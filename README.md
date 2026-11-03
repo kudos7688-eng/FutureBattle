@@ -1,3 +1,5 @@
+> **開発の再開**：[STATUS.md](STATUS.md) → [ROADMAP.md](ROADMAP.md)。継続指示は [AGENTS.md](AGENTS.md)。以下のv0.1仕様と最新工程に差がある場合は、最新工程を参照してください。
+
 > **20体のFPS×RTS試作**：操作・設計・検証手順は [PROTOTYPE.md](PROTOTYPE.md)。
 >
 > 起動すると専用の `Lvl_BattlePrototype` が開きます。Playで開始し、TabでFPS/俯瞰を切り替えます。
