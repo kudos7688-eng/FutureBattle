@@ -53,7 +53,7 @@ void ABattleHUD::DrawHUD()
 	}
 	if (PC->IsDragging())
 	{
-		FVector2D End; PC->GetMousePosition(End.X, End.Y);
+		FVector2D End = PC->DragOrigin; PC->GetPointerPosition(End);
 		FVector2D Start = PC->DragOrigin;
 		DrawRect(FLinearColor(.1f, .8f, .65f, .12f), FMath::Min(Start.X, End.X), FMath::Min(Start.Y, End.Y), FMath::Abs(Start.X - End.X), FMath::Abs(Start.Y - End.Y));
 		DrawLine(Start.X, Start.Y, End.X, Start.Y, Mint); DrawLine(End.X, Start.Y, End.X, End.Y, Mint);

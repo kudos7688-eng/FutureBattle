@@ -28,6 +28,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 	virtual void PlayerTick(float DeltaTime) override;
+	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
 	void EnterTactical();
 	bool ControlUnit(ABattleUnit* Unit);
 	void ToggleMode();
@@ -39,6 +40,7 @@ public:
 	bool IsSelected(const ABattleUnit* Unit) const { return Selected.Contains(Unit); }
 	void SetSelection(ABattleUnit* Unit);
 	bool IsDragging() const { return bTactical && bTriggerHeld; }
+	bool GetPointerPosition(FVector2D& Position) const;
 	FVector2D DragOrigin;
 	double HitMarkerUntil = 0.;
 	FString Notice;

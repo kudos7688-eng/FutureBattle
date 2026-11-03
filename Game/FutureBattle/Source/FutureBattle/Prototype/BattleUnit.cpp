@@ -51,6 +51,7 @@ ABattleUnit::ABattleUnit()
 	TeamLabel->SetRelativeLocation(FVector(0, 0, 115));
 	TeamLabel->SetHorizontalAlignment(EHTA_Center);
 	TeamLabel->SetWorldSize(28.f);
+	TeamLabel->SetVisibility(false); // HUD already draws compact labels at a fixed screen size.
 }
 
 void ABattleUnit::InitializeUnit(int32 ID)
@@ -112,7 +113,8 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 	}
 	if (bRevealed)
 	{
-		DrawDebugLine(GetWorld(), Start, Hit.bBlockingHit ? Hit.ImpactPoint : End,
+		const FVector TracerStart = bPlayerShot ? Start + Direction.GetSafeNormal() * 70.f + FirstPersonCamera->GetRightVector() * 12.f - FVector(0, 0, 10) : Start;
+		DrawDebugLine(GetWorld(), TracerStart, Hit.bBlockingHit ? Hit.ImpactPoint : End,
 			GetState()->Team == 0 ? FColor(100, 245, 230) : FColor(255, 120, 65), false, .09f, 0, 2.f);
 		if (Hit.bBlockingHit) DrawDebugPoint(GetWorld(), Hit.ImpactPoint, 10, FColor::Yellow, false, .12f);
 	}
@@ -124,7 +126,7 @@ void ABattleUnit::SetDirectControl(bool bDirect)
 	bUseControllerRotationYaw = bDirect;
 	GetCharacterMovement()->bOrientRotationToMovement = !bDirect;
 	GetMesh()->SetOwnerNoSee(bDirect);
-	TeamLabel->SetVisibility(!bDirect && bRevealed);
+	TeamLabel->SetVisibility(false);
 }
 
 void ABattleUnit::SetRevealed(bool bVisible)

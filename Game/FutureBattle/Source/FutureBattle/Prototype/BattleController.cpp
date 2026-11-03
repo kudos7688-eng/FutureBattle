@@ -13,6 +13,9 @@
 #include "NavigationPath.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/GameViewportClient.h"
+#include "InputKeyEventArgs.h"
+#include "UnrealClient.h"
 #include "DrawDebugHelpers.h"
 #include "FutureBattle.h"
 
@@ -36,7 +39,7 @@ void ABattleCameraPawn::Zoom(float Delta)
 void ABattleController::BeginPlay()
 {
 	Super::BeginPlay();
-	TacticalPawn = GetWorld()->SpawnActor<ABattleCameraPawn>(FVector(-600, 0, 0), FRotator::ZeroRotator);
+	TacticalPawn = GetWorld()->SpawnActor<ABattleCameraPawn>(FVector(-2100, 0, 0), FRotator::ZeroRotator);
 	EnterTactical();
 }
 
@@ -69,10 +72,8 @@ void ABattleController::SetupInputComponent()
 		Input->BindAction(Action, ETriggerEvent::Started, this, Handler);
 		return Action;
 	};
-	UInputAction* Primary = Button(TEXT("Primary"), EKeys::LeftMouseButton, &ABattleController::PrimaryPressed);
-	Input->BindAction(Primary, ETriggerEvent::Completed, this, &ABattleController::PrimaryReleased);
-	Input->BindAction(Primary, ETriggerEvent::Canceled, this, &ABattleController::PrimaryReleased);
-	Button(TEXT("MoveOrder"), EKeys::RightMouseButton, &ABattleController::MoveSelected);
+	// Mouse button edges are handled by InputKey, so a press and release within one
+	// frame cannot be lost by the sampled Enhanced Input action value.
 	Button(TEXT("ToggleMode"), EKeys::Tab, &ABattleController::ToggleMode);
 	Button(TEXT("ControlSelected"), EKeys::E, &ABattleController::ControlSelected);
 	Button(TEXT("SelectAll"), EKeys::Q, &ABattleController::SelectAll);
@@ -137,10 +138,14 @@ void ABattleController::EnterTactical()
 	bTactical = true;
 	bTriggerHeld = false;
 	bShowMouseCursor = true;
-	FInputModeGameAndUI Mode;
-	Mode.SetHideCursorDuringCapture(false);
-	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	FInputModeGameOnly Mode;
+	Mode.SetConsumeCaptureMouseDown(false);
 	SetInputMode(Mode);
+	if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
+	{
+		Viewport->SetMouseCaptureMode(EMouseCaptureMode::CaptureDuringMouseDown);
+		Viewport->SetMouseLockMode(EMouseLockMode::DoNotLock);
+	}
 }
 
 bool ABattleController::ControlUnit(ABattleUnit* Unit)
@@ -157,7 +162,7 @@ bool ABattleController::ControlUnit(ABattleUnit* Unit)
 	bTactical = false;
 	bTriggerHeld = false;
 	bShowMouseCursor = false;
-	SetInputMode(FInputModeGameOnly());
+	FInputModeGameOnly Mode; Mode.SetConsumeCaptureMouseDown(false); SetInputMode(Mode);
 	const FBattleUnitState& After = *Unit->GetState();
 	ensureAlwaysMsgf(Before.UnitID == After.UnitID && Before.HP == After.HP && Before.Ammo == After.Ammo && Before.Order == After.Order && Before.Destination == After.Destination, TEXT("Unit state changed during possession"));
 	ShowNotice(FString::Printf(TEXT("DIRECT CONTROL / UNIT %02d"), Unit->GetUnitID()));
@@ -185,7 +190,25 @@ void ABattleController::SelectAll()
 void ABattleController::PrimaryPressed()
 {
 	bTriggerHeld = true;
-	GetMousePosition(DragOrigin.X, DragOrigin.Y);
+	GetPointerPosition(DragOrigin);
+	if (!bTactical)
+		if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
+			if (Unit->IsAlive())
+				if (ABattleGameMode* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>())
+					if (!Mode->bBattleEnded) Unit->FireAt(Unit->FirstPersonCamera->GetComponentLocation(), GetControlRotation().Vector(), true);
+}
+
+bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
+{
+	const bool bHandled = Super::InputKey(Params);
+	if (Params.Key == EKeys::LeftMouseButton)
+	{
+		if (Params.Event == IE_Pressed) PrimaryPressed();
+		else if (Params.Event == IE_Released) PrimaryReleased();
+		return true;
+	}
+	if (Params.Key == EKeys::RightMouseButton && Params.Event == IE_Pressed) { MoveSelected(); return true; }
+	return bHandled;
 }
 
 void ABattleController::PrimaryReleased()
@@ -194,7 +217,7 @@ void ABattleController::PrimaryReleased()
 	bTriggerHeld = false;
 	if (!bTactical) return;
 	FVector2D End;
-	if (!GetMousePosition(End.X, End.Y)) return;
+	if (!GetPointerPosition(End)) return;
 	const bool bAdd = IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
 	if (!bAdd) Selected.Reset();
 	if (FVector2D::Distance(End, DragOrigin) > 10)
@@ -210,17 +233,37 @@ void ABattleController::PrimaryReleased()
 	else
 	{
 		FHitResult Hit;
-		GetHitResultUnderCursor(ECC_Visibility, false, Hit);
+		GetHitResultAtScreenPosition(End, ECC_Visibility, false, Hit);
 		if (ABattleUnit* Unit = Cast<ABattleUnit>(Hit.GetActor()))
 			if (Unit->IsAlive() && Unit->GetState()->Team == 0) Selected.AddUnique(Unit);
 	}
+	UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_INPUT Selection=%d"), Selected.Num());
 }
 
 void ABattleController::MoveSelected()
 {
 	if (!bTactical || Selected.IsEmpty()) return;
 	FHitResult Hit;
-	if (GetHitResultUnderCursor(ECC_Visibility, false, Hit)) IssueMoveAt(Hit.ImpactPoint);
+	FVector2D Position;
+	if (GetPointerPosition(Position) && GetHitResultAtScreenPosition(Position, ECC_Visibility, false, Hit)) IssueMoveAt(Hit.ImpactPoint);
+}
+
+bool ABattleController::GetPointerPosition(FVector2D& Position) const
+{
+	if (GetMousePosition(Position.X, Position.Y)) return true;
+	// Slate's IsMouseAttached can be false for a virtual/remote mouse despite valid
+	// viewport pointer events. Use the same cached viewport coordinates in that case.
+	if (UGameViewportClient* Client = GetWorld()->GetGameViewport())
+		if (FViewport* Viewport = Client->Viewport)
+		{
+			FIntPoint Point; Viewport->GetMousePos(Point);
+			const FIntPoint Size = Viewport->GetSizeXY();
+			if (Point.X >= 0 && Point.Y >= 0 && Point.X < Size.X && Point.Y < Size.Y)
+			{
+				Position = FVector2D(Point); return true;
+			}
+		}
+	return false;
 }
 
 void ABattleController::IssueMoveAt(FVector Target)
@@ -244,6 +287,7 @@ void ABattleController::IssueMoveAt(FVector Target)
 		++Issued;
 	}
 	ShowNotice(Issued ? FString::Printf(TEXT("MOVE ORDER / %d UNITS"), Issued) : TEXT("No reachable ground at this location"));
+	UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_INPUT MoveOrders=%d"), Issued);
 }
 
 void ABattleController::HoldSelected()
