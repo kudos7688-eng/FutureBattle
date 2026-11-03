@@ -1,0 +1,76 @@
+FutureBattle 環境構築記録（2026-10-31）
+
+採用方針
+Unreal Engine 5.7系の正式版＋Visual Studio 2022 17.14。
+既存のBuild Toolsと互換性を保つ。Preview版は採用しない。
+Windows向けのエンジン、テンプレート、Starter Contentを初期対象とする。
+他プラットフォームのSDKやBlenderは必要になる段階で追加する。
+
+確認済み
+既存Build Tools: 17.14.42 / C:\BuildTools
+MSVC実バージョン: 14.44.35229（フォルダー名は14.44.35207）
+Windows SDK: 10.0.26100.0
+Setup/Check-Compiler.cmd: C++20コードのコンパイル、Windows APIへのリンク、実行に成功。
+Git for Windows: 2.56.0.windows.4 / C:\Program Files\Git\cmd\git.exe
+
+構築中
+Visual Studio Community 2022: NativeGameワークロード＋推奨コンポーネント。
+Epic Games Launcher: 20.3.3の公式MSIを検証し導入成功（終了コード0）。
+配置先: C:\Program Files\Epic Games\Launcher
+初回更新・起動済み。ユーザーからEpicログイン完了の連絡あり。
+UE本体: 5.7.4を選択。配置予定はC:\Program Files\Epic Games\UE_5.7。
+直近の画面確認では一時停止0%。10:57 JST時点のInstallationListは空。
+ユーザーの待機指示により追加操作を停止。現在の状態を確認してから再開する。
+ユーザー設定Engine.iniのHTTP待ち時間をtotal=600秒、connection=60秒、activity=120秒に変更済み。
+詳細な引き継ぎ情報は上位フォルダーのHANDOFF.mdを参照。
+UE C++プロジェクトのビルド・エディタ起動: 未実施。
+
+配布元のSHA256とAuthenticode署名を確認してからインストーラーを実行する。
+wingetのDelivery Optimizationによる取得が進まなかったため公式配布URLを直接取得。
+Setup/Install-Tools.ps1とInstall-Launcher.ps1に取得元・検証値・導入コマンドを記録。
+インストーラーと生成バイナリはGit対象外。
+
+公式資料
+https://dev.epicgames.com/documentation/en-us/unreal-engine/setting-up-visual-studio-development-environment-for-cplusplus-projects-in-unreal-engine?application_version=5.7
+https://dev.epicgames.com/documentation/en-us/unreal-engine/install-unreal-engine
+
+再確認方法
+Setup/Check-Compiler.cmd
+"C:\Program Files\Git\cmd\git.exe" --version
+"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -products * -format json
+
+## 2026-11-03 再開時の実機確認
+
+- 現在の資料配置：C:\Users\nanek\Documents\FPS\FutureBattle。添付ZIPを展開。元の資料は変更していない。
+- ユーザー指定によりUE 5.8.4を使用する。配置：C:\Program Files\Epic Games\UE_5.8。
+- Build.version：5.8.4 / CL 58902052。エディタ実行ファイル、Build.bat、Third Personテンプレートの存在を確認。
+- LauncherInstalled.datのInstallationListは空。Launcherによるインストール完全性の確認は未完了。
+- UE 5.7は本体未確認（.egstoreのみ）。再インストールは実施していない。
+- Visual Studio Community 2022 17.14.44：導入完了、isRebootRequired=false。
+- Communityのx64開発環境でCheck-Compiler.cmdを実行し、C++20コンパイル、Windows APIリンク、実行成功（28論理プロセッサ）。
+- Windows SDK：10.0.26100.0。Git：2.56.0.windows.4。
+- Check-Environment.ps1のvswhere出力をUTF-8で解析するよう修正。-EngineRoot指定による環境確認成功。
+- UEエディタを起動。WindowsファイアウォールのUnreal Insights用通信確認画面でユーザー操作待ち。
+- FutureBattle.uproject作成、Development Editor / Win64ビルド、Play確認はまだ未実施。
+- Gitのuser.name / user.emailは現在の作業場所で未設定。本人情報を推測せず、初期コミットは未実施。
+- 検証ログ：Setup/Compiler-2026-11-03.log、Setup/Environment-2026-11-03.log（Git対象外）。
+
+## 2026-11-04 00:10 JST 環境検証完了
+
+- C++ Third Person / Desktop / MaximumでFutureBattleを作成。
+- プロジェクト：C:\Users\nanek\Documents\FPS\FutureBattle\Game\FutureBattle\FutureBattle.uproject
+- UE 5.8.4でDevelopment Editor / Win64ビルド成功。初回51.17秒。
+- UEビルドが選択したツールチェーン：C:\BuildTools\VC\Tools\MSVC\14.44.35207（コンパイラ14.44.35229）とSDK 10.0.26100.0。Community単独のC++20検証も別途成功済み。
+- Lvl_ThirdPersonのPlay起動成功。W短押しの反応、Spaceでのジャンプ、Escapeでの正常終了を画面で確認。長時間・性能・パッケージ化検証は未実施。
+- Setup/Build-Editor.ps1で再ビルド確認成功（up to date、終了コード0）。ソース変更後の通常ビルドはエディタを閉じて実行する。
+- 起動はSetup/Open-Editor.ps1を使用可能。EngineAssociationのGUIDがこのPCのUE_5.8に対応することを確認。他PCでは再関連付けが必要。
+- 初回ビルドログ：Setup/Initial-Build-Editor.log。再確認ログ：Setup/Build-Editor.log。Playログ：Game/FutureBattle/Saved/Logs/FutureBattle.log。すべてGit対象外。
+- Git mainは初期化済み。名前・メール設定とコミットはユーザーの「後で」に従い未実施。
+- エディタはPlay停止後、マップを開いた状態で残している。
+- 次工程：20体のFPS/RTS試作。永続UnitIDと正規データをActorから分離し、操作切替時にHP・弾薬・命令を保持する。今回は環境準備までで、ゲーム独自機能は未実装。
+
+
+## 2026-11-04 Git初期保存
+
+ユーザーからGit表示名とメールアドレスの指定を受領し、このリポジトリのローカル設定に反映。以前の保留は解除。検証済みC++ Third Personテンプレート・設定・素材・資料・構築スクリプトを初期コミットに保存する。生成物とローカルログは.gitignoreで除外。リモートへの送信は実施していない。
+
