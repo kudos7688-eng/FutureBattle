@@ -1,3 +1,8 @@
+> **20体のFPS×RTS試作**：操作・設計・検証手順は [PROTOTYPE.md](PROTOTYPE.md)。
+>
+> 起動すると専用の `Lvl_BattlePrototype` が開きます。Playで開始し、TabでFPS/俯瞰を切り替えます。
+>
+> 自動検証：`./Setup/Test-Battle.ps1`。元のThird Personテンプレートは残しています。
 > 2026-11-04：UE 5.8.4でC++ Third Personのビルド・Play確認済み。最新の実機記録はHANDOFF.md末尾。
 >
 > 起動：PowerShellで `./Setup/Open-Editor.ps1`。再ビルド：エディタを閉じて `./Setup/Build-Editor.ps1`。
@@ -69,5 +74,3 @@ PCのCPU/GPU/RAM、UE5バージョン、世界観と陣営数、戦場寸法、�
 - 仕様・データ・テストをバージョン管理し、動作する段階を残す。
 - AI生成コードはエディタ実機でビルド・実行・性能検証する。
 - エンジン更新前にバックアップとプラグイン互換性確認を行う。
-
-

@@ -15,6 +15,7 @@ public class FutureBattle : ModuleRules
 			"InputCore",
 			"EnhancedInput",
 			"AIModule",
+			"NavigationSystem",
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"UMG",
@@ -22,6 +23,10 @@ public class FutureBattle : ModuleRules
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.Add("UnrealEd");
+		}
 
 		PublicIncludePaths.AddRange(new string[] {
 			"FutureBattle",
