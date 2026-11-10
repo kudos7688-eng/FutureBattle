@@ -16,3 +16,7 @@ Setup/*.msi
 Setup/*.exe
 Setup/*.log
 Setup/*.before-timeout
+# Regenerable local caches (keep benchmark evidence and authored assets visible)
+__pycache__/
+*.py[cod]
+/Game/FutureBattle/Build/Windows/FileOpenOrder/*.log

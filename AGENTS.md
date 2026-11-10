@@ -11,3 +11,4 @@
 - C++変更後は `Setup/Build-Editor.ps1`、挙動変更後は `Setup/Test-Battle.ps1` を実施し、必要な実画面確認を追加する。成功判定はログの `BATTLE_SMOKE_RESULT failures=0`。ビルド時のEditor DLLロックに注意し、未保存作業を失う強制終了は避ける。
 - 作業の区切りごとに、別途依頼されなくてもSTATUSへ実装済み範囲・実施した検証・未解決事項・次の一手を更新する。方針が変わったらROADMAPを更新する。重要な経緯はHANDOFFへ追記し、古い完了待ち記述を最新状態と誤解させない。未実施の確認を完了と書かない。
 - チャットの記憶だけに依存せず、ファイルに残した合意と実際のコード・ログを確認して継続する。
+- T5以降に実施する各計測では、開始前に `Setup/Get-MeasurementMachine.ps1` の `Get-MeasurementMachine` で測定機情報を取得し、manifestの `machine` に保存する（JSON深さ5以上）。GPU名・VRAM（bytesと取得元）・ドライバ版、CPU名・物理コア数/論理プロセッサ数、物理メモリ容量（bytes）、OS名/版/ビルド/アーキテクチャを含める。複数GPU/CPUは全件保存し、実際の描画GPUはUEログと照合する。既存結果への後付けはしない。VRAM取得不能はnullと理由を残し、32bitのCIM AdapterRAM値を実容量と誤認しない。
