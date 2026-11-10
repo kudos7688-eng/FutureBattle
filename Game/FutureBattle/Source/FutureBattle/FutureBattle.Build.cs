@@ -22,10 +22,14 @@ public class FutureBattle : ModuleRules
 			"Slate"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Json", "NetCore", "RenderCore", "RHI", "MassCore", "MassEntity" });
+		// T5 test-only view visibility observer; no renderer behavior changes.
+		PrivateDependencyModuleNames.Add("Renderer");
+		PrivateIncludePaths.Add(System.IO.Path.Combine(EngineDirectory, "Source/Runtime/Renderer/Private"));
+		PrivateIncludePaths.Add(System.IO.Path.Combine(EngineDirectory, "Source/Runtime/Renderer/Internal"));
 		if (Target.bBuildEditor)
 		{
-			PrivateDependencyModuleNames.Add("UnrealEd");
+			PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "AnimToTexture", "AnimToTextureEditor", "MeshDescription", "StaticMeshDescription", "AssetRegistry" });
 		}
 
 		PublicIncludePaths.AddRange(new string[] {

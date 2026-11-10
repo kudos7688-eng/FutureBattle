@@ -1,6 +1,14 @@
 #include "BattleUnit.h"
+#include "BattleLeaderRuntime.h"
+#include "Animation/AnimSequence.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 #include "BattleGameMode.h"
 #include "BattleController.h"
+#include "BattleTactics.h"
+#include "BattleCover.h"
+#include "BattleSquadAI.h"
+#include "BattleMetrics.h"
+#include "BattleMatch.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -10,8 +18,9 @@
 #include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Misc/CommandLine.h"
 
-ABattleUnit::ABattleUnit()
+ABattleUnit::ABattleUnit(const FObjectInitializer& Init) : Super(Init)
 {
 	PrimaryActorTick.bCanEverTick = true;
 	GetCapsuleComponent()->InitCapsuleSize(36.f, 90.f);
@@ -38,7 +47,16 @@ ABattleUnit::ABattleUnit()
 	FirstPersonCamera->SetRelativeLocation(FVector(0, 0, 65));
 	FirstPersonCamera->bUsePawnControlRotation = true;
 	FirstPersonCamera->FieldOfView = 90.f;
+	FirstPersonCamera->PostProcessSettings.bOverride_MotionBlurAmount = true;
+	FirstPersonCamera->PostProcessSettings.MotionBlurAmount = 0;
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Carbine(TEXT("/Game/Prototype/Weapons/SM_Carbine"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Support(TEXT("/Game/Prototype/Weapons/SM_Support"));
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> Idle(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MF_Rifle_Idle_ADS"));
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> Walk(TEXT("/Game/Characters/Mannequins/Anims/Rifle/Walk/MF_Rifle_Walk_Fwd"));
+	static ConstructorHelpers::FObjectFinder<UAnimSequence> Reload(TEXT("/Game/Characters/Mannequins/Anims/Rifle/MM_Rifle_Reload"));
+	CarbineModel = Carbine.Object; SupportModel = Support.Object;
+	RifleIdle = Idle.Object; RifleWalk = Walk.Object; RifleReload = Reload.Object;
 	Rifle = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PrototypeRifle"));
 	Rifle->SetupAttachment(FirstPersonCamera);
 	Rifle->SetStaticMesh(Cube.Object);
@@ -57,11 +75,16 @@ ABattleUnit::ABattleUnit()
 void ABattleUnit::InitializeUnit(int32 ID)
 {
 	UnitID = ID;
+	SetAnimationDetail(false);
 	if (const FBattleUnitState* S = GetState())
 	{
 		TeamLabel->SetText(FText::FromString(FString::Printf(TEXT("%s %02d"), S->Team == 0 ? TEXT("ALLY") : TEXT("HOSTILE"), ID)));
 		TeamLabel->SetTextRenderColor(S->Team == 0 ? FColor(75, 230, 195) : FColor(255, 90, 70));
 	}
+	FString TrialVariant;
+	bWeaponVisuals = !FParse::Param(FCommandLine::Get(), TEXT("BattleLegacyWeaponVisuals"));
+	bTrialPose = FParse::Value(FCommandLine::Get(), TEXT("BattleSquadTrial="), TrialVariant);
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, GetMesh(), GetState()->Weapon, false);
 	SpawnDefaultController();
 	SavedAI = Cast<AAIController>(GetController());
 }
@@ -76,9 +99,15 @@ FVector ABattleUnit::EyePosition() const { return GetActorLocation() + FVector(0
 
 void ABattleUnit::Tick(float DeltaTime)
 {
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattleUnitTick);
 	Super::Tick(DeltaTime);
-	if (GetState() && !IsAlive()) ApplyDeath();
-	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	if (const auto* State = GetState())
+	{
+		if (State->IsAlive()) GetWorld()->GetSubsystem<UBattleState>()->UpdateAim(UnitID, GetWorld()->GetTimeSeconds(), GetVelocity().Size2D(), GetBaseAimRotation().Vector(), GetCharacterMovement()->IsMovingOnGround());
+		else ApplyDeath();
+		if (State->IsAlive() && bWeaponVisuals && !bTrialPose) UpdateWeaponPose(*State);
+	}
+	if (TeamLabel->IsVisible()) if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
 		if (PC->PlayerCameraManager) TeamLabel->SetWorldRotation((PC->PlayerCameraManager->GetCameraLocation() - TeamLabel->GetComponentLocation()).Rotation());
 	}
@@ -86,19 +115,55 @@ void ABattleUnit::Tick(float DeltaTime)
 
 bool ABattleUnit::CanSee(const ABattleUnit* Other) const
 {
-	if (!Other || !Other->IsAlive() || !IsAlive()) return false;
-	if (FVector::DistSquared(GetActorLocation(), Other->GetActorLocation()) > FMath::Square(GetDefault<UBattleTuning>()->SightRange)) return false;
+	return CanSeeSnapshot(CaptureSightContext(), Other, Other ? Other->GetActorLocation() : FVector::ZeroVector, Other && Other->IsAlive());
+}
+
+FBattleSightContext ABattleUnit::CaptureSightContext() const
+{
+	FBattleSightContext Context;
+	const auto* State = GetState(); Context.bAlive = State && State->IsAlive();
+	Context.Position = GetActorLocation(); Context.Eye = EyePosition();
+	const float Yaw = IsPlayerControlled() ? GetControlRotation().Yaw : GetActorRotation().Yaw;
+	Context.Forward = FRotator(0, Yaw, 0).Vector();
+	if (State)
+	{
+		Context.RangeSquared = FMath::Square(State->Perception.SightRange);
+		Context.HalfAngleCos = FMath::Cos(FMath::DegreesToRadians(State->Perception.FieldOfView * .5f));
+		Context.bOmnidirectional = State->Perception.FieldOfView >= 360.f;
+	}
+	Context.Metrics = GetWorld()->GetSubsystem<UBattleMetrics>();
+	Context.Query = FCollisionQueryParams(SCENE_QUERY_STAT(BattleSight), false, this);
+	return Context;
+}
+
+bool ABattleUnit::CanSeeSnapshot(const FBattleSightContext& Context, const ABattleUnit* Other, const FVector& Position, bool bAlive) const
+{
+	if (Context.Metrics->bRecording) ++Context.Metrics->SightChecks;
+	if (!Other || !bAlive || !Context.bAlive) return false;
+	if (FVector::DistSquared(Context.Position, Position) > Context.RangeSquared) return false;
+	const FVector Direction = (Position - Context.Position).GetSafeNormal2D();
+	if (!Context.bOmnidirectional && !Direction.IsNearlyZero() && FVector::DotProduct(Context.Forward, Direction) + 1.e-6f < Context.HalfAngleCos) return false;
 	FHitResult Hit;
-	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleSight), false, this);
-	GetWorld()->LineTraceSingleByChannel(Hit, EyePosition(), Other->GetActorLocation() + FVector(0, 0, 35), ECC_Visibility, Query);
+	if (Context.Metrics->bRecording) ++Context.Metrics->SightRays;
+	GetWorld()->LineTraceSingleByChannel(Hit, Context.Eye, Position + FVector(0, 0, 35), ECC_Visibility, Context.Query);
 	return !Hit.bBlockingHit || Hit.GetActor() == Other;
 }
 
 bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 {
+ if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled()) return L->Fire(UnitID,Start,Direction,bPlayerShot);
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (Match->IsEnabled() && Match->Phase != EBattleMatchPhase::Combat) return false;
 	const UBattleTuning* Tuning = GetDefault<UBattleTuning>();
 	UBattleState* Store = GetWorld()->GetSubsystem<UBattleState>();
-	if (Direction.IsNearlyZero() || !Store->ConsumeShot(UnitID, GetWorld()->GetTimeSeconds(), bPlayerShot ? Tuning->PlayerShotInterval : Tuning->AIShotInterval)) return false;
+	if (Direction.ContainsNaN() || Direction.IsNearlyZero()) return false;
+	Store->UpdateAim(UnitID, GetWorld()->GetTimeSeconds(), GetVelocity().Size2D(), Direction, GetCharacterMovement()->IsMovingOnGround());
+	if (!Store->ConsumeShot(UnitID, GetWorld()->GetTimeSeconds(), Tuning->ShotInterval(GetState()->Weapon, bPlayerShot))) return false;
+	auto* Metrics = GetWorld()->GetSubsystem<UBattleMetrics>();
+	if (Metrics->bRecording) ++Metrics->Shots;
+	LastVisualShot = GetWorld()->GetTimeSeconds();
+	// Apply exactly the same bounded cone to AI and directly controlled shots.
+	Direction = BattleTactics::ShotDirection(*GetState(), Direction, GetWorld()->GetTimeSeconds());
 	FHitResult Hit;
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleShot), false, this);
 	const FVector End = Start + Direction.GetSafeNormal() * Tuning->WeaponRange;
@@ -107,6 +172,7 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 	{
 		if (Store->ApplyDamage(Victim->GetUnitID(), GetState()->Team, Tuning->ShotDamage))
 		{
+			if (Metrics->bRecording) ++Metrics->Hits;
 			if (bPlayerShot) if (ABattleController* PC = Cast<ABattleController>(GetController())) PC->HitMarkerUntil = GetWorld()->GetTimeSeconds() + .18;
 			if (!Victim->IsAlive()) Victim->ApplyDeath();
 		}
@@ -121,12 +187,75 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 	return true;
 }
 
+void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Parent, EBattleWeapon Weapon, bool bFirstPerson) const
+{
+	const bool Support = Weapon == EBattleWeapon::SupportGun;
+	Model->SetStaticMesh(Support ? SupportModel : CarbineModel);
+	Model->AttachToComponent(Parent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, bFirstPerson ? NAME_None : FName(TEXT("hand_r")));
+	Model->SetRelativeScale3D(FVector(Support ? 1.0 : .62));
+	Model->SetRelativeRotation(FRotator(0,90,0));
+	Model->SetRelativeLocation(FVector(47,15,-16));
+	if (!bFirstPerson)
+	{
+		// Grip calibration against the bundled rifle idle pose. The simplified
+		// Quinn mesh has hand_r but omits the animation skeleton weapon_r bone.
+		const FTransform Hand(FRotator(-11.885756,-81.776576,16.174298),FVector(-16.823813,7.097377,139.904362));
+		const FTransform Gun(FRotator(0,180,0),FVector(-14.9,29.,143.5));
+		const FTransform Grip = Gun.GetRelativeTransform(Hand);
+		Model->SetRelativeLocationAndRotation(Grip.GetLocation(),Grip.GetRotation());
+	}
+}
+
+void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
+{
+	const double Now = GetWorld()->GetTimeSeconds();
+	const float Duration = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
+	const bool Reloading = S.ReloadEndTime > Now;
+	auto* Pose = Reloading ? RifleReload.Get() : GetVelocity().SizeSquared2D() > 400. ? RifleWalk.Get() : RifleIdle.Get();
+	if (Pose && CurrentPose != Pose)
+	{
+		CurrentPose = Pose;
+		GetMesh()->PlayAnimation(Pose,!Reloading);
+		GetMesh()->SetPlayRate(Reloading ? Pose->GetPlayLength()/Duration : 1.f);
+		if (Reloading) GetMesh()->SetPosition(Pose->GetPlayLength()*FMath::Clamp(1.-(S.ReloadEndTime-Now)/Duration,0.,1.), false);
+	}
+	if (IsPlayerControlled() && Rifle->GetAttachParent()==FirstPersonCamera)
+	{
+		const double Kick = FMath::Clamp(1.-(Now-LastVisualShot)/.12,0.,1.);
+		const double Dip = Reloading ? FMath::Sin(PI*FMath::Clamp((S.ReloadEndTime-Now)/Duration,0.,1.)) : 0.;
+		Rifle->SetRelativeLocation(FVector(47-4*Kick,15,-16-6*Dip));
+		Rifle->SetRelativeRotation(FRotator(0,90,4*Kick-25*Dip));
+	}
+}
+
 void ABattleUnit::SetDirectControl(bool bDirect)
 {
+	SetAnimationDetail(bDirect);
+	GetWorld()->GetSubsystem<UBattleState>()->SetAction(UnitID, bDirect ? EBattleAction::DirectControl : EBattleAction::Idle);
 	bUseControllerRotationYaw = bDirect;
 	GetCharacterMovement()->bOrientRotationToMovement = !bDirect;
 	GetMesh()->SetOwnerNoSee(bDirect);
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bDirect ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bDirect);
 	TeamLabel->SetVisibility(false);
+}
+
+void ABattleUnit::SetAnimationDetail(bool bDirect)
+{
+	// UE uses projected size and interpolation for remote bodies. Physics, senses and weapons keep their own clocks.
+	const bool bOptimize = !bDirect && !FParse::Param(FCommandLine::Get(), TEXT("BattleNoAnimationLOD"));
+	GetMesh()->bEnableUpdateRateOptimizations = bOptimize;
+	if (GetMesh()->AnimUpdateRateParams)
+	{
+		// Keep full detail for large on-screen bodies; small RTS silhouettes can
+		// evaluate less often. UE staggers updates and interpolates the nearer tiers.
+		// Keep the previous policy available for same-binary performance comparisons.
+		const bool bLegacy = FParse::Param(FCommandLine::Get(), TEXT("BattleLegacyAnimationLOD"));
+		GetMesh()->AnimUpdateRateParams->BaseVisibleDistanceFactorThesholds = bLegacy
+			? TArray<float>{ .24f, .12f } : TArray<float>{ .24f, .12f, .06f, .03f };
+	}
+	// Gameplay uses capsule/actor transforms, not animation bones or root motion.
+	// Hidden bodies can stop evaluating the animation graph without stopping combat.
+	GetMesh()->VisibilityBasedAnimTickOption = bOptimize ? EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered : EVisibilityBasedAnimTickOption::AlwaysTickPose;
 }
 
 void ABattleUnit::SetRevealed(bool bVisible)
@@ -139,6 +268,9 @@ void ABattleUnit::ApplyDeath()
 {
 	if (bDeathApplied) return;
 	bDeathApplied = true;
+	GetWorld()->GetSubsystem<UBattleSquadAI>()->ReleaseUnit(UnitID);
+	GetWorld()->GetSubsystem<UBattleCover>()->Release(UnitID);
+	GetWorld()->GetSubsystem<UBattleState>()->SetTacticalState(UnitID, INDEX_NONE, TEXT("UNIT DOWN"));
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -148,52 +280,4 @@ void ABattleUnit::ApplyDeath()
 	TeamLabel->SetText(FText::FromString(TEXT("DOWN")));
 	TeamLabel->SetTextRenderColor(FColor(140, 140, 140));
 	Rifle->SetVisibility(false);
-}
-
-ABattleAIController::ABattleAIController()
-{
-	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.TickInterval = .1f;
-	bAttachToPawn = true;
-}
-
-void ABattleAIController::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-	ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn());
-	ABattleGameMode* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>();
-	if (!Unit || !Unit->IsAlive() || !Mode || Mode->bCombatPaused || Mode->bBattleEnded) return;
-	const double Now = GetWorld()->GetTimeSeconds();
-	if (Now < Mode->CombatStartsAt) return;
-	if (Now < NextDecision) return;
-	NextDecision = Now + .2;
-	const FBattleUnitState* S = Unit->GetState();
-	if (S->Order == EBattleOrder::Move)
-	{
-		if (FVector::DistSquared2D(Unit->GetActorLocation(), S->Destination) < FMath::Square(90.f))
-		{
-			GetWorld()->GetSubsystem<UBattleState>()->SetOrder(Unit->GetUnitID(), EBattleOrder::Hold, S->Destination);
-			StopMovement();
-		}
-		else if (Now >= NextMoveRequest)
-		{
-			MoveToLocation(S->Destination, 55.f, true, true, false, true, nullptr, false);
-			NextMoveRequest = Now + 1.;
-		}
-	}
-	ABattleUnit* Target = nullptr;
-	float Best = TNumericLimits<float>::Max();
-	for (ABattleUnit* Candidate : Mode->Units)
-	{
-		if (!Candidate || !Candidate->IsAlive() || Candidate->GetState()->Team == S->Team) continue;
-		const float Distance = FVector::DistSquared(Unit->GetActorLocation(), Candidate->GetActorLocation());
-		if (Distance < Best && Unit->CanSee(Candidate)) { Best = Distance; Target = Candidate; }
-	}
-	if (Target)
-	{
-		SetFocus(Target);
-		if (S->Ammo == 0) GetWorld()->GetSubsystem<UBattleState>()->StartReload(Unit->GetUnitID(), Now);
-		else Unit->FireAt(Unit->EyePosition(), Target->GetActorLocation() + FVector(0, 0, 35) - Unit->EyePosition(), false);
-	}
-	else ClearFocus(EAIFocusPriority::Gameplay);
 }

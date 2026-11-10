@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
+#include "BattleState.h"
 #include "BattleController.generated.h"
 
 class UCameraComponent;
@@ -30,11 +31,35 @@ public:
 	virtual void PlayerTick(float DeltaTime) override;
 	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
 	void EnterTactical();
+ void BindLeaderDeaths();
+ void OnLeaderUnitDied(int32 ID);
+ bool LeaderSelectable(ABattleUnit* Unit) const;
+ int32 SquadListScroll=0;
+ bool SquadPanelAtPointer() const;
+ void ScrollSquadList(int32 Delta);
+ void SelectSquadListRow(FVector2D Position);
+ int32 SquadListIDAt(FVector2D Position) const;
 	bool ControlUnit(ABattleUnit* Unit);
 	void ToggleMode();
 	void ControlSelected();
 	void IssueMoveAt(FVector Target);
+	void IssueOrderAt(FVector Target, EBattleOrder Order);
 	void SelectAll();
+	void HoldSelected();
+	void ChooseAttackMove();
+	void ChooseDefend();
+	EBattleOrder PendingOrder = EBattleOrder::Move;
+	bool bShowContactDebug = false;
+	void ToggleContactDebug() { bShowContactDebug = !bShowContactDebug; }
+	void CycleTrainingSelected();
+	void HireRecruit();
+	void HireRegular();
+	void HireVeteran();
+	void StartMatch();
+	void SaveMatch();
+	void LoadMatch();
+	void ResetMatchControl();
+	void RequestSupport();
 	bool IsTactical() const { return bTactical; }
 	const TArray<TObjectPtr<ABattleUnit>>& GetSelection() const { return Selected; }
 	bool IsSelected(const ABattleUnit* Unit) const { return Selected.Contains(Unit); }
@@ -55,6 +80,9 @@ private:
 	UPROPERTY() TArray<TObjectPtr<UInputAction>> Actions;
 	bool bTactical = true;
 	bool bTriggerHeld = false;
+ bool bSquadListPress=false;
+ int32 PressedSquadID=INDEX_NONE;
+ FDelegateHandle LeaderDeathHandle;
 	void Forward(const FInputActionValue& Value);
 	void Right(const FInputActionValue& Value);
 	void LookYaw(const FInputActionValue& Value);
@@ -65,9 +93,9 @@ private:
 	void Reload();
 	void JumpPressed();
 	void JumpReleased();
-	void HoldSelected();
 	void ToggleCombat();
 	void RestartBattle();
 	void ZoomIn();
 	void ZoomOut();
+	void HireTraining(EBattleTraining Training);
 };
