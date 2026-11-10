@@ -1,0 +1,160 @@
+{
+  "dll": "72BD51BE335008EE5E78E277C4807C96EAE664EF9170FFC35E3060536CAF22A6",
+  "passed_runs": 28,
+  "integrated_pass": 210,
+  "off_matches": 40,
+  "functional_pass_each_mode": 25,
+  "pose": {
+    "FPS": [
+      12960,
+      0,
+      108,
+      108
+    ],
+    "RTS": [
+      12960,
+      0,
+      108,
+      108
+    ],
+    "TPS": [
+      12960,
+      0,
+      108,
+      108
+    ]
+  },
+  "shadow_lumen_quality_fixture": {
+    "FPS": [
+      12960,
+      0,
+      108,
+      108
+    ],
+    "RTS": [
+      12960,
+      0,
+      108,
+      108
+    ],
+    "TPS": [
+      12960,
+      0,
+      108,
+      108
+    ]
+  },
+  "replay": {
+    "RTS": {
+      "frames_off": 1349,
+      "frames_on": 1349,
+      "first_mismatch": null,
+      "equal": true,
+      "shooting_exercised": true,
+      "final_off": {
+        "frame": "1348",
+        "time": "45.000002347",
+        "state_sha1": "082C90F60F7E9EE7D4DC17C51F3766AB0929387C",
+        "sense_sha1": "05463BE29800C9F9BC06AAA0D54F2152FD5A3446",
+        "shots": "614",
+        "deaths": "51",
+        "hp": "93920.000000000",
+        "ammo": "35386",
+        "alive": "949"
+      },
+      "final_on": {
+        "frame": "1348",
+        "time": "45.000002347",
+        "state_sha1": "082C90F60F7E9EE7D4DC17C51F3766AB0929387C",
+        "sense_sha1": "05463BE29800C9F9BC06AAA0D54F2152FD5A3446",
+        "shots": "614",
+        "deaths": "51",
+        "hp": "93920.000000000",
+        "ammo": "35386",
+        "alive": "949"
+      }
+    },
+    "TPS": {
+      "frames_off": 1349,
+      "frames_on": 1349,
+      "first_mismatch": null,
+      "equal": true,
+      "shooting_exercised": true,
+      "final_off": {
+        "frame": "1348",
+        "time": "45.000002347",
+        "state_sha1": "46E47A5DD00DFF0F31E42132A759EB28B9CF6FE9",
+        "sense_sha1": "18F106633DF889F222DF193BBE7AB56C5B51785D",
+        "shots": "671",
+        "deaths": "56",
+        "hp": "93380.000000000",
+        "ammo": "35329",
+        "alive": "944"
+      },
+      "final_on": {
+        "frame": "1348",
+        "time": "45.000002347",
+        "state_sha1": "46E47A5DD00DFF0F31E42132A759EB28B9CF6FE9",
+        "sense_sha1": "18F106633DF889F222DF193BBE7AB56C5B51785D",
+        "shots": "671",
+        "deaths": "56",
+        "hp": "93380.000000000",
+        "ammo": "35329",
+        "alive": "944"
+      }
+    },
+    "FPS": {
+      "frames_off": 1349,
+      "frames_on": 1349,
+      "first_mismatch": null,
+      "equal": true,
+      "shooting_exercised": true,
+      "final_off": {
+        "frame": "1348",
+        "time": "45.000002347",
+        "state_sha1": "46E47A5DD00DFF0F31E42132A759EB28B9CF6FE9",
+        "sense_sha1": "18F106633DF889F222DF193BBE7AB56C5B51785D",
+        "shots": "671",
+        "deaths": "56",
+        "hp": "93380.000000000",
+        "ammo": "35329",
+        "alive": "944"
+      },
+      "final_on": {
+        "frame": "1348",
+        "time": "45.000002347",
+        "state_sha1": "46E47A5DD00DFF0F31E42132A759EB28B9CF6FE9",
+        "sense_sha1": "18F106633DF889F222DF193BBE7AB56C5B51785D",
+        "shots": "671",
+        "deaths": "56",
+        "hp": "93380.000000000",
+        "ammo": "35329",
+        "alive": "944"
+      }
+    }
+  },
+  "protected_count": 16,
+  "protected_changed": [],
+  "original_assets_and_configs_unchanged": true,
+  "changed_existing_source": [
+    "FutureBattle.Build.cs",
+    "BattleLeaderRuntime.cpp",
+    "BattleLeaderRuntime.h",
+    "BattlePhase3.cpp"
+  ],
+  "new_source": [
+    "BattleVATBake.cpp",
+    "BattleVATBake.h",
+    "BattleVATBakeCommandlet.cpp",
+    "BattleVATBakeCommandlet.h",
+    "BattleVATData.h",
+    "BattleVATDisplay.cpp",
+    "BattleVATDisplay.h",
+    "BattleVATMaterial.cpp"
+  ],
+  "all_run_sources_configs_map_assets_frozen": true,
+  "default_display_lod": 0,
+  "prior_three_optimizations_on": true,
+  "anim_tasks": 0,
+  "visual_tolerance_approval": false
+}

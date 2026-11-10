@@ -1,0 +1,111 @@
+{
+  "runs": [
+    {
+      "run": "control-r1",
+      "status": "passed",
+      "dll": "72BD51BE335008EE5E78E277C4807C96EAE664EF9170FFC35E3060536CAF22A6",
+      "machine_before": true,
+      "etw_stop": null,
+      "config_equal": false,
+      "saved_config_differences": [
+        {
+          "InputObject": "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\Saved\\Config\\CrashReportClient\\UECC-Windows-DEBB44FF42C5C38BBB5C528E1BADBD5A\\CrashReportClient.ini CE69D7E7BBD1A64729BD4D5724F3C1EFC47C6C3D555DA9D2C6AD741EDDC3D893",
+          "SideIndicator": "=>"
+        }
+      ],
+      "gameplay_saved_config_equal": true,
+      "render_config_hashes": [
+        {
+          "Path": "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\Saved\\Config\\WindowsEditor\\Engine.ini",
+          "Hash": "469F99CA4F4BBF449DCBFE028C5B331C13C8D3CE57DA1A200675D11F76CC378D"
+        },
+        {
+          "Path": "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\Saved\\Config\\WindowsEditor\\GameUserSettings.ini",
+          "Hash": "21D21CF7C258255401EE91DD9400B0F39B46640395DEEB86C3D7F9E4DEAC7E04"
+        }
+      ]
+    },
+    {
+      "run": "control-r2",
+      "status": "passed",
+      "dll": "72BD51BE335008EE5E78E277C4807C96EAE664EF9170FFC35E3060536CAF22A6",
+      "machine_before": true,
+      "etw_stop": null,
+      "config_equal": false,
+      "saved_config_differences": [
+        {
+          "InputObject": "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\Saved\\Config\\CrashReportClient\\UECC-Windows-DBAAE0A54871D5F8D02A2C92EE17CAFB\\CrashReportClient.ini CE69D7E7BBD1A64729BD4D5724F3C1EFC47C6C3D555DA9D2C6AD741EDDC3D893",
+          "SideIndicator": "=>"
+        }
+      ],
+      "gameplay_saved_config_equal": true,
+      "render_config_hashes": [
+        {
+          "Path": "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\Saved\\Config\\WindowsEditor\\Engine.ini",
+          "Hash": "469F99CA4F4BBF449DCBFE028C5B331C13C8D3CE57DA1A200675D11F76CC378D"
+        },
+        {
+          "Path": "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\Saved\\Config\\WindowsEditor\\GameUserSettings.ini",
+          "Hash": "21D21CF7C258255401EE91DD9400B0F39B46640395DEEB86C3D7F9E4DEAC7E04"
+        }
+      ]
+    },
+    {
+      "run": "trace-r1",
+      "status": "passed",
+      "dll": "72BD51BE335008EE5E78E277C4807C96EAE664EF9170FFC35E3060536CAF22A6",
+      "machine_before": true,
+      "etw_stop": 0,
+      "config_equal": false,
+      "saved_config_differences": [
+        {
+          "InputObject": "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\Saved\\Config\\CrashReportClient\\UECC-Windows-ACC6E698423AA7FFE4CA74BF1534AB18\\CrashReportClient.ini CE69D7E7BBD1A64729BD4D5724F3C1EFC47C6C3D555DA9D2C6AD741EDDC3D893",
+          "SideIndicator": "=>"
+        }
+      ],
+      "gameplay_saved_config_equal": true,
+      "render_config_hashes": [
+        {
+          "Path": "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\Saved\\Config\\WindowsEditor\\Engine.ini",
+          "Hash": "469F99CA4F4BBF449DCBFE028C5B331C13C8D3CE57DA1A200675D11F76CC378D"
+        },
+        {
+          "Path": "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\Saved\\Config\\WindowsEditor\\GameUserSettings.ini",
+          "Hash": "21D21CF7C258255401EE91DD9400B0F39B46640395DEEB86C3D7F9E4DEAC7E04"
+        }
+      ]
+    },
+    {
+      "run": "trace-r2",
+      "status": "passed",
+      "dll": "72BD51BE335008EE5E78E277C4807C96EAE664EF9170FFC35E3060536CAF22A6",
+      "machine_before": true,
+      "etw_stop": 0,
+      "config_equal": false,
+      "saved_config_differences": [
+        {
+          "InputObject": "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\Saved\\Config\\CrashReportClient\\UECC-Windows-AF1F226B44590464666D249D36794112\\CrashReportClient.ini CE69D7E7BBD1A64729BD4D5724F3C1EFC47C6C3D555DA9D2C6AD741EDDC3D893",
+          "SideIndicator": "=>"
+        }
+      ],
+      "gameplay_saved_config_equal": true,
+      "render_config_hashes": [
+        {
+          "Path": "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\Saved\\Config\\WindowsEditor\\Engine.ini",
+          "Hash": "469F99CA4F4BBF449DCBFE028C5B331C13C8D3CE57DA1A200675D11F76CC378D"
+        },
+        {
+          "Path": "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\Saved\\Config\\WindowsEditor\\GameUserSettings.ini",
+          "Hash": "21D21CF7C258255401EE91DD9400B0F39B46640395DEEB86C3D7F9E4DEAC7E04"
+        }
+      ]
+    }
+  ],
+  "dll_match": true,
+  "source_config_asset_mismatches": [],
+  "source_count": 190,
+  "map_match": true,
+  "config_count": 5,
+  "asset_count": 18,
+  "checked": "2026-11-11T02:09:04.3881069+09:00"
+}

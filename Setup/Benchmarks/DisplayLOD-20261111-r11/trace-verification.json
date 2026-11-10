@@ -1,0 +1,14 @@
+[
+  {
+    "mode": 0,
+    "ticks": 2541,
+    "events": 145806894,
+    "accounting_error_ms": 0.0
+  },
+  {
+    "mode": 1,
+    "ticks": 5044,
+    "events": 117764935,
+    "accounting_error_ms": 1.7763568394002505e-15
+  }
+]

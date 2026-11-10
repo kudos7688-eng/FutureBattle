@@ -1,0 +1,58 @@
+[
+  {
+    "run": "control-r1",
+    "spikes": 137,
+    "spikes_per60s": 137,
+    "isolated": 60,
+    "deaths": 0
+  },
+  {
+    "run": "control-r2",
+    "spikes": 146,
+    "spikes_per60s": 146,
+    "isolated": 79,
+    "deaths": 0
+  },
+  {
+    "run": "trace-r1",
+    "spikes": 127,
+    "spikes_per60s": 127,
+    "isolated": 75,
+    "deaths": 0,
+    "scope_accounting_max_error_ms": 0.0,
+    "etw": {
+      "status": 0,
+      "events_lost": 0,
+      "buffers_lost": 0,
+      "frequency": 10000000,
+      "events": 12203945,
+      "switches": 6551280,
+      "target_ready_events": 1167563,
+      "target_threads": 95,
+      "layout_errors": 0
+    },
+    "selected_task_matches": 86399,
+    "task_start_gap_max_us": 37.300000002460365
+  },
+  {
+    "run": "trace-r2",
+    "spikes": 124,
+    "spikes_per60s": 124,
+    "isolated": 37,
+    "deaths": 0,
+    "scope_accounting_max_error_ms": 0.0,
+    "etw": {
+      "status": 0,
+      "events_lost": 0,
+      "buffers_lost": 0,
+      "frequency": 10000000,
+      "events": 8401614,
+      "switches": 4622957,
+      "target_ready_events": 1163906,
+      "target_threads": 95,
+      "layout_errors": 0
+    },
+    "selected_task_matches": 86400,
+    "task_start_gap_max_us": 38.29999999993561
+  }
+]
