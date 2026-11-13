@@ -20,7 +20,7 @@ void BattleFollowerBones::SetVisible(USkeletalMeshComponent* Mesh,bool Show,bool
   Mesh->VisibilityBasedAnimTickOption=Reduce?EVisibilityBasedAnimTickOption::AlwaysTickPose:EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
   if(WasReduced && !Reduce && Mesh->IsComponentTickEnabled())
   {
-   Mesh->CompleteParallelAnimationEvaluation(true);
+   Mesh->HandleExistingParallelEvaluationTask(true,true);
    // Evaluate the current animation time before visibility / attachments are exposed.
    // Do not advance animation time a second time.
    Mesh->RefreshBoneTransforms(nullptr);
@@ -32,7 +32,7 @@ void BattleFollowerBones::PrepareFreeze(USkeletalMeshComponent* Mesh,bool Enable
 {
  if(Enabled && Mesh->VisibilityBasedAnimTickOption==EVisibilityBasedAnimTickOption::AlwaysTickPose)
  {
-  Mesh->CompleteParallelAnimationEvaluation(true);
+  Mesh->HandleExistingParallelEvaluationTask(true,true);
   Mesh->VisibilityBasedAnimTickOption=EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
   Mesh->RefreshBoneTransforms(nullptr);
  }

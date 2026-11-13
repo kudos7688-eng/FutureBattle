@@ -21,7 +21,7 @@ void FBattleAnimTasks::Apply(USkeletalMeshComponent* Mesh,bool Enabled)
  const bool Parallel=Immediate?false:OriginalParallel;
  if(Current->bUseMultiThreadedAnimationUpdate!=Parallel)
  {
-  Mesh->CompleteParallelAnimationEvaluation(true);
+  Mesh->HandleExistingParallelEvaluationTask(true,true);
   Current->bUseMultiThreadedAnimationUpdate=Parallel;
  }
 }

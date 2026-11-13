@@ -34,7 +34,7 @@ void ABattleAnimTaskTrial::Start(UBattlePhase3* InPhase)
 void ABattleAnimTaskTrial::Compare(int32 Pair)
 {
  auto* A=Meshes[Pair*2].Get(); auto* B=Meshes[Pair*2+1].Get();
- A->CompleteParallelAnimationEvaluation(true); B->CompleteParallelAnimationEvaluation(true);
+ A->HandleExistingParallelEvaluationTask(true,true); B->HandleExistingParallelEvaluationTask(true,true);
  bool Equal=A->GetSingleNodeInstance()->GetCurrentTime()==B->GetSingleNodeInstance()->GetCurrentTime();
  if(Shown)
  {
@@ -51,7 +51,7 @@ void ABattleAnimTaskTrial::Tick(float Dt)
 {
  Super::Tick(Dt); if(!Phase || Done) return;
  ++Frame;
- for(auto& M:Meshes) M->CompleteParallelAnimationEvaluation(true);
+ for(auto& M:Meshes) M->HandleExistingParallelEvaluationTask(true,true);
  // Move and turn both parents while hidden, change clip, and cross LODs.
  if(Frame==30 || Frame==240) { Shown=false; for(int32 I=0;I<Meshes.Num();++I) BattleFollowerBones::SetVisible(Meshes[I],false,true); }
  if(Frame==90) for(int32 I=0;I<Meshes.Num();++I) { Meshes[I]->PlayAnimation(Clips[(I/6+1)%3],true); BattleFollowerBones::SetVisible(Meshes[I],Shown,true); }
