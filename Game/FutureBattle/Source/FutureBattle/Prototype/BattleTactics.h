@@ -23,7 +23,7 @@ namespace BattleTactics
  bool CoverFireEnabled();
  // AI cover range check and peek line revalidation (UBattleTuning::bAICoverValidation, default ON; -BattleCoverValidation=0/1 overrides).
  bool CoverValidationEnabled();
- // Trial switch (UBattleTuning::bAICoverPeekSight, default OFF; -BattleCoverPeekSight=0/1): end an AI peek early without an own sighting.
+ // Blind peek exit (UBattleTuning::bAICoverPeekSight, default ON since 2026-11-14; -BattleCoverPeekSight=0/1): end an AI peek early without an own sighting.
  bool CoverPeekSightEnabled();
  // Trial switch -BattleReacquireGrace=1 (condition B): re-seeing an own contact within ReacquireGraceSeconds skips the
  // detection delay, and a squad keeps its previous target for TargetHoldSeconds after a member's own sighting.

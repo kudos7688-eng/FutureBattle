@@ -65,7 +65,7 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVER_LINE anchor=%d peek=%d"),AnchorLine,PeekLine);
    Check(GetDefault<UBattleTuning>()->bAICoverValidation && BattleTactics::CoverValidationEnabled(),TEXT("AI cover validation is on by default"));
    Check(GetDefault<UBattleTuning>()->bAICoverFire && BattleTactics::CoverFireEnabled(),TEXT("AI cover firing window is on by default"));
-   Check(!GetDefault<UBattleTuning>()->bAICoverPeekSight && !BattleTactics::CoverPeekSightEnabled(),TEXT("AI blind peek exit trial is off by default"));
+   Check(GetDefault<UBattleTuning>()->bAICoverPeekSight && BattleTactics::CoverPeekSightEnabled(),TEXT("AI blind peek exit is on by default"));
    Check(PeekLine,TEXT("peek destination has a clear line to the threat"));
    const FVector PeekBefore=Store->Find(2)->CoverPeek;
    Check(RevalidatePeek(2,Threat) && CoverLineClear(2,Store->Find(2)->CoverPeek,Threat),TEXT("Mass follower peek revalidates against the observed threat"));

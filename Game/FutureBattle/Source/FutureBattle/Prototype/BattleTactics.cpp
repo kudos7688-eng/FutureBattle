@@ -114,7 +114,7 @@ bool BattleTactics::CoverValidationEnabled()
 }
 bool BattleTactics::CoverPeekSightEnabled()
 {
- // Config default (UBattleTuning::bAICoverPeekSight, OFF trial); -BattleCoverPeekSight=0/1 overrides.
+ // Config default (UBattleTuning::bAICoverPeekSight, ON since 2026-11-14); -BattleCoverPeekSight=0/1 overrides.
  static const bool Enabled=[](){int32 Value=GetDefault<UBattleTuning>()->bAICoverPeekSight?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverPeekSight="),Value);return Value!=0;}();
  return Enabled;
 }
