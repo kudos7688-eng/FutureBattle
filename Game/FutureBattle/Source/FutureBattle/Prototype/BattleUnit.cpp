@@ -10,6 +10,7 @@
 #include "BattleMetrics.h"
 #include "BattleMatch.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/CameraTypes.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -23,6 +24,9 @@
 ABattleUnit::ABattleUnit(const FObjectInitializer& Init) : Super(Init)
 {
 	PrimaryActorTick.bCanEverTick = true;
+	FString Phase3Output;
+	bThirdPersonView = !FParse::Param(FCommandLine::Get(), TEXT("BattleFirstPerson")) &&
+		!FParse::Value(FCommandLine::Get(), TEXT("BattlePhase3="), Phase3Output);
 	GetCapsuleComponent()->InitCapsuleSize(36.f, 90.f);
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -97,6 +101,39 @@ const FBattleUnitState* ABattleUnit::GetState() const
 bool ABattleUnit::IsAlive() const { const auto* S = GetState(); return S && S->IsAlive(); }
 FVector ABattleUnit::EyePosition() const { return GetActorLocation() + FVector(0, 0, 60); }
 
+void ABattleUnit::CalcCamera(float DeltaTime, FMinimalViewInfo& View)
+{
+	Super::CalcCamera(DeltaTime, View);
+	if (!bThirdPersonView || !IsPlayerControlled()) return;
+	View.Rotation = GetControlRotation();
+	const FVector Pivot = FirstPersonCamera->GetComponentLocation();
+	const FVector Desired = Pivot + View.Rotation.RotateVector(FVector(-350, 65, 45));
+	FHitResult Hit;
+	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleThirdPersonCamera), false, this);
+	GetWorld()->SweepSingleByChannel(Hit, Pivot, Desired, FQuat::Identity, ECC_Camera, FCollisionShape::MakeSphere(12.f), Query);
+	View.Location = Hit.bBlockingHit ? Hit.Location : Desired;
+}
+
+void ABattleUnit::GetPlayerShot(FVector& Start, FVector& Direction)
+{
+	// Keep the shot at the soldier's eye: the rear camera must never fire around cover.
+	Start = FirstPersonCamera->GetComponentLocation();
+	Direction = GetControlRotation().Vector();
+	if (!bThirdPersonView) return;
+	FMinimalViewInfo View; CalcCamera(0.f, View);
+	const FVector End = View.Location + View.Rotation.Vector() * GetDefault<UBattleTuning>()->EffectiveWeaponRange();
+	FHitResult Hit;
+	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleThirdPersonAim), false, this);
+	GetWorld()->LineTraceSingleByChannel(Hit, View.Location, End, ECC_Visibility, Query);
+	Direction = ((Hit.bBlockingHit ? Hit.ImpactPoint : End) - Start).GetSafeNormal();
+}
+
+bool ABattleUnit::FireFromPlayerView()
+{
+	FVector Start, Direction; GetPlayerShot(Start, Direction);
+	return FireAt(Start, Direction, true);
+}
+
 void ABattleUnit::Tick(float DeltaTime)
 {
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattleUnitTick);
@@ -166,7 +203,7 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 	Direction = BattleTactics::ShotDirection(*GetState(), Direction, GetWorld()->GetTimeSeconds());
 	FHitResult Hit;
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleShot), false, this);
-	const FVector End = Start + Direction.GetSafeNormal() * Tuning->WeaponRange;
+	const FVector End = Start + Direction.GetSafeNormal() * Tuning->EffectiveWeaponRange();
 	GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Query);
 	if (ABattleUnit* Victim = Cast<ABattleUnit>(Hit.GetActor()))
 	{
@@ -230,12 +267,27 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 
 void ABattleUnit::SetDirectControl(bool bDirect)
 {
+	auto* Movement = GetCharacterMovement();
+	if (bDirect && !bDirectAvoidanceOverride)
+	{
+		SavedAvoidanceWeight = Movement->GetRVOAvoidanceWeight();
+		// UE skips CalcAvoidanceVelocity at weight 1, but still publishes this
+		// participant so AI soldiers can avoid the player. Physical collision remains.
+		Movement->SetRVOAvoidanceWeight(1.f);
+		bDirectAvoidanceOverride = true;
+	}
+	else if (!bDirect && bDirectAvoidanceOverride)
+	{
+		Movement->SetRVOAvoidanceWeight(SavedAvoidanceWeight);
+		bDirectAvoidanceOverride = false;
+	}
 	SetAnimationDetail(bDirect);
 	GetWorld()->GetSubsystem<UBattleState>()->SetAction(UnitID, bDirect ? EBattleAction::DirectControl : EBattleAction::Idle);
 	bUseControllerRotationYaw = bDirect;
 	GetCharacterMovement()->bOrientRotationToMovement = !bDirect;
-	GetMesh()->SetOwnerNoSee(bDirect);
-	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bDirect ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bDirect);
+	const bool bFirstPerson = bDirect && !bThirdPersonView;
+	GetMesh()->SetOwnerNoSee(bFirstPerson);
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
 	TeamLabel->SetVisibility(false);
 }
 
@@ -261,7 +313,9 @@ void ABattleUnit::SetAnimationDetail(bool bDirect)
 void ABattleUnit::SetRevealed(bool bVisible)
 {
 	bRevealed = bVisible;
-	SetActorHiddenInGame(!bVisible);
+	// bRevealed remains sensor knowledge for HUD/AI. TPS body rendering is independent.
+	const auto* PC = Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
+	SetActorHiddenInGame(!(bVisible || (PC && PC->ShowsUnspottedBodies())));
 }
 
 void ABattleUnit::ApplyDeath()

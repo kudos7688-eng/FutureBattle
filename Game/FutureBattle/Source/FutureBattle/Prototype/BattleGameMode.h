@@ -26,6 +26,9 @@ public:
 	double CombatStartsAt = 8.;
 	void RefreshVisibility(int32 Slice = 0, int32 SliceCount = 1);
 	void RunSmokeTest();
+	void RunThirdPersonSmokeTest();
+	void RunDelegationSmokeTest();
+ void RunSquadTacticsSmokeTest();
 	void RunCornerTrial();
 	void RunWeaponPreview();
 	void RunLargeFieldTest();

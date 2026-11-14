@@ -38,7 +38,7 @@ ABattleCameraPawn::ABattleCameraPawn()
 void ABattleCameraPawn::Zoom(float Delta)
 {
 	const FVector Current = Camera->GetRelativeLocation();
-	const float Height = FMath::Clamp(Current.Z + Delta, 1000.f, BattleFieldLayout::IsLarge(GetWorld()) ? 30000.f : 4500.f);
+	const float Height = FMath::Clamp(Current.Z + Delta, 1000.f, BattleFieldLayout::IsExpanded(GetWorld()) ? 130000.f : BattleFieldLayout::IsSightField(GetWorld()) ? 100000.f : BattleFieldLayout::IsLarge(GetWorld()) ? 30000.f : 4500.f);
 	Camera->SetRelativeLocation(FVector(-Height * .65f, 0, Height));
 }
 
@@ -50,7 +50,7 @@ void ABattleController::BeginPlay()
 	if (FParse::Param(FCommandLine::Get(), TEXT("BattleBenchmark")) || ScaleUnits > 20)
 	{ TacticalPawn->SetActorLocation(FVector::ZeroVector); TacticalPawn->Zoom(1900); }
 	EnterTactical();
-	if (BattleFieldLayout::IsLarge(GetWorld())) { TacticalPawn->SetActorLocation(FVector(-8500,0,0)); TacticalPawn->Zoom(3500); }
+	if (BattleFieldLayout::IsLarge(GetWorld())) { TacticalPawn->SetActorLocation(FVector(BattleFieldLayout::IsSightField(GetWorld())?-BattleFieldLayout::HomeDistance(GetWorld())+2000:-8500,0,0)); TacticalPawn->Zoom(3500); }
 }
 
 void ABattleController::SetupInputComponent()
@@ -87,6 +87,8 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("ToggleMode"), EKeys::Tab, &ABattleController::ToggleMode);
 	Button(TEXT("ControlSelected"), EKeys::E, &ABattleController::ControlSelected);
 	Button(TEXT("SelectAll"), EKeys::Q, &ABattleController::SelectAll);
+	Button(TEXT("DelegateSelected"), EKeys::J, &ABattleController::DelegateSelected);
+	Button(TEXT("TakeCommandSelected"), EKeys::K, &ABattleController::TakeCommandSelected);
 	Button(TEXT("Hold"), EKeys::H, &ABattleController::HoldSelected);
 	Button(TEXT("AttackMove"), EKeys::T, &ABattleController::ChooseAttackMove);
 	Button(TEXT("Defend"), EKeys::G, &ABattleController::ChooseDefend);
@@ -101,6 +103,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("RequestSupport"), EKeys::B, &ABattleController::RequestSupport);
 	Button(TEXT("Reload"), EKeys::R, &ABattleController::Reload);
 	Button(TEXT("ToggleCombat"), EKeys::P, &ABattleController::ToggleCombat);
+	Button(TEXT("GameSpeed"), EKeys::Period, &ABattleController::CycleGameSpeed);
 	Button(TEXT("Restart"), EKeys::F5, &ABattleController::RestartBattle);
 	Button(TEXT("ZoomIn"), EKeys::MouseScrollUp, &ABattleController::ZoomIn);
 	Button(TEXT("ZoomOut"), EKeys::MouseScrollDown, &ABattleController::ZoomOut);
@@ -116,10 +119,11 @@ void ABattleController::Forward(const FInputActionValue& Value)
 	if (bTactical && TacticalPawn)
 	{
 		FVector P = TacticalPawn->GetActorLocation() + FVector(Axis * 1800 * GetWorld()->GetDeltaSeconds(), 0, 0);
-		P.X = FMath::Clamp(P.X, BattleFieldLayout::IsLarge(GetWorld()) ? -11500.f : -3500.f, BattleFieldLayout::IsLarge(GetWorld()) ? 11500.f : 3500.f); TacticalPawn->SetActorLocation(P);
+		const float Limit=BattleFieldLayout::IsExpanded(GetWorld())?39500.f:BattleFieldLayout::IsSightField(GetWorld())?29500.f:BattleFieldLayout::IsLarge(GetWorld())?11500.f:3500.f;
+		P.X = FMath::Clamp(P.X,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
 	else if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
-		if (Unit->IsAlive()) Unit->AddMovementInput(FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::X), Axis);
+		if (Unit->IsAlive()){if(FMath::Abs(Axis)>.01f)GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->CancelCoverAction(Unit->GetUnitID());Unit->AddMovementInput(FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::X), Axis);}
 }
 
 void ABattleController::Right(const FInputActionValue& Value)
@@ -128,10 +132,11 @@ void ABattleController::Right(const FInputActionValue& Value)
 	if (bTactical && TacticalPawn)
 	{
 		FVector P = TacticalPawn->GetActorLocation() + FVector(0, Axis * 1800 * GetWorld()->GetDeltaSeconds(), 0);
-		P.Y = FMath::Clamp(P.Y, BattleFieldLayout::IsLarge(GetWorld()) ? -8500.f : -2500.f, BattleFieldLayout::IsLarge(GetWorld()) ? 8500.f : 2500.f); TacticalPawn->SetActorLocation(P);
+		const float Limit=BattleFieldLayout::IsExpanded(GetWorld())?29500.f:BattleFieldLayout::IsSightField(GetWorld())?19500.f:BattleFieldLayout::IsLarge(GetWorld())?8500.f:2500.f;
+		P.Y = FMath::Clamp(P.Y,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
 	else if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
-		if (Unit->IsAlive()) Unit->AddMovementInput(FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::Y), Axis);
+		if (Unit->IsAlive()){if(FMath::Abs(Axis)>.01f)GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->CancelCoverAction(Unit->GetUnitID());Unit->AddMovementInput(FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::Y), Axis);}
 }
 
 void ABattleController::LookYaw(const FInputActionValue& Value) { if (!bTactical) AddYawInput(Value.Get<float>() * .8f); }
@@ -168,15 +173,15 @@ void ABattleController::StartMatch()
 
 void ABattleController::SaveMatch()
 {
- if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled()) { ShowNotice(TEXT("隊長試験モードの保存は未対応です")); return; }
+ if(const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); R->IsEnabled()&&!R->IsWideField()) { ShowNotice(TEXT("この部隊構成の保存は未対応です")); return; }
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
-	if (Match->IsEnabled()) { Match->SaveMatch(); ShowNotice(Match->LastMessage); }
+	if (Match->IsEnabled()) { Match->SaveMatch(QuickSaveSlot); ShowNotice(Match->LastMessage); }
 }
 void ABattleController::LoadMatch()
 {
- if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled()) { ShowNotice(TEXT("隊長試験モードの読込は未対応です")); return; }
+ if(const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); R->IsEnabled()&&!R->IsWideField()) { ShowNotice(TEXT("この部隊構成の読込は未対応です")); return; }
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
-	if (Match->IsEnabled()) { Match->LoadMatch(); ShowNotice(Match->LastMessage); }
+	if (Match->IsEnabled()) { Match->LoadMatch(QuickSaveSlot); ShowNotice(Match->LastMessage); }
 }
 void ABattleController::ResetMatchControl()
 {
@@ -190,6 +195,20 @@ void ABattleController::RequestSupport()
 	ABattleUnit* Observer = bTactical ? (Selected.IsEmpty() ? nullptr : Selected[0].Get()) : Cast<ABattleUnit>(GetPawn());
 	if (!Observer) { ShowNotice(TEXT("Select a friendly observer first")); return; }
 	Match->RequestSupport(Observer->GetUnitID()); ShowNotice(Match->LastMessage);
+}
+
+bool ABattleController::ShowsUnspottedBodies() const
+{
+	const auto* Unit = Cast<ABattleUnit>(GetPawn());
+	return !bTactical && Unit && Unit->UsesThirdPersonView();
+}
+
+void ABattleController::RefreshBodyPresentation()
+{
+	auto* Leader = GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+	if (Leader->IsEnabled()) { Leader->RefreshDisplay(); return; }
+	if (auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>())
+		for (ABattleUnit* Unit : Mode->Units) if (Unit) Unit->SetRevealed(Unit->bRevealed);
 }
 
 void ABattleController::EnterTactical()
@@ -212,6 +231,8 @@ void ABattleController::EnterTactical()
 	}
 	Possess(TacticalPawn);
 	bTactical = true;
+	ApplyGameSpeed();
+	RefreshBodyPresentation();
 	bTriggerHeld = false;
 	bShowMouseCursor = true;
 	FInputModeGameOnly Mode;
@@ -240,6 +261,8 @@ bool ABattleController::ControlUnit(ABattleUnit* Unit)
 	LastControlled = Unit;
 	SetSelection(Unit);
 	bTactical = false;
+	ApplyGameSpeed();
+	RefreshBodyPresentation();
 	bTriggerHeld = false;
 	bShowMouseCursor = false;
 	FInputModeGameOnly Mode; Mode.SetConsumeCaptureMouseDown(false); SetInputMode(Mode);
@@ -267,6 +290,45 @@ void ABattleController::SelectAll()
 		for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0 && LeaderSelectable(Unit)) Selected.Add(Unit);
 }
 
+bool ABattleController::CanShowDelegation() const
+{
+	return bTactical && GetWorld()->GetSubsystem<UBattleMatch>()->CanDelegateAllies();
+}
+
+void ABattleController::GetDelegationCounts(int32& Manual, int32& Automatic) const
+{
+	Manual = Automatic = 0;
+	TSet<int32> IDs;
+	const auto* Store = GetWorld()->GetSubsystem<UBattleState>();
+	for (const ABattleUnit* U : Selected) if (U && U->IsAlive() && U->GetState()->Team == 0) IDs.Add(U->GetState()->SquadID);
+	for (int32 ID : IDs) if (const auto* S = Store->FindSquad(ID))
+		{ if (S->bPlayerDelegated) ++Automatic; else ++Manual; }
+}
+
+bool ABattleController::DelegationPanelAt(FVector2D P) const
+{
+	return CanShowDelegation() && P.X >= 16 && P.X < 466 && P.Y >= 238 && P.Y < 332;
+}
+
+int32 ABattleController::DelegationButtonAt(FVector2D P) const
+{
+	if (!DelegationPanelAt(P) || P.Y < 270 || P.Y >= 300) return INDEX_NONE;
+	if (P.X >= 28 && P.X < 228) return 0;
+	if (P.X >= 240 && P.X < 454) return 1;
+	return INDEX_NONE;
+}
+
+void ABattleController::SetSelectedDelegated(bool bDelegated)
+{
+	if (!CanShowDelegation()) return;
+	TSet<int32> IDs;
+	for (const ABattleUnit* U : Selected) if (U && U->IsAlive() && U->GetState()->Team == 0) IDs.Add(U->GetState()->SquadID);
+	int32 Count = 0;
+	for (int32 ID : IDs) if (GetWorld()->GetSubsystem<UBattleMatch>()->SetAllyDelegated(ID, bDelegated)) ++Count;
+	PendingOrder = EBattleOrder::Move;
+	ShowNotice(Count ? FString::Printf(TEXT("%d SQUADS / %s"), Count, bDelegated ? TEXT("AI COMMAND / P TO RESUME IF PAUSED") : TEXT("MANUAL COMMAND / CURRENT ORDERS RETAINED")) : TEXT("SELECT FRIENDLY SQUADS FIRST"));
+}
+
 void ABattleController::PrimaryPressed()
 {
 	bTriggerHeld = true;
@@ -275,11 +337,37 @@ void ABattleController::PrimaryPressed()
 		if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
 			if (Unit->IsAlive())
 				if (ABattleGameMode* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>())
-					if (!Mode->bBattleEnded) Unit->FireAt(Unit->FirstPersonCamera->GetComponentLocation(), GetControlRotation().Vector(), true);
+					if (!Mode->bBattleEnded) Unit->FireFromPlayerView();
 }
 
 bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 {
+ if(!bTactical && Params.Key==EKeys::C && Params.Event==IE_Pressed)
+ {
+  if(auto* U=Cast<ABattleUnit>(GetPawn()))
+  {
+   auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+   if(U->GetState()->CoverPhase){R->CancelCoverAction(U->GetUnitID());ShowNotice(TEXT("COVER RELEASED"));}
+   else ShowNotice(R->RequestCoverAction(U->GetUnitID(),U->GetActorLocation()+GetControlRotation().Vector()*5000)?TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE"):TEXT("NO NEARBY COVER WITH SAFE PEEK"));
+   return true;
+  }
+ }
+	FVector2D Pointer;
+	const bool OverDelegation = GetPointerPosition(Pointer) && DelegationPanelAt(Pointer);
+	if (Params.Key == EKeys::LeftMouseButton)
+	{
+		if (Params.Event == IE_Pressed && OverDelegation)
+		{
+			DelegationPress = DelegationButtonAt(Pointer); bTriggerHeld = false; return true;
+		}
+		if (Params.Event == IE_Released && (DelegationPress != INDEX_NONE || OverDelegation))
+		{
+			if (DelegationPress != INDEX_NONE && OverDelegation && DelegationButtonAt(Pointer) == DelegationPress)
+				SetSelectedDelegated(DelegationPress == 1);
+			DelegationPress = INDEX_NONE; bTriggerHeld = false; return true;
+		}
+	}
+	if (OverDelegation && Params.Key == EKeys::RightMouseButton) return true;
 	if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled() && bTactical)
  {
   const bool Over=SquadPanelAtPointer();
@@ -381,7 +469,12 @@ void ABattleController::IssueMoveAt(FVector Target)
 void ABattleController::IssueOrderAt(FVector Target, EBattleOrder Order)
 {
  if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled())
- { for(ABattleUnit* U:Selected) if(LeaderSelectable(U)) L->IssueOrder(U->GetState()->SquadID,Order,Target); return; }
+ {
+  int32 Accepted=0,Rejected=0;
+  for(ABattleUnit* U:Selected) if(LeaderSelectable(U)) { if(L->IssueOrder(U->GetState()->SquadID,Order,Target)) ++Accepted; else ++Rejected; }
+  if(L->IsWideField()) ShowNotice(FString::Printf(TEXT("ORDER: %d SQUADS / %d REJECTED"),Accepted,Rejected));
+  return;
+ }
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (Match->IsEnabled() && Match->Phase != EBattleMatchPhase::Combat) { ShowNotice(TEXT("Start the battle with ENTER")); return; }
 	if (Target.ContainsNaN() || Order == EBattleOrder::Hold) return;
@@ -419,6 +512,7 @@ void ABattleController::IssueOrderAt(FVector Target, EBattleOrder Order)
 		}
 		// Atomic per squad: retain the previous order if any living member has no path.
 		if (!Store->SetSquadOrder(Squad->SquadID, Order, Center, Goals)) { ++Rejected; continue; }
+		Store->SetSquadDelegated(Squad->SquadID, false);
 		for (ABattleUnit* Unit : Mode->Units) if (Unit && Goals.Contains(Unit->GetUnitID()))
 		{
 			if (ABattleAIController* AI = Cast<ABattleAIController>(Unit->GetController()))
@@ -450,6 +544,7 @@ void ABattleController::HoldSelected()
 		for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive() && Unit->GetState()->SquadID == ID)
 		{ Goals.Add(Unit->GetUnitID(), Unit->GetActorLocation()); Center += Unit->GetActorLocation(); }
 		if (Goals.IsEmpty() || !Store->SetSquadOrder(ID, EBattleOrder::Hold, Center / Goals.Num(), Goals)) continue;
+		Store->SetSquadDelegated(ID, false);
 		for (ABattleUnit* Unit : Mode->Units) if (Unit && Goals.Contains(Unit->GetUnitID()))
 			if (ABattleAIController* AI = Cast<ABattleAIController>(Unit->GetController())) AI->BeginOrder();
 	}
@@ -487,7 +582,7 @@ void ABattleController::PlayerTick(float DeltaTime)
 		else if (bTriggerHeld)
 		{
 			ABattleGameMode* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>();
-			if (!Mode || !Mode->bBattleEnded) Unit->FireAt(Unit->FirstPersonCamera->GetComponentLocation(), GetControlRotation().Vector(), true);
+			if (!Mode || !Mode->bBattleEnded) Unit->FireFromPlayerView();
 		}
 	}
 }
@@ -535,4 +630,19 @@ int32 ABattleController::SquadListIDAt(FVector2D P) const
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); int32 W,H; GetViewportSize(W,H);
  const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H)).RowAt(P); const auto& Rows=L->Summaries();
  return R!=INDEX_NONE && Rows.IsValidIndex(R+SquadListScroll)?Rows[R+SquadListScroll].SquadID:INDEX_NONE;
+}
+
+void ABattleController::CycleGameSpeed()
+{
+	if (GetNetMode() != NM_Standalone) { ShowNotice(TEXT("Game speed: standalone only")); return; }
+	if (!bTactical) { ShowNotice(TEXT("Game speed: tactical view only (direct control runs at x1)")); return; }
+	GameSpeed = GameSpeed == 1 ? 2 : GameSpeed == 2 ? 4 : 1;
+	ApplyGameSpeed();
+	ShowNotice(FString::Printf(TEXT("GAME SPEED x%d [.]"), GameSpeed));
+}
+
+void ABattleController::ApplyGameSpeed()
+{
+	// Simulation steps scale with the world delta, so AI, movement and timers all run faster together.
+	if (GetNetMode() == NM_Standalone) UGameplayStatics::SetGlobalTimeDilation(GetWorld(), bTactical ? float(GameSpeed) : 1.f);
 }

@@ -3,6 +3,9 @@
 #include "BattleVATDisplay.h"
 #include "BattlePhase3.h"
 #include "BattleGameMode.h"
+#include "BattleFieldLayout.h"
+#include "BattleMatch.h"
+#include "BattleSquadTactics.h"
 #include "BattleController.h"
 #include "BattlePerception.h"
 #include "BattleTactics.h"
@@ -19,9 +22,19 @@
 #include "TimerManager.h"
 #include "FutureBattle.h"
 
+FVector UBattleLeaderRuntime::LimitedSteering(FVector Desired,FVector Separation,float MaxSide)
+{
+ const FVector Forward=Desired.GetSafeNormal2D();
+ if(Forward.IsNearlyZero()) return FVector::ZeroVector;
+ const FVector Side(-Forward.Y,Forward.X,0);
+ // Preserve the commanded forward direction; crowd size cannot amplify the sideways correction.
+ const float Offset=FMath::Clamp(float(FVector::DotProduct(Separation,Side)*.65),-FMath::Clamp(MaxSide,0.f,.5f),FMath::Clamp(MaxSide,0.f,.5f));
+ return (Forward+Side*Offset).GetSafeNormal2D();
+}
+
 FBattleSquadListLayout FBattleSquadListLayout::Make(FVector2D View)
 {
- FBattleSquadListLayout L; L.Width=FMath::Min(300.f,float(View.X)-32.f);
+ FBattleSquadListLayout L; L.Width=FMath::Min(360.f,float(View.X)-32.f);
  L.Origin=FVector2D(View.X-L.Width-16,104); L.Height=FMath::Max(0.f,FMath::Min(720.f,float(View.Y)-234.f));
  L.VisibleRows=FMath::Max(0,FMath::FloorToInt((L.Height-52)/L.RowHeight)); return L;
 }
@@ -38,8 +51,25 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
  // Explicit opt-in isolated runtime. Legacy trials, saves and network modes are not silently mixed.
  if(InMode.GetClass()!=ABattleGameMode::StaticClass() || GetWorld()->GetNetMode()!=NM_Standalone || FParse::Param(FCommandLine::Get(),TEXT("BattleBenchmark")) || FParse::Param(FCommandLine::Get(),TEXT("BattleFastMatch")) ||
    FCString::Stristr(FCommandLine::Get(),TEXT("BattleSquadTrial="))) return false;
- int32 Count=40; FParse::Value(FCommandLine::Get(),TEXT("BattleLeaderUnits="),Count);
+ bWideField=FParse::Param(FCommandLine::Get(),TEXT("BattleWideMixed")) || BattleFieldLayout::IsSightField(GetWorld());
+ bMixedFastMatch=bWideField && FParse::Param(FCommandLine::Get(),TEXT("BattleMixedFastMatch"));
+ bArea=BattleFieldLayout::IsSightField(GetWorld())&&FParse::Param(FCommandLine::Get(),TEXT("BattleArea"));
+ if(bArea&&bMixedFastMatch)return false;
+ SightExperiment.Enabled=FParse::Value(FCommandLine::Get(),TEXT("BattleSightExperiment="),SightExperiment.Output);
+ if(SightExperiment.Enabled && !BattleFieldLayout::IsSightField(GetWorld())) return false;
+ const bool Swap=BattleFieldLayout::IsSightField(GetWorld()) && FParse::Param(FCommandLine::Get(),TEXT("BattleTrialSwap"));
+ int32 RangeAware=1;FParse::Value(FCommandLine::Get(),TEXT("BattleRangeAware="),RangeAware);bRangeAwareCombat=RangeAware==1;
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_RANGE_AWARE enabled=%d"),bRangeAwareCombat);
+ int32 Stable=1; FParse::Value(FCommandLine::Get(),TEXT("BattleStableMovement="),Stable); bStableMovement=Stable!=0;
+ int32 Contact=1;FParse::Value(FCommandLine::Get(),TEXT("BattleContactAvoidance="),Contact);bContactAvoidance=Contact!=0;
+ bContactTrial=FParse::Param(FCommandLine::Get(),TEXT("BattleContactTrial"));
+ bMovementTrial=bContactTrial || FParse::Param(FCommandLine::Get(),TEXT("BattleMovementTrial"));
+ FParse::Value(FCommandLine::Get(),TEXT("BattleMovementScene="),MoveTrialOnly);
+ if(MoveTrialOnly>=0 && MoveTrialOnly<4) MoveTrialScene=MoveTrialOnly;
+ if(bWideField && !BattleFieldLayout::IsLarge(GetWorld())) return false;
+ int32 Count=bMixedFastMatch?20:bWideField?500:40; FParse::Value(FCommandLine::Get(),TEXT("BattleLeaderUnits="),Count);
  if(Count<20 || Count>1000 || Count%20) return false;
+ if(bWideField && Count!=(bMixedFastMatch?20:500)) return false;
  Mode=&InMode; bEnabled=true;
  int32 AnimTasks=0; FParse::Value(FCommandLine::Get(),TEXT("BattleReduceAnimTasks="),AnimTasks);
  if(AnimTasks!=0 && AnimTasks!=1) return false;
@@ -59,9 +89,12 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
  UE_LOG(LogFutureBattle,Display,TEXT("SIGHT_CONTEXT_REUSE enabled=%d scope=observer_scan"),ReuseSight);
  Phase3=GetWorld()->GetSubsystem<UBattlePhase3>();
  if(!Phase3->Configure(*this)) return false;
- int32 DisplayLOD=0; FParse::Value(FCommandLine::Get(),TEXT("BattleDisplayLOD="),DisplayLOD);
- if((DisplayLOD!=0 && DisplayLOD!=1) || (DisplayLOD==1 && !Phase3->bEnabled))return false;
- UE_LOG(LogFutureBattle,Display,TEXT("VAT_DISPLAY requested=%d default=0 trial_only=1"),DisplayLOD);
+ if(bWideField && Phase3->bEnabled) return false;
+ int32 DisplayLOD=1; FParse::Value(FCommandLine::Get(),TEXT("BattleDisplayLOD="),DisplayLOD);
+ if(DisplayLOD!=0 && DisplayLOD!=1)return false;
+ bDisplayLODEnabled=DisplayLOD==1;
+ if(!Phase3->bEnabled && FParse::Param(FCommandLine::Get(),TEXT("P3VATAudit")))return false;
+ UE_LOG(LogFutureBattle,Display,TEXT("VAT_DISPLAY requested=%d default=1 scope=mass_followers"),DisplayLOD);
  if(DisplayLOD==1){VAT=GetWorld()->SpawnActor<ABattleVATDisplay>();VAT->PrepareRendering();}
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  DeathHandle=Store->OnUnitDied.AddUObject(this,&UBattleLeaderRuntime::OnDeath);
@@ -78,26 +111,33 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
  for(int32 Team=0;Team<2;++Team) for(int32 Group=0;Group<Count/20;++Group)
  {
   TArray<int32> IDs;
-  const FVector Center=Phase3->bEnabled?Phase3->SpawnCenter(Team,Group):FVector(Team ? 1800:-1800, (Group-(Count/20-1)*.5)*800, 95);
+  const int32 Side=Swap?1-Team:Team;
+  const FVector Center=bMixedFastMatch?FVector((Team?1:-1)*(BattleFieldLayout::HomeDistance(GetWorld())-(BattleFieldLayout::IsSightField(GetWorld())?1000:500)),0,100):BattleFieldLayout::IsSightField(GetWorld())?BattleFieldLayout::WideSpawn(Side,Group,BattleFieldLayout::IsExpanded(GetWorld())):bWideField?FVector((Team?1:-1)*(9000+(Group%5)*400),(Group/5-2)*2800,100):Phase3->bEnabled?Phase3->SpawnCenter(Team,Group):FVector(Team ? 1800:-1800, (Group-(Count/20-1)*.5)*800, 95);
   ABattleUnit* Leader=nullptr;
   for(int32 Slot=0;Slot<10;++Slot)
   {
    const int32 ID=Store->RegisterUnit(Team,Phase3->bStable?10000.f:0.f,WeaponForSlot(Slot)); IDs.Add(ID);
-   const FVector P=Center+FVector((Slot/5)*-130*(Team?-1:1),(Slot%5-2)*110,0);
+   const FVector P=Center+FVector((Slot/5)*-130*(Side?-1:1),(Slot%5-2)*110*(BattleFieldLayout::IsSightField(GetWorld()) && Side?-1:1),0);
    FBattleLeaderBody B;
    if(Slot==0)
    {
     FActorSpawnParameters Params; Params.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    Leader=GetWorld()->SpawnActor<ABattleUnit>(P,FRotator(0,Team?180:0,0),Params);
+    Leader=GetWorld()->SpawnActor<ABattleUnit>(P,FRotator(0,Side?180:0,0),Params);
     if(!Leader) return false;
     Leader->InitializeUnit(ID); Mode->Units.Add(Leader); B.Actor=Leader;
     Leader->GetCharacterMovement()->bOrientRotationToMovement=false;
+    // The shared runtime produces input in GameMode::Tick. Explicitly order its
+    // consumer afterwards; a throttled controller prerequisite can otherwise
+    // reorder movement ticks and leave every third frame without input.
+    Leader->GetCharacterMovement()->AddTickPrerequisiteActor(Mode);
+    // The mixed runtime already steers both representations. Do not apply a second RVO correction.
+    if(bWideField) Leader->GetCharacterMovement()->SetRVOAvoidanceWeight(1.f);
     HitIDs.Add(Leader->GetCapsuleComponent(),ID);
    }
    else
    {
     B.Entity=Manager->CreateEntity(Archetype); auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);
-    F.UnitID=ID; F.Position=P; F.Forward=FVector(Team?-1:1,0,0);
+    F.UnitID=ID; F.Position=P; F.Forward=FVector(Side?-1:1,0,0);
     auto* Capsule=NewObject<UCapsuleComponent>(DisplayHost); DisplayHost->AddInstanceComponent(Capsule);
     Capsule->InitCapsuleSize(36,90); Capsule->SetCollisionObjectType(ECC_Pawn);
     Capsule->SetCollisionEnabled(ECollisionEnabled::QueryOnly); Capsule->SetCollisionResponseToAllChannels(ECR_Block);
@@ -115,12 +155,50 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   const int32 SID=Store->CreateLeaderSquad(Team,IDs,IDs[0],Team==0 && Group!=NoControl);
   if(SID==INDEX_NONE) return false;
   FBattleLeaderPlan Plan; Plan.Center=Center; Plan.NextThink=GetWorld()->GetTimeSeconds()+.05*(SID%10); Plans.Add(SID,Plan);
-  IssueOrder(SID,Phase3->bEnabled?EBattleOrder::AttackMove:Team?EBattleOrder::AttackMove:EBattleOrder::Hold,Phase3->bEnabled?Phase3->Goal(Team,Group):FVector(Team?600:Center.X,Center.Y,0));
+  IssueOrder(SID,bWideField?EBattleOrder::Hold:Phase3->bEnabled?EBattleOrder::AttackMove:Team?EBattleOrder::AttackMove:EBattleOrder::Hold,bWideField?Center:Phase3->bEnabled?Phase3->Goal(Team,Group):FVector(Team?600:Center.X,Center.Y,0));
  }
  if(DisplayLOD==1 && !VAT->Initialize(this))return false;
  Mode->CombatStartsAt=GetWorld()->GetTimeSeconds()+3.;
  if(Phase3->bEnabled) Phase3->Begin();
  if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())) PC->BindLeaderDeaths();
+ if(bWideField)
+ {
+  auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); Match->InitializeMatch(); Match->Phase=EBattleMatchPhase::Combat; Match->DirectorClock=5;
+  Mode->bScaleTest=true; Mode->ScaleUnitCount=Count; Mode->bCombatPaused=true;
+  if(bMixedFastMatch){Match->Phase=EBattleMatchPhase::Deployment;Match->Credits[0]=Match->Credits[1]=3000-Match->CurrentSquadPrice(EBattleTraining::Regular);}
+  if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())) PC->SetSelection(Actor(1));
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WIDE_MIXED_READY squads=50 actors=50 mass=450 objectives=%d paused=1"),Match->Objectives.Num());
+  if(FParse::Param(FCommandLine::Get(),TEXT("BattleCoverActionSmoke")))
+  {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunCoverActionSmoke,4.f,false);}
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleFlankBayTrial")))
+  {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunFlankBayTrial,4.f,false);}
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleMixedFastSmoke")))
+  {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunMixedFastSmoke,4.f,false);}
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleMixedSaveSmoke")))
+  { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunMixedSaveSmoke,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleWeaponTrial")))
+  { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWeaponRangeTrial,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleSightVisual")))
+  { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSightVisual,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleWideMapAudit")))
+  { bMovementTrial=true;FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWideMapAudit,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleSightTrial")))
+  { FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSightTrial,4.f,false); }
+  else if(bContactTrial)
+  { FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunContactTrial,4.f,false); }
+  else if(bMovementTrial)
+  { FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunMovementTrial,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleFlankSmoke")))
+  { FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunFlankSmoke,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleSupportSmoke")))
+  { FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSupportSmoke,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleST2Smoke")))
+  { FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunST2Smoke,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleWideSmoke")))
+  { FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWideSmoke,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleWideSoak")))
+  { FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWideSoak,4.f,false); }
+ }
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_LEADER_READY total=%d actors=%d mass=%d"),Count,Mode->Units.Num(),Count-Mode->Units.Num());
  if(FParse::Param(FCommandLine::Get(),TEXT("BattleLeaderSmoke")))
  { Mode->bCombatPaused=true; FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSmoke,3.f,false); }
@@ -193,10 +271,17 @@ const TArray<FBattleSquadSummary>& UBattleLeaderRuntime::Summaries()
 }
 void UBattleLeaderRuntime::OnDeath(int32 ID)
 {
+ CancelCoverAction(ID);
  if(Phase3 && Phase3->bEnabled) Phase3->OnDeath(ID);
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U) return;
  const auto* S=Store->FindSquad(U->SquadID);
  if(S && S->LeaderUnitID==ID) { Store->DisableLeaderSquad(S->SquadID); Plans.Remove(S->SquadID); }
+ if(bArea&&S&&S->CommandStatus!=EBattleCommandStatus::Active)
+ {
+  auto* M=GetWorld()->GetSubsystem<UBattleMatch>();
+  for(auto It=M->Area.Replacements.CreateIterator();It;++It)if(const auto* U2=Store->Find(It.Key());U2&&U2->SquadID==S->SquadID)It.RemoveCurrent();
+  M->Area.AmmoTimers.Remove(S->SquadID);
+ }
  if(auto* B=Bodies.Find(ID))
  {
   B->Velocity=FVector::ZeroVector;
@@ -205,10 +290,18 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
  }
  bSummaryDirty=true;
 }
-bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal)
+bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,bool bMissionUpdate)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID);
  if(!Mode || Mode->bBattleEnded || !S || S->CommandStatus!=EBattleCommandStatus::Active || Goal.ContainsNaN()) return false;
+ if(bWideField && Order!=EBattleOrder::Hold)
+ {
+  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()); FNavLocation Projected;
+  if(!Nav || !Nav->ProjectPointToNavigation(Goal,Projected,FVector(100,100,400))) return false;
+  auto* Route=Nav->FindPathToLocationSynchronously(GetWorld(),Position(S->LeaderUnitID),Projected.Location);
+  if(!Route || !Route->IsValid() || Route->IsPartial()) return false;
+  Goal=Projected.Location;
+ }
  TMap<int32,FVector> Goals;
  for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive())
  {
@@ -229,53 +322,138 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal)
   }
   Goals.Add(ID,MemberGoal);
  }
- const bool OK=Store->SetSquadOrder(SID,Order,Goal,Goals); if(OK) { auto& P=Plans.FindOrAdd(SID); P.bReplan=true; P.NextThink=0; } return OK;
+ const int32 Revision=S->OrderRevision;
+ const bool OK=Store->SetSquadOrder(SID,Order,Goal,Goals,bMissionUpdate);
+ if(OK)
+ {
+  if(S->OrderRevision!=Revision) { auto& P=Plans.FindOrAdd(SID); P.bReplan=true; P.NextThink=0; }
+  if(bWideField && !bMissionUpdate && S->Team==0) Store->SetSquadDelegated(SID,false);
+ }
+ return OK;
 }
 void UBattleLeaderRuntime::Think(int32 SID,double Now)
 {
+ FBattleScopedMetric TrialTiming(SightExperiment.Enabled?GetWorld()->GetSubsystem<UBattleMetrics>():nullptr,EBattleMetricPhase::Squad);
  FPhase3Scope Timing(Phase3,EPhase3Cost::Decision);
  if(Phase3 && Phase3->bEnabled) ++Phase3->Decisions;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID); auto& P=Plans.FindChecked(SID);
  auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();
  if(Phase3 && Phase3->bEnabled && P.NextThink>0) Phase3->DecisionLateMS=FMath::Max(Phase3->DecisionLateMS,(Now-P.NextThink)*1000);
  P.NextThink=Now+FMath::Max(.2f,GetDefault<UBattleTuning>()->SquadDecisionSeconds);
+ const int32 PreviousTarget=P.TargetID;
  P.TargetID=INDEX_NONE; double Best=DBL_MAX;
  P.Center=FVector::ZeroVector; int32 Count=0; for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) { P.Center+=Position(ID); ++Count; } if(Count) P.Center/=Count;
  if(S->Order!=EBattleOrder::Move) for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) if(const auto* Contacts=Sense->GetContacts(ID))
   for(const auto& C:*Contacts) if(C.Value.bVisible && !C.Value.bShared)
   {
+   if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C.Value.LastKnownPosition)>FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange())) continue;
    if(S->Order==EBattleOrder::Defend && FVector::Dist2D(C.Value.LastKnownPosition,S->Destination)>S->DefenseRadius) continue;
+   if(S->TacticalPlan.Action==EBattleSquadTactic::Support && C.Key!=S->TacticalPlan.SupportTarget) continue;
    const double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
    if(D<Best || (D==Best && C.Key<P.TargetID)) { Best=D; P.TargetID=C.Key; }
   }
- if(P.OrderRevision!=S->OrderRevision) { P.OrderRevision=S->OrderRevision; P.bReplan=true; }
+ // Trial -BattleReacquireGrace=1: keep the previous target briefly while a member's own (non-shared) sighting is
+ // fresh. Firing still requires a current line of sight (CanEngage/CanSee); this only avoids dropping the engagement.
+ if(P.TargetID==INDEX_NONE && PreviousTarget!=INDEX_NONE && S->Order!=EBattleOrder::Move && BattleTactics::ReacquireGraceEnabled())
+ {
+  const float Hold=FMath::Max(0.f,GetDefault<UBattleTuning>()->TargetHoldSeconds);
+  if(S->TacticalPlan.Action!=EBattleSquadTactic::Support || PreviousTarget==S->TacticalPlan.SupportTarget)
+   for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) if(const auto* C=Sense->FindContact(ID,PreviousTarget))
+   {
+    if(C->bShared || Now-C->LastSeenTime>Hold+1.e-6) continue;
+    if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C->LastKnownPosition)>FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange())) continue;
+    if(S->Order==EBattleOrder::Defend && FVector::Dist2D(C->LastKnownPosition,S->Destination)>S->DefenseRadius) continue;
+    P.TargetID=PreviousTarget;SightExperiment.Cover(TEXT("squad_target_held"));break;
+   }
+ }
+ // Evaluation only: how long a squad goes without a visible target, and whether a member had just seen it.
+ if(SightExperiment.Enabled && S->Order!=EBattleOrder::Move)
+ {
+  auto& E=SightExperiment;
+  if(PreviousTarget!=INDEX_NONE && P.TargetID==INDEX_NONE)
+  {
+   E.Cover(TEXT("squad_target_lost"));E.SquadTargetLostAt.Add(SID,Now);
+   bool Recent=false;
+   for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) if(const auto* C=Sense->FindContact(ID,PreviousTarget)) if(!C->bShared && Now-C->LastSeenTime<=1.) {Recent=true;break;}
+   if(Recent)E.Cover(TEXT("squad_target_lost_member_saw_within_1s"));
+  }
+  else if(PreviousTarget==INDEX_NONE && P.TargetID!=INDEX_NONE)
+   if(const double* Lost=E.SquadTargetLostAt.Find(SID))
+   {
+    const double Gap=Now-*Lost;E.SquadTargetLostAt.Remove(SID);
+    E.Cover(Gap<=.51?TEXT("squad_target_gap_le_0_5s"):Gap<=1.01?TEXT("squad_target_gap_0_5_1s"):Gap<=2.01?TEXT("squad_target_gap_1_2s"):Gap<=5.01?TEXT("squad_target_gap_2_5s"):TEXT("squad_target_gap_gt_5s"));
+   }
+ }
+ const bool NewOrder=P.OrderRevision!=S->OrderRevision;
+ if(NewOrder) { P.OrderRevision=S->OrderRevision; P.bReplan=true; }
  if(P.bReplan && Now>=P.NextPath && S->Order!=EBattleOrder::Hold)
  {
   P.NextPath=Now+1.; P.bReplan=false; P.Path.Reset();
+  ++P.PathRequests;
   P.Center=FVector::ZeroVector; int32 N=0; for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) { P.Center+=Position(ID); ++N; } if(N) P.Center/=N;
   FPhase3Scope PathTiming(Phase3,EPhase3Cost::Path);
   if(Phase3 && Phase3->bEnabled) ++Phase3->PathRequests;
   auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
   FNavLocation From,To;
-  if(Nav && Nav->ProjectPointToNavigation(P.Center,From) && Nav->ProjectPointToNavigation(S->Destination,To))
+  const FVector Origin=bWideField && !bStableMovement?Position(S->LeaderUnitID):P.Center;
+  if(Nav && (Nav->ProjectPointToNavigation(Origin,From) || (bWideField && Nav->ProjectPointToNavigation(Position(S->LeaderUnitID),From))) && Nav->ProjectPointToNavigation(S->Destination,To))
   {
+   const double PathStart=SightExperiment.Enabled?FPlatformTime::Seconds():0;
    auto* Path=Nav->FindPathToLocationSynchronously(GetWorld(),From.Location,To.Location);
+   if(SightExperiment.Enabled){SightExperiment.PathMS.Add((FPlatformTime::Seconds()-PathStart)*1000);if(Path && Path->IsValid())SightExperiment.MaxPathLength=FMath::Max(SightExperiment.MaxPathLength,double(Path->GetPathLength()));}
    if(Path && Path->IsValid() && !Path->IsPartial()) P.Path=Path->PathPoints;
+   if(S->TacticalPlan.bAutonomous && S->TacticalPlan.Action==EBattleSquadTactic::Regroup && FVector::Dist2D(From.Location,To.Location)<50)
+    P.Path={From.Location,To.Location}; // Followers can converge even when the leader is already at the rally point.
   }
-  for(int32 ID:S->Members) if(auto* B=Bodies.Find(ID)) B->Waypoint=1;
+  if(bWideField && bStableMovement) BuildMovementPlan(SID);
+  else for(int32 ID:S->Members) if(auto* B=Bodies.Find(ID)) B->Waypoint=1;
  }
 }
 void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()) return;
- auto& B=Bodies.FindChecked(ID); if(B.Actor.IsValid() && B.Actor->IsPlayerControlled()) return;
+ auto& B=Bodies.FindChecked(ID);
+ if(StepCoverAction(ID,Dt,Now))return;
+ if(B.Actor.IsValid() && B.Actor->IsPlayerControlled()) return;
  const auto* S=Store->FindSquad(U->SquadID); auto* P=Plans.Find(U->SquadID); if(!P || S->CommandStatus!=EBattleCommandStatus::Active) return;
  FVector Pos=Position(ID), Direction=Forward(ID); B.Velocity=FVector::ZeroVector;
  const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,P->TargetID);
- const bool CanEngage=Contact && Contact->bVisible && !Contact->bShared && CanSee(ID,P->TargetID);
+ // Regrouping does not replenish ammunition, but may load existing reserve without an enemy target.
+ if(bWideField && U->Ammo==0 && U->Reserve>0 && U->ReloadEndTime==0) Store->StartReload(ID,Now);
+ const bool CanEngage=Contact && Contact->bVisible && !Contact->bShared &&
+  (!bRangeAwareCombat || FVector::DistSquared(Pos,Contact->LastKnownPosition)<=FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange())) &&
+  (S->TacticalPlan.Action!=EBattleSquadTactic::Support || P->TargetID==S->TacticalPlan.SupportTarget) && CanSee(ID,P->TargetID);
  const bool StopForCombat=P->TargetID!=INDEX_NONE && S->Order!=EBattleOrder::Move;
+ const bool ProbeBudget=BattleTactics::AICoverProbeBudgetEnabled();
+ if(ProbeBudget && CoverProbeFrame!=GFrameCounter){CoverProbeFrame=GFrameCounter;CoverProbesThisFrame=0;}
+ const auto* CoverTuning=GetDefault<UBattleTuning>();
+ // Trial -BattleLeaderGuard=1: an AI leader (one per squad) does not wait for the shared probe slot.
+ const bool LeaderFirst=BattleTactics::LeaderGuardEnabled() && ID==S->LeaderUnitID;
+ const bool ProbeSlot=LeaderFirst || (ProbeBudget?CoverProbesThisFrame<FMath::Max(1,CoverTuning->AICoverProbesPerFrame):Now>=NextCoverProbe);
+ if(BattleTactics::CoverActionsEnabled() && Contact && Contact->bVisible)
+ {
+  auto& Diag=SightExperiment;
+  if(!StopForCombat)Diag.Cover(TEXT("ai_visible_moving_frames"));
+  else{Diag.Cover(TEXT("ai_eligible_frames"));if(Now<CoverProbeAfter.FindRef(ID))Diag.Cover(TEXT("ai_wait_retry_frames"));else if(!ProbeSlot)Diag.Cover(TEXT("ai_wait_budget_frames"));}
+ }
+ // Cover validation (default ON): never take cover from a contact that this soldier cannot shoot at from here.
+ const bool CoverInRange=!BattleTactics::CoverValidationEnabled() || (Contact && FVector::DistSquared2D(Pos,Contact->LastKnownPosition)<=FMath::Square(CoverTuning->EffectiveWeaponRange()));
+ if(BattleTactics::CoverActionsEnabled() && StopForCombat && Contact && Contact->bVisible && CoverInRange && ProbeSlot && Now>=CoverProbeAfter.FindRef(ID))
+ {
+  if(LeaderFirst){}else if(ProbeBudget)++CoverProbesThisFrame;else NextCoverProbe=Now+FMath::Max(0.f,CoverTuning->AICoverProbeInterval);
+  CoverProbeAfter.Add(ID,Now+FMath::Max(0.f,LeaderFirst?CoverTuning->LeaderGuardCoverRetrySeconds:CoverTuning->AICoverRetrySeconds));
+  const float LocalRadius=(ProbeBudget||LeaderFirst)?CoverTuning->AICoverSearchRadius:CoverTuning->CoverActionSearchRadius;
+  if(RequestCoverAction(ID,Contact->LastKnownPosition,P->TargetID,LocalRadius)){CoverApproaches.Remove(ID);return;}
+  // Trial -BattleCoverApproach=1: no usable cover here, so walk to a hidden slot beyond the local search radius.
+  if(BattleTactics::CoverApproachEnabled() && !CoverApproaches.Contains(ID))StartCoverApproach(ID,Contact->LastKnownPosition,P->TargetID,Now,LocalRadius);
+ }
+ const bool Approaching=CoverApproaches.Contains(ID) && StepCoverApproach(ID,Dt,Now,StopForCombat?P->TargetID:INDEX_NONE);
+ if(StopForCombat || S->Order==EBattleOrder::Hold) B.bTrafficWait=false;
  if(S->Order!=EBattleOrder::Hold && !StopForCombat && P->Path.IsValidIndex(B.Waypoint))
  {
+  if(bWideField && bStableMovement) StableMove(ID,Dt,Now,Direction);
+  else
+  {
   const FVector Segment=(P->Path[B.Waypoint]-P->Path[B.Waypoint-1]).GetSafeNormal2D();
   const int32 Slot=S->Members.IndexOfByKey(ID);
   // Shrink to the corridor center after a collision, then ask the commander to replan.
@@ -294,7 +472,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
     const FVector Away=Pos-Position(Other); const double Dist=Away.Size2D();
     if(Dist>1 && Dist<95) Separation+=Away.GetSafeNormal2D()*(95-Dist)/95;
    }
-  Direction=(D+Separation*.65).GetSafeNormal2D();
+  Direction=bWideField?LimitedSteering(D,Separation,GetDefault<UBattleTuning>()->WideAvoidanceMaxSide):(D+Separation*.65).GetSafeNormal2D();
   const float Speed=GetDefault<UBattleTuning>()->MoveSpeed;
   if(B.Actor.IsValid())
   {
@@ -313,9 +491,19 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
    if(B.StalledSince>0 && Now-B.StalledSince>2) { P->bReplan=true; B.StalledSince=Now; }
   }
   if(FVector::Dist2D(Position(ID),Way)<90) ++B.Waypoint;
+  }
  }
- else if(B.Actor.IsValid()) B.Actor->GetCharacterMovement()->StopMovementImmediately();
- if(CanEngage) Direction=(Contact->LastKnownPosition+FVector(0,0,35)-(Pos+FVector(0,0,60))).GetSafeNormal();
+ else if(B.Actor.IsValid() && !Approaching) B.Actor->GetCharacterMovement()->StopMovementImmediately();
+ FVector BaseTarget;const bool BaseEngage=!CanEngage&&S->Order!=EBattleOrder::Move&&GetWorld()->GetSubsystem<UBattleMatch>()->CanFireAtBase(ID,BaseTarget);
+ if(BaseEngage)Direction=(BaseTarget-(Pos+FVector(0,0,60))).GetSafeNormal();
+ else if(CanEngage) Direction=(Contact->LastKnownPosition+FVector(0,0,35)-(Pos+FVector(0,0,60))).GetSafeNormal();
+ else if(S->TacticalPlan.Action==EBattleSquadTactic::Flank)
+ {
+  // Movement has already consumed its steering vector. Keep watch toward known
+  // contact information while moving sideways; never resolve the enemy body here.
+  const auto* Known=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,S->TacticalPlan.FlankTarget);
+  Direction=((Known?Known->LastKnownPosition:S->TacticalPlan.FlankContact)-Position(ID)).GetSafeNormal2D();
+ }
  if(B.Actor.IsValid()) B.Actor->SetActorRotation(FRotator(0,Direction.Rotation().Yaw,0));
  else
  {
@@ -325,7 +513,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   if(Pose!=B.Pose) { B.Pose=Pose; if(VAT)VAT->ChangePose(ID,Pose); if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(Pose==2?ReloadPose:Pose==1?WalkPose:IdlePose,true); }
  }
  Store->UpdateAim(ID,Now,B.Velocity.Size2D(),Direction,true);
- if(CanEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else Fire(ID,Pos+FVector(0,0,60),Direction,false); }
+ if(BaseEngage)Fire(ID,Pos+FVector(0,0,60),Direction,false);
+ if(CanEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+FVector(0,0,60),Direction,false) && S->TacticalPlan.Action==EBattleSquadTactic::Support) GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(S->SquadID,P->TargetID); }
  Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:CanEngage?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
 }
 bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot)
@@ -334,46 +523,129 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
  if(!S || S->CommandStatus!=EBattleCommandStatus::Active || !U->IsAlive() || Mode->bBattleEnded || Direction.ContainsNaN() || Direction.IsNearlyZero()) return false;
  const double Now=GetWorld()->GetTimeSeconds(); const auto* T=GetDefault<UBattleTuning>();
+ if(U->CoverPhase && U->CoverPhase!=4)
+ {
+  if(bPlayerShot && U->CoverPhase==2){auto& Cover=Store->Units.FindChecked(ID);Cover.CoverPhase=3;Cover.CoverSeconds=3;}
+  return false;
+ }
  Store->UpdateAim(ID,Now,Actor(ID)?Actor(ID)->GetVelocity().Size2D():Bodies.FindChecked(ID).Velocity.Size2D(),Direction,Actor(ID)?Actor(ID)->GetCharacterMovement()->IsMovingOnGround():true);
  if(!Store->ConsumeShot(ID,Now,T->ShotInterval(U->Weapon,bPlayerShot))) return false;
+ if(SightExperiment.Started)
+ {
+  auto& E=SightExperiment;++E.Shots;
+  const auto* P=Plans.Find(U->SquadID);const auto* C=P?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,P->TargetID):nullptr;
+  const double D=C?FVector::Dist(Position(ID),C->LastKnownPosition):-1;
+  E.ShotDistances.Add(D);if(E.FirstShot<0){E.FirstShot=GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed;E.FirstShotDistance=D;}
+ }
  if(Phase3 && Phase3->bEnabled) ++Phase3->Shots;
  Direction=BattleTactics::ShotDirection(*U,Direction,Now);
- auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*T->WeaponRange;
+ auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*T->EffectiveWeaponRange();
  GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_Visibility,Q);
  const int32 Victim=HitIDs.FindRef(Hit.GetComponent());
- if(Victim>0 && Store->ApplyDamage(Victim,U->Team,T->ShotDamage))
+ if(bArea)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,T->ShotDamage);
+ if(SightExperiment.Started && Victim>0) ++SightExperiment.Hits;
+ const auto* BeforeVictim=Store->Find(Victim);
+ const float BeforeHP=BeforeVictim?BeforeVictim->HP:0;
+ const int32 VictimSquad=BeforeVictim?BeforeVictim->SquadID:INDEX_NONE;
+ // Evaluation only (never AI input): leader exposure before the hit is applied.
+ const auto* VictimSquadState=VictimSquad!=INDEX_NONE?Store->FindSquad(VictimSquad):nullptr;
+ const bool VictimLeader=VictimSquadState && VictimSquadState->LeaderUnitID==Victim;
+ const int32 VictimTeam=BeforeVictim?BeforeVictim->Team:0;
+ const bool VictimCover=BeforeVictim && BeforeVictim->CoverPhase!=0;
+ // Evaluation only: victim's cover state before the hit (0 none, 1 entering, 2 hidden, 3 moving to peek, 4 peek; 9 approaching cover).
+ static const TCHAR* const HitKeys[]={TEXT("victim_hit_no_cover"),TEXT("victim_hit_cover_entering"),TEXT("victim_hit_cover_hidden"),TEXT("victim_hit_cover_to_peek"),TEXT("victim_hit_cover_peek"),TEXT("victim_hit_approaching_cover")};
+ static const TCHAR* const DeathKeys[]={TEXT("victim_death_no_cover"),TEXT("victim_death_cover_entering"),TEXT("victim_death_cover_hidden"),TEXT("victim_death_cover_to_peek"),TEXT("victim_death_cover_peek"),TEXT("victim_death_approaching_cover")};
+ const int32 VictimCoverState=!BeforeVictim?0:BeforeVictim->CoverPhase>0?FMath::Min<int32>(BeforeVictim->CoverPhase,4):CoverApproaches.Contains(Victim)?5:0;
+ int32 LeaderRank=-1,SquadLiving=0;
+ if(SightExperiment.Started && VictimLeader)
+ {
+  LeaderRank=0;const double LeaderDistance=FVector::DistSquared2D(Position(Victim),Start);
+  for(int32 Member:VictimSquadState->Members) if(const auto* M=Store->Find(Member); M && M->IsAlive())
+  {++SquadLiving;if(Member!=Victim && FVector::DistSquared2D(Position(Member),Start)<LeaderDistance)++LeaderRank;}
+ }
+ const bool Damaged=Victim>0 && Store->ApplyDamage(Victim,U->Team,T->ShotDamage);
+ if(SightExperiment.Started && Damaged && BeforeVictim)
+ {
+  auto& E=SightExperiment;const bool Killed=BeforeHP>0 && !Store->Find(Victim)->IsAlive();
+  (VictimLeader?E.LeaderHits:E.FollowerHits)[VictimTeam]++;
+  E.Cover(HitKeys[VictimCoverState]);if(Killed)E.Cover(DeathKeys[VictimCoverState]);
+  if(Killed && !VictimLeader) E.FollowerCombatDeaths[VictimTeam]++;
+  if(Killed && VictimLeader)
+  {
+   E.LeaderCombatDeaths[VictimTeam]++;E.LeaderLossFollowers[VictimTeam]+=FMath::Max(0,SquadLiving-1);
+   E.LeaderDeathRanks.Add(LeaderRank);E.LeaderDeathsInCover+=VictimCover;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_LEADER_DEATH t=%.2f squad=%d team=%d rank=%d living=%d cover=%d"),GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed,VictimSquad,VictimTeam,LeaderRank,SquadLiving,VictimCover);
+  }
+ }
+ if(SightExperiment.Started)
+ {
+  // Evaluation only: attribute fire to the closest objective within 100m of the shooter.
+  auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();int32 Nearest=INDEX_NONE;double Best=10000;
+  for(int32 I=0;I<Match->Objectives.Num();++I){const double D=FVector::Dist2D(Start,Match->Objectives[I].Position);if(D<Best){Best=D;Nearest=I;}}
+  if(Nearest!=INDEX_NONE){++SightExperiment.ObjectiveShots[Nearest];SightExperiment.ObjectiveDamage[Nearest]+=Damaged?FMath::Min(BeforeHP,T->ShotDamage):0;if(SightExperiment.ObjectiveFirstShot[Nearest]<0)SightExperiment.ObjectiveFirstShot[Nearest]=Match->Elapsed;}
+ }
+ if(BayStage==1 && Damaged){BayDamageGiven[U->Team]+=FMath::Min(BeforeHP,T->ShotDamage);if(VictimSquad==2 && BayArrival<0)BayMoveDirectDamage+=FMath::Min(BeforeHP,T->ShotDamage);}
+ if(SightExperiment.Started && SightExperiment.FlankTrial)
+ {
+  auto& E=SightExperiment;++E.TeamShots[U->Team];
+  const double Damage=Damaged?FMath::Min(BeforeHP,T->ShotDamage):0.f;
+  const bool Kill=Damaged && BeforeHP>0 && !Store->Find(Victim)->IsAlive();
+  E.TeamDamage[U->Team]+=Damage;E.TeamKills[U->Team]+=Kill;
+  double Angle=-1;
+  if(Damaged){const auto View=Sight(Victim);Angle=FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(View.Forward.GetSafeNormal2D(),(Position(ID)-Position(Victim)).GetSafeNormal2D()),-1.,1.)));}
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FLANK_SHOT t=%.3f squad=%d team=%d victim_squad=%d damage=%.1f kill=%d angle=%.1f"),GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed,U->SquadID,U->Team,VictimSquad,Damage,Kill,Angle);
+ }
+ if(Damaged)
   if(bPlayerShot) if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())) PC->HitMarkerUntil=Now+.18;
  if(U->Team==0 || (Actor(ID) && Actor(ID)->bRevealed)) DrawDebugLine(GetWorld(),Start,Hit.bBlockingHit?Hit.ImpactPoint:End,U->Team?FColor::Orange:FColor::Cyan,false,.09f,0,2);
  return true;
 }
 void UBattleLeaderRuntime::RefreshDisplay()
 {
+ const auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
+ const bool DirectBodies=PC && PC->ShowsUnspottedBodies();
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>(); TSet<int32> Visible;
  for(const auto& B:Bodies) if(Store->Find(B.Key)->Team==0 && Store->Find(B.Key)->IsAlive())
   if(const auto* Contacts=Sense->GetContacts(B.Key)) for(const auto& C:*Contacts) if(C.Value.bVisible) Visible.Add(C.Key);
  for(auto& B:Bodies)
  {
   const bool Show=Store->Find(B.Key)->Team==0 || Visible.Contains(B.Key);
+  const bool BodyShow=Show || DirectBodies;
   if(B.Value.Actor.IsValid()) B.Value.Actor->SetRevealed(Show);
-  else { if(VAT)VAT->SetVisible(B.Key,Show); if(!VAT || !VAT->IsFar(B.Key)){BattleFollowerBones::SetVisible(B.Value.Mesh.Get(),Show,bReduceHiddenBones); if(bReduceAnimTasks) B.Value.AnimTasks.Apply(B.Value.Mesh.Get(),true); B.Value.Weapon->SetVisibility(Show && Store->Find(B.Key)->IsAlive());} }
+  else { if(VAT)VAT->SetVisible(B.Key,BodyShow); if(!VAT || !VAT->IsFar(B.Key)){BattleFollowerBones::SetVisible(B.Value.Mesh.Get(),BodyShow,bReduceHiddenBones); if(bReduceAnimTasks) B.Value.AnimTasks.Apply(B.Value.Mesh.Get(),true); B.Value.Weapon->SetVisibility(BodyShow && Store->Find(B.Key)->IsAlive());} }
  }
 }
 void UBattleLeaderRuntime::Step(float Dt)
 {
  if(!bEnabled) return;
+ if(SightExperiment.Enabled) StepSightExperiment(Dt);
  if(Phase3 && Phase3->bEnabled) { Phase3->Step(Dt); return; }
+ if(bMovementTrial && MoveTrialStage==1 && !Mode->bCombatPaused) MoveTrialFrameMS.Add(Dt*1000);
  const double Now=GetWorld()->GetTimeSeconds(); auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ if(bWideField && bStableMovement && Mode->bCombatPaused)
+  for(auto& Body:Bodies) {Body.Value.LastProgressTime=Now;Body.Value.StalledSince=0;}
+ // P pauses AI decisions, not the directly controlled soldier's reload (same as the wide Actor mode).
+ if(bWideField) Store->AdvanceReloads(Now);
+ if(bWideField && !bMovementTrial && Now>=Mode->CombatStartsAt)
+ {
+  GetWorld()->GetSubsystem<UBattleMatch>()->Update(Dt);
+  GetWorld()->GetSubsystem<UBattleSquadTactics>()->Step(Dt);
+ }
  if(!Mode->bCombatPaused && !Mode->bBattleEnded && Now>=Mode->CombatStartsAt)
  {
-  Store->AdvanceReloads(Now);
-  GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now,-1,0);
-  for(auto& P:Plans) if(Now>=P.Value.NextThink) Think(P.Key,Now);
+  if(!bWideField) Store->AdvanceReloads(Now);
+  if(!bMovementTrial) GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now,-1,0);
+  for(auto& P:Plans) if(Now>=P.Value.NextThink || (Store->FindSquad(P.Key) && P.Value.OrderRevision!=Store->FindSquad(P.Key)->OrderRevision)) Think(P.Key,Now);
   AvoidanceGrid.Reset();
   for(const auto& B:Bodies) if(Store->Find(B.Key)->IsAlive()) { const FVector P=Position(B.Key); AvoidanceGrid.FindOrAdd(FIntPoint(FMath::FloorToInt(P.X/150.),FMath::FloorToInt(P.Y/150.))).Add(B.Key); }
   // Death may invalidate a plan during firing; iterate stable UnitIDs, never a plan iterator.
   for(const auto& B:Bodies) Follow(B.Key,FMath::Min(Dt,.05f),Now);
  }
  int32 Living[2]={0,0}; for(const auto& U:Store->GetUnits()) if(U.Value.IsAlive()) ++Living[U.Value.Team];
- if(!Living[0] || !Living[1]) { Mode->bBattleEnded=true; Mode->Result=Living[0]?TEXT("VICTORY"):TEXT("DEFEAT"); }
+ if(!bArea && !Mode->bBattleEnded && (!Living[0] || !Living[1]))
+ {
+  if(bWideField) GetWorld()->GetSubsystem<UBattleMatch>()->Finish(Living[0]?0:1,Living[0]?TEXT("VICTORY / ENEMY ELIMINATED"):TEXT("DEFEAT / FORCE ELIMINATED"));
+  else { Mode->bBattleEnded=true; Mode->Result=Living[0]?TEXT("VICTORY"):TEXT("DEFEAT"); }
+ }
  RefreshDisplay();
 }

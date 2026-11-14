@@ -11,6 +11,8 @@ void UBattleMetrics::Start()
 	CoordinationChanges = MoveFailures = Shots = Hits = PerceptionUpdates = 0;
 	MoveRequests = MoveArrivals = 0;
 	PendingReportsPeak = 0; PerceptionObservers = PerceptionCandidates = FarCandidatesSkipped = 0;
+	ReacquireKnownStarted = ReacquireKnownCompleted = 0; ReacquireBlackoutSumSeconds = ReacquireBlackoutMaxSeconds = 0.;
+ ReportsDelivered = 0;
 	SensorIntervalSumMS = SensorIntervalMaxMS = SensorLatenessMaxMS = 0.; SensorIntervalSamples = 0;
 	MoveRetryCauses.Reset(); MoveFailureSamples.Reset();
 	StartedAt = LastFrameAt = FPlatformTime::Seconds(); bRecording = true;
@@ -114,9 +116,14 @@ TSharedPtr<FJsonObject> UBattleMetrics::Finish()
 	Counters->SetNumberField(TEXT("shots"), Shots); Counters->SetNumberField(TEXT("hits"), Hits); Counters->SetNumberField(TEXT("perception_updates"), PerceptionUpdates);
 	Counters->SetNumberField(TEXT("move_requests"), MoveRequests); Counters->SetNumberField(TEXT("move_arrivals"), MoveArrivals);
 	Counters->SetNumberField(TEXT("pending_reports_peak"), PendingReportsPeak);
+ Counters->SetNumberField(TEXT("reports_delivered"), ReportsDelivered);
 	Counters->SetNumberField(TEXT("perception_observers"), PerceptionObservers);
 	Counters->SetNumberField(TEXT("perception_candidates"), PerceptionCandidates);
 	Counters->SetNumberField(TEXT("far_candidates_skipped"), FarCandidatesSkipped);
+	Counters->SetNumberField(TEXT("reacquire_known_started"), ReacquireKnownStarted);
+	Counters->SetNumberField(TEXT("reacquire_known_completed"), ReacquireKnownCompleted);
+	Counters->SetNumberField(TEXT("reacquire_blackout_mean_seconds"), ReacquireKnownCompleted ? ReacquireBlackoutSumSeconds / ReacquireKnownCompleted : 0.);
+	Counters->SetNumberField(TEXT("reacquire_blackout_max_seconds"), ReacquireBlackoutMaxSeconds);
 	Root->SetObjectField(TEXT("counts"), Counters);
 	auto SensorTiming = MakeShared<FJsonObject>();
 	SensorTiming->SetNumberField(TEXT("interval_mean_ms"), SensorIntervalSamples ? SensorIntervalSumMS / SensorIntervalSamples : 0.);

@@ -37,7 +37,11 @@ public:
 	int64 CoordinationChanges = 0, MoveFailures = 0, Shots = 0, Hits = 0, PerceptionUpdates = 0;
 	int64 MoveRequests = 0, MoveArrivals = 0;
 	int64 PendingReportsPeak = 0;
+ int64 ReportsDelivered = 0;
 	int64 PerceptionObservers = 0, PerceptionCandidates = 0, FarCandidatesSkipped = 0;
+	// Evaluation only: a contact seen within 1s re-enters view and restarts the detection timer.
+	int64 ReacquireKnownStarted = 0, ReacquireKnownCompleted = 0;
+	double ReacquireBlackoutSumSeconds = 0., ReacquireBlackoutMaxSeconds = 0.;
 	double SensorIntervalSumMS = 0., SensorIntervalMaxMS = 0., SensorLatenessMaxMS = 0.;
 	int64 SensorIntervalSamples = 0;
 	void RecordObserverScan(double IntervalSeconds, double LateSeconds);

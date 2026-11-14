@@ -3,6 +3,7 @@
 #include "GameFramework/SaveGame.h"
 #include "BattleMatch.h"
 #include "BattlePerception.h"
+#include "BattleSquadTactics.h"
 #include "BattleSave.generated.h"
 
 USTRUCT()
@@ -15,12 +16,36 @@ struct FBattleSavedUnit
 };
 
 // Versioned, single-map match snapshot. Timers are relative to the save instant.
+USTRUCT()
+struct FBattleSavedDamage
+{
+ GENERATED_BODY()
+ UPROPERTY() int32 SquadID=INDEX_NONE;
+ UPROPERTY() double Bucket=0;
+ UPROPERTY() float Damage=0;
+};
+
 UCLASS()
 class UBattleSave : public USaveGame
 {
 	GENERATED_BODY()
 public:
 	UPROPERTY() int32 Version = 1;
+ UPROPERTY() FBattleAreaState Area;
+ UPROPERTY() FString MapName;
+ UPROPERTY() FName Ruleset;
+ UPROPERTY() float BaseSightRange=0;
+ UPROPERTY() float WeaponRange=0;
+ UPROPERTY() bool bRangeAware=true;
+ UPROPERTY() int32 TacticalFeatures=0;
+ UPROPERTY() float DelegationClock=0;
+ UPROPERTY() TMap<int32,FBattleSquadTacticalPlan> SavedPlans;
+ UPROPERTY() double TacticalClock=0;
+ UPROPERTY() TMap<int32,FBattleSquadObservation> TacticalSamples;
+ UPROPERTY() TMap<int32,double> NextSamples;
+ UPROPERTY() TArray<FBattleSavedDamage> DamageBuckets;
+ UPROPERTY() double TeamNextAssignment=0;
+ UPROPERTY() TMap<int32,double> TeamRetryAfter;
 	UPROPERTY() FGuid MatchID;
 	UPROPERTY() uint8 Phase = 0;
 	UPROPERTY() int32 AllyCredits = 0;
@@ -47,4 +72,5 @@ public:
 	UPROPERTY() int32 AllySupportUsed = 0;
 	UPROPERTY() int32 EnemySupportUsed = 0;
 	bool Validate(FString& Error) const;
+ bool ValidateMixed(FString& Error) const;
 };

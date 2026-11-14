@@ -171,7 +171,7 @@ void FBattleMixedDriver::Tick(float DeltaTime)
 	FBattleMixedUnit* Target = nullptr;
 	const FBattleContact* TacticalThreat = nullptr;
 	FVector KnownTargetPosition = FVector::ZeroVector;
-	float Best = FMath::Square(GetDefault<UBattleTuning>()->WeaponRange);
+	float Best = FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange());
 	const auto* Contacts = GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(Unit->GetUnitID());
 	const FBattleSightContext Sight = Unit->CaptureSightContext();
 	if (Contacts) for (const auto& Pair : *Contacts)
@@ -183,7 +183,7 @@ void FBattleMixedDriver::Tick(float DeltaTime)
 		if (S->Order == EBattleOrder::Defend && Squad &&
 			FVector::DistSquared2D(Contact.LastKnownPosition, Squad->Destination) > FMath::Square(Squad->DefenseRadius)) continue;
 		float Distance = FVector::DistSquared(Unit->GetActorLocation(), Contact.LastKnownPosition);
-		if (Distance > FMath::Square(GetDefault<UBattleTuning>()->WeaponRange)) continue;
+		if (Distance > FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange())) continue;
 		if (Contact.TargetID == S->CoordinatedTarget) Distance *= .25f;
 		if (Distance < Best) { Best = Distance; Target = Candidate; KnownTargetPosition = Contact.LastKnownPosition; TacticalThreat = &Contact; }
 	}

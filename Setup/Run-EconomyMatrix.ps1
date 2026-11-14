@@ -23,6 +23,10 @@ $supply=@{
  'S120'=@('-AreaHireStop','120')
  'S180'=@('-AreaHireStop','180')
  'G60'=@('-AreaHireInterval','60')
+ # AI strategy S1 (weighted point spread, fixed per-squad slot): W = weight of points not observed as own.
+ 'S1'=@('-AreaStrategy','1')
+ 'S1W3'=@('-AreaStrategy','1','-AreaAttackWeight','3')
+ 'S1B0'=@('-AreaStrategy','1','-AreaBaseShare','0')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

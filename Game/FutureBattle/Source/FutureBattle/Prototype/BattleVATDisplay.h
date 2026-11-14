@@ -30,7 +30,7 @@ struct FBattleVATEntry
  bool Far=false,Visible=true,Dead=false,Initialized=false;
  FVector3f PreviousFrames=FVector3f::ZeroVector;
 };
-// Test-only actor. No writes to simulation, capsules, perception or hit IDs.
+// Mass follower presentation. No writes to simulation, capsules, perception or hit IDs.
 UCLASS()
 class ABattleVATDisplay : public AActor
 {
@@ -44,6 +44,8 @@ public:
  void SetVisible(int32 ID,bool Visible);
  void ChangePose(int32 ID,int32 Pose);
  void Freeze(int32 ID);
+ void RemoveUnit(int32 ID);
+ void ResetBodies();
  void Advance(int32 ID,float Dt);
  virtual void Tick(float Dt) override;
  virtual void EndPlay(const EEndPlayReason::Type Reason) override;

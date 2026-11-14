@@ -3,6 +3,7 @@
 #include "ProfilingDebugging/CsvProfiler.h"
 #include "BattleUnit.h"
 #include "BattleMetrics.h"
+#include "BattleTactics.h"
 
 void UBattlePerception::Capture(TMap<int32, FBattleObserver>& OutObservers, TArray<FBattleReport>& OutReports, double Now) const
 {
@@ -129,8 +130,25 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 				const int32 TargetID = Candidate.State->UnitID;
 				InView.Add(TargetID);
 				double* Started = Observer.DetectionStarted.Find(TargetID);
-				if (!Started) { Observer.DetectionStarted.Add(TargetID, Now); Started = Observer.DetectionStarted.Find(TargetID); }
+				if (!Started)
+				{
+					// Trial -BattleReacquireGrace=1: a target this observer itself saw moments ago is recognised again
+					// without repeating the whole detection delay (own non-shared memory only, never the live target state).
+					double StartAt = Now;
+					if (BattleTactics::ReacquireGraceEnabled())
+						if (const auto* Known = Observer.Contacts.Find(TargetID); Known && !Known->bShared && Now - Known->LastSeenTime <= FMath::Max(0.f, GetDefault<UBattleTuning>()->ReacquireGraceSeconds) + 1.e-6)
+							StartAt = Now - Profile.DetectionSeconds;
+					Observer.DetectionStarted.Add(TargetID, StartAt); Started = Observer.DetectionStarted.Find(TargetID);
+					// Evaluation only: a contact this observer saw itself within 1s must wait for detection again.
+					if (Metrics->bRecording) if (const auto* Known = Observer.Contacts.Find(TargetID); Known && !Known->bShared && Now - Known->LastSeenTime <= 1. + 1.e-6) ++Metrics->ReacquireKnownStarted;
+				}
 				if (Now - *Started + 1.e-6 < Profile.DetectionSeconds) return;
+				if (Metrics->bRecording && *Started < Now - 1.e-6)
+					if (const auto* Known = Observer.Contacts.Find(TargetID); Known && !Known->bShared && Known->LastSeenTime < *Started - 1.e-6 && *Started - Known->LastSeenTime <= 1. + 1.e-6)
+					{
+						const double Blackout = Now - Known->LastSeenTime;
+						++Metrics->ReacquireKnownCompleted; Metrics->ReacquireBlackoutSumSeconds += Blackout; Metrics->ReacquireBlackoutMaxSeconds = FMath::Max(Metrics->ReacquireBlackoutMaxSeconds, Blackout);
+					}
 				auto& Contact = Observer.Contacts.FindOrAdd(TargetID);
 				Contact.TargetID = TargetID;
 				Contact.LastKnownPosition = Candidate.Position;
@@ -195,6 +213,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 					FBattleContact Copy = Report.Contact; Copy.bVisible = false; Copy.bShared = true;
 					Copy.Confidence = FMath::Clamp(1.f - static_cast<float>((Now - Copy.LastSeenTime) / Memory), 0.f, 1.f);
 					Contacts.Add(Copy.TargetID, Copy);
+     if(Metrics->bRecording) ++Metrics->ReportsDelivered;
 				}
 			}
 			RemovePendingKey(Report); It.RemoveCurrentSwap(EAllowShrinking::No);

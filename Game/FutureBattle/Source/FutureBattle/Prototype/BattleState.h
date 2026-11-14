@@ -74,10 +74,52 @@ enum class EBattleCommandStatus : uint8 { Legacy, Active, Disabled };
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FBattleUnitDied, int32);
 
+UENUM()
+enum class EBattleSquadTactic : uint8 { Mission, Engage, Support, Flank, Retreat, Regroup, Recover };
+
+inline const TCHAR* BattleSquadTacticName(EBattleSquadTactic Tactic)
+{
+ switch (Tactic) {
+ case EBattleSquadTactic::Engage: return TEXT("ENGAGE");
+ case EBattleSquadTactic::Support: return TEXT("SUPPORT");
+ case EBattleSquadTactic::Flank: return TEXT("FLANK");
+ case EBattleSquadTactic::Retreat: return TEXT("RETREAT");
+ case EBattleSquadTactic::Regroup: return TEXT("REGROUP");
+ case EBattleSquadTactic::Recover: return TEXT("RECOVER / DEFEND");
+ default: return TEXT("FOLLOW MISSION"); }
+}
+
+USTRUCT()
+struct FBattleSquadTacticalPlan
+{
+ GENERATED_BODY()
+ UPROPERTY() EBattleSquadTactic Action = EBattleSquadTactic::Mission;
+ UPROPERTY() FVector Destination = FVector::ZeroVector;
+ UPROPERTY() float Remaining = 0;
+ UPROPERTY() int32 Revision = 0;
+ UPROPERTY() FString Reason;
+ UPROPERTY() int32 SupportSquad = INDEX_NONE;
+ UPROPERTY() int32 SupportTarget = INDEX_NONE;
+ UPROPERTY() double SupportUntil = 0;
+ UPROPERTY() double LastSupportShot = -1;
+ UPROPERTY() bool bSupportConfirmed = false;
+ UPROPERTY() int32 FlankTarget = INDEX_NONE;
+ UPROPERTY() int32 FlankSupport = INDEX_NONE;
+ UPROPERTY() int32 FlankSupportChanges = 0;
+ UPROPERTY() FVector FlankContact = FVector::ZeroVector;
+ UPROPERTY() float FlankExposure = 0;
+ // Combat-clock timers owned by ST2, independent of the objective director.
+ UPROPERTY() bool bAutonomous = false;
+ UPROPERTY() float Age = 0;
+ UPROPERTY() float SafeSeconds = 0;
+ UPROPERTY() float RetrySeconds = 0;
+};
+
 USTRUCT(BlueprintType)
 struct FBattleSquadState
 {
 	GENERATED_BODY()
+	UPROPERTY(VisibleAnywhere) bool bPlayerDelegated = false;
 	UPROPERTY(VisibleAnywhere) int32 SquadID = INDEX_NONE;
 	UPROPERTY() int32 LeaderUnitID = INDEX_NONE;
 	UPROPERTY() EBattleCommandStatus CommandStatus = EBattleCommandStatus::Legacy;
@@ -90,6 +132,15 @@ struct FBattleSquadState
 	UPROPERTY(VisibleAnywhere) FVector Destination = FVector::ZeroVector;
 	UPROPERTY(VisibleAnywhere) float DefenseRadius = 600.f;
 	UPROPERTY(VisibleAnywhere) int32 OrderRevision = 0;
+ // Intent is distinct from the currently executing Order/Destination.
+ UPROPERTY() bool bHasMission = false;
+ UPROPERTY() EBattleOrder MissionOrder = EBattleOrder::Hold;
+ UPROPERTY() FVector MissionDestination = FVector::ZeroVector;
+ UPROPERTY() TMap<int32, FVector> MissionGoals;
+ UPROPERTY() int32 MissionRevision = 0;
+ // ST1 does not generate autonomous plans. ST2 will add selection and versioned plan saves.
+ UPROPERTY(Transient) FBattleSquadTacticalPlan TacticalPlan;
+ UPROPERTY() float FlankCooldown = 0;
 };
 
 // Authoritative match data. Possession and Actor lifetime never create/reset this record.
@@ -97,7 +148,7 @@ USTRUCT(BlueprintType)
 struct FBattlePerceptionProfile
 {
 	GENERATED_BODY()
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) float SightRange = 2400.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) float SightRange = 10000.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) float FieldOfView = 120.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) float DetectionSeconds = .6f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) float MemorySeconds = 5.f;
@@ -114,6 +165,7 @@ struct FBattleUnitState
 	UPROPERTY() bool bLeaderManaged = false;
 	UPROPERTY() bool bCanPlayerControl = false;
 	UPROPERTY() bool bActorRepresentation = true;
+ UPROPERTY() bool bRetired=false;
 	UPROPERTY() FName UnitArchetypeID = TEXT("Regular");
 	UPROPERTY() float LeaderAbilityScale = 1.f;
 	UPROPERTY() FName DeathCause;
@@ -133,6 +185,15 @@ struct FBattleUnitState
 	UPROPERTY(VisibleAnywhere) int32 PerceptionRevision = 0;
 	UPROPERTY(VisibleAnywhere) double AimStableSince = -1.;
 	UPROPERTY(VisibleAnywhere) FVector AimAnchor = FVector::ForwardVector;
+ UPROPERTY() bool bWeaponAimInitialized=false;
+ UPROPERTY() FVector WeaponAimDirection=FVector::ForwardVector;
+ // Physical cover movement: enter, hidden, emerge, exposed. Relative timers survive saving.
+ UPROPERTY() uint8 CoverPhase=0;
+ UPROPERTY() FVector CoverAnchor=FVector::ZeroVector;
+ UPROPERTY() FVector CoverPeek=FVector::ZeroVector;
+ UPROPERTY() float CoverSeconds=0;
+ UPROPERTY() int32 CoverOrderRevision=0;
+ UPROPERTY() int32 CoverTargetID=INDEX_NONE;
 	UPROPERTY(VisibleAnywhere) bool bMovingShot = false;
 	UPROPERTY(VisibleAnywhere) float SpreadSkillScale = 1.f;
 	UPROPERTY(VisibleAnywhere) int32 ShotSequence = 0;
@@ -176,8 +237,10 @@ public:
 		if (W == EBattleWeapon::SupportGun) return bPlayer ? SupportPlayerInterval : SupportAIInterval;
 		return bPlayer ? PlayerShotInterval : AIShotInterval;
 	}
-	UPROPERTY(Config, EditAnywhere) float SightRange = 2400.f;
+	UPROPERTY(Config, EditAnywhere) float SightRange = 10000.f;
 	UPROPERTY(Config, EditAnywhere) float WeaponRange = 5000.f;
+	float EffectiveWeaponRange() const;
+ float EffectiveSightRange() const;
 	UPROPERTY(Config, EditAnywhere) float MoveSpeed = 420.f;
 	UPROPERTY(Config, EditAnywhere) float DefenseRadius = 600.f;
 	UPROPERTY(Config, EditAnywhere) float MoveStuckSeconds = 2.f;
@@ -193,13 +256,86 @@ public:
 	UPROPERTY(Config, EditAnywhere) float AimSettleSeconds = .8f;
 	UPROPERTY(Config, EditAnywhere) float AimResetDegrees = 3.f;
 	UPROPERTY(Config, EditAnywhere) float AimStationarySpeed = 20.f;
-	UPROPERTY(Config, EditAnywhere) float FlankAngleDegrees = 60.f;
+	// Shared physical weapon constraint for direct control and AI: large aim turns delay the next shot.
+	UPROPERTY(Config, EditAnywhere) float AimSwitchMinDegrees = 45.f;
+	UPROPERTY(Config, EditAnywhere) float AimSwitchBaseSeconds = .15f;
+	UPROPERTY(Config, EditAnywhere) float AimSwitchHalfTurnSeconds = .35f;
+	float AimSwitchDelay(float Degrees) const { return Degrees >= AimSwitchMinDegrees ? FMath::Max(0.f, AimSwitchBaseSeconds + AimSwitchHalfTurnSeconds * Degrees / 180.f) : 0.f; }
+	// Shared cover-action geometry (C key and AI use the same search).
+	UPROPERTY(Config, EditAnywhere) float CoverActionSearchRadius = 350.f;
+	UPROPERTY(Config, EditAnywhere) int32 CoverActionCandidateLimit = 6;
+	// AI cognition only: how often non-player units look for a cover action.
+	UPROPERTY(Config, EditAnywhere) float AICoverProbeInterval = .25f;
+	UPROPERTY(Config, EditAnywhere) float AICoverRetrySeconds = 5.f;
+	// Used only with -BattleAICoverProbe=1 (trial): probes per frame for all AI and AI-only search radius.
+	UPROPERTY(Config, EditAnywhere) int32 AICoverProbesPerFrame = 2;
+	UPROPERTY(Config, EditAnywhere) float AICoverSearchRadius = 600.f;
+	// Used only with -BattleCoverApproach=1 (trial): move to a hidden cover slot when none is within AICoverSearchRadius.
+	UPROPERTY(Config, EditAnywhere) float AICoverApproachRadius = 1500.f;
+	UPROPERTY(Config, EditAnywhere) float AICoverApproachSeconds = 6.f;
+	UPROPERTY(Config, EditAnywhere) float AICoverApproachMaxAdvance = 200.f;
+	UPROPERTY(Config, EditAnywhere) int32 AICoverApproachCandidates = 8;
+	// AI/perception continuity (adopted default ON 2026-11-13; -BattleReacquireGrace=0 restores the old behaviour):
+	// own contacts seen within ReacquireGraceSeconds are re-detected immediately, and a squad keeps its previous target
+	// for TargetHoldSeconds after a member's own sighting. Firing still requires a current line of sight.
+	UPROPERTY(Config, EditAnywhere) bool bReacquireGrace = true;
+	UPROPERTY(Config, EditAnywhere) float ReacquireGraceSeconds = 1.f;
+	UPROPERTY(Config, EditAnywhere) float TargetHoldSeconds = 1.f;
+	// AI cover firing window (adopted ON 2026-11-14; -BattleCoverFire=0 restores the fixed 1.2s peek): AI stays at the peek point
+	// long enough for AICoverShotsPerPeek shots (AI interval 1.4s plus aim delay), capped at AICoverPeekSeconds (<=3 for saves).
+	UPROPERTY(Config, EditAnywhere) bool bAICoverFire = true;
+	UPROPERTY(Config, EditAnywhere) float AICoverPeekSeconds = 2.8f;
+	UPROPERTY(Config, EditAnywhere) int32 AICoverShotsPerPeek = 2;
+	// AI cover validation (ON; -BattleCoverValidation=0 restores the old behaviour): start cover only against a contact within
+	// weapon range, and before/while peeking require a clear line to the contact's last known position (observed data only).
+	UPROPERTY(Config, EditAnywhere) bool bAICoverValidation = true;
+	// Trial (OFF; -BattleCoverPeekSight=1): an AI firing-window peek ends early ("blind") once AICoverPeekBlindSeconds have passed
+	// at the peek point without an own sighting of the cover target (observed data only).
+	UPROPERTY(Config, EditAnywhere) bool bAICoverPeekSight = false;
+	UPROPERTY(Config, EditAnywhere) float AICoverPeekBlindSeconds = 1.f;
+	// Squad leader HP = Health x this (1..10). Adopted default 3 (2026-11-13); -BattleLeaderHealth=N overrides for trials.
+	UPROPERTY(Config, EditAnywhere) float LeaderHealthMultiplier = 3.f;
+	// Area home supply cycle (defaults reproduce the 2026-11-12 behaviour). Trials override with -BattleSupply*=.
+	// Return home when living <= SupplyReturnLiving; resume when living >= SupplyResumeLiving (or no resources) and,
+	// if SupplyResumeHealthRatio > 0, squad HP ratio reaches it. At most SupplyAwayRatio of a team's active squads
+	// may be on a supply trip (1 = no limit; out-of-ammo squads always may). SupplyHealPerSecond heals at home (0 = none).
+	UPROPERTY(Config, EditAnywhere) int32 SupplyReturnLiving = 8;
+	UPROPERTY(Config, EditAnywhere) int32 SupplyResumeLiving = 10;
+	UPROPERTY(Config, EditAnywhere) float SupplyAwayRatio = 1.f;
+	UPROPERTY(Config, EditAnywhere) float SupplyHealPerSecond = 0.f;
+	UPROPERTY(Config, EditAnywhere) float SupplyResumeHealthRatio = 0.f;
+	// Area new-squad hiring (adopted 2026-11-14; -BattleAreaHire=0 disables): a team with fewer than 25 active squads may buy
+	// a fresh 10-soldier regular squad at home for AreaSquadCost resources. AI buys only when resources minus pending
+	// replenishments >= AreaSquadCost + AreaHireReserve.
+	UPROPERTY(Config, EditAnywhere) bool bAreaHire = true;
+	UPROPERTY(Config, EditAnywhere) int32 AreaSquadCost = 15;
+	UPROPERTY(Config, EditAnywhere) int32 AreaHireReserve = 10;
+	// AI purchase pacing (0 = off, the first implementation): at least AreaHireIntervalSeconds between a team's AI purchases,
+	// and no AI purchase in the last AreaHireStopSeconds of the time limit. Trials: -BattleAreaHireReserve= / -Interval= / -Stop=.
+	UPROPERTY(Config, EditAnywhere) float AreaHireIntervalSeconds = 0.f;
+	UPROPERTY(Config, EditAnywhere) float AreaHireStopSeconds = 0.f;
+	// Area resource income (adopted 2026-11-14; -BattleAreaIncome=0 disables): every AreaIncomeSeconds each team gains
+	// AreaBaseIncome plus AreaPointIncome per central point it actually owns at that moment.
+	UPROPERTY(Config, EditAnywhere) bool bAreaIncome = true;
+	UPROPERTY(Config, EditAnywhere) float AreaIncomeSeconds = 20.f;
+	UPROPERTY(Config, EditAnywhere) int32 AreaBaseIncome = 1;
+	UPROPERTY(Config, EditAnywhere) int32 AreaPointIncome = 1;
+	// Used only with -BattleLeaderGuard=1 (trial, AI cognition): AI leader cover retry interval.
+	UPROPERTY(Config, EditAnywhere) float LeaderGuardCoverRetrySeconds = 2.f;	UPROPERTY(Config, EditAnywhere) float FlankAngleDegrees = 60.f;
 	UPROPERTY(Config, EditAnywhere) float CoverSearchRadius = 900.f;
 	UPROPERTY(Config, EditAnywhere) int32 CoverCandidateLimit = 12;
 	UPROPERTY(Config, EditAnywhere) float TacticalDecisionSeconds = 1.f;
 	UPROPERTY(Config, EditAnywhere) float TacticalCommitSeconds = 2.f;
 	UPROPERTY(Config, EditAnywhere) float TacticalSwitchMargin = .35f;
 	UPROPERTY(Config, EditAnywhere) float SquadDecisionSeconds = .5f;
+ UPROPERTY(Config, EditAnywhere) float SquadRetreatHealthRatio = .45f;
+ UPROPERTY(Config, EditAnywhere) float SquadRetreatLivingRatio = .4f;
+ UPROPERTY(Config, EditAnywhere) float SquadRetreatDamageRatio = .25f;
+ UPROPERTY(Config, EditAnywhere) float SquadRetreatThreatRatio = 2.f;
+ UPROPERTY(Config, EditAnywhere) float SquadRegroupSafeSeconds = 5.f;
+ UPROPERTY(Config, EditAnywhere) float SquadRetreatTimeout = 12.f;
+ UPROPERTY(Config, EditAnywhere) float SquadRetreatRetrySeconds = 5.f;
+ UPROPERTY(Config, EditAnywhere) float WideAvoidanceMaxSide = .2f;
 	UPROPERTY(Config, EditAnywhere) float SquadFlankDistance = 600.f;
 	UPROPERTY(Config, EditAnywhere) float SquadFlankStandoff = 250.f;
 	UPROPERTY(Config, EditAnywhere) float SquadFlankMaxTravel = 1800.f;
@@ -218,14 +354,24 @@ class UBattleState : public UWorldSubsystem
 	GENERATED_BODY()
 public:
 	int32 RegisterUnit(int32 Team, float InitialHealth = 0.f, EBattleWeapon Weapon = EBattleWeapon::Carbine);
+ bool ReplaceDeadFollower(int32 OldID,int32 NewID,FVector Position);
 	int32 CreateSquad(int32 Team, const TArray<int32>& Members);
 	int32 CreateLeaderSquad(int32 Team, const TArray<int32>& Members, int32 LeaderID, bool bAllowControl);
+	// Maximum HP of a unit: Health, times the trial -BattleLeaderHealth multiplier for a squad leader.
+	float MaxHealthOf(int32 UnitID) const;
 	bool DisableLeaderSquad(int32 SquadID);
 	bool CanSelectLeader(int32 UnitID, int32 PlayerTeam = 0) const;
 	FBattleUnitDied OnUnitDied;
+	bool SetSquadDelegated(int32 ID, bool bDelegated);
 	const FBattleSquadState* FindSquad(int32 ID) const { return Squads.Find(ID); }
+ friend class UBattleSquadTactics;
+ friend class UBattleLeaderRuntime;
 	const TMap<int32, FBattleSquadState>& GetSquads() const { return Squads; }
-	bool SetSquadOrder(int32 ID, EBattleOrder Order, FVector Destination, const TMap<int32, FVector>& Goals);
+	bool SetSquadOrder(int32 ID, EBattleOrder Order, FVector Destination, const TMap<int32, FVector>& Goals, bool bMissionUpdate = false);
+ bool SetSquadTacticalPlan(int32 ID, EBattleSquadTactic Action, EBattleOrder Order, FVector Destination,
+  const TMap<int32, FVector>& Goals, float Lifetime, const FString& Reason);
+ void CancelSquadTacticalPlan(int32 ID, const FString& Reason);
+ void AdvanceSquadTacticalPlan(int32 ID, float DeltaSeconds);
 	void SetAction(int32 ID, EBattleAction Action);
 	void SetMoveRetries(int32 ID, int32 Retries);
 	bool SetPerceptionProfile(int32 ID, const FBattlePerceptionProfile& Profile);
@@ -241,7 +387,9 @@ public:
 	void AdvanceReloads(double Now);
 	bool ApplyDamage(int32 ID, int32 AttackingTeam, float Damage);
 	int32 AddReserve(int32 ID, int32 Rounds);
-	void RestoreRecords(const TArray<FBattleUnitState>& SavedUnits, const TArray<FBattleSquadState>& SavedSquads);
+	// Heals a living unit up to MaxHealthOf(ID); returns the amount applied.
+	float Heal(int32 ID, float Amount);
+	void RestoreRecords(const TArray<FBattleUnitState>& SavedUnits, const TArray<FBattleSquadState>& SavedSquads, bool PreservePlans=false);
 	const TMap<int32, FBattleUnitState>& GetUnits() const { return Units; }
 private:
 	UPROPERTY() TMap<int32, FBattleUnitState> Units;

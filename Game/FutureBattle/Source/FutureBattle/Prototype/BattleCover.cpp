@@ -2,6 +2,9 @@
 #include "BattleState.h"
 #include "BattleGameMode.h"
 #include "BattleUnit.h"
+#include "BattleLeaderRuntime.h"
+#include "BattleFieldLayout.h"
+#include "Components/CapsuleComponent.h"
 #include "Engine/StaticMeshActor.h"
 #include "EngineUtils.h"
 #include "NavigationSystem.h"
@@ -15,10 +18,13 @@ void UBattleCover::BuildSlots(bool bForce)
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleCoverSlots), false);
 	if (const auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>())
 		for (ABattleUnit* Unit : Mode->Units) if (Unit) Query.AddIgnoredActor(Unit);
+ if(const auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime->IsEnabled())
+  for(const auto& Body:Runtime->GetBodies())if(Body.Value.Capsule.IsValid())Query.AddIgnoredComponent(Body.Value.Capsule.Get());
 	for (TActorIterator<AStaticMeshActor> It(GetWorld()); It; ++It)
 	{
 		FVector Center, Extent; It->GetActorBounds(true, Center, Extent);
-		if (Extent.Z < 45.f || Extent.X > 1000.f || Extent.Y > 1000.f || Extent.X < 10.f || Extent.Y < 10.f) continue;
+		const FVector Limit=BattleFieldLayout::Expand(FVector(1000,1000,0),BattleFieldLayout::IsExpanded(GetWorld()));
+		if (Extent.Z < 45.f || Extent.X > Limit.X || Extent.Y > Limit.Y || Extent.X < 10.f || Extent.Y < 10.f) continue;
 		TArray<FVector> Candidates;
 		for (float Side : {-1.f, 1.f}) for (float Along : {-.75f, 0.f, .75f})
 		{

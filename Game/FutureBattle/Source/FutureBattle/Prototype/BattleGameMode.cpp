@@ -11,6 +11,7 @@
 #include "BattleState.h"
 #include "BattlePerception.h"
 #include "BattleSquadAI.h"
+#include "BattleSquadTactics.h"
 #include "BattleMetrics.h"
 #include "BattleMatch.h"
 #include "FutureBattle.h"
@@ -51,6 +52,7 @@ void ABattleGameMode::BeginPlay()
 {
 	Super::BeginPlay();
  int32 LeaderOption=0; FParse::Value(FCommandLine::Get(),TEXT("BattleLeaderCommand="),LeaderOption);
+ if(FParse::Param(FCommandLine::Get(),TEXT("BattleWideMixed")) || BattleFieldLayout::IsSightField(GetWorld())) LeaderOption=1;
  if(LeaderOption!=0)
  {
   bLeaderCommand=true;
@@ -152,7 +154,7 @@ void ABattleGameMode::BeginPlay()
 		FTimerHandle Timer;
 		FString Suite;
 		FParse::Value(FCommandLine::Get(), TEXT("BattleSmokeSuite="), Suite);
-		GetWorldTimerManager().SetTimer(Timer, this, Suite == TEXT("Weapons") ? &ABattleGameMode::RunWeaponPreview : Suite == TEXT("Corner") ? &ABattleGameMode::RunCornerTrial : Suite == TEXT("Match") ? &ABattleGameMode::RunMatchSmokeTest : Suite == TEXT("Ability") ? &ABattleGameMode::RunAbilitySmokeTest : Suite == TEXT("Squad") ? &ABattleGameMode::RunSquadSmokeTest : Suite == TEXT("Tactical") ? &ABattleGameMode::RunTacticalSmokeTest : &ABattleGameMode::RunSmokeTest, 3.f, false);
+		GetWorldTimerManager().SetTimer(Timer, this, Suite == TEXT("SquadTactics") ? &ABattleGameMode::RunSquadTacticsSmokeTest : Suite == TEXT("Delegation") ? &ABattleGameMode::RunDelegationSmokeTest : Suite == TEXT("TPS") ? &ABattleGameMode::RunThirdPersonSmokeTest : Suite == TEXT("Weapons") ? &ABattleGameMode::RunWeaponPreview : Suite == TEXT("Corner") ? &ABattleGameMode::RunCornerTrial : Suite == TEXT("Match") ? &ABattleGameMode::RunMatchSmokeTest : Suite == TEXT("Ability") ? &ABattleGameMode::RunAbilitySmokeTest : Suite == TEXT("Squad") ? &ABattleGameMode::RunSquadSmokeTest : Suite == TEXT("Tactical") ? &ABattleGameMode::RunTacticalSmokeTest : &ABattleGameMode::RunSmokeTest, 3.f, false);
 	}
 	UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_READY Units=%d"), Units.Num());
 }
@@ -174,6 +176,7 @@ void ABattleGameMode::Tick(float DeltaTime)
 	if (MoveCourse && bBenchmarkStarted && !bBenchmarkFinished) MoveCourse->Update(*this, DeltaTime);
 	UpdateBenchmark();
 	GetWorld()->GetSubsystem<UBattleMatch>()->Update(DeltaTime);
+ GetWorld()->GetSubsystem<UBattleSquadTactics>()->Step(DeltaTime);
 	UpdateMatchSoak();
 	const double Now = GetWorld()->GetTimeSeconds();
 	GetWorld()->GetSubsystem<UBattleState>()->AdvanceReloads(Now);

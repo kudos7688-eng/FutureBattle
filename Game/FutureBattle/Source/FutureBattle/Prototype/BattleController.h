@@ -45,6 +45,13 @@ public:
 	void IssueMoveAt(FVector Target);
 	void IssueOrderAt(FVector Target, EBattleOrder Order);
 	void SelectAll();
+	bool CanShowDelegation() const;
+	void SetSelectedDelegated(bool bDelegated);
+	void DelegateSelected() { SetSelectedDelegated(true); }
+	void TakeCommandSelected() { SetSelectedDelegated(false); }
+	void GetDelegationCounts(int32& Manual, int32& Automatic) const;
+	int32 DelegationButtonAt(FVector2D Position) const;
+	bool DelegationPanelAt(FVector2D Position) const;
 	void HoldSelected();
 	void ChooseAttackMove();
 	void ChooseDefend();
@@ -58,9 +65,16 @@ public:
 	void StartMatch();
 	void SaveMatch();
 	void LoadMatch();
+ FString QuickSaveSlot=TEXT("FutureBattleQuick01"); // Smoke fixtures inject the whitelisted test slot.
 	void ResetMatchControl();
 	void RequestSupport();
 	bool IsTactical() const { return bTactical; }
+	// Play-speed toggle (tactical view, standalone only): [.] cycles x1/x2/x4 via global time dilation; direct control always runs at x1.
+	void CycleGameSpeed();
+	void ApplyGameSpeed();
+	int32 GetGameSpeed() const { return GameSpeed; }
+	bool ShowsUnspottedBodies() const;
+	void RefreshBodyPresentation();
 	const TArray<TObjectPtr<ABattleUnit>>& GetSelection() const { return Selected; }
 	bool IsSelected(const ABattleUnit* Unit) const { return Selected.Contains(Unit); }
 	void SetSelection(ABattleUnit* Unit);
@@ -79,7 +93,9 @@ private:
 	UPROPERTY() TObjectPtr<UInputMappingContext> Mapping;
 	UPROPERTY() TArray<TObjectPtr<UInputAction>> Actions;
 	bool bTactical = true;
+	int32 GameSpeed = 1;
 	bool bTriggerHeld = false;
+	int32 DelegationPress = INDEX_NONE;
  bool bSquadListPress=false;
  int32 PressedSquadID=INDEX_NONE;
  FDelegateHandle LeaderDeathHandle;

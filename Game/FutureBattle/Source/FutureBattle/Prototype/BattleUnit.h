@@ -32,6 +32,10 @@ public:
 	void MountWeapon(UStaticMeshComponent* Model, USceneComponent* Parent, EBattleWeapon Weapon, bool bFirstPerson) const;
 	bool HasWeaponVisuals() const { return bWeaponVisuals; }
 	virtual void Tick(float DeltaTime) override;
+	virtual void CalcCamera(float DeltaTime, FMinimalViewInfo& OutResult) override;
+	bool UsesThirdPersonView() const { return bThirdPersonView; }
+	void GetPlayerShot(FVector& Start, FVector& Direction);
+	bool FireFromPlayerView();
 	int32 GetUnitID() const { return UnitID; }
 	const FBattleUnitState* GetState() const;
 	bool IsAlive() const;
@@ -52,6 +56,9 @@ public:
 private:
 	UPROPERTY() int32 UnitID = INDEX_NONE;
 	bool bDeathApplied = false;
+	bool bThirdPersonView = true;
+	bool bDirectAvoidanceOverride = false;
+	float SavedAvoidanceWeight = .5f;
 	bool bWeaponVisuals = true, bTrialPose = false;
 	UPROPERTY() TObjectPtr<UStaticMesh> CarbineModel;
 	UPROPERTY() TObjectPtr<UStaticMesh> SupportModel;

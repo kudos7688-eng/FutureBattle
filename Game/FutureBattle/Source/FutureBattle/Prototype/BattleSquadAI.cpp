@@ -1,4 +1,5 @@
 #include "BattleSquadAI.h"
+#include "BattleSquadTactics.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 #include "BattleState.h"
 #include "BattleUnit.h"
@@ -16,6 +17,7 @@ void UBattleSquadAI::ReleaseUnit(int32 UnitID)
 
 void UBattleSquadAI::ReportFailure(int32 UnitID, double Now)
 {
+ GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("FlankExecutionFailed"));
 	ReleaseUnit(UnitID); BlockedUntil.Add(UnitID, Now + 8.);
 	UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_SQUAD_FAILED Unit=%d / independent fallback for 8 seconds"), UnitID);
 }
@@ -46,7 +48,7 @@ void UBattleSquadAI::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double
 			for (int32 ID : Squad.Members) Store->SetCoordination(ID, EBattleRole::Independent);
 			Plans.Remove(Squad.SquadID);
 		};
-		if (Squad.Order != EBattleOrder::AttackMove && Squad.Order != EBattleOrder::Defend) { Clear(); continue; }
+		if (Squad.Order != EBattleOrder::AttackMove && Squad.Order != EBattleOrder::Defend) { GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("EvalOrderIneligible")); Clear(); continue; }
 		TArray<ABattleUnit*> Members;
 		for (int32 ID : Squad.Members)
 		{
@@ -57,7 +59,7 @@ void UBattleSquadAI::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double
 			{ Store->SetCoordination(ID, EBattleRole::Independent); continue; }
 			Members.Add(Unit);
 		}
-		if (Members.Num() < 2) { Clear(); continue; }
+		if (Members.Num() < 2) { GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("EvalMembersIneligible")); Clear(); continue; }
 		// A common target needs at least one current observer. No actor position is used to nominate it.
 		TMap<int32, int32> Votes;
 		TMap<int32, FBattleContact> Latest;
@@ -79,7 +81,7 @@ void UBattleSquadAI::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double
 			const int32 CurrentVotes = Votes.FindRef(Existing->TargetID);
 			if (Now < Existing->TargetCommittedUntil || BestVotes < CurrentVotes + 2) { Target = Existing->TargetID; BestVotes = CurrentVotes; }
 		}
-		if (Target == INDEX_NONE || BestVotes < 2) { Clear(); continue; }
+		if (Target == INDEX_NONE || BestVotes < 2) { GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("EvalNoCommonContact")); Clear(); continue; }
 		const FVector Threat = Latest.FindChecked(Target).LastKnownPosition;
 		FBattleSquadPlan& Plan = Plans.FindOrAdd(Squad.SquadID);
 		if (Plan.OrderRevision != Squad.OrderRevision || Plan.TargetID != Target || (Now >= Plan.TargetCommittedUntil && FVector::Dist2D(Plan.ThreatAnchor, Threat) > 300.f))
@@ -98,7 +100,7 @@ void UBattleSquadAI::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double
 			Eligible.Add(Unit);
 			if (Unit->GetState()->Role == EBattleRole::Independent) Store->SetCoordination(Unit->GetUnitID(), EBattleRole::Support, Target);
 		}
-		if (Eligible.Num() < 2) { Clear(); continue; }
+		if (Eligible.Num() < 2) { GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("EvalCoordinationOutOfRange")); Clear(); continue; }
 		auto CanSupport = [&](ABattleUnit* Unit)
 		{
 			const auto* S = Unit->GetState(); const auto* Contact = Perception->FindContact(S->UnitID, Target);
@@ -113,6 +115,7 @@ void UBattleSquadAI::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double
 		for (ABattleUnit* Unit : Movers) if (FVector::Dist2D(Unit->GetActorLocation(), Unit->GetState()->TacticalDestination) < 90.f)
 		{
 			Store->SetCoordination(Unit->GetUnitID(), EBattleRole::Support, Target); bCompleted = true;
+   GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("FlankArrival"));
 			if (auto* Metrics = GetWorld()->GetSubsystem<UBattleMetrics>(); Metrics->bRecording) ++Metrics->MoveArrivals;
 		}
 		Movers.RemoveAll([](ABattleUnit* Unit) { return Unit->GetState()->Role != EBattleRole::Flank; });
@@ -128,6 +131,7 @@ void UBattleSquadAI::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double
 		{
 			if (!bSupport || Now - Plan.WaveStarted > FMath::Max(3.f, Tuning->SquadWaveTimeout))
 			{
+    GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(bSupport ? TEXT("WaveTimedOut") : TEXT("WaveLostSupport"));
 				for (ABattleUnit* Unit : Movers)
 				{
 					if (!bSupport) Plan.Moved.Remove(Unit->GetUnitID());
@@ -139,7 +143,11 @@ void UBattleSquadAI::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double
 			}
 			continue;
 		}
-		if (!bSupport || Now < Plan.NextWaveAt || Plan.Waves >= 2) continue;
+		if (!bSupport || Now < Plan.NextWaveAt || Plan.Waves >= 2)
+  {
+   GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(!bSupport ? TEXT("EvalNoActualSupport") : Plan.Waves >= 2 ? TEXT("EvalWaveLimit") : TEXT("EvalWaveCooldown"));
+   continue;
+  }
 		// Keep one proven shooter in place; rotate previously moved soldiers into support next wave.
 		ABattleUnit* Anchor = nullptr;
 		for (ABattleUnit* Unit : Eligible) if (CanSupport(Unit))
@@ -183,7 +191,7 @@ void UBattleSquadAI::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double
 			}
 			if (bAssigned && Assigned >= FMath::Max(1, Eligible.Num() / 2)) break;
 		}
-		if (Assigned > 0) { ++Plan.Waves; Plan.WaveStarted = Now; }
-		else Plan.NextWaveAt = Now + 2.;
+		if (Assigned > 0) { GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("FlankAssigned"), Assigned); ++Plan.Waves; Plan.WaveStarted = Now; }
+		else { GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("EvalNoFeasibleMover")); Plan.NextWaveAt = Now + 2.; }
 	}
 }

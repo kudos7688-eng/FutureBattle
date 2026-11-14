@@ -1,4 +1,5 @@
 #include "BattleHUD.h"
+#include "BattleSquadTactics.h"
 #include "BattleLeaderRuntime.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 #include "BattleController.h"
@@ -26,7 +27,7 @@ void ABattleHUD::DrawHUD()
 	DrawRect(Ink, 16, 16, W - 32, 66);
 	DrawRect(Mint, 16, 16, 4, 66);
 	Label(TEXT("FUTURE BATTLE"), 34, 25, White, 1.55f);
-	Label(FString::Printf(TEXT("PROTOTYPE 01  /  %d-UNIT FIELD TEST"), (Mode->bLeaderCommand?GetWorld()->GetSubsystem<UBattleState>()->GetUnits().Num():Mode->Units.Num())), 35, 53, Muted, .9f);
+ Label(GetWorld()->GetSubsystem<UBattleMatch>()->bArea?FString(TEXT("AREA BATTLE / OBSERVED INFORMATION")):FString::Printf(TEXT("PROTOTYPE 01  /  %d-UNIT FIELD TEST"), (Mode->bLeaderCommand?GetWorld()->GetSubsystem<UBattleState>()->GetUnits().Num():Mode->Units.Num())), 35, 53, Muted, .9f);
 	int32 Allies = 0, Enemies = 0, Spotted = 0;
 	for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive())
 	{
@@ -40,22 +41,33 @@ void ABattleHUD::DrawHUD()
   { ++Allies; if(const auto* C=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(P.Key)) for(const auto& Contact:*C) if(Contact.Value.bVisible) Known.Add(Contact.Key); }
   Enemies=Spotted=Known.Num();
  }
-	Label(PC->IsTactical() ? TEXT("TACTICAL COMMAND") : TEXT("DIRECT CONTROL / FPS"), W * .4f, 30, Mint, 1.2f);
+	const auto* Controlled=Cast<ABattleUnit>(PC->GetPawn());
+	Label(PC->IsTactical() ? TEXT("TACTICAL COMMAND") : Controlled && !Controlled->UsesThirdPersonView() ? TEXT("DIRECT CONTROL / FPS") : TEXT("DIRECT CONTROL / TPS"), W * .4f, 30, Mint, 1.2f);
 	Label(FString::Printf(TEXT("ALLY %02d   /   ENEMY %02d   /   SPOTTED %02d"), Allies, Enemies, Spotted), W * .4f, 54, White, .9f);
 	Label(Mode->bCombatPaused ? TEXT("AI PAUSED [P]") : TEXT("AI ACTIVE [P]"), W - 165, 35, Mode->bCombatPaused ? FLinearColor::Yellow : Muted);
+	if (const auto* SpeedPC = Cast<ABattleController>(GetOwningPlayerController()); SpeedPC && SpeedPC->IsTactical())
+		Label(FString::Printf(TEXT("SPEED x%d [.]"), SpeedPC->GetGameSpeed()), W - 165, 55, SpeedPC->GetGameSpeed() > 1 ? FLinearColor::Yellow : Muted);
 	const auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (Match->IsEnabled())
 	{
 		const TCHAR* Phase = Match->Phase == EBattleMatchPhase::Deployment ? TEXT("DEPLOYMENT / ENTER: START") : Match->Phase == EBattleMatchPhase::Combat ? TEXT("BATTLE / REINFORCEMENTS") : TEXT("FINISHED / F5: RESTART");
 		DrawRect(Ink, 16, 84, W - 32, 26);
-		if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("500 SOLDIERS / THREE CONTROL POINTS / P: PAUSE OR RESUME"),28,90,Mint,.9f);
+  if(Match->bArea)Label(FString::Printf(TEXT("AREA / RESOURCES %d / HOME HP %.0f / ENEMY BASE LAST SEEN %s%s"),Match->Credits[0],Match->Area.BaseHP[0],Match->Area.KnownEnemyBaseHP[0]<0?TEXT("UNKNOWN"):*FString::Printf(TEXT("%.0f"),Match->Area.KnownEnemyBaseHP[0]),
+   BattleTactics::AreaHire().bEnabled?*FString::Printf(TEXT(" / [2] NEW SQUAD %d (%d/25)"),BattleTactics::AreaHire().Cost,Match->ActiveSquads(0)):TEXT("")),28,90,Mint,.9f);
+  else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch) Label(FString::Printf(TEXT("%s / CREDITS %d / [1] %d [2] %d [3] %d / 10 soldiers"),Phase,Match->Credits[0],Match->CurrentSquadPrice(EBattleTraining::Recruit),Match->CurrentSquadPrice(EBattleTraining::Regular),Match->CurrentSquadPrice(EBattleTraining::Veteran)),28,90,Mint,.9f);
+  else if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("500 SOLDIERS / THREE CONTROL POINTS / P: PAUSE OR RESUME"),28,90,Mint,.9f);
 		else Label(FString::Printf(TEXT("%s   CREDITS %d   [1] RECRUIT %d   [2] REGULAR %d   [3] VETERAN %d / 5 units"), Phase, Match->Credits[0], UBattleMatch::SquadPrice(EBattleTraining::Recruit), UBattleMatch::SquadPrice(EBattleTraining::Regular), UBattleMatch::SquadPrice(EBattleTraining::Veteran)), 28, 90, Mint, .9f);
 		DrawRect(Ink, 16, 112, 560, 51);
-		Label(FString::Printf(TEXT("CONTROL %.0f : %.0f / 100    TIME %.0fs"), Match->Score[0], Match->Score[1], FMath::Max(0.f, 180.f - Match->Elapsed)), 28, 119, White);
-		if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("Capture 8s / 1 point per second / First to 100 / Limit 180s"),28,141,Muted,.85f);
+		const float Limit=BattleFieldLayout::IsSightField(GetWorld())?600.f:180.f;
+  if(Match->bArea)Label(FString::Printf(TEXT("TIME %.0fs / BASE DESTRUCTION OR FINAL RESOURCE SCORE"),FMath::Max(0.f,600-Match->Elapsed)),28,119,White);
+  else Label(FString::Printf(TEXT("CONTROL %.2f : %.2f / 100    TIME %.0fs"), Match->Score[0], Match->Score[1], FMath::Max(0.f, Limit - Match->Elapsed)), 28, 119, White);
+  if(Match->bArea)Label(TEXT("Final: living soldiers + resources + central points x20 / ties draw"),28,141,Muted,.85f);
+  else if (BattleFieldLayout::IsLarge(GetWorld())) Label(FString::Printf(TEXT("Capture 8s / 1 point per second / First to 100 / Limit %.0fs"),Limit),28,141,Muted,.85f);
 		else Label(TEXT("Capture 8s / Income +20 per 5s / Supply 1 per round / F8 save / F9 load"), 28, 141, Muted, .85f);
 		DrawRect(Ink, 16, 165, 560, 26);
-		if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("Fixed forces / no reinforcements, resupply or support strikes"),28,172,Mint,.85f);
+  if(Match->bArea)Label(TEXT("Home: replenish in 10s / 1 resource per completed soldier / F8 save / F9 load"),28,172,Mint,.85f);
+  else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch)Label(TEXT("Home / owned point supply: 1 credit per round / F8 save / F9 load / strikes unavailable"),28,172,Mint,.85f);
+  else if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("Fixed forces / no reinforcements, resupply or support strikes"),28,172,Mint,.85f);
 		else Label(FString::Printf(TEXT("[B] SUPPORT 400 / %d left / rearm %.0fs / selected unit's known position"), 3 - Match->SupportUsed[0], Match->SupportCooldown[0]), 28, 172, Mint, .85f);
 		for (const auto& Strike : Match->Strikes)
 		{
@@ -68,13 +80,14 @@ void ABattleHUD::DrawHUD()
 		}
 		for (int32 Index = 0; Index < Match->Objectives.Num(); ++Index)
 		{
-			const auto& Point = Match->Objectives[Index];
+   auto Point = Match->Objectives[Index];
+   if(Match->bArea){Point.Owner=Match->ObservedOwner(0,Index);Point.bContested=false;Point.CaptureProgress=0;}
 			const FLinearColor Color = Point.bContested ? FLinearColor::Yellow : Point.Owner == 0 ? Mint : Point.Owner == 1 ? FLinearColor(1, .35f, .25f) : White;
 			FVector2D Center;
 			if (PC->ProjectWorldLocationToScreen(Point.Position + FVector(0, 0, 45), Center) && Center.Y > 160 && Center.Y < H - 135)
 			{
 				DrawRect(Ink, Center.X - 48, Center.Y - 18, 170, 24);
-				Label(FString::Printf(TEXT("%c / %s %.0f%%"), 'A' + Index, Point.bContested ? TEXT("CONTESTED") : Point.Owner == 0 ? TEXT("ALLY") : Point.Owner == 1 ? TEXT("ENEMY") : TEXT("NEUTRAL"), Point.CaptureProgress / 8.f * 100.f), Center.X - 42, Center.Y - 12, Color, .85f);
+    Label(Match->bArea?(Point.Owner==-2?FString::Printf(TEXT("%c / UNKNOWN"),'A'+Index):FString::Printf(TEXT("%c / %s / seen %.0fs"),'A'+Index,Point.Owner==0?TEXT("ALLY"):Point.Owner==1?TEXT("ENEMY"):TEXT("NEUTRAL"),Match->Area.SeenAt[Index])):FString::Printf(TEXT("%c / %s %.0f%%"), 'A' + Index, Point.bContested ? TEXT("CONTESTED") : Point.Owner == 0 ? TEXT("ALLY") : Point.Owner == 1 ? TEXT("ENEMY") : TEXT("NEUTRAL"), Point.CaptureProgress / 8.f * 100.f), Center.X - 42, Center.Y - 12, Color, .85f);
 			}
 			for (int32 Segment = 0; Segment < 32; ++Segment)
 			{
@@ -85,7 +98,12 @@ void ABattleHUD::DrawHUD()
 		}
 	}
 
-	TSet<int32> DrawnDefenseSquads;
+ if(Match->bArea)for(int32 Team=0;Team<2;++Team)
+ {
+  FVector2D P;if(PC->ProjectWorldLocationToScreen(Match->AreaHome(Team),P)&&P.Y>200&&P.Y<H-135)
+  {DrawRect(Ink,P.X-65,P.Y-16,190,26);Label(Team?TEXT("ENEMY BASE / PUBLIC LOCATION"):TEXT("HOME / REPLENISHMENT AREA"),P.X-60,P.Y-10,Team?FLinearColor(1,.35f,.25f):Mint,.85f);}
+ }
+ TSet<int32> DrawnDefenseSquads;
 	TArray<FVector2D> LabelPositions;
 	if (!PC->IsTactical() && (LabelViewPawn.Get() != PC->GetPawn() || GetWorld()->GetTimeSeconds() >= NextLabelCheck))
 	{
@@ -122,7 +140,7 @@ void ABattleHUD::DrawHUD()
 		{
 			LabelPositions.Add(Screen);
 			DrawRect(Ink, Screen.X - 25, Screen.Y, 50, 5);
-			DrawRect(Color, Screen.X - 25, Screen.Y, 50 * FMath::Clamp(State->HP / FMath::Max(1.f, GetDefault<UBattleTuning>()->Health), 0.f, 1.f), 5);
+			DrawRect(Color, Screen.X - 25, Screen.Y, 50 * FMath::Clamp(State->HP / FMath::Max(1.f, GetWorld()->GetSubsystem<UBattleState>()->MaxHealthOf(State->UnitID)), 0.f, 1.f), 5);
 			Label(FString::Printf(TEXT("S%d / %02d"), State->SquadID, State->UnitID), Screen.X - 22, Screen.Y - 19, Color, .85f);
 		}
 		if (PC->IsSelected(Unit))
@@ -157,6 +175,31 @@ void ABattleHUD::DrawHUD()
 		DrawRect(FLinearColor(.1f, .8f, .65f, .12f), FMath::Min(Start.X, End.X), FMath::Min(Start.Y, End.Y), FMath::Abs(Start.X - End.X), FMath::Abs(Start.Y - End.Y));
 		DrawLine(Start.X, Start.Y, End.X, Start.Y, Mint); DrawLine(End.X, Start.Y, End.X, End.Y, Mint);
 		DrawLine(End.X, End.Y, Start.X, End.Y, Mint); DrawLine(Start.X, End.Y, Start.X, Start.Y, Mint);
+	}
+	if (PC->CanShowDelegation())
+	{
+		int32 Manual = 0, Automatic = 0; PC->GetDelegationCounts(Manual, Automatic);
+		DrawRect(Ink, 16, 238, 450, 94);
+		Label(FString::Printf(TEXT("SELECTED SQUADS  /  MANUAL %d  /  AI %d"), Manual, Automatic), 28, 247, White, .95f);
+		const bool bSelected = Manual + Automatic > 0;
+		DrawRect(bSelected && Automatic == 0 ? FLinearColor(.12f,.38f,.32f,.98f) : FLinearColor(.10f,.15f,.20f,.98f), 28, 270, 200, 30);
+		DrawRect(bSelected && Manual == 0 ? FLinearColor(.12f,.38f,.32f,.98f) : FLinearColor(.10f,.15f,.20f,.98f), 240, 270, 214, 30);
+		Label(TEXT("[K] MANUAL COMMAND"), 40, 278, bSelected ? Mint : Muted, .9f);
+		Label(TEXT("[J] DELEGATE TO AI"), 252, 278, bSelected ? Mint : Muted, .9f);
+		Label(TEXT("Q: select all / Move or Hold takes command"), 28, 310, Muted, .85f);
+  if (GetWorld()->GetSubsystem<UBattleSquadTactics>()->IsEnabled() && !PC->GetSelection().IsEmpty())
+   if (const auto* Selected = PC->GetSelection()[0]->GetState())
+    if (const auto* Squad = GetWorld()->GetSubsystem<UBattleState>()->FindSquad(Selected->SquadID))
+    {
+     const FString Movement=GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->MovementLabel(Squad->SquadID);
+     DrawRect(Ink, 16, 336, 450, Movement.IsEmpty()?79:98);
+     Label(FString::Printf(TEXT("SQ %d  MISSION: %s"), Squad->SquadID, BattleOrderName(Squad->bHasMission ? Squad->MissionOrder : Squad->Order)), 28, 343, White, .85f);
+     Label(FString::Printf(TEXT("TACTIC: %s"), BattleSquadTacticName(Squad->TacticalPlan.Action)), 28, 362, Mint, .85f);
+     const auto* Sample = GetWorld()->GetSubsystem<UBattleSquadTactics>()->Find(Squad->SquadID);
+     const FString Reason = !Squad->bPlayerDelegated ? TEXT("MANUAL / LOCAL AI") : Squad->TacticalPlan.Action != EBattleSquadTactic::Mission ? Squad->TacticalPlan.Reason : Sample ? Sample->Reason : TEXT("WAITING FOR ACTIVE SAMPLE");
+     Label(Reason, 28, 382, Muted, .8f);
+     if(!Movement.IsEmpty()) Label(Movement,28,402,Muted,.8f);
+    }
 	}
 	DrawRect(Ink, 16, H - 128, W - 32, 112);
 	const ABattleUnit* Focus = PC->IsTactical() ? (PC->GetSelection().IsEmpty() ? nullptr : PC->GetSelection()[0].Get()) : Cast<ABattleUnit>(PC->GetPawn());
@@ -231,7 +274,7 @@ void ABattleHUD::DrawHUD()
 	else Label(TEXT("SELECT A FRIENDLY UNIT TO BEGIN"), 34, H - 112, White, 1.2f);
 	if (PC->IsTactical())
 	{
-		Label(TEXT("LMB/drag: select   RMB: move   T then RMB: attack move   G then RMB: defend   H: hold   Q: all   E/Tab: FPS"), 34, H - 80, Mint);
+		Label(TEXT("LMB/drag: select   RMB: move   T then RMB: attack move   G then RMB: defend   H: hold   Q: all   E/Tab: TPS"), 34, H - 80, Mint);
 		Label(FString::Printf(TEXT("WASD: pan   Wheel: zoom   P: pause AI   F5: reset   F6: memory   %s      SELECTED %02d"), Match->IsEnabled() ? TEXT("1/2/3: recruit") : TEXT("F7: training preset"), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
 	}
 	else
@@ -244,7 +287,7 @@ void ABattleHUD::DrawHUD()
 		DrawLine(W / 2, H / 2 - 13, W / 2, H / 2 - 4, CrossColor, 1.5f);
 		DrawLine(W / 2, H / 2 + 4, W / 2, H / 2 + 13, CrossColor, 1.5f);
 	}
-	if (PC->NoticeUntil > GetWorld()->GetTimeSeconds()) Label(PC->Notice, 35, Match->IsEnabled() ? 235 : 96, Mint, 1.1f);
+	if (PC->NoticeUntil > GetWorld()->GetTimeSeconds()) Label(PC->Notice, 35, PC->CanShowDelegation() ? H - 156 : Match->IsEnabled() ? 235 : 96, Mint, 1.1f);
 	if (PC->IsTactical() && PC->PendingOrder != EBattleOrder::Move)
 		Label(FString::Printf(TEXT("%s: RIGHT-CLICK DESTINATION / H TO CANCEL"), BattleOrderName(PC->PendingOrder)), 35, 148, FLinearColor::Yellow);
 	if (!Match->IsEnabled() && GetWorld()->GetTimeSeconds() < Mode->CombatStartsAt)
@@ -261,7 +304,7 @@ void ABattleHUD::DrawHUD()
 void ABattleHUD::DrawSquadList()
 {
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); if(!L->IsEnabled()) return;
- auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas) return;
+ auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas || !PC->IsTactical()) return;
  PC->ScrollSquadList(0); const auto Layout=FBattleSquadListLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY));
  if(Layout.VisibleRows<=0) return;
  const auto& Rows=L->Summaries(); int32 Active=0; for(const auto& S:Rows) if(S.bActive) ++Active;
@@ -277,6 +320,22 @@ void ABattleHUD::DrawSquadList()
   FString Name=S.Name.Len()>12?S.Name.Left(11)+TEXT("…"):S.Name;
   DrawText(Name,Color,Layout.Origin.X+9,Y+4,GEngine->GetSmallFont(),1);
   DrawText(State,Color,Layout.Origin.X+Layout.Width-110,Y+4,GEngine->GetSmallFont(),1);
+  if(const auto* Squad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(S.SquadID))
+  {
+   const auto& Plan=Squad->TacticalPlan;
+   const bool Mission=Plan.Action==EBattleSquadTactic::Mission;
+   const FVector Goal=Mission?Squad->Destination:Plan.Destination;
+   const int32 Partner=Plan.Action==EBattleSquadTactic::Support?Plan.SupportSquad:Plan.Action==EBattleSquadTactic::Flank?Plan.FlankSupport:INDEX_NONE;
+   const FString Link=Partner==INDEX_NONE?TEXT(""):FString::Printf(TEXT(" / S%d"),Partner);
+   const FString Action=Mission?FString(BattleOrderName(Squad->Order)):FString::Printf(TEXT("%s %.0fs"),BattleSquadTacticName(Plan.Action),Plan.Age);
+   DrawText(FString::Printf(TEXT("%s / %.0fm%s"),*Action,FVector::Dist2D(L->Position(S.LeaderUnitID),Goal)/100.,*Link),Color,Layout.Origin.X+9,Y+23,GEngine->GetSmallFont(),.8f);
+   const auto* Sample=GetWorld()->GetSubsystem<UBattleSquadTactics>()->Find(S.SquadID);
+   int32 Waiting=0;for(int32 ID:Squad->Members)if(const auto* Body=L->GetBodies().Find(ID))Waiting+=Body->bTrafficWait;
+   FString Reason=!S.bActive?Squad->StopReason.ToString():!Squad->bPlayerDelegated?TEXT("MANUAL COMMAND"):
+    Waiting>0?FString::Printf(TEXT("TRAFFIC WAIT %d"),Waiting):!Mission?Plan.Reason:Sample?Sample->Reason:TEXT("WAITING FOR REPORT");
+   if(Reason.Len()>44)Reason=Reason.Left(43)+TEXT("...");
+   DrawText(Reason,FLinearColor(.72f,.78f,.8f),Layout.Origin.X+9,Y+40,GEngine->GetSmallFont(),.7f);
+  }
  }
  if(Rows.Num()>Layout.VisibleRows)
  {

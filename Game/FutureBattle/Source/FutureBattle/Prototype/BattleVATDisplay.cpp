@@ -11,6 +11,8 @@
 #include "Components/CapsuleComponent.h"
 #include "BattlePhase3.h"
 #include "BattleGameMode.h"
+#include "BattleController.h"
+#include "Camera/PlayerCameraManager.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "Misc/FileHelper.h"
 #include "UnrealClient.h"
@@ -103,14 +105,33 @@ bool ABattleVATDisplay::Initialize(UBattleLeaderRuntime* InRuntime)
  FAssetCompilingManager::Get().FinishAllCompilation();
  if(GShaderCompilingManager)GShaderCompilingManager->FinishAllCompilation();
 #endif
- UE_LOG(LogTemp,Display,TEXT("VAT_DISPLAY enabled=1 followers=%d scope=phase3_trial groups=%d max_instances=250 ray_wpo=%d ray_simulation_count=%d"),Entries.Num(),Groups.Num(),IConsoleManager::Get().FindConsoleVariable(TEXT("r.RayTracing.Geometry.InstancedStaticMeshes.EvaluateWPO"))->GetInt(),IConsoleManager::Get().FindConsoleVariable(TEXT("r.RayTracing.Geometry.InstancedStaticMeshes.SimulationCount"))->GetInt());return true;
+ UE_LOG(LogTemp,Display,TEXT("VAT_DISPLAY enabled=1 followers=%d scope=mass_followers groups=%d max_instances=250 ray_wpo=%d ray_simulation_count=%d"),Entries.Num(),Groups.Num(),IConsoleManager::Get().FindConsoleVariable(TEXT("r.RayTracing.Geometry.InstancedStaticMeshes.EvaluateWPO"))->GetInt(),IConsoleManager::Get().FindConsoleVariable(TEXT("r.RayTracing.Geometry.InstancedStaticMeshes.SimulationCount"))->GetInt());return true;
+}
+void ABattleVATDisplay::ResetBodies()
+{
+ // Loading can occur inside a GameMode tick task. Keep the existing owner of
+ // render CVars; restarting PrepareRendering would recursively drain that queue.
+ for(const auto& Pair:Entries)if(Pair.Value.Body.IsValid())RemoveTickPrerequisiteComponent(Pair.Value.Body.Get());
+ Entries.Reset();
+ for(auto& G:Groups)if(G)G->DestroyComponent();Groups.Reset();
+}
+void ABattleVATDisplay::RemoveUnit(int32 ID)
+{
+ if(auto* E=Entries.Find(ID))
+ {
+  if(E->Body.IsValid())RemoveTickPrerequisiteComponent(E->Body.Get());
+  const FTransform Hidden(FQuat::Identity,FVector::ZeroVector,FVector::ZeroVector);
+  Groups[E->BodyGroup]->UpdateInstanceTransform(E->Slot,Hidden,true,true,true);
+  Groups[E->WeaponGroup]->UpdateInstanceTransform(E->WeaponSlot,Hidden,true,true,true);
+  Entries.Remove(ID);
+ }
 }
 bool ABattleVATDisplay::IsFar(int32 ID)const{const auto* E=Entries.Find(ID);return E && E->Far;}
 void ABattleVATDisplay::SetVisible(int32 ID,bool Visible){if(auto* E=Entries.Find(ID))E->Visible=Visible;}
 void ABattleVATDisplay::ChangePose(int32 ID,int32 Pose)
 {
- if(auto* E=Entries.Find(ID)){if(!E->Far)E->Body->CompleteParallelAnimationEvaluation(true);E->Pose=Pose;if(E->Far){E->Time=0;E->Rate=1;}}
- if(const auto* I=AuditIndices.Find(ID)){AuditBodies[*I]->CompleteParallelAnimationEvaluation(true);AuditBodies[*I]->PlayAnimation(Data->Clips[Pose].Clip,true);}
+ if(auto* E=Entries.Find(ID)){if(!E->Far)E->Body->HandleExistingParallelEvaluationTask(true,true);E->Pose=Pose;if(E->Far){E->Time=0;E->Rate=1;}}
+ if(const auto* I=AuditIndices.Find(ID)){AuditBodies[*I]->HandleExistingParallelEvaluationTask(true,true);AuditBodies[*I]->PlayAnimation(Data->Clips[Pose].Clip,true);}
 }
 void ABattleVATDisplay::Freeze(int32 ID)
 {
@@ -118,7 +139,7 @@ void ABattleVATDisplay::Freeze(int32 ID)
  {
   E->Dead=true;
   if(E->Far){E->BodyRelative.SetRotation(FRotator(0,-90,85).Quaternion());}
-  if(const auto* I=AuditIndices.Find(ID)){auto* M=AuditBodies[*I].Get();M->CompleteParallelAnimationEvaluation(true);M->SetComponentTickEnabled(false);M->SetRelativeRotation(FRotator(0,-90,85));}
+  if(const auto* I=AuditIndices.Find(ID)){auto* M=AuditBodies[*I].Get();M->HandleExistingParallelEvaluationTask(true,true);M->SetComponentTickEnabled(false);M->SetRelativeRotation(FRotator(0,-90,85));}
  }
 }
 void ABattleVATDisplay::Enter(FBattleVATEntry& E)
@@ -138,7 +159,7 @@ void ABattleVATDisplay::Enter(FBattleVATEntry& E)
   }
  }
  if(!AssetsReady)return;
- M->CompleteParallelAnimationEvaluation(true);
+ M->HandleExistingParallelEvaluationTask(true,true);
  auto* Node=M->GetSingleNodeInstance();if(!Node || !BattleFollowerBones::Eligible(M))return;
  E.Time=Node->GetCurrentTime();E.Rate=Node->GetPlayRate()*M->GlobalAnimRateScale;
  E.BodyRelative=M->GetRelativeTransform();E.WeaponRelative=W->GetRelativeTransform();
@@ -151,7 +172,7 @@ void ABattleVATDisplay::Enter(FBattleVATEntry& E)
 void ABattleVATDisplay::Leave(FBattleVATEntry& E)
 {
  auto* M=E.Body.Get();auto* W=E.Weapon.Get();const auto& B=Runtime->GetBodies().FindChecked(E.ID);
- M->CompleteParallelAnimationEvaluation(true);
+ M->HandleExistingParallelEvaluationTask(true,true);
  M->SetRelativeTransform(E.BodyRelative);CastChecked<UBattleVATSkeletalMeshComponent>(M)->VATFar=false;
  M->SetVisibility(false);M->PlayAnimation(Data->Clips[E.Pose].Clip,true);M->SetPlayRate(E.Rate/M->GlobalAnimRateScale);
  M->SetPosition(E.Time,false);M->TickAnimation(0,false);M->VisibilityBasedAnimTickOption=EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
@@ -188,6 +209,25 @@ void ABattleVATDisplay::Tick(float Dt)
  Super::Tick(Dt);if(!Data)return;
  const double Start=FPlatformTime::Seconds();int32 FarCount=0,ShownCount=0;
  TRACE_CPUPROFILER_EVENT_SCOPE(BattleVATDisplay);
+ const auto* Phase=GetWorld()->GetSubsystem<UBattlePhase3>();
+ if(!Phase->bEnabled)
+ {
+  // Ordinary leader play retains native skeletal LOD selection. Only replace
+  // an already-coarse LOD; restore immediately when the distance gate closes.
+  auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
+  if(PC && PC->PlayerCameraManager)
+  {
+   FVector Eye;FRotator Rotation;PC->GetPlayerViewPoint(Eye,Rotation);
+   int32 Width=0,Height=0;PC->GetViewportSize(Width,Height);
+   const double Scale=180.*FMath::Max(Width,1)*.5/FMath::Tan(FMath::DegreesToRadians(PC->PlayerCameraManager->GetFOVAngle()*.5));
+   for(auto& Pair:Entries)
+   {
+    const auto& E=Pair.Value;
+    const int32 LOD=E.Far?2:E.Body->GetPredictedLODLevel();
+    Select(E.ID,LOD>=2?2:LOD,FVector::Distance(Eye,Runtime->Position(E.ID)),Scale,PC->IsTactical()?TEXT("RTS"):TEXT("FPS"));
+   }
+  }
+ }
  TArray<TArray<FTransform>> Transforms;Transforms.SetNum(Groups.Num());for(int32 I=0;I<Groups.Num();++I)Transforms[I].Init(FTransform(FQuat::Identity,FVector::ZeroVector,FVector::ZeroVector),Groups[I]->GetInstanceCount());
  for(auto& Pair:Entries)
  {
@@ -203,8 +243,8 @@ void ABattleVATDisplay::Tick(float Dt)
   E.PreviousFrames=F;
  }
  for(int32 I=0;I<Groups.Num();++I)Groups[I]->BatchUpdateInstancesTransforms(0,Transforms[I],true,true,false);
- const auto* Phase=GetWorld()->GetSubsystem<UBattlePhase3>();const double Elapsed=GetWorld()->GetTimeSeconds()-Phase->Started;
- if(Elapsed>=Phase->Warmup && Elapsed<Phase->Warmup+Phase->Duration){++StatFrames;StatFar+=FarCount;StatShown+=ShownCount;StatMS+=(FPlatformTime::Seconds()-Start)*1000;}
+ const double Elapsed=GetWorld()->GetTimeSeconds()-Phase->Started;
+ if(!Phase->bEnabled || (Elapsed>=Phase->Warmup && Elapsed<Phase->Warmup+Phase->Duration)){++StatFrames;StatFar+=FarCount;StatShown+=ShownCount;StatMS+=(FPlatformTime::Seconds()-Start)*1000;}
  if(Audit)
  {
   ++AuditFrame;
@@ -220,8 +260,8 @@ void ABattleVATDisplay::Tick(float Dt)
   }
   for(const auto& Pair:Entries)
   {
-   const auto& E=Pair.Value;const int32 I=AuditIndices.FindChecked(E.ID);auto* Ref=AuditBodies[I].Get();Ref->CompleteParallelAnimationEvaluation(true);
-   auto* M=E.Body.Get();if(!E.Far)M->CompleteParallelAnimationEvaluation(true);
+   const auto& E=Pair.Value;const int32 I=AuditIndices.FindChecked(E.ID);auto* Ref=AuditBodies[I].Get();Ref->HandleExistingParallelEvaluationTask(true,true);
+   auto* M=E.Body.Get();if(!E.Far)M->HandleExistingParallelEvaluationTask(true,true);
    const float T=E.Far?E.Time:M->GetSingleNodeInstance()->GetCurrentTime(),RT=Ref->GetSingleNodeInstance()->GetCurrentTime();
    bool Bones=true,Weapon=true;
    if(!E.Far && (E.Visible || E.Dead))

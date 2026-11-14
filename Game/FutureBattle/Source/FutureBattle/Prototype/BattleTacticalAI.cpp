@@ -1,4 +1,5 @@
 #include "BattleUnit.h"
+#include "BattleSquadTactics.h"
 #include "BattleState.h"
 #include "BattlePerception.h"
 #include "BattleCover.h"
@@ -30,6 +31,7 @@ bool ABattleAIController::TryTacticalAction(ABattleUnit* Unit, const FBattleCont
 	}
 	if (bFailed && CurrentCoverSlot != INDEX_NONE)
 	{
+  GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("CoverExecutionFailed"));
 		ResetExecution(); TacticalBlockedUntil = Now + 5.;
 		Store->SetTacticalState(Unit->GetUnitID(), INDEX_NONE, TEXT("COVER FAILED: RETURN TO ORDER"));
 	}
@@ -75,6 +77,7 @@ bool ABattleAIController::TryTacticalAction(ABattleUnit* Unit, const FBattleCont
 		}
 		if (BestSlot != INDEX_NONE && BestSlot != CurrentCoverSlot && Cover->Reserve(BestSlot, Unit->GetUnitID(), Now))
 		{
+   GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(bNeedsReload ? TEXT("CoverReloadAssigned") : TEXT("CoverFireAssigned"));
 			SuspendMovement(); CurrentCoverSlot = BestSlot;
 			TacticalCommitUntil = Now + FMath::Max(.5f, Tuning->TacticalCommitSeconds);
 			bRelaxed = false; NextMoveRequest = 0.;
@@ -88,6 +91,7 @@ bool ABattleAIController::TryTacticalAction(ABattleUnit* Unit, const FBattleCont
 			ClearCoverPlan(); SuspendMovement();
 		}
 		bCoverForReload = bNeedsReload;
+  if (BestSlot == INDEX_NONE) GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("EvalNoBetterCover"));
 	}
 	if (CurrentCoverSlot != INDEX_NONE)
 	{
@@ -99,6 +103,7 @@ bool ABattleAIController::TryTacticalAction(ABattleUnit* Unit, const FBattleCont
 		}
 		if (S->Action == EBattleAction::TakingCover)
 		{
+   GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("CoverArrival"));
 			if (auto* Metrics = GetWorld()->GetSubsystem<UBattleMetrics>(); Metrics->bRecording) ++Metrics->MoveArrivals;
 			UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_COVER_ARRIVAL Unit=%d Slot=%d Pos=%s Exposure=%d"), Unit->GetUnitID(), CurrentCoverSlot, *Unit->GetActorLocation().ToCompactString(), BattleTactics::ExposureFrom(Unit, ThreatEye).VisibleSamples);
 		}

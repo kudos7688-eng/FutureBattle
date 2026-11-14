@@ -4,6 +4,133 @@
 #include "BattleGameMode.h"
 #include "BattleMetrics.h"
 
+bool BattleTactics::AICoverProbeBudgetEnabled()
+{
+ static const bool Enabled=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAICoverProbe="),Value);return Value!=0;}();
+ return Enabled;
+}
+
+bool BattleTactics::LeaderGuardEnabled()
+{
+ static const bool Enabled=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleLeaderGuard="),Value);return Value!=0;}();
+ return Enabled;
+}
+
+float BattleTactics::LeaderHealthMultiplier()
+{
+ // Config default (UBattleTuning::LeaderHealthMultiplier); the command line overrides it for trials.
+ static const float Multiplier=[](){float Value=GetDefault<UBattleTuning>()->LeaderHealthMultiplier;FParse::Value(FCommandLine::Get(),TEXT("BattleLeaderHealth="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,1.f,10.f):1.f;}();
+ return Multiplier;
+}
+
+const BattleTactics::FSupplyTuning& BattleTactics::Supply()
+{
+ static const FSupplyTuning Value=[]()
+ {
+  const auto* T=GetDefault<UBattleTuning>(); FSupplyTuning S;
+  S.ReturnLiving=T->SupplyReturnLiving;S.ResumeLiving=T->SupplyResumeLiving;S.AwayRatio=T->SupplyAwayRatio;
+  S.HealPerSecond=T->SupplyHealPerSecond;S.ResumeHealthRatio=T->SupplyResumeHealthRatio;
+  const TCHAR* Line=FCommandLine::Get();
+  FParse::Value(Line,TEXT("BattleSupplyReturnLiving="),S.ReturnLiving);FParse::Value(Line,TEXT("BattleSupplyResumeLiving="),S.ResumeLiving);
+  FParse::Value(Line,TEXT("BattleSupplyAwayRatio="),S.AwayRatio);FParse::Value(Line,TEXT("BattleSupplyHeal="),S.HealPerSecond);
+  FParse::Value(Line,TEXT("BattleSupplyResumeHealth="),S.ResumeHealthRatio);
+  S.ReturnLiving=FMath::Clamp(S.ReturnLiving,1,9);S.ResumeLiving=FMath::Clamp(S.ResumeLiving,1,10);
+  S.AwayRatio=FMath::IsFinite(S.AwayRatio)?FMath::Clamp(S.AwayRatio,.05f,1.f):1.f;
+  S.HealPerSecond=FMath::IsFinite(S.HealPerSecond)?FMath::Clamp(S.HealPerSecond,0.f,1000.f):0.f;
+  S.ResumeHealthRatio=FMath::IsFinite(S.ResumeHealthRatio)?FMath::Clamp(S.ResumeHealthRatio,0.f,1.f):0.f;
+  return S;
+ }();
+ return Value;
+}
+
+const BattleTactics::FAreaHireTuning& BattleTactics::AreaHire()
+{
+ static const FAreaHireTuning Value=[]()
+ {
+  const auto* T=GetDefault<UBattleTuning>();FAreaHireTuning H;int32 Enabled=T->bAreaHire?1:0;
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHire="),Enabled);
+  H.bEnabled=Enabled!=0;H.Cost=FMath::Clamp(T->AreaSquadCost,1,100);H.Reserve=T->AreaHireReserve;H.Interval=T->AreaHireIntervalSeconds;H.Stop=T->AreaHireStopSeconds;
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHireReserve="),H.Reserve);FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHireInterval="),H.Interval);
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHireStop="),H.Stop);
+  H.Reserve=FMath::Clamp(H.Reserve,0,1000);H.Interval=FMath::IsFinite(H.Interval)?FMath::Clamp(H.Interval,0.f,600.f):0.f;H.Stop=FMath::IsFinite(H.Stop)?FMath::Clamp(H.Stop,0.f,600.f):0.f;
+  return H;
+ }();
+ return Value;
+}
+
+const BattleTactics::FAreaStrategyTuning& BattleTactics::AreaStrategy()
+{
+ static const FAreaStrategyTuning Value=[]()
+ {
+  FAreaStrategyTuning S;int32 Enabled=0;
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaStrategy="),Enabled);
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaAttackWeight="),S.AttackWeight);
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseShare="),S.BaseShare);
+  S.bEnabled=Enabled!=0;
+  S.AttackWeight=FMath::IsFinite(S.AttackWeight)?FMath::Clamp(S.AttackWeight,0.1f,10.f):2.f;
+  S.BaseShare=FMath::IsFinite(S.BaseShare)?FMath::Clamp(S.BaseShare,0.f,0.5f):0.2f;
+  return S;
+ }();
+ return Value;
+}
+
+const BattleTactics::FAreaIncomeTuning& BattleTactics::AreaIncome()
+{
+ static const FAreaIncomeTuning Value=[]()
+ {
+  const auto* T=GetDefault<UBattleTuning>();FAreaIncomeTuning I;int32 Enabled=T->bAreaIncome?1:0;
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaIncome="),Enabled);
+  I.bEnabled=Enabled!=0;I.Seconds=FMath::IsFinite(T->AreaIncomeSeconds)?FMath::Clamp(T->AreaIncomeSeconds,1.f,600.f):20.f;
+  I.Base=FMath::Clamp(T->AreaBaseIncome,0,100);I.PerPoint=FMath::Clamp(T->AreaPointIncome,0,100);
+  return I;
+ }();
+ return Value;
+}
+
+int32 BattleTactics::LeaderHealthSaveBits()
+{
+ // 0 for the former x1 rule, so saves made before the multiplier existed load only under x1.
+ return FMath::Clamp(FMath::RoundToInt(LeaderHealthMultiplier()*10.f)-10,0,90)<<9;
+}
+
+bool BattleTactics::ReacquireGraceEnabled()
+{
+ // Config default (UBattleTuning::bReacquireGrace, adopted ON 2026-11-13); -BattleReacquireGrace=0/1 overrides for trials.
+ static const bool Enabled=[](){int32 Value=GetDefault<UBattleTuning>()->bReacquireGrace?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleReacquireGrace="),Value);return Value!=0;}();
+ return Enabled;
+}
+
+bool BattleTactics::CoverFireEnabled()
+{
+ // Config default (UBattleTuning::bAICoverFire, ON since 2026-11-14); -BattleCoverFire=0/1 overrides for trials.
+ static const bool Enabled=[](){int32 Value=GetDefault<UBattleTuning>()->bAICoverFire?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverFire="),Value);return Value!=0;}();
+ return Enabled;
+}
+bool BattleTactics::CoverValidationEnabled()
+{
+ // Config default (UBattleTuning::bAICoverValidation, ON); -BattleCoverValidation=0/1 overrides for trials.
+ static const bool Enabled=[](){int32 Value=GetDefault<UBattleTuning>()->bAICoverValidation?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverValidation="),Value);return Value!=0;}();
+ return Enabled;
+}
+bool BattleTactics::CoverPeekSightEnabled()
+{
+ // Config default (UBattleTuning::bAICoverPeekSight, OFF trial); -BattleCoverPeekSight=0/1 overrides.
+ static const bool Enabled=[](){int32 Value=GetDefault<UBattleTuning>()->bAICoverPeekSight?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverPeekSight="),Value);return Value!=0;}();
+ return Enabled;
+}
+
+bool BattleTactics::CoverApproachEnabled()
+{
+ static const bool Enabled=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverApproach="),Value);return Value!=0;}();
+ return Enabled;
+}
+
+bool BattleTactics::CoverActionsEnabled()
+{
+ static const bool Enabled=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverActions="),Value);return Value!=0;}();
+ return Enabled;
+}
+
 float BattleTactics::SpreadDegrees(const FBattleUnitState& State, double Now)
 {
 	const auto* Tuning = GetDefault<UBattleTuning>();
@@ -15,7 +142,8 @@ float BattleTactics::SpreadDegrees(const FBattleUnitState& State, double Now)
 FVector BattleTactics::ShotDirection(const FBattleUnitState& State, FVector Aim, double Now)
 {
 	// Match-local sequence remains in canonical state across possession changes.
-	const uint32 Seed = static_cast<uint32>(State.UnitID) * 196613u + static_cast<uint32>(State.ShotSequence) * 314159u + 271828u;
+	static const uint32 TrialSalt=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleTrialSeed="),Value);return uint32(Value)*2654435761u;}();
+	const uint32 Seed = static_cast<uint32>(State.UnitID) * 196613u + static_cast<uint32>(State.ShotSequence) * 314159u + 271828u + TrialSalt;
 	FRandomStream Random(static_cast<int32>(Seed));
 	return Random.VRandCone(Aim.GetSafeNormal(), FMath::DegreesToRadians(SpreadDegrees(State, Now)));
 }

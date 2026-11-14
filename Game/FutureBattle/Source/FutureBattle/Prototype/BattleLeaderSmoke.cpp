@@ -26,8 +26,8 @@ void UBattleLeaderRuntime::RunSmoke()
   Check(Summaries().Num()==2 && Summaries()[0].Name==TEXT("第1小隊"),TEXT("summary includes own squads only and stable names"));
   Check(Summaries()[0].Intent==EBattleSquadIntent::Unspecified && Summaries()[0].ProblemFlags==0,TEXT("intent and problem slots remain empty"));
   const auto Layout=FBattleSquadListLayout::Make(FVector2D(1920,1080));
-  Check(Layout.VisibleRows==23 && Layout.RowAt(Layout.Origin+FVector2D(10,45))==0 && Layout.RowAt(Layout.Origin+FVector2D(10,5))==INDEX_NONE,TEXT("list rows and header hit regions"));
-  Check(FBattleSquadListLayout::Make(FVector2D(1280,720)).VisibleRows==15,TEXT("list resize to 720p"));
+  Check(Layout.VisibleRows==11 && Layout.RowAt(Layout.Origin+FVector2D(10,45))==0 && Layout.RowAt(Layout.Origin+FVector2D(10,5))==INDEX_NONE,TEXT("list rows and header hit regions"));
+  Check(FBattleSquadListLayout::Make(FVector2D(1280,720)).VisibleRows==7,TEXT("list resize to 720p"));
   Check(!GetWorld()->GetSubsystem<UBattleMatch>()->SaveMatch(TEXT("LeaderUnsupported")),TEXT("unsupported save is rejected"));
   SmokePosition=Position(2); IssueOrder(1,EBattleOrder::Move,SmokePosition+FVector(650,0,0));
   Mode->bCombatPaused=false; Mode->CombatStartsAt=0;

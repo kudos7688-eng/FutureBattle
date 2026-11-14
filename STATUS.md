@@ -1,5 +1,683 @@
 # 現在地と次の作業
 
+## 2026-11-14 Claude：資源収入（既定ON）・倍速切替・AI購入ペース切替・経済48戦＋ペース36戦
+- **資源収入（ユーザー「叩き台で進めて」）**
+  - 20秒ごとに、各軍へ「基本1＋保有拠点1つにつき1」を加える。
+  - UBattleTuning `bAreaIncome` / `AreaIncomeSeconds=20` / `AreaBaseIncome=1` / `AreaPointIncome=1`、`-BattleAreaIncome=0` で止まる。
+  - 保存の照合は「消費＋雇用支出＋残資源＝100＋収入」。収入の改ざんは拒否する。
+  - 得点式は変更なし。HUDに収入の表示はない。
+  - エリアのスモーク試験に4項目を追加：19秒では未払い、20秒で+3/+1、照合、改ざんの拒否。
+- **倍速切替（ユーザー「実装して」）**
+  - [.] で x1→x2→x4→x1。作戦画面かつスタンドアロンのときだけ効く。
+  - 隊長を直接操作している間は x1、作戦画面に戻ると選んだ速度に戻る。
+  - HUDの右上に `SPEED xN [.]` を表示する。
+  - スモーク試験に「x2 x4 x1 と回る」を追加し、PASS。
+  - **実画面での操作感・表示は未確認。**
+- **AI購入ペース切替（E2、既定は変更なし）**
+  - `-BattleAreaHireInterval=秒`：同じ軍の購入の最小間隔。
+  - `-BattleAreaHireStop=秒`：試合終了の何秒前から買わないか。
+  - 既定はどちらも0で、無効。
+  - 確認1戦（D seed7、間隔60・停止120）：購入は60〜65秒おきで、最後の購入は425秒（480秒以降は0）。両軍6部隊ずつ買い、得点は247/104（Setup/Benchmarks/SightTrial-20261111/pace-check-r1）。
+- **計測の追加（S1の準備）**：metrics に拠点ごとの保有秒数（`*_point_owned_seconds`）と初占領時刻（`*_first_capture_seconds`）を追加した。
+- **検証**
+  - 新DLLでBuild成功。
+  - 基本、エリア（Setup/Benchmarks の speed-r1）、MixedFast、混成保存、広域混成のすべてで failures=0。
+- **経済48戦・初回（固定 claude-income-r1、条件 HI/H/I/none × seed 7/19/43 × マップD/A × 入替）**：比較は不成立。後述の再実行で置き換えた。
+  - 完走は22戦のみ。
+  - 約18戦はエンジンのアニメーション処理で異常終了した（PropagatePreviewCurve null+0xb0、または SkinnedAsset.cpp:470 の assert）。
+  - 異常終了は全条件で起き、雇用・収入OFFの none でも起きたので、経済の変更が原因ではない。
+  - 残りの欠損は、2つの実行器が同じ試合を重ねて走らせた運用ミス（以後、実行器は1つにする）。
+  - 参考値（完走分のみ、組がそろわないので判断には使わない）：
+
+    | 条件 | 戦数 | 1戦あたりの雇用 | 1戦あたりの生存 |
+    |---|---|---|---|
+    | HI | 4 | 12.5 | 246 |
+    | H | 6 | 11.3 | 129 |
+    | I | 7 | 0 | 163 |
+    | none | 5 | 0 | 171 |
+
+  - 解析は `Setup/Analyze-EconomyMatrix.ps1 -Tag r1`。
+- **異常終了の修正**：カバー担当セッションが、`CompleteParallelAnimationEvaluation` の直接呼び出し16か所を `HandleExistingParallelEvaluationTask(true,true)` に置き換えた（同セッションの記録・ローカルコミット 4e4649d）。
+- **経済48戦の再実行（固定 claude-animfix-econ-r2＝異常終了の修正入り）**
+  - **48戦すべて完走、異常終了0**（修正前は約18/48）。
+  - 雇用ONの14戦が、Test-WideSight の実時間制限（900秒）で打ち切られていた。雇用で兵が増え、8並列では遅くなったため。r1の「欠損」の一部も同じ原因と思われる。
+  - 制限を2700秒に上げ（Setup/Test-WideSight.ps1:53）、14戦だけ再実行した。
+  - 結果（各12戦、seed 7/19/43 × D/A × 入替）：
+
+    | 条件 | 終了時の生存 | 残資源 | 雇用 | 補充 | 損失 | 隊長戦死 | 拠点付近の人・秒 | 勝敗(味方/敵/引分) |
+    |---|---|---|---|---|---|---|---|---|
+    | HI（既定） | 260 | 17 | 12.6 | 130 | 496 | 32.0 | 104,214 | 6/6/0 |
+    | H（収入OFF） | 141 | 0 | 11.3 | 31 | 502 | 35.2 | 104,048 | 8/4/0 |
+    | I（雇用OFF） | 167 | 195 | 0 | 140 | 472 | 30.4 | 83,631 | 6/5/1 |
+    | none（両方OFF） | 168 | 60 | 0 | 140 | 472 | 30.3 | 83,675 | 7/4/1 |
+
+  - 既定（HI）は none より、生存+92（12組中10組で上回る）、拠点付近の人・秒+20,539（約+25%）。
+  - 収入だけ（I）では資源が195余り、補充も生存も none と同じで効果がない（補充は資源で頭打ちになっていない）。
+  - 雇用だけ（H）では資源を使い切り、補充が140→31に減って、生存が27人減る。
+  - 雇用と収入は**両方そろって効く**。**既定（両方ON）を維持する。**
+  - 損失は +24、両軍の得点差の平均は 42→95 で、勝負の差は開きやすくなる。本拠地破壊は0。
+- **AI購入ペース36戦（同じ固定ビルド、HIの上に追加、各12戦、異常終了0）**
+
+  | 条件 | 生存 | 得点合計 | 平均差 | 拠点付近の人・秒 | 480秒以降の雇用 |
+  |---|---|---|---|---|---|
+  | HI（既定、間隔0・停止0） | 260 | 337 | 95.4 | 104,214 | 5 |
+  | S120（終了120秒前から停止） | 256 | 339 | 96.8 | 104,212 | 0 |
+  | S180（終了180秒前から停止） | 256 | 339 | 96.8 | 104,212 | 0 |
+  | G60（間隔60秒） | 247 | 331 | 58.0 | 97,446 | 8 |
+
+  - 停止は120秒と180秒で結果が同じだった。終盤の雇用が元々少ないので、効果は誤差程度（生存-4、得点+2）。
+  - G60 は試合が均衡しやすい（平均差95→58）。一方で、生存-13、拠点付近の人・秒-6,769（-6.5%）。
+  - 明確な改善がないため**既定は変えない**（間隔0・停止0、委任範囲の判断）。
+  - 証拠：SightTrial-20261111/econ-*-r2。打ち切られた14戦は econ-*-r2-timeout として残してある。
+  - 解析：`Analyze-EconomyMatrix.ps1 -Tag r2 [-Conditions HI,S120,S180,G60 -Baseline HI]`。
+- **次の一手**
+  - AIの戦略判断（S1〜S4）へ進む。S1は「拠点の重みづけ配分」。
+  - 現状の配分：小隊を3拠点に順番に割り当て、自軍がすでに保有している拠点は飛ばす。5番目ごとの小隊が敵本拠地へ向かう。全滅した小隊や雇用した小隊も、この順番の数に入る。
+  - コミット：ローカル d9d65cb（Run-EconomyMatrix.ps1 と Analyze-EconomyMatrix.ps1 の2ファイルだけ）。
+  - 雇用・収入・倍速のSourceは、未コミットのエリア戦本体（BattleArea.cpp などの未追跡ファイル、40ファイルの変更）の上に載っている。自分の分だけを切り出したコミットは、ビルドが通らないため作っていない。
+  - 作業ツリー全体を区切りとしてコミットするかは、ユーザーの判断待ち。push なし。
+
+## 2026-11-14 Claude：のぞき中に敵が見えなければ早めに隠れ直す試験切替（S、既定OFF、採否はユーザー判断待ち）
+- **変更**：AIがカバーの射撃窓（最大2.8秒）で身を出してから `AICoverPeekBlindSeconds`（1秒）たっても、カバーの対象を自分で見ていなければ（`bVisible && !bShared` でない）、身を出すのをやめて隠れ直す。終了理由は `peek_end_blind`。判断に使うのは観測情報だけ。
+  - 有効化：`bAICoverPeekSight=false`（BattleState.h）、`BattleTactics::CoverPeekSightEnabled()`、`-BattleCoverPeekSight=0/1`
+  - 変更したファイル：BattleCoverAction.cpp、Cover smoke の既定OFF確認、Test-WideSight.ps1 の `-CoverPeekSight`、Run-CoverFireMatrix.ps1 の条件 S
+- **検証**：`Build-Editor` 成功。回帰はすべて failures=0（出力名 `peeksight-r1`）。
+  - 試験：Battle、Cover、Area、WideMixed
+  - 既定OFFでの一致：Area と WideMixed の試合ログは animfix-r1 と完全一致
+- **比較**：凍結ビルド `claude-peeksight-r1`、エリア600秒、地図A/D × 乱数7/19/43 × 陣営入替あり/なし、各12戦。異常終了0。
+  - r1 は凍結ビルドの指定誤りで、全戦が起動時に失敗した。正しく実行したのは r2。
+
+| 項目（12戦合計） | base | S |
+|---|---|---|
+| のぞき地点に到達 | 119 | 177 |
+| カバーからの射撃 | 118 | 163 |
+| 時間切れで終了 | 34 | 4 |
+| 見えずに終了（blind） | 0 | 63 |
+| 射線なしで待ったフレーム | 6,682 | 3,730 |
+| 全射撃 | 58,067 | 56,844 |
+| 部下の戦死 | 2,987 | 2,858 |
+| 隊長の戦死 | 384 | 382 |
+
+  - 見えないまま2.8秒さらす時間切れは34回から4回に減った。浮いた時間で次ののぞきへ移れるため、のぞき回数は+49%、カバーからの射撃は+38%になった。
+  - 組ごとの差はばらつく。カバー射撃が増えたのは12組中7組、同じが2組、減ったのが3組。
+  - カバー射撃は全射撃の0.3%以下しかない。試合全体（部下戦死-4%、隊長戦死は同じ、勝敗の変化は2組）への影響は、ばらつきの範囲で、確定的な差ではない。
+- **採否**：2026-11-14、ユーザーが既定ONを決定。経済セッションのS1の48戦がSource/Configを占有しているため、反映（Config・ヘッダー既定・smokeの期待値）と回帰は占有が解けてから行う。それまでの実行は既定OFFのまま。
+- **コミット**：BattleCoverAction.cpp ほかの関係ファイルは未追跡、または他セッションの変更と混在しているため、ローカルコミットしていない。
+
+## 2026-11-14 Claude：アニメーション異常終了の修正（適用・ビルド・回帰済み、再発しないことは未確認）
+- **変更**：下記の原因節の16か所（14行）の `CompleteParallelAnimationEvaluation(true)` を、`HandleExistingParallelEvaluationTask(true,true)` に置き換えた。この関数は評価タスクの完了を待ってから後処理し、タスクがなければ何もしない。対象：BattleVATDisplay.cpp 7、BattleFollowerBones.cpp 2、BattleAnimTasks.cpp 1、BattleAnimTaskTrial.cpp 3、BattleHiddenBoneTrial.cpp 3。表示だけの変更で、正規状態・AI判断には触れていない。
+- **経済セッションからの報告**：経済48戦（600秒エリア、8〜16並列）のうち約18本が異常終了した。補給・採用なしの条件でも起きている。落ちる箇所は2種類。
+  - PropagatePreviewCurve / Evaluate_AnyThread（null+0xb0）
+  - SkinnedAsset.cpp:470 の骨数アサート（骨格の骨数と ComponentSpaceTransforms の数の不一致）
+  後者も同じ競合（評価中に後処理が走る）と見ているが、推定。
+- **検証**：`Build-Editor` 成功。回帰はすべて failures=0（出力名 `animfix-r1`）。
+  - Battle
+  - Area（倍速切替の確認を含む）
+  - MixedFast
+  - MixedSave
+  - WideMixed
+- **修正前との一致（直前のDLLでの `speed-r1` と比較。試合ログの LogFutureBattle 行から時刻部分を除いて照合）**：
+  - Area 57行、MixedFast 28行、WideMixed 69行：完全一致
+  - MixedSave：差は側面移動の終了 4.22秒→4.23秒と位置の1cm程度だけ。過去30本でも 4.20〜4.22秒 でぶれているので、実時間による揺らぎの範囲。
+- **再発確認（経済セッションの再実行、凍結 `claude-animfix-econ-r2`、8並列）**：48戦中の異常終了は0件で、SkinnedAsset.cpp:470 のアサートも出なかった。修正前のDLLでは同じ条件で約18件だった。修正が効いたと判断する。
+- **制限**：経済セッションの報告では、採用ONの14戦が Test-WideSight の実時間上限（900秒）で打ち切られていた。これは異常終了とは別件で、上限は2,700秒に引き上げ済み。BattleVATDisplay.cpp には別の未コミット変更があるため、ローカルコミットには含めていない。
+
+## 2026-11-14 Claude：継続改善（異常終了の原因特定・隊長戦死の分解）
+方針はROADMAP冒頭の同日節。もう一方のセッションが資源収入の実装中でSource/Config/DLLを占有しているため、この節は記録とコード読解だけで、コード変更・ビルド・試合は未実施。
+
+- **アニメーションの異常終了（2回）の原因（コード読解による。修正・再現は未実施）**：ゲーム側は11か所で `USkeletalMeshComponent::CompleteParallelAnimationEvaluation(true)` を直接呼んでいる（BattleVATDisplay 7、BattleFollowerBones 2、BattleAnimTasks 1、試験用のAnimTaskTrial/HiddenBoneTrial）。UE 5.8 のこの関数は別スレッドの評価タスクを**待たずに**、タスクの参照を捨てて後処理（PostAnimEvaluation → プロキシの ClearObjects で Skeleton=null）を実行する（SkeletalMeshComponent.cpp:4980）。評価がまだワーカーで走っていると、評価中のプロキシの Skeleton が消え、ログと同じ `ensure(Skeleton)`（AnimInstanceProxy.h:377、PropagatePreviewCurve）→ アクセス違反 0xb0 になる。2回とも別の時刻（330秒、540秒）で、再走すると完走する（タイミング依存）ことと合う。エンジンには、待ってから後処理する公開関数 `HandleExistingParallelEvaluationTask(true,true)` があるので、占有が解けたらこれに置き換え、ビルドと回帰を行う。表示だけの変更で、正規状態・AI判断は変わらない見込み（前後の試合が完全一致することで確認する）。
+- **隊長戦死の増加の分解（covervalid 48戦の既存記録）**：
+
+| 条件 | 隊長の被弾 | 部下の被弾 | 隊長の割合 | 隊長戦死 | 戦死1人あたり被弾 |
+|---|---|---|---|---|---|
+| V0（修正OFF） | 12,548 | 32,500 | 27.9% | 327 | 38.4 |
+| base（修正ON） | 13,007 | 30,855 | 29.7% | 351 | 37.1 |
+| F（ON＋F） | 13,244 | 31,825 | 29.4% | 364 | 36.4 |
+
+  隊長が硬くなくなったのではなく、狙われる割合が増えた（部下の被弾-5%、隊長+4%、隊長の割合は12組中9組で上昇）。部下が射線のない地点で身を出さなくなり、敵の射撃が隊長へ回った可能性がある（推定）。ただし1戦あたりの隊長戦死は±5程度ばらつき、増加は1戦あたり2〜3人で、確定的な差ではない。カバー状態での隊長戦死は0〜2件。次に確かめるなら、隊長が撃たれたときの状態（移動中・カバー中・部下との位置関係）を計測に加える。
+
+## 2026-11-14 Claude：AIカバーの射撃窓（F）を既定ONに
+
+ユーザー指示「Fも既定に」。UBattleTuning `bAICoverFire=true`（BattleState.h、DefaultGame.ini `bAICoverFire=True`）。`-BattleCoverFire=0` で従来の身を出す1.2秒固定に戻る。根拠は前節の48戦（確かめ直しON＋F：1回あたり射撃0.97、2発以上42%、カバー中射撃146で最多）。カバー試験に「射撃窓が既定ON」を追加（計24項目）。
+
+- 検証：Build成功、固定 claude-coverfire-default-r1（DLL 74B02980904680A8D6824EB41F47AB19EC883E2A96A2FC2F3EE601B7FB5D6935、別セッションの新部隊雇用・補給B・確かめ直しONを含む）。基本、カバーC/D（各24）、エリア、MixedFast、混成保存、広域混成すべて failures=0（Setup/CoverFireDefault-*-r1.txt）。
+- 既定の確認：新部隊雇用OFF（-AreaHire 0）の D-s7入替・A-s7通常が、前節の covervalid-*-F-r1 と射撃・命中・得点が完全一致（既定でFが働く）。既定のまま（雇用ON）の2戦も完走・保存読込成功、`peek_end_shots_done` が記録され（3回・5回）、2発撃って隠れる動作を確認。
+- 注意：雇用ONのA-s7通常（cfdefault-A-s7-r1）は590秒で味方本拠地が破壊されて敗北（DEFEAT / HOME BASE DESTROYED）。F OFF・雇用ONの hire-on-A-s7-r1（別セッション）は時間切れ敗北42/144。1戦のみのため、Fと雇用の組み合わせの影響かseed差かは未判断。隊長戦死の増加（前節）も未分解。証拠 SightTrial-20261111/cfdefault-*-r1。コミット/pushなし。
+
+## 2026-11-14 Claude：エリア戦の新部隊雇用を実装（既定ON）
+ユーザー指示「新部隊雇用へ」。仕様はROADMAP冒頭の同日節。
+- **変更**
+  - BattleArea.cpp：`HireAreaSquad` / `UpdateAreaHiring` / `ActiveSquads` を追加。
+  - BattleMatch.cpp：エリア戦の `HireSquad` を雇用処理へ回し、5秒ごとのAI購入を加えた。
+  - BattleMixedRecruitment.cpp：`SpawnPurchasedSquad` をエリア戦でも使えるようにした。出現位置は `AreaHome` 基準で陣営入替に従う。MixedFastの位置は式を変えただけで値は同じ。記録上の兵数の上限は、エリア戦では1000（収入追加で700から変更、保存上限と同じ）。
+  - BattleMixedSaveValidation.cpp：保存の照合を変更（版3のまま）。
+  - BattleAreaState.h：`HireSpent` を追加。
+  - BattleState.h / BattleTactics：設定と `-BattleAreaHire`。
+  - BattleHUD.cpp：`[2] NEW SQUAD 15 (n/25)`。
+  - BattleSightExperiment：metrics に雇用回数・時刻・支出・終了時の稼働部隊数を追加し、保存往復の照合に `HireSpent` と部隊数を加えた。
+  - BattleAreaSmoke.cpp：雇用の試験項目を追加。
+  - DefaultGame.ini：`bAreaHire=True` / `AreaSquadCost=15` / `AreaHireReserve=10`。
+  - Test-WideSight.ps1：`-AreaHire` を追加。
+  - PROTOTYPE.md：エリア戦の項に雇用を追記。
+- **検証**
+  - ビルド成功。固定 claude-hire-r1（DLL D04F0BA4A4B1B7FB03D82F2E15F3A25A7EB1A8E4B2E6AF804AC9C45E9774126D）。
+  - エリアのスモーク試験は failures=0（Setup/Hire-area-r1.txt）。追加した項目で次を確かめた：通常兵以外は拒否、資源14では拒否、15を払って10人の新IDで第51小隊が本拠地に出る、稼働25のとき拒否、保存の照合と復元、HireSpentの改ざんは拒否、補充待ちの取り消し、2回雇用したあとの照合。
+  - 回帰（基本／MixedFast／混成保存／広域／カバーC）はすべて failures=0（Setup/Hire-*-r1.txt）。
+  - 計測2戦（雇用ON、D入替とA、seed7）は異常終了なし、保存往復 failures=0。入替時は自軍がX=+36000側に正しく出現した。
+  - `-AreaHire 0` の2戦は、covervalid-*-base-r1 と得点・射撃・資源・補充数が完全に一致した。
+- **観察（1戦ずつなので傾向は未確定）**
+  - 雇用ONでは、両軍AIが70〜150秒に4〜6部隊を買い、終了時の資源は両軍とも0。
+  - 得点は、雇用ON（D入替115/88、A 42/144）が雇用OFF（126/172、135/190）より両軍とも低い。
+  - 原因の候補：予備10では、序盤に失った部隊をすぐ買い直して資源を使い切り、その後の補充（1人1）ができない。さらに割増分5も得点から減る。
+- **制限**
+  - 実画面での[2]購入・HUD表示・選択は未確認。
+  - AIの購入規則（予備10、5秒ごとに1部隊）は暫定値で、複数seedでは比べていない。
+  - AI購入は作戦画面の待機と関係なく動く。
+- **次の一手（ユーザー判断）**
+  - AIの購入規則を調整するか（予備を増やす、試合時間に応じて購入をやめる、購入の間隔を空ける等）。
+  - 雇用ON/OFFで複数seedを比べるか。
+- アニメーションの異常終了（Skeleton ensure → AnimInstanceProxy のアクセス違反）は、カバー担当の走行でも540秒で1回起きた。合計2回で、どちらも単独で再走すると完走した。原因は未調査。
+
+## 2026-11-14 Claude：AIカバーの射程確認と射線の確かめ直し（既定ON）、48戦比較
+
+ユーザー指示「両方修正」（前節の原因1・2）。UBattleTuning `bAICoverValidation=true`（BattleState.h、DefaultGame.ini）、`-BattleCoverValidation=0` で旧挙動（BattleTactics::CoverValidationEnabled、Test-WideSight `-CoverValidation`、既定-1＝Configに従う）。直接操作の兵には適用しない。
+
+- 実装：(1) Follow（BattleLeaderRuntime.cpp）でカバー開始・遮蔽物へ寄る開始を、敵の最終確認位置が武器射程内のときに限定。カバー中に敵の最終確認位置が射程外になったら解除（`cancel_target_out_of_range`）。(2) 隠れ→身を出す前に、身を出す地点から敵の最終確認位置への可視線（CoverLineClear：自分のカプセルを除外、兵の体は遮蔽と数えない）を確かめ、通らなければ遮蔽物の左右220/400cmで地点を選び直し（RevalidatePeek、`peek_repicked`）、なければ隠れたまま0.5秒後に再確認（`peek_hold_no_line`）。身を出している間に可視線が切れたら隠れ直す（`peek_end_no_line`）。判断に使うのは観測した最終確認位置だけで、敵の真の位置は使わない。カバー試験に3項目（既定ON、身を出す地点の可視線、部下の地点確認）を追加し計23項目。
+- 検証：Build成功、固定 claude-covervalid-r1（DLL 097962E3E72030E3EB2D33867B926F203F7E1CA6BA968CB107C26168733F853B、補給B既定を含む）。基本 failures=0、カバーC/D各23項目 failures=0、エリア、混成保存、広域混成 failures=0（Setup/CoverValid-*-r1.txt）。48戦（V0＝修正OFF／FV0＝修正OFF＋F／base＝修正ON／F＝修正ON＋F × seed 7/19/43 × D/A × 通常/入替）すべて完走・保存読込成功。**V0は別セッションの supplyB-default-*-r1（D-s7入替・A-s7）と射撃・命中・得点が完全一致**（OFFで旧挙動を再現）。
+- 1戦（covervalid-A-s19-swap-base-r1）が540秒でUEエンジンのアニメーション評価で落ちた（FAnimSingleNodeInstanceProxy::PropagatePreviewCurve の Skeleton ensure のあとアクセス違反、Background Worker）。別セッションの supply-all-A-s19-r2 と同じ症状。同じ条件で単独再走（BehaviorConcurrency 1）すると完走したため、再走結果で集計。落ちた記録は *-crash1 に保存。2回目の発生であり、ゲーム側の表示（VATの姿勢切替・PlayAnimation）との関係は未調査。
+- 結果（各12戦の合計）：
+
+| 条件 | 身を出した | カバー中射撃 | 1回あたり射撃 | 1発も撃てず | 身を出し中の被弾 | カバー状態の戦死 | 全戦死（隊長） | 全射撃 |
+|---|---|---|---|---|---|---|---|---|
+| V0（修正OFF） | 307 | 120 | 0.39 | 73% | 89 | 17 | 3,239（327） | 54,723 |
+| FV0（OFF＋F） | 201 | 50 | 0.25 | 85% | 112 | 11 | 3,173（333） | 54,330 |
+| base（修正ON） | 138 | 81 | 0.59 | 63% | 41 | 8 | 3,105（351） | 53,124 |
+| F（ON＋F） | 151 | 146 | 0.97 | 45% | 91 | 12 | 3,214（364） | 54,846 |
+
+- 所見1（修正は狙いどおり）：射程外の敵による待ち（V0で5,437フレーム）は0になり、射線なしの待ちは8,211→4,028。無駄な身の出し入れが減り、1回あたり射撃は1.5倍。修正ONでは身を出す時間の延長（F）が効くようになり、1回あたり0.97発、2発以上撃てた回が42%（OFF時のFは0.25発）。カバー中射撃は全条件で最多の146。
+- 所見2（残る原因）：修正ON＋Fで撃てなかったフレームは、射線なし55%（敵が最終確認位置から動き、まだ線が通っている扱いのまま時間切れまで待つ）、射撃間隔33%、発見待ち12%。
+- 所見3（戦闘全体）：カバーの関わる被弾は全被弾の0.2〜0.4%で、全体への影響は小さい。修正ONの戦死は12組中9組で減り合計-4%、ただし射撃も-3%。**隊長の戦死は327→351（base）・364（F）とやや増えた**（カバー状態での戦死は少ないため、カバー解除後の位置取りなどの間接的影響と推定、未分解）。勝者は条件で入れ替わる組があるが一貫した傾向はない。AI処理は平均2.2〜2.5ms・p95 7.0〜7.4ms（4並列）で増加なし。
+- 既定：修正（bAICoverValidation）はON、射撃窓（bAICoverFire）・探索・寄りはOFFのまま。証拠 Setup/Benchmarks/SightTrial-20261111/covervalid-*-r1、covervalid-matrix-r1.txt。コミット/pushなし。
+
+## 2026-11-14 Claude：AIが身を出しても撃てない原因の計測
+
+ユーザー指示「原因を計測」。評価用の計測のみ追加（AI判断・挙動は不変）。
+
+- 実装（BattleCoverAction.cpp、BattleLeaderRuntime.h）：AIが身を出している（CoverPhase=4）フレームで撃てなかった理由を cover_diagnostics に記録。`peekwait_no_line_of_sight`（知覚上見えておらず、実際も射線なし）/ `peekwait_detecting`（射線はあるが発見待ち）/ `peekwait_shared_only` / `peekwait_out_of_range`（目標が武器射程外）/ `peekwait_ray_blocked`（見えている扱いだが射線判定で遮られる）/ `peekwait_cooldown`（射撃間隔・照準切替の待ち）/ `peekwait_reloading` / `peekwait_no_contact`。射線の追加判定は実験時のみ。身を出した時点の状態 `peek_start_visible / seen_within_grace / seen_before_grace / no_contact`、`peek_start_cooldown_pending`。終了時 `peek_end_timer / reload / shots_done / cancel / died` と `peek_end_shots_0 / 1 / 2plus`、`peek_first_shot`。Run-CoverFireMatrix.ps1 に `-Only`（条件の絞り込み）を追加。
+- 検証：Build成功、固定 claude-peekdiag-r1（DLL 1A08E25B8AF0AF7EF17496A34B684F66A517CD9ABD32EFBA9011FFA67BBC5161）。基本 failures=0、カバーC/D failures=0（Setup/PeekDiag-*-r1.txt）。base / F × seed 7/19/43 × D/A × 通常/入替＝24戦すべて完走・保存読込成功、**前回の coverfire-*-r1 と射撃・命中・得点が24戦とも完全一致**（計測は挙動を変えない）。
+- 結果（各12戦の合計。フレームは60Hz）：
+
+| 撃てなかったフレームの理由 | base（1.2秒） | F（最大2.8秒） |
+|---|---|---|
+| 射線なし（敵が見えず、実際も遮られる） | 10,261（42%） | 16,084（49%） |
+| 目標が武器射程（50m）の外 | 8,750（36%） | 11,643（35%） |
+| 射撃間隔・照準切替の待ち | 2,996（12%） | 2,814（9%） |
+| 射線はあるが発見待ち | 2,315（9%） | 2,301（7%） |
+| その他（見えている扱いで射線が遮られる・リロード） | 57（0.2%） | 50（0.2%） |
+
+- 身を出した回数のうち**1発も撃てずに終わった割合は base・Fとも83%**（base 297/357、F 198/240）。身を出した時点で敵が見えていたのは base 37%・F 28%で、残りは「1秒以内に見ていた」（24%・26%）か「それより前」（39%・47%、再発見に0.6秒必要）。身を出した時点で射撃間隔が残っていたのは9%（32/358）。
+- **原因1：射程外の敵に対してカバーしている（約36%）**。カバーを始める条件（BattleLeaderRuntime.cpp Follow）は「敵が見えている＋交戦中」で、武器射程（50m）の確認がない。認識距離は100mのため、撃てない距離の敵に隠れて身を出している。射撃の条件（CanEngage）には射程の確認がある。
+- **原因2：身を出した地点から敵への射線がない（42〜49%）**。身を出す地点は、カバー開始時の敵の最終確認位置に対して、露出の割合と地形の線（HasTerrainLine）だけで選んでいる（RequestCoverAction）。隠れる0.8秒＋移動の間に敵が動くと、地点に着いても射線が通らない。身を出す時間を延ばす（F）と、この割合が増える。
+- 射撃間隔（12%）と発見待ち（9%）は副次的。
+- 改善候補（未実施）：(a) 武器射程内の敵に対してのみカバーを始める。(b) 身を出す地点へ移る前に、今の敵の最終確認位置に対して射線を確かめ直し、通らなければ別の地点を選ぶか、隠れたままにする。(c) その後で射撃窓（F）を再評価。証拠 Setup/Benchmarks/SightTrial-20261111/peekdiag-*-r1。コミット/pushなし。
+
+## 2026-11-13 Claude：AIカバーの射撃窓（-BattleCoverFire）とカバー状態別被弾、探索・寄りの新既定上48戦比較
+
+ユーザー指示「カバーの露出時間をAI射撃間隔に合わせる／被弾・戦死をカバー状態別に記録／新既定（HP3倍＋条件B）上で探索改善・寄りを複数seed比較」。**3つの試験スイッチ（CoverFire / AICoverProbe / CoverApproach）はすべて既定OFFのまま**（採否はユーザー判断待ち）。
+
+- 実装：UBattleTuning `bAICoverFire=false` / `AICoverPeekSeconds=2.8` / `AICoverShotsPerPeek=2`（BattleState.h、DefaultGame.ini）、`-BattleCoverFire=0/1` で上書き（BattleTactics::CoverFireEnabled）。有効時、AI（直接操作でない兵）は身を出す地点に最大2.8秒（従来1.2秒）とどまり、2発撃つかリロードで隠れる（BattleCoverAction.cpp、実行時のみの CoverPeekShots。保存しない、読込後は0から）。評価用計測：Fire で被弾側のカバー状態ごとに `victim_hit_*` / `victim_death_*`（no_cover / cover_entering / cover_hidden / cover_to_peek / cover_peek / approaching_cover）を cover_diagnostics に出力（AI入力に使わない）。比較用 Setup/Run-CoverFireMatrix.ps1（base / F / FP＝F＋探索 / FPA＝FP＋寄り × seed 7/19/43 × D/A × 通常/入替＝48戦、4並列）。Test-WideSight に `-CoverFire`（既定-1＝Configに従う）。
+- 検証：Build成功、固定 claude-coverfire-r1（DLL CCD6450127A856E0D6AA545BB3B84056A60A19E0CEEBD45AED5D05BA9CB70463）。基本 failures=0、カバーC/D、エリア、混成保存、広域混成すべて failures=0（Setup/CoverFire-*-r1.txt）。48戦すべて完走・保存読込検証成功。**決定性**：base の seed7（A通常・A入替・D入替）が前DLLの defaults-*-r1 と射撃・命中・得点で完全一致（追加した計測は挙動を変えない）。
+- 結果（48戦を条件ごとに合計、各12戦）：
+
+| 条件 | カバー成功 | 身を出した | カバー中射撃 | カバー状態での被弾（うち身を出し中） | カバー状態での戦死 | 全被弾 | 全戦死 | 全射撃 |
+|---|---|---|---|---|---|---|---|---|
+| base | 169 | 358 | 77 | 169（84） | 14 | 45,086 | 3,325 | 54,866 |
+| F | 148 | 240 | 75 | 171（125） | 15 | 44,440 | 3,265 | 54,113 |
+| FP | 427 | 564 | 230 | 445（208） | 29 | 42,607 | 3,120 | 51,452 |
+| FPA | 589 | 707 | 222 | 1,096（356、寄り移動中485） | 67 | 43,169 | 3,166 | 53,256 |
+
+- 所見1（F単独は効果なし）：身を出す時間を延ばしても、カバー中射撃は77→75で増えず、身を出している間の被弾が84→125に増えた。1回あたりの射撃は0.21→0.31発で、目標の2発に届かない。身を出してもほとんど撃てていない原因（射線がない、隠れていた時間が1秒を超えて再発見待ち0.6秒が戻る、照準の切替遅れ、射撃間隔1.4秒など）は未計測。
+- 所見2（カバーは戦闘全体にほとんど効いていない）：カバー状態での被弾は全被弾の0.4%（base）〜2.5%（FPA）、戦死は0.4〜2.1%。探索（FP）でカバー利用は約2.5倍、射撃3倍になるが、戦闘の大半はカバー外で起きている。
+- 所見3（損耗・勝敗）：同じ場面どうしの差（12組）は戦死±30〜90程度で、seedによるぶれと同程度。FPは12組中10組で戦死が減った（合計-6%）が、全射撃も-6%で、交戦が鈍ったためか防護の効果かは区別できない。勝者は条件によって入れ替わる組があるが、一貫した傾向はない。FPA は寄り開始2,822回のうち到達851（30%）、交戦終了による中止895、目標変更による中止577。寄り移動中の戦死18。
+- AI処理（4並列走行のため絶対値は参考）：平均 base 2.20 / F 2.18 / FP 2.08 / FPA 2.28 ms、p95 6.46〜6.74 ms。探索・寄りで大きな負荷増はない。
+- 判断材料：Fは単独では採用理由なし（被弾が増えるだけ）。カバーを戦闘に効かせるには、まず「身を出しても撃てない」原因を計測で特定する必要がある。証拠 Setup/Benchmarks/SightTrial-20261111/coverfire-*-r1、coverfire-matrix-r1.txt。コミット/pushなし。
+
+## 2026-11-14 Claude：補給サイクル比較72戦の結果（採否はユーザー判断待ち、既定は変更なし）
+
+ユーザーの「再開」指示で、下記節の再開手順(3)(4)を実施。固定 claude-coverfire-r1（DLL CCD64501…）、`Setup/Run-SupplyMatrix.ps1 -Tag r2`、6条件 × seed 7/19/43 × D/A × 通常/入替＝72戦、全戦600秒完走・80秒保存読込検証成功。走行中はカバー担当セッションがビルド/UE起動を待機。Source/Config/DLLの変更なし。
+- 1戦（supply-all-A-s19-r2）が330秒でUEエンジン内部のアニメーション評価クラッシュ（AnimInstanceProxy.h:377 の Skeleton ensure → FAnimNode_SingleNode::Evaluate_AnyThread で EXCEPTION_ACCESS_VIOLATION、ゲームコードのフレームなし）。既存の SightTrial 全走行に同じ ensure は無い。証拠を supply-all-A-s19-r2-crash1 / Setup/Supply-supply-all-A-s19-r2-crash1*.txt に残し、同条件を再走して完走（再現せず）。原因は未調査。
+- 集計（`Setup/Analyze-SupplyMatrix.ps1 -Tag r2`、各12戦合計）：
+
+| 条件 | 帰還 | 平均帰還秒 | 帰還中の時間 | 交戦時間 | 拠点100m内 延べ人秒/戦 | 全損失 | 隊長戦死 | 残資源/戦 | 終了時生存/戦 |
+|---|---|---|---|---|---|---|---|---|---|
+| base | 586 | 109 | 31% | 12% | 89,535 | 5,615 | 348 | 51 | 181 |
+| A 6人以下で帰還 | 388 | 86 | 20% | 16% | 81,434 | 6,127 | 414 | 54 | 136 |
+| B 回復10/秒・90%で復帰 | 568 | 110 | 31% | 12% | 87,835 | 5,426 | 327 | 49 | 199 |
+| C 9人で復帰 | 587 | 109 | 31% | 12% | 89,553 | 5,618 | 348 | 51 | 181 |
+| D 同時帰還34%まで | 420 | 97 | 25% | 14% | 81,921 | 5,748 | 396 | 70 | 151 |
+| all | 404 | 83 | 19% | 16% | 84,734 | 6,037 | 391 | 52 | 145 |
+
+- 同じ場面どうし（12組）のbaseとの差：拠点付近の延べ人秒 A -8.6%（上回り2/12）、B -1.9%（3/12）、C ±0、D -8.0%（0/12）、all -4.5%（5/12）。終了時生存 A -45（1/12）、B +17（7/12）、C ±0、D -30（1/12）、all -36（2/12）。両軍得点合計 A -44、B +16（8/12）、D -11、all -35。
+- 所見：(1)「帰還が多すぎて前線が薄い」という前提は支持されない。A/Dは帰還を減らし交戦時間を増やすが、拠点付近の延べ人数は減り、損失と隊長戦死が増える（減った部隊が前線に残ると早く溶ける）。(2) Cは効果なし（復帰待ちの間にほぼ必ず10人そろう）。(3) Bは小幅プラス（損失-3%、隊長戦死-6%、生存+10%）だが12組中7〜8組で、seedのぶれに近い。(4) 勝者に一貫した傾向なし。
+- **決定（2026-11-14 ユーザー）：Bを採用、A/C/Dは不採用**（ROADMAP冒頭）。DefaultGame.ini を SupplyHealPerSecond=10 / SupplyResumeHealthRatio=0.9 に変更した（C++変更なし。DLLはカバー担当の 1A08E25B8AF0AF7EF17496A34B684F66A517CD9ABD32EFBA9011FFA67BBC5161＝評価用カウンタのみ追加）。回帰：基本・エリア・カバーC・混成保存・広域すべて failures=0（Setup/SupplyB-*-r1.txt）。固定 claude-supplyB-r1 で、試験引数なしの既定のままD入替/A通常（seed7）を走らせ、比較の試験B（supply-B-D-s7-swap-r2 / supply-B-A-s7-r2）と得点・射撃・命中・生存・補充・資源・帰還・復帰回数が完全一致（supplyB-default-*-r1）。旧挙動は `-BattleSupplyHeal=0 -BattleSupplyResumeHealth=0` で再現できる。**直接操作で在宅中にHPが回復する見た目（HUDのHPバー）は実画面で未確認。**証拠 Setup/Benchmarks/SightTrial-20261111/supply-*-r2、Setup/Supply-*-r2*.txt、Supply-matrix-r2*.log。コミット/pushなし。
+
+## 2026-11-13 Claude：補給サイクル調整の試験切替を実装（比較は2026-11-14に実施、上記節）
+
+ユーザー指示で、ROADMAP冒頭「エリア戦の新部隊雇用と補給サイクル調整」の(1)を、実装・ビルド・回帰・既定での挙動不変の確認まで進めて**一時停止**した。比較は上記節で実施済み。採否判断と(2)新部隊雇用は未着手。
+
+- 実装（すべて既定は従来どおり）：UBattleTuning に SupplyReturnLiving=8 / SupplyResumeLiving=10 / SupplyAwayRatio=1.0 / SupplyHealPerSecond=0 / SupplyResumeHealthRatio=0（BattleState.h、DefaultGame.ini）。BattleTactics::Supply() が読み、`-BattleSupplyReturnLiving= / -BattleSupplyResumeLiving= / -BattleSupplyAwayRatio= / -BattleSupplyHeal= / -BattleSupplyResumeHealth=` で上書き（試験専用、保存の照合には含めない）。BattleSquadRetreat.cpp：A 帰還開始の生存人数、C 復帰の人数（または資源0）、Bの復帰条件（部隊HP比）、D 自軍の稼働部隊のうち帰還中の割合の上限（自軍の計画状態だけを読む、弾切れは常に許可）。BattleArea.cpp：B 本拠地（補充と同じ在宅判定）でHPを毎秒回復、上限は MaxHealthOf（UBattleState::Heal を新設）。
+- 評価用の計測F（AI入力に使わない、保存しない）：UBattleSquadTactics の帰還記録（開始〜復帰の秒数）、tactical_events に HomeSupplyAbortEmergency / HomeSupplyDeferredAwayLimit / HomeSupplyEndWithoutStart、metrics.json に `supply_cycle`（resumed_trip_seconds、試合終了時に開いている帰還の内訳＝隊長死亡/帰還中/別計画、拠点100m以内の延べ人数 front_person_seconds_team0/1、使った設定値）。照合式：HomeSupplyReturn＋HomeSupplyEndWithoutStart＝復帰＋緊急中止＋開いている帰還（80秒の保存読込で読込前の帰還は開始時刻を失う）。
+- 検証：Build成功、固定claude-supply-r1（DLL 1CB7BE1AC79771768630176B40E650F01B1AF5E1247908AD3A1983F604865336、HP3倍・条件B既定を含む）。基本210、カバーC 20、エリア24、混成保存35、広域46成功。既定のままD入替/A通常（seed7）を再走し、前DLLの defaults-D-s7-swap-r1 / defaults-A-s7-r1 と得点・射撃・命中・生存・補充・資源・帰還回数が完全一致（supply-default-*-r1）。全部入り条件をDのseed7通常/入替で2戦実施し、引数が渡り設定値どおり動くこと（帰還見送り90/122回など）と保存読込付き完走を確認（supply-all-D-s7*-r1。比較の一部として再利用する）。この2戦の数値は条件・構成がそろっていないため結論に使わない。証拠 Setup/Supply-*.txt。コミット/pushなし。
+- **再開手順**：(1) `git status` と実行中のUE/計測プロセス、別セッションの作業を確認する。(2) DLLを確認する（`(Get-FileHash Game\FutureBattle\Binaries\Win64\UnrealEditor-FutureBattle.dll).Hash`）。**2026-11-13時点（一時停止後）で、別セッションのカバー射撃窓の作業により DLL は CCD6450127A856E0D6AA545BB3B84056A60A19E0CEEBD45AED5D05BA9CB70463（固定 claude-coverfire-r1）に変わった。** このsnapshotのsource.zipには補給の試験切替と計測F（BattleSupplyAwayRatio、supply_cycle）が含まれることを確認済みで、追加の試験スイッチ3つは既定OFF。DLLがまだ CCD64501… なら claude-coverfire-r1 をそのまま使い、全条件を `-Tag r2` で取り直す（r1のDLLと異なるため、既存の supply-all-D-s7*-r1 は消さずに比較から外す）。さらに変わっていれば、ビルドし直して新しいsnapshotを作る（`Setup/New-BattleBuildSnapshot.ps1 -Name <未使用名>`）。-FrozenBuild はDLLとConfig・マップが固定時と一致しないと走行を失敗にする。(3) `Setup/Run-SupplyMatrix.ps1 -FrozenBuild Benchmarks/BuildSnapshots/claude-coverfire-r1/manifest.json -Tag r2` を実行（snapshot名は(2)で決めたもの）（6条件 base/A/B/C/D/all × seed 7/19/43 × D/A × 通常/入替＝72戦、4並列で約2時間、既存の出力は飛ばすので中断しても同じコマンドで再開できる）。(4) `Setup/Analyze-SupplyMatrix.ps1` で条件別に集計。(5) 帰還時間の割合・交戦時間・前線の延べ人数・損失・資源・得点を比べ、ユーザーに採否（とくにBのHP回復は以前の試作判断「本拠地ではHPを回復しない」を変えるかどうか）を確認する。(6) 結果をSTATUS、採否をROADMAPに記録し、そのあと(2)新部隊雇用へ進む。
+
+## 2026-11-13 Claude：条件Bを既定化、HP3倍と合わせた最終回帰
+
+ユーザー指示で条件B（再発見の待ち省略＋部隊目標1秒維持）を既定ONにした。UBattleTuning `bReacquireGrace=true`（DefaultGame.ini `bReacquireGrace=True`）、`-BattleReacquireGrace=0/1` で上書き（BattleTactics.cpp）。Test-WideSight の `-ReacquireGrace` は既定-1（引数を渡さずConfigに従う）。HP3倍の既定化は別セッション（DLL A54D8FDD…で回帰済み）。
+
+- 最終回帰（HP3倍＋条件B、DLL A69D0AF50326822443136F9DB10D20166E6ACAE0504916953E3A6591BD17AE3F、固定claude-defaults-r1）：基本210、カバーC/D各20、エリア24、混成保存35、混成Fast、広域混成、撤退、援護、迂回、TPS操作、大規模戦500体、隊長指揮すべて failures=0。描画ありエリア24成功。新既定の通常戦4戦（D描画あり・D入替・A通常・A入替、seed7、保存読込付き600秒）全完走・保存読込「Match restored」。描画画像を目視確認（HUDの隊長HP270表示、終了表示、拠点・部隊ラベル。中央ラベルの重なりと移動待ち・隊長死亡停止14/25は既知）。描画GPUはD3D12 Adapter 0。
+- **TPS敵表示試験（Test-TPSVisibility）の失敗は既存の前提ずれ**：試験は「35m先の敵はセンサー範囲外」を前提とするが、HEADの認識24m→未コミットの100m変更以後は範囲内で検出される。条件B OFFでも同じ2項目が失敗することを確認。スクリプトに `-BattleSightRange=2400`（試験当時の条件）を追加し、TPS敵表示・統合・大規模戦が成功。同スクリプトの隊長指揮段は固定出力先が既存のため上書きを拒否したので、別出力先 LeaderCommand-claude-defaults-r1 で実行し成功。TPS試験は固定出力先のため、既存証拠を退避→実行→新結果を *-claude-defaults-r1 / *-claude-graceoff-r1 / *-claude-defaults-sight24-r1 へ移し原本を復元。
+- 注意：D描画あり走行の途中で切り分け用TPS試験を同時実行したため、その走行のフレーム時間は性能比較に使わない（挙動は固定タイムステップで影響なし）。新既定ではAI処理が平均1.4〜1.8ms・p95 4.4〜5.0msと増加（隊長生存で稼働部隊・交戦が増えたためと推定、未分解）。
+- 次：カバー中の露出時間とAI射撃間隔の整合、カバー中の被弾/戦死計測、新既定上で探索改善・寄りの複数seed比較。コミット/pushなし。
+
+## 2026-11-13 Claude：隊長HP 3倍を既定に（採用準備）
+
+ユーザーが「倍率3で採用準備」を選択（根拠は下記「隊長HP倍率の試験切替と1/3/5比較」節の3seed比較）。
+
+- 変更：UBattleTuning::LeaderHealthMultiplier=3（BattleState.h、DefaultGame.ini）を追加し、BattleTactics::LeaderHealthMultiplier はConfig既定を読み、`-BattleLeaderHealth=N` で上書きする。混成保存の照合値（TacticalFeatures）に倍率のビット（BattleTactics::LeaderHealthSaveBits、倍率1=0）を加え、倍率が違う保存は「Save mode, map or rule configuration does not match」で読み込まない。旧保存は倍率1扱いのため、倍率3の既定では読めない。保存検査の上限（BattleMixedSaveValidation.cpp TacticalFeatures≤511）を広げた。Test-WideSight.ps1 の `-LeaderHealth` は既定0＝引数を渡さずConfigに従う（倍率1で比べるときは `-LeaderHealth 1`）。試験の期待値を1か所修正（BattleWideMixedSmoke.cpp「F5 resets command ownership and casualties」：隊長のHPを Health ではなく MaxHealthOf と比べる）。
+- 検証：Build成功（最終DLL A54D8FDD871A15E44A3B847BCB513D0F0ABB4513022F96F3A399CB5A5E3D15EB）。既定（倍率3）で、基本210、カバーC 20、エリア24、混成保存35、混成Fast 15、撤退34、援護32、迂回51が成功。広域混成は初回45/46（上記の期待値1件が失敗）、修正後46/46成功。描画ありのエリア試験24成功、復元後の画面（Area-20261112/claude-lh3-rendered-r1/screen-restored.png）を目視し、隊長の頭上HPバーが満タン表示で崩れないことを確認。証拠 Setup/LeaderHealth3-*.txt。
+- 未確認：ダメージを受けた隊長のHPバーが300基準の割合で減る表示（画像は満タン状態のみ）。TPSで隊長を直接操作したときのプレイ感（ユーザーの実操作が必要。`./Setup/Play-Area.ps1 -Map A` → Q→J→P → Eで隊長を操作）。Test-TPSControl.ps1 は出力先が固定で既存証拠を上書きするため今回は実行していない。既定変更後の通常600秒走行・性能測定は未実施。
+- 並行作業：別セッションがこの後、条件B（-BattleReacquireGrace）の既定化と、HP3倍と合わせた最終回帰・描画確認を行う予定。コミット/pushなし。
+
+## 2026-11-13 Claude：認識の途切れ対策・条件B（-BattleReacquireGrace）の試験
+
+ユーザー指定の条件Bのみ試験。`-BattleReacquireGrace=1`（Test-WideSight `-ReacquireGrace 1`、既定0）で次の2つを有効化。(1) 兵が自分で1秒以内（ReacquireGraceSeconds）に見ていた敵が再び視界に入ったら発見待ちを省略（BattlePerception.cpp Consider。共有情報・敵の真値は使わない。初めて見る敵は従来の0.6秒等）。(2) 見えている目標がなくなっても、部下が直前の目標を1秒以内（TargetHoldSeconds）に自分で見ていれば部隊目標を維持（BattleLeaderRuntime.cpp Think。射程・防衛範囲・援護対象の条件は従来どおり、射撃は従来どおりCanSee必須）。DefaultGame.iniに2値を追記。
+
+- 検証：Build成功、固定claude-reacquire-r1（DLL 11FF0EF3822B46F75599FE5E09677610D315C61E54774EDC132E7D8A73266AC4）。基本210、カバーC、エリア24、混成保存35成功。5戦（条件Bを4条件＋既定OFF 1戦、p1、seed7、NullRHI、保存読込付き600秒）全完走・保存読込failures=0。既定OFFのD入替は前回targetgap-*-r1と完全一致。
+- 改善（4戦合計、基準targetgap-*-p1-r1 → 条件B）：部隊目標の消失1,185→1,066、**うち直前1秒以内に部下が見ていた消失1,138→369（-68%）**、目標維持1,346回。0.5秒以内の途切れ442→325。交戦（ENGAGE）部隊秒4,927→5,257（+7%）、任務移動27,544→26,788。射撃12,163→12,921（+6%）、命中10,051→10,602（+5%）。カバー成功74→85、カバー中射撃31→21。再発見後の空白は待ち時間分がなくなり、残りは実際の遮蔽時間（平均約0.9秒）。
+- 問題確認：回帰・保存読込・完走すべて正常。AI処理（平均0.8〜1.1ms、p95 3.2〜3.9ms）・知覚処理に増加なし。射撃は射線判定が必須のままで、隠れた敵への射撃経路は追加していない（コード確認）。未確認：描画あり/直接操作時の敵表示の見え方、複数seed。
+- 試合：勝者は4組とも不変。得点 D入替155/123→127/97、D通常162/151→159/146、A通常183/89→130/97、A入替96/151→126/162。隊長戦死145→150、部下戦死770→820（交戦時間増に伴う）。5秒超の途切れは282→333とやや増。1 seedのため戦術上の優劣は判断しない。
+- 所見：条件Bは狙いどおり「再認識待ちによる見かけの交戦途切れ」をほぼ解消し、交戦時間・射撃を増やした。問題は検出されず。既定化する場合は複数seed・陣営入替と描画確認を推奨。証拠 Setup/Reacquire-*.txt、SightTrial-20261111/reacquire-*-r1。コミット/pushなし。
+
+## 2026-11-12 Claude：交戦の途切れ（再認識の待ち直し）を計測
+
+仮説：知覚は0.2秒ごとに全接触の可視をリセットし、1回でも視界外になると発見タイマーを破棄するため、直前まで見ていた敵でも再発見に DetectionSeconds（通常0.6秒、新兵1.2秒）を待ち直す。部隊目標は「今見えている非共有の接触」からしか選ばれないため、その間に目標が消えて交戦が途切れる。評価専用の計数を追加して確認（BattlePerception.cpp Consider、BattleMetrics の counts.reacquire_*、BattleLeaderRuntime.cpp Think の cover_diagnostics.squad_target_*）。判断には不使用。
+
+- 検証：Build成功、固定claude-targetgap-r1（DLL 6E37D448E5AB929F2DC151908ADC6466814AA35781A162C8905BD78F2ED48263、別セッションの読込経路修正を同居）。基本210、カバーC、エリア24、混成保存35成功。4戦（D/A×通常/陣営入替、p1、seed7、NullRHI、保存読込付き600秒）全完走・保存読込failures=0、前回coverdiag-*-p1-r1と完全一致（計数追加で挙動不変）。
+- 結果（4戦合計）：**1秒以内に自分で見ていた敵の待ち直しが123,673回**、うち再び見えるまで至ったのは47,784回（39%、残りは途中で再び視界外）。見失ってから再表示までの平均1.1秒・最大1.6秒。**部隊目標の消失1,185回のうち1,138回（96%）は、部下の誰かがその敵を直前1秒以内に見ていた**。再取得までの間隔は0.5秒以内442、0.5〜1秒148、1〜2秒122、2〜5秒133、5秒超282（2秒以内が約64%）。
+- 結論：交戦の途切れの大半は実際の見失いではなく、再認識の待ち直しによる短い空白。寄りの中止（disengaged）や交戦停止/移動再開の繰り返しの主因と整合。
+- 次の候補（AI認知側、試験引数で比較）：(1) 直前（例1秒以内）に自分で見ていた敵の再発見は待ち時間を省略/短縮、(2) 部隊目標を兵自身の直近の非共有記憶で短時間維持。DetectionSecondsは兵の能力で直接操作中の兵の敵表示にも効く点に注意。証拠 Setup/TargetGap-*.txt、SightTrial-20261111/targetgap-*-r1。コミット/pushなし。
+
+## 2026-11-12 Claude：遮蔽への寄りの中止条件を修正（r2）
+
+StepCoverApproach（BattleCoverAction.cpp）で、部隊の目標が別の敵へ切り替わっても兵自身が元の敵を見ている間は寄りを継続するよう変更。部隊が交戦をやめた（目標なし）場合は `approach_cancel_disengaged` として中止。継続時は `approach_kept_after_target_change` を1回計数。`-BattleCoverApproach=1` の時のみ有効。
+
+- 検証：Build成功、固定claude-coverapproach-r2（DLL C4EFD11F143FB2733E3654A74589953C8BF4487F148ACF31294D84495CFD5BED、別セッションのLeaderHealth既定1を同居）。基本210、カバーC、エリア24、混成保存35成功。5戦（寄りr2を4条件＋既定OFF確認1戦）全完走、80秒保存読込は全戦「Match restored」で「Saved route unreachable」なし。既定OFFのD入替はr1と完全一致。
+- 4戦合計 r1→r2：寄り開始954→786、到着230→215（24%→27%）、「目標変更」中止584→143、うち継続44回。**r1の「目標変更」中止の大半は、実は部隊が目標を失った（交戦終了）ケースで、r2では disengaged 310回として分離された。** カバー成功132→126、カバー中射撃45→37、隊長戦死142→132、部下戦死856→827。得点 D入替139/147→173/155、D通常123/121→169/115、A通常167/82→161/108、A入替127/156→124/182（1 seed、方向不一致）。AI処理は平均0.8〜1.3ms/p95 3.4〜3.9msで変化なし。
+- 所見：中止条件の修正だけでは到着率はほぼ改善しない。寄りの主な終わり方は「部隊が交戦対象を失う（視認が途切れる）」で、交戦が数秒単位で途切れることが根本。次の候補は、交戦が途切れても直近の接触が新しい間（MemorySeconds内）は寄りを続ける案、またはカバー中射撃の少なさ（露出1.2秒とAI射撃間隔1.4秒）の整合。採否は未決、既定OFFのまま。証拠 Setup/CoverApproach-*-r2.txt、SightTrial-20261111/coverapproach-*-r2。コミット/pushなし。
+
+## 2026-11-12 Claude：隊長HP倍率の試験切替と1/3/5比較（隊長死亡＝部隊全員死亡の仕様は維持）
+
+ユーザー依頼で、試験切替 `-BattleLeaderHealth=N`（Test-WideSight `-LeaderHealth N`、1〜10、**既定1＝従来どおり、通常採用は未決**）を追加。部隊作成時（CreateLeaderSquad、混成購入の新隊長を含む）に、初期HPが通常値の隊長だけ Health×N にする（Phase3の10000HP fixtureは対象外）。両軍に同じ倍率がかかり、TPSで直接操作する隊長にも適用される。
+
+- 付随修正：兵ごとの最大HP `UBattleState::MaxHealthOf`（隊長はHealth×N）を追加。部隊観測に保存しない `MaxHealth`（生存兵の最大HPの合計）を足し、撤退（BattleSquadRetreat.cpp FullHP）、援護（BattleSquadSupport.cpp の体力比2か所）、迂回（BattleSquadFlank.cpp の消耗判定2か所）の満タンHPを「100×生存人数」からこの合計へ変更。倍率1では同じ値になる。直近5秒の被ダメージ閾値は撃たれている強さの目安なので変えていない。HUDのHPバーも兵ごとの最大HPで描く。leader_survival に leader_health_multiplier を追加。
+- 検証：Build成功、固定claude-leaderhealth-r1（DLL 7D1A050BC121CD9D278809E3AC232EDDCF8DBA3216FD58446BEDBBCF4406181B、別セッションのCoverApproach変更を含む）。倍率1で基本210、カバーC 20、エリア24、混成保存35成功。比較12戦（D/A×通常/陣営入替×倍率1/3/5、seed7、NullRHI、AICoverProbe=0・LeaderGuard=0、80秒保存読込付き600秒、4並列）のうち10戦が完走・保存読込成功。倍率1の4戦は前回leaderguard g0と得点・被弾まで一致。
+- r1の失敗2戦（A通常の倍率3と5）：80秒の保存読込で `Saved route unreachable; battle retained` となり、metricsが出ずに終了（証拠は残し、統計には混ぜない）。原因はA通常の第2小隊（隊長11、order=1）で、目的地が隊長の現在位置そのもの（-2516.43, -803.89）、かつその位置がNavMeshから1m以上外れていたこと。倍率1ではこの時点で死んでいた隊長が生き残り、読込検査の対象になった。HP処理の不具合ではなく、読込検査の潜在的な不具合。
+- **読込検査の修正（BattleMixedBodies.cpp RestoreMixedBodies）**：生の位置で経路が引けなかったときだけ、隊長位置と目的地をNavMeshへ投影（範囲100×100×400cm）して再試行する。それでも失敗し、かつ隊長が目的地から50cm以内なら、その場にとどまる2点の経路として受け入れる（実行中の集合処理と同じ扱い）。それ以外は従来どおり読込を拒否し、部隊・命令・位置をログ（BATTLE_MIXED_RESTORE_ROUTE_PROJECTED / _IN_PLACE / _FAIL）に出す。成功していた読込は処理が変わらない。r2（投影のみ）では同じ失敗が残り、r3で解消。固定claude-leaderhealth-r3（DLL B130FE0750262939E92EB2EF9BBEC637657975F23B33E71BC03DFD14F9BBC093）で基本210、カバーC 20、エリア24、混成保存35成功。A通常の倍率1/3/5を再走し、3戦とも600秒完走・保存読込成功（倍率3/5は第2小隊が _IN_PLACE で復元）。倍率1はr1と得点（197/65）・損失まで一致。
+- 結果（全4構成＝D通常/D入替/A入替はr1、A通常はr3、倍率1→3→5）：隊長1人の戦死に要した被弾 10.5→34.0→68.2（倍率が効いていることを確認）。隊長戦死 140→120→87、隊長と一緒に失われた部下 985→791→496、部下の戦闘死 741→853→1,019。全損失 1,866→1,764→1,602（倍率5で約14%減）、隊長起因の損失比 52.8→44.8→31.0%。終了時の両軍生存 520→723→915。射撃数 11,685→16,459→20,497 で交戦が長引く。戦死時の隊長が撃った敵に最も近い位置だった割合は91→91→93%で、隊長は狙われ続けて耐える役（盾）になり、その分部下の戦闘死が増える。勝者は D通常 0/0/0、D入替 0/0/1、A入替 1/0/1、A通常 0/0/1 で一貫せず（A通常の得点は 197/65→158/151→159/287）、1 seedのため勝率・得点への効果は判断しない。
+- 証拠：Setup/LeaderHealth-*.txt、SightTrial-20261111/leaderhealth-*-r1・-r2・-r3、BuildSnapshots/claude-leaderhealth-r1〜r3。コミット/pushなし。
+- 既知の制限：倍率は保存データの設定照合に含めていないため、異なる倍率で読み込める。直接操作の隊長の耐久が上がるプレイ感の変化は未確認（実画面確認なし）。目的地が現在位置でNavMesh外に立つ隊長がいる原因（どの命令が目的地を現在位置にしているか）は未調査。
+- **複数seed比較（2026-11-13）**：seed19/43×D/A×通常/陣営入替×倍率1/3/5の24戦を、別セッションの固定claude-targetgap-r1（DLL 6E37D448E5AB929F2DC151908ADC6466814AA35781A162C8905BD78F2ED48263、本節の倍率と読込修正を含み、追加は評価用計数のみ）で実行（4並列、出力 leaderhealth-*-s19|s43-*-r4）。全24戦が600秒完走・保存読込成功（s43のA系で1回 _IN_PLACE 復元）。同DLLでseed7 D通常の倍率5を再走し、r1と得点197/146・射撃5,243まで一致したため、seed7はr1/r3の結果を合算した。
+- 3seed×4構成＝各倍率12戦の合計（倍率1→3→5）：隊長1人の戦死に要した被弾 10.5→35.7→70.5。隊長戦死 424→349→255、隊長と一緒に失われた部下 2,961→2,337→1,531、部下の戦闘死 2,217→2,866→3,390（+53%）。全損失 5,602→5,552→5,176（倍率5で7.6%減。seed別では s7 −14%、s19 −9%、s43 ±0 で一貫しない）。隊長起因の損失比 52.9→42.1→29.6%。戦死時の隊長が撃った敵に最も近い位置だった割合 92→90→93%。射撃数 35,398→53,393→66,408（+88%）、終了時の両軍生存 1,595→2,230→2,841（+78%）、得点差の平均（絶対値）60.5→48.0→47.5。本拠地破壊は倍率1の1戦（s43 D通常）だけ。両軍に同じ倍率なので勝敗は陣営の有利不利ではなく、勝者は倍率でよく入れ替わる（12組中、倍率1と5で勝者が違うのは6組）。
+- 判断材料：隊長起因の一斉崩壊を減らすという目的は、3seedそろって効いている（損失比が約半分→約3割）。一方、全体の損失はほぼ同じで、隊長が盾になる分だけ部下が死ぬ。交戦が長引き、終了時の生存が増え、得点差が縮む（決着しにくくなる）。通常採用は未決。
+- 次の一手：採否と倍率（3か5）をユーザーが決める。採用する場合は、倍率を保存の設定照合に含め、直接操作のプレイ感を実画面で確認し、既定値の変更として回帰を取り直す。隊長が最前で狙われる構造（目標の見失いと再発見の待ち直し、別セッションで計測・試験中）を直す案とは独立に効く。
+
+## 2026-11-12 Claude：交戦中AIが遮蔽物へ寄る試験（-BattleCoverApproach）
+
+試験切替 `-BattleCoverApproach=1`（Test-WideSight `-CoverApproach 1`、既定0）を追加。AIのカバー探索が失敗した時だけ、局所探索半径の外〜15m（AICoverApproachRadius）から、未予約・他兵の目標でない・敵へ2m超近づかない・防衛範囲内・直進可能・敵から可視率60%以下の遮蔽位置を最大8候補で選び、撃ちながら移動（BattleCoverAction.cpp StartCoverApproach/StepCoverApproach、Follow）。1.2m以内で到着→即カバー探索。6秒/目標変更/接触の古さ/新命令/位置の取得で中止。状態は保存せず読込時に破棄（BattleMixedBodies.cpp）。Hold/Move命令では寄らない。別セッションのLeaderGuard（既定0）と同居。
+
+- 検証：Build成功、固定claude-coverapproach-r1（DLL 03BFD9E5F94A6553D799677CC189EBB81A805282CDD45F34F7936C0B3FDABDDA）。基本210、カバーC、エリア24、混成保存35成功。比較8戦（D/A×通常/陣営入替×p1のみ/p1＋寄る、seed7、NullRHI、80秒保存読込付き600秒）全完走・保存読込failures=0。p1のみの4戦はcoverdiag-*-p1-r1と完全一致（既定OFFで挙動不変、LeaderGuard=0の同居も不変）。
+- 4戦合計（p1のみ → p1＋寄る）：カバー成功 74→132（+78%）、遮蔽到着 148→258、露出到達 127→218、カバー中射撃 31→45。寄り開始954回のうち到着230回（24%）、中止の主因は「部隊の目標変更」584回（61%）、新命令110、時間切れ4。寄り先なし5,172回（15m内にも条件を満たす遮蔽が無いことが多い）。
+- 試合：総射撃はD両組で増（3,280→3,967、3,289→3,765）、Aはほぼ同等。得点 D入替155/123→139/147、D通常162/151→123/121、A通常183/89→167/82、A入替96/151→127/156。隊長戦死145→142、部下戦死770→856。AI処理は平均0.8〜1.3ms、p95 3.1〜4.0msで大差なし。1 seedで効果の向きは一貫せず、採否は未決。
+- 所見と次の候補：(1) 部隊の目標選択（0.5秒ごとに部隊中心から最近の敵）が切り替わるたびに寄りが中止されるので、兵の接触が新しい間は目標変更で中止しない案、(2) 寄り先なしが多い地形側（遮蔽密度・配置）の確認、(3) カバー中射撃が依然少ない（露出1.2秒とAI射撃間隔1.4秒の整合）。証拠 Setup/CoverApproach-*.txt、SightTrial-20261111/coverapproach-*-r1。コミット/pushなし。
+
+## 2026-11-12 Claude：隊長の生存性を試験引数で改善・比較（隊長死亡＝部隊全員死亡の仕様は維持）
+
+ユーザーが「仕様維持で生存性改善」を選択。隊長死亡で部隊全員を死亡扱いにする決定（ROADMAP「隊長死亡時の完全停止」）は変えず、AIの位置取りと探索認知だけを試験切替 `-BattleLeaderGuard=1`（Test-WideSight `-LeaderGuard 1`）で変える。**既定は従来（0）、通常採用は未決。**
+
+- 実装：(1) BattleStableMovement.cpp BuildMovementPlan：Rally（撤退/集合/回復/迂回）以外の到着枠で、隊長を最後列の枠と入れ替える。(2) BattleLeaderRuntime.cpp Follow：隊長は共有の探索順番を待たずにカバーを探し、再試行 LeaderGuardCoverRetrySeconds=2.0、半径 AICoverSearchRadius=600。(3) 評価専用の計数 `leader_survival`（metrics.json、Fire内。AI入力に使わない）：陣営別の隊長/部下の被弾・戦死、隊長戦死で失われた部下、戦死時の隊長の前後順位（撃った敵に近い順、0=最前）、カバー中の戦死。
+- 検証：Build成功、固定claude-leaderguard-r1（DLL BF08D9E13A4230A75B404799B9E4C2927F9F27EE9C2092C5ADD8ADD5AC12C40A）。基本210、カバーC 20、エリア24、混成保存35成功。比較8戦（D/A×通常/陣営入替×g0/g1、seed7、NullRHI、AICoverProbe=0、80秒保存読込付き600秒、4並列のため時間は比較不可）全完走・保存読込failures=0。g0の4戦は前回aicover/coverdiagのp0と得点が完全一致（計数追加で挙動不変）。両軍とも同じ切替。
+- **主な所見：隊長に起因する損失が全損失の約半分。** g0の8戦合計で、隊長戦死140、部下の戦闘死741に対し、隊長戦死で一緒に失われた部下985（全損失の52.8%）。隊長は兵の10%だが被弾の15.3%。戦死時の隊長は140件中128件（91%）が撃った敵に部隊内で最も近い位置だった。部隊は「部隊中心に最も近い観測済みの敵」1体へ集中射撃するため、前に出た隊長が狙われやすい構造と推定。
+- g1の効果は小さい：隊長戦死140→129、隊長と一緒に失われた部下985→891（損失比52.8→47.2%）、隊長の被弾比15.3→13.3%。一方、部下の戦闘死は741→868に増え、最前位置での戦死は91%のまま。勝者はD入替だけ反転（他3組は不変）、得点差の方向は一貫しない。到着枠の入替は、交戦が移動中や到着前に始まると効かないと推定（戦死時の行動状態は未計測）。1 seedのため採否は判断しない。
+- 証拠：Setup/LeaderGuard-*.txt、SightTrial-20261111/leaderguard-*-r1、BuildSnapshots/claude-leaderguard-r1。同時に別セッションがカバー寄り付き（-BattleCoverApproach）を開発中で、Source/Config/DLLの使用は相互に連絡して順番に行った。コミット/pushなし。
+- 次の一手：戦死時の隊長の行動（移動中/交戦停止中/カバー中）と隊列内の位置を計数し、移動中に隊長が隊列の先頭になっていないかを確認。そのうえで、移動中の隊長位置（隊列の中ほど）を試験し、複数seedで評価する。
+
+## 2026-11-12 Claude：AIカバー探索の失敗理由を計測
+
+評価専用の計数 `cover_diagnostics`（metrics.json）を追加。AIの交戦停止中フレームの待ち理由、RequestCoverActionごとの最終到達段階、露出点の却下理由、カバー終了理由、カバー中射撃を数える。判断・探索順序は変えていない。固定claude-coverdiag-r1（DLL AE2464528F4B5FF635554957CD88AC0CFF7D8239ABCCD4D7AB9AC6982DDE3D20）で基本210、カバーC 20、エリア24、混成保存35成功。前回aicover-*-r1と同条件の8戦を再走し、全8戦で得点・射撃・命中・カバー回数が完全一致（計数追加で挙動不変）。21:05頃に別Claudeセッションが同じファイルへ一時的に試験コードを入れて取り除いた件は、残存0件・snapshot/走行時刻が前であることを確認済み。
+
+8戦合計（従来p0 / 改善p1）：
+- 探索要求 4,326 / 9,562 回、成功 31 / 74（約0.7%）。**失敗の大半は「半径内にカバー位置なし」3,857 / 8,096（89% / 85%）**。次いで露出点なし 379 / 1,200、遮蔽点が露出過多 38 / 146、予約済み 18 / 28、経路遮断 3 / 18。露出点の却下は「露出不足」と「経路遮断」がほぼ同数。
+- 待ち：p0は交戦停止フレームの約45%が全体0.25秒枠待ち、p1は枠待ちがほぼ0で兵ごと5秒間隔が支配。
+- カバー後：遮蔽到着・露出到達は繰り返されるが、**カバー中の実射撃は8戦合計 p0 10 / p1 31発のみ**（全射撃は1戦約2,500〜3,400発）。露出時間1.2秒がAI射撃間隔1.4秒・照準切替遅れより短いことが主因候補。終了理由は接触の古さ（遮蔽中）と新命令が主。
+- 次の候補：(1) 現在位置で探すのではなく交戦停止位置を遮蔽近くに選ぶ（位置選択側）、(2) AIの露出時間と射撃間隔の整合。いずれも試合展開を変えるため、試験引数で比較してから採否判断。証拠 Setup/CoverDiag-*.txt、SightTrial-20261111/coverdiag-*-r1。コミット/pushなし。
+
+## 2026-11-12 Claude：AIカバー探索の改善（段階E）を試験引数で実装・比較
+
+AIのカバー探索に試験切替 `-BattleAICoverProbe=1`（Test-WideSight `-AICoverProbe 1`）を追加。全兵共通0.25秒に1回の探索を、全AI合計で1フレーム2回の予算（AICoverProbesPerFrame=2）に置換し、AIのみ探索半径350→600cm（AICoverSearchRadius、入る期限3秒・保存検査範囲内）。兵ごと5秒間隔、Cキー（直接操作）の半径350cmは不変。**既定は従来（0）のまま、通常採用は未決。**
+
+- 検証：Build成功、固定claude-aicover-r1（DLL 4B2EF4EFBC647CDA07646811028C8FDB9C2013FFBFFF452879A4DF3D4B4B549E）。基本210、カバー専用C 20、エリア24、混成保存35成功。比較8戦（D/A×通常/陣営入替×従来p0/改善p1、seed7、NullRHI、80秒保存読込付き600秒）全完走・保存読込failures=0。
+- 決定性：p0のD入替とA通常は旧DLLのstages4-*-r2と得点・生存・補充・射撃・命中・カバー回数まで完全一致。前回の設定項目化で挙動が変わっていないことと、NullRHI同seedの再現性を確認。D通常はNullRHI(p0)と描画(r2)で結果が異なり、描画有無は同一条件に含めない。
+- カバー開始回数 p0→p1：D入替11→18、D通常3→8、A通常10→25、A入替7→23（計31→74、約2.4倍）。露出射撃まで到達した解除（phase4）は計9→29。可視率は0.03〜0.15で遮蔽品質は維持。一方、遮蔽到着前の中止（phase1）も増加（A入替で11件）。
+- AI処理：combined_ai平均0.7〜1.3ms/フレーム、p95約3〜3.9msで、p0/p1間に一貫した増加なし（戦況差の範囲）。
+- 試合：得点 D入替166/136→155/123、D通常187/124→162/151、A通常197/65→183/89、A入替132/167→96/151。勝者は4組とも不変だが差の方向は一貫せず、1 seedで戦術効果は判断しない。
+- 所見：予算を外しても増加は約2.4倍で、500体×600秒に対し依然少ない。主な制約は全体予算ではなく、交戦停止中・可視接触・半径内に安全な露出点を持つ遮蔽という成立条件側と推定（探索の失敗理由は未計測）。次は探索失敗理由の計数（候補なし/露出点なし/予約済み/到着失敗）を評価ログに追加し、条件側を調整してから複数seed・陣営入替で採否判断。証拠 Setup/AICover-*.txt、SightTrial-20261111/aicover-*-r1。コミット/pushなし。
+
+## 2026-11-12 Claude：反応速度の調整項目を整理（既定値・挙動は不変）
+
+ROADMAP冒頭の決定（差はAIの認知・判断のみ、物理制約は共通）に沿い、直書き値をBattleTuningの設定項目へ移した。DefaultGame.iniは既定値を従来と同値で追記し、共通物理制約とAI認知の区分コメントを付けた。
+
+- 共通（直接操作とAI）：照準切替の射撃遅れ AimSwitchMinDegrees=45 / AimSwitchBaseSeconds=0.15 / AimSwitchHalfTurnSeconds=0.35（BattleState.cpp UpdateAim）。カバー動作の探索 CoverActionSearchRadius=350 / CoverActionCandidateLimit=6（BattleCoverAction.cpp、Cキーと共通）。
+- AI認知のみ：AICoverProbeInterval=0.25（全兵共通の探索間隔）/ AICoverRetrySeconds=5（BattleLeaderRuntime.cpp Follow、直接操作中の兵は対象外）。既存のDetectionSeconds/ShareDelay/MemorySeconds/TacticalDecisionSeconds/SquadDecisionSeconds/AIDecisionSecondsはiniコメントでAI認知側と明示。DetectionSeconds等は兵士ごとの能力（新兵/熟練倍率、保存対象）で、その兵を直接操作中も同じ値を持つ点は変更していない。
+- 検証：Build成功（DLL 3057C5230790E4CEABD233CAB82696ECFAB48F1B93F46D2D001056C98653EB86）。基本210/BATTLE_SMOKE_RESULT failures=0、カバー専用C/D各20項目（追加3：既定値で従来の0.24〜0.5秒、設定変更が照準遅れへ反映、直接操作兵はAIカバー探索外）、エリア24、混成保存35成功。証拠 Setup/AICog-*-r1.txt、FlankStages-20261112/claude-aicog-r1-C|D。
+- 未実施：AI探索頻度の設定変更が実戦で効くことの走行確認、既定値での通常戦600秒走行・描画確認（挙動不変の変更のため省略）、ビルド固定snapshot。AI反応値の実際の調整・カバー探索改善（方針案の段階E）は試合展開を変えるため未着手。コミット/pushなし。
+
+## 2026-11-12 Claude：flank-stages-4-r2結果の追加分析（読取のみ）
+
+下記完了節の3戦（stages4-D-s7-r2/-swap-r2/stages4-A-s7-r2）をmetrics.json・run.log・終了画像から再集計。Source/Config/DLL/マップ変更、ビルド、ゲーム実行なし。DLL・D/Aマップhashはsnapshot一致、走行manifestのソース232件を現在ファイルと再照合し不一致0。下記節に無い所見のみ記す。
+
+- 迂回：試行154/157/85→FLANK移行22/24/15→到達（WideFlankArrived）3/3/4。保存読込後のFLANK_ENDは到達約2割、中止は「援護喪失」と「接触が古い/移動」が主。却下理由の最多は援護なし露出87/98/37。
+- カバー：ログのhiddenは名前に反し敵からの可視率（ExposureAtの5点中の可視割合）で、0.00〜0.40・多くが0＝遮蔽地点ではほぼ完全に隠れている。発生回数が少ない主因候補は、AIのカバー探索が全兵共通で0.25秒に1回（BattleLeaderRuntime.cpp:394のNextCoverProbe）＋兵ごと5秒間隔、探索半径3.5mの制限。描画ありD通常のみ1回だが、描画有無と配置が同時に異なり原因は未分離。
+- D通常の終了画像で自軍25部隊中16部隊がLeaderDeath停止、第6小隊は359m先でTRAFFIC WAIT。隊長死亡停止・移動待ちの既知制限がDでも大きい。中央の部隊ラベルが重なる。
+- 走行条件に `-BattleWideScreens=…\screen` を渡したが、出力は終了時のmetrics.json.pngのみで、途中画像は無い（通常戦では途中画像を撮らない仕様かは未確認）。
+- 描画D走行のフレーム時間は平均6.9ms/p95 12.8ms、最大705msの突出あり（原因未調査、挙動試験で性能比較条件ではない）。AI処理は平均約1.2ms/フレーム。
+- 未確認：BATTLE_ST_SAMPLEのliving合計（各軍約200）と終了時ally_alive/enemy_alive（例85/90）の差。集計範囲の違いと推定するが未検証。基本試験のmachine.jsonはPowerShell 5.1で `-Encoding UTF8` 指定が必要（内容は正常）。
+- 1 seed・各1戦のため、配置側偏り・新機構の効果は判断しない。次の候補は下記節と同じく、隊長死亡停止とカバー利用率の要因分解、複数seed・陣営入替評価。
+
+## 2026-11-12 段階1〜4の順次実装・検証完了
+
+ユーザー指定の1〜4を順に実装し、各段階で検証して完了。通常認識100m・射程50m、迂回の従来採用条件を維持。`./Setup/Play-Area.ps1 -Map D`で新マップを起動。Play-Areaはカバーと連携改善を有効にする。A〜Cも使用可。操作はPROTOTYPE、根拠と制限は[報告](Setup/Benchmarks/FlankStages-20261112/report.md)、[最終照合](Setup/Benchmarks/FlankStages-20261112/verification-final.json)。コミット/pushなし。
+
+1：Cの20対10人・45秒・seed7/19/43×南北×正面/10人側方移動の12戦。同一DLLで正面6戦の直接与損害4290/被損害5550、側方6戦4540/4480、到達3/6。隊長死亡による部隊停止を直接ダメージから区別。固定局所条件の結果で一般的優位は未確定。基本210成功、flank-stages-1固定。
+
+2：実遮蔽への移動・隠れる・端へ露出して射撃・退避をActor/Massで共有。Cキーで開始/解除、移動入力で解除、隠れている間の射撃入力で露出へ移る。45度以上の照準切替に約0.24〜0.5秒の射撃準備時間、視点回転は維持。既存歩行/射撃姿勢を使用。専用17と基本210成功、flank-stages-2固定。保存用UPROPERTYの欠落を修正し、失敗r1〜r4を保持、r5成功。
+
+3：実射撃後3.5秒以内の短い援護中断と、近隣の射撃可能な部隊への一度だけの交代。元の経路・20秒期限を維持。専用51と基本210成功、flank-stages-3固定。
+
+4：D（800m×600m）を追加し、拠点・配置・本拠地/補給・カメラ・保存範囲を接続。6か所で正面露出2/5→側面5/5、約38mの側方経路とカプセル掃引、カバー候補生成を確認（最終地形45項目）。3部隊30人が全員予約位置1m以内へ116.08秒で到達し、F5再開始成功（41項目）。新設遮蔽の重なりと拡大後のカバー候補上限を修正。初回D資産と中止した診断走行は保存し、最終結果へ混ぜない。既存A/B/C・旧2マップはhash一致。D専用カバー17項目も成功。
+
+最終flank-stages-4-r2：DLL 90FEAF1308AB947BC27090A9F053BC851A40E03B97D3FAC2CA0B16C5A0FE0D14、ソースZIP BD92F327B9835D38FDDE7BA8E3EE89009B2F9E82BCD7D826944C43F7EF6E3A7D。Build、基本210、エリア24、混成保存35成功。D通常（描画）/陣営入替、A回帰の全3戦が80秒保存読込後600.01秒完走。全3拠点で射撃・実ダメージを確認。通常Dの初認識69.57秒/初射撃75.02秒、Aは49.23秒/55.02秒。カバー開始はD通常1/入替11/A10回、援護交代は4/2/1回。実描画GPUは事前machine記録とUEログのRTX 5070 Tiを照合、画面目視確認。Verify-FlankStages.ps1で22ケース、基本回帰、資源保存則、得点式、ソース/DLL/ZIP/マップを照合（不一致0）。試験プロセス終了。
+
+残る調整点：中央への交戦集中、カバー利用のばらつき、帰還・移動待ちと配置側の偏り。Dの1組は両戦とも物理右側が勝利し、多数戦での公平性や新機構の勝率改善を保証しない。次の候補はカバーの便益/移動費用と探索配分、複数seed・陣営入替での戦術効果評価。1000体性能・キャンペーン・新アニメ資産は今回の範囲外。以下は過去の作業履歴。
+
+## 2026-11-12 迂回有用化に着手：局所試験マップCを追加
+
+flank-effect-r1の全48戦・保存描画QA・最終照合と担当チャットの完了を待って実装を開始。Aの全体配置に南北160mの点対称な局所試験区画を追加したLvl_BattleWide_Cを生成し、Play-Area -Map Cと保存読込へ接続。600m×400mは維持。既存4マップのhashは旧snapshotと一致。カバー姿勢/照準切替/新連携/全体拡張は未実装。通常射程・認識・迂回既定・命中ダメージは変更なし。
+
+両区画で正面露出2/5→側面5/5、Nav経路3824.9cm、兵士カプセルの静的障害物掃引成功、経路視線12/20露出を確認。地形33項目、実移動/F5再開始37項目が成功。局所各10人＋従来拠点へ10人の計30人が予約位置1m以内に到達（全員到達85.86秒、局所だけの時間ではない）。南北近景とエリア終了画像を目視確認。
+
+最終flank-geometry-r3：DLL A2ADF5C2EB366C517B7B825573B425D97CD48902DB93427F5689EAC486510FCB、ZIP 851F031757299C42E3CF8F2589AEB1B83812838FB459C7C8EBBC8EEE6A31F94D。Build成功、基本210/BATTLE_SMOKE_RESULT failures=0、Cの描画Area/seed7/通常迂回条件が80秒保存読込後600.01秒完走。source不一致0、DLL/ZIP/各走行map/machineを照合。r2のinclude不足によるビルド失敗はr3で修正し記録を保持。試験プロセス終了、コミット/pushなし。
+
+第1段階の試験環境・幾何/移動確認まで完了。局所区画は拠点外で、通常AIが必ず使う設定ではない。エリア一戦は起動/保存回帰であり、局所戦術や勝率の効果測定ではない。次は同人数で全員正面/一部側方移動の局所戦闘を比較し、移動中損耗・射撃機会損失・到達後の実損害を測る。その後カバー動作と照準切替へ進む。全工程や第1段階の戦術効果評価を完了扱いにしない。[報告](Setup/Benchmarks/FlankGeometry-20261112/report.md)、[照合](Setup/Benchmarks/FlankGeometry-20261112/verification.json)。
+
+## 2026-11-12 Claude向け開発・テスト引継ぎ資料を追加
+
+ユーザー依頼で、ワークスペースとリポジトリのCLAUDE.md、および [CLAUDE_HANDOFF.md](CLAUDE_HANDOFF.md) を追加。共通AGENTS/STATUSを正本とし、最新資料の読み順、ビルド・回帰、専用試験、操作、コード入口、証拠固定と同時作業の注意、開始文を整理。既存スクリプトの引数・判定を確認した。作成中はflank-effect-r1比較の稼働を確認し、ゲームSource/Config/DLL/マップは変更していない。文書のみのためビルド・ゲーム試験は再実行していない。比較の完了/集計や次の局所検証は本作業では行っておらず、下記の工程を維持する。
+
+## 2026-11-12 現行テスト後の迂回有用化を承認
+
+ユーザーが「現在のテストが終わり次第取り掛かってください」と指示。flank-effect-r1比較が実行中であることを確認。終了・結果集計・証拠固定後に、方向性のある遮蔽と短い側方経路の局所検証から着手する。カバー動作/照準切替、既存連携改善、全体マップ拡張の順序と制約をROADMAP冒頭に記録。現在は準備段階で、新しいゲーム実装・ビルド・マップ変更は未実施。既存カバー候補/予約/露出判定を再利用する。
+
+## 2026-11-12 迂回条件緩和・対戦寄与の検証完了
+
+同一flank-effect-r1で48戦が完走し、ソースZIP/マップ/損害ログ/資源/得点の照合成功。従来両軍12戦は272採用/20到達（7.4%）、緩和両軍12戦は522採用/73到達（14.0%）。到達後の実HP与損害は5,100→20,610だが、全迂回の移動中被損害も12,760→31,490。あり対なし24戦は11勝13敗、本拠地破壊はあり1勝/なし2勝。Aは6勝6敗・平均終了時得点差+10.7、Bは5勝7敗・-42.2。時限まで続いた陣営交代9組の平均得点差-14.2。A対戦12戦は物理左側が全勝。局所射撃の増加を対戦優位と同一視せず、通常条件は従来のまま維持する。
+
+基本210・迂回専用43に加え、緩和＋軍0のみONでエリア24・混成保存35が通過。単独描画B/seed19/両軍緩和も80秒保存読込後に600秒完走し、画像を確認した。実描画GPUはログのChosen D3D12 Adapter 0 / NVIDIA GeForce RTX 5070 Tiと照合。Verify-FlankEffect.py成功、現在ソースと固定ZIPの不一致0。描画走行は保存介入・評価ログなしの別QAであり、48戦の対戦統計や性能比較には混ぜない。
+
+結論と詳細は[迂回寄与の報告](Setup/Benchmarks/SightTrial-20261111/report-flank-effect-conclusion.md)、[最終検証](Setup/Benchmarks/SightTrial-20261111/verification-flank-effect-final.json)。中間A24証拠と最終解析スクリプトはFlankEffectAnalysisScripts-r1に保存。緩和はBattleFlankRelaxed=1の試験設定として残し、通常は0。BattleFlankTeamsはbitmask（1=軍0、2=軍1、3=両軍、0=無効）。保存は設定の一致を要求し、既定条件の旧保存互換を保つ。
+
+次の候補は、現在位置の射線と移動先の改善量を比較する便益評価、射撃中断/損耗/主戦線離脱の費用、配置側の偏りと到着予約/移動待ちの切り分け。これらの追加実装、通常採用、1000体性能測定は今回行っていない。既存未コミット変更を保持、コミット/pushなし。以下は作業履歴。
+
+## 2026-11-12 迂回条件緩和・対戦寄与の検証に着手
+
+新しいユーザー依頼：条件緩和時の実行と寄与、および迂回ありAI対なしAIを検証する。通常既定は従来のまま、試験引数BattleFlankRelaxedとBattleFlankTeamsで切替。緩和案は健康/武装/既知敵数を満たす部隊に短い露出経路を許し、援護喪失時に残りNav経路と観測情報から単独続行を再判断する。未観測の敵状態を判断へ使わず、緊急撤退・20秒期限・試行制限を維持。
+
+flank-effect-r1のBuild・専用43項目・基本210が成功。固定DLL 8D5CD59BEA9628DE8730A9819070937741EDB5510899F2A0702330849C5DDA3D、ソースZIP 0F4C23D40A9F3632C338E2ECC98A3B00BEF2582430B7D9B5239155D7E4E11591。A/seed7/通常配置の予備4戦完走、ログ損害とチーム集計一致・OFF軍の採用0を照合。従来16採用/1到達、緩和43採用/10到達（到達後全10回で与損害）。対戦はあり側1勝1敗。これは予備結果であり全体結論ではない。40/48戦完走。32戦までソースZIP/マップ/ログ損害/得点の照合成功、Bの最後の8戦を実行中。A集計は従来126採用/13到達、緩和253採用/30到達、あり対なし6勝6敗。本拠地破壊1戦はなし側勝利。途中集計をFlankEffectAnalysisScripts-r1/A24-*へ保存し、最終結論にはしない。同一DLLで従来両軍/緩和両軍/緩和軍0のみ/緩和軍1のみ×A/B×seed7/19/43×配置入替の計48戦を予定。認識100m・射程50m・Area600秒・保存介入なし。BattleFlankTrialは評価専用ログを追加し、射撃/実HP損害/直接撃破/側背面被弾角/部隊位置と拠点圏内人数/保有拠点秒を記録。これはAI入力に戻さない。試験はまだ完了しておらず、緩和条件の通常採用は未決。実行スクリプトRun-FlankEffectMatrix.ps1。
+
+## 2026-11-12 工程1〜8の試作実装・最終検証完了
+
+ユーザー依頼の認識50m/100m比較と調整を終え、工程8（混成FastMatch・1エリア戦）まで実装した。認識100m、射程50mを維持。これは試作機構と下記検証の完了であり、戦術バランス・全条件で無停滞・基準PC性能の完成宣言ではない。以下の「検証中」「未実装」は作業履歴。
+
+比較はA/B×陣営入替×50/100mの8走行を3段階、計24走行。調整前は両距離とも迂回到達0。近傍の観測済み援護対象への切替と短い経路の優先後は、50mが76採用/2到達、100mが83採用/2到達。100m化だけを原因とは確認できず、マップは拡張していない。少数seed・低い到達割合のため戦術優位は未確定。[切り分け報告](Setup/Benchmarks/SightTrial-20261111/report-flank-space-conclusion.md)。
+
+最終area-r6：DLL ED3305D4BEE61D55BCFC540739B741CD45D04017F7CDD9DD2B1054029AF83C07、ソースZIP A15AFEA91260C5E4D7E8D5F89E0CCBC69A7B4BA81F904D8E000D64D56787665B。Build成功、基本210、Area24、混成Fast15、混成保存35が成功。固定した同じDLLでA/B×陣営入替4戦＋単独描画B1戦が全て600.01秒完走。補充94/101/115/95/115人、残資源＋完成補充=200、時間切れ得点式を照合。A0と描画Bは80秒の保存読込後も完走。全5戦時間切れで、本拠地破壊は専用の実射撃試験で確認した。移動4・接触3・固定広域回帰は直前area-r5の証拠として区別する。ソース/設定・ZIP・マップ・開始前machineの照合成功、現在ソース不一致0。[最終報告](Setup/Benchmarks/SightTrial-20261111/report-area-final.md)、[検証JSON](Setup/Benchmarks/SightTrial-20261111/verification-area-final-r6.json)。
+
+area-r5描画時の途中読込クラッシュは、Tick内でVATのPrepareRenderingがTaskGraph処理へ再入したため。r6はVAT表示器と描画設定の所有を維持し、登録兵だけを再構成して解消。失敗ログは残し成功統計から除外。保存後の兵士表示・UI画像も確認した。
+
+操作はPROTOTYPE冒頭。1エリア戦は `./Setup/Play-Area.ps1 -Map A`、混成購入戦は `./Setup/Play-MixedFast.ps1 -Map A`（ともにB可）。了承済みの完了時資源消費、補充中の兵は得点外、中央3点×20、同点引分、隊長死亡部隊の補充禁止、敵資源非公開を反映。保存は固定混成V2・混成FastV2・AreaV3の別スロット。
+
+残る制限と次の優先課題：通常戦闘の迂回中断は多い。描画Bでは帰還後の第3/第6部隊に遠い防衛目標への移動待ちが残り、到着枠予約と途中衝突の寄与は未分離。次はこの待機理由と援護継続・到達後の射撃/損耗を計測し、複数seedで評価する。新規/補充兵はskeletal fallback、混成Fastは死亡込み登録500上限、旧支援砲撃は混成未接続。配布用cook、1000体・基準PC性能、キャンペーンは今回未実施。既存未コミット変更を保持、コミット/pushなし。
+
+## 2026-11-12 描画途中読込の修正：area-r6検証中
+
+area-r5の通常A/B×陣営入替4戦は全て600秒完走、補充94/101/115/95人、資源保存則も一致。A0の80秒読込成功。ただし単独描画Bの80秒読込でABattleVATDisplay::PrepareRenderingのTaskGraph再入assertが発生。工程8はまだ完了ではない。
+
+area-r6で表示器自体と描画CVar所有を保持し、旧兵の表示登録だけをResetBodiesで解除・再構成するよう修正。Tick内でPrepareRenderingのキュー処理を再呼出ししない。UNKNOWN拠点の未観測時刻-1をUIへ出さない修正も追加。新DLLをBuildSnapshots/area-r6へ固定し、描画Bの途中読込→専用→基本→混成購入/保存を実行中。その後同じr6でA/B×入替4戦を再確認する。r5の成功4戦と失敗描画は保存し、r6と混合しない。移動4・接触3・固定混成回帰はr5の証拠として区別する。
+
+## 2026-11-12 工程8：area-r5専用24・基本210・移動4通過、最終一戦確認中
+
+現在の固定DLLはF2DD09A116565654E087AD855050075C0277AE9B4CDAE07C73F72C1B2D0EF482、ソースZIP SHA256 DE5FAC4E6B66F01B0358E94C96E5F30425CB716561CD58D2A9F5C548BC4546B8（BuildSnapshots/area-r5）。現行Source/Configとの不一致0。Area専用24項目、基本210が成功。移動4条件は40/20/20/100人全員到着（12.61/14.13/11.09/7.83秒）。接触3、広域混成、A/B×陣営入替の通常一戦4＋単独描画B1、混成Fast/固定混成保存の最終回帰を順次実行中。途中保存はA0と描画Bで実施する。未完了の通常一戦を完了扱いにしない。
+
+area-r2/r3の補充阻塞試験失敗は、試験用の拡大meshが実際の進入を塞いでいなかったため。明示的なBox衝突形状と実overlap確認を加えたr4/r5で、資源/ID無消費・完了待機・解除後の補充を確認。資源枯渇時に武装部隊が帰還を繰り返す条件も修正し専用確認。死亡置換履歴＋残資源=初期100/軍を保存検証で要求する。旧失敗証拠は残し、成功統計へ混ぜない。
+
+通常戦闘での迂回到達割合が低いこと、skeletal fallbackの追加兵、混成Fastの死亡込み500登録上限、混成支援砲撃の未接続は既知の制限。新モードの操作と保存スロットはPROTOTYPE冒頭へ記載済み。以下は過去の作業記録。
+
+## 2026-11-12 工程8の混成FastMatch接続通過、1エリア戦を検証中
+
+認識比較は追加調整まで計24走行をソースZIP/DLL/マップ単位で確認。元r4は50m/100mとも到達0、援護対象の近傍切替のみのadjust-r1も到達0。短い側方移動を優先したadjust-r2（mixed-fast-r1固定）では両距離で各2回到達（50mは76採用、100mは83採用）。100mへの延長だけが原因という説明は支持されず、長い経路と援護継続条件の組合せが制約。少数seedかつ成功率が低いため、有効性/優位性の確定ではない。認識100m、射程50m、マップ形状は維持。
+
+mixed-fast-r1で混成FastMatchの購入/予算/Mass補給/隊長死亡/F8F9/読込後ID/敵増援/時間決着の専用試験、迂回専用、基本回帰が成功。画像も確認。新規購入兵は既存VATエントリの時計を壊さずskeletal fallbackで描画し、読込時にVATへ組込む。試作の一戦内総登録数上限500（死亡分を含む）、旧全Actor用の支援砲撃は混成へ未接続。
+
+1エリア戦は別フラグBattleArea、V3別保存スロットで接続しarea-r1をビルド中。補充は死亡兵を復活させず新IDを割当て、旧IDは死亡履歴として保持。完了時消費、隊長死亡で取消、資源+生存兵+中央3点x20、同点引分、本拠地破壊、敵資源/未観測拠点の秘匿を実装。専用・通常一戦・保存/移動回帰は未検証であり工程8完了とはしていない。以下は過去の作業記録。
+
+## 2026-11-12 認識50/100mの追加比較完了、援護継続を調整中
+
+mixed-save-r4固定のA/B×陣営入替×認識50/100m、射程50mの8走行が完走し、ソースZIP・DLL・マップ・測定機記録を照合済み（report-flank-space-r4.md/json）。50mは迂回75回/到達0/援護喪失62、100mは71回/到達0/援護喪失48。経路なしは29/23回。100mだけで空間が失われたという説明は今回支持されず、両条件共通の援護継続を先に調整する。少数seedのため地形影響の否定ではない。
+
+援護対象1人への固定を、元の接敵位置10m以内・自部隊の直近観測・援護側の実射撃条件を満たす相手に限って切替可能にした。経路・期限・実射撃時刻は延長/捏造しない。flank-adjust-r1で専用試験、基本回帰、同条件比較を実行中。調整の有効性は未確定。通常認識100mを維持。
+
+ST4bはmixed-save-r4でF8/F9を含む専用35項目、基本210、旧隊長、Phase3の40人機能試験、通常A/Bの途中保存・読込が成功。以前のPhase3既定500人の誤ったfixture走行は除外。VATなし34項目はr3の別DLLで成功。工程8は未実装、ユーザーの継続指示に従い進める。下記は過去の作業記録。
+
+## 2026-11-12 工程7：ST3b専用試験通過、ST4a通常戦闘の接続を調査中
+最新の作業状態：st4a-input-r8（DLL 120C4C3EF0425BADB608CE2E98591F020FDA54E52F5B4D72B943C30FA1E7E82E）の基本210・移動4・接触3・広域・ST2・ST3a・ST3bが成功。追加の旧40人体制テストはUI行数の旧期待値2項目のみ失敗し、ソースで新表示11/7行へ修正済み・再試験待ち。Run-TacticsMatrix.ps1でr8を固定したA/B×陣営入替×迂回ON/OFFの8走行と単独描画3反復を実行中。測定中はDLL/Config/mapを変更しない。
+
+並行してST4bのVersion 2保存、Actor/Massの段階生成・原子的復元、戦術計画/認識/時計の保存、別スロット、専用試験をソースへ追加した。まだビルド/実行しておらず未完了。BattleMixedBodies.cpp、BattleMixedSaveValidation.cpp、BattleTacticsSave.cpp、BattleMixedSaveSmoke.cpp、Test-MixedSave.ps1を参照。描画測定終了後にビルドと専用/既存試験へ進む。補充・混成FastMatch・工程8は未実装。
+
+最新追記：固定60Hzの隊長Actorに3フレームごとの入力消失を発見。GameModeの入力生成→CharacterMovement消費のTick順を明示したr7では約94→設定420cm/秒へ改善し、通常B戦で迂回24回を確認（到達0、援護喪失17/接触喪失3/緊急撤退2）。r6は原因特定後に診断対象プロセスのみ中断。診断専用クラスを除去したst4a-input-r8をBuildSnapshotsに固定し、基本210・移動4条件は成功。接触/広域/ST2/ST3a/ST3bを回帰中。旧Stage 1/2の数値は旧DLLの履歴として保持し、修正後の戦術/性能には流用しない。認識100mの採用は維持。ST4a最終比較、ST4b、工程8は未完了。
+
+ST3bの単独/援護付き迂回を実装。専用描画30項目、援護OFF6項目、迂回OFF2項目が成功（SquadFlank-ST3b-20261112/probe-r5、support-off-r5、disabled-r5）。接敵方向を保つ旋回と到着時の集合範囲を修正し、実移動10.24秒で隊長・部下10人の到着を確認。source-r5.zipに保存。
+
+ST4aは部隊一覧の戦術/経過時間/相手/待機理由、得点の小数2桁表示、戦術イベント/部隊時間と最終拠点状態の計測を追加。build-st4a-r1および基本210・広域混成・ST2・ST3a・ST3bの回帰成功。720p/1080p画像も確認。BuildSnapshots/st4a-r1でソース/DLLを固定し、A/B×陣営入替seed7の4走行を実施・ソースZIP照合済み。ただし全4走行で戦術遷移/迂回発動が0のため、通常戦闘の接続完了とは扱わない。report-st4a-pilot-r1.md参照。認識情報は届いており、戦術判断の距離条件を追加ログで調査中（st4a-observe-r1/r2）。性能比較・調整確定、ST4b保存、工程8は未完了。通常認識100m/射程50mと工程8の了承仕様を維持し継続する。
+
+## 2026-11-12 工程6の移動・援護確認完了、工程7のST3b実装中
+
+DLL C7C019C79C2044B833829C2A83B99C6F95A95626F8443E478A99BCAD65BBE627で、認識100m/射程50mの移動4条件（40/20/20/100人）、接触3条件（各10人）が全員到達。通常一戦180秒完走、援護割当42回/実射撃確認33回。代表3画像も目視確認。参照verification-normal100-r1.json、report.md。固定試験合格を全自然戦闘の無停滞と扱わない。
+
+ST3bは単独/援護付きの側面移動、上限4候補/陣営/秒、15秒再試行間隔、権限・接触・援護・時間切れによる解除を追加し検証中。初回BuildはSamplesローカル名の衝突を修正して再実行。ST3bの合格判定、ST4a/ST4b、工程8は未完了。
+
+## 2026-11-12 工程5の射程比較完了、工程6の移動・援護確認へ
+
+認識100m固定の射程50/75/100m比較は36挙動＋9単独描画走行が全件成功、report-stage2-verification.jsonのsource不一致0。詳細はSetup/Benchmarks/SightTrial-20261111/report.mdとreport-stage2.md。通常射程50mを維持。点対称な任務割当後も距離/マップ別に配置側勝率の偏りが残るため、勝率から射程の優劣を断定しない。工程6は既存移動4条件、接触3条件、通常戦闘の援護soakを認識100mで描画検証中（default100-r1/default100-soak-r1）。工程7〜8は未実装。
+
+## 2026-11-12 認識100mの通常採用・回帰完了、工程5の射程比較中
+
+Stage 1の48＋9走行の結果を提示後、ユーザーが「100mを採用する」を選択。Stage 2境界試験4条件×12項目、Test-Battle、A/B×陣営入替の任務割当対称性4条件が通過（DLL B00615DAF476A026913ABF83C01E7E6D2B19C90960134CE34FCF0162A43779A2、source不一致0）。通常基準SightRangeを10000cmへ変更し、射程外発砲防止も通常有効化した。DLL C7C019C79C2044B833829C2A83B99C6F95A95626F8443E478A99BCAD65BBE627でBuild、基本210項目、500混成、ST2撤退、ST3a援護が成功。設定未指定と明示100m/RangeAware=1の8条件で認識・発射数・標的HPが一致し、source不一致0（verification-default100-r2.json）。初回に失敗した旧小型マップの長距離視認試験は、標的が外壁の向こうに出るため距離試験だけを壁より高い位置へ変更。実視認処理と距離期待値は維持し、別の遮蔽試験も通過。工程5はweapon-full-r1の36挙動走行→weapon-perf-r1の単独描画9走行を実行中。訓練倍率は維持（新兵75m、通常100m、精鋭125m）。射程既定はまだ50m。旧測定結果の「通常既定50m」は測定時点の記録として残す。工程5〜8の継続依頼と工程8の了承仕様は維持。
+
+## 2026-11-12 工程4完了（48挙動＋9描画走行、最終報告済み）
+
+DLL 62C8EE9700602A44349F722FBC24F60FC3DF19BA11AB03A60FC95954DCE9612B、full-r4のA/B×50/75/100/150m×3seed×陣営入替=48走行が全件正常終了。試験前Test-Battleも成功。4並行headlessの時間値は性能比較に使わない。perf-r4のB/seed7×50/100/150m×3反復は単独描画で実行中。最終集計・照合も完了し、report-stage1.md / report-stage1-verification.jsonへ保存。工程5以降は未完了。
+
+全48走行で左配置側が勝利（Team0/1は各24勝）。現行の絶対ポイントindex順による任務配分は点対称でなく、勝率の距離評価には使えない。75/100/150mでは同一map/seed/配置側の試合時間・射撃数が一致。認識の早期化と戦闘結果の変化を分けて報告する。次の射程比較前に任務割当の点対称化を別DLLで修正・再確認する方針。通常認識既定50mは維持。
+
+## 2026-11-11 認識距離本試験をr4へ切替（進行中）
+
+full-r3は射程外人秒の標本間隔を常に0.2秒とした過少集計を発見し、中断。途中結果を保存し、最終統計には使わない。BattleSightExperimentを実標本間のElapsed差で加算するよう修正、Build成功。full-r4の前にTest-Battleを実行し、次に48挙動走行（4並行・時間値は性能比較対象外）→perf-r4描画9走行（単独）を順次実行する。
+
+本試験中はソース/設定/DLLを固定。現時点では結果待ち。r3のA50mでは左側6/6勝利だった。任務割当が両軍同じ絶対index順で、25部隊のうち左側に近いpoint0へ9部隊、他へ8部隊となる非対称性が原因候補。試験中の条件変更はせず、勝率偏りと距離効果を分けて扱う。
+
+## 2026-11-11 工程2〜3の追加検証、全条件試験の準備
+
+A/Bの全景が収まるRTSカメラを画像確認。全通行再確認はaudit-A-final/B-finalで30/30到達（86.35/84.40秒）、F5再初期化合格。geometry-A-r2/B-r2では各ポイントの遮蔽寄り/開放寄り接近経路と露出率を確認。B010941E6A210CD62ED4C90D945B77025ED6AF42571FCB6D1DECDF6D69B67954でBattle・広域混成・ST2・ST3a回帰通過（regression-*-final.txt）。
+
+撮影診断だけを修正したDLL D1249DD0CB036E9675BC816C65D56314817D8A63DCC7474FB0C76DE53B8E6C38でBuild成功、visual-fps-r3/tps-r3合格。FPSは未認識敵を隠す既存表示のため味方兵を撮影用標的に使用。FPS100mの180cm線分投影高17.28px、TPS16.696px。画像で標的を確認済み（輪郭高さそのものの画像計測ではない）。旧visual-fps-r2は標的非表示なので見た目の根拠に使わない。
+
+予備走行A/B×50/100mは完走済み、陣営入替予備走行を追加中。本試験48走行/描画9走行、Stage 2以降は未完了。INSTRUCTIONへ測定定義を追記し、挙動用headless最大2並行と描画性能単独を区別。工程8はユーザー了承済み仕様で継続する。通常距離既定の採用判断は未実施。
+
+## 2026-11-11 新マップA/Bの接続・初期検証、予備走行へ（工程2〜3進行中）
+
+新規Lvl_BattleWide_A/B（600m×400m）を生成。旧マップ不変。広域識別・500体混成初期化・点対称の兵種/Actor配置・中央3拠点・600秒制限・RTSカメラ範囲を接続。生成時の全10拠点対経路/指定視線遮断は両マップ合格。初期監査DLL60B8F2E30A2B337A533D63D375285FCD610A11B84BEECB5ED3CC3E95CB9C35BDで地形/配置の点対称1cm以内・代替経路・3部隊30人の到達・F5初期化を確認。到達はA85.47秒/B85.46秒。可視率はA左右0.7595/中央0.5633、B左右0.6582（10m格子・目高1.7m・半径100m）。maps-r1、audit-A-r1、audit-B-r1、verification-map-r1.json参照。
+
+初期全景画像で手前側が切れたためズーム上限を1000mへ拡大し、次の画像で再確認する。認識/発砲/経路/フレーム計測と射撃乱数seed・陣営入替を追加してBuild成功。60Hz固定シミュレーションのA/B×50/100m予備走行中。初期マップ監査と現行DLLの結果を混同しない。接近路の露出比較、距離別の兵サイズ画像、全48走行/性能9走行、Stage 2以降は未完了。全工程依頼を継続中。
+
+## 2026-11-11 工程1の上書きと射程外診断・既存回帰を確認（工程2以降へ継続中）
+
+BattleSightRangeの試験用cm上書きと訓練倍率確認を追加。射程外停止/空撃ちをActor/Massで再現し、試験用BattleRangeAware=1（既定OFF）で標的選択/発砲へ射程条件を追加。通常距離既定は維持。DLL B667733424CE02BE23F6D005E6EC006D9368BC7CECEBFFAC9601AB03BB8882CCで診断6走行通過、未指定/明示50mの認識有無・発射数・HP一致（全状態厳密一致ではない）。Build成功、既存210/広域48/ST2 34/ST3a 32 PASS、RTS/TPS画像確認、各診断前machine・hash記録とソース照合不一致0。詳細はSetup/Benchmarks/SightTrial-20261111/report-stage1a.md。
+
+診断は固定ステップの隔離場面で、通常全軍や性能の保証ではない。次は新マップA/Bの生成とゲーム接続・検証。工程2〜8、距離の通常採用は未完了。ユーザー依頼に従い継続中。
+
+## 2026-11-11 工程1〜8の継続実装を開始（進行中）
+
+ユーザーが前回提示の工程1〜8（認識距離試験から混成FastMatch・1エリア戦ルールまで）の継続を依頼。工程1の試験用BattleSightRange上書きと射程外診断を追加し、ビルド成功。初期診断では認識150mのActor/Mass双方が75/100/150m先への射程外発砲で弾薬を消費することを確認。試験用BattleRangeAware=1で標的選択・発砲の射程条件を追加し、比較検証中。通常既定は変更していない。初期結果はSightTrial-20261111/legacy150-r1で、修正版の証拠と区別する。工程1の回帰・最終検証と工程2〜8は未完了。
+
+工程8の試作仕様をユーザーが了承：補充資源は完了時消費、補充途中の兵は得点算入せず、同点は引き分け。本拠地2つをポイント得点から除外し中央3点のみ×K（仮20）。隊長死亡部隊は補充/再編成対象外、敵資源残量は非公開。まだ未実装。コミット/pushなし。
+
+## 2026-11-11 認識距離試験と既存工程の着手順を整理（文書のみ）
+
+ユーザーの依頼でROADMAPの現行計画とINSTRUCTION_SightTrial_20261111.mdの進め方を統一。次はStage 1の試験用上書きと射程外挙動の小試験。その後、新マップ生成/ゲーム接続→予備走行→48走行/描画9走行→結果確認→Stage 2射程比較→通常戦闘の移動/援護確認→ST3b→ST4a→ST4b→混成FastMatch→1エリア戦ルールと再評価→本格性能改善/人数拡大。各工程の性能退行確認は継続する。
+
+移動固定4条件・接触3条件・ST3aは完了済みとして維持。補充中の保存はST4bの先行要件から外し、補充実装時に追加する。射程外停止/空撃ちはコード読解による懸念で、再現確認・修正は未実施。詳細な指標/性能条件等のレビュー指摘は、予備走行までに具体化する。ゲーム実装、ビルド、試験、コミット/pushなし。既存の未コミット変更を保持。
+
+## 2026-11-11 認識距離試験とマップ拡張の指示書を発行（設計相談・文書のみ、コード変更なし）
+
+Codex向けにINSTRUCTION_SightTrial_20261111.mdを作成した。内容：認識距離50/75/100/150mの試験用上書き（既定は変更しない）、約600m×400mの点対称・遮蔽多めの新規マップ2種（本拠地2＋ポイント3）、条件・計測項目・回帰・合格条件。未着手で、結果は未取得。ROADMAPへ段階計画（Stage 1/2）と将来案（兵科別射程・共有認識による長射程射撃）を記録。ビルド・試験なし。コミット/pushなし、既存の未コミット変更を保持。
+
+## 2026-11-11 時間切れ得点式と認識距離100m試験を記録（設計相談のみ、コード変更なし）
+
+ユーザー了承：時間切れ得点＝残存ユニット＋残りリソース＋保有ポイント数×K（K仮20）。認識距離は現状50mでは短いとの判断から、設定値試験として100mを試す（射程50m維持）。ROADMAPの1エリア戦の節へ記録。試験は未実施で、採用は未判断。実装・ビルド・試験なし。コミット/pushなし、既存の未コミット変更を保持。
+
+## 2026-11-11 補充・リソース・ポイント配置の回答を記録（設計相談のみ、コード変更なし）
+
+ユーザー回答：補充は本拠地で並行処理、リソースがゼロなら補充不能（敗北ではない）、補充以外のリソース減少要因なし。ポイントを中間に並べると射線が通る懸念あり。ROADMAPの1エリア戦の節へ反映し、リソース勝利の判定指標とポイントの役割を未決として残した。実装・ビルド・試験なし。コミット/pushなし、既存の未コミット変更を保持。
+
+## 2026-11-11 1エリア戦の初期数値を記録（設計相談のみ、コード変更なし）
+
+ユーザー回答：補充はリソース勝利の資源を消費、1ユニット10秒・1コスト、初期リソースは各軍100、ポイントは本拠地各1＋付近3（合計5と解釈、要確認）、ポイント状態はスポットされなければ相手に分からない、移動時間は後回し。ROADMAPの同名節へ「1エリア戦の初期数値」として記録し、未決事項を更新した。数km規模の性能影響は机上の概算のみで未測定。実装・ビルド・試験なし。コミット/pushなし、既存の未コミット変更を保持。
+
+## 2026-11-11 将来の戦闘構造・補充・AI評価の方針をROADMAPへ統合（設計相談のみ、コード変更なし）
+
+数km規模の広域で徐々に接敵し戦力集中・突破・本拠地襲撃・ポイント奪取を行う構造について、設計相談で合意した内容をROADMAPの同名節へ記録した。確定事項は、本拠地破壊の決定勝利とリソース勝利、本拠地での補充、1エリア戦の対称・防衛恩恵なし、キャンペーンの別軸リソース影響。AI評価の懸念を受け、最小マップは動作確認用に限り、評価は複数マップ・戦術シナリオ・AI対AI統計で行う方針とした。補充とリソース勝利の関係、隊長死亡部隊の扱い、数値、マップ配置は未決で未実装。
+
+実装済み範囲・検証結果・次の一手は上記の直近記録から変更なし。次は通常戦闘の接触待ちの再現確認とST3b（迂回）。ST4aの評価に複数マップ・戦術シナリオ・陣営入替統計を加える案を提示済みで、着手順の確定はユーザー確認待ち。ビルド・試験は実施していない。コミット/pushなし、既存の未コミット変更を保持。
+
+## 2026-11-11 停止部隊を動かさない接触移動（実装・検証完了）
+
+ユーザーの再選択を採用し、停止部隊は自動退避させず移動側のみ局所迂回・到着予約を調整する方式を実装。停止/交戦保持/直接操作中の味方を対象とし、空きがなければ待機表示。全体AI→部隊AI→行動実行の階層と部隊任務を保ち、今回の変更は行動実行層。ST2集合半径と防衛範囲を保つ。移動命令中の先着兵は既存の隊形回避を維持する。
+
+最終DLL **ACE1F73CB5B4E0DADB530CACA3B6AE2BEC99D215DB826CEC7B82BFA82CAF8D99**。Build成功。同DLL・500体保持・720pの接触3場面は全員10/10到達（14.90/5.80/17.45秒）。停止部隊の命令/位置を維持し、2.4m通路解放前の待機と明示命令後の再開を確認。到着先占有は10人分を再割当。観測最小中心間隔72cm以上、移動側の共有経路要求は各1回。到達判定は予約先1m以内で、HUDの20cm到着とは区別する。
+
+同DLL OFF比較は9/10・10/10・10/10でfailures=1。OFFの到着先占有は1m以内に近づくだけで予約占有は解消しない。初期baselineの8/10・3/10・10/10とは別の単走行結果。最終根拠はContactMovement-20261111/final-on・final-off。途中版の密集/集合退行は修正済みで、旧失敗結果を最終版へ混ぜない。
+
+既存移動4条件は40/20/20/100人全員到達。ST2 34 PASS、ST3a 32 PASS、広域46 PASS、Test-Battle210 PASS / BATTLE_SMOKE_RESULT failures=0。最終接触3画像を確認、各走行前machineとDLL、ソース/設定hashを保存。通常一戦は180秒の時間切れまで完走し、射撃4654（Mass4637）、援護割当35/実射成立23、stuck警告ログ行0件。単走行であり全条件の無停滞を保証しない。[詳細報告](Setup/Benchmarks/ContactMovement-20261111/report.md)。
+
+1人幅の対向通行、高低差、全軍一点集合、多数seedでの無停滞は未保証。今回の接触試験は元の自然戦闘の全警告と同じ原因と確定したものではない。次の新戦術はST3b（援護は任意）で、局所接触回避とは別工程。コミット/pushなし、既存未コミット変更を保持。
+
+## 2026-11-11 階層型ST3a撤退援護（実装・検証完了）
+
+ユーザー指示に基づき、全体AI（BattleMatch任務配分＋BattleTeamAI連携割当）→部隊AI（BattleSquadTacticsの受諾・交戦/撤退判断）→個体行動実行（BattleLeaderRuntime）をROADMAPへ明記し、混成広域に撤退援護を既定ONで実装。味方委任部隊と敵が同規則。全体AIは自軍候補だけを並べ替え、配信済み観測から割当。部隊AIが射線・弾薬・自部隊の安全を再確認する。援護は任意で、撤退は割当や実射成立を待たない。
+
+近隣20m・1対1・最大8秒・全体AIによる解除後5秒待ち。実射成立と割当だけの状態をHUDで区別。手動/TPS・死亡・失認・弾切れ・距離・期限・射撃不成立で解除し、緊急撤退を優先する。比較用は `-BattleTeamSupport=0`。部隊単位の処理で、重い経路探索は追加していない。
+
+最終DLL **27D5705BC6201F9AB00005CAEFC035EA195EB440BF967505B755CE60971F002F**。Build成功。専用720p/1080p各32 PASS、OFF 2 PASS、ST2 34 PASS、広域46 PASS（headless）、既存Test-Battle210 PASS / BATTLE_SMOKE_RESULT failures=0。Mass標的への実射、同時撤退、敵位置/HPの未観測変更で全体AI割当が不変なことも検証。両解像度の実画面確認、各試験前machine、209ソース/設定のhash一致を記録。[実装・検証報告](Setup/Benchmarks/TeamSupport-ST3a-20261111/report.md)とverification.jsonを参照。
+
+最終DLLの通常全軍委任は141.42秒で決着、射撃4226回（Mass 4175）、援護割当38/実射成立31回（味方16/敵15）。再割当込みで成功率・勝率改善の評価ではない。判断Step平均0.011794ms/最大0.580400msは診断ログと評価なし呼出しを含む。総フレーム性能とはしない。最新根拠はaudited*。旧DLL D705…のfinal-soak-on/off比較、初期試験、途中中止soak-onを最終DLLの結果へ混ぜない。
+
+残る範囲は通常戦闘の接触待ち、ST3bの単独/援護付き迂回、ST4調整・混成保存、混成FastMatch、複数seed/基準PC/1000体性能。次は既知の接触待ちと援護の発動/解除を実プレイで確認し、迂回へ進む。援護をすべての迂回の必須条件にはしない。既存変更を保持、コミット/pushなし。
+
+## 2026-11-11 混成移動の固定4条件を安定化（実装・検証、実戦の接触待ち残り）
+
+50 Actor＋450 Massの広域へ、到着位置の予約・進入側への配置・狭路の右側列への合流・前走者への追従・短い局所迂回を既定ONで追加。Mass同士も明示掃引で衝突させ、混雑による部隊全体の経路リセットを停止。HUDに到着/混雑待ち/経路なし/配置位置不足を表示。横離隔上限0.2とTPS直接操作の扱いは維持。ST2は隊長2.5m/部下4.5m内へ配置し、既存の集合条件を保つ。
+
+最終DLL **3AB7AD07CC39AAA50291768EDB555FD2D17F986823D6EF26DAA3A488183C8626**。同DLL・720p・500体保持の固定比較で、旧→新の到達人数は密集38/40→40/40、狭路11/20→20/20、対向流12/20→20/20、集合42/100→100/100。新処理の全員到達は12.61/17.14/11.10/8.33秒。計測上の兵間最小中心間隔は全条件72cm。到着先を分散するため、命令直線からの最大距離は増える（100体集合で1.72m→11.87m）。角度上限は局所進路への離隔補正に対するもので、局所経路自体の曲がりを制限するものではない。
+
+Build成功、広域48 PASS、ST2 34 PASS、Test-Battle210 PASS / BATTLE_SMOKE_RESULT failures=0。全軍委任の一戦は134.29秒で敵の拠点得点100到達により決着、3757射撃（Mass3707）、撤退38/集合36/任務復帰2を確認。遷移回数は再遷移を含む。実画面確認、各試験前machine、最終205ソース/設定のhash照合を保存。詳細は [移動安定化報告](Setup/Benchmarks/MovementStability-20261111/report.md)。最終比較はstable-finalとbaseline-final-v2。途中のr1〜r9や旧DLLのbaseline-finalを最終結果に混ぜない。
+
+固定4条件の全員到達は達成したが、通常戦闘では4体のActor隊長に接触停止警告が計6ログ行残った（内部の集約回数を含み、停止件数ではない）。あらゆる密度での無停滞は未達。次は停止中/交戦中の兵がいる実戦接触待ちを固定シナリオ化し、待機と通過失敗を区別して追加調整する。その後ST3a援護→ST3b援護付き迂回。1人幅の優先通行、高低差、全軍一点集合、多数seedと基準PC性能は後続。既存変更を保持、コミット/pushなし。
+
+## 2026-11-11 RTS回避補正の抑制・今後の計画整理（完了）
+
+ユーザーの指摘はTPSではなくRTSの部隊移動。混成広域の近隣兵からの離隔補正を横方向のみ・上限0.2（最大約11.3度、前進成分98%以上）へ制限し、人数分の加算で逆向きに押し戻されることを防止。Actor隊長へのRVO速度補正の重複を停止。物理衝突と旧全Actor/隔離隊長/Phase3/TPSの既存処理は維持。経路自体の曲がりや衝突による移動制限は別で、密集時の通過性能改善までは保証しない。
+
+DLL **2C9077F7B597F3ECAA64180966CCAD2F458F0909D359AE44DCF7899F499CD262**。Build成功、広域48 PASS、ST2 32 PASS、Test-Battle210 PASS / failures=0。証拠はSetup/Benchmarks/WideMixed-20261111/steering720とSetup/Benchmarks/SquadRetreat-ST2-20261111/steering-st2。設定はWideAvoidanceMaxSide。詳細はsteering720/report.md。
+
+検証後に依頼どおりROADMAP冒頭を現行計画として整理。次は密集/狭路/対向流/集合の移動安定化、その後ST3a援護→ST3b迂回→ST4a調整/可視化→ST4b混成保存→混成FastMatch→性能/人数拡大。各工程の完了条件と次の最小単位を明記。旧「ST2待ち」「混成はST5」「VAT採用待ち」は履歴として扱う。計画整理のみで次工程は未着手。既存変更を保持、コミット/pushなし。
+
+## 2026-11-11 ST2 混成広域の交戦・撤退・集合・復帰（完了）
+
+50 Actor＋450 Massの広域で、味方AI委任部隊/敵へ同じST2判断を既定ONで接続。自部隊資源と配信済み接触を1秒分散評価し、交戦保持→不利なら到達可能な候補へ撤退→部下を集合→安全/戦力条件を満たせば最新任務復帰、消耗時は防衛保持へ移る。最大4候補/部隊、共有経路、失敗再試行5秒。TPS中は新規遷移を止め、手動/K/P/隊長死亡との調停を保持。予備弾からのリロードのみで自動回復なし。DefaultGame.iniで初期閾値を調整でき、-BattleSquadST2=0でST1へ戻せる。
+
+最終DLL **43FF209C4BA309D3C49E814ECF7F4B7995F3655AC12EE846CFEDCB544E0A05F1**。Build-Editor成功、専用720p/1080p各32 PASS、ST2 OFF 2 PASS、広域既存44 PASS、旧隊長39 PASS、Test-Battle既存210 PASS / BATTLE_SMOKE_RESULT failures=0。実画面の撤退理由とActor/Massの実Tick撤退を確認。各走行前machine、ソース198/設定5のhash、試験詳細は [ST2報告](Setup/Benchmarks/SquadRetreat-ST2-20261111/report.md)。
+
+自然な一戦は162.04秒で味方の100点到達による決着。射撃2405回（Mass2163回）、撤退23/集合22/防衛保持17/集合後の任務復帰5回を確認。再遷移を含む回数で、成功率や勝率改善の評価ではない。ST2判断器のStep平均0.004862ms/最大0.403102msは診断ログを含み、更新のない呼出しも含む。総フレーム性能やOFFとの差とはしない。
+
+全Actor/FastMatchの自律ST2展開・有効計画保存の版管理は別工程。混成広域は元から保存対象外のため今回は保存機能を新設しない。混雑による移動停止/集合遅れは残り、理由付き保持で対処する。ST3の部隊間援護/迂回・予約、複数seed/陣営入替での調整、1000体性能は未実施。次はST3。既存未コミット変更を保持、コミット/pushなし。
+
+## 2026-11-11 広域50 Actor＋450 Mass統合（完了）
+
+ユーザーの優先指示に従いST2より先に実装。Play-TestField.cmd / Play-Prototype.ps1 -LargeFieldは既存の広域マップを50 Actor隊長＋450 Mass部下（各軍25部隊×10人）で起動する。3拠点/得点/時間切れ/全滅、手動指揮・AI委任、隊長TPS、P停止、F5再戦、VAT、ST1の10人情報集約と任務/計画調停を接続。旧全Actorは-LargeField -LegacyActorsで比較用に保持。フラグなしでUEから広域マップを直接起動する場合は旧方式。
+
+最終DLL **7D74C471CB2CC9A7AFDC06B7A5A768C80DAE29DB7F9A11C42F78F9B0267E49CB**。Build-Editor成功。専用720p/1080p各44 PASS、従来隊長40体39 PASS。一戦実行もfailures=0、154.47秒で敵の100点到達により終了し、Mass射撃2681回を確認。実画像、各走行前machine、最終DLL/ソース照合は [統合報告](Setup/Benchmarks/WideMixed-20261111/report.md) とverification.jsonを参照。
+
+直接操作は隊長のみ、隊長死亡時は所属部下も死亡扱いとなる既存仕様。混雑時の一部隊長のstuck警告は残る。旧全Actorの個体遮蔽/側面移動の同等化やST2〜ST3の新しい判断は未実装。FastMatch/保存/ネットワークの混成統合と1000体性能は対象外。次は混成広域を主対象にST2の交戦継続/撤退・集合/復帰を実装する。既存未コミット変更を保持、コミット/pushなし。
+
+最終DLLでTest-Battleも210 PASS / BATTLE_SMOKE_RESULT failures=0。専用4走行と統合試験のDLL一致、ソース196件のhash一致をverification.jsonへ保存。起動/試験PowerShellの構文確認とgit diff --checkも通過。
+
+以下は経過記録。「広域未統合」「500 Actorのまま」「隊長/Mass接続はST5」の旧記述は本節で更新する。
+
+## 2026-11-11 ST0〜ST1 部隊戦術の観測・命令調停（完了）
+
+ユーザー依頼に基づき、全Actor広域500体/FastMatchへ部隊戦術の土台を追加。BattleSquadTacticsで自部隊資源・既存局所行動・配信済み接触を1秒周期で集約し、既存の遮蔽/側面移動の発動・中止・到着・移動失敗を診断ログへ記録する。正規状態で任務と実行計画を分離し、拠点指揮による有効計画の上書きを防止。P停止、K/H、拒否命令、TPS切替、期限切れ、全滅時の取消を検証。RTSに選択部隊の任務/行動/理由を表示。通常はFOLLOW MISSIONで、撤退/援護/迂回の新しい自律選択は未実装。
+
+最終DLL **42BB291D9E2E1EDC80C894128EF4E5CD1B47F4A5A409FA8977562703C9CEEA0F**。Build-Editor成功、Test-Battle210 PASS/BATTLE_SMOKE_RESULT failures=0。専用小規模ON26/OFF12 PASS、広域500体720p/1080p各20 PASS・実画像確認。各走行前machine保存、最終ソースhash照合。最終根拠は [報告](Setup/Benchmarks/SquadTactics-ST01-20261111/report.md) と同フォルダーのr2出力、verification.json。途中版の結果は混合しない。
+
+ST0の45秒診断では、側面移動の割当2008/1987回に対し到着5/5回、援護消失でのwave中止817/814回（720p/1080p）。割当は再割当を含み、兵とwaveで集計単位が異なるため成功率とはしない。既存戦術は発動しているが、援護中断により完遂しにくい候補を確認した。単一原因の分離・勝率・一戦完走・1000体性能は未検証。
+
+任務の保存/バイナリ復元と旧フィールド欠落の補完は検証済み。試験注入する有効な戦術計画の保存はST1では拒否し、ST2以降に版管理を追加する。部隊間予約、判断候補の評価、局所AIへの新しい行動制約は後続。既存未コミット変更を保持、コミット/pushなし。次はST2の交戦継続/撤退・集合/復帰と有効計画の保存を実装する。
+
+途中のユーザー確認への回答：**Play-TestField.cmdの広域マップは引き続き500 Actor。50 Actor＋450 Massは別の隊長モードで、広域への統合は未実施**。今回も構成は変更せず、隊長/Massへの戦術接続はST5。
+
+## 2026-11-11 部隊の戦術判断を計画（経過記録。ST0〜ST1は上記で完了）
+
+ユーザー依頼によりROADMAP冒頭へ交戦継続・援護・迂回・撤退の計画を追加。既存の拠点委任、個体遮蔽、小隊内援護/側面移動を活かし、任務と戦術計画を分離する。ST0現状観測→ST1状態/命令調停→ST2交戦/撤退→ST3部隊間援護/迂回→ST4広域/FastMatch検証、隊長/MassはST5として後続。対象は全Actor広域500体/FastMatchのAI委任部隊と敵AI。手動指揮は維持する。
+
+情報制約、援護成立確認、撤退と拠点命令の競合防止、失敗時の処理、理由表示、保存互換、性能計測を計画に含めた。数値は未調整の初期案。既存ソース・資料の静的確認のみで、ゲーム実装・ビルド・挙動/性能試験は未実施。既存未コミット変更を保持。次の実装依頼ではROADMAPの同名節を参照しST0〜ST1から着手する。
+
+## 2026-11-11 通常兵の索敵距離を50mへ変更（完了）
+
+ユーザー依頼によりDefaultGame.iniとC++の既定SightRangeを2400cmから5000cmへ変更。通常兵の視野角120度、発見待ち0.6秒、遮蔽判定の実装、射程50mは維持。既存訓練倍率を維持し新兵37.5m・精鋭62.5m、敵味方共通。能力試験の「通常兵には届かず精鋭には届く」対象位置は両者の索敵距離の中間へ調整し、旧24m前提の固定位置への依存を除いた。
+
+Build-Editor成功。DLL **3636BAE7A2F21C26B1227CFB27FC80AD3E7CE8B2097B2FDF83E34F763CFA5427**。Test-Battle既存210 PASS/BATTLE_SMOKE_RESULT failures=0、広域500体の委任/UI試験25 PASS。実画面でSIGHT 50m / 120deg / 0.6sを確認。証拠はSetup/Benchmarks/Sight50-20261111のmanifest.json、integration.txt、ui/wide720.log、ui/wide720-rts.png。各試験前に測定機情報を保存。性能/勝率の再測定なし。
+
+新規戦闘で反映。保存済み試合の個体能力は保存値を復元するため自動移行しない。PROTOTYPEの現行値・訓練表を更新、過去の24m記述は履歴。既存未コミット作業を保持、コミット/pushなし。次は広域フィールドで50m設定の交戦開始距離を試す。
+
+## 2026-11-11 味方部隊の手動指揮／AI委任（完了）
+
+ユーザー希望のRTSでの指揮担当切替を、広域500体とFastMatchに追加。選択部隊を左パネルまたはJでAIへ委任、Kで手動指揮へ戻す。Qで全選択して一括切替。初期は手動。公開拠点の状態に基づく攻撃移動・防衛を約5秒ごとに判断し、P停止中は進めない。手動の移動/攻撃移動/防衛/停止命令が受理されれば委任解除、拒否時は保持。Kだけでは現在の命令を継続し、停止はH。
+
+委任は正規部隊状態へ保持し、TPS切替やFastMatch保存/復元でも維持。TPS兵士の操作権・HP/弾薬は維持。通常20体練習・隊長/Mass・ネットワークへの委任UI統合、購入/砲撃自動化は対象外。
+
+Build-Editor成功、DLL **FA5755E6C9B1218641D53D8D3C1BE260D77E62831E6135A76F63627940293979**。専用小規模25 PASS、広域500体720p/1080p各25 PASS、既存210 PASS/BATTLE_SMOKE_RESULT failures=0。実viewport入力での切替、world tickでの進軍、手動部隊の命令非変更、保存バイナリ往復・復元を確認。両解像度の実PNG寸法と実画面確認、通知の重なり修正。各走行前machine保存。初期1080p指定の720p画像は除外しForceResで再取得。
+
+[実装・試験・画像・制限](Setup/Benchmarks/AllyDelegation-final-20261111/report.md)。性能再測定・1000体・全軍委任での一戦完走・旧版保存ファイル互換実測は未実施。既存未コミット作業を保持、コミット/pushなし。次はPlay-TestField.cmdでQ→J→Pを試し、部分的な手動介入と拠点配分の使い勝手を確認する。
+
 ## 2026-11-11 ユーザー指示によるコミット保存
 
 最終確認時の注意：コミット処理中に別作業の新規変更（BattleLeaderRuntime.cpp、BattleVATDisplay.cpp/.h、Play-LeaderCommand.ps1、02:53:32更新）とUEプロセスを検出。これらは照合済みスナップショット後の差分として未コミットで保持し、本保存へ混ぜていない。以下のhash一致はコミット前に照合した版に対する結果。
@@ -19,7 +697,7 @@
 
 現在地はM1〜M7完了、M8実証済み、広域500体の手動テスト入口あり。T5のA〜D、隊長2A/2B、Phase3の84性能走行、認識/表示処理の試験を経て、M9d ISM＋VAT段階Bは検証・測定完了。最終根拠は末尾の同名完了節と `Setup/Benchmarks/DisplayLOD-20261111-r11/report.md` / `verification.json`。統合210 PASS・OFF40一致等は既存検証で、今回の再実行ではない。
 
-通常採用は未承認、表示LOD既定OFFを維持。1000体全視点60FPSと基準PCでの実測は未達/未実施。スパイク根因調査は別作業の出力 `SpikeRoot-final-20261111` があり、本整理中にもUEプロセスを確認したため同時ビルド/測定は行わない。完了判定はその作業の最終報告を確認する。
+2026-11-11の追加承認で、今回のVAT画質差を許容しMass部下経路を通常採用・既定ONへ移行済み。全Actorの広域500体への移植は対象外。1000体全視点60FPSと基準PCでの実測は未達/未実施。スパイク根因調査は別作業の出力 `SpikeRoot-final-20261111` があり、本整理中にもUEプロセスを確認したため同時ビルド/測定は行わない。完了判定はその作業の最終報告を確認する。
 
 今回の検証：Setup直下の全PowerShell構文、git diff --check、キャッシュ除外と証拠/資産の非除外を確認。棚卸しCSVは19,269件・パス重複0（取得時点。別作業で出力増加あり）。現DLLはr11の72BD51BE…22A6と一致するが、全ソース一致の再監査ではない。SpikeRoot-final進捗ログのALL_FOUR_RUNS_COMPLETEを確認し、解析の最終報告は未確認。ゲームビルド/統合試験の再実行なし。
 
@@ -652,3 +1330,51 @@ DLL SHA256 **72BD51BE335008EE5E78E277C4807C96EAE664EF9170FFC35E3060536CAF22A6**�
 ETW欠落0、CSwitch連続性不一致0、GT時間会計誤差1.14e-10ms以下、選択scope会計誤差0。DLL/190source/5config/18asset/map一致、保護16不変。Saved Engine/GameUserSettingsも4走行同一・前後同一（CrashReportClient自動生成設定は差分あり）。4走行P3_RESULT failures=0、測定/解析プロセス終了。証拠・候補順位・追加検証/未実装対策案は [追加調査報告](Setup/Benchmarks/SpikeRoot-final-20261111/report.md)、同verification.json/checks.json/evidence.json。
 
 開発機のみ、基準PC換算未取得、trace負荷・GT/tick境界差・実時間戦況差あり。旧DLLへの原因割合転用なし。次の候補はlight trace/ETWと周波数・CPU counters、外部負荷を抑えた比較、follow内部件数/deadline時系列。Pコア限定など条件変更試験、外部アプリ停止、最適化は未実施。完了したのは今回の追加測定と切り分けであり、単一根因確定ではない。
+
+## 2026-11-11 VAT通常採用の追加承認（検証完了、末尾参照）
+
+ユーザーが「今回のVATの画質差を許容し、通常採用（既定ON）へ進める」を選択。BattleDisplayLODをMass部下経路で既定1へ変更し、計測外の隊長モードでもVATを使えるよう接続。OFF明示は維持。Play-LeaderCommand.ps1は既定DisplayLOD=1、-DisplayLOD 0で戻せる。通常の全Actor広域500体を隊長方式へ変更せず、全Actorへの表示移植も行わない。近表示のnative LOD選択を保持し、既存LOD2以上かつ距離閾値を満たすMass部下のみ遠表示化する。画面幅/FOVに応じて同じpixel基準を使う。Phase3は既存Screen120_48経路を維持。
+
+新DLL301ED9560EB88257F459DCCC37FEED5AE4D2EF15491C6FA8E7B92897F6B2EA83。Build成功、計測外の隊長機能39件は既定ON/明示OFFともPASS。500体隊長モードの描画付きUI10件PASS、実際に遠表示平均356体を確認。全Actor広域500体の測定結果ではない。Phase3再検証と既存210/OFF40も完了（結果は末尾）。新たな性能12走行の再測定や追加最適化は行わない。旧DLLの性能値を新DLLでの実測としない。
+
+
+## 2026-11-11 VAT通常採用完了：隊長方式のMass部下を既定ON
+
+今回のVAT画質差を許容するユーザー承認に基づき、BattleDisplayLOD=1を既定とし、Phase3以外の通常隊長モードにも接続。Play-LeaderCommand.ps1は既定ON、`-DisplayLOD 0`（直接起動は`-BattleDisplayLOD=0`）でOFFへ戻せる。全ActorのPlay-TestField.cmd広域500体への適用・戦闘方式変更は行っていない。追加最適化、他の最適化の既定値変更、影/距離/精度の追加低下はなし。
+
+DLL SHA256 **301ED9560EB88257F459DCCC37FEED5AE4D2EF15491C6FA8E7B92897F6B2EA83**。Build-Editor成功、既存210 PASS/BATTLE_SMOKE_RESULT failures=0、OFF40/40一致。通常隊長機能は既定ON/明示OFF各39 PASS、500体UIは1080p/720p各10 PASS・実画面出力確認。Phase3機能OFF/ON各25 PASS、通常/影あり×3視点QA各12960比較不一致0（各108回enter/return）。1000体固定入力は3視点それぞれ1349frameで感覚・戦闘状態一致。保護16、元資産/設定/マップ不変、保存画質設定復元、計測プロセス終了。
+
+[採用報告と変更範囲](Setup/Benchmarks/VAT-Adoption-20261111/report.md)、[検証結果](Setup/Benchmarks/VAT-Adoption-20261111/verification.json)。開発機のみ、基準PC換算未取得。今回の性能再測定は未実施で、旧DLLの段階B性能値と混合しない。全視点60FPS達成とはしない。パッケージcook/起動検証は未実施。次の最適化や全Actor経路への移植は別途判断する。
+
+
+## 2026-11-11 通常FPS操作をTPSへ変更、広域の表示・衝突調査
+
+ユーザー依頼により通常E/Tab直接操作を肩越しTPSへ変更。自分の身体・手持ち武器を表示、壁際ではcamera sweepで退避。画面中央の照準点へ従来の目の位置から射撃し、遮蔽越しのカメラ発射を防ぐ。Phase3の明示比較視点は従来の経路を保持。プレイヤーの投影・照準はTPSに変わるため、旧FPSと同じマウス角での射撃結果一致は主張しない。
+
+報告された現象はPlay-TestField.cmdの全Actor広域500体で、VAT対象外。敵表示は標準24m/120度/0.6秒の索敵・射線確認に連動する仕様。実際にユーザーが見た出現距離は未測定。カプセル半径36cmと小隊内中心間隔1mでは隙間28cmであり、操作兵士は間を通れない。自動回避の検討半径3.5mも有効だが、これは物理当たり判定の半径ではない。感覚・当たり判定・回避・隊列間隔は今回変更せず。操作性改善候補は配置間隔または直接操作時の回避の見直しで、戦闘結果にも影響するカプセル縮小とは分けて判断する。
+
+DLL SHA256 **2085D16EF159B2BF970EEAFE166A649576B939BEF5874CFCE27C3EBB8EAC7987**。Build-Editor成功、TPS専用10 PASS（壁退避、遮蔽、身体/武器、状態保持）、既存210 PASS/BATTLE_SMOKE_RESULT failures=0、広域500体描画12 PASS/RESULT failures=0・実画面出力確認。保護16 hash不変。今回はOFF40・1000体性能再測定は未実施、過去の結果を新DLLの結果として扱わない。開発機のみ、基準PC換算未取得。プロセス終了。
+
+[変更・調査・検証報告](Setup/Benchmarks/TPS-Control-20261111/report.md)。通常起動は従来どおりPlay-TestField.cmd、E/TabでTPS。追加の索敵/移動調整は未実施。
+
+
+## 2026-11-11 TPSの未発見敵描画を承認・実装
+
+通常TPSでは敵の身体・武器を索敵距離24m/発見待ち0.6秒と独立に描画し、壁による遮蔽は通常の描画処理へ任せる。RTS復帰時は未発見敵を即時非表示に戻す。bRevealedは認識状態として維持し、HUDマーカー・発見数・AI認識/記憶/共有は身体の描画では増やさない。全Actor広域500体、小規模通常モード、隊長方式のMass/VAT部下に接続。Phase3の明示比較視点は従来表示を保持。プレイヤーの遠方発見・射撃によって戦闘結果が変わり得ることはユーザー承認済み。索敵能力、当たり判定、回避、配置は変更なし。
+
+Build-Editor成功。DLL E740A1CAE2E31C9AF87B6F33D217A8DAF3055D38546DE1EFE39F3B564413AE13で専用17 PASS、既存210 PASS/BATTLE_SMOKE_RESULT failures=0、広域500体描画12 PASS、隊長機能39 PASS。35m先の敵をTPSで身体表示しながらSPOTTED/SEEN/MEMORY/SHARED=0・敵マーカーなしを実画面確認。RTS復帰時のHiddenを専用試験で確認。保護16 hash不変。
+
+[仕様・変更・検証・画像](Setup/Benchmarks/TPS-Visibility-20261111/report.md)。今回OFF40固定戦闘・1000体性能・Mass/VAT全遠近画質QAの再実施はなし。表示対象増加のGT/RT/GPU負荷は未測定。旧Phase3性能を新通常TPSへ転用しない。開発機のみ、基準PC換算未取得。追加最適化・衝突調整は未実施。
+
+
+## 2026-11-11 操作中の兵士の自動回避補正を停止
+
+ユーザー依頼に基づきSetDirectControlで元のRVO weightを保存し、操作中は1へ設定。UEのCalcAvoidanceVelocityが補正前にreturnする設定を使い、他AIが回避対象として扱うための参加登録は維持。RTS復帰時は元のweightを復元。重複開始で保存値を失わず、元から無効な回避を有効化しない。兵士・壁との物理衝突、半径36cm/高さ180cmカプセルは保持。狭い隙間を通れるようにする変更ではない。通常隊長のFollowは以前から操作Actorを除外。Phase3独自RVOは変更なし。
+
+Build-Editor成功。DLL **1FB7D39AE4EFEBABD975C90DD4ECEEEBE24976DF27537ACC1F17C723BC54D61D**。専用22 PASS（隣接兵への実sweep衝突、回避補正停止、重複開始、元設定復元、無効状態保持を含む）、既存210 PASS/BATTLE_SMOKE_RESULT failures=0、広域500体描画12 PASS、隊長機能39 PASS。TPSと広域の実画面出力確認。保護16 hash不変。各走行前machine保存。同DLL検証・プロセス終了。
+
+[変更・検証報告](Setup/Benchmarks/TPS-Avoidance-20261111/report.md)。操作兵士と周囲AIの進路は変わり得るため旧版との手動戦闘結果一致は主張しない。OFF40固定戦闘・1000体性能再測定は未実施。開発機のみ、基準PC換算未取得。感覚能力・描画品質・カプセル縮小・隊列変更などの追加調整なし。
+
+## 2026-11-11 全軍AI委任で手動テストを開始
+
+ユーザー依頼で広域500体のゲームを起動。実画面でQ→Jにより味方250体/50部隊のMANUAL 0・AI 50を確認し、PでAI ACTIVEへ切替、進軍を確認。選択線を消してユーザーへ操作を引き渡した。ゲームは起動したまま。一戦完走・勝敗・性能の検証ではなく、ソース変更/ビルドなし。

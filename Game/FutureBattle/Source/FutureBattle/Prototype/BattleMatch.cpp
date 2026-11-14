@@ -1,4 +1,5 @@
 #include "BattleMatch.h"
+#include "BattleSquadTactics.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleFieldLayout.h"
 #include "BattleGameMode.h"
@@ -6,6 +7,9 @@
 #include "BattleController.h"
 #include "NavigationSystem.h"
 #include "BattleNavigation.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "BattleTactics.h"
 
 void UBattleMatch::InitializeMatch()
 {
@@ -14,8 +18,9 @@ void UBattleMatch::InitializeMatch()
 	Credits[0] = Credits[1] = 3000; Winner = INDEX_NONE;
 	for (const FVector Position : { FVector(-800, -1800, 0), FVector(0, 1800, 0), FVector(800, -1800, 0) })
 	{
-		FBattleObjective Point; Point.Position = BattleFieldLayout::IsLarge(GetWorld()) ? FVector(0,(Objectives.Num()-1)*4500,0) : Position; Objectives.Add(Point);
+		FBattleObjective Point; Point.Position = BattleFieldLayout::IsSightField(GetWorld()) ? BattleFieldLayout::Objective(Objectives.Num(),BattleFieldLayout::IsExpanded(GetWorld())) : BattleFieldLayout::IsLarge(GetWorld()) ? FVector(0,(Objectives.Num()-1)*4500,0) : Position; Objectives.Add(Point);
 	}
+ bArea=GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bArea;if(bArea)InitializeArea();
 }
 
 int32 UBattleMatch::SquadPrice(EBattleTraining Training)
@@ -31,9 +36,24 @@ int32 UBattleMatch::SquadPrice(EBattleTraining Training)
 	return Price > 0 && Price <= MAX_int32 / 5 ? Price * 5 : INDEX_NONE;
 }
 
+int32 UBattleMatch::CurrentSquadPrice(EBattleTraining Training) const
+{
+ const int32 Price=SquadPrice(Training);return Price>0 && GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch?Price*2:Price;
+}
+
 bool UBattleMatch::HireSquad(int32 Team, EBattleTraining Training)
 {
 	LastMessage.Reset();
+ if(bArea)return HireAreaSquad(Team,Training,false);
+ auto* Mixed=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ if(Mixed->bMixedFastMatch)
+ {
+  const int32 Price=CurrentSquadPrice(Training);
+  if(Team<0||Team>1||Price<=0||(Phase!=EBattleMatchPhase::Deployment&&Phase!=EBattleMatchPhase::Combat)){LastMessage=TEXT("Recruitment unavailable");return false;}
+  if(Credits[Team]<Price){LastMessage=TEXT("Insufficient credits");return false;}
+  if(!Mixed->SpawnPurchasedSquad(Team,Training,LastMessage))return false;
+  Credits[Team]-=Price;LastMessage=FString::Printf(TEXT("10 soldiers deployed / -%d credits"),Price);return true;
+ }
 	if (BattleFieldLayout::IsLarge(GetWorld())) { LastMessage=TEXT("Fixed 500-soldier field / no reinforcements"); return false; }
 	auto Fail = [this](const TCHAR* Message) { LastMessage = Message; return false; };
 	if ((Team != 0 && Team != 1) || (Phase != EBattleMatchPhase::Deployment && Phase != EBattleMatchPhase::Combat)) return Fail(TEXT("Recruitment unavailable"));
@@ -101,36 +121,64 @@ bool UBattleMatch::StartCombat()
 	return true;
 }
 
+bool UBattleMatch::CanDelegateAllies() const
+{
+	const auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>();
+	return Mode && (!Mode->bLeaderCommand || GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsWideField()) &&
+		(Phase == EBattleMatchPhase::Deployment || Phase == EBattleMatchPhase::Combat);
+}
+
+bool UBattleMatch::SetAllyDelegated(int32 SquadID, bool bDelegated)
+{
+	if (!CanDelegateAllies() || !GetWorld()->GetSubsystem<UBattleState>()->SetSquadDelegated(SquadID, bDelegated)) return false;
+	if (bDelegated) DelegationClock = 5.f;
+	return true;
+}
+
 void UBattleMatch::Update(float DeltaSeconds)
 {
 	auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>();
 	if (Phase != EBattleMatchPhase::Combat || !Mode || Mode->bCombatPaused || !FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) return;
 	Elapsed += DeltaSeconds;
+	if (CanDelegateAllies())
+	{
+		DelegationClock += DeltaSeconds;
+		if (DelegationClock >= 5.f)
+		{
+			DelegationClock = 0.f;
+			UpdateTeamOrders(0, true);
+		}
+	}
 	if (!BattleFieldLayout::IsLarge(GetWorld())) UpdateSupport(DeltaSeconds);
 	UpdateObjectives(DeltaSeconds);
+ if(bArea){UpdateArea(DeltaSeconds);DirectorClock+=DeltaSeconds;if(DirectorClock>=5){DirectorClock=0;UpdateAreaHiring();UpdateEnemyOrders();}CheckTimeLimit();return;}
 	if (Phase != EBattleMatchPhase::Combat) return;
 	DirectorClock += DeltaSeconds; SupplyClock += DeltaSeconds;
 	if (DirectorClock >= 5.f)
 	{
 		DirectorClock = FMath::Fmod(DirectorClock, 5.f);
-		int32 EnemyAlive = 0; for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 1) ++EnemyAlive;
-		if (!BattleFieldLayout::IsLarge(GetWorld()) && EnemyAlive < 10) HireSquad(1, Credits[1] >= SquadPrice(EBattleTraining::Regular) ? EBattleTraining::Regular : EBattleTraining::Recruit);
+  const bool MixedFast=GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch;
+  int32 EnemyAlive=0;for(const auto& U:GetWorld()->GetSubsystem<UBattleState>()->GetUnits())if(U.Value.IsAlive()&&U.Value.Team==1)++EnemyAlive;
+  if((!BattleFieldLayout::IsLarge(GetWorld())||MixedFast) && EnemyAlive<(MixedFast?20:10)) HireSquad(1,Credits[1]>=CurrentSquadPrice(EBattleTraining::Regular)?EBattleTraining::Regular:EBattleTraining::Recruit);
 		UpdateEnemyOrders();
 		if (!BattleFieldLayout::IsLarge(GetWorld()) && Credits[1] >= 1300 && SupportCooldown[1] <= 0 && SupportUsed[1] < 3)
 			for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 1 && RequestSupport(Unit->GetUnitID())) break;
 	}
-	if (!BattleFieldLayout::IsLarge(GetWorld()) && SupplyClock >= 1.f)
+	if ((!BattleFieldLayout::IsLarge(GetWorld()) || GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch) && SupplyClock >= 1.f)
 	{
 		SupplyClock = FMath::Fmod(SupplyClock, 1.f);
-		for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive()) Resupply(Unit->GetUnitID());
+  for(const auto& U:GetWorld()->GetSubsystem<UBattleState>()->GetUnits())if(U.Value.IsAlive())Resupply(U.Key);
 	}
 	CheckTimeLimit();
 }
 
+float UBattleMatch::MatchTimeLimit() const { return BattleFieldLayout::IsSightField(GetWorld()) ? 600.f : 180.f; }
+
 void UBattleMatch::CheckTimeLimit()
 {
-	if (Elapsed >= 180.f)
+	if (Elapsed >= MatchTimeLimit())
 	{
+  if(bArea){Score[0]=AreaScore(0);Score[1]=AreaScore(1);}
 		const int32 WinningTeam = FMath::IsNearlyEqual(Score[0], Score[1], .01f) ? INDEX_NONE : Score[0] > Score[1] ? 0 : 1;
 		Finish(WinningTeam, WinningTeam == INDEX_NONE ? TEXT("DRAW / TIME LIMIT") : WinningTeam == 0 ? TEXT("VICTORY / TIME LIMIT") : TEXT("DEFEAT / TIME LIMIT"));
 	}
@@ -180,7 +228,7 @@ void UBattleMatch::AdvanceObjectiveControl(float DeltaSeconds, TFunctionRef<int3
 		}
 		else { Point.CaptureProgress = 0; Point.CapturingTeam = INDEX_NONE; }
 		// No payout on the capture frame or while an opponent is capturing the point.
-		if (Point.Owner != INDEX_NONE && Point.Owner == OwnerBefore && (Team == INDEX_NONE || Team == Point.Owner))
+		if (!bArea && Point.Owner != INDEX_NONE && Point.Owner == OwnerBefore && (Team == INDEX_NONE || Team == Point.Owner))
 		{
 			Score[Point.Owner] += DeltaSeconds;
 			Point.IncomeClock += DeltaSeconds;
@@ -188,7 +236,7 @@ void UBattleMatch::AdvanceObjectiveControl(float DeltaSeconds, TFunctionRef<int3
 			if (Payments > 0) { Credits[Point.Owner] = FMath::Min(1000000, Credits[Point.Owner] + Payments * 20); Point.IncomeClock = FMath::Fmod(Point.IncomeClock, 5.f); }
 		}
 	}
-	if (Score[0] >= 100 || Score[1] >= 100)
+	if (!bArea && (Score[0] >= 100 || Score[1] >= 100))
 	{
 		const int32 WinningTeam = FMath::IsNearlyEqual(Score[0], Score[1], .01f) ? INDEX_NONE : Score[0] > Score[1] ? 0 : 1;
 		Finish(WinningTeam, WinningTeam == INDEX_NONE ? TEXT("DRAW / CONTROL SCORE") : WinningTeam == 0 ? TEXT("VICTORY / CONTROL SCORE") : TEXT("DEFEAT / CONTROL SCORE"));
@@ -203,47 +251,87 @@ void UBattleMatch::UpdateEnemyOrders()
 int32 UBattleMatch::ChooseObjective(int32 Group, int32 Team) const
 {
 	const int32 Start = Group % Objectives.Num();
+	const bool Rotate = BattleFieldLayout::IsSightField(GetWorld()) && (Team != int32(FParse::Param(FCommandLine::Get(),TEXT("BattleTrialSwap"))));
+	auto Index = [&](int32 I){return Rotate ? Objectives.Num()-1-I : I;};
 	for (int32 Offset = 0; Offset < Objectives.Num(); ++Offset)
 	{
-		const int32 Target = (Start + Offset) % Objectives.Num();
-		if (Objectives[Target].Owner != Team) return Target;
+		const int32 Target = Index((Start + Offset) % Objectives.Num());
+		if (ObservedOwner(Team,Target) != Team) return Target;
 	}
-	return Start;
+	return Index(Start);
 }
 
-void UBattleMatch::UpdateTeamOrders(int32 Team)
+void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
 {
 	auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>();
 	if (!Mode || (Team != 0 && Team != 1) || Phase != EBattleMatchPhase::Combat || Objectives.IsEmpty()) return;
 	auto* Store = GetWorld()->GetSubsystem<UBattleState>();
 	int32 Group = 0;
+ // S1 trial (-BattleAreaStrategy=1): weighted point spread from observed ownership only. Each squad keeps a fixed slot
+ // frac(ID*golden ratio) so deaths and hires do not reshuffle other squads; owned points weigh 1, others AttackWeight.
+ const auto& Strategy=BattleTactics::AreaStrategy();
+ const bool bStrategy=bArea&&Strategy.bEnabled;
+ TArray<double> PointWeight;double WeightSum=0;
+ if(bStrategy)
+ {
+  const bool Rotate=BattleFieldLayout::IsSightField(GetWorld())&&(Team!=int32(FParse::Param(FCommandLine::Get(),TEXT("BattleTrialSwap"))));
+  for(int32 I=0;I<Objectives.Num();++I){const int32 P=Rotate?Objectives.Num()-1-I:I;const double W=ObservedOwner(Team,P)==Team?1.0:Strategy.AttackWeight;PointWeight.Add(W);WeightSum+=W;}
+ }
+ auto StrategyPick=[&](int32 SquadID,bool& bBase)
+ {
+  const double Slot=FMath::Frac(double(SquadID)*0.6180339887498949);
+  bBase=Slot>=1.0-Strategy.BaseShare;
+  const double Pos=Slot/FMath::Max(1e-6,1.0-Strategy.BaseShare)*WeightSum;
+  const bool Rotate=BattleFieldLayout::IsSightField(GetWorld())&&(Team!=int32(FParse::Param(FCommandLine::Get(),TEXT("BattleTrialSwap"))));
+  double Acc=0;
+  for(int32 I=0;I<PointWeight.Num();++I){Acc+=PointWeight[I];if(Pos<Acc||I==PointWeight.Num()-1)return Rotate?Objectives.Num()-1-I:I;}
+  return 0;
+ };
 	for (const auto& Pair : Store->GetSquads()) if (Pair.Value.Team == Team)
 	{
 		// Public objective status only; never use an unseen enemy's location.
-		const int32 Target = ChooseObjective(Group++, Team);
-		const FVector Center = Objectives[Target].Position;
-		const EBattleOrder Order = Objectives[Target].Owner == Team ? EBattleOrder::Defend : EBattleOrder::AttackMove;
+  bool bStrategyBase=false;
+		const int32 Target = bStrategy ? StrategyPick(Pair.Key,bStrategyBase) : ChooseObjective(Group, Team);
+  ++Group;
+		// Keep assignment stable when only some squads are delegated.
+		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated) continue;
+  const bool BaseAssault=bStrategy?bStrategyBase:(bArea&&Group%5==0);
+  const FVector Center=BaseAssault?AreaHome(1-Team)*(25./27.):Objectives[Target].Position;
+  const EBattleOrder Order=!BaseAssault&&ObservedOwner(Team,Target)==Team?EBattleOrder::Defend:EBattleOrder::AttackMove;
+  if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())
+  {
+   const auto& S=Pair.Value;
+   if(S.CommandStatus!=EBattleCommandStatus::Active) continue;
+   if(!S.bHasMission || S.MissionOrder!=Order || !S.MissionDestination.Equals(Center,20)) Leader->IssueOrder(Pair.Key,Order,Center,true);
+   continue;
+  }
 		TMap<int32, FVector> Goals; bool bNeedsOrder = Pair.Value.Order != Order || !Pair.Value.Destination.Equals(Center, 20); bool bReachable = true;
+  if (GetWorld()->GetSubsystem<UBattleSquadTactics>()->IsEnabled())
+   bNeedsOrder |= !Pair.Value.bHasMission || Pair.Value.MissionOrder != Order || !Pair.Value.MissionDestination.Equals(Center, 20);
 		for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive() && Unit->GetState()->SquadID == Pair.Key)
 		{
 			bNeedsOrder |= Unit->GetState()->Action == EBattleAction::MoveFailed;
 			FVector Goal; const FVector Offset(0, (Goals.Num() - 2) * 100, 0);
 			if (BattleNavigation::FormationGoal(Unit, Center, Offset, Goal)) Goals.Add(Unit->GetUnitID(), Goal); else bReachable = false;
 		}
-		if (bNeedsOrder && bReachable && !Goals.IsEmpty()) Store->SetSquadOrder(Pair.Key, Order, Center, Goals);
+		if (bNeedsOrder && bReachable && !Goals.IsEmpty()) Store->SetSquadOrder(Pair.Key, Order, Center, Goals,
+   GetWorld()->GetSubsystem<UBattleSquadTactics>()->IsEnabled());
 	}
 }
 
 int32 UBattleMatch::Resupply(int32 UnitID, int32 RequestedRounds)
 {
+	if(bArea)return 0; // Area resources buy replacement soldiers only.
 	if (Phase != EBattleMatchPhase::Combat || RequestedRounds <= 0) return 0;
 	auto* Store = GetWorld()->GetSubsystem<UBattleState>(); const auto* S = Store->Find(UnitID);
 	auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>();
 	if (!S || !S->IsAlive() || !Mode || Mode->bCombatPaused) return 0;
 	ABattleUnit* Unit = nullptr; for (ABattleUnit* Candidate : Mode->Units) if (Candidate && Candidate->GetUnitID() == UnitID) { Unit = Candidate; break; }
-	if (!Unit) return 0;
-	const FVector Position = Unit->GetActorLocation();
+ auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ if(!Unit && !Runtime->bMixedFastMatch)return 0;
+ const FVector Position=Runtime->bMixedFastMatch?Runtime->Position(UnitID):Unit->GetActorLocation();
 	bool bInSupply = FMath::Abs(Position.X - (S->Team ? 2600.f : -2600.f)) <= 800 && FMath::Abs(Position.Y) <= 2100 && FMath::Abs(Position.Z) < 250;
+ if(Runtime->bMixedFastMatch)bInSupply=FVector::Dist2D(Position,FVector((S->Team?1:-1)*BattleFieldLayout::HomeDistance(GetWorld()),0,0))<=2500 && FMath::Abs(Position.Z)<250;
 	for (const auto& Point : Objectives) bInSupply |= Point.Owner == S->Team && !Point.bContested && Point.CapturingTeam == INDEX_NONE && FVector::Dist2D(Position, Point.Position) <= 450 && FMath::Abs(Position.Z - Point.Position.Z) < 250;
 	if (!bInSupply) return 0;
 	const int32 Added = Store->AddReserve(UnitID, FMath::Min(RequestedRounds, Credits[S->Team]));

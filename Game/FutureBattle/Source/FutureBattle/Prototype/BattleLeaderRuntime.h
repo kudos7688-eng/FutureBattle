@@ -6,9 +6,12 @@
 #include "BattleState.h"
 #include "BattleAnimTasks.h"
 #include "BattleUnit.h"
+#include "BattleSightExperiment.h"
 #include "BattleLeaderRuntime.generated.h"
 
 class ABattleGameMode;
+class UBattleSave;
+struct FBattleSavedUnit;
 class UCapsuleComponent;
 class USkeletalMeshComponent;
 class UStaticMeshComponent;
@@ -36,7 +39,7 @@ struct FBattleSquadSummary
 struct FBattleSquadListLayout
 {
  FVector2D Origin;
- float Width=300, Height=0, RowHeight=28, Header=44;
+ float Width=360, Height=0, RowHeight=56, Header=44;
  int32 VisibleRows=0;
  static FBattleSquadListLayout Make(FVector2D View);
  bool Contains(FVector2D P) const;
@@ -52,6 +55,18 @@ struct FBattleLeaderBody
  TWeakObjectPtr<UStaticMeshComponent> Weapon;
  FVector Velocity=FVector::ZeroVector;
  double StalledSince=0;
+ FVector LastProgressPosition=FVector::ZeroVector;
+ double LastProgressTime=0;
+ bool bTrafficWait=false, bArrived=false;
+ int32 PassingID=INDEX_NONE;
+
+ FVector PassingWaypoint=FVector::ZeroVector, PassingForward=FVector::ForwardVector, PassingOffset=FVector::ZeroVector;
+ bool bPassingSecond=false;
+ double EscapeUntil=0, NextEscapeProbe=0;
+ FVector EscapeWaypoint=FVector::ZeroVector;
+ TArray<FVector> ContactRoute;
+ double NextContactProbe=0, ContactRouteUntil=0, NextArrivalProbe=0;
+ bool bArrivalOccupied=false, bContactWaiting=false;
  int32 Waypoint=1, Pose=0;
  FBattleAnimTasks AnimTasks;
 };
@@ -62,6 +77,11 @@ struct FBattleLeaderPlan
  bool bReplan=true;
  TArray<FVector> Path;
  FVector Center=FVector::ZeroVector;
+ TMap<int32,FVector> ArrivalGoals;
+ TMap<int32,TArray<FVector>> Corridors;
+ int32 PathRequests=0, ArrivalReassignments=0, ContactProbes=0;
+ int32 ArrivalRevision=INDEX_NONE;
+ bool bNarrowCorridor=false;
 };
 
 UCLASS()
@@ -70,8 +90,24 @@ class UBattleLeaderRuntime : public UWorldSubsystem
  GENERATED_BODY()
 public:
  bool IsEnabled() const { return bEnabled; }
+ bool IsWideField() const { return bWideField; }
+ bool RangeAwareEnabled() const {return bRangeAwareCombat;}
+ bool bMixedFastMatch=false;
+ bool bArea=false;
+ FName SnapshotMode() const {return bArea?TEXT("Area"):bMixedFastMatch?TEXT("MixedFast"):TEXT("Wide");}
+ bool ReplaceFollower(int32 DeadID);
+ // MixedFast or Area. bSelect selects a new team-0 leader (player purchase); OutSquadID receives the new squad.
+ bool SpawnPurchasedSquad(int32 Team,EBattleTraining Training,FString& Error,bool bSelect=true,int32* OutSquadID=nullptr);
+ bool CreateBody(const FBattleSavedUnit& Entry,AActor* Host,FBattleLeaderBody& Body);
+ void DestroyBody(FBattleLeaderBody& Body);
+ bool RestoreMixedBodies(const UBattleSave* Save,FString& Error);
+ void RunMixedSaveSmoke();
+ void RunMixedFastSmoke();
+ void RunAreaSmoke();
+ static FVector LimitedSteering(FVector Desired, FVector Separation, float MaxSide);
  bool Start(ABattleGameMode& Mode);
  void Step(float DeltaTime);
+ void RefreshDisplay();
  virtual void Deinitialize() override;
  FVector Position(int32 ID) const;
  FVector Forward(int32 ID) const;
@@ -82,18 +118,83 @@ public:
  // Context must belong to the current observer/update; never retained across updates.
  bool CanSeeWithContext(const FBattleSightContext& Context,int32 TargetID) const;
  bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot);
- bool IssueOrder(int32 SquadID,EBattleOrder Order,FVector Goal);
+ bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f);
+ void CancelCoverAction(int32 ID);
+ bool StepCoverAction(int32 ID,float Dt,double Now);
+ void RunCoverActionSmoke();
+ double NextCoverProbe=0;
+ uint64 CoverProbeFrame=0;int32 CoverProbesThisFrame=0;
+ TMap<int32,double> CoverProbeAfter;
+ // Trial -BattleCoverApproach: runtime-only walk toward a hidden cover slot (not saved; cleared on restore).
+ struct FCoverApproach{FVector Goal=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false;};
+ TMap<int32,FCoverApproach> CoverApproaches;
+ // -BattleCoverFire: shots fired during the current AI peek (runtime only; a restored peek starts from zero).
+ TMap<int32,int32> CoverPeekShots;
+ // Evaluation only: records how an AI peek ended (peek_end_*) and its shot count; removes the CoverPeekShots entry.
+ void EndPeekDiag(int32 ID,const TCHAR* Cause);
+ // Cover validation: a visibility line from a standing position at From to the observed threat position
+ // (own capsule ignored; soldiers' bodies are transient and do not count as blocking).
+ bool CoverLineClear(int32 ID,FVector From,FVector Threat) const;
+ // Re-picks a peek point beside the cover anchor with a clear line to Threat; false keeps the soldier hidden.
+ bool RevalidatePeek(int32 ID,FVector Threat);
+ bool StartCoverApproach(int32 ID,FVector Threat,int32 Target,double Now,float LocalRadius);
+ bool StepCoverApproach(int32 ID,float Dt,double Now,int32 Target);
+ bool IssueOrder(int32 SquadID,EBattleOrder Order,FVector Goal,bool bMissionUpdate=false);
  bool CanSelectLeader(int32 ID) const;
  bool CanControlLeader(int32 ID) const;
  const TArray<FBattleSquadSummary>& Summaries();
  void OnDeath(int32 ID);
  void RunSmoke();
  void RunUIQA();
+ void RunWideSmoke();
+ void RunWideSoak();
+ void RunST2Smoke();
+ void RunSupportSmoke();
+ void RunFlankSmoke();
+ void RunFlankBayTrial();
+ double BayStart=0, BayArrival=-1, BayMovingDamage=0, BayLastHP=0;
+ int32 BayStage=0;
+ double BayDamageGiven[2]={0,0}, BayMoveDirectDamage=0;
+ FVector FlankSmokeGoal=FVector::ZeroVector;
+ void RunMovementTrial();
+ void RunContactTrial();
+ void RunSightTrial();
+ void RunWeaponRangeTrial();
+ void RunWideMapAudit();
+ void RunSightVisual();
+ int32 SightVisualStage=0;
+ void StepSightExperiment(float DeltaSeconds);
+ FBattleSightExperiment SightExperiment;
+ int32 MapAuditStage=0;
+ double MapAuditStart=0;
+ int32 SightTrialCase=0, SightTrialTick=0;
+ int32 SightTrialAmmo=0;
+ FVector SightTrialStart=FVector::ZeroVector;
+ FString MovementLabel(int32 SquadID) const;
  class ABattleVATDisplay* VATDisplay() const {return VAT;}
 private:
  friend class UBattlePhase3;
  friend struct FBattleMixedUnit;
  bool bEnabled=false, bSummaryDirty=true, bReduceHiddenBones=false, bReduceAnimTasks=false;
+ bool bWideField=false;
+ bool bDisplayLODEnabled=true;
+ int32 RestoreStageFailureAfter=INDEX_NONE; // Exercised only by BattleMixedSaveSmoke.
+ bool bRangeAwareCombat=true; // BattleRangeAware=0 retains the legacy trial baseline.
+ bool bStableMovement=true, bMovementTrial=false, bContactTrial=false, bContactAvoidance=true;
+ bool ContactBlockersHeld=true, ContactWaitObserved=false, ContactReleased=false;
+ TMap<int32,FVector> ContactBlockerStarts;
+ int32 MoveTrialScene=0, MoveTrialStage=0;
+ int32 MoveTrialOnly=-1;
+ double MoveTrialStart=0, MoveTrialStall=0;
+ double MoveTrialMaxDeviation=0;
+ double MoveTrialMinSpacing=DBL_MAX;
+ TArray<float> MoveTrialFrameMS;
+ TArray<int32> MoveTrialIDs;
+ TMap<int32,FVector> MoveTrialStarts, MoveTrialGoals;
+ TMap<int32,double> MoveTrialArrivals;
+ TArray<TWeakObjectPtr<AActor>> MoveTrialWalls;
+ int32 WideStage=0;
+ FVector WideStart=FVector::ZeroVector;
  UPROPERTY() TObjectPtr<class UBattlePhase3> Phase3;
  UPROPERTY() TObjectPtr<class ABattleVATDisplay> VAT;
  int32 SmokeFailures=0, SmokeStage=0, QAStage=0;
@@ -113,5 +214,10 @@ private:
  FDelegateHandle DeathHandle;
  void Think(int32 SquadID,double Now);
  void Follow(int32 ID,float Dt,double Now);
- void RefreshDisplay();
+ void BuildMovementPlan(int32 SquadID);
+ bool StableMove(int32 ID,float Dt,double Now,FVector& Direction);
+ bool IsStationaryAlly(int32 Observer,int32 Other) const;
+ void ReassignOccupiedArrival(int32 ID,double Now);
+ bool ResolveStoppedContact(int32 ID,FVector Way,double Now,FVector& Direction,float& Scale);
+ bool ClearMovementSegment(FVector A,FVector B) const;
 };

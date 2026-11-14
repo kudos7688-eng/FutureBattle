@@ -2382,3 +2382,12 @@ DLL SHA256 **72BD51BE335008EE5E78E277C4807C96EAE664EF9170FFC35E3060536CAF22A6**�
 [最終報告・画像・制限](Setup/Benchmarks/DisplayLOD-20261111-r11/report.md)、[性能表](Setup/Benchmarks/DisplayLOD-20261111-r11/performance-tables.md)、[RT/GPU等](Setup/Benchmarks/DisplayLOD-20261111-r11/supplement-tables.md)、[RTS trace内訳](Setup/Benchmarks/DisplayLOD-20261111-r11/trace-tables.md)、[整合検証](Setup/Benchmarks/DisplayLOD-20261111-r11/verification.json)。RTS別traceではアニメTick＋GT反映6.044→0.081ms、描画更新2.938→0.551ms、新ISM更新0.141ms。ON残差はGameMode6.901/その他2.206/CharacterMovement1.226ms。trace負荷あり・通常性能へ加算しない。TPS/FPS詳細traceは未測定。
 
 性能条件は以前からの保存済み低設定（影/Lumen/反射OFF）。影ありQAは40体で別実施し保存設定を復元。高画質1000体性能、実resident VRAM増分、全時刻VAT誤差上限、多数同時復帰burst性能は未測定。VAT texel計算約265.1MiB。開発機i7-14700KF/RTX5070Tiのみ、基準PC換算・1660 Super実機未取得。通常採用/画質許容差拡大は未承認で既定OFFを維持。次の候補はTPS/FPSで残る近表示Skeletal処理と厳密共有可能な評価入力数の観測（未実施）。新たな最適化や距離/影の品質変更へ進まない。計測プロセスは終了。
+
+
+## 2026-11-11 VAT通常採用完了：隊長方式のMass部下を既定ON
+
+今回のVAT画質差を許容するユーザー承認に基づき、BattleDisplayLOD=1を既定とし、Phase3以外の通常隊長モードにも接続。Play-LeaderCommand.ps1は既定ON、`-DisplayLOD 0`（直接起動は`-BattleDisplayLOD=0`）でOFFへ戻せる。全ActorのPlay-TestField.cmd広域500体への適用・戦闘方式変更は行っていない。追加最適化、他の最適化の既定値変更、影/距離/精度の追加低下はなし。
+
+DLL SHA256 **301ED9560EB88257F459DCCC37FEED5AE4D2EF15491C6FA8E7B92897F6B2EA83**。Build-Editor成功、既存210 PASS/BATTLE_SMOKE_RESULT failures=0、OFF40/40一致。通常隊長機能は既定ON/明示OFF各39 PASS、500体UIは1080p/720p各10 PASS・実画面出力確認。Phase3機能OFF/ON各25 PASS、通常/影あり×3視点QA各12960比較不一致0（各108回enter/return）。1000体固定入力は3視点それぞれ1349frameで感覚・戦闘状態一致。保護16、元資産/設定/マップ不変、保存画質設定復元、計測プロセス終了。
+
+[採用報告と変更範囲](Setup/Benchmarks/VAT-Adoption-20261111/report.md)、[検証結果](Setup/Benchmarks/VAT-Adoption-20261111/verification.json)。開発機のみ、基準PC換算未取得。今回の性能再測定は未実施で、旧DLLの段階B性能値と混合しない。全視点60FPS達成とはしない。パッケージcook/起動検証は未実施。次の最適化や全Actor経路への移植は別途判断する。

@@ -1,11 +1,61 @@
 #include "BattleState.h"
 #include "BattleMetrics.h"
+#include "BattleSquadTactics.h"
+#include "BattleLeaderRuntime.h"
+#include "BattleTactics.h"
+#include "FutureBattle.h"
 
-void UBattleState::RestoreRecords(const TArray<FBattleUnitState>& SavedUnits, const TArray<FBattleSquadState>& SavedSquads)
+namespace
+{
+float TrialSightRange(float DefaultRange)
+{
+ static const float Override=[]()
+ {
+  FString Raw;
+  if(!FParse::Value(FCommandLine::Get(),TEXT("BattleSightRange="),Raw)) return -1.f;
+  float Value=0;
+  if(!LexTryParseString(Value,*Raw) || !FMath::IsFinite(Value) || Value<100.f || Value>16000.f)
+   UE_LOG(LogFutureBattle,Fatal,TEXT("BattleSightRange must be finite, 100..16000 cm (veteran multiplier preserved)"));
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SIGHT_OVERRIDE base_cm=%.1f recruit_cm=%.1f regular_cm=%.1f veteran_cm=%.1f scope=new_training_profiles saved_records=preserved"),Value,Value*.75f,Value,Value*1.25f);
+  return Value;
+ }();
+ return Override<0 ? DefaultRange:Override;
+}
+}
+
+float UBattleTuning::EffectiveSightRange() const {return TrialSightRange(SightRange);}
+
+float UBattleTuning::EffectiveWeaponRange() const
+{
+ static const float Override=[]()
+ {
+  FString Raw;
+  if(!FParse::Value(FCommandLine::Get(),TEXT("BattleWeaponRange="),Raw)) return -1.f;
+  float Value=0;
+  if(!LexTryParseString(Value,*Raw) || !FMath::IsFinite(Value) || Value<100.f || Value>10000.f)
+   UE_LOG(LogFutureBattle,Fatal,TEXT("BattleWeaponRange must be finite, 100..10000 cm"));
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WEAPON_OVERRIDE cm=%.1f scope=trial_all_weapons"),Value);
+  return Value;
+ }();
+ return Override<0 ? WeaponRange:Override;
+}
+
+void UBattleState::RestoreRecords(const TArray<FBattleUnitState>& SavedUnits, const TArray<FBattleSquadState>& SavedSquads, bool PreservePlans)
 {
 	Units.Reset(); Squads.Reset(); NextID = NextSquadID = 1;
 	for (const auto& Unit : SavedUnits) { Units.Add(Unit.UnitID, Unit); NextID = FMath::Max(NextID, Unit.UnitID + 1); }
-	for (const auto& Squad : SavedSquads) { Squads.Add(Squad.SquadID, Squad); NextSquadID = FMath::Max(NextSquadID, Squad.SquadID + 1); }
+	for (auto Squad : SavedSquads)
+ {
+  if(!PreservePlans) Squad.TacticalPlan = FBattleSquadTacticalPlan();
+  // Old saves have no mission fields; rebuild only from their own stored orders.
+  if (!Squad.bHasMission)
+  {
+   Squad.bHasMission = true; Squad.MissionOrder = Squad.Order; Squad.MissionDestination = Squad.Destination;
+   for (int32 ID : Squad.Members) if (const auto* U = Find(ID)) Squad.MissionGoals.Add(ID, U->Destination);
+  }
+  Squads.Add(Squad.SquadID, Squad); NextSquadID = FMath::Max(NextSquadID, Squad.SquadID + 1);
+ }
+ GetWorld()->GetSubsystem<UBattleSquadTactics>()->Reset();
 }
 
 int32 UBattleState::AddReserve(int32 ID, int32 Rounds)
@@ -14,6 +64,14 @@ int32 UBattleState::AddReserve(int32 ID, int32 Rounds)
 	if (!Unit || !Unit->IsAlive() || Rounds <= 0) return 0;
 	const int32 Added = FMath::Min(Rounds, FMath::Max(0, GetDefault<UBattleTuning>()->ReserveAmmo - Unit->Reserve));
 	Unit->Reserve += Added; return Added;
+}
+
+float UBattleState::Heal(int32 ID, float Amount)
+{
+ auto* Unit = Units.Find(ID);
+ if (!Unit || !Unit->IsAlive() || !FMath::IsFinite(Amount) || Amount <= 0.f) return 0.f;
+ const float Before = Unit->HP; Unit->HP = FMath::Min(MaxHealthOf(ID), Unit->HP + Amount);
+ return FMath::Max(0.f, Unit->HP - Before);
 }
 
 int32 UBattleState::RegisterUnit(int32 Team, float InitialHealth, EBattleWeapon Weapon)
@@ -31,6 +89,18 @@ int32 UBattleState::RegisterUnit(int32 Team, float InitialHealth, EBattleWeapon 
 	return State.UnitID;
 }
 
+bool UBattleState::ReplaceDeadFollower(int32 OldID,int32 NewID,FVector Position)
+{
+ auto* Old=Units.Find(OldID);auto* New=Units.Find(NewID);auto* S=Old?Squads.Find(Old->SquadID):nullptr;
+ if(!Old||!New||!S||Old->IsAlive()||Old->bRetired||Old->bActorRepresentation||S->CommandStatus!=EBattleCommandStatus::Active||
+    !New->IsAlive()||New->SquadID!=INDEX_NONE||New->Team!=Old->Team||!S->Members.Contains(OldID))return false;
+ S->Members[S->Members.Find(OldID)]=NewID;Old->bRetired=true;
+ New->SquadID=S->SquadID;New->bLeaderManaged=true;New->bActorRepresentation=false;New->bCanPlayerControl=false;
+ New->Order=S->Order;New->Destination=Position;New->OrderRevision=S->OrderRevision;
+ S->MissionGoals.Remove(OldID);if(S->bHasMission)S->MissionGoals.Add(NewID,S->MissionDestination);
+ ++S->OrderRevision;return true;
+}
+
 bool UBattleState::SetTrainingPreset(int32 ID, EBattleTraining Training)
 {
 	auto* Unit = Units.Find(ID);
@@ -38,7 +108,7 @@ bool UBattleState::SetTrainingPreset(int32 ID, EBattleTraining Training)
 	const auto* T = GetDefault<UBattleTuning>();
 	const bool bRecruit = Training == EBattleTraining::Recruit, bVeteran = Training == EBattleTraining::Veteran;
 	FBattlePerceptionProfile P;
-	P.SightRange = T->SightRange * (bRecruit ? .75f : bVeteran ? 1.25f : 1.f);
+	P.SightRange = T->EffectiveSightRange() * (bRecruit ? .75f : bVeteran ? 1.25f : 1.f);
 	P.FieldOfView = T->FieldOfView * (bRecruit ? .75f : bVeteran ? 1.25f : 1.f);
 	P.DetectionSeconds = T->DetectionSeconds * (bRecruit ? 2.f : bVeteran ? .5f : 1.f);
 	P.MemorySeconds = T->MemorySeconds * (bRecruit ? .6f : bVeteran ? 1.6f : 1.f);
@@ -91,10 +161,23 @@ int32 UBattleState::CreateSquad(int32 Team, const TArray<int32>& Members)
 	return Squad.SquadID;
 }
 
-bool UBattleState::SetSquadOrder(int32 ID, EBattleOrder Order, FVector Destination, const TMap<int32, FVector>& Goals)
+bool UBattleState::SetSquadDelegated(int32 ID, bool bDelegated)
 {
 	auto* Squad = Squads.Find(ID);
-	if (!Squad || Destination.ContainsNaN()) return false;
+	if (!Squad || Squad->Team != 0 || (Squad->CommandStatus != EBattleCommandStatus::Legacy &&
+  !(Squad->CommandStatus == EBattleCommandStatus::Active && GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsWideField()))) return false;
+	bool bAlive = false;
+	for (int32 Member : Squad->Members) if (const auto* U = Find(Member); U && U->IsAlive()) bAlive = true;
+	if (!bAlive) return false;
+	Squad->bPlayerDelegated = bDelegated;
+ if (!bDelegated) CancelSquadTacticalPlan(ID, TEXT("MANUAL COMMAND / KEEP EXECUTION"));
+	return true;
+}
+
+bool UBattleState::SetSquadOrder(int32 ID, EBattleOrder Order, FVector Destination, const TMap<int32, FVector>& Goals, bool bMissionUpdate)
+{
+	auto* Squad = Squads.Find(ID);
+	if (!Squad || Destination.ContainsNaN() || static_cast<uint8>(Order) > static_cast<uint8>(EBattleOrder::Defend)) return false;
 	int32 Living = 0;
 	for (int32 Member : Squad->Members) if (Units.FindChecked(Member).IsAlive())
 	{
@@ -104,15 +187,74 @@ bool UBattleState::SetSquadOrder(int32 ID, EBattleOrder Order, FVector Destinati
 		++Living;
 	}
 	if (!Living) return false;
+ if (!Squad->bHasMission || Squad->MissionOrder != Order || !Squad->MissionDestination.Equals(Destination, .01f) || !bMissionUpdate)
+  ++Squad->MissionRevision;
+ Squad->bHasMission = true; Squad->MissionOrder = Order; Squad->MissionDestination = Destination; Squad->MissionGoals = Goals;
+ if (bMissionUpdate && Squad->TacticalPlan.Action != EBattleSquadTactic::Mission)
+ {
+  GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("MissionDeferredByPlan"));
+  return true;
+ }
+ CancelSquadTacticalPlan(ID, bMissionUpdate ? TEXT("FOLLOW MISSION / ST1") : TEXT("EXPLICIT ORDER"));
 	Squad->Order = Order; Squad->Destination = Destination;
 	++Squad->OrderRevision;
 	for (int32 Member : Squad->Members) if (Units.FindChecked(Member).IsAlive()) SetOrder(Member, Order, Goals.FindChecked(Member));
 	return true;
 }
 
+void UBattleState::CancelSquadTacticalPlan(int32 ID, const FString& Reason)
+{
+ if (auto* S = Squads.Find(ID))
+ {
+  if (S->TacticalPlan.Action != EBattleSquadTactic::Mission)
+   GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("PlanCancelled"));
+  const int32 Revision = S->TacticalPlan.Revision + (S->TacticalPlan.Action != EBattleSquadTactic::Mission);
+  S->TacticalPlan = FBattleSquadTacticalPlan(); S->TacticalPlan.Revision = Revision; S->TacticalPlan.Reason = Reason;
+ }
+}
+
+bool UBattleState::SetSquadTacticalPlan(int32 ID, EBattleSquadTactic Action, EBattleOrder Order, FVector Destination,
+ const TMap<int32, FVector>& Goals, float Lifetime, const FString& Reason)
+{
+ auto* S = Squads.Find(ID);
+ if (!GetWorld()->GetSubsystem<UBattleSquadTactics>()->IsEnabled() || !S ||
+     (S->CommandStatus != EBattleCommandStatus::Legacy && !(S->CommandStatus == EBattleCommandStatus::Active && GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsWideField())) ||
+     (S->Team == 0 && !S->bPlayerDelegated) || Action == EBattleSquadTactic::Mission ||
+     static_cast<uint8>(Action) > static_cast<uint8>(EBattleSquadTactic::Recover) ||
+     !FMath::IsFinite(Lifetime) || Lifetime <= 0 || Lifetime > 60 || Reason.Len() > 160) return false;
+ const FBattleSquadState Before = *S;
+ // Validate every living member before making any change, using the normal order path.
+ if (!SetSquadOrder(ID, Order, Destination, Goals)) return false;
+ S->bHasMission = Before.bHasMission; S->MissionOrder = Before.MissionOrder;
+ S->MissionDestination = Before.MissionDestination; S->MissionGoals = Before.MissionGoals; S->MissionRevision = Before.MissionRevision;
+ S->TacticalPlan.Action = Action; S->TacticalPlan.Destination = Destination; S->TacticalPlan.Remaining = Lifetime;
+ S->TacticalPlan.Revision = Before.TacticalPlan.Revision + 1; S->TacticalPlan.Reason = Reason;
+ return true;
+}
+
+void UBattleState::AdvanceSquadTacticalPlan(int32 ID, float DeltaSeconds)
+{
+ auto* S = Squads.Find(ID);
+ if (!S || S->TacticalPlan.Action == EBattleSquadTactic::Mission || !FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) return;
+ bool bAlive = false;
+ for (int32 Member : S->Members) if (const auto* U = Find(Member); U && U->IsAlive()) bAlive = true;
+ if (!bAlive) { CancelSquadTacticalPlan(ID, TEXT("NO LIVING MEMBERS")); return; }
+ S->TacticalPlan.Remaining = FMath::Max(0.f, S->TacticalPlan.Remaining - DeltaSeconds);
+ if (S->TacticalPlan.Remaining > 0) return;
+ CancelSquadTacticalPlan(ID, TEXT("PLAN EXPIRED"));
+ const auto Goals = S->MissionGoals;
+ if (S->bHasMission && !SetSquadOrder(ID, S->MissionOrder, S->MissionDestination, Goals, true))
+  S->TacticalPlan.Reason = TEXT("MISSION RESUME FAILED / KEEP EXECUTION");
+}
+
 void UBattleState::SetAction(int32 ID, EBattleAction Action)
 {
-	if (auto* Unit = Units.Find(ID)) Unit->Action = Unit->IsAlive() ? Action : EBattleAction::Dead;
+	if (auto* Unit = Units.Find(ID))
+ {
+  if (Unit->IsAlive() && Unit->Action != Action && Action == EBattleAction::MoveFailed)
+   GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("MoveExecutionFailed"));
+  Unit->Action = Unit->IsAlive() ? Action : EBattleAction::Dead;
+ }
 }
 
 void UBattleState::SetMoveRetries(int32 ID, int32 Retries)
@@ -156,6 +298,17 @@ void UBattleState::UpdateAim(int32 ID, double Now, float Speed, FVector Directio
 {
 	auto* Unit = Units.Find(ID);
 	if (!Unit || !Unit->IsAlive()) return;
+ if(BattleTactics::CoverActionsEnabled() && !Direction.ContainsNaN() && !Direction.IsNearlyZero())
+ {
+  const FVector Aim=Direction.GetSafeNormal();
+  if(Unit->bWeaponAimInitialized)
+  {
+   const float Angle=FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Unit->WeaponAimDirection,Aim),-1.,1.)));
+   const auto* AimTuning=GetDefault<UBattleTuning>();
+   if(Angle>=AimTuning->AimSwitchMinDegrees){Unit->NextShotTime=FMath::Max(Unit->NextShotTime,Now+AimTuning->AimSwitchDelay(Angle));Unit->WeaponAimDirection=Aim;}
+  }
+  if(!Unit->bWeaponAimInitialized)Unit->WeaponAimDirection=Aim;Unit->bWeaponAimInitialized=true;
+ }
 	const auto* Tuning = GetDefault<UBattleTuning>();
 	Unit->bMovingShot = !bGrounded || Speed > FMath::Max(0.f, Tuning->AimStationarySpeed);
 	if (Unit->bMovingShot || Unit->ReloadEndTime > 0. || Direction.ContainsNaN() || Direction.IsNearlyZero())
@@ -211,10 +364,17 @@ bool UBattleState::ApplyDamage(int32 ID, int32 AttackingTeam, float Damage)
 {
 	FBattleUnitState* State = Units.Find(ID);
 	if (!State || !State->IsAlive() || State->Team == AttackingTeam || !FMath::IsFinite(Damage) || Damage <= 0.f) return false;
+ GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordDamage(State->SquadID, FMath::Min(State->HP, Damage));
 	State->HP = FMath::Max(0.f, State->HP - Damage);
 	if (!State->IsAlive())
 	{
 		State->Action = EBattleAction::Dead;
+  if (const auto* Squad = FindSquad(State->SquadID))
+  {
+   bool bSurvivor = false;
+   for (int32 Member : Squad->Members) if (const auto* U = Find(Member); U && U->IsAlive()) bSurvivor = true;
+   if (!bSurvivor) CancelSquadTacticalPlan(Squad->SquadID, TEXT("NO LIVING MEMBERS"));
+  }
 		if (State->bLeaderManaged) { State->DeathCause = TEXT("Combat"); OnUnitDied.Broadcast(ID); }
 	}
 	return true;
@@ -228,7 +388,16 @@ int32 UBattleState::CreateLeaderSquad(int32 Team, const TArray<int32>& Members, 
  FBattleSquadState S; S.SquadID=NextSquadID++; S.Team=Team; S.Members=Members; S.LeaderUnitID=LeaderID;
  S.CommandStatus=EBattleCommandStatus::Active; S.DisplayName=FString::Printf(TEXT("第%d小隊"),S.SquadID);
  for (int32 ID:Members) { auto& U=Units.FindChecked(ID); U.SquadID=S.SquadID; U.bLeaderManaged=true; U.bActorRepresentation=ID==LeaderID; U.bCanPlayerControl=ID==LeaderID && bAllowControl; }
+ // Trial -BattleLeaderHealth: only a leader at the normal starting HP is scaled (fixtures with custom HP keep theirs).
+ if (auto& Leader=Units.FindChecked(LeaderID); BattleTactics::LeaderHealthMultiplier()>1.f && Leader.HP==GetDefault<UBattleTuning>()->Health)
+  Leader.HP=GetDefault<UBattleTuning>()->Health*BattleTactics::LeaderHealthMultiplier();
  Squads.Add(S.SquadID,S); return S.SquadID;
+}
+float UBattleState::MaxHealthOf(int32 UnitID) const
+{
+ const float Base=GetDefault<UBattleTuning>()->Health;
+ const auto* U=Find(UnitID); const auto* S=U?FindSquad(U->SquadID):nullptr;
+ return S && S->LeaderUnitID==UnitID ? Base*BattleTactics::LeaderHealthMultiplier() : Base;
 }
 bool UBattleState::CanSelectLeader(int32 ID,int32 PlayerTeam) const
 {
@@ -239,6 +408,7 @@ bool UBattleState::DisableLeaderSquad(int32 ID)
 {
  auto* S=Squads.Find(ID); if (!S || S->CommandStatus!=EBattleCommandStatus::Active) return false;
  S->CommandStatus=EBattleCommandStatus::Disabled; S->StopReason=TEXT("LeaderDeath"); ++S->CommandRevision;
+ S->bPlayerDelegated=false; CancelSquadTacticalPlan(ID,TEXT("LEADER LOST"));
  TArray<int32> Dead;
  for(int32 Member:S->Members) { auto& U=Units.FindChecked(Member); if(U.IsAlive()) { U.HP=0; U.Action=EBattleAction::Dead; U.DeathCause=TEXT("LeaderLoss"); Dead.Add(Member); } U.ReloadEndTime=0; }
  for(int32 Member:Dead) OnUnitDied.Broadcast(Member);

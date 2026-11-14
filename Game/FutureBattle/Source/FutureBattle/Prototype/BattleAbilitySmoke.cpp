@@ -51,8 +51,13 @@ void ABattleGameMode::RunAbilitySmokeTest()
 		TEXT("Changing training preserves separately configured shooting skill and current resources"));
 	Store->SetSpreadSkill(Recruit->GetUnitID(), 1.f); Store->SetTrainingPreset(Recruit->GetUnitID(), EBattleTraining::Recruit);
 	CheckSmoke(!Store->SetTrainingPreset(Recruit->GetUnitID(), static_cast<EBattleTraining>(255)), TEXT("Invalid training identifier cannot corrupt current capability state"));
-	Place(Enemy, FVector(400, 2000, 95));
+	// Isolate range from the small arena's boundary at X=4000. The normal
+	// 100m preset puts this target beyond that wall; retain the real sight query.
+	const FVector RangeOrigin(-2300, 2000, 2000);
+	for (int32 I = 0; I < 3; ++I) Place(Fixture[I], RangeOrigin);
+	Place(Enemy, RangeOrigin + FVector((N.Perception.SightRange + V.Perception.SightRange) * .5f, 0, 0));
 	CheckSmoke(!Recruit->CanSee(Enemy) && !Regular->CanSee(Enemy) && Veteran->CanSee(Enemy), TEXT("Long-range target is visible only to the preset whose sight range reaches it"));
+	for (int32 I = 0; I < 3; ++I) Place(Fixture[I], FVector(-2300, 2000, 95));
 	Place(Enemy, Recruit->GetActorLocation() + FRotator(0, 70, 0).Vector() * 900.f);
 	CheckSmoke(!Recruit->CanSee(Enemy) && !Regular->CanSee(Enemy) && Veteran->CanSee(Enemy), TEXT("Peripheral target obeys each preset's field of view"));
 	// Fixed-seed placements share geometry, equipment and update times; record direct acquisition only.

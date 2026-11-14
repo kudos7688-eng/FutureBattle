@@ -2,6 +2,8 @@
 #include "BattleGameMode.h"
 #include "Misc/Paths.h"
 #include "Misc/Parse.h"
+#include "BattleFieldLayout.h"
+#include "NavigationPath.h"
 
 #if WITH_EDITOR
 #include "Editor.h"
@@ -32,9 +34,15 @@ UBattleMapCommandlet::UBattleMapCommandlet()
 int32 UBattleMapCommandlet::Main(const FString& Params)
 {
 #if WITH_EDITOR
-	const bool Large = FParse::Param(*Params,TEXT("LargeField"));
-	const FString Asset = Large ? TEXT("/Game/Prototype/Lvl_BattleField500") : TEXT("/Game/Prototype/Lvl_BattlePrototype");
-	const FString MapFile = FPaths::ProjectContentDir() / (Large ? TEXT("Prototype/Lvl_BattleField500.umap") : TEXT("Prototype/Lvl_BattlePrototype.umap"));
+	FString Wide;FParse::Value(*Params,TEXT("WideField="),Wide);
+	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D")) return 6;
+	const bool Expanded=Wide==TEXT("D");
+	const bool Sight=!Wide.IsEmpty();
+	const bool Large = Sight || FParse::Param(*Params,TEXT("LargeField"));
+	const FString Name=Sight?TEXT("Lvl_BattleWide_")+Wide:Large?TEXT("Lvl_BattleField500"):TEXT("Lvl_BattlePrototype");
+	const FString Asset=TEXT("/Game/Prototype/")+Name;
+	const FString MapFile=FPaths::ProjectContentDir()/TEXT("Prototype")/(Name+TEXT(".umap"));
+	if(Sight && FPaths::FileExists(MapFile)){UE_LOG(LogTemp,Error,TEXT("Sight trial map already exists; refusing replacement even with Force"));return 1;}
 	if (FPaths::FileExists(MapFile) && !FParse::Param(*Params, TEXT("Force"))) { UE_LOG(LogTemp, Error, TEXT("Map already exists; use -Force only to regenerate the test arena.")); return 1; }
 	UWorld* World = UEditorLoadingAndSavingUtils::NewBlankMap(false);
 	if (!World) return 2;
@@ -65,6 +73,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 	UMaterial* EnemyMat = Material(TEXT("M_DeploymentEnemy"), FLinearColor(.65f, .12f, .07f));
 	auto Box = [&](const TCHAR* Label, FVector Location, FVector Size, UMaterial* Mat, bool bCollision = true)
 	{
+		Location=BattleFieldLayout::Expand(Location,Expanded);Size=BattleFieldLayout::Expand(Size,Expanded);
 		AStaticMeshActor* Actor = World->SpawnActor<AStaticMeshActor>(Location, FRotator::ZeroRotator);
 		Actor->SetActorLabel(Label);
 		Actor->GetStaticMeshComponent()->SetStaticMesh(Cube);
@@ -73,7 +82,45 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 		Actor->SetActorScale3D(Size / 100.f);
 		return Actor;
 	};
-	if (Large)
+	if (Sight)
+	{
+		Box(TEXT("WideFloor"),FVector(0,0,-60),FVector(60000,40000,120),FloorMat);
+		for(int32 Sign:{-1,1})
+		{
+			Box(TEXT("WideBoundary"),FVector(0,Sign*20000,180),FVector(60000,100,360),WallMat);
+			Box(TEXT("WideBoundary"),FVector(Sign*30000,0,180),FVector(100,40000,360),WallMat);
+			Box(TEXT("HomeMarker"),FVector(Sign*27000,0,2),FVector(3000,3000,3),Sign<0?AllyMat:EnemyMat,false);
+			// Every obstacle is generated with its rotated partner. Corridors remain wide.
+			for(const FVector P:{FVector(1500,0,0),FVector(-3500,6000,0),FVector(10000,6000,0)})
+				Box(TEXT("SightScreen"),FVector(P.X*Sign,P.Y*Sign,250),FVector(1600,1000,500),WallMat);
+			for(int32 Column=0;Column<3;++Column) for(int32 Row=0;Row<3;++Row)
+			{
+				const FVector P(Sign*(10000+Column*5000),Sign*(-11000+Row*9500),250);
+				Box(TEXT("WideWarehouse"),P,FVector(1800,2500,500),WallMat);
+			}
+			if(Wide==TEXT("B")) for(int32 Row=0;Row<4;++Row)
+				Box(TEXT("DenseScreen"),FVector(Sign*(4500+(Row%2)*7000),Sign*(-15000+Row*8500),250),FVector(2200,1200,500),WallMat);
+		}
+		for(int32 I=0;I<3;++I) Box(TEXT("WideObjective"),BattleFieldLayout::Objective(I)+FVector(0,0,2),FVector(1400,1400,3),AllyMat,false);
+		if(Expanded)for(int32 I=0;I<3;++I)for(int32 Sign:{-1,1})
+		{
+			const FVector Origin=BattleFieldLayout::Objective(I)+FVector(0,3000*Sign,0);
+			Box(TEXT("ObjectiveFrontCover"),Origin+FVector(1300*Sign,0,65),FVector(100,1400,130),WallMat);
+			Box(TEXT("ObjectiveApproachCover"),Origin+FVector(2400*Sign,1200*Sign,150),FVector(1400,120,300),WallMat);
+		}
+		if(Wide==TEXT("C")) for(int32 Sign:{-1,1})
+		{
+			// Isolated, point-symmetric local bays retain A's objectives and routes.
+			// A low frontal wall exposes the head; its open end permits a short flank.
+			const FVector Origin(0,Sign*16000,0);
+			Box(TEXT("FlankBayFront"),Origin+FVector(-200*Sign,0,65),FVector(100,1400,130),WallMat);
+			Box(TEXT("FlankBayApproach"),Origin+FVector(-1700*Sign,800*Sign,150),FVector(1800,120,300),WallMat);
+			Box(TEXT("FlankBayTarget"),Origin+FVector(0,0,2),FVector(150,150,3),EnemyMat,false);
+			Box(TEXT("FlankBayStart"),Origin+FVector(-3000*Sign,0,2),FVector(200,200,3),AllyMat,false);
+			Box(TEXT("FlankBaySide"),Origin+FVector(0,2000*Sign,2),FVector(200,200,3),AllyMat,false);
+		}
+	}
+	else if (Large)
 	{
 		Box(TEXT("FieldFloor"),FVector(0,0,-60),FVector(24000,18000,120),FloorMat);
 		for (int32 Sign : {-1,1})
@@ -123,7 +170,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 	ANavMeshBoundsVolume* Bounds = World->SpawnActor<ANavMeshBoundsVolume>(FVector(0, 0, 150), FRotator::ZeroRotator);
 	Bounds->SetActorLabel(TEXT("ArenaNavigationBounds"));
 	UCubeBuilder* Builder = NewObject<UCubeBuilder>(Bounds);
-	Builder->X = Large ? 23800 : 7800; Builder->Y = Large ? 17800 : 5800; Builder->Z = 1200;
+	Builder->X = Expanded?79800:Sight ? 59800 : Large ? 23800 : 7800; Builder->Y = Expanded?59800:Sight ? 39800 : Large ? 17800 : 5800; Builder->Z = 1200;
 	UActorFactory::CreateBrushForVolumeActor(Bounds, Builder);
 	Bounds->GetBrushComponent()->BuildSimpleBrushCollision();
 	Bounds->PostEditChange();
@@ -135,10 +182,27 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 		Nav->Tick(.1f);
 		Nav->Build();
 		FNavLocation TestPoint;
-		if (!Nav->ProjectPointToNavigation((Large ? FVector(-9000,0,0) : FVector(-1800,-2100,0)), TestPoint, FVector(100, 100, 200)))
+		if (!Nav->ProjectPointToNavigation((Sight ? FVector(-27000,0,0) : Large ? FVector(-9000,0,0) : FVector(-1800,-2100,0)), TestPoint, FVector(100, 100, 200)))
 		{
 			UE_LOG(LogTemp, Error, TEXT("Arena navigation failed validation; map not saved. Bounds: %s"), *Bounds->GetComponentsBoundingBox().ToString());
 			return 5;
+		}
+		if(Sight)
+		{
+			TArray<FVector> Points={FVector(-27000,0,0),FVector(27000,0,0),BattleFieldLayout::Objective(0),BattleFieldLayout::Objective(1),BattleFieldLayout::Objective(2)};
+			for(auto& P:Points)P=BattleFieldLayout::Expand(P,Expanded);
+			int32 Failures=0;
+			for(int32 I=0;I<Points.Num();++I) for(int32 J=I+1;J<Points.Num();++J)
+			{
+				auto* Path=Nav->FindPathToLocationSynchronously(World,Points[I],Points[J]);
+				const bool Reach=Path && Path->IsValid() && !Path->IsPartial();
+				const bool Blocked=World->LineTraceTestByChannel(Points[I]+FVector(0,0,170),Points[J]+FVector(0,0,170),ECC_Visibility);
+				const bool RequireBlocked=(I==0 && J==1) || (I>=2) || (I==0 && (J==3 || J==4)) || (I==1 && (J==2 || J==3));
+				Failures+=!Reach || (RequireBlocked && !Blocked);
+				UE_LOG(LogTemp,Display,TEXT("WIDE_MAP_PAIR from=%d to=%d reachable=%d length_cm=%.1f blocked=%d required=%d"),I,J,Reach,Reach?Path->GetPathLength():-1,Blocked,RequireBlocked);
+			}
+			UE_LOG(LogTemp,Display,TEXT("WIDE_MAP_RESULT failures=%d layout=fixed-v1 rotation=180"),Failures);
+			if(Failures) return 7;
 		}
 	}
 	if (!UEditorLoadingAndSavingUtils::SaveMap(World, Asset)) return 4;
