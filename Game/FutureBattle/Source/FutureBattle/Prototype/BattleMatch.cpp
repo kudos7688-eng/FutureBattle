@@ -271,6 +271,20 @@ int32 UBattleMatch::AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) c
  const bool Rotate=BattleFieldLayout::IsSightField(GetWorld())&&(Team!=int32(FParse::Param(FCommandLine::Get(),TEXT("BattleTrialSwap"))));
  TArray<double> Weight;double Sum=0;int32 Owned=0;
  for(int32 I=0;I<Objectives.Num();++I){const int32 P=Rotate?Objectives.Num()-1-I:I;const bool bOwn=ObservedOwner(Team,P)==Team;Owned+=bOwn;const double W=bOwn?1.0:Strategy.AttackWeight;Weight.Add(W);Sum+=W;}
+ // S4 trial: boost points where the team's own living soldiers (own positions only) are below the per-point average.
+ if(Strategy.bFrontBalance&&Sum>0)
+ {
+  TArray<double> Own;Own.Init(0,Objectives.Num());
+  const auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+  for(const auto& U:GetWorld()->GetSubsystem<UBattleState>()->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive())
+  {
+   const FVector P=Runtime->Position(U.Key);
+   for(int32 I=0;I<Objectives.Num();++I){const int32 Pt=Rotate?Objectives.Num()-1-I:I;if(FVector::DistSquared2D(P,Objectives[Pt].Position)<=FMath::Square(10000.)){Own[I]+=1;break;}}
+  }
+  double Avg=0;for(double O:Own)Avg+=O;Avg/=FMath::Max(1,Own.Num());
+  Sum=0;
+  for(int32 I=0;I<Weight.Num();++I){const double Deficit=Avg>0?FMath::Max(0.0,Avg-Own[I])/Avg:0.0;Weight[I]*=1.0+Strategy.FrontGain*Deficit;Sum+=Weight[I];}
+ }
  // S3 trial: home-assault share from observed state only (own observed points, last seen enemy home HP).
  double Share=Strategy.BaseShare;
  if(Strategy.bBaseRule)

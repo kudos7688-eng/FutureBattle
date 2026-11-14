@@ -31,6 +31,10 @@ $supply=@{
  'B3'=@('-AreaBaseRule','1')
  'B3L1'=@('-AreaBaseRule','1','-AreaBaseShareLow','0.1')
  'B3H4'=@('-AreaBaseRule','1','-AreaBaseShareHigh','0.4')
+ # S4 front balance on top of the default S1: weight x (1 + gain x own-soldier deficit near the point).
+ 'F1'=@('-AreaFrontBalance','1')
+ 'F2'=@('-AreaFrontBalance','1','-AreaFrontGain','2')
+ 'F05'=@('-AreaFrontBalance','1','-AreaFrontGain','0.5')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

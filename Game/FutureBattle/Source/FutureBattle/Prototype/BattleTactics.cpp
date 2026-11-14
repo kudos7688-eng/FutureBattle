@@ -71,6 +71,9 @@ const BattleTactics::FAreaStrategyTuning& BattleTactics::AreaStrategy()
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseShareLow="),S.BaseShareLow);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseShareHigh="),S.BaseShareHigh);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseLowHP="),S.BaseLowHP);
+  int32 Front=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaFrontBalance="),Front);S.bFrontBalance=Front!=0;
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaFrontGain="),S.FrontGain);
+  S.FrontGain=FMath::IsFinite(S.FrontGain)?FMath::Clamp(S.FrontGain,0.f,5.f):1.f;
   S.BaseShareLow=FMath::IsFinite(S.BaseShareLow)?FMath::Clamp(S.BaseShareLow,0.f,0.5f):0.f;
   S.BaseShareHigh=FMath::IsFinite(S.BaseShareHigh)?FMath::Clamp(S.BaseShareHigh,0.f,0.5f):0.3f;
   S.BaseLowHP=FMath::IsFinite(S.BaseLowHP)?FMath::Clamp(S.BaseLowHP,0.f,1000.f):500.f;

@@ -51,7 +51,9 @@ namespace BattleTactics
  // golden-ratio slot; points the team does not observe as its own weigh AttackWeight, owned ones 1; slots above 1-BaseShare assault the enemy home.
  // S3 trial (-BattleAreaBaseRule=1, default OFF): home-assault share is BaseShareHigh when the team observes owning 2+ points or last saw the
  // enemy home at or below BaseLowHP, otherwise BaseShareLow (-BattleAreaBaseShareHigh= / -BattleAreaBaseShareLow= / -BattleAreaBaseLowHP=).
- struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; };
+ // S4 trial (-BattleAreaFrontBalance=1, default OFF; -BattleAreaFrontGain=): each point weight is multiplied by 1+FrontGain*deficit, where deficit is
+ // how far the team's OWN living soldiers within 100m of the point fall below the per-point average (own positions only).
+ struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; };
  const FAreaStrategyTuning& AreaStrategy();
 	float SpreadDegrees(const FBattleUnitState& State, double Now);
 	FVector ShotDirection(const FBattleUnitState& State, FVector Aim, double Now);
