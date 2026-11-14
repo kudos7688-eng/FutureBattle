@@ -79,6 +79,8 @@ public:
 	void AdvanceObjectiveControl(float DeltaSeconds, TFunctionRef<int32(const FBattleObjective&)> Presence);
 	static bool InObjective(FVector Position, const FBattleObjective& Point);
 	int32 ChooseObjective(int32 Group, int32 Team) const;
+	// S1 allocation for one squad from observed point ownership only (Area). bBase = assault the enemy home instead.
+	int32 AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) const;
 	void CheckTimeLimit();
 	void UpdateEnemyOrders();
 	void UpdateTeamOrders(int32 Team, bool bDelegatedOnly = false);

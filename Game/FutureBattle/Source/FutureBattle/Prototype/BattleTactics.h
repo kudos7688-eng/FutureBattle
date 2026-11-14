@@ -47,9 +47,9 @@ namespace BattleTactics
  // Area income: UBattleTuning::bAreaIncome/AreaIncomeSeconds/AreaBaseIncome/AreaPointIncome; -BattleAreaIncome=0/1 overrides.
  struct FAreaIncomeTuning { bool bEnabled=true; float Seconds=20.f; int32 Base=1, PerPoint=1; };
  const FAreaIncomeTuning& AreaIncome();
- // Area AI strategy S1 (trial, default OFF, command line only): -BattleAreaStrategy=1 spreads squads over the points by a fixed per-squad
+ // Area AI point allocation S1 (UBattleTuning::bAreaStrategy/AreaAttackWeight/AreaBaseShare, adopted ON 2026-11-14; -BattleAreaStrategy=0 restores the old round-robin): fixed per-squad
  // golden-ratio slot; points the team does not observe as its own weigh AttackWeight, owned ones 1; slots above 1-BaseShare assault the enemy home.
- struct FAreaStrategyTuning { bool bEnabled=false; float AttackWeight=2.f, BaseShare=0.2f; };
+ struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; };
  const FAreaStrategyTuning& AreaStrategy();
 	float SpreadDegrees(const FBattleUnitState& State, double Now);
 	FVector ShotDirection(const FBattleUnitState& State, FVector Aim, double Now);

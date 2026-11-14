@@ -62,7 +62,8 @@ const BattleTactics::FAreaStrategyTuning& BattleTactics::AreaStrategy()
 {
  static const FAreaStrategyTuning Value=[]()
  {
-  FAreaStrategyTuning S;int32 Enabled=0;
+  const auto* T=GetDefault<UBattleTuning>();FAreaStrategyTuning S;int32 Enabled=T->bAreaStrategy?1:0;
+  S.AttackWeight=T->AreaAttackWeight;S.BaseShare=T->AreaBaseShare;
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaStrategy="),Enabled);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaAttackWeight="),S.AttackWeight);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseShare="),S.BaseShare);

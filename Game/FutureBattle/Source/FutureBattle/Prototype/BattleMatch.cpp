@@ -261,37 +261,37 @@ int32 UBattleMatch::ChooseObjective(int32 Group, int32 Team) const
 	return Index(Start);
 }
 
+int32 UBattleMatch::AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) const
+{
+ // Each squad keeps a fixed slot frac(ID*golden ratio) so deaths and hires do not reshuffle other squads.
+ // Points the team observes as its own weigh 1, others AttackWeight; the top BaseShare of slots assault the enemy home.
+ const auto& Strategy=BattleTactics::AreaStrategy();
+ bBase=false;
+ if(Objectives.IsEmpty())return 0;
+ const bool Rotate=BattleFieldLayout::IsSightField(GetWorld())&&(Team!=int32(FParse::Param(FCommandLine::Get(),TEXT("BattleTrialSwap"))));
+ TArray<double> Weight;double Sum=0;
+ for(int32 I=0;I<Objectives.Num();++I){const int32 P=Rotate?Objectives.Num()-1-I:I;const double W=ObservedOwner(Team,P)==Team?1.0:Strategy.AttackWeight;Weight.Add(W);Sum+=W;}
+ const double Slot=FMath::Frac(double(SquadID)*0.6180339887498949);
+ bBase=Slot>=1.0-Strategy.BaseShare;
+ const double Pos=Slot/FMath::Max(1e-6,1.0-Strategy.BaseShare)*Sum;
+ double Acc=0;
+ for(int32 I=0;I<Weight.Num();++I){Acc+=Weight[I];if(Pos<Acc||I==Weight.Num()-1)return Rotate?Objectives.Num()-1-I:I;}
+ return 0;
+}
+
 void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
 {
 	auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>();
 	if (!Mode || (Team != 0 && Team != 1) || Phase != EBattleMatchPhase::Combat || Objectives.IsEmpty()) return;
 	auto* Store = GetWorld()->GetSubsystem<UBattleState>();
 	int32 Group = 0;
- // S1 trial (-BattleAreaStrategy=1): weighted point spread from observed ownership only. Each squad keeps a fixed slot
- // frac(ID*golden ratio) so deaths and hires do not reshuffle other squads; owned points weigh 1, others AttackWeight.
- const auto& Strategy=BattleTactics::AreaStrategy();
- const bool bStrategy=bArea&&Strategy.bEnabled;
- TArray<double> PointWeight;double WeightSum=0;
- if(bStrategy)
- {
-  const bool Rotate=BattleFieldLayout::IsSightField(GetWorld())&&(Team!=int32(FParse::Param(FCommandLine::Get(),TEXT("BattleTrialSwap"))));
-  for(int32 I=0;I<Objectives.Num();++I){const int32 P=Rotate?Objectives.Num()-1-I:I;const double W=ObservedOwner(Team,P)==Team?1.0:Strategy.AttackWeight;PointWeight.Add(W);WeightSum+=W;}
- }
- auto StrategyPick=[&](int32 SquadID,bool& bBase)
- {
-  const double Slot=FMath::Frac(double(SquadID)*0.6180339887498949);
-  bBase=Slot>=1.0-Strategy.BaseShare;
-  const double Pos=Slot/FMath::Max(1e-6,1.0-Strategy.BaseShare)*WeightSum;
-  const bool Rotate=BattleFieldLayout::IsSightField(GetWorld())&&(Team!=int32(FParse::Param(FCommandLine::Get(),TEXT("BattleTrialSwap"))));
-  double Acc=0;
-  for(int32 I=0;I<PointWeight.Num();++I){Acc+=PointWeight[I];if(Pos<Acc||I==PointWeight.Num()-1)return Rotate?Objectives.Num()-1-I:I;}
-  return 0;
- };
+ // S1 (default ON, -BattleAreaStrategy=0 = old round-robin): weighted point spread from observed ownership only.
+ const bool bStrategy=bArea&&BattleTactics::AreaStrategy().bEnabled;
 	for (const auto& Pair : Store->GetSquads()) if (Pair.Value.Team == Team)
 	{
 		// Public objective status only; never use an unseen enemy's location.
   bool bStrategyBase=false;
-		const int32 Target = bStrategy ? StrategyPick(Pair.Key,bStrategyBase) : ChooseObjective(Group, Team);
+		const int32 Target = bStrategy ? AreaStrategyTarget(Pair.Key,Team,bStrategyBase) : ChooseObjective(Group, Team);
   ++Group;
 		// Keep assignment stable when only some squads are delegated.
 		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated) continue;

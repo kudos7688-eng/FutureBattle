@@ -320,6 +320,11 @@ public:
 	UPROPERTY(Config, EditAnywhere) float AreaIncomeSeconds = 20.f;
 	UPROPERTY(Config, EditAnywhere) int32 AreaBaseIncome = 1;
 	UPROPERTY(Config, EditAnywhere) int32 AreaPointIncome = 1;
+	// Area AI point allocation S1 (adopted 2026-11-14; -BattleAreaStrategy=0 restores the old round-robin): each squad keeps a fixed
+	// golden-ratio slot; points not observed as own weigh AreaAttackWeight, owned ones 1; the top AreaBaseShare of slots assault the enemy home.
+	UPROPERTY(Config, EditAnywhere) bool bAreaStrategy = true;
+	UPROPERTY(Config, EditAnywhere) float AreaAttackWeight = 2.f;
+	UPROPERTY(Config, EditAnywhere) float AreaBaseShare = 0.2f;
 	// Used only with -BattleLeaderGuard=1 (trial, AI cognition): AI leader cover retry interval.
 	UPROPERTY(Config, EditAnywhere) float LeaderGuardCoverRetrySeconds = 2.f;	UPROPERTY(Config, EditAnywhere) float FlankAngleDegrees = 60.f;
 	UPROPERTY(Config, EditAnywhere) float CoverSearchRadius = 900.f;

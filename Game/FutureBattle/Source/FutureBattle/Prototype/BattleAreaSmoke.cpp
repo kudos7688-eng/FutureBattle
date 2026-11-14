@@ -4,6 +4,7 @@
 #include "BattleGameMode.h"
 #include "BattleController.h"
 #include "BattleSquadTactics.h"
+#include "BattleTactics.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/StaticMeshActor.h"
 #include "Components/StaticMeshComponent.h"
@@ -50,6 +51,20 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   Check(M->ObservedOwner(0,0)==-2,TEXT("unobserved objective ownership remains unknown"));
   const int32 Assignment=M->ChooseObjective(0,0);M->Objectives[0].Owner=0;
   Check(M->ChooseObjective(0,0)==Assignment,TEXT("unseen true ownership cannot alter AI assignment"));
+  {
+   // S1 point allocation (default ON): spread by fixed per-squad slot, own observed points weigh less, ~20% home assault.
+   const TArray<int32> SavedKnown=M->Area.KnownOwners;const int32 SavedOwner1=M->Objectives[1].Owner;
+   Check(BattleTactics::AreaStrategy().bEnabled,TEXT("S1 point allocation is ON by default"));
+   auto Spread=[&](int32 (&Count)[3])->int32{int32 Base=0;Count[0]=Count[1]=Count[2]=0;for(int32 ID=1;ID<=25;++ID){bool bBase=false;const int32 T=M->AreaStrategyTarget(ID,0,bBase);if(bBase)++Base;else if(T>=0&&T<3)++Count[T];}return Base;};
+   for(int32 P=0;P<3;++P)M->Area.KnownOwners[P]=-2;
+   int32 Unknown[3];const int32 Base=Spread(Unknown);
+   Check(Base>=3&&Base<=7&&Unknown[0]>0&&Unknown[1]>0&&Unknown[2]>0,TEXT("S1 spreads 25 squads over all three points with about 20 percent home assault"));
+   M->Area.KnownOwners[0]=0;int32 OwnFirst[3];Spread(OwnFirst);
+   Check(OwnFirst[0]<Unknown[0]&&OwnFirst[1]+OwnFirst[2]>Unknown[1]+Unknown[2],TEXT("S1 sends fewer squads to a point observed as own"));
+   bool bBase=false;const int32 Before=M->AreaStrategyTarget(7,0,bBase);M->Objectives[1].Owner=0;
+   Check(M->AreaStrategyTarget(7,0,bBase)==Before,TEXT("unseen true ownership cannot alter S1 allocation"));
+   M->Objectives[1].Owner=SavedOwner1;M->Area.KnownOwners=SavedKnown;
+  }
   const FVector ObserverStart=Position(11);Place(11,M->Objectives[0].Position+FVector(-200,0,100));M->UpdateArea(1);
   Check(M->ObservedOwner(0,0)==0,TEXT("actual own line of sight updates point ownership"));Place(11,ObserverStart);
   M->Objectives[0].Owner=1;M->UpdateArea(1);Check(M->ObservedOwner(0,0)==0,TEXT("lost sight retains old ownership instead of reading truth"));
