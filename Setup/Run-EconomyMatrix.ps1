@@ -27,6 +27,10 @@ $supply=@{
  'S1'=@('-AreaStrategy','1')
  'S1W3'=@('-AreaStrategy','1','-AreaAttackWeight','3')
  'S1B0'=@('-AreaStrategy','1','-AreaBaseShare','0')
+ # S3 conditional home assault on top of the default S1: High share with 2+ observed own points or seen enemy home HP <= 500.
+ 'B3'=@('-AreaBaseRule','1')
+ 'B3L1'=@('-AreaBaseRule','1','-AreaBaseShareLow','0.1')
+ 'B3H4'=@('-AreaBaseRule','1','-AreaBaseShareHigh','0.4')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

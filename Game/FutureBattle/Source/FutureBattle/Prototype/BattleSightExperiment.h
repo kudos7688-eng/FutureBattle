@@ -34,5 +34,7 @@ struct FBattleSightExperiment
  // Evaluation only (Area): true-owner seconds per central point and team, and the first capture time per team (-1 = never).
  double AreaPointSeconds[3][2]={{0,0},{0,0},{0,0}};
  double FirstCapture[2]={-1,-1};
+ // Evaluation only (Area): living person-seconds within weapon range / 100m (2D) of the ENEMY home, by attacking team (5Hz samples).
+ double EnemyHomeRangeSeconds[2]={0,0},EnemyHomeNearSeconds[2]={0,0};
  void Cover(const TCHAR* Key){if(Enabled)++CoverDiag.FindOrAdd(FName(Key));}
 };

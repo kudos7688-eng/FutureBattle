@@ -269,11 +269,18 @@ int32 UBattleMatch::AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) c
  bBase=false;
  if(Objectives.IsEmpty())return 0;
  const bool Rotate=BattleFieldLayout::IsSightField(GetWorld())&&(Team!=int32(FParse::Param(FCommandLine::Get(),TEXT("BattleTrialSwap"))));
- TArray<double> Weight;double Sum=0;
- for(int32 I=0;I<Objectives.Num();++I){const int32 P=Rotate?Objectives.Num()-1-I:I;const double W=ObservedOwner(Team,P)==Team?1.0:Strategy.AttackWeight;Weight.Add(W);Sum+=W;}
+ TArray<double> Weight;double Sum=0;int32 Owned=0;
+ for(int32 I=0;I<Objectives.Num();++I){const int32 P=Rotate?Objectives.Num()-1-I:I;const bool bOwn=ObservedOwner(Team,P)==Team;Owned+=bOwn;const double W=bOwn?1.0:Strategy.AttackWeight;Weight.Add(W);Sum+=W;}
+ // S3 trial: home-assault share from observed state only (own observed points, last seen enemy home HP).
+ double Share=Strategy.BaseShare;
+ if(Strategy.bBaseRule)
+ {
+  const float SeenHP=bArea&&Area.KnownEnemyBaseHP.IsValidIndex(Team)?Area.KnownEnemyBaseHP[Team]:-1.f;
+  Share=(Owned>=2||(SeenHP>=0&&SeenHP<=Strategy.BaseLowHP))?Strategy.BaseShareHigh:Strategy.BaseShareLow;
+ }
  const double Slot=FMath::Frac(double(SquadID)*0.6180339887498949);
- bBase=Slot>=1.0-Strategy.BaseShare;
- const double Pos=Slot/FMath::Max(1e-6,1.0-Strategy.BaseShare)*Sum;
+ bBase=Slot>=1.0-Share;
+ const double Pos=Slot/FMath::Max(1e-6,1.0-Share)*Sum;
  double Acc=0;
  for(int32 I=0;I<Weight.Num();++I){Acc+=Weight[I];if(Pos<Acc||I==Weight.Num()-1)return Rotate?Objectives.Num()-1-I:I;}
  return 0;

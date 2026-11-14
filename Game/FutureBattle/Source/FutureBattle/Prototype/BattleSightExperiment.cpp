@@ -90,6 +90,12 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
   {
    const FVector P=Position(Pair.Key);
    for(const auto& Point:Match->Objectives) if(FVector::DistSquared2D(P,Point.Position)<=FMath::Square(10000.)){E.FrontPersonSeconds[Pair.Value.Team]+=SampleDt;break;}
+   if(Match->bArea)
+   {
+    const double D2=FVector::DistSquared2D(P,Match->AreaHome(1-Pair.Value.Team));
+    if(D2<=FMath::Square(double(GetDefault<UBattleTuning>()->EffectiveWeaponRange())))E.EnemyHomeRangeSeconds[Pair.Value.Team]+=SampleDt;
+    if(D2<=FMath::Square(10000.))E.EnemyHomeNearSeconds[Pair.Value.Team]+=SampleDt;
+   }
   }
   auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();
   TSet<int32> Seeing;
@@ -154,6 +160,8 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
    TArray<TSharedPtr<FJsonValue>> PointSeconds;for(int32 I=0;I<3;++I)PointSeconds.Add(MakeShared<FJsonValueNumber>(E.AreaPointSeconds[I][Team]));
    Root->SetArrayField(Team?TEXT("enemy_point_owned_seconds"):TEXT("ally_point_owned_seconds"),PointSeconds);
    Root->SetNumberField(Team?TEXT("enemy_first_capture_seconds"):TEXT("ally_first_capture_seconds"),E.FirstCapture[Team]);
+   Root->SetNumberField(Team?TEXT("enemy_at_opponent_home_range_seconds"):TEXT("ally_at_opponent_home_range_seconds"),E.EnemyHomeRangeSeconds[Team]);
+   Root->SetNumberField(Team?TEXT("enemy_near_opponent_home_seconds"):TEXT("ally_near_opponent_home_seconds"),E.EnemyHomeNearSeconds[Team]);
   }
  }
  const auto* Tactics=GetWorld()->GetSubsystem<UBattleSquadTactics>();

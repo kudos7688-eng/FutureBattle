@@ -7,7 +7,7 @@ $ErrorActionPreference='Stop'
 $root=Join-Path $PSScriptRoot 'Benchmarks/SightTrial-20261111'
 $runs=@{}
 foreach($c in $Conditions){
- $a=@{N=0;Fail=@();Alive=0;Credits=0;Income=0;Hires=0;HireTimes=@();Late=0;Comp=0;Loss=0;LD=0;Front=0;Shots=0;W0=0;W1=0;Draw=0;Base=0;Diff=0;Score=0;Points=0}
+ $a=@{N=0;Fail=@();Alive=0;Credits=0;Income=0;Hires=0;HireTimes=@();Late=0;Comp=0;Loss=0;LD=0;Front=0;Shots=0;W0=0;W1=0;Draw=0;Base=0;Diff=0;Score=0;Points=0;BaseDmg=0;HomeRange=0}
  foreach($d in Get-ChildItem $root -Directory -Filter "$Prefix-$c-*-$Tag"){
   $res=Get-Content (Join-Path $d.FullName 'result.json') -Raw -ErrorAction SilentlyContinue|ConvertFrom-Json
   $mp=Join-Path $d.FullName 'metrics.json'
@@ -23,11 +23,13 @@ foreach($c in $Conditions){
   $a.W0+=[int]($m.winner -eq 0);$a.W1+=[int]($m.winner -eq 1);$a.Draw+=[int]($m.winner -eq -1);$a.Base+=[int]($m.reason -match 'BASE')
   $a.Diff+=[math]::Abs($m.ally_score-$m.enemy_score);$a.Score+=$m.ally_score+$m.enemy_score
   $a.Points+=@($m.final_objectives|Where-Object{$_.owner -ge 0}).Count
+  $a.BaseDmg+=(1000-[double]$m.ally_base_hp)+(1000-[double]$m.enemy_base_hp)
+  $a.HomeRange+=[double]$m.ally_at_opponent_home_range_seconds+[double]$m.enemy_at_opponent_home_range_seconds
  }
  if($a.N -eq 0){"$c : no completed runs; failed/missing=$($a.Fail -join ',')";continue}
  $first=if($a.HireTimes.Count){($a.HireTimes|Measure-Object -Average).Average}else{0}
- ('{0} (n={1}): aliveEnd/run={2:N0} creditsLeft/run={3:N0} income/run={4:N0} hires/run={5:N1} meanHireSec={6:N0} hiresAfter480s={7} replacements/run={8:N0} loss/run={9:N0} leaderDeaths/run={10:N1} frontPersonSec/run={11:N0} shots/run={12:N0} wins0/1/draw={13}/{14}/{15} baseKills={16} scoreSum/run={17:N0} mean|diff|={18:N1} ownedPointsEnd/run={19:N2}' -f
-  $c,$a.N,($a.Alive/$a.N),($a.Credits/$a.N),($a.Income/$a.N),($a.Hires/$a.N),$first,$a.Late,($a.Comp/$a.N),($a.Loss/$a.N),($a.LD/$a.N),($a.Front/$a.N),($a.Shots/$a.N),$a.W0,$a.W1,$a.Draw,$a.Base,($a.Score/$a.N),($a.Diff/$a.N),($a.Points/$a.N))
+ ('{0} (n={1}): aliveEnd/run={2:N0} creditsLeft/run={3:N0} income/run={4:N0} hires/run={5:N1} meanHireSec={6:N0} hiresAfter480s={7} replacements/run={8:N0} loss/run={9:N0} leaderDeaths/run={10:N1} frontPersonSec/run={11:N0} shots/run={12:N0} wins0/1/draw={13}/{14}/{15} baseKills={16} scoreSum/run={17:N0} mean|diff|={18:N1} ownedPointsEnd/run={19:N2} baseDamage/run={20:N0} atEnemyHomeRangeSec/run={21:N0}' -f
+  $c,$a.N,($a.Alive/$a.N),($a.Credits/$a.N),($a.Income/$a.N),($a.Hires/$a.N),$first,$a.Late,($a.Comp/$a.N),($a.Loss/$a.N),($a.LD/$a.N),($a.Front/$a.N),($a.Shots/$a.N),$a.W0,$a.W1,$a.Draw,$a.Base,($a.Score/$a.N),($a.Diff/$a.N),($a.Points/$a.N),($a.BaseDmg/$a.N),($a.HomeRange/$a.N))
  if($a.Fail.Count){"   failed/missing: $($a.Fail -join ',')"}
 }
 # Paired comparison (same map/seed/side) against the baseline condition.

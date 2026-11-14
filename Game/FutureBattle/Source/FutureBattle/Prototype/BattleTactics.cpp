@@ -67,6 +67,13 @@ const BattleTactics::FAreaStrategyTuning& BattleTactics::AreaStrategy()
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaStrategy="),Enabled);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaAttackWeight="),S.AttackWeight);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseShare="),S.BaseShare);
+  int32 BaseRule=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseRule="),BaseRule);S.bBaseRule=BaseRule!=0;
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseShareLow="),S.BaseShareLow);
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseShareHigh="),S.BaseShareHigh);
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseLowHP="),S.BaseLowHP);
+  S.BaseShareLow=FMath::IsFinite(S.BaseShareLow)?FMath::Clamp(S.BaseShareLow,0.f,0.5f):0.f;
+  S.BaseShareHigh=FMath::IsFinite(S.BaseShareHigh)?FMath::Clamp(S.BaseShareHigh,0.f,0.5f):0.3f;
+  S.BaseLowHP=FMath::IsFinite(S.BaseLowHP)?FMath::Clamp(S.BaseLowHP,0.f,1000.f):500.f;
   S.bEnabled=Enabled!=0;
   S.AttackWeight=FMath::IsFinite(S.AttackWeight)?FMath::Clamp(S.AttackWeight,0.1f,10.f):2.f;
   S.BaseShare=FMath::IsFinite(S.BaseShare)?FMath::Clamp(S.BaseShare,0.f,0.5f):0.2f;

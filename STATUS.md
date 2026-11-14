@@ -1,5 +1,34 @@
 # 現在地と次の作業
 
+## 2026-11-14 Claude：本拠地攻撃の条件化（S3）を試験切替で実装、48戦で不採用（既定OFFのまま）
+- **仕組み**（`-BattleAreaBaseRule=1`、既定OFF。BattleMatch.cpp の `AreaStrategyTarget`、BattleTactics の AreaStrategy）
+  - 次のどちらかのとき、敵本拠地へ向かう割合を `BaseShareHigh`（既定0.3）にする。それ以外は `BaseShareLow`（既定0）。
+    - 自軍保有と観測している拠点が2つ以上。
+    - 最後に見た敵本拠地のHPが `BaseLowHP`（500）以下。
+  - 判断に使うのは観測情報だけ。
+- **計測の追加（評価専用、判断には使わない）**
+  - metrics に、敵本拠地の射程内にいた延べ人・秒（`*_at_opponent_home_range_seconds`）と、100m以内の延べ人・秒（`*_near_opponent_home_seconds`）を追加した。
+  - Analyze-EconomyMatrix に、本拠地へのダメージ（`baseDamage`）と射程内の人・秒（`atEnemyHomeRangeSec`）を追加した。
+- **検証**：Build成功。基本、エリア、MixedFast、混成保存、広域混成（出力名 s3-r1）はすべて failures=0。
+- **48戦**（固定 claude-s3-r4＝S1既定ON・覗き確認ON、各12戦、異常終了0）
+
+  | 条件 | 生存 | 損失 | 拠点付近の人・秒 | 本拠地ダメージ/戦 | 敵本拠地の射程内の人・秒 | 勝敗(味方/敵) |
+  |---|---|---|---|---|---|---|
+  | HI（既定：S1、本拠地20%固定） | 280 | 478 | 114,072 | 0 | 0 | 6/6 |
+  | B3（条件化、0%→30%） | 245 | 509 | 95,236 | 87 | 55 | 11/1 |
+  | B3L1（10%→30%） | 251 | 511 | 103,420 | 0 | 0 | 7/5 |
+  | B3H4（0%→40%） | 242 | 511 | 93,024 | 83 | 39 | 7/5 |
+
+  - どの条件化も、生存は30〜38人減り、拠点付近の兵は減った（12組中2〜3組しか上回らない）。**不採用、既定OFFのまま。**
+  - B3の勝敗11/1は、味方側（チーム0）に偏っている。小隊IDの受け持ちが両軍で違うため、片側だけ本拠地まで届いた可能性がある（推定、未確認）。
+- **分かったこと**
+  - 既定（本拠地へ向かう20%）では、48戦すべてで敵本拠地の射程内にいた兵が0人・秒、本拠地へのダメージも0だった。本拠地へ向かう小隊は、途中で戦闘に入るか、補給に戻って、たどり着いていない。
+  - それでも、S1で本拠地0%（S1B0）にすると生存が下がる（r3）。この小隊は、敵の拠点より奥で敵を引きつける役になっている可能性がある（推定）。
+  - 証拠：SightTrial-20261111/econ-*-r4。解析：`Analyze-EconomyMatrix.ps1 -Tag r4 -Conditions HI,B3,B3L1,B3H4 -Baseline HI`。
+- **次の一手の候補**
+  - S4：雇用した部隊と補充を終えた部隊を、最も弱い前線へ回す。
+  - 本拠地攻撃の小隊がどこで止まるかを位置で計測する。
+
 ## 2026-11-14 Claude：S1を既定ONに（ユーザー「既定ONにする」）
 - **変更**
   - UBattleTuning に `bAreaStrategy=true` / `AreaAttackWeight=2` / `AreaBaseShare=0.2` を追加した（BattleState.h、DefaultGame.ini）。
@@ -119,6 +148,33 @@
     - 含めていないもの（UNCOMMITTED.mdの方針どおり、ローカルに保持）：計測の生データ（Setup/Benchmarks）、Setup/*.txt のログ、png、*-machine.json、リポジトリ直下の空の Run-CoverFireMatrix.ps1。
     - push なし。
 
+## 2026-11-14 Claude：500体性能の再計測（原因特定、コード変更なし、採否はユーザー判断待ち）
+- **Phase3固定条件で計測**：500体・隊長方式・VAT ON・グリッド/文脈再利用/骨削減 ON・Sense B（4群）・1080p・warmup10＋60秒。証拠は `Setup/Benchmarks/Perf500-20261114`。
+  - ゲームスレッド平均（1回目→2回目）：RTS 17.7/9.5ms、TPS 16.9/14.5ms、FPS 20.9/13.7ms。p95は30〜57ms。走行間の差は、主に認識の時間の差。
+  - trace（RTS）：最大は `LeaderSight` の視線trace（約1,500回/フレーム）。
+  - 予算超過フレームでは、認識が平均約22ms。4群のうち1群の走査が0.05秒ごとにまとめて走り、そのフレームだけが重くなる（約5フレームおき）。
+- **視認距離の影響（RTS、交互に各2本）**：
+
+  | 視認距離 | GT平均 | p95 | 16.67ms超過 | 認識平均 |
+  |---|---|---|---|---|
+  | 10000cm（現在の既定。a51107bで2400から変更） | 7.3/8.3ms | 27.0/27.5ms | 13.2/15.0% | 2.9/3.3ms |
+  | 2400cm | 5.5/5.5ms | 6.8/6.9ms | 0% | 0.07ms |
+
+- **実際のエリア戦では、検証済みの3最適化が既定OFFのまま**：`-BattleReuseSightContext` / `-BattlePerceptionGrid` / `-BattleReduceHiddenBones`。3つとも2026-11-10に等価性を確認したうえで、既定OFFで保留されていた。
+  - Test-WideSight に `-PerceptionOpt 1` を追加し、同じseedで比べた。条件はエリア600秒、nullrhi、4並列。
+
+  | 試合 | フレーム平均/p95 OFF→ON | 認識平均 OFF→ON | 射撃・命中・得点・生存 |
+  |---|---|---|---|
+  | D-s7 | 8.95/12.81 → 7.79/10.68ms | 2.01 → 0.97ms | 完全一致 |
+  | A-s19 | 8.31/13.37 → 7.31/11.59ms | 1.91 → 1.07ms | 完全一致 |
+
+  - 認識は約半分に、フレーム平均は12〜13%、p95は13〜17%短くなった。試合結果は変わらない。
+  - 描画ありの実画面での効果（特に骨削減）は未計測。
+- **次の一手（ユーザー判断）**：
+  1. 3最適化を通常プレイの既定ONにするか。試合結果が一致しているので、挙動変更ではなく性能だけの変更。→ 2026-11-14、ユーザーが既定ONを決定。経済セッションのS3の48戦が占有中のため、反映は占有が解けてから。
+  2. 認識の4群まとめ走査を、個体ごとに毎フレームへ均す方式（既存の Even）を試すか。発見のタイミングが変わるので、挙動変更になる。
+  3. 視認距離10000の負荷を、遠い未知の候補の間引きなどで下げるか。挙動変更になる。
+
 ## 2026-11-14 Claude：のぞき中に敵が見えなければ早めに隠れ直す試験切替（S、既定OFF、採否はユーザー判断待ち）
 - **変更**：AIがカバーの射撃窓（最大2.8秒）で身を出してから `AICoverPeekBlindSeconds`（1秒）たっても、カバーの対象を自分で見ていなければ（`bVisible && !bShared` でない）、身を出すのをやめて隠れ直す。終了理由は `peek_end_blind`。判断に使うのは観測情報だけ。
   - 有効化：`bAICoverPeekSight=false`（BattleState.h）、`BattleTactics::CoverPeekSightEnabled()`、`-BattleCoverPeekSight=0/1`
@@ -143,12 +199,12 @@
   - 見えないまま2.8秒さらす時間切れは34回から4回に減った。浮いた時間で次ののぞきへ移れるため、のぞき回数は+49%、カバーからの射撃は+38%になった。
   - 組ごとの差はばらつく。カバー射撃が増えたのは12組中7組、同じが2組、減ったのが3組。
   - カバー射撃は全射撃の0.3%以下しかない。試合全体（部下戦死-4%、隊長戦死は同じ、勝敗の変化は2組）への影響は、ばらつきの範囲で、確定的な差ではない。
-- **採否**（2026-11-14、ユーザーが既定ONを決定し、反映済み）
-  - 変更：DefaultGame.ini に `bAICoverPeekSight=True` と `AICoverPeekBlindSeconds=1.0`、BattleState.h の既定値を true、Cover smoke の期待値を「既定ON」に変更。
+- **採否**：2026-11-14、ユーザーが既定ONを決定し、反映済み。
+  - 変更：DefaultGame.ini に `bAICoverPeekSight=True` と `AICoverPeekBlindSeconds=1.0`。BattleState.h の既定値も true。Cover smoke の期待値を「既定ON」に変更。
   - 戻し方：`-BattleCoverPeekSight=0` で以前の挙動に戻る。
   - 検証：Build-Editor 成功。回帰はすべて failures=0（出力名 `peeksight-on-*`）。対象は Battle、Cover（地図C・D）、Area、MixedFast、MixedSave、WideMixed。
   - 注意：これ以降のビルドではAIのカバー挙動が少し変わる。それ以前の基準と比べるときは基準を取り直す。
-- **コミット**：BattleCoverAction.cpp ほかの関係ファイルは未追跡、または他セッションの変更と混在しているため、ローカルコミットしていない。
+- **コミット**：試験切替の実装は、作業ツリー全体のローカルコミット a51107b に含まれた。既定ONの反映は、変更した5ファイルだけをローカルコミット 6f9be3a にした。
 
 ## 2026-11-14 Claude：アニメーション異常終了の修正（適用・ビルド・回帰済み、再発しないことは未確認）
 - **変更**：下記の原因節の16か所（14行）の `CompleteParallelAnimationEvaluation(true)` を、`HandleExistingParallelEvaluationTask(true,true)` に置き換えた。この関数は評価タスクの完了を待ってから後処理し、タスクがなければ何もしない。対象：BattleVATDisplay.cpp 7、BattleFollowerBones.cpp 2、BattleAnimTasks.cpp 1、BattleAnimTaskTrial.cpp 3、BattleHiddenBoneTrial.cpp 3。表示だけの変更で、正規状態・AI判断には触れていない。
