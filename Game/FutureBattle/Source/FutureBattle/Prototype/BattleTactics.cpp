@@ -139,21 +139,21 @@ bool BattleTactics::CoverActionsEnabled()
  return Enabled;
 }
 
-float BattleTactics::SpreadDegrees(const FBattleUnitState& State, double Now)
+float BattleTactics::SpreadDegrees(const FBattleUnitState& State, double Now, float SpreadScale)
 {
 	const auto* Tuning = GetDefault<UBattleTuning>();
 	const bool bSettled = State.AimStableSince >= 0. && Now - State.AimStableSince >= FMath::Max(0.f, Tuning->AimSettleSeconds);
 	const float Base = State.bMovingShot ? Tuning->MovingSpreadDegrees : bSettled ? Tuning->SettledSpreadDegrees : Tuning->StandingSpreadDegrees;
-	return FMath::Clamp(Base * State.SpreadSkillScale * (State.Weapon == EBattleWeapon::SupportGun && State.bMovingShot ? Tuning->SupportMovingSpreadScale : 1.f), .05f, 15.f);
+	return FMath::Clamp(Base * SpreadScale * State.SpreadSkillScale * (State.Weapon == EBattleWeapon::SupportGun && State.bMovingShot ? Tuning->SupportMovingSpreadScale : 1.f), .05f, 15.f);
 }
 
-FVector BattleTactics::ShotDirection(const FBattleUnitState& State, FVector Aim, double Now)
+FVector BattleTactics::ShotDirection(const FBattleUnitState& State, FVector Aim, double Now, float SpreadScale)
 {
 	// Match-local sequence remains in canonical state across possession changes.
 	static const uint32 TrialSalt=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleTrialSeed="),Value);return uint32(Value)*2654435761u;}();
 	const uint32 Seed = static_cast<uint32>(State.UnitID) * 196613u + static_cast<uint32>(State.ShotSequence) * 314159u + 271828u + TrialSalt;
 	FRandomStream Random(static_cast<int32>(Seed));
-	return Random.VRandCone(Aim.GetSafeNormal(), FMath::DegreesToRadians(SpreadDegrees(State, Now)));
+	return Random.VRandCone(Aim.GetSafeNormal(), FMath::DegreesToRadians(SpreadDegrees(State, Now, SpreadScale)));
 }
 
 FBattleExposure BattleTactics::ExposureFrom(const ABattleUnit* Target, FVector AttackOrigin)

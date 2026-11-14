@@ -1,5 +1,27 @@
 # 現在地と次の作業
 
+## 2026-11-14 Claude（新機能担当）：制圧（サプレッション）を試験切替で実装（既定OFF、比較計測は未実施）
+- **作業場所**：別の作業ツリー `C:\Users\nanek\Documents\FPS\FutureBattle-suppression`（ブランチ `suppression`、bb45eaf から分岐）。Binaries・Saved・Setup/Benchmarks は本体と別。本体の作業ツリーには何も書いていない。
+- **仕組み**（`-BattleSuppression=1`、コマンドラインのみ、既定OFF。BattleSuppression.h/.cpp、混成・エリア戦の射撃経路 `UBattleLeaderRuntime::Fire`）
+  - 弾の通った線分（発射点〜着弾点）から半径2m以内にいる敵兵に、制圧値を加える。1発あたり最大0.12で、距離に比例して減る。上限は1。
+  - 制圧値は毎秒0.25ずつ直線的に減る（最大から4秒で0）。
+  - 共通の戦術効果（AIと直接操作の両方）：射撃の拡散を「1＋1.5×制圧値」倍にする（最大2.5倍）。
+  - AIの判断だけに効くもの：制圧値が0.5以上のAI兵は、遮蔽に隠れたまま身を出さず、身を出している途中なら隠れ直す。
+  - 弾の経路による物理的な効果で、ダメージと同じく真の位置を使う。AIの判断入力には敵の真値を使っていない（自分の制圧値だけ）。
+  - 保存しない。読込後は制圧なしから始まる（`RestoreMixedBodies` で消去）。
+  - 上書き：`-BattleSuppressionRadius=` / `PerShot=` / `Decay=` / `Spread=` / `Pin=`（Pin を1より大きくすると釘付けなし）。
+  - HUD：直接操作中の SPREAD 表示に倍率を反映し、制圧中は `SUPPRESSED nn%` を出す。**実画面では未確認。**
+- **計測用の追加**：cover_diagnostics に `suppression_events`（加算回数）、`suppressed_shots`（拡散1.25倍以上で撃った回数）、`peek_hold_suppressed`、`peek_end_suppressed`。Test-WideSight に `-Suppression` / `-SuppressionPin` / `-SuppressionSpread` / `-SuppressionPerShot`、Run-EconomyMatrix に条件 P / PS（拡散のみ）/ PP（釘付けのみ）/ PH（釘付け0.75）。
+- **検証**：Build成功（作業ツリー側）。基本 failures=0、エリア（supp-r1）failures=0、混成保存（supp-r1）failures=0、カバーC/D（supp-C-r2 / supp-D-r2）failures=0。カバーのスモーク試験に制圧の11項目を追加（既定OFF、OFFでは何も変わらない、距離比例の加算、自軍の弾と遠い経路では加算なし、直線減衰、上限と釘付け、拡散倍率、釘付けの解除、隠れ続ける、解除後に身を出す、身を出し中に隠れ直す）。
+  - r1 はカバーC/Dで1項目FAIL（試験側の想定違い：兵を身を出す地点へ動かさずに状態だけ変えたため、隠れ直しが同じ処理内で「隠れ完了」まで進んだ）。判定を直した r2 で合格。
+- **比較計測**：固定ビルド `claude-supp-r1` を作成済み。48戦（HI / P / PS / PP × seed 7/19/43 × D/A × 入替）を18:16に開始したが、戦闘担当セッションの計測（evensense-*）と重なっていたため18:21に中止した。途中だった8戦は `aborted-econ-HI-*-p1-1816` に改名して残した（結果なし）。**計測ロックの順番待ちで、まだ1戦も完了していない。**
+- **制限**
+  - 旧全Actorモード（`ABattleUnit::FireAt` の単独経路）では制圧は加算されない。
+  - 遮蔽の外にいるAI兵は、制圧されても行動を変えない（拡散が増えるだけ）。遮蔽探しを早める処理は入れていない。
+  - 1発ごとに全兵を走査する（境界箱で早期に除外）。500体での負荷は未計測。
+  - 迂回・援護の判断は制圧を参照しない。
+- **次の一手**：ロックを受け取ったら48戦を実行し、生存・損失・前線の人・秒・命中率・釘付け回数で採否の材料を出す。既定にするかはユーザー判断。その後、本体（main）への取り込み方をユーザーと決める。
+
 ## 2026-11-14 Claude：本拠地攻撃の条件化（S3）を試験切替で実装、48戦で不採用（既定OFFのまま）
 - **仕組み**（`-BattleAreaBaseRule=1`、既定OFF。BattleMatch.cpp の `AreaStrategyTarget`、BattleTactics の AreaStrategy）
   - 次のどちらかのとき、敵本拠地へ向かう割合を `BaseShareHigh`（既定0.3）にする。それ以外は `BaseShareLow`（既定0）。

@@ -137,6 +137,14 @@ public:
  bool CoverLineClear(int32 ID,FVector From,FVector Threat) const;
  // Re-picks a peek point beside the cover anchor with a clear line to Threat; false keeps the soldier hidden.
  bool RevalidatePeek(int32 ID,FVector Threat);
+ // Suppression trial (-BattleSuppression=1, see BattleSuppression.h). Runtime only: time at which each unit's level decays to zero.
+ TMap<int32,double> SuppressionZeroAt;
+ float Suppression(int32 ID,double Now) const;
+ bool IsPinned(int32 ID,double Now) const;
+ float SuppressionSpreadScale(int32 ID,double Now) const;
+ void AddSuppression(int32 ID,float Amount,double Now);
+ // Suppresses living enemies of ShooterTeam within the tuning radius of the travelled bullet path Start..End.
+ void SuppressNear(int32 ShooterTeam,FVector Start,FVector End,double Now);
  bool StartCoverApproach(int32 ID,FVector Threat,int32 Target,double Now,float LocalRadius);
  bool StepCoverApproach(int32 ID,float Dt,double Now,int32 Target);
  bool IssueOrder(int32 SquadID,EBattleOrder Order,FVector Goal,bool bMissionUpdate=false);

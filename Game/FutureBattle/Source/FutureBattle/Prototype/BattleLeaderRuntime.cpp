@@ -538,9 +538,12 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   E.ShotDistances.Add(D);if(E.FirstShot<0){E.FirstShot=GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed;E.FirstShotDistance=D;}
  }
  if(Phase3 && Phase3->bEnabled) ++Phase3->Shots;
- Direction=BattleTactics::ShotDirection(*U,Direction,Now);
+ const float SuppressedScale=SuppressionSpreadScale(ID,Now);
+ if(SuppressedScale>1.25f)SightExperiment.Cover(TEXT("suppressed_shots"));
+ Direction=BattleTactics::ShotDirection(*U,Direction,Now,SuppressedScale);
  auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*T->EffectiveWeaponRange();
  GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_Visibility,Q);
+ SuppressNear(U->Team,Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Now);
  const int32 Victim=HitIDs.FindRef(Hit.GetComponent());
  if(bArea)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,T->ShotDamage);
  if(SightExperiment.Started && Victim>0) ++SightExperiment.Hits;

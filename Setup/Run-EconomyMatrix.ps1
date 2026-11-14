@@ -31,6 +31,11 @@ $supply=@{
  'B3'=@('-AreaBaseRule','1')
  'B3L1'=@('-AreaBaseRule','1','-AreaBaseShareLow','0.1')
  'B3H4'=@('-AreaBaseRule','1','-AreaBaseShareHigh','0.4')
+ # Suppression trial: P = defaults (spread x2.5 at full, pin at 0.5); PS = spread only (no pinning); PP = pinning only; PH = pin at 0.75.
+ 'P'=@('-Suppression','1')
+ 'PS'=@('-Suppression','1','-SuppressionPin','2')
+ 'PP'=@('-Suppression','1','-SuppressionSpread','0')
+ 'PH'=@('-Suppression','1','-SuppressionPin','0.75')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

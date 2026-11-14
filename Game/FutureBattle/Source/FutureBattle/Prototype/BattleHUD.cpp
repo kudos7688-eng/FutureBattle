@@ -246,8 +246,10 @@ void ABattleHUD::DrawHUD()
 				CoverText = FString::Printf(TEXT("EXPOSED %d/5 vs %02d%s"), Exposure.VisibleSamples, Nearest->TargetID, Exposure.bFlanked ? TEXT(" / FLANKED") : TEXT(""));
 			}
 		}
+		/* Suppression trial: the shown spread includes the same multiplier the shot uses. */ const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); const float SuppressedScale = Leaders->SuppressionSpreadScale(S->UnitID, GetWorld()->GetTimeSeconds());
+		if (SuppressedScale > 1.f) CoverText = FString::Printf(TEXT("SUPPRESSED %d%%  %s"), FMath::RoundToInt(Leaders->Suppression(S->UnitID, GetWorld()->GetTimeSeconds()) * 100.f), *CoverText);
 		const float Steady = S->AimStableSince < 0. ? 0.f : static_cast<float>(GetWorld()->GetTimeSeconds() - S->AimStableSince);
-		Label(FString::Printf(TEXT("AIM %.1fs   SPREAD %.2fdeg   %s"), FMath::Min(Steady, GetDefault<UBattleTuning>()->AimSettleSeconds), BattleTactics::SpreadDegrees(*S, GetWorld()->GetTimeSeconds()), *CoverText), W - 566, 148, White, .85f);
+		Label(FString::Printf(TEXT("AIM %.1fs   SPREAD %.2fdeg   %s"), FMath::Min(Steady, GetDefault<UBattleTuning>()->AimSettleSeconds), BattleTactics::SpreadDegrees(*S, GetWorld()->GetTimeSeconds(), SuppressedScale), *CoverText), W - 566, 148, White, .85f);
 		DrawRect(Ink, W - 576, 170, 560, 27);
 		Label(S->DecisionReason.IsEmpty() ? TEXT("PLAN: FOLLOW ORDER") : FString::Printf(TEXT("PLAN: %s / SLOT %d"), *S->DecisionReason, S->CoverSlot), W - 566, 177, Mint, .85f);
 		DrawRect(Ink, W - 576, 199, 560, 27);

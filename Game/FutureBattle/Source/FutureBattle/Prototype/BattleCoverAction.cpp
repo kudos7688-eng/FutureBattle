@@ -175,14 +175,16 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  {Diag.Cover(TEXT("cancel_target_out_of_range"));CancelCoverAction(ID);return false;}
  if(U->CoverPhase==2 && !Player && U->CoverSeconds<=0 && U->ReloadEndTime==0)
  {
-  if(Validate && !RevalidatePeek(ID,Contact->LastKnownPosition)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_no_line"));}
+  // Suppression trial: a pinned AI soldier stays behind cover and checks again shortly.
+  if(IsPinned(ID,Now)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_suppressed"));}
+  else if(Validate && !RevalidatePeek(ID,Contact->LastKnownPosition)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_no_line"));}
   else{U->CoverPhase=3;U->CoverSeconds=3;}
  }
  // -BattleCoverFire=1: an AI peek ends after AICoverShotsPerPeek shots instead of a fixed 1.2s that is shorter than the AI shot interval.
  const bool AIPeekFire=!Player && BattleTactics::CoverFireEnabled();
  if(U->CoverPhase==4)
  {
-  const TCHAR* PeekEnd=U->ReloadEndTime>0?TEXT("reload"):(AIPeekFire && CoverPeekShots.FindRef(ID)>=FMath::Max(1,GetDefault<UBattleTuning>()->AICoverShotsPerPeek))?TEXT("shots_done"):U->CoverSeconds<=0?TEXT("timer"):
+  const TCHAR* PeekEnd=U->ReloadEndTime>0?TEXT("reload"):(!Player && IsPinned(ID,Now))?TEXT("suppressed"):(AIPeekFire && CoverPeekShots.FindRef(ID)>=FMath::Max(1,GetDefault<UBattleTuning>()->AICoverShotsPerPeek))?TEXT("shots_done"):U->CoverSeconds<=0?TEXT("timer"):
    (Validate && !CoverLineClear(ID,Position(ID),Contact->LastKnownPosition))?TEXT("no_line"):
    // -BattleCoverPeekSight=1: stop exposing once the blind time has passed at the peek point without an own sighting.
    (AIPeekFire && BattleTactics::CoverPeekSightEnabled() && !(Contact->bVisible && !Contact->bShared) &&
