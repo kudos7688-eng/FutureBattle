@@ -5,6 +5,7 @@
 #include "BattleGameMode.h"
 #include "BattleController.h"
 #include "BattleTactics.h"
+#include "BattleRanges.h"
 #include "BattleCover.h"
 #include "BattleSquadAI.h"
 #include "BattleMetrics.h"
@@ -121,7 +122,8 @@ void ABattleUnit::GetPlayerShot(FVector& Start, FVector& Direction)
 	Direction = GetControlRotation().Vector();
 	if (!bThirdPersonView) return;
 	FMinimalViewInfo View; CalcCamera(0.f, View);
-	const FVector End = View.Location + View.Rotation.Vector() * GetDefault<UBattleTuning>()->EffectiveWeaponRange();
+	// Aim to wherever the bullet can reach (range profile: further than the AI engagement distance).
+	const FVector End = View.Location + View.Rotation.Vector() * BattleRanges::Reach(GetState()->Weapon);
 	FHitResult Hit;
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleThirdPersonAim), false, this);
 	GetWorld()->LineTraceSingleByChannel(Hit, View.Location, End, ECC_Visibility, Query);
@@ -203,7 +205,7 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 	Direction = BattleTactics::ShotDirection(*GetState(), Direction, GetWorld()->GetTimeSeconds());
 	FHitResult Hit;
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleShot), false, this);
-	const FVector End = Start + Direction.GetSafeNormal() * Tuning->EffectiveWeaponRange();
+	const FVector End = Start + Direction.GetSafeNormal() * BattleRanges::Reach(GetState()->Weapon);
 	GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Query);
 	if (ABattleUnit* Victim = Cast<ABattleUnit>(Hit.GetActor()))
 	{

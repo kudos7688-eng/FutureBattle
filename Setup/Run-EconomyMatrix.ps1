@@ -39,6 +39,15 @@ $supply=@{
  # War score trial: W = time limit only; W400 = also ends when a team's earned score reaches 400.
  'W'=@('-AreaWarScore','1')
  'W400'=@('-AreaWarScore','1','-AreaWarTarget','400')
+ # Range profile (map E default): R0 = off (100m sight / 50m range as on A-D); RE75/RE100/RE125 = carbine AI engagement distance;
+ # RS150 = 150m sight; RP = profile with the suppression trial; RN = profile with 100m sight (ranges only).
+ 'R0'=@('-RangeProfile','0')
+ 'RE75'=@('-RangeEngage','7500')
+ 'RE100'=@('-RangeEngage','10000')
+ 'RE125'=@('-RangeEngage','12500')
+ 'RS150'=@('-RangeSight','15000')
+ 'RN'=@('-RangeSight','10000')
+ 'RP'=@('-Suppression','1')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

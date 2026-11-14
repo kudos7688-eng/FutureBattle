@@ -1,6 +1,7 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleCover.h"
 #include "BattleTactics.h"
+#include "BattleRanges.h"
 #include "BattlePerception.h"
 #include "BattleGameMode.h"
 #include "BattleVATDisplay.h"
@@ -219,7 +220,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
   if(B.Actor.IsValid())B.Actor->SetActorRotation(FRotator(0,Aim.Rotation().Yaw,0));
   else {Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity).Forward=Aim.GetSafeNormal2D();B.Capsule->SetWorldRotation(FRotator(0,Aim.Rotation().Yaw,0));}
   Store->UpdateAim(ID,Now,B.Velocity.Size2D(),Aim,true);
-  const bool InRange=FVector::Dist2D(Position(ID),Contact->LastKnownPosition)<=GetDefault<UBattleTuning>()->EffectiveWeaponRange();
+  const bool InRange=FVector::Dist2D(Position(ID),Contact->LastKnownPosition)<=BattleRanges::Engage(U->Weapon);
   if(U->CoverPhase==4 && Contact->bVisible && !Contact->bShared && InRange && CanSee(ID,U->CoverTargetID))
   {
    if(U->Ammo==0){Store->StartReload(ID,Now);Diag.Cover(TEXT("peekwait_reloading"));}

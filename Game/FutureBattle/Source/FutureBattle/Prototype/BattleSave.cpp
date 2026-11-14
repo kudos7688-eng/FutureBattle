@@ -217,13 +217,23 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 }
 
 namespace {
+// Experiment round trips (-BattleVerifyMixedSave) run several processes at once; a shared smoke slot file made them
+// collide ("Could not write save file"), so each such process uses its own smoke slot and removes it after loading.
+bool PerProcessSmokeSlot(const FString& Requested)
+{
+ static const bool Experiment=FParse::Param(FCommandLine::Get(),TEXT("BattleVerifyMixedSave"));
+ return Experiment&&Requested==TEXT("FutureBattleSmokeOnly");
+}
 FString CompatibleSlot(const UBattleLeaderRuntime* R,const FString& Requested)
 {
  if(Requested!=TEXT("FutureBattleQuick01")&&Requested!=TEXT("FutureBattleSmokeOnly"))return {};
  if(R->IsEnabled()&&!R->IsWideField())return {};
- if(R->bArea)return Requested==TEXT("FutureBattleQuick01")?TEXT("FutureBattleAreaQuick03"):TEXT("FutureBattleAreaSmoke03");
- if(R->bMixedFastMatch)return Requested==TEXT("FutureBattleQuick01")?TEXT("FutureBattleMixedFastQuick02"):TEXT("FutureBattleMixedFastSmoke02");
- return R->IsWideField()?(Requested==TEXT("FutureBattleQuick01")?TEXT("FutureBattleMixedQuick02"):TEXT("FutureBattleMixedSmoke02")):Requested;
+ FString Slot;
+ if(R->bArea)Slot=Requested==TEXT("FutureBattleQuick01")?TEXT("FutureBattleAreaQuick03"):TEXT("FutureBattleAreaSmoke03");
+ else if(R->bMixedFastMatch)Slot=Requested==TEXT("FutureBattleQuick01")?TEXT("FutureBattleMixedFastQuick02"):TEXT("FutureBattleMixedFastSmoke02");
+ else Slot=R->IsWideField()?(Requested==TEXT("FutureBattleQuick01")?TEXT("FutureBattleMixedQuick02"):TEXT("FutureBattleMixedSmoke02")):Requested;
+ if(PerProcessSmokeSlot(Requested))Slot+=FString::Printf(TEXT("_%u"),FPlatformProcess::GetCurrentProcessId());
+ return Slot;
 }
 }
 bool UBattleMatch::SaveMatch(const FString& Slot)
@@ -238,5 +248,7 @@ bool UBattleMatch::LoadMatch(const FString& Slot)
 {
  const FString Actual=CompatibleSlot(GetWorld()->GetSubsystem<UBattleLeaderRuntime>(),Slot);
  if(!IsEnabled()||Actual.IsEmpty()){LastMessage=TEXT("Unsupported save mode or slot");return false;}
- return RestoreSnapshot(Cast<UBattleSave>(UGameplayStatics::LoadGameFromSlot(Actual,0)));
+ auto* Loaded=Cast<UBattleSave>(UGameplayStatics::LoadGameFromSlot(Actual,0));
+ if(PerProcessSmokeSlot(Slot))UGameplayStatics::DeleteGameInSlot(Actual,0);
+ return RestoreSnapshot(Loaded);
 }

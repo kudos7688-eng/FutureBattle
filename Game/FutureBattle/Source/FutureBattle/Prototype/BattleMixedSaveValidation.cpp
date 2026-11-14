@@ -9,7 +9,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
  auto Point=[&](FVector P){return ValidPoint(P,MapName==TEXT("Lvl_BattleWide_D"),BattleFieldLayout::IsUrbanMap(MapName));};
  auto Fail=[&](const TCHAR* Why){Error=Why;return false;};
  if(MapName!=TEXT("Lvl_BattleField500")&&MapName!=TEXT("Lvl_BattleWide_A")&&MapName!=TEXT("Lvl_BattleWide_B")&&MapName!=TEXT("Lvl_BattleWide_C")&&MapName!=TEXT("Lvl_BattleWide_D")&&MapName!=TEXT("Lvl_BattleWide_E")) return Fail(TEXT("Unknown mixed map"));
- if((Ruleset!=TEXT("Wide")&&Ruleset!=TEXT("MixedFast")&&Ruleset!=TEXT("Area")) || !Finite(BaseSightRange,100,16000)||!Finite(WeaponRange,100,10000)||TacticalFeatures<0||TacticalFeatures>((90<<9)|511) ||
+ if((Ruleset!=TEXT("Wide")&&Ruleset!=TEXT("MixedFast")&&Ruleset!=TEXT("Area")) || !Finite(BaseSightRange,100,50000)||!Finite(WeaponRange,100,100000)||TacticalFeatures<0||TacticalFeatures>((90<<9)|511) ||
     !Finite(TacticalClock,0,1000)||!Finite(TeamNextAssignment,0,TacticalClock+1.1)||!Finite(DelegationClock,0,5.1))return Fail(TEXT("Invalid mixed rules/clocks"));
  if(Ruleset==TEXT("Wide")&&(Units.Num()!=500 || Squads.Num()!=50))return Fail(TEXT("Fixed wide roster must contain 500 soldiers and 50 squads"));
  if(Ruleset==TEXT("MixedFast")&&(Units.Num()<20||Units.Num()>500||Units.Num()!=Squads.Num()*10))return Fail(TEXT("Invalid purchased roster"));

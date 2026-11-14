@@ -9,6 +9,7 @@
 #include "BattleController.h"
 #include "BattlePerception.h"
 #include "BattleTactics.h"
+#include "BattleRanges.h"
 #include "BattleMetrics.h"
 #include "MassEntitySubsystem.h"
 #include "Components/CapsuleComponent.h"
@@ -423,7 +424,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  // Regrouping does not replenish ammunition, but may load existing reserve without an enemy target.
  if(bWideField && U->Ammo==0 && U->Reserve>0 && U->ReloadEndTime==0) Store->StartReload(ID,Now);
  const bool CanEngage=Contact && Contact->bVisible && !Contact->bShared &&
-  (!bRangeAwareCombat || FVector::DistSquared(Pos,Contact->LastKnownPosition)<=FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange())) &&
+  (!bRangeAwareCombat || FVector::DistSquared(Pos,Contact->LastKnownPosition)<=FMath::Square(BattleRanges::Engage(U->Weapon))) &&
   (S->TacticalPlan.Action!=EBattleSquadTactic::Support || P->TargetID==S->TacticalPlan.SupportTarget) && CanSee(ID,P->TargetID);
  const bool StopForCombat=P->TargetID!=INDEX_NONE && S->Order!=EBattleOrder::Move;
  const bool ProbeBudget=BattleTactics::AICoverProbeBudgetEnabled();
@@ -543,7 +544,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  const float SuppressedScale=SuppressionSpreadScale(ID,Now);
  if(SuppressedScale>1.25f)SightExperiment.Cover(TEXT("suppressed_shots"));
  Direction=BattleTactics::ShotDirection(*U,Direction,Now,SuppressedScale);
- auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*T->EffectiveWeaponRange();
+ auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon);
  GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_Visibility,Q);
  SuppressNear(U->Team,Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Now);
  const int32 Victim=HitIDs.FindRef(Hit.GetComponent());
