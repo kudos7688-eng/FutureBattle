@@ -7,6 +7,7 @@
 #include "BattleGameMode.h"
 #include "BattlePerception.h"
 #include "BattleTactics.h"
+#include "BattleWarScore.h"
 #include "BattleCover.h"
 #include "BattleMatch.h"
 #include "BattleFieldLayout.h"
@@ -61,7 +62,9 @@ void ABattleHUD::DrawHUD()
 		const float Limit=BattleFieldLayout::IsSightField(GetWorld())?600.f:180.f;
   if(Match->bArea)Label(FString::Printf(TEXT("TIME %.0fs / BASE DESTRUCTION OR FINAL RESOURCE SCORE"),FMath::Max(0.f,600-Match->Elapsed)),28,119,White);
   else Label(FString::Printf(TEXT("CONTROL %.2f : %.2f / 100    TIME %.0fs"), Match->Score[0], Match->Score[1], FMath::Max(0.f, Limit - Match->Elapsed)), 28, 119, White);
-  if(Match->bArea)Label(TEXT("Final: living soldiers + resources + central points x20 / ties draw"),28,141,Muted,.85f);
+  // War score trial: own score exactly; the opponent only as an estimate from own losses and observed ownership (its resources unknown).
+  if(Match->bArea&&BattleWarScore::Tuning().bEnabled)Label(FString::Printf(TEXT("WAR SCORE %s / ENEMY EST %d + RESOURCES ?"),*Match->WarScoreBreakdown(0),Match->WarScoreEstimate(0)),28,141,Muted,.85f);
+  else if(Match->bArea)Label(TEXT("Final: living soldiers + resources + central points x20 / ties draw"),28,141,Muted,.85f);
   else if (BattleFieldLayout::IsLarge(GetWorld())) Label(FString::Printf(TEXT("Capture 8s / 1 point per second / First to 100 / Limit %.0fs"),Limit),28,141,Muted,.85f);
 		else Label(TEXT("Capture 8s / Income +20 per 5s / Supply 1 per round / F8 save / F9 load"), 28, 141, Muted, .85f);
 		DrawRect(Ink, 16, 165, 560, 26);
@@ -299,6 +302,13 @@ void ABattleHUD::DrawHUD()
 		DrawRect(Ink, W * .25f, H * .35f, W * .5f, 100);
 		Label(Mode->Result, W * .25f + 25, H * .35f + 16, Mint, 1.8f);
 		Label(TEXT("F5 TO REDEPLOY"), W * .25f + 25, H * .35f + 60, White);
+		// War score trial: both teams' breakdown is disclosed once the battle has ended.
+		if (Match->bArea && BattleWarScore::Tuning().bEnabled)
+		{
+			DrawRect(Ink, W * .25f, H * .35f + 104, W * .5f, 58);
+			Label(FString::Printf(TEXT("YOU    %s"), *Match->WarScoreBreakdown(0)), W * .25f + 25, H * .35f + 112, Mint);
+			Label(FString::Printf(TEXT("ENEMY  %s"), *Match->WarScoreBreakdown(1)), W * .25f + 25, H * .35f + 136, White);
+		}
 	}
  DrawSquadList();
 }

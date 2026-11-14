@@ -5,6 +5,7 @@
 #include "BattleController.h"
 #include "BattleSquadTactics.h"
 #include "BattleTactics.h"
+#include "BattleWarScore.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/StaticMeshActor.h"
 #include "Components/StaticMeshComponent.h"
@@ -129,6 +130,38 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    if(Save){Save->Area.Income[0]-=1;Check(!M->RestoreSnapshot(Save)&&M->Credits[0]==C0+3,TEXT("income outside conservation rejected"));}
    Mode->bCombatPaused=false;M->bAreaIncomeHeld=true;
    for(auto& P:M->Objectives)P.Owner=INDEX_NONE;
+  }
+  // War score trial (default OFF): points from true ownership every 5 s, losses score for the other team, the opponent estimate
+  // uses observed ownership only, unspent resources are added at the end, and the record survives a snapshot.
+  {
+   auto& W=BattleWarScore::MutableTuning();const auto SavedW=W;const auto KnownBefore=M->Area.KnownOwners;
+   Check(!SavedW.bEnabled,TEXT("war score trial is off by default"));
+   M->Area.WarClock=0;for(int32 I=0;I<6;++I)M->UpdateArea(1);M->RecordWarLoss(0);
+   Check(M->Area.WarPoint[0]==0&&M->Area.WarPoint[1]==0&&M->Area.WarLoss[1]==0&&M->Area.WarClock==0,TEXT("disabled war score records nothing"));
+   W=BattleWarScore::FTuning();W.bEnabled=true;
+   for(auto& P:M->Objectives)P.Owner=INDEX_NONE;M->Objectives[0].Owner=0;M->Objectives[1].Owner=0;M->Objectives[2].Owner=1;
+   auto Seen=[&](){for(int32 I=0;I<6;++I)M->Area.KnownOwners[I]=-2;M->Area.KnownOwners[2]=1;}; // team 0 has seen only point 2, held by the enemy
+   M->Area.WarPoint={0,0};M->Area.WarLoss={0,0};M->Area.WarPointEstimate={0,0};M->Area.WarClock=0;
+   for(int32 I=0;I<4;++I){Seen();M->UpdateArea(1);}
+   Check(M->Area.WarPoint[0]==0&&M->Area.WarPoint[1]==0,TEXT("no war points before the 5 second tick"));
+   Seen();M->UpdateArea(1);
+   Check(M->Area.WarPoint[0]==2&&M->Area.WarPoint[1]==1,TEXT("each owned point scores 1 per 5 seconds"));
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_WAR estimate=%d/%d known=%d,%d,%d,%d,%d,%d"),M->Area.WarPointEstimate[0],M->Area.WarPointEstimate[1],M->Area.KnownOwners[0],M->Area.KnownOwners[1],M->Area.KnownOwners[2],M->Area.KnownOwners[3],M->Area.KnownOwners[4],M->Area.KnownOwners[5]);
+   Check(M->Area.WarPointEstimate[0]==1&&M->Area.WarPointEstimate[1]==0,TEXT("opponent estimate counts only observed ownership"));
+   M->RecordWarLoss(0);
+   Check(M->Area.WarLoss[1]==1&&M->Area.WarLoss[0]==0&&M->WarScoreEstimate(0)==2,TEXT("a lost soldier scores for the other team and is known to the loser"));
+   Check(M->WarScore(0)==2+M->Credits[0]&&M->WarScore(1)==2+M->Credits[1]&&M->AreaScore(0)==M->WarScore(0),TEXT("unspent resources are added to the war score"));
+   Mode->bCombatPaused=true;Save=M->CaptureSnapshot();
+   Check(Save&&Save->Validate(Error)&&Save->Area.WarPoint[0]==2&&Save->Area.WarLoss[1]==1,TEXT("war score joins the snapshot"));
+   if(Save){Save->Area.WarPoint[0]=-1;Check(!Save->Validate(Error),TEXT("invalid war score rejected"));}
+   Mode->bCombatPaused=false;
+   M->Area.WarPoint={5,0};M->Area.WarLoss={0,0};M->Credits[0]=10;M->Credits[1]=16;M->Elapsed=600;M->CheckTimeLimit();
+   Check(M->Winner==1&&M->Phase==EBattleMatchPhase::Finished,TEXT("resources kept decide the time limit under war score"));
+   M->Phase=EBattleMatchPhase::Combat;Mode->bBattleEnded=false;M->Winner=INDEX_NONE;M->Elapsed=100;
+   W.Target=5;M->UpdateArea(1);
+   Check(M->Winner==0&&M->Phase==EBattleMatchPhase::Finished,TEXT("optional target ends the match on earned score"));
+   M->Phase=EBattleMatchPhase::Combat;Mode->bBattleEnded=false;M->Winner=INDEX_NONE;
+   M->Area.WarPoint={0,0};M->Area.WarLoss={0,0};M->Area.WarPointEstimate={0,0};M->Area.WarClock=0;M->Area.KnownOwners=KnownBefore;W=SavedW;
   }
   for(auto& P:M->Objectives)P.Owner=INDEX_NONE;
   M->Credits[0]=100;M->Credits[1]=100;M->Credits[1]=100-(M->AreaScore(1)-M->AreaScore(0)); // formula assumes Credits[1]==100 (income may have changed it)

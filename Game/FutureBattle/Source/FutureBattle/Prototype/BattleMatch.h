@@ -58,6 +58,14 @@ public:
  FVector AreaHome(int32 Team) const;
  int32 ObservedOwner(int32 Team,int32 Point) const;
  int32 AreaScore(int32 Team) const;
+ // War score trial (BattleWarScore.h). Earned = points + enemy losses; Score adds unspent resources; Estimate is what Observer
+ // can know of the opponent's Earned (own losses exactly, points from observed ownership only).
+ int32 WarEarned(int32 Team) const;
+ int32 WarScore(int32 Team) const;
+ int32 WarScoreEstimate(int32 Observer) const;
+ void RecordWarLoss(int32 LostTeam);
+ void UpdateWarScore(float Dt);
+ FString WarScoreBreakdown(int32 Team) const;
  // Area new squad (regular only) into a free slot (<25 active squads) for BattleTactics::AreaHire().Cost resources.
  // bAuto: AI purchase (no selection change; a team-0 squad is delegated). Cancels pending replenishments the spend can no longer cover.
  bool HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto);

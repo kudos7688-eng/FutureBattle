@@ -36,6 +36,9 @@ $supply=@{
  'PS'=@('-Suppression','1','-SuppressionPin','2')
  'PP'=@('-Suppression','1','-SuppressionSpread','0')
  'PH'=@('-Suppression','1','-SuppressionPin','0.75')
+ # War score trial: W = time limit only; W400 = also ends when a team's earned score reaches 400.
+ 'W'=@('-AreaWarScore','1')
+ 'W400'=@('-AreaWarScore','1','-AreaWarTarget','400')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

@@ -274,6 +274,8 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
  CancelCoverAction(ID);
  if(Phase3 && Phase3->bEnabled) Phase3->OnDeath(ID);
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U) return;
+ // War score trial: every loss (shot or stopped by the leader's death) scores for the other team.
+ if(bArea)GetWorld()->GetSubsystem<UBattleMatch>()->RecordWarLoss(U->Team);
  const auto* S=Store->FindSquad(U->SquadID);
  if(S && S->LeaderUnitID==ID) { Store->DisableLeaderSquad(S->SquadID); Plans.Remove(S->SquadID); }
  if(bArea&&S&&S->CommandStatus!=EBattleCommandStatus::Active)

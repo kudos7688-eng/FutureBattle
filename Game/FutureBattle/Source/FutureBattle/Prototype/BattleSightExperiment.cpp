@@ -157,6 +157,10 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
    Root->SetNumberField(Team?TEXT("enemy_hire_spent"):TEXT("ally_hire_spent"),Match->Area.HireSpent.IsValidIndex(Team)?Match->Area.HireSpent[Team]:0);
    Root->SetNumberField(Team?TEXT("enemy_active_squads"):TEXT("ally_active_squads"),Match->ActiveSquads(Team));
    Root->SetNumberField(Team?TEXT("enemy_income"):TEXT("ally_income"),Match->Area.Income.IsValidIndex(Team)?Match->Area.Income[Team]:0);
+   // War score trial (0 when the trial is off).
+   Root->SetNumberField(Team?TEXT("enemy_war_point"):TEXT("ally_war_point"),Match->Area.WarPoint.IsValidIndex(Team)?Match->Area.WarPoint[Team]:0);
+   Root->SetNumberField(Team?TEXT("enemy_war_loss"):TEXT("ally_war_loss"),Match->Area.WarLoss.IsValidIndex(Team)?Match->Area.WarLoss[Team]:0);
+   Root->SetNumberField(Team?TEXT("enemy_war_estimate_of_opponent"):TEXT("ally_war_estimate_of_opponent"),Match->WarScoreEstimate(Team));
    TArray<TSharedPtr<FJsonValue>> PointSeconds;for(int32 I=0;I<3;++I)PointSeconds.Add(MakeShared<FJsonValueNumber>(E.AreaPointSeconds[I][Team]));
    Root->SetArrayField(Team?TEXT("enemy_point_owned_seconds"):TEXT("ally_point_owned_seconds"),PointSeconds);
    Root->SetNumberField(Team?TEXT("enemy_first_capture_seconds"):TEXT("ally_first_capture_seconds"),E.FirstCapture[Team]);

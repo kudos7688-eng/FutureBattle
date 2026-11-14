@@ -1,5 +1,17 @@
 # 現在地と次の作業
 
+## 2026-11-14 Claude（新機能担当）：戦果点を試験切替で記述（既定OFF、**未ビルド・未試験**）
+- **状態**：計測ロックの順番待ちのため、コードを書いただけでビルドも試験もしていない。コンパイルが通るかも未確認。作業ツリー `FutureBattle-suppression`（ブランチ `suppression`）。方針の経緯は ROADMAP 冒頭。
+- **仕組み**（`-BattleAreaWarScore=1`、コマンドラインのみ。BattleWarScore.h/.cpp）
+  - 5秒ごとに、真の保有拠点1つにつき1点。損失1人（射殺、隊長戦死による停止）につき相手に1点（`UBattleLeaderRuntime::OnDeath` から加算）。
+  - 時間切れの得点を「拠点の点＋与えた損失＋残り資源」に置き換える（`AreaScore` が切替時だけ `WarScore` を返す）。生存兵は数えない。本拠地破壊は即時勝利のまま。
+  - 相手の点の推定：自軍の損失（正確）＋観測した保有状況から積んだ拠点の点。相手の資源は含めない。HUDには自軍の内訳と相手の推定だけを出し、終了時に両軍の内訳を出す。**実画面は未確認。**
+  - `-BattleAreaWarTarget=N`（既定0＝なし）で、拠点の点＋損失がNに達したら途中決着。
+  - 保存：`FBattleAreaState` に WarPoint / WarLoss / WarPointEstimate / WarClock を追加（版は据え置き、範囲検査のみ）。
+- **追加した試験（未実行）**：エリアのスモークに10項目。Test-WideSight に `-AreaWarScore` / `-AreaWarTarget`、Run-EconomyMatrix に条件 W / W400。metrics に `*_war_point` / `*_war_loss` / `*_war_estimate_of_opponent`。
+- **未実装**：購入の遅延、本拠地HPの見直し、情報報告（150/300/450秒の開示）、作戦方針、秘密任務、AIが資源を貯める規則（いまのAIは使い切るので、この切替だけではAIは得点で不利な買い方をする）。
+- **次の一手**：ロック受領後にビルド → 基本・エリア・混成保存・カバーの回帰 → 制圧の48戦 → 戦果点の比較。
+
 ## 2026-11-14 Claude（新機能担当）：制圧（サプレッション）を試験切替で実装（既定OFF、比較計測は未実施）
 - **作業場所**：別の作業ツリー `C:\Users\nanek\Documents\FPS\FutureBattle-suppression`（ブランチ `suppression`、bb45eaf から分岐）。Binaries・Saved・Setup/Benchmarks は本体と別。本体の作業ツリーには何も書いていない。
 - **仕組み**（`-BattleSuppression=1`、コマンドラインのみ、既定OFF。BattleSuppression.h/.cpp、混成・エリア戦の射撃経路 `UBattleLeaderRuntime::Fire`）

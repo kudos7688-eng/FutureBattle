@@ -34,6 +34,9 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   }
   // Income (2026-11-14) adds to the starting 100. Pre-income saves have Income {0,0} and IncomeClock 0.
   if(Area.Income.Num()!=2||Area.Income[0]<0||Area.Income[1]<0||Area.Income[0]>100000||Area.Income[1]>100000||!Finite(Area.IncomeClock,0,600))return Fail(TEXT("Invalid area income record"));
+  // War score trial: older saves have {0,0} and clock 0. Range checks only (losses are not reconstructed from the records).
+  if(Area.WarPoint.Num()!=2||Area.WarLoss.Num()!=2||Area.WarPointEstimate.Num()!=2||!Finite(Area.WarClock,0,600))return Fail(TEXT("Invalid area war score record"));
+  for(int32 Team=0;Team<2;++Team)if(Area.WarPoint[Team]<0||Area.WarPoint[Team]>1000000||Area.WarLoss[Team]<0||Area.WarLoss[Team]>1000000||Area.WarPointEstimate[Team]<0||Area.WarPointEstimate[Team]>1000000)return Fail(TEXT("Invalid area war score"));
   if(Area.LastAIHireAt.Num()!=2||!Finite(Area.LastAIHireAt[0],-1000,Elapsed+.01)||!Finite(Area.LastAIHireAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area AI hire clock"));
   if(Retired[0]+Area.HireSpent[0]+AllyCredits!=100+Area.Income[0]||Retired[1]+Area.HireSpent[1]+EnemyCredits!=100+Area.Income[1])return Fail(TEXT("Area resource conservation mismatch"));
   if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=500+10*(Squads.Num()-50)||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=6||Area.SeenAt.Num()!=6||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>200||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));

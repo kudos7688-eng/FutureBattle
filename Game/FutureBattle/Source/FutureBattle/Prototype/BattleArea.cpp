@@ -4,6 +4,7 @@
 #include "BattleGameMode.h"
 #include "BattleSquadTactics.h"
 #include "BattleTactics.h"
+#include "BattleWarScore.h"
 #include "Engine/StaticMeshActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "TimerManager.h"
@@ -13,6 +14,8 @@ FVector UBattleMatch::AreaHome(int32 Team)const{return FVector((Team!=int32(FPar
 int32 UBattleMatch::ObservedOwner(int32 Team,int32 Point)const{return bArea?Area.KnownOwners[Team*3+Point]:Objectives[Point].Owner;}
 int32 UBattleMatch::AreaScore(int32 Team)const
 {
+ // War score trial: points held over time + enemy losses + unspent resources replace the living/resource/point formula.
+ if(BattleWarScore::Tuning().bEnabled)return WarScore(Team);
  int32 Total=Credits[Team];for(const auto& U:GetWorld()->GetSubsystem<UBattleState>()->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive())++Total;
  for(const auto& P:Objectives)if(P.Owner==Team)Total+=20;return Total;
 }
@@ -138,6 +141,7 @@ void UBattleMatch::UpdateArea(float Dt)
    }
   }
  }
+ UpdateWarScore(Dt);if(Phase!=EBattleMatchPhase::Combat)return;
  Area.SupplyClock+=Dt;if(Area.SupplyClock<1)return;
  const float Step=Area.SupplyClock;Area.SupplyClock=0;
  TSet<int32> AtHome;

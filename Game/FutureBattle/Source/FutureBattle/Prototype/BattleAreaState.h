@@ -22,4 +22,10 @@ struct FBattleAreaState
  UPROPERTY() float IncomeClock=0;
  // Match time of each team's last AI purchase (-1000 = none), for the AI purchase interval.
  UPROPERTY() TArray<float> LastAIHireAt={-1000,-1000};
+ // War score trial (BattleWarScore.h; absent in older saves = 0). Per team: score from held central points and from enemy losses,
+ // each observer's estimate of the OPPONENT's point score (from last observed ownership), and the shared scoring clock.
+ UPROPERTY() TArray<int32> WarPoint={0,0};
+ UPROPERTY() TArray<int32> WarLoss={0,0};
+ UPROPERTY() TArray<int32> WarPointEstimate={0,0};
+ UPROPERTY() float WarClock=0;
 };
