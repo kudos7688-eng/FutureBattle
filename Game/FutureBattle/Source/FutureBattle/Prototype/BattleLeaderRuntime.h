@@ -145,6 +145,15 @@ public:
  void AddSuppression(int32 ID,float Amount,double Now);
  // Suppresses living enemies of ShooterTeam within the tuning radius of the travelled bullet path Start..End.
  void SuppressNear(int32 ShooterTeam,FVector Start,FVector End,double Now);
+ // Stances (BattleStance.h; map E default). Runtime only: 0 stand, 1 crouch, 2 prone, and the earliest time each may change again.
+ TMap<int32,uint8> Stances;
+ TMap<int32,double> StanceLockedUntil;
+ uint8 StanceOf(int32 ID) const {const uint8* Found=Stances.Find(ID);return Found?*Found:0;}
+ bool SetStance(int32 ID,uint8 Stance,double Now,bool bForce=false);
+ void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight);
+ // Concealment (hedges tagged BattleConcealment in the map): blocks sight but shots ignore it. Collected once per world.
+ TArray<AActor*> ConcealmentActors;
+ bool bConcealmentBuilt=false;
  bool StartCoverApproach(int32 ID,FVector Threat,int32 Target,double Now,float LocalRadius);
  bool StepCoverApproach(int32 ID,float Dt,double Now,int32 Target);
  bool IssueOrder(int32 SquadID,EBattleOrder Order,FVector Goal,bool bMissionUpdate=false);

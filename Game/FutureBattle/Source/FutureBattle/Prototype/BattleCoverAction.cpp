@@ -2,6 +2,7 @@
 #include "BattleCover.h"
 #include "BattleTactics.h"
 #include "BattleRanges.h"
+#include "BattleStance.h"
 #include "BattlePerception.h"
 #include "BattleGameMode.h"
 #include "BattleVATDisplay.h"
@@ -245,5 +246,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  }
  U->DecisionReason=U->CoverPhase==2?TEXT("COVER / HIDDEN - FIRE TO PEEK"):U->CoverPhase==4?TEXT("COVER / EXPOSED FIRING WINDOW"):TEXT("COVER / MOVING - FIRE BLOCKED");
  if(!Player)U->Action=U->CoverPhase==2?EBattleAction::TakingCover:U->CoverPhase==4?EBattleAction::Engaging:EBattleAction::Moving;
+ // Stances: crouch while hidden behind cover, stand to move and to fire from the peek point.
+ if(!Player)SetStance(ID,U->CoverPhase==2?BattleStance::Crouch:BattleStance::Stand,Now,true);
  return true;
 }

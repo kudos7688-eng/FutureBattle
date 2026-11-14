@@ -48,6 +48,12 @@ $supply=@{
  'RS150'=@('-RangeSight','15000')
  'RN'=@('-RangeSight','10000')
  'RP'=@('-Suppression','1')
+ # Stances (map E default ON): T0 = off; TP = stances with the suppression trial (pinned soldiers go prone).
+ 'T0'=@('-Stances','0')
+ 'TP'=@('-Suppression','1')
+ 'T0P'=@('-Stances','0','-Suppression','1')
+ # TP3 = stances with stronger suppression per shot (0.3 instead of 0.12).
+ 'TP3'=@('-Suppression','1','-SuppressionPerShot','0.3')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

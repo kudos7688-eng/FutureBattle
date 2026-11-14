@@ -10,6 +10,8 @@
 #include "BattlePerception.h"
 #include "BattleTactics.h"
 #include "BattleRanges.h"
+#include "BattleStance.h"
+#include "EngineUtils.h"
 #include "BattleMetrics.h"
 #include "MassEntitySubsystem.h"
 #include "Components/CapsuleComponent.h"
@@ -230,9 +232,11 @@ FVector UBattleLeaderRuntime::Forward(int32 ID) const
 }
 FBattleSightContext UBattleLeaderRuntime::Sight(int32 ID) const
 {
- if(auto* A=Actor(ID)) return A->CaptureSightContext();
+ // Stances lower the eye (60cm above the body centre when standing).
+ const float EyeZ=BattleStance::EyeOffset(StanceOf(ID));
+ if(auto* A=Actor(ID)) {auto Context=A->CaptureSightContext();Context.Eye.Z+=EyeZ-60.f;return Context;}
  FBattleSightContext C; const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
- C.Position=Position(ID); C.Eye=C.Position+FVector(0,0,60); C.Forward=Forward(ID); C.bAlive=U && U->IsAlive();
+ C.Position=Position(ID); C.Eye=C.Position+FVector(0,0,EyeZ); C.Forward=Forward(ID); C.bAlive=U && U->IsAlive();
  if(U) { C.RangeSquared=FMath::Square(U->Perception.SightRange); C.HalfAngleCos=FMath::Cos(FMath::DegreesToRadians(U->Perception.FieldOfView*.5)); C.bOmnidirectional=U->Perception.FieldOfView>=360; }
  C.Metrics=GetWorld()->GetSubsystem<UBattleMetrics>(); C.Query=FCollisionQueryParams(SCENE_QUERY_STAT(LeaderSight),false);
  if(const auto* B=Bodies.Find(ID)) C.Query.AddIgnoredComponent(B->Capsule.Get()); return C;
@@ -243,7 +247,7 @@ bool UBattleLeaderRuntime::CanSee(int32 ID,int32 Target) const
  if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
  const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
  if(FVector::DistSquared(P,C.Position)>C.RangeSquared || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
- FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,35),ECC_Visibility,C.Query);
+ FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
  return !Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
 }
 bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 Target) const
@@ -254,7 +258,7 @@ bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 
  if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
  const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
  if(FVector::DistSquared(P,C.Position)>C.RangeSquared || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
- FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,35),ECC_Visibility,C.Query);
+ FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
  return !Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
 }
 bool UBattleLeaderRuntime::CanSelectLeader(int32 ID) const { return Actor(ID) && GetWorld()->GetSubsystem<UBattleState>()->CanSelectLeader(ID); }
@@ -273,6 +277,8 @@ const TArray<FBattleSquadSummary>& UBattleLeaderRuntime::Summaries()
 void UBattleLeaderRuntime::OnDeath(int32 ID)
 {
  CancelCoverAction(ID);
+ // Stances are for the living: restore the normal body shape before the death pose is applied.
+ SetStance(ID,BattleStance::Stand,GetWorld()->GetTimeSeconds(),true);Stances.Remove(ID);StanceLockedUntil.Remove(ID);
  if(Phase3 && Phase3->bEnabled) Phase3->OnDeath(ID);
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U) return;
  // War score trial: every loss (shot or stopped by the leader's death) scores for the other team.
@@ -417,7 +423,12 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()) return;
  auto& B=Bodies.FindChecked(ID);
  if(StepCoverAction(ID,Dt,Now))return;
- if(B.Actor.IsValid() && B.Actor->IsPlayerControlled()) return;
+ if(B.Actor.IsValid() && B.Actor->IsPlayerControlled())
+ {
+  // Direct control: walking stands the soldier up again (there is no crouch-walk or crawl yet).
+  if(StanceOf(ID)!=BattleStance::Stand && B.Actor->GetVelocity().SizeSquared2D()>2500.)SetStance(ID,BattleStance::Stand,Now,true);
+  return;
+ }
  const auto* S=Store->FindSquad(U->SquadID); auto* P=Plans.Find(U->SquadID); if(!P || S->CommandStatus!=EBattleCommandStatus::Active) return;
  FVector Pos=Position(ID), Direction=Forward(ID); B.Velocity=FVector::ZeroVector;
  const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,P->TargetID);
@@ -427,6 +438,14 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   (!bRangeAwareCombat || FVector::DistSquared(Pos,Contact->LastKnownPosition)<=FMath::Square(BattleRanges::Engage(U->Weapon))) &&
   (S->TacticalPlan.Action!=EBattleSquadTactic::Support || P->TargetID==S->TacticalPlan.SupportTarget) && CanSee(ID,P->TargetID);
  const bool StopForCombat=P->TargetID!=INDEX_NONE && S->Order!=EBattleOrder::Move;
+ if(BattleStance::Enabled(GetWorld()))
+ {
+  const bool WillMove=(S->Order!=EBattleOrder::Hold && !StopForCombat && P->Path.IsValidIndex(B.Waypoint)) || CoverApproaches.Contains(ID);
+  const bool LostSight=!CanEngage && Contact && !Contact->bVisible && Now-Contact->LastSeenTime<=4.;
+  UpdateAIStance(ID,Now,WillMove,StopForCombat,LostSight);
+  // Getting up takes time: no walking until the soldier is standing.
+  if(WillMove && StanceOf(ID)!=BattleStance::Stand){Store->SetAction(ID,EBattleAction::Idle);return;}
+ }
  const bool ProbeBudget=BattleTactics::AICoverProbeBudgetEnabled();
  if(ProbeBudget && CoverProbeFrame!=GFrameCounter){CoverProbeFrame=GFrameCounter;CoverProbesThisFrame=0;}
  const auto* CoverTuning=GetDefault<UBattleTuning>();
@@ -498,8 +517,10 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  }
  else if(B.Actor.IsValid() && !Approaching) B.Actor->GetCharacterMovement()->StopMovementImmediately();
  FVector BaseTarget;const bool BaseEngage=!CanEngage&&S->Order!=EBattleOrder::Move&&GetWorld()->GetSubsystem<UBattleMatch>()->CanFireAtBase(ID,BaseTarget);
- if(BaseEngage)Direction=(BaseTarget-(Pos+FVector(0,0,60))).GetSafeNormal();
- else if(CanEngage) Direction=(Contact->LastKnownPosition+FVector(0,0,35)-(Pos+FVector(0,0,60))).GetSafeNormal();
+ // Stances: fire from the current eye height, and aim at the height the visible target presents.
+ const FVector Muzzle(0,0,BattleStance::EyeOffset(StanceOf(ID)));
+ if(BaseEngage)Direction=(BaseTarget-(Pos+Muzzle)).GetSafeNormal();
+ else if(CanEngage) Direction=(Contact->LastKnownPosition+FVector(0,0,BattleStance::AimOffset(StanceOf(P->TargetID)))-(Pos+Muzzle)).GetSafeNormal();
  else if(S->TacticalPlan.Action==EBattleSquadTactic::Flank)
  {
   // Movement has already consumed its steering vector. Keep watch toward known
@@ -516,8 +537,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   if(Pose!=B.Pose) { B.Pose=Pose; if(VAT)VAT->ChangePose(ID,Pose); if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(Pose==2?ReloadPose:Pose==1?WalkPose:IdlePose,true); }
  }
  Store->UpdateAim(ID,Now,B.Velocity.Size2D(),Direction,true);
- if(BaseEngage)Fire(ID,Pos+FVector(0,0,60),Direction,false);
- if(CanEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+FVector(0,0,60),Direction,false) && S->TacticalPlan.Action==EBattleSquadTactic::Support) GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(S->SquadID,P->TargetID); }
+ if(BaseEngage)Fire(ID,Pos+Muzzle,Direction,false);
+ if(CanEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false) && S->TacticalPlan.Action==EBattleSquadTactic::Support) GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(S->SquadID,P->TargetID); }
  Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:CanEngage?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
 }
 bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot)
@@ -543,9 +564,24 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  if(Phase3 && Phase3->bEnabled) ++Phase3->Shots;
  const float SuppressedScale=SuppressionSpreadScale(ID,Now);
  if(SuppressedScale>1.25f)SightExperiment.Cover(TEXT("suppressed_shots"));
- Direction=BattleTactics::ShotDirection(*U,Direction,Now,SuppressedScale);
+ Direction=BattleTactics::ShotDirection(*U,Direction,Now,SuppressedScale*BattleStance::SpreadScale(StanceOf(ID)));
  auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon);
+ // Concealment (hedges) hides soldiers from sight but does not stop bullets.
+ if(!bConcealmentBuilt)
+ {
+  bConcealmentBuilt=true;
+  for(TActorIterator<AActor> It(GetWorld());It;++It)if(It->ActorHasTag(TEXT("BattleConcealment")))ConcealmentActors.Add(*It);
+ }
+ if(ConcealmentActors.Num())Q.AddIgnoredActors(ConcealmentActors);
  GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_Visibility,Q);
+ // Stances: a bullet above a crouched or prone soldier passes over him and flies on.
+ for(int32 Pass=0;Pass<4&&Hit.bBlockingHit;++Pass)
+ {
+  const int32 Over=HitIDs.FindRef(Hit.GetComponent());const uint8 OverStance=Over>0?StanceOf(Over):0;
+  if(OverStance==BattleStance::Stand||Hit.ImpactPoint.Z<=Position(Over).Z+BattleStance::TopOffset(OverStance))break;
+  SightExperiment.Cover(TEXT("shot_passed_over"));Q.AddIgnoredComponent(Hit.GetComponent());
+  Hit=FHitResult();GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_Visibility,Q);
+ }
  SuppressNear(U->Team,Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Now);
  const int32 Victim=HitIDs.FindRef(Hit.GetComponent());
  if(bArea)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,T->ShotDamage);

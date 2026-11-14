@@ -1,5 +1,6 @@
 #include "BattleController.h"
 #include "BattleLeaderRuntime.h"
+#include "BattleStance.h"
 #include "BattleFieldLayout.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 #include "BattleUnit.h"
@@ -342,6 +343,15 @@ void ABattleController::PrimaryPressed()
 
 bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 {
+ // Stances (map E): X cycles stand -> crouch -> prone for the directly controlled soldier.
+ if(!bTactical && Params.Key==EKeys::X && Params.Event==IE_Pressed)
+  if(auto* U=Cast<ABattleUnit>(GetPawn()))
+   if(auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();R->IsEnabled()&&BattleStance::Enabled(GetWorld()))
+   {
+    const uint8 Next=(R->StanceOf(U->GetUnitID())+1)%3;
+    if(R->SetStance(U->GetUnitID(),Next,GetWorld()->GetTimeSeconds()))ShowNotice(Next==BattleStance::Prone?TEXT("PRONE / X TO STAND"):Next==BattleStance::Crouch?TEXT("CROUCHED / X FOR PRONE"):TEXT("STANDING / X TO CROUCH"));
+    return true;
+   }
  if(!bTactical && Params.Key==EKeys::C && Params.Event==IE_Pressed)
  {
   if(auto* U=Cast<ABattleUnit>(GetPawn()))
