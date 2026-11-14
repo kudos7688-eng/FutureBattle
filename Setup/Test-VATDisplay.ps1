@@ -4,7 +4,7 @@ param([Parameter(Mandatory=$true)][string]$OutputFolder,
  [ValidateSet('Individual','Leader')][string]$Decision='Leader',
  [ValidateSet('RTS','TPS','FPS')][string]$View='RTS',
  [ValidateSet('Open','Cross','Gate')][string]$Layout='Open',
- [int]$Seed=1,[double]$Warmup=10,[double]$Duration=60,[switch]$Stable,[switch]$NullRHI,[switch]$Capture,[switch]$Functional,[ValidateSet('A','B')][string]$Sense='A',[switch]$SenseAudit,[switch]$CpuTrace,[switch]$LightTrace,[ValidateSet(0,1)][int]$ContextReuse=0,[switch]$ContextAudit,[switch]$ContextReplay,[ValidateSet(0,1)][int]$HiddenBones=0,[switch]$BoneAudit,[ValidateSet(0,1)][int]$PerceptionGrid=0,[switch]$GridAudit,[switch]$GridFixture,[ValidateSet(0,1)][int]$AnimTasks=0,[switch]$AnimTaskAudit,[ValidateSet(0,1)][int]$DisplayLOD=0,[switch]$VATAudit,[switch]$VATQuality)
+ [int]$Seed=1,[double]$Warmup=10,[double]$Duration=60,[switch]$Stable,[switch]$NullRHI,[switch]$Capture,[switch]$Functional,[ValidateSet('A','B')][string]$Sense='A',[switch]$SenseAudit,[switch]$CpuTrace,[switch]$LightTrace,[ValidateSet(0,1)][int]$ContextReuse=0,[switch]$ContextAudit,[switch]$ContextReplay,[ValidateSet(0,1)][int]$HiddenBones=0,[switch]$BoneAudit,[ValidateSet(0,1)][int]$PerceptionGrid=0,[switch]$GridAudit,[switch]$GridFixture,[ValidateSet(0,1)][int]$AnimTasks=0,[switch]$AnimTaskAudit,[ValidateSet(0,1)][int]$DisplayLOD=0,[int]$SightRange=0,[switch]$VATAudit,[switch]$VATQuality)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Get-MeasurementMachine.ps1')
 $out=[IO.Path]::GetFullPath($OutputFolder)
@@ -26,6 +26,7 @@ $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/F
 $dll=Join-Path $PSScriptRoot '../Game/FutureBattle/Binaries/Win64/UnrealEditor-FutureBattle.dll'
 $log=Join-Path $out 'run.log'
 $args=@(('"'+$project+'"'),'/Game/Prototype/Lvl_BattleField500','-game','-unattended','-nosound','-nosplash','-BattleLeaderCommand=1',"-BattleLeaderUnits=$Units",('-abslog="'+$log+'"'),('-BattlePhase3="'+(Join-Path $out 'frames')+'"'),"-P3Decision=$Decision","-P3View=$View","-P3Layout=$Layout","-P3Seed=$Seed","-P3Warmup=$Warmup","-P3Duration=$Duration",'-ResX=1920','-ResY=1080','-Windowed','-ForceRes','-NoVSync')
+if($SightRange -gt 0){$args+="-BattleSightRange=$SightRange"}
 if($NullRHI) { $args+='-nullrhi' } else { $args+='-RenderOffscreen' }
  $args+="-P3Sense=$Sense"; if($SenseAudit) { $args+="-P3SenseAudit" }
 if($Stable) { $args+='-P3Stable' }

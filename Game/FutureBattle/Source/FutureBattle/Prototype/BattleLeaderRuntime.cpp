@@ -75,14 +75,14 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
  if(AnimTasks!=0 && AnimTasks!=1) return false;
  bReduceAnimTasks=AnimTasks==1;
  UE_LOG(LogFutureBattle,Display,TEXT("ANIM_TASKS enabled=%d scope=hidden_update_only"),AnimTasks);
- int32 HiddenBones=0; FParse::Value(FCommandLine::Get(),TEXT("BattleReduceHiddenBones="),HiddenBones);
+ int32 HiddenBones=GetDefault<UBattleTuning>()->bReduceHiddenBones?1:0; FParse::Value(FCommandLine::Get(),TEXT("BattleReduceHiddenBones="),HiddenBones);
  if(HiddenBones!=0 && HiddenBones!=1) return false;
  bReduceHiddenBones=HiddenBones==1;
  UE_LOG(LogFutureBattle,Display,TEXT("HIDDEN_BONES enabled=%d scope=fog_hidden_followers"),HiddenBones);
- int32 ReuseSight=0; FParse::Value(FCommandLine::Get(),TEXT("BattleReuseSightContext="),ReuseSight);
+ int32 ReuseSight=GetDefault<UBattleTuning>()->bReuseSightContext?1:0; FParse::Value(FCommandLine::Get(),TEXT("BattleReuseSightContext="),ReuseSight);
  if(ReuseSight!=0 && ReuseSight!=1) return false;
  GetWorld()->GetSubsystem<UBattlePerception>()->bReuseSightContext=ReuseSight==1;
- int32 Grid=0; FParse::Value(FCommandLine::Get(),TEXT("BattlePerceptionGrid="),Grid);
+ int32 Grid=GetDefault<UBattleTuning>()->bPerceptionGrid?1:0; FParse::Value(FCommandLine::Get(),TEXT("BattlePerceptionGrid="),Grid);
  if(Grid!=0 && Grid!=1) return false;
  GetWorld()->GetSubsystem<UBattlePerception>()->bUseSpatialGrid=Grid==1;
  UE_LOG(LogFutureBattle,Display,TEXT("PERCEPTION_GRID enabled=%d far=0 scope=existing_candidate_grid"),Grid);

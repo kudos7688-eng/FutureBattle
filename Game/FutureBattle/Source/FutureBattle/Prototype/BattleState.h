@@ -293,6 +293,12 @@ public:
 	// ("blind") once AICoverPeekBlindSeconds have passed at the peek point without an own sighting of the cover target (observed data only).
 	UPROPERTY(Config, EditAnywhere) bool bAICoverPeekSight = true;
 	UPROPERTY(Config, EditAnywhere) float AICoverPeekBlindSeconds = 1.f;
+	// Leader-mode perception optimizations (adopted ON 2026-11-14; results verified identical): observer sight context reuse,
+	// candidate grid, and skipping bone refresh of fog-hidden followers. -BattleReuseSightContext= / -BattlePerceptionGrid= /
+	// -BattleReduceHiddenBones= (0/1) override.
+	UPROPERTY(Config, EditAnywhere) bool bReuseSightContext = true;
+	UPROPERTY(Config, EditAnywhere) bool bPerceptionGrid = true;
+	UPROPERTY(Config, EditAnywhere) bool bReduceHiddenBones = true;
 	// Squad leader HP = Health x this (1..10). Adopted default 3 (2026-11-13); -BattleLeaderHealth=N overrides for trials.
 	UPROPERTY(Config, EditAnywhere) float LeaderHealthMultiplier = 3.f;
 	// Area home supply cycle (defaults reproduce the 2026-11-12 behaviour). Trials override with -BattleSupply*=.
