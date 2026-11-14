@@ -14,14 +14,15 @@
 namespace
 {
 	bool InRange(double Value, double Min, double Max) { return FMath::IsFinite(Value) && Value >= Min && Value <= Max; }
-	bool ValidSnapshotPosition(const FVector& P, bool Mixed,bool Expanded) { return !P.ContainsNaN() && FMath::Abs(P.X) <= (Expanded?42000:Mixed?32000:10000) && FMath::Abs(P.Y) <= (Expanded?32000:Mixed?22000:10000) && InRange(P.Z, -1000, 10000); }
+	// Map E (urban) is 1000m x 700m; D is 800m x 600m; the other wide maps 600m x 400m.
+	bool ValidSnapshotPosition(const FVector& P, bool Mixed,bool Expanded,bool Urban=false) { return !P.ContainsNaN() && FMath::Abs(P.X) <= (Urban?52000:Expanded?42000:Mixed?32000:10000) && FMath::Abs(P.Y) <= (Urban?37000:Expanded?32000:Mixed?22000:10000) && InRange(P.Z, -1000, 10000); }
 	bool ValidTeam(int32 Team, bool bNeutral = false) { return Team == 0 || Team == 1 || (bNeutral && Team == INDEX_NONE); }
 }
 
 bool UBattleSave::Validate(FString& Error) const
 {
 	const bool Mixed=Version==2||Version==3;
- auto ValidPosition=[&](const FVector& P){return ValidSnapshotPosition(P,Mixed,MapName==TEXT("Lvl_BattleWide_D"));};
+ auto ValidPosition=[&](const FVector& P){return ValidSnapshotPosition(P,Mixed,MapName==TEXT("Lvl_BattleWide_D"),BattleFieldLayout::IsUrbanMap(MapName));};
 	auto Fail = [&Error](const TCHAR* Message) { Error = Message; return false; };
 	if ((Version != 1 && Version != 2 && Version!=3) || (Version==3)!=(Ruleset==TEXT("Area")) || !MatchID.IsValid() || Phase < 1 || Phase > 3 || !ValidTeam(Winner, true) || Result.Len() > 200 || ViewRotation.ContainsNaN()) return Fail(TEXT("Unsupported or invalid match header"));
 	if (!InRange(AllyCredits, 0, 1000000) || !InRange(EnemyCredits, 0, 1000000) || !InRange(AllyScore, 0, 1000) || !InRange(EnemyScore, 0, 1000) || !InRange(Elapsed, 0, 1000) || !InRange(DirectorClock, 0, 5) || !InRange(SupplyClock, 0, Mixed?1000:1)) return Fail(TEXT("Invalid economy or match timers"));

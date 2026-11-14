@@ -2,13 +2,13 @@
 #include "BattleFieldLayout.h"
 namespace {
 bool Finite(double V,double Low,double High){return FMath::IsFinite(V)&&V>=Low&&V<=High;}
-bool ValidPoint(FVector P,bool Expanded){return !P.ContainsNaN()&&FMath::Abs(P.X)<=(Expanded?42000:32000)&&FMath::Abs(P.Y)<=(Expanded?32000:22000)&&Finite(P.Z,-1000,10000);}
+bool ValidPoint(FVector P,bool Expanded,bool Urban){return !P.ContainsNaN()&&FMath::Abs(P.X)<=(Urban?52000:Expanded?42000:32000)&&FMath::Abs(P.Y)<=(Urban?37000:Expanded?32000:22000)&&Finite(P.Z,-1000,10000);}
 }
 bool UBattleSave::ValidateMixed(FString& Error) const
 {
- auto Point=[&](FVector P){return ValidPoint(P,MapName==TEXT("Lvl_BattleWide_D"));};
+ auto Point=[&](FVector P){return ValidPoint(P,MapName==TEXT("Lvl_BattleWide_D"),BattleFieldLayout::IsUrbanMap(MapName));};
  auto Fail=[&](const TCHAR* Why){Error=Why;return false;};
- if(MapName!=TEXT("Lvl_BattleField500")&&MapName!=TEXT("Lvl_BattleWide_A")&&MapName!=TEXT("Lvl_BattleWide_B")&&MapName!=TEXT("Lvl_BattleWide_C")&&MapName!=TEXT("Lvl_BattleWide_D")) return Fail(TEXT("Unknown mixed map"));
+ if(MapName!=TEXT("Lvl_BattleField500")&&MapName!=TEXT("Lvl_BattleWide_A")&&MapName!=TEXT("Lvl_BattleWide_B")&&MapName!=TEXT("Lvl_BattleWide_C")&&MapName!=TEXT("Lvl_BattleWide_D")&&MapName!=TEXT("Lvl_BattleWide_E")) return Fail(TEXT("Unknown mixed map"));
  if((Ruleset!=TEXT("Wide")&&Ruleset!=TEXT("MixedFast")&&Ruleset!=TEXT("Area")) || !Finite(BaseSightRange,100,16000)||!Finite(WeaponRange,100,10000)||TacticalFeatures<0||TacticalFeatures>((90<<9)|511) ||
     !Finite(TacticalClock,0,1000)||!Finite(TeamNextAssignment,0,TacticalClock+1.1)||!Finite(DelegationClock,0,5.1))return Fail(TEXT("Invalid mixed rules/clocks"));
  if(Ruleset==TEXT("Wide")&&(Units.Num()!=500 || Squads.Num()!=50))return Fail(TEXT("Fixed wide roster must contain 500 soldiers and 50 squads"));
