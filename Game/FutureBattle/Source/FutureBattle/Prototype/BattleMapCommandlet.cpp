@@ -35,8 +35,10 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 {
 #if WITH_EDITOR
 	FString Wide;FParse::Value(*Params,TEXT("WideField="),Wide);
-	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D")) return 6;
+	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D") && Wide!=TEXT("E")) return 6;
 	const bool Expanded=Wide==TEXT("D");
+	// Map E (2026-11-14): 1000m x 700m, urban centre with five objectives, open flanks with hedges and low walls.
+	const bool Urban=Wide==TEXT("E");
 	const bool Sight=!Wide.IsEmpty();
 	const bool Large = Sight || FParse::Param(*Params,TEXT("LargeField"));
 	const FString Name=Sight?TEXT("Lvl_BattleWide_")+Wide:Large?TEXT("Lvl_BattleField500"):TEXT("Lvl_BattlePrototype");
@@ -82,7 +84,68 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 		Actor->SetActorScale3D(Size / 100.f);
 		return Actor;
 	};
-	if (Sight)
+	if (Urban)
+	{
+		// Every obstacle is spawned with its 180-degree partner, so the layout is point symmetric.
+		auto Pair=[&](const TCHAR* Label,FVector Center,FVector Size,bool bConcealment=false)
+		{
+			for(int32 Sign:{-1,1})
+			{
+				AStaticMeshActor* Actor=Box(Label,FVector(Center.X*Sign,Center.Y*Sign,Center.Z),Size,WallMat);
+				// Hedges hide soldiers but are meant not to stop bullets (shots will ignore this tag).
+				if(bConcealment)Actor->Tags.Add(TEXT("BattleConcealment"));
+			}
+		};
+		Box(TEXT("UrbanFloor"),FVector(0,0,-60),FVector(100000,70000,120),FloorMat);
+		for(int32 Sign:{-1,1})
+		{
+			Box(TEXT("UrbanBoundary"),FVector(0,Sign*35000,180),FVector(100000,100,360),WallMat);
+			Box(TEXT("UrbanBoundary"),FVector(Sign*50000,0,180),FVector(100,70000,360),WallMat);
+			Box(TEXT("HomeMarker"),FVector(Sign*42000,0,2),FVector(3000,3000,3),Sign<0?AllyMat:EnemyMat,false);
+			Box(TEXT("LookoutMarker"),FVector(0,Sign*16500,2),FVector(800,800,3),AllyMat,false);
+			Box(TEXT("DepotMarker"),FVector(Sign*33000,Sign*15000,2),FVector(1200,1200,3),AllyMat,false);
+		}
+		for(int32 I=0;I<5;++I) Box(TEXT("UrbanObjective"),BattleFieldLayout::ObjectiveForMap(TEXT("Lvl_BattleWide_E"),I)+FVector(0,0,2),FVector(1400,1400,3),AllyMat,false);
+		// City: 500m x 300m. Streets (16m) run along x = -130/0/130m and y = -75/0/75m; each block holds 2 x 2 buildings split by 8m alleys.
+		const double BlockX[4][2]={{-25000,-13800},{-12200,-800},{800,12200},{13800,25000}};
+		const double BlockY[4][2]={{-15000,-8300},{-6700,-800},{800,6700},{8300,15000}};
+		int32 Buildings=0;
+		for(int32 BX=2;BX<4;++BX) for(int32 BY=0;BY<4;++BY) for(int32 SX=0;SX<2;++SX) for(int32 SY=0;SY<2;++SY)
+		{
+			const double MX=(BlockX[BX][0]+BlockX[BX][1])*.5,MY=(BlockY[BY][0]+BlockY[BY][1])*.5;
+			const double X0=SX?MX+400:BlockX[BX][0],X1=SX?BlockX[BX][1]:MX-400,Y0=SY?MY+400:BlockY[BY][0],Y1=SY?BlockY[BY][1]:MY-400;
+			const double Height=600+300*((BX+BY+SX+SY)%2);
+			Pair(TEXT("UrbanBuilding"),FVector((X0+X1)*.5,(Y0+Y1)*.5,Height*.5),FVector(X1-X0,Y1-Y0,Height));++Buildings;
+		}
+		// Street barricades alternate sides so that no street gives a straight line of sight from one crossing to the next.
+		const double StreetX[5]={-25000,-13000,0,13000,25000},StreetY[5]={-15000,-7500,0,7500,15000};
+		for(int32 Row=1;Row<4;++Row) for(int32 Seg=0;Seg<4;++Seg)
+		{
+			const double X=(StreetX[Seg]+StreetX[Seg+1])*.5,Y=StreetY[Row];
+			if(X>0)Pair(TEXT("StreetBarricade"),FVector(X,Y+((Seg+Row)%2?300:-300),150),FVector(300,1000,300));
+		}
+		for(int32 Column=1;Column<4;++Column) for(int32 Seg=0;Seg<4;++Seg)
+		{
+			const double X=StreetX[Column],Y=(StreetY[Seg]+StreetY[Seg+1])*.5;
+			if(X>0 || (X==0 && Y>0))Pair(TEXT("StreetBarricade"),FVector(X+((Seg+Column)%2?300:-300),Y,150),FVector(1000,300,300));
+		}
+		// Open flanks (200m each): staggered hedges (concealment), sheds (hard cover) and low walls; the outermost 30m stays clear as a long firing lane.
+		for(int32 Row=0;Row<3;++Row) for(int32 Column=-4;Column<=4;++Column)
+			Pair(TEXT("FlankHedge"),FVector(Column*10000+(Row%2?5000:0),19000+Row*5000,110),FVector(6000,100,220),true);
+		for(int32 Column=-3;Column<=3;++Column)
+		{
+			Pair(TEXT("FlankShed"),FVector(Column*12000+3000,21500,150),FVector(800,600,300));
+			Pair(TEXT("FlankShed"),FVector(Column*12000-3000,27000,150),FVector(800,600,300));
+			Pair(TEXT("FlankLowWall"),FVector(Column*12000,17000,60),FVector(2000,100,120));
+			Pair(TEXT("FlankLowWall"),FVector(Column*12000+6000,31500,60),FVector(2000,100,120));
+		}
+		// Home yards and depots: low sandbag walls facing the centre.
+		Pair(TEXT("HomeYardWall"),FVector(36000,3000,65),FVector(100,2400,130));
+		Pair(TEXT("HomeYardWall"),FVector(36000,-3000,65),FVector(100,2400,130));
+		Pair(TEXT("DepotCrate"),FVector(33000,15600,100),FVector(600,400,200));
+		UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_LAYOUT buildings=%d (x2 by rotation)"),Buildings);
+	}
+	else if (Sight)
 	{
 		Box(TEXT("WideFloor"),FVector(0,0,-60),FVector(60000,40000,120),FloorMat);
 		for(int32 Sign:{-1,1})
@@ -170,7 +233,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 	ANavMeshBoundsVolume* Bounds = World->SpawnActor<ANavMeshBoundsVolume>(FVector(0, 0, 150), FRotator::ZeroRotator);
 	Bounds->SetActorLabel(TEXT("ArenaNavigationBounds"));
 	UCubeBuilder* Builder = NewObject<UCubeBuilder>(Bounds);
-	Builder->X = Expanded?79800:Sight ? 59800 : Large ? 23800 : 7800; Builder->Y = Expanded?59800:Sight ? 39800 : Large ? 17800 : 5800; Builder->Z = 1200;
+	Builder->X = Urban?99800:Expanded?79800:Sight ? 59800 : Large ? 23800 : 7800; Builder->Y = Urban?69800:Expanded?59800:Sight ? 39800 : Large ? 17800 : 5800; Builder->Z = 1200;
 	UActorFactory::CreateBrushForVolumeActor(Bounds, Builder);
 	Bounds->GetBrushComponent()->BuildSimpleBrushCollision();
 	Bounds->PostEditChange();
@@ -182,12 +245,29 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 		Nav->Tick(.1f);
 		Nav->Build();
 		FNavLocation TestPoint;
-		if (!Nav->ProjectPointToNavigation((Sight ? FVector(-27000,0,0) : Large ? FVector(-9000,0,0) : FVector(-1800,-2100,0)), TestPoint, FVector(100, 100, 200)))
+		if (!Nav->ProjectPointToNavigation((Urban ? FVector(-42000,0,0) : Sight ? FVector(-27000,0,0) : Large ? FVector(-9000,0,0) : FVector(-1800,-2100,0)), TestPoint, FVector(100, 100, 200)))
 		{
 			UE_LOG(LogTemp, Error, TEXT("Arena navigation failed validation; map not saved. Bounds: %s"), *Bounds->GetComponentsBoundingBox().ToString());
 			return 5;
 		}
-		if(Sight)
+		if(Urban)
+		{
+			// Homes and the five objectives must all connect; homes and objectives must not see each other directly.
+			TArray<FVector> Points={FVector(-42000,0,0),FVector(42000,0,0)};
+			for(int32 I=0;I<5;++I)Points.Add(BattleFieldLayout::ObjectiveForMap(TEXT("Lvl_BattleWide_E"),I));
+			int32 Failures=0;
+			for(int32 I=0;I<Points.Num();++I) for(int32 J=I+1;J<Points.Num();++J)
+			{
+				auto* Path=Nav->FindPathToLocationSynchronously(World,Points[I],Points[J]);
+				const bool Reach=Path && Path->IsValid() && !Path->IsPartial();
+				const bool Blocked=World->LineTraceTestByChannel(Points[I]+FVector(0,0,170),Points[J]+FVector(0,0,170),ECC_Visibility);
+				Failures+=!Reach || !Blocked;
+				UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_PAIR from=%d to=%d reachable=%d length_cm=%.1f blocked=%d"),I,J,Reach,Reach?Path->GetPathLength():-1,Blocked);
+			}
+			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d layout=urban-v1 rotation=180"),Failures);
+			if(Failures) return 7;
+		}
+		else if(Sight)
 		{
 			TArray<FVector> Points={FVector(-27000,0,0),FVector(27000,0,0),BattleFieldLayout::Objective(0),BattleFieldLayout::Objective(1),BattleFieldLayout::Objective(2)};
 			for(auto& P:Points)P=BattleFieldLayout::Expand(P,Expanded);

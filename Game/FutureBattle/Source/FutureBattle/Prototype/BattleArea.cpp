@@ -11,7 +11,7 @@
 #include "FutureBattle.h"
 
 FVector UBattleMatch::AreaHome(int32 Team)const{return FVector((Team!=int32(FParse::Param(FCommandLine::Get(),TEXT("BattleTrialSwap"))))?BattleFieldLayout::HomeDistance(GetWorld()):-BattleFieldLayout::HomeDistance(GetWorld()),0,0);}
-int32 UBattleMatch::ObservedOwner(int32 Team,int32 Point)const{return bArea?Area.KnownOwners[Team*3+Point]:Objectives[Point].Owner;}
+int32 UBattleMatch::ObservedOwner(int32 Team,int32 Point)const{return bArea?Area.KnownOwners[Team*Objectives.Num()+Point]:Objectives[Point].Owner;}
 int32 UBattleMatch::AreaScore(int32 Team)const
 {
  // War score trial: points held over time + enemy losses + unspent resources replace the living/resource/point formula.
@@ -22,6 +22,8 @@ int32 UBattleMatch::AreaScore(int32 Team)const
 void UBattleMatch::InitializeArea()
 {
  Credits[0]=Credits[1]=100;Area=FBattleAreaState();Score[0]=Score[1]=0;
+ // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
+ Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
  for(int32 Team=0;Team<2;++Team)
  {
   auto* Base=GetWorld()->SpawnActor<AStaticMeshActor>(AreaHome(Team)*(28./27.)+FVector(0,0,200),FRotator::ZeroRotator);
@@ -119,8 +121,8 @@ void UBattleMatch::UpdateArea(float Dt)
   Area.ObserveClock=FMath::Fmod(Area.ObserveClock,.2f);
   for(int32 Team=0;Team<2;++Team)
   {
-   for(int32 Point=0;Point<3;++Point)for(const auto& U:Store->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive()&&AreaVisible(U.Key,Objectives[Point].Position+FVector(0,0,80)))
-   {Area.KnownOwners[Team*3+Point]=Objectives[Point].Owner;Area.SeenAt[Team*3+Point]=Elapsed;break;}
+   for(int32 Point=0;Point<Objectives.Num();++Point)for(const auto& U:Store->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive()&&AreaVisible(U.Key,Objectives[Point].Position+FVector(0,0,80)))
+   {Area.KnownOwners[Team*Objectives.Num()+Point]=Objectives[Point].Owner;Area.SeenAt[Team*Objectives.Num()+Point]=Elapsed;break;}
    for(const auto& U:Store->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive()&&AreaVisible(U.Key,BaseActors[1-Team]->GetActorLocation(),BaseActors[1-Team]))
    {Area.KnownEnemyBaseHP[Team]=Area.BaseHP[1-Team];break;}
   }

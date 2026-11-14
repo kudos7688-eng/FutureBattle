@@ -25,7 +25,7 @@ bool UBattleSave::Validate(FString& Error) const
 	auto Fail = [&Error](const TCHAR* Message) { Error = Message; return false; };
 	if ((Version != 1 && Version != 2 && Version!=3) || (Version==3)!=(Ruleset==TEXT("Area")) || !MatchID.IsValid() || Phase < 1 || Phase > 3 || !ValidTeam(Winner, true) || Result.Len() > 200 || ViewRotation.ContainsNaN()) return Fail(TEXT("Unsupported or invalid match header"));
 	if (!InRange(AllyCredits, 0, 1000000) || !InRange(EnemyCredits, 0, 1000000) || !InRange(AllyScore, 0, 1000) || !InRange(EnemyScore, 0, 1000) || !InRange(Elapsed, 0, 1000) || !InRange(DirectorClock, 0, 5) || !InRange(SupplyClock, 0, Mixed?1000:1)) return Fail(TEXT("Invalid economy or match timers"));
-	if (Objectives.Num() != 3 || Units.Num() > (Version==3?1000:500) || Squads.Num() > 100 || Observers.Num() > (Mixed?500:100) || Reports.Num() > 100000) return Fail(TEXT("Invalid snapshot size"));
+	if (Objectives.Num() != (Mixed ? BattleFieldLayout::ObjectiveCountForMap(MapName) : 3) || Units.Num() > (Version==3?1000:500) || Squads.Num() > 100 || Observers.Num() > (Mixed?500:100) || Reports.Num() > 100000) return Fail(TEXT("Invalid snapshot size"));
 	if (Strikes.Num() > 2 || !InRange(AllySupportCooldown, 0, 20) || !InRange(EnemySupportCooldown, 0, 20) || !InRange(AllySupportUsed, 0, 3) || !InRange(EnemySupportUsed, 0, 3)) return Fail(TEXT("Invalid support resources"));
 	TSet<int32> StrikeTeams;
 	for (const auto& Strike : Strikes)
@@ -37,7 +37,7 @@ bool UBattleSave::Validate(FString& Error) const
 	for (int32 Index = 0; Index < Objectives.Num(); ++Index)
 	{
 		const auto& P = Objectives[Index];
-		if (!P.Position.Equals(Mixed?(MapName==TEXT("Lvl_BattleField500")?FVector(0,(Index-1)*4500,0):BattleFieldLayout::Objective(Index,MapName==TEXT("Lvl_BattleWide_D"))):Expected[Index], .01) || !ValidTeam(P.Owner, true) || !ValidTeam(P.CapturingTeam, true) || !InRange(P.CaptureProgress, 0, 8) || !InRange(P.IncomeClock, 0, 5)) return Fail(TEXT("Invalid objective state"));
+		if (!P.Position.Equals(Mixed?(MapName==TEXT("Lvl_BattleField500")?FVector(0,(Index-1)*4500,0):BattleFieldLayout::ObjectiveForMap(MapName,Index)):Expected[Index], .01) || !ValidTeam(P.Owner, true) || !ValidTeam(P.CapturingTeam, true) || !InRange(P.CaptureProgress, 0, 8) || !InRange(P.IncomeClock, 0, 5)) return Fail(TEXT("Invalid objective state"));
 	}
 	TMap<int32, const FBattleUnitState*> ByID; TSet<int32> SquadIDs; int32 Alive = 0;
 	for (const auto& Entry : Units)

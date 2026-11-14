@@ -60,7 +60,7 @@ void ABattleHUD::DrawHUD()
 		else Label(FString::Printf(TEXT("%s   CREDITS %d   [1] RECRUIT %d   [2] REGULAR %d   [3] VETERAN %d / 5 units"), Phase, Match->Credits[0], UBattleMatch::SquadPrice(EBattleTraining::Recruit), UBattleMatch::SquadPrice(EBattleTraining::Regular), UBattleMatch::SquadPrice(EBattleTraining::Veteran)), 28, 90, Mint, .9f);
 		DrawRect(Ink, 16, 112, 560, 51);
 		const float Limit=BattleFieldLayout::IsSightField(GetWorld())?600.f:180.f;
-  if(Match->bArea)Label(FString::Printf(TEXT("TIME %.0fs / BASE DESTRUCTION OR FINAL RESOURCE SCORE"),FMath::Max(0.f,600-Match->Elapsed)),28,119,White);
+  if(Match->bArea)Label(FString::Printf(TEXT("TIME %.0fs / BASE DESTRUCTION OR FINAL RESOURCE SCORE"),FMath::Max(0.f,Match->MatchTimeLimit()-Match->Elapsed)),28,119,White);
   else Label(FString::Printf(TEXT("CONTROL %.2f : %.2f / 100    TIME %.0fs"), Match->Score[0], Match->Score[1], FMath::Max(0.f, Limit - Match->Elapsed)), 28, 119, White);
   // War score trial: own score exactly; the opponent only as an estimate from own losses and observed ownership (its resources unknown).
   if(Match->bArea&&BattleWarScore::Tuning().bEnabled)Label(FString::Printf(TEXT("WAR SCORE %s / ENEMY EST %d + RESOURCES ?"),*Match->WarScoreBreakdown(0),Match->WarScoreEstimate(0)),28,141,Muted,.85f);

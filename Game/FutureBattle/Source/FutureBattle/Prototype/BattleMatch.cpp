@@ -16,9 +16,16 @@ void UBattleMatch::InitializeMatch()
 	if (IsEnabled()) return;
 	MatchID = FGuid::NewGuid(); Phase = EBattleMatchPhase::Deployment;
 	Credits[0] = Credits[1] = 3000; Winner = INDEX_NONE;
-	for (const FVector Position : { FVector(-800, -1800, 0), FVector(0, 1800, 0), FVector(800, -1800, 0) })
+	if (BattleFieldLayout::IsSightField(GetWorld()))
 	{
-		FBattleObjective Point; Point.Position = BattleFieldLayout::IsSightField(GetWorld()) ? BattleFieldLayout::Objective(Objectives.Num(),BattleFieldLayout::IsExpanded(GetWorld())) : BattleFieldLayout::IsLarge(GetWorld()) ? FVector(0,(Objectives.Num()-1)*4500,0) : Position; Objectives.Add(Point);
+		// Wide maps take their objective count and positions from the layout (three on A-D, five on E).
+		const FString Map = GetWorld()->GetMapName();
+		for (int32 Index = 0; Index < BattleFieldLayout::ObjectiveCountForMap(Map); ++Index)
+		{ FBattleObjective Point; Point.Position = BattleFieldLayout::ObjectiveForMap(Map, Index); Objectives.Add(Point); }
+	}
+	else for (const FVector Position : { FVector(-800, -1800, 0), FVector(0, 1800, 0), FVector(800, -1800, 0) })
+	{
+		FBattleObjective Point; Point.Position = BattleFieldLayout::IsLarge(GetWorld()) ? FVector(0,(Objectives.Num()-1)*4500,0) : Position; Objectives.Add(Point);
 	}
  bArea=GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bArea;if(bArea)InitializeArea();
 }
@@ -172,7 +179,7 @@ void UBattleMatch::Update(float DeltaSeconds)
 	CheckTimeLimit();
 }
 
-float UBattleMatch::MatchTimeLimit() const { return BattleFieldLayout::IsSightField(GetWorld()) ? 600.f : 180.f; }
+float UBattleMatch::MatchTimeLimit() const { return BattleFieldLayout::IsUrban(GetWorld()) ? 900.f : BattleFieldLayout::IsSightField(GetWorld()) ? 600.f : 180.f; }
 
 void UBattleMatch::CheckTimeLimit()
 {

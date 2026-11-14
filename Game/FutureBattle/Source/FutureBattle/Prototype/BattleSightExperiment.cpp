@@ -84,7 +84,7 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
     }
    }
   }
-  if(Match->bArea)for(int32 I=0;I<Match->Objectives.Num()&&I<3;++I)if(const int32 Owner=Match->Objectives[I].Owner;Owner>=0&&Owner<2)
+  if(Match->bArea)for(int32 I=0;I<Match->Objectives.Num()&&I<FBattleSightExperiment::MaxObjectives;++I)if(const int32 Owner=Match->Objectives[I].Owner;Owner>=0&&Owner<2)
   {E.AreaPointSeconds[I][Owner]+=SampleDt;if(E.FirstCapture[Owner]<0)E.FirstCapture[Owner]=Match->Elapsed;}
   if(SampleDt>0)for(const auto& Pair:Store->GetUnits()) if(Pair.Value.IsAlive() && Pair.Value.Team>=0 && Pair.Value.Team<2)
   {
@@ -161,7 +161,7 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
    Root->SetNumberField(Team?TEXT("enemy_war_point"):TEXT("ally_war_point"),Match->Area.WarPoint.IsValidIndex(Team)?Match->Area.WarPoint[Team]:0);
    Root->SetNumberField(Team?TEXT("enemy_war_loss"):TEXT("ally_war_loss"),Match->Area.WarLoss.IsValidIndex(Team)?Match->Area.WarLoss[Team]:0);
    Root->SetNumberField(Team?TEXT("enemy_war_estimate_of_opponent"):TEXT("ally_war_estimate_of_opponent"),Match->WarScoreEstimate(Team));
-   TArray<TSharedPtr<FJsonValue>> PointSeconds;for(int32 I=0;I<3;++I)PointSeconds.Add(MakeShared<FJsonValueNumber>(E.AreaPointSeconds[I][Team]));
+   TArray<TSharedPtr<FJsonValue>> PointSeconds;for(int32 I=0;I<Match->Objectives.Num()&&I<FBattleSightExperiment::MaxObjectives;++I)PointSeconds.Add(MakeShared<FJsonValueNumber>(E.AreaPointSeconds[I][Team]));
    Root->SetArrayField(Team?TEXT("enemy_point_owned_seconds"):TEXT("ally_point_owned_seconds"),PointSeconds);
    Root->SetNumberField(Team?TEXT("enemy_first_capture_seconds"):TEXT("ally_first_capture_seconds"),E.FirstCapture[Team]);
    Root->SetNumberField(Team?TEXT("enemy_at_opponent_home_range_seconds"):TEXT("ally_at_opponent_home_range_seconds"),E.EnemyHomeRangeSeconds[Team]);
