@@ -57,7 +57,9 @@ namespace BattleTactics
  // until its leader is within that many metres of the enemy home, then switches to AttackMove.
  // S6 trial (-BattleAreaFocus=<gain>, default 0 = OFF): the point not observed as own that is nearest the team's own home gets its
  // weight multiplied by 1+gain (concentration of force; static positions and observed ownership only).
- struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; float InfiltrateRadius=0.f, FocusGain=0.f; int32 TrialTeam=-1; };
+ // S7 trial (-BattleAreaBaseFlank=<f>, default 0 = OFF): a home-assault squad heads first for a flank waypoint at x=0, y=+/-f times the
+ // side points' |y| (side alternates by squad), then for the enemy home once its leader is past 45% of the home-to-home line.
+ struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; float InfiltrateRadius=0.f, FocusGain=0.f, FlankOffset=0.f; int32 TrialTeam=-1; };
  const FAreaStrategyTuning& AreaStrategy();
 	float SpreadDegrees(const FBattleUnitState& State, double Now);
 	FVector ShotDirection(const FBattleUnitState& State, FVector Aim, double Now);

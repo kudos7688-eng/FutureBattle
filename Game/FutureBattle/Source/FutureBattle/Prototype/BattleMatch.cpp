@@ -326,12 +326,22 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
 		// Keep assignment stable when only some squads are delegated.
 		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated) continue;
   const bool BaseAssault=bStrategy?bStrategyBase:(bArea&&Group%5==0);
-  const FVector Center=BaseAssault?AreaHome(1-Team)*(25./27.):Objectives[Target].Position;
+  FVector Center=BaseAssault?AreaHome(1-Team)*(25./27.):Objectives[Target].Position;
   EBattleOrder Order=!BaseAssault&&ObservedOwner(Team,Target)==Team?EBattleOrder::Defend:EBattleOrder::AttackMove;
   // S5 trial: a home-assault squad does not stop to fight until its leader is within InfiltrateRadius of the enemy home.
   if(BaseAssault&&bStrategy&&BattleTactics::AreaStrategy().InfiltrateRadius>0&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==Team))
    if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
     if(FVector::Dist2D(Runtime->Position(Pair.Value.LeaderUnitID),AreaHome(1-Team))>BattleTactics::AreaStrategy().InfiltrateRadius)Order=EBattleOrder::Move;
+  // S7 trial: a home-assault squad first heads for a flank waypoint beside the centre line (away from the central point),
+  // then for the enemy home once its leader is past the middle of the field. Static map positions and own leader only.
+  if(BaseAssault&&bStrategy&&BattleTactics::AreaStrategy().FlankOffset>0&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==Team))
+   if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
+   {
+    const FVector Own=AreaHome(Team),Axis=AreaHome(1-Team)-Own,P=Runtime->Position(Pair.Value.LeaderUnitID);
+    const FVector Way=BattleFieldLayout::Expand(FVector(0,((Pair.Key/10)%2?1:-1)*BattleTactics::AreaStrategy().FlankOffset*12000.f,0),BattleFieldLayout::IsExpanded(GetWorld()));
+    const double T=FVector::DotProduct(P-Own,Axis)/FMath::Max(1.0,Axis.SizeSquared2D());
+    if(T<0.45&&FVector::Dist2D(P,Way)>2500)Center=Way;
+   }
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())
   {
    const auto& S=Pair.Value;

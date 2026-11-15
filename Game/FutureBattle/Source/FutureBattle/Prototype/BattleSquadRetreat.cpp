@@ -134,7 +134,11 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   }
   const FVector Home=Match->AreaHome(S->Team);
   const FVector Goal=Home+FVector((Home.X>0?-1:1)*700,(SID%5-2)*600,0);
-  if(Allowed && Apply(SID,EBattleSquadTactic::Recover,EBattleOrder::Move,Goal,TEXT("HOME SUPPLY / RETURN WITH LEADER"))){Event(TEXT("HomeSupplyReturn"));SupplyTripBegin(SID);return;}
+  if(Allowed && Apply(SID,EBattleSquadTactic::Recover,EBattleOrder::Move,Goal,TEXT("HOME SUPPLY / RETURN WITH LEADER"))){Event(TEXT("HomeSupplyReturn"));
+   // Evaluation only: trip reason (all members out of ammo vs losses) and whether the squad holds an S1 home-assault slot.
+   bool bBase=false;if(Match->bArea&&BattleTactics::AreaStrategy().bEnabled)Match->AreaStrategyTarget(SID,S->Team,bBase);
+   if(O.Armed==0)Event(TEXT("HomeSupplyReturnAmmo"));if(bBase){Event(TEXT("HomeSupplyReturnBaseAssault"));if(O.Armed==0)Event(TEXT("HomeSupplyReturnBaseAssaultAmmo"));}
+   SupplyTripBegin(SID);return;}
  }
  if(P.Action==EBattleSquadTactic::Retreat)
  {

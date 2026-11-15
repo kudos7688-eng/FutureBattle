@@ -55,6 +55,9 @@ $supply=@{
  'FO1'=@('-AreaFocus','1')
  'FO2'=@('-AreaFocus','2')
  'F1FO1'=@('-AreaFrontBalance','1','-AreaFocus','1')
+ # S7 flank route for home-assault squads: waypoint at y = +/-f x side-point |y| before heading for the enemy home.
+ 'FL13'=@('-AreaBaseFlank','1.3')
+ 'FL10'=@('-AreaBaseFlank','1.0')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}
