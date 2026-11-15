@@ -7,7 +7,7 @@ param(
  [string[]]$Conditions=@('HI','H','I','none'),
  [int[]]$Seeds=@(7,19,43),
  [string[]]$Maps=@('D','A'),
- [ValidateRange(1,16)][int]$Concurrency=8,
+ [ValidateRange(1,16)][int]$Concurrency=12,
  [string]$Tag='r1',
  [ValidateRange(-1,1)][int]$TrialTeam=-1,   # 0/1: the S3-S6 trial flags apply to that team only (use a distinct -Tag)
  [ValidateRange(10,120)][int]$Fps=60,       # fixed simulation step (2026-11-16: 30 = about twice as fast; compare only runs with the same Fps)
