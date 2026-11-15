@@ -14,9 +14,9 @@ namespace BattleStance
 {
  enum : uint8 { Stand=0, Crouch=1, Prone=2 };
  bool Enabled(const UWorld* World);
- float EyeOffset(uint8 Stance);    // 60 / 5 / -50
- float AimOffset(uint8 Stance);    // 35 / -5 / -60
- float TopOffset(uint8 Stance);    // 95 / 30 / -35
+ float EyeOffset(uint8 Stance);    // 60 / 0 / -50
+ float AimOffset(uint8 Stance);    // 35 / -10 / -60
+ float TopOffset(uint8 Stance);    // 95 / 20 / -35
  float SpreadScale(uint8 Stance);  // 1 / 0.8 / 0.6
  float VisualScale(uint8 Stance);  // 1 / 0.65 / 0.3
 }

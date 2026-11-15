@@ -380,6 +380,19 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 	if (OverDelegation && Params.Key == EKeys::RightMouseButton) return true;
 	if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled() && bTactical)
  {
+  // Minimap: a left click moves the tactical camera there.
+  if(Params.Key==EKeys::LeftMouseButton)
+  {
+   FVector2D MapPointer; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH);
+   const auto Map=FBattleMinimapLayout::Make(FVector2D(ViewW,ViewH),GetWorld());
+   if(Params.Event==IE_Pressed && GetPointerPosition(MapPointer) && Map.Contains(MapPointer))
+   {
+    bMinimapPress=true; bTriggerHeld=false;
+    if(TacticalPawn){const FVector Target=Map.ToWorld(MapPointer);TacticalPawn->SetActorLocation(FVector(Target.X,Target.Y,TacticalPawn->GetActorLocation().Z));}
+    return true;
+   }
+   if(Params.Event==IE_Released && bMinimapPress){bMinimapPress=false;bTriggerHeld=false;return true;}
+  }
   const bool Over=SquadPanelAtPointer();
   if(Params.Key==EKeys::MouseScrollUp || Params.Key==EKeys::MouseScrollDown)
   { if(Over) { if(Params.Event==IE_Pressed) ScrollSquadList(Params.Key==EKeys::MouseScrollUp?-3:3); return true; } }

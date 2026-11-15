@@ -3,6 +3,7 @@
 #include "BattleTactics.h"
 #include "BattleRanges.h"
 #include "BattleStance.h"
+#include "BattleFieldLayout.h"
 #include "BattlePerception.h"
 #include "BattleGameMode.h"
 #include "BattleVATDisplay.h"
@@ -69,7 +70,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
  auto& Diag=SightExperiment;int32 Stage=0;
  static const TCHAR* StageKeys[]={TEXT("request_no_slot_in_radius"),TEXT("request_slot_reserved"),TEXT("request_path_to_anchor_blocked"),TEXT("request_anchor_too_exposed"),TEXT("request_no_valid_peek"),TEXT("request_reserve_failed")};
  Diag.Cover(TEXT("request_total"));
- for(int32 Slot:Cover->NearbySlots(Pos,FMath::Max(0.f,SearchRadius>=0?SearchRadius:Tuning->CoverActionSearchRadius),FMath::Max(1,Tuning->CoverActionCandidateLimit)))
+ for(int32 Slot:Cover->NearbySlots(Pos,FMath::Max(0.f,SearchRadius>=0?SearchRadius:Tuning->CoverActionSearchRadius),BattleFieldLayout::IsUrban(GetWorld())?12:FMath::Max(1,Tuning->CoverActionCandidateLimit)))
  {
   const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
   Stage=FMath::Max(Stage,1);if(!Cover->IsAvailable(Slot,ID,Now))continue;
@@ -78,6 +79,18 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
   const float Hidden=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Eye).Fraction();
   if(Hidden>.6f)continue;
   Stage=FMath::Max(Stage,4);
+  // Stances: low cover (a wall, a car, sandbags) is used by crouching behind it and standing up to fire, with no step
+  // sideways. It qualifies when the threat cannot see the top of a crouched soldier here but a standing one can see the threat.
+  if(BattleStance::Enabled(GetWorld()) && !BattleTactics::HasTerrainLine(GetWorld(),Anchor+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch)),Eye)
+     && BattleTactics::HasTerrainLine(GetWorld(),Anchor+FVector(0,0,60),Eye))
+  {
+   Stage=FMath::Max(Stage,5);
+   if(!Cover->Reserve(Slot,ID,Now))continue;
+   Diag.Cover(TEXT("request_success"));Diag.Cover(TEXT("request_success_stand_up"));
+   U->CoverAnchor=Anchor;U->CoverPeek=Anchor;U->CoverSlot=Slot;U->CoverPhase=1;U->CoverSeconds=3;
+   U->CoverOrderRevision=U->OrderRevision;U->CoverTargetID=Target;U->DecisionReason=TEXT("COVER / CROUCH BEHIND LOW COVER");
+   return true;
+  }
   for(float Offset:{-220.f,220.f,-400.f,400.f})
   {
    FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Anchor+Lateral*Offset-FVector(0,0,90),Projected,FVector(50,50,150))){Diag.Cover(TEXT("peek_off_navmesh"));continue;}
@@ -247,6 +260,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  U->DecisionReason=U->CoverPhase==2?TEXT("COVER / HIDDEN - FIRE TO PEEK"):U->CoverPhase==4?TEXT("COVER / EXPOSED FIRING WINDOW"):TEXT("COVER / MOVING - FIRE BLOCKED");
  if(!Player)U->Action=U->CoverPhase==2?EBattleAction::TakingCover:U->CoverPhase==4?EBattleAction::Engaging:EBattleAction::Moving;
  // Stances: crouch while hidden behind cover, stand to move and to fire from the peek point.
- if(!Player)SetStance(ID,U->CoverPhase==2?BattleStance::Crouch:BattleStance::Stand,Now,true);
+ // (Direct control too: behind low cover the player is only hidden while crouched.)
+ SetStance(ID,U->CoverPhase==2?BattleStance::Crouch:BattleStance::Stand,Now,true);
  return true;
 }

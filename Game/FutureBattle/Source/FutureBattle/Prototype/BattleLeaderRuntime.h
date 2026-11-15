@@ -46,6 +46,16 @@ struct FBattleSquadListLayout
  int32 RowAt(FVector2D P) const;
 };
 
+// Tactical minimap, shared by Canvas drawing and pointer input. World +X is up and +Y is right, like the tactical camera.
+struct FBattleMinimapLayout
+{
+ FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector, HalfExtent=FVector2D(30000,20000);
+ static FBattleMinimapLayout Make(FVector2D View,const UWorld* World);
+ bool Contains(FVector2D P) const { return Size.X>0 && P.X>=Origin.X && P.X<Origin.X+Size.X && P.Y>=Origin.Y && P.Y<Origin.Y+Size.Y; }
+ FVector2D ToScreen(FVector World) const { return FVector2D(Origin.X+(World.Y+HalfExtent.Y)/(2*HalfExtent.Y)*Size.X,Origin.Y+(HalfExtent.X-World.X)/(2*HalfExtent.X)*Size.Y); }
+ FVector ToWorld(FVector2D P) const { return FVector(HalfExtent.X-(P.Y-Origin.Y)/Size.Y*2*HalfExtent.X,(P.X-Origin.X)/Size.X*2*HalfExtent.Y-HalfExtent.Y,0); }
+};
+
 struct FBattleLeaderBody
 {
  TWeakObjectPtr<ABattleUnit> Actor;
@@ -63,6 +73,8 @@ struct FBattleLeaderBody
  FVector PassingWaypoint=FVector::ZeroVector, PassingForward=FVector::ForwardVector, PassingOffset=FVector::ZeroVector;
  bool bPassingSecond=false;
  double EscapeUntil=0, NextEscapeProbe=0;
+ // Map E: earliest time this member may ask for a route of his own again after being cut off from the shared corridor.
+ double NextOwnPath=0;
  FVector EscapeWaypoint=FVector::ZeroVector;
  TArray<FVector> ContactRoute;
  double NextContactProbe=0, ContactRouteUntil=0, NextArrivalProbe=0;
@@ -78,6 +90,9 @@ struct FBattleLeaderPlan
  TArray<FVector> Path;
  FVector Center=FVector::ZeroVector;
  TMap<int32,FVector> ArrivalGoals;
+ // Map E cover arrival: a member's own short route from the end of the shared path to a cover slot that the
+ // destination cannot reach in a straight line. Rebuilt on demand (not saved).
+ TMap<int32,TArray<FVector>> ArrivalTails;
  TMap<int32,TArray<FVector>> Corridors;
  int32 PathRequests=0, ArrivalReassignments=0, ContactProbes=0;
  int32 ArrivalRevision=INDEX_NONE;

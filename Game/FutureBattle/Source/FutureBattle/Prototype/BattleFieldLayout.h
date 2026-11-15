@@ -30,6 +30,8 @@ namespace BattleFieldLayout
 		if(IsUrban(World))return FVector((Team?1:-1)*(39000+(Group%5)*450),(Group/5-2)*3500,100);
 		return WideSpawn(Team,Group,IsExpanded(World));
 	}
+	// Half size of the playable floor (X, Y) in cm; used by the minimap.
+	inline FVector2D FieldHalfExtent(const UWorld* World) {return IsUrban(World)?FVector2D(50000,35000):IsExpanded(World)?FVector2D(40000,30000):IsSightField(World)?FVector2D(30000,20000):IsLarge(World)?FVector2D(12000,9000):FVector2D(4000,3000);}
 	inline float HomeDistance(const UWorld* World) {return IsUrban(World)?42000:IsExpanded(World)?36000:IsSightField(World)?27000:10000;}
 	inline FVector Spawn(int32 Team, int32 Index)
 	{

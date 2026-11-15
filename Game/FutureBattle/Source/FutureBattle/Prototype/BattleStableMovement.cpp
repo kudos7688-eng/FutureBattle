@@ -1,6 +1,9 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
 #include "BattleTactics.h"
+#include "BattleFieldLayout.h"
+#include "BattleCover.h"
+#include "NavigationPath.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "NavigationSystem.h"
@@ -36,7 +39,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
  const bool NewOrder=P.ArrivalRevision!=S->OrderRevision;
  if(NewOrder || P.ArrivalGoals.IsEmpty())
  {
-  P.ArrivalGoals.Reset(); P.ArrivalRevision=S->OrderRevision;
+  P.ArrivalGoals.Reset(); P.ArrivalTails.Reset(); P.ArrivalRevision=S->OrderRevision;
   TArray<FVector> Reserved;
   for(const auto& Other:Plans) if(Other.Key!=SID)
    if(const auto* OS=Store->FindSquad(Other.Key); OS && OS->Team==S->Team && OS->Order!=EBattleOrder::Hold && OS->CommandStatus==EBattleCommandStatus::Active)
@@ -59,10 +62,40 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   // Fill from the approach side, so converging squads don't seek slots beyond each other.
   auto Score=[&](FVector V){return FMath::FloorToDouble(FVector::Dist2D(V,S->Destination)/450.)*100000.+FVector::Dist2D(V,P.Center);};
   Candidates.Sort([&](const FVector& A,const FVector& B){const double SA=Score(A),SB=Score(B);return SA!=SB?SA<SB:A.X!=B.X?A.X<B.X:A.Y<B.Y;});
-  int32 Queries=0;
+  // Map E: arrive behind cover. The grid below only accepts spots the destination reaches in a straight line, which is
+  // exactly what excludes the far side of a car or a wall. So most members first try cover slots near the destination that
+  // are shielded from the direction of advance, and walk there along a short route of their own. The first three (never
+  // the leader) still take open spots on the objective, so that it can be captured and held.
+  // -BattleCoverArrival=0 turns it off for comparison.
+  static const bool CoverArrivalAllowed=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverArrival="),Value);return Value!=0;}();
+  const bool CoverArrival=CoverArrivalAllowed && BattleFieldLayout::IsUrban(GetWorld()) && !Rally && Nav;
+  TArray<FVector> CoverCandidates; TSet<int32> CoverAssigned;
+  if(CoverArrival)
+  {
+   auto* Cover=GetWorld()->GetSubsystem<UBattleCover>(); Cover->BuildSlots();
+   for(int32 Slot:Cover->NearbySlots(S->Destination,1400.f,48))
+   {
+    const FVector At=Cover->GetSlots()[Slot];
+    if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic))) CoverCandidates.Add(At);
+   }
+  }
+  int32 Queries=0, OpenMembers=0, TailQueries=0;
   for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive())
   {
    bool Found=false;
+   if(CoverArrival && (ID==S->LeaderUnitID || OpenMembers++>=3))
+    for(const FVector& At:CoverCandidates)
+    {
+     if(TailQueries>=24) break;
+     bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,At)<FMath::Square(190.)) {Taken=true;break;}
+     if(Taken) continue;
+     ++TailQueries;
+     auto* Tail=Nav->FindPathToLocationSynchronously(GetWorld(),P.Path.Num()?P.Path.Last():S->Destination,At);
+     if(!Tail || !Tail->IsValid() || Tail->IsPartial() || Tail->PathPoints.Num()<2 || Tail->GetPathLength()>2500) continue;
+     P.ArrivalGoals.Add(ID,At); P.ArrivalTails.Add(ID,Tail->PathPoints); Reserved.Add(At); CoverAssigned.Add(ID); Found=true;
+     SightExperiment.Cover(TEXT("arrival_cover_slot"));
+     break;
+    }
    // Bounded shared allocation. Each living member reserves a distinct destination.
    for(const FVector& Candidate:Candidates)
      {
@@ -71,22 +104,45 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
       bool Occupied=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,Candidate)<FMath::Square(190.)) {Occupied=true;break;}
       if(Occupied) continue;
       ++Queries; FNavLocation Projected;
-      if(!Nav || !Nav->ProjectPointToNavigation(Candidate,Projected,FVector(30,30,200)) || !ClearMovementSegment(S->Destination,Projected.Location)) continue;
+      if(!Nav || !Nav->ProjectPointToNavigation(Candidate,Projected,FVector(30,30,200))) continue;
+      TArray<FVector> OpenTail;
+      if(!ClearMovementSegment(S->Destination,Projected.Location))
+      {
+       // Map E: clutter (low walls, cars) breaks the straight line to most spots around a destination. Accept a spot that a
+       // short walk reaches instead of rejecting it; without this, squads were left with no free arrival spot and re-planned
+       // every second.
+       if(!CoverArrival || TailQueries>=40) continue;
+       ++TailQueries;
+       const FVector PathEnd=P.Path.Num()?FVector(P.Path.Last()):S->Destination;
+       auto* Tail=Nav->FindPathToLocationSynchronously(GetWorld(),PathEnd,Projected.Location);
+       if(!Tail || !Tail->IsValid() || Tail->IsPartial() || Tail->PathPoints.Num()<2 || Tail->GetPathLength()>FVector::Dist2D(PathEnd,Projected.Location)*2.+400.) continue;
+       OpenTail=Tail->PathPoints;
+      }
       if(Rally && FVector::Dist2D(Projected.Location,S->Destination)>450) continue;
       if(Rally && ID==S->LeaderUnitID && FVector::Dist2D(Projected.Location,S->Destination)>250) continue;
       for(const auto& R:Reserved) if(FVector::DistSquared2D(R,Projected.Location)<FMath::Square(190.)) {Occupied=true;break;}
       if(Occupied) continue;
       P.ArrivalGoals.Add(ID,Projected.Location); Reserved.Add(Projected.Location); Found=true;
+      if(OpenTail.Num()>1) {P.ArrivalTails.Add(ID,OpenTail); CoverAssigned.Add(ID);}
+      if(CoverArrival) SightExperiment.Cover(TEXT("arrival_open_slot"));
      }
+   // Map E: never leave a member without an arrival spot (that forced a full reassignment every second). As a last resort
+   // he walks to the end of the shared path and local avoidance sorts out the crowding.
+   if(CoverArrival && !Found)
+   {
+    P.ArrivalGoals.Add(ID,P.Path.Num()?FVector(P.Path.Last()):S->Destination); CoverAssigned.Add(ID);
+    SightExperiment.Cover(TEXT("arrival_fallback"));
+   }
   }
   // Preserve front-to-back ordering: a front row must not stop on the rear row's route.
   TArray<int32> Members;TArray<FVector> Goals;
-  for(const auto& Pair:P.ArrivalGoals) {Members.Add(Pair.Key);Goals.Add(Pair.Value);}
+  // Members sent to a cover slot keep it: their own route leads to that exact spot.
+  for(const auto& Pair:P.ArrivalGoals) if(!CoverAssigned.Contains(Pair.Key)) {Members.Add(Pair.Key);Goals.Add(Pair.Value);}
   auto Key=[&](FVector V){return FMath::RoundToDouble(FVector::DotProduct(V-S->Destination,Forward)/80.);};
   Members.Sort([&](int32 A,int32 B){const double KA=Key(Position(A)),KB=Key(Position(B));return KA!=KB?KA>KB:FVector::DotProduct(Position(A),Right)<FVector::DotProduct(Position(B),Right);});
   Goals.Sort([&](const FVector& A,const FVector& B){const double KA=Key(A),KB=Key(B);return KA!=KB?KA>KB:FVector::DotProduct(A,Right)<FVector::DotProduct(B,Right);});
   for(int32 I=0;I<Members.Num();++I) P.ArrivalGoals[Members[I]]=Goals[I];
-  if(BattleTactics::LeaderGuardEnabled() && !Rally && Goals.Num()>1 && P.ArrivalGoals.Contains(S->LeaderUnitID))
+  if(BattleTactics::LeaderGuardEnabled() && !Rally && !CoverArrival && Goals.Num()>1 && P.ArrivalGoals.Contains(S->LeaderUnitID))
   {
    // Trial: the AI leader stops on the rearmost reserved slot. Goals are sorted front to back.
    int32 RearID=S->LeaderUnitID;
@@ -125,6 +181,12 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
     const FVector A=P.Path[I-1]+Right*Width, End=P.Path[I]+Right*Width;
     if(ClearMovementSegment(A,End) && ClearMovementSegment(P.Path[I],End)) {if(I==1) Route[0]=A;Route[I]=End;break;}
    }
+  }
+  // Map E cover arrival: continue from the end of the shared path along the member's own route to his cover slot.
+  if(const auto* Tail=P.ArrivalTails.Find(ID); Tail && Tail->Num()>1)
+  {
+   if(Route.IsEmpty()) Route=*Tail;
+   else { Route.Last()=(*Tail)[0]; for(int32 I=1;I<Tail->Num();++I) Route.Add((*Tail)[I]); }
   }
   B->Waypoint=1;
   if(!NewOrder && Route.Num()>1)
@@ -285,6 +347,26 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  }
  if(FVector::Dist2D(Pos,B.LastProgressPosition)>40) {B.LastProgressPosition=Pos;B.LastProgressTime=Now;B.StalledSince=0;}
  else if(Now-B.LastProgressTime>1) {B.StalledSince=B.LastProgressTime;B.bTrafficWait=true;}
+ // Map E: a member cut off from the shared corridor by walls gets a route of his own to his arrival spot, instead of
+ // waiting for a squad replan that starts from the squad centre and does not help him. At most two such queries per frame.
+ if(BattleFieldLayout::IsUrban(GetWorld()) && Now-B.LastProgressTime>2 && Now>=B.NextOwnPath && !ClearMovementSegment(Pos,Way))
+ {
+  static uint64 QueryFrame=0; static int32 QueriesThisFrame=0;
+  if(QueryFrame!=GFrameCounter) {QueryFrame=GFrameCounter;QueriesThisFrame=0;}
+  if(QueriesThisFrame<2)
+  {
+   ++QueriesThisFrame; B.NextOwnPath=Now+3;
+   auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+   auto* Own=Nav?Nav->FindPathToLocationSynchronously(GetWorld(),Pos,*Goal):nullptr;
+   if(Own && Own->IsValid() && Own->PathPoints.Num()>1)
+   {
+    TArray<FVector> OwnRoute; for(const auto& Point:Own->PathPoints) OwnRoute.Add(Point);
+    P.Corridors.Add(ID,MoveTemp(OwnRoute)); B.Waypoint=1; B.LastProgressTime=Now; B.StalledSince=0;
+    SightExperiment.Cover(TEXT("move_own_route"));
+    return true;
+   }
+  }
+ }
  // Congestion is not a navigation failure: do not reset all ten paths every two seconds.
  if(B.StalledSince>0 && Now-B.LastProgressTime>4 && !ClearMovementSegment(Pos,Way) && Now>=P.NextPath)
  {P.bReplan=true;P.NextPath=Now+1;B.LastProgressTime=Now;}

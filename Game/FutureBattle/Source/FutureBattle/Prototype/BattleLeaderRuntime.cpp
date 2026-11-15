@@ -20,6 +20,7 @@
 #include "Animation/AnimSequence.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "NavigationSystem.h"
+#include "NavMesh/RecastNavMesh.h"
 #include "NavigationPath.h"
 #include "DrawDebugHelpers.h"
 #include "TimerManager.h"
@@ -35,6 +36,14 @@ FVector UBattleLeaderRuntime::LimitedSteering(FVector Desired,FVector Separation
  return (Forward+Side*Offset).GetSafeNormal2D();
 }
 
+FBattleMinimapLayout FBattleMinimapLayout::Make(FVector2D View,const UWorld* World)
+{
+ // Bottom left, above the order bar. Only the wide maps have one; too small a window gets none.
+ FBattleMinimapLayout M; if(!BattleFieldLayout::IsSightField(World)) return M;
+ M.HalfExtent=BattleFieldLayout::FieldHalfExtent(World);
+ const float Height=FMath::Min(300.f,float(View.Y)-440.f); if(Height<140.f) return M;
+ M.Size=FVector2D(Height*M.HalfExtent.Y/M.HalfExtent.X,Height); M.Origin=FVector2D(20,View.Y-150-Height); return M;
+}
 FBattleSquadListLayout FBattleSquadListLayout::Make(FVector2D View)
 {
  FBattleSquadListLayout L; L.Width=FMath::Min(360.f,float(View.X)-32.f);
@@ -170,6 +179,11 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   Mode->bScaleTest=true; Mode->ScaleUnitCount=Count; Mode->bCombatPaused=true;
   if(bMixedFastMatch){Match->Phase=EBattleMatchPhase::Deployment;Match->Credits[0]=Match->Credits[1]=3000-Match->CurrentSquadPrice(EBattleTraining::Regular);}
   if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())) PC->SetSelection(Actor(1));
+  // Map E: long paths through the dense city need a larger A* node budget than the engine default, or they come back partial.
+  if(BattleFieldLayout::IsUrban(GetWorld()))
+   if(auto* NavSystem=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+    if(auto* Recast=Cast<ARecastNavMesh>(NavSystem->GetDefaultNavDataInstance()))
+    {Recast->DefaultMaxSearchNodes=32768.f;const_cast<FNavigationQueryFilter&>(*Recast->GetDefaultQueryFilter()).SetMaxSearchNodes(32768);}
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WIDE_MIXED_READY squads=50 actors=50 mass=450 objectives=%d paused=1"),Match->Objectives.Num());
   if(FParse::Param(FCommandLine::Get(),TEXT("BattleCoverActionSmoke")))
   {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunCoverActionSmoke,4.f,false);}
@@ -410,7 +424,9 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    const double PathStart=SightExperiment.Enabled?FPlatformTime::Seconds():0;
    auto* Path=Nav->FindPathToLocationSynchronously(GetWorld(),From.Location,To.Location);
    if(SightExperiment.Enabled){SightExperiment.PathMS.Add((FPlatformTime::Seconds()-PathStart)*1000);if(Path && Path->IsValid())SightExperiment.MaxPathLength=FMath::Max(SightExperiment.MaxPathLength,double(Path->GetPathLength()));}
-   if(Path && Path->IsValid() && !Path->IsPartial()) P.Path=Path->PathPoints;
+   // Map E: a partial path still moves the squad as far as the route goes, instead of leaving it standing.
+   if(Path && Path->IsValid() && Path->IsPartial() && BattleFieldLayout::IsUrban(GetWorld())) SightExperiment.Cover(TEXT("path_partial_used"));
+   if(Path && Path->IsValid() && (!Path->IsPartial() || BattleFieldLayout::IsUrban(GetWorld()))) P.Path=Path->PathPoints;
    if(S->TacticalPlan.bAutonomous && S->TacticalPlan.Action==EBattleSquadTactic::Regroup && FVector::Dist2D(From.Location,To.Location)<50)
     P.Path={From.Location,To.Location}; // Followers can converge even when the leader is already at the rally point.
   }
@@ -464,7 +480,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  {
   if(LeaderFirst){}else if(ProbeBudget)++CoverProbesThisFrame;else NextCoverProbe=Now+FMath::Max(0.f,CoverTuning->AICoverProbeInterval);
   CoverProbeAfter.Add(ID,Now+FMath::Max(0.f,LeaderFirst?CoverTuning->LeaderGuardCoverRetrySeconds:CoverTuning->AICoverRetrySeconds));
-  const float LocalRadius=(ProbeBudget||LeaderFirst)?CoverTuning->AICoverSearchRadius:CoverTuning->CoverActionSearchRadius;
+  // Map E: cover is plentiful but small, so AI looks a little further for it (6.5m instead of 3.5m; AI cognition only).
+  const float LocalRadius=(ProbeBudget||LeaderFirst)?CoverTuning->AICoverSearchRadius:BattleFieldLayout::IsUrban(GetWorld())?650.f:CoverTuning->CoverActionSearchRadius;
   if(RequestCoverAction(ID,Contact->LastKnownPosition,P->TargetID,LocalRadius)){CoverApproaches.Remove(ID);return;}
   // Trial -BattleCoverApproach=1: no usable cover here, so walk to a hidden slot beyond the local search radius.
   if(BattleTactics::CoverApproachEnabled() && !CoverApproaches.Contains(ID))StartCoverApproach(ID,Contact->LastKnownPosition,P->TargetID,Now,LocalRadius);

@@ -16,9 +16,11 @@ bool BattleStance::Enabled(const UWorld* World)
  }
  return bEnabled;
 }
-float BattleStance::EyeOffset(uint8 Stance){return Stance==Prone?-50.f:Stance==Crouch?5.f:60.f;}
-float BattleStance::AimOffset(uint8 Stance){return Stance==Prone?-60.f:Stance==Crouch?-5.f:35.f;}
-float BattleStance::TopOffset(uint8 Stance){return Stance==Prone?-35.f:Stance==Crouch?30.f:95.f;}
+// A crouched soldier is 110cm tall (eye at 90cm), so the 130cm low walls of map E hide and protect him, while a standing
+// soldier (eye at 150cm) sees and fires over them. With the first values (120cm) a 120cm wall hid nobody.
+float BattleStance::EyeOffset(uint8 Stance){return Stance==Prone?-50.f:Stance==Crouch?0.f:60.f;}
+float BattleStance::AimOffset(uint8 Stance){return Stance==Prone?-60.f:Stance==Crouch?-10.f:35.f;}
+float BattleStance::TopOffset(uint8 Stance){return Stance==Prone?-35.f:Stance==Crouch?20.f:95.f;}
 float BattleStance::SpreadScale(uint8 Stance){return Stance==Prone?.6f:Stance==Crouch?.8f:1.f;}
 float BattleStance::VisualScale(uint8 Stance){return Stance==Prone?.3f:Stance==Crouch?.65f:1.f;}
 

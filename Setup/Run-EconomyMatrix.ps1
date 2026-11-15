@@ -52,6 +52,8 @@ $supply=@{
  'T0'=@('-Stances','0')
  'TP'=@('-Suppression','1')
  'T0P'=@('-Stances','0','-Suppression','1')
+ # CA0 = map E without cover-first arrival slots (members arrive on the open grid as on maps A-D).
+ 'CA0'=@('-CoverArrival','0')
  # TP3 = stances with stronger suppression per shot (0.3 instead of 0.12).
  'TP3'=@('-Suppression','1','-SuppressionPerShot','0.3')
 }
