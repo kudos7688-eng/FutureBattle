@@ -67,6 +67,8 @@ $supply=@{
  # Income-curve trials (2026-11-16): INC2 doubles base and per-point income; RAMP2 multiplies each payment by 1+0.2 x minutes;
  # RAMP2S50 also halves the starting resources (similar total, shifted toward the late game).
  'INC2'=@('-AreaIncomeBase','2','-AreaIncomePerPoint','2')
+ 'INC3'=@('-AreaIncomeBase','3','-AreaIncomePerPoint','3')
+ 'INC4'=@('-AreaIncomeBase','4','-AreaIncomePerPoint','4')
  'RAMP2'=@('-AreaIncomeRamp','0.2')
  'RAMP2S50'=@('-AreaIncomeRamp','0.2','-AreaStartCredits','50')
  # P1 purpose purchase: the AI buys only for an observed need (home under attack, thin point, weak enemy home) and keeps that mission.
