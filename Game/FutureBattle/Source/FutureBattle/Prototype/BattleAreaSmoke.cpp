@@ -3,6 +3,7 @@
 #include "BattleSave.h"
 #include "BattleGameMode.h"
 #include "BattleController.h"
+#include "InputKeyEventArgs.h"
 #include "BattleSquadTactics.h"
 #include "BattleTactics.h"
 #include "BattleWarScore.h"
@@ -186,6 +187,10 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   // Command bar: the attack-move button arms the same pending order as the T key; the move button clears it.
   { PC->PressCommandButton(1);const bool Armed=PC->PendingOrder==EBattleOrder::AttackMove;PC->PressCommandButton(0);
     Check(Armed&&PC->PendingOrder==EBattleOrder::Move,TEXT("command bar buttons arm and clear orders")); }
+  // Gamepad: tactical pad buttons read as the same keys; a simulated pad press marks the pad as the active device.
+  { const bool Map=PC->GamepadToKey(EKeys::Gamepad_FaceButton_Top)==EKeys::T&&PC->GamepadToKey(EKeys::Gamepad_FaceButton_Bottom)==EKeys::LeftMouseButton&&PC->GamepadToKey(EKeys::Gamepad_FaceButton_Left)==EKeys::RightMouseButton;
+    PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_LeftThumbstick,IE_Pressed,1.f));PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_LeftThumbstick,IE_Released,0.f));
+    Check(Map&&PC->bGamepadActive,TEXT("gamepad buttons map to the keyboard and mouse actions"));PC->bGamepadActive=false; }
   FString Prefix;FParse::Value(FCommandLine::Get(),TEXT("BattleWideScreens="),Prefix);if(!Prefix.IsEmpty())FScreenshotRequest::RequestScreenshot(Prefix+TEXT("-restored.png"),true,false);
   SmokeStage=1;FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunAreaSmoke,.5f,false);return;
  }

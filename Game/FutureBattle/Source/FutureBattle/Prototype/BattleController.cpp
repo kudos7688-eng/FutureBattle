@@ -6,6 +6,7 @@
 #include "BattleUnit.h"
 #include "BattleGameMode.h"
 #include "BattleMatch.h"
+#include "BattlePerception.h"
 #include "BattleNavigation.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
@@ -343,6 +344,16 @@ void ABattleController::PrimaryPressed()
 
 bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 {
+ // Gamepad: read the button as the keyboard/mouse key with the same action (see GamepadToKey).
+ if(Params.Key.IsGamepadKey())
+ {
+  bGamepadActive=true;
+  const FKey Mapped=GamepadToKey(Params.Key); if(!Mapped.IsValid()) return Super::InputKey(Params);
+  FInputKeyEventArgs Translated=Params; Translated.Key=Mapped; Translated.AmountDepressed=Params.Event==IE_Released?0.f:1.f;
+  const bool bResult=InputKey(Translated); bGamepadActive=true; return bResult;
+ }
+ // Any keyboard key or mouse button switches the HUD hints back to keyboard and mouse.
+ if(Params.Key.IsMouseButton()||!Params.Key.IsAnalog()) bGamepadActive=false;
  // Stances (map E): X cycles stand -> crouch -> prone for the directly controlled soldier.
  if(!bTactical && Params.Key==EKeys::X && Params.Event==IE_Pressed)
   if(auto* U=Cast<ABattleUnit>(GetPawn()))
@@ -630,6 +641,7 @@ void ABattleController::PlayerTick(float DeltaTime)
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattlePlayerTick);
 	Super::PlayerTick(DeltaTime);
 	UpdateNoticeLog();
+	UpdateGamepad(DeltaTime);
 	Selected.RemoveAll([](const TObjectPtr<ABattleUnit>& Unit) { return !Unit || !Unit->IsAlive(); });
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
 	{
@@ -841,5 +853,81 @@ void ABattleController::PressCommandButton(int32 Index)
  case 5: DelegateSelected(); break;
  case 6: HireRegular(); break;
  default: break;
+ }
+}
+
+// ---- Gamepad (Xbox controller). Buttons become the keyboard/mouse key with the same action; sticks are read every frame.
+FKey ABattleController::GamepadToKey(const FKey& Key) const
+{
+ if(bTactical)
+ {
+  if(Key==EKeys::Gamepad_FaceButton_Bottom) return EKeys::LeftMouseButton;   // A: select / press a panel button
+  if(Key==EKeys::Gamepad_FaceButton_Left) return EKeys::RightMouseButton;    // X: order destination
+  if(Key==EKeys::Gamepad_FaceButton_Top) return EKeys::T;                    // Y: attack move
+  if(Key==EKeys::Gamepad_FaceButton_Right) return EKeys::H;                  // B: hold
+  if(Key==EKeys::Gamepad_RightShoulder) return EKeys::G;                     // RB: defend
+  if(Key==EKeys::Gamepad_LeftShoulder) return EKeys::Q;                      // LB: select all
+  if(Key==EKeys::Gamepad_LeftTrigger) return EKeys::MouseScrollDown;         // LT: zoom out
+  if(Key==EKeys::Gamepad_RightTrigger) return EKeys::MouseScrollUp;          // RT: zoom in
+  if(Key==EKeys::Gamepad_Special_Left) return EKeys::E;                      // View: control the selected leader
+  if(Key==EKeys::Gamepad_DPad_Up) return EKeys::K;                           // manual command
+  if(Key==EKeys::Gamepad_DPad_Down) return EKeys::J;                         // delegate to AI
+  if(Key==EKeys::Gamepad_DPad_Left) return EKeys::Two;                       // buy a squad
+  if(Key==EKeys::Gamepad_DPad_Right) return EKeys::Period;                   // game speed
+  if(Key==EKeys::Gamepad_RightThumbstick) return EKeys::Enter;               // start the match
+ }
+ else
+ {
+  if(Key==EKeys::Gamepad_RightTrigger) return EKeys::LeftMouseButton;        // RT: fire
+  if(Key==EKeys::Gamepad_FaceButton_Bottom) return EKeys::SpaceBar;          // A: jump
+  if(Key==EKeys::Gamepad_FaceButton_Left) return EKeys::R;                   // X: reload (held: future interact)
+  if(Key==EKeys::Gamepad_FaceButton_Right) return EKeys::X;                  // B: stance
+  if(Key==EKeys::Gamepad_FaceButton_Top) return EKeys::C;                    // Y: cover
+  if(Key==EKeys::Gamepad_Special_Left) return EKeys::Tab;                    // View: back to the tactical view
+ }
+ if(Key==EKeys::Gamepad_Special_Right) return EKeys::P;                      // Menu: pause AI
+ return EKeys::Invalid;
+}
+float ABattleController::AimAssistScale() const
+{
+ // Light aim assist (user decision): the look speed drops near a contact the controlled soldier currently sees. No pull
+ // toward the target and no unseen enemies. -BattleAimAssist=0 turns it off.
+ static const bool bEnabled=[](){int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleAimAssist="),V);return V!=0;}();
+ const auto* Unit=Cast<ABattleUnit>(GetPawn()); if(!bEnabled||!Unit||!PlayerCameraManager) return 1.f;
+ const auto* Contacts=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(Unit->GetUnitID()); if(!Contacts) return 1.f;
+ const FVector Eye=PlayerCameraManager->GetCameraLocation(),Aim=GetControlRotation().Vector();
+ float Best=180.f;
+ for(const auto& C:*Contacts) if(C.Value.bVisible)
+ {
+  const FVector To=(C.Value.LastKnownPosition+FVector(0,0,100)-Eye).GetSafeNormal();
+  Best=FMath::Min(Best,FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Aim,To),-1.f,1.f))));
+ }
+ return Best>=4.f?1.f:FMath::Lerp(.5f,1.f,Best/4.f);
+}
+void ABattleController::UpdateGamepad(float DeltaTime)
+{
+ auto Stick=[this](const FKey& Key){const float V=GetInputAnalogKeyState(Key);return FMath::Abs(V)<.2f?0.f:FMath::Sign(V)*(FMath::Abs(V)-.2f)/.8f;};
+ const float LX=Stick(EKeys::Gamepad_LeftX),LY=Stick(EKeys::Gamepad_LeftY),RX=Stick(EKeys::Gamepad_RightX),RY=Stick(EKeys::Gamepad_RightY);
+ if(LX==0&&LY==0&&RX==0&&RY==0) return;
+ bGamepadActive=true;
+ if(LY!=0) Forward(FInputActionValue(LY));
+ if(LX!=0) Right(FInputActionValue(LX));
+ if(bTactical)
+ {
+  // Virtual cursor: the right stick moves the mouse cursor, so every mouse-driven panel and order works as with a mouse.
+  float X=0,Y=0; int32 W=0,H=0; GetViewportSize(W,H);
+  if((RX!=0||RY!=0)&&GetMousePosition(X,Y)&&W>0)
+  {
+   const float Speed=1200.f*DeltaTime;
+   SetMouseLocation(FMath::Clamp(FMath::RoundToInt(X+RX*FMath::Abs(RX)*Speed),0,W-1),FMath::Clamp(FMath::RoundToInt(Y-RY*FMath::Abs(RY)*Speed),0,H-1));
+  }
+ }
+ else if(RX!=0||RY!=0)
+ {
+  const float Assist=AimAssistScale();
+  FRotator R=GetControlRotation();
+  R.Yaw+=RX*150.f*Assist*DeltaTime;
+  R.Pitch=FMath::Clamp(FRotator::NormalizeAxis(R.Pitch+RY*110.f*Assist*DeltaTime),-80.f,80.f);
+  SetControlRotation(R);
  }
 }

@@ -315,7 +315,9 @@ void ABattleHUD::DrawHUD()
 		// Command bar (command UI 2026-11-16): buttons call the same actions as the keys shown in brackets.
 		{
 			const auto Bar = FBattleCommandBarLayout::Make(FVector2D(W, H));
-			static const TCHAR* const Names[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("小隊を購入 [2]") };
+			static const TCHAR* const KeyNames[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("小隊を購入 [2]") };
+			static const TCHAR* const PadNames[] = { TEXT("移動 [X]"), TEXT("攻撃移動 [Y]"), TEXT("防衛 [RB]"), TEXT("停止 [B]"), TEXT("手動指揮 [十字↑]"), TEXT("AIに委任 [十字↓]"), TEXT("小隊を購入 [十字←]") };
+			const TCHAR* const* Names = PC->bGamepadActive ? PadNames : KeyNames;
 			const bool bAny = !PC->GetSelection().IsEmpty();
 			for (int32 I = 0; I < FBattleCommandBarLayout::Count; ++I)
 			{
@@ -326,10 +328,14 @@ void ABattleHUD::DrawHUD()
 				Label(Names[I], X + 8, Bar.Origin.Y + 5, bPending ? FLinearColor::Yellow : bUsable ? Mint : Muted, .85f);
 			}
 		}
+		if (PC->bGamepadActive) Label(TEXT("右スティック：カーソル   A：選択・決定   左スティック：視点移動   LT/RT：拡大縮小   LB：全選択   ビュー：直接操作   メニュー：AI一時停止   十字→：速度"), 34, H - 53, Muted, .9f);
+		else
 		Label(FString::Printf(TEXT("左ドラッグ：選択   Q：全選択   E/Tab：直接操作   WASD：視点移動   ホイール：拡大縮小   P：AI一時停止   F5：やり直し   F6：記憶表示   %s      選択中 %02d"), Match->IsEnabled() ? TEXT("1/2/3：購入") : TEXT("F7：練度の切替"), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
 	}
 	else
 	{
+		if (PC->bGamepadActive) Label(TEXT("左スティック：移動   右スティック：照準（補助あり）   RT：射撃   X：装填   A：ジャンプ   B：姿勢   Y：遮蔽   ビュー：作戦画面"), 34, H - 80, Mint);
+		else
 		Label(TEXT("WASD：移動   マウス：照準   左クリック：射撃   R：装填   Space：ジャンプ   Tab：作戦画面"), 34, H - 80, Mint);
 		Label(TEXT("P：AI一時停止   F5：戦闘をやり直す   ｜   操作を切り替えても、兵・HP・弾薬・命令は引き継がれる"), 34, H - 53, Muted, .9f);
 		const FLinearColor CrossColor = PC->HitMarkerUntil > GetWorld()->GetTimeSeconds() ? FLinearColor::Yellow : White;

@@ -131,6 +131,15 @@ public:
 	TMap<int32,TArray<FString>> ReasonHistory;
 	// Top of the notification log: below the delegation and squad detail panels while they are shown.
 	float NoticeLogTop() const {return CanShowDelegation()?440.f:262.f;}
+	// Gamepad (Xbox controller, user decision 2026-11-16). Buttons are read as the keyboard/mouse key with the same action
+	// (tactical: A=left click, X=right click, Y=T, B=H, RB=G, LB=Q ...; direct: RT=fire, A=jump, X=reload, B=stance, Y=cover),
+	// so every existing action and panel works unchanged. Tactical: the right stick moves the mouse cursor (virtual cursor) and
+	// the left stick pans; direct: left stick moves, right stick looks with a light aim assist. X held in direct control is
+	// reserved for a future interact action. bGamepadActive switches the HUD hints to pad buttons.
+	bool bGamepadActive=false;
+	FKey GamepadToKey(const FKey& Key) const;
+	void UpdateGamepad(float DeltaTime);
+	float AimAssistScale() const;
 	UFUNCTION(Exec) void BattleVerify();
 private:
 	UPROPERTY() TObjectPtr<ABattleCameraPawn> TacticalPawn;
