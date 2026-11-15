@@ -107,6 +107,9 @@ const BattleTactics::FAreaIncomeTuning& BattleTactics::AreaIncome()
   I.Base=FMath::Clamp(T->AreaBaseIncome,0,100);I.PerPoint=FMath::Clamp(T->AreaPointIncome,0,100);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaIncomeBase="),I.Base);FParse::Value(FCommandLine::Get(),TEXT("BattleAreaIncomePerPoint="),I.PerPoint);
   I.Base=FMath::Clamp(I.Base,0,100);I.PerPoint=FMath::Clamp(I.PerPoint,0,100);
+  I.UrbanBase=T->AreaBaseIncomeUrban;I.UrbanPerPoint=T->AreaPointIncomeUrban;
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaIncomeUrbanBase="),I.UrbanBase);FParse::Value(FCommandLine::Get(),TEXT("BattleAreaIncomeUrbanPerPoint="),I.UrbanPerPoint);
+  I.UrbanBase=I.UrbanBase<0?-1:FMath::Min(I.UrbanBase,100);I.UrbanPerPoint=I.UrbanPerPoint<0?-1:FMath::Min(I.UrbanPerPoint,100);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaIncomeRamp="),I.Ramp);I.Ramp=FMath::IsFinite(I.Ramp)?FMath::Clamp(I.Ramp,0.f,2.f):0.f;
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaStartCredits="),I.StartCredits);I.StartCredits=FMath::Clamp(I.StartCredits,0,1000);
   return I;

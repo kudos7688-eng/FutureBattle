@@ -146,7 +146,8 @@ void UBattleMatch::UpdateArea(float Dt)
    Area.IncomeClock-=I.Seconds;
    for(int32 Team=0;Team<2;++Team)
    {
-    int32 Gain=I.Base;for(const auto& P:Objectives)Gain+=P.Owner==Team?I.PerPoint:0;
+    const bool bUrban=BattleFieldLayout::IsUrban(GetWorld());
+    int32 Gain=I.BaseFor(bUrban);for(const auto& P:Objectives)Gain+=P.Owner==Team?I.PerPointFor(bUrban):0;
     if(I.Ramp>0)Gain=FMath::RoundToInt(Gain*(1.f+I.Ramp*Elapsed/60.f));
     Credits[Team]+=Gain;Area.Income[Team]+=Gain;
    }
@@ -230,20 +231,22 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
  // S7/S8 trials (one team only with -BattleAreaTrialTeam).
  if(bTrial){I.FlankOffset=S.FlankOffset;I.bFlankSameSide=S.bFlankSameSide;I.BaseReturnLiving=S.BaseReturnLiving;}
  // Stage 2: time-phased team plans (match time only; no hidden information). Values are first trial values (numbers delegated).
+ // Phase times are written for the 600 s maps A-D and scale with the match length (map E: 900 s, so x1.5).
+ const float K=MatchTimeLimit()/600.f;
  if(bTrial&&S.Plan==1)
  {
   // EH: expand (take points, spend freely) -> hold (owned points weigh more, keep resources: they are score and pay
   // replacements) -> late hold (no new squads: a squad costs 5 score).
-  if(Elapsed<240.f){I.Phase=1;I.AttackWeight=3.f;I.HireReserve=0;}
-  else if(Elapsed<480.f){I.Phase=2;I.AttackWeight=.5f;I.BaseShare=.1f;I.HireReserve=45;}
+  if(Elapsed<240.f*K){I.Phase=1;I.AttackWeight=3.f;I.HireReserve=0;}
+  else if(Elapsed<480.f*K){I.Phase=2;I.AttackWeight=.5f;I.BaseShare=.1f;I.HireReserve=45;}
   else{I.Phase=3;I.AttackWeight=.5f;I.BaseShare=.1f;I.HireReserve=1000;}
  }
  else if(bTrial&&S.Plan==2)
  {
   // ESA: expand -> save (balanced hold, few home-assault squads, bank resources) -> mass on the enemy home (half the slots
   // assault on one flank route, assault squads return for supply only at 5 living, spend the bank).
-  if(Elapsed<180.f){I.Phase=1;I.AttackWeight=3.f;I.HireReserve=0;}
-  else if(Elapsed<420.f){I.Phase=2;I.AttackWeight=1.f;I.BaseShare=.1f;I.HireReserve=75;}
+  if(Elapsed<180.f*K){I.Phase=1;I.AttackWeight=3.f;I.HireReserve=0;}
+  else if(Elapsed<420.f*K){I.Phase=2;I.AttackWeight=1.f;I.BaseShare=.1f;I.HireReserve=75;}
   else{I.Phase=3;I.BaseShare=.5f;I.FlankOffset=1.3f;I.bFlankSameSide=true;I.BaseReturnLiving=5;I.HireReserve=0;}
  }
  return I;

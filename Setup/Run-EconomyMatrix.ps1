@@ -69,6 +69,10 @@ $supply=@{
  # Income-curve trials (2026-11-16): INC2 doubles base and per-point income; RAMP2 multiplies each payment by 1+0.2 x minutes;
  # RAMP2S50 also halves the starting resources (similar total, shifted toward the late game).
  'INC1'=@('-AreaIncomeBase','1','-AreaIncomePerPoint','1')
+ # Map E income candidates (2026-11-16): EI12 = 1 + 2 per point, EI22 = 2 + 2, EI23 = 2 + 3 (A-D keep INC4).
+ 'EI12'=@('-AreaIncomeUrbanBase','1','-AreaIncomeUrbanPerPoint','2')
+ 'EI22'=@('-AreaIncomeUrbanBase','2','-AreaIncomeUrbanPerPoint','2')
+ 'EI23'=@('-AreaIncomeUrbanBase','2','-AreaIncomeUrbanPerPoint','3')
  'INC2'=@('-AreaIncomeBase','2','-AreaIncomePerPoint','2')
  'INC3'=@('-AreaIncomeBase','3','-AreaIncomePerPoint','3')
  'INC4'=@('-AreaIncomeBase','4','-AreaIncomePerPoint','4')

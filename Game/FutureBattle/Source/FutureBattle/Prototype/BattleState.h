@@ -326,6 +326,10 @@ public:
 	UPROPERTY(Config, EditAnywhere) float AreaIncomeSeconds = 20.f;
 	UPROPERTY(Config, EditAnywhere) int32 AreaBaseIncome = 1;
 	UPROPERTY(Config, EditAnywhere) int32 AreaPointIncome = 1;
+	// Map E (urban, 900 s, five points) amounts; -1 = use AreaBaseIncome / AreaPointIncome. Added 2026-11-16 because INC4 leaves
+	// about 345 resources per team unused on map E. -BattleAreaIncomeUrbanBase= / -BattleAreaIncomeUrbanPerPoint= override.
+	UPROPERTY(Config, EditAnywhere) int32 AreaBaseIncomeUrban = -1;
+	UPROPERTY(Config, EditAnywhere) int32 AreaPointIncomeUrban = -1;
 	// Area AI point allocation S1 (adopted 2026-11-14; -BattleAreaStrategy=0 restores the old round-robin): each squad keeps a fixed
 	// golden-ratio slot; points not observed as own weigh AreaAttackWeight, owned ones 1; the top AreaBaseShare of slots assault the enemy home.
 	UPROPERTY(Config, EditAnywhere) bool bAreaStrategy = true;
