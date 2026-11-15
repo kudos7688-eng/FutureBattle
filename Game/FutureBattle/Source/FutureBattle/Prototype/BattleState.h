@@ -315,7 +315,7 @@ public:
 	// replenishments >= AreaSquadCost + AreaHireReserve.
 	UPROPERTY(Config, EditAnywhere) bool bAreaHire = true;
 	UPROPERTY(Config, EditAnywhere) int32 AreaSquadCost = 15;
-	UPROPERTY(Config, EditAnywhere) int32 AreaHireReserve = 10;
+	UPROPERTY(Config, EditAnywhere) int32 AreaHireReserve = 0;
 	// AI purchase pacing (0 = off, the first implementation): at least AreaHireIntervalSeconds between a team's AI purchases,
 	// and no AI purchase in the last AreaHireStopSeconds of the time limit. Trials: -BattleAreaHireReserve= / -Interval= / -Stop=.
 	UPROPERTY(Config, EditAnywhere) float AreaHireIntervalSeconds = 0.f;

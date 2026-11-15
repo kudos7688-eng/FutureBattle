@@ -35,6 +35,10 @@ $supply=@{
  'F1'=@('-AreaFrontBalance','1')
  'F2'=@('-AreaFrontBalance','1','-AreaFrontGain','2')
  'F05'=@('-AreaFrontBalance','1','-AreaFrontGain','0.5')
+ # Numeric tuning on the current defaults: AI hire reserve (default 10) and S1 attack weight (default 2).
+ 'R0'=@('-AreaHireReserve','0')
+ 'R25'=@('-AreaHireReserve','25')
+ 'W15'=@('-AreaAttackWeight','1.5')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}
