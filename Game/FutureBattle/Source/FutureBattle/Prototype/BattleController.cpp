@@ -380,6 +380,19 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 	if (OverDelegation && Params.Key == EKeys::RightMouseButton) return true;
 	if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled() && bTactical)
  {
+  // Notification log: a left click on a row moves the tactical camera to that event (its release is swallowed like the minimap's).
+  if(Params.Key==EKeys::LeftMouseButton && Params.Event==IE_Pressed)
+  {
+   FVector2D NoticePointer; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH);
+   const auto Notices=VisibleNotices(); const auto Layout=FBattleNoticeLayout::Make(FVector2D(ViewW,ViewH),GetWorld(),Notices.Num());
+   if(GetPointerPosition(NoticePointer))
+    if(const int32 Row=Layout.RowAt(NoticePointer);Row!=INDEX_NONE && Notices.IsValidIndex(Row))
+    {
+     bMinimapPress=true; bTriggerHeld=false;
+     if(TacticalPawn) TacticalPawn->SetActorLocation(FVector(Notices[Row]->Where.X,Notices[Row]->Where.Y,TacticalPawn->GetActorLocation().Z));
+     return true;
+    }
+  }
   // Minimap: a left click moves the tactical camera there.
   if(Params.Key==EKeys::LeftMouseButton)
   {
@@ -598,6 +611,7 @@ void ABattleController::PlayerTick(float DeltaTime)
 {
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattlePlayerTick);
 	Super::PlayerTick(DeltaTime);
+	UpdateNoticeLog();
 	Selected.RemoveAll([](const TObjectPtr<ABattleUnit>& Unit) { return !Unit || !Unit->IsAlive(); });
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
 	{
@@ -668,4 +682,82 @@ void ABattleController::ApplyGameSpeed()
 {
 	// Simulation steps scale with the world delta, so AI, movement and timers all run faster together.
 	if (GetNetMode() == NM_Standalone) UGameplayStatics::SetGlobalTimeDilation(GetWorld(), bTactical ? float(GameSpeed) : 1.f);
+}
+
+// ---- Notification log (command UI). Only what the player's side observes: own home HP, observed point owners, own squads,
+// and the enemy home HP last seen by own soldiers. Area battles on the wide maps only.
+FBattleNoticeLayout FBattleNoticeLayout::Make(FVector2D View,const UWorld* World,int32 Entries)
+{
+ FBattleNoticeLayout L; if(Entries<=0) return L;
+ const auto Map=FBattleMinimapLayout::Make(View,World);
+ const float Bottom=Map.Size.X>0?Map.Origin.Y-32.f:float(View.Y)-170.f;
+ L.Rows=FMath::Clamp(FMath::FloorToInt((Bottom-L.Origin.Y-L.Header)/L.RowHeight),0,FMath::Min(6,Entries));
+ return L;
+}
+int32 FBattleNoticeLayout::RowAt(FVector2D P) const
+{
+ if(Rows<=0||P.X<Origin.X||P.X>=Origin.X+Width) return INDEX_NONE;
+ const float Y=P.Y-Origin.Y-Header; if(Y<0) return INDEX_NONE;
+ const int32 Row=FMath::FloorToInt(Y/RowHeight); return Row<Rows?Row:INDEX_NONE;
+}
+void ABattleController::PushNotice(uint8 Kind,const FString& Text,FVector Where)
+{
+ const double Now=GetWorld()->GetTimeSeconds();
+ // The same notice within 15 s is merged into one row (count and time refreshed, moved to the top).
+ for(int32 I=0;I<NoticeLog.Num();++I) if(NoticeLog[I].Kind==Kind && NoticeLog[I].Text==Text && Now-NoticeLog[I].Time<15.)
+ { FBattleNoticeEntry E=NoticeLog[I]; ++E.Count; E.Time=Now; E.Where=Where; NoticeLog.RemoveAt(I); NoticeLog.Insert(E,0); return; }
+ FBattleNoticeEntry E; E.Text=Text; E.Where=Where; E.Time=Now; E.Kind=Kind; NoticeLog.Insert(E,0);
+ if(NoticeLog.Num()>32) NoticeLog.SetNum(32);
+ UE_LOG(LogTemp,Display,TEXT("BATTLE_NOTICE kind=%d text=%s"),Kind,*Text);
+}
+TArray<const FBattleNoticeEntry*> ABattleController::VisibleNotices() const
+{
+ TArray<const FBattleNoticeEntry*> Out; const double Now=GetWorld()->GetTimeSeconds();
+ for(const auto& E:NoticeLog) if(Now-E.Time<=60.) Out.Add(&E);
+ return Out;
+}
+void ABattleController::UpdateNoticeLog(bool bForce)
+{
+ auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ if(!Match||!Match->bArea||!L||!L->IsEnabled()||!BattleFieldLayout::IsSightField(GetWorld())) return;
+ const double Now=GetWorld()->GetTimeSeconds(); if(!bForce&&Now<NextNoticePoll) return; NextNoticePoll=Now+.25;
+ // A new match (F5 or a load to an earlier time) starts a fresh log.
+ if(Match->Elapsed+1.f<NoticeElapsed){NoticeLog.Reset();LastHomeHP=-1;LastObservedOwner.Reset();LastSquadActive.Reset();AmmoWarned.Reset();bEnemyHomeWeakNoted=false;}
+ NoticeElapsed=Match->Elapsed;
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ // Own home.
+ if(Match->Area.BaseHP.IsValidIndex(0))
+ {
+  const float HP=Match->Area.BaseHP[0];
+  if(LastHomeHP>=0 && HP<LastHomeHP) PushNotice(0,FString::Printf(TEXT("本拠地が攻撃を受けている（耐久 %.0f）"),HP),Match->AreaHome(0));
+  LastHomeHP=HP;
+ }
+ // Points as the player's side last observed them.
+ const int32 N=Match->Objectives.Num();
+ if(LastObservedOwner.Num()!=N){LastObservedOwner.Init(-3,N);}
+ for(int32 I=0;I<N;++I)
+ {
+  const int32 Holder=Match->ObservedOwner(0,I),Before=LastObservedOwner[I];LastObservedOwner[I]=Holder;
+  if(Before==-3||Before==Holder) continue;
+  const TCHAR Name=TCHAR('A'+I); const FVector Where=Match->Objectives[I].Position;
+  if(Holder==0) PushNotice(1,FString::Printf(TEXT("拠点%c を確保"),Name),Where);
+  else if(Holder==1) PushNotice(2,Before==0?FString::Printf(TEXT("拠点%c を失った"),Name):FString::Printf(TEXT("拠点%c は敵が保有"),Name),Where);
+  else if(Before==0) PushNotice(2,FString::Printf(TEXT("拠点%c が中立になった"),Name),Where);
+ }
+ // Own squads: stopped (leader lost) and out of ammunition.
+ for(const auto& S:L->Summaries())
+ {
+  const bool* Was=LastSquadActive.Find(S.SquadID);
+  if(Was && *Was && !S.bActive) PushNotice(3,FString::Printf(TEXT("%s 停止（隊長戦死）"),*S.Name),L->Position(S.LeaderUnitID));
+  LastSquadActive.Add(S.SquadID,S.bActive);
+  if(!S.bActive||AmmoWarned.Contains(S.SquadID)) continue;
+  if(const auto* Squad=Store->FindSquad(S.SquadID))
+  {
+   int32 Living=0,Armed=0;for(int32 ID:Squad->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive()){++Living;Armed+=U->Ammo>0||U->Reserve>0;}
+   if(Living>0&&Armed==0){AmmoWarned.Add(S.SquadID);PushNotice(4,FString::Printf(TEXT("%s 弾切れ"),*S.Name),L->Position(S.LeaderUnitID));}
+  }
+ }
+ // Enemy home seen weak by own soldiers.
+ if(!bEnemyHomeWeakNoted&&Match->Area.KnownEnemyBaseHP.IsValidIndex(0)&&Match->Area.KnownEnemyBaseHP[0]>=0&&Match->Area.KnownEnemyBaseHP[0]<=500)
+ {bEnemyHomeWeakNoted=true;PushNotice(5,FString::Printf(TEXT("敵本拠地の耐久が低い（%.0f）"),Match->Area.KnownEnemyBaseHP[0]),Match->AreaHome(1));}
 }

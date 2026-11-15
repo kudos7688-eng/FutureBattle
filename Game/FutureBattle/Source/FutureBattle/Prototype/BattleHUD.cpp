@@ -312,6 +312,7 @@ void ABattleHUD::DrawHUD()
 	}
  DrawSquadList();
  DrawMinimap();
+ DrawNoticeLog();
 }
 
 void ABattleHUD::DrawMinimap()
@@ -402,5 +403,23 @@ void ABattleHUD::DrawSquadList()
   const float Track=Layout.VisibleRows*Layout.RowHeight, Thumb=Track*Layout.VisibleRows/Rows.Num();
   const float Top=(Track-Thumb)*PC->SquadListScroll/FMath::Max(1,Rows.Num()-Layout.VisibleRows);
   DrawRect(FLinearColor(.65f,.65f,.65f),Layout.Origin.X+Layout.Width-5,Layout.Origin.Y+Layout.Header+Top,3,Thumb);
+ }
+}
+
+void ABattleHUD::DrawNoticeLog()
+{
+ auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas || !PC->IsTactical()) return;
+ const auto Notices=PC->VisibleNotices(); if(Notices.IsEmpty()) return;
+ const auto Layout=FBattleNoticeLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld(),Notices.Num()); if(Layout.Rows<=0) return;
+ static const FLinearColor Colors[]={FLinearColor(1,.35f,.25f),FLinearColor(.28f,.95f,.8f),FLinearColor(.95f,.65f,.3f),FLinearColor(.95f,.65f,.3f),FLinearColor(1,.9f,.35f),FLinearColor(.94f,.97f,1.f)};
+ DrawRect(FLinearColor(.025f,.04f,.065f,.9f),Layout.Origin.X-5,Layout.Origin.Y,Layout.Width+10,Layout.Header+Layout.Rows*Layout.RowHeight+4);
+ DrawText(TEXT("通知（クリックで現地へ）"),FLinearColor(.45f,.52f,.58f),Layout.Origin.X,Layout.Origin.Y+3,GEngine->GetSmallFont(),.8f);
+ const double Now=GetWorld()->GetTimeSeconds();
+ for(int32 I=0;I<Layout.Rows;++I)
+ {
+  const auto& E=*Notices[I]; const float Y=Layout.Origin.Y+Layout.Header+I*Layout.RowHeight;
+  FLinearColor Color=Colors[FMath::Min<int32>(E.Kind,5)]; if(Now-E.Time>20.) Color.A=.6f; // older entries fade
+  const FString Text=E.Count>1?FString::Printf(TEXT("%s ×%d"),*E.Text,E.Count):E.Text;
+  DrawText(FString::Printf(TEXT("%3.0f秒前  %s"),Now-E.Time,*Text),Color,Layout.Origin.X,Y+3,GEngine->GetSmallFont(),.9f);
  }
 }

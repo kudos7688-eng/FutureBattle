@@ -175,6 +175,8 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    PC->CycleGameSpeed();const float X2=UGameplayStatics::GetGlobalTimeDilation(GetWorld());PC->CycleGameSpeed();const float X4=UGameplayStatics::GetGlobalTimeDilation(GetWorld());
    PC->CycleGameSpeed();Check(X2==2.f&&X4==4.f&&UGameplayStatics::GetGlobalTimeDilation(GetWorld())==1.f&&PC->GetGameSpeed()==1,TEXT("tactical speed toggle cycles x2 x4 x1"));
   }
+  // Notification log (command UI): the stopped squads and observed points of this fixture appear before the screenshot.
+  PC->UpdateNoticeLog(true);Check(PC->VisibleNotices().Num()>0,TEXT("notification log records observed events"));
   FString Prefix;FParse::Value(FCommandLine::Get(),TEXT("BattleWideScreens="),Prefix);if(!Prefix.IsEmpty())FScreenshotRequest::RequestScreenshot(Prefix+TEXT("-restored.png"),true,false);
   SmokeStage=1;FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunAreaSmoke,.5f,false);return;
  }

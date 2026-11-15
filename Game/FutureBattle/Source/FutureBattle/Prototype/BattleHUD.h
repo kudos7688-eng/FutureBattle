@@ -13,6 +13,8 @@ private:
  void DrawSquadList();
  // Tactical minimap: own squads and only what the player's side has observed (never unseen enemies).
  void DrawMinimap();
+ // Notification log (newest first; click a row to move the camera there). Observed events only.
+ void DrawNoticeLog();
 	double NextLabelCheck = 0;
 	TSet<int32> ClearLabels;
 	TWeakObjectPtr<APawn> LabelViewPawn;
