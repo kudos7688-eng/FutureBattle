@@ -73,6 +73,8 @@ $supply=@{
  'EI12'=@('-AreaIncomeUrbanBase','1','-AreaIncomeUrbanPerPoint','2')
  'EI22'=@('-AreaIncomeUrbanBase','2','-AreaIncomeUrbanPerPoint','2')
  'EI23'=@('-AreaIncomeUrbanBase','2','-AreaIncomeUrbanPerPoint','3')
+ # Return fire: AI soldiers hit in the last 5 s may fire back at visible contacts up to bullet reach (matters on map E).
+ 'RF'=@('-ReturnFire','1')
  'INC2'=@('-AreaIncomeBase','2','-AreaIncomePerPoint','2')
  'INC3'=@('-AreaIncomeBase','3','-AreaIncomePerPoint','3')
  'INC4'=@('-AreaIncomeBase','4','-AreaIncomePerPoint','4')

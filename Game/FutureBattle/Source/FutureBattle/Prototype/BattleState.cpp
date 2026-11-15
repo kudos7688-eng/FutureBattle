@@ -372,7 +372,8 @@ bool UBattleState::ApplyDamage(int32 ID, int32 AttackingTeam, float Damage)
 {
 	FBattleUnitState* State = Units.Find(ID);
 	if (!State || !State->IsAlive() || State->Team == AttackingTeam || !FMath::IsFinite(Damage) || Damage <= 0.f) return false;
- GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordDamage(State->SquadID, FMath::Min(State->HP, Damage));
+  GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordDamage(State->SquadID, FMath::Min(State->HP, Damage));
+ if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>())Runtime->NoteUnderFire(ID);
 	State->HP = FMath::Max(0.f, State->HP - Damage);
 	if (!State->IsAlive())
 	{

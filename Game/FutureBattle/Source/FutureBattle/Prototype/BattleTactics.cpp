@@ -149,6 +149,12 @@ bool BattleTactics::CoverPeekSightEnabled()
  return Enabled;
 }
 
+bool BattleTactics::ReturnFireEnabled()
+{
+ static const bool Enabled=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleReturnFire="),Value);return Value!=0;}();
+ return Enabled;
+}
+
 bool BattleTactics::CoverApproachEnabled()
 {
  static const bool Enabled=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverApproach="),Value);return Value!=0;}();

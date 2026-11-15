@@ -7,6 +7,7 @@
 #include "BattleAnimTasks.h"
 #include "BattleUnit.h"
 #include "BattleSightExperiment.h"
+#include "BattleTactics.h"
 #include "BattleLeaderRuntime.generated.h"
 
 class ABattleGameMode;
@@ -107,6 +108,14 @@ public:
  bool IsEnabled() const { return bEnabled; }
  bool IsWideField() const { return bWideField; }
  bool RangeAwareEnabled() const {return bRangeAwareCombat;}
+ // Return fire (trial -BattleReturnFire=1, ROADMAP range table): a soldier hit within the last ReturnFireSeconds may engage a
+ // contact it can currently see up to its weapon reach instead of the shorter AI engagement distance; its squad may pick such a target.
+ // Only differs from the old rule where the range profile separates reach from engagement (map E).
+ void NoteUnderFire(int32 ID){if(BattleTactics::ReturnFireEnabled())UnderFireUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);}
+ bool UnderFire(int32 ID) const {const double* T=UnderFireUntil.Find(ID);return T&&*T>GetWorld()->GetTimeSeconds();}
+ TMap<int32,double> UnderFireUntil;
+ // Squad target search range for one member: the AI engagement distance, or its weapon reach while under fire (return fire).
+ float TargetRange(int32 ID) const;
  bool bMixedFastMatch=false;
  bool bArea=false;
  FName SnapshotMode() const {return bArea?TEXT("Area"):bMixedFastMatch?TEXT("MixedFast"):TEXT("Wide");}

@@ -369,7 +369,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  if(S->Order!=EBattleOrder::Move) for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) if(const auto* Contacts=Sense->GetContacts(ID))
   for(const auto& C:*Contacts) if(C.Value.bVisible && !C.Value.bShared)
   {
-   if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C.Value.LastKnownPosition)>FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange())) continue;
+   if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C.Value.LastKnownPosition)>FMath::Square(TargetRange(ID))) continue;
    if(S->Order==EBattleOrder::Defend && FVector::Dist2D(C.Value.LastKnownPosition,S->Destination)>S->DefenseRadius) continue;
    if(S->TacticalPlan.Action==EBattleSquadTactic::Support && C.Key!=S->TacticalPlan.SupportTarget) continue;
    const double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
@@ -384,7 +384,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) if(const auto* C=Sense->FindContact(ID,PreviousTarget))
    {
     if(C->bShared || Now-C->LastSeenTime>Hold+1.e-6) continue;
-    if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C->LastKnownPosition)>FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange())) continue;
+    if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C->LastKnownPosition)>FMath::Square(TargetRange(ID))) continue;
     if(S->Order==EBattleOrder::Defend && FVector::Dist2D(C->LastKnownPosition,S->Destination)>S->DefenseRadius) continue;
     P.TargetID=PreviousTarget;SightExperiment.Cover(TEXT("squad_target_held"));break;
    }
@@ -451,8 +451,10 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  // Regrouping does not replenish ammunition, but may load existing reserve without an enemy target.
  if(bWideField && U->Ammo==0 && U->Reserve>0 && U->ReloadEndTime==0) Store->StartReload(ID,Now);
  const bool CanEngage=Contact && Contact->bVisible && !Contact->bShared &&
-  (!bRangeAwareCombat || FVector::DistSquared(Pos,Contact->LastKnownPosition)<=FMath::Square(BattleRanges::Engage(U->Weapon))) &&
+  (!bRangeAwareCombat || FVector::DistSquared(Pos,Contact->LastKnownPosition)<=FMath::Square(UnderFire(ID)?BattleRanges::Reach(U->Weapon):BattleRanges::Engage(U->Weapon))) &&
   (S->TacticalPlan.Action!=EBattleSquadTactic::Support || P->TargetID==S->TacticalPlan.SupportTarget) && CanSee(ID,P->TargetID);
+ // Evaluation only: an engagement that only the return-fire rule allows (beyond the AI engagement distance, within reach).
+ if(CanEngage&&SightExperiment.Enabled&&bRangeAwareCombat&&UnderFire(ID)&&FVector::DistSquared(Pos,Contact->LastKnownPosition)>FMath::Square(BattleRanges::Engage(U->Weapon)))SightExperiment.Cover(TEXT("return_fire_engage"));
  const bool StopForCombat=P->TargetID!=INDEX_NONE && S->Order!=EBattleOrder::Move;
  if(BattleStance::Enabled(GetWorld()))
  {
@@ -707,4 +709,12 @@ void UBattleLeaderRuntime::Step(float Dt)
   else { Mode->bBattleEnded=true; Mode->Result=Living[0]?TEXT("VICTORY"):TEXT("DEFEAT"); }
  }
  RefreshDisplay();
+}
+
+float UBattleLeaderRuntime::TargetRange(int32 ID) const
+{
+ const float Base=GetDefault<UBattleTuning>()->EffectiveWeaponRange();
+ if(!UnderFire(ID))return Base;
+ const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
+ return U?FMath::Max(Base,BattleRanges::Reach(U->Weapon)):Base;
 }

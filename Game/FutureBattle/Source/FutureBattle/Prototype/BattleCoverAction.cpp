@@ -186,7 +186,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  // Cover validation (default ON): leave cover once the observed threat is beyond weapon range, and only step out to a
  // peek point with a clear line to the threat's last known position; otherwise stay hidden and check again shortly.
  const bool Validate=!Player && BattleTactics::CoverValidationEnabled();
- if(Validate && FVector::Dist2D(Position(ID),Contact->LastKnownPosition)>GetDefault<UBattleTuning>()->EffectiveWeaponRange())
+ if(Validate && FVector::Dist2D(Position(ID),Contact->LastKnownPosition)>TargetRange(ID))
  {Diag.Cover(TEXT("cancel_target_out_of_range"));CancelCoverAction(ID);return false;}
  if(U->CoverPhase==2 && !Player && U->CoverSeconds<=0 && U->ReloadEndTime==0)
  {
@@ -234,7 +234,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
   if(B.Actor.IsValid())B.Actor->SetActorRotation(FRotator(0,Aim.Rotation().Yaw,0));
   else {Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity).Forward=Aim.GetSafeNormal2D();B.Capsule->SetWorldRotation(FRotator(0,Aim.Rotation().Yaw,0));}
   Store->UpdateAim(ID,Now,B.Velocity.Size2D(),Aim,true);
-  const bool InRange=FVector::Dist2D(Position(ID),Contact->LastKnownPosition)<=BattleRanges::Engage(U->Weapon);
+  const bool InRange=FVector::Dist2D(Position(ID),Contact->LastKnownPosition)<=(UnderFire(ID)?BattleRanges::Reach(U->Weapon):BattleRanges::Engage(U->Weapon));
   if(U->CoverPhase==4 && Contact->bVisible && !Contact->bShared && InRange && CanSee(ID,U->CoverTargetID))
   {
    if(U->Ammo==0){Store->StartReload(ID,Now);Diag.Cover(TEXT("peekwait_reloading"));}
