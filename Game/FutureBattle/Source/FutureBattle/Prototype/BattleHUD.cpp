@@ -362,6 +362,7 @@ void ABattleHUD::DrawHUD()
 			Label(FString::Printf(TEXT("敵軍  %s"), *Match->WarScoreBreakdown(1)), W * .25f + 25, H * .35f + 136, White);
 		}
 	}
+ DrawOrderMarks();
  DrawSquadList();
  DrawMinimap();
  DrawNoticeLog();
@@ -489,5 +490,37 @@ void ABattleHUD::DrawNoticeLog()
   FLinearColor Color=Colors[FMath::Min<int32>(E.Kind,5)]; if(Now-E.Time>20.) Color.A=.6f; // older entries fade
   const FString Text=E.Count>1?FString::Printf(TEXT("%s ×%d"),*E.Text,E.Count):E.Text;
   DrawText(FString::Printf(TEXT("%3.0f秒前  %s"),Now-E.Time,*Text),Color,Layout.Origin.X,Y+3,GEngine->GetSmallFont(),.9f);
+ }
+}
+
+void ABattleHUD::DrawOrderMarks()
+{
+ auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); if(!L->IsEnabled()) return;
+ auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas || !PC->IsTactical() || PC->GetSelection().IsEmpty()) return;
+ const float H=Canvas->SizeY; const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ auto Screen=[&](FVector World,FVector2D& Out){return PC->ProjectWorldLocationToScreen(World,Out)&&Out.Y>110&&Out.Y<H-130;};
+ auto Segment=[&](FVector A,FVector B,FLinearColor Color,float Thickness)
+ {
+  // Projected in short pieces so a line that leaves the screen is still drawn where it is visible.
+  FVector2D P0; bool bPrev=Screen(A,P0);
+  for(int32 I=1;I<=12;++I){FVector2D P1;const bool bNow=Screen(FMath::Lerp(A,B,I/12.f),P1);if(bPrev&&bNow)DrawLine(P0.X,P0.Y,P1.X,P1.Y,Color,Thickness);P0=P1;bPrev=bNow;}
+ };
+ TSet<int32> Done;
+ for(const auto& Unit:PC->GetSelection())
+ {
+  if(!Unit||!Unit->GetState()) continue; const int32 SID=Unit->GetState()->SquadID; if(Done.Contains(SID)) continue; Done.Add(SID);
+  const auto* S=Store->FindSquad(SID); if(!S||S->CommandStatus!=EBattleCommandStatus::Active) continue;
+  const EBattleOrder Order=S->bHasMission?S->MissionOrder:S->Order; const FVector Goal=(S->bHasMission?S->MissionDestination:S->Destination)+FVector(0,0,25);
+  if(Order==EBattleOrder::Hold) continue;
+  const FLinearColor Color=Order==EBattleOrder::AttackMove?FLinearColor(1,.6f,.2f,.9f):Order==EBattleOrder::Defend?FLinearColor(.45f,.7f,1,.9f):FLinearColor(.28f,.95f,.8f,.9f);
+  // Line from the leader to the destination, and a diamond at the destination.
+  Segment(L->Position(S->LeaderUnitID)+FVector(0,0,40),Goal,Color,1.5f);
+  FVector2D G; if(Screen(Goal,G)){DrawLine(G.X,G.Y-9,G.X+9,G.Y,Color,2);DrawLine(G.X+9,G.Y,G.X,G.Y+9,Color,2);DrawLine(G.X,G.Y+9,G.X-9,G.Y,Color,2);DrawLine(G.X-9,G.Y,G.X,G.Y-9,Color,2);}
+  // Defence radius.
+  if(Order==EBattleOrder::Defend)
+   for(int32 I=0;I<32;++I){const float A=I*2*PI/32,B=(I+1)*2*PI/32;Segment(Goal+FVector(FMath::Cos(A),FMath::Sin(A),0)*S->DefenseRadius,Goal+FVector(FMath::Cos(B),FMath::Sin(B),0)*S->DefenseRadius,Color*FLinearColor(1,1,1,.6f),1);}
+  // Arrival slots of living members.
+  if(const auto* Plan=L->PlanOf(SID)) for(const auto& Slot:Plan->ArrivalGoals) if(const auto* M=Store->Find(Slot.Key); M&&M->IsAlive())
+  {FVector2D P; if(Screen(Slot.Value+FVector(0,0,20),P)) DrawRect(Color*FLinearColor(1,1,1,.7f),P.X-2,P.Y-2,4,4);}
  }
 }

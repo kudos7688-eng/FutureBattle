@@ -190,6 +190,8 @@ public:
  const TArray<FBattleSquadSummary>& Summaries();
  // Current squad target (a contact the squad engages), or INDEX_NONE. For the command UI squad list.
  int32 SquadTargetID(int32 SquadID) const {const auto* P=Plans.Find(SquadID);return P?P->TargetID:INDEX_NONE;}
+ // Squad plan (arrival goals per member) for the command UI ground marks. Read only.
+ const FBattleLeaderPlan* PlanOf(int32 SquadID) const {return Plans.Find(SquadID);}
  void OnDeath(int32 ID);
  void RunSmoke();
  void RunUIQA();
