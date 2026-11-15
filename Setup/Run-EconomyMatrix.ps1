@@ -8,7 +8,8 @@ param(
  [int[]]$Seeds=@(7,19,43),
  [string[]]$Maps=@('D','A'),
  [ValidateRange(1,16)][int]$Concurrency=8,
- [string]$Tag='r1'
+ [string]$Tag='r1',
+ [ValidateRange(-1,1)][int]$TrialTeam=-1   # 0/1: the S3-S6 trial flags apply to that team only (use a distinct -Tag)
 )
 $ErrorActionPreference='Stop'
 Set-Location $PSScriptRoot
@@ -46,6 +47,13 @@ $supply=@{
  # S1 home-assault share (default 0.2) numeric tuning.
  'BS10'=@('-AreaBaseShare','0.1')
  'BS30'=@('-AreaBaseShare','0.3')
+ # Home supply heal numeric tuning (defaults: heal 10/s, resume at 90% squad HP).
+ 'SH20'=@('-SupplyHeal','20')
+ 'RH75'=@('-SupplyResumeHealth','0.75')
+ 'RH100'=@('-SupplyResumeHealth','1.0')
+ # S6 focus: the non-own point nearest the own home gets weight x (1+gain).
+ 'FO1'=@('-AreaFocus','1')
+ 'FO2'=@('-AreaFocus','2')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}
@@ -58,6 +66,7 @@ foreach($r in $runs){
  $pa=@('-NoProfile','-ExecutionPolicy','Bypass','-File','.\Test-WideSight.ps1','-Map',$map,'-OutputName',$name,'-Seed',"$seed",
   '-AICoverProbe','0','-LeaderGuard','0','-SightRange','10000','-WeaponRange','5000','-Area','-Experiment','-RoundTripSave',
   '-CoverActions','1','-FlankCoordination','1','-ObserveTactics','-BehaviorConcurrency',"$Concurrency",'-FrozenBuild',$frozen)+$supply[$c]
+ if($TrialTeam -ge 0){$pa+=@('-AreaTrialTeam',"$TrialTeam")}
  if($swap){$pa+='-Swap'}
  while(@($jobs|Where-Object{!$_.HasExited}).Count -ge $Concurrency){Start-Sleep 5}
  $jobs+=Start-Process powershell.exe -ArgumentList $pa -RedirectStandardOutput "Econ-$name.txt" -RedirectStandardError "Econ-$name.err.txt" -WindowStyle Hidden -PassThru

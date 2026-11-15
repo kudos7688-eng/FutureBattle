@@ -272,7 +272,9 @@ int32 UBattleMatch::AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) c
  TArray<double> Weight;double Sum=0;int32 Owned=0;
  for(int32 I=0;I<Objectives.Num();++I){const int32 P=Rotate?Objectives.Num()-1-I:I;const bool bOwn=ObservedOwner(Team,P)==Team;Owned+=bOwn;const double W=bOwn?1.0:Strategy.AttackWeight;Weight.Add(W);Sum+=W;}
  // S4 trial: boost points where the team's own living soldiers (own positions only) are below the per-point average.
- if(Strategy.bFrontBalance&&Sum>0)
+ // -BattleAreaTrialTeam=0/1 limits the S3-S6 trials to one team (the other plays the default) to measure who wins.
+ const bool bTrial=Strategy.TrialTeam<0||Strategy.TrialTeam==Team;
+ if(bTrial&&Strategy.bFrontBalance&&Sum>0)
  {
   TArray<double> Own;Own.Init(0,Objectives.Num());
   const auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
@@ -285,9 +287,16 @@ int32 UBattleMatch::AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) c
   Sum=0;
   for(int32 I=0;I<Weight.Num();++I){const double Deficit=Avg>0?FMath::Max(0.0,Avg-Own[I])/Avg:0.0;Weight[I]*=1.0+Strategy.FrontGain*Deficit;Sum+=Weight[I];}
  }
+ // S6 trial: concentrate on the one point not observed as own that is nearest the team's own home (static positions only).
+ if(bTrial&&Strategy.FocusGain>0&&Sum>0)
+ {
+  int32 Best=INDEX_NONE;double BestD=DBL_MAX;const FVector Home=AreaHome(Team);
+  for(int32 I=0;I<Objectives.Num();++I){const int32 P=Rotate?Objectives.Num()-1-I:I;if(ObservedOwner(Team,P)==Team)continue;const double D=FVector::DistSquared2D(Objectives[P].Position,Home);if(D<BestD){BestD=D;Best=I;}}
+  if(Best!=INDEX_NONE){Sum+=Weight[Best]*Strategy.FocusGain;Weight[Best]*=1.0+Strategy.FocusGain;}
+ }
  // S3 trial: home-assault share from observed state only (own observed points, last seen enemy home HP).
  double Share=Strategy.BaseShare;
- if(Strategy.bBaseRule)
+ if(bTrial&&Strategy.bBaseRule)
  {
   const float SeenHP=bArea&&Area.KnownEnemyBaseHP.IsValidIndex(Team)?Area.KnownEnemyBaseHP[Team]:-1.f;
   Share=(Owned>=2||(SeenHP>=0&&SeenHP<=Strategy.BaseLowHP))?Strategy.BaseShareHigh:Strategy.BaseShareLow;
@@ -320,7 +329,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   const FVector Center=BaseAssault?AreaHome(1-Team)*(25./27.):Objectives[Target].Position;
   EBattleOrder Order=!BaseAssault&&ObservedOwner(Team,Target)==Team?EBattleOrder::Defend:EBattleOrder::AttackMove;
   // S5 trial: a home-assault squad does not stop to fight until its leader is within InfiltrateRadius of the enemy home.
-  if(BaseAssault&&bStrategy&&BattleTactics::AreaStrategy().InfiltrateRadius>0)
+  if(BaseAssault&&bStrategy&&BattleTactics::AreaStrategy().InfiltrateRadius>0&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==Team))
    if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
     if(FVector::Dist2D(Runtime->Position(Pair.Value.LeaderUnitID),AreaHome(1-Team))>BattleTactics::AreaStrategy().InfiltrateRadius)Order=EBattleOrder::Move;
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())

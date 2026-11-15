@@ -76,6 +76,9 @@ const BattleTactics::FAreaStrategyTuning& BattleTactics::AreaStrategy()
   S.FrontGain=FMath::IsFinite(S.FrontGain)?FMath::Clamp(S.FrontGain,0.f,5.f):1.f;
   float Infiltrate=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseInfiltrate="),Infiltrate);
   S.InfiltrateRadius=FMath::IsFinite(Infiltrate)?FMath::Clamp(Infiltrate,0.f,500.f)*100.f:0.f;
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaFocus="),S.FocusGain);
+  S.FocusGain=FMath::IsFinite(S.FocusGain)?FMath::Clamp(S.FocusGain,0.f,10.f):0.f;
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaTrialTeam="),S.TrialTeam);S.TrialTeam=S.TrialTeam==0||S.TrialTeam==1?S.TrialTeam:-1;
   S.BaseShareLow=FMath::IsFinite(S.BaseShareLow)?FMath::Clamp(S.BaseShareLow,0.f,0.5f):0.f;
   S.BaseShareHigh=FMath::IsFinite(S.BaseShareHigh)?FMath::Clamp(S.BaseShareHigh,0.f,0.5f):0.3f;
   S.BaseLowHP=FMath::IsFinite(S.BaseLowHP)?FMath::Clamp(S.BaseLowHP,0.f,1000.f):500.f;

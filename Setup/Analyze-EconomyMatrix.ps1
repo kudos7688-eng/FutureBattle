@@ -2,7 +2,7 @@
 # One line per condition, summed over seeds, maps and side swaps, plus a paired comparison of each condition with -Baseline.
 # Failed or missing runs are listed and excluded.
 [CmdletBinding()]
-param([string[]]$Conditions=@('HI','H','I','none'),[string]$Tag='r1',[string]$Baseline='none',[string]$Prefix='econ')
+param([string[]]$Conditions=@('HI','H','I','none'),[string]$Tag='r1',[string]$Baseline='none',[string]$Prefix='econ',[ValidateRange(-1,1)][int]$TrialTeam=-1)
 $ErrorActionPreference='Stop'
 $root=Join-Path $PSScriptRoot 'Benchmarks/SightTrial-20261111'
 $runs=@{}
@@ -41,4 +41,14 @@ foreach($c in $Conditions|Where-Object{$_ -ne $Baseline}){
   $dFront+=($m.supply_cycle.front_person_seconds_team0+$m.supply_cycle.front_person_seconds_team1)-($b.supply_cycle.front_person_seconds_team0+$b.supply_cycle.front_person_seconds_team1)
  }
  if($pairs){('{0} vs {1}: pairs={2} aliveEnd diff/run={3:N1} (higher in {4}/{2}) frontPersonSec diff/run={5:N0}' -f $c,$Baseline,$pairs,($dAlive/$pairs),$better,($dFront/$pairs))}
+}
+# One-team trials (Run-EconomyMatrix -TrialTeam): the trial team's wins, score lead and survivor lead per run.
+if($TrialTeam -ge 0){
+ $me=if($TrialTeam){'enemy'}else{'ally'};$them=if($TrialTeam){'ally'}else{'enemy'}
+ foreach($c in $Conditions){
+  $ks=@($runs.Keys|Where-Object{$_ -like "$c|*"});if(!$ks.Count){continue}
+  $w=0;$l=0;$ds=0;$da=0
+  foreach($k in $ks){$m=$runs[$k];$w+=[int]($m.winner -eq $TrialTeam);$l+=[int]($m.winner -eq 1-$TrialTeam);$ds+=$m."$($me)_score"-$m."$($them)_score";$da+=$m."$($me)_alive"-$m."$($them)_alive"}
+  ('{0} trial team {1}: wins {2} losses {3} of {4}, score lead/run={5:N1}, survivor lead/run={6:N1}' -f $c,$TrialTeam,$w,$l,$ks.Count,($ds/$ks.Count),($da/$ks.Count))
+ }
 }
