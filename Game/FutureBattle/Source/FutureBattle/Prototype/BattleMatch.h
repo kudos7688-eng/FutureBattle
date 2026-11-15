@@ -10,13 +10,14 @@ class UBattleSave;
 struct FAreaIntent
 {
  float AttackWeight=2.f,BaseShare=0.2f; bool bFrontBalance=false; float FrontGain=1.f,FocusGain=0.f;
- float PointWeight[3]={1.f,1.f,1.f}; // per objective index, multiplies the S1 weight
+ static constexpr int32 MaxObjectives=8; // three objectives on maps A-D, five on map E
+ float PointWeight[MaxObjectives]={1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f}; // per objective index, multiplies the S1 weight
  int32 HireReserve=0;                 // resources kept back before an AI purchase (above pending replacements)
  float FlankOffset=0.f; bool bFlankSameSide=false; // S7/S8 route of home-assault squads (0 = straight)
  int32 BaseReturnLiving=0;            // S8: living count at which home-assault squads return for supply (0 = SupplyReturnLiving)
  int32 Phase=0;                       // index of the active phase of the team plan (0 when no plan)
 };
-// One lane (the third of the field around one objective) as seen by one team: own soldiers and own front (furthest progress
+// One sector (the part of the field nearest one objective; a lane on maps A-D) as seen by one team: own soldiers and own front (furthest progress
 // from own home, 0..1 along the home-to-home line, 90th percentile), and enemies currently visible to the team (count and the
 // progress of the most advanced one, -1 = none seen). Observed information only.
 struct FAreaFront { float OwnFront=-1.f,EnemyFront=-1.f; int32 Own=0,EnemySeen=0; };
@@ -73,6 +74,14 @@ public:
  FVector AreaHome(int32 Team) const;
  int32 ObservedOwner(int32 Team,int32 Point) const;
  int32 AreaScore(int32 Team) const;
+ // War score trial (BattleWarScore.h). Earned = points + enemy losses; Score adds unspent resources; Estimate is what Observer
+ // can know of the opponent's Earned (own losses exactly, points from observed ownership only).
+ int32 WarEarned(int32 Team) const;
+ int32 WarScore(int32 Team) const;
+ int32 WarScoreEstimate(int32 Observer) const;
+ void RecordWarLoss(int32 LostTeam);
+ void UpdateWarScore(float Dt);
+ FString WarScoreBreakdown(int32 Team) const;
  // Area new squad (regular only) into a free slot (<25 active squads) for BattleTactics::AreaHire().Cost resources.
  // bAuto: AI purchase (no selection change; a team-0 squad is delegated). Cancels pending replenishments the spend can no longer cover.
  bool HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto);
@@ -100,7 +109,7 @@ public:
 	// S1 allocation for one squad from observed point ownership only (Area). bBase = assault the enemy home instead.
 	int32 AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) const;
 	FAreaIntent AreaIntent(int32 Team) const;
-	void AreaFronts(int32 Team, FAreaFront (&Out)[3]) const;
+	void AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObjectives]) const;
 	void CheckTimeLimit();
 	void UpdateEnemyOrders();
 	void UpdateTeamOrders(int32 Team, bool bDelegatedOnly = false);

@@ -11,6 +11,7 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Misc/FileHelper.h"
+#include "Kismet/GameplayStatics.h"
 #include "Camera/CameraComponent.h"
 #include "UnrealClient.h"
 #include "TimerManager.h"
@@ -87,7 +88,7 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
   while(Match->bArea&&E.NextFrontSample<=20&&Match->Elapsed>=E.NextFrontSample*30.0-0.05)
   {
    const int32 S=E.NextFrontSample-1;
-   for(int32 T=0;T<2;++T){FAreaFront F[3];Match->AreaFronts(T,F);for(int32 L=0;L<3;++L){E.FrontTimeline[T][S][L][0]=F[L].OwnFront;E.FrontTimeline[T][S][L][1]=F[L].EnemyFront;E.FrontTimeline[T][S][L][2]=F[L].Own;E.FrontTimeline[T][S][L][3]=F[L].EnemySeen;}}
+   for(int32 T=0;T<2;++T){FAreaFront F[FAreaIntent::MaxObjectives];Match->AreaFronts(T,F);for(int32 L=0;L<Match->Objectives.Num()&&L<FBattleSightExperiment::MaxObjectives;++L){E.FrontTimeline[T][S][L][0]=F[L].OwnFront;E.FrontTimeline[T][S][L][1]=F[L].EnemyFront;E.FrontTimeline[T][S][L][2]=F[L].Own;E.FrontTimeline[T][S][L][3]=F[L].EnemySeen;}}
    ++E.NextFrontSample;
   }
   while(Match->bArea&&E.NextEconMinute<=10&&Match->Elapsed>=E.NextEconMinute*60.0-0.05)
@@ -97,7 +98,7 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
    for(int32 T=0;T<2;++T){E.EconTimeline[T][M][0]=Match->Credits[T];E.EconTimeline[T][M][1]=Match->Area.Income.IsValidIndex(T)?Match->Area.Income[T]:0;E.EconTimeline[T][M][2]=Match->Area.HireSpent.IsValidIndex(T)?Match->Area.HireSpent[T]:0;E.EconTimeline[T][M][3]=Living[T];}
    ++E.NextEconMinute;
   }
-  if(Match->bArea)for(int32 I=0;I<Match->Objectives.Num()&&I<3;++I)if(const int32 Owner=Match->Objectives[I].Owner;Owner>=0&&Owner<2)
+  if(Match->bArea)for(int32 I=0;I<Match->Objectives.Num()&&I<FBattleSightExperiment::MaxObjectives;++I)if(const int32 Owner=Match->Objectives[I].Owner;Owner>=0&&Owner<2)
   {E.AreaPointSeconds[I][Owner]+=SampleDt;if(E.FirstCapture[Owner]<0)E.FirstCapture[Owner]=Match->Elapsed;}
   if(SampleDt>0)for(const auto& Pair:Store->GetUnits()) if(Pair.Value.IsAlive() && Pair.Value.Team>=0 && Pair.Value.Team<2)
   {
@@ -188,7 +189,11 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
    Root->SetNumberField(Team?TEXT("enemy_hire_spent"):TEXT("ally_hire_spent"),Match->Area.HireSpent.IsValidIndex(Team)?Match->Area.HireSpent[Team]:0);
    Root->SetNumberField(Team?TEXT("enemy_active_squads"):TEXT("ally_active_squads"),Match->ActiveSquads(Team));
    Root->SetNumberField(Team?TEXT("enemy_income"):TEXT("ally_income"),Match->Area.Income.IsValidIndex(Team)?Match->Area.Income[Team]:0);
-   TArray<TSharedPtr<FJsonValue>> PointSeconds;for(int32 I=0;I<3;++I)PointSeconds.Add(MakeShared<FJsonValueNumber>(E.AreaPointSeconds[I][Team]));
+   // War score trial (0 when the trial is off).
+   Root->SetNumberField(Team?TEXT("enemy_war_point"):TEXT("ally_war_point"),Match->Area.WarPoint.IsValidIndex(Team)?Match->Area.WarPoint[Team]:0);
+   Root->SetNumberField(Team?TEXT("enemy_war_loss"):TEXT("ally_war_loss"),Match->Area.WarLoss.IsValidIndex(Team)?Match->Area.WarLoss[Team]:0);
+   Root->SetNumberField(Team?TEXT("enemy_war_estimate_of_opponent"):TEXT("ally_war_estimate_of_opponent"),Match->WarScoreEstimate(Team));
+   TArray<TSharedPtr<FJsonValue>> PointSeconds;for(int32 I=0;I<Match->Objectives.Num()&&I<FBattleSightExperiment::MaxObjectives;++I)PointSeconds.Add(MakeShared<FJsonValueNumber>(E.AreaPointSeconds[I][Team]));
    Root->SetArrayField(Team?TEXT("enemy_point_owned_seconds"):TEXT("ally_point_owned_seconds"),PointSeconds);
    Root->SetNumberField(Team?TEXT("enemy_first_capture_seconds"):TEXT("ally_first_capture_seconds"),E.FirstCapture[Team]);
    Root->SetNumberField(Team?TEXT("enemy_at_opponent_home_range_seconds"):TEXT("ally_at_opponent_home_range_seconds"),E.EnemyHomeRangeSeconds[Team]);
@@ -203,7 +208,7 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
    for(int32 M=0;M<10;++M){TArray<TSharedPtr<FJsonValue>> Row;for(double V:E.EconTimeline[Team][M])Row.Add(MakeShared<FJsonValueNumber>(V));Econ.Add(MakeShared<FJsonValueArray>(Row));}
    Root->SetArrayField(Team?TEXT("enemy_economy_per_minute"):TEXT("ally_economy_per_minute"),Econ);
    TArray<TSharedPtr<FJsonValue>> Front;
-   for(int32 S=0;S<20;++S){TArray<TSharedPtr<FJsonValue>> Row;for(int32 L=0;L<3;++L)for(float V:E.FrontTimeline[Team][S][L])Row.Add(MakeShared<FJsonValueNumber>(V));Front.Add(MakeShared<FJsonValueArray>(Row));}
+   for(int32 S=0;S<20;++S){TArray<TSharedPtr<FJsonValue>> Row;for(int32 L=0;L<Match->Objectives.Num()&&L<FBattleSightExperiment::MaxObjectives;++L)for(float V:E.FrontTimeline[Team][S][L])Row.Add(MakeShared<FJsonValueNumber>(V));Front.Add(MakeShared<FJsonValueArray>(Row));}
    Root->SetArrayField(Team?TEXT("enemy_front_per_30s"):TEXT("ally_front_per_30s"),Front);
   }
  }

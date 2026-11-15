@@ -22,8 +22,14 @@ struct FBattleAreaState
  UPROPERTY() float IncomeClock=0;
  // Match time of each team's last AI purchase (-1000 = none), for the AI purchase interval.
  UPROPERTY() TArray<float> LastAIHireAt={-1000,-1000};
- // P1 purpose purchase trial (2026-11-16): mission of each AI-bought squad, 0..2 = objective index (take/hold),
- // 3 = enemy home assault, 4 = own home defence; and the match time the own home last took damage (-1000 = never).
+ // P1 purpose purchase trial (2026-11-16): mission of each AI-bought squad, 0..N-1 = objective index (take/hold),
+  // 100 = enemy home assault, 101 = own home defence; and the match time the own home last took damage (-1000 = never).
  UPROPERTY() TMap<int32,int32> HirePurpose;
  UPROPERTY() TArray<float> HomeHitAt={-1000,-1000};
+ // War score trial (BattleWarScore.h; absent in older saves = 0). Per team: score from held central points and from enemy losses,
+ // each observer's estimate of the OPPONENT's point score (from last observed ownership), and the shared scoring clock.
+ UPROPERTY() TArray<int32> WarPoint={0,0};
+ UPROPERTY() TArray<int32> WarLoss={0,0};
+ UPROPERTY() TArray<int32> WarPointEstimate={0,0};
+ UPROPERTY() float WarClock=0;
 };

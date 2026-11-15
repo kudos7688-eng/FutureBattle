@@ -70,8 +70,9 @@ namespace BattleTactics
  // 2 = ESA expand, save, then mass on the enemy home. Phases switch by match time only; see UBattleMatch::AreaIntent.
  struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; float InfiltrateRadius=0.f, FocusGain=0.f, FlankOffset=0.f; bool bFlankSameSide=false; int32 BaseReturnLiving=0; int32 TrialTeam=-1; int32 Plan=0; };
  const FAreaStrategyTuning& AreaStrategy();
-	float SpreadDegrees(const FBattleUnitState& State, double Now);
-	FVector ShotDirection(const FBattleUnitState& State, FVector Aim, double Now);
+	// SpreadScale: extra multiplier from runtime effects (suppression trial); 1 = none.
+	float SpreadDegrees(const FBattleUnitState& State, double Now, float SpreadScale = 1.f);
+	FVector ShotDirection(const FBattleUnitState& State, FVector Aim, double Now, float SpreadScale = 1.f);
 	FBattleExposure ExposureFrom(const ABattleUnit* Target, FVector AttackOrigin);
 	FBattleExposure ExposureAt(UWorld* World, FVector Position, FVector Forward, FVector AttackOrigin);
 	bool HasTerrainLine(UWorld* World, FVector From, FVector To);

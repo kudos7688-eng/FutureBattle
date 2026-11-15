@@ -9,6 +9,9 @@
 #include "BattleController.h"
 #include "BattlePerception.h"
 #include "BattleTactics.h"
+#include "BattleRanges.h"
+#include "BattleStance.h"
+#include "EngineUtils.h"
 #include "BattleMetrics.h"
 #include "MassEntitySubsystem.h"
 #include "Components/CapsuleComponent.h"
@@ -17,6 +20,7 @@
 #include "Animation/AnimSequence.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "NavigationSystem.h"
+#include "NavMesh/RecastNavMesh.h"
 #include "NavigationPath.h"
 #include "DrawDebugHelpers.h"
 #include "TimerManager.h"
@@ -32,6 +36,14 @@ FVector UBattleLeaderRuntime::LimitedSteering(FVector Desired,FVector Separation
  return (Forward+Side*Offset).GetSafeNormal2D();
 }
 
+FBattleMinimapLayout FBattleMinimapLayout::Make(FVector2D View,const UWorld* World)
+{
+ // Bottom left, above the order bar. Only the wide maps have one; too small a window gets none.
+ FBattleMinimapLayout M; if(!BattleFieldLayout::IsSightField(World)) return M;
+ M.HalfExtent=BattleFieldLayout::FieldHalfExtent(World);
+ const float Height=FMath::Min(300.f,float(View.Y)-440.f); if(Height<140.f) return M;
+ M.Size=FVector2D(Height*M.HalfExtent.Y/M.HalfExtent.X,Height); M.Origin=FVector2D(20,View.Y-150-Height); return M;
+}
 FBattleSquadListLayout FBattleSquadListLayout::Make(FVector2D View)
 {
  FBattleSquadListLayout L; L.Width=FMath::Min(360.f,float(View.X)-32.f);
@@ -112,7 +124,7 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
  {
   TArray<int32> IDs;
   const int32 Side=Swap?1-Team:Team;
-  const FVector Center=bMixedFastMatch?FVector((Team?1:-1)*(BattleFieldLayout::HomeDistance(GetWorld())-(BattleFieldLayout::IsSightField(GetWorld())?1000:500)),0,100):BattleFieldLayout::IsSightField(GetWorld())?BattleFieldLayout::WideSpawn(Side,Group,BattleFieldLayout::IsExpanded(GetWorld())):bWideField?FVector((Team?1:-1)*(9000+(Group%5)*400),(Group/5-2)*2800,100):Phase3->bEnabled?Phase3->SpawnCenter(Team,Group):FVector(Team ? 1800:-1800, (Group-(Count/20-1)*.5)*800, 95);
+  const FVector Center=bMixedFastMatch?FVector((Team?1:-1)*(BattleFieldLayout::HomeDistance(GetWorld())-(BattleFieldLayout::IsSightField(GetWorld())?1000:500)),0,100):BattleFieldLayout::IsSightField(GetWorld())?BattleFieldLayout::WideSpawnFor(GetWorld(),Side,Group):bWideField?FVector((Team?1:-1)*(9000+(Group%5)*400),(Group/5-2)*2800,100):Phase3->bEnabled?Phase3->SpawnCenter(Team,Group):FVector(Team ? 1800:-1800, (Group-(Count/20-1)*.5)*800, 95);
   ABattleUnit* Leader=nullptr;
   for(int32 Slot=0;Slot<10;++Slot)
   {
@@ -167,6 +179,11 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   Mode->bScaleTest=true; Mode->ScaleUnitCount=Count; Mode->bCombatPaused=true;
   if(bMixedFastMatch){Match->Phase=EBattleMatchPhase::Deployment;Match->Credits[0]=Match->Credits[1]=3000-Match->CurrentSquadPrice(EBattleTraining::Regular);}
   if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())) PC->SetSelection(Actor(1));
+  // Map E: long paths through the dense city need a larger A* node budget than the engine default, or they come back partial.
+  if(BattleFieldLayout::IsUrban(GetWorld()))
+   if(auto* NavSystem=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+    if(auto* Recast=Cast<ARecastNavMesh>(NavSystem->GetDefaultNavDataInstance()))
+    {Recast->DefaultMaxSearchNodes=32768.f;const_cast<FNavigationQueryFilter&>(*Recast->GetDefaultQueryFilter()).SetMaxSearchNodes(32768);}
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WIDE_MIXED_READY squads=50 actors=50 mass=450 objectives=%d paused=1"),Match->Objectives.Num());
   if(FParse::Param(FCommandLine::Get(),TEXT("BattleCoverActionSmoke")))
   {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunCoverActionSmoke,4.f,false);}
@@ -229,9 +246,11 @@ FVector UBattleLeaderRuntime::Forward(int32 ID) const
 }
 FBattleSightContext UBattleLeaderRuntime::Sight(int32 ID) const
 {
- if(auto* A=Actor(ID)) return A->CaptureSightContext();
+ // Stances lower the eye (60cm above the body centre when standing).
+ const float EyeZ=BattleStance::EyeOffset(StanceOf(ID));
+ if(auto* A=Actor(ID)) {auto Context=A->CaptureSightContext();Context.Eye.Z+=EyeZ-60.f;return Context;}
  FBattleSightContext C; const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
- C.Position=Position(ID); C.Eye=C.Position+FVector(0,0,60); C.Forward=Forward(ID); C.bAlive=U && U->IsAlive();
+ C.Position=Position(ID); C.Eye=C.Position+FVector(0,0,EyeZ); C.Forward=Forward(ID); C.bAlive=U && U->IsAlive();
  if(U) { C.RangeSquared=FMath::Square(U->Perception.SightRange); C.HalfAngleCos=FMath::Cos(FMath::DegreesToRadians(U->Perception.FieldOfView*.5)); C.bOmnidirectional=U->Perception.FieldOfView>=360; }
  C.Metrics=GetWorld()->GetSubsystem<UBattleMetrics>(); C.Query=FCollisionQueryParams(SCENE_QUERY_STAT(LeaderSight),false);
  if(const auto* B=Bodies.Find(ID)) C.Query.AddIgnoredComponent(B->Capsule.Get()); return C;
@@ -242,7 +261,7 @@ bool UBattleLeaderRuntime::CanSee(int32 ID,int32 Target) const
  if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
  const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
  if(FVector::DistSquared(P,C.Position)>C.RangeSquared || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
- FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,35),ECC_Visibility,C.Query);
+ FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
  return !Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
 }
 bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 Target) const
@@ -253,7 +272,7 @@ bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 
  if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
  const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
  if(FVector::DistSquared(P,C.Position)>C.RangeSquared || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
- FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,35),ECC_Visibility,C.Query);
+ FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
  return !Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
 }
 bool UBattleLeaderRuntime::CanSelectLeader(int32 ID) const { return Actor(ID) && GetWorld()->GetSubsystem<UBattleState>()->CanSelectLeader(ID); }
@@ -272,8 +291,12 @@ const TArray<FBattleSquadSummary>& UBattleLeaderRuntime::Summaries()
 void UBattleLeaderRuntime::OnDeath(int32 ID)
 {
  CancelCoverAction(ID);
+ // Stances are for the living: restore the normal body shape before the death pose is applied.
+ SetStance(ID,BattleStance::Stand,GetWorld()->GetTimeSeconds(),true);Stances.Remove(ID);StanceLockedUntil.Remove(ID);
  if(Phase3 && Phase3->bEnabled) Phase3->OnDeath(ID);
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U) return;
+ // War score trial: every loss (shot or stopped by the leader's death) scores for the other team.
+ if(bArea)GetWorld()->GetSubsystem<UBattleMatch>()->RecordWarLoss(U->Team);
  const auto* S=Store->FindSquad(U->SquadID);
  if(S && S->LeaderUnitID==ID) { Store->DisableLeaderSquad(S->SquadID); Plans.Remove(S->SquadID); }
  if(bArea&&S&&S->CommandStatus!=EBattleCommandStatus::Active)
@@ -401,7 +424,9 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    const double PathStart=SightExperiment.Enabled?FPlatformTime::Seconds():0;
    auto* Path=Nav->FindPathToLocationSynchronously(GetWorld(),From.Location,To.Location);
    if(SightExperiment.Enabled){SightExperiment.PathMS.Add((FPlatformTime::Seconds()-PathStart)*1000);if(Path && Path->IsValid())SightExperiment.MaxPathLength=FMath::Max(SightExperiment.MaxPathLength,double(Path->GetPathLength()));}
-   if(Path && Path->IsValid() && !Path->IsPartial()) P.Path=Path->PathPoints;
+   // Map E: a partial path still moves the squad as far as the route goes, instead of leaving it standing.
+   if(Path && Path->IsValid() && Path->IsPartial() && BattleFieldLayout::IsUrban(GetWorld())) SightExperiment.Cover(TEXT("path_partial_used"));
+   if(Path && Path->IsValid() && (!Path->IsPartial() || BattleFieldLayout::IsUrban(GetWorld()))) P.Path=Path->PathPoints;
    if(S->TacticalPlan.bAutonomous && S->TacticalPlan.Action==EBattleSquadTactic::Regroup && FVector::Dist2D(From.Location,To.Location)<50)
     P.Path={From.Location,To.Location}; // Followers can converge even when the leader is already at the rally point.
   }
@@ -414,16 +439,29 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()) return;
  auto& B=Bodies.FindChecked(ID);
  if(StepCoverAction(ID,Dt,Now))return;
- if(B.Actor.IsValid() && B.Actor->IsPlayerControlled()) return;
+ if(B.Actor.IsValid() && B.Actor->IsPlayerControlled())
+ {
+  // Direct control: walking stands the soldier up again (there is no crouch-walk or crawl yet).
+  if(StanceOf(ID)!=BattleStance::Stand && B.Actor->GetVelocity().SizeSquared2D()>2500.)SetStance(ID,BattleStance::Stand,Now,true);
+  return;
+ }
  const auto* S=Store->FindSquad(U->SquadID); auto* P=Plans.Find(U->SquadID); if(!P || S->CommandStatus!=EBattleCommandStatus::Active) return;
  FVector Pos=Position(ID), Direction=Forward(ID); B.Velocity=FVector::ZeroVector;
  const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,P->TargetID);
  // Regrouping does not replenish ammunition, but may load existing reserve without an enemy target.
  if(bWideField && U->Ammo==0 && U->Reserve>0 && U->ReloadEndTime==0) Store->StartReload(ID,Now);
  const bool CanEngage=Contact && Contact->bVisible && !Contact->bShared &&
-  (!bRangeAwareCombat || FVector::DistSquared(Pos,Contact->LastKnownPosition)<=FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange())) &&
+  (!bRangeAwareCombat || FVector::DistSquared(Pos,Contact->LastKnownPosition)<=FMath::Square(BattleRanges::Engage(U->Weapon))) &&
   (S->TacticalPlan.Action!=EBattleSquadTactic::Support || P->TargetID==S->TacticalPlan.SupportTarget) && CanSee(ID,P->TargetID);
  const bool StopForCombat=P->TargetID!=INDEX_NONE && S->Order!=EBattleOrder::Move;
+ if(BattleStance::Enabled(GetWorld()))
+ {
+  const bool WillMove=(S->Order!=EBattleOrder::Hold && !StopForCombat && P->Path.IsValidIndex(B.Waypoint)) || CoverApproaches.Contains(ID);
+  const bool LostSight=!CanEngage && Contact && !Contact->bVisible && Now-Contact->LastSeenTime<=4.;
+  UpdateAIStance(ID,Now,WillMove,StopForCombat,LostSight);
+  // Getting up takes time: no walking until the soldier is standing.
+  if(WillMove && StanceOf(ID)!=BattleStance::Stand){Store->SetAction(ID,EBattleAction::Idle);return;}
+ }
  const bool ProbeBudget=BattleTactics::AICoverProbeBudgetEnabled();
  if(ProbeBudget && CoverProbeFrame!=GFrameCounter){CoverProbeFrame=GFrameCounter;CoverProbesThisFrame=0;}
  const auto* CoverTuning=GetDefault<UBattleTuning>();
@@ -442,7 +480,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  {
   if(LeaderFirst){}else if(ProbeBudget)++CoverProbesThisFrame;else NextCoverProbe=Now+FMath::Max(0.f,CoverTuning->AICoverProbeInterval);
   CoverProbeAfter.Add(ID,Now+FMath::Max(0.f,LeaderFirst?CoverTuning->LeaderGuardCoverRetrySeconds:CoverTuning->AICoverRetrySeconds));
-  const float LocalRadius=(ProbeBudget||LeaderFirst)?CoverTuning->AICoverSearchRadius:CoverTuning->CoverActionSearchRadius;
+  // Map E: cover is plentiful but small, so AI looks a little further for it (6.5m instead of 3.5m; AI cognition only).
+  const float LocalRadius=(ProbeBudget||LeaderFirst)?CoverTuning->AICoverSearchRadius:BattleFieldLayout::IsUrban(GetWorld())?650.f:CoverTuning->CoverActionSearchRadius;
   if(RequestCoverAction(ID,Contact->LastKnownPosition,P->TargetID,LocalRadius)){CoverApproaches.Remove(ID);return;}
   // Trial -BattleCoverApproach=1: no usable cover here, so walk to a hidden slot beyond the local search radius.
   if(BattleTactics::CoverApproachEnabled() && !CoverApproaches.Contains(ID))StartCoverApproach(ID,Contact->LastKnownPosition,P->TargetID,Now,LocalRadius);
@@ -495,8 +534,10 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  }
  else if(B.Actor.IsValid() && !Approaching) B.Actor->GetCharacterMovement()->StopMovementImmediately();
  FVector BaseTarget;const bool BaseEngage=!CanEngage&&S->Order!=EBattleOrder::Move&&GetWorld()->GetSubsystem<UBattleMatch>()->CanFireAtBase(ID,BaseTarget);
- if(BaseEngage)Direction=(BaseTarget-(Pos+FVector(0,0,60))).GetSafeNormal();
- else if(CanEngage) Direction=(Contact->LastKnownPosition+FVector(0,0,35)-(Pos+FVector(0,0,60))).GetSafeNormal();
+ // Stances: fire from the current eye height, and aim at the height the visible target presents.
+ const FVector Muzzle(0,0,BattleStance::EyeOffset(StanceOf(ID)));
+ if(BaseEngage)Direction=(BaseTarget-(Pos+Muzzle)).GetSafeNormal();
+ else if(CanEngage) Direction=(Contact->LastKnownPosition+FVector(0,0,BattleStance::AimOffset(StanceOf(P->TargetID)))-(Pos+Muzzle)).GetSafeNormal();
  else if(S->TacticalPlan.Action==EBattleSquadTactic::Flank)
  {
   // Movement has already consumed its steering vector. Keep watch toward known
@@ -513,8 +554,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   if(Pose!=B.Pose) { B.Pose=Pose; if(VAT)VAT->ChangePose(ID,Pose); if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(Pose==2?ReloadPose:Pose==1?WalkPose:IdlePose,true); }
  }
  Store->UpdateAim(ID,Now,B.Velocity.Size2D(),Direction,true);
- if(BaseEngage)Fire(ID,Pos+FVector(0,0,60),Direction,false);
- if(CanEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+FVector(0,0,60),Direction,false) && S->TacticalPlan.Action==EBattleSquadTactic::Support) GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(S->SquadID,P->TargetID); }
+ if(BaseEngage)Fire(ID,Pos+Muzzle,Direction,false);
+ if(CanEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false) && S->TacticalPlan.Action==EBattleSquadTactic::Support) GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(S->SquadID,P->TargetID); }
  Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:CanEngage?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
 }
 bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot)
@@ -538,9 +579,27 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   E.ShotDistances.Add(D);if(E.FirstShot<0){E.FirstShot=GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed;E.FirstShotDistance=D;}
  }
  if(Phase3 && Phase3->bEnabled) ++Phase3->Shots;
- Direction=BattleTactics::ShotDirection(*U,Direction,Now);
- auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*T->EffectiveWeaponRange();
+ const float SuppressedScale=SuppressionSpreadScale(ID,Now);
+ if(SuppressedScale>1.25f)SightExperiment.Cover(TEXT("suppressed_shots"));
+ Direction=BattleTactics::ShotDirection(*U,Direction,Now,SuppressedScale*BattleStance::SpreadScale(StanceOf(ID)));
+ auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon);
+ // Concealment (hedges) hides soldiers from sight but does not stop bullets.
+ if(!bConcealmentBuilt)
+ {
+  bConcealmentBuilt=true;
+  for(TActorIterator<AActor> It(GetWorld());It;++It)if(It->ActorHasTag(TEXT("BattleConcealment")))ConcealmentActors.Add(*It);
+ }
+ if(ConcealmentActors.Num())Q.AddIgnoredActors(ConcealmentActors);
  GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_Visibility,Q);
+ // Stances: a bullet above a crouched or prone soldier passes over him and flies on.
+ for(int32 Pass=0;Pass<4&&Hit.bBlockingHit;++Pass)
+ {
+  const int32 Over=HitIDs.FindRef(Hit.GetComponent());const uint8 OverStance=Over>0?StanceOf(Over):0;
+  if(OverStance==BattleStance::Stand||Hit.ImpactPoint.Z<=Position(Over).Z+BattleStance::TopOffset(OverStance))break;
+  SightExperiment.Cover(TEXT("shot_passed_over"));Q.AddIgnoredComponent(Hit.GetComponent());
+  Hit=FHitResult();GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_Visibility,Q);
+ }
+ SuppressNear(U->Team,Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Now);
  const int32 Victim=HitIDs.FindRef(Hit.GetComponent());
  if(bArea)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,T->ShotDamage);
  if(SightExperiment.Started && Victim>0) ++SightExperiment.Hits;

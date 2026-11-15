@@ -14,8 +14,10 @@ struct FBattleSightExperiment
  double NextFlankSample=0;
  int32 TeamShots[2]={0,0},TeamKills[2]={0,0};
  double TeamDamage[2]={0,0},PointSeconds[2]={0,0};
- int32 ObjectiveShots[3]={0,0,0};
- double ObjectiveDamage[3]={0,0,0},ObjectiveFirstShot[3]={-1,-1,-1};
+ // Per objective (three on maps A-D, five on map E; sized for up to MaxObjectives).
+ static constexpr int32 MaxObjectives=8;
+ int32 ObjectiveShots[MaxObjectives]={0,0,0,0,0,0,0,0};
+ double ObjectiveDamage[MaxObjectives]={0,0,0,0,0,0,0,0},ObjectiveFirstShot[MaxObjectives]={-1,-1,-1,-1,-1,-1,-1,-1};
  TArray<double> ShotDistances, PathMS;
  double MaxPathLength=0;
  TSet<int32> PreviouslySeeing;
@@ -32,7 +34,7 @@ struct FBattleSightExperiment
  // Evaluation only: match time of each Area new-squad purchase per team.
  TArray<double> HireTimes[2];
  // Evaluation only (Area): true-owner seconds per central point and team, and the first capture time per team (-1 = never).
- double AreaPointSeconds[3][2]={{0,0},{0,0},{0,0}};
+ double AreaPointSeconds[MaxObjectives][2]={{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},{0,0}};
  double FirstCapture[2]={-1,-1};
  // Evaluation only (Area): living person-seconds within weapon range / 100m (2D) of the ENEMY home, by attacking team (5Hz samples).
  double EnemyHomeRangeSeconds[2]={0,0},EnemyHomeNearSeconds[2]={0,0};
@@ -45,6 +47,6 @@ struct FBattleSightExperiment
  double EconTimeline[2][10][4]={};int32 NextEconMinute=1;
  // Evaluation only (Area, strategy layer stage 1): UBattleMatch::AreaFronts every 30 s (samples 1..20) per team and lane (objective
  // index): [0] own front, [1] most advanced visible enemy, [2] own soldiers, [3] visible enemies.
- float FrontTimeline[2][20][3][4]={};int32 NextFrontSample=1;
+ float FrontTimeline[2][20][MaxObjectives][4]={};int32 NextFrontSample=1;
  void Cover(const TCHAR* Key){if(Enabled)++CoverDiag.FindOrAdd(FName(Key));}
 };

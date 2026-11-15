@@ -1,6 +1,9 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleCover.h"
 #include "BattleTactics.h"
+#include "BattleRanges.h"
+#include "BattleStance.h"
+#include "BattleFieldLayout.h"
 #include "BattlePerception.h"
 #include "BattleGameMode.h"
 #include "BattleVATDisplay.h"
@@ -67,7 +70,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
  auto& Diag=SightExperiment;int32 Stage=0;
  static const TCHAR* StageKeys[]={TEXT("request_no_slot_in_radius"),TEXT("request_slot_reserved"),TEXT("request_path_to_anchor_blocked"),TEXT("request_anchor_too_exposed"),TEXT("request_no_valid_peek"),TEXT("request_reserve_failed")};
  Diag.Cover(TEXT("request_total"));
- for(int32 Slot:Cover->NearbySlots(Pos,FMath::Max(0.f,SearchRadius>=0?SearchRadius:Tuning->CoverActionSearchRadius),FMath::Max(1,Tuning->CoverActionCandidateLimit)))
+ for(int32 Slot:Cover->NearbySlots(Pos,FMath::Max(0.f,SearchRadius>=0?SearchRadius:Tuning->CoverActionSearchRadius),BattleFieldLayout::IsUrban(GetWorld())?12:FMath::Max(1,Tuning->CoverActionCandidateLimit)))
  {
   const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
   Stage=FMath::Max(Stage,1);if(!Cover->IsAvailable(Slot,ID,Now))continue;
@@ -76,6 +79,18 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
   const float Hidden=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Eye).Fraction();
   if(Hidden>.6f)continue;
   Stage=FMath::Max(Stage,4);
+  // Stances: low cover (a wall, a car, sandbags) is used by crouching behind it and standing up to fire, with no step
+  // sideways. It qualifies when the threat cannot see the top of a crouched soldier here but a standing one can see the threat.
+  if(BattleStance::Enabled(GetWorld()) && !BattleTactics::HasTerrainLine(GetWorld(),Anchor+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch)),Eye)
+     && BattleTactics::HasTerrainLine(GetWorld(),Anchor+FVector(0,0,60),Eye))
+  {
+   Stage=FMath::Max(Stage,5);
+   if(!Cover->Reserve(Slot,ID,Now))continue;
+   Diag.Cover(TEXT("request_success"));Diag.Cover(TEXT("request_success_stand_up"));
+   U->CoverAnchor=Anchor;U->CoverPeek=Anchor;U->CoverSlot=Slot;U->CoverPhase=1;U->CoverSeconds=3;
+   U->CoverOrderRevision=U->OrderRevision;U->CoverTargetID=Target;U->DecisionReason=TEXT("COVER / CROUCH BEHIND LOW COVER");
+   return true;
+  }
   for(float Offset:{-220.f,220.f,-400.f,400.f})
   {
    FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Anchor+Lateral*Offset-FVector(0,0,90),Projected,FVector(50,50,150))){Diag.Cover(TEXT("peek_off_navmesh"));continue;}
@@ -175,14 +190,16 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  {Diag.Cover(TEXT("cancel_target_out_of_range"));CancelCoverAction(ID);return false;}
  if(U->CoverPhase==2 && !Player && U->CoverSeconds<=0 && U->ReloadEndTime==0)
  {
-  if(Validate && !RevalidatePeek(ID,Contact->LastKnownPosition)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_no_line"));}
+  // Suppression trial: a pinned AI soldier stays behind cover and checks again shortly.
+  if(IsPinned(ID,Now)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_suppressed"));}
+  else if(Validate && !RevalidatePeek(ID,Contact->LastKnownPosition)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_no_line"));}
   else{U->CoverPhase=3;U->CoverSeconds=3;}
  }
  // -BattleCoverFire=1: an AI peek ends after AICoverShotsPerPeek shots instead of a fixed 1.2s that is shorter than the AI shot interval.
  const bool AIPeekFire=!Player && BattleTactics::CoverFireEnabled();
  if(U->CoverPhase==4)
  {
-  const TCHAR* PeekEnd=U->ReloadEndTime>0?TEXT("reload"):(AIPeekFire && CoverPeekShots.FindRef(ID)>=FMath::Max(1,GetDefault<UBattleTuning>()->AICoverShotsPerPeek))?TEXT("shots_done"):U->CoverSeconds<=0?TEXT("timer"):
+  const TCHAR* PeekEnd=U->ReloadEndTime>0?TEXT("reload"):(!Player && IsPinned(ID,Now))?TEXT("suppressed"):(AIPeekFire && CoverPeekShots.FindRef(ID)>=FMath::Max(1,GetDefault<UBattleTuning>()->AICoverShotsPerPeek))?TEXT("shots_done"):U->CoverSeconds<=0?TEXT("timer"):
    (Validate && !CoverLineClear(ID,Position(ID),Contact->LastKnownPosition))?TEXT("no_line"):
    // -BattleCoverPeekSight=1: stop exposing once the blind time has passed at the peek point without an own sighting.
    (AIPeekFire && BattleTactics::CoverPeekSightEnabled() && !(Contact->bVisible && !Contact->bShared) &&
@@ -217,7 +234,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
   if(B.Actor.IsValid())B.Actor->SetActorRotation(FRotator(0,Aim.Rotation().Yaw,0));
   else {Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity).Forward=Aim.GetSafeNormal2D();B.Capsule->SetWorldRotation(FRotator(0,Aim.Rotation().Yaw,0));}
   Store->UpdateAim(ID,Now,B.Velocity.Size2D(),Aim,true);
-  const bool InRange=FVector::Dist2D(Position(ID),Contact->LastKnownPosition)<=GetDefault<UBattleTuning>()->EffectiveWeaponRange();
+  const bool InRange=FVector::Dist2D(Position(ID),Contact->LastKnownPosition)<=BattleRanges::Engage(U->Weapon);
   if(U->CoverPhase==4 && Contact->bVisible && !Contact->bShared && InRange && CanSee(ID,U->CoverTargetID))
   {
    if(U->Ammo==0){Store->StartReload(ID,Now);Diag.Cover(TEXT("peekwait_reloading"));}
@@ -242,5 +259,8 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  }
  U->DecisionReason=U->CoverPhase==2?TEXT("COVER / HIDDEN - FIRE TO PEEK"):U->CoverPhase==4?TEXT("COVER / EXPOSED FIRING WINDOW"):TEXT("COVER / MOVING - FIRE BLOCKED");
  if(!Player)U->Action=U->CoverPhase==2?EBattleAction::TakingCover:U->CoverPhase==4?EBattleAction::Engaging:EBattleAction::Moving;
+ // Stances: crouch while hidden behind cover, stand to move and to fire from the peek point.
+ // (Direct control too: behind low cover the player is only hidden while crouched.)
+ SetStance(ID,U->CoverPhase==2?BattleStance::Crouch:BattleStance::Stand,Now,true);
  return true;
 }

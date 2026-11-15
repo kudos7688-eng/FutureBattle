@@ -7,6 +7,7 @@
 #include "BattleGameMode.h"
 #include "BattlePerception.h"
 #include "BattleTactics.h"
+#include "BattleWarScore.h"
 #include "BattleCover.h"
 #include "BattleMatch.h"
 #include "BattleFieldLayout.h"
@@ -59,9 +60,11 @@ void ABattleHUD::DrawHUD()
 		else Label(FString::Printf(TEXT("%s   CREDITS %d   [1] RECRUIT %d   [2] REGULAR %d   [3] VETERAN %d / 5 units"), Phase, Match->Credits[0], UBattleMatch::SquadPrice(EBattleTraining::Recruit), UBattleMatch::SquadPrice(EBattleTraining::Regular), UBattleMatch::SquadPrice(EBattleTraining::Veteran)), 28, 90, Mint, .9f);
 		DrawRect(Ink, 16, 112, 560, 51);
 		const float Limit=BattleFieldLayout::IsSightField(GetWorld())?600.f:180.f;
-  if(Match->bArea)Label(FString::Printf(TEXT("TIME %.0fs / BASE DESTRUCTION OR FINAL RESOURCE SCORE"),FMath::Max(0.f,600-Match->Elapsed)),28,119,White);
+  if(Match->bArea)Label(FString::Printf(TEXT("TIME %.0fs / BASE DESTRUCTION OR FINAL RESOURCE SCORE"),FMath::Max(0.f,Match->MatchTimeLimit()-Match->Elapsed)),28,119,White);
   else Label(FString::Printf(TEXT("CONTROL %.2f : %.2f / 100    TIME %.0fs"), Match->Score[0], Match->Score[1], FMath::Max(0.f, Limit - Match->Elapsed)), 28, 119, White);
-  if(Match->bArea)Label(TEXT("Final: living soldiers + resources + central points x20 / ties draw"),28,141,Muted,.85f);
+  // War score trial: own score exactly; the opponent only as an estimate from own losses and observed ownership (its resources unknown).
+  if(Match->bArea&&BattleWarScore::Tuning().bEnabled)Label(FString::Printf(TEXT("WAR SCORE %s / ENEMY EST %d + RESOURCES ?"),*Match->WarScoreBreakdown(0),Match->WarScoreEstimate(0)),28,141,Muted,.85f);
+  else if(Match->bArea)Label(TEXT("Final: living soldiers + resources + central points x20 / ties draw"),28,141,Muted,.85f);
   else if (BattleFieldLayout::IsLarge(GetWorld())) Label(FString::Printf(TEXT("Capture 8s / 1 point per second / First to 100 / Limit %.0fs"),Limit),28,141,Muted,.85f);
 		else Label(TEXT("Capture 8s / Income +20 per 5s / Supply 1 per round / F8 save / F9 load"), 28, 141, Muted, .85f);
 		DrawRect(Ink, 16, 165, 560, 26);
@@ -246,8 +249,10 @@ void ABattleHUD::DrawHUD()
 				CoverText = FString::Printf(TEXT("EXPOSED %d/5 vs %02d%s"), Exposure.VisibleSamples, Nearest->TargetID, Exposure.bFlanked ? TEXT(" / FLANKED") : TEXT(""));
 			}
 		}
+		/* Suppression trial: the shown spread includes the same multiplier the shot uses. */ const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); const float SuppressedScale = Leaders->SuppressionSpreadScale(S->UnitID, GetWorld()->GetTimeSeconds());
+		if (SuppressedScale > 1.f) CoverText = FString::Printf(TEXT("SUPPRESSED %d%%  %s"), FMath::RoundToInt(Leaders->Suppression(S->UnitID, GetWorld()->GetTimeSeconds()) * 100.f), *CoverText);
 		const float Steady = S->AimStableSince < 0. ? 0.f : static_cast<float>(GetWorld()->GetTimeSeconds() - S->AimStableSince);
-		Label(FString::Printf(TEXT("AIM %.1fs   SPREAD %.2fdeg   %s"), FMath::Min(Steady, GetDefault<UBattleTuning>()->AimSettleSeconds), BattleTactics::SpreadDegrees(*S, GetWorld()->GetTimeSeconds()), *CoverText), W - 566, 148, White, .85f);
+		Label(FString::Printf(TEXT("AIM %.1fs   SPREAD %.2fdeg   %s"), FMath::Min(Steady, GetDefault<UBattleTuning>()->AimSettleSeconds), BattleTactics::SpreadDegrees(*S, GetWorld()->GetTimeSeconds(), SuppressedScale), *CoverText), W - 566, 148, White, .85f);
 		DrawRect(Ink, W - 576, 170, 560, 27);
 		Label(S->DecisionReason.IsEmpty() ? TEXT("PLAN: FOLLOW ORDER") : FString::Printf(TEXT("PLAN: %s / SLOT %d"), *S->DecisionReason, S->CoverSlot), W - 566, 177, Mint, .85f);
 		DrawRect(Ink, W - 576, 199, 560, 27);
@@ -297,8 +302,63 @@ void ABattleHUD::DrawHUD()
 		DrawRect(Ink, W * .25f, H * .35f, W * .5f, 100);
 		Label(Mode->Result, W * .25f + 25, H * .35f + 16, Mint, 1.8f);
 		Label(TEXT("F5 TO REDEPLOY"), W * .25f + 25, H * .35f + 60, White);
+		// War score trial: both teams' breakdown is disclosed once the battle has ended.
+		if (Match->bArea && BattleWarScore::Tuning().bEnabled)
+		{
+			DrawRect(Ink, W * .25f, H * .35f + 104, W * .5f, 58);
+			Label(FString::Printf(TEXT("YOU    %s"), *Match->WarScoreBreakdown(0)), W * .25f + 25, H * .35f + 112, Mint);
+			Label(FString::Printf(TEXT("ENEMY  %s"), *Match->WarScoreBreakdown(1)), W * .25f + 25, H * .35f + 136, White);
+		}
 	}
  DrawSquadList();
+ DrawMinimap();
+}
+
+void ABattleHUD::DrawMinimap()
+{
+ auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); if(!L->IsEnabled()) return;
+ auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas || !PC->IsTactical()) return;
+ const auto Map=FBattleMinimapLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld()); if(Map.Size.X<=0) return;
+ const FLinearColor Ink(.025f,.04f,.065f,.94f), Ground(.07f,.1f,.13f,.96f), Mint(.28f,.95f,.8f), Enemy(1,.35f,.25f), Stale(.95f,.65f,.3f,.75f), White(.94f,.97f,1.f), Muted(.45f,.52f,.58f);
+ auto Dot=[&](FVector World,float Size,FLinearColor Color){const FVector2D P=Map.ToScreen(World);if(Map.Contains(P))DrawRect(Color,P.X-Size*.5f,P.Y-Size*.5f,Size,Size);};
+ auto Frame=[&](FVector2D A,FVector2D B,FLinearColor Color)
+ {DrawLine(A.X,A.Y,B.X,A.Y,Color,1);DrawLine(B.X,A.Y,B.X,B.Y,Color,1);DrawLine(B.X,B.Y,A.X,B.Y,Color,1);DrawLine(A.X,B.Y,A.X,A.Y,Color,1);};
+ DrawRect(Ink,Map.Origin.X-5,Map.Origin.Y-24,Map.Size.X+10,Map.Size.Y+29);
+ DrawText(TEXT("MAP / observed only"),Muted,Map.Origin.X,Map.Origin.Y-20,GEngine->GetSmallFont(),.8f);
+ DrawRect(Ground,Map.Origin.X,Map.Origin.Y,Map.Size.X,Map.Size.Y);
+ // Map E: the city block outline (public map knowledge).
+ if(BattleFieldLayout::IsUrban(GetWorld())) Frame(Map.ToScreen(FVector(25000,-15000,0)),Map.ToScreen(FVector(-25000,15000,0)),Muted);
+ const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ // Homes are public; objective ownership is what the player's side last observed.
+ if(Match->bArea) for(int32 Team=0;Team<2;++Team)
+ {const FVector2D P=Map.ToScreen(Match->AreaHome(Team));Frame(P-FVector2D(7,7),P+FVector2D(7,7),Team?Enemy:Mint);}
+ for(int32 Index=0;Index<Match->Objectives.Num();++Index)
+ {
+  const int32 Holder=Match->bArea?Match->ObservedOwner(0,Index):Match->Objectives[Index].Owner;
+  const FLinearColor Color=Holder==0?Mint:Holder==1?Enemy:Holder==-2?Muted:White;
+  const FVector2D P=Map.ToScreen(Match->Objectives[Index].Position);
+  DrawRect(Color,P.X-5,P.Y-5,10,10);
+  DrawText(FString::Printf(TEXT("%c"),'A'+Index),Color,P.X+7,P.Y-7,GEngine->GetSmallFont(),.8f);
+ }
+ // Enemies: only contacts held by the player's side. Seen now = solid; remembered = dim, at the last known position.
+ TMap<int32,const FBattleContact*> Known;
+ auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();
+ for(const auto& Pair:Store->GetUnits()) if(Pair.Value.Team==0 && Pair.Value.IsAlive())
+  if(const auto* Contacts=Sense->GetContacts(Pair.Key)) for(const auto& C:*Contacts)
+  {
+   const FBattleContact*& Best=Known.FindOrAdd(C.Key);
+   if(!Best || (C.Value.bVisible && !Best->bVisible) || (C.Value.bVisible==Best->bVisible && C.Value.LastSeenTime>Best->LastSeenTime)) Best=&C.Value;
+  }
+ for(const auto& Pair:Known) if(!Pair.Value->bVisible && Pair.Value->Confidence>.35f) Dot(Pair.Value->LastKnownPosition,3,Stale);
+ for(const auto& Pair:Known) if(Pair.Value->bVisible) Dot(Pair.Value->LastKnownPosition,4,Enemy);
+ // Own squads: one mark per leader; selected squads stand out, stopped squads are not drawn.
+ for(const auto& S:L->Summaries()) if(S.bActive)
+ {
+  auto* Leader=L->Actor(S.LeaderUnitID); const bool Selected=Leader && PC->IsSelected(Leader);
+  Dot(L->Position(S.LeaderUnitID),Selected?7:5,Selected?White:Mint);
+ }
+ // Where the tactical camera is looking.
+ if(const APawn* Camera=PC->GetPawn()){const FVector2D P=Map.ToScreen(Camera->GetActorLocation());if(Map.Contains(P))Frame(P-FVector2D(9,6),P+FVector2D(9,6),White);}
 }
 
 void ABattleHUD::DrawSquadList()

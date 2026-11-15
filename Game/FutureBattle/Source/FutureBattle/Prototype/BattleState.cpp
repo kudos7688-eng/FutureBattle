@@ -3,6 +3,7 @@
 #include "BattleSquadTactics.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleTactics.h"
+#include "BattleRanges.h"
 #include "FutureBattle.h"
 
 namespace
@@ -23,10 +24,17 @@ float TrialSightRange(float DefaultRange)
 }
 }
 
-float UBattleTuning::EffectiveSightRange() const {return TrialSightRange(SightRange);}
+float UBattleTuning::EffectiveSightRange() const
+{
+ // Range profile (map E): base sight of a regular soldier; see BattleRanges.h.
+ if(const auto& Profile=BattleRanges::Get();Profile.bActive)return Profile.Sight;
+ return TrialSightRange(SightRange);
+}
 
 float UBattleTuning::EffectiveWeaponRange() const
 {
+ // Range profile (map E): the shared "weapon range" becomes the carbine's AI engagement distance; bullets reach further.
+ if(const auto& Profile=BattleRanges::Get();Profile.bActive)return Profile.EngageCarbine;
  static const float Override=[]()
  {
   FString Raw;

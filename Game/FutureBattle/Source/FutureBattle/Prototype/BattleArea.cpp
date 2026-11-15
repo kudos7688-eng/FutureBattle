@@ -4,6 +4,7 @@
 #include "BattleGameMode.h"
 #include "BattleSquadTactics.h"
 #include "BattleTactics.h"
+#include "BattleWarScore.h"
 #include "Engine/StaticMeshActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "TimerManager.h"
@@ -11,15 +12,19 @@
 #include "BattlePerception.h"
 
 FVector UBattleMatch::AreaHome(int32 Team)const{return FVector((Team!=int32(FParse::Param(FCommandLine::Get(),TEXT("BattleTrialSwap"))))?BattleFieldLayout::HomeDistance(GetWorld()):-BattleFieldLayout::HomeDistance(GetWorld()),0,0);}
-int32 UBattleMatch::ObservedOwner(int32 Team,int32 Point)const{return bArea?Area.KnownOwners[Team*3+Point]:Objectives[Point].Owner;}
+int32 UBattleMatch::ObservedOwner(int32 Team,int32 Point)const{return bArea?Area.KnownOwners[Team*Objectives.Num()+Point]:Objectives[Point].Owner;}
 int32 UBattleMatch::AreaScore(int32 Team)const
 {
+ // War score trial: points held over time + enemy losses + unspent resources replace the living/resource/point formula.
+ if(BattleWarScore::Tuning().bEnabled)return WarScore(Team);
  int32 Total=Credits[Team];for(const auto& U:GetWorld()->GetSubsystem<UBattleState>()->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive())++Total;
  for(const auto& P:Objectives)if(P.Owner==Team)Total+=20;return Total;
 }
 void UBattleMatch::InitializeArea()
 {
  Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();Score[0]=Score[1]=0;
+ // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
+ Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
  for(int32 Team=0;Team<2;++Team)
  {
   auto* Base=GetWorld()->SpawnActor<AStaticMeshActor>(AreaHome(Team)*(28./27.)+FVector(0,0,200),FRotator::ZeroRotator);
@@ -124,8 +129,8 @@ void UBattleMatch::UpdateArea(float Dt)
   Area.ObserveClock=FMath::Fmod(Area.ObserveClock,.2f);
   for(int32 Team=0;Team<2;++Team)
   {
-   for(int32 Point=0;Point<3;++Point)for(const auto& U:Store->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive()&&AreaVisible(U.Key,Objectives[Point].Position+FVector(0,0,80)))
-   {Area.KnownOwners[Team*3+Point]=Objectives[Point].Owner;Area.SeenAt[Team*3+Point]=Elapsed;break;}
+   for(int32 Point=0;Point<Objectives.Num();++Point)for(const auto& U:Store->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive()&&AreaVisible(U.Key,Objectives[Point].Position+FVector(0,0,80)))
+   {Area.KnownOwners[Team*Objectives.Num()+Point]=Objectives[Point].Owner;Area.SeenAt[Team*Objectives.Num()+Point]=Elapsed;break;}
    for(const auto& U:Store->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive()&&AreaVisible(U.Key,BaseActors[1-Team]->GetActorLocation(),BaseActors[1-Team]))
    {Area.KnownEnemyBaseHP[Team]=Area.BaseHP[1-Team];break;}
   }
@@ -147,6 +152,7 @@ void UBattleMatch::UpdateArea(float Dt)
    }
   }
  }
+ UpdateWarScore(Dt);if(Phase!=EBattleMatchPhase::Combat)return;
  Area.SupplyClock+=Dt;if(Area.SupplyClock<1)return;
  const float Step=Area.SupplyClock;Area.SupplyClock=0;
  TSet<int32> AtHome;
@@ -194,7 +200,7 @@ int32 UBattleMatch::AreaHireNeed(int32 Team) const
  const auto* Perception=GetWorld()->GetSubsystem<UBattlePerception>();
  bool bDefender=false,bAssault=false;
  for(const auto& P:Area.HirePurpose)if(const auto* S=Store->FindSquad(P.Key);S&&S->Team==Team&&S->CommandStatus==EBattleCommandStatus::Active)
- {bDefender|=P.Value==4;bAssault|=P.Value==3;}
+ {bDefender|=P.Value==101;bAssault|=P.Value==100;}
  const FVector Home=AreaHome(Team);
  bool bThreat=Area.HomeHitAt.IsValidIndex(Team)&&Elapsed-Area.HomeHitAt[Team]<30.f;
  TArray<int32> Own;Own.Init(0,Objectives.Num());
@@ -206,12 +212,12 @@ int32 UBattleMatch::AreaHireNeed(int32 Team) const
    if(const auto* Contacts=Perception->GetContacts(U.Key))
     for(const auto& C:*Contacts)if(C.Value.bVisible&&FVector::DistSquared2D(C.Value.LastKnownPosition,Home)<=FMath::Square(15000.)){bThreat=true;break;}
  }
- if(bThreat&&!bDefender)return 4;
+ if(bThreat&&!bDefender)return 101;
  int32 Best=-1;
  for(int32 I=0;I<Own.Num();++I)if(Own[I]<BattleTactics::AreaHire().PurposeFront)
   if(Best<0||Own[I]<Own[Best]||(Own[I]==Own[Best]&&FVector::DistSquared2D(Objectives[I].Position,Home)<FVector::DistSquared2D(Objectives[Best].Position,Home)))Best=I;
  if(Best>=0)return Best;
- if(!bAssault&&Area.KnownEnemyBaseHP.IsValidIndex(Team)&&Area.KnownEnemyBaseHP[Team]>=0&&Area.KnownEnemyBaseHP[Team]<=500)return 3;
+ if(!bAssault&&Area.KnownEnemyBaseHP.IsValidIndex(Team)&&Area.KnownEnemyBaseHP[Team]>=0&&Area.KnownEnemyBaseHP[Team]<=500)return 100;
  return -1;
 }
 FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
@@ -242,23 +248,24 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
  }
  return I;
 }
-void UBattleMatch::AreaFronts(int32 Team, FAreaFront (&Out)[3]) const
+void UBattleMatch::AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObjectives]) const
 {
  for(auto& F:Out)F=FAreaFront();
- if(Objectives.Num()!=3||Team<0||Team>1)return;
+ const int32 N=Objectives.Num();if(N<1||N>FAreaIntent::MaxObjectives||Team<0||Team>1)return;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const auto* Perception=GetWorld()->GetSubsystem<UBattlePerception>();
  const FVector Own=AreaHome(Team),Axis=AreaHome(1-Team)-Own;const double Len2=FMath::Max(1.0,Axis.SizeSquared2D());
- auto Lane=[this](const FVector& P){int32 Best=0;for(int32 I=1;I<3;++I)if(FMath::Abs(P.Y-Objectives[I].Position.Y)<FMath::Abs(P.Y-Objectives[Best].Position.Y))Best=I;return Best;};
+ // Sectors: on three-objective maps (A-D) the lane by nearest objective Y (north, centre, south); otherwise the nearest objective in 2D.
+ auto Lane=[this,N](const FVector& P){int32 Best=0;for(int32 I=1;I<N;++I){const double D=N==3?FMath::Abs(P.Y-Objectives[I].Position.Y):FVector::DistSquared2D(P,Objectives[I].Position);const double B=N==3?FMath::Abs(P.Y-Objectives[Best].Position.Y):FVector::DistSquared2D(P,Objectives[Best].Position);if(D<B)Best=I;}return Best;};
  auto Progress=[&](const FVector& P){return float(FVector::DotProduct(P-Own,Axis)/Len2);};
- TArray<float> OwnT[3];TMap<int32,FVector> Seen;
+ TArray<float> OwnT[FAreaIntent::MaxObjectives];TMap<int32,FVector> Seen;
  for(const auto& U:Store->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive())
  {
   const FVector P=R->Position(U.Key);OwnT[Lane(P)].Add(Progress(P));
   if(const auto* Contacts=Perception?Perception->GetContacts(U.Key):nullptr)
    for(const auto& C:*Contacts)if(C.Value.bVisible)Seen.Add(C.Key,C.Value.LastKnownPosition);
  }
- for(int32 L=0;L<3;++L)if(OwnT[L].Num())
+ for(int32 L=0;L<N;++L)if(OwnT[L].Num())
  {OwnT[L].Sort();Out[L].Own=OwnT[L].Num();Out[L].OwnFront=OwnT[L][FMath::Min(OwnT[L].Num()-1,FMath::FloorToInt(OwnT[L].Num()*.9f))];}
  for(const auto& E:Seen)
  {const int32 L=Lane(E.Value);const float T=Progress(E.Value);++Out[L].EnemySeen;Out[L].EnemyFront=Out[L].EnemyFront<0?T:FMath::Min(Out[L].EnemyFront,T);}

@@ -6,6 +6,7 @@
 #include "BattlePerception.h"
 #include "BattleFieldLayout.h"
 #include "BattleTactics.h"
+#include "BattleSuppression.h"
 #include "Components/CapsuleComponent.h"
 #include "Camera/CameraComponent.h"
 #include "TimerManager.h"
@@ -41,6 +42,26 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    Tuning->AimSwitchBaseSeconds=OldBase;U.NextShotTime=0;U.Ammo=FMath::Max(U.Ammo,Ammo);
    Check(!Early && Late,TEXT("aim switch delay follows shared config"));
   }
+  {
+   // Suppression trial (default OFF): accrual from the bullet path, decay, cap, spread multiplier.
+   auto& Tune=BattleSuppression::MutableTuning();const auto Saved=Tune;
+   const FVector Near=Position(251)+FVector(0,50,35),A=Near-FVector(1000,0,0),B=Near+FVector(1000,0,0);
+   Check(!Saved.bEnabled,TEXT("suppression trial is off by default"));
+   SuppressNear(0,A,B,Now);
+   Check(Suppression(251,Now)==0 && SuppressionSpreadScale(251,Now)==1.f && !IsPinned(251,Now),TEXT("disabled suppression changes nothing"));
+   Tune=BattleSuppression::FTuning();Tune.bEnabled=true;
+   SuppressNear(0,A,B,Now);const float One=Suppression(251,Now);
+   Check(FMath::IsNearlyEqual(One,.09f,.005f),TEXT("near miss at 50cm adds distance-scaled suppression"));
+   SuppressNear(1,A,B,Now);SuppressNear(0,A+FVector(0,300,0),B+FVector(0,300,0),Now);
+   Check(FMath::IsNearlyEqual(Suppression(251,Now),One,.0001f),TEXT("own-team fire and distant paths do not suppress"));
+   Check(FMath::IsNearlyEqual(Suppression(251,Now+.2),One-.05f,.005f) && Suppression(251,Now+1)==0,TEXT("suppression decays linearly to zero"));
+   for(int32 I=0;I<20;++I)AddSuppression(251,.12f,Now);
+   const auto& Victim=*Store->Find(251);
+   Check(Suppression(251,Now)==1.f && IsPinned(251,Now) && FMath::IsNearlyEqual(SuppressionSpreadScale(251,Now),2.5f,.001f),TEXT("suppression caps at 1 and pins"));
+   Check(FMath::IsNearlyEqual(BattleTactics::SpreadDegrees(Victim,Now,2.5f),2.5f*BattleTactics::SpreadDegrees(Victim,Now),.001f),TEXT("suppression multiplies the shared weapon spread"));
+   Check(!IsPinned(251,Now+2.1),TEXT("pin ends as suppression decays"));
+   SuppressionZeroAt.Reset();Tune=Saved;
+  }
   Check(!RequestCoverAction(21,FVector::ZeroVector),TEXT("open field cannot manufacture cover"));
   PC->ControlUnit(Actor(1));
   CoverProbeAfter.Remove(1);Follow(1,.016f,Now);Check(!CoverProbeAfter.Contains(1),TEXT("direct-controlled unit is outside AI cover probe cognition"));
@@ -70,6 +91,20 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    const FVector PeekBefore=Store->Find(2)->CoverPeek;
    Check(RevalidatePeek(2,Threat) && CoverLineClear(2,Store->Find(2)->CoverPeek,Threat),TEXT("Mass follower peek revalidates against the observed threat"));
    Store->Units.FindChecked(2).CoverPeek=PeekBefore;
+  }
+  {
+   // Suppression trial: a pinned AI soldier behind cover does not step out; once it wears off he does.
+   auto& Tune=BattleSuppression::MutableTuning();const auto Saved=Tune;Tune=BattleSuppression::FTuning();Tune.bEnabled=true;
+   auto& F=Store->Units.FindChecked(2);
+   Check(F.CoverPhase!=0,TEXT("Mass follower is still in its cover action"));
+   F.CoverPhase=2;F.CoverSeconds=0;F.ReloadEndTime=0;AddSuppression(2,1.f,Now);StepCoverAction(2,.016f,Now);
+   Check(F.CoverPhase==2,TEXT("pinned AI soldier stays hidden"));
+   SuppressionZeroAt.Reset();F.CoverSeconds=0;StepCoverAction(2,.016f,Now);
+   Check(F.CoverPhase==3,TEXT("AI soldier leaves cover to peek once suppression is gone"));
+   F.CoverPhase=4;F.CoverSeconds=2;AddSuppression(2,1.f,Now);StepCoverAction(2,.016f,Now);
+   // The body is still at the anchor in this fixture, so the return move (1) may complete to hidden (2) in the same step.
+   Check(F.CoverPhase==1 || F.CoverPhase==2,TEXT("pinned AI soldier ducks back from an exposed peek"));
+   SuppressionZeroAt.Reset();Tune=Saved;
   }
   const int32 Ammo=Store->Find(1)->Ammo;
   Check(!Fire(1,Position(1)+FVector(0,0,60),FVector(-1,0,0),true)&&Store->Find(1)->Ammo==Ammo,TEXT("hidden trigger requests emergence without firing through cover"));

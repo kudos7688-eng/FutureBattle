@@ -1,5 +1,6 @@
 #include "BattleController.h"
 #include "BattleLeaderRuntime.h"
+#include "BattleStance.h"
 #include "BattleFieldLayout.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 #include "BattleUnit.h"
@@ -38,7 +39,7 @@ ABattleCameraPawn::ABattleCameraPawn()
 void ABattleCameraPawn::Zoom(float Delta)
 {
 	const FVector Current = Camera->GetRelativeLocation();
-	const float Height = FMath::Clamp(Current.Z + Delta, 1000.f, BattleFieldLayout::IsExpanded(GetWorld()) ? 130000.f : BattleFieldLayout::IsSightField(GetWorld()) ? 100000.f : BattleFieldLayout::IsLarge(GetWorld()) ? 30000.f : 4500.f);
+	const float Height = FMath::Clamp(Current.Z + Delta, 1000.f, BattleFieldLayout::IsUrban(GetWorld()) ? 160000.f : BattleFieldLayout::IsExpanded(GetWorld()) ? 130000.f : BattleFieldLayout::IsSightField(GetWorld()) ? 100000.f : BattleFieldLayout::IsLarge(GetWorld()) ? 30000.f : 4500.f);
 	Camera->SetRelativeLocation(FVector(-Height * .65f, 0, Height));
 }
 
@@ -119,7 +120,7 @@ void ABattleController::Forward(const FInputActionValue& Value)
 	if (bTactical && TacticalPawn)
 	{
 		FVector P = TacticalPawn->GetActorLocation() + FVector(Axis * 1800 * GetWorld()->GetDeltaSeconds(), 0, 0);
-		const float Limit=BattleFieldLayout::IsExpanded(GetWorld())?39500.f:BattleFieldLayout::IsSightField(GetWorld())?29500.f:BattleFieldLayout::IsLarge(GetWorld())?11500.f:3500.f;
+		const float Limit=BattleFieldLayout::IsUrban(GetWorld())?49500.f:BattleFieldLayout::IsExpanded(GetWorld())?39500.f:BattleFieldLayout::IsSightField(GetWorld())?29500.f:BattleFieldLayout::IsLarge(GetWorld())?11500.f:3500.f;
 		P.X = FMath::Clamp(P.X,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
 	else if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
@@ -132,7 +133,7 @@ void ABattleController::Right(const FInputActionValue& Value)
 	if (bTactical && TacticalPawn)
 	{
 		FVector P = TacticalPawn->GetActorLocation() + FVector(0, Axis * 1800 * GetWorld()->GetDeltaSeconds(), 0);
-		const float Limit=BattleFieldLayout::IsExpanded(GetWorld())?29500.f:BattleFieldLayout::IsSightField(GetWorld())?19500.f:BattleFieldLayout::IsLarge(GetWorld())?8500.f:2500.f;
+		const float Limit=BattleFieldLayout::IsUrban(GetWorld())?34500.f:BattleFieldLayout::IsExpanded(GetWorld())?29500.f:BattleFieldLayout::IsSightField(GetWorld())?19500.f:BattleFieldLayout::IsLarge(GetWorld())?8500.f:2500.f;
 		P.Y = FMath::Clamp(P.Y,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
 	else if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
@@ -342,6 +343,15 @@ void ABattleController::PrimaryPressed()
 
 bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 {
+ // Stances (map E): X cycles stand -> crouch -> prone for the directly controlled soldier.
+ if(!bTactical && Params.Key==EKeys::X && Params.Event==IE_Pressed)
+  if(auto* U=Cast<ABattleUnit>(GetPawn()))
+   if(auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();R->IsEnabled()&&BattleStance::Enabled(GetWorld()))
+   {
+    const uint8 Next=(R->StanceOf(U->GetUnitID())+1)%3;
+    if(R->SetStance(U->GetUnitID(),Next,GetWorld()->GetTimeSeconds()))ShowNotice(Next==BattleStance::Prone?TEXT("PRONE / X TO STAND"):Next==BattleStance::Crouch?TEXT("CROUCHED / X FOR PRONE"):TEXT("STANDING / X TO CROUCH"));
+    return true;
+   }
  if(!bTactical && Params.Key==EKeys::C && Params.Event==IE_Pressed)
  {
   if(auto* U=Cast<ABattleUnit>(GetPawn()))
@@ -370,6 +380,19 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 	if (OverDelegation && Params.Key == EKeys::RightMouseButton) return true;
 	if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled() && bTactical)
  {
+  // Minimap: a left click moves the tactical camera there.
+  if(Params.Key==EKeys::LeftMouseButton)
+  {
+   FVector2D MapPointer; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH);
+   const auto Map=FBattleMinimapLayout::Make(FVector2D(ViewW,ViewH),GetWorld());
+   if(Params.Event==IE_Pressed && GetPointerPosition(MapPointer) && Map.Contains(MapPointer))
+   {
+    bMinimapPress=true; bTriggerHeld=false;
+    if(TacticalPawn){const FVector Target=Map.ToWorld(MapPointer);TacticalPawn->SetActorLocation(FVector(Target.X,Target.Y,TacticalPawn->GetActorLocation().Z));}
+    return true;
+   }
+   if(Params.Event==IE_Released && bMinimapPress){bMinimapPress=false;bTriggerHeld=false;return true;}
+  }
   const bool Over=SquadPanelAtPointer();
   if(Params.Key==EKeys::MouseScrollUp || Params.Key==EKeys::MouseScrollDown)
   { if(Over) { if(Params.Event==IE_Pressed) ScrollSquadList(Params.Key==EKeys::MouseScrollUp?-3:3); return true; } }

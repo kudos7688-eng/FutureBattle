@@ -2,8 +2,8 @@
 # (Benchmarks/SightTrial-20261111/<prefix>-<condition>-*-<tag>) and prints, per condition, the mean per team and run:
 #  - at each full minute: resources held, cumulative income, new-squad spend, replacement spend
 #    (= StartCredits + income - held - squad spend), living soldiers;
-#  - every 60 s: own front and most advanced visible enemy (progress 0 = own home, 1 = enemy home, mean over lanes that have
-#    a value), own soldiers and visible enemies summed over the three lanes.
+#  - every 60 s: own front and most advanced visible enemy (progress 0 = own home, 1 = enemy home, mean over sectors (3 lanes on A-D, 5 on E) that have
+#    a value), own soldiers and visible enemies summed over the sectors.
 [CmdletBinding()]
 param([string[]]$Conditions=@('HI'),[string]$Tag='r17',[string]$Prefix='econ',[int]$StartCredits=100)
 $ErrorActionPreference='Stop'
@@ -21,7 +21,7 @@ foreach($c in $Conditions){
    $fr=@($m."$($side)_front_per_30s")
    if($fr.Count -eq 20){for($s=0;$s -lt 20;$s++){$r=@($fr[$s])
     $of=@();$ef=@();$own=0;$seen=0
-    for($l=0;$l -lt 3;$l++){if($r[4*$l] -ge 0){$of+=$r[4*$l]};if($r[4*$l+1] -ge 0){$ef+=$r[4*$l+1]};$own+=$r[4*$l+2];$seen+=$r[4*$l+3]}
+    for($l=0;$l -lt [int]($r.Count/4);$l++){if($r[4*$l] -ge 0){$of+=$r[4*$l]};if($r[4*$l+1] -ge 0){$ef+=$r[4*$l+1]};$own+=$r[4*$l+2];$seen+=$r[4*$l+3]}
     if($of.Count){$f[$s,0]+=($of|Measure-Object -Average).Average;$f[$s,1]++}
     if($ef.Count){$f[$s,2]+=($ef|Measure-Object -Average).Average;$f[$s,3]++}
     $f[$s,4]+=$own;$f[$s,5]+=$seen}}

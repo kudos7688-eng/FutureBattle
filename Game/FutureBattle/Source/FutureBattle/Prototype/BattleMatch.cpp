@@ -16,9 +16,16 @@ void UBattleMatch::InitializeMatch()
 	if (IsEnabled()) return;
 	MatchID = FGuid::NewGuid(); Phase = EBattleMatchPhase::Deployment;
 	Credits[0] = Credits[1] = 3000; Winner = INDEX_NONE;
-	for (const FVector Position : { FVector(-800, -1800, 0), FVector(0, 1800, 0), FVector(800, -1800, 0) })
+	if (BattleFieldLayout::IsSightField(GetWorld()))
 	{
-		FBattleObjective Point; Point.Position = BattleFieldLayout::IsSightField(GetWorld()) ? BattleFieldLayout::Objective(Objectives.Num(),BattleFieldLayout::IsExpanded(GetWorld())) : BattleFieldLayout::IsLarge(GetWorld()) ? FVector(0,(Objectives.Num()-1)*4500,0) : Position; Objectives.Add(Point);
+		// Wide maps take their objective count and positions from the layout (three on A-D, five on E).
+		const FString Map = GetWorld()->GetMapName();
+		for (int32 Index = 0; Index < BattleFieldLayout::ObjectiveCountForMap(Map); ++Index)
+		{ FBattleObjective Point; Point.Position = BattleFieldLayout::ObjectiveForMap(Map, Index); Objectives.Add(Point); }
+	}
+	else for (const FVector Position : { FVector(-800, -1800, 0), FVector(0, 1800, 0), FVector(800, -1800, 0) })
+	{
+		FBattleObjective Point; Point.Position = BattleFieldLayout::IsLarge(GetWorld()) ? FVector(0,(Objectives.Num()-1)*4500,0) : Position; Objectives.Add(Point);
 	}
  bArea=GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bArea;if(bArea)InitializeArea();
 }
@@ -172,7 +179,7 @@ void UBattleMatch::Update(float DeltaSeconds)
 	CheckTimeLimit();
 }
 
-float UBattleMatch::MatchTimeLimit() const { return BattleFieldLayout::IsSightField(GetWorld()) ? 600.f : 180.f; }
+float UBattleMatch::MatchTimeLimit() const { return BattleFieldLayout::IsUrban(GetWorld()) ? 900.f : BattleFieldLayout::IsSightField(GetWorld()) ? 600.f : 180.f; }
 
 void UBattleMatch::CheckTimeLimit()
 {
@@ -272,7 +279,7 @@ int32 UBattleMatch::AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) c
  if(Objectives.IsEmpty())return 0;
  const bool Rotate=BattleFieldLayout::IsSightField(GetWorld())&&(Team!=int32(FParse::Param(FCommandLine::Get(),TEXT("BattleTrialSwap"))));
  TArray<double> Weight;double Sum=0;int32 Owned=0;
- for(int32 I=0;I<Objectives.Num();++I){const int32 P=Rotate?Objectives.Num()-1-I:I;const bool bOwn=ObservedOwner(Team,P)==Team;Owned+=bOwn;const double W=(bOwn?1.0:Intent.AttackWeight)*Intent.PointWeight[P];Weight.Add(W);Sum+=W;}
+ for(int32 I=0;I<Objectives.Num();++I){const int32 P=Rotate?Objectives.Num()-1-I:I;const bool bOwn=ObservedOwner(Team,P)==Team;Owned+=bOwn;const double W=(bOwn?1.0:Intent.AttackWeight)*(P<FAreaIntent::MaxObjectives?Intent.PointWeight[P]:1.f);Weight.Add(W);Sum+=W;}
  // S4 trial: boost points where the team's own living soldiers (own positions only) are below the per-point average.
  // -BattleAreaTrialTeam=0/1 limits the S3-S6 trials to one team (the other plays the default) to measure who wins.
  const bool bTrial=Strategy.TrialTeam<0||Strategy.TrialTeam==Team;
@@ -327,8 +334,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
 		int32 Target = bStrategy ? AreaStrategyTarget(Pair.Key,Team,bStrategyBase) : ChooseObjective(Group, Team);
   // P1 trial: a squad bought for a need keeps that mission (point, enemy home, or own home defence).
   const int32* Purpose=bStrategy?Area.HirePurpose.Find(Pair.Key):nullptr;
-  if(Purpose&&*Purpose>=0&&*Purpose<Objectives.Num()){Target=*Purpose;bStrategyBase=false;}else if(Purpose&&*Purpose==3)bStrategyBase=true;
-  const bool bHomeDefence=Purpose&&*Purpose==4;if(bHomeDefence)bStrategyBase=false;
+  if(Purpose&&*Purpose>=0&&*Purpose<Objectives.Num()){Target=*Purpose;bStrategyBase=false;}else if(Purpose&&*Purpose==100)bStrategyBase=true;
+  const bool bHomeDefence=Purpose&&*Purpose==101;if(bHomeDefence)bStrategyBase=false;
   ++Group;
 		// Keep assignment stable when only some squads are delegated.
 		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated) continue;

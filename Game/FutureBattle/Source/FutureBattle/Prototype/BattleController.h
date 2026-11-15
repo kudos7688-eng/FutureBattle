@@ -97,6 +97,8 @@ private:
 	bool bTriggerHeld = false;
 	int32 DelegationPress = INDEX_NONE;
  bool bSquadListPress=false;
+ // A left press that started on the minimap (moves the tactical camera); its release is swallowed too.
+ bool bMinimapPress=false;
  int32 PressedSquadID=INDEX_NONE;
  FDelegateHandle LeaderDeathHandle;
 	void Forward(const FInputActionValue& Value);

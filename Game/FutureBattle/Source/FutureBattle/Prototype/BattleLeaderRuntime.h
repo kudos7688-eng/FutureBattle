@@ -46,6 +46,16 @@ struct FBattleSquadListLayout
  int32 RowAt(FVector2D P) const;
 };
 
+// Tactical minimap, shared by Canvas drawing and pointer input. World +X is up and +Y is right, like the tactical camera.
+struct FBattleMinimapLayout
+{
+ FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector, HalfExtent=FVector2D(30000,20000);
+ static FBattleMinimapLayout Make(FVector2D View,const UWorld* World);
+ bool Contains(FVector2D P) const { return Size.X>0 && P.X>=Origin.X && P.X<Origin.X+Size.X && P.Y>=Origin.Y && P.Y<Origin.Y+Size.Y; }
+ FVector2D ToScreen(FVector World) const { return FVector2D(Origin.X+(World.Y+HalfExtent.Y)/(2*HalfExtent.Y)*Size.X,Origin.Y+(HalfExtent.X-World.X)/(2*HalfExtent.X)*Size.Y); }
+ FVector ToWorld(FVector2D P) const { return FVector(HalfExtent.X-(P.Y-Origin.Y)/Size.Y*2*HalfExtent.X,(P.X-Origin.X)/Size.X*2*HalfExtent.Y-HalfExtent.Y,0); }
+};
+
 struct FBattleLeaderBody
 {
  TWeakObjectPtr<ABattleUnit> Actor;
@@ -63,6 +73,8 @@ struct FBattleLeaderBody
  FVector PassingWaypoint=FVector::ZeroVector, PassingForward=FVector::ForwardVector, PassingOffset=FVector::ZeroVector;
  bool bPassingSecond=false;
  double EscapeUntil=0, NextEscapeProbe=0;
+ // Map E: earliest time this member may ask for a route of his own again after being cut off from the shared corridor.
+ double NextOwnPath=0;
  FVector EscapeWaypoint=FVector::ZeroVector;
  TArray<FVector> ContactRoute;
  double NextContactProbe=0, ContactRouteUntil=0, NextArrivalProbe=0;
@@ -78,6 +90,9 @@ struct FBattleLeaderPlan
  TArray<FVector> Path;
  FVector Center=FVector::ZeroVector;
  TMap<int32,FVector> ArrivalGoals;
+ // Map E cover arrival: a member's own short route from the end of the shared path to a cover slot that the
+ // destination cannot reach in a straight line. Rebuilt on demand (not saved).
+ TMap<int32,TArray<FVector>> ArrivalTails;
  TMap<int32,TArray<FVector>> Corridors;
  int32 PathRequests=0, ArrivalReassignments=0, ContactProbes=0;
  int32 ArrivalRevision=INDEX_NONE;
@@ -137,6 +152,23 @@ public:
  bool CoverLineClear(int32 ID,FVector From,FVector Threat) const;
  // Re-picks a peek point beside the cover anchor with a clear line to Threat; false keeps the soldier hidden.
  bool RevalidatePeek(int32 ID,FVector Threat);
+ // Suppression trial (-BattleSuppression=1, see BattleSuppression.h). Runtime only: time at which each unit's level decays to zero.
+ TMap<int32,double> SuppressionZeroAt;
+ float Suppression(int32 ID,double Now) const;
+ bool IsPinned(int32 ID,double Now) const;
+ float SuppressionSpreadScale(int32 ID,double Now) const;
+ void AddSuppression(int32 ID,float Amount,double Now);
+ // Suppresses living enemies of ShooterTeam within the tuning radius of the travelled bullet path Start..End.
+ void SuppressNear(int32 ShooterTeam,FVector Start,FVector End,double Now);
+ // Stances (BattleStance.h; map E default). Runtime only: 0 stand, 1 crouch, 2 prone, and the earliest time each may change again.
+ TMap<int32,uint8> Stances;
+ TMap<int32,double> StanceLockedUntil;
+ uint8 StanceOf(int32 ID) const {const uint8* Found=Stances.Find(ID);return Found?*Found:0;}
+ bool SetStance(int32 ID,uint8 Stance,double Now,bool bForce=false);
+ void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight);
+ // Concealment (hedges tagged BattleConcealment in the map): blocks sight but shots ignore it. Collected once per world.
+ TArray<AActor*> ConcealmentActors;
+ bool bConcealmentBuilt=false;
  bool StartCoverApproach(int32 ID,FVector Threat,int32 Target,double Now,float LocalRadius);
  bool StepCoverApproach(int32 ID,float Dt,double Now,int32 Target);
  bool IssueOrder(int32 SquadID,EBattleOrder Order,FVector Goal,bool bMissionUpdate=false);

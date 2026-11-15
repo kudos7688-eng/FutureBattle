@@ -2,14 +2,14 @@
 #include "BattleFieldLayout.h"
 namespace {
 bool Finite(double V,double Low,double High){return FMath::IsFinite(V)&&V>=Low&&V<=High;}
-bool ValidPoint(FVector P,bool Expanded){return !P.ContainsNaN()&&FMath::Abs(P.X)<=(Expanded?42000:32000)&&FMath::Abs(P.Y)<=(Expanded?32000:22000)&&Finite(P.Z,-1000,10000);}
+bool ValidPoint(FVector P,bool Expanded,bool Urban){return !P.ContainsNaN()&&FMath::Abs(P.X)<=(Urban?52000:Expanded?42000:32000)&&FMath::Abs(P.Y)<=(Urban?37000:Expanded?32000:22000)&&Finite(P.Z,-1000,10000);}
 }
 bool UBattleSave::ValidateMixed(FString& Error) const
 {
- auto Point=[&](FVector P){return ValidPoint(P,MapName==TEXT("Lvl_BattleWide_D"));};
+ auto Point=[&](FVector P){return ValidPoint(P,MapName==TEXT("Lvl_BattleWide_D"),BattleFieldLayout::IsUrbanMap(MapName));};
  auto Fail=[&](const TCHAR* Why){Error=Why;return false;};
- if(MapName!=TEXT("Lvl_BattleField500")&&MapName!=TEXT("Lvl_BattleWide_A")&&MapName!=TEXT("Lvl_BattleWide_B")&&MapName!=TEXT("Lvl_BattleWide_C")&&MapName!=TEXT("Lvl_BattleWide_D")) return Fail(TEXT("Unknown mixed map"));
- if((Ruleset!=TEXT("Wide")&&Ruleset!=TEXT("MixedFast")&&Ruleset!=TEXT("Area")) || !Finite(BaseSightRange,100,16000)||!Finite(WeaponRange,100,10000)||TacticalFeatures<0||TacticalFeatures>((90<<9)|511) ||
+ if(MapName!=TEXT("Lvl_BattleField500")&&MapName!=TEXT("Lvl_BattleWide_A")&&MapName!=TEXT("Lvl_BattleWide_B")&&MapName!=TEXT("Lvl_BattleWide_C")&&MapName!=TEXT("Lvl_BattleWide_D")&&MapName!=TEXT("Lvl_BattleWide_E")) return Fail(TEXT("Unknown mixed map"));
+ if((Ruleset!=TEXT("Wide")&&Ruleset!=TEXT("MixedFast")&&Ruleset!=TEXT("Area")) || !Finite(BaseSightRange,100,50000)||!Finite(WeaponRange,100,100000)||TacticalFeatures<0||TacticalFeatures>((90<<9)|511) ||
     !Finite(TacticalClock,0,1000)||!Finite(TeamNextAssignment,0,TacticalClock+1.1)||!Finite(DelegationClock,0,5.1))return Fail(TEXT("Invalid mixed rules/clocks"));
  if(Ruleset==TEXT("Wide")&&(Units.Num()!=500 || Squads.Num()!=50))return Fail(TEXT("Fixed wide roster must contain 500 soldiers and 50 squads"));
  if(Ruleset==TEXT("MixedFast")&&(Units.Num()<20||Units.Num()>500||Units.Num()!=Squads.Num()*10))return Fail(TEXT("Invalid purchased roster"));
@@ -34,14 +34,17 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   }
   // Income (2026-11-14) adds to the starting 100. Pre-income saves have Income {0,0} and IncomeClock 0.
   if(Area.Income.Num()!=2||Area.Income[0]<0||Area.Income[1]<0||Area.Income[0]>100000||Area.Income[1]>100000||!Finite(Area.IncomeClock,0,600))return Fail(TEXT("Invalid area income record"));
+  // War score trial: older saves have {0,0} and clock 0. Range checks only (losses are not reconstructed from the records).
+  if(Area.WarPoint.Num()!=2||Area.WarLoss.Num()!=2||Area.WarPointEstimate.Num()!=2||!Finite(Area.WarClock,0,600))return Fail(TEXT("Invalid area war score record"));
+  for(int32 Team=0;Team<2;++Team)if(Area.WarPoint[Team]<0||Area.WarPoint[Team]>1000000||Area.WarLoss[Team]<0||Area.WarLoss[Team]>1000000||Area.WarPointEstimate[Team]<0||Area.WarPointEstimate[Team]>1000000)return Fail(TEXT("Invalid area war score"));
   if(Area.LastAIHireAt.Num()!=2||!Finite(Area.LastAIHireAt[0],-1000,Elapsed+.01)||!Finite(Area.LastAIHireAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area AI hire clock"));
   // P1 trial (2026-11-16): bought-squad missions point at existing squads with a known mission; home hit times are past clocks.
-  for(const auto& P:Area.HirePurpose)if(P.Value<0||P.Value>4||!BySquad.FindRef(P.Key))return Fail(TEXT("Invalid area hire purpose"));
+  for(const auto& P:Area.HirePurpose)if(!((P.Value>=0&&P.Value<Objectives.Num())||P.Value==100||P.Value==101)||!BySquad.FindRef(P.Key))return Fail(TEXT("Invalid area hire purpose"));
   if(Area.HomeHitAt.Num()!=2||!Finite(Area.HomeHitAt[0],-1000,Elapsed+.01)||!Finite(Area.HomeHitAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area home hit clock"));
   if(Retired[0]+Area.HireSpent[0]+AllyCredits!=100+Area.Income[0]||Retired[1]+Area.HireSpent[1]+EnemyCredits!=100+Area.Income[1])return Fail(TEXT("Area resource conservation mismatch"));
-  if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=500+10*(Squads.Num()-50)||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=6||Area.SeenAt.Num()!=6||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>200||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
+  if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=500+10*(Squads.Num()-50)||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=2*Objectives.Num()||Area.SeenAt.Num()!=2*Objectives.Num()||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>200||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
   for(int32 Team=0;Team<2;++Team)if(!Finite(Area.BaseHP[Team],0,1000)||!Finite(Area.KnownEnemyBaseHP[Team],-1,1000))return Fail(TEXT("Invalid base state"));
-  for(int32 I=0;I<6;++I)if(Area.KnownOwners[I]<-2||Area.KnownOwners[I]>1||!Finite(Area.SeenAt[I],-1,Elapsed+.01))return Fail(TEXT("Invalid observed objective"));
+  for(int32 I=0;I<Area.KnownOwners.Num();++I)if(Area.KnownOwners[I]<-2||Area.KnownOwners[I]>1||!Finite(Area.SeenAt[I],-1,Elapsed+.01))return Fail(TEXT("Invalid observed objective"));
   int32 Reserved[2]={0,0};
   for(const auto& Q:Area.Replacements)
   {

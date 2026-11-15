@@ -38,8 +38,8 @@ $supply=@{
  'F1'=@('-AreaFrontBalance','1')
  'F2'=@('-AreaFrontBalance','1','-AreaFrontGain','2')
  'F05'=@('-AreaFrontBalance','1','-AreaFrontGain','0.5')
- # Numeric tuning on the current defaults: AI hire reserve (default 10) and S1 attack weight (default 2).
- 'R0'=@('-AreaHireReserve','0')
+ # Numeric tuning: AI hire reserve (HR0; R0 was renamed when the range-profile R0 arrived with the merge) and S1 attack weight.
+ 'HR0'=@('-AreaHireReserve','0')
  'R25'=@('-AreaHireReserve','25')
  'W15'=@('-AreaAttackWeight','1.5')
  # S5 home-assault infiltration: Move (no stopping to fight) until the leader is within N m of the enemy home.
@@ -80,6 +80,31 @@ $supply=@{
  # Strategy layer stage 2 plans (time phases): EH expand then hold, ESA expand, save, then mass on the enemy home.
  'EH'=@('-AreaPlan','1')
  'ESA'=@('-AreaPlan','2')
+ # Suppression trial: P = defaults (spread x2.5 at full, pin at 0.5); PS = spread only (no pinning); PP = pinning only; PH = pin at 0.75.
+ 'P'=@('-Suppression','1')
+ 'PS'=@('-Suppression','1','-SuppressionPin','2')
+ 'PP'=@('-Suppression','1','-SuppressionSpread','0')
+ 'PH'=@('-Suppression','1','-SuppressionPin','0.75')
+ # War score trial: W = time limit only; W400 = also ends when a team's earned score reaches 400.
+ 'W'=@('-AreaWarScore','1')
+ 'W400'=@('-AreaWarScore','1','-AreaWarTarget','400')
+ # Range profile (map E default): R0 = off (100m sight / 50m range as on A-D); RE75/RE100/RE125 = carbine AI engagement distance;
+ # RS150 = 150m sight; RP = profile with the suppression trial; RN = profile with 100m sight (ranges only).
+ 'R0'=@('-RangeProfile','0')
+ 'RE75'=@('-RangeEngage','7500')
+ 'RE100'=@('-RangeEngage','10000')
+ 'RE125'=@('-RangeEngage','12500')
+ 'RS150'=@('-RangeSight','15000')
+ 'RN'=@('-RangeSight','10000')
+ 'RP'=@('-Suppression','1')
+ # Stances (map E default ON): T0 = off; TP = stances with the suppression trial (pinned soldiers go prone).
+ 'T0'=@('-Stances','0')
+ 'TP'=@('-Suppression','1')
+ 'T0P'=@('-Stances','0','-Suppression','1')
+ # CA0 = map E without cover-first arrival slots (members arrive on the open grid as on maps A-D).
+ 'CA0'=@('-CoverArrival','0')
+ # TP3 = stances with stronger suppression per shot (0.3 instead of 0.12).
+ 'TP3'=@('-Suppression','1','-SuppressionPerShot','0.3')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

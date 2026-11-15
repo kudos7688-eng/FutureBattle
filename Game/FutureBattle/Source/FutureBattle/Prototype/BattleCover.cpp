@@ -23,10 +23,13 @@ void UBattleCover::BuildSlots(bool bForce)
 	for (TActorIterator<AStaticMeshActor> It(GetWorld()); It; ++It)
 	{
 		FVector Center, Extent; It->GetActorBounds(true, Center, Extent);
-		const FVector Limit=BattleFieldLayout::Expand(FVector(1000,1000,0),BattleFieldLayout::IsExpanded(GetWorld()));
+		// Map E: city buildings are up to 52m x 30m, so they count as cover and get slots nearer their corners as well.
+		const bool Urban=BattleFieldLayout::IsUrban(GetWorld());
+		const FVector Limit=Urban?FVector(3200,3200,0):BattleFieldLayout::Expand(FVector(1000,1000,0),BattleFieldLayout::IsExpanded(GetWorld()));
 		if (Extent.Z < 45.f || Extent.X > Limit.X || Extent.Y > Limit.Y || Extent.X < 10.f || Extent.Y < 10.f) continue;
 		TArray<FVector> Candidates;
-		for (float Side : {-1.f, 1.f}) for (float Along : {-.75f, 0.f, .75f})
+		static const TArray<float> WideSamples={-.75f,0.f,.75f},UrbanSamples={-.95f,-.5f,0.f,.5f,.95f};
+		for (float Side : {-1.f, 1.f}) for (float Along : (Urban?UrbanSamples:WideSamples))
 		{
 			Candidates.Add(FVector(Center.X + Side * (Extent.X + 95.f), Center.Y + Along * Extent.Y, Center.Z - Extent.Z));
 			Candidates.Add(FVector(Center.X + Along * Extent.X, Center.Y + Side * (Extent.Y + 95.f), Center.Z - Extent.Z));

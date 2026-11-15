@@ -13,7 +13,7 @@ param(
  [double]$Threshold=0,
  [ValidateRange(10,120)][int]$Fps=60,
  [switch]$NoRoundTripSave,
- [ValidateRange(1,16)][int]$Concurrency=8
+ [ValidateRange(1,16)][int]$Concurrency=12
 )
 $ErrorActionPreference='Stop'
 Set-Location $PSScriptRoot

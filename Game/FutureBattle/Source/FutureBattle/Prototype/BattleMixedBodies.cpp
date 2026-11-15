@@ -71,6 +71,8 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
  if(!Nav) {Error=TEXT("Navigation unavailable; battle retained");return false;}
  CoverApproaches.Reset();
+ SuppressionZeroAt.Reset();
+ Stances.Reset();StanceLockedUntil.Reset();
  TMap<int32,FVector> Positions;
  TMap<int32,TArray<FVector>> ValidatedPaths;
  for(const auto& E:Save->Units) Positions.Add(E.State.UnitID,E.Position);
