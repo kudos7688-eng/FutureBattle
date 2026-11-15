@@ -12,6 +12,18 @@ inline EBattleWeapon WeaponForSlot(int32 Slot)
 	return Slot % 5 == 4 ? EBattleWeapon::SupportGun : EBattleWeapon::Carbine;
 }
 
+// Squad types (2026-11-16, ROADMAP heavy equipment order): 0 = rifle squad (10, two support guns), 1 = heavy infantry
+// (UBattleTuning::HeavyMembers soldiers, all support guns, HeavyHealthScale x HP, HeavySpeedScale x speed, AreaHeavyCost).
+namespace BattleSquadType
+{
+ enum : uint8 { Rifle=0, Heavy=1, Count=2 };
+ int32 Members(uint8 Type);
+ float HealthScale(uint8 Type);
+ float SpeedScale(uint8 Type);
+ int32 AreaCost(uint8 Type);
+ EBattleWeapon Weapon(uint8 Type,int32 Slot);
+}
+
 UENUM(BlueprintType)
 enum class EBattleOrder : uint8 { Hold, Move, AttackMove, Defend };
 
@@ -124,6 +136,7 @@ struct FBattleSquadState
 	UPROPERTY() int32 LeaderUnitID = INDEX_NONE;
 	UPROPERTY() EBattleCommandStatus CommandStatus = EBattleCommandStatus::Legacy;
 	UPROPERTY() FString DisplayName;
+	UPROPERTY() uint8 SquadType = 0; // BattleSquadType (absent in older saves = rifle squad)
 	UPROPERTY() int32 CommandRevision = 0;
 	UPROPERTY() FName StopReason;
 	UPROPERTY(VisibleAnywhere) int32 Team = 0;
@@ -242,6 +255,11 @@ public:
 	float EffectiveWeaponRange() const;
  float EffectiveSightRange() const;
 	UPROPERTY(Config, EditAnywhere) float MoveSpeed = 420.f;
+	// Heavy infantry (squad type 1, 2026-11-16 first values): members, HP and speed scale, Area purchase cost.
+	UPROPERTY(Config, EditAnywhere) int32 HeavyMembers = 6;
+	UPROPERTY(Config, EditAnywhere) float HeavyHealthScale = 3.f;
+	UPROPERTY(Config, EditAnywhere) float HeavySpeedScale = .714f;
+	UPROPERTY(Config, EditAnywhere) int32 AreaHeavyCost = 18;
 	UPROPERTY(Config, EditAnywhere) float DefenseRadius = 600.f;
 	UPROPERTY(Config, EditAnywhere) float MoveStuckSeconds = 2.f;
 	UPROPERTY(Config, EditAnywhere) int32 MaxMoveRetries = 3;
@@ -379,6 +397,7 @@ public:
 	int32 CreateLeaderSquad(int32 Team, const TArray<int32>& Members, int32 LeaderID, bool bAllowControl);
 	// Maximum HP of a unit: Health, times the trial -BattleLeaderHealth multiplier for a squad leader.
 	float MaxHealthOf(int32 UnitID) const;
+	void SetSquadType(int32 SquadID,uint8 Type);
 	bool DisableLeaderSquad(int32 SquadID);
 	bool CanSelectLeader(int32 UnitID, int32 PlayerTeam = 0) const;
 	FBattleUnitDied OnUnitDied;

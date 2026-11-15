@@ -20,6 +20,8 @@ bool UBattleSave::ValidateMixed(FString& Error) const
  if(Ruleset==TEXT("Area"))
  {
   int32 Current=0;for(const auto& U:Units)Current+=!U.State.bRetired;
+  // Every squad keeps its type's size (replacements retire the dead soldier): 50 starting rifle squads plus purchases.
+  int32 ExpectedRoster=0;for(const auto& S:Squads)ExpectedRoster+=S.SquadType<BattleSquadType::Count?BattleSquadType::Members(S.SquadType):0;
   int32 Retired[2]={0,0};for(const auto& U:Units)if(U.State.bRetired)
   {const auto* S=BySquad.FindRef(U.State.SquadID);if(!S||S->Team!=U.State.Team)return Fail(TEXT("Invalid retired squad reference"));++Retired[U.State.Team];}
   // New-squad hiring (2026-11-14): each team starts with 25 squads; every extra squad is a purchase of 10 fresh soldiers,
@@ -42,7 +44,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   for(const auto& P:Area.HirePurpose)if(!((P.Value>=0&&P.Value<Objectives.Num())||P.Value==100||P.Value==101)||!BySquad.FindRef(P.Key))return Fail(TEXT("Invalid area hire purpose"));
   if(Area.HomeHitAt.Num()!=2||!Finite(Area.HomeHitAt[0],-1000,Elapsed+.01)||!Finite(Area.HomeHitAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area home hit clock"));
   if(Retired[0]+Area.HireSpent[0]+AllyCredits!=100+Area.Income[0]||Retired[1]+Area.HireSpent[1]+EnemyCredits!=100+Area.Income[1])return Fail(TEXT("Area resource conservation mismatch"));
-  if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=500+10*(Squads.Num()-50)||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=2*Objectives.Num()||Area.SeenAt.Num()!=2*Objectives.Num()||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>200||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
+  if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=ExpectedRoster||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=2*Objectives.Num()||Area.SeenAt.Num()!=2*Objectives.Num()||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>200||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
   for(int32 Team=0;Team<2;++Team)if(!Finite(Area.BaseHP[Team],0,1000)||!Finite(Area.KnownEnemyBaseHP[Team],-1,1000))return Fail(TEXT("Invalid base state"));
   for(int32 I=0;I<Area.KnownOwners.Num();++I)if(Area.KnownOwners[I]<-2||Area.KnownOwners[I]>1||!Finite(Area.SeenAt[I],-1,Elapsed+.01))return Fail(TEXT("Invalid observed objective"));
   int32 Reserved[2]={0,0};
@@ -59,7 +61,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
  for(const auto& S:Squads)
  {
   const auto* Leader=ByID.FindRef(S.LeaderUnitID);
-  if(!Leader||!S.Members.Contains(S.LeaderUnitID)||S.Members.Num()!=10||
+  if(!Leader||!S.Members.Contains(S.LeaderUnitID)||S.SquadType>=BattleSquadType::Count||S.Members.Num()!=BattleSquadType::Members(S.SquadType)||
     (S.CommandStatus!=EBattleCommandStatus::Active&&S.CommandStatus!=EBattleCommandStatus::Disabled)||S.DisplayName.Len()>80||S.CommandRevision<0||
     !Finite(S.FlankCooldown,0,15.1))return Fail(TEXT("Invalid leader squad"));
   for(int32 ID:S.Members)

@@ -391,7 +391,8 @@ bool UBattleState::ApplyDamage(int32 ID, int32 AttackingTeam, float Damage)
 
 int32 UBattleState::CreateLeaderSquad(int32 Team, const TArray<int32>& Members, int32 LeaderID, bool bAllowControl)
 {
- if (Members.Num() != 10 || !Members.Contains(LeaderID)) return INDEX_NONE;
+ // Rifle squads have 10 members; heavy infantry has fewer (BattleSquadType::Members). The caller sets the type afterwards.
+ if (Members.Num() < 2 || Members.Num() > 10 || !Members.Contains(LeaderID)) return INDEX_NONE;
  TSet<int32> Unique;
  for (int32 ID : Members) { const auto* U=Find(ID); if (!U || !U->IsAlive() || U->Team!=Team || U->SquadID!=INDEX_NONE || Unique.Contains(ID)) return INDEX_NONE; Unique.Add(ID); }
  FBattleSquadState S; S.SquadID=NextSquadID++; S.Team=Team; S.Members=Members; S.LeaderUnitID=LeaderID;
@@ -406,7 +407,9 @@ float UBattleState::MaxHealthOf(int32 UnitID) const
 {
  const float Base=GetDefault<UBattleTuning>()->Health;
  const auto* U=Find(UnitID); const auto* S=U?FindSquad(U->SquadID):nullptr;
- return S && S->LeaderUnitID==UnitID ? Base*BattleTactics::LeaderHealthMultiplier() : Base;
+ // Squad type scale (heavy infantry); a leader keeps the larger of that and the leader multiplier.
+ const float TypeScale=S?BattleSquadType::HealthScale(S->SquadType):1.f;
+ return S && S->LeaderUnitID==UnitID ? Base*FMath::Max(TypeScale,BattleTactics::LeaderHealthMultiplier()) : Base*TypeScale;
 }
 bool UBattleState::CanSelectLeader(int32 ID,int32 PlayerTeam) const
 {
@@ -422,4 +425,18 @@ bool UBattleState::DisableLeaderSquad(int32 ID)
  for(int32 Member:S->Members) { auto& U=Units.FindChecked(Member); if(U.IsAlive()) { U.HP=0; U.Action=EBattleAction::Dead; U.DeathCause=TEXT("LeaderLoss"); Dead.Add(Member); } U.ReloadEndTime=0; }
  for(int32 Member:Dead) OnUnitDied.Broadcast(Member);
  return true;
+}
+
+// ---- Squad types.
+int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?FMath::Clamp(GetDefault<UBattleTuning>()->HeavyMembers,2,10):10;}
+float BattleSquadType::HealthScale(uint8 Type){return Type==Heavy?FMath::Clamp(GetDefault<UBattleTuning>()->HeavyHealthScale,1.f,10.f):1.f;}
+float BattleSquadType::SpeedScale(uint8 Type){return Type==Heavy?FMath::Clamp(GetDefault<UBattleTuning>()->HeavySpeedScale,.2f,1.f):1.f;}
+int32 BattleSquadType::AreaCost(uint8 Type){return Type==Heavy?FMath::Clamp(GetDefault<UBattleTuning>()->AreaHeavyCost,1,100):FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
+EBattleWeapon BattleSquadType::Weapon(uint8 Type,int32 Slot){return Type==Heavy?EBattleWeapon::SupportGun:WeaponForSlot(Slot);}
+void UBattleState::SetSquadType(int32 SquadID,uint8 Type)
+{
+ // Purchased squads only: name, and every member at the type's full health (the leader keeps the larger of the two scales).
+ auto* S=Squads.Find(SquadID); if(!S||Type>=BattleSquadType::Count) return;
+ S->SquadType=Type; if(Type==BattleSquadType::Heavy) S->DisplayName=FString::Printf(TEXT("第%d重装歩兵隊"),SquadID);
+ for(int32 ID:S->Members) if(auto* U=Units.Find(ID); U&&U->IsAlive()) U->HP=MaxHealthOf(ID);
 }

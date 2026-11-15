@@ -514,7 +514,10 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
     if(Dist>1 && Dist<95) Separation+=Away.GetSafeNormal2D()*(95-Dist)/95;
    }
   Direction=bWideField?LimitedSteering(D,Separation,GetDefault<UBattleTuning>()->WideAvoidanceMaxSide):(D+Separation*.65).GetSafeNormal2D();
-  const float Speed=GetDefault<UBattleTuning>()->MoveSpeed;
+  // Heavy infantry moves slower (squad type speed scale); rifle squads keep the configured speed.
+  const float TypeSpeed=BattleSquadType::SpeedScale(S->SquadType);
+  const float Speed=GetDefault<UBattleTuning>()->MoveSpeed*TypeSpeed;
+  if(TypeSpeed<1.f&&B.Actor.IsValid())B.Actor->GetCharacterMovement()->MaxWalkSpeed=Speed;
   if(B.Actor.IsValid())
   {
    B.Actor->AddMovementInput(Direction); B.Velocity=B.Actor->GetVelocity();

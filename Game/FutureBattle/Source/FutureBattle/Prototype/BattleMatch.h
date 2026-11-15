@@ -16,6 +16,7 @@ struct FAreaIntent
  float FlankOffset=0.f; bool bFlankSameSide=false; // S7/S8 route of home-assault squads (0 = straight)
  int32 BaseReturnLiving=0;            // S8: living count at which home-assault squads return for supply (0 = SupplyReturnLiving)
  int32 Phase=0;                       // index of the active phase of the team plan (0 when no plan)
+ float HeavyShare=0.f;                // share of AI purchases that are heavy infantry (0 = rifle squads only)
 };
 // One sector (the part of the field nearest one objective; a lane on maps A-D) as seen by one team: own soldiers and own front (furthest progress
 // from own home, 0..1 along the home-to-home line, 90th percentile), and enemies currently visible to the team (count and the
@@ -84,7 +85,7 @@ public:
  FString WarScoreBreakdown(int32 Team) const;
  // Area new squad (regular only) into a free slot (<25 active squads) for BattleTactics::AreaHire().Cost resources.
  // bAuto: AI purchase (no selection change; a team-0 squad is delegated). Cancels pending replenishments the spend can no longer cover.
- bool HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto);
+ bool HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,uint8 SquadType=0);
  int32 LastHiredSquadID=INDEX_NONE;
  // P1 trial: the observed need a new AI squad would serve (see FAreaHireTuning), or -1 for none.
  int32 AreaHireNeed(int32 Team) const;
@@ -109,6 +110,9 @@ public:
 	// S1 allocation for one squad from observed point ownership only (Area). bBase = assault the enemy home instead.
 	int32 AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) const;
 	FAreaIntent AreaIntent(int32 Team) const;
+	// Heavy infantry objective: the observed own point with the fewest own soldiers within 100 m (hold the thin front), or,
+	// with no own point, the point nearest the own home. Observed ownership, own positions and fixed positions only.
+	int32 AreaHeavyTarget(int32 Team) const;
 	void AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObjectives]) const;
 	void CheckTimeLimit();
 	void UpdateEnemyOrders();

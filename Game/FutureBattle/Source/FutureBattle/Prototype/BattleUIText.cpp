@@ -77,6 +77,7 @@ FString BattleUIText::Ja(const FString& Text)
   {TEXT("^TEST TRAINING: (.*) / (\\d+) UNITS / equipment unchanged$"),TEXT("試験の練度：{0} ／ {1}体 ／ 装備は同じ")},
   {TEXT("^VERIFY: (\\d+) FAILURES / F5 TO RESET$"),TEXT("検証：失敗 {0} ／ F5でやり直し")},
   {TEXT("^New squad deployed / -(\\d+) resources$"),TEXT("新しい小隊を配備 ／ 資源 -{0}")},
+  {TEXT("^Heavy infantry deployed / -(\\d+) resources$"),TEXT("重装歩兵隊を配備 ／ 資源 -{0}")},
   {TEXT("^(\\d+) SQUADS / (.*)$"),TEXT("{0}部隊 ／ {1}")},
   {TEXT("^(.*) / (\\d+)m$"),TEXT("{0} ／ {1}m")},
  };

@@ -75,6 +75,9 @@ $supply=@{
  'EI23'=@('-AreaIncomeUrbanBase','2','-AreaIncomeUrbanPerPoint','3')
  # Return fire: AI soldiers hit in the last 5 s may fire back at visible contacts up to bullet reach (matters on map E).
  'RF'=@('-ReturnFire','1')
+ # Heavy infantry: share of AI purchases that are heavy infantry (6 soldiers, support guns, 3x health, 18 resources).
+ 'HV33'=@('-AreaHeavyShare','0.33')
+ 'HV50'=@('-AreaHeavyShare','0.5')
  'INC2'=@('-AreaIncomeBase','2','-AreaIncomePerPoint','2')
  'INC3'=@('-AreaIncomeBase','3','-AreaIncomePerPoint','3')
  'INC4'=@('-AreaIncomeBase','4','-AreaIncomePerPoint','4')

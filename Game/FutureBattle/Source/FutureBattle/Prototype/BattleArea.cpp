@@ -66,7 +66,7 @@ int32 UBattleMatch::ActiveSquads(int32 Team)const
  int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active;
  return Count;
 }
-bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto)
+bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,uint8 SquadType)
 {
  LastMessage.Reset();
  auto Fail=[this](const TCHAR* Why){LastMessage=Why;return false;};
@@ -75,14 +75,17 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto)
  if(Team<0||Team>1||Phase!=EBattleMatchPhase::Combat)return Fail(TEXT("Recruitment unavailable"));
  if(Training!=EBattleTraining::Regular)return Fail(TEXT("Area battle: regular squads only [2]"));
  if(ActiveSquads(Team)>=25)return Fail(TEXT("No free squad slot (25 active squads)"));
- if(Credits[Team]<H.Cost)return Fail(TEXT("Insufficient resources"));
+ // Squad type: rifle squad (AreaSquadCost) or heavy infantry (AreaHeavyCost).
+ if(SquadType>=BattleSquadType::Count)return Fail(TEXT("Recruitment unavailable"));
+ const int32 Cost=SquadType==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(SquadType);
+ if(Credits[Team]<Cost)return Fail(TEXT("Insufficient resources"));
  if(GetWorld()->GetSubsystem<UBattleState>()->GetSquads().Num()>=100)return Fail(TEXT("Squad record capacity reached (100 including lost squads)"));
  auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  int32 SID=INDEX_NONE;
- if(!R->SpawnPurchasedSquad(Team,EBattleTraining::Regular,LastMessage,!bAuto,&SID))return false;
- Credits[Team]-=H.Cost;LastHiredSquadID=SID;
+ if(!R->SpawnPurchasedSquad(Team,EBattleTraining::Regular,LastMessage,!bAuto,&SID,SquadType))return false;
+ Credits[Team]-=Cost;LastHiredSquadID=SID;
  if(Area.HireSpent.Num()!=2)Area.HireSpent={0,0};
- Area.HireSpent[Team]+=H.Cost;
+ Area.HireSpent[Team]+=Cost;
  // Queued replenishments reserve one resource each; drop the least advanced ones the remaining resources cannot cover.
  TArray<int32> Queued;for(const auto& Q:Area.Replacements)if(Store->Find(Q.Key)->Team==Team)Queued.Add(Q.Key);
  Queued.Sort([this](int32 A,int32 B){const float PA=Area.Replacements.FindChecked(A),PB=Area.Replacements.FindChecked(B);return PA!=PB?PA<PB:A>B;});
@@ -91,8 +94,8 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto)
  if(bAuto){if(Area.LastAIHireAt.Num()!=2)Area.LastAIHireAt={-1000,-1000};Area.LastAIHireAt[Team]=Elapsed;}
  if(R->SightExperiment.Enabled)R->SightExperiment.HireTimes[Team].Add(Elapsed);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE team=%d squad=%d auto=%d cost=%d credits=%d cancelled_replacements=%d active=%d time=%.1f leader=%s home=%s"),
-  Team,SID,bAuto?1:0,H.Cost,Credits[Team],Cancelled,ActiveSquads(Team),Elapsed,*R->Position(Store->FindSquad(SID)->LeaderUnitID).ToCompactString(),*AreaHome(Team).ToCompactString());
- LastMessage=FString::Printf(TEXT("New squad deployed / -%d resources"),H.Cost);
+  Team,SID,bAuto?1:0,Cost,Credits[Team],Cancelled,ActiveSquads(Team),Elapsed,*R->Position(Store->FindSquad(SID)->LeaderUnitID).ToCompactString(),*AreaHome(Team).ToCompactString());
+ LastMessage=SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
  return true;
 }
 void UBattleMatch::UpdateAreaHiring()
@@ -104,7 +107,15 @@ void UBattleMatch::UpdateAreaHiring()
  {
   if(Team==0&&!R->SightExperiment.Enabled)continue; // The player's resources are spent only by the player.
   int32 Pending=0;for(const auto& Q:Area.Replacements)Pending+=Store->Find(Q.Key)->Team==Team;
-  if(Credits[Team]-Pending<H.Cost+AreaIntent(Team).HireReserve||ActiveSquads(Team)>=25)continue;
+  // Squad type by the intent's heavy share: heavy infantry while the team's bought heavy squads are below that share of its purchases.
+  const FAreaIntent HireIntent=AreaIntent(Team); uint8 Type=BattleSquadType::Rifle;
+  if(HireIntent.HeavyShare>0)
+  {
+   int32 Bought=0,Heavy=0;for(const auto& P:Store->GetSquads())if(P.Value.Team==Team){Bought+=P.Key>50;Heavy+=P.Value.SquadType==BattleSquadType::Heavy;}
+   if(Heavy<HireIntent.HeavyShare*(Bought+1))Type=BattleSquadType::Heavy;
+  }
+  const int32 TypeCost=Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
+  if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=25)continue;
   // Pacing (own clock and own purchase history only): spacing between purchases and no purchases near the time limit,
   // where a squad costs score (15 resources for 10 living) and has little time to take a point.
   if(H.Stop>0&&Elapsed>=MatchTimeLimit()-H.Stop)continue;
@@ -114,7 +125,7 @@ void UBattleMatch::UpdateAreaHiring()
   const bool bPurpose=H.bPurpose&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==Team);
   if(bPurpose&&(Need=AreaHireNeed(Team))<0)continue;
   const FString Message=LastMessage;LastHiredSquadID=INDEX_NONE;
-  if(HireAreaSquad(Team,EBattleTraining::Regular,true)&&bPurpose&&LastHiredSquadID!=INDEX_NONE){Area.HirePurpose.Add(LastHiredSquadID,Need);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE_PURPOSE team=%d squad=%d purpose=%d time=%.1f"),Team,LastHiredSquadID,Need,Elapsed);}
+  if(HireAreaSquad(Team,EBattleTraining::Regular,true,Type)&&bPurpose&&LastHiredSquadID!=INDEX_NONE){Area.HirePurpose.Add(LastHiredSquadID,Need);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE_PURPOSE team=%d squad=%d purpose=%d time=%.1f"),Team,LastHiredSquadID,Need,Elapsed);}
   LastMessage=Message;
  }
 }
@@ -228,6 +239,8 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
  const auto& S=BattleTactics::AreaStrategy();const bool bTrial=S.TrialTeam<0||S.TrialTeam==Team;
  FAreaIntent I;I.AttackWeight=S.AttackWeight;I.BaseShare=S.BaseShare;I.bFrontBalance=bTrial&&S.bFrontBalance;I.FrontGain=S.FrontGain;
  I.FocusGain=bTrial?S.FocusGain:0.f;I.HireReserve=BattleTactics::AreaHire().Reserve;
+ // Heavy infantry share of AI purchases (trial, one team only with -BattleAreaTrialTeam).
+ if(bTrial) I.HeavyShare=S.HeavyShare;
  // S7/S8 trials (one team only with -BattleAreaTrialTeam).
  if(bTrial){I.FlankOffset=S.FlankOffset;I.bFlankSameSide=S.bFlankSameSide;I.BaseReturnLiving=S.BaseReturnLiving;}
  // Stage 2: time-phased team plans (match time only; no hidden information). Values are first trial values (numbers delegated).
@@ -248,6 +261,12 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
   if(Elapsed<180.f*K){I.Phase=1;I.AttackWeight=3.f;I.HireReserve=0;}
   else if(Elapsed<420.f*K){I.Phase=2;I.AttackWeight=1.f;I.BaseShare=.1f;I.HireReserve=75;}
   else{I.Phase=3;I.BaseShare=.5f;I.FlankOffset=1.3f;I.bFlankSameSide=true;I.BaseReturnLiving=5;I.HireReserve=0;}
+ }
+ // Plans use heavy infantry where they hold ground: more in hold/save phases, fewer while expanding or massing.
+ if(I.HeavyShare>0&&I.Phase>0)
+ {
+  const bool bHoldPhase=(S.Plan==1&&I.Phase>=2)||(S.Plan==2&&I.Phase==2);
+  I.HeavyShare=FMath::Clamp(I.HeavyShare*(bHoldPhase?1.5f:.5f),0.f,.8f);
  }
  return I;
 }
@@ -272,4 +291,19 @@ void UBattleMatch::AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObje
  {OwnT[L].Sort();Out[L].Own=OwnT[L].Num();Out[L].OwnFront=OwnT[L][FMath::Min(OwnT[L].Num()-1,FMath::FloorToInt(OwnT[L].Num()*.9f))];}
  for(const auto& E:Seen)
  {const int32 L=Lane(E.Value);const float T=Progress(E.Value);++Out[L].EnemySeen;Out[L].EnemyFront=Out[L].EnemyFront<0?T:FMath::Min(Out[L].EnemyFront,T);}
+}
+int32 UBattleMatch::AreaHeavyTarget(int32 Team) const
+{
+ if(Objectives.IsEmpty()) return 0;
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ int32 Best=INDEX_NONE,BestOwn=MAX_int32;
+ for(int32 I=0;I<Objectives.Num();++I) if(ObservedOwner(Team,I)==Team)
+ {
+  int32 Own=0;for(const auto& U:Store->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive()&&FVector::DistSquared2D(R->Position(U.Key),Objectives[I].Position)<=FMath::Square(10000.))++Own;
+  if(Own<BestOwn){BestOwn=Own;Best=I;}
+ }
+ if(Best!=INDEX_NONE) return Best;
+ const FVector Home=AreaHome(Team);double BestD=DBL_MAX;
+ for(int32 I=0;I<Objectives.Num();++I){const double D=FVector::DistSquared2D(Objectives[I].Position,Home);if(D<BestD){BestD=D;Best=I;}}
+ return Best;
 }

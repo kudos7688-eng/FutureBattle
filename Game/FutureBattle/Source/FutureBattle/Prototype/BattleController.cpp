@@ -162,6 +162,8 @@ void ABattleController::HireTraining(EBattleTraining Training)
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled()) return;
+	// Area battle: key 3 buys heavy infantry (squad type 1); key 2 the rifle squad.
+	if (Match->bArea && Training == EBattleTraining::Veteran) { Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Heavy); ShowNotice(Match->LastMessage); return; }
 	Match->HireSquad(0, Training); ShowNotice(Match->LastMessage);
 }
 void ABattleController::HireRecruit() { HireTraining(EBattleTraining::Recruit); }
@@ -852,6 +854,7 @@ void ABattleController::PressCommandButton(int32 Index)
  case 4: TakeCommandSelected(); break;
  case 5: DelegateSelected(); break;
  case 6: HireRegular(); break;
+ case 7: HireVeteran(); break; // area battle: heavy infantry
  default: break;
  }
 }

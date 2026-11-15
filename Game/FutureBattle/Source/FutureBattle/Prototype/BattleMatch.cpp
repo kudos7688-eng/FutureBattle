@@ -336,6 +336,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   const int32* Purpose=bStrategy?Area.HirePurpose.Find(Pair.Key):nullptr;
   if(Purpose&&*Purpose>=0&&*Purpose<Objectives.Num()){Target=*Purpose;bStrategyBase=false;}else if(Purpose&&*Purpose==100)bStrategyBase=true;
   const bool bHomeDefence=Purpose&&*Purpose==101;if(bHomeDefence)bStrategyBase=false;
+  // Heavy infantry (tactical role): hold the thinnest observed own point, or take the point nearest home; never the home assault.
+  if(bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::Heavy&&!Objectives.IsEmpty()){bStrategyBase=false;Target=AreaHeavyTarget(Team);}
   ++Group;
 		// Keep assignment stable when only some squads are delegated.
 		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated) continue;
