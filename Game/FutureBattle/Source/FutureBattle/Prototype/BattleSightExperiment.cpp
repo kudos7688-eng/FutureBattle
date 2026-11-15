@@ -97,6 +97,24 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
     if(D2<=FMath::Square(10000.))E.EnemyHomeNearSeconds[Pair.Value.Team]+=SampleDt;
    }
   }
+  if(SampleDt>0&&Match->bArea&&BattleTactics::AreaStrategy().bEnabled)
+  {
+   const auto& Trips=GetWorld()->GetSubsystem<UBattleSquadTactics>()->OpenSupplyTrips();
+   for(const auto& Pair:Store->GetSquads())
+   {
+    const auto& S=Pair.Value;if(S.Team<0||S.Team>1)continue;
+    bool bBase=false;Match->AreaStrategyTarget(Pair.Key,S.Team,bBase);if(!bBase)continue;
+    int32 Living=0;FVector Sum=FVector::ZeroVector;
+    for(int32 ID:S.Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive()){++Living;Sum+=Position(ID);}
+    if(!Living)continue;
+    const FVector H0=Match->AreaHome(S.Team),Axis=Match->AreaHome(1-S.Team)-H0;
+    const double Progress=FMath::Clamp(FVector::DotProduct(Sum/Living-H0,Axis)/FMath::Max(1.,Axis.SizeSquared()),0.,1.);
+    const double W=SampleDt*Living;
+    E.BaseAssaultProgress[S.Team][FMath::Min(9,int32(Progress*10))]+=W;
+    E.BaseAssaultMaxProgress[S.Team]=FMath::Max(E.BaseAssaultMaxProgress[S.Team],Progress);
+    E.BaseAssaultState[S.Team][Trips.Contains(Pair.Key)?7:!S.bHasMission?8:FMath::Min(6,int32(S.TacticalPlan.Action))]+=W;
+   }
+  }
   auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();
   TSet<int32> Seeing;
   for(const auto& Pair:Store->GetUnits()) if(Pair.Value.IsAlive())
@@ -162,6 +180,12 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
    Root->SetNumberField(Team?TEXT("enemy_first_capture_seconds"):TEXT("ally_first_capture_seconds"),E.FirstCapture[Team]);
    Root->SetNumberField(Team?TEXT("enemy_at_opponent_home_range_seconds"):TEXT("ally_at_opponent_home_range_seconds"),E.EnemyHomeRangeSeconds[Team]);
    Root->SetNumberField(Team?TEXT("enemy_near_opponent_home_seconds"):TEXT("ally_near_opponent_home_seconds"),E.EnemyHomeNearSeconds[Team]);
+   TArray<TSharedPtr<FJsonValue>> Progress,States;
+   for(double V:E.BaseAssaultProgress[Team])Progress.Add(MakeShared<FJsonValueNumber>(V));
+   for(double V:E.BaseAssaultState[Team])States.Add(MakeShared<FJsonValueNumber>(V));
+   Root->SetArrayField(Team?TEXT("enemy_base_assault_progress_seconds"):TEXT("ally_base_assault_progress_seconds"),Progress);
+   Root->SetArrayField(Team?TEXT("enemy_base_assault_state_seconds"):TEXT("ally_base_assault_state_seconds"),States);
+   Root->SetNumberField(Team?TEXT("enemy_base_assault_max_progress"):TEXT("ally_base_assault_max_progress"),E.BaseAssaultMaxProgress[Team]);
   }
  }
  const auto* Tactics=GetWorld()->GetSubsystem<UBattleSquadTactics>();

@@ -36,5 +36,9 @@ struct FBattleSightExperiment
  double FirstCapture[2]={-1,-1};
  // Evaluation only (Area): living person-seconds within weapon range / 100m (2D) of the ENEMY home, by attacking team (5Hz samples).
  double EnemyHomeRangeSeconds[2]={0,0},EnemyHomeNearSeconds[2]={0,0};
+ // Evaluation only (Area, S1): living person-seconds of squads whose S1 slot is the home assault, by team and by
+ // progress from own home (0) to enemy home (1) in tenths (squad mean position), and by squad state:
+ // [0..6] = EBattleSquadTactic, 7 = home supply trip, 8 = no mission. MaxProgress = furthest squad mean reached.
+ double BaseAssaultProgress[2][10]={},BaseAssaultState[2][9]={},BaseAssaultMaxProgress[2]={0,0};
  void Cover(const TCHAR* Key){if(Enabled)++CoverDiag.FindOrAdd(FName(Key));}
 };
