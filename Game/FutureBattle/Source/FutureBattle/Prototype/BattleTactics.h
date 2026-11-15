@@ -53,7 +53,9 @@ namespace BattleTactics
  // enemy home at or below BaseLowHP, otherwise BaseShareLow (-BattleAreaBaseShareHigh= / -BattleAreaBaseShareLow= / -BattleAreaBaseLowHP=).
  // S4 trial (-BattleAreaFrontBalance=1, default OFF; -BattleAreaFrontGain=): each point weight is multiplied by 1+FrontGain*deficit, where deficit is
  // how far the team's OWN living soldiers within 100m of the point fall below the per-point average (own positions only).
- struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; };
+ // S5 trial (-BattleAreaBaseInfiltrate=<m>, default 0 = OFF): a home-assault squad moves with a Move order (no stopping to fight)
+ // until its leader is within that many metres of the enemy home, then switches to AttackMove.
+ struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; float InfiltrateRadius=0.f; };
  const FAreaStrategyTuning& AreaStrategy();
 	float SpreadDegrees(const FBattleUnitState& State, double Now);
 	FVector ShotDirection(const FBattleUnitState& State, FVector Aim, double Now);

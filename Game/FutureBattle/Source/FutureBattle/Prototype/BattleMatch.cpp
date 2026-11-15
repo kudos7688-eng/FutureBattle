@@ -318,7 +318,11 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
 		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated) continue;
   const bool BaseAssault=bStrategy?bStrategyBase:(bArea&&Group%5==0);
   const FVector Center=BaseAssault?AreaHome(1-Team)*(25./27.):Objectives[Target].Position;
-  const EBattleOrder Order=!BaseAssault&&ObservedOwner(Team,Target)==Team?EBattleOrder::Defend:EBattleOrder::AttackMove;
+  EBattleOrder Order=!BaseAssault&&ObservedOwner(Team,Target)==Team?EBattleOrder::Defend:EBattleOrder::AttackMove;
+  // S5 trial: a home-assault squad does not stop to fight until its leader is within InfiltrateRadius of the enemy home.
+  if(BaseAssault&&bStrategy&&BattleTactics::AreaStrategy().InfiltrateRadius>0)
+   if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
+    if(FVector::Dist2D(Runtime->Position(Pair.Value.LeaderUnitID),AreaHome(1-Team))>BattleTactics::AreaStrategy().InfiltrateRadius)Order=EBattleOrder::Move;
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())
   {
    const auto& S=Pair.Value;

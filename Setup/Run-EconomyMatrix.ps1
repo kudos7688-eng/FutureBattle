@@ -39,6 +39,13 @@ $supply=@{
  'R0'=@('-AreaHireReserve','0')
  'R25'=@('-AreaHireReserve','25')
  'W15'=@('-AreaAttackWeight','1.5')
+ # S5 home-assault infiltration: Move (no stopping to fight) until the leader is within N m of the enemy home.
+ 'IN60'=@('-AreaBaseInfiltrate','60')
+ 'IN100'=@('-AreaBaseInfiltrate','100')
+ 'IN150'=@('-AreaBaseInfiltrate','150')
+ # S1 home-assault share (default 0.2) numeric tuning.
+ 'BS10'=@('-AreaBaseShare','0.1')
+ 'BS30'=@('-AreaBaseShare','0.3')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}
