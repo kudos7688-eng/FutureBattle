@@ -54,7 +54,7 @@ void ABattleHUD::DrawHUD()
 		const TCHAR* Phase = Match->Phase == EBattleMatchPhase::Deployment ? TEXT("DEPLOYMENT / ENTER: START") : Match->Phase == EBattleMatchPhase::Combat ? TEXT("BATTLE / REINFORCEMENTS") : TEXT("FINISHED / F5: RESTART");
 		DrawRect(Ink, 16, 84, W - 32, 26);
   if(Match->bArea)Label(FString::Printf(TEXT("AREA / RESOURCES %d / HOME HP %.0f / ENEMY BASE LAST SEEN %s%s"),Match->Credits[0],Match->Area.BaseHP[0],Match->Area.KnownEnemyBaseHP[0]<0?TEXT("UNKNOWN"):*FString::Printf(TEXT("%.0f"),Match->Area.KnownEnemyBaseHP[0]),
-   BattleTactics::AreaHire().bEnabled?*FString::Printf(TEXT(" / [2] NEW SQUAD %d (%d/25)"),BattleTactics::AreaHire().Cost,Match->ActiveSquads(0)):TEXT("")),28,90,Mint,.9f);
+   BattleTactics::AreaHire().bEnabled?*FString::Printf(TEXT(" / [2] NEW SQUAD %d = SCORE %+d (%d/25)"),BattleTactics::AreaHire().Cost,10-BattleTactics::AreaHire().Cost,Match->ActiveSquads(0)):TEXT("")),28,90,Mint,.9f);
   else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch) Label(FString::Printf(TEXT("%s / CREDITS %d / [1] %d [2] %d [3] %d / 10 soldiers"),Phase,Match->Credits[0],Match->CurrentSquadPrice(EBattleTraining::Recruit),Match->CurrentSquadPrice(EBattleTraining::Regular),Match->CurrentSquadPrice(EBattleTraining::Veteran)),28,90,Mint,.9f);
   else if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("500 SOLDIERS / THREE CONTROL POINTS / P: PAUSE OR RESUME"),28,90,Mint,.9f);
 		else Label(FString::Printf(TEXT("%s   CREDITS %d   [1] RECRUIT %d   [2] REGULAR %d   [3] VETERAN %d / 5 units"), Phase, Match->Credits[0], UBattleMatch::SquadPrice(EBattleTraining::Recruit), UBattleMatch::SquadPrice(EBattleTraining::Regular), UBattleMatch::SquadPrice(EBattleTraining::Veteran)), 28, 90, Mint, .9f);
@@ -64,7 +64,17 @@ void ABattleHUD::DrawHUD()
   else Label(FString::Printf(TEXT("CONTROL %.2f : %.2f / 100    TIME %.0fs"), Match->Score[0], Match->Score[1], FMath::Max(0.f, Limit - Match->Elapsed)), 28, 119, White);
   // War score trial: own score exactly; the opponent only as an estimate from own losses and observed ownership (its resources unknown).
   if(Match->bArea&&BattleWarScore::Tuning().bEnabled)Label(FString::Printf(TEXT("WAR SCORE %s / ENEMY EST %d + RESOURCES ?"),*Match->WarScoreBreakdown(0),Match->WarScoreEstimate(0)),28,141,Muted,.85f);
-  else if(Match->bArea)Label(TEXT("Final: living soldiers + resources + central points x20 / ties draw"),28,141,Muted,.85f);
+  else if(Match->bArea)
+  {
+   // Command UI top bar (2026-11-16): own final score as it stands, from own state and the points the own side observes as its own;
+   // the opponent only from observed points (its living soldiers and resources are not shown).
+   int32 Living=0;for(const auto& U:GetWorld()->GetSubsystem<UBattleState>()->GetUnits())Living+=U.Value.Team==0&&U.Value.IsAlive();
+   int32 OwnPoints=0,EnemyPoints=0;for(int32 I=0;I<Match->Objectives.Num();++I){const int32 O=Match->ObservedOwner(0,I);OwnPoints+=O==0;EnemyPoints+=O==1;}
+   DrawRect(Ink,576,112,260,51);
+   Label(FString::Printf(TEXT("SCORE %d = LIVING %d + RESOURCES %d + POINTS %dx20"),Living+Match->Credits[0]+OwnPoints*20,Living,Match->Credits[0],OwnPoints),28,141,Mint,.85f);
+   Label(FString::Printf(TEXT("ENEMY: POINTS %dx20 (observed)"),EnemyPoints),588,119,Muted,.85f);
+   Label(TEXT("+ living / resources unknown"),588,141,Muted,.85f);
+  }
   else if (BattleFieldLayout::IsLarge(GetWorld())) Label(FString::Printf(TEXT("Capture 8s / 1 point per second / First to 100 / Limit %.0fs"),Limit),28,141,Muted,.85f);
 		else Label(TEXT("Capture 8s / Income +20 per 5s / Supply 1 per round / F8 save / F9 load"), 28, 141, Muted, .85f);
 		DrawRect(Ink, 16, 165, 560, 26);
