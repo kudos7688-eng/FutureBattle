@@ -12,6 +12,9 @@ struct FAreaIntent
  float AttackWeight=2.f,BaseShare=0.2f; bool bFrontBalance=false; float FrontGain=1.f,FocusGain=0.f;
  float PointWeight[3]={1.f,1.f,1.f}; // per objective index, multiplies the S1 weight
  int32 HireReserve=0;                 // resources kept back before an AI purchase (above pending replacements)
+ float FlankOffset=0.f; bool bFlankSameSide=false; // S7/S8 route of home-assault squads (0 = straight)
+ int32 BaseReturnLiving=0;            // S8: living count at which home-assault squads return for supply (0 = SupplyReturnLiving)
+ int32 Phase=0;                       // index of the active phase of the team plan (0 when no plan)
 };
 // One lane (the third of the field around one objective) as seen by one team: own soldiers and own front (furthest progress
 // from own home, 0..1 along the home-to-home line, 90th percentile), and enemies currently visible to the team (count and the

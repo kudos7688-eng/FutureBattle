@@ -109,8 +109,9 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  const auto& Supply=BattleTactics::Supply();
  // S8 trial: S1 home-assault squads return for supply only at BaseReturnLiving living soldiers (own squad state and fixed slot only).
  int32 ReturnLiving=Supply.ReturnLiving;
- if(Match->bArea&&BattleTactics::AreaStrategy().bEnabled&&BattleTactics::AreaStrategy().BaseReturnLiving>0&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==S->Team))
- {bool bB=false;Match->AreaStrategyTarget(SID,S->Team,bB);if(bB)ReturnLiving=BattleTactics::AreaStrategy().BaseReturnLiving;}
+ const int32 BaseReturnLiving=Match->bArea&&BattleTactics::AreaStrategy().bEnabled?Match->AreaIntent(S->Team).BaseReturnLiving:0;
+ if(BaseReturnLiving>0)
+ {bool bB=false;Match->AreaStrategyTarget(SID,S->Team,bB);if(bB)ReturnLiving=BaseReturnLiving;}
  if(Match->bArea && P.Action==EBattleSquadTactic::Recover && P.Reason.StartsWith(TEXT("HOME SUPPLY")))
  {
   if(Emergency){Event(TEXT("HomeSupplyAbortEmergency"));SupplyTripEnd(SID,false);Retreat();return;}

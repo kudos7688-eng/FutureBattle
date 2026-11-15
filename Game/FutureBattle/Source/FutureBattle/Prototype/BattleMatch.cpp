@@ -319,6 +319,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
 	int32 Group = 0;
  // S1 (default ON, -BattleAreaStrategy=0 = old round-robin): weighted point spread from observed ownership only.
  const bool bStrategy=bArea&&BattleTactics::AreaStrategy().bEnabled;
+ const FAreaIntent TeamIntent=AreaIntent(Team);
 	for (const auto& Pair : Store->GetSquads()) if (Pair.Value.Team == Team)
 	{
 		// Public objective status only; never use an unseen enemy's location.
@@ -340,11 +341,11 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     if(FVector::Dist2D(Runtime->Position(Pair.Value.LeaderUnitID),AreaHome(1-Team))>BattleTactics::AreaStrategy().InfiltrateRadius)Order=EBattleOrder::Move;
   // S7 trial: a home-assault squad first heads for a flank waypoint beside the centre line (away from the central point),
   // then for the enemy home once its leader is past the middle of the field. Static map positions and own leader only.
-  if(BaseAssault&&bStrategy&&BattleTactics::AreaStrategy().FlankOffset>0&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==Team))
+  if(BaseAssault&&bStrategy&&TeamIntent.FlankOffset>0)
    if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
    {
     const FVector Own=AreaHome(Team),Axis=AreaHome(1-Team)-Own,P=Runtime->Position(Pair.Value.LeaderUnitID);
-    const FVector Way=BattleFieldLayout::Expand(FVector(0,((BattleTactics::AreaStrategy().bFlankSameSide||(Pair.Key/10)%2)?1:-1)*BattleTactics::AreaStrategy().FlankOffset*12000.f,0),BattleFieldLayout::IsExpanded(GetWorld()));
+    const FVector Way=BattleFieldLayout::Expand(FVector(0,((TeamIntent.bFlankSameSide||(Pair.Key/10)%2)?1:-1)*TeamIntent.FlankOffset*12000.f,0),BattleFieldLayout::IsExpanded(GetWorld()));
     const double T=FVector::DotProduct(P-Own,Axis)/FMath::Max(1.0,Axis.SizeSquared2D());
     if(T<0.45&&FVector::Dist2D(P,Way)>2500)Center=Way;
    }

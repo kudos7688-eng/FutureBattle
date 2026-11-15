@@ -9,7 +9,9 @@ param(
  [string[]]$Maps=@('D','A'),
  [ValidateRange(1,16)][int]$Concurrency=8,
  [string]$Tag='r1',
- [ValidateRange(-1,1)][int]$TrialTeam=-1   # 0/1: the S3-S6 trial flags apply to that team only (use a distinct -Tag)
+ [ValidateRange(-1,1)][int]$TrialTeam=-1,   # 0/1: the S3-S6 trial flags apply to that team only (use a distinct -Tag)
+ [ValidateRange(10,120)][int]$Fps=60,       # fixed simulation step (2026-11-16: 30 = about twice as fast; compare only runs with the same Fps)
+ [switch]$NoRoundTripSave                   # skip the 80 s save round trip (strategy screening only; regressions keep it)
 )
 $ErrorActionPreference='Stop'
 Set-Location $PSScriptRoot
@@ -69,11 +71,15 @@ $supply=@{
  'INC2'=@('-AreaIncomeBase','2','-AreaIncomePerPoint','2')
  'INC3'=@('-AreaIncomeBase','3','-AreaIncomePerPoint','3')
  'INC4'=@('-AreaIncomeBase','4','-AreaIncomePerPoint','4')
+ 'INC5'=@('-AreaIncomeBase','5','-AreaIncomePerPoint','5')
  'RAMP2'=@('-AreaIncomeRamp','0.2')
  'RAMP2S50'=@('-AreaIncomeRamp','0.2','-AreaStartCredits','50')
  # P1 purpose purchase: the AI buys only for an observed need (home under attack, thin point, weak enemy home) and keeps that mission.
  'P1'=@('-AreaHirePurpose','1')
  'P1RAMP'=@('-AreaHirePurpose','1','-AreaIncomeRamp','0.2','-AreaStartCredits','50')
+ # Strategy layer stage 2 plans (time phases): EH expand then hold, ESA expand, save, then mass on the enemy home.
+ 'EH'=@('-AreaPlan','1')
+ 'ESA'=@('-AreaPlan','2')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}
@@ -84,9 +90,11 @@ foreach($r in $runs){
  $name="econ-$c-$map-s$seed"+($(if($swap){'-swap'}else{''}))+"-$Tag"
  if(Test-Path "Benchmarks/SightTrial-20261111/$name"){ $skipped++; continue }
  $pa=@('-NoProfile','-ExecutionPolicy','Bypass','-File','.\Test-WideSight.ps1','-Map',$map,'-OutputName',$name,'-Seed',"$seed",
-  '-AICoverProbe','0','-LeaderGuard','0','-SightRange','10000','-WeaponRange','5000','-Area','-Experiment','-RoundTripSave',
+  '-AICoverProbe','0','-LeaderGuard','0','-SightRange','10000','-WeaponRange','5000','-Area','-Experiment',
   '-CoverActions','1','-FlankCoordination','1','-ObserveTactics','-BehaviorConcurrency',"$Concurrency",'-FrozenBuild',$frozen)+$supply[$c]
  if($TrialTeam -ge 0){$pa+=@('-AreaTrialTeam',"$TrialTeam")}
+ if(!$NoRoundTripSave){$pa+='-RoundTripSave'}
+ if($Fps -ne 60){$pa+=@('-Fps',"$Fps")}
  if($swap){$pa+='-Swap'}
  while(@($jobs|Where-Object{!$_.HasExited}).Count -ge $Concurrency){Start-Sleep 5}
  $jobs+=Start-Process powershell.exe -ArgumentList $pa -RedirectStandardOutput "Econ-$name.txt" -RedirectStandardError "Econ-$name.err.txt" -WindowStyle Hidden -PassThru

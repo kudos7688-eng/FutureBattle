@@ -221,6 +221,25 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
  const auto& S=BattleTactics::AreaStrategy();const bool bTrial=S.TrialTeam<0||S.TrialTeam==Team;
  FAreaIntent I;I.AttackWeight=S.AttackWeight;I.BaseShare=S.BaseShare;I.bFrontBalance=bTrial&&S.bFrontBalance;I.FrontGain=S.FrontGain;
  I.FocusGain=bTrial?S.FocusGain:0.f;I.HireReserve=BattleTactics::AreaHire().Reserve;
+ // S7/S8 trials (one team only with -BattleAreaTrialTeam).
+ if(bTrial){I.FlankOffset=S.FlankOffset;I.bFlankSameSide=S.bFlankSameSide;I.BaseReturnLiving=S.BaseReturnLiving;}
+ // Stage 2: time-phased team plans (match time only; no hidden information). Values are first trial values (numbers delegated).
+ if(bTrial&&S.Plan==1)
+ {
+  // EH: expand (take points, spend freely) -> hold (owned points weigh more, keep resources: they are score and pay
+  // replacements) -> late hold (no new squads: a squad costs 5 score).
+  if(Elapsed<240.f){I.Phase=1;I.AttackWeight=3.f;I.HireReserve=0;}
+  else if(Elapsed<480.f){I.Phase=2;I.AttackWeight=.5f;I.BaseShare=.1f;I.HireReserve=45;}
+  else{I.Phase=3;I.AttackWeight=.5f;I.BaseShare=.1f;I.HireReserve=1000;}
+ }
+ else if(bTrial&&S.Plan==2)
+ {
+  // ESA: expand -> save (balanced hold, few home-assault squads, bank resources) -> mass on the enemy home (half the slots
+  // assault on one flank route, assault squads return for supply only at 5 living, spend the bank).
+  if(Elapsed<180.f){I.Phase=1;I.AttackWeight=3.f;I.HireReserve=0;}
+  else if(Elapsed<420.f){I.Phase=2;I.AttackWeight=1.f;I.BaseShare=.1f;I.HireReserve=75;}
+  else{I.Phase=3;I.BaseShare=.5f;I.FlankOffset=1.3f;I.bFlankSameSide=true;I.BaseReturnLiving=5;I.HireReserve=0;}
+ }
  return I;
 }
 void UBattleMatch::AreaFronts(int32 Team, FAreaFront (&Out)[3]) const

@@ -66,7 +66,9 @@ namespace BattleTactics
  // side points' |y| (side alternates by squad), then for the enemy home once its leader is past 45% of the home-to-home line.
  // S8 trials: -BattleAreaBaseFlankSide=1 puts every S7 waypoint on the +y side (concentrate the assault on one route);
  // -BattleAreaBaseReturnLiving=N (1..9, default 0 = use SupplyReturnLiving) is the living count at which an S1 home-assault squad returns for supply.
- struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; float InfiltrateRadius=0.f, FocusGain=0.f, FlankOffset=0.f; bool bFlankSameSide=false; int32 BaseReturnLiving=0; int32 TrialTeam=-1; };
+ // Strategy layer stage 2 (ROADMAP 2026-11-16) -BattleAreaPlan=N (default 0 = no plan, the fixed intent): 1 = EH expand then hold,
+ // 2 = ESA expand, save, then mass on the enemy home. Phases switch by match time only; see UBattleMatch::AreaIntent.
+ struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; float InfiltrateRadius=0.f, FocusGain=0.f, FlankOffset=0.f; bool bFlankSameSide=false; int32 BaseReturnLiving=0; int32 TrialTeam=-1; int32 Plan=0; };
  const FAreaStrategyTuning& AreaStrategy();
 	float SpreadDegrees(const FBattleUnitState& State, double Now);
 	FVector ShotDirection(const FBattleUnitState& State, FVector Aim, double Now);

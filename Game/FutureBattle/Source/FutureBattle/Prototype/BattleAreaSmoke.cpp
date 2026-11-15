@@ -123,10 +123,12 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    for(int32 I=0;I<19;++I)M->UpdateArea(1);
    Check(M->Credits[0]==C0&&M->Credits[1]==C1,TEXT("no income before the 20 second payment"));
    M->UpdateArea(1);
-   Check(M->Credits[0]==C0+3&&M->Credits[1]==C1+1&&M->Area.Income[0]==I0+3&&M->Area.Income[1]==I1+1,TEXT("payment is base 1 plus 1 per owned point"));
+   // Fixture: team 0 owns two points, team 1 none. Amounts follow the configured income (INC4 = 4 + 4 per point since 2026-11-16).
+   const int32 G0=BattleTactics::AreaIncome().Base+2*BattleTactics::AreaIncome().PerPoint,G1=BattleTactics::AreaIncome().Base;
+   Check(M->Credits[0]==C0+G0&&M->Credits[1]==C1+G1&&M->Area.Income[0]==I0+G0&&M->Area.Income[1]==I1+G1,TEXT("payment is base plus per owned point (configured amounts)"));
    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();
    Check(Save&&Save->Validate(Error),TEXT("income joins resource conservation"));
-   if(Save){Save->Area.Income[0]-=1;Check(!M->RestoreSnapshot(Save)&&M->Credits[0]==C0+3,TEXT("income outside conservation rejected"));}
+   if(Save){Save->Area.Income[0]-=1;Check(!M->RestoreSnapshot(Save)&&M->Credits[0]==C0+G0,TEXT("income outside conservation rejected"));}
    Mode->bCombatPaused=false;M->bAreaIncomeHeld=true;
    for(auto& P:M->Objectives)P.Owner=INDEX_NONE;
   }

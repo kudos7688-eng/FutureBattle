@@ -84,6 +84,7 @@ const BattleTactics::FAreaStrategyTuning& BattleTactics::AreaStrategy()
   S.FlankOffset=FMath::IsFinite(S.FlankOffset)?FMath::Clamp(S.FlankOffset,0.f,1.6f):0.f;
   int32 SameSide=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseFlankSide="),SameSide);S.bFlankSameSide=SameSide!=0;
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseReturnLiving="),S.BaseReturnLiving);S.BaseReturnLiving=FMath::Clamp(S.BaseReturnLiving,0,9);
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaPlan="),S.Plan);S.Plan=FMath::Clamp(S.Plan,0,2);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaTrialTeam="),S.TrialTeam);S.TrialTeam=S.TrialTeam==0||S.TrialTeam==1?S.TrialTeam:-1;
   S.BaseShareLow=FMath::IsFinite(S.BaseShareLow)?FMath::Clamp(S.BaseShareLow,0.f,0.5f):0.f;
   S.BaseShareHigh=FMath::IsFinite(S.BaseShareHigh)?FMath::Clamp(S.BaseShareHigh,0.f,0.5f):0.3f;
