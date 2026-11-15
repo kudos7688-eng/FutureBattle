@@ -107,6 +107,10 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  };
  auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  const auto& Supply=BattleTactics::Supply();
+ // S8 trial: S1 home-assault squads return for supply only at BaseReturnLiving living soldiers (own squad state and fixed slot only).
+ int32 ReturnLiving=Supply.ReturnLiving;
+ if(Match->bArea&&BattleTactics::AreaStrategy().bEnabled&&BattleTactics::AreaStrategy().BaseReturnLiving>0&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==S->Team))
+ {bool bB=false;Match->AreaStrategyTarget(SID,S->Team,bB);if(bB)ReturnLiving=BattleTactics::AreaStrategy().BaseReturnLiving;}
  if(Match->bArea && P.Action==EBattleSquadTactic::Recover && P.Reason.StartsWith(TEXT("HOME SUPPLY")))
  {
   if(Emergency){Event(TEXT("HomeSupplyAbortEmergency"));SupplyTripEnd(SID,false);Retreat();return;}
@@ -120,7 +124,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   }
   return;
  }
- if(Match->bArea && Threats==0 && O.RecentDamage==0 && ((O.Living<=Supply.ReturnLiving&&Match->Credits[S->Team]>0)||O.Armed==0) && P.Action!=EBattleSquadTactic::Retreat && P.Action!=EBattleSquadTactic::Support && P.Action!=EBattleSquadTactic::Flank)
+ if(Match->bArea && Threats==0 && O.RecentDamage==0 && ((O.Living<=ReturnLiving&&Match->Credits[S->Team]>0)||O.Armed==0) && P.Action!=EBattleSquadTactic::Retreat && P.Action!=EBattleSquadTactic::Support && P.Action!=EBattleSquadTactic::Flank)
  {
   // Trial -BattleSupplyAwayRatio<1: keep most of the team on the line; only own-team plan state is read.
   bool Allowed=true;

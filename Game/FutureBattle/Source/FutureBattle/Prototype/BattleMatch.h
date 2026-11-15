@@ -5,6 +5,18 @@
 #include "BattleAreaState.h"
 #include "BattleMatch.generated.h"
 class UBattleSave;
+// Area strategy layer (ROADMAP 2026-11-16). The team intent is all the lower layers read: point allocation (S1 with S4/S6) and
+// AI purchasing. Stage 1: a fixed intent built from the tuning, so behaviour is unchanged.
+struct FAreaIntent
+{
+ float AttackWeight=2.f,BaseShare=0.2f; bool bFrontBalance=false; float FrontGain=1.f,FocusGain=0.f;
+ float PointWeight[3]={1.f,1.f,1.f}; // per objective index, multiplies the S1 weight
+ int32 HireReserve=0;                 // resources kept back before an AI purchase (above pending replacements)
+};
+// One lane (the third of the field around one objective) as seen by one team: own soldiers and own front (furthest progress
+// from own home, 0..1 along the home-to-home line, 90th percentile), and enemies currently visible to the team (count and the
+// progress of the most advanced one, -1 = none seen). Observed information only.
+struct FAreaFront { float OwnFront=-1.f,EnemyFront=-1.f; int32 Own=0,EnemySeen=0; };
 
 enum class EBattleMatchPhase : uint8 { Disabled, Deployment, Combat, Finished };
 
@@ -61,6 +73,9 @@ public:
  // Area new squad (regular only) into a free slot (<25 active squads) for BattleTactics::AreaHire().Cost resources.
  // bAuto: AI purchase (no selection change; a team-0 squad is delegated). Cancels pending replenishments the spend can no longer cover.
  bool HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto);
+ int32 LastHiredSquadID=INDEX_NONE;
+ // P1 trial: the observed need a new AI squad would serve (see FAreaHireTuning), or -1 for none.
+ int32 AreaHireNeed(int32 Team) const;
  // AI purchase rule, every director tick: own resources minus own pending replenishments >= cost + reserve, and a free slot.
  // Team 1 always; team 0 only in the all-AI sight experiment.
  void UpdateAreaHiring();
@@ -81,6 +96,8 @@ public:
 	int32 ChooseObjective(int32 Group, int32 Team) const;
 	// S1 allocation for one squad from observed point ownership only (Area). bBase = assault the enemy home instead.
 	int32 AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) const;
+	FAreaIntent AreaIntent(int32 Team) const;
+	void AreaFronts(int32 Team, FAreaFront (&Out)[3]) const;
 	void CheckTimeLimit();
 	void UpdateEnemyOrders();
 	void UpdateTeamOrders(int32 Team, bool bDelegatedOnly = false);

@@ -26,8 +26,9 @@ bool UBattleSave::Validate(FString& Error) const
 	auto Fail = [&Error](const TCHAR* Message) { Error = Message; return false; };
 	if ((Version != 1 && Version != 2 && Version!=3) || (Version==3)!=(Ruleset==TEXT("Area")) || !MatchID.IsValid() || Phase < 1 || Phase > 3 || !ValidTeam(Winner, true) || Result.Len() > 200 || ViewRotation.ContainsNaN()) return Fail(TEXT("Unsupported or invalid match header"));
 	if (!InRange(AllyCredits, 0, 1000000) || !InRange(EnemyCredits, 0, 1000000) || !InRange(AllyScore, 0, 1000) || !InRange(EnemyScore, 0, 1000) || !InRange(Elapsed, 0, 1000) || !InRange(DirectorClock, 0, 5) || !InRange(SupplyClock, 0, Mixed?1000:1)) return Fail(TEXT("Invalid economy or match timers"));
-	if (Objectives.Num() != 3 || Units.Num() > (Version==3?1000:500) || Squads.Num() > 100 || Observers.Num() > (Mixed?500:100) || Reports.Num() > 100000) UE_LOG(LogFutureBattle,Warning,TEXT("BATTLE_SAVE_SIZE objectives=%d units=%d squads=%d observers=%d reports=%d"),Objectives.Num(),Units.Num(),Squads.Num(),Observers.Num(),Reports.Num());
-	if (Objectives.Num() != 3 || Units.Num() > (Version==3?1000:500) || Squads.Num() > 100 || Observers.Num() > (Mixed?500:100) || Reports.Num() > 100000) return Fail(TEXT("Invalid snapshot size"));
+	// Pending sighting reports: cap raised 100000 -> 1000000 on 2026-11-16 (a heavy Area fight reached 100822 at 80 s).
+	if (Objectives.Num() != 3 || Units.Num() > (Version==3?1000:500) || Squads.Num() > 100 || Observers.Num() > (Mixed?500:100) || Reports.Num() > 1000000) UE_LOG(LogFutureBattle,Warning,TEXT("BATTLE_SAVE_SIZE objectives=%d units=%d squads=%d observers=%d reports=%d"),Objectives.Num(),Units.Num(),Squads.Num(),Observers.Num(),Reports.Num());
+	if (Objectives.Num() != 3 || Units.Num() > (Version==3?1000:500) || Squads.Num() > 100 || Observers.Num() > (Mixed?500:100) || Reports.Num() > 1000000) return Fail(TEXT("Invalid snapshot size"));
 	if (Strikes.Num() > 2 || !InRange(AllySupportCooldown, 0, 20) || !InRange(EnemySupportCooldown, 0, 20) || !InRange(AllySupportUsed, 0, 3) || !InRange(EnemySupportUsed, 0, 3)) return Fail(TEXT("Invalid support resources"));
 	TSet<int32> StrikeTeams;
 	for (const auto& Strike : Strikes)

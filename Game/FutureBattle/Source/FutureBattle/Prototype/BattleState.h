@@ -331,6 +331,11 @@ public:
 	UPROPERTY(Config, EditAnywhere) bool bAreaStrategy = true;
 	UPROPERTY(Config, EditAnywhere) float AreaAttackWeight = 2.f;
 	UPROPERTY(Config, EditAnywhere) float AreaBaseShare = 0.2f;
+	// S4 front balance and S6 focus on top of S1 (adopted 2026-11-15 by the user after one-team trials, both teams):
+	// -BattleAreaFrontBalance=0/1, -BattleAreaFrontGain=, -BattleAreaFocus=<gain> (0 = OFF) override.
+	UPROPERTY(Config, EditAnywhere) bool bAreaFrontBalance = true;
+	UPROPERTY(Config, EditAnywhere) float AreaFrontGain = 1.f;
+	UPROPERTY(Config, EditAnywhere) float AreaFocusGain = 1.f;
 	// Used only with -BattleLeaderGuard=1 (trial, AI cognition): AI leader cover retry interval.
 	UPROPERTY(Config, EditAnywhere) float LeaderGuardCoverRetrySeconds = 2.f;	UPROPERTY(Config, EditAnywhere) float FlankAngleDegrees = 60.f;
 	UPROPERTY(Config, EditAnywhere) float CoverSearchRadius = 900.f;

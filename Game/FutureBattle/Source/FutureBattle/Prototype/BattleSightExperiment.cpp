@@ -84,6 +84,19 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
     }
    }
   }
+  while(Match->bArea&&E.NextFrontSample<=20&&Match->Elapsed>=E.NextFrontSample*30.0-0.05)
+  {
+   const int32 S=E.NextFrontSample-1;
+   for(int32 T=0;T<2;++T){FAreaFront F[3];Match->AreaFronts(T,F);for(int32 L=0;L<3;++L){E.FrontTimeline[T][S][L][0]=F[L].OwnFront;E.FrontTimeline[T][S][L][1]=F[L].EnemyFront;E.FrontTimeline[T][S][L][2]=F[L].Own;E.FrontTimeline[T][S][L][3]=F[L].EnemySeen;}}
+   ++E.NextFrontSample;
+  }
+  while(Match->bArea&&E.NextEconMinute<=10&&Match->Elapsed>=E.NextEconMinute*60.0-0.05)
+  {
+   const int32 M=E.NextEconMinute-1;int32 Living[2]={0,0};
+   for(const auto& U:Store->GetUnits())if(U.Value.IsAlive()&&U.Value.Team>=0&&U.Value.Team<2)++Living[U.Value.Team];
+   for(int32 T=0;T<2;++T){E.EconTimeline[T][M][0]=Match->Credits[T];E.EconTimeline[T][M][1]=Match->Area.Income.IsValidIndex(T)?Match->Area.Income[T]:0;E.EconTimeline[T][M][2]=Match->Area.HireSpent.IsValidIndex(T)?Match->Area.HireSpent[T]:0;E.EconTimeline[T][M][3]=Living[T];}
+   ++E.NextEconMinute;
+  }
   if(Match->bArea)for(int32 I=0;I<Match->Objectives.Num()&&I<3;++I)if(const int32 Owner=Match->Objectives[I].Owner;Owner>=0&&Owner<2)
   {E.AreaPointSeconds[I][Owner]+=SampleDt;if(E.FirstCapture[Owner]<0)E.FirstCapture[Owner]=Match->Elapsed;}
   if(SampleDt>0)for(const auto& Pair:Store->GetUnits()) if(Pair.Value.IsAlive() && Pair.Value.Team>=0 && Pair.Value.Team<2)
@@ -186,6 +199,12 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
    Root->SetArrayField(Team?TEXT("enemy_base_assault_progress_seconds"):TEXT("ally_base_assault_progress_seconds"),Progress);
    Root->SetArrayField(Team?TEXT("enemy_base_assault_state_seconds"):TEXT("ally_base_assault_state_seconds"),States);
    Root->SetNumberField(Team?TEXT("enemy_base_assault_max_progress"):TEXT("ally_base_assault_max_progress"),E.BaseAssaultMaxProgress[Team]);
+   TArray<TSharedPtr<FJsonValue>> Econ;
+   for(int32 M=0;M<10;++M){TArray<TSharedPtr<FJsonValue>> Row;for(double V:E.EconTimeline[Team][M])Row.Add(MakeShared<FJsonValueNumber>(V));Econ.Add(MakeShared<FJsonValueArray>(Row));}
+   Root->SetArrayField(Team?TEXT("enemy_economy_per_minute"):TEXT("ally_economy_per_minute"),Econ);
+   TArray<TSharedPtr<FJsonValue>> Front;
+   for(int32 S=0;S<20;++S){TArray<TSharedPtr<FJsonValue>> Row;for(int32 L=0;L<3;++L)for(float V:E.FrontTimeline[Team][S][L])Row.Add(MakeShared<FJsonValueNumber>(V));Front.Add(MakeShared<FJsonValueArray>(Row));}
+   Root->SetArrayField(Team?TEXT("enemy_front_per_30s"):TEXT("ally_front_per_30s"),Front);
   }
  }
  const auto* Tactics=GetWorld()->GetSubsystem<UBattleSquadTactics>();

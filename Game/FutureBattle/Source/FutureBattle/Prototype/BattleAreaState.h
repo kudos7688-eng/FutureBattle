@@ -22,4 +22,8 @@ struct FBattleAreaState
  UPROPERTY() float IncomeClock=0;
  // Match time of each team's last AI purchase (-1000 = none), for the AI purchase interval.
  UPROPERTY() TArray<float> LastAIHireAt={-1000,-1000};
+ // P1 purpose purchase trial (2026-11-16): mission of each AI-bought squad, 0..2 = objective index (take/hold),
+ // 3 = enemy home assault, 4 = own home defence; and the match time the own home last took damage (-1000 = never).
+ UPROPERTY() TMap<int32,int32> HirePurpose;
+ UPROPERTY() TArray<float> HomeHitAt={-1000,-1000};
 };

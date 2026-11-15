@@ -58,6 +58,20 @@ $supply=@{
  # S7 flank route for home-assault squads: waypoint at y = +/-f x side-point |y| before heading for the enemy home.
  'FL13'=@('-AreaBaseFlank','1.3')
  'FL10'=@('-AreaBaseFlank','1.0')
+ # S8 concentration: home-assault squads return for supply at 5 living (BR5) and/or all take the same flank side (FS13).
+ 'BR5'=@('-AreaBaseReturnLiving','5')
+ 'FS13'=@('-AreaBaseFlank','1.3','-AreaBaseFlankSide','1')
+ 'FS13BR5'=@('-AreaBaseFlank','1.3','-AreaBaseFlankSide','1','-AreaBaseReturnLiving','5')
+ # Since 2026-11-15 HI includes S4+S6 (Config). S1only = the previous default (S4 and S6 off).
+ 'S1only'=@('-AreaFrontBalance','0','-AreaFocus','0')
+ # Income-curve trials (2026-11-16): INC2 doubles base and per-point income; RAMP2 multiplies each payment by 1+0.2 x minutes;
+ # RAMP2S50 also halves the starting resources (similar total, shifted toward the late game).
+ 'INC2'=@('-AreaIncomeBase','2','-AreaIncomePerPoint','2')
+ 'RAMP2'=@('-AreaIncomeRamp','0.2')
+ 'RAMP2S50'=@('-AreaIncomeRamp','0.2','-AreaStartCredits','50')
+ # P1 purpose purchase: the AI buys only for an observed need (home under attack, thin point, weak enemy home) and keeps that mission.
+ 'P1'=@('-AreaHirePurpose','1')
+ 'P1RAMP'=@('-AreaHirePurpose','1','-AreaIncomeRamp','0.2','-AreaStartCredits','50')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

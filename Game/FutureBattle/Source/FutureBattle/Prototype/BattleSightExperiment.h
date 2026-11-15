@@ -40,5 +40,11 @@ struct FBattleSightExperiment
  // progress from own home (0) to enemy home (1) in tenths (squad mean position), and by squad state:
  // [0..6] = EBattleSquadTactic, 7 = home supply trip, 8 = no mission. MaxProgress = furthest squad mean reached.
  double BaseAssaultProgress[2][10]={},BaseAssaultState[2][9]={},BaseAssaultMaxProgress[2]={0,0};
+ // Evaluation only (Area): economy at each full minute 1..10 per team: [0] resources held, [1] cumulative income,
+ // [2] cumulative new-squad spend, [3] living soldiers. Replacement spend = 100 + income - held - squad spend.
+ double EconTimeline[2][10][4]={};int32 NextEconMinute=1;
+ // Evaluation only (Area, strategy layer stage 1): UBattleMatch::AreaFronts every 30 s (samples 1..20) per team and lane (objective
+ // index): [0] own front, [1] most advanced visible enemy, [2] own soldiers, [3] visible enemies.
+ float FrontTimeline[2][20][3][4]={};int32 NextFrontSample=1;
  void Cover(const TCHAR* Key){if(Enabled)++CoverDiag.FindOrAdd(FName(Key));}
 };

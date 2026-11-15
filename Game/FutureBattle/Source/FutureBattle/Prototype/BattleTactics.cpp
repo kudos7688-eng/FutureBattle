@@ -52,6 +52,8 @@ const BattleTactics::FAreaHireTuning& BattleTactics::AreaHire()
   H.bEnabled=Enabled!=0;H.Cost=FMath::Clamp(T->AreaSquadCost,1,100);H.Reserve=T->AreaHireReserve;H.Interval=T->AreaHireIntervalSeconds;H.Stop=T->AreaHireStopSeconds;
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHireReserve="),H.Reserve);FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHireInterval="),H.Interval);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHireStop="),H.Stop);
+  int32 Purpose=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHirePurpose="),Purpose);H.bPurpose=Purpose!=0;
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHirePurposeFront="),H.PurposeFront);H.PurposeFront=FMath::Clamp(H.PurposeFront,1,100);
   H.Reserve=FMath::Clamp(H.Reserve,0,1000);H.Interval=FMath::IsFinite(H.Interval)?FMath::Clamp(H.Interval,0.f,600.f):0.f;H.Stop=FMath::IsFinite(H.Stop)?FMath::Clamp(H.Stop,0.f,600.f):0.f;
   return H;
  }();
@@ -63,7 +65,7 @@ const BattleTactics::FAreaStrategyTuning& BattleTactics::AreaStrategy()
  static const FAreaStrategyTuning Value=[]()
  {
   const auto* T=GetDefault<UBattleTuning>();FAreaStrategyTuning S;int32 Enabled=T->bAreaStrategy?1:0;
-  S.AttackWeight=T->AreaAttackWeight;S.BaseShare=T->AreaBaseShare;
+  S.AttackWeight=T->AreaAttackWeight;S.BaseShare=T->AreaBaseShare;S.bFrontBalance=T->bAreaFrontBalance;S.FrontGain=T->AreaFrontGain;S.FocusGain=T->AreaFocusGain;
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaStrategy="),Enabled);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaAttackWeight="),S.AttackWeight);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseShare="),S.BaseShare);
@@ -71,7 +73,7 @@ const BattleTactics::FAreaStrategyTuning& BattleTactics::AreaStrategy()
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseShareLow="),S.BaseShareLow);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseShareHigh="),S.BaseShareHigh);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseLowHP="),S.BaseLowHP);
-  int32 Front=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaFrontBalance="),Front);S.bFrontBalance=Front!=0;
+  int32 Front=S.bFrontBalance?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaFrontBalance="),Front);S.bFrontBalance=Front!=0;
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaFrontGain="),S.FrontGain);
   S.FrontGain=FMath::IsFinite(S.FrontGain)?FMath::Clamp(S.FrontGain,0.f,5.f):1.f;
   float Infiltrate=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseInfiltrate="),Infiltrate);
@@ -80,6 +82,8 @@ const BattleTactics::FAreaStrategyTuning& BattleTactics::AreaStrategy()
   S.FocusGain=FMath::IsFinite(S.FocusGain)?FMath::Clamp(S.FocusGain,0.f,10.f):0.f;
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseFlank="),S.FlankOffset);
   S.FlankOffset=FMath::IsFinite(S.FlankOffset)?FMath::Clamp(S.FlankOffset,0.f,1.6f):0.f;
+  int32 SameSide=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseFlankSide="),SameSide);S.bFlankSameSide=SameSide!=0;
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaBaseReturnLiving="),S.BaseReturnLiving);S.BaseReturnLiving=FMath::Clamp(S.BaseReturnLiving,0,9);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaTrialTeam="),S.TrialTeam);S.TrialTeam=S.TrialTeam==0||S.TrialTeam==1?S.TrialTeam:-1;
   S.BaseShareLow=FMath::IsFinite(S.BaseShareLow)?FMath::Clamp(S.BaseShareLow,0.f,0.5f):0.f;
   S.BaseShareHigh=FMath::IsFinite(S.BaseShareHigh)?FMath::Clamp(S.BaseShareHigh,0.f,0.5f):0.3f;
@@ -100,6 +104,10 @@ const BattleTactics::FAreaIncomeTuning& BattleTactics::AreaIncome()
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaIncome="),Enabled);
   I.bEnabled=Enabled!=0;I.Seconds=FMath::IsFinite(T->AreaIncomeSeconds)?FMath::Clamp(T->AreaIncomeSeconds,1.f,600.f):20.f;
   I.Base=FMath::Clamp(T->AreaBaseIncome,0,100);I.PerPoint=FMath::Clamp(T->AreaPointIncome,0,100);
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaIncomeBase="),I.Base);FParse::Value(FCommandLine::Get(),TEXT("BattleAreaIncomePerPoint="),I.PerPoint);
+  I.Base=FMath::Clamp(I.Base,0,100);I.PerPoint=FMath::Clamp(I.PerPoint,0,100);
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaIncomeRamp="),I.Ramp);I.Ramp=FMath::IsFinite(I.Ramp)?FMath::Clamp(I.Ramp,0.f,2.f):0.f;
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaStartCredits="),I.StartCredits);I.StartCredits=FMath::Clamp(I.StartCredits,0,1000);
   return I;
  }();
  return Value;

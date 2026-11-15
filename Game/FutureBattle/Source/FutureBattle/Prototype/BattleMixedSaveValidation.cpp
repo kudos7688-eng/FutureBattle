@@ -35,6 +35,9 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   // Income (2026-11-14) adds to the starting 100. Pre-income saves have Income {0,0} and IncomeClock 0.
   if(Area.Income.Num()!=2||Area.Income[0]<0||Area.Income[1]<0||Area.Income[0]>100000||Area.Income[1]>100000||!Finite(Area.IncomeClock,0,600))return Fail(TEXT("Invalid area income record"));
   if(Area.LastAIHireAt.Num()!=2||!Finite(Area.LastAIHireAt[0],-1000,Elapsed+.01)||!Finite(Area.LastAIHireAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area AI hire clock"));
+  // P1 trial (2026-11-16): bought-squad missions point at existing squads with a known mission; home hit times are past clocks.
+  for(const auto& P:Area.HirePurpose)if(P.Value<0||P.Value>4||!BySquad.FindRef(P.Key))return Fail(TEXT("Invalid area hire purpose"));
+  if(Area.HomeHitAt.Num()!=2||!Finite(Area.HomeHitAt[0],-1000,Elapsed+.01)||!Finite(Area.HomeHitAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area home hit clock"));
   if(Retired[0]+Area.HireSpent[0]+AllyCredits!=100+Area.Income[0]||Retired[1]+Area.HireSpent[1]+EnemyCredits!=100+Area.Income[1])return Fail(TEXT("Area resource conservation mismatch"));
   if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=500+10*(Squads.Num()-50)||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=6||Area.SeenAt.Num()!=6||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>200||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
   for(int32 Team=0;Team<2;++Team)if(!Finite(Area.BaseHP[Team],0,1000)||!Finite(Area.KnownEnemyBaseHP[Team],-1,1000))return Fail(TEXT("Invalid base state"));
