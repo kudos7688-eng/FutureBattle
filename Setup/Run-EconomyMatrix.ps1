@@ -54,6 +54,7 @@ $supply=@{
  # S6 focus: the non-own point nearest the own home gets weight x (1+gain).
  'FO1'=@('-AreaFocus','1')
  'FO2'=@('-AreaFocus','2')
+ 'F1FO1'=@('-AreaFrontBalance','1','-AreaFocus','1')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}
