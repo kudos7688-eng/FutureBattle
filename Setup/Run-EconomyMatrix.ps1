@@ -68,6 +68,7 @@ $supply=@{
  'S1only'=@('-AreaFrontBalance','0','-AreaFocus','0')
  # Income-curve trials (2026-11-16): INC2 doubles base and per-point income; RAMP2 multiplies each payment by 1+0.2 x minutes;
  # RAMP2S50 also halves the starting resources (similar total, shifted toward the late game).
+ 'INC1'=@('-AreaIncomeBase','1','-AreaIncomePerPoint','1')
  'INC2'=@('-AreaIncomeBase','2','-AreaIncomePerPoint','2')
  'INC3'=@('-AreaIncomeBase','3','-AreaIncomePerPoint','3')
  'INC4'=@('-AreaIncomeBase','4','-AreaIncomePerPoint','4')
