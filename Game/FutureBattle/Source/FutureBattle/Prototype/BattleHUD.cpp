@@ -53,7 +53,17 @@ void ABattleHUD::DrawHUD()
 	{
 		const TCHAR* Phase = Match->Phase == EBattleMatchPhase::Deployment ? TEXT("DEPLOYMENT / ENTER: START") : Match->Phase == EBattleMatchPhase::Combat ? TEXT("BATTLE / REINFORCEMENTS") : TEXT("FINISHED / F5: RESTART");
 		DrawRect(Ink, 16, 84, W - 32, 26);
-  if(Match->bArea)Label(FString::Printf(TEXT("AREA / RESOURCES %d / HOME HP %.0f / ENEMY BASE LAST SEEN %s%s"),Match->Credits[0],Match->Area.BaseHP[0],Match->Area.KnownEnemyBaseHP[0]<0?TEXT("UNKNOWN"):*FString::Printf(TEXT("%.0f"),Match->Area.KnownEnemyBaseHP[0]),
+  // Own income rate (user decision 2026-11-16): the next payment from the points the own team actually holds. The opponent's
+  // rate and resource total are never shown.
+  FString IncomeText;
+  if(Match->bArea&&BattleTactics::AreaIncome().bEnabled)
+  {
+   const auto& I=BattleTactics::AreaIncome();const bool bUrban=BattleFieldLayout::IsUrban(GetWorld());
+   int32 Gain=I.BaseFor(bUrban);for(const auto& P:Match->Objectives)Gain+=P.Owner==0?I.PerPointFor(bUrban):0;
+   if(I.Ramp>0)Gain=FMath::RoundToInt(Gain*(1.f+I.Ramp*Match->Elapsed/60.f));
+   IncomeText=FString::Printf(TEXT(" (+%d / %.0fs)"),Gain,I.Seconds);
+  }
+  if(Match->bArea)Label(FString::Printf(TEXT("AREA / RESOURCES %d%s / HOME HP %.0f / ENEMY BASE LAST SEEN %s%s"),Match->Credits[0],*IncomeText,Match->Area.BaseHP[0],Match->Area.KnownEnemyBaseHP[0]<0?TEXT("UNKNOWN"):*FString::Printf(TEXT("%.0f"),Match->Area.KnownEnemyBaseHP[0]),
    BattleTactics::AreaHire().bEnabled?*FString::Printf(TEXT(" / [2] NEW SQUAD %d = SCORE %+d (%d/25)"),BattleTactics::AreaHire().Cost,10-BattleTactics::AreaHire().Cost,Match->ActiveSquads(0)):TEXT("")),28,90,Mint,.9f);
   else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch) Label(FString::Printf(TEXT("%s / CREDITS %d / [1] %d [2] %d [3] %d / 10 soldiers"),Phase,Match->Credits[0],Match->CurrentSquadPrice(EBattleTraining::Recruit),Match->CurrentSquadPrice(EBattleTraining::Regular),Match->CurrentSquadPrice(EBattleTraining::Veteran)),28,90,Mint,.9f);
   else if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("500 SOLDIERS / THREE CONTROL POINTS / P: PAUSE OR RESUME"),28,90,Mint,.9f);
