@@ -389,10 +389,25 @@ void ABattleHUD::DrawSquadList()
  auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas || !PC->IsTactical()) return;
  PC->ScrollSquadList(0); const auto Layout=FBattleSquadListLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY));
  if(Layout.VisibleRows<=0) return;
- const auto& Rows=L->Summaries(); int32 Active=0; for(const auto& S:Rows) if(S.bActive) ++Active;
+ const auto& All=L->Summaries(); int32 Active=0; for(const auto& S:All) if(S.bActive) ++Active;
+ // Rows after the list filter and sort (command UI 2026-11-16); counts per filter for the tabs.
+ const auto Rows=PC->SquadListRows(); int32 Counts[FBattleSquadListLayout::FilterCount]={All.Num(),0,0,0,0}; for(const auto& S:All) ++Counts[PC->SquadCategory(S)];
  DrawRect(FLinearColor(.025f,.04f,.065f,.96f),Layout.Origin.X,Layout.Origin.Y,Layout.Width,Layout.Height);
- DrawText(FString::Printf(TEXT("自軍部隊　稼働 %d / 停止 %d"),Active,Rows.Num()-Active),FLinearColor::White,Layout.Origin.X+8,Layout.Origin.Y+5,GEngine->GetSmallFont(),1);
- DrawText(TEXT("クリックで選択 → Eで操作"),FLinearColor(.7f,.7f,.7f),Layout.Origin.X+8,Layout.Origin.Y+24,GEngine->GetSmallFont(),.85);
+ DrawText(FString::Printf(TEXT("自軍部隊　稼働 %d / 停止 %d"),Active,All.Num()-Active),FLinearColor::White,Layout.Origin.X+8,Layout.Origin.Y+5,GEngine->GetSmallFont(),1);
+ DrawText(TEXT("クリックで選択・ダブルクリックで移動・Eで操作"),FLinearColor(.6f,.65f,.7f),Layout.Origin.X+8,Layout.Origin.Y+Layout.Height-18,GEngine->GetSmallFont(),.7f);
+ static const TCHAR* const FilterNames[]={TEXT("全部"),TEXT("交戦"),TEXT("補給"),TEXT("待機"),TEXT("停止")};
+ for(int32 T=0;T<FBattleSquadListLayout::FilterCount;++T)
+ {
+  const float X=Layout.Origin.X+6+T*FBattleSquadListLayout::TabWidth,Y=Layout.Origin.Y+FBattleSquadListLayout::TabTop; const bool On=PC->SquadFilter==T;
+  DrawRect(On?FLinearColor(.12f,.38f,.36f):FLinearColor(.08f,.11f,.15f),X,Y,FBattleSquadListLayout::TabWidth-4,FBattleSquadListLayout::TabHeight);
+  DrawText(FString::Printf(TEXT("%s %d"),FilterNames[T],Counts[T]),On?FLinearColor::White:FLinearColor(.7f,.75f,.8f),X+4,Y+2,GEngine->GetSmallFont(),.75f);
+ }
+ static const TCHAR* const SortNames[]={TEXT("並び：番号順"),TEXT("並び：損耗順"),TEXT("並び：拠点別")};
+ {
+  const float X=Layout.Origin.X+Layout.Width-FBattleSquadListLayout::SortWidth-8,Y=Layout.Origin.Y+FBattleSquadListLayout::TabTop;
+  DrawRect(FLinearColor(.08f,.11f,.15f),X,Y,FBattleSquadListLayout::SortWidth,FBattleSquadListLayout::TabHeight);
+  DrawText(SortNames[FMath::Min<int32>(PC->SquadSort,2)],FLinearColor(.7f,.75f,.8f),X+4,Y+2,GEngine->GetSmallFont(),.75f);
+ }
  for(int32 I=0;I<Layout.VisibleRows && I+PC->SquadListScroll<Rows.Num();++I)
  {
   const auto& S=Rows[I+PC->SquadListScroll]; const float Y=Layout.Origin.Y+Layout.Header+I*Layout.RowHeight;

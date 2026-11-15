@@ -43,6 +43,10 @@ struct FBattleSquadListLayout
  float Width=360, Height=0, RowHeight=56, Header=44;
  int32 VisibleRows=0;
  static FBattleSquadListLayout Make(FVector2D View);
+ // Header controls (command UI 2026-11-16): five filter tabs and a sort button on the second header line.
+ static constexpr int32 FilterCount=5; static constexpr float TabWidth=50, TabTop=23, TabHeight=18, SortWidth=86;
+ int32 FilterTabAt(FVector2D P) const {if(P.Y<Origin.Y+TabTop||P.Y>=Origin.Y+TabTop+TabHeight||P.X<Origin.X+6)return INDEX_NONE;const int32 I=FMath::FloorToInt((P.X-Origin.X-6)/TabWidth);return I<FilterCount?I:INDEX_NONE;}
+ bool SortButtonAt(FVector2D P) const {return P.Y>=Origin.Y+TabTop&&P.Y<Origin.Y+TabTop+TabHeight&&P.X>=Origin.X+Width-SortWidth-8&&P.X<Origin.X+Width-8;}
  bool Contains(FVector2D P) const;
  int32 RowAt(FVector2D P) const;
 };
@@ -184,6 +188,8 @@ public:
  bool CanSelectLeader(int32 ID) const;
  bool CanControlLeader(int32 ID) const;
  const TArray<FBattleSquadSummary>& Summaries();
+ // Current squad target (a contact the squad engages), or INDEX_NONE. For the command UI squad list.
+ int32 SquadTargetID(int32 SquadID) const {const auto* P=Plans.Find(SquadID);return P?P->TargetID:INDEX_NONE;}
  void OnDeath(int32 ID);
  void RunSmoke();
  void RunUIQA();

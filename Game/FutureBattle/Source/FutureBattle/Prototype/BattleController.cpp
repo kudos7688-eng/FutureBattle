@@ -411,6 +411,16 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
   { if(Over) { if(Params.Event==IE_Pressed) ScrollSquadList(Params.Key==EKeys::MouseScrollUp?-3:3); return true; } }
   if(Params.Key==EKeys::LeftMouseButton)
   {
+   // Header controls: a filter tab or the sort button.
+   if(Params.Event==IE_Pressed && Over)
+   {
+    FVector2D P; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH); const auto Layout=FBattleSquadListLayout::Make(FVector2D(ViewW,ViewH));
+    if(GetPointerPosition(P))
+    {
+     if(const int32 Tab=Layout.FilterTabAt(P);Tab!=INDEX_NONE){SquadFilter=uint8(Tab);SquadListScroll=0;bSquadListPress=false;bTriggerHeld=false;return true;}
+     if(Layout.SortButtonAt(P)){SquadSort=uint8((SquadSort+1)%3);SquadListScroll=0;bSquadListPress=false;bTriggerHeld=false;return true;}
+    }
+   }
    if(Params.Event==IE_Pressed && Over) { bSquadListPress=true; bTriggerHeld=false; FVector2D P; PressedSquadID=GetPointerPosition(P)?SquadListIDAt(P):INDEX_NONE; return true; }
    if(Params.Event==IE_Released && (bSquadListPress || Over))
    { if(bSquadListPress && Over) { FVector2D P; if(GetPointerPosition(P) && PressedSquadID!=INDEX_NONE && SquadListIDAt(P)==PressedSquadID) SelectSquadListRow(P); } bSquadListPress=false; bTriggerHeld=false; return true; }
@@ -650,22 +660,26 @@ void ABattleController::ScrollSquadList(int32 Delta)
 {
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); int32 W,H; GetViewportSize(W,H);
  const auto Layout=FBattleSquadListLayout::Make(FVector2D(W,H));
- SquadListScroll=FMath::Clamp(SquadListScroll+Delta,0,FMath::Max(0,L->Summaries().Num()-Layout.VisibleRows));
+ SquadListScroll=FMath::Clamp(SquadListScroll+Delta,0,FMath::Max(0,SquadListRows().Num()-Layout.VisibleRows));
 }
 void ABattleController::SelectSquadListRow(FVector2D P)
 {
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); int32 W,H; GetViewportSize(W,H);
  const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H)).RowAt(P); ScrollSquadList(0);
- const auto& Rows=L->Summaries(); if(R==INDEX_NONE || !Rows.IsValidIndex(R+SquadListScroll)) return;
+ const auto Rows=SquadListRows(); if(R==INDEX_NONE || !Rows.IsValidIndex(R+SquadListScroll)) return;
  const auto& Row=Rows[R+SquadListScroll];
+ // Double-click (two clicks on the same row within 0.4 s): move the tactical camera to the squad leader.
+ { const double Now=GetWorld()->GetRealTimeSeconds();
+   if(LastRowClickID==Row.SquadID && Now-LastRowClickTime<.4 && TacticalPawn){const FVector Where=L->Position(Row.LeaderUnitID);TacticalPawn->SetActorLocation(FVector(Where.X,Where.Y,TacticalPawn->GetActorLocation().Z));}
+   LastRowClickID=Row.SquadID; LastRowClickTime=Now; }
  if(L->CanSelectLeader(Row.LeaderUnitID)) SetSelection(L->Actor(Row.LeaderUnitID));
  else ShowNotice(Row.bActive?TEXT("この隊長は操作不可です"):TEXT("この部隊は機能停止しています"));
 }
 
 int32 ABattleController::SquadListIDAt(FVector2D P) const
 {
- auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); int32 W,H; GetViewportSize(W,H);
- const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H)).RowAt(P); const auto& Rows=L->Summaries();
+ int32 W,H; GetViewportSize(W,H);
+ const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H)).RowAt(P); const auto Rows=SquadListRows();
  return R!=INDEX_NONE && Rows.IsValidIndex(R+SquadListScroll)?Rows[R+SquadListScroll].SquadID:INDEX_NONE;
 }
 
@@ -760,4 +774,42 @@ void ABattleController::UpdateNoticeLog(bool bForce)
  // Enemy home seen weak by own soldiers.
  if(!bEnemyHomeWeakNoted&&Match->Area.KnownEnemyBaseHP.IsValidIndex(0)&&Match->Area.KnownEnemyBaseHP[0]>=0&&Match->Area.KnownEnemyBaseHP[0]<=500)
  {bEnemyHomeWeakNoted=true;PushNotice(5,FString::Printf(TEXT("敵本拠地の耐久が低い（%.0f）"),Match->Area.KnownEnemyBaseHP[0]),Match->AreaHome(1));}
+}
+
+// ---- Squad list view (command UI): filters, sort, double-click. Own squads' state only.
+uint8 ABattleController::SquadCategory(const FBattleSquadSummary& Row) const
+{
+ if(!Row.bActive) return 4;
+ auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(Row.SquadID);
+ if(S && S->TacticalPlan.Action==EBattleSquadTactic::Recover && S->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY"))) return 2;
+ if(L->SquadTargetID(Row.SquadID)!=INDEX_NONE || (S && (S->TacticalPlan.Action==EBattleSquadTactic::Engage || S->TacticalPlan.Action==EBattleSquadTactic::Support || S->TacticalPlan.Action==EBattleSquadTactic::Flank || S->TacticalPlan.Action==EBattleSquadTactic::Retreat))) return 1;
+ return 3;
+}
+TArray<FBattleSquadSummary> ABattleController::SquadListRows() const
+{
+ auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); TArray<FBattleSquadSummary> Rows;
+ for(const auto& Row:L->Summaries()) if(SquadFilter==0 || SquadCategory(Row)==SquadFilter) Rows.Add(Row);
+ if(SquadSort==0) return Rows;
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ TMap<int32,float> Key;
+ for(const auto& Row:Rows)
+ {
+  float K=0;
+  if(SquadSort==1)
+  {
+   // Heaviest losses first: share of members still alive (stopped squads last).
+   int32 Living=0,Members=0; if(const auto* S=Store->FindSquad(Row.SquadID)) for(int32 ID:S->Members){++Members;if(const auto* U=Store->Find(ID);U&&U->IsAlive())++Living;}
+   K=Row.bActive?float(Living)/FMath::Max(1,Members):2.f;
+  }
+  else
+  {
+   // Grouped by the objective nearest the leader (public positions), then by distance to it.
+   const FVector P=L->Position(Row.LeaderUnitID); int32 Best=0; double BestD=DBL_MAX;
+   for(int32 I=0;I<Match->Objectives.Num();++I){const double D=FVector::Dist2D(P,Match->Objectives[I].Position);if(D<BestD){BestD=D;Best=I;}}
+   K=Best*1000000.f+float(FMath::Min(BestD,999999.0));
+  }
+  Key.Add(Row.SquadID,K);
+ }
+ Rows.StableSort([&Key](const FBattleSquadSummary& A,const FBattleSquadSummary& B){return Key[A.SquadID]<Key[B.SquadID];});
+ return Rows;
 }

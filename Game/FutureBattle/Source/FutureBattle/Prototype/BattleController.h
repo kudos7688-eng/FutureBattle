@@ -9,6 +9,7 @@ class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
 class ABattleUnit;
+struct FBattleSquadSummary;
 struct FInputActionValue;
 
 UCLASS()
@@ -52,6 +53,12 @@ public:
  int32 SquadListScroll=0;
  bool SquadPanelAtPointer() const;
  void ScrollSquadList(int32 Delta);
+ // Squad list view (command UI 2026-11-16): filter 0 all, 1 engaged, 2 home supply, 3 other active, 4 stopped;
+ // sort 0 squad number, 1 heaviest losses first, 2 by nearest objective. The HUD and clicks both use SquadListRows().
+ uint8 SquadFilter=0, SquadSort=0;
+ uint8 SquadCategory(const FBattleSquadSummary& Row) const;
+ TArray<FBattleSquadSummary> SquadListRows() const;
+ double LastRowClickTime=-10; int32 LastRowClickID=INDEX_NONE;
  void SelectSquadListRow(FVector2D Position);
  int32 SquadListIDAt(FVector2D Position) const;
 	bool ControlUnit(ABattleUnit* Unit);
