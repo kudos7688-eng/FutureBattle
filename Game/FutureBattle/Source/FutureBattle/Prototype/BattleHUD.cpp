@@ -9,6 +9,7 @@
 #include "BattleTactics.h"
 #include "BattleWarScore.h"
 #include "BattleUIText.h"
+#include "BattleStance.h"
 #include "BattleCover.h"
 #include "BattleMatch.h"
 #include "BattleFieldLayout.h"
@@ -216,13 +217,24 @@ void ABattleHUD::DrawHUD()
     if (const auto* Squad = GetWorld()->GetSubsystem<UBattleState>()->FindSquad(Selected->SquadID))
     {
      const FString Movement=GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->MovementLabel(Squad->SquadID);
-     DrawRect(Ink, 16, 336, 450, Movement.IsEmpty()?79:98);
+     DrawRect(Ink, 16, 336, 450, (Movement.IsEmpty()?79:98)+40);
      Label(FString::Printf(TEXT("部隊%d　任務：%s"), Squad->SquadID, *BattleUIText::Ja(BattleOrderName(Squad->bHasMission ? Squad->MissionOrder : Squad->Order))), 28, 343, White, .85f);
      Label(FString::Printf(TEXT("戦術：%s"), *BattleUIText::Ja(BattleSquadTacticName(Squad->TacticalPlan.Action))), 28, 362, Mint, .85f);
      const auto* Sample = GetWorld()->GetSubsystem<UBattleSquadTactics>()->Find(Squad->SquadID);
      const FString Reason = !Squad->bPlayerDelegated ? TEXT("手動 ／ 部隊AI") : Squad->TacticalPlan.Action != EBattleSquadTactic::Mission ? Squad->TacticalPlan.Reason : Sample ? Sample->Reason : TEXT("状態の取得待ち");
      Label(BattleUIText::Ja(Reason), 28, 382, Muted, .8f);
      if(!Movement.IsEmpty()) Label(Movement,28,402,Muted,.8f);
+     // Squad state (own soldiers) and the last decision reasons, newest first.
+     {
+      auto* LR=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); const auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const double Now=GetWorld()->GetTimeSeconds();
+      int32 Living=0,Ammo=0,Crouch=0,Prone=0,Pinned=0,InCover=0; float HP=0;
+      for(int32 ID:Squad->Members) if(const auto* U=Store->Find(ID); U && U->IsAlive())
+      {++Living;HP+=U->HP;Ammo+=U->Ammo+U->Reserve;const uint8 St=LR->StanceOf(ID);Crouch+=St==BattleStance::Crouch;Prone+=St==BattleStance::Prone;Pinned+=LR->Suppression(ID,Now)>=.5f;InCover+=U->CoverPhase!=0;}
+      const float Y0=Movement.IsEmpty()?402.f:421.f;
+      Label(FString::Printf(TEXT("生存 %d/%d   HP %.0f   弾 %d   しゃがみ %d・伏せ %d   制圧 %d   遮蔽 %d"),Living,Squad->Members.Num(),HP,Ammo,Crouch,Prone,Pinned,InCover),28,Y0,White,.8f);
+      FString History; if(const auto* Past=PC->ReasonHistory.Find(Squad->SquadID)) for(int32 I=0;I<Past->Num();++I) History+=(I?TEXT(" ← "):TEXT(""))+BattleUIText::Ja((*Past)[I]);
+      Label(TEXT("履歴：")+(History.IsEmpty()?FString(TEXT("なし")):History.Left(60)),28,Y0+19,Muted,.75f);
+     }
     }
 	}
 	DrawRect(Ink, 16, H - 128, W - 32, 112);
@@ -300,8 +312,21 @@ void ABattleHUD::DrawHUD()
 	else Label(TEXT("味方の部隊を選んで開始"), 34, H - 112, White, 1.2f);
 	if (PC->IsTactical())
 	{
-		Label(TEXT("左クリック・ドラッグ：選択   右クリック：移動   T→右クリック：攻撃移動   G→右クリック：防衛   H：停止   Q：全選択   E/Tab：直接操作"), 34, H - 80, Mint);
-		Label(FString::Printf(TEXT("WASD：視点移動   ホイール：拡大縮小   P：AI一時停止   F5：やり直し   F6：記憶表示   %s      選択中 %02d"), Match->IsEnabled() ? TEXT("1/2/3：購入") : TEXT("F7：練度の切替"), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
+		// Command bar (command UI 2026-11-16): buttons call the same actions as the keys shown in brackets.
+		{
+			const auto Bar = FBattleCommandBarLayout::Make(FVector2D(W, H));
+			static const TCHAR* const Names[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("小隊を購入 [2]") };
+			const bool bAny = !PC->GetSelection().IsEmpty();
+			for (int32 I = 0; I < FBattleCommandBarLayout::Count; ++I)
+			{
+				const float X = Bar.Origin.X + I * (Bar.ButtonWidth + Bar.Gap);
+				const bool bUsable = I == 6 ? (Match->bArea && BattleTactics::AreaHire().bEnabled) : bAny;
+				const bool bPending = (I == 1 && PC->PendingOrder == EBattleOrder::AttackMove) || (I == 2 && PC->PendingOrder == EBattleOrder::Defend);
+				DrawRect(bPending ? FLinearColor(.45f, .4f, .1f, .98f) : bUsable ? FLinearColor(.10f, .24f, .24f, .98f) : FLinearColor(.08f, .11f, .15f, .98f), X, Bar.Origin.Y, Bar.ButtonWidth, Bar.ButtonHeight);
+				Label(Names[I], X + 8, Bar.Origin.Y + 5, bPending ? FLinearColor::Yellow : bUsable ? Mint : Muted, .85f);
+			}
+		}
+		Label(FString::Printf(TEXT("左ドラッグ：選択   Q：全選択   E/Tab：直接操作   WASD：視点移動   ホイール：拡大縮小   P：AI一時停止   F5：やり直し   F6：記憶表示   %s      選択中 %02d"), Match->IsEnabled() ? TEXT("1/2/3：購入") : TEXT("F7：練度の切替"), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
 	}
 	else
 	{
@@ -447,7 +472,7 @@ void ABattleHUD::DrawNoticeLog()
 {
  auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas || !PC->IsTactical()) return;
  const auto Notices=PC->VisibleNotices(); if(Notices.IsEmpty()) return;
- const auto Layout=FBattleNoticeLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld(),Notices.Num()); if(Layout.Rows<=0) return;
+ const auto Layout=FBattleNoticeLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld(),Notices.Num(),PC->NoticeLogTop()); if(Layout.Rows<=0) return;
  static const FLinearColor Colors[]={FLinearColor(1,.35f,.25f),FLinearColor(.28f,.95f,.8f),FLinearColor(.95f,.65f,.3f),FLinearColor(.95f,.65f,.3f),FLinearColor(1,.9f,.35f),FLinearColor(.94f,.97f,1.f)};
  DrawRect(FLinearColor(.025f,.04f,.065f,.9f),Layout.Origin.X-5,Layout.Origin.Y,Layout.Width+10,Layout.Header+Layout.Rows*Layout.RowHeight+4);
  DrawText(TEXT("通知（クリックで現地へ）"),FLinearColor(.45f,.52f,.58f),Layout.Origin.X,Layout.Origin.Y+3,GEngine->GetSmallFont(),.8f);

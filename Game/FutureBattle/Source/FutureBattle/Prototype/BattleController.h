@@ -33,8 +33,21 @@ struct FBattleNoticeLayout
 {
  FVector2D Origin=FVector2D(20,262); float Width=400, RowHeight=22, Header=22; int32 Rows=0;
  // Fits between the single-line notice area and the minimap; too small a window shows fewer rows.
- static FBattleNoticeLayout Make(FVector2D View,const UWorld* World,int32 Entries);
+ static FBattleNoticeLayout Make(FVector2D View,const UWorld* World,int32 Entries,float Top=262.f);
  int32 RowAt(FVector2D P) const;
+};
+// Command bar (command UI 2026-11-16): buttons on the bottom panel that call the same actions as the keys.
+struct FBattleCommandBarLayout
+{
+ FVector2D Origin=FVector2D::ZeroVector; float ButtonWidth=124, ButtonHeight=26, Gap=6;
+ static constexpr int32 Count=7; // move, attack move, defend, hold, manual command, delegate to AI, buy a squad
+ static FBattleCommandBarLayout Make(FVector2D View){FBattleCommandBarLayout L;L.Origin=FVector2D(34,View.Y-90);return L;}
+ int32 ButtonAt(FVector2D P) const
+ {
+  if(P.Y<Origin.Y||P.Y>=Origin.Y+ButtonHeight||P.X<Origin.X) return INDEX_NONE;
+  const int32 I=FMath::FloorToInt((P.X-Origin.X)/(ButtonWidth+Gap));
+  return I<Count&&P.X<Origin.X+I*(ButtonWidth+Gap)+ButtonWidth?I:INDEX_NONE;
+ }
 };
 
 UCLASS()
@@ -112,6 +125,12 @@ public:
 	void PushNotice(uint8 Kind,const FString& Text,FVector Where);
 	TArray<const FBattleNoticeEntry*> VisibleNotices() const;
 	void UpdateNoticeLog(bool bForce=false);
+	// Command bar button (index as in FBattleCommandBarLayout).
+	void PressCommandButton(int32 Index);
+	// Last distinct decision reasons per own squad, newest first (at most 3), for the selected squad detail.
+	TMap<int32,TArray<FString>> ReasonHistory;
+	// Top of the notification log: below the delegation and squad detail panels while they are shown.
+	float NoticeLogTop() const {return CanShowDelegation()?440.f:262.f;}
 	UFUNCTION(Exec) void BattleVerify();
 private:
 	UPROPERTY() TObjectPtr<ABattleCameraPawn> TacticalPawn;

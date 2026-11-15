@@ -183,6 +183,9 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    PC->SquadFilter=0;PC->SquadSort=1;const int32 Sorted=PC->SquadListRows().Num();PC->SquadSort=0;
    Check(AllStopped&&Sorted==PC->SquadListRows().Num(),TEXT("squad list filter and sort"));
   }
+  // Command bar: the attack-move button arms the same pending order as the T key; the move button clears it.
+  { PC->PressCommandButton(1);const bool Armed=PC->PendingOrder==EBattleOrder::AttackMove;PC->PressCommandButton(0);
+    Check(Armed&&PC->PendingOrder==EBattleOrder::Move,TEXT("command bar buttons arm and clear orders")); }
   FString Prefix;FParse::Value(FCommandLine::Get(),TEXT("BattleWideScreens="),Prefix);if(!Prefix.IsEmpty())FScreenshotRequest::RequestScreenshot(Prefix+TEXT("-restored.png"),true,false);
   SmokeStage=1;FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunAreaSmoke,.5f,false);return;
  }

@@ -380,11 +380,19 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 	if (OverDelegation && Params.Key == EKeys::RightMouseButton) return true;
 	if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled() && bTactical)
  {
+  // Command bar: a left click on a button runs that action (its release is swallowed like the minimap's).
+  if(Params.Key==EKeys::LeftMouseButton && Params.Event==IE_Pressed)
+  {
+   FVector2D BarPointer; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH);
+   if(GetPointerPosition(BarPointer))
+    if(const int32 Button=FBattleCommandBarLayout::Make(FVector2D(ViewW,ViewH)).ButtonAt(BarPointer);Button!=INDEX_NONE)
+    {bMinimapPress=true;bTriggerHeld=false;PressCommandButton(Button);return true;}
+  }
   // Notification log: a left click on a row moves the tactical camera to that event (its release is swallowed like the minimap's).
   if(Params.Key==EKeys::LeftMouseButton && Params.Event==IE_Pressed)
   {
    FVector2D NoticePointer; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH);
-   const auto Notices=VisibleNotices(); const auto Layout=FBattleNoticeLayout::Make(FVector2D(ViewW,ViewH),GetWorld(),Notices.Num());
+   const auto Notices=VisibleNotices(); const auto Layout=FBattleNoticeLayout::Make(FVector2D(ViewW,ViewH),GetWorld(),Notices.Num(),NoticeLogTop());
    if(GetPointerPosition(NoticePointer))
     if(const int32 Row=Layout.RowAt(NoticePointer);Row!=INDEX_NONE && Notices.IsValidIndex(Row))
     {
@@ -700,9 +708,9 @@ void ABattleController::ApplyGameSpeed()
 
 // ---- Notification log (command UI). Only what the player's side observes: own home HP, observed point owners, own squads,
 // and the enemy home HP last seen by own soldiers. Area battles on the wide maps only.
-FBattleNoticeLayout FBattleNoticeLayout::Make(FVector2D View,const UWorld* World,int32 Entries)
+FBattleNoticeLayout FBattleNoticeLayout::Make(FVector2D View,const UWorld* World,int32 Entries,float Top)
 {
- FBattleNoticeLayout L; if(Entries<=0) return L;
+ FBattleNoticeLayout L; L.Origin.Y=Top; if(Entries<=0) return L;
  const auto Map=FBattleMinimapLayout::Make(View,World);
  const float Bottom=Map.Size.X>0?Map.Origin.Y-32.f:float(View.Y)-170.f;
  L.Rows=FMath::Clamp(FMath::FloorToInt((Bottom-L.Origin.Y-L.Header)/L.RowHeight),0,FMath::Min(6,Entries));
@@ -736,7 +744,7 @@ void ABattleController::UpdateNoticeLog(bool bForce)
  if(!Match||!Match->bArea||!L||!L->IsEnabled()||!BattleFieldLayout::IsSightField(GetWorld())) return;
  const double Now=GetWorld()->GetTimeSeconds(); if(!bForce&&Now<NextNoticePoll) return; NextNoticePoll=Now+.25;
  // A new match (F5 or a load to an earlier time) starts a fresh log.
- if(Match->Elapsed+1.f<NoticeElapsed){NoticeLog.Reset();LastHomeHP=-1;LastObservedOwner.Reset();LastSquadActive.Reset();AmmoWarned.Reset();bEnemyHomeWeakNoted=false;}
+ if(Match->Elapsed+1.f<NoticeElapsed){NoticeLog.Reset();LastHomeHP=-1;LastObservedOwner.Reset();LastSquadActive.Reset();AmmoWarned.Reset();ReasonHistory.Reset();bEnemyHomeWeakNoted=false;}
  NoticeElapsed=Match->Elapsed;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Own home.
@@ -764,6 +772,12 @@ void ABattleController::UpdateNoticeLog(bool bForce)
   const bool* Was=LastSquadActive.Find(S.SquadID);
   if(Was && *Was && !S.bActive) PushNotice(3,FString::Printf(TEXT("%s 停止（隊長戦死）"),*S.Name),L->Position(S.LeaderUnitID));
   LastSquadActive.Add(S.SquadID,S.bActive);
+  // Decision reason history for the selected squad detail (own squad state only).
+  if(const auto* Sq=Store->FindSquad(S.SquadID); Sq && !Sq->TacticalPlan.Reason.IsEmpty())
+  {
+   auto& History=ReasonHistory.FindOrAdd(S.SquadID);
+   if(History.IsEmpty()||History[0]!=Sq->TacticalPlan.Reason){History.Insert(Sq->TacticalPlan.Reason,0);if(History.Num()>3)History.SetNum(3);}
+  }
   if(!S.bActive||AmmoWarned.Contains(S.SquadID)) continue;
   if(const auto* Squad=Store->FindSquad(S.SquadID))
   {
@@ -812,4 +826,20 @@ TArray<FBattleSquadSummary> ABattleController::SquadListRows() const
  }
  Rows.StableSort([&Key](const FBattleSquadSummary& A,const FBattleSquadSummary& B){return Key[A.SquadID]<Key[B.SquadID];});
  return Rows;
+}
+
+// ---- Command bar (command UI): each button calls the same action as its key.
+void ABattleController::PressCommandButton(int32 Index)
+{
+ switch(Index)
+ {
+ case 0: PendingOrder=EBattleOrder::Move; ShowNotice(TEXT("移動：右クリックで目的地")); break;
+ case 1: ChooseAttackMove(); break;
+ case 2: ChooseDefend(); break;
+ case 3: HoldSelected(); break;
+ case 4: TakeCommandSelected(); break;
+ case 5: DelegateSelected(); break;
+ case 6: HireRegular(); break;
+ default: break;
+ }
 }
