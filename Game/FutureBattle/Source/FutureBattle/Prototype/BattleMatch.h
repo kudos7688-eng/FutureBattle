@@ -17,6 +17,7 @@ struct FAreaIntent
  int32 BaseReturnLiving=0;            // S8: living count at which home-assault squads return for supply (0 = SupplyReturnLiving)
  int32 Phase=0;                       // index of the active phase of the team plan (0 when no plan)
  float HeavyShare=0.f;                // share of AI purchases that are heavy infantry (0 = rifle squads only)
+ int32 ScoutKeep=0;                   // scout pairs the AI keeps active (one more per ScoutAfterHires purchases, up to this; 0 = none)
 };
 // One sector (the part of the field nearest one objective; a lane on maps A-D) as seen by one team: own soldiers and own front (furthest progress
 // from own home, 0..1 along the home-to-home line, 90th percentile), and enemies currently visible to the team (count and the
@@ -115,6 +116,8 @@ public:
 	// Heavy infantry objective: the observed own point with the fewest own soldiers within 100 m (hold the thin front), or,
 	// with no own point, the point nearest the own home. Observed ownership, own positions and fixed positions only.
 	int32 AreaHeavyTarget(int32 Team) const;
+	// Observation post of a scout pair: ahead of an own front point (observed ownership and static positions only).
+	FVector AreaScoutPost(int32 Team, int32 SquadID) const;
 	void AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObjectives]) const;
 	void CheckTimeLimit();
 	void UpdateEnemyOrders();

@@ -339,12 +339,15 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   const bool bHomeDefence=Purpose&&*Purpose==101;if(bHomeDefence)bStrategyBase=false;
   // Heavy infantry (tactical role): hold the thinnest observed own point, or take the point nearest home; never the home assault.
   if(bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::Heavy&&!Objectives.IsEmpty()){bStrategyBase=false;Target=AreaHeavyTarget(Team);}
+  // Scout pairs (tactical role): watch from a post ahead of an own front point (AreaScoutPost); never the home assault.
+  const bool bScout=bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::Scout;if(bScout)bStrategyBase=false;
   ++Group;
 		// Keep assignment stable when only some squads are delegated.
 		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated) continue;
   const bool BaseAssault=bStrategy?bStrategyBase:(bArea&&Group%5==0);
   FVector Center=BaseAssault?AreaHome(1-Team)*(25./27.):bHomeDefence?AreaHome(Team)*(25./27.):Objectives[Target].Position;
   EBattleOrder Order=bHomeDefence||(!BaseAssault&&ObservedOwner(Team,Target)==Team)?EBattleOrder::Defend:EBattleOrder::AttackMove;
+  if(bScout){Center=AreaScoutPost(Team,Pair.Key);Order=EBattleOrder::Defend;}
   // S5 trial: a home-assault squad does not stop to fight until its leader is within InfiltrateRadius of the enemy home.
   if(BaseAssault&&bStrategy&&BattleTactics::AreaStrategy().InfiltrateRadius>0&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==Team))
    if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))

@@ -275,6 +275,10 @@ public:
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRange = 30000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRangeProfile = 40000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutStillSpeed = 30.f;
+	// AI use of scout pairs (stage 2): keep up to AreaScoutKeep active, one more per AreaScoutAfterHires purchases; posts ScoutPostAdvance ahead of the front point.
+	UPROPERTY(Config, EditAnywhere) int32 AreaScoutKeep = 2;
+	UPROPERTY(Config, EditAnywhere) int32 AreaScoutAfterHires = 3;
+	UPROPERTY(Config, EditAnywhere) float ScoutPostAdvance = 6000.f;
 	UPROPERTY(Config, EditAnywhere) float DefenseRadius = 600.f;
 	UPROPERTY(Config, EditAnywhere) float MoveStuckSeconds = 2.f;
 	UPROPERTY(Config, EditAnywhere) int32 MaxMoveRetries = 3;

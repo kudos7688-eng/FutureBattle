@@ -153,6 +153,12 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     }
     const int32 C1=M->Credits[0];const bool Limited=!M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Scout)&&M->Credits[0]==C1&&M->ActiveScouts(0)==3;
     Check(Bought&&Cost==8&&Limited,TEXT("scout pairs: 2 rifles, 8 resources, at most 3 per team"));
+    // AI use: a post ahead of a point (towards the enemy home), and the intent keeps two pairs by default.
+    {
+     const FVector Post=M->AreaScoutPost(0,Scouts[1]);double Near=DBL_MAX;FVector Point=FVector::ZeroVector;
+     for(const auto& O:M->Objectives){const double D=FVector::Dist2D(Post,O.Position);if(D<Near){Near=D;Point=O.Position;}}
+     Check(Near>1000&&Near<9000&&FVector::Dist2D(Post,M->AreaHome(1))<FVector::Dist2D(Point,M->AreaHome(1))&&M->AreaIntent(0).ScoutKeep==2,TEXT("scout post lies ahead of an own front point"));
+    }
     const auto* First=Store->FindSquad(Scouts[0]);const int32 OldLeader=First->LeaderUnitID,Heir=First->Members[1];
     const float Still=ScoutStillSight(OldLeader);
     Check(Still>=29999.f&&Still==ScoutStillSight(Heir)&&ScoutStillSight(1)==0.f,TEXT("still scouts see 300 m, other soldiers keep their range"));

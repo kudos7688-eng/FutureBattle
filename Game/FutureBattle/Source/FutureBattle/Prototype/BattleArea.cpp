@@ -10,6 +10,7 @@
 #include "TimerManager.h"
 #include "FutureBattle.h"
 #include "BattlePerception.h"
+#include "NavigationSystem.h"
 
 FVector UBattleMatch::AreaHome(int32 Team)const{return FVector((Team!=int32(FParse::Param(FCommandLine::Get(),TEXT("BattleTrialSwap"))))?BattleFieldLayout::HomeDistance(GetWorld()):-BattleFieldLayout::HomeDistance(GetWorld()),0,0);}
 int32 UBattleMatch::ObservedOwner(int32 Team,int32 Point)const{return bArea?Area.KnownOwners[Team*Objectives.Num()+Point]:Objectives[Point].Owner;}
@@ -115,10 +116,14 @@ void UBattleMatch::UpdateAreaHiring()
   int32 Pending=0;for(const auto& Q:Area.Replacements)Pending+=Store->Find(Q.Key)->Team==Team;
   // Squad type by the intent's heavy share: heavy infantry while the team's bought heavy squads are below that share of its purchases.
   const FAreaIntent HireIntent=AreaIntent(Team); uint8 Type=BattleSquadType::Rifle;
-  if(HireIntent.HeavyShare>0)
+  int32 Bought=0,Heavy=0;for(const auto& P:Store->GetSquads())if(P.Value.Team==Team){Bought+=P.Key>50;Heavy+=P.Value.SquadType==BattleSquadType::Heavy;}
+  if(HireIntent.HeavyShare>0&&Heavy<HireIntent.HeavyShare*(Bought+1))Type=BattleSquadType::Heavy;
+  // Scout pairs first when the team has fewer active pairs than it wants: none during the first purchases (taking points),
+  // then one more per AreaScoutAfterHires purchases up to the intent's ScoutKeep; a lost pair is bought again.
   {
-   int32 Bought=0,Heavy=0;for(const auto& P:Store->GetSquads())if(P.Value.Team==Team){Bought+=P.Key>50;Heavy+=P.Value.SquadType==BattleSquadType::Heavy;}
-   if(Heavy<HireIntent.HeavyShare*(Bought+1))Type=BattleSquadType::Heavy;
+   const int32 After=FMath::Max(1,GetDefault<UBattleTuning>()->AreaScoutAfterHires);
+   const int32 Want=FMath::Min(HireIntent.ScoutKeep,Bought/After);
+   if(Want>0&&ActiveScouts(Team)<Want)Type=BattleSquadType::Scout;
   }
   const int32 TypeCost=Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
   if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=25)continue;
@@ -249,6 +254,8 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
  I.FocusGain=bTrial?S.FocusGain:0.f;I.HireReserve=BattleTactics::AreaHire().Reserve;
  // Heavy infantry share of AI purchases: the configured default for both teams; the -BattleAreaHeavyShare trial replaces it for the trial team(s).
  I.HeavyShare=bTrial&&S.HeavyShare>=0?S.HeavyShare:FMath::Clamp(GetDefault<UBattleTuning>()->AreaHeavyShare,0.f,1.f);
+ // Scout pairs the AI keeps: configured default; -BattleAreaScoutKeep replaces it for the trial team(s).
+ I.ScoutKeep=FMath::Clamp(bTrial&&S.ScoutKeep>=0?S.ScoutKeep:GetDefault<UBattleTuning>()->AreaScoutKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaScoutLimit));
  // S7/S8 trials (one team only with -BattleAreaTrialTeam).
  if(bTrial){I.FlankOffset=S.FlankOffset;I.bFlankSameSide=S.bFlankSameSide;I.BaseReturnLiving=S.BaseReturnLiving;}
  // Stage 2: time-phased team plans (match time only; no hidden information). Values are first trial values (numbers delegated).
@@ -314,4 +321,22 @@ int32 UBattleMatch::AreaHeavyTarget(int32 Team) const
  const FVector Home=AreaHome(Team);double BestD=DBL_MAX;
  for(int32 I=0;I<Objectives.Num();++I){const double D=FVector::DistSquared2D(Objectives[I].Position,Home);if(D<BestD){BestD=D;Best=I;}}
  return Best;
+}
+
+FVector UBattleMatch::AreaScoutPost(int32 Team,int32 SquadID) const
+{
+ // Fronts: observed own points, most forward first (nearest the enemy home); with none, the points nearest own home.
+ // Each active scout pair of the team (in squad ID order) takes the next front, ScoutPostAdvance towards the enemy home.
+ if(Objectives.IsEmpty()) return AreaHome(Team);
+ const FVector Own=AreaHome(Team),Enemy=AreaHome(1-Team);
+ TArray<int32> Fronts;for(int32 I=0;I<Objectives.Num();++I)if(ObservedOwner(Team,I)==Team)Fronts.Add(I);
+ const bool bOwned=!Fronts.IsEmpty();if(!bOwned)for(int32 I=0;I<Objectives.Num();++I)Fronts.Add(I);
+ Fronts.Sort([&](int32 A,int32 B){const FVector& RefPos=bOwned?Enemy:Own;const double DA=FVector::DistSquared2D(Objectives[A].Position,RefPos),DB=FVector::DistSquared2D(Objectives[B].Position,RefPos);return DA!=DB?DA<DB:A<B;});
+ int32 Rank=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())
+  Rank+=P.Key<SquadID&&P.Value.Team==Team&&P.Value.SquadType==BattleSquadType::Scout&&P.Value.CommandStatus==EBattleCommandStatus::Active;
+ const FVector Point=Objectives[Fronts[Rank%Fronts.Num()]].Position;
+ FVector Post=Point+(Enemy-Point).GetSafeNormal2D()*FMath::Clamp(GetDefault<UBattleTuning>()->ScoutPostAdvance,0.f,30000.f);
+ if(auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+ {FNavLocation L;if(Nav->ProjectPointToNavigation(Post,L,FVector(1500,1500,500)))Post=L.Location;else Post=Point;}
+ return Post;
 }
