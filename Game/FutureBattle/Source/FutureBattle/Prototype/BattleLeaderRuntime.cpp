@@ -328,17 +328,22 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID);
  if(!Mode || Mode->bBattleEnded || !S || S->CommandStatus!=EBattleCommandStatus::Active || Goal.ContainsNaN()) return false;
+ const FVector AskedGoal=Goal;
  if(bWideField && Order!=EBattleOrder::Hold)
  {
+  // A vehicle's order (with its path searches, partial routes into the city explore the whole reachable area) is timed for BATTLE_TANK_COST.
+  const bool bVehicleOrder=IsVehicle(S->LeaderUnitID);const double OrderStart=bVehicleOrder?FPlatformTime::Seconds():0.;
+  ON_SCOPE_EXIT{if(bVehicleOrder){TankOrderMs+=(FPlatformTime::Seconds()-OrderStart)*1000.;++TankOrders;}};
+  const FVector RequestedGoal=Goal;auto Refuse=[&]{if(bVehicleOrder){auto& V=VehicleOrders.FindOrAdd(SID);V.Refused=RequestedGoal;V.RetryAt=GetWorld()->GetTimeSeconds()+5.;}};
   auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()); FNavLocation Projected;
   // Vehicles use their own navigation data (wide agent) for the goal and the route.
   const ANavigationData* VehicleNav=NavFor(S->LeaderUnitID);AActor* VehicleContext=VehicleNav?Actor(S->LeaderUnitID):nullptr;
   const bool Projectable=Nav&&Nav->ProjectPointToNavigation(Goal,Projected,VehicleNav?FVector(600,600,400):FVector(100,100,400),VehicleNav);
-  if(!Projectable){if(VehicleNav||NavFor(S->LeaderUnitID)!=nullptr||IsVehicle(S->LeaderUnitID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_ORDER_FAIL squad=%d reason=project nav=%s goal=%s"),SID,VehicleNav?*VehicleNav->GetName():TEXT("none"),*Goal.ToCompactString());return false;}
+  if(!Projectable){if(VehicleNav||NavFor(S->LeaderUnitID)!=nullptr||IsVehicle(S->LeaderUnitID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_ORDER_FAIL squad=%d reason=project nav=%s goal=%s"),SID,VehicleNav?*VehicleNav->GetName():TEXT("none"),*Goal.ToCompactString());Refuse();return false;}
   auto* Route=Nav->FindPathToLocationSynchronously(GetWorld(),Position(S->LeaderUnitID),Projected.Location,VehicleContext);
   // A tank whose goal lies where it cannot fit (the narrow streets of map E) drives to the end of the partial route instead.
   const bool VehiclePartial=VehicleNav&&Route&&Route->IsValid()&&Route->IsPartial()&&Route->PathPoints.Num()>1;
-  if(!VehiclePartial&&(!Route || !Route->IsValid() || Route->IsPartial())){if(IsVehicle(S->LeaderUnitID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_ORDER_FAIL squad=%d reason=route valid=%d"),SID,Route&&Route->IsValid()?1:0);return false;}
+  if(!VehiclePartial&&(!Route || !Route->IsValid() || Route->IsPartial())){if(IsVehicle(S->LeaderUnitID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_ORDER_FAIL squad=%d reason=route valid=%d"),SID,Route&&Route->IsValid()?1:0);Refuse();return false;}
   Goal=VehiclePartial?FVector(Route->PathPoints.Last()):Projected.Location;
  }
  TMap<int32,FVector> Goals;
@@ -367,6 +372,7 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
  {
   if(S->OrderRevision!=Revision) { auto& P=Plans.FindOrAdd(SID); P.bReplan=true; P.NextThink=0; }
   if(bWideField && !bMissionUpdate && S->Team==0) Store->SetSquadDelegated(SID,false);
+  if(IsVehicle(S->LeaderUnitID)){auto& V=VehicleOrders.FindOrAdd(SID);V.Requested=AskedGoal;V.MissionRevision=S->MissionRevision;V.RetryAt=0;}
  }
  return OK;
 }

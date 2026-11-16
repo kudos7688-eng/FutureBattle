@@ -253,6 +253,25 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     const bool Second=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Tank);const int32 C2=M->Credits[0];
     const bool Third=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Tank);
     Check(Second&&!Third&&M->Credits[0]==C2&&M->ActiveOfType(0,BattleSquadType::Tank)==2,TEXT("tanks: at most 2 per team"));
+    // Performance: a far tank's line of sight is traced once per TankSightReuse seconds per observer (range and view each scan);
+    // a tank's accepted (or refused) goal is not reissued by the director every update.
+    {
+     int32 Obs=INDEX_NONE;for(const auto& B:GetBodies())if(const auto* U=Store->Find(B.Key);U&&U->IsAlive()&&U->Team==1&&Actor(B.Key)){Obs=B.Key;break;}
+     bool Reuse=false;
+     if(Obs!=INDEX_NONE)
+     {
+      FBattleSightContext C=Sight(Obs);C.Position=Position(TankID)+FVector(3000,0,0);C.Eye=C.Position+FVector(0,0,60);C.bOmnidirectional=true;C.RangeSquared=FMath::Square(1000.f);
+      const float Was=GetDefault<UBattleTuning>()->TankSightReuse;GetMutableDefault<UBattleTuning>()->TankSightReuse=1.f;VehicleSightCache.Reset();
+      const int64 T0=TankSightTraces,R0=TankSightReused;
+      const bool A=CanSeeVehicleFar(Obs,C,TankID,1000.),B=CanSeeVehicleFar(Obs,C,TankID,1000.5);const int64 T1=TankSightTraces;
+      CanSeeVehicleFar(Obs,C,TankID,1001.1);
+      Reuse=A==B&&T1==T0+1&&TankSightReused==R0+1&&TankSightTraces==T0+2;
+      GetMutableDefault<UBattleTuning>()->TankSightReuse=Was;VehicleSightCache.Reset();
+     }
+     Check(Reuse,TEXT("far tank sight: one trace per second per observer, reused in between"));
+     const FVector Goal=Position(TankID)+FVector(400,0,0);IssueOrder(TSID,EBattleOrder::Move,Goal,true);
+     Check(SameVehicleMission(TSID,EBattleOrder::Move,Goal)&&!SameVehicleMission(TSID,EBattleOrder::Move,Goal+FVector(3000,0,0))&&!SameVehicleMission(1,EBattleOrder::Move,Goal),TEXT("tank order: the same goal is not reissued every update"));
+    }
     Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
     const bool Restored=Valid&&M->RestoreSnapshot(Save);ABattleUnit* After=Actor(TankID);
     Check(Restored&&After&&IsVehicle(TankID)&&After->GetCapsuleComponent()->GetScaledCapsuleRadius()>=150.f&&Turrets.Contains(TankID),TEXT("tank survives save and restore"));

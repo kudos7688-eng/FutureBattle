@@ -309,6 +309,7 @@ public:
 	UPROPERTY(Config, EditAnywhere) float TankSpotRange = 20000.f;
 	UPROPERTY(Config, EditAnywhere) float TankSpotRangeProfile = 40000.f;
 	UPROPERTY(Config, EditAnywhere) float TankRadius = 200.f; // the capsule half height stays 130; the vehicle navigation agent is 140 cm tall (see DefaultEngine.ini)
+	UPROPERTY(Config, EditAnywhere) float TankSightReuse = 1.f; // seconds a far vehicle line-of-sight result is reused per observer (performance)
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRange = 30000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRangeProfile = 40000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutStillSpeed = 30.f;

@@ -148,6 +148,17 @@ public:
  void AimTurret(int32 ID,const FVector& Direction);
  // Navigation data for a unit's paths: the vehicle agent for tanks, nullptr (the default infantry data) otherwise.
  class ANavigationData* NavFor(int32 ID) const;
+ // Performance (2026-11-17): a far enemy vehicle (beyond the observer's own sight, within VehicleSpotRange) has its line of sight
+ // traced at most every TankSightReuse seconds per observer; range and field of view are still checked every scan.
+ bool CanSeeVehicleFar(int32 ObserverID,const FBattleSightContext& Context,int32 TargetID,double Now) const;
+ mutable TMap<FIntPoint,TPair<double,bool>> VehicleSightCache; // (observer, vehicle) -> (trace due time, last result)
+ // A vehicle's accepted order: the goal the caller asked for (the squad's own goal may be the end of a partial route) and the
+ // mission revision it produced, so the director does not reissue the same order every update. A refused goal waits 5 s.
+ struct FVehicleOrder{FVector Requested=FVector::ZeroVector;int32 MissionRevision=-1;FVector Refused=FVector(1.e9);double RetryAt=0;};
+ TMap<int32,FVehicleOrder> VehicleOrders;
+ bool SameVehicleMission(int32 SquadID,EBattleOrder Order,const FVector& Goal) const;
+ // Evaluation counters for BATTLE_TANK_COST (not AI input).
+ mutable int64 TankSightTraces=0,TankSightReused=0,TankOrderSkips=0;mutable double TankSightMs=0;int32 TankOrders=0;double TankOrderMs=0;
  // MixedFast or Area. bSelect selects a new team-0 leader (player purchase); OutSquadID receives the new squad.
  bool SpawnPurchasedSquad(int32 Team,EBattleTraining Training,FString& Error,bool bSelect=true,int32* OutSquadID=nullptr,uint8 SquadType=0);
  bool CreateBody(const FBattleSavedUnit& Entry,AActor* Host,FBattleLeaderBody& Body);

@@ -6,6 +6,7 @@
 #include "BattleUnit.h"
 #include "BattleVehicleNavMesh.h"
 #include "BattleRanges.h"
+#include "BattleStance.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -95,4 +96,32 @@ ANavigationData* UBattleLeaderRuntime::NavFor(int32 ID) const
  if(!IsVehicle(ID))return nullptr;
  ABattleUnit* A=Actor(ID);auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
  return A&&Nav?Nav->GetNavDataForProps(A->GetNavAgentPropertiesRef()):nullptr;
+}
+
+bool UBattleLeaderRuntime::CanSeeVehicleFar(int32 ObserverID,const FBattleSightContext& C,int32 Target,double Now) const
+{
+ // Same checks as CanSeeWithContext; only the line trace result is reused for TankSightReuse seconds (performance: every soldier
+ // within the long vehicle spotting range otherwise traces up to 200-400 m to each enemy tank five times a second).
+ const auto* T=GetWorld()->GetSubsystem<UBattleState>()->Find(Target);
+ if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
+ const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
+ if(FVector::DistSquared(P,C.Position)>FMath::Max(C.RangeSquared,FMath::Square(VehicleSpotRange())) || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
+ auto& Entry=VehicleSightCache.FindOrAdd(FIntPoint(ObserverID,Target),TPair<double,bool>(-1.,false));
+ if(Now+1.e-6<Entry.Key){++TankSightReused;return Entry.Value;}
+ const double Start=FPlatformTime::Seconds();
+ FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
+ TankSightMs+=(FPlatformTime::Seconds()-Start)*1000.;++TankSightTraces;
+ Entry.Key=Now+FMath::Max(0.f,GetDefault<UBattleTuning>()->TankSightReuse);Entry.Value=!Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
+ return Entry.Value;
+}
+
+bool UBattleLeaderRuntime::SameVehicleMission(int32 SID,EBattleOrder Order,const FVector& Goal) const
+{
+ const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);const auto* V=VehicleOrders.Find(SID);
+ if(!S||!V||!IsVehicle(S->LeaderUnitID))return false;
+ // A refused goal (no vehicle route) is retried after 5 s, not every director update.
+ if(V->Refused.Equals(Goal,20)&&GetWorld()->GetTimeSeconds()<V->RetryAt){++TankOrderSkips;return true;}
+ const bool Same=S->bHasMission&&S->MissionOrder==Order&&S->MissionRevision==V->MissionRevision&&V->Requested.Equals(Goal,20);
+ if(Same)++TankOrderSkips;
+ return Same;
 }

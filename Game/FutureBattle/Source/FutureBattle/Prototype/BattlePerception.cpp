@@ -129,7 +129,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 					FVector::DistSquared(Sight.Position, Candidate.Position) > FMath::Square(1200.f) &&
 					!Observer.Contacts.Contains(Candidate.State->UnitID) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID))
 				{ if (Metrics->bRecording) ++Metrics->FarCandidatesSkipped; return; }
-				if (Mixed ? !(bReuseSightContext ? Leader->CanSeeWithContext(Sight,Candidate.State->UnitID) : Leader->CanSee(Pair.Key,Candidate.State->UnitID)) : !Unit->CanSeeSnapshot(Sight, Candidate.Unit, Candidate.Position, true)) return;
+				if (Mixed ? !(bReuseSightContext ? (VehicleSpot2 > 0. && FVector::DistSquared(Sight.Position, Candidate.Position) > Sight.RangeSquared && Leader->IsVehicle(Candidate.State->UnitID) ? Leader->CanSeeVehicleFar(Pair.Key, Sight, Candidate.State->UnitID, Now) : Leader->CanSeeWithContext(Sight,Candidate.State->UnitID)) : Leader->CanSee(Pair.Key,Candidate.State->UnitID)) : !Unit->CanSeeSnapshot(Sight, Candidate.Unit, Candidate.Position, true)) return;
 				const int32 TargetID = Candidate.State->UnitID;
 				InView.Add(TargetID);
 				double* Started = Observer.DetectionStarted.Find(TargetID);

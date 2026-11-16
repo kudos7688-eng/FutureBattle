@@ -392,7 +392,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   {
    const auto& S=Pair.Value;
    if(S.CommandStatus!=EBattleCommandStatus::Active) continue;
-   if(!S.bHasMission || S.MissionOrder!=Order || !S.MissionDestination.Equals(Center,20)) Leader->IssueOrder(Pair.Key,Order,Center,true);
+   // A tank keeps the goal it was given even when it drives only to the end of a partial route (SameVehicleMission).
+   if(!S.bHasMission || S.MissionOrder!=Order || !S.MissionDestination.Equals(Center,20)) if(!Leader->SameVehicleMission(Pair.Key,Order,Center)) Leader->IssueOrder(Pair.Key,Order,Center,true);
    continue;
   }
 		TMap<int32, FVector> Goals; bool bNeedsOrder = Pair.Value.Order != Order || !Pair.Value.Destination.Equals(Center, 20); bool bReachable = true;
