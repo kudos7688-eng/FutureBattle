@@ -42,7 +42,7 @@ const UBattleMatch::FAreaIntelView& UBattleMatch::AreaIntelView(int32 Team) cons
  const double Radius2=FMath::Square(FMath::Max(0.f,T->AreaIntelRadius));
  for(const auto& E:Seen)
  {
-  V.Enemies.Add(E.Value);
+  V.Enemies.Add(E.Value);V.EnemyKeys.Add(E.Key);
   for(int32 I=0;I<N;++I)if(FVector::DistSquared2D(E.Value,Objectives[I].Position)<=Radius2)++V.EnemyAt[I];
   if(FVector::DistSquared2D(E.Value,EnemyHome)<=FMath::Square(15000.))++V.HomeEnemies;
  }

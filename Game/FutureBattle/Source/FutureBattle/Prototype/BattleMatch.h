@@ -131,7 +131,7 @@ public:
 	// (1) reinforce own points where more enemies are known than own soldiers, (2) attack the points where fewer enemies are known,
 	// (3) raise the home-assault share when the enemy home was observed lightly held, (4) buy squads to defend a threatened point
 	// (released once the threat is gone and the squad is there). Known positions only; never the hidden truth.
-	struct FAreaIntelView { double At=-1; TArray<FVector> Enemies; TArray<int32> OwnAt, EnemyAt; int32 HomeEnemies=0; bool bHomeCovered=false; };
+	struct FAreaIntelView { double At=-1; TArray<FVector> Enemies; TArray<int32> EnemyKeys /* unit IDs, below zero for scout report positions */; TArray<int32> OwnAt, EnemyAt; int32 HomeEnemies=0; bool bHomeCovered=false; };
 	const FAreaIntelView& AreaIntelView(int32 Team) const;
 	bool AreaIntelOn(int32 Team) const;
 	int32 AreaIntelThreat(int32 Team) const;   // own point with the largest known enemy surplus (-1 = none)

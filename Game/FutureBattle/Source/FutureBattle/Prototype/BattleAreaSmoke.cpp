@@ -272,6 +272,31 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      const FVector Goal=Position(TankID)+FVector(400,0,0);IssueOrder(TSID,EBattleOrder::Move,Goal,true);
      Check(SameVehicleMission(TSID,EBattleOrder::Move,Goal)&&!SameVehicleMission(TSID,EBattleOrder::Move,Goal+FVector(3000,0,0))&&!SameVehicleMission(1,EBattleOrder::Move,Goal),TEXT("tank order: the same goal is not reissued every update"));
     }
+    // Main gun (stage 2): 300 m on maps A-D, one round per TankGunReload seconds, a direct hit pierces armour (three kill a tank),
+    // never own units.
+    {
+     const auto* TT=GetDefault<UBattleTuning>();const double Now=GetWorld()->GetTimeSeconds();
+     const auto SavedGuns=TankGuns;
+     const int64 S0=TankGunShots;
+     const bool Fired=FireTankGun(TankID,Position(TankID)+FVector(5000,0,60),Now);
+     const bool Loaded=TankGuns.Contains(TankID)&&FMath::IsNearlyEqual(TankGuns[TankID].ReadyAt,Now+TT->TankGunReload,.01)&&!StepTankGun(TankID,Now+1.);
+     Check(Fired&&TankGunShots==S0+1&&Loaded&&FMath::IsNearlyEqual(TankGunEngage(),TT->TankGunRange)&&TankGunEngage()>=29999.f,TEXT("tank gun: 300 m, one round per reload"));
+     if(M->Credits[1]<Cost){const int32 Add=Cost-M->Credits[1];M->Area.Income[1]+=Add;M->Credits[1]+=Add;}
+     // Free an enemy squad slot first (the fixture may fill all 25).
+     for(const auto& P:Store->GetSquads())if(P.Value.Team==1&&P.Value.CommandStatus==EBattleCommandStatus::Active){Store->ApplyDamage(P.Value.LeaderUnitID,0,10000);break;}
+     M->UpdateArea(1);M->Area.Replacements.Reset();
+     const bool EnemyHired=M->HireAreaSquad(1,EBattleTraining::Regular,false,BattleSquadType::Tank);
+     if(!EnemyHired)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_TANK_GUN_SMOKE enemy hire refused: %s"),*M->LastMessage);
+     int32 ESID=0;for(const auto& P:Store->GetSquads())ESID=FMath::Max(ESID,P.Key);const auto* ES=Store->FindSquad(ESID);
+     const int32 EnemyTank=EnemyHired&&ES&&ES->SquadType==BattleSquadType::Tank?ES->LeaderUnitID:INDEX_NONE;
+     const int32 OwnTank=Store->FindSquad(TSID+1)?Store->FindSquad(TSID+1)->LeaderUnitID:INDEX_NONE;
+     const bool NoFriendly=OwnTank!=INDEX_NONE&&!TankGunHit(TankID,OwnTank)&&FMath::IsNearlyEqual(Store->Find(OwnTank)->HP,350.f);
+     const bool H1=TankGunHit(TankID,EnemyTank),H2=TankGunHit(TankID,EnemyTank);const float After2=EnemyTank!=INDEX_NONE?Store->Find(EnemyTank)->HP:-1.f;
+     const bool H3=TankGunHit(TankID,EnemyTank);
+     Check(NoFriendly&&H1&&H2&&H3&&FMath::IsNearlyEqual(After2,350.f-2*TT->TankGunDamage,1.f)&&!Store->Find(EnemyTank)->IsAlive(),TEXT("tank gun pierces armour: three hits destroy a tank, never own tanks"));
+     TankGuns=SavedGuns;
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_TANK_GUN_SMOKE tank=%d enemy=%d own=%d after2=%.0f"),TankID,EnemyTank,OwnTank,After2);
+    }
     Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
     const bool Restored=Valid&&M->RestoreSnapshot(Save);ABattleUnit* After=Actor(TankID);
     Check(Restored&&After&&IsVehicle(TankID)&&After->GetCapsuleComponent()->GetScaledCapsuleRadius()>=150.f&&Turrets.Contains(TankID),TEXT("tank survives save and restore"));

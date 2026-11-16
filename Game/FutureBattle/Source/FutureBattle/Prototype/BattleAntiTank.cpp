@@ -3,10 +3,10 @@
 #include "BattleState.h"
 #include "BattleMatch.h"
 
-int32 UBattleLeaderRuntime::Explode(int32 ShooterID,FVector At,int32 ExcludeID)
+int32 UBattleLeaderRuntime::Explode(int32 ShooterID,FVector At,int32 ExcludeID,float RadiusIn,float DamageIn)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Shooter=Store->Find(ShooterID);if(!Shooter)return 0;
- const auto* T=GetDefault<UBattleTuning>();const float Radius=FMath::Max(1.f,T->ATSplashRadius);
+ const auto* T=GetDefault<UBattleTuning>();const float Radius=FMath::Max(1.f,RadiusIn>=0.f?RadiusIn:T->ATSplashRadius);const float Splash=DamageIn>=0.f?DamageIn:T->ATSplashDamage;
  const int32 Team=Shooter->Team;const auto* ShooterSquad=Store->FindSquad(Shooter->SquadID);
  // Collect first: damage broadcasts deaths, which may change the body map.
  TArray<TPair<int32,float>> Hits;
@@ -14,7 +14,7 @@ int32 UBattleLeaderRuntime::Explode(int32 ShooterID,FVector At,int32 ExcludeID)
  {
   if(B.Key==ExcludeID||IsVehicle(B.Key))continue;const auto* U=Store->Find(B.Key);if(!U||!U->IsAlive()||U->Team==Team)continue; // armour: splash does not hurt vehicles
   const double D=FVector::Dist(Position(B.Key),At);if(D>Radius)continue;
-  Hits.Add({B.Key,float(T->ATSplashDamage*(1.0-D/Radius))});
+  Hits.Add({B.Key,float(Splash*(1.0-D/Radius))});
  }
  Hits.Sort([](const TPair<int32,float>& A,const TPair<int32,float>& B){return A.Key<B.Key;});
  int32 Damaged=0;

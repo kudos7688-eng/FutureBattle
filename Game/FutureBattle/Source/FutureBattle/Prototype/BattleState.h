@@ -310,6 +310,22 @@ public:
 	UPROPERTY(Config, EditAnywhere) float TankSpotRangeProfile = 40000.f;
 	UPROPERTY(Config, EditAnywhere) float TankRadius = 200.f; // the capsule half height stays 130; the vehicle navigation agent is 140 cm tall (see DefaultEngine.ini)
 	UPROPERTY(Config, EditAnywhere) float TankSightReuse = 1.f; // seconds a far vehicle line-of-sight result is reused per observer (performance)
+	// Tank main gun (stage 2, user decisions 2026-11-17): reload TankGunReload s; the AI fires up to TankGunRange (maps A-D, 300 m) or
+	// TankGunRangeProfile (map E, 600 m; rounds fly TankGunReachProfile, 1000 m). Beyond the tank's own sight it fires only at positions its
+	// team knows (soldiers' sightings, scout and lookout reports). A direct hit does TankGunDamage (also to vehicles: three hits kill a
+	// tank), the explosion TankGunSplashDamage within TankGunSplashRadius (not to vehicles), an enemy home TankGunBaseDamage. Infantry
+	// targets need TankGunMinCluster known enemies around the impact; vehicles and the home are always worth a round.
+	UPROPERTY(Config, EditAnywhere) float TankGunReload = 6.f;
+	UPROPERTY(Config, EditAnywhere) float TankGunRange = 30000.f;
+	UPROPERTY(Config, EditAnywhere) float TankGunRangeProfile = 60000.f;
+	UPROPERTY(Config, EditAnywhere) float TankGunReachProfile = 100000.f;
+	UPROPERTY(Config, EditAnywhere) float TankGunMinRange = 1500.f;
+	UPROPERTY(Config, EditAnywhere) float TankGunDamage = 120.f;
+	UPROPERTY(Config, EditAnywhere) float TankGunSplashRadius = 500.f;
+	UPROPERTY(Config, EditAnywhere) float TankGunSplashDamage = 80.f;
+	UPROPERTY(Config, EditAnywhere) float TankGunBaseDamage = 30.f;
+	UPROPERTY(Config, EditAnywhere) float TankGunSpread = .4f; // degrees, half cone
+	UPROPERTY(Config, EditAnywhere) int32 TankGunMinCluster = 2;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRange = 30000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRangeProfile = 40000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutStillSpeed = 30.f;

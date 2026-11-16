@@ -133,7 +133,8 @@ public:
  mutable TArray<FVector> LookoutCache; mutable bool bLookoutCache=false; // BattleFieldLayout::Lookouts of this world
  float ScoutStillSight(int32 ID) const;
  // Anti-tank explosion at a point: enemies of the shooter within ATSplashRadius lose up to ATSplashDamage (falling off to zero at the edge).
- int32 Explode(int32 ShooterID,FVector At,int32 ExcludeID);
+ // Radius/Damage below zero: the anti-tank values (the tank gun passes its own).
+ int32 Explode(int32 ShooterID,FVector At,int32 ExcludeID,float Radius=-1.f,float Damage=-1.f);
  // Tanks (vehicles, squad type 4): living vehicle IDs (refreshed on purchase, restore and death), their bodies, armour and steering.
  TSet<int32> VehicleIDs;
  TMap<int32,TWeakObjectPtr<USceneComponent>> Turrets;
@@ -157,6 +158,18 @@ public:
  struct FVehicleOrder{FVector Requested=FVector::ZeroVector;int32 MissionRevision=-1;FVector Refused=FVector(1.e9);double RetryAt=0;};
  TMap<int32,FVehicleOrder> VehicleOrders;
  bool SameVehicleMission(int32 SquadID,EBattleOrder Order,const FVector& Goal) const;
+ // Tank main gun (stage 2): picked target and reload per tank (not saved: a restored tank's gun is loaded).
+ struct FTankGun{double ReadyAt=0,NextPick=0;int32 TargetKey=INDEX_NONE,Shots=0;FVector Aim=FVector::ZeroVector;bool bHasTarget=false,bBase=false;};
+ TMap<int32,FTankGun> TankGuns;
+ float TankGunEngage() const;
+ float TankGunReach() const;
+ // Picks the main gun target (every 0.5 s) and points Direction at it (the turret follows). False: no main gun target.
+ bool TankGunTarget(int32 ID,double Now,FVector& Direction);
+ // Fires when loaded and the turret is on the target. True when a round was fired.
+ bool StepTankGun(int32 ID,double Now);
+ bool FireTankGun(int32 ID,const FVector& Aim,double Now);
+ bool TankGunHit(int32 ID,int32 VictimID); // a direct hit's damage (TankGunDamage, armour pierced)
+ int64 TankGunShots=0,TankGunHits=0,TankGunKills=0,TankGunVehicleHits=0,TankGunBaseHits=0,TankGunPicks=0;double TankGunMs=0;
  // Evaluation counters for BATTLE_TANK_COST (not AI input).
  mutable int64 TankSightTraces=0,TankSightReused=0,TankOrderSkips=0;mutable double TankSightMs=0;int32 TankOrders=0;double TankOrderMs=0;
  // MixedFast or Area. bSelect selects a new team-0 leader (player purchase); OutSquadID receives the new squad.

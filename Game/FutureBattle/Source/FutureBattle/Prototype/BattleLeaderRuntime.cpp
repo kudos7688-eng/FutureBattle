@@ -576,7 +576,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   Direction=((Known?Known->LastKnownPosition:S->TacticalPlan.FlankContact)-Position(ID)).GetSafeNormal2D();
  }
  // A vehicle turns its turret to the target; its hull keeps the driving heading (SteerVehicle).
- if(B.Actor.IsValid()) { if(IsVehicle(ID)) AimTurret(ID,Direction); else B.Actor->SetActorRotation(FRotator(0,Direction.Rotation().Yaw,0)); }
+ // The main gun's target (stage 2) takes the turret; the machine gun keeps firing along Direction at its own target.
+ if(B.Actor.IsValid()) { if(IsVehicle(ID)) { FVector GunDirection; AimTurret(ID,TankGunTarget(ID,Now,GunDirection)?GunDirection:Direction); StepTankGun(ID,Now); } else B.Actor->SetActorRotation(FRotator(0,Direction.Rotation().Yaw,0)); }
  else
  {
   Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity).Forward=Direction.GetSafeNormal2D();
