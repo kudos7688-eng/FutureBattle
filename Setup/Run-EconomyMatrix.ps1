@@ -80,6 +80,10 @@ $supply=@{
  'HV50'=@('-AreaHeavyShare','0.5')
  # HV0 = rifle squads only (the default before 2026-11-16 18:50, when the AI share became 0.33; HI now equals HV33).
  'HV0'=@('-AreaHeavyShare','0')
+ # SC0 = no scout pairs (default since 2026-11-16 23:40: the AI keeps up to two).
+ 'SC0'=@('-AreaScoutKeep','0')
+ # IN = intel trial (AI reinforces threatened points, attacks thinly held ones, assaults a weak home, buys defenders; known positions only).
+ 'IN'=@('-AreaIntel','1')
  # Weapon role: suppression on (both teams) with support-gun shots suppressing 2.5x; HV33PS adds a 33% heavy-infantry share.
  'PS25'=@('-Suppression','1','-SuppressionSupport','2.5')
  'HV33PS'=@('-Suppression','1','-SuppressionSupport','2.5','-AreaHeavyShare','0.33')

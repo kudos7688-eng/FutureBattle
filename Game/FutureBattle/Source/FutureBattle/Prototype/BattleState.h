@@ -278,7 +278,8 @@ public:
 	// AI use of scout pairs (stage 2): keep up to AreaScoutKeep active, one more per AreaScoutAfterHires purchases; posts ScoutPostAdvance ahead of the front point.
 	UPROPERTY(Config, EditAnywhere) int32 AreaScoutKeep = 2;
 	UPROPERTY(Config, EditAnywhere) int32 AreaScoutAfterHires = 3;
-	UPROPERTY(Config, EditAnywhere) float ScoutPostAdvance = 6000.f;
+	// Negative = behind the front point (2026-11-17: stand back and rely on the long still-sight; was +60 m ahead).
+	UPROPERTY(Config, EditAnywhere) float ScoutPostAdvance = -3000.f;
 	// Scout reports (stage 3, ROADMAP values): direction-only alert, then positions and size; enemies within ScoutHintRadius of a
 	// reporting scout learn its approximate position (ScoutHintGrid cells). Reports stay in team plans and the map for ScoutReportMemory.
 	UPROPERTY(Config, EditAnywhere) float ScoutAlertSeconds = 10.f;
@@ -286,6 +287,24 @@ public:
 	UPROPERTY(Config, EditAnywhere) float ScoutReportMemory = 30.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutHintRadius = 15000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutHintGrid = 3000.f;
+	// Scout retreat (2026-11-17 first values, user direction: posts stand back, fall back only when hit; -BattleScoutRetreat=0 turns it off):
+	// move ScoutRetreatDistance away from the nearest seen enemy for ScoutRetreatSeconds, watch from there until ScoutHoldSeconds pass without a hit.
+	UPROPERTY(Config, EditAnywhere) bool bScoutRetreat = true;
+	UPROPERTY(Config, EditAnywhere) float ScoutRetreatDistance = 4000.f;
+	UPROPERTY(Config, EditAnywhere) float ScoutRetreatSeconds = 10.f;
+	UPROPERTY(Config, EditAnywhere) float ScoutHoldSeconds = 60.f;
+	// Warning distance for scouts: an enemy within this x a soldier's normal sight (130 m on maps A-D, 260 m on map E) starts the fall-back.
+	UPROPERTY(Config, EditAnywhere) float ScoutWarnScale = 1.3f;
+	// Intel trial (-BattleAreaIntel=1; default OFF until measured). Radius around a point for known enemies, gains of (1) and (2),
+	// (3) the home share when the enemy home was observed with at most AreaIntelHomeWeak known enemies, (4) the least surplus that counts as a threat.
+	UPROPERTY(Config, EditAnywhere) bool bAreaIntel = false;
+	UPROPERTY(Config, EditAnywhere) float AreaIntelRadius = 15000.f;
+	UPROPERTY(Config, EditAnywhere) float AreaIntelDefendGain = 1.f;
+	UPROPERTY(Config, EditAnywhere) float AreaIntelAttackGain = 1.f;
+	UPROPERTY(Config, EditAnywhere) int32 AreaIntelHomeWeak = 5;
+	UPROPERTY(Config, EditAnywhere) float AreaIntelHomeShare = .4f;
+	UPROPERTY(Config, EditAnywhere) int32 AreaIntelThreatMin = 3;
+	UPROPERTY(Config, EditAnywhere) float ScoutPostShift = 4000.f;
 	UPROPERTY(Config, EditAnywhere) float DefenseRadius = 600.f;
 	UPROPERTY(Config, EditAnywhere) float MoveStuckSeconds = 2.f;
 	UPROPERTY(Config, EditAnywhere) int32 MaxMoveRetries = 3;

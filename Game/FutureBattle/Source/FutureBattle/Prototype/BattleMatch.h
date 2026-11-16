@@ -120,7 +120,22 @@ public:
 	FVector AreaScoutPost(int32 Team, int32 SquadID) const;
 	// Scout reports (ROADMAP 2026-11-14, stage 3): what a scout pair sees beyond normal sight reaches its team only through a timed
 	// two-step report (direction after ScoutAlertSeconds, positions and size after ScoutReportSeconds). Transient: a load restarts the timers.
-	struct FScoutReport { double Started=-1, LastLong=-1, AlertAt=-1, ReportedAt=-1, NextHint=0; int32 Stage=0, Living=0, Sequence=0, AlertSequence=0; FVector Direction=FVector::ZeroVector, Approx=FVector::ZeroVector; TArray<FVector> Positions; };
+	struct FScoutReport { double Started=-1, LastLong=-1, AlertAt=-1, ReportedAt=-1, NextHint=0, RetreatUntil=-1, PauseStart=-1, LastDanger=-1; FVector ReportFrom=FVector::ZeroVector; float LastHP=-1; int32 Stage=0, Living=0, Sequence=0, AlertSequence=0, Burns=0; FVector Direction=FVector::ZeroVector, Approx=FVector::ZeroVector, RetreatPoint=FVector::ZeroVector; TArray<FVector> Positions; };
+	// Scout retreat (2026-11-17): an AI-led pair that is hit falls back ScoutRetreatDistance from the nearest seen enemy, watches from
+	// there until ScoutHoldSeconds pass without a hit, then returns to its post shifted sideways (Burns). The report pauses while it moves.
+	bool IsAIScoutLed(int32 SquadID) const;
+	// Intel trial (-BattleAreaIntel=1, 2026-11-17): the AI acts on what its team knows of enemy positions (own sight now, scout reports).
+	// (1) reinforce own points where more enemies are known than own soldiers, (2) attack the points where fewer enemies are known,
+	// (3) raise the home-assault share when the enemy home was observed lightly held, (4) buy squads to defend a threatened point
+	// (released once the threat is gone and the squad is there). Known positions only; never the hidden truth.
+	struct FAreaIntelView { double At=-1; TArray<FVector> Enemies; TArray<int32> OwnAt, EnemyAt; int32 HomeEnemies=0; bool bHomeCovered=false; };
+	const FAreaIntelView& AreaIntelView(int32 Team) const;
+	bool AreaIntelOn(int32 Team) const;
+	int32 AreaIntelThreat(int32 Team) const;   // own point with the largest known enemy surplus (-1 = none)
+	bool AreaIntelThreatAt(int32 Team, int32 Point) const;
+	void UpdateIntelPurposes();
+	TMap<int32, int32> IntelPurpose;           // squad -> point it was bought to defend (transient)
+	mutable FAreaIntelView IntelViews[2];
 	TMap<int32, FScoutReport> ScoutReports;
 	void UpdateScoutReports();
 	// True when a scout sees this contact only because of its long still-sight (team displays and plans use the reports instead).

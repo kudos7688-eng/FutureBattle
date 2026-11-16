@@ -297,6 +297,21 @@ int32 UBattleMatch::AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) c
   Sum=0;
   for(int32 I=0;I<Weight.Num();++I){const double Deficit=Avg>0?FMath::Max(0.0,Avg-Own[I])/Avg:0.0;Weight[I]*=1.0+Intent.FrontGain*Deficit;Sum+=Weight[I];}
  }
+ // Intel trial (1)(2): own points with more known enemies than own soldiers weigh more; other points weigh less the more enemies
+ // are known around them (BattleAreaIntel.cpp; known positions only).
+ if(AreaIntelOn(Team)&&Sum>0)
+ {
+  const auto& V=AreaIntelView(Team);const auto* T=GetDefault<UBattleTuning>();
+  double Avg=0;for(int32 O:V.OwnAt)Avg+=O;Avg=FMath::Max(1.0,Avg/FMath::Max(1,V.OwnAt.Num()));
+  Sum=0;
+  for(int32 I=0;I<Weight.Num();++I)
+  {
+   const int32 P=Rotate?Objectives.Num()-1-I:I;if(!V.EnemyAt.IsValidIndex(P)){Sum+=Weight[I];continue;}
+   if(ObservedOwner(Team,P)==Team)Weight[I]*=1.0+T->AreaIntelDefendGain*FMath::Min(2.0,FMath::Max(0,V.EnemyAt[P]-V.OwnAt[P])/Avg);
+   else Weight[I]/=1.0+T->AreaIntelAttackGain*V.EnemyAt[P]/Avg;
+   Sum+=Weight[I];
+  }
+ }
  // S6 trial: concentrate on the one point not observed as own that is nearest the team's own home (static positions only).
  if(Intent.FocusGain>0&&Sum>0)
  {
@@ -311,6 +326,8 @@ int32 UBattleMatch::AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) c
   const float SeenHP=bArea&&Area.KnownEnemyBaseHP.IsValidIndex(Team)?Area.KnownEnemyBaseHP[Team]:-1.f;
   Share=(Owned>=2||(SeenHP>=0&&SeenHP<=Strategy.BaseLowHP))?Strategy.BaseShareHigh:Strategy.BaseShareLow;
  }
+ // Intel trial (3): the enemy home was observed (own sight or a scout report) with few enemies around it: more squads assault it.
+ if(AreaIntelOn(Team)){const auto& V=AreaIntelView(Team);if(V.bHomeCovered&&V.HomeEnemies<=GetDefault<UBattleTuning>()->AreaIntelHomeWeak)Share=FMath::Max(Share,double(GetDefault<UBattleTuning>()->AreaIntelHomeShare));}
  const double Slot=FMath::Frac(double(SquadID)*0.6180339887498949);
  bBase=Slot>=1.0-Share;
  const double Pos=Slot/FMath::Max(1e-6,1.0-Share)*Sum;
@@ -335,6 +352,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
 		int32 Target = bStrategy ? AreaStrategyTarget(Pair.Key,Team,bStrategyBase) : ChooseObjective(Group, Team);
   // P1 trial: a squad bought for a need keeps that mission (point, enemy home, or own home defence).
   const int32* Purpose=bStrategy?Area.HirePurpose.Find(Pair.Key):nullptr;
+  // Intel trial (4): a squad bought to defend a threatened point keeps that mission until released (BattleAreaIntel.cpp).
+  if(!Purpose&&bStrategy)Purpose=IntelPurpose.Find(Pair.Key);
   if(Purpose&&*Purpose>=0&&*Purpose<Objectives.Num()){Target=*Purpose;bStrategyBase=false;}else if(Purpose&&*Purpose==100)bStrategyBase=true;
   const bool bHomeDefence=Purpose&&*Purpose==101;if(bHomeDefence)bStrategyBase=false;
   // Heavy infantry (tactical role): hold the thinnest observed own point, or take the point nearest home; never the home assault.
@@ -347,7 +366,14 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   const bool BaseAssault=bStrategy?bStrategyBase:(bArea&&Group%5==0);
   FVector Center=BaseAssault?AreaHome(1-Team)*(25./27.):bHomeDefence?AreaHome(Team)*(25./27.):Objectives[Target].Position;
   EBattleOrder Order=bHomeDefence||(!BaseAssault&&ObservedOwner(Team,Target)==Team)?EBattleOrder::Defend:EBattleOrder::AttackMove;
-  if(bScout){Center=AreaScoutPost(Team,Pair.Key);Order=EBattleOrder::Defend;}
+  // After a warning (an enemy near or a hit) the pair moves to its fall-back point, then watches from there until ScoutHoldSeconds pass without one (BattleScoutReport.cpp).
+  if(bScout)
+  {
+   const auto* Rep=ScoutReports.Find(Pair.Key);
+   if(Rep&&Elapsed<Rep->RetreatUntil){Center=Rep->RetreatPoint;Order=EBattleOrder::Move;}
+   else if(Rep&&Rep->LastDanger>=0&&Elapsed-Rep->LastDanger<GetDefault<UBattleTuning>()->ScoutHoldSeconds&&Rep->Burns>0){Center=Rep->RetreatPoint;Order=EBattleOrder::Defend;}
+   else{Center=AreaScoutPost(Team,Pair.Key);Order=EBattleOrder::Defend;}
+  }
   // S5 trial: a home-assault squad does not stop to fight until its leader is within InfiltrateRadius of the enemy home.
   if(BaseAssault&&bStrategy&&BattleTactics::AreaStrategy().InfiltrateRadius>0&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==Team))
    if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))

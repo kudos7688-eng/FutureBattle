@@ -23,7 +23,7 @@ int32 UBattleMatch::AreaScore(int32 Team)const
 }
 void UBattleMatch::InitializeArea()
 {
- Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();Score[0]=Score[1]=0;
+ Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
  for(int32 Team=0;Team<2;++Team)
@@ -110,6 +110,7 @@ void UBattleMatch::UpdateAreaHiring()
  const auto& H=BattleTactics::AreaHire();
  if(!bArea||!H.bEnabled||Phase!=EBattleMatchPhase::Combat)return;
  const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ UpdateIntelPurposes();
  for(int32 Team=0;Team<2;++Team)
  {
   if(Team==0&&!R->SightExperiment.Enabled)continue; // The player's resources are spent only by the player.
@@ -134,9 +135,12 @@ void UBattleMatch::UpdateAreaHiring()
   // P1 trial: buy only for an observed need and keep that mission for the new squad.
   int32 Need=-1;
   const bool bPurpose=H.bPurpose&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==Team);
+  // Intel trial (4): with a known threat at an own point, the purchase (not a scout pair) is bought to defend it.
+  const int32 IntelNeed=!bPurpose&&Type!=BattleSquadType::Scout&&AreaIntelOn(Team)?AreaIntelThreat(Team):-1;
   if(bPurpose&&(Need=AreaHireNeed(Team))<0)continue;
   const FString Message=LastMessage;LastHiredSquadID=INDEX_NONE;
   if(HireAreaSquad(Team,EBattleTraining::Regular,true,Type)&&bPurpose&&LastHiredSquadID!=INDEX_NONE){Area.HirePurpose.Add(LastHiredSquadID,Need);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE_PURPOSE team=%d squad=%d purpose=%d time=%.1f"),Team,LastHiredSquadID,Need,Elapsed);}
+  else if(IntelNeed>=0&&LastHiredSquadID!=INDEX_NONE&&Store->FindSquad(LastHiredSquadID)){IntelPurpose.Add(LastHiredSquadID,IntelNeed);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_INTEL_HIRE team=%d squad=%d point=%d time=%.1f"),Team,LastHiredSquadID,IntelNeed,Elapsed);}
   LastMessage=Message;
  }
 }
@@ -338,7 +342,10 @@ FVector UBattleMatch::AreaScoutPost(int32 Team,int32 SquadID) const
  int32 Rank=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())
   Rank+=P.Key<SquadID&&P.Value.Team==Team&&P.Value.SquadType==BattleSquadType::Scout&&P.Value.CommandStatus==EBattleCommandStatus::Active;
  const FVector Point=Objectives[Fronts[Rank%Fronts.Num()]].Position;
- FVector Post=Point+(Enemy-Point).GetSafeNormal2D()*FMath::Clamp(GetDefault<UBattleTuning>()->ScoutPostAdvance,0.f,30000.f);
+ const FVector Ahead=(Enemy-Point).GetSafeNormal2D();
+ FVector Post=Point+Ahead*FMath::Clamp(GetDefault<UBattleTuning>()->ScoutPostAdvance,-30000.f,30000.f);
+ // After each retreat the pair watches from a post shifted sideways (right, left, back to centre), not the spot it was found at.
+ if(const auto* Rep=ScoutReports.Find(SquadID);Rep&&Rep->Burns>0){const int32 Step=Rep->Burns%3;Post+=FVector(-Ahead.Y,Ahead.X,0)*(Step==1?1.f:Step==2?-1.f:0.f)*FMath::Clamp(GetDefault<UBattleTuning>()->ScoutPostShift,0.f,20000.f);}
  if(auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
  {FNavLocation L;if(Nav->ProjectPointToNavigation(Post,L,FVector(1500,1500,500)))Post=L.Location;else Post=Point;}
  return Post;

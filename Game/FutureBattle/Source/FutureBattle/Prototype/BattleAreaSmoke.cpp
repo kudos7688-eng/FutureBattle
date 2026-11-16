@@ -153,11 +153,11 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     }
     const int32 C1=M->Credits[0];const bool Limited=!M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Scout)&&M->Credits[0]==C1&&M->ActiveScouts(0)==3;
     Check(Bought&&Cost==8&&Limited,TEXT("scout pairs: 2 rifles, 8 resources, at most 3 per team"));
-    // AI use: a post ahead of a point (towards the enemy home), and the intent keeps two pairs by default.
+    // AI use: a post 30 m behind an own front point (long still-sight), and the intent keeps two pairs by default.
     {
      const FVector Post=M->AreaScoutPost(0,Scouts[1]);double Near=DBL_MAX;FVector Point=FVector::ZeroVector;
      for(const auto& O:M->Objectives){const double D=FVector::Dist2D(Post,O.Position);if(D<Near){Near=D;Point=O.Position;}}
-     Check(Near>1000&&Near<9000&&FVector::Dist2D(Post,M->AreaHome(1))<FVector::Dist2D(Point,M->AreaHome(1))&&M->AreaIntent(0).ScoutKeep==2,TEXT("scout post lies ahead of an own front point"));
+     Check(Near>1000&&Near<9000&&FVector::Dist2D(Post,M->AreaHome(1))>FVector::Dist2D(Point,M->AreaHome(1))&&M->AreaIntent(0).ScoutKeep==2,TEXT("scout post stands back behind an own front point"));
     }
     // Reports (stage 3): a sighting beyond normal sight is a scout long contact (hidden until reported); a report's positions
     // reach the team's plans for ScoutReportMemory seconds.
@@ -169,6 +169,26 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      TMap<int32,FVector> Seen;M->AddScoutReportSightings(0,Seen);const int32 Mine=Seen.Num();Seen.Reset();M->AddScoutReportSightings(1,Seen);
      M->ScoutReports.Remove(Scouts[1]);
      Check(Long&&Mine==2&&Seen.IsEmpty(),TEXT("scout long sightings wait for the report; reports reach only their own team"));
+     // Intel trial: 40 reported enemies at an own point make it the team's threat (known positions only).
+     int32 OwnPoint=-1;for(int32 I=0;I<M->Objectives.Num();++I)if(M->ObservedOwner(0,I)==0){OwnPoint=I;break;}
+     if(OwnPoint>=0)
+     {
+      auto& Threat=M->ScoutReports.FindOrAdd(Scouts[1]);Threat.ReportedAt=M->Elapsed;Threat.Positions.Init(M->Objectives[OwnPoint].Position+FVector(3000,0,0),40);
+      M->IntelViews[0].At=-1;const bool Seen40=M->AreaIntelView(0).EnemyAt[OwnPoint]>=40&&M->AreaIntelThreatAt(0,OwnPoint)&&M->AreaIntelThreat(0)==OwnPoint;
+      M->ScoutReports.Remove(Scouts[1]);M->IntelViews[0].At=-1;
+      Check(Seen40&&!M->AreaIntelThreatAt(0,OwnPoint),TEXT("intel: reported enemies at an own point make it the threat"));
+     }
+     else Check(false,TEXT("intel: fixture has an observed own point"));
+    }
+    // Retreat: an AI-led pair that is hit falls back up to 40 m, its report pauses (not restarts), and its next post is shifted sideways.
+    {
+     const int32 SID=Scouts[2];Store->SetSquadDelegated(SID,true);const FVector PostBefore=M->AreaScoutPost(0,SID);
+     M->UpdateScoutReports();M->ScoutReports.FindOrAdd(SID).Started=M->Elapsed;M->ScoutReports.FindOrAdd(SID).LastLong=M->Elapsed;Store->ApplyDamage(Store->FindSquad(SID)->Members[1],1,10);M->UpdateScoutReports();
+     const auto* Rep=M->ScoutReports.Find(SID);const FVector PostAfter=M->AreaScoutPost(0,SID);
+     const bool Back=Rep&&Rep->RetreatUntil>M->Elapsed&&Rep->Burns==1&&Rep->PauseStart>=0&&Rep->Started>=0&&FVector::Dist2D(Rep->RetreatPoint,Position(Store->FindSquad(SID)->LeaderUnitID))<=4200.f;
+     if(Rep)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_SCOUT_RETREAT_SMOKE until=%.1f now=%.1f burns=%d pause=%.1f started=%.1f dist=%.0f post=%.0f danger=%.1f"),Rep->RetreatUntil,M->Elapsed,Rep->Burns,Rep->PauseStart,Rep->Started,FVector::Dist2D(Rep->RetreatPoint,Position(Store->FindSquad(SID)->LeaderUnitID)),FVector::Dist2D(PostBefore,PostAfter),Rep->LastDanger);
+     Check(Back&&FVector::Dist2D(PostBefore,PostAfter)>1000,TEXT("scout pair falls back at most 40 m when hit, pauses its report and moves its post"));
+     Store->SetSquadDelegated(SID,false);M->ScoutReports.Remove(SID);
     }
     const auto* First=Store->FindSquad(Scouts[0]);const int32 OldLeader=First->LeaderUnitID,Heir=First->Members[1];
     const float Still=ScoutStillSight(OldLeader);
