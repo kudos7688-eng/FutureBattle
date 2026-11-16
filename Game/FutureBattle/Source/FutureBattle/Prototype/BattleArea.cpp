@@ -239,8 +239,8 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
  const auto& S=BattleTactics::AreaStrategy();const bool bTrial=S.TrialTeam<0||S.TrialTeam==Team;
  FAreaIntent I;I.AttackWeight=S.AttackWeight;I.BaseShare=S.BaseShare;I.bFrontBalance=bTrial&&S.bFrontBalance;I.FrontGain=S.FrontGain;
  I.FocusGain=bTrial?S.FocusGain:0.f;I.HireReserve=BattleTactics::AreaHire().Reserve;
- // Heavy infantry share of AI purchases (trial, one team only with -BattleAreaTrialTeam).
- if(bTrial) I.HeavyShare=S.HeavyShare;
+ // Heavy infantry share of AI purchases: the configured default for both teams; the -BattleAreaHeavyShare trial replaces it for the trial team(s).
+ I.HeavyShare=bTrial&&S.HeavyShare>=0?S.HeavyShare:FMath::Clamp(GetDefault<UBattleTuning>()->AreaHeavyShare,0.f,1.f);
  // S7/S8 trials (one team only with -BattleAreaTrialTeam).
  if(bTrial){I.FlankOffset=S.FlankOffset;I.bFlankSameSide=S.bFlankSameSide;I.BaseReturnLiving=S.BaseReturnLiving;}
  // Stage 2: time-phased team plans (match time only; no hidden information). Values are first trial values (numbers delegated).

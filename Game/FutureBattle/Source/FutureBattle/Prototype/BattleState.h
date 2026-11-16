@@ -263,6 +263,8 @@ public:
 	UPROPERTY(Config, EditAnywhere) int32 AreaHeavyCost = 15;
 	// Damage per shot of heavy infantry relative to ShotDamage (1 = same as other soldiers).
 	UPROPERTY(Config, EditAnywhere) float HeavyDamageScale = 1.5f;
+	// Share of AI Area purchases that are heavy infantry (2026-11-16: 0.33 adopted after the one-team screen; 0 = rifle squads only).
+	UPROPERTY(Config, EditAnywhere) float AreaHeavyShare = .33f;
 	UPROPERTY(Config, EditAnywhere) float DefenseRadius = 600.f;
 	UPROPERTY(Config, EditAnywhere) float MoveStuckSeconds = 2.f;
 	UPROPERTY(Config, EditAnywhere) int32 MaxMoveRetries = 3;

@@ -78,6 +78,8 @@ $supply=@{
  # Heavy infantry: share of AI purchases that are heavy infantry (6 soldiers, support guns, 3x health; since 2026-11-16 18:10 1.5x damage and 15 resources, earlier runs 1x and 18).
  'HV33'=@('-AreaHeavyShare','0.33')
  'HV50'=@('-AreaHeavyShare','0.5')
+ # HV0 = rifle squads only (the default before 2026-11-16 18:50, when the AI share became 0.33; HI now equals HV33).
+ 'HV0'=@('-AreaHeavyShare','0')
  # Weapon role: suppression on (both teams) with support-gun shots suppressing 2.5x; HV33PS adds a 33% heavy-infantry share.
  'PS25'=@('-Suppression','1','-SuppressionSupport','2.5')
  'HV33PS'=@('-Suppression','1','-SuppressionSupport','2.5','-AreaHeavyShare','0.33')
