@@ -608,7 +608,9 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  }
  SuppressNear(U->Team,Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Now,U->Weapon==EBattleWeapon::SupportGun?BattleSuppression::Tuning().SupportScale:1.f);
  const int32 Victim=HitIDs.FindRef(Hit.GetComponent());
- if(bArea)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,T->ShotDamage);
+ // Per-shot damage by the shooter's squad type (heavy infantry may hit harder; rifle squads 1x).
+ const float ShotDmg=[&]{const auto* SS=Store->FindSquad(U->SquadID);return T->ShotDamage*BattleSquadType::DamageScale(SS?SS->SquadType:0);}();
+ if(bArea)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,ShotDmg);
  if(SightExperiment.Started && Victim>0) ++SightExperiment.Hits;
  const auto* BeforeVictim=Store->Find(Victim);
  const float BeforeHP=BeforeVictim?BeforeVictim->HP:0;
@@ -629,12 +631,12 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   for(int32 Member:VictimSquadState->Members) if(const auto* M=Store->Find(Member); M && M->IsAlive())
   {++SquadLiving;if(Member!=Victim && FVector::DistSquared2D(Position(Member),Start)<LeaderDistance)++LeaderRank;}
  }
- const bool Damaged=Victim>0 && Store->ApplyDamage(Victim,U->Team,T->ShotDamage);
+ const bool Damaged=Victim>0 && Store->ApplyDamage(Victim,U->Team,ShotDmg);
  if(SightExperiment.Started && Damaged && BeforeVictim)
  {
   auto& E=SightExperiment;const bool Killed=BeforeHP>0 && !Store->Find(Victim)->IsAlive();
   // Squad type activity: damage and kills by the shooter's squad type, damage taken and deaths by the victim's.
-  { const float Dealt=FMath::Min(BeforeHP,T->ShotDamage); const auto* ShooterSquad=Store->FindSquad(U->SquadID);
+  { const float Dealt=FMath::Min(BeforeHP,ShotDmg); const auto* ShooterSquad=Store->FindSquad(U->SquadID);
     if(ShooterSquad && ShooterSquad->SquadType<2 && U->Team>=0 && U->Team<2){E.TypeDamage[U->Team][ShooterSquad->SquadType]+=Dealt;E.TypeKills[U->Team][ShooterSquad->SquadType]+=Killed;}
     if(VictimSquadState && VictimSquadState->SquadType<2 && VictimTeam>=0 && VictimTeam<2){E.TypeTaken[VictimTeam][VictimSquadState->SquadType]+=Dealt;E.TypeDeaths[VictimTeam][VictimSquadState->SquadType]+=Killed;} }
   (VictimLeader?E.LeaderHits:E.FollowerHits)[VictimTeam]++;
@@ -652,13 +654,13 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   // Evaluation only: attribute fire to the closest objective within 100m of the shooter.
   auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();int32 Nearest=INDEX_NONE;double Best=10000;
   for(int32 I=0;I<Match->Objectives.Num();++I){const double D=FVector::Dist2D(Start,Match->Objectives[I].Position);if(D<Best){Best=D;Nearest=I;}}
-  if(Nearest!=INDEX_NONE){++SightExperiment.ObjectiveShots[Nearest];SightExperiment.ObjectiveDamage[Nearest]+=Damaged?FMath::Min(BeforeHP,T->ShotDamage):0;if(SightExperiment.ObjectiveFirstShot[Nearest]<0)SightExperiment.ObjectiveFirstShot[Nearest]=Match->Elapsed;}
+  if(Nearest!=INDEX_NONE){++SightExperiment.ObjectiveShots[Nearest];SightExperiment.ObjectiveDamage[Nearest]+=Damaged?FMath::Min(BeforeHP,ShotDmg):0;if(SightExperiment.ObjectiveFirstShot[Nearest]<0)SightExperiment.ObjectiveFirstShot[Nearest]=Match->Elapsed;}
  }
- if(BayStage==1 && Damaged){BayDamageGiven[U->Team]+=FMath::Min(BeforeHP,T->ShotDamage);if(VictimSquad==2 && BayArrival<0)BayMoveDirectDamage+=FMath::Min(BeforeHP,T->ShotDamage);}
+ if(BayStage==1 && Damaged){BayDamageGiven[U->Team]+=FMath::Min(BeforeHP,ShotDmg);if(VictimSquad==2 && BayArrival<0)BayMoveDirectDamage+=FMath::Min(BeforeHP,ShotDmg);}
  if(SightExperiment.Started && SightExperiment.FlankTrial)
  {
   auto& E=SightExperiment;++E.TeamShots[U->Team];
-  const double Damage=Damaged?FMath::Min(BeforeHP,T->ShotDamage):0.f;
+  const double Damage=Damaged?FMath::Min(BeforeHP,ShotDmg):0.f;
   const bool Kill=Damaged && BeforeHP>0 && !Store->Find(Victim)->IsAlive();
   E.TeamDamage[U->Team]+=Damage;E.TeamKills[U->Team]+=Kill;
   double Angle=-1;

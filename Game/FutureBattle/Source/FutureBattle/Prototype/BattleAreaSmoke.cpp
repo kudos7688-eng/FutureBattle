@@ -117,17 +117,18 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();Check(Save&&Save->Validate(Error)&&Save->Squads.Num()==52,TEXT("two hires and a reservation validate"));Mode->bCombatPaused=false;
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE_SMOKE squads=%d records=%d credits=%d validation=%s"),Store->GetSquads().Num(),Store->GetUnits().Num(),M->Credits[0],*Error);
    M->Area.Replacements.Reset();
-   // Heavy infantry (squad type 1): a freed slot (leader 41 lost), 18 resources, 6 soldiers with support guns at 3x health;
+   // Heavy infantry (squad type 1): a freed slot (leader 41 lost), 15 resources, 6 soldiers with support guns at 3x health;
    // the type and health survive save and restore.
    {
     Store->ApplyDamage(41,1,10000);M->UpdateArea(1);
-    if(M->Credits[0]<18){const int32 Add=18-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
+    if(M->Credits[0]<BattleSquadType::AreaCost(BattleSquadType::Heavy)){const int32 Add=BattleSquadType::AreaCost(BattleSquadType::Heavy)-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
     const int32 C0=M->Credits[0],Spent0=M->Area.HireSpent[0],HeavyRecords=Store->GetUnits().Num();
     const bool Hired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Heavy);
     int32 HSID=0;for(const auto& P:Store->GetSquads())HSID=FMath::Max(HSID,P.Key);const auto* HS=Store->FindSquad(HSID);
-    bool Heavy=Hired&&HS&&HS->SquadType==BattleSquadType::Heavy&&HS->Members.Num()==BattleSquadType::Members(BattleSquadType::Heavy)&&M->Credits[0]==C0-18&&M->Area.HireSpent[0]==Spent0+18&&Store->GetUnits().Num()==HeavyRecords+HS->Members.Num();
+    bool Heavy=Hired&&HS&&HS->SquadType==BattleSquadType::Heavy&&HS->Members.Num()==BattleSquadType::Members(BattleSquadType::Heavy)&&M->Credits[0]==C0-BattleSquadType::AreaCost(BattleSquadType::Heavy)&&M->Area.HireSpent[0]==Spent0+BattleSquadType::AreaCost(BattleSquadType::Heavy)&&Store->GetUnits().Num()==HeavyRecords+HS->Members.Num();
     if(Heavy)for(int32 ID:HS->Members){const auto* U=Store->Find(ID);Heavy&=U&&U->Weapon==EBattleWeapon::SupportGun&&FMath::IsNearlyEqual(U->HP,GetDefault<UBattleTuning>()->Health*3.f);}
-    Check(Heavy,TEXT("heavy infantry: 6 soldiers, support guns, 3x health, 18 resources"));
+    Heavy&=FMath::IsNearlyEqual(BattleSquadType::DamageScale(BattleSquadType::Heavy),1.5f)&&FMath::IsNearlyEqual(BattleSquadType::DamageScale(BattleSquadType::Rifle),1.f);
+    Check(Heavy,TEXT("heavy infantry: 6 soldiers, support guns, 3x health, 15 resources, 1.5x damage"));
     Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
     const bool Restored=Valid&&M->RestoreSnapshot(Save);const auto* After=Store->FindSquad(HSID);
     Check(Restored&&After&&After->SquadType==BattleSquadType::Heavy&&FMath::IsNearlyEqual(Store->Find(After->Members[1])->HP,GetDefault<UBattleTuning>()->Health*3.f),TEXT("heavy infantry survives save and restore"));

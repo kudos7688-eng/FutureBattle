@@ -13,13 +13,14 @@ inline EBattleWeapon WeaponForSlot(int32 Slot)
 }
 
 // Squad types (2026-11-16, ROADMAP heavy equipment order): 0 = rifle squad (10, two support guns), 1 = heavy infantry
-// (UBattleTuning::HeavyMembers soldiers, all support guns, HeavyHealthScale x HP, HeavySpeedScale x speed, AreaHeavyCost).
+// (UBattleTuning::HeavyMembers soldiers, all support guns, HeavyHealthScale x HP, HeavySpeedScale x speed, AreaHeavyCost, HeavyDamageScale x damage per shot; 2026-11-16 screen: 1.5x damage and cost 15).
 namespace BattleSquadType
 {
  enum : uint8 { Rifle=0, Heavy=1, Count=2 };
  int32 Members(uint8 Type);
  float HealthScale(uint8 Type);
  float SpeedScale(uint8 Type);
+ float DamageScale(uint8 Type);
  int32 AreaCost(uint8 Type);
  EBattleWeapon Weapon(uint8 Type,int32 Slot);
 }
@@ -259,7 +260,9 @@ public:
 	UPROPERTY(Config, EditAnywhere) int32 HeavyMembers = 6;
 	UPROPERTY(Config, EditAnywhere) float HeavyHealthScale = 3.f;
 	UPROPERTY(Config, EditAnywhere) float HeavySpeedScale = .714f;
-	UPROPERTY(Config, EditAnywhere) int32 AreaHeavyCost = 18;
+	UPROPERTY(Config, EditAnywhere) int32 AreaHeavyCost = 15;
+	// Damage per shot of heavy infantry relative to ShotDamage (1 = same as other soldiers).
+	UPROPERTY(Config, EditAnywhere) float HeavyDamageScale = 1.5f;
 	UPROPERTY(Config, EditAnywhere) float DefenseRadius = 600.f;
 	UPROPERTY(Config, EditAnywhere) float MoveStuckSeconds = 2.f;
 	UPROPERTY(Config, EditAnywhere) int32 MaxMoveRetries = 3;

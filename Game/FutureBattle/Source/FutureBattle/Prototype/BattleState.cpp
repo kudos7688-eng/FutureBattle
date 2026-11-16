@@ -428,10 +428,32 @@ bool UBattleState::DisableLeaderSquad(int32 ID)
 }
 
 // ---- Squad types.
-int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?FMath::Clamp(GetDefault<UBattleTuning>()->HeavyMembers,2,10):10;}
-float BattleSquadType::HealthScale(uint8 Type){return Type==Heavy?FMath::Clamp(GetDefault<UBattleTuning>()->HeavyHealthScale,1.f,10.f):1.f;}
-float BattleSquadType::SpeedScale(uint8 Type){return Type==Heavy?FMath::Clamp(GetDefault<UBattleTuning>()->HeavySpeedScale,.2f,1.f):1.f;}
-int32 BattleSquadType::AreaCost(uint8 Type){return Type==Heavy?FMath::Clamp(GetDefault<UBattleTuning>()->AreaHeavyCost,1,100):FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
+// Heavy infantry values come from config and can be overridden per run by trial switches (-BattleHeavyMembers=, -BattleHeavyHealth=,
+// -BattleHeavySpeed=, -BattleHeavyCost=, -BattleHeavyDamage=), so number screens never edit Config (the frozen snapshot hashes it).
+namespace
+{
+ struct FHeavyValues { int32 Members; float Health,Speed,Damage; int32 Cost; };
+ const FHeavyValues& HeavyValues()
+ {
+  static const FHeavyValues V=[]{
+   const UBattleTuning* T=GetDefault<UBattleTuning>();
+   FHeavyValues H{T->HeavyMembers,T->HeavyHealthScale,T->HeavySpeedScale,T->HeavyDamageScale,T->AreaHeavyCost};
+   const TCHAR* C=FCommandLine::Get();
+   FParse::Value(C,TEXT("BattleHeavyMembers="),H.Members);FParse::Value(C,TEXT("BattleHeavyHealth="),H.Health);
+   FParse::Value(C,TEXT("BattleHeavySpeed="),H.Speed);FParse::Value(C,TEXT("BattleHeavyDamage="),H.Damage);FParse::Value(C,TEXT("BattleHeavyCost="),H.Cost);
+   H.Members=FMath::Clamp(H.Members,2,10);H.Cost=FMath::Clamp(H.Cost,1,100);
+   H.Health=FMath::IsFinite(H.Health)?FMath::Clamp(H.Health,1.f,10.f):3.f;
+   H.Speed=FMath::IsFinite(H.Speed)?FMath::Clamp(H.Speed,.2f,1.f):.714f;
+   H.Damage=FMath::IsFinite(H.Damage)?FMath::Clamp(H.Damage,.1f,10.f):1.f;
+   return H;}();
+  return V;
+ }
+}
+int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:10;}
+float BattleSquadType::HealthScale(uint8 Type){return Type==Heavy?HeavyValues().Health:1.f;}
+float BattleSquadType::SpeedScale(uint8 Type){return Type==Heavy?HeavyValues().Speed:1.f;}
+float BattleSquadType::DamageScale(uint8 Type){return Type==Heavy?HeavyValues().Damage:1.f;}
+int32 BattleSquadType::AreaCost(uint8 Type){return Type==Heavy?HeavyValues().Cost:FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
 EBattleWeapon BattleSquadType::Weapon(uint8 Type,int32 Slot){return Type==Heavy?EBattleWeapon::SupportGun:WeaponForSlot(Slot);}
 void UBattleState::SetSquadType(int32 SquadID,uint8 Type)
 {

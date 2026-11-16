@@ -75,12 +75,17 @@ $supply=@{
  'EI23'=@('-AreaIncomeUrbanBase','2','-AreaIncomeUrbanPerPoint','3')
  # Return fire: AI soldiers hit in the last 5 s may fire back at visible contacts up to bullet reach (matters on map E).
  'RF'=@('-ReturnFire','1')
- # Heavy infantry: share of AI purchases that are heavy infantry (6 soldiers, support guns, 3x health, 18 resources).
+ # Heavy infantry: share of AI purchases that are heavy infantry (6 soldiers, support guns, 3x health; since 2026-11-16 18:10 1.5x damage and 15 resources, earlier runs 1x and 18).
  'HV33'=@('-AreaHeavyShare','0.33')
  'HV50'=@('-AreaHeavyShare','0.5')
  # Weapon role: suppression on (both teams) with support-gun shots suppressing 2.5x; HV33PS adds a 33% heavy-infantry share.
  'PS25'=@('-Suppression','1','-SuppressionSupport','2.5')
  'HV33PS'=@('-Suppression','1','-SuppressionSupport','2.5','-AreaHeavyShare','0.33')
+ # Heavy infantry numbers (33% share), screened against the old 1x/18 values (r27f): HD20 = 2x damage, HC12 = cost 12, HM8 = 8 soldiers, HD15C15 = 1.5x damage and cost 15 (adopted as default).
+ 'HD20'=@('-AreaHeavyShare','0.33','-HeavyDamage','2')
+ 'HC12'=@('-AreaHeavyShare','0.33','-HeavyCost','12')
+ 'HM8'=@('-AreaHeavyShare','0.33','-HeavyMembers','8')
+ 'HD15C15'=@('-AreaHeavyShare','0.33','-HeavyDamage','1.5','-HeavyCost','15')
  'INC2'=@('-AreaIncomeBase','2','-AreaIncomePerPoint','2')
  'INC3'=@('-AreaIncomeBase','3','-AreaIncomePerPoint','3')
  'INC4'=@('-AreaIncomeBase','4','-AreaIncomePerPoint','4')
