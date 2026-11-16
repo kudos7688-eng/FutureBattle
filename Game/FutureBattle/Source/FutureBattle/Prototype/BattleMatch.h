@@ -118,6 +118,15 @@ public:
 	int32 AreaHeavyTarget(int32 Team) const;
 	// Observation post of a scout pair: ahead of an own front point (observed ownership and static positions only).
 	FVector AreaScoutPost(int32 Team, int32 SquadID) const;
+	// Scout reports (ROADMAP 2026-11-14, stage 3): what a scout pair sees beyond normal sight reaches its team only through a timed
+	// two-step report (direction after ScoutAlertSeconds, positions and size after ScoutReportSeconds). Transient: a load restarts the timers.
+	struct FScoutReport { double Started=-1, LastLong=-1, AlertAt=-1, ReportedAt=-1, NextHint=0; int32 Stage=0, Living=0, Sequence=0, AlertSequence=0; FVector Direction=FVector::ZeroVector, Approx=FVector::ZeroVector; TArray<FVector> Positions; };
+	TMap<int32, FScoutReport> ScoutReports;
+	void UpdateScoutReports();
+	// True when a scout sees this contact only because of its long still-sight (team displays and plans use the reports instead).
+	bool IsScoutLongContact(int32 ObserverID, const struct FBattleContact& Contact) const;
+	// Positions from the team's scout reports of the last ScoutReportMemory seconds (keys below zero, never unit IDs).
+	void AddScoutReportSightings(int32 Team, TMap<int32, FVector>& Seen) const;
 	void AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObjectives]) const;
 	void CheckTimeLimit();
 	void UpdateEnemyOrders();

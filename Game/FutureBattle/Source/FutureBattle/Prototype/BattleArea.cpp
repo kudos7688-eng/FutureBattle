@@ -23,7 +23,7 @@ int32 UBattleMatch::AreaScore(int32 Team)const
 }
 void UBattleMatch::InitializeArea()
 {
- Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();Score[0]=Score[1]=0;
+ Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
  for(int32 Team=0;Team<2;++Team)
@@ -176,6 +176,7 @@ void UBattleMatch::UpdateArea(float Dt)
   }
  }
  UpdateWarScore(Dt);if(Phase!=EBattleMatchPhase::Combat)return;
+ UpdateScoutReports();
  Area.SupplyClock+=Dt;if(Area.SupplyClock<1)return;
  const float Step=Area.SupplyClock;Area.SupplyClock=0;
  TSet<int32> AtHome;
@@ -300,8 +301,10 @@ void UBattleMatch::AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObje
  {
   const FVector P=R->Position(U.Key);OwnT[Lane(P)].Add(Progress(P));
   if(const auto* Contacts=Perception?Perception->GetContacts(U.Key):nullptr)
-   for(const auto& C:*Contacts)if(C.Value.bVisible)Seen.Add(C.Key,C.Value.LastKnownPosition);
+   for(const auto& C:*Contacts)if(C.Value.bVisible&&!IsScoutLongContact(U.Key,C.Value))Seen.Add(C.Key,C.Value.LastKnownPosition);
  }
+ // Scout reports: what scouts saw beyond normal sight enters team plans only through their reports.
+ AddScoutReportSightings(Team,Seen);
  for(int32 L=0;L<N;++L)if(OwnT[L].Num())
  {OwnT[L].Sort();Out[L].Own=OwnT[L].Num();Out[L].OwnFront=OwnT[L][FMath::Min(OwnT[L].Num()-1,FMath::FloorToInt(OwnT[L].Num()*.9f))];}
  for(const auto& E:Seen)

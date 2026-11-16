@@ -159,6 +159,17 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      for(const auto& O:M->Objectives){const double D=FVector::Dist2D(Post,O.Position);if(D<Near){Near=D;Point=O.Position;}}
      Check(Near>1000&&Near<9000&&FVector::Dist2D(Post,M->AreaHome(1))<FVector::Dist2D(Point,M->AreaHome(1))&&M->AreaIntent(0).ScoutKeep==2,TEXT("scout post lies ahead of an own front point"));
     }
+    // Reports (stage 3): a sighting beyond normal sight is a scout long contact (hidden until reported); a report's positions
+    // reach the team's plans for ScoutReportMemory seconds.
+    {
+     const int32 Eye=Store->FindSquad(Scouts[1])->LeaderUnitID;const float Normal=Store->Find(Eye)->Perception.SightRange;
+     FBattleContact Far;Far.LastKnownPosition=Position(Eye)+FVector(Normal+5000.f,0,0);FBattleContact Close;Close.LastKnownPosition=Position(Eye)+FVector(Normal*.5f,0,0);
+     const bool Long=M->IsScoutLongContact(Eye,Far)&&!M->IsScoutLongContact(Eye,Close)&&!M->IsScoutLongContact(1,Far);
+     auto& Rep=M->ScoutReports.FindOrAdd(Scouts[1]);Rep.ReportedAt=M->Elapsed;Rep.Positions={FVector(1000,0,0),FVector(2000,0,0)};
+     TMap<int32,FVector> Seen;M->AddScoutReportSightings(0,Seen);const int32 Mine=Seen.Num();Seen.Reset();M->AddScoutReportSightings(1,Seen);
+     M->ScoutReports.Remove(Scouts[1]);
+     Check(Long&&Mine==2&&Seen.IsEmpty(),TEXT("scout long sightings wait for the report; reports reach only their own team"));
+    }
     const auto* First=Store->FindSquad(Scouts[0]);const int32 OldLeader=First->LeaderUnitID,Heir=First->Members[1];
     const float Still=ScoutStillSight(OldLeader);
     Check(Still>=29999.f&&Still==ScoutStillSight(Heir)&&ScoutStillSight(1)==0.f,TEXT("still scouts see 300 m, other soldiers keep their range"));

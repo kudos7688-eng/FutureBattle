@@ -687,7 +687,9 @@ void UBattleLeaderRuntime::RefreshDisplay()
  const bool DirectBodies=PC && PC->ShowsUnspottedBodies();
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>(); TSet<int32> Visible;
  for(const auto& B:Bodies) if(Store->Find(B.Key)->Team==0 && Store->Find(B.Key)->IsAlive())
-  if(const auto* Contacts=Sense->GetContacts(B.Key)) for(const auto& C:*Contacts) if(C.Value.bVisible) Visible.Add(C.Key);
+  // A scout's long-range sightings are not shown until reported (the player's own camera still shows what it sees).
+  if(const auto* M=GetWorld()->GetSubsystem<UBattleMatch>();M)
+  if(const auto* Contacts=Sense->GetContacts(B.Key)) for(const auto& C:*Contacts) if(C.Value.bVisible) if(!M->bArea||!M->IsScoutLongContact(B.Key,C.Value)) Visible.Add(C.Key);
  for(auto& B:Bodies)
  {
   const bool Show=Store->Find(B.Key)->Team==0 || Visible.Contains(B.Key);

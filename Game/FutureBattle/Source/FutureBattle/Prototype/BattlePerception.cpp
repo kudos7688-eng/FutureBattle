@@ -231,7 +231,9 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			const auto* SourceState = Source.Value.State;
 			if (SourceState->Perception.ShareRange <= 0.f) continue;
 			TArray<const FBattleContact*, TInlineAllocator<32>> VisibleContacts;
-			for (const auto& Contact : Observers.FindChecked(Source.Key).Contacts) if (Contact.Value.bVisible) VisibleContacts.Add(&Contact.Value);
+			// Contacts beyond the source's own profile range (a still scout's long sight) are not passed on by word of mouth; they travel in scout reports.
+			const double LocalRange2 = FMath::Square(SourceState->Perception.SightRange * 1.1);
+			for (const auto& Contact : Observers.FindChecked(Source.Key).Contacts) if (Contact.Value.bVisible) if (FVector::DistSquared(Source.Value.Position, Contact.Value.LastKnownPosition) <= LocalRange2) VisibleContacts.Add(&Contact.Value);
 			if (VisibleContacts.IsEmpty()) continue;
 			for (const auto& Receiver : Alive)
 			{
@@ -255,4 +257,13 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 		}
 	}
 	if (Metrics->bRecording) Metrics->PendingReportsPeak = FMath::Max(Metrics->PendingReportsPeak, static_cast<int64>(PendingReports.Num()));
+}
+
+void UBattlePerception::AddHint(int32 ObserverID, int32 TargetID, const FVector& Position, double Now, float Confidence)
+{
+	auto* Observer = Observers.Find(ObserverID); if (!Observer) return;
+	if (const auto* Existing = Observer->Contacts.Find(TargetID); Existing && (Existing->bVisible || Existing->LastSeenTime > Now - .5)) return;
+	FBattleContact Hint; Hint.TargetID = TargetID; Hint.LastKnownPosition = Position; Hint.LastSeenTime = Now;
+	Hint.Confidence = FMath::Clamp(Confidence, 0.f, 1.f); Hint.bVisible = false; Hint.SourceUnitID = ObserverID; Hint.bShared = true; // its own (valid, same-team) source for saves
+	Observer->Contacts.Add(TargetID, Hint);
 }

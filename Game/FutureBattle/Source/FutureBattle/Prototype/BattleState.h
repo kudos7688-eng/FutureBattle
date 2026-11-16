@@ -279,6 +279,13 @@ public:
 	UPROPERTY(Config, EditAnywhere) int32 AreaScoutKeep = 2;
 	UPROPERTY(Config, EditAnywhere) int32 AreaScoutAfterHires = 3;
 	UPROPERTY(Config, EditAnywhere) float ScoutPostAdvance = 6000.f;
+	// Scout reports (stage 3, ROADMAP values): direction-only alert, then positions and size; enemies within ScoutHintRadius of a
+	// reporting scout learn its approximate position (ScoutHintGrid cells). Reports stay in team plans and the map for ScoutReportMemory.
+	UPROPERTY(Config, EditAnywhere) float ScoutAlertSeconds = 10.f;
+	UPROPERTY(Config, EditAnywhere) float ScoutReportSeconds = 40.f;
+	UPROPERTY(Config, EditAnywhere) float ScoutReportMemory = 30.f;
+	UPROPERTY(Config, EditAnywhere) float ScoutHintRadius = 15000.f;
+	UPROPERTY(Config, EditAnywhere) float ScoutHintGrid = 3000.f;
 	UPROPERTY(Config, EditAnywhere) float DefenseRadius = 600.f;
 	UPROPERTY(Config, EditAnywhere) float MoveStuckSeconds = 2.f;
 	UPROPERTY(Config, EditAnywhere) int32 MaxMoveRetries = 3;

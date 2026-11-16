@@ -400,11 +400,35 @@ void ABattleHUD::DrawMinimap()
  for(const auto& Pair:Store->GetUnits()) if(Pair.Value.Team==0 && Pair.Value.IsAlive())
   if(const auto* Contacts=Sense->GetContacts(Pair.Key)) for(const auto& C:*Contacts)
   {
+   // A scout's long-range sightings appear only through its reports (drawn below).
+   if(Match->bArea&&Match->IsScoutLongContact(Pair.Key,C.Value)) continue;
    const FBattleContact*& Best=Known.FindOrAdd(C.Key);
    if(!Best || (C.Value.bVisible && !Best->bVisible) || (C.Value.bVisible==Best->bVisible && C.Value.LastSeenTime>Best->LastSeenTime)) Best=&C.Value;
   }
  for(const auto& Pair:Known) if(!Pair.Value->bVisible && Pair.Value->Confidence>.35f) Dot(Pair.Value->LastKnownPosition,3,Stale);
  for(const auto& Pair:Known) if(Pair.Value->bVisible) Dot(Pair.Value->LastKnownPosition,4,Enemy);
+ // Scout reports: own pairs' direction alerts (a line from the pair) and reported positions; enemy observers reporting near own
+ // soldiers as a circle at their approximate position.
+ if(Match->bArea)
+ {
+  const float Memory=GetDefault<UBattleTuning>()->ScoutReportMemory;
+  for(const auto& P:Match->ScoutReports)
+  {
+   const auto* S=Store->FindSquad(P.Key); if(!S) continue; const auto& R=P.Value;
+   if(S->Team==0)
+   {
+    if(R.AlertAt>=0&&Match->Elapsed-R.AlertAt<=Memory)
+    {const FVector From=L->Position(S->LeaderUnitID);const FVector2D A=Map.ToScreen(From),B=Map.ToScreen(From+R.Direction*30000.f);DrawLine(A.X,A.Y,B.X,B.Y,Stale,2);}
+    if(R.ReportedAt>=0&&Match->Elapsed-R.ReportedAt<=Memory) for(const FVector& Where:R.Positions) Dot(Where,4,Stale);
+   }
+   else if(R.Started>=0)
+   {
+    bool Near=false;for(const auto& U:Store->GetUnits()) if(U.Value.Team==0&&U.Value.IsAlive()&&FVector::DistSquared2D(L->Position(U.Key),R.Approx)<=FMath::Square(GetDefault<UBattleTuning>()->ScoutHintRadius)){Near=true;break;}
+    if(Near){const FVector2D C=Map.ToScreen(R.Approx);const float Rad=FMath::Max(4.f,FMath::Abs(float(Map.ToScreen(R.Approx+FVector(GetDefault<UBattleTuning>()->ScoutHintGrid,0,0)).X-C.X)));
+     for(int32 I=0;I<16;++I){const float A0=I*PI/8,A1=(I+1)*PI/8;DrawLine(C.X+Rad*FMath::Cos(A0),C.Y+Rad*FMath::Sin(A0),C.X+Rad*FMath::Cos(A1),C.Y+Rad*FMath::Sin(A1),Enemy,1);}}
+   }
+  }
+ }
  // Own squads: one mark per leader; selected squads stand out, stopped squads are not drawn.
  for(const auto& S:L->Summaries()) if(S.bActive)
  {

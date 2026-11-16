@@ -766,7 +766,7 @@ void ABattleController::UpdateNoticeLog(bool bForce)
  if(!Match||!Match->bArea||!L||!L->IsEnabled()||!BattleFieldLayout::IsSightField(GetWorld())) return;
  const double Now=GetWorld()->GetTimeSeconds(); if(!bForce&&Now<NextNoticePoll) return; NextNoticePoll=Now+.25;
  // A new match (F5 or a load to an earlier time) starts a fresh log.
- if(Match->Elapsed+1.f<NoticeElapsed){NoticeLog.Reset();LastHomeHP=-1;LastObservedOwner.Reset();LastSquadActive.Reset();AmmoWarned.Reset();ReasonHistory.Reset();bEnemyHomeWeakNoted=false;}
+ if(Match->Elapsed+1.f<NoticeElapsed){NoticeLog.Reset();LastHomeHP=-1;LastObservedOwner.Reset();LastSquadActive.Reset();AmmoWarned.Reset();ReasonHistory.Reset();bEnemyHomeWeakNoted=false;ScoutAlertsSeen.Reset();ScoutReportsSeen.Reset();EnemyObserversNoted.Reset();}
  NoticeElapsed=Match->Elapsed;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Own home.
@@ -805,6 +805,32 @@ void ABattleController::UpdateNoticeLog(bool bForce)
   {
    int32 Living=0,Armed=0;for(int32 ID:Squad->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive()){++Living;Armed+=U->Ammo>0||U->Reserve>0;}
    if(Living>0&&Armed==0){AmmoWarned.Add(S.SquadID);PushNotice(4,FString::Printf(TEXT("%s 弾切れ"),*S.Name),L->Position(S.LeaderUnitID));}
+  }
+ }
+ // Scout reports: own pairs' direction alerts and reports; an enemy observer reporting near own soldiers (approximate position).
+ {
+  const FVector Own=Match->AreaHome(0),Axis=(Match->AreaHome(1)-Own).GetSafeNormal2D(),Side(-Axis.Y,Axis.X,0);
+  auto Bearing=[&](const FVector& D)->const TCHAR*
+  {
+   const float F=FVector::DotProduct(D,Axis),S=FVector::DotProduct(D,Side);const float A=FMath::RadiansToDegrees(FMath::Atan2(S,F));
+   static const TCHAR* const Names[]={TEXT("前方"),TEXT("右前方"),TEXT("右"),TEXT("右後方"),TEXT("後方"),TEXT("左後方"),TEXT("左"),TEXT("左前方")};
+   return Names[(FMath::RoundToInt((A<0?A+360.f:A)/45.f))%8];
+  };
+  for(const auto& P:Match->ScoutReports)
+  {
+   const auto* Sq=Store->FindSquad(P.Key); if(!Sq) continue; const auto& R=P.Value;
+   if(Sq->Team==0)
+   {
+    int32& Alert=ScoutAlertsSeen.FindOrAdd(P.Key); int32& Report=ScoutReportsSeen.FindOrAdd(P.Key);
+    if(R.AlertSequence>Alert){Alert=R.AlertSequence;PushNotice(5,FString::Printf(TEXT("%s：%sに敵（規模不明）"),*Sq->DisplayName,Bearing(R.Direction)),L->Position(Sq->LeaderUnitID)+R.Direction*15000.f);}
+    if(R.Sequence>Report&&!R.Positions.IsEmpty()){Report=R.Sequence;FVector C=FVector::ZeroVector;for(const FVector& W:R.Positions)C+=W;C/=R.Positions.Num();
+     PushNotice(5,FString::Printf(TEXT("%s：敵 約%d人を報告"),*Sq->DisplayName,R.Positions.Num()),C);}
+   }
+   else if(R.Started>=0&&!EnemyObserversNoted.Contains(P.Key))
+   {
+    bool Near=false;for(const auto& U:Store->GetUnits()) if(U.Value.Team==0&&U.Value.IsAlive()&&FVector::DistSquared2D(L->Position(U.Key),R.Approx)<=FMath::Square(GetDefault<UBattleTuning>()->ScoutHintRadius)){Near=true;break;}
+    if(Near){EnemyObserversNoted.Add(P.Key);PushNotice(2,TEXT("近くに敵の観測者がいる（おおよその位置を地図に表示）"),R.Approx);}
+   }
   }
  }
  // Enemy home seen weak by own soldiers.

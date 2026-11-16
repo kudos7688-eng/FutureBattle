@@ -159,6 +159,8 @@ private:
  FDelegateHandle LeaderDeathHandle;
  // Notification polling: what the player's side last knew (own home HP, observed point owners, own squads' state).
  double NextNoticePoll=0; float NoticeElapsed=-1; float LastHomeHP=-1; TArray<int32> LastObservedOwner; TMap<int32,bool> LastSquadActive; TSet<int32> AmmoWarned; bool bEnemyHomeWeakNoted=false;
+ // Scout reports already announced (alert and report sequence per own pair; enemy observers by pair).
+ TMap<int32,int32> ScoutAlertsSeen, ScoutReportsSeen; TSet<int32> EnemyObserversNoted;
 	void Forward(const FInputActionValue& Value);
 	void Right(const FInputActionValue& Value);
 	void LookYaw(const FInputActionValue& Value);

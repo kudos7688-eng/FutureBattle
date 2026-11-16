@@ -52,6 +52,8 @@ public:
 	const TMap<int32, FBattleContact>* GetContacts(int32 ObserverID) const;
 	const FBattleContact* FindContact(int32 ObserverID, int32 TargetID) const;
 	void CollectVisibleTargets(const TArray<TObjectPtr<ABattleUnit>>& Units, int32 Team, TSet<int32>& Targets) const;
+	// Scout reports: an enemy near a reporting scout learns its approximate position (a remembered, never visible, contact).
+	void AddHint(int32 ObserverID, int32 TargetID, const FVector& Position, double Now, float Confidence);
 	void Reset() { Observers.Reset(); PendingReports.Reset(); PendingCounts.Reset(); NextScanTimes.Reset(); LastScanTimes.Reset(); }
 	void Capture(TMap<int32, FBattleObserver>& OutObservers, TArray<FBattleReport>& OutReports, double Now) const;
 	void Restore(const TMap<int32, FBattleObserver>& SavedObservers, const TArray<FBattleReport>& SavedReports, double Now);
