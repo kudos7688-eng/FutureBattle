@@ -5,7 +5,8 @@
 #include "BattleState.generated.h"
 
 UENUM(BlueprintType)
-enum class EBattleWeapon : uint8 { Carbine, SupportGun };
+// AntiTank (2026-11-17, ROADMAP heavy equipment): one round loaded, a long reload, an explosion that also hurts infantry around the impact.
+enum class EBattleWeapon : uint8 { Carbine, SupportGun, AntiTank };
 
 inline EBattleWeapon WeaponForSlot(int32 Slot)
 {
@@ -16,7 +17,7 @@ inline EBattleWeapon WeaponForSlot(int32 Slot)
 // (UBattleTuning::HeavyMembers soldiers, all support guns, HeavyHealthScale x HP, HeavySpeedScale x speed, AreaHeavyCost, HeavyDamageScale x damage per shot; 2026-11-16 screen: 1.5x damage and cost 15).
 namespace BattleSquadType
 {
- enum : uint8 { Rifle=0, Heavy=1, Scout=2, Count=3 };
+ enum : uint8 { Rifle=0, Heavy=1, Scout=2, AntiTank=3, Count=4 };
  int32 Members(uint8 Type);
  float HealthScale(uint8 Type);
  float SpeedScale(uint8 Type);
@@ -248,10 +249,23 @@ public:
 	UPROPERTY(Config, EditAnywhere) float SupportPlayerInterval = .09f;
 	UPROPERTY(Config, EditAnywhere) float SupportAIInterval = .45f;
 	UPROPERTY(Config, EditAnywhere) float SupportMovingSpreadScale = 1.5f;
-	int32 Capacity(EBattleWeapon W) const { return W == EBattleWeapon::SupportGun ? SupportMagazine : Magazine; }
-	float ReloadTime(EBattleWeapon W) const { return W == EBattleWeapon::SupportGun ? SupportReloadSeconds : ReloadSeconds; }
+	// Anti-tank weapon (ROADMAP values: 4 rounds, 8 s reload, 80 m on maps A-D). Damage to the soldier hit, to enemies within
+	// ATSplashRadius (falling off to zero at the edge) and to an enemy home.
+	UPROPERTY(Config, EditAnywhere) int32 ATMagazine = 1;
+	UPROPERTY(Config, EditAnywhere) int32 ATReserve = 3;
+	UPROPERTY(Config, EditAnywhere) float ATReloadSeconds = 8.f;
+	UPROPERTY(Config, EditAnywhere) float ATShotInterval = 1.f;
+	UPROPERTY(Config, EditAnywhere) float ATRange = 8000.f;
+	UPROPERTY(Config, EditAnywhere) float ATDamage = 100.f;
+	UPROPERTY(Config, EditAnywhere) float ATSplashRadius = 400.f;
+	UPROPERTY(Config, EditAnywhere) float ATSplashDamage = 60.f;
+	UPROPERTY(Config, EditAnywhere) float ATBaseDamage = 60.f;
+	int32 Capacity(EBattleWeapon W) const { return W == EBattleWeapon::AntiTank ? ATMagazine : W == EBattleWeapon::SupportGun ? SupportMagazine : Magazine; }
+	float ReloadTime(EBattleWeapon W) const { return W == EBattleWeapon::AntiTank ? ATReloadSeconds : W == EBattleWeapon::SupportGun ? SupportReloadSeconds : ReloadSeconds; }
+	int32 ReserveFor(EBattleWeapon W) const { return W == EBattleWeapon::AntiTank ? ATReserve : ReserveAmmo; }
 	float ShotInterval(EBattleWeapon W, bool bPlayer) const
 	{
+		if (W == EBattleWeapon::AntiTank) return ATShotInterval;
 		if (W == EBattleWeapon::SupportGun) return bPlayer ? SupportPlayerInterval : SupportAIInterval;
 		return bPlayer ? PlayerShotInterval : AIShotInterval;
 	}
@@ -272,9 +286,19 @@ public:
 	// Scout pair (squad type 2, ROADMAP 2026-11-14 values): 2 rifles, cost 8, sight while still 300 m (400 m with the range profile), at most 3 per team.
 	UPROPERTY(Config, EditAnywhere) int32 AreaScoutCost = 8;
 	UPROPERTY(Config, EditAnywhere) int32 AreaScoutLimit = 3;
+	// Anti-tank team (squad type 3, ROADMAP values): 4 soldiers (slots 1 and 2 anti-tank weapons, the others rifles), cost 12, at most 3
+	// per team. The AI keeps AreaATKeep teams (trial -BattleAreaATKeep=n; default 0 until measured), one more per AreaScoutAfterHires purchases.
+	UPROPERTY(Config, EditAnywhere) int32 AreaATCost = 12;
+	UPROPERTY(Config, EditAnywhere) int32 AreaATLimit = 3;
+	UPROPERTY(Config, EditAnywhere) int32 AreaATKeep = 0;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRange = 30000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRangeProfile = 40000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutStillSpeed = 30.f;
+	// Lookouts (BattleFieldLayout::Lookouts): a still soldier within LookoutRadius sees LookoutSightRange (with the range profile:
+	// LookoutSightRangeProfile). What he sees beyond normal sight reaches his team through the same two-step report as scouts.
+	UPROPERTY(Config, EditAnywhere) float LookoutRadius = 1000.f;
+	UPROPERTY(Config, EditAnywhere) float LookoutSightRange = 30000.f;
+	UPROPERTY(Config, EditAnywhere) float LookoutSightRangeProfile = 40000.f;
 	// AI use of scout pairs (stage 2): keep up to AreaScoutKeep active, one more per AreaScoutAfterHires purchases; posts ScoutPostAdvance ahead of the front point.
 	UPROPERTY(Config, EditAnywhere) int32 AreaScoutKeep = 2;
 	UPROPERTY(Config, EditAnywhere) int32 AreaScoutAfterHires = 3;

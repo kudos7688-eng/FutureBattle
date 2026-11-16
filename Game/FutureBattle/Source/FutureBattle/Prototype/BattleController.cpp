@@ -100,6 +100,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("HireRegular"), EKeys::Two, &ABattleController::HireRegular);
 	Button(TEXT("HireVeteran"), EKeys::Three, &ABattleController::HireVeteran);
 	Button(TEXT("HireScout"), EKeys::Four, &ABattleController::HireScout);
+	Button(TEXT("HireAntiTank"), EKeys::Five, &ABattleController::HireAntiTank);
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
 	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
 	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
@@ -890,6 +891,7 @@ void ABattleController::PressCommandButton(int32 Index)
  case 6: HireRegular(); break;
  case 7: HireVeteran(); break; // area battle: heavy infantry
  case 8: HireScout(); break; // area battle: scout pair
+ case 9: HireAntiTank(); break; // area battle: anti-tank team
  default: break;
  }
 }
@@ -968,4 +970,11 @@ void ABattleController::UpdateGamepad(float DeltaTime)
   R.Pitch=FMath::Clamp(FRotator::NormalizeAxis(R.Pitch+RY*110.f*Assist*DeltaTime),-80.f,80.f);
   SetControlRotation(R);
  }
+}
+// Area battle: key 5 buys an anti-tank team (squad type 3, at most AreaATLimit per team).
+void ABattleController::HireAntiTank()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::AntiTank); ShowNotice(Match->LastMessage);
 }

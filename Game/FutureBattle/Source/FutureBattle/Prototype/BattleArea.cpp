@@ -67,9 +67,10 @@ int32 UBattleMatch::ActiveSquads(int32 Team)const
  int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active;
  return Count;
 }
-int32 UBattleMatch::ActiveScouts(int32 Team)const
+int32 UBattleMatch::ActiveScouts(int32 Team)const{return ActiveOfType(Team,BattleSquadType::Scout);}
+int32 UBattleMatch::ActiveOfType(int32 Team,uint8 SquadType)const
 {
- int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==BattleSquadType::Scout;
+ int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==SquadType;
  return Count;
 }
 bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,uint8 SquadType)
@@ -85,6 +86,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(SquadType>=BattleSquadType::Count)return Fail(TEXT("Recruitment unavailable"));
  const int32 Cost=SquadType==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(SquadType);
  if(SquadType==BattleSquadType::Scout&&ActiveScouts(Team)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaScoutLimit))return Fail(TEXT("Scout pair limit reached"));
+ if(SquadType==BattleSquadType::AntiTank&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaATLimit))return Fail(TEXT("Anti-tank team limit reached"));
  if(Credits[Team]<Cost)return Fail(TEXT("Insufficient resources"));
  if(GetWorld()->GetSubsystem<UBattleState>()->GetSquads().Num()>=100)return Fail(TEXT("Squad record capacity reached (100 including lost squads)"));
  auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
@@ -102,7 +104,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(R->SightExperiment.Enabled)R->SightExperiment.HireTimes[Team].Add(Elapsed);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE team=%d squad=%d auto=%d cost=%d credits=%d cancelled_replacements=%d active=%d time=%.1f leader=%s home=%s"),
   Team,SID,bAuto?1:0,Cost,Credits[Team],Cancelled,ActiveSquads(Team),Elapsed,*R->Position(Store->FindSquad(SID)->LeaderUnitID).ToCompactString(),*AreaHome(Team).ToCompactString());
- LastMessage=SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
+ LastMessage=SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
  return true;
 }
 void UBattleMatch::UpdateAreaHiring()
@@ -125,6 +127,9 @@ void UBattleMatch::UpdateAreaHiring()
    const int32 After=FMath::Max(1,GetDefault<UBattleTuning>()->AreaScoutAfterHires);
    const int32 Want=FMath::Min(HireIntent.ScoutKeep,Bought/After);
    if(Want>0&&ActiveScouts(Team)<Want)Type=BattleSquadType::Scout;
+   // Anti-tank teams (trial -BattleAreaATKeep, default AreaATKeep 0): the same pacing as scout pairs, scouts first.
+   const int32 ATWant=FMath::Min(HireIntent.ATKeep,Bought/After);
+   if(Type!=BattleSquadType::Scout&&ATWant>0&&ActiveOfType(Team,BattleSquadType::AntiTank)<ATWant)Type=BattleSquadType::AntiTank;
   }
   const int32 TypeCost=Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
   if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=25)continue;
@@ -261,6 +266,7 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
  I.HeavyShare=bTrial&&S.HeavyShare>=0?S.HeavyShare:FMath::Clamp(GetDefault<UBattleTuning>()->AreaHeavyShare,0.f,1.f);
  // Scout pairs the AI keeps: configured default; -BattleAreaScoutKeep replaces it for the trial team(s).
  I.ScoutKeep=FMath::Clamp(bTrial&&S.ScoutKeep>=0?S.ScoutKeep:GetDefault<UBattleTuning>()->AreaScoutKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaScoutLimit));
+ I.ATKeep=FMath::Clamp(bTrial&&S.ATKeep>=0?S.ATKeep:GetDefault<UBattleTuning>()->AreaATKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaATLimit));
  // S7/S8 trials (one team only with -BattleAreaTrialTeam).
  if(bTrial){I.FlankOffset=S.FlankOffset;I.bFlankSameSide=S.bFlankSameSide;I.BaseReturnLiving=S.BaseReturnLiving;}
  // Stage 2: time-phased team plans (match time only; no hidden information). Values are first trial values (numbers delegated).
@@ -341,7 +347,18 @@ FVector UBattleMatch::AreaScoutPost(int32 Team,int32 SquadID) const
  Fronts.Sort([&](int32 A,int32 B){const FVector& RefPos=bOwned?Enemy:Own;const double DA=FVector::DistSquared2D(Objectives[A].Position,RefPos),DB=FVector::DistSquared2D(Objectives[B].Position,RefPos);return DA!=DB?DA<DB:A<B;});
  int32 Rank=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())
   Rank+=P.Key<SquadID&&P.Value.Team==Team&&P.Value.SquadType==BattleSquadType::Scout&&P.Value.CommandStatus==EBattleCommandStatus::Active;
- const FVector Point=Objectives[Fronts[Rank%Fronts.Num()]].Position;
+ // Lookouts first (public places with long sight), when not ahead of the team's own front; then the front points.
+ TArray<FVector> Lookouts;
+ if(bOwned){const double FrontD=FVector::Dist2D(Objectives[Fronts[0]].Position,Enemy);for(const FVector& L:BattleFieldLayout::Lookouts(GetWorld()))if(FVector::Dist2D(L,Enemy)>=FrontD-2000.)Lookouts.Add(L);}
+ Lookouts.Sort([&](const FVector& A,const FVector& B){return FVector::DistSquared2D(A,Enemy)<FVector::DistSquared2D(B,Enemy);});
+ const int32 Slot=Rank%(Lookouts.Num()+Fronts.Num());
+ if(Slot<Lookouts.Num())
+ {
+  FVector Post=Lookouts[Slot];
+  if(auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld())){FNavLocation L;if(Nav->ProjectPointToNavigation(Post,L,FVector(500,500,500)))Post=L.Location;}
+  return Post;
+ }
+ const FVector Point=Objectives[Fronts[Slot-Lookouts.Num()]].Position;
  const FVector Ahead=(Enemy-Point).GetSafeNormal2D();
  FVector Post=Point+Ahead*FMath::Clamp(GetDefault<UBattleTuning>()->ScoutPostAdvance,-30000.f,30000.f);
  // After each retreat the pair watches from a post shifted sideways (right, left, back to centre), not the spot it was found at.

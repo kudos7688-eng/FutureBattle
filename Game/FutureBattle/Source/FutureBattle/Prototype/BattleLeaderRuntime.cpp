@@ -589,7 +589,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  if(SightExperiment.Started)
  {
   auto& E=SightExperiment;++E.Shots;
-  if(const auto* ShooterSquad=Store->FindSquad(U->SquadID); ShooterSquad && ShooterSquad->SquadType<3 && U->Team>=0 && U->Team<2) ++E.TypeShots[U->Team][ShooterSquad->SquadType];
+  if(const auto* ShooterSquad=Store->FindSquad(U->SquadID); ShooterSquad && ShooterSquad->SquadType<4 && U->Team>=0 && U->Team<2) ++E.TypeShots[U->Team][ShooterSquad->SquadType];
   const auto* P=Plans.Find(U->SquadID);const auto* C=P?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,P->TargetID):nullptr;
   const double D=C?FVector::Dist(Position(ID),C->LastKnownPosition):-1;
   E.ShotDistances.Add(D);if(E.FirstShot<0){E.FirstShot=GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed;E.FirstShotDistance=D;}
@@ -618,8 +618,10 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  SuppressNear(U->Team,Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Now,U->Weapon==EBattleWeapon::SupportGun?BattleSuppression::Tuning().SupportScale:1.f);
  const int32 Victim=HitIDs.FindRef(Hit.GetComponent());
  // Per-shot damage by the shooter's squad type (heavy infantry may hit harder; rifle squads 1x).
- const float ShotDmg=[&]{const auto* SS=Store->FindSquad(U->SquadID);return T->ShotDamage*BattleSquadType::DamageScale(SS?SS->SquadType:0);}();
- if(bArea)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,ShotDmg);
+ // An anti-tank round hits for ATDamage (and ATBaseDamage on an enemy home); its explosion follows below.
+ const bool bAT=U->Weapon==EBattleWeapon::AntiTank;
+ const float ShotDmg=bAT?T->ATDamage:[&]{const auto* SS=Store->FindSquad(U->SquadID);return T->ShotDamage*BattleSquadType::DamageScale(SS?SS->SquadType:0);}();
+ if(bArea)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,bAT?T->ATBaseDamage:ShotDmg);
  if(SightExperiment.Started && Victim>0) ++SightExperiment.Hits;
  const auto* BeforeVictim=Store->Find(Victim);
  const float BeforeHP=BeforeVictim?BeforeVictim->HP:0;
@@ -646,8 +648,8 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   auto& E=SightExperiment;const bool Killed=BeforeHP>0 && !Store->Find(Victim)->IsAlive();
   // Squad type activity: damage and kills by the shooter's squad type, damage taken and deaths by the victim's.
   { const float Dealt=FMath::Min(BeforeHP,ShotDmg); const auto* ShooterSquad=Store->FindSquad(U->SquadID);
-    if(ShooterSquad && ShooterSquad->SquadType<3 && U->Team>=0 && U->Team<2){E.TypeDamage[U->Team][ShooterSquad->SquadType]+=Dealt;E.TypeKills[U->Team][ShooterSquad->SquadType]+=Killed;}
-    if(VictimSquadState && VictimSquadState->SquadType<3 && VictimTeam>=0 && VictimTeam<2){E.TypeTaken[VictimTeam][VictimSquadState->SquadType]+=Dealt;E.TypeDeaths[VictimTeam][VictimSquadState->SquadType]+=Killed;} }
+    if(ShooterSquad && ShooterSquad->SquadType<4 && U->Team>=0 && U->Team<2){E.TypeDamage[U->Team][ShooterSquad->SquadType]+=Dealt;E.TypeKills[U->Team][ShooterSquad->SquadType]+=Killed;}
+    if(VictimSquadState && VictimSquadState->SquadType<4 && VictimTeam>=0 && VictimTeam<2){E.TypeTaken[VictimTeam][VictimSquadState->SquadType]+=Dealt;E.TypeDeaths[VictimTeam][VictimSquadState->SquadType]+=Killed;} }
   (VictimLeader?E.LeaderHits:E.FollowerHits)[VictimTeam]++;
   E.Cover(HitKeys[VictimCoverState]);if(Killed)E.Cover(DeathKeys[VictimCoverState]);
   if(Killed && !VictimLeader) E.FollowerCombatDeaths[VictimTeam]++;
@@ -676,6 +678,8 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   if(Damaged){const auto View=Sight(Victim);Angle=FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(View.Forward.GetSafeNormal2D(),(Position(ID)-Position(Victim)).GetSafeNormal2D()),-1.,1.)));}
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FLANK_SHOT t=%.3f squad=%d team=%d victim_squad=%d damage=%.1f kill=%d angle=%.1f"),GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed,U->SquadID,U->Team,VictimSquad,Damage,Kill,Angle);
  }
+ // Anti-tank round: the explosion at the impact hurts enemies around it (not the soldier already hit; never own soldiers).
+ if(bAT)Explode(ID,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Victim);
  if(Damaged)
   if(bPlayerShot) if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())) PC->HitMarkerUntil=Now+.18;
  if(U->Team==0 || (Actor(ID) && Actor(ID)->bRevealed)) DrawDebugLine(GetWorld(),Start,Hit.bBlockingHit?Hit.ImpactPoint:End,U->Team?FColor::Orange:FColor::Cyan,false,.09f,0,2);
@@ -743,11 +747,27 @@ float UBattleLeaderRuntime::TargetRange(int32 ID) const
 
 float UBattleLeaderRuntime::ScoutStillSight(int32 ID) const
 {
+ // Called for every sight check: cheap tests first (scout squad, at a lookout), the speed last.
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
- const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
- const float Range=S?BattleSquadType::StillSightRange(S->SquadType):0.f;
- if(Range<=0.f||!U->IsAlive()) return 0.f;
+ if(!U||!U->IsAlive()) return 0.f;
+ const auto* S=Store->FindSquad(U->SquadID);
+ float Range=S?BattleSquadType::StillSightRange(S->SquadType):0.f;
+ if(AtLookout(ID)){const auto* T=GetDefault<UBattleTuning>();Range=FMath::Max(Range,FMath::Clamp(BattleRanges::Get().bActive?T->LookoutSightRangeProfile:T->LookoutSightRange,0.f,60000.f));}
+ if(Range<=0.f) return 0.f;
  const auto* B=Bodies.Find(ID); if(!B) return 0.f;
  const float Speed=B->Actor.IsValid()?B->Actor->GetVelocity().Size2D():B->Velocity.Size2D();
  return Speed<=GetDefault<UBattleTuning>()->ScoutStillSpeed?Range:0.f;
+}
+bool UBattleLeaderRuntime::AtLookout(int32 ID) const
+{
+ if(!bLookoutCache){LookoutCache=BattleFieldLayout::Lookouts(GetWorld());bLookoutCache=true;}
+ if(LookoutCache.IsEmpty()||!Bodies.Contains(ID)) return false;
+ const FVector P=Position(ID);const double R2=FMath::Square(FMath::Max(0.f,GetDefault<UBattleTuning>()->LookoutRadius));
+ for(const FVector& L:LookoutCache) if(FVector::DistSquared2D(P,L)<=R2) return true;
+ return false;
+}
+bool UBattleLeaderRuntime::HasLongSight(int32 ID) const
+{
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
+ return (S&&S->SquadType==BattleSquadType::Scout)||AtLookout(ID);
 }

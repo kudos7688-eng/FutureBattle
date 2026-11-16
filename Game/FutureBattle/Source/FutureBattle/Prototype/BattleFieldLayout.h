@@ -30,6 +30,14 @@ namespace BattleFieldLayout
 		if(IsUrban(World))return FVector((Team?1:-1)*(39000+(Group%5)*450),(Group/5-2)*3500,100);
 		return WideSpawn(Team,Group,IsExpanded(World));
 	}
+	// Lookouts (ROADMAP 2026-11-14): public places where a still soldier sees far (UBattleTuning::LookoutSightRange). Map E: the city
+	// edges overlooking the open flanks (0, +-165 m); maps A-D: the field edges beside the centre (0, +-170 m).
+	inline TArray<FVector> Lookouts(const UWorld* World)
+	{
+		if(IsUrban(World))return {FVector(0,16500,0),FVector(0,-16500,0)};
+		if(IsSightField(World))return {Expand(FVector(0,17000,0),IsExpanded(World)),Expand(FVector(0,-17000,0),IsExpanded(World))};
+		return {};
+	}
 	// Half size of the playable floor (X, Y) in cm; used by the minimap.
 	inline FVector2D FieldHalfExtent(const UWorld* World) {return IsUrban(World)?FVector2D(50000,35000):IsExpanded(World)?FVector2D(40000,30000):IsSightField(World)?FVector2D(30000,20000):IsLarge(World)?FVector2D(12000,9000):FVector2D(4000,3000);}
 	inline float HomeDistance(const UWorld* World) {return IsUrban(World)?42000:IsExpanded(World)?36000:IsSightField(World)?27000:10000;}

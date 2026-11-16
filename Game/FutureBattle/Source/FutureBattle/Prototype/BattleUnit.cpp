@@ -228,10 +228,11 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 
 void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Parent, EBattleWeapon Weapon, bool bFirstPerson) const
 {
-	const bool Support = Weapon == EBattleWeapon::SupportGun;
+	// No anti-tank model yet: the support gun model, larger.
+	const bool Support = Weapon == EBattleWeapon::SupportGun || Weapon == EBattleWeapon::AntiTank;
 	Model->SetStaticMesh(Support ? SupportModel : CarbineModel);
 	Model->AttachToComponent(Parent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, bFirstPerson ? NAME_None : FName(TEXT("hand_r")));
-	Model->SetRelativeScale3D(FVector(Support ? 1.0 : .62));
+	Model->SetRelativeScale3D(FVector(Weapon == EBattleWeapon::AntiTank ? 1.35 : Support ? 1.0 : .62));
 	Model->SetRelativeRotation(FRotator(0,90,0));
 	Model->SetRelativeLocation(FVector(47,15,-16));
 	if (!bFirstPerson)

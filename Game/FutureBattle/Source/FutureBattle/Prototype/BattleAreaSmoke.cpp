@@ -6,6 +6,7 @@
 #include "InputKeyEventArgs.h"
 #include "BattleSquadTactics.h"
 #include "BattleTactics.h"
+#include "BattleFieldLayout.h"
 #include "BattleWarScore.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/StaticMeshActor.h"
@@ -157,7 +158,8 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     {
      const FVector Post=M->AreaScoutPost(0,Scouts[1]);double Near=DBL_MAX;FVector Point=FVector::ZeroVector;
      for(const auto& O:M->Objectives){const double D=FVector::Dist2D(Post,O.Position);if(D<Near){Near=D;Point=O.Position;}}
-     Check(Near>1000&&Near<9000&&FVector::Dist2D(Post,M->AreaHome(1))>FVector::Dist2D(Point,M->AreaHome(1))&&M->AreaIntent(0).ScoutKeep==2,TEXT("scout post stands back behind an own front point"));
+     bool AtLookout=false;for(const FVector& L:BattleFieldLayout::Lookouts(GetWorld()))AtLookout|=FVector::Dist2D(Post,L)<1500;
+     Check(((Near>1000&&Near<9000&&FVector::Dist2D(Post,M->AreaHome(1))>FVector::Dist2D(Point,M->AreaHome(1)))||AtLookout)&&M->AreaIntent(0).ScoutKeep==2,TEXT("scout post at a lookout or behind an own front point"));
     }
     // Reports (stage 3): a sighting beyond normal sight is a scout long contact (hidden until reported); a report's positions
     // reach the team's plans for ScoutReportMemory seconds.
@@ -205,6 +207,28 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Store->ApplyDamage(Heir,1,10000);
     Check(Store->FindSquad(Scouts[0])->CommandStatus==EBattleCommandStatus::Disabled,TEXT("scout pair stops when both are lost"));
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_SCOUT_SMOKE squads=%d,%d,%d heir=%d validation=%s"),Scouts[0],Scouts[1],Scouts[2],Heir,*Error);
+   }
+   // Anti-tank team (squad type 3): 4 soldiers, two anti-tank weapons (1 loaded + 3 reserve, never refilled beyond that), 12
+   // resources; its explosion hurts an enemy at the impact by ATSplashDamage and never an ally. Lookouts exist on this map.
+   {
+    for(int32 Leader:{91,101})Store->ApplyDamage(Leader,1,10000);
+    M->UpdateArea(1);M->Area.Replacements.Reset();
+    const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::AntiTank);
+    if(M->Credits[0]<Cost){const int32 Add=Cost-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
+    const int32 C0=M->Credits[0];const bool Hired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::AntiTank);
+    int32 SID=0;for(const auto& P:Store->GetSquads())SID=FMath::Max(SID,P.Key);const auto* AS=Store->FindSquad(SID);
+    bool ATGood=Hired&&Cost==12&&M->Credits[0]==C0-Cost&&AS&&AS->SquadType==BattleSquadType::AntiTank&&AS->Members.Num()==4&&AS->DisplayName.Contains(TEXT("対戦車班"));
+    int32 Gunners=0;if(ATGood)for(int32 ID:AS->Members){const auto* U=Store->Find(ID);if(U->Weapon==EBattleWeapon::AntiTank){++Gunners;ATGood&=U->Ammo==1&&U->Reserve==3;}}
+    if(ATGood){const int32 G=AS->Members[1];Store->AddReserve(G,90);ATGood&=Store->Find(G)->Reserve==3;}
+    Check(ATGood&&Gunners==2,TEXT("anti-tank team: 4 soldiers, 2 anti-tank weapons with 4 rounds, 12 resources"));
+    int32 Enemy=INDEX_NONE;for(const auto& P:Store->GetUnits())if(P.Value.Team==1&&P.Value.IsAlive()&&Bodies.Contains(P.Key)){Enemy=P.Key;break;}
+    const int32 Ally=AS?AS->Members[0]:INDEX_NONE;
+    const float EnemyBefore=Enemy!=INDEX_NONE?Store->Find(Enemy)->HP:0.f,AllyBefore=Ally!=INDEX_NONE?Store->Find(Ally)->HP:0.f;
+    const int32 ATHit=AS&&Enemy!=INDEX_NONE?Explode(AS->Members[1],Position(Enemy),INDEX_NONE):0;
+    const float Lost=Enemy!=INDEX_NONE?EnemyBefore-Store->Find(Enemy)->HP:0.f;
+    Check(ATHit>=1&&FMath::IsNearlyEqual(Lost,FMath::Min(EnemyBefore,GetDefault<UBattleTuning>()->ATSplashDamage),1.f)&&Store->Find(Ally)->HP==AllyBefore,TEXT("anti-tank explosion hurts enemies around the impact, never allies"));
+    Check(BattleFieldLayout::Lookouts(GetWorld()).Num()==2&&!HasLongSight(1),TEXT("two lookouts; a soldier away from them has normal sight"));
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_AT_SMOKE squad=%d gunners=%d enemy=%d lost=%.1f hit=%d"),SID,Gunners,Enemy,Lost,ATHit);
    }
   }
   // Resource income: base 1 plus 1 per actually owned point every 20 s, for both teams at once.

@@ -25,9 +25,9 @@ namespace
 bool UBattleMatch::IsScoutLongContact(int32 ObserverID,const FBattleContact& Contact) const
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ObserverID);
- const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
- if(!S||S->SquadType!=BattleSquadType::Scout) return false;
  const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ // Long sight: a scout pair member or a soldier at a lookout (BattleLeaderRuntime::HasLongSight).
+ if(!U||!R->HasLongSight(ObserverID)) return false;
  return FVector::DistSquared2D(R->Position(ObserverID),Contact.LastKnownPosition)>FMath::Square(U->Perception.SightRange);
 }
 
@@ -56,7 +56,10 @@ void UBattleMatch::UpdateScoutReports()
  for(int32 SID:Squads)
  {
   const auto* S=Store->FindSquad(SID);
-  if(S->SquadType!=BattleSquadType::Scout||S->CommandStatus!=EBattleCommandStatus::Active)continue;
+  // Observers: scout pairs, and any squad with a member at a lookout (or a report of its own still running).
+  if(S->CommandStatus!=EBattleCommandStatus::Active)continue;
+  const bool bScoutPair=S->SquadType==BattleSquadType::Scout;
+  if(!bScoutPair&&!ScoutReports.Contains(SID)){bool AtLookout=false;for(int32 ID:S->Members){const auto* U=Store->Find(ID);if(U&&U->IsAlive()&&R->AtLookout(ID)){AtLookout=true;break;}}if(!AtLookout)continue;}
   auto& Rep=ScoutReports.FindOrAdd(SID);
   auto Restart=[&Rep](){Rep.Started=-1;Rep.Stage=0;};
   int32 Living=0;bool Pinned=false;float HP=0;TMap<int32,FVector> Long;FVector Nearest=FVector::ZeroVector;double NearestD=DBL_MAX;
@@ -78,13 +81,13 @@ void UBattleMatch::UpdateScoutReports()
   const float Warn=GetDefault<UBattleTuning>()->EffectiveSightRange()*FMath::Max(0.f,T->ScoutWarnScale);
   const bool Near=NearestD<=FMath::Square(Warn);
   if(Hit||Near)Rep.LastDanger=Now;
-  if(Hit)
+  if(Hit&&bScoutPair)
   {
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SCOUT_HIT team=%d squad=%d report_age=%.1f stage=%d living=%d time=%.1f"),S->Team,SID,Rep.Started>=0?Now-Rep.Started:-1.,Rep.Stage,Living,Now);
   }
   // Retreat (AI-led pairs, on a warning or a hit): ScoutRetreatDistance away from the nearest visible enemy (towards home when none is seen),
   // never past the home; the pair then watches from there (BattleMatch.cpp) and the report pauses while it moves.
-  if((Hit||Near)&&ScoutRetreatEnabled()&&Now>=Rep.RetreatUntil&&IsAIScoutLed(SID))
+  if(bScoutPair&&(Hit||Near)&&ScoutRetreatEnabled()&&Now>=Rep.RetreatUntil&&IsAIScoutLed(SID))
   {
    const FVector ToHome=AreaHome(S->Team)-Eye;
    const FVector Away=NearestD<DBL_MAX?(Eye-Nearest).GetSafeNormal2D():ToHome.GetSafeNormal2D();

@@ -70,7 +70,7 @@ int32 UBattleState::AddReserve(int32 ID, int32 Rounds)
 {
 	auto* Unit = Units.Find(ID);
 	if (!Unit || !Unit->IsAlive() || Rounds <= 0) return 0;
-	const int32 Added = FMath::Min(Rounds, FMath::Max(0, GetDefault<UBattleTuning>()->ReserveAmmo - Unit->Reserve));
+	const int32 Added = FMath::Min(Rounds, FMath::Max(0, GetDefault<UBattleTuning>()->ReserveFor(Unit->Weapon) - Unit->Reserve));
 	Unit->Reserve += Added; return Added;
 }
 
@@ -91,7 +91,7 @@ int32 UBattleState::RegisterUnit(int32 Team, float InitialHealth, EBattleWeapon 
 	State.HP = FMath::Max(1.f, InitialHealth > 0.f && FMath::IsFinite(InitialHealth) ? InitialHealth : Tuning->Health);
 	State.Weapon = Weapon;
 	State.Ammo = FMath::Max(1, Tuning->Capacity(Weapon));
-	State.Reserve = FMath::Max(0, Tuning->ReserveAmmo);
+	State.Reserve = FMath::Max(0, Tuning->ReserveFor(Weapon));
 	Units.Add(State.UnitID, State);
 	SetTrainingPreset(State.UnitID, EBattleTraining::Regular);
 	return State.UnitID;
@@ -458,7 +458,7 @@ namespace
   return V;
  }
 }
-int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:Type==Scout?2:10;}
+int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:Type==Scout?2:Type==AntiTank?4:10;}
 bool BattleSquadType::Replenished(uint8 Type){return Type!=Scout;}
 bool BattleSquadType::LeaderHandover(uint8 Type){return Type==Scout;}
 float BattleSquadType::StillSightRange(uint8 Type)
@@ -471,13 +471,14 @@ float BattleSquadType::StillSightRange(uint8 Type)
 float BattleSquadType::HealthScale(uint8 Type){return Type==Heavy?HeavyValues().Health:1.f;}
 float BattleSquadType::SpeedScale(uint8 Type){return Type==Heavy?HeavyValues().Speed:1.f;}
 float BattleSquadType::DamageScale(uint8 Type){return Type==Heavy?HeavyValues().Damage:1.f;}
-int32 BattleSquadType::AreaCost(uint8 Type){if(Type==Scout)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaScoutCost,1,100);return Type==Heavy?HeavyValues().Cost:FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
-EBattleWeapon BattleSquadType::Weapon(uint8 Type,int32 Slot){return Type==Heavy?EBattleWeapon::SupportGun:WeaponForSlot(Slot);}
+int32 BattleSquadType::AreaCost(uint8 Type){if(Type==AntiTank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaATCost,1,100);if(Type==Scout)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaScoutCost,1,100);return Type==Heavy?HeavyValues().Cost:FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
+EBattleWeapon BattleSquadType::Weapon(uint8 Type,int32 Slot){if(Type==AntiTank)return Slot==1||Slot==2?EBattleWeapon::AntiTank:EBattleWeapon::Carbine;return Type==Heavy?EBattleWeapon::SupportGun:WeaponForSlot(Slot);}
 void UBattleState::SetSquadType(int32 SquadID,uint8 Type)
 {
  // Purchased squads only: name, and every member at the type's full health (the leader keeps the larger of the two scales).
  auto* S=Squads.Find(SquadID); if(!S||Type>=BattleSquadType::Count) return;
  S->SquadType=Type; if(Type==BattleSquadType::Heavy) S->DisplayName=FString::Printf(TEXT("第%d重装歩兵隊"),SquadID);
  if(Type==BattleSquadType::Scout) S->DisplayName=FString::Printf(TEXT("第%d偵察組"),SquadID);
+ if(Type==BattleSquadType::AntiTank) S->DisplayName=FString::Printf(TEXT("第%d対戦車班"),SquadID);
  for(int32 ID:S->Members) if(auto* U=Units.Find(ID); U&&U->IsAlive()) U->HP=MaxHealthOf(ID);
 }

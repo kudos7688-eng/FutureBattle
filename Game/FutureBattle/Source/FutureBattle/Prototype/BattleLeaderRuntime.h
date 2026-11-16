@@ -126,8 +126,14 @@ public:
  bool ReplaceFollower(int32 DeadID);
  // Scout pairs: the surviving follower becomes the squad leader (its Mass body is replaced by an Actor in place).
  bool PromoteScout(int32 SquadID,int32 NewLeaderID);
- // Sight range of a still scout (0 when the unit is not a scout or is moving).
+ // Long sight of a still observer: a scout pair member, or any soldier at a lookout (0 when moving or neither).
+ // AtLookout: within LookoutRadius of a lookout (public map places).
+ bool AtLookout(int32 ID) const;
+ bool HasLongSight(int32 ID) const;
+ mutable TArray<FVector> LookoutCache; mutable bool bLookoutCache=false; // BattleFieldLayout::Lookouts of this world
  float ScoutStillSight(int32 ID) const;
+ // Anti-tank explosion at a point: enemies of the shooter within ATSplashRadius lose up to ATSplashDamage (falling off to zero at the edge).
+ int32 Explode(int32 ShooterID,FVector At,int32 ExcludeID);
  // MixedFast or Area. bSelect selects a new team-0 leader (player purchase); OutSquadID receives the new squad.
  bool SpawnPurchasedSquad(int32 Team,EBattleTraining Training,FString& Error,bool bSelect=true,int32* OutSquadID=nullptr,uint8 SquadType=0);
  bool CreateBody(const FBattleSavedUnit& Entry,AActor* Host,FBattleLeaderBody& Body);

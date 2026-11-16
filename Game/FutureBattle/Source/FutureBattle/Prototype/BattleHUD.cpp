@@ -242,7 +242,7 @@ void ABattleHUD::DrawHUD()
 	if (Focus && Focus->GetState())
 	{
 		const FBattleUnitState* S = Focus->GetState();
-		Label(FString::Printf(TEXT("%s %02d ／ 部隊%02d   HP %.0f   弾 %02d / %02d   %s ／ %s   再試行 %d%s"), S->Weapon == EBattleWeapon::SupportGun ? TEXT("支援火器") : TEXT("小銃"), S->UnitID, S->SquadID, S->HP, S->Ammo, S->Reserve,
+		Label(FString::Printf(TEXT("%s %02d ／ 部隊%02d   HP %.0f   弾 %02d / %02d   %s ／ %s   再試行 %d%s"), S->Weapon == EBattleWeapon::AntiTank ? TEXT("対戦車火器") : S->Weapon == EBattleWeapon::SupportGun ? TEXT("支援火器") : TEXT("小銃"), S->UnitID, S->SquadID, S->HP, S->Ammo, S->Reserve,
 			*BattleUIText::Ja(BattleOrderName(S->Order)), *BattleUIText::Ja(BattleActionName(S->Action)), S->MoveRetries, S->ReloadEndTime > 0 ? TEXT("   装填中…") : TEXT("")), 34, H - 112, S->Action == EBattleAction::MoveFailed ? FLinearColor::Yellow : White, 1.05f);
 		if(!Mode->bLeaderCommand)
         {
@@ -315,8 +315,8 @@ void ABattleHUD::DrawHUD()
 		// Command bar (command UI 2026-11-16): buttons call the same actions as the keys shown in brackets.
 		{
 			const auto Bar = FBattleCommandBarLayout::Make(FVector2D(W, H));
-			static const TCHAR* const KeyNames[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("小隊を購入 [2]"), TEXT("重装歩兵 [3]"), TEXT("偵察組 [4]") };
-			static const TCHAR* const PadNames[] = { TEXT("移動 [X]"), TEXT("攻撃移動 [Y]"), TEXT("防衛 [RB]"), TEXT("停止 [B]"), TEXT("手動指揮 [十字↑]"), TEXT("AIに委任 [十字↓]"), TEXT("小隊を購入 [十字←]"), TEXT("重装歩兵 [Aでクリック]"), TEXT("偵察組 [Aでクリック]") };
+			static const TCHAR* const KeyNames[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("小隊を購入 [2]"), TEXT("重装歩兵 [3]"), TEXT("偵察組 [4]"), TEXT("対戦車班 [5]") };
+			static const TCHAR* const PadNames[] = { TEXT("移動 [X]"), TEXT("攻撃移動 [Y]"), TEXT("防衛 [RB]"), TEXT("停止 [B]"), TEXT("手動指揮 [十字↑]"), TEXT("AIに委任 [十字↓]"), TEXT("小隊を購入 [十字←]"), TEXT("重装歩兵 [Aでクリック]"), TEXT("偵察組 [Aでクリック]"), TEXT("対戦車班 [Aでクリック]") };
 			const TCHAR* const* Names = PC->bGamepadActive ? PadNames : KeyNames;
 			const bool bAny = !PC->GetSelection().IsEmpty();
 			for (int32 I = 0; I < FBattleCommandBarLayout::Count; ++I)
@@ -330,7 +330,7 @@ void ABattleHUD::DrawHUD()
 		}
 		if (PC->bGamepadActive) Label(TEXT("右スティック：カーソル   A：選択・決定   左スティック：視点移動   LT/RT：拡大縮小   LB：全選択   ビュー：直接操作   メニュー：AI一時停止   十字→：速度"), 34, H - 53, Muted, .9f);
 		else
-		Label(FString::Printf(TEXT("左ドラッグ：選択   Q：全選択   E/Tab：直接操作   WASD：視点移動   ホイール：拡大縮小   P：AI一時停止   F5：やり直し   F6：記憶表示   %s      選択中 %02d"), Match->IsEnabled() ? TEXT("1〜4：購入") : TEXT("F7：練度の切替"), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
+		Label(FString::Printf(TEXT("左ドラッグ：選択   Q：全選択   E/Tab：直接操作   WASD：視点移動   ホイール：拡大縮小   P：AI一時停止   F5：やり直し   F6：記憶表示   %s      選択中 %02d"), Match->IsEnabled() ? TEXT("1〜5：購入") : TEXT("F7：練度の切替"), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
 	}
 	else
 	{
@@ -394,6 +394,9 @@ void ABattleHUD::DrawMinimap()
   DrawRect(Color,P.X-5,P.Y-5,10,10);
   DrawText(FString::Printf(TEXT("%c"),'A'+Index),Color,P.X+7,P.Y-7,GEngine->GetSmallFont(),.8f);
  }
+ // Lookouts (public map places): a small diamond.
+ for(const FVector& Look:BattleFieldLayout::Lookouts(GetWorld()))
+ {const FVector2D P=Map.ToScreen(Look);DrawLine(P.X,P.Y-6,P.X+6,P.Y,White,1);DrawLine(P.X+6,P.Y,P.X,P.Y+6,White,1);DrawLine(P.X,P.Y+6,P.X-6,P.Y,White,1);DrawLine(P.X-6,P.Y,P.X,P.Y-6,White,1);}
  // Enemies: only contacts held by the player's side. Seen now = solid; remembered = dim, at the last known position.
  TMap<int32,const FBattleContact*> Known;
  auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();

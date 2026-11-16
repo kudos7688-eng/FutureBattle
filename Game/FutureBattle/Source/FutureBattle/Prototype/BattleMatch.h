@@ -17,6 +17,7 @@ struct FAreaIntent
  int32 BaseReturnLiving=0;            // S8: living count at which home-assault squads return for supply (0 = SupplyReturnLiving)
  int32 Phase=0;                       // index of the active phase of the team plan (0 when no plan)
  float HeavyShare=0.f;                // share of AI purchases that are heavy infantry (0 = rifle squads only)
+ int32 ATKeep=0;                      // anti-tank teams the AI keeps active (same pacing as scouts; 0 = none)
  int32 ScoutKeep=0;                   // scout pairs the AI keeps active (one more per ScoutAfterHires purchases, up to this; 0 = none)
 };
 // One sector (the part of the field nearest one objective; a lane on maps A-D) as seen by one team: own soldiers and own front (furthest progress
@@ -96,6 +97,7 @@ public:
  int32 ActiveSquads(int32 Team) const;
  // Active scout pairs of a team (at most UBattleTuning::AreaScoutLimit).
  int32 ActiveScouts(int32 Team) const;
+ int32 ActiveOfType(int32 Team,uint8 SquadType) const;
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;
