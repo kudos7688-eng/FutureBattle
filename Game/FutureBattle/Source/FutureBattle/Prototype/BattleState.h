@@ -300,7 +300,8 @@ public:
 	UPROPERTY(Config, EditAnywhere) float LookoutSightRange = 30000.f;
 	UPROPERTY(Config, EditAnywhere) float LookoutSightRangeProfile = 40000.f;
 	// AI use of scout pairs (stage 2): keep up to AreaScoutKeep active, one more per AreaScoutAfterHires purchases; posts ScoutPostAdvance ahead of the front point.
-	UPROPERTY(Config, EditAnywhere) int32 AreaScoutKeep = 2;
+	// 2026-11-17 user decision: 0 until the strategy layer uses information (one-team screen: scouts were a loss); -BattleAreaScoutKeep=n tries it.
+	UPROPERTY(Config, EditAnywhere) int32 AreaScoutKeep = 0;
 	UPROPERTY(Config, EditAnywhere) int32 AreaScoutAfterHires = 3;
 	// Negative = behind the front point (2026-11-17: stand back and rely on the long still-sight; was +60 m ahead).
 	UPROPERTY(Config, EditAnywhere) float ScoutPostAdvance = -3000.f;

@@ -159,7 +159,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      const FVector Post=M->AreaScoutPost(0,Scouts[1]);double Near=DBL_MAX;FVector Point=FVector::ZeroVector;
      for(const auto& O:M->Objectives){const double D=FVector::Dist2D(Post,O.Position);if(D<Near){Near=D;Point=O.Position;}}
      bool AtLookout=false;for(const FVector& L:BattleFieldLayout::Lookouts(GetWorld()))AtLookout|=FVector::Dist2D(Post,L)<1500;
-     Check(((Near>1000&&Near<9000&&FVector::Dist2D(Post,M->AreaHome(1))>FVector::Dist2D(Point,M->AreaHome(1)))||AtLookout)&&M->AreaIntent(0).ScoutKeep==2,TEXT("scout post at a lookout or behind an own front point"));
+     Check(((Near>1000&&Near<9000&&FVector::Dist2D(Post,M->AreaHome(1))>FVector::Dist2D(Point,M->AreaHome(1)))||AtLookout)&&M->AreaIntent(0).ScoutKeep==0,TEXT("scout post at a lookout or behind an own front point; the AI keeps no pairs by default"));
     }
     // Reports (stage 3): a sighting beyond normal sight is a scout long contact (hidden until reported); a report's positions
     // reach the team's plans for ScoutReportMemory seconds.
