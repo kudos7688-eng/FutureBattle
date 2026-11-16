@@ -10,6 +10,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "BattleTactics.h"
+#include "FutureBattle.h"
 
 void UBattleMatch::InitializeMatch()
 {

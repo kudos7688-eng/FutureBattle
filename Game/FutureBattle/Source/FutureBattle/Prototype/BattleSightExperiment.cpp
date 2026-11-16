@@ -104,6 +104,11 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
   {
    const FVector P=Position(Pair.Key);
    for(const auto& Point:Match->Objectives) if(FVector::DistSquared2D(P,Point.Position)<=FMath::Square(10000.)){E.FrontPersonSeconds[Pair.Value.Team]+=SampleDt;break;}
+   if(const auto* Sq=Store->FindSquad(Pair.Value.SquadID); Sq && Sq->SquadType<2)
+   {
+    E.TypePersonSec[Pair.Value.Team][Sq->SquadType]+=SampleDt;
+    for(const auto& Point:Match->Objectives) if(FVector::DistSquared2D(P,Point.Position)<=FMath::Square(10000.)){E.TypePointSec[Pair.Value.Team][Sq->SquadType]+=SampleDt;break;}
+   }
    if(Match->bArea)
    {
     const double D2=FVector::DistSquared2D(P,Match->AreaHome(1-Pair.Value.Team));
@@ -207,6 +212,14 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
    TArray<TSharedPtr<FJsonValue>> Econ;
    for(int32 M=0;M<10;++M){TArray<TSharedPtr<FJsonValue>> Row;for(double V:E.EconTimeline[Team][M])Row.Add(MakeShared<FJsonValueNumber>(V));Econ.Add(MakeShared<FJsonValueArray>(Row));}
    Root->SetArrayField(Team?TEXT("enemy_economy_per_minute"):TEXT("ally_economy_per_minute"),Econ);
+   TArray<TSharedPtr<FJsonValue>> TypeRows;
+   for(int32 Ty=0;Ty<2;++Ty)
+   {
+    auto Row=MakeShared<FJsonObject>();Row->SetNumberField(TEXT("type"),Ty);Row->SetNumberField(TEXT("person_seconds"),E.TypePersonSec[Team][Ty]);Row->SetNumberField(TEXT("point_person_seconds"),E.TypePointSec[Team][Ty]);
+    Row->SetNumberField(TEXT("shots"),E.TypeShots[Team][Ty]);Row->SetNumberField(TEXT("damage"),E.TypeDamage[Team][Ty]);Row->SetNumberField(TEXT("kills"),E.TypeKills[Team][Ty]);
+    Row->SetNumberField(TEXT("damage_taken"),E.TypeTaken[Team][Ty]);Row->SetNumberField(TEXT("deaths"),E.TypeDeaths[Team][Ty]);TypeRows.Add(MakeShared<FJsonValueObject>(Row));
+   }
+   Root->SetArrayField(Team?TEXT("enemy_type_activity"):TEXT("ally_type_activity"),TypeRows);
    TArray<TSharedPtr<FJsonValue>> Front;
    for(int32 S=0;S<20;++S){TArray<TSharedPtr<FJsonValue>> Row;for(int32 L=0;L<Match->Objectives.Num()&&L<FBattleSightExperiment::MaxObjectives;++L)for(float V:E.FrontTimeline[Team][S][L])Row.Add(MakeShared<FJsonValueNumber>(V));Front.Add(MakeShared<FJsonValueArray>(Row));}
    Root->SetArrayField(Team?TEXT("enemy_front_per_30s"):TEXT("ally_front_per_30s"),Front);

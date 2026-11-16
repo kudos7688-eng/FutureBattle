@@ -317,7 +317,10 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   if(ResolveStoppedContact(ID,Way,Now,D,Scale)) Separation=FVector::ZeroVector;
  Direction=LimitedSteering(D,Separation,GetDefault<UBattleTuning>()->WideAvoidanceMaxSide);
  B.bTrafficWait=Scale<.15f;
- const float Speed=GetDefault<UBattleTuning>()->MoveSpeed;
+ // Heavy infantry moves slower (squad type speed scale); rifle squads keep the configured speed.
+ const float TypeSpeed=S?BattleSquadType::SpeedScale(S->SquadType):1.f;
+ const float Speed=GetDefault<UBattleTuning>()->MoveSpeed*TypeSpeed;
+ if(TypeSpeed<1.f&&B.Actor.IsValid())B.Actor->GetCharacterMovement()->MaxWalkSpeed=Speed;
  if(B.Actor.IsValid())
  {
   if(Scale<=.01f) Stop(); else B.Actor->AddMovementInput(Direction,Scale);
