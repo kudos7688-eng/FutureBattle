@@ -426,6 +426,15 @@ bool UBattleState::DisableLeaderSquad(int32 ID)
  for(int32 Member:Dead) OnUnitDied.Broadcast(Member);
  return true;
 }
+bool UBattleState::HandOverLeader(int32 ID,int32 NewLeaderID)
+{
+ auto* S=Squads.Find(ID); auto* U=Units.Find(NewLeaderID);
+ if(!S||S->CommandStatus!=EBattleCommandStatus::Active||!U||!U->IsAlive()||!S->Members.Contains(NewLeaderID)||NewLeaderID==S->LeaderUnitID) return false;
+ if(auto* Old=Units.Find(S->LeaderUnitID)) Old->bCanPlayerControl=false;
+ S->LeaderUnitID=NewLeaderID; ++S->CommandRevision;
+ U->bActorRepresentation=true; U->bCanPlayerControl=U->Team==0;
+ return true;
+}
 
 // ---- Squad types.
 // Heavy infantry values come from config and can be overridden per run by trial switches (-BattleHeavyMembers=, -BattleHeavyHealth=,
@@ -449,16 +458,26 @@ namespace
   return V;
  }
 }
-int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:10;}
+int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:Type==Scout?2:10;}
+bool BattleSquadType::Replenished(uint8 Type){return Type!=Scout;}
+bool BattleSquadType::LeaderHandover(uint8 Type){return Type==Scout;}
+float BattleSquadType::StillSightRange(uint8 Type)
+{
+ // Scouts see far only while still; the range profile (map E) uses the longer value. 0 = no still-sight bonus.
+ if(Type!=Scout) return 0.f;
+ const auto* T=GetDefault<UBattleTuning>();
+ return FMath::Clamp(BattleRanges::Get().bActive?T->ScoutSightRangeProfile:T->ScoutSightRange,0.f,60000.f);
+}
 float BattleSquadType::HealthScale(uint8 Type){return Type==Heavy?HeavyValues().Health:1.f;}
 float BattleSquadType::SpeedScale(uint8 Type){return Type==Heavy?HeavyValues().Speed:1.f;}
 float BattleSquadType::DamageScale(uint8 Type){return Type==Heavy?HeavyValues().Damage:1.f;}
-int32 BattleSquadType::AreaCost(uint8 Type){return Type==Heavy?HeavyValues().Cost:FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
+int32 BattleSquadType::AreaCost(uint8 Type){if(Type==Scout)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaScoutCost,1,100);return Type==Heavy?HeavyValues().Cost:FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
 EBattleWeapon BattleSquadType::Weapon(uint8 Type,int32 Slot){return Type==Heavy?EBattleWeapon::SupportGun:WeaponForSlot(Slot);}
 void UBattleState::SetSquadType(int32 SquadID,uint8 Type)
 {
  // Purchased squads only: name, and every member at the type's full health (the leader keeps the larger of the two scales).
  auto* S=Squads.Find(SquadID); if(!S||Type>=BattleSquadType::Count) return;
  S->SquadType=Type; if(Type==BattleSquadType::Heavy) S->DisplayName=FString::Printf(TEXT("第%d重装歩兵隊"),SquadID);
+ if(Type==BattleSquadType::Scout) S->DisplayName=FString::Printf(TEXT("第%d偵察組"),SquadID);
  for(int32 ID:S->Members) if(auto* U=Units.Find(ID); U&&U->IsAlive()) U->HP=MaxHealthOf(ID);
 }

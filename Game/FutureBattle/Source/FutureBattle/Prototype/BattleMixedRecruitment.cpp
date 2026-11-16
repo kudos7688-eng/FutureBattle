@@ -7,12 +7,13 @@
 #include "BattleVATDisplay.h"
 #include "Components/CapsuleComponent.h"
 #include "NavigationSystem.h"
+#include "FutureBattle.h"
 
 bool UBattleLeaderRuntime::ReplaceFollower(int32 DeadID)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Old=Store->Find(DeadID);
  const auto* S=Old?Store->FindSquad(Old->SquadID):nullptr;
- if(!bArea||!Old||Old->IsAlive()||Old->bRetired||Old->bActorRepresentation||!S||S->CommandStatus!=EBattleCommandStatus::Active||Store->GetUnits().Num()>=1000)return false;
+ if(!bArea||!Old||Old->IsAlive()||Old->bRetired||Old->bActorRepresentation||!S||!BattleSquadType::Replenished(S->SquadType)||S->CommandStatus!=EBattleCommandStatus::Active||Store->GetUnits().Num()>=1000)return false;
  const auto Weapon=Old->Weapon;const auto Training=Old->Training;const int32 Team=Old->Team,SID=S->SquadID;
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!Nav)return false;
  FVector PositionToUse;bool Found=false;
@@ -96,4 +97,19 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  // Newly purchased followers use the normal skeletal fallback until next load.
  // Existing VAT entries and animation clocks remain untouched by recruitment.
  Mode->RefreshVisibility();return true;
+}
+
+bool UBattleLeaderRuntime::PromoteScout(int32 SID,int32 NewID)
+{
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(NewID);auto* Old=Bodies.Find(NewID);
+ if(!Mode||!U||!U->IsAlive()||!Old||Old->Actor.IsValid())return false;
+ FBattleSavedUnit E;E.State=*U;E.State.bActorRepresentation=true;E.Position=Position(NewID);E.Rotation=Forward(NewID).Rotation();
+ FBattleLeaderBody B;if(!CreateBody(E,DisplayHost,B)){DestroyBody(B);return false;}
+ if(!Store->HandOverLeader(SID,NewID)){DestroyBody(B);return false;}
+ if(VAT)VAT->RemoveUnit(NewID);
+ HitIDs.Remove(Old->Capsule.Get());DestroyBody(*Old);Bodies.Remove(NewID);
+ B.Actor->InitializeUnit(NewID);Mode->Units.Add(B.Actor.Get());HitIDs.Add(B.Actor->GetCapsuleComponent(),NewID);Bodies.Add(NewID,B);
+ Plans.FindOrAdd(SID).bReplan=true;bSummaryDirty=true;Mode->RefreshVisibility();
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SCOUT_HANDOVER squad=%d leader=%d"),SID,NewID);
+ return true;
 }

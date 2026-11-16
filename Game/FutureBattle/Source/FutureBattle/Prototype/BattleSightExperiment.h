@@ -50,6 +50,6 @@ struct FBattleSightExperiment
  float FrontTimeline[2][20][MaxObjectives][4]={};int32 NextFrontSample=1;
  // Evaluation only (squad types, 2026-11-16): per team and squad type (0 rifle, 1 heavy): living person-seconds, person-seconds
  // within 100 m of an objective, shots, damage dealt, kills, damage taken, deaths. Squad type is that of the soldier's squad.
- double TypePersonSec[2][2]={},TypePointSec[2][2]={},TypeDamage[2][2]={},TypeTaken[2][2]={}; int32 TypeShots[2][2]={},TypeKills[2][2]={},TypeDeaths[2][2]={};
+ double TypePersonSec[2][3]={},TypePointSec[2][3]={},TypeDamage[2][3]={},TypeTaken[2][3]={}; int32 TypeShots[2][3]={},TypeKills[2][3]={},TypeDeaths[2][3]={};
  void Cover(const TCHAR* Key){if(Enabled)++CoverDiag.FindOrAdd(FName(Key));}
 };

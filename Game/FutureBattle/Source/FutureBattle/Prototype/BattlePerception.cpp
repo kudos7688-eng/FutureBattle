@@ -155,8 +155,10 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 				Contact.LastSeenTime = Now; Contact.Confidence = 1.f; Contact.bVisible = true;
 				Contact.SourceUnitID = Pair.Key; Contact.bShared = false;
 			};
-			const int32 MinX = Cell(Sight.Position.X - Profile.SightRange), MaxX = Cell(Sight.Position.X + Profile.SightRange);
-			const int32 MinY = Cell(Sight.Position.Y - Profile.SightRange), MaxY = Cell(Sight.Position.Y + Profile.SightRange);
+			// Scout pairs widen the sight context beyond their profile while still; the grid search follows the context.
+			const float GridRange = Sight.RangeSquared > FMath::Square(Profile.SightRange) + 1.f ? FMath::Sqrt(Sight.RangeSquared) : Profile.SightRange;
+			const int32 MinX = Cell(Sight.Position.X - GridRange), MaxX = Cell(Sight.Position.X + GridRange);
+			const int32 MinY = Cell(Sight.Position.Y - GridRange), MaxY = Cell(Sight.Position.Y + GridRange);
 			// Very long-range profiles can cover more cells than units; use the reference then.
 			if (bUseSpatialGrid && int64(MaxX - MinX + 1) * (MaxY - MinY + 1) <= FMath::Max(64, Alive.Num()))
 			{

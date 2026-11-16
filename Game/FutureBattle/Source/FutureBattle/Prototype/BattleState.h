@@ -16,13 +16,17 @@ inline EBattleWeapon WeaponForSlot(int32 Slot)
 // (UBattleTuning::HeavyMembers soldiers, all support guns, HeavyHealthScale x HP, HeavySpeedScale x speed, AreaHeavyCost, HeavyDamageScale x damage per shot; 2026-11-16 screen: 1.5x damage and cost 15).
 namespace BattleSquadType
 {
- enum : uint8 { Rifle=0, Heavy=1, Count=2 };
+ enum : uint8 { Rifle=0, Heavy=1, Scout=2, Count=3 };
  int32 Members(uint8 Type);
  float HealthScale(uint8 Type);
  float SpeedScale(uint8 Type);
  float DamageScale(uint8 Type);
  int32 AreaCost(uint8 Type);
  EBattleWeapon Weapon(uint8 Type,int32 Slot);
+ // Scout pair (ROADMAP 2026-11-14): long sight while still, leader handover, no replenishment, AreaScoutLimit per team.
+ bool Replenished(uint8 Type);
+ bool LeaderHandover(uint8 Type);
+ float StillSightRange(uint8 Type);
 }
 
 UENUM(BlueprintType)
@@ -265,6 +269,12 @@ public:
 	UPROPERTY(Config, EditAnywhere) float HeavyDamageScale = 1.5f;
 	// Share of AI Area purchases that are heavy infantry (2026-11-16: 0.33 adopted after the one-team screen; 0 = rifle squads only).
 	UPROPERTY(Config, EditAnywhere) float AreaHeavyShare = .33f;
+	// Scout pair (squad type 2, ROADMAP 2026-11-14 values): 2 rifles, cost 8, sight while still 300 m (400 m with the range profile), at most 3 per team.
+	UPROPERTY(Config, EditAnywhere) int32 AreaScoutCost = 8;
+	UPROPERTY(Config, EditAnywhere) int32 AreaScoutLimit = 3;
+	UPROPERTY(Config, EditAnywhere) float ScoutSightRange = 30000.f;
+	UPROPERTY(Config, EditAnywhere) float ScoutSightRangeProfile = 40000.f;
+	UPROPERTY(Config, EditAnywhere) float ScoutStillSpeed = 30.f;
 	UPROPERTY(Config, EditAnywhere) float DefenseRadius = 600.f;
 	UPROPERTY(Config, EditAnywhere) float MoveStuckSeconds = 2.f;
 	UPROPERTY(Config, EditAnywhere) int32 MaxMoveRetries = 3;
@@ -404,6 +414,8 @@ public:
 	float MaxHealthOf(int32 UnitID) const;
 	void SetSquadType(int32 SquadID,uint8 Type);
 	bool DisableLeaderSquad(int32 SquadID);
+	// Scout pairs: the surviving member takes command (becomes the Actor-represented, player-selectable leader).
+	bool HandOverLeader(int32 SquadID, int32 NewLeaderID);
 	bool CanSelectLeader(int32 UnitID, int32 PlayerTeam = 0) const;
 	FBattleUnitDied OnUnitDied;
 	bool SetSquadDelegated(int32 ID, bool bDelegated);

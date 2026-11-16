@@ -67,7 +67,9 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   for(int32 ID:S.Members)
   {
    const auto& U=ByID.FindChecked(ID)->State;
-   if(!U.bLeaderManaged || U.bActorRepresentation!=(ID==S.LeaderUnitID) ||
+   // A scout pair that handed over command keeps its dead former leader as an Actor body (no other squad has two Actors).
+   const bool HandedOver=BattleSquadType::LeaderHandover(S.SquadType)&&ID!=S.LeaderUnitID&&!U.IsAlive()&&U.bActorRepresentation;
+   if(!U.bLeaderManaged || (U.bActorRepresentation!=(ID==S.LeaderUnitID)&&!HandedOver) ||
       (U.bCanPlayerControl && (ID!=S.LeaderUnitID||U.Team!=0))||
       (S.CommandStatus==EBattleCommandStatus::Disabled && U.IsAlive()))return Fail(TEXT("Invalid Actor/Mass representation"));
   }

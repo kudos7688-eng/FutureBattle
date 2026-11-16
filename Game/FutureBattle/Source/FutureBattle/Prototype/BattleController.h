@@ -40,7 +40,7 @@ struct FBattleNoticeLayout
 struct FBattleCommandBarLayout
 {
  FVector2D Origin=FVector2D::ZeroVector; float ButtonWidth=124, ButtonHeight=26, Gap=6;
- static constexpr int32 Count=8; // move, attack move, defend, hold, manual command, delegate to AI, buy a rifle squad, buy heavy infantry
+ static constexpr int32 Count=9; // move, attack move, defend, hold, manual command, delegate to AI, buy a rifle squad, heavy infantry, a scout pair
  static FBattleCommandBarLayout Make(FVector2D View){FBattleCommandBarLayout L;L.Origin=FVector2D(34,View.Y-90);return L;}
  int32 ButtonAt(FVector2D P) const
  {
@@ -97,6 +97,7 @@ public:
 	void HireRecruit();
 	void HireRegular();
 	void HireVeteran();
+	void HireScout();
 	void StartMatch();
 	void SaveMatch();
 	void LoadMatch();

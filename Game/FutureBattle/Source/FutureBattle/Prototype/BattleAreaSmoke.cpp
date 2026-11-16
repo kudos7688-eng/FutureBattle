@@ -135,6 +135,40 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Mode->bCombatPaused=false;
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HEAVY_SMOKE squad=%d members=%d validation=%s"),HSID,HS?HS->Members.Num():0,*Error);
    }
+   // Scout pairs (squad type 2): 2 rifles for 8 resources, at most 3 per team, long sight while still, the survivor takes
+   // command when the leader falls, never replenished, and the handed-over squad survives save and restore.
+   {
+    for(int32 Leader:{51,61,71,81})Store->ApplyDamage(Leader,1,10000);
+    M->UpdateArea(1);M->Area.Replacements.Reset();
+    const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::Scout);
+    if(M->Credits[0]<Cost*4){const int32 Add=Cost*4-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
+    TArray<int32> Scouts;bool Bought=true;
+    for(int32 I=0;I<3;++I)
+    {
+     const int32 C0=M->Credits[0];Bought&=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Scout)&&M->Credits[0]==C0-Cost;
+     int32 SID=0;for(const auto& P:Store->GetSquads())SID=FMath::Max(SID,P.Key);Scouts.Add(SID);
+     const auto* S=Store->FindSquad(SID);
+     Bought&=S&&S->SquadType==BattleSquadType::Scout&&S->Members.Num()==2&&S->DisplayName.Contains(TEXT("偵察組"));
+     if(S)for(int32 ID:S->Members)Bought&=Store->Find(ID)->Weapon==EBattleWeapon::Carbine;
+    }
+    const int32 C1=M->Credits[0];const bool Limited=!M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Scout)&&M->Credits[0]==C1&&M->ActiveScouts(0)==3;
+    Check(Bought&&Cost==8&&Limited,TEXT("scout pairs: 2 rifles, 8 resources, at most 3 per team"));
+    const auto* First=Store->FindSquad(Scouts[0]);const int32 OldLeader=First->LeaderUnitID,Heir=First->Members[1];
+    const float Still=ScoutStillSight(OldLeader);
+    Check(Still>=29999.f&&Still==ScoutStillSight(Heir)&&ScoutStillSight(1)==0.f,TEXT("still scouts see 300 m, other soldiers keep their range"));
+    Store->ApplyDamage(OldLeader,1,10000);
+    First=Store->FindSquad(Scouts[0]);
+    const bool Handed=First->CommandStatus==EBattleCommandStatus::Active&&First->LeaderUnitID==Heir&&Actor(Heir)&&Store->CanSelectLeader(Heir,0);
+    M->UpdateArea(1);M->UpdateArea(1);
+    Check(Handed&&!M->Area.Replacements.Contains(OldLeader),TEXT("scout survivor takes command and the pair is not replenished"));
+    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
+    const bool Restored=Valid&&M->RestoreSnapshot(Save);const auto* After=Store->FindSquad(Scouts[0]);
+    Check(Restored&&After&&After->SquadType==BattleSquadType::Scout&&After->LeaderUnitID==Heir&&After->CommandStatus==EBattleCommandStatus::Active&&Actor(Heir),TEXT("handed-over scout pair survives save and restore"));
+    Mode->bCombatPaused=false;
+    Store->ApplyDamage(Heir,1,10000);
+    Check(Store->FindSquad(Scouts[0])->CommandStatus==EBattleCommandStatus::Disabled,TEXT("scout pair stops when both are lost"));
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_SCOUT_SMOKE squads=%d,%d,%d heir=%d validation=%s"),Scouts[0],Scouts[1],Scouts[2],Heir,*Error);
+   }
   }
   // Resource income: base 1 plus 1 per actually owned point every 20 s, for both teams at once.
   {

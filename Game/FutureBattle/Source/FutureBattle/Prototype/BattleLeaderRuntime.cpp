@@ -249,10 +249,13 @@ FBattleSightContext UBattleLeaderRuntime::Sight(int32 ID) const
 {
  // Stances lower the eye (60cm above the body centre when standing).
  const float EyeZ=BattleStance::EyeOffset(StanceOf(ID));
- if(auto* A=Actor(ID)) {auto Context=A->CaptureSightContext();Context.Eye.Z+=EyeZ-60.f;return Context;}
+ // Scout pairs see ScoutSightRange while still (moving: their normal profile).
+ const float Still=ScoutStillSight(ID);
+ if(auto* A=Actor(ID)) {auto Context=A->CaptureSightContext();Context.Eye.Z+=EyeZ-60.f;if(Still>0.f)Context.RangeSquared=FMath::Max(Context.RangeSquared,FMath::Square(Still));return Context;}
  FBattleSightContext C; const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
  C.Position=Position(ID); C.Eye=C.Position+FVector(0,0,EyeZ); C.Forward=Forward(ID); C.bAlive=U && U->IsAlive();
  if(U) { C.RangeSquared=FMath::Square(U->Perception.SightRange); C.HalfAngleCos=FMath::Cos(FMath::DegreesToRadians(U->Perception.FieldOfView*.5)); C.bOmnidirectional=U->Perception.FieldOfView>=360; }
+ if(Still>0.f) C.RangeSquared=FMath::Max(C.RangeSquared,FMath::Square(Still));
  C.Metrics=GetWorld()->GetSubsystem<UBattleMetrics>(); C.Query=FCollisionQueryParams(SCENE_QUERY_STAT(LeaderSight),false);
  if(const auto* B=Bodies.Find(ID)) C.Query.AddIgnoredComponent(B->Capsule.Get()); return C;
 }
@@ -299,7 +302,13 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
  // War score trial: every loss (shot or stopped by the leader's death) scores for the other team.
  if(bArea)GetWorld()->GetSubsystem<UBattleMatch>()->RecordWarLoss(U->Team);
  const auto* S=Store->FindSquad(U->SquadID);
- if(S && S->LeaderUnitID==ID) { Store->DisableLeaderSquad(S->SquadID); Plans.Remove(S->SquadID); }
+ if(S && S->LeaderUnitID==ID)
+ {
+  // Scout pairs: the surviving member takes command instead of the squad stopping.
+  int32 Heir=INDEX_NONE;
+  if(BattleSquadType::LeaderHandover(S->SquadType)) for(int32 M:S->Members) if(M!=ID){const auto* MU=Store->Find(M);if(MU&&MU->IsAlive()){Heir=M;break;}}
+  if(Heir==INDEX_NONE||!PromoteScout(S->SquadID,Heir)) { Store->DisableLeaderSquad(S->SquadID); Plans.Remove(S->SquadID); }
+ }
  if(bArea&&S&&S->CommandStatus!=EBattleCommandStatus::Active)
  {
   auto* M=GetWorld()->GetSubsystem<UBattleMatch>();
@@ -580,7 +589,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  if(SightExperiment.Started)
  {
   auto& E=SightExperiment;++E.Shots;
-  if(const auto* ShooterSquad=Store->FindSquad(U->SquadID); ShooterSquad && ShooterSquad->SquadType<2 && U->Team>=0 && U->Team<2) ++E.TypeShots[U->Team][ShooterSquad->SquadType];
+  if(const auto* ShooterSquad=Store->FindSquad(U->SquadID); ShooterSquad && ShooterSquad->SquadType<3 && U->Team>=0 && U->Team<2) ++E.TypeShots[U->Team][ShooterSquad->SquadType];
   const auto* P=Plans.Find(U->SquadID);const auto* C=P?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,P->TargetID):nullptr;
   const double D=C?FVector::Dist(Position(ID),C->LastKnownPosition):-1;
   E.ShotDistances.Add(D);if(E.FirstShot<0){E.FirstShot=GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed;E.FirstShotDistance=D;}
@@ -637,8 +646,8 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   auto& E=SightExperiment;const bool Killed=BeforeHP>0 && !Store->Find(Victim)->IsAlive();
   // Squad type activity: damage and kills by the shooter's squad type, damage taken and deaths by the victim's.
   { const float Dealt=FMath::Min(BeforeHP,ShotDmg); const auto* ShooterSquad=Store->FindSquad(U->SquadID);
-    if(ShooterSquad && ShooterSquad->SquadType<2 && U->Team>=0 && U->Team<2){E.TypeDamage[U->Team][ShooterSquad->SquadType]+=Dealt;E.TypeKills[U->Team][ShooterSquad->SquadType]+=Killed;}
-    if(VictimSquadState && VictimSquadState->SquadType<2 && VictimTeam>=0 && VictimTeam<2){E.TypeTaken[VictimTeam][VictimSquadState->SquadType]+=Dealt;E.TypeDeaths[VictimTeam][VictimSquadState->SquadType]+=Killed;} }
+    if(ShooterSquad && ShooterSquad->SquadType<3 && U->Team>=0 && U->Team<2){E.TypeDamage[U->Team][ShooterSquad->SquadType]+=Dealt;E.TypeKills[U->Team][ShooterSquad->SquadType]+=Killed;}
+    if(VictimSquadState && VictimSquadState->SquadType<3 && VictimTeam>=0 && VictimTeam<2){E.TypeTaken[VictimTeam][VictimSquadState->SquadType]+=Dealt;E.TypeDeaths[VictimTeam][VictimSquadState->SquadType]+=Killed;} }
   (VictimLeader?E.LeaderHits:E.FollowerHits)[VictimTeam]++;
   E.Cover(HitKeys[VictimCoverState]);if(Killed)E.Cover(DeathKeys[VictimCoverState]);
   if(Killed && !VictimLeader) E.FollowerCombatDeaths[VictimTeam]++;
@@ -728,4 +737,15 @@ float UBattleLeaderRuntime::TargetRange(int32 ID) const
  if(!UnderFire(ID))return Base;
  const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
  return U?FMath::Max(Base,BattleRanges::Reach(U->Weapon)):Base;
+}
+
+float UBattleLeaderRuntime::ScoutStillSight(int32 ID) const
+{
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
+ const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
+ const float Range=S?BattleSquadType::StillSightRange(S->SquadType):0.f;
+ if(Range<=0.f||!U->IsAlive()) return 0.f;
+ const auto* B=Bodies.Find(ID); if(!B) return 0.f;
+ const float Speed=B->Actor.IsValid()?B->Actor->GetVelocity().Size2D():B->Velocity.Size2D();
+ return Speed<=GetDefault<UBattleTuning>()->ScoutStillSpeed?Range:0.f;
 }

@@ -93,6 +93,8 @@ public:
  // Team 1 always; team 0 only in the all-AI sight experiment.
  void UpdateAreaHiring();
  int32 ActiveSquads(int32 Team) const;
+ // Active scout pairs of a team (at most UBattleTuning::AreaScoutLimit).
+ int32 ActiveScouts(int32 Team) const;
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;

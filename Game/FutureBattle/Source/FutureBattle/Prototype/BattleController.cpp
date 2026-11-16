@@ -99,6 +99,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("HireRecruit"), EKeys::One, &ABattleController::HireRecruit);
 	Button(TEXT("HireRegular"), EKeys::Two, &ABattleController::HireRegular);
 	Button(TEXT("HireVeteran"), EKeys::Three, &ABattleController::HireVeteran);
+	Button(TEXT("HireScout"), EKeys::Four, &ABattleController::HireScout);
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
 	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
 	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
@@ -169,6 +170,13 @@ void ABattleController::HireTraining(EBattleTraining Training)
 void ABattleController::HireRecruit() { HireTraining(EBattleTraining::Recruit); }
 void ABattleController::HireRegular() { HireTraining(EBattleTraining::Regular); }
 void ABattleController::HireVeteran() { HireTraining(EBattleTraining::Veteran); }
+// Area battle: key 4 buys a scout pair (squad type 2, at most AreaScoutLimit per team).
+void ABattleController::HireScout()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Scout); ShowNotice(Match->LastMessage);
+}
 void ABattleController::StartMatch()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
@@ -855,6 +863,7 @@ void ABattleController::PressCommandButton(int32 Index)
  case 5: DelegateSelected(); break;
  case 6: HireRegular(); break;
  case 7: HireVeteran(); break; // area battle: heavy infantry
+ case 8: HireScout(); break; // area battle: scout pair
  default: break;
  }
 }

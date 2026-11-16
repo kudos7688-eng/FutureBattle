@@ -124,6 +124,10 @@ public:
  bool bArea=false;
  FName SnapshotMode() const {return bArea?TEXT("Area"):bMixedFastMatch?TEXT("MixedFast"):TEXT("Wide");}
  bool ReplaceFollower(int32 DeadID);
+ // Scout pairs: the surviving follower becomes the squad leader (its Mass body is replaced by an Actor in place).
+ bool PromoteScout(int32 SquadID,int32 NewLeaderID);
+ // Sight range of a still scout (0 when the unit is not a scout or is moving).
+ float ScoutStillSight(int32 ID) const;
  // MixedFast or Area. bSelect selects a new team-0 leader (player purchase); OutSquadID receives the new squad.
  bool SpawnPurchasedSquad(int32 Team,EBattleTraining Training,FString& Error,bool bSelect=true,int32* OutSquadID=nullptr,uint8 SquadType=0);
  bool CreateBody(const FBattleSavedUnit& Entry,AActor* Host,FBattleLeaderBody& Body);

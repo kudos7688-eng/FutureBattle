@@ -114,11 +114,13 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  {bool bB=false;Match->AreaStrategyTarget(SID,S->Team,bB);if(bB)ReturnLiving=BaseReturnLiving;}
  // Thresholds are written for 10-soldier squads; smaller squads (heavy infantry, 6) scale them to their size (10 -> unchanged).
  if(S->Members.Num()<10) ReturnLiving=FMath::FloorToInt(ReturnLiving*S->Members.Num()/10.f);
+ // Scout pairs are never replenished: they go home for ammunition only, and one survivor is enough to resume.
+ const bool bNoReplenish=!BattleSquadType::Replenished(S->SquadType);if(bNoReplenish)ReturnLiving=0;
  if(Match->bArea && P.Action==EBattleSquadTactic::Recover && P.Reason.StartsWith(TEXT("HOME SUPPLY")))
  {
   if(Emergency){Event(TEXT("HomeSupplyAbortEmergency"));SupplyTripEnd(SID,false);Retreat();return;}
   const bool Home=FVector::Dist2D(Here,Match->AreaHome(S->Team))<=2500;
-  const bool Manned=O.Living>=FMath::Min(S->Members.Num(),Supply.ResumeLiving)||Match->Credits[S->Team]==0;
+  const bool Manned=bNoReplenish||O.Living>=FMath::Min(S->Members.Num(),Supply.ResumeLiving)||Match->Credits[S->Team]==0;
   const bool Healed=Supply.ResumeHealthRatio<=0.f||O.Health/FullHP>=Supply.ResumeHealthRatio;
   if(Home && O.Armed>=FMath::CeilToInt(O.Living*.6f) && Manned && Healed)
   {
