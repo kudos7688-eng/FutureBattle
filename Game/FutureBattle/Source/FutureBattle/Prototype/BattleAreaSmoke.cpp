@@ -9,6 +9,9 @@
 #include "BattleFieldLayout.h"
 #include "BattleWarScore.h"
 #include "Components/CapsuleComponent.h"
+#include "NavigationSystem.h"
+#include "NavigationData.h"
+#include "BattleUnit.h"
 #include "Engine/StaticMeshActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
@@ -229,6 +232,32 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Check(ATHit>=1&&FMath::IsNearlyEqual(Lost,FMath::Min(EnemyBefore,GetDefault<UBattleTuning>()->ATSplashDamage),1.f)&&Store->Find(Ally)->HP==AllyBefore,TEXT("anti-tank explosion hurts enemies around the impact, never allies"));
     Check(BattleFieldLayout::Lookouts(GetWorld()).Num()==2&&!HasLongSight(1),TEXT("two lookouts; a soldier away from them has normal sight"));
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_AT_SMOKE squad=%d gunners=%d enemy=%d lost=%.1f hit=%d"),SID,Gunners,Enemy,Lost,ATHit);
+   }
+   // Tank (squad type 4, stage 1): one wide, armoured vehicle for 40 resources, at most 2 per team, its own navigation data,
+   // seen from farther away, 8 m/s in the open; the vehicle survives save and restore.
+   {
+    for(int32 Leader:{111,121,131})Store->ApplyDamage(Leader,1,10000);
+    M->UpdateArea(1);M->Area.Replacements.Reset();
+    const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::Tank);
+    if(M->Credits[0]<Cost*3){const int32 Add=Cost*3-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
+    const int32 C0=M->Credits[0];const bool Hired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Tank);
+    int32 TSID=0;for(const auto& P:Store->GetSquads())TSID=FMath::Max(TSID,P.Key);const auto* TS=Store->FindSquad(TSID);
+    const int32 TankID=TS?TS->LeaderUnitID:INDEX_NONE;ABattleUnit* TankActor=Actor(TankID);
+    const bool Body=Hired&&Cost==40&&M->Credits[0]==C0-Cost&&TS&&TS->SquadType==BattleSquadType::Tank&&TS->Members.Num()==1&&TankActor&&
+     TankActor->GetCapsuleComponent()->GetScaledCapsuleRadius()>=150.f&&FMath::IsNearlyEqual(Store->Find(TankID)->HP,350.f)&&IsVehicle(TankID)&&TS->DisplayName.Contains(TEXT("戦車"));
+    Check(Body,TEXT("tank: one wide vehicle, 350 health, 40 resources"));
+    Check(ArmorScale(TankID,EBattleWeapon::Carbine)==0.f&&ArmorScale(TankID,EBattleWeapon::SupportGun)==0.f&&ArmorScale(TankID,EBattleWeapon::AntiTank)==1.f&&ArmorScale(1,EBattleWeapon::Carbine)==1.f,TEXT("tank armour: only anti-tank weapons hurt it"));
+    auto* NavSys=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());const ANavigationData* VN=NavFor(TankID);
+    Check(VN&&NavSys&&VN!=NavSys->GetDefaultNavDataInstance()&&NavFor(1)==nullptr,TEXT("tank uses the vehicle navigation data"));
+    Check(VehicleSpotRange()>=Store->Find(1)->Perception.SightRange*1.9f&&FMath::IsNearlyEqual(BattleSquadType::SpeedAt(BattleSquadType::Tank,GetWorld(),FVector::ZeroVector),800.f/GetDefault<UBattleTuning>()->MoveSpeed,.01f),TEXT("tank: seen from twice the normal sight, 8 m/s in the open"));
+    const bool Second=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Tank);const int32 C2=M->Credits[0];
+    const bool Third=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Tank);
+    Check(Second&&!Third&&M->Credits[0]==C2&&M->ActiveOfType(0,BattleSquadType::Tank)==2,TEXT("tanks: at most 2 per team"));
+    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
+    const bool Restored=Valid&&M->RestoreSnapshot(Save);ABattleUnit* After=Actor(TankID);
+    Check(Restored&&After&&IsVehicle(TankID)&&After->GetCapsuleComponent()->GetScaledCapsuleRadius()>=150.f&&Turrets.Contains(TankID),TEXT("tank survives save and restore"));
+    Mode->bCombatPaused=false;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_TANK_SMOKE squad=%d tank=%d nav=%s validation=%s"),TSID,TankID,VN?*VN->GetName():TEXT("none"),*Error);
    }
   }
   // Resource income: base 1 plus 1 per actually owned point every 20 s, for both teams at once.

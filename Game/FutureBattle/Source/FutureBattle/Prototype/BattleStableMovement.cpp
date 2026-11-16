@@ -318,11 +318,13 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  Direction=LimitedSteering(D,Separation,GetDefault<UBattleTuning>()->WideAvoidanceMaxSide);
  B.bTrafficWait=Scale<.15f;
  // Heavy infantry moves slower (squad type speed scale); rifle squads keep the configured speed.
- const float TypeSpeed=S?BattleSquadType::SpeedScale(S->SquadType):1.f;
+ const float TypeSpeed=S?BattleSquadType::SpeedAt(S->SquadType,GetWorld(),Pos):1.f;
  const float Speed=GetDefault<UBattleTuning>()->MoveSpeed*TypeSpeed;
- if(TypeSpeed<1.f&&B.Actor.IsValid())B.Actor->GetCharacterMovement()->MaxWalkSpeed=Speed;
+ if(TypeSpeed!=1.f&&B.Actor.IsValid())B.Actor->GetCharacterMovement()->MaxWalkSpeed=Speed;
  if(B.Actor.IsValid())
  {
+  // Vehicles turn at their own rate and drive along the hull.
+  if(IsVehicle(ID)&&Scale>.01f)SteerVehicle(ID,Direction,Scale);
   if(Scale<=.01f) Stop(); else B.Actor->AddMovementInput(Direction,Scale);
   B.Velocity=B.Actor->GetVelocity();
  }
@@ -360,7 +362,7 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   {
    ++QueriesThisFrame; B.NextOwnPath=Now+3;
    auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
-   auto* Own=Nav?Nav->FindPathToLocationSynchronously(GetWorld(),Pos,*Goal):nullptr;
+   auto* Own=Nav?Nav->FindPathToLocationSynchronously(GetWorld(),Pos,*Goal,NavFor(ID)?Actor(ID):nullptr):nullptr;
    if(Own && Own->IsValid() && Own->PathPoints.Num()>1)
    {
     TArray<FVector> OwnRoute; for(const auto& Point:Own->PathPoints) OwnRoute.Add(Point);

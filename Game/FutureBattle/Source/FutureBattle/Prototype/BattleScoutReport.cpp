@@ -48,6 +48,9 @@ void UBattleMatch::UpdateScoutReports()
  auto* Perception=GetWorld()->GetSubsystem<UBattlePerception>();const auto* T=GetDefault<UBattleTuning>();
  if(!R||!Perception)return;
  const double Now=Elapsed,WorldNow=GetWorld()->GetTimeSeconds();
+ // Evaluation log (not AI input): tank positions and speeds every 10 s of match time.
+ if(R->VehicleIDs.Num()&&FMath::FloorToInt(Now/10.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/10.))
+  for(int32 VID:R->VehicleIDs)if(const auto* A=R->Actor(VID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_SAMPLE t=%.0f unit=%d team=%d pos=%s speed=%.0f"),Now,VID,Store->Find(VID)->Team,*A->GetActorLocation().ToCompactString(),A->GetVelocity().Size2D());
  for(auto It=ScoutReports.CreateIterator();It;++It)
  {const auto* S=Store->FindSquad(It.Key());const auto& V=It.Value();
   // A load to an earlier match time drops reports from the abandoned future.

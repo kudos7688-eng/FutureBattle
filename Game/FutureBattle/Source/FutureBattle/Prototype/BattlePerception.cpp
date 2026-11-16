@@ -80,6 +80,9 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 		Grid.FindOrAdd(FIntPoint(Cell(Pair.Value.Position.X), Cell(Pair.Value.Position.Y))).Add(&Pair.Value);
 	for (auto It = Observers.CreateIterator(); It; ++It) if (!Alive.Contains(It.Key()))
 	{ NextScanTimes.Remove(It.Key()); LastScanTimes.Remove(It.Key()); It.RemoveCurrent(); }
+	// Vehicles are seen from farther than an observer's own range (UBattleLeaderRuntime::VehicleSpotRange): the grid search adds them.
+	TArray<const FLiveUnit*> VehicleUnits; double VehicleSpot2 = 0.;
+	if (Mixed && Leader && Leader->VehicleIDs.Num()) { VehicleSpot2 = FMath::Square(Leader->VehicleSpotRange()); for (const auto& L : Alive) if (Leader->IsVehicle(L.Key)) VehicleUnits.Add(&L.Value); }
 	TSet<int32> UpdatedObservers;
 	{
 		FBattleScopedMetric ScanTiming(Metrics, EBattleMetricPhase::SightScan);
@@ -167,6 +170,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 					if (const auto* Bucket = Grid.Find(FIntPoint(X, Y))) for (const FLiveUnit* Candidate : *Bucket)
 						if (Candidate->State->Team != State->Team && FVector::DistSquared(Sight.Position, Candidate->Position) <= Sight.RangeSquared)
 							Candidates.Add(Candidate);
+				for (const FLiveUnit* V : VehicleUnits) { const double D = FVector::DistSquared(Sight.Position, V->Position); if (V->State->Team != State->Team && D > Sight.RangeSquared && D <= VehicleSpot2) Candidates.Add(V); }
 				// Preserve insertion/tie-breaking order in contacts and shared reports.
 				Candidates.Sort([](const FLiveUnit& A, const FLiveUnit& B) { return A.Ordinal < B.Ordinal; });
 				for (const FLiveUnit* Candidate : Candidates) Consider(*Candidate);

@@ -12,7 +12,7 @@ int32 UBattleLeaderRuntime::Explode(int32 ShooterID,FVector At,int32 ExcludeID)
  TArray<TPair<int32,float>> Hits;
  for(const auto& B:Bodies)
  {
-  if(B.Key==ExcludeID)continue;const auto* U=Store->Find(B.Key);if(!U||!U->IsAlive()||U->Team==Team)continue;
+  if(B.Key==ExcludeID||IsVehicle(B.Key))continue;const auto* U=Store->Find(B.Key);if(!U||!U->IsAlive()||U->Team==Team)continue; // armour: splash does not hurt vehicles
   const double D=FVector::Dist(Position(B.Key),At);if(D>Radius)continue;
   Hits.Add({B.Key,float(T->ATSplashDamage*(1.0-D/Radius))});
  }
@@ -26,8 +26,8 @@ int32 UBattleLeaderRuntime::Explode(int32 ShooterID,FVector At,int32 ExcludeID)
   if(SightExperiment.Started)
   {
    auto& E=SightExperiment;const float Dealt=FMath::Min(BeforeHP,H.Value);const bool Killed=!Store->Find(H.Key)->IsAlive();
-   if(ShooterSquad&&ShooterSquad->SquadType<4&&Team>=0&&Team<2){E.TypeDamage[Team][ShooterSquad->SquadType]+=Dealt;E.TypeKills[Team][ShooterSquad->SquadType]+=Killed;}
-   if(VictimType<4&&VictimTeam>=0&&VictimTeam<2){E.TypeTaken[VictimTeam][VictimType]+=Dealt;E.TypeDeaths[VictimTeam][VictimType]+=Killed;}
+   if(ShooterSquad&&ShooterSquad->SquadType<5&&Team>=0&&Team<2){E.TypeDamage[Team][ShooterSquad->SquadType]+=Dealt;E.TypeKills[Team][ShooterSquad->SquadType]+=Killed;}
+   if(VictimType<5&&VictimTeam>=0&&VictimTeam<2){E.TypeTaken[VictimTeam][VictimType]+=Dealt;E.TypeDeaths[VictimTeam][VictimType]+=Killed;}
    E.TeamDamage[Team]+=Dealt;E.TeamKills[Team]+=Killed;
   }
  }

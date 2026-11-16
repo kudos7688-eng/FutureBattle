@@ -134,6 +134,20 @@ public:
  float ScoutStillSight(int32 ID) const;
  // Anti-tank explosion at a point: enemies of the shooter within ATSplashRadius lose up to ATSplashDamage (falling off to zero at the edge).
  int32 Explode(int32 ShooterID,FVector At,int32 ExcludeID);
+ // Tanks (vehicles, squad type 4): living vehicle IDs (refreshed on purchase, restore and death), their bodies, armour and steering.
+ TSet<int32> VehicleIDs;
+ TMap<int32,TWeakObjectPtr<USceneComponent>> Turrets;
+ bool IsVehicle(int32 ID) const {return VehicleIDs.Num()>0&&VehicleIDs.Contains(ID);}
+ void ConfigureVehicle(int32 ID);
+ void RefreshVehicles();
+ float VehicleSpotRange() const;
+ // Damage scale of a weapon on a unit: vehicles take only anti-tank (and, later, tank gun) hits.
+ float ArmorScale(int32 VictimID,EBattleWeapon Weapon) const;
+ // Turns a vehicle towards Direction at TankTurnRate; it drives only roughly forwards (Direction becomes its heading, Scale drops while turning).
+ void SteerVehicle(int32 ID,FVector& Direction,float& Scale);
+ void AimTurret(int32 ID,const FVector& Direction);
+ // Navigation data for a unit's paths: the vehicle agent for tanks, nullptr (the default infantry data) otherwise.
+ class ANavigationData* NavFor(int32 ID) const;
  // MixedFast or Area. bSelect selects a new team-0 leader (player purchase); OutSquadID receives the new squad.
  bool SpawnPurchasedSquad(int32 Team,EBattleTraining Training,FString& Error,bool bSelect=true,int32* OutSquadID=nullptr,uint8 SquadType=0);
  bool CreateBody(const FBattleSavedUnit& Entry,AActor* Host,FBattleLeaderBody& Body);

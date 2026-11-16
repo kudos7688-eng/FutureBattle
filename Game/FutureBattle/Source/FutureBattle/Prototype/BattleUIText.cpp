@@ -47,6 +47,7 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("Insufficient credits"),TEXT("資源が足りません"));M.Add(TEXT("Insufficient resources"),TEXT("資源が足りません"));
   M.Add(TEXT("Scout pair limit reached"),TEXT("偵察組は1軍3組まで"));
   M.Add(TEXT("Anti-tank team limit reached"),TEXT("対戦車班は1軍3班まで"));
+  M.Add(TEXT("Tank limit reached"),TEXT("戦車は1軍2両まで"));
   M.Add(TEXT("Match restored"),TEXT("試合を読み込みました"));M.Add(TEXT("Match saved [F9 to load]"),TEXT("試合を保存しました [F9で読込]"));
   M.Add(TEXT("Mixed recruitment unavailable"),TEXT("購入できません"));M.Add(TEXT("Navigation unavailable"),TEXT("経路がありません"));
   M.Add(TEXT("No compatible save found"),TEXT("使える保存データがありません"));M.Add(TEXT("No free squad slot (25 active squads)"),TEXT("部隊の空きがありません（稼働25部隊）"));
@@ -82,6 +83,7 @@ FString BattleUIText::Ja(const FString& Text)
   {TEXT("^Heavy infantry deployed / -(\\d+) resources$"),TEXT("重装歩兵隊を配備 ／ 資源 -{0}")},
   {TEXT("^Scout pair deployed / -(\\d+) resources$"),TEXT("偵察組を配備 ／ 資源 -{0}")},
   {TEXT("^Anti-tank team deployed / -(\\d+) resources$"),TEXT("対戦車班を配備 ／ 資源 -{0}")},
+  {TEXT("^Tank deployed / -(\\d+) resources$"),TEXT("戦車を配備 ／ 資源 -{0}")},
   {TEXT("^(\\d+) SQUADS / (.*)$"),TEXT("{0}部隊 ／ {1}")},
   {TEXT("^(.*) / (\\d+)m$"),TEXT("{0} ／ {1}m")},
  };

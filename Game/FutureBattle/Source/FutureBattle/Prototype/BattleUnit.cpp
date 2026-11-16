@@ -10,6 +10,7 @@
 #include "BattleSquadAI.h"
 #include "BattleMetrics.h"
 #include "BattleMatch.h"
+#include "NavMesh/RecastNavMesh.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/CameraTypes.h"
 #include "Components/CapsuleComponent.h"
@@ -43,6 +44,8 @@ ABattleUnit::ABattleUnit(const FObjectInitializer& Init) : Super(Init)
 	GetCharacterMovement()->JumpZVelocity = 480;
 	GetCharacterMovement()->AirControl = 0.3f;
 	GetCharacterMovement()->bUseRVOAvoidance = true;
+	// Soldiers path on the Default (infantry) navigation data; tanks switch to ABattleVehicleNavMesh (BattleVehicle.cpp).
+	GetCharacterMovement()->NavAgentProps.SetPreferredNavData(ARecastNavMesh::StaticClass());
 	GetCharacterMovement()->AvoidanceConsiderationRadius = 350.f;
 	bUseControllerRotationYaw = false;
 	AIControllerClass = ABattleAIController::StaticClass();

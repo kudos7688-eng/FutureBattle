@@ -90,6 +90,7 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  const int32 SID=Store->CreateLeaderSquad(Team,Members,Members[0],Team==0);
  check(SID!=INDEX_NONE);
  if(SquadType!=BattleSquadType::Rifle) Store->SetSquadType(SID,SquadType);
+ if(BattleSquadType::IsVehicle(SquadType)) ConfigureVehicle(Members[0]);
  FBattleLeaderPlan Plan;Plan.Center=Positions[0];Plans.Add(SID,Plan);
  IssueOrder(SID,EBattleOrder::Hold,Positions[0]);bSummaryDirty=true;
  if(OutSquadID)*OutSquadID=SID;

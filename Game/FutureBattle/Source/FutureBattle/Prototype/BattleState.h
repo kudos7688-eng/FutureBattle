@@ -15,9 +15,10 @@ inline EBattleWeapon WeaponForSlot(int32 Slot)
 
 // Squad types (2026-11-16, ROADMAP heavy equipment order): 0 = rifle squad (10, two support guns), 1 = heavy infantry
 // (UBattleTuning::HeavyMembers soldiers, all support guns, HeavyHealthScale x HP, HeavySpeedScale x speed, AreaHeavyCost, HeavyDamageScale x damage per shot; 2026-11-16 screen: 1.5x damage and cost 15).
+class UWorld;
 namespace BattleSquadType
 {
- enum : uint8 { Rifle=0, Heavy=1, Scout=2, AntiTank=3, Count=4 };
+ enum : uint8 { Rifle=0, Heavy=1, Scout=2, AntiTank=3, Tank=4, Count=5 };
  int32 Members(uint8 Type);
  float HealthScale(uint8 Type);
  float SpeedScale(uint8 Type);
@@ -28,6 +29,9 @@ namespace BattleSquadType
  bool Replenished(uint8 Type);
  bool LeaderHandover(uint8 Type);
  float StillSightRange(uint8 Type);
+ // Tank (ROADMAP 2026-11-14, stage 1 2026-11-17): one vehicle, armoured (only anti-tank weapons and tank guns hurt it), speed by terrain.
+ bool IsVehicle(uint8 Type);
+ float SpeedAt(uint8 Type,const UWorld* World,const FVector& Position); // scale of UBattleTuning::MoveSpeed
 }
 
 UENUM(BlueprintType)
@@ -291,6 +295,20 @@ public:
 	UPROPERTY(Config, EditAnywhere) int32 AreaATCost = 12;
 	UPROPERTY(Config, EditAnywhere) int32 AreaATLimit = 3;
 	UPROPERTY(Config, EditAnywhere) int32 AreaATKeep = 0;
+	// Tank (squad type 4, ROADMAP values): cost 40, at most 2 per team, health 350 (anti-tank hits of 100: four), 8 m/s in the open and
+	// 3 m/s in the city of map E, turning TankTurnRate deg/s; sight forward TankFieldOfView degrees; enemy soldiers see a tank from
+	// TankSpotRange (TankSpotRangeProfile with the range profile). The AI keeps AreaTankKeep tanks (trial -BattleAreaTankKeep=n).
+	UPROPERTY(Config, EditAnywhere) int32 AreaTankCost = 40;
+	UPROPERTY(Config, EditAnywhere) int32 AreaTankLimit = 2;
+	UPROPERTY(Config, EditAnywhere) int32 AreaTankKeep = 0;
+	UPROPERTY(Config, EditAnywhere) float TankHealthScale = 3.5f;
+	UPROPERTY(Config, EditAnywhere) float TankOpenSpeed = 800.f;
+	UPROPERTY(Config, EditAnywhere) float TankUrbanSpeed = 300.f;
+	UPROPERTY(Config, EditAnywhere) float TankTurnRate = 45.f;
+	UPROPERTY(Config, EditAnywhere) float TankFieldOfView = 60.f;
+	UPROPERTY(Config, EditAnywhere) float TankSpotRange = 20000.f;
+	UPROPERTY(Config, EditAnywhere) float TankSpotRangeProfile = 40000.f;
+	UPROPERTY(Config, EditAnywhere) float TankRadius = 200.f; // the capsule half height stays 130; the vehicle navigation agent is 140 cm tall (see DefaultEngine.ini)
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRange = 30000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRangeProfile = 40000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutStillSpeed = 30.f;

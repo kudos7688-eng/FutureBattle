@@ -264,7 +264,7 @@ bool UBattleLeaderRuntime::CanSee(int32 ID,int32 Target) const
  const auto* T=GetWorld()->GetSubsystem<UBattleState>()->Find(Target); const auto C=Sight(ID);
  if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
  const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
- if(FVector::DistSquared(P,C.Position)>C.RangeSquared || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
+ if(FVector::DistSquared(P,C.Position)>(IsVehicle(Target)?FMath::Max(C.RangeSquared,FMath::Square(VehicleSpotRange())):C.RangeSquared) || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
  FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
  return !Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
 }
@@ -275,7 +275,7 @@ bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 
  const auto* T=GetWorld()->GetSubsystem<UBattleState>()->Find(Target);
  if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
  const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
- if(FVector::DistSquared(P,C.Position)>C.RangeSquared || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
+ if(FVector::DistSquared(P,C.Position)>(IsVehicle(Target)?FMath::Max(C.RangeSquared,FMath::Square(VehicleSpotRange())):C.RangeSquared) || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
  FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
  return !Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
 }
@@ -295,6 +295,7 @@ const TArray<FBattleSquadSummary>& UBattleLeaderRuntime::Summaries()
 void UBattleLeaderRuntime::OnDeath(int32 ID)
 {
  CancelCoverAction(ID);
+ VehicleIDs.Remove(ID); // a destroyed vehicle is a wreck: no armour or spotting rules
  // Stances are for the living: restore the normal body shape before the death pose is applied.
  SetStance(ID,BattleStance::Stand,GetWorld()->GetTimeSeconds(),true);Stances.Remove(ID);StanceLockedUntil.Remove(ID);
  if(Phase3 && Phase3->bEnabled) Phase3->OnDeath(ID);
@@ -330,10 +331,15 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
  if(bWideField && Order!=EBattleOrder::Hold)
  {
   auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()); FNavLocation Projected;
-  if(!Nav || !Nav->ProjectPointToNavigation(Goal,Projected,FVector(100,100,400))) return false;
-  auto* Route=Nav->FindPathToLocationSynchronously(GetWorld(),Position(S->LeaderUnitID),Projected.Location);
-  if(!Route || !Route->IsValid() || Route->IsPartial()) return false;
-  Goal=Projected.Location;
+  // Vehicles use their own navigation data (wide agent) for the goal and the route.
+  const ANavigationData* VehicleNav=NavFor(S->LeaderUnitID);AActor* VehicleContext=VehicleNav?Actor(S->LeaderUnitID):nullptr;
+  const bool Projectable=Nav&&Nav->ProjectPointToNavigation(Goal,Projected,VehicleNav?FVector(600,600,400):FVector(100,100,400),VehicleNav);
+  if(!Projectable){if(VehicleNav||NavFor(S->LeaderUnitID)!=nullptr||IsVehicle(S->LeaderUnitID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_ORDER_FAIL squad=%d reason=project nav=%s goal=%s"),SID,VehicleNav?*VehicleNav->GetName():TEXT("none"),*Goal.ToCompactString());return false;}
+  auto* Route=Nav->FindPathToLocationSynchronously(GetWorld(),Position(S->LeaderUnitID),Projected.Location,VehicleContext);
+  // A tank whose goal lies where it cannot fit (the narrow streets of map E) drives to the end of the partial route instead.
+  const bool VehiclePartial=VehicleNav&&Route&&Route->IsValid()&&Route->IsPartial()&&Route->PathPoints.Num()>1;
+  if(!VehiclePartial&&(!Route || !Route->IsValid() || Route->IsPartial())){if(IsVehicle(S->LeaderUnitID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_ORDER_FAIL squad=%d reason=route valid=%d"),SID,Route&&Route->IsValid()?1:0);return false;}
+  Goal=VehiclePartial?FVector(Route->PathPoints.Last()):Projected.Location;
  }
  TMap<int32,FVector> Goals;
  for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive())
@@ -429,14 +435,15 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
   FNavLocation From,To;
   const FVector Origin=bWideField && !bStableMovement?Position(S->LeaderUnitID):P.Center;
-  if(Nav && (Nav->ProjectPointToNavigation(Origin,From) || (bWideField && Nav->ProjectPointToNavigation(Position(S->LeaderUnitID),From))) && Nav->ProjectPointToNavigation(S->Destination,To))
+  const ANavigationData* VehicleNav=NavFor(S->LeaderUnitID);AActor* VehicleContext=VehicleNav?Actor(S->LeaderUnitID):nullptr;const FVector VehicleExtent=VehicleNav?FVector(600,600,400):INVALID_NAVEXTENT;
+  if(Nav && (Nav->ProjectPointToNavigation(Origin,From,VehicleExtent,VehicleNav) || (bWideField && Nav->ProjectPointToNavigation(Position(S->LeaderUnitID),From,VehicleExtent,VehicleNav))) && Nav->ProjectPointToNavigation(S->Destination,To,VehicleExtent,VehicleNav))
   {
    const double PathStart=SightExperiment.Enabled?FPlatformTime::Seconds():0;
-   auto* Path=Nav->FindPathToLocationSynchronously(GetWorld(),From.Location,To.Location);
+   auto* Path=Nav->FindPathToLocationSynchronously(GetWorld(),From.Location,To.Location,VehicleContext);
    if(SightExperiment.Enabled){SightExperiment.PathMS.Add((FPlatformTime::Seconds()-PathStart)*1000);if(Path && Path->IsValid())SightExperiment.MaxPathLength=FMath::Max(SightExperiment.MaxPathLength,double(Path->GetPathLength()));}
    // Map E: a partial path still moves the squad as far as the route goes, instead of leaving it standing.
    if(Path && Path->IsValid() && Path->IsPartial() && BattleFieldLayout::IsUrban(GetWorld())) SightExperiment.Cover(TEXT("path_partial_used"));
-   if(Path && Path->IsValid() && (!Path->IsPartial() || BattleFieldLayout::IsUrban(GetWorld()))) P.Path=Path->PathPoints;
+   if(Path && Path->IsValid() && (!Path->IsPartial() || BattleFieldLayout::IsUrban(GetWorld()) || VehicleNav)) P.Path=Path->PathPoints;
    if(S->TacticalPlan.bAutonomous && S->TacticalPlan.Action==EBattleSquadTactic::Regroup && FVector::Dist2D(From.Location,To.Location)<50)
     P.Path={From.Location,To.Location}; // Followers can converge even when the leader is already at the rally point.
   }
@@ -525,12 +532,14 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
    }
   Direction=bWideField?LimitedSteering(D,Separation,GetDefault<UBattleTuning>()->WideAvoidanceMaxSide):(D+Separation*.65).GetSafeNormal2D();
   // Heavy infantry moves slower (squad type speed scale); rifle squads keep the configured speed.
-  const float TypeSpeed=BattleSquadType::SpeedScale(S->SquadType);
+  const float TypeSpeed=BattleSquadType::SpeedAt(S->SquadType,GetWorld(),Pos);
   const float Speed=GetDefault<UBattleTuning>()->MoveSpeed*TypeSpeed;
-  if(TypeSpeed<1.f&&B.Actor.IsValid())B.Actor->GetCharacterMovement()->MaxWalkSpeed=Speed;
+  if(TypeSpeed!=1.f&&B.Actor.IsValid())B.Actor->GetCharacterMovement()->MaxWalkSpeed=Speed;
   if(B.Actor.IsValid())
   {
-   B.Actor->AddMovementInput(Direction); B.Velocity=B.Actor->GetVelocity();
+   // Vehicles turn at their own rate and drive along the hull.
+   float VehicleScale=1.f;if(IsVehicle(ID))SteerVehicle(ID,Direction,VehicleScale);
+   B.Actor->AddMovementInput(Direction,VehicleScale); B.Velocity=B.Actor->GetVelocity();
    if(B.Velocity.Size2D()<10) { if(B.StalledSince==0) B.StalledSince=Now; }
    else B.StalledSince=0;
    if(B.StalledSince>0 && Now-B.StalledSince>2) { P->bReplan=true; B.StalledSince=Now; }
@@ -560,7 +569,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   const auto* Known=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,S->TacticalPlan.FlankTarget);
   Direction=((Known?Known->LastKnownPosition:S->TacticalPlan.FlankContact)-Position(ID)).GetSafeNormal2D();
  }
- if(B.Actor.IsValid()) B.Actor->SetActorRotation(FRotator(0,Direction.Rotation().Yaw,0));
+ // A vehicle turns its turret to the target; its hull keeps the driving heading (SteerVehicle).
+ if(B.Actor.IsValid()) { if(IsVehicle(ID)) AimTurret(ID,Direction); else B.Actor->SetActorRotation(FRotator(0,Direction.Rotation().Yaw,0)); }
  else
  {
   Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity).Forward=Direction.GetSafeNormal2D();
@@ -589,7 +599,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  if(SightExperiment.Started)
  {
   auto& E=SightExperiment;++E.Shots;
-  if(const auto* ShooterSquad=Store->FindSquad(U->SquadID); ShooterSquad && ShooterSquad->SquadType<4 && U->Team>=0 && U->Team<2) ++E.TypeShots[U->Team][ShooterSquad->SquadType];
+  if(const auto* ShooterSquad=Store->FindSquad(U->SquadID); ShooterSquad && ShooterSquad->SquadType<5 && U->Team>=0 && U->Team<2) ++E.TypeShots[U->Team][ShooterSquad->SquadType];
   const auto* P=Plans.Find(U->SquadID);const auto* C=P?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,P->TargetID):nullptr;
   const double D=C?FVector::Dist(Position(ID),C->LastKnownPosition):-1;
   E.ShotDistances.Add(D);if(E.FirstShot<0){E.FirstShot=GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed;E.FirstShotDistance=D;}
@@ -642,14 +652,15 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   for(int32 Member:VictimSquadState->Members) if(const auto* M=Store->Find(Member); M && M->IsAlive())
   {++SquadLiving;if(Member!=Victim && FVector::DistSquared2D(Position(Member),Start)<LeaderDistance)++LeaderRank;}
  }
- const bool Damaged=Victim>0 && Store->ApplyDamage(Victim,U->Team,ShotDmg);
+ // Armour: a vehicle takes only anti-tank hits (rifles and machine guns do nothing to it).
+ const bool Damaged=Victim>0 && ArmorScale(Victim,U->Weapon)>0.f && Store->ApplyDamage(Victim,U->Team,ShotDmg*ArmorScale(Victim,U->Weapon));
  if(SightExperiment.Started && Damaged && BeforeVictim)
  {
   auto& E=SightExperiment;const bool Killed=BeforeHP>0 && !Store->Find(Victim)->IsAlive();
   // Squad type activity: damage and kills by the shooter's squad type, damage taken and deaths by the victim's.
   { const float Dealt=FMath::Min(BeforeHP,ShotDmg); const auto* ShooterSquad=Store->FindSquad(U->SquadID);
-    if(ShooterSquad && ShooterSquad->SquadType<4 && U->Team>=0 && U->Team<2){E.TypeDamage[U->Team][ShooterSquad->SquadType]+=Dealt;E.TypeKills[U->Team][ShooterSquad->SquadType]+=Killed;}
-    if(VictimSquadState && VictimSquadState->SquadType<4 && VictimTeam>=0 && VictimTeam<2){E.TypeTaken[VictimTeam][VictimSquadState->SquadType]+=Dealt;E.TypeDeaths[VictimTeam][VictimSquadState->SquadType]+=Killed;} }
+    if(ShooterSquad && ShooterSquad->SquadType<5 && U->Team>=0 && U->Team<2){E.TypeDamage[U->Team][ShooterSquad->SquadType]+=Dealt;E.TypeKills[U->Team][ShooterSquad->SquadType]+=Killed;}
+    if(VictimSquadState && VictimSquadState->SquadType<5 && VictimTeam>=0 && VictimTeam<2){E.TypeTaken[VictimTeam][VictimSquadState->SquadType]+=Dealt;E.TypeDeaths[VictimTeam][VictimSquadState->SquadType]+=Killed;} }
   (VictimLeader?E.LeaderHits:E.FollowerHits)[VictimTeam]++;
   E.Cover(HitKeys[VictimCoverState]);if(Killed)E.Cover(DeathKeys[VictimCoverState]);
   if(Killed && !VictimLeader) E.FollowerCombatDeaths[VictimTeam]++;

@@ -158,6 +158,9 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
   if(const auto* Path=ValidatedPaths.Find(S.SquadID)){P.Path=*Path;P.bReplan=false;}
   Plans.Add(S.SquadID,P);
  }
+ // Vehicles: rebuild their bodies (wide capsule, placeholder shapes) before any path is planned.
+ VehicleIDs.Reset();Turrets.Reset();
+ for(const auto& S:Squads)if(S.CommandStatus==EBattleCommandStatus::Active&&BattleSquadType::IsVehicle(S.SquadType))ConfigureVehicle(S.LeaderUnitID);
  for(const auto& U:Records) if(!U.IsAlive()) OnDeath(U.UnitID);
  for(const auto& S:Squads)if(S.CommandStatus==EBattleCommandStatus::Active && S.Order!=EBattleOrder::Hold)BuildMovementPlan(S.SquadID);
  bSummaryDirty=true;PC->BindLeaderDeaths();return true;

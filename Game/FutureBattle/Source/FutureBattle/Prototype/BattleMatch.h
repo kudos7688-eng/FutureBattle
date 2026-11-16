@@ -17,6 +17,7 @@ struct FAreaIntent
  int32 BaseReturnLiving=0;            // S8: living count at which home-assault squads return for supply (0 = SupplyReturnLiving)
  int32 Phase=0;                       // index of the active phase of the team plan (0 when no plan)
  float HeavyShare=0.f;                // share of AI purchases that are heavy infantry (0 = rifle squads only)
+ int32 TankKeep=0;                    // tanks the AI keeps active (same pacing as scouts; 0 = none)
  int32 ATKeep=0;                      // anti-tank teams the AI keeps active (same pacing as scouts; 0 = none)
  int32 ScoutKeep=0;                   // scout pairs the AI keeps active (one more per ScoutAfterHires purchases, up to this; 0 = none)
 };

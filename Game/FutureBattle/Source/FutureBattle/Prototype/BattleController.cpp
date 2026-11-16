@@ -101,6 +101,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("HireVeteran"), EKeys::Three, &ABattleController::HireVeteran);
 	Button(TEXT("HireScout"), EKeys::Four, &ABattleController::HireScout);
 	Button(TEXT("HireAntiTank"), EKeys::Five, &ABattleController::HireAntiTank);
+	Button(TEXT("HireTank"), EKeys::Six, &ABattleController::HireTank);
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
 	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
 	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
@@ -892,6 +893,7 @@ void ABattleController::PressCommandButton(int32 Index)
  case 7: HireVeteran(); break; // area battle: heavy infantry
  case 8: HireScout(); break; // area battle: scout pair
  case 9: HireAntiTank(); break; // area battle: anti-tank team
+ case 10: HireTank(); break; // area battle: tank
  default: break;
  }
 }
@@ -977,4 +979,11 @@ void ABattleController::HireAntiTank()
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
 	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::AntiTank); ShowNotice(Match->LastMessage);
+}
+// Area battle: key 6 buys a tank (squad type 4, at most AreaTankLimit per team).
+void ABattleController::HireTank()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Tank); ShowNotice(Match->LastMessage);
 }

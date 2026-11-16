@@ -87,6 +87,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  const int32 Cost=SquadType==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(SquadType);
  if(SquadType==BattleSquadType::Scout&&ActiveScouts(Team)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaScoutLimit))return Fail(TEXT("Scout pair limit reached"));
  if(SquadType==BattleSquadType::AntiTank&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaATLimit))return Fail(TEXT("Anti-tank team limit reached"));
+ if(SquadType==BattleSquadType::Tank&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaTankLimit))return Fail(TEXT("Tank limit reached"));
  if(Credits[Team]<Cost)return Fail(TEXT("Insufficient resources"));
  if(GetWorld()->GetSubsystem<UBattleState>()->GetSquads().Num()>=100)return Fail(TEXT("Squad record capacity reached (100 including lost squads)"));
  auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
@@ -104,7 +105,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(R->SightExperiment.Enabled)R->SightExperiment.HireTimes[Team].Add(Elapsed);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE team=%d squad=%d auto=%d cost=%d credits=%d cancelled_replacements=%d active=%d time=%.1f leader=%s home=%s"),
   Team,SID,bAuto?1:0,Cost,Credits[Team],Cancelled,ActiveSquads(Team),Elapsed,*R->Position(Store->FindSquad(SID)->LeaderUnitID).ToCompactString(),*AreaHome(Team).ToCompactString());
- LastMessage=SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
+ LastMessage=SquadType==BattleSquadType::Tank?FString::Printf(TEXT("Tank deployed / -%d resources"),Cost):SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
  return true;
 }
 void UBattleMatch::UpdateAreaHiring()
@@ -130,6 +131,9 @@ void UBattleMatch::UpdateAreaHiring()
    // Anti-tank teams (trial -BattleAreaATKeep, default AreaATKeep 0): the same pacing as scout pairs, scouts first.
    const int32 ATWant=FMath::Min(HireIntent.ATKeep,Bought/After);
    if(Type!=BattleSquadType::Scout&&ATWant>0&&ActiveOfType(Team,BattleSquadType::AntiTank)<ATWant)Type=BattleSquadType::AntiTank;
+   // Tanks (trial -BattleAreaTankKeep, default AreaTankKeep 0): the same pacing.
+   const int32 TankWant=FMath::Min(HireIntent.TankKeep,Bought/After);
+   if(Type==BattleSquadType::Rifle&&TankWant>0&&ActiveOfType(Team,BattleSquadType::Tank)<TankWant)Type=BattleSquadType::Tank;
   }
   const int32 TypeCost=Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
   if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=25)continue;
@@ -267,6 +271,7 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
  // Scout pairs the AI keeps: configured default; -BattleAreaScoutKeep replaces it for the trial team(s).
  I.ScoutKeep=FMath::Clamp(bTrial&&S.ScoutKeep>=0?S.ScoutKeep:GetDefault<UBattleTuning>()->AreaScoutKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaScoutLimit));
  I.ATKeep=FMath::Clamp(bTrial&&S.ATKeep>=0?S.ATKeep:GetDefault<UBattleTuning>()->AreaATKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaATLimit));
+ I.TankKeep=FMath::Clamp(bTrial&&S.TankKeep>=0?S.TankKeep:GetDefault<UBattleTuning>()->AreaTankKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaTankLimit));
  // S7/S8 trials (one team only with -BattleAreaTrialTeam).
  if(bTrial){I.FlankOffset=S.FlankOffset;I.bFlankSameSide=S.bFlankSameSide;I.BaseReturnLiving=S.BaseReturnLiving;}
  // Stage 2: time-phased team plans (match time only; no hidden information). Values are first trial values (numbers delegated).
