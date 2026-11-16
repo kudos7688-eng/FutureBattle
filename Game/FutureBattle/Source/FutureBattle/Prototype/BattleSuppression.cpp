@@ -11,11 +11,13 @@ BattleSuppression::FTuning& BattleSuppression::MutableTuning()
   FParse::Value(Line,TEXT("BattleSuppressionRadius="),T.Radius);FParse::Value(Line,TEXT("BattleSuppressionPerShot="),T.PerShot);
   FParse::Value(Line,TEXT("BattleSuppressionDecay="),T.DecayPerSecond);FParse::Value(Line,TEXT("BattleSuppressionSpread="),T.SpreadScale);
   FParse::Value(Line,TEXT("BattleSuppressionPin="),T.PinLevel);
+  FParse::Value(Line,TEXT("BattleSuppressionSupport="),T.SupportScale);
   T.Radius=FMath::IsFinite(T.Radius)?FMath::Clamp(T.Radius,10.f,1000.f):200.f;
   T.PerShot=FMath::IsFinite(T.PerShot)?FMath::Clamp(T.PerShot,0.f,1.f):.12f;
   T.DecayPerSecond=FMath::IsFinite(T.DecayPerSecond)?FMath::Clamp(T.DecayPerSecond,.01f,10.f):.25f;
   T.SpreadScale=FMath::IsFinite(T.SpreadScale)?FMath::Clamp(T.SpreadScale,0.f,10.f):1.5f;
   T.PinLevel=FMath::IsFinite(T.PinLevel)?FMath::Clamp(T.PinLevel,.05f,2.f):.5f;
+  T.SupportScale=FMath::IsFinite(T.SupportScale)?FMath::Clamp(T.SupportScale,.1f,10.f):1.f;
   return T;
  }();
  return Value;
@@ -50,7 +52,7 @@ void UBattleLeaderRuntime::AddSuppression(int32 ID,float Amount,double Now)
  SightExperiment.Cover(TEXT("suppression_events"));
 }
 
-void UBattleLeaderRuntime::SuppressNear(int32 ShooterTeam,FVector Start,FVector End,double Now)
+void UBattleLeaderRuntime::SuppressNear(int32 ShooterTeam,FVector Start,FVector End,double Now,float Scale)
 {
  const auto& T=BattleSuppression::Tuning();
  if(!T.bEnabled)return;
@@ -64,6 +66,6 @@ void UBattleLeaderRuntime::SuppressNear(int32 ShooterTeam,FVector Start,FVector 
   const auto* U=Store->Find(Body.Key);
   if(!U || !U->IsAlive() || U->Team==ShooterTeam)continue;
   const float Distance=FMath::PointDistToSegment(Chest,Start,End);
-  if(Distance<T.Radius)AddSuppression(Body.Key,T.PerShot*(1.f-Distance/T.Radius),Now);
+  if(Distance<T.Radius)AddSuppression(Body.Key,T.PerShot*Scale*(1.f-Distance/T.Radius),Now);
  }
 }

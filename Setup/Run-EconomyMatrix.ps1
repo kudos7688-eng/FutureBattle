@@ -78,6 +78,9 @@ $supply=@{
  # Heavy infantry: share of AI purchases that are heavy infantry (6 soldiers, support guns, 3x health, 18 resources).
  'HV33'=@('-AreaHeavyShare','0.33')
  'HV50'=@('-AreaHeavyShare','0.5')
+ # Weapon role: suppression on (both teams) with support-gun shots suppressing 2.5x; HV33PS adds a 33% heavy-infantry share.
+ 'PS25'=@('-Suppression','1','-SuppressionSupport','2.5')
+ 'HV33PS'=@('-Suppression','1','-SuppressionSupport','2.5','-AreaHeavyShare','0.33')
  'INC2'=@('-AreaIncomeBase','2','-AreaIncomePerPoint','2')
  'INC3'=@('-AreaIncomeBase','3','-AreaIncomePerPoint','3')
  'INC4'=@('-AreaIncomeBase','4','-AreaIncomePerPoint','4')

@@ -172,7 +172,7 @@ public:
  float SuppressionSpreadScale(int32 ID,double Now) const;
  void AddSuppression(int32 ID,float Amount,double Now);
  // Suppresses living enemies of ShooterTeam within the tuning radius of the travelled bullet path Start..End.
- void SuppressNear(int32 ShooterTeam,FVector Start,FVector End,double Now);
+ void SuppressNear(int32 ShooterTeam,FVector Start,FVector End,double Now,float Scale=1.f);
  // Stances (BattleStance.h; map E default). Runtime only: 0 stand, 1 crouch, 2 prone, and the earliest time each may change again.
  TMap<int32,uint8> Stances;
  TMap<int32,double> StanceLockedUntil;

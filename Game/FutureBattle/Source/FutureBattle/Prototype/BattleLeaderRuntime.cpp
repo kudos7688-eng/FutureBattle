@@ -10,6 +10,7 @@
 #include "BattlePerception.h"
 #include "BattleTactics.h"
 #include "BattleRanges.h"
+#include "BattleSuppression.h"
 #include "BattleStance.h"
 #include "EngineUtils.h"
 #include "BattleMetrics.h"
@@ -604,7 +605,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   SightExperiment.Cover(TEXT("shot_passed_over"));Q.AddIgnoredComponent(Hit.GetComponent());
   Hit=FHitResult();GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_Visibility,Q);
  }
- SuppressNear(U->Team,Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Now);
+ SuppressNear(U->Team,Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Now,U->Weapon==EBattleWeapon::SupportGun?BattleSuppression::Tuning().SupportScale:1.f);
  const int32 Victim=HitIDs.FindRef(Hit.GetComponent());
  if(bArea)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,T->ShotDamage);
  if(SightExperiment.Started && Victim>0) ++SightExperiment.Hits;
