@@ -6,8 +6,9 @@
 
 1. **ロック**：ビルド・UEの起動（試験・計測・試合）・Source/Config/DLL/マップの変更の前に、`ListAgents` でロックを持っているセッションを探し、`SendMessage` でロックを受け取る。終わったら手放したことを伝える。ワークツリーが別でもCPUは共有なので、実行を重ねない。
 2. `git status --short -uno` と、実行中の `UnrealEditor` を確認する。ほかのセッションのプロセスは止めない。
-3. **Config（`DefaultGame.ini` など）は計測の前に変え終える**。計測中に変えると、固定ビルドの照合で起動拒否か不合格になる。ソースとスクリプトの編集は照合の対象外。
+3. **凍結ビルドは写しから起動する**（11-18 から）。`New-BattleBuildSnapshot.ps1` は `<凍結ビルド>/Project` に DLL・Config・Content などの写しを作り（約200MB・約5秒）、試合はその写しから起動する。計測中にビルドや Config・マップを編集しても、計測は止まらず、不合格にもならない。ただし、写しを持たない古い凍結ビルド（または `-NoProjectCopy` で作ったもの）は従来どおりで、計測中に Config を変えると起動拒否か不合格になる。
 4. 所要時間を見積もってユーザーに伝える（目安は下の表）。
+5. 起動引数の名前と既定値は `SWITCHES.md` で引く。ソースを変えた後は、`& 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/ThirdParty/Python3/Win64/python.exe' -I Setup/Export-Switches.py` で作り直す。Claude は `/measure` スキル（`FPS/.claude/skills/measure/`）で、この手順を同じ順に進められる。
 
 ## 1. 目的別の入口
 
@@ -28,6 +29,7 @@
 - 片側試験の偏り（`-AreaTrialTeam` で相手側の S4/S6 が切れていた）は 11-18 0時50分に修正した。それより前の勝敗を問う片側試験の結果とは比べない。
 - 保存往復の検証で `Invalid cover peek distance` によって試合が失敗することがある（既存の問題で未調査）。完走数を必ず確かめる。
 - 途中で止まった総当たりは、同じコマンドをもう一度実行すれば、出力が既にある試合を飛ばして再開する。
+- **同じ試合の再利用（11-18 から既定）**：`Run-EconomyMatrix`/`Run-StrategyScreen` は、同じ凍結ビルド・同じ条件で合格済みの試合があれば、試合をせずに結果を写す（`reusedFrom` が付き、`timingComparable=false`）。勝ち負けの比較には使えるが、時間の比較には使わない。毎回試合をするときは `-NoReuse` を付ける。詳しくは STATUS の 11-18 1時05分の項。
 
 ### 性能の計測の決まり
 
