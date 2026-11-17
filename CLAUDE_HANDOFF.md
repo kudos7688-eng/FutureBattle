@@ -116,7 +116,7 @@ F8保存/F9読込。同じモード/マップ/認識・射程/戦術条件から
 
 ## 7. コードの入口
 
-主なゲーム実装は `Game/FutureBattle/Source/FutureBattle/Prototype/`。詳細はシンボル検索で呼出元/対象モードを確認する。
+主なゲーム実装は `Game/FutureBattle/Source/FutureBattle/Prototype/`。機能ごとの入口と各ファイルの役割は [CODEMAP.md](CODEMAP.md)、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md)（どちらも `Setup/Export-CodeMap.py` で自動生成）。下の表は概略で、詳しい方は CODEMAP を正とする。
 
 |ファイル群|確認する内容|
 |---|---|
