@@ -91,6 +91,7 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  check(SID!=INDEX_NONE);
  if(SquadType!=BattleSquadType::Rifle) Store->SetSquadType(SID,SquadType);
  if(BattleSquadType::IsVehicle(SquadType)) ConfigureVehicle(Members[0]);
+ ApplySquadLook(SID);
  FBattleLeaderPlan Plan;Plan.Center=Positions[0];Plans.Add(SID,Plan);
  IssueOrder(SID,EBattleOrder::Hold,Positions[0]);bSummaryDirty=true;
  if(OutSquadID)*OutSquadID=SID;
@@ -120,6 +121,7 @@ bool UBattleLeaderRuntime::PromoteScout(int32 SID,int32 NewID)
  if(VAT)VAT->RemoveUnit(NewID);
  HitIDs.Remove(Old->Capsule.Get());DestroyBody(*Old);Bodies.Remove(NewID);
  B.Actor->InitializeUnit(NewID);Mode->Units.Add(B.Actor.Get());HitIDs.Add(B.Actor->GetCapsuleComponent(),NewID);Bodies.Add(NewID,B);
+ ApplySquadLook(SID);
  Plans.FindOrAdd(SID).bReplan=true;bSummaryDirty=true;if(HireSightRefresh())Mode->RefreshVisibility();
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SCOUT_HANDOVER squad=%d leader=%d"),SID,NewID);
  return true;

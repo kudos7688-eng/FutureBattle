@@ -91,7 +91,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  for(const auto& C:O.Contacts) if(FVector::Dist2D(Here,C.Value.LastKnownPosition)<=T->EffectiveWeaponRange()) { ++Threats; Visible|=C.Value.bVisible && !C.Value.bShared; }
  const float FullHP=FMath::Max(1.f,O.FullHealth(T->Health));
  const bool Depleted=O.Armed==0 || O.Living<=S->Members.Num()*T->SquadRetreatLivingRatio || O.Health/FullHP<T->SquadRetreatHealthRatio;
- const bool Emergency=Threats>0 && (Depleted || O.RecentDamage>=T->Health*S->Members.Num()*T->SquadRetreatDamageRatio || Threats>FMath::Max(3.f,O.Armed*T->SquadRetreatThreatRatio));
+ const bool Emergency=Threats>0 && (Depleted || O.RecentDamage>=T->Health*S->Members.Num()*T->SquadRetreatDamageRatio || Threats>FMath::Max(3.f,O.Armed*BattleSquadType::ScoreCount(S->SquadType)*T->SquadRetreatThreatRatio));
  const FString Cause=O.Armed==0?TEXT("AMMO EXHAUSTED"):
   O.Living<=S->Members.Num()*T->SquadRetreatLivingRatio?FString::Printf(TEXT("MEMBERS %d/%d"),O.Living,S->Members.Num()):
   O.Health/FullHP<T->SquadRetreatHealthRatio?FString::Printf(TEXT("HEALTH %.0f%%"),O.Health/FullHP*100):
@@ -120,10 +120,14 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  // Vehicles (stage 2, 2026-11-18): below VehicleRepairRatio of its health a vehicle drives home to be repaired (home healing) even under
  // fire, since it outruns infantry; an emergency does not turn that trip into a retreat. Own state only.
  const bool bVehicle=Runtime->IsVehicle(S->LeaderUnitID);
- const bool bRepair=Match->bArea&&bVehicle&&Supply.HealPerSecond>0.f&&O.Health/FullHP<GetDefault<UBattleTuning>()->VehicleRepairRatio;
+ // The exoskeleton soldier does the same (its shield refills in the field, its health only at home).
+ const bool bExo=S->SquadType==BattleSquadType::Exo;const bool bMachine=bVehicle||bExo;
+ const auto* ExoUnit=bExo?Store->Find(S->LeaderUnitID):nullptr;const float ExoShieldMax=bExo?BattleSquadType::ShieldMax(S->SquadType):0.f;
+ const float ShieldRatio=ExoUnit&&ExoShieldMax>0.f?ExoUnit->Shield/ExoShieldMax:1.f;
+ const bool bRepair=Match->bArea&&bMachine&&Supply.HealPerSecond>0.f&&O.Health/FullHP<GetDefault<UBattleTuning>()->VehicleRepairRatio;
  if(Match->bArea && P.Action==EBattleSquadTactic::Recover && P.Reason.StartsWith(TEXT("HOME SUPPLY")))
  {
-  if(Emergency&&!bVehicle){Event(TEXT("HomeSupplyAbortEmergency"));SupplyTripEnd(SID,false);Retreat();return;}
+  if(Emergency&&!bMachine){Event(TEXT("HomeSupplyAbortEmergency"));SupplyTripEnd(SID,false);Retreat();return;}
   const bool Home=FVector::Dist2D(Here,Match->AreaHome(S->Team))<=2500;
   const bool Manned=bNoReplenish||O.Living>=FMath::Min(S->Members.Num(),Supply.ResumeLiving)||Match->Credits[S->Team]==0;
   const bool Healed=Supply.ResumeHealthRatio<=0.f||O.Health/FullHP>=Supply.ResumeHealthRatio;
@@ -172,8 +176,14 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  {
   if(Threats && P.RetrySeconds<=0 && (Emergency || P.Action==EBattleSquadTactic::Regroup)) { Retreat(); return; }
   // Armour AI: a vehicle resumes above its repair threshold (below it, it drives home; between that and 60% it used to wait forever).
-  const float ResumeHealth=bVehicle&&BattleTactics::ArmourAI(S->Team)?FMath::Min(.6f,GetDefault<UBattleTuning>()->VehicleRepairRatio):.6f;
+  const float ResumeHealth=(S->SquadType==BattleSquadType::Exo||(bVehicle&&BattleTactics::ArmourAI(S->Team)))?FMath::Min(.6f,GetDefault<UBattleTuning>()->VehicleRepairRatio):.6f;
   const bool ReadyToReturn=O.Armed>=FMath::CeilToInt(O.Living*.6f) && O.Living>S->Members.Num()*T->SquadRetreatLivingRatio && O.Health/FullHP>=ResumeHealth;
+  // Exoskeleton: back to the mission as soon as the shield is up again (it does not wait out the regroup time).
+  if(bExo && ShieldRatio>=T->ExoResumeShield && O.Health/FullHP>=ResumeHealth && O.RecentDamage==0 && O.Armed>0 && P.Age>=2.f)
+  {
+   const auto Order=S->MissionOrder; const FVector Goal=S->MissionDestination;
+   if(Runtime->IssueOrder(SID,Order,Goal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("SHIELD RESTORED / RESUME MISSION"));Runtime->IssueOrder(SID,Order,Goal,true);Event(TEXT("ExoShieldResume"));return;}
+  }
   int32 Joined=0; for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive() && FVector::Dist2D(Runtime->Position(ID),P.Destination)<500) ++Joined;
   const bool Cohesive=Joined>=FMath::CeilToInt(O.Living*.7f);
   if(P.SafeSeconds>=T->SquadRegroupSafeSeconds && P.Age>=T->SquadRegroupSafeSeconds)
@@ -195,6 +205,9 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   }
   return;
  }
+ // Exoskeleton: with the shield gone and an enemy in sight it breaks contact; the shield refills out of the fight (own state and own contacts).
+ if(bExo && Visible && ShieldRatio<=0.f && P.RetrySeconds<=0 && P.Action!=EBattleSquadTactic::Support)
+ {CauseOverride=TEXT("SHIELD DOWN / BREAK CONTACT");Event(TEXT("ExoShieldBreak"));Retreat();S->TacticalPlan.RetrySeconds=FMath::Max(S->TacticalPlan.RetrySeconds,T->SquadRetreatRetrySeconds);return;}
  // Armour AI, stage 3 (BattleArmourAI.cpp): a vehicle backs out of known anti-tank reach or away from a heavy hit; infantry with no
  // anti-tank weapon falls back from a tank it sees. Only while a vehicle is on the field.
  if(Match->bArea && Runtime->VehicleIDs.Num() && P.RetrySeconds<=0 && P.Action!=EBattleSquadTactic::Support && BattleTactics::ArmourAI(S->Team))

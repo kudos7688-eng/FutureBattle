@@ -20,7 +20,7 @@ inline EBattleWeapon WeaponForSlot(int32 Slot)
 class UWorld;
 namespace BattleSquadType
 {
- enum : uint8 { Rifle=0, Heavy=1, Scout=2, AntiTank=3, Tank=4, ArmoredCar=5, Mortar=6, SPGun=7, Count=8 };
+ enum : uint8 { Rifle=0, Heavy=1, Scout=2, AntiTank=3, Tank=4, ArmoredCar=5, Mortar=6, SPGun=7, Exo=8, Count=9 };
  int32 Members(uint8 Type);
  float HealthScale(uint8 Type);
  float SpeedScale(uint8 Type);
@@ -43,6 +43,12 @@ namespace BattleSquadType
  // Indirect fire (ROADMAP 2026-11-14, stage 1 2026-11-18): the mortar team (3 soldiers, slot 1 carries the mortar) and the
  // self-propelled gun (one vehicle with a high-angle gun). Both fire only at positions their team knows (BattleArtillery.cpp).
  bool IsArtillery(uint8 Type);
+ // Armoured exoskeleton soldier (2026-11-18, user request and decisions): ONE fast, armoured soldier with a strong automatic rifle, a
+ // shoulder anti-tank launcher as a second weapon (BattleExo.cpp) and a shield that absorbs damage before health and refills after a
+ // pause without hits. Infantry, not a vehicle: it paths, hides and is seen like a soldier.
+ float ShieldMax(uint8 Type);     // 0 = the type has no shield
+ int32 LauncherRounds(uint8 Type); // anti-tank rounds of the second weapon (0 = none)
+ int32 ScoreCount(uint8 Type);     // how many soldiers one living member counts for in the final score (1 for all but the exoskeleton)
  float SpeedAt(uint8 Type,const UWorld* World,const FVector& Position); // scale of UBattleTuning::MoveSpeed
 }
 
@@ -244,6 +250,14 @@ struct FBattleUnitState
 	UPROPERTY(VisibleAnywhere) int32 HireCost = 180;
 	UPROPERTY() double NextShotTime = 0.;
 	UPROPERTY() double ReloadEndTime = 0.;
+	// Exoskeleton shield: points left, and seconds until it starts to refill (relative, so it survives saving). 0 for other types.
+	UPROPERTY() float Shield = 0.f;
+	UPROPERTY() float ShieldWait = 0.f;
+	// Exoskeleton second weapon: anti-tank rounds left and seconds until the next one is loaded (relative). 0 for other types.
+	UPROPERTY() int32 Launcher = 0;
+	UPROPERTY() float LauncherWait = 0.f;
+	// Carries a weapon that hurts armour: an anti-tank soldier or an exoskeleton with launcher rounds left.
+	bool CarriesAntiTank() const { return Weapon == EBattleWeapon::AntiTank || Launcher > 0; }
 	bool IsAlive() const { return HP > 0.f; }
 };
 
@@ -330,6 +344,33 @@ public:
 	UPROPERTY(Config, EditAnywhere) float ACTurnRate = 90.f;
 	UPROPERTY(Config, EditAnywhere) float ACFieldOfView = 120.f;
 	UPROPERTY(Config, EditAnywhere) float ACRadius = 150.f; // capsule only; the car paths on the same vehicle navigation data as a tank
+	// Armoured exoskeleton soldier (squad type 8, 2026-11-18, user decisions): one soldier. Health ExoHealthScale x (200), small arms do
+	// ExoArmorSmallArms of their damage (anti-tank weapons, tank guns and shells full), ExoSpeed cm/s (10 m/s) on every ground, a shield
+	// of ExoShield points that takes damage before health and, ExoShieldDelay seconds after the last hit, refills at ExoShieldRegen
+	// points/s; while any shield is left the soldier is not suppressed. Main weapon: the support gun doing ExoDamageScale x ShotDamage
+	// (20). Second weapon: a shoulder launcher with ExoLauncherRounds anti-tank rounds (ATDamage and the anti-tank explosion),
+	// ExoLauncherReload seconds between rounds, fired by itself at vehicles the soldier sees, or at ExoLauncherCluster or more enemy
+	// soldiers together while more than ExoLauncherKeep rounds are left; refilled at home. Counts as ExoScoreCount soldiers in the final
+	// score (as one when taking a point). Cost AreaExoCost, at most AreaExoLimit per team. Below VehicleRepairRatio of its health it
+	// goes home to be repaired like a vehicle. The AI keeps AreaExoKeep of them (trial -BattleAreaExoKeep=n; default 0 until measured).
+	UPROPERTY(Config, EditAnywhere) int32 AreaExoCost = 30;
+	UPROPERTY(Config, EditAnywhere) int32 AreaExoLimit = 3;
+	UPROPERTY(Config, EditAnywhere) int32 AreaExoKeep = 0;
+	UPROPERTY(Config, EditAnywhere) float ExoHealthScale = 2.f;
+	UPROPERTY(Config, EditAnywhere) float ExoArmorSmallArms = .3f;
+	UPROPERTY(Config, EditAnywhere) float ExoSpeed = 1000.f;
+	UPROPERTY(Config, EditAnywhere) float ExoDamageScale = 2.f;
+	UPROPERTY(Config, EditAnywhere) float ExoShield = 100.f;
+	UPROPERTY(Config, EditAnywhere) float ExoShieldDelay = 5.f;
+	UPROPERTY(Config, EditAnywhere) float ExoShieldRegen = 20.f;
+	UPROPERTY(Config, EditAnywhere) int32 ExoLauncherRounds = 4;
+	UPROPERTY(Config, EditAnywhere) float ExoLauncherReload = 8.f;
+	UPROPERTY(Config, EditAnywhere) int32 ExoLauncherKeep = 2;
+	UPROPERTY(Config, EditAnywhere) int32 ExoLauncherCluster = 3;
+	UPROPERTY(Config, EditAnywhere) int32 ExoScoreCount = 5;
+	// Exoskeleton AI (2026-11-18): with its shield gone and enemies in sight it breaks contact (it outruns infantry), and goes back to
+	// its mission once the shield is at ExoResumeShield of its maximum. The team layer uses it as a fast reserve (UBattleMatch::AreaExoTarget).
+	UPROPERTY(Config, EditAnywhere) float ExoResumeShield = .8f;
 	UPROPERTY(Config, EditAnywhere) int32 AreaTankCost = 40;
 	UPROPERTY(Config, EditAnywhere) int32 AreaTankLimit = 2;
 	UPROPERTY(Config, EditAnywhere) int32 AreaTankKeep = 0;
@@ -654,6 +695,13 @@ public:
 	bool ConsumeShot(int32 ID, double Now, double Interval);
 	bool StartReload(int32 ID, double Now);
 	void AdvanceReloads(double Now);
+	// Exoskeleton shields and launchers: counts down the pause after a hit, then refills the shield; counts down the launcher's load.
+	// Does nothing while no such squad exists.
+	void AdvanceShields(float DeltaSeconds);
+	bool UseLauncher(int32 UnitID); // one round out, the load time starts; false when empty or still loading
+	void RefillLauncher(int32 UnitID);
+	float MaxShieldOf(int32 UnitID) const;
+	bool HasShields() const { return bShields; }
 	bool ApplyDamage(int32 ID, int32 AttackingTeam, float Damage);
 	int32 AddReserve(int32 ID, int32 Rounds);
 	// Heals a living unit up to MaxHealthOf(ID); returns the amount applied.
@@ -664,5 +712,6 @@ private:
 	UPROPERTY() TMap<int32, FBattleUnitState> Units;
 	UPROPERTY() TMap<int32, FBattleSquadState> Squads;
 	int32 NextSquadID = 1;
+	bool bShields = false; // a squad type with a shield exists (purchase or restore)
 	int32 NextID = 1;
 };

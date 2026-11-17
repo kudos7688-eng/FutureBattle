@@ -51,6 +51,8 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("Armoured car limit reached"),TEXT("装甲車は1軍3両まで"));
   M.Add(TEXT("Mortar team limit reached"),TEXT("迫撃砲班は1軍3班まで"));
   M.Add(TEXT("Self-propelled gun limit reached"),TEXT("自走砲は1軍2両まで"));
+  M.Add(TEXT("LAUNCHER EMPTY / REFILL AT HOME"),TEXT("対戦車弾なし ／ 本拠地で補充"));M.Add(TEXT("LAUNCHER LOADING"),TEXT("対戦車火器を装填中"));
+  M.Add(TEXT("Exoskeleton soldier limit reached"),TEXT("外骨格兵は1軍3体まで"));
   M.Add(TEXT("Match restored"),TEXT("試合を読み込みました"));M.Add(TEXT("Match saved [F9 to load]"),TEXT("試合を保存しました [F9で読込]"));
   M.Add(TEXT("Mixed recruitment unavailable"),TEXT("購入できません"));M.Add(TEXT("Navigation unavailable"),TEXT("経路がありません"));
   M.Add(TEXT("No compatible save found"),TEXT("使える保存データがありません"));M.Add(TEXT("No free squad slot (25 active squads)"),TEXT("部隊の空きがありません（稼働25部隊）"));
@@ -103,6 +105,8 @@ static FString JaUncached(const FString& Text)
   {TEXT("^Armoured car deployed / -(\\d+) resources$"),TEXT("装甲車を配備 ／ 資源 -{0}")},
   {TEXT("^Mortar team deployed / -(\\d+) resources$"),TEXT("迫撃砲班を配備 ／ 資源 -{0}")},
   {TEXT("^Self-propelled gun deployed / -(\\d+) resources$"),TEXT("自走砲を配備 ／ 資源 -{0}")},
+  {TEXT("^LAUNCHER FIRED / (\\d+) LEFT$"),TEXT("対戦車火器を発射 ／ 残り{0}発")},
+  {TEXT("^Exoskeleton soldier deployed / -(\\d+) resources$"),TEXT("外骨格兵を配備 ／ 資源 -{0}")},
   {TEXT("^(\\d+) SQUADS / (.*)$"),TEXT("{0}部隊 ／ {1}")},
   {TEXT("^(.*) / (\\d+)m$"),TEXT("{0} ／ {1}m")},
  };

@@ -107,6 +107,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("HireArmoredCar"), EKeys::Seven, &ABattleController::HireArmoredCar);
 	Button(TEXT("HireMortar"), EKeys::Eight, &ABattleController::HireMortar);
 	Button(TEXT("HireSPGun"), EKeys::Nine, &ABattleController::HireSPGun);
+	Button(TEXT("HireExo"), EKeys::Zero, &ABattleController::HireExo);
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
 	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
 	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
@@ -410,6 +411,16 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
     if(R->SetStance(U->GetUnitID(),Next,GetWorld()->GetTimeSeconds()))ShowNotice(Next==BattleStance::Prone?TEXT("PRONE / X TO STAND"):Next==BattleStance::Crouch?TEXT("CROUCHED / X FOR PRONE"):TEXT("STANDING / X TO CROUCH"));
     return true;
    }
+ // Exoskeleton: F fires the shoulder launcher of the directly controlled soldier along the aim (it does not fire by itself meanwhile).
+ if(!bTactical && Params.Key==EKeys::F && Params.Event==IE_Pressed)
+  if(auto* U=Cast<ABattleUnit>(GetPawn());U&&U->GetState()&&GetWorld()->GetSubsystem<UBattleState>()->MaxShieldOf(U->GetUnitID())>0.f)
+  {
+   const auto* St=U->GetState();FVector Start,Direction;U->GetPlayerShot(Start,Direction);
+   if(St->Launcher<=0)ShowNotice(TEXT("LAUNCHER EMPTY / REFILL AT HOME"));
+   else if(St->LauncherWait>0.f)ShowNotice(TEXT("LAUNCHER LOADING"));
+   else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->FireExoLauncher(U->GetUnitID(),Start+Direction*20000.f,GetWorld()->GetTimeSeconds()))ShowNotice(FString::Printf(TEXT("LAUNCHER FIRED / %d LEFT"),St->Launcher));
+   return true;
+  }
  if(!bTactical && Params.Key==EKeys::C && Params.Event==IE_Pressed)
  {
   if(auto* U=Cast<ABattleUnit>(GetPawn()))
@@ -932,6 +943,7 @@ void ABattleController::PressCommandButton(int32 Index)
  case 11: HireArmoredCar(); break; // area battle: armoured car
  case 12: HireMortar(); break; // area battle: mortar team
  case 13: HireSPGun(); break; // area battle: self-propelled gun
+ case 14: HireExo(); break; // area battle: armoured exoskeleton soldier
  default: break;
  }
 }
@@ -959,6 +971,7 @@ FKey ABattleController::GamepadToKey(const FKey& Key) const
  else
  {
   if(Key==EKeys::Gamepad_RightTrigger) return EKeys::LeftMouseButton;        // RT: fire
+  if(Key==EKeys::Gamepad_LeftShoulder) return EKeys::F;                      // LB: exoskeleton launcher
   if(Key==EKeys::Gamepad_FaceButton_Bottom) return EKeys::SpaceBar;          // A: jump
   if(Key==EKeys::Gamepad_FaceButton_Left) return EKeys::R;                   // X: reload (held: future interact)
   if(Key==EKeys::Gamepad_FaceButton_Right) return EKeys::X;                  // B: stance
@@ -1038,6 +1051,13 @@ void ABattleController::HireMortar()
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
 	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Mortar); ShowNotice(Match->LastMessage);
+}
+// Area battle: key 0 buys an armoured exoskeleton soldier (squad type 8, at most AreaExoLimit per team).
+void ABattleController::HireExo()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Exo); ShowNotice(Match->LastMessage);
 }
 // Area battle: key 9 buys a self-propelled gun (squad type 7, at most AreaSPGLimit per team).
 void ABattleController::HireSPGun()

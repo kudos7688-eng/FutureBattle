@@ -9,6 +9,7 @@
 #include "BattleFieldLayout.h"
 #include "BattleRanges.h"
 #include "BattleWarScore.h"
+#include "BattleSuppression.h"
 #include "Components/CapsuleComponent.h"
 #include "NavigationSystem.h"
 #include "NavigationData.h"
@@ -367,7 +368,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
          Store->SetSquadDelegated(ThirdSquad,D2);Three.Squads.Remove(ThirdSquad);M->SquadGroup.Remove(ThirdSquad);M->AssignGroupRoles(Three);
         }
         M->Groups[GID].PhaseAt=M->Elapsed-1000.f;M->UpdateGroups(0);GG=M->Groups.Find(GID);
-        bStall=GG&&GG->Phase==0;
+        bStall=GG&&(GG->Phase==0||GG->Phase==3);
        }
        const int32 Solo=M->FormGroup(0,{Two[1]},true);
        bLeft=Solo!=INDEX_NONE&&M->GroupOf(Two[1])==Solo&&M->GroupOf(Two[0])==GID&&M->Groups.Contains(GID)&&M->Groups[GID].Squads.Num()==1;
@@ -623,6 +624,61 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Mode->bCombatPaused=false;
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_SPG_SMOKE squad=%d gun=%d enemy=%d dir=%s after_hit=%.0f nav=%s validation=%s"),GSID,GunID,EnemyGun,*Dir.ToCompactString(),AfterHit,GN?*GN->GetName():TEXT("none"),*Error);
    }
+  }
+  // Armoured exoskeleton soldier (squad type 8, 2026-11-18): one soldier for 30 resources, a strong automatic rifle and a launcher,
+  // armour against small arms, 10 m/s, a shield that takes damage first and refills after a pause, 5 soldiers in the score, save and restore.
+  {
+   const auto* TT=GetDefault<UBattleTuning>();const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::Exo);const double Now=GetWorld()->GetTimeSeconds();
+   for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==BattleSquadType::Rifle){Store->ApplyDamage(P.Value.LeaderUnitID,1,10000);break;}
+   M->UpdateArea(1);M->Area.Replacements.Reset();
+   if(M->Credits[0]<Cost){const int32 Add=Cost-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
+   const int32 C0=M->Credits[0],Score0=M->AreaScore(0);const bool Hired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Exo);
+   if(!Hired)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_EXO_SMOKE hire refused: %s"),*M->LastMessage);
+   const int32 XSID=Hired?M->LastHiredSquadID:INDEX_NONE;const auto* XS=Store->FindSquad(XSID);
+   bool Body=false,Armour=false,Shield=false,Regen=false,Calm=false,Launch=false,Scored=false,Kept=false,Reserve=false;float ShieldSaved=-1.f;
+   if(XS&&XS->Members.Num()==1)
+   {
+    const int32 L=XS->LeaderUnitID;const auto* LU=Store->Find(L);const float HP0=LU->HP;
+    Body=Cost==30&&M->Credits[0]==C0-Cost&&XS->SquadType==BattleSquadType::Exo&&XS->DisplayName.Contains(TEXT("外骨格"))&&!IsVehicle(L)&&Actor(L)&&ExoLooks.Contains(L)&&ExoLooks[L].Bubble.IsValid()&&
+     LU->Weapon==EBattleWeapon::SupportGun&&FMath::IsNearlyEqual(HP0,TT->Health*2.f)&&FMath::IsNearlyEqual(LU->Shield,100.f)&&FMath::IsNearlyEqual(Store->MaxShieldOf(L),100.f)&&Store->MaxShieldOf(1)==0.f&&
+     LU->Launcher==4&&LU->CarriesAntiTank()&&!Store->Find(1)->CarriesAntiTank()&&
+     FMath::IsNearlyEqual(BattleSquadType::SpeedAt(BattleSquadType::Exo,GetWorld(),FVector::ZeroVector),1000.f/TT->MoveSpeed,.01f)&&FMath::IsNearlyEqual(BattleSquadType::DamageScale(BattleSquadType::Exo),2.f);
+    Scored=BattleWarScore::Tuning().bEnabled||M->AreaScore(0)==Score0-Cost+5;
+    Armour=FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::Carbine),.3f)&&FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::SupportGun),.3f)&&ArmorScale(L,EBattleWeapon::AntiTank)==1.f&&ArmorScale(1,EBattleWeapon::Carbine)==1.f;
+    // No suppression while the shield holds.
+    SuppressionZeroAt.Remove(L);AddSuppression(L,1.f,Now);const bool Unshaken=Suppression(L,Now)==0.f;
+    // Shield: 70 damage leaves health untouched; the next 50 empties the shield and takes 20 health.
+    Store->ApplyDamage(L,1,70);const bool First=FMath::IsNearlyEqual(LU->HP,HP0)&&FMath::IsNearlyEqual(LU->Shield,30.f);
+    Store->ApplyDamage(L,1,50);Shield=First&&FMath::IsNearlyEqual(LU->HP,HP0-20.f)&&LU->Shield==0.f;
+    AddSuppression(L,1.f,Now);Calm=Unshaken&&(!BattleSuppression::Tuning().bEnabled||Suppression(L,Now)>0.f);SuppressionZeroAt.Remove(L);
+    // Refill: nothing for 5 s after the last hit, then 20 points/s up to 100; health does not refill.
+    Store->AdvanceShields(2.5f);Store->AdvanceShields(2.5f);const bool Waited=LU->Shield==0.f;
+    Store->AdvanceShields(2.f);const bool Partial=FMath::IsNearlyEqual(LU->Shield,40.f);
+    Store->AdvanceShields(100.f);Regen=Waited&&Partial&&FMath::IsNearlyEqual(LU->Shield,100.f)&&FMath::IsNearlyEqual(LU->HP,HP0-20.f);
+    // Launcher: one round out (straight up, hitting nothing), then 8 s to load the next; the main weapon's ammunition is untouched.
+    const int32 Ammo0=LU->Ammo;const bool Fired=FireExoLauncher(L,Position(L)+FVector(0,0,5000),Now);const bool Loading=!FireExoLauncher(L,Position(L)+FVector(0,0,5000),Now);
+    const bool One=LU->Launcher==3&&FMath::IsNearlyEqual(LU->LauncherWait,8.f)&&LU->Ammo==Ammo0;
+    Store->AdvanceShields(8.f);Launch=Fired&&Loading&&One&&LU->LauncherWait==0.f;
+    // Team layer: the fast reserve gets a valid objective from what its team knows.
+    Reserve=M->Objectives.IsValidIndex(M->AreaExoTarget(0,XSID));
+    // Save and restore: type, shield points, the pause before the refill and the launcher rounds survive.
+    Store->ApplyDamage(L,1,25);ShieldSaved=LU->Shield;
+    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
+    const bool Restored=Valid&&M->RestoreSnapshot(Save);const auto* After=Store->FindSquad(XSID);const auto* RU=Store->Find(L);
+    Kept=Restored&&After&&After->SquadType==BattleSquadType::Exo&&After->CommandStatus==EBattleCommandStatus::Active&&RU&&Actor(L)&&ExoLooks.Contains(L)&&FMath::IsNearlyEqual(RU->Shield,75.f)&&FMath::IsNearlyEqual(RU->ShieldWait,TT->ExoShieldDelay)&&
+     RU->Launcher==3&&FMath::IsNearlyEqual(RU->HP,HP0-20.f)&&Store->HasShields()&&FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::Carbine),.3f);
+    Mode->bCombatPaused=false;
+   }
+   Check(Body,TEXT("exoskeleton soldier: one soldier, 30 resources, automatic rifle at 2x damage, 4 launcher rounds, 200 health, 100 shield, 10 m/s"));
+   Check(Scored,TEXT("exoskeleton soldier counts as 5 soldiers in the score"));
+   Check(Armour,TEXT("exoskeleton armour: small arms do 0.3, anti-tank weapons full damage, other soldiers unchanged"));
+   Check(Shield,TEXT("exoskeleton shield takes damage before health"));
+   Check(Calm,TEXT("exoskeleton is not suppressed while its shield holds"));
+   Check(Regen,TEXT("exoskeleton shield refills 5 s after the last hit at 20 points per second"));
+   Check(Launch,TEXT("exoskeleton launcher: one round per 8 s, separate from the main weapon"));
+   Check(Reserve,TEXT("exoskeleton soldier: the team layer gives it an objective as the fast reserve"));
+   Check(Kept,TEXT("exoskeleton soldier survives save and restore with its shield, launcher rounds and look"));
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_EXO_SMOKE squad=%d shield_saved=%.0f validation=%s"),XSID,ShieldSaved,*Error);
   }
   // Resource income: base 1 plus 1 per actually owned point every 20 s, for both teams at once.
   {

@@ -26,7 +26,10 @@ float UBattleLeaderRuntime::ArmorScale(int32 VictimID,EBattleWeapon Weapon) cons
 {
  // Anti-tank weapons hurt every unit fully; small arms (rifles, machine guns) by the vehicle type's armour (tank 0, armoured car and
  // self-propelled gun 0.1). Shells (BattleArtillery.cpp) do not pass through here.
- return IsVehicle(VictimID)&&Weapon!=EBattleWeapon::AntiTank?BattleSquadType::ArmorSmallArms(VehicleType(VictimID)):1.f;
+ if(Weapon==EBattleWeapon::AntiTank)return 1.f;
+ if(IsVehicle(VictimID))return BattleSquadType::ArmorSmallArms(VehicleType(VictimID));
+ // Armoured exoskeleton soldiers (infantry with armour): only looked up once such a squad exists.
+ return GetWorld()->GetSubsystem<UBattleState>()->HasShields()?BattleSquadType::ArmorSmallArms(VehicleType(VictimID)):1.f;
 }
 
 uint8 UBattleLeaderRuntime::VehicleType(int32 ID) const

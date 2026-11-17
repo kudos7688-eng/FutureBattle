@@ -51,7 +51,7 @@ float UBattleTuning::EffectiveWeaponRange() const
 
 void UBattleState::RestoreRecords(const TArray<FBattleUnitState>& SavedUnits, const TArray<FBattleSquadState>& SavedSquads, bool PreservePlans)
 {
-	Units.Reset(); Squads.Reset(); NextID = NextSquadID = 1;
+	Units.Reset(); Squads.Reset(); NextID = NextSquadID = 1; bShields = false;
 	for (const auto& Unit : SavedUnits) { Units.Add(Unit.UnitID, Unit); NextID = FMath::Max(NextID, Unit.UnitID + 1); }
 	for (auto Squad : SavedSquads)
  {
@@ -63,6 +63,7 @@ void UBattleState::RestoreRecords(const TArray<FBattleUnitState>& SavedUnits, co
    for (int32 ID : Squad.Members) if (const auto* U = Find(ID)) Squad.MissionGoals.Add(ID, U->Destination);
   }
   Squads.Add(Squad.SquadID, Squad); NextSquadID = FMath::Max(NextSquadID, Squad.SquadID + 1);
+  bShields |= BattleSquadType::ShieldMax(Squad.SquadType) > 0.f;
  }
  GetWorld()->GetSubsystem<UBattleSquadTactics>()->Reset();
 }
@@ -369,16 +370,58 @@ void UBattleState::AdvanceReloads(double Now)
 	}
 }
 
+float UBattleState::MaxShieldOf(int32 UnitID) const
+{
+ const auto* U=Find(UnitID);const auto* S=U?FindSquad(U->SquadID):nullptr;
+ return S?BattleSquadType::ShieldMax(S->SquadType):0.f;
+}
+
+void UBattleState::AdvanceShields(float DeltaSeconds)
+{
+ if(!bShields||DeltaSeconds<=0.f)return;
+ const float Regen=FMath::Max(0.f,GetDefault<UBattleTuning>()->ExoShieldRegen);
+ for(const auto& P:Squads)
+ {
+  const float Max=BattleSquadType::ShieldMax(P.Value.SquadType);if(Max<=0.f)continue;
+  for(int32 ID:P.Value.Members)
+  {
+   auto* U=Units.Find(ID);if(!U||!U->IsAlive())continue;
+   if(U->LauncherWait>0.f)U->LauncherWait=FMath::Max(0.f,U->LauncherWait-DeltaSeconds);
+   if(U->ShieldWait>0.f){U->ShieldWait=FMath::Max(0.f,U->ShieldWait-DeltaSeconds);continue;}
+   if(U->Shield<Max)U->Shield=FMath::Min(Max,U->Shield+Regen*DeltaSeconds);
+  }
+ }
+}
+
+bool UBattleState::UseLauncher(int32 UnitID)
+{
+ auto* U=Units.Find(UnitID);if(!U||!U->IsAlive()||U->Launcher<=0||U->LauncherWait>0.f)return false;
+ --U->Launcher;U->LauncherWait=FMath::Max(.5f,GetDefault<UBattleTuning>()->ExoLauncherReload);return true;
+}
+
+void UBattleState::RefillLauncher(int32 UnitID)
+{
+ auto* U=Units.Find(UnitID);const auto* S=U?FindSquad(U->SquadID):nullptr;
+ if(U&&U->IsAlive()&&S)U->Launcher=FMath::Max(U->Launcher,BattleSquadType::LauncherRounds(S->SquadType));
+}
+
 bool UBattleState::ApplyDamage(int32 ID, int32 AttackingTeam, float Damage)
 {
 	FBattleUnitState* State = Units.Find(ID);
 	if (!State || !State->IsAlive() || State->Team == AttackingTeam || !FMath::IsFinite(Damage) || Damage <= 0.f) return false;
+ // Exoskeleton shield: takes the damage first; any hit restarts the pause before it refills. A hit it absorbs whole still counts as a hit.
+ if(bShields)if(const float MaxShield=MaxShieldOf(ID);MaxShield>0.f)
+ {
+  State->ShieldWait=FMath::Max(0.f,GetDefault<UBattleTuning>()->ExoShieldDelay);
+  const float Absorbed=FMath::Min(FMath::Max(0.f,State->Shield),Damage);State->Shield-=Absorbed;Damage-=Absorbed;
+  if(Damage<=0.f){if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>())Runtime->NoteUnderFire(ID);return true;}
+ }
   GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordDamage(State->SquadID, FMath::Min(State->HP, Damage));
  if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>())Runtime->NoteUnderFire(ID);
 	State->HP = FMath::Max(0.f, State->HP - Damage);
 	if (!State->IsAlive())
 	{
-		State->Action = EBattleAction::Dead;
+		State->Action = EBattleAction::Dead; State->Shield = 0.f;
   if (const auto* Squad = FindSquad(State->SquadID))
   {
    bool bSurvivor = false;
@@ -410,8 +453,8 @@ float UBattleState::MaxHealthOf(int32 UnitID) const
  const auto* U=Find(UnitID); const auto* S=U?FindSquad(U->SquadID):nullptr;
  // Squad type scale (heavy infantry); a leader keeps the larger of that and the leader multiplier.
  const float TypeScale=S?BattleSquadType::HealthScale(S->SquadType):1.f;
- // A vehicle's health is its type's alone (the leader multiplier is for soldiers).
- return S && S->LeaderUnitID==UnitID && !BattleSquadType::IsVehicle(S->SquadType) ? Base*FMath::Max(TypeScale,BattleTactics::LeaderHealthMultiplier()) : Base*TypeScale;
+ // A vehicle's health is its type's alone (the leader multiplier is for soldiers); so is the exoskeleton soldier's.
+ return S && S->LeaderUnitID==UnitID && !BattleSquadType::IsVehicle(S->SquadType) && S->SquadType!=BattleSquadType::Exo ? Base*FMath::Max(TypeScale,BattleTactics::LeaderHealthMultiplier()) : Base*TypeScale;
 }
 bool UBattleState::CanSelectLeader(int32 ID,int32 PlayerTeam) const
 {
@@ -460,9 +503,12 @@ namespace
   return V;
  }
 }
-int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:Type==Scout?2:Type==AntiTank?4:Type==Mortar?3:IsVehicle(Type)?1:10;}
-bool BattleSquadType::Replenished(uint8 Type){return Type!=Scout;}
+int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:Type==Scout?2:Type==AntiTank?4:Type==Mortar?3:Type==Exo||IsVehicle(Type)?1:10;}
+bool BattleSquadType::Replenished(uint8 Type){return Type!=Scout&&Type!=Exo;}
 bool BattleSquadType::LeaderHandover(uint8 Type){return Type==Scout;}
+float BattleSquadType::ShieldMax(uint8 Type){return Type==Exo?FMath::Clamp(GetDefault<UBattleTuning>()->ExoShield,0.f,1000.f):0.f;}
+int32 BattleSquadType::LauncherRounds(uint8 Type){return Type==Exo?FMath::Clamp(GetDefault<UBattleTuning>()->ExoLauncherRounds,0,20):0;}
+int32 BattleSquadType::ScoreCount(uint8 Type){return Type==Exo?FMath::Clamp(GetDefault<UBattleTuning>()->ExoScoreCount,1,20):1;}
 float BattleSquadType::StillSightRange(uint8 Type)
 {
  // Scouts see far only while still; the range profile (map E) uses the longer value. 0 = no still-sight bonus.
@@ -470,19 +516,19 @@ float BattleSquadType::StillSightRange(uint8 Type)
  const auto* T=GetDefault<UBattleTuning>();
  return FMath::Clamp(BattleRanges::Get().bActive?T->ScoutSightRangeProfile:T->ScoutSightRange,0.f,60000.f);
 }
-float BattleSquadType::HealthScale(uint8 Type){if(Type==SPGun)return FMath::Clamp(GetDefault<UBattleTuning>()->SPGHealthScale,.1f,20.f);if(Type==ArmoredCar)return FMath::Clamp(GetDefault<UBattleTuning>()->ACHealthScale,.1f,20.f);if(Type==Tank)return FMath::Clamp(GetDefault<UBattleTuning>()->TankHealthScale,1.f,20.f);return Type==Heavy?HeavyValues().Health:1.f;}
+float BattleSquadType::HealthScale(uint8 Type){if(Type==Exo)return FMath::Clamp(GetDefault<UBattleTuning>()->ExoHealthScale,.1f,20.f);if(Type==SPGun)return FMath::Clamp(GetDefault<UBattleTuning>()->SPGHealthScale,.1f,20.f);if(Type==ArmoredCar)return FMath::Clamp(GetDefault<UBattleTuning>()->ACHealthScale,.1f,20.f);if(Type==Tank)return FMath::Clamp(GetDefault<UBattleTuning>()->TankHealthScale,1.f,20.f);return Type==Heavy?HeavyValues().Health:1.f;}
 namespace
 {
  // Open and urban speed of a vehicle type (cm/s).
  float VehicleOpenSpeed(uint8 Type){const auto* T=GetDefault<UBattleTuning>();return Type==BattleSquadType::SPGun?T->SPGOpenSpeed:Type==BattleSquadType::ArmoredCar?T->ACOpenSpeed:T->TankOpenSpeed;}
  float VehicleUrbanSpeed(uint8 Type){const auto* T=GetDefault<UBattleTuning>();return Type==BattleSquadType::SPGun?T->SPGUrbanSpeed:Type==BattleSquadType::ArmoredCar?T->ACUrbanSpeed:T->TankUrbanSpeed;}
 }
-float BattleSquadType::SpeedScale(uint8 Type){if(IsVehicle(Type)){const auto* T=GetDefault<UBattleTuning>();return FMath::Max(.1f,VehicleOpenSpeed(Type))/FMath::Max(1.f,T->MoveSpeed);}return Type==Heavy?HeavyValues().Speed:1.f;}
+float BattleSquadType::SpeedScale(uint8 Type){if(IsVehicle(Type)){const auto* T=GetDefault<UBattleTuning>();return FMath::Max(.1f,VehicleOpenSpeed(Type))/FMath::Max(1.f,T->MoveSpeed);}if(Type==Exo){const auto* T=GetDefault<UBattleTuning>();return FMath::Clamp(T->ExoSpeed,100.f,3000.f)/FMath::Max(1.f,T->MoveSpeed);}return Type==Heavy?HeavyValues().Speed:1.f;}
 bool BattleSquadType::IsVehicle(uint8 Type){return Type==Tank||Type==ArmoredCar||Type==SPGun;}
 float BattleSquadType::VehicleTurnRate(uint8 Type){const auto* T=GetDefault<UBattleTuning>();return FMath::Max(1.f,Type==SPGun?T->SPGTurnRate:Type==ArmoredCar?T->ACTurnRate:T->TankTurnRate);}
 float BattleSquadType::VehicleFieldOfView(uint8 Type){const auto* T=GetDefault<UBattleTuning>();return FMath::Clamp(Type==SPGun?T->SPGFieldOfView:Type==ArmoredCar?T->ACFieldOfView:T->TankFieldOfView,1.f,360.f);}
 float BattleSquadType::VehicleRadius(uint8 Type){const auto* T=GetDefault<UBattleTuning>();return FMath::Max(50.f,Type==SPGun?T->SPGRadius:Type==ArmoredCar?T->ACRadius:T->TankRadius);}
-float BattleSquadType::ArmorSmallArms(uint8 Type){return Type==Tank?0.f:Type==ArmoredCar?FMath::Clamp(GetDefault<UBattleTuning>()->ACArmorSmallArms,0.f,1.f):Type==SPGun?FMath::Clamp(GetDefault<UBattleTuning>()->SPGArmorSmallArms,0.f,1.f):1.f;}
+float BattleSquadType::ArmorSmallArms(uint8 Type){return Type==Tank?0.f:Type==ArmoredCar?FMath::Clamp(GetDefault<UBattleTuning>()->ACArmorSmallArms,0.f,1.f):Type==SPGun?FMath::Clamp(GetDefault<UBattleTuning>()->SPGArmorSmallArms,0.f,1.f):Type==Exo?FMath::Clamp(GetDefault<UBattleTuning>()->ExoArmorSmallArms,0.f,1.f):1.f;}
 bool BattleSquadType::HasMainGun(uint8 Type){return Type==Tank;}
 bool BattleSquadType::IsArtillery(uint8 Type){return Type==Mortar||Type==SPGun;}
 float BattleSquadType::SpeedAt(uint8 Type,const UWorld* World,const FVector& P)
@@ -493,11 +539,12 @@ float BattleSquadType::SpeedAt(uint8 Type,const UWorld* World,const FVector& P)
  const float Open=VehicleOpenSpeed(Type),Urban=VehicleUrbanSpeed(Type);
  return FMath::Max(.1f,City?Urban:Open)/FMath::Max(1.f,T->MoveSpeed);
 }
-float BattleSquadType::DamageScale(uint8 Type){return Type==Heavy?HeavyValues().Damage:1.f;}
-int32 BattleSquadType::AreaCost(uint8 Type){if(Type==SPGun)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaSPGCost,1,200);if(Type==Mortar)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaMortarCost,1,100);if(Type==ArmoredCar)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaACCost,1,200);if(Type==Tank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaTankCost,1,200);if(Type==AntiTank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaATCost,1,100);if(Type==Scout)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaScoutCost,1,100);return Type==Heavy?HeavyValues().Cost:FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
+float BattleSquadType::DamageScale(uint8 Type){if(Type==Exo)return FMath::Clamp(GetDefault<UBattleTuning>()->ExoDamageScale,.1f,10.f);return Type==Heavy?HeavyValues().Damage:1.f;}
+int32 BattleSquadType::AreaCost(uint8 Type){if(Type==Exo)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaExoCost,1,200);if(Type==SPGun)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaSPGCost,1,200);if(Type==Mortar)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaMortarCost,1,100);if(Type==ArmoredCar)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaACCost,1,200);if(Type==Tank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaTankCost,1,200);if(Type==AntiTank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaATCost,1,100);if(Type==Scout)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaScoutCost,1,100);return Type==Heavy?HeavyValues().Cost:FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
 EBattleWeapon BattleSquadType::Weapon(uint8 Type,int32 Slot){if(IsVehicle(Type))return EBattleWeapon::SupportGun; // the machine gun (a tank's main gun is separate)
  if(Type==AntiTank)return Slot==1||Slot==2?EBattleWeapon::AntiTank:EBattleWeapon::Carbine;
  if(Type==Mortar)return Slot==1?EBattleWeapon::Mortar:EBattleWeapon::Carbine; // the leader keeps a rifle; slot 1 carries the mortar
+ if(Type==Exo)return EBattleWeapon::SupportGun; // the automatic rifle (DamageScale 2); the launcher is a second weapon (BattleExo.cpp)
  return Type==Heavy?EBattleWeapon::SupportGun:WeaponForSlot(Slot);}
 void UBattleState::SetSquadType(int32 SquadID,uint8 Type)
 {
@@ -510,5 +557,7 @@ void UBattleState::SetSquadType(int32 SquadID,uint8 Type)
  if(Type==BattleSquadType::ArmoredCar) S->DisplayName=FString::Printf(TEXT("第%d装甲車"),SquadID);
  if(Type==BattleSquadType::Mortar) S->DisplayName=FString::Printf(TEXT("第%d迫撃砲班"),SquadID);
  if(Type==BattleSquadType::SPGun) S->DisplayName=FString::Printf(TEXT("第%d自走砲"),SquadID);
- for(int32 ID:S->Members) if(auto* U=Units.Find(ID); U&&U->IsAlive()) U->HP=MaxHealthOf(ID);
+ if(Type==BattleSquadType::Exo) S->DisplayName=FString::Printf(TEXT("第%d外骨格兵"),SquadID);
+ const float Shield=BattleSquadType::ShieldMax(Type);bShields|=Shield>0.f;
+ for(int32 ID:S->Members) if(auto* U=Units.Find(ID); U&&U->IsAlive()) {U->HP=MaxHealthOf(ID);U->Shield=Shield;U->ShieldWait=0.f;U->Launcher=BattleSquadType::LauncherRounds(Type);U->LauncherWait=0.f;}
 }

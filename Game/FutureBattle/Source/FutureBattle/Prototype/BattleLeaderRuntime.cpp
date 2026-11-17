@@ -205,6 +205,8 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunMixedSaveSmoke,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleWeaponTrial")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWeaponRangeTrial,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleExoShot")))
+  { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunExoShot,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleStanceShot")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunStanceShot,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleSightVisual")))
@@ -907,6 +909,8 @@ void UBattleLeaderRuntime::Step(float Dt)
  if(!Mode->bCombatPaused && !Mode->bBattleEnded && Now>=Mode->CombatStartsAt)
  {
   if(!bWideField) Store->AdvanceReloads(Now);
+  Store->AdvanceShields(Dt);
+  if(Store->HasShields()) StepExoLaunchers(Now);
   RefreshSightTeamMasks();
   if(!bMovementTrial) { TRACE_CPUPROFILER_EVENT_SCOPE(BattlePerceptionUpdate); GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now,-1,0); }
   { TRACE_CPUPROFILER_EVENT_SCOPE(BattleThink); for(auto& P:Plans) if(Now>=P.Value.NextThink || (Store->FindSquad(P.Key) && P.Value.OrderRevision!=Store->FindSquad(P.Key)->OrderRevision)) Think(P.Key,Now); }

@@ -46,6 +46,8 @@ void UBattleLeaderRuntime::AddSuppression(int32 ID,float Amount,double Now)
 {
  const auto& T=BattleSuppression::Tuning();
  if(!T.bEnabled || Amount<=0)return;
+ // Exoskeleton: no suppression while any shield is left (user decision 2026-11-18).
+ if(const auto* Store=GetWorld()->GetSubsystem<UBattleState>();Store->HasShields())if(const auto* U=Store->Find(ID);U&&U->Shield>0.f)return;
  double& ZeroAt=SuppressionZeroAt.FindOrAdd(ID);
  // Linear decay is stored as the time the level reaches zero; the level is capped at 1.
  ZeroAt=FMath::Min(FMath::Max(ZeroAt,Now)+Amount/T.DecayPerSecond,Now+1./T.DecayPerSecond);

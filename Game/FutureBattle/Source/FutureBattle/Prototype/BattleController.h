@@ -39,8 +39,8 @@ struct FBattleNoticeLayout
 // Command bar (command UI 2026-11-16): buttons on the bottom panel that call the same actions as the keys.
 struct FBattleCommandBarLayout
 {
- FVector2D Origin=FVector2D::ZeroVector; float ButtonWidth=116, ButtonHeight=26, Gap=6; // 14 buttons: 1702 px wide (x 34..1736, inside the 1904 px panel at 1920)
- static constexpr int32 Count=14; // move, attack move, defend, hold, manual command, delegate to AI, buy a rifle squad, heavy infantry, a scout pair, an anti-tank team, a tank, an armoured car, a mortar team, a self-propelled gun
+ FVector2D Origin=FVector2D::ZeroVector; float ButtonWidth=116, ButtonHeight=26, Gap=6; // 15 buttons: 1824 px wide (x 34..1858, inside the 1904 px panel at 1920)
+ static constexpr int32 Count=15; // move, attack move, defend, hold, manual command, delegate to AI, buy a rifle squad, heavy infantry, a scout pair, an anti-tank team, a tank, an armoured car, a mortar team, a self-propelled gun
  static FBattleCommandBarLayout Make(FVector2D View){FBattleCommandBarLayout L;L.Origin=FVector2D(34,View.Y-90);return L;}
  int32 ButtonAt(FVector2D P) const
  {
@@ -106,6 +106,7 @@ public:
 	void HireArmoredCar();
 	void HireMortar();
 	void HireSPGun();
+	void HireExo();
 	void StartMatch();
 	void SaveMatch();
 	void LoadMatch();

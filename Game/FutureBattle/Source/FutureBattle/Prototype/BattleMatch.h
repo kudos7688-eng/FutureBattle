@@ -21,6 +21,7 @@ struct FAreaIntent
  int32 ACKeep=0;                      // armoured cars the AI keeps active (same pacing as scouts; 0 = none)
  int32 MortarKeep=0;                  // mortar teams the AI keeps active (same pacing as scouts; 0 = none)
  int32 SPGKeep=0;                     // self-propelled guns the AI keeps active (same pacing as scouts; 0 = none)
+ int32 ExoKeep=0;                     // armoured exoskeleton soldiers the AI keeps active (same pacing as scouts; 0 = none)
  int32 ATKeep=0;                      // anti-tank teams the AI keeps active (same pacing as scouts; 0 = none)
  int32 ScoutKeep=0;                   // scout pairs the AI keeps active (one more per ScoutAfterHires purchases, up to this; 0 = none)
 };
@@ -169,6 +170,9 @@ public:
 	bool GroupOrder(int32 SquadID, int32 Team, FVector& Center, EBattleOrder& Order) const;
 	// Anti-tank team objective: the point nearest a known enemy vehicle; INDEX_NONE while the team knows of none.
 	int32 AreaATTarget(int32 Team, int32 SquadID) const;
+	// Exoskeleton soldier objective (BattleExo.cpp): the team's fast reserve. An own point with more known enemies than own soldiers
+	// first, then the point nearest a known enemy vehicle, then a point the team does not hold and few enemies are known at.
+	int32 AreaExoTarget(int32 Team, int32 SquadID) const;
 	int32 AreaVehicleChoice(int32 SquadID, TFunctionRef<double(int32)> ScoreOf) const;
 	// Strategic layer trial (-BattleAreaComposition=1): the AI's own mix of special squad types, written into the intent's Keep numbers.
 	void AreaComposition(int32 Team, FAreaIntent& Intent, int32 Bought) const;

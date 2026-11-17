@@ -367,6 +367,9 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   // Armoured cars (tactical role, stage 2): an open point away from known anti-tank threats (AreaCarTarget); never the home assault.
   if(bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::ArmoredCar)
   {bStrategyBase=false;if(const int32 CarTarget=AreaCarTarget(Team,Pair.Key);CarTarget!=INDEX_NONE)Target=CarTarget;}
+  // Exoskeleton soldiers (tactical role): the fast reserve (AreaExoTarget); never the home assault.
+  if(bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::Exo&&Pair.Value.CommandStatus==EBattleCommandStatus::Active)
+  {bStrategyBase=false;if(const int32 ExoTarget=AreaExoTarget(Team,Pair.Key);ExoTarget!=INDEX_NONE)Target=ExoTarget;}
   // Armour AI, stage 3 (BattleArmourAI.cpp): a tank outside the home-assault slots supports the point with the most known enemies from
   // an overwatch post; an anti-tank team goes to the point nearest a known enemy vehicle (the normal spread while none is known).
   bool bTankPost=false;

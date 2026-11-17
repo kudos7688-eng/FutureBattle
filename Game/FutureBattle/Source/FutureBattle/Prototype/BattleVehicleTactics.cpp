@@ -20,7 +20,7 @@ bool UBattleMatch::AreaArmourThreat(int32 Team,const FVector& P,bool bTankGuns) 
   const int32 Key=V.EnemyKeys[I];if(Key<0)continue;
   const auto* U=Store->Find(Key);if(!U||!U->IsAlive())continue;
   double Reach=0;
-  if(U->Weapon==EBattleWeapon::AntiTank)Reach=AT;
+  if(U->CarriesAntiTank())Reach=AT;
   else if(bTankGuns&&R->HasMainGun(Key))Reach=Gun;
   if(Reach>0&&FVector::DistSquared2D(P,V.Enemies[I])<=Reach*Reach)return true;
  }

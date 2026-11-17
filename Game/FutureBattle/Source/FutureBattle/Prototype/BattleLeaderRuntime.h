@@ -147,6 +147,16 @@ public:
  bool HasMainGun(int32 ID) const {return IsVehicle(ID)&&BattleSquadType::HasMainGun(VehicleType(ID));}
  uint8 VehicleType(int32 ID) const; // the unit's squad type (tank, armoured car; Rifle when unknown)
  void ConfigureVehicle(int32 ID);
+ // The armoured exoskeleton soldier is drawn larger (the near skeletal body only; the far VAT display keeps the normal size).
+ void ApplySquadLook(int32 SquadID);
+ // Exoskeleton second weapon (BattleExo.cpp): picks a target among what the soldier sees itself and fires an anti-tank round.
+ void StepExoLaunchers(double Now);
+ bool FireExoLauncher(int32 ID,const FVector& Aim,double Now);
+ double ExoNextPick=0;int64 ExoLauncherShots=0,ExoLauncherHits=0;
+ // Look: armour parts on a rig that follows the chest and keeps the body's heading, the launcher tube, and a shield bubble shown while shield points are left.
+ struct FExoLook{TWeakObjectPtr<USceneComponent> Rig;TWeakObjectPtr<class UStaticMeshComponent> Bubble;TWeakObjectPtr<class UMaterialInstanceDynamic> BubblePaint;};
+ TMap<int32,FExoLook> ExoLooks;
+ void UpdateExoLooks();
  void RefreshVehicles();
  float VehicleSpotRange() const;
  // Damage scale of a weapon on a unit: anti-tank hits fully; small arms by the vehicle type (tank none, armoured car ACArmorSmallArms).
@@ -330,6 +340,8 @@ public:
  int32 SightVisualStage=0;
  // Stance visuals check (-BattleStanceShot, BattleStanceShot.cpp): close-up screenshots of a leader and a follower.
  void RunStanceShot();
+ void RunExoShot();
+ int32 ExoShotStage=0,ExoShotIDs[2]={0,0};
  int32 StanceShotStage=0,StanceShotFollower=0;
  void StepSightExperiment(float DeltaSeconds);
  FBattleSightExperiment SightExperiment;

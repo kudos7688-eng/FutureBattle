@@ -134,7 +134,7 @@ int32 UBattleMatch::AreaArmourReaction(int32 Team,int32 SquadID,float DamageRati
   for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)
   {
    const int32 Key=V.EnemyKeys[I];const auto* U=Key>0?Store->Find(Key):nullptr;
-   if(!U||!U->IsAlive()||U->Weapon!=EBattleWeapon::AntiTank)continue;
+   if(!U||!U->IsAlive()||!U->CarriesAntiTank())continue;
    const double D=FVector::Dist2D(Here,V.Enemies[I]);if(D<=Keep&&D<Nearest){Nearest=D;Threat=&V.Enemies[I];}
   }
   const bool bShock=DamageRatio>=FMath::Max(.01f,T->VehicleShockRatio);
@@ -151,7 +151,7 @@ int32 UBattleMatch::AreaArmourReaction(int32 Team,int32 SquadID,float DamageRati
  }
  // Infantry: a squad with no loaded anti-tank weapon does not stand in front of a tank it sees (small arms do nothing to it).
  const auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();if(!Sense)return 0;
- for(int32 ID:S->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive()&&U->Weapon==EBattleWeapon::AntiTank&&U->Ammo+U->Reserve>0)return 0;
+ for(int32 ID:S->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive()&&((U->Weapon==EBattleWeapon::AntiTank&&U->Ammo+U->Reserve>0)||U->Launcher>0))return 0;
  const double Fear=FMath::Max(0.f,BattleRanges::Get().bActive?T->ArmourFearRangeProfile:T->ArmourFearRange);
  for(int32 ID:S->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())if(const auto* Contacts=Sense->GetContacts(ID))
   for(const auto& C:*Contacts)
