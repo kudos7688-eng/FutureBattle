@@ -40,7 +40,7 @@ ABattleCameraPawn::ABattleCameraPawn()
 void ABattleCameraPawn::Zoom(float Delta)
 {
 	const FVector Current = Camera->GetRelativeLocation();
-	const float Height = FMath::Clamp(Current.Z + Delta, 1000.f, BattleFieldLayout::IsUrban(GetWorld()) ? 160000.f : BattleFieldLayout::IsExpanded(GetWorld()) ? 130000.f : BattleFieldLayout::IsSightField(GetWorld()) ? 100000.f : BattleFieldLayout::IsLarge(GetWorld()) ? 30000.f : 4500.f);
+	const float Height = FMath::Clamp(Current.Z + Delta, 1000.f, BattleFieldLayout::Of(GetWorld()).CameraMaxHeight);
 	Camera->SetRelativeLocation(FVector(-Height * .65f, 0, Height));
 }
 
@@ -124,7 +124,7 @@ void ABattleController::Forward(const FInputActionValue& Value)
 	if (bTactical && TacticalPawn)
 	{
 		FVector P = TacticalPawn->GetActorLocation() + FVector(Axis * 1800 * GetWorld()->GetDeltaSeconds(), 0, 0);
-		const float Limit=BattleFieldLayout::IsUrban(GetWorld())?49500.f:BattleFieldLayout::IsExpanded(GetWorld())?39500.f:BattleFieldLayout::IsSightField(GetWorld())?29500.f:BattleFieldLayout::IsLarge(GetWorld())?11500.f:3500.f;
+		const float Limit=float(BattleFieldLayout::Of(GetWorld()).HalfExtent.X)-500.f;
 		P.X = FMath::Clamp(P.X,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
 	else if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
@@ -137,7 +137,7 @@ void ABattleController::Right(const FInputActionValue& Value)
 	if (bTactical && TacticalPawn)
 	{
 		FVector P = TacticalPawn->GetActorLocation() + FVector(0, Axis * 1800 * GetWorld()->GetDeltaSeconds(), 0);
-		const float Limit=BattleFieldLayout::IsUrban(GetWorld())?34500.f:BattleFieldLayout::IsExpanded(GetWorld())?29500.f:BattleFieldLayout::IsSightField(GetWorld())?19500.f:BattleFieldLayout::IsLarge(GetWorld())?8500.f:2500.f;
+		const float Limit=float(BattleFieldLayout::Of(GetWorld()).HalfExtent.Y)-500.f;
 		P.Y = FMath::Clamp(P.Y,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
 	else if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))

@@ -474,9 +474,9 @@ float BattleSquadType::SpeedScale(uint8 Type){if(Type==Tank){const auto* T=GetDe
 bool BattleSquadType::IsVehicle(uint8 Type){return Type==Tank;}
 float BattleSquadType::SpeedAt(uint8 Type,const UWorld* World,const FVector& P)
 {
- // Tanks: TankUrbanSpeed inside the city of map E (x +-250 m, y +-150 m), TankOpenSpeed elsewhere. Others: SpeedScale.
+ // Tanks: TankUrbanSpeed inside the city of the map (FMapDef::CityHalf; map E: x +-250 m, y +-150 m), TankOpenSpeed elsewhere. Others: SpeedScale.
  if(Type!=Tank)return SpeedScale(Type);
- const auto* T=GetDefault<UBattleTuning>();const bool City=BattleFieldLayout::IsUrban(World)&&FMath::Abs(P.X)<25000&&FMath::Abs(P.Y)<15000;
+ const auto* T=GetDefault<UBattleTuning>();const FVector2D CityHalf=BattleFieldLayout::Of(World).CityHalf;const bool City=FMath::Abs(P.X)<CityHalf.X&&FMath::Abs(P.Y)<CityHalf.Y;
  return FMath::Max(.1f,City?T->TankUrbanSpeed:T->TankOpenSpeed)/FMath::Max(1.f,T->MoveSpeed);
 }
 float BattleSquadType::DamageScale(uint8 Type){return Type==Heavy?HeavyValues().Damage:1.f;}

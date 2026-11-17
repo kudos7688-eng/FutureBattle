@@ -180,7 +180,7 @@ void UBattleMatch::Update(float DeltaSeconds)
 	CheckTimeLimit();
 }
 
-float UBattleMatch::MatchTimeLimit() const { return BattleFieldLayout::IsUrban(GetWorld()) ? 900.f : BattleFieldLayout::IsSightField(GetWorld()) ? 600.f : 180.f; }
+float UBattleMatch::MatchTimeLimit() const { return BattleFieldLayout::Of(GetWorld()).MatchSeconds; }
 
 void UBattleMatch::CheckTimeLimit()
 {

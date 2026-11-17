@@ -383,7 +383,7 @@ void ABattleHUD::DrawMinimap()
  DrawText(TEXT("地図（観測情報のみ）"),Muted,Map.Origin.X,Map.Origin.Y-20,GEngine->GetSmallFont(),.8f);
  DrawRect(Ground,Map.Origin.X,Map.Origin.Y,Map.Size.X,Map.Size.Y);
  // Map E: the city block outline (public map knowledge).
- if(BattleFieldLayout::IsUrban(GetWorld())) Frame(Map.ToScreen(FVector(25000,-15000,0)),Map.ToScreen(FVector(-25000,15000,0)),Muted);
+ if(const FVector2D City=BattleFieldLayout::Of(GetWorld()).CityHalf;City.X>0) Frame(Map.ToScreen(FVector(City.X,-City.Y,0)),Map.ToScreen(FVector(-City.X,City.Y,0)),Muted);
  const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Homes are public; objective ownership is what the player's side last observed.
  if(Match->bArea) for(int32 Team=0;Team<2;++Team)
