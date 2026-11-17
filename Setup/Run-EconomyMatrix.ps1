@@ -64,6 +64,8 @@ $supply=@{
  'BR5'=@('-AreaBaseReturnLiving','5')
  'FS13'=@('-AreaBaseFlank','1.3','-AreaBaseFlankSide','1')
  'FS13BR5'=@('-AreaBaseFlank','1.3','-AreaBaseFlankSide','1','-AreaBaseReturnLiving','5')
+ # FS0 = the pre-2026-11-17 straight home assault (FS13BR5 is the default since then)
+ 'FS0'=@('-AreaBaseFlank','0','-AreaBaseFlankSide','0','-AreaBaseReturnLiving','0')
  # Since 2026-11-15 HI includes S4+S6 (Config). S1only = the previous default (S4 and S6 off).
  'S1only'=@('-AreaFrontBalance','0','-AreaFocus','0')
  # Income-curve trials (2026-11-16): INC2 doubles base and per-point income; RAMP2 multiplies each payment by 1+0.2 x minutes;

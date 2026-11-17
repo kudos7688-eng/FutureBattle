@@ -1,5 +1,21 @@
 # 現在地と次の作業
 
+## 2026-11-17 23時40分 Claude（経済・AI戦略）：FS13BR5を既定に（ユーザー指示）→ 逆向きの片側試験で効果が出ず、片側試験の偏りを発見
+
+- **既定の変更（ユーザー指示、未コミット）**：本拠地攻撃部隊の側面迂回1.3・片側集中・残り5人で補給（FS13BR5）を両チームの既定にした。変更は `BattleMatch.h`（`FAreaIntent` の既定値）、`BattleTactics.h/.cpp`（`FAreaStrategyTuning` の既定値と `-BattleAreaBaseFlankSide` の読み取り初期値）の6行だけ。`-BattleAreaBaseFlank=0 -BattleAreaBaseFlankSide=0 -BattleAreaBaseReturnLiving=0` で従来どおりになる。視線判定セッションの22時41分のビルドに含まれ、Test-Battle・Area・MixedSave は failures=0（同セッションの報告）。
+- **第2段は凍結ビルドが使えなかった**：凍結ビルドはDLLの照合値だけを持ち、写しは持たない。22時41分に作り直されたため照合が合わず、全試合が開始前に止まった（空のフォルダは削除）。
+- **代わりの試験**：今のビルドで凍結ビルド `claude-mapE-screen-r2` を作成。片側を従来の動き（条件 `FS0`、`Run-EconomyMatrix.ps1` に追加）に戻し、既定（FS13BR5）どうしの試合と比べた。マップE・30FPS・9seed・54戦。53戦完走（`econ-FS0-E-s173-e2s2t1` だけ失敗）。タグ `e2`、記録は `screen-e2.log`。
+
+  | 範囲 | チーム0側 | チーム1側 | 平均 | 試験側の勝ち（基準） |
+  |---|---|---|---|---|
+  | 第1段（3seed） | +210.0 | -75.0 | +67.5 | 8/12（6/12） |
+  | 第2段（6seed） | +20.2 | +114.9 | +67.6 | 15/23（12/24） |
+  | 計 | | | **+67.5** | **23/35**（18/35） |
+
+- **読み**：従来に戻した側も、FS13BR5にした側（20時10分の+70.6）とほぼ同じだけ勝った。つまり「相手と違う側」が勝っていて、FS13BR5そのものの効果は見えない。
+- **原因と思われる偏り**：`UBattleMatch::AreaIntent`（`BattleArea.cpp`）は `-BattleAreaTrialTeam` を付けると、試験側でないチームの S4（前線の均衡、`bFrontBalance`）と S6（集中、`FocusGain`）を切る。S4/S6 は 11-15 から既定ONなので、片側試験では「試験側だけが既定の S4/S6 を持ち、相手は持たない」状態になっていた。11-15以降の片側試験（計画 EH/ESA、重歩兵の割合、撃ち返し、隔回検索など）の得点差は、すべて試験側に有利な方向へずれている可能性がある。
+- **未対応**：偏りの修正（試験側でないチームにも既定の S4/S6 を残す）。`BattleArea.cpp` の1行で済む見込み。FS13BR5を既定のままにするか戻すかは、ユーザーの判断待ち。
+
 ## 2026-11-17 22時40分 Claude（視線判定の負荷対策）：視線判定コードの重複整理（試合は不変）
 
 - 変更範囲：`BattleLeaderRuntime.cpp/.h`、`BattleVehicle.cpp`、`BattleArea.cpp`、`BattlePerception.cpp`。
