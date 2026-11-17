@@ -116,9 +116,13 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  if(S->Members.Num()<10) ReturnLiving=FMath::FloorToInt(ReturnLiving*S->Members.Num()/10.f);
  // Scout pairs are never replenished: they go home for ammunition only, and one survivor is enough to resume.
  const bool bNoReplenish=!BattleSquadType::Replenished(S->SquadType);if(bNoReplenish)ReturnLiving=0;
+ // Vehicles (stage 2, 2026-11-18): below VehicleRepairRatio of its health a vehicle drives home to be repaired (home healing) even under
+ // fire, since it outruns infantry; an emergency does not turn that trip into a retreat. Own state only.
+ const bool bVehicle=Runtime->IsVehicle(S->LeaderUnitID);
+ const bool bRepair=Match->bArea&&bVehicle&&Supply.HealPerSecond>0.f&&O.Health/FullHP<GetDefault<UBattleTuning>()->VehicleRepairRatio;
  if(Match->bArea && P.Action==EBattleSquadTactic::Recover && P.Reason.StartsWith(TEXT("HOME SUPPLY")))
  {
-  if(Emergency){Event(TEXT("HomeSupplyAbortEmergency"));SupplyTripEnd(SID,false);Retreat();return;}
+  if(Emergency&&!bVehicle){Event(TEXT("HomeSupplyAbortEmergency"));SupplyTripEnd(SID,false);Retreat();return;}
   const bool Home=FVector::Dist2D(Here,Match->AreaHome(S->Team))<=2500;
   const bool Manned=bNoReplenish||O.Living>=FMath::Min(S->Members.Num(),Supply.ResumeLiving)||Match->Credits[S->Team]==0;
   const bool Healed=Supply.ResumeHealthRatio<=0.f||O.Health/FullHP>=Supply.ResumeHealthRatio;
@@ -129,7 +133,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   }
   return;
  }
- if(Match->bArea && Threats==0 && O.RecentDamage==0 && ((O.Living<=ReturnLiving&&Match->Credits[S->Team]>0)||O.Armed==0) && P.Action!=EBattleSquadTactic::Retreat && P.Action!=EBattleSquadTactic::Support && P.Action!=EBattleSquadTactic::Flank)
+ if(bRepair || (Match->bArea && Threats==0 && O.RecentDamage==0 && ((O.Living<=ReturnLiving&&Match->Credits[S->Team]>0)||O.Armed==0) && P.Action!=EBattleSquadTactic::Retreat && P.Action!=EBattleSquadTactic::Support && P.Action!=EBattleSquadTactic::Flank))
  {
   // Trial -BattleSupplyAwayRatio<1: keep most of the team on the line; only own-team plan state is read.
   bool Allowed=true;
@@ -146,6 +150,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   if(Allowed && Apply(SID,EBattleSquadTactic::Recover,EBattleOrder::Move,Goal,TEXT("HOME SUPPLY / RETURN WITH LEADER"))){Event(TEXT("HomeSupplyReturn"));
    // Evaluation only: trip reason (all members out of ammo vs losses) and whether the squad holds an S1 home-assault slot.
    bool bBase=false;if(Match->bArea&&BattleTactics::AreaStrategy().bEnabled)Match->AreaStrategyTarget(SID,S->Team,bBase);
+   if(bRepair)Event(TEXT("HomeSupplyReturnVehicleRepair"));
    if(O.Armed==0)Event(TEXT("HomeSupplyReturnAmmo"));if(bBase){Event(TEXT("HomeSupplyReturnBaseAssault"));if(O.Armed==0)Event(TEXT("HomeSupplyReturnBaseAssaultAmmo"));}
    SupplyTripBegin(SID);return;}
  }

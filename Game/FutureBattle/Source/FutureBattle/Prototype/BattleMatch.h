@@ -127,6 +127,14 @@ public:
 	// Indirect-fire squads (mortar team, self-propelled gun; BattleArtillery.cpp): their assigned goal, pulled back towards the own home
 	// until it is ArtilleryStandoff x their range from every enemy the team knows of (known positions only).
 	FVector AreaArtilleryPost(int32 Team, int32 SquadID, const FVector& Goal) const;
+	// Armoured car objective (stage 2, BattleVehicleTactics.cpp): outside the city of map E, away from known enemy anti-tank soldiers and
+	// tanks, preferring points the team does not hold, points with known enemies and near ones; kept ACChoiceHold s unless it turns unsafe.
+	// INDEX_NONE when no objective qualifies (the caller keeps its default). Known enemies (AreaIntelView) and observed ownership only.
+	int32 AreaCarTarget(int32 Team, int32 SquadID) const;
+	// True when an enemy the team knows of and can tell apart as an anti-tank soldier or a tank threatens a vehicle at P.
+	bool AreaArmourThreat(int32 Team, const FVector& P) const;
+	struct FCarChoice { int32 Target = INDEX_NONE; double At = -1; };
+	mutable TMap<int32, FCarChoice> CarChoices; // transient, squad -> current objective
 	// Scout reports (ROADMAP 2026-11-14, stage 3): what a scout pair sees beyond normal sight reaches its team only through a timed
 	// two-step report (direction after ScoutAlertSeconds, positions and size after ScoutReportSeconds). Transient: a load restarts the timers.
 	struct FScoutReport { double Started=-1, LastLong=-1, AlertAt=-1, ReportedAt=-1, NextHint=0, RetreatUntil=-1, PauseStart=-1, LastDanger=-1; FVector ReportFrom=FVector::ZeroVector; float LastHP=-1; int32 Stage=0, Living=0, Sequence=0, AlertSequence=0, Burns=0; FVector Direction=FVector::ZeroVector, Approx=FVector::ZeroVector, RetreatPoint=FVector::ZeroVector; TArray<FVector> Positions; };

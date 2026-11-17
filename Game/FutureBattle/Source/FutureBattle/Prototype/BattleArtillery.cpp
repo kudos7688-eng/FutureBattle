@@ -57,14 +57,35 @@ FVector UBattleMatch::AreaArtilleryPost(int32 Team,int32 SquadID,const FVector& 
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const auto* S=Store?Store->FindSquad(SquadID):nullptr;
  if(!S||!R||!BattleSquadType::IsArtillery(S->SquadType))return Goal;
- const double Keep=FMath::Clamp(GetDefault<UBattleTuning>()->ArtilleryStandoff,0.f,1.f)*R->ArtilleryMaxRange(S->SquadType==BattleSquadType::SPGun);
+ const double Range=R->ArtilleryMaxRange(S->SquadType==BattleSquadType::SPGun);
+ const double Keep=FMath::Clamp(GetDefault<UBattleTuning>()->ArtilleryStandoff,0.f,1.f)*Range;
  const auto& V=AreaIntelView(Team);
  if(Keep<=0.||V.Enemies.IsEmpty())return Goal;
  auto Clear=[&](const FVector& P){for(const FVector& E:V.Enemies)if(FVector::DistSquared2D(P,E)<Keep*Keep)return false;return true;};
- if(Clear(Goal))return Goal;
- const FVector Home=AreaHome(Team);const double Length=FVector::Dist2D(Goal,Home);const FVector Back=(Home-Goal).GetSafeNormal2D();
- FVector Post=Home;
- for(double Step=1000.;Step<Length;Step+=1000.){const FVector P=Goal+Back*Step;if(Clear(P)){Post=P;break;}}
+ FVector Post=Goal;
+ if(!Clear(Goal))
+ {
+  const FVector Home=AreaHome(Team);const double Length=FVector::Dist2D(Goal,Home);const FVector Back=(Home-Goal).GetSafeNormal2D();
+  Post=Home;
+  for(double Step=1000.;Step<Length;Step+=1000.){const FVector P=Goal+Back*Step;if(Clear(P)){Post=P;break;}}
+ }
+ // Stage 2 (2026-11-18), moving into range: when no known enemy is within ArtilleryAdvance x range of the post, the post moves towards the
+ // nearest known enemy until that enemy is ArtilleryAdvance x range away, stepping back in 10 m steps while the standoff is not clear.
+ const double Reach=FMath::Clamp(GetDefault<UBattleTuning>()->ArtilleryAdvance,0.f,1.f)*Range;
+ if(Reach>Keep)
+ {
+  const FVector* Nearest=nullptr;double NearestD=DBL_MAX;
+  for(const FVector& E:V.Enemies){const double D=FVector::Dist2D(Post,E);if(D<NearestD){NearestD=D;Nearest=&E;}}
+  if(Nearest&&NearestD>Reach)
+  {
+   const FVector Dir=(Post-*Nearest).GetSafeNormal2D();
+   for(double Step=0.;Step<=NearestD-Reach;Step+=1000.)
+   {
+    FVector P=*Nearest+Dir*(Reach+Step);P.Z=Post.Z;
+    if(Clear(P)){Post=P;break;}
+   }
+  }
+ }
  // A post near the current mission is kept: no new order for every small change in what the team knows.
  if(S->bHasMission&&FVector::Dist2D(S->MissionDestination,Post)<2500.)return S->MissionDestination;
  return Post;

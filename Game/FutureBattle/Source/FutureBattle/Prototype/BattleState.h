@@ -404,6 +404,14 @@ public:
 	UPROPERTY(Config, EditAnywhere) int32 ArtilleryMinCluster = 2;
 	UPROPERTY(Config, EditAnywhere) float ArtilleryPickInterval = .75f;
 	UPROPERTY(Config, EditAnywhere) float ArtilleryStandoff = .6f;
+	// Stage 2 (2026-11-18): an artillery post with no known enemy within ArtilleryAdvance x range moves towards the nearest known enemy.
+	UPROPERTY(Config, EditAnywhere) float ArtilleryAdvance = .8f;
+	// Vehicle tactics (stage 2, 2026-11-18). A vehicle below VehicleRepairRatio of its health drives home to be repaired (home healing,
+	// SupplyHealPerSecond) and resumes at SupplyResumeHealthRatio. An armoured car picks an objective outside the city of map E with no
+	// known enemy anti-tank soldier or tank within its reach plus ACThreatMargin, and keeps it at least ACChoiceHold seconds.
+	UPROPERTY(Config, EditAnywhere) float VehicleRepairRatio = .5f;
+	UPROPERTY(Config, EditAnywhere) float ACThreatMargin = 3000.f;
+	UPROPERTY(Config, EditAnywhere) float ACChoiceHold = 30.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRange = 30000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRangeProfile = 40000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutStillSpeed = 30.f;

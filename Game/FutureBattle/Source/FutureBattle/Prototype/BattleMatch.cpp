@@ -362,6 +362,9 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   const bool bScout=bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::Scout;if(bScout)bStrategyBase=false;
   // Indirect fire (mortar teams, self-propelled guns; tactical role): never the home assault; held back from known enemies below.
   const bool bArtillery=bStrategy&&!Purpose&&BattleSquadType::IsArtillery(Pair.Value.SquadType);if(bArtillery)bStrategyBase=false;
+  // Armoured cars (tactical role, stage 2): an open point away from known anti-tank threats (AreaCarTarget); never the home assault.
+  if(bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::ArmoredCar)
+  {bStrategyBase=false;if(const int32 CarTarget=AreaCarTarget(Team,Pair.Key);CarTarget!=INDEX_NONE)Target=CarTarget;}
   ++Group;
 		// Keep assignment stable when only some squads are delegated.
 		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated) continue;

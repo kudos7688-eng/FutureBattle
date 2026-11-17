@@ -202,6 +202,6 @@
 | `-BattleWideMapAudit` | Param | off | BattleLeaderRuntime.cpp:212 |  |
 | `-BattleWideMapGeometryOnly` | Param | off | BattleWideMapAudit.cpp:157 |  |
 | `-BattleWideMixed` | Param | off | BattleGameMode.cpp:55, BattleLeaderRuntime.cpp:68 |  |
-| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:612, BattleContactTrial.cpp:97, BattleMixedFastSmoke.cpp:34 ほか12 |  |
+| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:618, BattleContactTrial.cpp:97, BattleMixedFastSmoke.cpp:34 ほか12 |  |
 | `-BattleWideSmoke` | Param | off | BattleLeaderRuntime.cpp:226 |  |
 | `-BattleWideSoak` | Param | off | BattleLeaderRuntime.cpp:228 |  |

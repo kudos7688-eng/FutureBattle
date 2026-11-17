@@ -349,6 +349,12 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Check(Restored&&After&&IsVehicle(CarID)&&FMath::IsNearlyEqual(After->GetCapsuleComponent()->GetScaledCapsuleRadius(),TT->ACRadius,1.f)&&Turrets.Contains(CarID)&&
      FMath::IsNearlyEqual(Store->Find(CarID)->Perception.FieldOfView,120.f),TEXT("armoured car survives save and restore"));
     Mode->bCombatPaused=false;
+    // Stage 2: the car's objective is a valid point outside the city of map E and is kept on the next pick (ACChoiceHold).
+    {
+     M->CarChoices.Remove(CSID);
+     const int32 First=M->AreaCarTarget(0,CSID),Again=M->AreaCarTarget(0,CSID);
+     const bool bCity=First!=INDEX_NONE&&BattleFieldLayout::IsUrban(GetWorld())&&FMath::Abs(M->Objectives[First].Position.X)<25000&&FMath::Abs(M->Objectives[First].Position.Y)<15000;
+     Check(M->Objectives.IsValidIndex(First)&&First==Again&&!bCity,TEXT("armoured car objective: a point outside the city, kept on the next pick"));    }
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_AC_SMOKE squad=%d car=%d third=%d nav=%s validation=%s"),CSID,CarID,Third,CN?*CN->GetName():TEXT("none"),*Error);
    }
    // Indirect fire (stage 1 2026-11-18). Two known soldiers 2 m apart: a target worth a shell (ArtilleryMinCluster 2); keys below zero
