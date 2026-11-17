@@ -138,16 +138,18 @@ public:
  // Anti-tank explosion at a point: enemies of the shooter within ATSplashRadius lose up to ATSplashDamage (falling off to zero at the edge).
  // Radius/Damage below zero: the anti-tank values (the tank gun passes its own).
  int32 Explode(int32 ShooterID,FVector At,int32 ExcludeID,float Radius=-1.f,float Damage=-1.f);
- // Tanks (vehicles, squad type 4): living vehicle IDs (refreshed on purchase, restore and death), their bodies, armour and steering.
+ // Vehicles (tanks, squad type 4; armoured cars, type 5): living vehicle IDs (refreshed on purchase, restore and death), their bodies, armour and steering.
  TSet<int32> VehicleIDs;
  TMap<int32,TWeakObjectPtr<USceneComponent>> Turrets;
  bool IsVehicle(int32 ID) const {return VehicleIDs.Num()>0&&VehicleIDs.Contains(ID);}
+ bool HasMainGun(int32 ID) const {return IsVehicle(ID)&&BattleSquadType::HasMainGun(VehicleType(ID));}
+ uint8 VehicleType(int32 ID) const; // the unit's squad type (tank, armoured car; Rifle when unknown)
  void ConfigureVehicle(int32 ID);
  void RefreshVehicles();
  float VehicleSpotRange() const;
- // Damage scale of a weapon on a unit: vehicles take only anti-tank (and, later, tank gun) hits.
+ // Damage scale of a weapon on a unit: anti-tank hits fully; small arms by the vehicle type (tank none, armoured car ACArmorSmallArms).
  float ArmorScale(int32 VictimID,EBattleWeapon Weapon) const;
- // Turns a vehicle towards Direction at TankTurnRate; it drives only roughly forwards (Direction becomes its heading, Scale drops while turning).
+ // Turns a vehicle towards Direction at its type's turn rate; it drives only roughly forwards (Direction becomes its heading, Scale drops while turning).
  void SteerVehicle(int32 ID,FVector& Direction,float& Scale);
  void AimTurret(int32 ID,const FVector& Direction);
  // Navigation data for a unit's paths: the vehicle agent for tanks, nullptr (the default infantry data) otherwise.

@@ -24,7 +24,14 @@ float UBattleLeaderRuntime::VehicleSpotRange() const
 
 float UBattleLeaderRuntime::ArmorScale(int32 VictimID,EBattleWeapon Weapon) const
 {
- return IsVehicle(VictimID)&&Weapon!=EBattleWeapon::AntiTank?0.f:1.f;
+ // Anti-tank weapons hurt every unit fully; small arms (rifles, machine guns) by the vehicle type's armour (tank 0, armoured car 0.1).
+ return IsVehicle(VictimID)&&Weapon!=EBattleWeapon::AntiTank?BattleSquadType::ArmorSmallArms(VehicleType(VictimID)):1.f;
+}
+
+uint8 UBattleLeaderRuntime::VehicleType(int32 ID) const
+{
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
+ return S?S->SquadType:BattleSquadType::Rifle;
 }
 
 void UBattleLeaderRuntime::RefreshVehicles()
@@ -39,13 +46,14 @@ void UBattleLeaderRuntime::ConfigureVehicle(int32 ID)
 {
  ABattleUnit* A=Actor(ID);auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
  if(!A||!U)return;
- const auto* T=GetDefault<UBattleTuning>();
  // Body: a wide capsule (collision and the navigation agent), the soldier mesh and rifle hidden.
- A->GetCapsuleComponent()->SetCapsuleSize(FMath::Max(50.f,T->TankRadius),130.f);
+ const uint8 Type=VehicleType(ID);const bool bCar=Type==BattleSquadType::ArmoredCar;
+ A->GetCapsuleComponent()->SetCapsuleSize(BattleSquadType::VehicleRadius(Type),130.f);
  A->GetMesh()->SetVisibility(false,true);if(A->Rifle)A->Rifle->SetVisibility(false);
  // Tanks path on the vehicle navigation data (the wide agent), told apart from infantry by PreferredNavData.
  auto* Move=A->GetCharacterMovement();Move->bOrientRotationToMovement=false;Move->NavAgentProps.SetPreferredNavData(ABattleVehicleNavMesh::StaticClass());Move->UpdateNavAgent(*A);
- // Placeholder shapes: hull 4.2 x 2.5 x 1.1 m, turret, barrel; team colour like the soldiers' labels.
+ // Placeholder shapes, team colour like the soldiers' labels. Tank: hull 4.2 x 2.5 x 1.1 m, turret, long barrel. Armoured car: a
+ // longer, narrower hull 4.6 x 2.2 x 1.1 m raised on four wheels and a small machine-gun mount.
  if(!Turrets.Contains(ID)||!Turrets[ID].IsValid())
  {
   auto* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));auto* Cylinder=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
@@ -59,15 +67,26 @@ void UBattleLeaderRuntime::ConfigureVehicle(int32 ID)
    if(Paint)C->SetMaterial(0,Paint);C->RegisterComponent();A->AddInstanceComponent(C);return C;
   };
   USceneComponent* Root=A->GetCapsuleComponent();
-  Part(Cube,Root,FVector(0,0,-75),FRotator::ZeroRotator,FVector(4.2,2.5,1.1));
-  auto* Turret=Part(Cylinder,Root,FVector(-20,0,15),FRotator::ZeroRotator,FVector(1.7,1.7,.6));
-  Part(Cylinder,Turret,FVector(180/1.7,0,0),FRotator(90,0,0),FVector(.12/1.7,.12/1.7,3.2/.6));
+  USceneComponent* Turret=nullptr;
+  if(bCar)
+  {
+   Part(Cube,Root,FVector(0,0,-30),FRotator::ZeroRotator,FVector(4.6,2.2,1.1));
+   for(int32 I=0;I<4;++I)Part(Cylinder,Root,FVector(I<2?150:-150,I%2?115:-115,-85),FRotator(0,0,90),FVector(.9,.9,.3));
+   Turret=Part(Cylinder,Root,FVector(-30,0,45),FRotator::ZeroRotator,FVector(.8,.8,.4));
+   Part(Cylinder,Turret,FVector(70/.8,0,0),FRotator(90,0,0),FVector(.06/.8,.06/.8,1.2/.4));
+  }
+  else
+  {
+   Part(Cube,Root,FVector(0,0,-75),FRotator::ZeroRotator,FVector(4.2,2.5,1.1));
+   Turret=Part(Cylinder,Root,FVector(-20,0,15),FRotator::ZeroRotator,FVector(1.7,1.7,.6));
+   Part(Cylinder,Turret,FVector(180/1.7,0,0),FRotator(90,0,0),FVector(.12/1.7,.12/1.7,3.2/.6));
+  }
   Turrets.Add(ID,Turret);
  }
  if(A->TeamLabel)A->TeamLabel->SetRelativeLocation(FVector(0,0,260));
- // Narrow forward view (the turret turns; the hull's view does not).
- // Only when it differs (a restored tank already has it; changing the profile would reset its contacts).
- const float Fov=FMath::Clamp(T->TankFieldOfView,1.f,360.f);
+ // Forward view by type (tank narrow, armoured car wider; the turret turns, the hull's view does not).
+ // Only when it differs (a restored vehicle already has it; changing the profile would reset its contacts).
+ const float Fov=BattleSquadType::VehicleFieldOfView(Type);
  if(!FMath::IsNearlyEqual(U->Perception.FieldOfView,Fov)){FBattlePerceptionProfile P=U->Perception;P.FieldOfView=Fov;Store->SetPerceptionProfile(ID,P);}
  VehicleIDs.Add(ID);
 }
@@ -75,7 +94,7 @@ void UBattleLeaderRuntime::ConfigureVehicle(int32 ID)
 void UBattleLeaderRuntime::SteerVehicle(int32 ID,FVector& Direction,float& Scale)
 {
  ABattleUnit* A=Actor(ID);if(!A||Direction.IsNearlyZero())return;
- const float Dt=FMath::Min(GetWorld()->GetDeltaSeconds(),.1f);const float Rate=FMath::Max(1.f,GetDefault<UBattleTuning>()->TankTurnRate);
+ const float Dt=FMath::Min(GetWorld()->GetDeltaSeconds(),.1f);const float Rate=BattleSquadType::VehicleTurnRate(VehicleType(ID));
  const float Yaw=A->GetActorRotation().Yaw,Delta=FMath::FindDeltaAngleDegrees(Yaw,Direction.Rotation().Yaw);
  A->SetActorRotation(FRotator(0,Yaw+FMath::Clamp(Delta,-Rate*Dt,Rate*Dt),0));
  // Drive along the hull: full speed when lined up, slower while turning, turning in place beyond 60 degrees.

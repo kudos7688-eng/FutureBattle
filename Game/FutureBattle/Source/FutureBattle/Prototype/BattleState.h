@@ -18,7 +18,7 @@ inline EBattleWeapon WeaponForSlot(int32 Slot)
 class UWorld;
 namespace BattleSquadType
 {
- enum : uint8 { Rifle=0, Heavy=1, Scout=2, AntiTank=3, Tank=4, Count=5 };
+ enum : uint8 { Rifle=0, Heavy=1, Scout=2, AntiTank=3, Tank=4, ArmoredCar=5, Count=6 };
  int32 Members(uint8 Type);
  float HealthScale(uint8 Type);
  float SpeedScale(uint8 Type);
@@ -31,6 +31,13 @@ namespace BattleSquadType
  float StillSightRange(uint8 Type);
  // Tank (ROADMAP 2026-11-14, stage 1 2026-11-17): one vehicle, armoured (only anti-tank weapons and tank guns hurt it), speed by terrain.
  bool IsVehicle(uint8 Type);
+ // Armoured car (ROADMAP 2026-11-14, stage 1 2026-11-18): one fast vehicle with a machine gun and light armour.
+ // Per-vehicle-type values for the shared vehicle code (tank or armoured car).
+ float VehicleTurnRate(uint8 Type);
+ float VehicleFieldOfView(uint8 Type);
+ float VehicleRadius(uint8 Type);
+ float ArmorSmallArms(uint8 Type); // damage scale of rifles and machine guns on this type (infantry 1, tank 0, armoured car ACArmorSmallArms)
+ bool HasMainGun(uint8 Type);
  float SpeedAt(uint8 Type,const UWorld* World,const FVector& Position); // scale of UBattleTuning::MoveSpeed
 }
 
@@ -298,6 +305,20 @@ public:
 	// Tank (squad type 4, ROADMAP values): cost 40, at most 2 per team, health 350 (anti-tank hits of 100: four), 8 m/s in the open and
 	// 3 m/s in the city of map E, turning TankTurnRate deg/s; sight forward TankFieldOfView degrees; enemy soldiers see a tank from
 	// TankSpotRange (TankSpotRangeProfile with the range profile). The AI keeps AreaTankKeep tanks (trial -BattleAreaTankKeep=n).
+	// Armoured car (squad type 5, ROADMAP values, stage 1 2026-11-18): cost 20, at most 3 per team, health 150 (anti-tank hits of 100 and
+	// tank gun hits of 120: two each), small arms do ACArmorSmallArms of their damage, 10 m/s in the open and 5 m/s in the city of map E,
+	// turning ACTurnRate deg/s, sight forward ACFieldOfView degrees, a machine gun (support gun). Enemies see it from TankSpotRange like a
+	// tank. The AI keeps AreaACKeep cars (trial -BattleAreaACKeep=n; default 0 until measured).
+	UPROPERTY(Config, EditAnywhere) int32 AreaACCost = 20;
+	UPROPERTY(Config, EditAnywhere) int32 AreaACLimit = 3;
+	UPROPERTY(Config, EditAnywhere) int32 AreaACKeep = 0;
+	UPROPERTY(Config, EditAnywhere) float ACHealthScale = 1.5f;
+	UPROPERTY(Config, EditAnywhere) float ACArmorSmallArms = .1f;
+	UPROPERTY(Config, EditAnywhere) float ACOpenSpeed = 1000.f;
+	UPROPERTY(Config, EditAnywhere) float ACUrbanSpeed = 500.f;
+	UPROPERTY(Config, EditAnywhere) float ACTurnRate = 90.f;
+	UPROPERTY(Config, EditAnywhere) float ACFieldOfView = 120.f;
+	UPROPERTY(Config, EditAnywhere) float ACRadius = 150.f; // capsule only; the car paths on the same vehicle navigation data as a tank
 	UPROPERTY(Config, EditAnywhere) int32 AreaTankCost = 40;
 	UPROPERTY(Config, EditAnywhere) int32 AreaTankLimit = 2;
 	UPROPERTY(Config, EditAnywhere) int32 AreaTankKeep = 0;

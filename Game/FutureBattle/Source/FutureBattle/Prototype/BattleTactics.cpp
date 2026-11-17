@@ -89,6 +89,7 @@ const BattleTactics::FAreaStrategyTuning& BattleTactics::AreaStrategy()
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaScoutKeep="),S.ScoutKeep);S.ScoutKeep=FMath::Clamp(S.ScoutKeep,-1,10);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaATKeep="),S.ATKeep);S.ATKeep=FMath::Clamp(S.ATKeep,-1,10);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaTankKeep="),S.TankKeep);S.TankKeep=FMath::Clamp(S.TankKeep,-1,10);
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaACKeep="),S.ACKeep);S.ACKeep=FMath::Clamp(S.ACKeep,-1,10);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaTrialTeam="),S.TrialTeam);S.TrialTeam=S.TrialTeam==0||S.TrialTeam==1?S.TrialTeam:-1;
   S.BaseShareLow=FMath::IsFinite(S.BaseShareLow)?FMath::Clamp(S.BaseShareLow,0.f,0.5f):0.f;
   S.BaseShareHigh=FMath::IsFinite(S.BaseShareHigh)?FMath::Clamp(S.BaseShareHigh,0.f,0.5f):0.3f;

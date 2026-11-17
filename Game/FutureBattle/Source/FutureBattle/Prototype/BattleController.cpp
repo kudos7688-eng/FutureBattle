@@ -102,6 +102,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("HireScout"), EKeys::Four, &ABattleController::HireScout);
 	Button(TEXT("HireAntiTank"), EKeys::Five, &ABattleController::HireAntiTank);
 	Button(TEXT("HireTank"), EKeys::Six, &ABattleController::HireTank);
+	Button(TEXT("HireArmoredCar"), EKeys::Seven, &ABattleController::HireArmoredCar);
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
 	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
 	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
@@ -894,6 +895,7 @@ void ABattleController::PressCommandButton(int32 Index)
  case 8: HireScout(); break; // area battle: scout pair
  case 9: HireAntiTank(); break; // area battle: anti-tank team
  case 10: HireTank(); break; // area battle: tank
+ case 11: HireArmoredCar(); break; // area battle: armoured car
  default: break;
  }
 }
@@ -986,4 +988,11 @@ void ABattleController::HireTank()
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
 	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Tank); ShowNotice(Match->LastMessage);
+}
+// Area battle: key 7 buys an armoured car (squad type 5, at most AreaACLimit per team).
+void ABattleController::HireArmoredCar()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::ArmoredCar); ShowNotice(Match->LastMessage);
 }

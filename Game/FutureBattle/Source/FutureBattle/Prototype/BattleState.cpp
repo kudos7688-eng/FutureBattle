@@ -410,7 +410,8 @@ float UBattleState::MaxHealthOf(int32 UnitID) const
  const auto* U=Find(UnitID); const auto* S=U?FindSquad(U->SquadID):nullptr;
  // Squad type scale (heavy infantry); a leader keeps the larger of that and the leader multiplier.
  const float TypeScale=S?BattleSquadType::HealthScale(S->SquadType):1.f;
- return S && S->LeaderUnitID==UnitID ? Base*FMath::Max(TypeScale,BattleTactics::LeaderHealthMultiplier()) : Base*TypeScale;
+ // A vehicle's health is its type's alone (the leader multiplier is for soldiers).
+ return S && S->LeaderUnitID==UnitID && !BattleSquadType::IsVehicle(S->SquadType) ? Base*FMath::Max(TypeScale,BattleTactics::LeaderHealthMultiplier()) : Base*TypeScale;
 }
 bool UBattleState::CanSelectLeader(int32 ID,int32 PlayerTeam) const
 {
@@ -459,7 +460,7 @@ namespace
   return V;
  }
 }
-int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:Type==Scout?2:Type==AntiTank?4:Type==Tank?1:10;}
+int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:Type==Scout?2:Type==AntiTank?4:IsVehicle(Type)?1:10;}
 bool BattleSquadType::Replenished(uint8 Type){return Type!=Scout;}
 bool BattleSquadType::LeaderHandover(uint8 Type){return Type==Scout;}
 float BattleSquadType::StillSightRange(uint8 Type)
@@ -469,19 +470,25 @@ float BattleSquadType::StillSightRange(uint8 Type)
  const auto* T=GetDefault<UBattleTuning>();
  return FMath::Clamp(BattleRanges::Get().bActive?T->ScoutSightRangeProfile:T->ScoutSightRange,0.f,60000.f);
 }
-float BattleSquadType::HealthScale(uint8 Type){if(Type==Tank)return FMath::Clamp(GetDefault<UBattleTuning>()->TankHealthScale,1.f,20.f);return Type==Heavy?HeavyValues().Health:1.f;}
-float BattleSquadType::SpeedScale(uint8 Type){if(Type==Tank){const auto* T=GetDefault<UBattleTuning>();return FMath::Max(.1f,T->TankOpenSpeed)/FMath::Max(1.f,T->MoveSpeed);}return Type==Heavy?HeavyValues().Speed:1.f;}
-bool BattleSquadType::IsVehicle(uint8 Type){return Type==Tank;}
+float BattleSquadType::HealthScale(uint8 Type){if(Type==ArmoredCar)return FMath::Clamp(GetDefault<UBattleTuning>()->ACHealthScale,.1f,20.f);if(Type==Tank)return FMath::Clamp(GetDefault<UBattleTuning>()->TankHealthScale,1.f,20.f);return Type==Heavy?HeavyValues().Health:1.f;}
+float BattleSquadType::SpeedScale(uint8 Type){if(IsVehicle(Type)){const auto* T=GetDefault<UBattleTuning>();return FMath::Max(.1f,Type==ArmoredCar?T->ACOpenSpeed:T->TankOpenSpeed)/FMath::Max(1.f,T->MoveSpeed);}return Type==Heavy?HeavyValues().Speed:1.f;}
+bool BattleSquadType::IsVehicle(uint8 Type){return Type==Tank||Type==ArmoredCar;}
+float BattleSquadType::VehicleTurnRate(uint8 Type){const auto* T=GetDefault<UBattleTuning>();return FMath::Max(1.f,Type==ArmoredCar?T->ACTurnRate:T->TankTurnRate);}
+float BattleSquadType::VehicleFieldOfView(uint8 Type){const auto* T=GetDefault<UBattleTuning>();return FMath::Clamp(Type==ArmoredCar?T->ACFieldOfView:T->TankFieldOfView,1.f,360.f);}
+float BattleSquadType::VehicleRadius(uint8 Type){const auto* T=GetDefault<UBattleTuning>();return FMath::Max(50.f,Type==ArmoredCar?T->ACRadius:T->TankRadius);}
+float BattleSquadType::ArmorSmallArms(uint8 Type){return Type==Tank?0.f:Type==ArmoredCar?FMath::Clamp(GetDefault<UBattleTuning>()->ACArmorSmallArms,0.f,1.f):1.f;}
+bool BattleSquadType::HasMainGun(uint8 Type){return Type==Tank;}
 float BattleSquadType::SpeedAt(uint8 Type,const UWorld* World,const FVector& P)
 {
- // Tanks: TankUrbanSpeed inside the city of map E (x +-250 m, y +-150 m), TankOpenSpeed elsewhere. Others: SpeedScale.
- if(Type!=Tank)return SpeedScale(Type);
+ // Vehicles: the urban speed inside the city of map E (x +-250 m, y +-150 m), the open speed elsewhere. Others: SpeedScale.
+ if(!IsVehicle(Type))return SpeedScale(Type);
  const auto* T=GetDefault<UBattleTuning>();const bool City=BattleFieldLayout::IsUrban(World)&&FMath::Abs(P.X)<25000&&FMath::Abs(P.Y)<15000;
- return FMath::Max(.1f,City?T->TankUrbanSpeed:T->TankOpenSpeed)/FMath::Max(1.f,T->MoveSpeed);
+ const float Open=Type==ArmoredCar?T->ACOpenSpeed:T->TankOpenSpeed,Urban=Type==ArmoredCar?T->ACUrbanSpeed:T->TankUrbanSpeed;
+ return FMath::Max(.1f,City?Urban:Open)/FMath::Max(1.f,T->MoveSpeed);
 }
 float BattleSquadType::DamageScale(uint8 Type){return Type==Heavy?HeavyValues().Damage:1.f;}
-int32 BattleSquadType::AreaCost(uint8 Type){if(Type==Tank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaTankCost,1,200);if(Type==AntiTank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaATCost,1,100);if(Type==Scout)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaScoutCost,1,100);return Type==Heavy?HeavyValues().Cost:FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
-EBattleWeapon BattleSquadType::Weapon(uint8 Type,int32 Slot){if(Type==Tank)return EBattleWeapon::SupportGun; // the machine gun; the main gun is stage 2
+int32 BattleSquadType::AreaCost(uint8 Type){if(Type==ArmoredCar)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaACCost,1,200);if(Type==Tank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaTankCost,1,200);if(Type==AntiTank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaATCost,1,100);if(Type==Scout)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaScoutCost,1,100);return Type==Heavy?HeavyValues().Cost:FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
+EBattleWeapon BattleSquadType::Weapon(uint8 Type,int32 Slot){if(IsVehicle(Type))return EBattleWeapon::SupportGun; // the machine gun (a tank's main gun is separate)
  if(Type==AntiTank)return Slot==1||Slot==2?EBattleWeapon::AntiTank:EBattleWeapon::Carbine;return Type==Heavy?EBattleWeapon::SupportGun:WeaponForSlot(Slot);}
 void UBattleState::SetSquadType(int32 SquadID,uint8 Type)
 {
@@ -491,5 +498,6 @@ void UBattleState::SetSquadType(int32 SquadID,uint8 Type)
  if(Type==BattleSquadType::Scout) S->DisplayName=FString::Printf(TEXT("第%d偵察組"),SquadID);
  if(Type==BattleSquadType::AntiTank) S->DisplayName=FString::Printf(TEXT("第%d対戦車班"),SquadID);
  if(Type==BattleSquadType::Tank) S->DisplayName=FString::Printf(TEXT("第%d戦車"),SquadID);
+ if(Type==BattleSquadType::ArmoredCar) S->DisplayName=FString::Printf(TEXT("第%d装甲車"),SquadID);
  for(int32 ID:S->Members) if(auto* U=Units.Find(ID); U&&U->IsAlive()) U->HP=MaxHealthOf(ID);
 }

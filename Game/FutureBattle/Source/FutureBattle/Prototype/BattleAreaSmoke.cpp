@@ -303,6 +303,53 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Mode->bCombatPaused=false;
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_TANK_SMOKE squad=%d tank=%d nav=%s validation=%s"),TSID,TankID,VN?*VN->GetName():TEXT("none"),*Error);
    }
+   // Armoured car (squad type 5, stage 1 2026-11-18): one vehicle for 20 resources, at most 3 per team, health 150, small arms do a tenth,
+   // two anti-tank hits destroy it, 10 m/s in the open, a 120 degree view, the vehicle navigation data, no main gun; survives save and restore.
+   {
+    // Free squad slots: stop team 0 rifle squads (leader killed) until three cars fit under the 25 active squads.
+    for(int32 Pass=0;Pass<6&&M->ActiveSquads(0)>22;++Pass)
+    {
+     for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Value.SquadType==BattleSquadType::Rifle&&P.Value.CommandStatus==EBattleCommandStatus::Active)
+      if(const auto* L=Store->Find(P.Value.LeaderUnitID);L&&L->IsAlive()){Store->ApplyDamage(L->UnitID,1,10000);break;}
+     M->UpdateArea(1);M->Area.Replacements.Reset();
+    }
+    const auto* TT=GetDefault<UBattleTuning>();
+    const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::ArmoredCar);
+    if(M->Credits[0]<Cost*4){const int32 Add=Cost*4-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
+    const int32 C0=M->Credits[0];const bool Hired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::ArmoredCar);
+    int32 CSID=0;for(const auto& P:Store->GetSquads())CSID=FMath::Max(CSID,P.Key);const auto* CS=Store->FindSquad(CSID);
+    const int32 CarID=CS?CS->LeaderUnitID:INDEX_NONE;ABattleUnit* CarActor=Actor(CarID);
+    const bool Body=Hired&&Cost==20&&M->Credits[0]==C0-Cost&&CS&&CS->SquadType==BattleSquadType::ArmoredCar&&CS->Members.Num()==1&&CarActor&&
+     FMath::IsNearlyEqual(CarActor->GetCapsuleComponent()->GetScaledCapsuleRadius(),TT->ACRadius,1.f)&&FMath::IsNearlyEqual(Store->Find(CarID)->HP,150.f)&&
+     IsVehicle(CarID)&&!HasMainGun(CarID)&&CS->DisplayName.Contains(TEXT("装甲車"))&&FMath::IsNearlyEqual(Store->Find(CarID)->Perception.FieldOfView,120.f)&&
+     Store->Find(CarID)->Weapon==EBattleWeapon::SupportGun;
+    Check(Body,TEXT("armoured car: one vehicle, 150 health, 20 resources, machine gun, 120 degree view, no main gun"));
+    Check(FMath::IsNearlyEqual(ArmorScale(CarID,EBattleWeapon::Carbine),.1f)&&FMath::IsNearlyEqual(ArmorScale(CarID,EBattleWeapon::SupportGun),.1f)&&ArmorScale(CarID,EBattleWeapon::AntiTank)==1.f,
+     TEXT("armoured car armour: small arms do a tenth, anti-tank weapons full damage"));
+    auto* NavSys=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());const ANavigationData* CN=NavFor(CarID);
+    const float Open=BattleSquadType::SpeedAt(BattleSquadType::ArmoredCar,GetWorld(),FVector::ZeroVector);
+    Check(CN&&NavSys&&CN!=NavSys->GetDefaultNavDataInstance()&&FMath::IsNearlyEqual(Open,1000.f/TT->MoveSpeed,.01f),TEXT("armoured car: vehicle navigation data, 10 m/s in the open"));
+    FVector GunDirection;Check(!TankGunTarget(CarID,GetWorld()->GetTimeSeconds(),GunDirection)&&!TankGuns.Contains(CarID),TEXT("armoured car has no main gun"));
+    const bool Second=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::ArmoredCar);
+    int32 Third=INDEX_NONE;if(M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::ArmoredCar)){const auto* TS=Store->FindSquad(M->LastHiredSquadID);Third=TS?TS->LeaderUnitID:INDEX_NONE;}
+    const int32 C3=M->Credits[0];const bool Fourth=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::ArmoredCar);
+    Check(Second&&Third!=INDEX_NONE&&!Fourth&&M->Credits[0]==C3&&M->ActiveOfType(0,BattleSquadType::ArmoredCar)==3,TEXT("armoured cars: at most 3 per team"));
+    // Two anti-tank hits (100 each) destroy a car; the first leaves it alive.
+    bool TwoHits=false;
+    if(Third!=INDEX_NONE)
+    {
+     Store->ApplyDamage(Third,1,TT->ATDamage);const bool AliveAfterOne=Store->Find(Third)->IsAlive();
+     Store->ApplyDamage(Third,1,TT->ATDamage);TwoHits=AliveAfterOne&&!Store->Find(Third)->IsAlive();
+    }
+    Check(TwoHits,TEXT("armoured car: two anti-tank hits destroy it"));
+    M->UpdateArea(1);M->Area.Replacements.Reset();
+    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
+    const bool Restored=Valid&&M->RestoreSnapshot(Save);ABattleUnit* After=Actor(CarID);
+    Check(Restored&&After&&IsVehicle(CarID)&&FMath::IsNearlyEqual(After->GetCapsuleComponent()->GetScaledCapsuleRadius(),TT->ACRadius,1.f)&&Turrets.Contains(CarID)&&
+     FMath::IsNearlyEqual(Store->Find(CarID)->Perception.FieldOfView,120.f),TEXT("armoured car survives save and restore"));
+    Mode->bCombatPaused=false;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_AC_SMOKE squad=%d car=%d third=%d nav=%s validation=%s"),CSID,CarID,Third,CN?*CN->GetName():TEXT("none"),*Error);
+   }
   }
   // Resource income: base 1 plus 1 per actually owned point every 20 s, for both teams at once.
   {

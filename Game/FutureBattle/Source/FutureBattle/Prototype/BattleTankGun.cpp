@@ -29,7 +29,7 @@ float UBattleLeaderRuntime::TankGunReach() const
 bool UBattleLeaderRuntime::TankGunTarget(int32 ID,double Now,FVector& Direction)
 {
  auto* M=GetWorld()->GetSubsystem<UBattleMatch>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
- if(!M||!M->bArea||M->Phase!=EBattleMatchPhase::Combat||!U||!U->IsAlive()||!IsVehicle(ID)){TankGuns.Remove(ID);return false;}
+ if(!M||!M->bArea||M->Phase!=EBattleMatchPhase::Combat||!U||!U->IsAlive()||!HasMainGun(ID)){TankGuns.Remove(ID);return false;}
  const auto* T=GetDefault<UBattleTuning>();
  auto& G=TankGuns.FindOrAdd(ID);
  if(G.ReadyAt>Now+FMath::Max(0.f,T->TankGunReload)+1.)G.ReadyAt=Now; // a load to an earlier time
@@ -103,8 +103,8 @@ bool UBattleLeaderRuntime::TankGunHit(int32 ID,int32 Victim)
  if(SightExperiment.Started)
  {
   auto& E=SightExperiment;const float Dealt=FMath::Min(BeforeHP,T->TankGunDamage);++E.Hits;
-  if(const auto* SS=Store->FindSquad(U->SquadID);SS&&SS->SquadType<5&&Team>=0&&Team<2){E.TypeDamage[Team][SS->SquadType]+=Dealt;E.TypeKills[Team][SS->SquadType]+=Killed;}
-  if(VictimType<5&&VictimTeam>=0&&VictimTeam<2){E.TypeTaken[VictimTeam][VictimType]+=Dealt;E.TypeDeaths[VictimTeam][VictimType]+=Killed;}
+  if(const auto* SS=Store->FindSquad(U->SquadID);SS&&SS->SquadType<BattleSquadType::Count&&Team>=0&&Team<2){E.TypeDamage[Team][SS->SquadType]+=Dealt;E.TypeKills[Team][SS->SquadType]+=Killed;}
+  if(VictimType<BattleSquadType::Count&&VictimTeam>=0&&VictimTeam<2){E.TypeTaken[VictimTeam][VictimType]+=Dealt;E.TypeDeaths[VictimTeam][VictimType]+=Killed;}
   E.TeamDamage[Team]+=Dealt;E.TeamKills[Team]+=Killed;
  }
  return true;
@@ -125,7 +125,7 @@ bool UBattleLeaderRuntime::FireTankGun(int32 ID,const FVector& Aim,double Now)
  GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_Visibility,Q);
  const FVector Impact=Hit.bBlockingHit?FVector(Hit.ImpactPoint):End;
  ++TankGunShots;
- if(SightExperiment.Started){++SightExperiment.Shots;if(const auto* SS=Store->FindSquad(U->SquadID);SS&&SS->SquadType<5&&Team>=0&&Team<2)++SightExperiment.TypeShots[Team][SS->SquadType];}
+ if(SightExperiment.Started){++SightExperiment.Shots;if(const auto* SS=Store->FindSquad(U->SquadID);SS&&SS->SquadType<BattleSquadType::Count&&Team>=0&&Team<2)++SightExperiment.TypeShots[Team][SS->SquadType];}
  SuppressNear(Team,Start,Impact,Now,BattleSuppression::Tuning().SupportScale);
  if(M->DamageBase(Hit.GetActor(),Team,T->TankGunBaseDamage))++TankGunBaseHits;
  const int32 Victim=HitIDs.FindRef(Hit.GetComponent());

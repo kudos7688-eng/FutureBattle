@@ -1,6 +1,7 @@
 #include "BattleSightExperiment.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
+static_assert(FBattleSightExperiment::MaxSquadTypes==BattleSquadType::Count,"type activity arrays must cover every squad type");
 #include "BattleController.h"
 #include "BattleMatch.h"
 #include "BattleMetrics.h"
@@ -105,7 +106,7 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
   {
    const FVector P=Position(Pair.Key);
    for(const auto& Point:Match->Objectives) if(FVector::DistSquared2D(P,Point.Position)<=FMath::Square(10000.)){E.FrontPersonSeconds[Pair.Value.Team]+=SampleDt;break;}
-   if(const auto* Sq=Store->FindSquad(Pair.Value.SquadID); Sq && Sq->SquadType<5)
+   if(const auto* Sq=Store->FindSquad(Pair.Value.SquadID); Sq && Sq->SquadType<BattleSquadType::Count)
    {
     E.TypePersonSec[Pair.Value.Team][Sq->SquadType]+=SampleDt;
     for(const auto& Point:Match->Objectives) if(FVector::DistSquared2D(P,Point.Position)<=FMath::Square(10000.)){E.TypePointSec[Pair.Value.Team][Sq->SquadType]+=SampleDt;break;}
@@ -214,7 +215,7 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
    for(int32 M=0;M<10;++M){TArray<TSharedPtr<FJsonValue>> Row;for(double V:E.EconTimeline[Team][M])Row.Add(MakeShared<FJsonValueNumber>(V));Econ.Add(MakeShared<FJsonValueArray>(Row));}
    Root->SetArrayField(Team?TEXT("enemy_economy_per_minute"):TEXT("ally_economy_per_minute"),Econ);
    TArray<TSharedPtr<FJsonValue>> TypeRows;
-   for(int32 Ty=0;Ty<5;++Ty)
+   for(int32 Ty=0;Ty<BattleSquadType::Count;++Ty)
    {
     auto Row=MakeShared<FJsonObject>();Row->SetNumberField(TEXT("type"),Ty);Row->SetNumberField(TEXT("person_seconds"),E.TypePersonSec[Team][Ty]);Row->SetNumberField(TEXT("point_person_seconds"),E.TypePointSec[Team][Ty]);
     Row->SetNumberField(TEXT("shots"),E.TypeShots[Team][Ty]);Row->SetNumberField(TEXT("damage"),E.TypeDamage[Team][Ty]);Row->SetNumberField(TEXT("kills"),E.TypeKills[Team][Ty]);

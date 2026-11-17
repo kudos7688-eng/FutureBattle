@@ -26,8 +26,8 @@ int32 UBattleLeaderRuntime::Explode(int32 ShooterID,FVector At,int32 ExcludeID,f
   if(SightExperiment.Started)
   {
    auto& E=SightExperiment;const float Dealt=FMath::Min(BeforeHP,H.Value);const bool Killed=!Store->Find(H.Key)->IsAlive();
-   if(ShooterSquad&&ShooterSquad->SquadType<5&&Team>=0&&Team<2){E.TypeDamage[Team][ShooterSquad->SquadType]+=Dealt;E.TypeKills[Team][ShooterSquad->SquadType]+=Killed;}
-   if(VictimType<5&&VictimTeam>=0&&VictimTeam<2){E.TypeTaken[VictimTeam][VictimType]+=Dealt;E.TypeDeaths[VictimTeam][VictimType]+=Killed;}
+   if(ShooterSquad&&ShooterSquad->SquadType<BattleSquadType::Count&&Team>=0&&Team<2){E.TypeDamage[Team][ShooterSquad->SquadType]+=Dealt;E.TypeKills[Team][ShooterSquad->SquadType]+=Killed;}
+   if(VictimType<BattleSquadType::Count&&VictimTeam>=0&&VictimTeam<2){E.TypeTaken[VictimTeam][VictimType]+=Dealt;E.TypeDeaths[VictimTeam][VictimType]+=Killed;}
    E.TeamDamage[Team]+=Dealt;E.TeamKills[Team]+=Killed;
   }
  }
