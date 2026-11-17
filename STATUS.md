@@ -1,5 +1,52 @@
 # 現在地と次の作業
 
+## 2026-11-17 12時15分 Claude（視線判定の負荷対策）：視線を遮る物の集計と、視線判定の並列化（どちらも既定OFF・試合は不変）
+- **変更範囲**：`BattleLeaderRuntime.cpp/.h`、`BattlePerception.cpp/.h`、`BattleVehicle.cpp`、`BattleArea.cpp`、`BattleMatch.cpp`、`BattleScoutReport.cpp`、`Setup/Test-WideSight.ps1`（`-SightHitStats 1`、`-SightParallel 1`）。
+- **検証1：視線を遮る物の集計** `-BattleSightHitStats=1`（評価用、挙動は不変）。視線判定（認識の `CanSeeWithContext`、直接の `CanSee`、遠くの戦車 `CanSeeVehicleFar`、本拠地の `AreaVisible`）で最初に当たった物を種類別に数え、所要時間も測る。試合終了時に `BATTLE_SIGHT_HITS`（合計）、`_KIND`（種類別）、`_SOURCE`（呼び出し元別）、`_CLASS`（部品のクラス名）、`_TAG`（Actorのタグ）、`_ACTOR`（種類:Actor名の上位40）をログに出す。
+  - 結果（seed 7、60FPS、保存往復あり、NullRHI、`sightpar-*-hit`・`sighthit2-*`）
+    | 最初に当たった物 | マップE（7,828万回） | マップA（255万回） |
+    |---|---|---|
+    | 観測者の**味方の兵**のカプセル | **49.3%** | **26.5%** |
+    | 建物などの静的メッシュ | 47.5%（Wing 1,787万、StreetWreck 719万、House 591万、Kiosk、RuinWall、Car…） | 50.5%（SightScreen 105万、WideWarehouse 24万） |
+    | 目標の側の別の兵 | 1.1% | 1.9% |
+    | 目標そのもの（見えている） | 1.3% | 19.1% |
+    | 何にも当たらない | 0.02% | 0.35% |
+    | 床・生け垣（`BattleConcealment`）・植生・ボリューム・兵の表示部品・その他 | 0件（木64回） | 0件 |
+  - 部品のクラスは CapsuleComponent と StaticMeshComponent の2種類だけで、タグのある物には当たっていない。**視線を遮る必要のない物が ECC_Visibility に反応している例はなかった**。床にも当たっていない（目の高さから地面へ下がる線がない）。
+  - 視線専用のトレースチャンネルで除外できる候補は「観測者の味方の兵」だけ（マップEの視線判定の約半分）。ただし、これは今の仕様（兵の体が視線を遮る。回帰の `Mass perception respects a blocking wall` などは壁の試験）の変更になる。除外すると、味方の後ろにいる敵が見えるようになり、発見・射撃・勝敗が変わる。また、当たり判定の回数は減らない（味方の先の建物か目標まで線が伸びるだけ）。負荷対策にはならず、ゲームのルールの選択になる。チームごとの視線チャンネル（チーム0の兵はチャンネルAを無視、チーム1はBを無視）で実装できる。**未実施・判断待ち**。
+  - 時間の値（1回2〜6µs）は、12並列や並列化ONの計測で同時に測ったもの。ほかのプロセスと取り合っているので、1回の費用としては使わない（単独の値は下のトレースのほうを使う）。
+- **検証2：視線判定の並列化** `-BattleSightParallel=1`（性能の試験切替、既定OFF）。認識の更新（`UBattlePerception::Update`）を3段に分ける。
+  1. 見回しの段（今までどおり、観測者の順）：予定・視野の取得・格子での候補集め。各観測者の判定と後片付け（`Consider`・`Forget`）は後ろへ回す。その後、`Consider` と同じ条件で絞り込む（同じチーム、遠くの未知の相手の間引き、`PrepareSightTrace` での距離・視野・生死の確認。`CanSeeWithContext` と同じ式）。トレースが要る分だけを並べる。
+  2. `ParallelFor`（16件ずつ）で `LineTraceSingleByChannel` だけを行う。ゲームの状態は書き換えない。`HitIDs` も参照しない（当たった部品を覚えるだけ）。
+  3. 元の観測者・候補の順で、`CanSeeWithContext` と同じ当たりの扱い（`SightHitVisible`）で反映する。指標と集計の加算もここで行う。
+  - 遠くの戦車（`CanSeeVehicleFar`、結果を使い回す仕組みがある）は反映の段で今までどおり直列に処理。`-BattleSightPairReuse=1` は判定中に共有の状態を書き換えるので、併用すると並列化は働かない（直列のまま）。
+  - **物理シーンへの同時の問い合わせ**：UE 5.8 の `SceneQuery.cpp` は、トレースのたびに `FScopedSceneReadLock`（Chaos の `GetExternalDataLock_External().ReadLock()`、読み取りの共有ロック）を取る。エンジンの非同期トレース（`WorldCollisionAsync.cpp`）も、ワーカースレッドから `FPhysicsInterface::RaycastSingle` を同時に呼んでいる。非同期物理（`bTickPhysicsAsync`）は使っていない。この3点から、自前のロックは追加していない。
+  - 記録 `BATTLE_SIGHT_PARALLEL`（60秒ごと、更新の回数・並列で行ったトレースの回数）。
+- **合格条件の確認**
+  1. `Build-Editor.ps1` 成功。`Test-Battle.ps1`（`BATTLE_SMOKE_RESULT failures=0`）、`Test-Area.ps1`（`sighthit-area-r1`、`BATTLE_AREA_RESULT failures=0`）、`Test-MixedSave.ps1`（`sighthit-save-r1`、`BATTLE_MIXED_SAVE_RESULT failures=0`）。回帰はどちらの切替も渡さない既定で実施。最後のビルドの差は集計ログだけ（空の行を出さない・兵を味方/目標の側に分ける）で、回帰は取り直していない。
+  2. **同じseedで切替OFF/ONが完全一致**。比較は勝敗・得点・射撃数と、射撃の距離の並び全体のハッシュ。すべて60FPS・保存往復あり・NullRHI、12並列で同時に実行し、全戦合格。
+     | マップ | OFF | 集計ON | 並列ON ×3 | 並列ON＋集計 |
+     |---|---|---|---|---|
+     | A | 勝ち1・230/232・6,419発 | 同一 | 3戦とも同一 | 同一（`sighthit2-A`） |
+     | E | 勝ち1・540/564・8,641発 | 同一 | 3戦とも同一 | 同一（2回） |
+     - 依頼文の基準（マップA 勝ち0・6,638発、マップE 勝ち1・8,079発）は今のHEAD（0dc7574）では再現しない。どちらもこの作業の前からずれている（マップAの6,419発は戦車段階2のセッションも同じ値を確認）。OFFの側を今のHEADで取り直して基準にした。
+     - 描画あり・30FPSのトレース計測でも、OFF/ONとも9,360発で完全一致（`claude-trace-E30j-par0/1`）。
+  3. **描画ありの負荷**（マップE、30FPS、1920×1080、seed 7、戦車なし、単独、トレースあり。`Export-TraceTimers.ps1` のゲームスレッドの集計、27,006フレーム）
+     | 区間（ms/フレーム） | OFF（E30j-par0） | ON（E30j-par1） |
+     |---|---|---|
+     | **1フレーム（ゲームスレッド）** | **17.45** | **14.23（−3.2、−18%）** |
+     | 自前の処理 全体（`BattleRuntimeStep`） | 10.48 | 7.31 |
+     | **認識（`BattlePerceptionUpdate`）** | **5.60** | **2.42** |
+     | └ 絞り込み（Prepare） | — | 0.95 |
+     | └ 並列トレースの待ち（Trace） | — | 0.88 |
+     | └ 反映（Apply） | — | 0.16 |
+     | ゲームスレッドでの視線判定 `LeaderSight` | 3.55（5,694万回） | 0.81（745万回。並列の一部をゲームスレッドが手伝う分と、直接の `CanSee`・本拠地） |
+     | 兵の行動 `BattleFollow` | 3.92 | 3.95 |
+     | HUD `BattleHUD_DrawHUD` | 1.03 | 1.03 |
+     - 最初の組（`claude-trace-E30i-par0/1`）は、OFFの側だけ視線と関係ない区間までそろって約2.3倍遅かった（1フレーム37.3ms）。計測中のPCの負荷とみて、OFF→ONを取り直した（E30j）。E30iのONは14.13msで、E30jとほぼ同じ。
+- **制限**：60FPSのNullRHIと描画ありの30FPSは、マップE・Aでseed 7の1種類だけ。戦車ありの試合と別のseedでは未確認。並列化の効果はコア数に依存する（この計測機は28論理プロセッサ）。物理の読み取りロックが安全という判断はエンジンのコードを読んだ結果で、長時間・多数の試合でのクラッシュの有無は、上の計12試合＋トレース4試合でしか見ていない。トレースは1本3.5GB（コミットしない）。Cドライブの空きは約20GB。
+- **次の一手**：(1) `-BattleSightParallel` を既定にするかはユーザーの判断。採用前に、戦車ありと別のseed（できれば12並列のまとまった試合）での一致を確かめる。(2) 絞り込みの段（0.95ms）は、目標の位置と姿勢をフレームの最初に一度だけ配列に写せば軽くできる見込み。(3) 味方の兵を視線から外すかは、ルールの選択としてユーザーに相談中。
+
 ## 2026-11-17 9時30分 Claude（経済・AI戦略）：ゲームスレッドの内訳と負荷対策
 - **計測の道具**：`Test-WideSight.ps1 -Trace cpu,frame`（Unreal Insights のトレースを出力先に `trace.utrace` として保存、`-statnamedevents` 付き）、`Setup/Export-TraceTimers.ps1`（Insights を画面なしで起動し、ゲームスレッドの区間ごとの集計をCSVに書き出す）。自前の処理に名前付きの区間を追加（`BattleRuntimeStep`、`BattlePerceptionUpdate`、`BattleFollow`、`BattleThink`、`BattleMatchUpdate`、`BattleHUD_*` など。トレースしていないときの負荷はない）。
 - **条件**：マップE、描画あり（1920×1080の画面外描画）、30FPS固定、seed 7、戦車なし、単独、トレースあり（トレースの分だけ遅い）。トレースは1試合で約3.2GB（コミットしない）。

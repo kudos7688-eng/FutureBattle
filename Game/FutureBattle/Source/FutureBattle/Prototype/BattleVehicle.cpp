@@ -111,6 +111,7 @@ bool UBattleLeaderRuntime::CanSeeVehicleFar(int32 ObserverID,const FBattleSightC
  const double Start=FPlatformTime::Seconds();
  FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
  TankSightMs+=(FPlatformTime::Seconds()-Start)*1000.;++TankSightTraces;
+ if(SightHitStatsEnabled()) RecordSightHit(Hit,Target,uint64((FPlatformTime::Seconds()-Start)/FPlatformTime::GetSecondsPerCycle64()),SightFromVehicleFar);
  Entry.Key=Now+FMath::Max(0.f,GetDefault<UBattleTuning>()->TankSightReuse);Entry.Value=!Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
  return Entry.Value;
 }

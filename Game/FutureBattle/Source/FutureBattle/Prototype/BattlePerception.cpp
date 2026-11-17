@@ -1,6 +1,7 @@
 #include "BattlePerception.h"
 #include "BattleLeaderRuntime.h"
 #include "ProfilingDebugging/CsvProfiler.h"
+#include "Async/ParallelFor.h"
 #include "BattleUnit.h"
 #include "BattleMetrics.h"
 #include "BattleTactics.h"
@@ -83,6 +84,75 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	// Vehicles are seen from farther than an observer's own range (UBattleLeaderRuntime::VehicleSpotRange): the grid search adds them.
 	TArray<const FLiveUnit*> VehicleUnits; double VehicleSpot2 = 0.;
 	if (Mixed && Leader && Leader->VehicleIDs.Num()) { VehicleSpot2 = FMath::Square(Leader->VehicleSpotRange()); for (const auto& L : Alive) if (Leader->IsVehicle(L.Key)) VehicleUnits.Add(&L.Value); }
+	// Never slow known contacts or acquisition already in progress. Short glimpses
+	// cannot carry a partly completed timer across skipped far scans.
+	auto SkipFar = [&](const FBattleObserver& Observer, const FBattleSightContext& Sight, bool bFarPulse, const FLiveUnit& Candidate)
+	{
+		return bSlowUnknownFar && SliceCount == 0 && !bFarPulse &&
+			FVector::DistSquared(Sight.Position, Candidate.Position) > FMath::Square(1200.f) &&
+			!Observer.Contacts.Contains(Candidate.State->UnitID) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID);
+	};
+	// One candidate of one observer's scan. Visible: -1 = test line of sight here, 0/1 = result already traced (parallel trial).
+	auto Consider = [&](FBattleObserver& Observer, const TPair<int32, FLiveUnit>& Pair, const FBattleSightContext& Sight, bool bFarPulse, TSet<int32>& InView, const FLiveUnit& Candidate, int32 Visible)
+	{
+		ABattleUnit* Unit = Pair.Value.Unit;
+		const auto* State = Pair.Value.State;
+		const auto& Profile = State->Perception;
+		if (Candidate.State->Team == State->Team) return;
+		if (Metrics->bRecording) ++Metrics->PerceptionCandidates;
+		if (SkipFar(Observer, Sight, bFarPulse, Candidate))
+		{ if (Metrics->bRecording) ++Metrics->FarCandidatesSkipped; return; }
+		if (Visible >= 0 ? Visible == 0 : Mixed ? !(bReuseSightContext ? (VehicleSpot2 > 0. && FVector::DistSquared(Sight.Position, Candidate.Position) > Sight.RangeSquared && Leader->IsVehicle(Candidate.State->UnitID) ? Leader->CanSeeVehicleFar(Pair.Key, Sight, Candidate.State->UnitID, Now) : Leader->CanSeeWithContext(Sight,Candidate.State->UnitID,Pair.Key)) : Leader->CanSee(Pair.Key,Candidate.State->UnitID)) : !Unit->CanSeeSnapshot(Sight, Candidate.Unit, Candidate.Position, true)) return;
+		const int32 TargetID = Candidate.State->UnitID;
+		InView.Add(TargetID);
+		double* Started = Observer.DetectionStarted.Find(TargetID);
+		if (!Started)
+		{
+			// Trial -BattleReacquireGrace=1: a target this observer itself saw moments ago is recognised again
+			// without repeating the whole detection delay (own non-shared memory only, never the live target state).
+			double StartAt = Now;
+			if (BattleTactics::ReacquireGraceEnabled())
+				if (const auto* Known = Observer.Contacts.Find(TargetID); Known && !Known->bShared && Now - Known->LastSeenTime <= FMath::Max(0.f, GetDefault<UBattleTuning>()->ReacquireGraceSeconds) + 1.e-6)
+					StartAt = Now - Profile.DetectionSeconds;
+			Observer.DetectionStarted.Add(TargetID, StartAt); Started = Observer.DetectionStarted.Find(TargetID);
+			// Evaluation only: a contact this observer saw itself within 1s must wait for detection again.
+			if (Metrics->bRecording) if (const auto* Known = Observer.Contacts.Find(TargetID); Known && !Known->bShared && Now - Known->LastSeenTime <= 1. + 1.e-6) ++Metrics->ReacquireKnownStarted;
+		}
+		if (Now - *Started + 1.e-6 < Profile.DetectionSeconds) return;
+		if (Metrics->bRecording && *Started < Now - 1.e-6)
+			if (const auto* Known = Observer.Contacts.Find(TargetID); Known && !Known->bShared && Known->LastSeenTime < *Started - 1.e-6 && *Started - Known->LastSeenTime <= 1. + 1.e-6)
+			{
+				const double Blackout = Now - Known->LastSeenTime;
+				++Metrics->ReacquireKnownCompleted; Metrics->ReacquireBlackoutSumSeconds += Blackout; Metrics->ReacquireBlackoutMaxSeconds = FMath::Max(Metrics->ReacquireBlackoutMaxSeconds, Blackout);
+			}
+		auto& Contact = Observer.Contacts.FindOrAdd(TargetID);
+		Contact.TargetID = TargetID;
+		Contact.LastKnownPosition = Candidate.Position;
+		Contact.LastSeenTime = Now; Contact.Confidence = 1.f; Contact.bVisible = true;
+		Contact.SourceUnitID = Pair.Key; Contact.bShared = false;
+	};
+	// End of one observer's scan: forget detections out of view and age unseen contacts.
+	auto Forget = [&](FBattleObserver& Observer, const auto& Profile, const TSet<int32>& InView)
+	{
+		for (auto It = Observer.DetectionStarted.CreateIterator(); It; ++It) if (!InView.Contains(It.Key())) It.RemoveCurrent();
+		for (auto It = Observer.Contacts.CreateIterator(); It; ++It)
+		{
+			auto& Contact = It.Value();
+			if (Contact.bVisible) continue;
+			const double Age = FMath::Max(0., Now - Contact.LastSeenTime);
+			// Do not consult an unseen target's current position or health to update memory.
+			if (Profile.MemorySeconds <= 0.f || Age >= Profile.MemorySeconds) { It.RemoveCurrent(); continue; }
+			Contact.Confidence = FMath::Clamp(1.f - static_cast<float>(Age / Profile.MemorySeconds), 0.f, 1.f);
+		}
+	};
+	// Trial -BattleSightParallel=1 (performance, default OFF): the line traces of all observers scanned this update run in a
+	// ParallelFor between gathering and applying, in the same frame and order. Mixed runtime with reused sight contexts only; the
+	// sight pair reuse trial writes shared state while tracing, so it keeps the serial path.
+	static const bool bParallelTrial = [] { int32 V = 0; FParse::Value(FCommandLine::Get(), TEXT("BattleSightParallel="), V); return V != 0; }();
+	static const bool bPairReuseTrial = [] { int32 V = 0; FParse::Value(FCommandLine::Get(), TEXT("BattleSightPairReuse="), V); return V != 0; }();
+	const bool bParallel = bParallelTrial && !bPairReuseTrial && Mixed && bReuseSightContext;
+	struct FSightJob { const TPair<int32, FLiveUnit>* Pair = nullptr; FBattleSightContext Sight; bool bFarPulse = false; int32 First = 0, Num = 0; };
+	TArray<FSightJob> Jobs; TArray<const FLiveUnit*> JobCandidates;
 	TSet<int32> UpdatedObservers;
 	{
 		FBattleScopedMetric ScanTiming(Metrics, EBattleMetricPhase::SightScan);
@@ -129,55 +199,16 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			LastScanTimes.Add(Pair.Key, Now);
 			const bool bFarPulse = FMath::FloorToInt64((Now - Phase + 1.e-6) / .2) % 2 == 0;
 			for (auto& Contact : Observer.Contacts) Contact.Value.bVisible = false;
-			TSet<int32> InView;
 			const FBattleSightContext Sight = Mixed ? Leader->Sight(Pair.Key) : Unit->CaptureSightContext();
-			auto Consider = [&](const FLiveUnit& Candidate)
-			{
-				if (Candidate.State->Team == State->Team) return;
-				if (Metrics->bRecording) ++Metrics->PerceptionCandidates;
-				// Never slow known contacts or acquisition already in progress. Short glimpses
-				// cannot carry a partly completed timer across skipped far scans.
-				if (bSlowUnknownFar && SliceCount == 0 && !bFarPulse &&
-					FVector::DistSquared(Sight.Position, Candidate.Position) > FMath::Square(1200.f) &&
-					!Observer.Contacts.Contains(Candidate.State->UnitID) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID))
-				{ if (Metrics->bRecording) ++Metrics->FarCandidatesSkipped; return; }
-				if (Mixed ? !(bReuseSightContext ? (VehicleSpot2 > 0. && FVector::DistSquared(Sight.Position, Candidate.Position) > Sight.RangeSquared && Leader->IsVehicle(Candidate.State->UnitID) ? Leader->CanSeeVehicleFar(Pair.Key, Sight, Candidate.State->UnitID, Now) : Leader->CanSeeWithContext(Sight,Candidate.State->UnitID,Pair.Key)) : Leader->CanSee(Pair.Key,Candidate.State->UnitID)) : !Unit->CanSeeSnapshot(Sight, Candidate.Unit, Candidate.Position, true)) return;
-				const int32 TargetID = Candidate.State->UnitID;
-				InView.Add(TargetID);
-				double* Started = Observer.DetectionStarted.Find(TargetID);
-				if (!Started)
-				{
-					// Trial -BattleReacquireGrace=1: a target this observer itself saw moments ago is recognised again
-					// without repeating the whole detection delay (own non-shared memory only, never the live target state).
-					double StartAt = Now;
-					if (BattleTactics::ReacquireGraceEnabled())
-						if (const auto* Known = Observer.Contacts.Find(TargetID); Known && !Known->bShared && Now - Known->LastSeenTime <= FMath::Max(0.f, GetDefault<UBattleTuning>()->ReacquireGraceSeconds) + 1.e-6)
-							StartAt = Now - Profile.DetectionSeconds;
-					Observer.DetectionStarted.Add(TargetID, StartAt); Started = Observer.DetectionStarted.Find(TargetID);
-					// Evaluation only: a contact this observer saw itself within 1s must wait for detection again.
-					if (Metrics->bRecording) if (const auto* Known = Observer.Contacts.Find(TargetID); Known && !Known->bShared && Now - Known->LastSeenTime <= 1. + 1.e-6) ++Metrics->ReacquireKnownStarted;
-				}
-				if (Now - *Started + 1.e-6 < Profile.DetectionSeconds) return;
-				if (Metrics->bRecording && *Started < Now - 1.e-6)
-					if (const auto* Known = Observer.Contacts.Find(TargetID); Known && !Known->bShared && Known->LastSeenTime < *Started - 1.e-6 && *Started - Known->LastSeenTime <= 1. + 1.e-6)
-					{
-						const double Blackout = Now - Known->LastSeenTime;
-						++Metrics->ReacquireKnownCompleted; Metrics->ReacquireBlackoutSumSeconds += Blackout; Metrics->ReacquireBlackoutMaxSeconds = FMath::Max(Metrics->ReacquireBlackoutMaxSeconds, Blackout);
-					}
-				auto& Contact = Observer.Contacts.FindOrAdd(TargetID);
-				Contact.TargetID = TargetID;
-				Contact.LastKnownPosition = Candidate.Position;
-				Contact.LastSeenTime = Now; Contact.Confidence = 1.f; Contact.bVisible = true;
-				Contact.SourceUnitID = Pair.Key; Contact.bShared = false;
-			};
 			// Scout pairs widen the sight context beyond their profile while still; the grid search follows the context.
 			const float GridRange = Sight.RangeSquared > FMath::Square(Profile.SightRange) + 1.f ? FMath::Sqrt(Sight.RangeSquared) : Profile.SightRange;
 			const int32 MinX = Cell(Sight.Position.X - GridRange), MaxX = Cell(Sight.Position.X + GridRange);
 			const int32 MinY = Cell(Sight.Position.Y - GridRange), MaxY = Cell(Sight.Position.Y + GridRange);
 			// Very long-range profiles can cover more cells than units; use the reference then.
-			if (bUseSpatialGrid && int64(MaxX - MinX + 1) * (MaxY - MinY + 1) <= FMath::Max(64, Alive.Num()))
+			const bool bGridSearch = bUseSpatialGrid && int64(MaxX - MinX + 1) * (MaxY - MinY + 1) <= FMath::Max(64, Alive.Num());
+			TArray<const FLiveUnit*, TInlineAllocator<128>> Candidates;
+			if (bGridSearch)
 			{
-				TArray<const FLiveUnit*, TInlineAllocator<128>> Candidates;
 				for (int32 X = MinX; X <= MaxX; ++X) for (int32 Y = MinY; Y <= MaxY; ++Y)
 					if (const auto* Bucket = Grid.Find(FIntPoint(X, Y))) for (const FLiveUnit* Candidate : *Bucket)
 						if (Candidate->State->Team != State->Team && FVector::DistSquared(Sight.Position, Candidate->Position) <= Sight.RangeSquared)
@@ -185,22 +216,81 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 				for (const FLiveUnit* V : VehicleUnits) { const double D = FVector::DistSquared(Sight.Position, V->Position); if (V->State->Team != State->Team && D > Sight.RangeSquared && D <= VehicleSpot2) Candidates.Add(V); }
 				// Preserve insertion/tie-breaking order in contacts and shared reports.
 				Candidates.Sort([](const FLiveUnit& A, const FLiveUnit& B) { return A.Ordinal < B.Ordinal; });
-				for (const FLiveUnit* Candidate : Candidates) Consider(*Candidate);
 			}
-			else for (const auto& Candidate : Alive) Consider(Candidate.Value);
-
-			for (auto It = Observer.DetectionStarted.CreateIterator(); It; ++It) if (!InView.Contains(It.Key())) It.RemoveCurrent();
-			for (auto It = Observer.Contacts.CreateIterator(); It; ++It)
+			if (bParallel)
 			{
-				auto& Contact = It.Value();
-				if (Contact.bVisible) continue;
-				const double Age = FMath::Max(0., Now - Contact.LastSeenTime);
-				// Do not consult an unseen target's current position or health to update memory.
-				if (Profile.MemorySeconds <= 0.f || Age >= Profile.MemorySeconds) { It.RemoveCurrent(); continue; }
-				Contact.Confidence = FMath::Clamp(1.f - static_cast<float>(Age / Profile.MemorySeconds), 0.f, 1.f);
+				// Parallel trial: the rest of this observer's scan runs in the apply stage below, in this same observer order.
+				FSightJob& Job = Jobs.AddDefaulted_GetRef();
+				Job.Pair = &Pair; Job.Sight = Sight; Job.bFarPulse = bFarPulse; Job.First = JobCandidates.Num();
+				if (bGridSearch) JobCandidates.Append(Candidates); else for (const auto& Candidate : Alive) JobCandidates.Add(&Candidate.Value);
+				Job.Num = JobCandidates.Num() - Job.First;
+				continue;
 			}
+			TSet<int32> InView;
+			if (bGridSearch) for (const FLiveUnit* Candidate : Candidates) Consider(Observer, Pair, Sight, bFarPulse, InView, *Candidate, -1);
+			else for (const auto& Candidate : Alive) Consider(Observer, Pair, Sight, bFarPulse, InView, Candidate.Value, -1);
+			Forget(Observer, Profile, InView);
 		}
-
+		if (bParallel && Jobs.Num())
+		{
+			// Stage 1 (game thread): the same filtering Consider does before its line of sight test; only candidates that would reach
+			// CanSeeWithContext's trace get one. Vehicles beyond the observer's own range keep the serial cached path (CanSeeVehicleFar).
+			TArray<int32> Pre; Pre.SetNumUninitialized(JobCandidates.Num());
+			struct FSightTrace { FVector End; int32 Job; FHitResult Hit; uint64 Cycles = 0; };
+			TArray<FSightTrace> Traces; Traces.Reserve(JobCandidates.Num());
+			{
+				TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightParallelPrepare);
+				for (int32 J = 0; J < Jobs.Num(); ++J)
+				{
+					const FSightJob& Job = Jobs[J]; const FBattleObserver& Observer = Observers.FindChecked(Job.Pair->Key);
+					for (int32 K = Job.First; K < Job.First + Job.Num; ++K)
+					{
+						const FLiveUnit& Candidate = *JobCandidates[K]; Pre[K] = -1;
+						if (Candidate.State->Team == Job.Pair->Value.State->Team || SkipFar(Observer, Job.Sight, Job.bFarPulse, Candidate)) continue;
+						if (VehicleSpot2 > 0. && FVector::DistSquared(Job.Sight.Position, Candidate.Position) > Job.Sight.RangeSquared && Leader->IsVehicle(Candidate.State->UnitID)) continue;
+						FVector End;
+						if (!Leader->PrepareSightTrace(Job.Sight, Candidate.State->UnitID, End)) { Pre[K] = 0; continue; }
+						Pre[K] = 2 + Traces.Num(); Traces.Add({End, J});
+					}
+				}
+			}
+			// Stage 2 (worker threads): line traces only. Nothing in the game is written; each trace takes the Chaos scene read lock
+			// itself (FScopedSceneReadLock in the engine's scene query), as the engine's own async traces do from worker threads.
+			{
+				TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightParallelTrace);
+				const UWorld* World = GetWorld(); const bool bStats = UBattleLeaderRuntime::SightHitStatsEnabled();
+				ParallelFor(TEXT("BattleSightTraces"), Traces.Num(), 16, [&](int32 I)
+				{
+					FSightTrace& T = Traces[I]; const FBattleSightContext& S = Jobs[T.Job].Sight;
+					const uint64 T0 = bStats ? FPlatformTime::Cycles64() : 0;
+					World->LineTraceSingleByChannel(T.Hit, S.Eye, T.End, ECC_Visibility, S.Query);
+					if (bStats) T.Cycles = FPlatformTime::Cycles64() - T0;
+				});
+			}
+			// Stage 3 (game thread): apply in the original observer and candidate order, with the hit policy of CanSeeWithContext.
+			{
+				TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightParallelApply);
+				const bool bStats = UBattleLeaderRuntime::SightHitStatsEnabled();
+				for (const FSightJob& Job : Jobs)
+				{
+					FBattleObserver& Observer = Observers.FindChecked(Job.Pair->Key);
+					TSet<int32> InView;
+					for (int32 K = Job.First; K < Job.First + Job.Num; ++K)
+					{
+						const FLiveUnit& Candidate = *JobCandidates[K]; int32 Visible = Pre[K] < 0 ? -1 : 0;
+						if (Pre[K] >= 2)
+						{
+							const FSightTrace& T = Traces[Pre[K] - 2];
+							if (bStats) Leader->RecordSightHit(T.Hit, Candidate.State->UnitID, T.Cycles, UBattleLeaderRuntime::SightFromPerception);
+							Visible = Leader->SightHitVisible(T.Hit, Candidate.State->UnitID) ? 1 : 0;
+						}
+						Consider(Observer, *Job.Pair, Job.Sight, Job.bFarPulse, InView, Candidate, Visible);
+					}
+					Forget(Observer, Job.Pair->Value.State->Perception, InView);
+				}
+			}
+			++ParallelUpdates; ParallelTraces += Traces.Num();
+		}
 	}
 	// Deliver snapshots, never a reference that tracks the target's live position.
 	{

@@ -197,6 +197,21 @@ public:
  struct FSightPair{double At=0;FVector Low=FVector::ZeroVector,High=FVector::ZeroVector;bool bLowObserver=false,bVisible=false;};
  mutable TMap<uint64,FSightPair> SightPairs; mutable double SightPairsPruneAt=0;
  mutable int64 SightPairTraced=0,SightPairReused=0; // evaluation counters (BATTLE_SIGHT_PAIR)
+ // The two halves of CanSeeWithContext, shared with the parallel perception trial (-BattleSightParallel=1, default OFF): the checks
+ // before the trace (false = not visible without tracing; End receives the trace end) and the hit policy. Same arithmetic.
+ bool PrepareSightTrace(const FBattleSightContext& Context,int32 TargetID,FVector& End) const;
+ bool SightHitVisible(const FHitResult& Hit,int32 TargetID) const { return !Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==TargetID; }
+ // Evaluation (-BattleSightHitStats=1, default OFF; behaviour unchanged): the first object each line-of-sight trace hits, by kind,
+ // with the trace time; class names, actor tags and actor names of the hits. Logged as BATTLE_SIGHT_HITS* at match end.
+ enum ESightHitSource : uint8 {SightFromPerception,SightFromCanSee,SightFromVehicleFar,SightFromArea,SightSourceCount};
+ static bool SightHitStatsEnabled();
+ void RecordSightHit(const FHitResult& Hit,int32 TargetID,uint64 Cycles,ESightHitSource Source) const;
+ void LogSightHitStats(const TCHAR* Why) const;
+ struct FSightHitCount{int64 Count=0;uint64 Cycles=0;};
+ static constexpr int32 SightHitKindCount=12;
+ mutable FSightHitCount SightHitKinds[SightHitKindCount],SightHitSources[SightSourceCount];
+ mutable TMap<FString,int64> SightHitClasses,SightHitTags,SightHitActors;
+ mutable bool bSightHitsLogged=false;
  int64 MoveSweeps=0,MoveHitSoldier=0,MoveHitWorld=0,MoveShortened=0; // Mass follower moves (BATTLE_MOVE_SWEEP)
  bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot);
  bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f);
