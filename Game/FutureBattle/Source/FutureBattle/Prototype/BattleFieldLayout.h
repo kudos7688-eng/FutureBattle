@@ -35,11 +35,14 @@ namespace BattleFieldLayout
 		// west home, 1 = of the east home, -1 = nobody). Value: multiplies its income and its end score (a depot is worth more).
 		TArray<int32> ObjectiveOwners;
 		TArray<float> ObjectiveValues;
+		// Multiplies the income of every objective (not the base income). Map F has nine objectives against five on map E, so it
+		// pays half per objective; with the full amount each team ended with about 800 unspent resources (mapf1-F-*).
+		float PointIncomeScale=1.f;
 		// Junctions and road sections of the map's routes; empty = squads go straight to their goal.
 		TArray<FVector> RouteNodes;
 		TArray<FRouteEdge> RouteEdges;
 		// A* node budget of the vehicle navmesh; 0 = the engine default (2048). On map E a tank's path to a goal beyond about 550m
-		// came back partial with the default (Setup/Benchmarks/MapStats/mapstats-E-r1), so map F raises it like the infantry one.
+		// came back partial with the default (Setup/Benchmarks/MapStats/mapstats-E-r1), so maps E and F raise it like the infantry one.
 		int32 VehicleSearchNodes=0;
 		// Lookouts (ROADMAP 2026-11-14): public places where a still soldier sees far (UBattleTuning::LookoutSightRange).
 		TArray<FVector> Lookouts;
@@ -73,6 +76,7 @@ namespace BattleFieldLayout
 			Urban.HalfExtent=FVector2D(50000,35000);Urban.HomeDistance=42000;Urban.SpawnX=39000;
 			Urban.Lookouts={FVector(0,16500,0),FVector(0,-16500,0)};
 			Urban.CityHalf=FVector2D(25000,15000);Urban.MatchSeconds=900;Urban.CameraMaxHeight=160000;Urban.SaveLimit=FVector2D(52000,37000);
+			Urban.VehicleSearchNodes=32768;
 			{
 				FMapDef D=Urban;D.Name=TEXT("Lvl_BattleWide_E");
 				D.Objectives={FVector(-13000,7500,0),FVector(-13000,-7500,0),FVector::ZeroVector,FVector(13000,7500,0),FVector(13000,-7500,0)};
@@ -86,7 +90,7 @@ namespace BattleFieldLayout
 					FVector(33000,20000,0),FVector(15000,-25000,0),FVector(13000,7500,0),FVector(13000,-7500,0)};
 				D.ObjectiveOwners={-1,-1,-1,0,-1,1,-1,-1,-1};
 				D.ObjectiveValues={1,1,1,2,1,2,1,1,1};
-				D.VehicleSearchNodes=32768;
+				D.PointIncomeScale=.5f;
 				// Roads: the avenue (centre), the flank roads at y = +-250m (north, south), and connectors: the streets and edges of the
 				// city, the x = 0 / +-130m / +-250m roads from the city to the flank roads, the x = +-380m road in front of each home,
 				// and a spur to each depot. The same lines are kept free of scattered cover in BattleMapLayoutF.inl.

@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 198 種類。
+計 199 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -120,7 +120,7 @@
 | `-BattleOpponentPreset` | other |  | BattleBenchmark.cpp:48 |  |
 | `-BattlePerceptionGrid` | Value | GetDefault<UBattleTuning>()->bPerceptionGrid?1:0 | BattleLeaderRuntime.cpp:100 |  |
 | `-BattlePerceptionSlices` | Value | 4 | BattleBenchmark.cpp:56 |  |
-| `-BattlePhase3` | Value |  | BattlePhase3.cpp:45, BattleUnit.cpp:32, BattleVATDisplay.cpp:294 ほか1 |  |
+| `-BattlePhase3` | Value |  | BattlePhase3.cpp:45, BattleUnit.cpp:32, BattleVATDisplay.cpp:311 ほか1 |  |
 | `-BattlePreset` | other |  | BattleBenchmark.cpp:48 |  |
 | `-BattleProfileCSV` | Param | off | BattleBenchmark.cpp:133, BattleBenchmark.cpp:144, BattleBenchmark.cpp:145 |  |
 | `-BattleRangeAware` | Value | 1 | BattleLeaderRuntime.cpp:76 |  |
@@ -194,6 +194,7 @@
 | `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:185 |  |
 | `-BattleTrialSwap` | Param | off | BattleArea.cpp:15, BattleLeaderRuntime.cpp:75, BattleMatch.cpp:27 ほか3 |  |
 | `-BattleUnits` | Value | 1000 / 20 | BattleBenchmark.cpp:36, BattleSquadTrial.cpp:28 |  |
+| `-BattleVATFarLight` | Value | 1 | BattleVATDisplay.cpp:35 |  |
 | `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:228, BattleSightExperiment.cpp:39 |  |
 | `-BattleWeaponLoadouts` | Param | off | BattleSquadTrial.cpp:50 |  |
 | `-BattleWeaponPreview` | Value |  | BattleWeaponPreview.cpp:19 |  |

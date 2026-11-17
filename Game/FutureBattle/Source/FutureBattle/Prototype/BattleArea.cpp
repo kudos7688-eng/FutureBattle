@@ -155,6 +155,13 @@ void UBattleMatch::UpdateAreaHiring()
   LastMessage=Message;
  }
 }
+int32 UBattleMatch::AreaIncomeGain(int32 Team) const
+{
+ // Whole numbers on maps without objective values or an income scale (A-E): the sum below is then exact.
+ const auto& I=BattleTactics::AreaIncome();const auto& Def=BattleFieldLayout::Of(GetWorld());
+ double Points=0;for(int32 Point=0;Point<Objectives.Num();++Point)if(Objectives[Point].Owner==Team)Points+=BattleFieldLayout::ObjectiveValue(Def,Point);
+ return I.BaseFor(Def.bUrban)+FMath::RoundToInt(I.PerPointFor(Def.bUrban)*Points*Def.PointIncomeScale);
+}
 void UBattleMatch::UpdateArea(float Dt)
 {
  const auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>();
@@ -183,8 +190,7 @@ void UBattleMatch::UpdateArea(float Dt)
    Area.IncomeClock-=I.Seconds;
    for(int32 Team=0;Team<2;++Team)
    {
-    const bool bUrban=BattleFieldLayout::IsUrban(GetWorld());
-    int32 Gain=I.BaseFor(bUrban);for(int32 Point=0;Point<Objectives.Num();++Point)Gain+=Objectives[Point].Owner==Team?FMath::RoundToInt(I.PerPointFor(bUrban)*ObjectiveValue(Point)):0;
+    int32 Gain=AreaIncomeGain(Team);
     if(I.Ramp>0)Gain=FMath::RoundToInt(Gain*(1.f+I.Ramp*Elapsed/60.f));
     Credits[Team]+=Gain;Area.Income[Team]+=Gain;
    }

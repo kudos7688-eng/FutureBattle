@@ -148,6 +148,8 @@ public:
 	void AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObjectives]) const;
 	// Objective worth (FMapDef::ObjectiveValues; 1 where the map sets none): multiplies its income and its end score.
 	float ObjectiveValue(int32 Point) const;
+	// Resources a team gains per income tick from the objectives it truly owns now (before the time ramp): base + per point x value x map scale.
+	int32 AreaIncomeGain(int32 Team) const;
 	// Routes (BattleRoutes.cpp): on maps with a road network, the next junction a squad at From is sent to on its way to Goal.
 	bool RoutesOn() const;
 	TArray<FVector> RouteKnownEnemies(int32 Team) const;

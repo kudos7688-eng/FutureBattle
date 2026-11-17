@@ -61,8 +61,8 @@ void ABattleHUD::DrawHUD()
   FString IncomeText;
   if(Match->bArea&&BattleTactics::AreaIncome().bEnabled)
   {
-   const auto& I=BattleTactics::AreaIncome();const bool bUrban=BattleFieldLayout::IsUrban(GetWorld());
-   int32 Gain=I.BaseFor(bUrban);for(const auto& P:Match->Objectives)Gain+=P.Owner==0?I.PerPointFor(bUrban):0;
+   const auto& I=BattleTactics::AreaIncome();
+   int32 Gain=Match->AreaIncomeGain(0);
    if(I.Ramp>0)Gain=FMath::RoundToInt(Gain*(1.f+I.Ramp*Match->Elapsed/60.f));
    IncomeText=FString::Printf(TEXT(" (+%d / %.0fs)"),Gain,I.Seconds);
   }
@@ -82,7 +82,8 @@ void ABattleHUD::DrawHUD()
    // Command UI top bar (2026-11-16): own final score as it stands, from own state and the points the own side observes as its own;
    // the opponent only from observed points (its living soldiers and resources are not shown).
    int32 Living=0;for(const auto& U:GetWorld()->GetSubsystem<UBattleState>()->GetUnits())Living+=U.Value.Team==0&&U.Value.IsAlive();
-   int32 OwnPoints=0,EnemyPoints=0;for(int32 I=0;I<Match->Objectives.Num();++I){const int32 O=Match->ObservedOwner(0,I);OwnPoints+=O==0;EnemyPoints+=O==1;}
+   // An objective counts by its worth (a depot of map F counts as two), like the end score.
+   int32 OwnPoints=0,EnemyPoints=0;for(int32 I=0;I<Match->Objectives.Num();++I){const int32 O=Match->ObservedOwner(0,I);const int32 Worth=FMath::RoundToInt(Match->ObjectiveValue(I));OwnPoints+=O==0?Worth:0;EnemyPoints+=O==1?Worth:0;}
    DrawRect(Ink,576,112,260,51);
    Label(FString::Printf(TEXT("得点 %d ＝ 生存 %d ＋ 資源 %d ＋ 拠点 %d×20"),Living+Match->Credits[0]+OwnPoints*20,Living,Match->Credits[0],OwnPoints),28,141,Mint,.85f);
    Label(FString::Printf(TEXT("敵：拠点 %d×20（観測）"),EnemyPoints),588,119,Muted,.85f);
