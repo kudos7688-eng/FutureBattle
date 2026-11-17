@@ -36,6 +36,8 @@ float BattleRanges::Engage(EBattleWeapon Weapon)
  const auto& P=Get();
  // Anti-tank weapon: ATRange on maps A-D, 200 m with the range profile (ROADMAP revised table).
  if(Weapon==EBattleWeapon::AntiTank)return P.bActive?20000.f:FMath::Max(100.f,GetDefault<UBattleTuning>()->ATRange);
+ // The mortar never fires along the line of sight (indirect fire, BattleArtillery.cpp): no direct engagement distance.
+ if(Weapon==EBattleWeapon::Mortar)return 0.f;
  return P.bActive?(Weapon==EBattleWeapon::SupportGun?P.EngageSupport:P.EngageCarbine):GetDefault<UBattleTuning>()->EffectiveWeaponRange();
 }
 
@@ -43,5 +45,6 @@ float BattleRanges::Reach(EBattleWeapon Weapon)
 {
  const auto& P=Get();
  if(Weapon==EBattleWeapon::AntiTank)return P.bActive?30000.f:FMath::Max(100.f,GetDefault<UBattleTuning>()->ATRange);
+ if(Weapon==EBattleWeapon::Mortar)return 0.f;
  return P.bActive?(Weapon==EBattleWeapon::SupportGun?P.ReachSupport:P.ReachCarbine):GetDefault<UBattleTuning>()->EffectiveWeaponRange();
 }

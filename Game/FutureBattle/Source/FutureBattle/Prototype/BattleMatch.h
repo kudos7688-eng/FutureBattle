@@ -19,6 +19,8 @@ struct FAreaIntent
  float HeavyShare=0.f;                // share of AI purchases that are heavy infantry (0 = rifle squads only)
  int32 TankKeep=0;                    // tanks the AI keeps active (same pacing as scouts; 0 = none)
  int32 ACKeep=0;                      // armoured cars the AI keeps active (same pacing as scouts; 0 = none)
+ int32 MortarKeep=0;                  // mortar teams the AI keeps active (same pacing as scouts; 0 = none)
+ int32 SPGKeep=0;                     // self-propelled guns the AI keeps active (same pacing as scouts; 0 = none)
  int32 ATKeep=0;                      // anti-tank teams the AI keeps active (same pacing as scouts; 0 = none)
  int32 ScoutKeep=0;                   // scout pairs the AI keeps active (one more per ScoutAfterHires purchases, up to this; 0 = none)
 };
@@ -122,6 +124,9 @@ public:
 	int32 AreaHeavyTarget(int32 Team) const;
 	// Observation post of a scout pair: ahead of an own front point (observed ownership and static positions only).
 	FVector AreaScoutPost(int32 Team, int32 SquadID) const;
+	// Indirect-fire squads (mortar team, self-propelled gun; BattleArtillery.cpp): their assigned goal, pulled back towards the own home
+	// until it is ArtilleryStandoff x their range from every enemy the team knows of (known positions only).
+	FVector AreaArtilleryPost(int32 Team, int32 SquadID, const FVector& Goal) const;
 	// Scout reports (ROADMAP 2026-11-14, stage 3): what a scout pair sees beyond normal sight reaches its team only through a timed
 	// two-step report (direction after ScoutAlertSeconds, positions and size after ScoutReportSeconds). Transient: a load restarts the timers.
 	struct FScoutReport { double Started=-1, LastLong=-1, AlertAt=-1, ReportedAt=-1, NextHint=0, RetreatUntil=-1, PauseStart=-1, LastDanger=-1; FVector ReportFrom=FVector::ZeroVector; float LastHP=-1; int32 Stage=0, Living=0, Sequence=0, AlertSequence=0, Burns=0; FVector Direction=FVector::ZeroVector, Approx=FVector::ZeroVector, RetreatPoint=FVector::ZeroVector; TArray<FVector> Positions; };

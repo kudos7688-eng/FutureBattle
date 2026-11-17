@@ -89,6 +89,8 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(SquadType==BattleSquadType::AntiTank&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaATLimit))return Fail(TEXT("Anti-tank team limit reached"));
  if(SquadType==BattleSquadType::Tank&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaTankLimit))return Fail(TEXT("Tank limit reached"));
  if(SquadType==BattleSquadType::ArmoredCar&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaACLimit))return Fail(TEXT("Armoured car limit reached"));
+ if(SquadType==BattleSquadType::Mortar&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaMortarLimit))return Fail(TEXT("Mortar team limit reached"));
+ if(SquadType==BattleSquadType::SPGun&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaSPGLimit))return Fail(TEXT("Self-propelled gun limit reached"));
  if(Credits[Team]<Cost)return Fail(TEXT("Insufficient resources"));
  if(GetWorld()->GetSubsystem<UBattleState>()->GetSquads().Num()>=100)return Fail(TEXT("Squad record capacity reached (100 including lost squads)"));
  auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
@@ -106,7 +108,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(R->SightExperiment.Enabled)R->SightExperiment.HireTimes[Team].Add(Elapsed);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE team=%d squad=%d auto=%d cost=%d credits=%d cancelled_replacements=%d active=%d time=%.1f leader=%s home=%s"),
   Team,SID,bAuto?1:0,Cost,Credits[Team],Cancelled,ActiveSquads(Team),Elapsed,*R->Position(Store->FindSquad(SID)->LeaderUnitID).ToCompactString(),*AreaHome(Team).ToCompactString());
- LastMessage=SquadType==BattleSquadType::ArmoredCar?FString::Printf(TEXT("Armoured car deployed / -%d resources"),Cost):SquadType==BattleSquadType::Tank?FString::Printf(TEXT("Tank deployed / -%d resources"),Cost):SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
+ LastMessage=SquadType==BattleSquadType::SPGun?FString::Printf(TEXT("Self-propelled gun deployed / -%d resources"),Cost):SquadType==BattleSquadType::Mortar?FString::Printf(TEXT("Mortar team deployed / -%d resources"),Cost):SquadType==BattleSquadType::ArmoredCar?FString::Printf(TEXT("Armoured car deployed / -%d resources"),Cost):SquadType==BattleSquadType::Tank?FString::Printf(TEXT("Tank deployed / -%d resources"),Cost):SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
  return true;
 }
 void UBattleMatch::UpdateAreaHiring()
@@ -138,6 +140,11 @@ void UBattleMatch::UpdateAreaHiring()
    // Armoured cars (trial -BattleAreaACKeep, default AreaACKeep 0): the same pacing, after tanks.
    const int32 ACWant=FMath::Min(HireIntent.ACKeep,Bought/After);
    if(Type==BattleSquadType::Rifle&&ACWant>0&&ActiveOfType(Team,BattleSquadType::ArmoredCar)<ACWant)Type=BattleSquadType::ArmoredCar;
+   // Indirect fire (trials -BattleAreaMortarKeep / -BattleAreaSPGKeep, defaults 0): the same pacing, after armoured cars.
+   const int32 MortarWant=FMath::Min(HireIntent.MortarKeep,Bought/After);
+   if(Type==BattleSquadType::Rifle&&MortarWant>0&&ActiveOfType(Team,BattleSquadType::Mortar)<MortarWant)Type=BattleSquadType::Mortar;
+   const int32 SPGWant=FMath::Min(HireIntent.SPGKeep,Bought/After);
+   if(Type==BattleSquadType::Rifle&&SPGWant>0&&ActiveOfType(Team,BattleSquadType::SPGun)<SPGWant)Type=BattleSquadType::SPGun;
   }
   const int32 TypeCost=Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
   if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=25)continue;
@@ -279,6 +286,8 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
  I.ATKeep=FMath::Clamp(bTrial&&S.ATKeep>=0?S.ATKeep:GetDefault<UBattleTuning>()->AreaATKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaATLimit));
  I.TankKeep=FMath::Clamp(bTrial&&S.TankKeep>=0?S.TankKeep:GetDefault<UBattleTuning>()->AreaTankKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaTankLimit));
  I.ACKeep=FMath::Clamp(bTrial&&S.ACKeep>=0?S.ACKeep:GetDefault<UBattleTuning>()->AreaACKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaACLimit));
+ I.MortarKeep=FMath::Clamp(bTrial&&S.MortarKeep>=0?S.MortarKeep:GetDefault<UBattleTuning>()->AreaMortarKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaMortarLimit));
+ I.SPGKeep=FMath::Clamp(bTrial&&S.SPGKeep>=0?S.SPGKeep:GetDefault<UBattleTuning>()->AreaSPGKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaSPGLimit));
  // S7/S8 trials (one team only with -BattleAreaTrialTeam).
  if(bTrial){I.FlankOffset=S.FlankOffset;I.bFlankSameSide=S.bFlankSameSide;I.BaseReturnLiving=S.BaseReturnLiving;}
  // Stage 2: time-phased team plans (match time only; no hidden information). Values are first trial values (numbers delegated).

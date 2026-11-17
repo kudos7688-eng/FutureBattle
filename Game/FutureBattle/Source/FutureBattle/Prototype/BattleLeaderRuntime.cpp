@@ -631,7 +631,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  }
  // Cover validation (default ON): never take cover from a contact that this soldier cannot shoot at from here.
  const bool CoverInRange=!BattleTactics::CoverValidationEnabled() || (Contact && FVector::DistSquared2D(Pos,Contact->LastKnownPosition)<=FMath::Square(CoverTuning->EffectiveWeaponRange()));
- if(BattleTactics::CoverActionsEnabled() && StopForCombat && Contact && Contact->bVisible && CoverInRange && ProbeSlot && Now>=CoverProbeAfter.FindRef(ID))
+ // A mortar gunner stays at his emplacement (moving would undo the set-up).
+ if(BattleTactics::CoverActionsEnabled() && StopForCombat && Contact && Contact->bVisible && CoverInRange && ProbeSlot && Now>=CoverProbeAfter.FindRef(ID) && U->Weapon!=EBattleWeapon::Mortar)
  {
   if(LeaderFirst){}else if(ProbeBudget)++CoverProbesThisFrame;else NextCoverProbe=Now+FMath::Max(0.f,CoverTuning->AICoverProbeInterval);
   CoverProbeAfter.Add(ID,Now+FMath::Max(0.f,LeaderFirst?CoverTuning->LeaderGuardCoverRetrySeconds:CoverTuning->AICoverRetrySeconds));
@@ -693,6 +694,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   }
  }
  else if(B.Actor.IsValid() && !Approaching) B.Actor->GetCharacterMovement()->StopMovementImmediately();
+ // Indirect fire (mortar gunner, self-propelled gun; BattleArtillery.cpp): set-up while still, target from known positions, firing.
+ FVector ArtilleryDirection=FVector::ZeroVector;
+ const bool bArtilleryAim=bArea && IsArtillery(ID) && StepArtillery(ID,Now,B.Velocity.Size2D()>20.f,ArtilleryDirection);
  FVector BaseTarget;const bool BaseEngage=!CanEngage&&S->Order!=EBattleOrder::Move&&GetWorld()->GetSubsystem<UBattleMatch>()->CanFireAtBase(ID,BaseTarget);
  // Stances: fire from the current eye height, and aim at the height the visible target presents.
  const FVector Muzzle(0,0,BattleStance::EyeOffset(StanceOf(ID)));
@@ -707,7 +711,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  }
  // A vehicle turns its turret to the target; its hull keeps the driving heading (SteerVehicle).
  // The main gun's target (stage 2) takes the turret; the machine gun keeps firing along Direction at its own target.
- if(B.Actor.IsValid()) { if(IsVehicle(ID)) { FVector GunDirection; AimTurret(ID,TankGunTarget(ID,Now,GunDirection)?GunDirection:Direction); StepTankGun(ID,Now); } else B.Actor->SetActorRotation(FRotator(0,Direction.Rotation().Yaw,0)); }
+ // A mortar gunner without a direct target faces his indirect-fire target; a self-propelled gun turns its gun to it.
+ if(bArtilleryAim && !CanEngage && !BaseEngage && !IsVehicle(ID)) Direction=ArtilleryDirection;
+ if(B.Actor.IsValid()) { if(IsVehicle(ID)) { FVector GunDirection; if(bArtilleryAim) AimTurret(ID,ArtilleryDirection); else { AimTurret(ID,TankGunTarget(ID,Now,GunDirection)?GunDirection:Direction); StepTankGun(ID,Now); } } else B.Actor->SetActorRotation(FRotator(0,Direction.Rotation().Yaw,0)); }
  else
  {
   Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity).Forward=Direction.GetSafeNormal2D();
@@ -725,6 +731,8 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  FPhase3Scope Timing(Phase3,EPhase3Cost::Shot);
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
  if(!S || S->CommandStatus!=EBattleCommandStatus::Active || !U->IsAlive() || Mode->bBattleEnded || Direction.ContainsNaN() || Direction.IsNearlyZero()) return false;
+ // A mortar has no direct fire (its shells go through FireArtillery, BattleArtillery.cpp).
+ if(U->Weapon==EBattleWeapon::Mortar) return false;
  const double Now=GetWorld()->GetTimeSeconds(); const auto* T=GetDefault<UBattleTuning>();
  if(U->CoverPhase && U->CoverPhase!=4)
  {
@@ -878,6 +886,8 @@ void UBattleLeaderRuntime::Step(float Dt)
   for(const auto& B:Bodies) if(Store->Find(B.Key)->IsAlive()) { const FVector P=Position(B.Key); AvoidanceGrid.FindOrAdd(FIntPoint(FMath::FloorToInt(P.X/150.),FMath::FloorToInt(P.Y/150.))).Add(B.Key); }
   // Death may invalidate a plan during firing; iterate stable UnitIDs, never a plan iterator.
   { TRACE_CPUPROFILER_EVENT_SCOPE(BattleFollow); for(const auto& B:Bodies) Follow(B.Key,FMath::Min(Dt,.05f),Now); }
+  // Indirect-fire shells in flight land after their flight time (paused with the combat).
+  if(bArea && ArtilleryShells.Num()) StepArtilleryShells(Dt);
  }
  int32 Living[2]={0,0}; for(const auto& U:Store->GetUnits()) if(U.Value.IsAlive()) ++Living[U.Value.Team];
  if(!bArea && !Mode->bBattleEnded && (!Living[0] || !Living[1]))

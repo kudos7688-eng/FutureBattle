@@ -6,7 +6,9 @@
 
 UENUM(BlueprintType)
 // AntiTank (2026-11-17, ROADMAP heavy equipment): one round loaded, a long reload, an explosion that also hurts infantry around the impact.
-enum class EBattleWeapon : uint8 { Carbine, SupportGun, AntiTank };
+// Mortar (2026-11-18, indirect fire): never fires along the line of sight (UBattleLeaderRuntime::Fire refuses it); it lobs shells at
+// positions the team knows (BattleArtillery.cpp) after setting up while still. One round loaded, MortarReserve in reserve.
+enum class EBattleWeapon : uint8 { Carbine, SupportGun, AntiTank, Mortar };
 
 inline EBattleWeapon WeaponForSlot(int32 Slot)
 {
@@ -18,7 +20,7 @@ inline EBattleWeapon WeaponForSlot(int32 Slot)
 class UWorld;
 namespace BattleSquadType
 {
- enum : uint8 { Rifle=0, Heavy=1, Scout=2, AntiTank=3, Tank=4, ArmoredCar=5, Count=6 };
+ enum : uint8 { Rifle=0, Heavy=1, Scout=2, AntiTank=3, Tank=4, ArmoredCar=5, Mortar=6, SPGun=7, Count=8 };
  int32 Members(uint8 Type);
  float HealthScale(uint8 Type);
  float SpeedScale(uint8 Type);
@@ -38,6 +40,9 @@ namespace BattleSquadType
  float VehicleRadius(uint8 Type);
  float ArmorSmallArms(uint8 Type); // damage scale of rifles and machine guns on this type (infantry 1, tank 0, armoured car ACArmorSmallArms)
  bool HasMainGun(uint8 Type);
+ // Indirect fire (ROADMAP 2026-11-14, stage 1 2026-11-18): the mortar team (3 soldiers, slot 1 carries the mortar) and the
+ // self-propelled gun (one vehicle with a high-angle gun). Both fire only at positions their team knows (BattleArtillery.cpp).
+ bool IsArtillery(uint8 Type);
  float SpeedAt(uint8 Type,const UWorld* World,const FVector& Position); // scale of UBattleTuning::MoveSpeed
 }
 
@@ -271,11 +276,17 @@ public:
 	UPROPERTY(Config, EditAnywhere) float ATSplashRadius = 400.f;
 	UPROPERTY(Config, EditAnywhere) float ATSplashDamage = 60.f;
 	UPROPERTY(Config, EditAnywhere) float ATBaseDamage = 60.f;
-	int32 Capacity(EBattleWeapon W) const { return W == EBattleWeapon::AntiTank ? ATMagazine : W == EBattleWeapon::SupportGun ? SupportMagazine : Magazine; }
-	float ReloadTime(EBattleWeapon W) const { return W == EBattleWeapon::AntiTank ? ATReloadSeconds : W == EBattleWeapon::SupportGun ? SupportReloadSeconds : ReloadSeconds; }
-	int32 ReserveFor(EBattleWeapon W) const { return W == EBattleWeapon::AntiTank ? ATReserve : ReserveAmmo; }
+	// Mortar (2026-11-18, first values): 1 loaded + 11 in reserve (refilled at home like other weapons), MortarReloadSeconds to load.
+	UPROPERTY(Config, EditAnywhere) int32 MortarMagazine = 1;
+	UPROPERTY(Config, EditAnywhere) int32 MortarReserve = 11;
+	UPROPERTY(Config, EditAnywhere) float MortarReloadSeconds = 4.f;
+	UPROPERTY(Config, EditAnywhere) float MortarShotInterval = .5f;
+	int32 Capacity(EBattleWeapon W) const { return W == EBattleWeapon::Mortar ? MortarMagazine : W == EBattleWeapon::AntiTank ? ATMagazine : W == EBattleWeapon::SupportGun ? SupportMagazine : Magazine; }
+	float ReloadTime(EBattleWeapon W) const { return W == EBattleWeapon::Mortar ? MortarReloadSeconds : W == EBattleWeapon::AntiTank ? ATReloadSeconds : W == EBattleWeapon::SupportGun ? SupportReloadSeconds : ReloadSeconds; }
+	int32 ReserveFor(EBattleWeapon W) const { return W == EBattleWeapon::Mortar ? MortarReserve : W == EBattleWeapon::AntiTank ? ATReserve : ReserveAmmo; }
 	float ShotInterval(EBattleWeapon W, bool bPlayer) const
 	{
+		if (W == EBattleWeapon::Mortar) return MortarShotInterval;
 		if (W == EBattleWeapon::AntiTank) return ATShotInterval;
 		if (W == EBattleWeapon::SupportGun) return bPlayer ? SupportPlayerInterval : SupportAIInterval;
 		return bPlayer ? PlayerShotInterval : AIShotInterval;
@@ -347,6 +358,52 @@ public:
 	UPROPERTY(Config, EditAnywhere) float TankGunBaseDamage = 30.f;
 	UPROPERTY(Config, EditAnywhere) float TankGunSpread = .4f; // degrees, half cone
 	UPROPERTY(Config, EditAnywhere) int32 TankGunMinCluster = 2;
+	// Mortar team (squad type 6, stage 1 2026-11-18, first values): 3 soldiers (slot 1 the mortar, the others rifles), cost 14, at most 3
+	// per team. The mortar fires only after MortarSetupSeconds standing still (moving undoes it), between MortarMinRange and MortarRange
+	// (MortarRangeProfile with the range profile, map E); shells fly at MortarShellSpeed and land within a circle whose radius grows with
+	// distance (MortarSpread at MortarRange). The explosion does up to MortarBlastDamage within MortarBlastRadius to enemy soldiers
+	// (falling off to zero at the edge; vehicles are immune), MortarBaseDamage to an enemy home. AI keeps AreaMortarKeep (trial -BattleAreaMortarKeep=n).
+	UPROPERTY(Config, EditAnywhere) int32 AreaMortarCost = 14;
+	UPROPERTY(Config, EditAnywhere) int32 AreaMortarLimit = 3;
+	UPROPERTY(Config, EditAnywhere) int32 AreaMortarKeep = 0;
+	UPROPERTY(Config, EditAnywhere) float MortarSetupSeconds = 4.f;
+	UPROPERTY(Config, EditAnywhere) float MortarMinRange = 5000.f;
+	UPROPERTY(Config, EditAnywhere) float MortarRange = 30000.f;
+	UPROPERTY(Config, EditAnywhere) float MortarRangeProfile = 40000.f;
+	UPROPERTY(Config, EditAnywhere) float MortarShellSpeed = 10000.f;
+	UPROPERTY(Config, EditAnywhere) float MortarSpread = 800.f;
+	UPROPERTY(Config, EditAnywhere) float MortarBlastRadius = 800.f;
+	UPROPERTY(Config, EditAnywhere) float MortarBlastDamage = 50.f;
+	UPROPERTY(Config, EditAnywhere) float MortarBaseDamage = 20.f;
+	// Self-propelled gun (squad type 7, stage 1 2026-11-18, first values): one vehicle, cost 35, at most 2 per team, health 200, small arms
+	// do SPGArmorSmallArms, 7 m/s in the open and 3 m/s in the city of map E, turning SPGTurnRate deg/s, a 120 degree view, a machine gun
+	// for self-defence. Its gun fires after SPGSetupSeconds still, SPGMinRange..SPGRange on every map, one round per SPGReload s, shells at
+	// SPGShellSpeed, spread SPGSpread at SPGRange; up to SPGBlastDamage within SPGBlastRadius to enemy soldiers, the full SPGBlastDamage
+	// to a vehicle only on a direct hit (within its body radius), SPGBaseDamage to an enemy home. AI keeps AreaSPGKeep (trial -BattleAreaSPGKeep=n).
+	UPROPERTY(Config, EditAnywhere) int32 AreaSPGCost = 35;
+	UPROPERTY(Config, EditAnywhere) int32 AreaSPGLimit = 2;
+	UPROPERTY(Config, EditAnywhere) int32 AreaSPGKeep = 0;
+	UPROPERTY(Config, EditAnywhere) float SPGHealthScale = 2.f;
+	UPROPERTY(Config, EditAnywhere) float SPGArmorSmallArms = .1f;
+	UPROPERTY(Config, EditAnywhere) float SPGOpenSpeed = 700.f;
+	UPROPERTY(Config, EditAnywhere) float SPGUrbanSpeed = 300.f;
+	UPROPERTY(Config, EditAnywhere) float SPGTurnRate = 60.f;
+	UPROPERTY(Config, EditAnywhere) float SPGFieldOfView = 120.f;
+	UPROPERTY(Config, EditAnywhere) float SPGRadius = 200.f;
+	UPROPERTY(Config, EditAnywhere) float SPGSetupSeconds = 8.f;
+	UPROPERTY(Config, EditAnywhere) float SPGMinRange = 10000.f;
+	UPROPERTY(Config, EditAnywhere) float SPGRange = 100000.f;
+	UPROPERTY(Config, EditAnywhere) float SPGReload = 10.f;
+	UPROPERTY(Config, EditAnywhere) float SPGShellSpeed = 25000.f;
+	UPROPERTY(Config, EditAnywhere) float SPGSpread = 1500.f;
+	UPROPERTY(Config, EditAnywhere) float SPGBlastRadius = 1000.f;
+	UPROPERTY(Config, EditAnywhere) float SPGBlastDamage = 100.f;
+	UPROPERTY(Config, EditAnywhere) float SPGBaseDamage = 40.f;
+	// Both: a target needs ArtilleryMinCluster known enemy soldiers within the blast radius; no target whose blast radius plus spread
+	// holds an own unit; picks every ArtilleryPickInterval s. The AI keeps an artillery squad ArtilleryStandoff x its range from known enemies.
+	UPROPERTY(Config, EditAnywhere) int32 ArtilleryMinCluster = 2;
+	UPROPERTY(Config, EditAnywhere) float ArtilleryPickInterval = .75f;
+	UPROPERTY(Config, EditAnywhere) float ArtilleryStandoff = .6f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRange = 30000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRangeProfile = 40000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutStillSpeed = 30.f;

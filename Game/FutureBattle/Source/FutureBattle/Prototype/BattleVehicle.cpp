@@ -24,7 +24,8 @@ float UBattleLeaderRuntime::VehicleSpotRange() const
 
 float UBattleLeaderRuntime::ArmorScale(int32 VictimID,EBattleWeapon Weapon) const
 {
- // Anti-tank weapons hurt every unit fully; small arms (rifles, machine guns) by the vehicle type's armour (tank 0, armoured car 0.1).
+ // Anti-tank weapons hurt every unit fully; small arms (rifles, machine guns) by the vehicle type's armour (tank 0, armoured car and
+ // self-propelled gun 0.1). Shells (BattleArtillery.cpp) do not pass through here.
  return IsVehicle(VictimID)&&Weapon!=EBattleWeapon::AntiTank?BattleSquadType::ArmorSmallArms(VehicleType(VictimID)):1.f;
 }
 
@@ -68,7 +69,15 @@ void UBattleLeaderRuntime::ConfigureVehicle(int32 ID)
   };
   USceneComponent* Root=A->GetCapsuleComponent();
   USceneComponent* Turret=nullptr;
-  if(bCar)
+  if(Type==BattleSquadType::SPGun)
+  {
+   // Self-propelled gun: a long hull 5.0 x 2.6 x 1.0 m, an open gun mount (a uniformly scaled cylinder, so the tilted barrel keeps its
+   // shape) and a 5 m barrel raised 45 degrees.
+   Part(Cube,Root,FVector(0,0,-80),FRotator::ZeroRotator,FVector(5.0,2.6,1.0));
+   Turret=Part(Cylinder,Root,FVector(-60,0,0),FRotator::ZeroRotator,FVector(1.4,1.4,1.4));
+   Part(Cylinder,Turret,FVector(177/1.4,0,177/1.4),FRotator(-45,0,0),FVector(.16/1.4,.16/1.4,5.0/1.4));
+  }
+  else if(bCar)
   {
    Part(Cube,Root,FVector(0,0,-30),FRotator::ZeroRotator,FVector(4.6,2.2,1.1));
    for(int32 I=0;I<4;++I)Part(Cylinder,Root,FVector(I<2?150:-150,I%2?115:-115,-85),FRotator(0,0,90),FVector(.9,.9,.3));

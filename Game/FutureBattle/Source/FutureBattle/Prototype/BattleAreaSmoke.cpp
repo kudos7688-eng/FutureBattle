@@ -7,6 +7,7 @@
 #include "BattleSquadTactics.h"
 #include "BattleTactics.h"
 #include "BattleFieldLayout.h"
+#include "BattleRanges.h"
 #include "BattleWarScore.h"
 #include "Components/CapsuleComponent.h"
 #include "NavigationSystem.h"
@@ -349,6 +350,190 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      FMath::IsNearlyEqual(Store->Find(CarID)->Perception.FieldOfView,120.f),TEXT("armoured car survives save and restore"));
     Mode->bCombatPaused=false;
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_AC_SMOKE squad=%d car=%d third=%d nav=%s validation=%s"),CSID,CarID,Third,CN?*CN->GetName():TEXT("none"),*Error);
+   }
+   // Indirect fire (stage 1 2026-11-18). Two known soldiers 2 m apart: a target worth a shell (ArtilleryMinCluster 2); keys below zero
+   // stand for report positions. A direction from a unit whose blast-plus-spread circle at Distance holds no own unit (zero when none).
+   auto KnownPair=[](const FVector& At){TMap<int32,FVector> K;K.Add(-901,At);K.Add(-902,At+FVector(200,0,0));return K;};
+   auto ClearDirection=[&](int32 ID,bool bSPG,double Distance)
+   {
+    for(int32 A=0;A<16;++A){const FVector D(FMath::Cos(A*PI/8),FMath::Sin(A*PI/8),0);if(!AllyNear(0,Position(ID)+D*Distance,ArtilleryBlastRadius(bSPG)+ArtillerySpread(bSPG,Distance)+500.))return D;}
+    return FVector(FVector::ZeroVector);
+   };
+   // Free team 0 squad slots: stop rifle squads (leader killed) until Keep slots are free under the 25 active squads.
+   auto FreeSlots=[&](int32 Keep)
+   {
+    for(int32 Pass=0;Pass<10&&M->ActiveSquads(0)>25-Keep;++Pass)
+    {
+     for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Value.SquadType==BattleSquadType::Rifle&&P.Value.CommandStatus==EBattleCommandStatus::Active)
+      if(const auto* L=Store->Find(P.Value.LeaderUnitID);L&&L->IsAlive()){Store->ApplyDamage(L->UnitID,1,10000);break;}
+     M->UpdateArea(1);M->Area.Replacements.Reset();
+    }
+   };
+   // Mortar team (squad type 6): 3 soldiers (slot 1 the mortar: 1 loaded, 11 in reserve), 14 resources, at most 3 per team; targets only
+   // between 50 m and 300 m and never where the blast and spread may reach an own unit; no shot before 4 s of set-up or while moving;
+   // the shell lands after its flight time; the explosion hurts enemy soldiers and never own units; survives save and restore.
+   {
+    FreeSlots(4);
+    const auto* TT=GetDefault<UBattleTuning>();
+    const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::Mortar);
+    if(M->Credits[0]<Cost*5){const int32 Add=Cost*5-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
+    const int32 C0=M->Credits[0];const bool Hired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Mortar);
+    const auto* MS=Hired?Store->FindSquad(M->LastHiredSquadID):nullptr;const int32 MSID=MS?MS->SquadID:INDEX_NONE;
+    const int32 Gunner=MS&&MS->Members.Num()==3?MS->Members[1]:INDEX_NONE;const int32 MLeader=MS?MS->LeaderUnitID:INDEX_NONE;
+    bool Body=Hired&&Cost==14&&M->Credits[0]==C0-Cost&&MS&&MS->SquadType==BattleSquadType::Mortar&&MS->DisplayName.Contains(TEXT("迫撃砲班"))&&Gunner!=INDEX_NONE;
+    if(Body)for(int32 I=0;I<3;++I){const auto* U=Store->Find(MS->Members[I]);Body&=U&&U->Weapon==(I==1?EBattleWeapon::Mortar:EBattleWeapon::Carbine);}
+    if(Body){const auto* G=Store->Find(Gunner);Body&=G->Ammo==1&&G->Reserve==11&&IsArtillery(Gunner)&&!IsArtillery(MLeader)&&!IsVehicle(Gunner);}
+    Check(Body,TEXT("mortar team: 3 soldiers, one mortar (1 loaded, 11 in reserve), 14 resources"));
+    Check(Gunner!=INDEX_NONE&&!Fire(Gunner,Position(Gunner)+FVector(0,0,60),FVector::ForwardVector,false)&&Store->Find(Gunner)->Ammo==1,TEXT("a mortar never fires along the line of sight"));
+    const bool Second=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Mortar),Third=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Mortar);
+    const int32 C3=M->Credits[0];const bool Fourth=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Mortar);
+    Check(Second&&Third&&!Fourth&&M->Credits[0]==C3&&M->ActiveOfType(0,BattleSquadType::Mortar)==3,TEXT("mortar teams: at most 3 per team"));
+    // Range: 50 m to 300 m (400 m with the range profile); spread 8 m at 300 m.
+    const float MinR=ArtilleryMinRange(false),MaxR=ArtilleryMaxRange(false);const double Mid=(MinR+MaxR)*.5;
+    Check(FMath::IsNearlyEqual(MinR,TT->MortarMinRange)&&FMath::IsNearlyEqual(MaxR,BattleRanges::Get().bActive?TT->MortarRangeProfile:TT->MortarRange)&&FMath::IsNearlyEqual(ArtillerySpread(false,TT->MortarRange),TT->MortarSpread,1.f),
+     TEXT("mortar: 50 m to 300 m (400 m with the range profile), 8 m spread at 300 m"));
+    const FVector GPos=Gunner!=INDEX_NONE?Position(Gunner):FVector::ZeroVector;const FVector Dir=Gunner!=INDEX_NONE?ClearDirection(Gunner,false,Mid):FVector::ZeroVector;
+    FVector Aim=FVector::ZeroVector;bool bBase=false,bHeld=false;
+    const bool Inside=!Dir.IsZero()&&PickArtilleryAim(Gunner,KnownPair(GPos+Dir*Mid),Aim,bBase,bHeld)&&!bBase&&FVector::Dist2D(Aim,GPos+Dir*Mid+FVector(100,0,0))<10.;
+    const bool Near=!Dir.IsZero()&&(!PickArtilleryAim(Gunner,KnownPair(GPos+Dir*(MinR*.8)),Aim,bBase,bHeld)||bBase);
+    const bool Far=!Dir.IsZero()&&(!PickArtilleryAim(Gunner,KnownPair(GPos+Dir*(MaxR*1.1)),Aim,bBase,bHeld)||bBase);
+    TMap<int32,FVector> One;One.Add(-903,GPos+Dir*Mid);
+    const bool Single=!Dir.IsZero()&&(!PickArtilleryAim(Gunner,One,Aim,bBase,bHeld)||bBase);
+    Check(Inside&&Near&&Far&&Single,TEXT("mortar target: two or more known soldiers, between the minimum and the maximum range only"));
+    // An own soldier at the target: no shot there.
+    bool Held=false;
+    if(!Dir.IsZero()&&MLeader!=INDEX_NONE)
+    {
+     const FVector LeaderAt=Position(MLeader);Place(MLeader,GPos+Dir*Mid);
+     Held=!PickArtilleryAim(Gunner,KnownPair(GPos+Dir*Mid),Aim,bBase,bHeld)&&bHeld;Place(MLeader,LeaderAt);
+    }
+    Check(Held,TEXT("mortar holds fire where the blast and spread may reach an own unit"));
+    // Set-up: nothing while moving or during the first 4 s still; then one round, and moving undoes the set-up.
+    const double Now=GetWorld()->GetTimeSeconds();bool SetUp=false;
+    if(!Dir.IsZero())
+    {
+     auto& A=Artillery.FindOrAdd(Gunner);A=FArtillery();A.bHasTarget=true;A.Aim=GPos+Dir*Mid;A.NextPick=Now+1000.;
+     const int64 S0=ArtilleryShotsMortar;const int32 F0=ArtilleryShells.Num();FVector ADir;
+     const bool Moving=!StepArtillery(Gunner,Now,true,ADir)&&ArtilleryShotsMortar==S0;
+     StepArtillery(Gunner,Now+1.,false,ADir);const bool Early=ArtilleryShotsMortar==S0;
+     StepArtillery(Gunner,Now+1.+TT->MortarSetupSeconds-.1,false,ADir);const bool Late=ArtilleryShotsMortar==S0;
+     StepArtillery(Gunner,Now+1.+TT->MortarSetupSeconds+.05,false,ADir);
+     const bool Fired=ArtilleryShotsMortar==S0+1&&ArtilleryShells.Num()==F0+1&&Store->Find(Gunner)->Ammo==0;
+     StepArtillery(Gunner,Now+2.+TT->MortarSetupSeconds,true,ADir);const bool Undone=Artillery.FindChecked(Gunner).StillSince<0;
+     SetUp=Moving&&Early&&Late&&Fired&&Undone;
+    }
+    Check(SetUp,TEXT("mortar fires only after 4 s of set-up while still; moving undoes the set-up"));
+    // Explosion at an enemy soldier with an own soldier 3 m away: the enemy loses MortarBlastDamage, the own soldier nothing.
+    int32 Enemy=INDEX_NONE;for(const auto& B:GetBodies())if(const auto* U=Store->Find(B.Key);U&&U->IsAlive()&&U->Team==1&&!IsVehicle(B.Key)){Enemy=B.Key;break;}
+    float Lost=-1.f;bool Blast=false;
+    if(Enemy!=INDEX_NONE&&MLeader!=INDEX_NONE&&Gunner!=INDEX_NONE)
+    {
+     const FVector LeaderAt=Position(MLeader);Place(MLeader,Position(Enemy)+FVector(300,0,0));
+     const float EnemyBefore=Store->Find(Enemy)->HP,AllyBefore=Store->Find(MLeader)->HP;
+     FArtilleryShell Shell;Shell.ShooterID=Gunner;Shell.Team=0;Shell.ShooterType=BattleSquadType::Mortar;Shell.At=Position(Enemy);
+     const int32 Damaged=ArtilleryImpact(Shell);Lost=EnemyBefore-Store->Find(Enemy)->HP;
+     Blast=Damaged>=1&&FMath::IsNearlyEqual(Lost,FMath::Min(EnemyBefore,TT->MortarBlastDamage),1.f)&&Store->Find(MLeader)->HP==AllyBefore;
+     Place(MLeader,LeaderAt);
+    }
+    Check(Blast,TEXT("mortar explosion hurts enemy soldiers around the impact, never own units"));
+    // Flight: the shell lands after distance / MortarShellSpeed, not before.
+    int32 FlightTarget=INDEX_NONE;for(const auto& B:GetBodies())if(const auto* U=Store->Find(B.Key);U&&U->IsAlive()&&U->Team==1&&!IsVehicle(B.Key)){FlightTarget=B.Key;break;}
+    float Flight=-1.f;bool Landed=false;
+    if(FlightTarget!=INDEX_NONE&&Gunner!=INDEX_NONE)
+    {
+     ArtilleryShells.Reset();
+     {auto& GS=Store->Units.FindChecked(Gunner);GS.Ammo=1;GS.ReloadEndTime=0;GS.NextShotTime=0;}
+     const float HP0=Store->Find(FlightTarget)->HP;const double Distance=FVector::Dist2D(Position(Gunner),Position(FlightTarget));
+     const int64 I0=ArtilleryImpacts;
+     const bool Launched=FireArtillery(Gunner,Position(FlightTarget),Now+20.);
+     Flight=ArtilleryShells.Num()==1?ArtilleryShells[0].Remaining:-1.f;
+     StepArtilleryShells(Flight*.5f);const bool Waiting=ArtilleryShells.Num()==1&&Store->Find(FlightTarget)->HP==HP0&&ArtilleryImpacts==I0;
+     StepArtilleryShells(Flight*.6f);
+     Landed=Launched&&FMath::IsNearlyEqual(Flight,float(Distance/TT->MortarShellSpeed),.01f)&&Waiting&&ArtilleryShells.IsEmpty()&&ArtilleryImpacts==I0+1;
+    }
+    Check(Landed,TEXT("mortar shell lands after its flight time (distance / 100 m/s)"));
+    // Save and restore: the team and its mortar survive; set-up and shells in flight are not saved.
+    ArtilleryShells.Add(FArtilleryShell());
+    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
+    const bool Restored=Valid&&M->RestoreSnapshot(Save);const auto* GU=Gunner!=INDEX_NONE?Store->Find(Gunner):nullptr;const auto* RS=Store->FindSquad(MSID);
+    Check(Restored&&GU&&GU->Weapon==EBattleWeapon::Mortar&&RS&&RS->SquadType==BattleSquadType::Mortar&&Artillery.IsEmpty()&&ArtilleryShells.IsEmpty(),TEXT("mortar team survives save and restore (set-up and shells in flight dropped)"));
+    Mode->bCombatPaused=false;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_MORTAR_SMOKE squad=%d gunner=%d dir=%s lost=%.1f flight=%.2f validation=%s"),MSID,Gunner,*Dir.ToCompactString(),Lost,Flight,*Error);
+   }
+   // Self-propelled gun (squad type 7): one vehicle for 35 resources, at most 2 per team, health 200, small arms do a tenth, 7 m/s in the
+   // open, a 120 degree view, a machine gun and no direct main gun; targets between 100 m and 1000 m; 8 s of set-up, one round per 10 s;
+   // its shell hurts a vehicle only on a direct hit, a mortar shell never; survives save and restore.
+   {
+    FreeSlots(3);
+    const auto* TT=GetDefault<UBattleTuning>();
+    const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::SPGun);
+    if(M->Credits[0]<Cost*3){const int32 Add=Cost*3-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
+    const int32 C0=M->Credits[0];const bool Hired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::SPGun);
+    const auto* GS=Hired?Store->FindSquad(M->LastHiredSquadID):nullptr;const int32 GSID=GS?GS->SquadID:INDEX_NONE;
+    const int32 GunID=GS?GS->LeaderUnitID:INDEX_NONE;ABattleUnit* GunActor=Actor(GunID);
+    const bool Body=Hired&&Cost==35&&M->Credits[0]==C0-Cost&&GS&&GS->SquadType==BattleSquadType::SPGun&&GS->Members.Num()==1&&GunActor&&
+     FMath::IsNearlyEqual(GunActor->GetCapsuleComponent()->GetScaledCapsuleRadius(),TT->SPGRadius,1.f)&&FMath::IsNearlyEqual(Store->Find(GunID)->HP,200.f)&&
+     IsVehicle(GunID)&&IsSPG(GunID)&&IsArtillery(GunID)&&!HasMainGun(GunID)&&GS->DisplayName.Contains(TEXT("自走砲"))&&
+     FMath::IsNearlyEqual(Store->Find(GunID)->Perception.FieldOfView,120.f)&&Store->Find(GunID)->Weapon==EBattleWeapon::SupportGun&&Turrets.Contains(GunID);
+    Check(Body,TEXT("self-propelled gun: one vehicle, 200 health, 35 resources, machine gun, 120 degree view, gun mount"));
+    Check(FMath::IsNearlyEqual(ArmorScale(GunID,EBattleWeapon::Carbine),.1f)&&FMath::IsNearlyEqual(ArmorScale(GunID,EBattleWeapon::SupportGun),.1f)&&ArmorScale(GunID,EBattleWeapon::AntiTank)==1.f,
+     TEXT("self-propelled gun armour: small arms do a tenth, anti-tank weapons full damage"));
+    auto* NavSys=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());const ANavigationData* GN=NavFor(GunID);
+    Check(GN&&NavSys&&GN!=NavSys->GetDefaultNavDataInstance()&&FMath::IsNearlyEqual(BattleSquadType::SpeedAt(BattleSquadType::SPGun,GetWorld(),FVector::ZeroVector),700.f/TT->MoveSpeed,.01f),
+     TEXT("self-propelled gun: vehicle navigation data, 7 m/s in the open"));
+    const bool Second=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::SPGun);const int32 C2=M->Credits[0];
+    const bool Third=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::SPGun);
+    Check(Second&&!Third&&M->Credits[0]==C2&&M->ActiveOfType(0,BattleSquadType::SPGun)==2,TEXT("self-propelled guns: at most 2 per team"));
+    // Range 100 m to 1000 m on every map; spread 15 m at 1000 m.
+    const float MinR=ArtilleryMinRange(true),MaxR=ArtilleryMaxRange(true);const double Mid=(MinR+MaxR)*.5;
+    Check(FMath::IsNearlyEqual(MinR,10000.f)&&FMath::IsNearlyEqual(MaxR,100000.f)&&FMath::IsNearlyEqual(ArtillerySpread(true,100000.),1500.f,1.f),TEXT("self-propelled gun: 100 m to 1000 m, 15 m spread at 1000 m"));
+    const FVector GPos=GunID!=INDEX_NONE?Position(GunID):FVector::ZeroVector;const FVector Dir=GunID!=INDEX_NONE?ClearDirection(GunID,true,Mid):FVector::ZeroVector;
+    FVector Aim=FVector::ZeroVector;bool bBase=false,bHeld=false;
+    const bool Inside=!Dir.IsZero()&&PickArtilleryAim(GunID,KnownPair(GPos+Dir*Mid),Aim,bBase,bHeld)&&!bBase;
+    const bool Near=!Dir.IsZero()&&(!PickArtilleryAim(GunID,KnownPair(GPos+Dir*(MinR*.8)),Aim,bBase,bHeld)||bBase);
+    const bool Far=!Dir.IsZero()&&(!PickArtilleryAim(GunID,KnownPair(GPos+Dir*(MaxR*1.1)),Aim,bBase,bHeld)||bBase);
+    Check(Inside&&Near&&Far,TEXT("self-propelled gun target: between 100 m and 1000 m only"));
+    // Set-up 8 s with the gun turned to the target, then one round per SPGReload seconds.
+    const double Now=GetWorld()->GetTimeSeconds();bool SetUp=false;
+    if(!Dir.IsZero())
+    {
+     if(const auto* Turret=Turrets.Find(GunID);Turret&&Turret->IsValid())(*Turret)->SetWorldRotation(FRotator(0,Dir.Rotation().Yaw,0));
+     auto& A=Artillery.FindOrAdd(GunID);A=FArtillery();A.bHasTarget=true;A.Aim=GPos+Dir*Mid;A.NextPick=Now+1000.;
+     const int64 S0=ArtilleryShotsSPG;FVector ADir;
+     StepArtillery(GunID,Now,false,ADir);
+     StepArtillery(GunID,Now+TT->SPGSetupSeconds-.1,false,ADir);const bool Early=ArtilleryShotsSPG==S0;
+     StepArtillery(GunID,Now+TT->SPGSetupSeconds+.05,false,ADir);const bool Fired=ArtilleryShotsSPG==S0+1;
+     StepArtillery(GunID,Now+TT->SPGSetupSeconds+.05+TT->SPGReload*.5,false,ADir);const bool Loading=ArtilleryShotsSPG==S0+1;
+     StepArtillery(GunID,Now+TT->SPGSetupSeconds+.1+TT->SPGReload,false,ADir);const bool Again=ArtilleryShotsSPG==S0+2;
+     SetUp=Early&&Fired&&Loading&&Again;
+    }
+    Check(SetUp,TEXT("self-propelled gun fires after 8 s of set-up, one round per 10 s"));
+    ArtilleryShells.Reset();
+    // Armour: a mortar shell does nothing to an enemy vehicle, the gun's direct hit SPGBlastDamage, a near miss nothing.
+    if(M->Credits[1]<Cost){const int32 Add=Cost-M->Credits[1];M->Area.Income[1]+=Add;M->Credits[1]+=Add;}
+    for(const auto& P:Store->GetSquads())if(P.Value.Team==1&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==BattleSquadType::Rifle){Store->ApplyDamage(P.Value.LeaderUnitID,0,10000);break;}
+    M->UpdateArea(1);M->Area.Replacements.Reset();
+    const bool EnemyHired=M->HireAreaSquad(1,EBattleTraining::Regular,false,BattleSquadType::SPGun);
+    if(!EnemyHired)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_SPG_SMOKE enemy hire refused: %s"),*M->LastMessage);
+    const auto* ES=EnemyHired?Store->FindSquad(M->LastHiredSquadID):nullptr;const int32 EnemyGun=ES?ES->LeaderUnitID:INDEX_NONE;
+    bool Armour=false;float AfterHit=-1.f;
+    if(EnemyGun!=INDEX_NONE&&GunID!=INDEX_NONE)
+    {
+     FArtilleryShell Shell;Shell.ShooterID=GunID;Shell.Team=0;Shell.At=Position(EnemyGun);
+     Shell.bSPG=false;Shell.ShooterType=BattleSquadType::Mortar;ArtilleryImpact(Shell);const bool MortarNone=FMath::IsNearlyEqual(Store->Find(EnemyGun)->HP,200.f);
+     Shell.bSPG=true;Shell.ShooterType=BattleSquadType::SPGun;Shell.At=Position(EnemyGun)+FVector(BattleSquadType::VehicleRadius(BattleSquadType::SPGun)+300.f,0,0);ArtilleryImpact(Shell);
+     const bool MissNone=FMath::IsNearlyEqual(Store->Find(EnemyGun)->HP,200.f);
+     Shell.At=Position(EnemyGun);ArtilleryImpact(Shell);AfterHit=Store->Find(EnemyGun)->HP;
+     Armour=MortarNone&&MissNone&&FMath::IsNearlyEqual(AfterHit,200.f-TT->SPGBlastDamage,1.f);
+    }
+    Check(Armour,TEXT("shells and vehicles: mortar shells never hurt them, the gun only on a direct hit"));
+    // Save and restore: the gun keeps its body and mount; set-up and load are not saved.
+    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
+    const bool Restored=Valid&&M->RestoreSnapshot(Save);ABattleUnit* After=Actor(GunID);
+    Check(Restored&&After&&IsSPG(GunID)&&IsArtillery(GunID)&&FMath::IsNearlyEqual(After->GetCapsuleComponent()->GetScaledCapsuleRadius(),TT->SPGRadius,1.f)&&Turrets.Contains(GunID)&&Artillery.IsEmpty(),
+     TEXT("self-propelled gun survives save and restore"));
+    Mode->bCombatPaused=false;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_SPG_SMOKE squad=%d gun=%d enemy=%d dir=%s after_hit=%.0f nav=%s validation=%s"),GSID,GunID,EnemyGun,*Dir.ToCompactString(),AfterHit,GN?*GN->GetName():TEXT("none"),*Error);
    }
   }
   // Resource income: base 1 plus 1 per actually owned point every 20 s, for both teams at once.

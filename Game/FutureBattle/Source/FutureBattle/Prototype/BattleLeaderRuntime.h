@@ -175,6 +175,30 @@ public:
  bool FireTankGun(int32 ID,const FVector& Aim,double Now);
  bool TankGunHit(int32 ID,int32 VictimID); // a direct hit's damage (TankGunDamage, armour pierced)
  int64 TankGunShots=0,TankGunHits=0,TankGunKills=0,TankGunVehicleHits=0,TankGunBaseHits=0,TankGunPicks=0;double TankGunMs=0;
+ // Indirect fire (BattleArtillery.cpp, stage 1 2026-11-18): the mortar gunner (weapon Mortar) and the self-propelled gun (squad type 7).
+ // Runtime only, not saved: a restored unit is not set up and its gun is loaded; shells in flight are dropped on restore.
+ struct FArtillery{double StillSince=-1,ReadyAt=0,NextPick=0;int32 Shots=0;FVector Aim=FVector::ZeroVector;bool bHasTarget=false,bBase=false;};
+ struct FArtilleryShell{int32 ShooterID=INDEX_NONE,Team=0;uint8 ShooterType=0;bool bSPG=false;FVector At=FVector::ZeroVector;float Remaining=0;};
+ TMap<int32,FArtillery> Artillery;
+ TArray<FArtilleryShell> ArtilleryShells;
+ bool IsArtillery(int32 ID) const; // a living mortar gunner or self-propelled gun
+ bool IsSPG(int32 ID) const {return IsVehicle(ID)&&VehicleType(ID)==BattleSquadType::SPGun;}
+ float ArtilleryMinRange(bool bSPG) const;
+ float ArtilleryMaxRange(bool bSPG) const;
+ float ArtilleryBlastRadius(bool bSPG) const;
+ float ArtillerySpread(bool bSPG,double Distance) const; // landing circle radius at a distance
+ // Per frame from Follow: set-up (bMoving undoes it), a target pick every ArtilleryPickInterval s while still, firing when set up and
+ // loaded. True with Direction (2D) towards the current target.
+ bool StepArtillery(int32 ID,double Now,bool bMoving,FVector& Direction);
+ // Picks an aim point from Known (unit key -> known position): a cluster of at least ArtilleryMinCluster soldiers within range and no
+ // own unit within the blast radius plus spread (bFriendlyHeld: a candidate was refused for that). Then the enemy home if seen.
+ bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld);
+ bool AllyNear(int32 Team,const FVector& At,double Radius) const;
+ // Launches one shell at Aim (spread applied, flight time Distance / shell speed). Consumes mortar ammunition or loads the gun.
+ bool FireArtillery(int32 ID,const FVector& Aim,double Now);
+ void StepArtilleryShells(float Dt);
+ int32 ArtilleryImpact(const FArtilleryShell& Shell); // the explosion; returns the units damaged
+ int64 ArtilleryShotsMortar=0,ArtilleryShotsSPG=0,ArtilleryImpacts=0,ArtilleryHits=0,ArtilleryKills=0,ArtilleryBaseHits=0,ArtilleryFriendlyHolds=0,ArtilleryPicks=0;double ArtilleryMs=0;
  // Evaluation counters for BATTLE_TANK_COST (not AI input).
  mutable int64 TankSightTraces=0,TankSightReused=0,TankOrderSkips=0;mutable double TankSightMs=0;int32 TankOrders=0;double TankOrderMs=0;
  // MixedFast or Area. bSelect selects a new team-0 leader (player purchase); OutSquadID receives the new squad.

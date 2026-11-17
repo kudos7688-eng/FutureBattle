@@ -360,6 +360,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   if(bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::Heavy&&!Objectives.IsEmpty()){bStrategyBase=false;Target=AreaHeavyTarget(Team);}
   // Scout pairs (tactical role): watch from a post ahead of an own front point (AreaScoutPost); never the home assault.
   const bool bScout=bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::Scout;if(bScout)bStrategyBase=false;
+  // Indirect fire (mortar teams, self-propelled guns; tactical role): never the home assault; held back from known enemies below.
+  const bool bArtillery=bStrategy&&!Purpose&&BattleSquadType::IsArtillery(Pair.Value.SquadType);if(bArtillery)bStrategyBase=false;
   ++Group;
 		// Keep assignment stable when only some squads are delegated.
 		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated) continue;
@@ -388,6 +390,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     const double T=FVector::DotProduct(P-Own,Axis)/FMath::Max(1.0,Axis.SizeSquared2D());
     if(T<0.45&&FVector::Dist2D(P,Way)>2500)Center=Way;
    }
+  if(bArtillery&&bArea)Center=AreaArtilleryPost(Team,Pair.Key,Center);
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())
   {
    const auto& S=Pair.Value;

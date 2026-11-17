@@ -103,6 +103,8 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("HireAntiTank"), EKeys::Five, &ABattleController::HireAntiTank);
 	Button(TEXT("HireTank"), EKeys::Six, &ABattleController::HireTank);
 	Button(TEXT("HireArmoredCar"), EKeys::Seven, &ABattleController::HireArmoredCar);
+	Button(TEXT("HireMortar"), EKeys::Eight, &ABattleController::HireMortar);
+	Button(TEXT("HireSPGun"), EKeys::Nine, &ABattleController::HireSPGun);
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
 	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
 	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
@@ -896,6 +898,8 @@ void ABattleController::PressCommandButton(int32 Index)
  case 9: HireAntiTank(); break; // area battle: anti-tank team
  case 10: HireTank(); break; // area battle: tank
  case 11: HireArmoredCar(); break; // area battle: armoured car
+ case 12: HireMortar(); break; // area battle: mortar team
+ case 13: HireSPGun(); break; // area battle: self-propelled gun
  default: break;
  }
 }
@@ -995,4 +999,18 @@ void ABattleController::HireArmoredCar()
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
 	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::ArmoredCar); ShowNotice(Match->LastMessage);
+}
+// Area battle: key 8 buys a mortar team (squad type 6, at most AreaMortarLimit per team).
+void ABattleController::HireMortar()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Mortar); ShowNotice(Match->LastMessage);
+}
+// Area battle: key 9 buys a self-propelled gun (squad type 7, at most AreaSPGLimit per team).
+void ABattleController::HireSPGun()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::SPGun); ShowNotice(Match->LastMessage);
 }

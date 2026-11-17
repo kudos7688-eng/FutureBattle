@@ -62,6 +62,10 @@ void UBattleMatch::UpdateScoutReports()
  if(R->VehicleIDs.Num()&&FMath::FloorToInt(Now/60.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/60.))
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_COST t=%.0f sight_traces=%lld sight_reused=%lld sight_ms=%.1f orders=%d order_ms=%.1f order_skips=%lld gun_shots=%lld gun_hits=%lld gun_vehicle_hits=%lld gun_kills=%lld gun_base_hits=%lld gun_picks=%lld gun_ms=%.1f"),Now,R->TankSightTraces,R->TankSightReused,R->TankSightMs,R->TankOrders,R->TankOrderMs,R->TankOrderSkips,
    R->TankGunShots,R->TankGunHits,R->TankGunVehicleHits,R->TankGunKills,R->TankGunBaseHits,R->TankGunPicks,R->TankGunMs);
+ // Indirect fire (mortar teams, self-propelled guns), evaluation only: logged once any artillery unit has picked or fired.
+ if(R->ArtilleryPicks+R->ArtilleryShotsMortar+R->ArtilleryShotsSPG>0&&FMath::FloorToInt(Now/60.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/60.))
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_COST t=%.0f mortar_shots=%lld spg_shots=%lld impacts=%lld hits=%lld kills=%lld base_hits=%lld friendly_holds=%lld picks=%lld pick_ms=%.1f in_flight=%d"),Now,
+   R->ArtilleryShotsMortar,R->ArtilleryShotsSPG,R->ArtilleryImpacts,R->ArtilleryHits,R->ArtilleryKills,R->ArtilleryBaseHits,R->ArtilleryFriendlyHolds,R->ArtilleryPicks,R->ArtilleryMs,R->ArtilleryShells.Num());
  for(auto It=ScoutReports.CreateIterator();It;++It)
  {const auto* S=Store->FindSquad(It.Key());const auto& V=It.Value();
   // A load to an earlier match time drops reports from the abandoned future.

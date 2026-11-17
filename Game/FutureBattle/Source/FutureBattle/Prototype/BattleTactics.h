@@ -75,7 +75,7 @@ namespace BattleTactics
  // Strategy layer stage 2 (ROADMAP 2026-11-16) -BattleAreaPlan=N (default 0 = no plan, the fixed intent): 1 = EH expand then hold,
  // 2 = ESA expand, save, then mass on the enemy home. Phases switch by match time only; see UBattleMatch::AreaIntent.
  // Heavy infantry share of AI purchases: -BattleAreaHeavyShare=f overrides UBattleTuning::AreaHeavyShare (default 0.33 since 2026-11-16) for the trial team(s); -1 = not passed.
- struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; float InfiltrateRadius=0.f, FocusGain=0.f, FlankOffset=1.3f; bool bFlankSameSide=true; int32 BaseReturnLiving=5; int32 TrialTeam=-1; int32 Plan=0; float HeavyShare=-1.f; int32 ScoutKeep=-1; int32 ATKeep=-1; int32 TankKeep=-1; int32 ACKeep=-1; };
+ struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; float InfiltrateRadius=0.f, FocusGain=0.f, FlankOffset=1.3f; bool bFlankSameSide=true; int32 BaseReturnLiving=5; int32 TrialTeam=-1; int32 Plan=0; float HeavyShare=-1.f; int32 ScoutKeep=-1; int32 ATKeep=-1; int32 TankKeep=-1; int32 ACKeep=-1; int32 MortarKeep=-1; int32 SPGKeep=-1; };
  const FAreaStrategyTuning& AreaStrategy();
 	// SpreadScale: extra multiplier from runtime effects (suppression trial); 1 = none.
 	float SpreadDegrees(const FBattleUnitState& State, double Now, float SpreadScale = 1.f);
