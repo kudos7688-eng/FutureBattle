@@ -97,7 +97,17 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())){PC->BindLeaderDeaths();if(Team==0&&bSelect)PC->SetSelection(Actor(Members[0]));}
  // Newly purchased followers use the normal skeletal fallback until next load.
  // Existing VAT entries and animation clocks remain untouched by recruitment.
- Mode->RefreshVisibility();return true;
+ if(HireSightRefresh())Mode->RefreshVisibility();
+ return true;
+}
+
+// Full sight update right after a hire or scout handover. It scans every observer in one frame
+// (30-60 ms on map E early in a match, 2026-11-18 trace). Trial -BattleHireSightRefresh=0 skips it:
+// the new soldiers then enter perception on their next regular scan. Changes discovery timing, so matches change.
+bool UBattleLeaderRuntime::HireSightRefresh()
+{
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleHireSightRefresh="),V);return V!=0;}();
+ return bOn;
 }
 
 bool UBattleLeaderRuntime::PromoteScout(int32 SID,int32 NewID)
@@ -110,7 +120,7 @@ bool UBattleLeaderRuntime::PromoteScout(int32 SID,int32 NewID)
  if(VAT)VAT->RemoveUnit(NewID);
  HitIDs.Remove(Old->Capsule.Get());DestroyBody(*Old);Bodies.Remove(NewID);
  B.Actor->InitializeUnit(NewID);Mode->Units.Add(B.Actor.Get());HitIDs.Add(B.Actor->GetCapsuleComponent(),NewID);Bodies.Add(NewID,B);
- Plans.FindOrAdd(SID).bReplan=true;bSummaryDirty=true;Mode->RefreshVisibility();
+ Plans.FindOrAdd(SID).bReplan=true;bSummaryDirty=true;if(HireSightRefresh())Mode->RefreshVisibility();
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SCOUT_HANDOVER squad=%d leader=%d"),SID,NewID);
  return true;
 }
