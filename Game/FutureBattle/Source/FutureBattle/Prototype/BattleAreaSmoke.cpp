@@ -298,6 +298,38 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      TankGuns=SavedGuns;
      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_TANK_GUN_SMOKE tank=%d enemy=%d own=%d after2=%.0f"),TankID,EnemyTank,OwnTank,After2);
     }
+    // Armour AI, stage 3 (BattleArmourAI.cpp): the tank's objective is kept on the next pick and its overwatch post lies short of the
+    // point on the own side; a stopped hull turns no faster than its turn rate; no reaction without a threat or a hit; an enemy vehicle
+    // the team knows of sends the anti-tank teams to the nearest point and changes the AI's own mix (anti-tank team, second tank).
+    {
+     const auto* TT=GetDefault<UBattleTuning>();
+     M->CarChoices.Remove(TSID);
+     const int32 TankPick=M->AreaTankTarget(0,TSID),Again=M->AreaTankTarget(0,TSID);
+     const FVector WatchPost=M->Objectives.IsValidIndex(TankPick)?M->AreaTankPost(0,TankPick):FVector::ZeroVector;
+     const bool bPost=M->Objectives.IsValidIndex(TankPick)&&FVector::Dist2D(WatchPost,M->AreaHome(0))<FVector::Dist2D(M->Objectives[TankPick].Position,M->AreaHome(0))&&
+      FVector::Dist2D(WatchPost,M->Objectives[TankPick].Position)>=FMath::Min(double(TT->TankOverwatch),FVector::Dist2D(M->Objectives[TankPick].Position,M->AreaHome(0))-3000.)-1.;
+     Check(BattleTactics::ArmourAI(0)&&BattleTactics::ArmourAI(1)&&TankPick==Again&&bPost,TEXT("armour AI: tank objective kept, overwatch post short of the point on the own side"));
+     ABattleUnit* Hull=Actor(TankID);const float Yaw0=Hull?Hull->GetActorRotation().Yaw:0.f;
+     FaceVehicle(TankID,FRotator(0,Yaw0+90.f,0).Vector());
+     const float Turned=Hull?FMath::Abs(FMath::FindDeltaAngleDegrees(Yaw0,Hull->GetActorRotation().Yaw)):-1.f;
+     Check(Hull&&Turned<=TT->TankTurnRate*.1f+.01f&&!VehicleWatchDirection(TankID).IsNearlyZero(),TEXT("armour AI: a stopped hull turns at its turn rate and has a watch direction"));
+     if(Hull)Hull->SetActorRotation(FRotator(0,Yaw0,0));
+     const auto SavedKnown=M->KnownVehicles[0];M->KnownVehicles[0].Reset();
+     FVector BackGoal;FString Why;
+     const int32 Calm=M->AreaArmourReaction(0,TSID,0.f,BackGoal,Why),Shock=M->AreaArmourReaction(0,TSID,.5f,BackGoal,Why);
+     FAreaIntent Mix0;M->AreaComposition(0,Mix0,0);
+     const int32 NoneKnown=M->KnownEnemyVehicles(0),NoATTarget=M->AreaATTarget(0,TSID);
+     const int32 SeenPoint=M->Objectives.Num()-1;
+     UBattleMatch::FKnownVehicle Seen;Seen.At=M->Elapsed;Seen.Position=M->Objectives[SeenPoint].Position;M->KnownVehicles[0].Add(900001,Seen);
+     M->CarChoices.Remove(TSID);
+     const int32 KnownNow=M->KnownEnemyVehicles(0),ATTarget=M->AreaATTarget(0,TSID);
+     FAreaIntent Mix6;M->AreaComposition(0,Mix6,6);
+     M->KnownVehicles[0]=SavedKnown;M->CarChoices.Remove(TSID);
+     Check(Calm==0&&(Shock==0||(Shock==1&&!BackGoal.ContainsNaN()))&&NoneKnown==0&&NoATTarget==INDEX_NONE&&KnownNow==1&&ATTarget==SeenPoint,TEXT("armour AI: no reaction without a threat; a known enemy vehicle draws the anti-tank teams to the nearest point"));
+     Check(Mix0.ATKeep==0&&Mix0.TankKeep==0&&Mix0.SPGKeep==0&&Mix0.ACKeep==1&&Mix0.MortarKeep==1&&Mix6.ATKeep==1&&Mix6.TankKeep==FMath::Min(2,TT->AreaTankLimit)&&Mix6.SPGKeep==0&&!BattleTactics::AreaComposition(1),
+      TEXT("composition: car and mortar first, a tank after six purchases, anti-tank teams and a second tank against known armour; off by default"));
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_ARMOUR_AI_SMOKE tank_target=%d post=%s turned=%.2f shock=%d why=%s at_target=%d mix6=at%d/tank%d/ac%d/mortar%d/spg%d"),TankPick,*WatchPost.ToCompactString(),Turned,Shock,*Why,ATTarget,Mix6.ATKeep,Mix6.TankKeep,Mix6.ACKeep,Mix6.MortarKeep,Mix6.SPGKeep);
+    }
     Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
     const bool Restored=Valid&&M->RestoreSnapshot(Save);ABattleUnit* After=Actor(TankID);
     Check(Restored&&After&&IsVehicle(TankID)&&After->GetCapsuleComponent()->GetScaledCapsuleRadius()>=150.f&&Turrets.Contains(TankID),TEXT("tank survives save and restore"));

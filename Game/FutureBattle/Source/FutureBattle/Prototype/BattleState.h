@@ -412,6 +412,20 @@ public:
 	UPROPERTY(Config, EditAnywhere) float VehicleRepairRatio = .5f;
 	UPROPERTY(Config, EditAnywhere) float ACThreatMargin = 3000.f;
 	UPROPERTY(Config, EditAnywhere) float ACChoiceHold = 30.f;
+	// Armour AI, stage 3 (2026-11-18, BattleArmourAI.cpp; first values, numbers delegated). bArmourAI: weapon-aware targets, hull facing,
+	// vehicle stand-off from known anti-tank soldiers (their reach plus VehicleStandOffMargin) and after losing VehicleShockRatio of its
+	// health within 5 s, infantry with no anti-tank weapon falling back from a visible tank within ArmourFearRange (ArmourFearRangeProfile
+	// with the range profile), an anti-tank gunner keeping his last ATKeepRounds for vehicles while his team knows of one (VehicleMemory
+	// seconds), tanks on overwatch TankOverwatch short of their point. bAreaComposition: the AI picks its own mix of squad types.
+	UPROPERTY(Config, EditAnywhere) bool bArmourAI = true;
+	UPROPERTY(Config, EditAnywhere) float VehicleStandOffMargin = 3000.f;
+	UPROPERTY(Config, EditAnywhere) float VehicleShockRatio = .2f;
+	UPROPERTY(Config, EditAnywhere) float ArmourFearRange = 12000.f;
+	UPROPERTY(Config, EditAnywhere) float ArmourFearRangeProfile = 20000.f;
+	UPROPERTY(Config, EditAnywhere) int32 ATKeepRounds = 2;
+	UPROPERTY(Config, EditAnywhere) float VehicleMemory = 120.f;
+	UPROPERTY(Config, EditAnywhere) float TankOverwatch = 12000.f;
+	UPROPERTY(Config, EditAnywhere) bool bAreaComposition = false;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRange = 30000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRangeProfile = 40000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutStillSpeed = 30.f;

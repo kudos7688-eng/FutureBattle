@@ -77,6 +77,10 @@ namespace BattleTactics
  // Heavy infantry share of AI purchases: -BattleAreaHeavyShare=f overrides UBattleTuning::AreaHeavyShare (default 0.33 since 2026-11-16) for the trial team(s); -1 = not passed.
  struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; float InfiltrateRadius=0.f, FocusGain=0.f, FlankOffset=1.3f; bool bFlankSameSide=true; int32 BaseReturnLiving=5; int32 TrialTeam=-1; int32 Plan=0; float HeavyShare=-1.f; int32 ScoutKeep=-1; int32 ATKeep=-1; int32 TankKeep=-1; int32 ACKeep=-1; int32 MortarKeep=-1; int32 SPGKeep=-1; };
  const FAreaStrategyTuning& AreaStrategy();
+ // Armour AI, stage 3 (BattleArmourAI.cpp): -BattleArmourAI=0/1 (UBattleTuning::bArmourAI, default 1), -BattleArmourAITeam=0/1 for one team only.
+ bool ArmourAI(int32 Team);
+ // Strategic layer trial -BattleAreaComposition=0/1 (UBattleTuning::bAreaComposition, default 0; the trial team with -BattleAreaTrialTeam).
+ bool AreaComposition(int32 Team);
 	// SpreadScale: extra multiplier from runtime effects (suppression trial); 1 = none.
 	float SpreadDegrees(const FBattleUnitState& State, double Now, float SpreadScale = 1.f);
 	FVector ShotDirection(const FBattleUnitState& State, FVector Aim, double Now, float SpreadScale = 1.f);

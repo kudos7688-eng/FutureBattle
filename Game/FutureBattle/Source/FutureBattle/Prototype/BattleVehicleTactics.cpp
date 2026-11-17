@@ -8,7 +8,7 @@
 #include "BattleFieldLayout.h"
 #include "FutureBattle.h"
 
-bool UBattleMatch::AreaArmourThreat(int32 Team,const FVector& P) const
+bool UBattleMatch::AreaArmourThreat(int32 Team,const FVector& P,bool bTankGuns) const
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  if(!Store||!R)return false;
@@ -21,7 +21,7 @@ bool UBattleMatch::AreaArmourThreat(int32 Team,const FVector& P) const
   const auto* U=Store->Find(Key);if(!U||!U->IsAlive())continue;
   double Reach=0;
   if(U->Weapon==EBattleWeapon::AntiTank)Reach=AT;
-  else if(R->HasMainGun(Key))Reach=Gun;
+  else if(bTankGuns&&R->HasMainGun(Key))Reach=Gun;
   if(Reach>0&&FVector::DistSquared2D(P,V.Enemies[I])<=Reach*Reach)return true;
  }
  return false;

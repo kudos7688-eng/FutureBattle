@@ -99,10 +99,11 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   FString::Printf(TEXT("CONTACTS %d / ARMED %d"),Threats,O.Armed);
  P.Age+=Dt; P.RetrySeconds=FMath::Max(0.f,P.RetrySeconds-Dt);
  P.SafeSeconds=Threats==0 && O.RecentDamage==0?P.SafeSeconds+Dt:0.f;
+ FString CauseOverride;
  auto Retreat=[&]()
  {
   FVector Goal;
-  if(RetreatGoal(*S,O,Goal)) Apply(SID,EBattleSquadTactic::Retreat,EBattleOrder::Move,Goal,Cause);
+  if(RetreatGoal(*S,O,Goal)) Apply(SID,EBattleSquadTactic::Retreat,EBattleOrder::Move,Goal,CauseOverride.IsEmpty()?Cause:CauseOverride);
   else { Apply(SID,EBattleSquadTactic::Regroup,EBattleOrder::Hold,Here,TEXT("NO SAFER REACHABLE ROUTE / HOLD")); P.RetrySeconds=T->SquadRetreatRetrySeconds; }
  };
  auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
@@ -170,7 +171,9 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  if(P.Action==EBattleSquadTactic::Regroup || P.Action==EBattleSquadTactic::Recover)
  {
   if(Threats && P.RetrySeconds<=0 && (Emergency || P.Action==EBattleSquadTactic::Regroup)) { Retreat(); return; }
-  const bool ReadyToReturn=O.Armed>=FMath::CeilToInt(O.Living*.6f) && O.Living>S->Members.Num()*T->SquadRetreatLivingRatio && O.Health/FullHP>=.6f;
+  // Armour AI: a vehicle resumes above its repair threshold (below it, it drives home; between that and 60% it used to wait forever).
+  const float ResumeHealth=bVehicle&&BattleTactics::ArmourAI(S->Team)?FMath::Min(.6f,GetDefault<UBattleTuning>()->VehicleRepairRatio):.6f;
+  const bool ReadyToReturn=O.Armed>=FMath::CeilToInt(O.Living*.6f) && O.Living>S->Members.Num()*T->SquadRetreatLivingRatio && O.Health/FullHP>=ResumeHealth;
   int32 Joined=0; for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive() && FVector::Dist2D(Runtime->Position(ID),P.Destination)<500) ++Joined;
   const bool Cohesive=Joined>=FMath::CeilToInt(O.Living*.7f);
   if(P.SafeSeconds>=T->SquadRegroupSafeSeconds && P.Age>=T->SquadRegroupSafeSeconds)
@@ -191,6 +194,16 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
     Apply(SID,EBattleSquadTactic::Recover,EBattleOrder::Defend,Here,Cohesive?TEXT("DEPLETED / DEFEND REGROUP POINT / NO AUTO HEAL"):TEXT("STRAGGLERS / DEFEND REGROUP POINT"));
   }
   return;
+ }
+ // Armour AI, stage 3 (BattleArmourAI.cpp): a vehicle backs out of known anti-tank reach or away from a heavy hit; infantry with no
+ // anti-tank weapon falls back from a tank it sees. Only while a vehicle is on the field.
+ if(Match->bArea && Runtime->VehicleIDs.Num() && P.RetrySeconds<=0 && P.Action!=EBattleSquadTactic::Support && BattleTactics::ArmourAI(S->Team))
+ {
+  FVector Goal;
+  const int32 Reaction=Match->AreaArmourReaction(S->Team,SID,O.RecentDamage/FullHP,Goal,CauseOverride);
+  if(Reaction==1 && Apply(SID,EBattleSquadTactic::Retreat,EBattleOrder::Move,Goal,CauseOverride)){Event(TEXT("ArmourStandOff"));P.RetrySeconds=T->SquadRetreatRetrySeconds;return;}
+  if(Reaction==2){Event(TEXT("ArmourFallBack"));Retreat();S->TacticalPlan.RetrySeconds=FMath::Max(S->TacticalPlan.RetrySeconds,T->SquadRetreatRetrySeconds);return;}
+  CauseOverride.Reset();
  }
  if(Emergency) { if(P.Action==EBattleSquadTactic::Flank)Event(TEXT("WideFlankEmergency"));Retreat(); return; }
  if(P.Action==EBattleSquadTactic::Flank) { EvaluateFlank(SID,O); return; }

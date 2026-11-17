@@ -132,7 +132,24 @@ public:
 	// INDEX_NONE when no objective qualifies (the caller keeps its default). Known enemies (AreaIntelView) and observed ownership only.
 	int32 AreaCarTarget(int32 Team, int32 SquadID) const;
 	// True when an enemy the team knows of and can tell apart as an anti-tank soldier or a tank threatens a vehicle at P.
-	bool AreaArmourThreat(int32 Team, const FVector& P) const;
+	bool AreaArmourThreat(int32 Team, const FVector& P, bool bTankGuns = true) const; // bTankGuns false: anti-tank soldiers only
+	// Armour AI, stage 3 (BattleArmourAI.cpp; -BattleArmourAI, default 1). Known enemies and own state only.
+	// Enemy vehicles the team has known of within the last VehicleMemory seconds (seen units; transient, not saved).
+	struct FKnownVehicle { float At = -1.f; FVector Position = FVector::ZeroVector; };
+	mutable TMap<int32, FKnownVehicle> KnownVehicles[2];
+	void NoteKnownVehicles(int32 Team) const;
+	int32 KnownEnemyVehicles(int32 Team, TArray<FVector>* Positions = nullptr) const;
+	// Squad reaction to armour: 1 = a vehicle backs away to Goal (a known anti-tank soldier within reach, or DamageRatio of its health
+	// lost in 5 s), 2 = infantry with no anti-tank weapon falls back from a tank it sees, 0 = none.
+	int32 AreaArmourReaction(int32 Team, int32 SquadID, float DamageRatio, FVector& Goal, FString& Why) const;
+	// Tank objective (the point with the most known enemies, outside the city of map E) and its overwatch post short of that point.
+	int32 AreaTankTarget(int32 Team, int32 SquadID) const;
+	FVector AreaTankPost(int32 Team, int32 Point) const;
+	// Anti-tank team objective: the point nearest a known enemy vehicle; INDEX_NONE while the team knows of none.
+	int32 AreaATTarget(int32 Team, int32 SquadID) const;
+	int32 AreaVehicleChoice(int32 SquadID, TFunctionRef<double(int32)> ScoreOf) const;
+	// Strategic layer trial (-BattleAreaComposition=1): the AI's own mix of special squad types, written into the intent's Keep numbers.
+	void AreaComposition(int32 Team, FAreaIntent& Intent, int32 Bought) const;
 	struct FCarChoice { int32 Target = INDEX_NONE; double At = -1; };
 	mutable TMap<int32, FCarChoice> CarChoices; // transient, squad -> current objective
 	// Scout reports (ROADMAP 2026-11-14, stage 3): what a scout pair sees beyond normal sight reaches its team only through a timed

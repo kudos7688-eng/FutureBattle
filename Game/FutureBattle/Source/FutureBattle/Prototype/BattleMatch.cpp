@@ -365,6 +365,14 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   // Armoured cars (tactical role, stage 2): an open point away from known anti-tank threats (AreaCarTarget); never the home assault.
   if(bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::ArmoredCar)
   {bStrategyBase=false;if(const int32 CarTarget=AreaCarTarget(Team,Pair.Key);CarTarget!=INDEX_NONE)Target=CarTarget;}
+  // Armour AI, stage 3 (BattleArmourAI.cpp): a tank outside the home-assault slots supports the point with the most known enemies from
+  // an overwatch post; an anti-tank team goes to the point nearest a known enemy vehicle (the normal spread while none is known).
+  bool bTankPost=false;
+  if(bStrategy&&!Purpose&&BattleTactics::ArmourAI(Team)&&Pair.Value.CommandStatus==EBattleCommandStatus::Active)
+  {
+   if(Pair.Value.SquadType==BattleSquadType::Tank&&!bStrategyBase){if(const int32 TankTarget=AreaTankTarget(Team,Pair.Key);TankTarget!=INDEX_NONE){Target=TankTarget;bTankPost=true;}}
+   else if(Pair.Value.SquadType==BattleSquadType::AntiTank){if(const int32 ATTarget=AreaATTarget(Team,Pair.Key);ATTarget!=INDEX_NONE){Target=ATTarget;bStrategyBase=false;}}
+  }
   ++Group;
 		// Keep assignment stable when only some squads are delegated.
 		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated) continue;
@@ -394,6 +402,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     if(T<0.45&&FVector::Dist2D(P,Way)>2500)Center=Way;
    }
   if(bArtillery&&bArea)Center=AreaArtilleryPost(Team,Pair.Key,Center);
+  // The tank's overwatch post; a post near its current mission is kept (no new order for every small change in what the team knows).
+  if(bTankPost){Center=AreaTankPost(Team,Target);if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2500.)Center=Pair.Value.MissionDestination;}
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())
   {
    const auto& S=Pair.Value;

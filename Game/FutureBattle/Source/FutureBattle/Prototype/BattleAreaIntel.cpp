@@ -46,6 +46,7 @@ const UBattleMatch::FAreaIntelView& UBattleMatch::AreaIntelView(int32 Team) cons
   for(int32 I=0;I<N;++I)if(FVector::DistSquared2D(E.Value,Objectives[I].Position)<=Radius2)++V.EnemyAt[I];
   if(FVector::DistSquared2D(E.Value,EnemyHome)<=FMath::Square(15000.))++V.HomeEnemies;
  }
+ NoteKnownVehicles(FMath::Clamp(Team,0,1));
  return V;
 }
 

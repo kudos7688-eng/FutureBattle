@@ -90,6 +90,8 @@ struct FBattleLeaderBody
 struct FBattleLeaderPlan
 {
  int32 OrderRevision=INDEX_NONE, TargetID=INDEX_NONE;
+ // Armour AI: the visible enemy vehicle the squad's anti-tank gunners fire at (INDEX_NONE = none; they share TargetID then).
+ int32 ArmourTargetID=INDEX_NONE;
  double NextThink=0, NextPath=0;
  bool bReplan=true;
  TArray<FVector> Path;
@@ -152,6 +154,12 @@ public:
  // Turns a vehicle towards Direction at its type's turn rate; it drives only roughly forwards (Direction becomes its heading, Scale drops while turning).
  void SteerVehicle(int32 ID,FVector& Direction,float& Scale);
  void AimTurret(int32 ID,const FVector& Direction);
+ // Armour AI, stage 3 (BattleArmourAI.cpp). PickArmourTargets: weapon-aware squad targets while the squad sees a vehicle.
+ // FaceVehicle: a stopped vehicle turns its hull (its forward view) at its turn rate. VehicleWatchDirection: towards the nearest
+ // enemy its team knows of, else the enemy home.
+ void PickArmourTargets(int32 SquadID,struct FBattleLeaderPlan& Plan);
+ void FaceVehicle(int32 ID,const FVector& Direction);
+ FVector VehicleWatchDirection(int32 ID) const;
  // Navigation data for a unit's paths: the vehicle agent for tanks, nullptr (the default infantry data) otherwise.
  class ANavigationData* NavFor(int32 ID) const;
  // Performance (2026-11-17): a far enemy vehicle (beyond the observer's own sight, within VehicleSpotRange) has its line of sight

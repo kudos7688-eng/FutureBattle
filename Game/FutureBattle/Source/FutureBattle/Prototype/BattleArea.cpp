@@ -23,7 +23,7 @@ int32 UBattleMatch::AreaScore(int32 Team)const
 }
 void UBattleMatch::InitializeArea()
 {
- Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();Score[0]=Score[1]=0;
+ Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();CarChoices.Reset();Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
  for(int32 Team=0;Team<2;++Team)
@@ -122,9 +122,12 @@ void UBattleMatch::UpdateAreaHiring()
   if(Team==0&&!R->SightExperiment.Enabled)continue; // The player's resources are spent only by the player.
   int32 Pending=0;for(const auto& Q:Area.Replacements)Pending+=Store->Find(Q.Key)->Team==Team;
   // Squad type by the intent's heavy share: heavy infantry while the team's bought heavy squads are below that share of its purchases.
-  const FAreaIntent HireIntent=AreaIntent(Team); uint8 Type=BattleSquadType::Rifle;
+  FAreaIntent HireIntent=AreaIntent(Team); uint8 Type=BattleSquadType::Rifle;
   int32 Bought=0,Heavy=0;for(const auto& P:Store->GetSquads())if(P.Value.Team==Team){Bought+=P.Key>50;Heavy+=P.Value.SquadType==BattleSquadType::Heavy;}
   if(HireIntent.HeavyShare>0&&Heavy<HireIntent.HeavyShare*(Bought+1))Type=BattleSquadType::Heavy;
+  // Strategic layer trial -BattleAreaComposition=1: the AI sets the numbers of special squad types it keeps (BattleArmourAI.cpp).
+  const bool bComposition=BattleTactics::AreaComposition(Team);const uint8 PlainType=Type;
+  if(bComposition)AreaComposition(Team,HireIntent,Bought);
   // Scout pairs first when the team has fewer active pairs than it wants: none during the first purchases (taking points),
   // then one more per AreaScoutAfterHires purchases up to the intent's ScoutKeep; a lost pair is bought again.
   {
@@ -132,7 +135,8 @@ void UBattleMatch::UpdateAreaHiring()
    const int32 Want=FMath::Min(HireIntent.ScoutKeep,Bought/After);
    if(Want>0&&ActiveScouts(Team)<Want)Type=BattleSquadType::Scout;
    // Anti-tank teams (trial -BattleAreaATKeep, default AreaATKeep 0): the same pacing as scout pairs, scouts first.
-   const int32 ATWant=FMath::Min(HireIntent.ATKeep,Bought/After);
+   // With the composition trial, anti-tank teams answer known enemy vehicles at once (no pacing by purchases).
+   const int32 ATWant=bComposition?HireIntent.ATKeep:FMath::Min(HireIntent.ATKeep,Bought/After);
    if(Type!=BattleSquadType::Scout&&ATWant>0&&ActiveOfType(Team,BattleSquadType::AntiTank)<ATWant)Type=BattleSquadType::AntiTank;
    // Tanks (trial -BattleAreaTankKeep, default AreaTankKeep 0): the same pacing.
    const int32 TankWant=FMath::Min(HireIntent.TankKeep,Bought/After);
@@ -146,6 +150,8 @@ void UBattleMatch::UpdateAreaHiring()
    const int32 SPGWant=FMath::Min(HireIntent.SPGKeep,Bought/After);
    if(Type==BattleSquadType::Rifle&&SPGWant>0&&ActiveOfType(Team,BattleSquadType::SPGun)<SPGWant)Type=BattleSquadType::SPGun;
   }
+  // Composition trial: an expensive type the team is far from affording (below 60% of its cost) does not hold up the plain purchases.
+  if(bComposition&&Type!=PlainType&&BattleSquadType::AreaCost(Type)>=20&&Credits[Team]-Pending<FMath::CeilToInt(BattleSquadType::AreaCost(Type)*.6f)+HireIntent.HireReserve)Type=PlainType;
   const int32 TypeCost=Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
   if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=25)continue;
   // Pacing (own clock and own purchase history only): spacing between purchases and no purchases near the time limit,
