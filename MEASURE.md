@@ -61,6 +61,8 @@
 
 `OutputName` やタグには、まだ使っていない名前を付ける。既存の証拠を上書きしない。
 
+11-04〜11-11 の個別の調査で使った試験・計測スクリプト（T2/T5 系、認識監査、GT の内訳など62本）は `Setup/Legacy/` へ移した。使うときは `Setup/Legacy/README.md` を読む。
+
 リポジトリ直下の `.ignore` により、ripgrep（Claude の Grep）は `Setup/Benchmarks/` や `Setup/Runs/` などの計測結果を検索しない。結果の中を検索するときは、パスを指定して `rg --no-ignore` か `grep -r` を使う。
 
 ## 4. してはいけないこと
