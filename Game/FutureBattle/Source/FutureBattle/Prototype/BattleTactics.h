@@ -68,14 +68,14 @@ namespace BattleTactics
  // until its leader is within that many metres of the enemy home, then switches to AttackMove.
  // S6 (UBattleTuning::AreaFocusGain, adopted 1 on 2026-11-15; -BattleAreaFocus=<gain>, 0 = OFF): the point not observed as own that is nearest the team's own home gets its
  // weight multiplied by 1+gain (concentration of force; static positions and observed ownership only).
- // S7 trial (-BattleAreaBaseFlank=<f>, default 0 = OFF): a home-assault squad heads first for a flank waypoint at x=0, y=+/-f times the
+ // S7 (-BattleAreaBaseFlank=<f>; FS13BR5 = flank 1.3, one side, return at 5 living adopted as the default 2026-11-17, -BattleAreaBaseFlank=0 -BattleAreaBaseFlankSide=0 -BattleAreaBaseReturnLiving=0 restore the old straight assault): a home-assault squad heads first for a flank waypoint at x=0, y=+/-f times the
  // side points' |y| (side alternates by squad), then for the enemy home once its leader is past 45% of the home-to-home line.
  // S8 trials: -BattleAreaBaseFlankSide=1 puts every S7 waypoint on the +y side (concentrate the assault on one route);
- // -BattleAreaBaseReturnLiving=N (1..9, default 0 = use SupplyReturnLiving) is the living count at which an S1 home-assault squad returns for supply.
+ // -BattleAreaBaseReturnLiving=N (1..9, default 5; 0 = use SupplyReturnLiving) is the living count at which an S1 home-assault squad returns for supply.
  // Strategy layer stage 2 (ROADMAP 2026-11-16) -BattleAreaPlan=N (default 0 = no plan, the fixed intent): 1 = EH expand then hold,
  // 2 = ESA expand, save, then mass on the enemy home. Phases switch by match time only; see UBattleMatch::AreaIntent.
  // Heavy infantry share of AI purchases: -BattleAreaHeavyShare=f overrides UBattleTuning::AreaHeavyShare (default 0.33 since 2026-11-16) for the trial team(s); -1 = not passed.
- struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; float InfiltrateRadius=0.f, FocusGain=0.f, FlankOffset=0.f; bool bFlankSameSide=false; int32 BaseReturnLiving=0; int32 TrialTeam=-1; int32 Plan=0; float HeavyShare=-1.f; int32 ScoutKeep=-1; int32 ATKeep=-1; int32 TankKeep=-1; };
+ struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; float InfiltrateRadius=0.f, FocusGain=0.f, FlankOffset=1.3f; bool bFlankSameSide=true; int32 BaseReturnLiving=5; int32 TrialTeam=-1; int32 Plan=0; float HeavyShare=-1.f; int32 ScoutKeep=-1; int32 ATKeep=-1; int32 TankKeep=-1; };
  const FAreaStrategyTuning& AreaStrategy();
 	// SpreadScale: extra multiplier from runtime effects (suppression trial); 1 = none.
 	float SpreadDegrees(const FBattleUnitState& State, double Now, float SpreadScale = 1.f);

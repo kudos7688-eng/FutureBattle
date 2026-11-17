@@ -262,10 +262,12 @@ int32 UBattleMatch::AreaHireNeed(int32 Team) const
 FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
 {
  // Stage 1 (ROADMAP 2026-11-16): the fixed intent equals the configured S1/S4/S6 tuning and AI hire reserve.
- // -BattleAreaTrialTeam=0/1 still limits the S4/S6 trials to one team.
+ // -BattleAreaTrialTeam=0/1 limits the S4/S6 command-line trials to one team; the other team keeps the configured S4/S6 (2026-11-18 fix:
+ // before, it lost S4/S6, which biased every one-team screen since S4/S6 became the default).
+ const auto* T=GetDefault<UBattleTuning>();
  const auto& S=BattleTactics::AreaStrategy();const bool bTrial=S.TrialTeam<0||S.TrialTeam==Team;
- FAreaIntent I;I.AttackWeight=S.AttackWeight;I.BaseShare=S.BaseShare;I.bFrontBalance=bTrial&&S.bFrontBalance;I.FrontGain=S.FrontGain;
- I.FocusGain=bTrial?S.FocusGain:0.f;I.HireReserve=BattleTactics::AreaHire().Reserve;
+ FAreaIntent I;I.AttackWeight=S.AttackWeight;I.BaseShare=S.BaseShare;I.bFrontBalance=bTrial?S.bFrontBalance:T->bAreaFrontBalance;I.FrontGain=bTrial?S.FrontGain:FMath::Clamp(T->AreaFrontGain,0.f,5.f);
+ I.FocusGain=bTrial?S.FocusGain:FMath::Clamp(T->AreaFocusGain,0.f,10.f);I.HireReserve=BattleTactics::AreaHire().Reserve;
  // Heavy infantry share of AI purchases: the configured default for both teams; the -BattleAreaHeavyShare trial replaces it for the trial team(s).
  I.HeavyShare=bTrial&&S.HeavyShare>=0?S.HeavyShare:FMath::Clamp(GetDefault<UBattleTuning>()->AreaHeavyShare,0.f,1.f);
  // Scout pairs the AI keeps: configured default; -BattleAreaScoutKeep replaces it for the trial team(s).

@@ -13,8 +13,8 @@ struct FAreaIntent
  static constexpr int32 MaxObjectives=8; // three objectives on maps A-D, five on map E
  float PointWeight[MaxObjectives]={1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f}; // per objective index, multiplies the S1 weight
  int32 HireReserve=0;                 // resources kept back before an AI purchase (above pending replacements)
- float FlankOffset=0.f; bool bFlankSameSide=false; // S7/S8 route of home-assault squads (0 = straight)
- int32 BaseReturnLiving=0;            // S8: living count at which home-assault squads return for supply (0 = SupplyReturnLiving)
+ float FlankOffset=1.3f; bool bFlankSameSide=true; // S7/S8 route of home-assault squads (0 = straight; FS13BR5 default since 2026-11-17)
+ int32 BaseReturnLiving=5;            // S8: living count at which home-assault squads return for supply (0 = SupplyReturnLiving; 5 by default since 2026-11-17)
  int32 Phase=0;                       // index of the active phase of the team plan (0 when no plan)
  float HeavyShare=0.f;                // share of AI purchases that are heavy infantry (0 = rifle squads only)
  int32 TankKeep=0;                    // tanks the AI keeps active (same pacing as scouts; 0 = none)
