@@ -154,7 +154,9 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	static const bool bPairReuseTrial = [] { int32 V = 0; FParse::Value(FCommandLine::Get(), TEXT("BattleSightPairReuse="), V); return V != 0; }();
 	const bool bParallel = bParallelTrial && !bPairReuseTrial && Mixed && bReuseSightContext;
 	struct FSightJob { const TPair<int32, FLiveUnit>* Pair = nullptr; FBattleSightContext Sight; bool bFarPulse = false; int32 First = 0, Num = 0; };
-	TArray<FSightJob> Jobs; TArray<const FLiveUnit*> JobCandidates;
+	// Scratch buffers of the scan (game thread only, never re-entered): emptied each update, their memory kept for the next one.
+	static TArray<FSightJob> Jobs; static TArray<const FLiveUnit*> JobCandidates; static TSet<int32> InView;
+	Jobs.Reset(); JobCandidates.Reset();
 	TSet<int32> UpdatedObservers;
 	{
 		FBattleScopedMetric ScanTiming(Metrics, EBattleMetricPhase::SightScan);
@@ -229,7 +231,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 				Job.Num = JobCandidates.Num() - Job.First;
 				continue;
 			}
-			TSet<int32> InView;
+			InView.Reset();
 			if (bGridSearch) for (const FLiveUnit* Candidate : Candidates) Consider(Observer, Pair, Sight, bFarPulse, InView, *Candidate, -1);
 			else for (const auto& Candidate : Alive) Consider(Observer, Pair, Sight, bFarPulse, InView, Candidate.Value, -1);
 			Forget(Observer, Profile, InView);
@@ -238,9 +240,9 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 		{
 			// Stage 1 (game thread): the same filtering Consider does before its line of sight test; only candidates that would reach
 			// CanSeeWithContext's trace get one. Vehicles beyond the observer's own range keep the serial cached path (CanSeeVehicleFar).
-			TArray<int32> Pre; Pre.SetNumUninitialized(JobCandidates.Num());
+			static TArray<int32> Pre; Pre.SetNumUninitialized(JobCandidates.Num(), EAllowShrinking::No);
 			struct FSightTrace { FVector End; int32 Job; FHitResult Hit; uint64 Cycles = 0; };
-			TArray<FSightTrace> Traces; Traces.Reserve(JobCandidates.Num());
+			static TArray<FSightTrace> Traces; Traces.Reset();
 			{
 				TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightParallelPrepare);
 				for (int32 J = 0; J < Jobs.Num(); ++J)
@@ -277,7 +279,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 				for (const FSightJob& Job : Jobs)
 				{
 					FBattleObserver& Observer = Observers.FindChecked(Job.Pair->Key);
-					TSet<int32> InView;
+					InView.Reset();
 					for (int32 K = Job.First; K < Job.First + Job.Num; ++K)
 					{
 						const FLiveUnit& Candidate = *JobCandidates[K]; int32 Visible = Pre[K] < 0 ? -1 : 0;

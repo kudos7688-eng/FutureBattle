@@ -1,5 +1,20 @@
 # 現在地と次の作業
 
+## 2026-11-17 22時40分 Claude（視線判定の負荷対策）：視線判定コードの重複整理（試合は不変）
+
+- 変更範囲：`BattleLeaderRuntime.cpp/.h`、`BattleVehicle.cpp`、`BattleArea.cpp`、`BattlePerception.cpp`。
+  - 「生存・距離・視野角」の事前判定が4か所（`CanSee`、`CanSeeWithContext`、`CanSeeVehicleFar`、`PrepareSightTrace`）に同じ式で書かれていたのを `PrepareSightTrace` の1か所にまとめた。`CanSeeVehicleFar` は戦車だけが対象なので、同じ式で結果は変わらない。
+  - 線の判定と統計（`-BattleSightHitStats`）の記録を、新しく作った `TraceSight` にまとめた。`AreaVisible` もこれを使う。「見えたか」の判定は `SightHitVisible` に統一した。並列処理の作業スレッドは統計を記録できないため、自前の判定のまま残した。
+  - 並列処理の配列（`Jobs`、`JobCandidates`、`Pre`、`Traces`）と観測者ごとの `InView` は、毎回確保し直さず、中身を空にして使い回す（関数内の static。ゲームスレッドからしか呼ばれず、途中で再び呼ばれることもない）。`Traces` を候補全員の数だけ予約していた分もなくなった。
+  - 見送り：`FSightJob` が視線情報をコピーする点。調べると、衝突判定の設定の除外リストはインライン確保の配列で、コピーしてもヒープ確保は起きなかった。
+- 検証：
+  - Build-Editor は成功。警告は今回変更していないファイルの既存のものだけ。
+  - Test-Battle、Test-Area（`-OutputName dedup-1117`）、Test-MixedSave（同）は、いずれも failures=0。
+  - 修正前（`dd0-*`）と修正後（`dd1-*`）の12試合を比べ、勝者・得点・射撃数・射撃距離列のハッシュがすべて一致した。条件はマップA/E × seed 7（既定・逐次・戦車・味方透過・統計ON）と seed 11 で、`Setup/Benchmarks/SightTrial-20261111` にある。統計ONの試合は、記録した線の判定の数も一致した（A 2,403,741、E 42,229,350）。
+  - 修正後の試合には `-AreaBaseFlank 0 -AreaBaseFlankSide 0 -AreaBaseReturnLiving 0` を付けた。同じ作業ツリーにある別セッションの既定値変更（FS13BR5、未コミット）の影響を除くためで、付けると従来の既定に戻る。
+- 制限：処理時間の改善量は測っていない。配列の使い回しで減るのは前処理の確保の分だけで、描画ありの計測もしていない。
+- 次の一手：特になし。並列処理と0.4秒走査を組み合わせた描画あり計測は、引き続き未実施。
+
 ## 2026-11-17 20時10分 Claude（経済・AI戦略）：マップEの片側試験（第1段のみ）：撃ち返し・隔回検索・本拠地攻撃の集中
 - **条件**：`Run-StrategyScreen -Maps E -Fps 30`、固定 `claude-mapE-screen-r1`（cfcd1c1：見回し0.4秒・エンジンの移動判定なし・視線判定の並列化・しゃがみアニメが既定）。seed 7/19/43×配置入替×試験側（チーム0・1）＝各条件12戦、基準（既定どうし）6戦。42戦とも完走。ユーザーの指示で第1段だけで止めた（第2段の最初の1戦は途中で止め、`failed-stopped-econ-HI-E-s61-e1s2` に改名）。
 - **結果**（試験側の得点差の、同じseedの既定どうしとの差）

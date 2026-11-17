@@ -100,19 +100,15 @@ ANavigationData* UBattleLeaderRuntime::NavFor(int32 ID) const
 
 bool UBattleLeaderRuntime::CanSeeVehicleFar(int32 ObserverID,const FBattleSightContext& C,int32 Target,double Now) const
 {
- // Same checks as CanSeeWithContext; only the line trace result is reused for TankSightReuse seconds (performance: every soldier
- // within the long vehicle spotting range otherwise traces up to 200-400 m to each enemy tank five times a second).
- const auto* T=GetWorld()->GetSubsystem<UBattleState>()->Find(Target);
- if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
- const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
- if(FVector::DistSquared(P,C.Position)>FMath::Max(C.RangeSquared,FMath::Square(VehicleSpotRange())) || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
+ // Same checks as CanSeeWithContext (Target is a vehicle); only the line trace result is reused for TankSightReuse seconds (performance:
+ // every soldier within the long vehicle spotting range otherwise traces up to 200-400 m to each enemy tank five times a second).
+ FVector End; if(!PrepareSightTrace(C,Target,End)) return false;
  auto& Entry=VehicleSightCache.FindOrAdd(FIntPoint(ObserverID,Target),TPair<double,bool>(-1.,false));
  if(Now+1.e-6<Entry.Key){++TankSightReused;return Entry.Value;}
  const double Start=FPlatformTime::Seconds();
- FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
+ const FHitResult Hit=TraceSight(C,End,Target,SightFromVehicleFar);
  TankSightMs+=(FPlatformTime::Seconds()-Start)*1000.;++TankSightTraces;
- if(SightHitStatsEnabled()) RecordSightHit(Hit,Target,uint64((FPlatformTime::Seconds()-Start)/FPlatformTime::GetSecondsPerCycle64()),SightFromVehicleFar);
- Entry.Key=Now+FMath::Max(0.f,GetDefault<UBattleTuning>()->TankSightReuse);Entry.Value=!Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
+ Entry.Key=Now+FMath::Max(0.f,GetDefault<UBattleTuning>()->TankSightReuse);Entry.Value=SightHitVisible(Hit,Target);
  return Entry.Value;
 }
 

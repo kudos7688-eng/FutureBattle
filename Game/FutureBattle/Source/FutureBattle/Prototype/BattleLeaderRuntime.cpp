@@ -276,27 +276,19 @@ FBattleSightContext UBattleLeaderRuntime::Sight(int32 ID) const
 }
 bool UBattleLeaderRuntime::CanSee(int32 ID,int32 Target) const
 {
- const auto* T=GetWorld()->GetSubsystem<UBattleState>()->Find(Target); const auto C=Sight(ID);
- if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
- const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
- if(FVector::DistSquared(P,C.Position)>(IsVehicle(Target)?FMath::Max(C.RangeSquared,FMath::Square(VehicleSpotRange())):C.RangeSquared) || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
- const bool bStats=SightHitStatsEnabled();const uint64 T0=bStats?FPlatformTime::Cycles64():0;
- FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
- if(bStats) RecordSightHit(Hit,Target,FPlatformTime::Cycles64()-T0,SightFromCanSee);
- return !Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
+ const auto C=Sight(ID); FVector End;
+ return PrepareSightTrace(C,Target,End) && SightHitVisible(TraceSight(C,End,Target,SightFromCanSee),Target);
 }
 bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 Target,int32 Observer) const
 {
  // Keep reference arithmetic, target reads, query and hit policy unchanged.
  // Only the observer Context construction is hoisted by the perception caller.
- const auto* T=GetWorld()->GetSubsystem<UBattleState>()->Find(Target);
- if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
- const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
- if(FVector::DistSquared(P,C.Position)>(IsVehicle(Target)?FMath::Max(C.RangeSquared,FMath::Square(VehicleSpotRange())):C.RangeSquared) || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
+ FVector End; if(!PrepareSightTrace(C,Target,End)) return false;
  // Trial -BattleSightPairReuse=1 (performance, default OFF): two soldiers looking at each other trace nearly the same line. A result
  // traced in the other direction within SightPairSeconds is reused while neither has moved more than 1 m since.
  static const bool bPairReuse=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSightPairReuse="),V);return V!=0;}();
  const bool bPair=bPairReuse&&Observer>=0&&Observer!=Target;
+ const FVector P=bPair?Position(Target):FVector::ZeroVector;
  const double Now=bPair?GetWorld()->GetTimeSeconds():0.;
  const uint64 Key=bPair?(uint64(uint32(FMath::Min(Observer,Target)))<<32)|uint32(FMath::Max(Observer,Target)):0;
  const bool bObserverLow=Observer<Target;
@@ -304,10 +296,7 @@ bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 
   if(const auto* E=SightPairs.Find(Key);E&&E->bLowObserver!=bObserverLow&&Now>=E->At&&Now-E->At<.2-1.e-6&&
      FVector::DistSquared(E->Low,bObserverLow?C.Position:P)<=1.e4&&FVector::DistSquared(E->High,bObserverLow?P:C.Position)<=1.e4)
   {++SightPairReused;return E->bVisible;}
- const bool bStats=SightHitStatsEnabled();const uint64 T0=bStats?FPlatformTime::Cycles64():0;
- FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
- if(bStats) RecordSightHit(Hit,Target,FPlatformTime::Cycles64()-T0,SightFromPerception);
- const bool bVisible=!Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
+ const bool bVisible=SightHitVisible(TraceSight(C,End,Target,SightFromPerception),Target);
  if(bPair)
  {
   ++SightPairTraced;
@@ -316,9 +305,16 @@ bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 
  }
  return bVisible;
 }
+FHitResult UBattleLeaderRuntime::TraceSight(const FBattleSightContext& C,const FVector& End,int32 Target,ESightHitSource Source) const
+{
+ const bool bStats=SightHitStatsEnabled();const uint64 T0=bStats?FPlatformTime::Cycles64():0;
+ FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,End,ECC_Visibility,C.Query);
+ if(bStats) RecordSightHit(Hit,Target,FPlatformTime::Cycles64()-T0,Source);
+ return Hit;
+}
 bool UBattleLeaderRuntime::PrepareSightTrace(const FBattleSightContext& C,int32 Target,FVector& End) const
 {
- // Keep identical to the checks of CanSeeWithContext above (same expressions, so the same candidates are traced).
+ // The one copy of the checks before a unit sight trace (alive, range, field of view); vehicles are seen out to VehicleSpotRange.
  const auto* T=GetWorld()->GetSubsystem<UBattleState>()->Find(Target);
  if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
  const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();

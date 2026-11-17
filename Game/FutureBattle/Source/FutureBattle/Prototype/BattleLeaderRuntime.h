@@ -198,13 +198,15 @@ public:
  struct FSightPair{double At=0;FVector Low=FVector::ZeroVector,High=FVector::ZeroVector;bool bLowObserver=false,bVisible=false;};
  mutable TMap<uint64,FSightPair> SightPairs; mutable double SightPairsPruneAt=0;
  mutable int64 SightPairTraced=0,SightPairReused=0; // evaluation counters (BATTLE_SIGHT_PAIR)
- // The two halves of CanSeeWithContext, shared with the parallel perception trial (-BattleSightParallel=1, default OFF): the checks
- // before the trace (false = not visible without tracing; End receives the trace end) and the hit policy. Same arithmetic.
+ // The parts of every unit line-of-sight test (CanSee, CanSeeWithContext, CanSeeVehicleFar and the parallel perception scan): the
+ // checks before the trace (false = not visible without tracing; End receives the trace end), the trace and the hit policy.
  bool PrepareSightTrace(const FBattleSightContext& Context,int32 TargetID,FVector& End) const;
  bool SightHitVisible(const FHitResult& Hit,int32 TargetID) const { return !Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==TargetID; }
  // Evaluation (-BattleSightHitStats=1, default OFF; behaviour unchanged): the first object each line-of-sight trace hits, by kind,
  // with the trace time; class names, actor tags and actor names of the hits. Logged as BATTLE_SIGHT_HITS* at match end.
  enum ESightHitSource : uint8 {SightFromPerception,SightFromCanSee,SightFromVehicleFar,SightFromArea,SightSourceCount};
+ // One sight trace from the context's eye to End on ECC_Visibility, recorded for the hit statistics when they are on (TargetID -1: a point).
+ FHitResult TraceSight(const FBattleSightContext& Context,const FVector& End,int32 TargetID,ESightHitSource Source) const;
  static bool SightHitStatsEnabled();
  // Trial -BattleSightTeamMask=1 (rules, default OFF; user request 2026-11-17): soldiers of one side do not block their own side's line of
  // sight. Each soldier body carries the mask bit 1<<team (FBodyInstance mask filter) and sight queries ignore the observer's bit
