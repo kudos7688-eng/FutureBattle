@@ -197,6 +197,7 @@ public:
  struct FSightPair{double At=0;FVector Low=FVector::ZeroVector,High=FVector::ZeroVector;bool bLowObserver=false,bVisible=false;};
  mutable TMap<uint64,FSightPair> SightPairs; mutable double SightPairsPruneAt=0;
  mutable int64 SightPairTraced=0,SightPairReused=0; // evaluation counters (BATTLE_SIGHT_PAIR)
+ int64 MoveSweeps=0,MoveHitSoldier=0,MoveHitWorld=0,MoveShortened=0; // Mass follower moves (BATTLE_MOVE_SWEEP)
  bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot);
  bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f);
  void CancelCoverAction(int32 ID);

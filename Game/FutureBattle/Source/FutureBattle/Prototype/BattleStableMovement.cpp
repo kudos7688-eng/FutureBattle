@@ -337,9 +337,15 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   auto SweepMove=[&](FVector Delta,FHitResult& Result)
   {
    const FVector From=B.Capsule->GetComponentLocation();
-   SweepSoldier(GetWorld(),B.Capsule.Get(),From,Delta,Result);
+   { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSweepSoldier); SweepSoldier(GetWorld(),B.Capsule.Get(),From,Delta,Result); }
    const float Fraction=Result.bBlockingHit?FMath::Max(0.f,Result.Time-.001f):1.f;
-   B.Capsule->MoveComponent(Delta*Fraction,Direction.Rotation().Quaternion(),true);
+   { TRACE_CPUPROFILER_EVENT_SCOPE(BattleMoveCapsule); B.Capsule->MoveComponent(Delta*Fraction,Direction.Rotation().Quaternion(),true); }
+   // Evaluation (2026-11-17, collision cost): what stopped the own sweep (a soldier or the world), and whether the engine's own
+   // sweep inside MoveComponent shortened the move further (it ignores the shared owner, so it only sees the world).
+   ++MoveSweeps;
+   if(Result.bBlockingHit){if(HitIDs.FindRef(Result.GetComponent())>0)++MoveHitSoldier;else ++MoveHitWorld;}
+   const double Wanted=(Delta*Fraction).Size2D(),Moved=FVector::Dist2D(From,B.Capsule->GetComponentLocation());
+   if(Wanted-Moved>.5)++MoveShortened;
   };
   SweepMove(Step,Hit);
   if(Hit.bBlockingHit)
