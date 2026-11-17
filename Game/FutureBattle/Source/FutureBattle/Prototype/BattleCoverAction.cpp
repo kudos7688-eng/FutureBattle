@@ -255,7 +255,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  if(!B.Actor.IsValid())
  {
   const int32 Pose=U->ReloadEndTime>Now?2:B.Velocity.SizeSquared2D()>400?1:0;
-  if(Pose!=B.Pose){B.Pose=Pose;if(VAT)VAT->ChangePose(ID,Pose);if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(Pose==2?ReloadPose:Pose==1?WalkPose:IdlePose,true);}
+  if(Pose!=B.Pose){B.Pose=Pose;if(VAT)VAT->ChangePose(ID,Pose);if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(FollowerClip(ID,Pose),true);}
  }
  U->DecisionReason=U->CoverPhase==2?TEXT("COVER / HIDDEN - FIRE TO PEEK"):U->CoverPhase==4?TEXT("COVER / EXPOSED FIRING WINDOW"):TEXT("COVER / MOVING - FIRE BLOCKED");
  if(!Player)U->Action=U->CoverPhase==2?EBattleAction::TakingCover:U->CoverPhase==4?EBattleAction::Engaging:EBattleAction::Moving;

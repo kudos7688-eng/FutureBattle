@@ -2,6 +2,7 @@
 #include "BattleVATData.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleFollowerBones.h"
+#include "BattleStance.h"
 #include "Animation/AnimSingleNodeInstance.h"
 #include "Animation/AnimSequence.h"
 #include "AnimationRuntime.h"
@@ -174,7 +175,7 @@ void ABattleVATDisplay::Leave(FBattleVATEntry& E)
  auto* M=E.Body.Get();auto* W=E.Weapon.Get();const auto& B=Runtime->GetBodies().FindChecked(E.ID);
  M->HandleExistingParallelEvaluationTask(true,true);
  M->SetRelativeTransform(E.BodyRelative);CastChecked<UBattleVATSkeletalMeshComponent>(M)->VATFar=false;
- M->SetVisibility(false);M->PlayAnimation(Data->Clips[E.Pose].Clip,true);M->SetPlayRate(E.Rate/M->GlobalAnimRateScale);
+ M->SetVisibility(false);M->PlayAnimation(BattleStance::AnimEnabled()?Runtime->FollowerClip(E.ID,E.Pose):Data->Clips[E.Pose].Clip.Get(),true);M->SetPlayRate(E.Rate/M->GlobalAnimRateScale);
  M->SetPosition(E.Time,false);M->TickAnimation(0,false);M->VisibilityBasedAnimTickOption=EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
  M->RefreshBoneTransforms(nullptr);M->SetComponentTickEnabled(!E.Dead);
  W->AttachToComponent(M,FAttachmentTransformRules::KeepRelativeTransform,TEXT("hand_r"));W->SetRelativeTransform(E.WeaponRelative);W->RegisterComponent();W->UpdateComponentToWorld();

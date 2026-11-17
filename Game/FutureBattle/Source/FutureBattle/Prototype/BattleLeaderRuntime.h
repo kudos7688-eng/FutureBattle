@@ -231,6 +231,9 @@ public:
  TMap<int32,double> StanceLockedUntil;
  uint8 StanceOf(int32 ID) const {const uint8* Found=Stances.Find(ID);return Found?*Found:0;}
  bool SetStance(int32 ID,uint8 Stance,double Now,bool bForce=false);
+ // Follower clip for pose 0 idle / 1 walk / 2 reload; with -BattleStanceAnim=1 a crouched follower gets the crouch clip.
+ class UAnimSequence* FollowerClip(int32 ID,int32 Pose) const;
+ void RefreshFollowerPose(int32 ID);
  void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight);
  // Concealment (hedges tagged BattleConcealment in the map): blocks sight but shots ignore it. Collected once per world.
  TArray<AActor*> ConcealmentActors;
@@ -265,6 +268,9 @@ public:
  void RunWideMapAudit();
  void RunSightVisual();
  int32 SightVisualStage=0;
+ // Stance visuals check (-BattleStanceShot, BattleStanceShot.cpp): close-up screenshots of a leader and a follower.
+ void RunStanceShot();
+ int32 StanceShotStage=0,StanceShotFollower=0;
  void StepSightExperiment(float DeltaSeconds);
  FBattleSightExperiment SightExperiment;
  int32 MapAuditStage=0;

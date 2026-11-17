@@ -53,6 +53,8 @@ public:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> TeamLabel;
 	UPROPERTY() TObjectPtr<AAIController> SavedAI;
 	bool bRevealed = true;
+	// Stance shown by the body (set by UBattleLeaderRuntime::SetStance); with -BattleStanceAnim=1 a crouch plays Lyra's clip.
+	uint8 VisualStance = 0;
 private:
 	UPROPERTY() int32 UnitID = INDEX_NONE;
 	bool bDeathApplied = false;

@@ -2,8 +2,11 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleFieldLayout.h"
 #include "BattleUnit.h"
+#include "BattleVATDisplay.h"
+#include "Animation/AnimSequence.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "UObject/StrongObjectPtr.h"
 
 bool BattleStance::Enabled(const UWorld* World)
 {
@@ -23,6 +26,25 @@ float BattleStance::AimOffset(uint8 Stance){return Stance==Prone?-60.f:Stance==C
 float BattleStance::TopOffset(uint8 Stance){return Stance==Prone?-35.f:Stance==Crouch?20.f:95.f;}
 float BattleStance::SpreadScale(uint8 Stance){return Stance==Prone?.6f:Stance==Crouch?.8f:1.f;}
 float BattleStance::VisualScale(uint8 Stance){return Stance==Prone?.3f:Stance==Crouch?.65f:1.f;}
+bool BattleStance::AnimEnabled()
+{
+ static const bool bOn=[]{int32 Mode=0;FParse::Value(FCommandLine::Get(),TEXT("BattleStanceAnim="),Mode);return Mode!=0;}();
+ return bOn;
+}
+UAnimSequence* BattleStance::CrouchClip(bool bWalk)
+{
+ if(!AnimEnabled())return nullptr;
+ static TStrongObjectPtr<UAnimSequence> Idle,Walk;static bool bLoaded=false;
+ if(!bLoaded)
+ {
+  bLoaded=true;
+  Idle.Reset(LoadObject<UAnimSequence>(nullptr,TEXT("/Game/Characters/Mannequins/Anims/Rifle/Crouch/MM_Rifle_Crouch_Idle")));
+  Walk.Reset(LoadObject<UAnimSequence>(nullptr,TEXT("/Game/Characters/Mannequins/Anims/Rifle/Crouch/MM_Rifle_Crouch_Walk_Fwd")));
+  UE_LOG(LogTemp,Display,TEXT("BATTLE_STANCE_ANIM idle=%d walk=%d"),Idle.IsValid(),Walk.IsValid());
+ }
+ return bWalk&&Walk.IsValid()?Walk.Get():Idle.Get();
+}
+float BattleStance::BodyScale(uint8 Stance){return Stance==Crouch&&CrouchClip(false)?1.f:VisualScale(Stance);}
 
 bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForce)
 {
@@ -36,12 +58,26 @@ bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForc
  // Placeholder visual: squash the body mesh vertically (feet stay on the ground). Far VAT instances are not changed.
  if(const auto* B=Bodies.Find(ID))
  {
-  const FVector Scale(1,1,BattleStance::VisualScale(Stance));
-  if(B->Actor.IsValid()){if(auto* Mesh=B->Actor->GetMesh())Mesh->SetRelativeScale3D(Scale);}
-  else if(B->Mesh.IsValid())B->Mesh->SetRelativeScale3D(Scale);
+  const FVector Scale(1,1,BattleStance::BodyScale(Stance));
+  if(B->Actor.IsValid()){B->Actor->VisualStance=Stance;if(auto* Mesh=B->Actor->GetMesh())Mesh->SetRelativeScale3D(Scale);}
+  else if(B->Mesh.IsValid()){B->Mesh->SetRelativeScale3D(Scale);if(BattleStance::AnimEnabled())RefreshFollowerPose(ID);}
  }
  SightExperiment.Cover(Stance==BattleStance::Prone?TEXT("stance_to_prone"):Stance==BattleStance::Crouch?TEXT("stance_to_crouch"):TEXT("stance_to_stand"));
  return true;
+}
+
+UAnimSequence* UBattleLeaderRuntime::FollowerClip(int32 ID,int32 Pose) const
+{
+ if(StanceOf(ID)==BattleStance::Crouch)if(auto* Crouch=BattleStance::CrouchClip(Pose==1))return Crouch;
+ return Pose==2?ReloadPose.Get():Pose==1?WalkPose.Get():IdlePose.Get();
+}
+
+void UBattleLeaderRuntime::RefreshFollowerPose(int32 ID)
+{
+ const auto* B=Bodies.Find(ID);
+ if(!B||B->Actor.IsValid()||!B->Mesh.IsValid()||(VAT&&VAT->IsFar(ID))||!B->Mesh->IsComponentTickEnabled())return;
+ B->Mesh->HandleExistingParallelEvaluationTask(true,true);
+ B->Mesh->PlayAnimation(FollowerClip(ID,B->Pose),true);
 }
 
 void UBattleLeaderRuntime::UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight)

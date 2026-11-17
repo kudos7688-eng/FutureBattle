@@ -1,3 +1,4 @@
+#include "BattleSightExperiment.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
 #include "BattleController.h"

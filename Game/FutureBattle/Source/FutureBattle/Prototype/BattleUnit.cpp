@@ -7,6 +7,7 @@
 #include "BattleTactics.h"
 #include "BattleRanges.h"
 #include "BattleCover.h"
+#include "BattleStance.h"
 #include "BattleSquadAI.h"
 #include "BattleMetrics.h"
 #include "BattleMatch.h"
@@ -254,13 +255,17 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 	const double Now = GetWorld()->GetTimeSeconds();
 	const float Duration = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
 	const bool Reloading = S.ReloadEndTime > Now;
-	auto* Pose = Reloading ? RifleReload.Get() : GetVelocity().SizeSquared2D() > 400. ? RifleWalk.Get() : RifleIdle.Get();
+	const bool Moving = GetVelocity().SizeSquared2D() > 400.;
+	auto* Pose = Reloading ? RifleReload.Get() : Moving ? RifleWalk.Get() : RifleIdle.Get();
+	// Stance visuals trial: a crouched soldier plays the crouch clip (reloading included: there is no crouched reload clip).
+	if (auto* Crouch = VisualStance == BattleStance::Crouch ? BattleStance::CrouchClip(Moving) : nullptr) Pose = Crouch;
+	const bool Looping = !Reloading || Pose != RifleReload.Get();
 	if (Pose && CurrentPose != Pose)
 	{
 		CurrentPose = Pose;
-		GetMesh()->PlayAnimation(Pose,!Reloading);
-		GetMesh()->SetPlayRate(Reloading ? Pose->GetPlayLength()/Duration : 1.f);
-		if (Reloading) GetMesh()->SetPosition(Pose->GetPlayLength()*FMath::Clamp(1.-(S.ReloadEndTime-Now)/Duration,0.,1.), false);
+		GetMesh()->PlayAnimation(Pose,Looping);
+		GetMesh()->SetPlayRate(!Looping ? Pose->GetPlayLength()/Duration : 1.f);
+		if (!Looping) GetMesh()->SetPosition(Pose->GetPlayLength()*FMath::Clamp(1.-(S.ReloadEndTime-Now)/Duration,0.,1.), false);
 	}
 	if (IsPlayerControlled() && Rifle->GetAttachParent()==FirstPersonCamera)
 	{

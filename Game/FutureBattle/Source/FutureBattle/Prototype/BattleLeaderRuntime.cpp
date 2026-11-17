@@ -196,6 +196,8 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunMixedSaveSmoke,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleWeaponTrial")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWeaponRangeTrial,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleStanceShot")))
+  { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunStanceShot,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleSightVisual")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSightVisual,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleWideMapAudit")))
@@ -601,7 +603,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity).Forward=Direction.GetSafeNormal2D();
   B.Capsule->SetWorldRotation(FRotator(0,Direction.Rotation().Yaw,0));
   const int32 Pose=U->ReloadEndTime>Now?2:B.Velocity.SizeSquared2D()>400?1:0;
-  if(Pose!=B.Pose) { B.Pose=Pose; if(VAT)VAT->ChangePose(ID,Pose); if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(Pose==2?ReloadPose:Pose==1?WalkPose:IdlePose,true); }
+  if(Pose!=B.Pose) { B.Pose=Pose; if(VAT)VAT->ChangePose(ID,Pose); if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(FollowerClip(ID,Pose),true); }
  }
  Store->UpdateAim(ID,Now,B.Velocity.Size2D(),Direction,true);
  if(BaseEngage)Fire(ID,Pos+Muzzle,Direction,false);

@@ -1,5 +1,14 @@
 # 現在地と次の作業
 
+## 2026-11-17 12時40分 Claude（新機能・suppression ワークツリー）：しゃがみの見た目にLyraのアニメ（試験切替）
+- **ユーザー依頼**：手元のLyra（`Documents/Unreal Projects/LyraStarterGame`、UE 5.8）とGame Animation Sampleの活用。Game Animation Sampleのしゃがみは素手でUEFN骨格（変換が必要）、Lyraには小銃を持ったしゃがみ一式があるので、Lyraを採用。伏せはどちらにもない。
+- **取り込み**：`MM_Rifle_Crouch_Idle / Walk_Fwd / Entry / Exit` を `/Game/Characters/Mannequins/Anims/Rifle/Crouch/` に置いた。Lyraのファイルを一時的にLyraと同じ場所に置き、`-run=BattleVATBake -ImportStanceAnims`（`BattleStanceAnimImport.cpp`）で複製した。骨格は今の `SK_Mannequin` に付け替え（骨の名前が同じなので変換は不要）、Lyra専用の足音の合図は削除。中継のコピーは削除済みで、取り込んだ4本はLyraのファイルを参照しない。
+- **切替 `-BattleStanceAnim=1`（既定OFF）**：しゃがむと、体を縮める代わりにしゃがみアニメを等身大で流す（止まっていれば待機、動いていれば前歩き。リロード中はしゃがみ待機で代用）。隊長（`ABattleUnit::VisualStance`）と部下（通常・遮蔽行動・Phase3、遠くのVAT表示から戻ったときも）の両方に効く。目の高さ・狙われる高さ・射撃などは変えていない（見た目だけ）。伏せは今の仮の見た目のまま。
+- **確認**：`Setup/Test-StanceShot.ps1 [-Anim]`。マップEで戦闘を止め、隊長と部下を立ち→しゃがみ→伏せ→立ちにして近くから撮影し、流れているアニメと縦の縮み具合を記録する。ONではしゃがみのアニメが等身大で流れた（`StanceAnim-20261117/stance-anim-r2`）。小銃は手に収まっている。OFFは従来どおり体を65%に縮めた（`stance-off-r1`）。どちらも failures=0。
+- **回帰**：Build成功、Test-Battle failures=0。試合（60FPS・保存往復あり・seed 7、`stanceanim-*`）：マップA OFF 6,419発・勝ち1、マップE OFF 8,641発・勝ち1、マップE ON 8,641発・勝ち1。基準と同じで、ONでも試合は変わらない。
+- **ついでの修正**：`BattleSightExperiment.cpp` の先頭に自分のヘッダーを追加（ファイルの組み合わせが変わると、UBTの「最初に自分のヘッダー」の検査で落ちたため。中身の変更なし）。
+- **未実施・制限**：遠くのVAT表示の兵は、しゃがんでも立った姿のまま（VATへの焼き足しはVAT素材の作り替えになるので別段階）。しゃがむ・立つ動作（Entry/Exit）は取り込んだが、まだ使っていない。既定ONにするかはユーザーが判断。性能は未計測（近い兵のアニメが1本増えるだけで、骨の更新の回数は同じ）。main へのマージは未実施（main の作業ツリーにほかのセッションの未コミットの変更がある）。
+
 ## 2026-11-17 9時30分 Claude（経済・AI戦略）：ゲームスレッドの内訳と負荷対策
 - **計測の道具**：`Test-WideSight.ps1 -Trace cpu,frame`（Unreal Insights のトレースを出力先に `trace.utrace` として保存、`-statnamedevents` 付き）、`Setup/Export-TraceTimers.ps1`（Insights を画面なしで起動し、ゲームスレッドの区間ごとの集計をCSVに書き出す）。自前の処理に名前付きの区間を追加（`BattleRuntimeStep`、`BattlePerceptionUpdate`、`BattleFollow`、`BattleThink`、`BattleMatchUpdate`、`BattleHUD_*` など。トレースしていないときの負荷はない）。
 - **条件**：マップE、描画あり（1920×1080の画面外描画）、30FPS固定、seed 7、戦車なし、単独、トレースあり（トレースの分だけ遅い）。トレースは1試合で約3.2GB（コミットしない）。
