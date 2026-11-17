@@ -127,7 +127,7 @@ public:
  bool ReplaceFollower(int32 DeadID);
  // Scout pairs: the surviving follower becomes the squad leader (its Mass body is replaced by an Actor in place).
  bool PromoteScout(int32 SquadID,int32 NewLeaderID);
- // Trial -BattleHireSightRefresh=0 (default 1): skip the full sight update after a hire or scout handover.
+ // -BattleHireSightRefresh=1 restores the full sight update after a hire or scout handover (default 0 = skipped, user decision 2026-11-18).
  static bool HireSightRefresh();
  // Long sight of a still observer: a scout pair member, or any soldier at a lookout (0 when moving or neither).
  // AtLookout: within LookoutRadius of a lookout (public map places).

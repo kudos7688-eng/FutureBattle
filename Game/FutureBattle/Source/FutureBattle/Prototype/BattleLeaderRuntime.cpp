@@ -22,6 +22,7 @@
 #include "Animation/AnimSequence.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "NavigationSystem.h"
+#include "BattleCover.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "NavigationPath.h"
 #include "DrawDebugHelpers.h"
@@ -859,6 +860,8 @@ void UBattleLeaderRuntime::Step(float Dt)
  if(Phase3 && Phase3->bEnabled) { Phase3->Step(Dt); return; }
  if(bMovementTrial && MoveTrialStage==1 && !Mode->bCombatPaused) MoveTrialFrameMS.Add(Dt*1000);
  const double Now=GetWorld()->GetTimeSeconds(); auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ // Build the cover slots while the match waits to start (they were built lazily by the first decision: ~100 ms in one frame).
+ if(bWideField && (Mode->bCombatPaused || Now<Mode->CombatStartsAt)) GetWorld()->GetSubsystem<UBattleCover>()->PrebuildSlots();
  if(bWideField && bStableMovement && Mode->bCombatPaused)
   for(auto& Body:Bodies) {Body.Value.LastProgressTime=Now;Body.Value.StalledSince=0;}
  // P pauses AI decisions, not the directly controlled soldier's reload (same as the wide Actor mode).
@@ -873,7 +876,19 @@ void UBattleLeaderRuntime::Step(float Dt)
   if(!bWideField) Store->AdvanceReloads(Now);
   RefreshSightTeamMasks();
   if(!bMovementTrial) { TRACE_CPUPROFILER_EVENT_SCOPE(BattlePerceptionUpdate); GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now,-1,0); }
-  { TRACE_CPUPROFILER_EVENT_SCOPE(BattleThink); for(auto& P:Plans) if(Now>=P.Value.NextThink || (Store->FindSquad(P.Key) && P.Value.OrderRevision!=Store->FindSquad(P.Key)->OrderRevision)) Think(P.Key,Now); }
+  {
+   TRACE_CPUPROFILER_EVENT_SCOPE(BattleThink);
+   // Trial -BattleThinkCap=N (0 = no cap, default): at most N squad decisions per step. Squads over the cap stay due and
+   // think on the next steps in the same order. Normally 2-3 squads are due per step; the cap only binds when many fall due
+   // together (match start: all 50 in one 139 ms frame, 2026-11-18 trace).
+   static const int32 ThinkCap=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleThinkCap="),V);return FMath::Max(0,V);}();
+   int32 Thought=0;
+   for(auto& P:Plans) if(Now>=P.Value.NextThink || (Store->FindSquad(P.Key) && P.Value.OrderRevision!=Store->FindSquad(P.Key)->OrderRevision))
+   {
+    if(ThinkCap>0 && Thought>=ThinkCap) break;
+    Think(P.Key,Now);++Thought;
+   }
+  }
   AvoidanceGrid.Reset();
   for(const auto& B:Bodies) if(Store->Find(B.Key)->IsAlive()) { const FVector P=Position(B.Key); AvoidanceGrid.FindOrAdd(FIntPoint(FMath::FloorToInt(P.X/150.),FMath::FloorToInt(P.Y/150.))).Add(B.Key); }
   // Death may invalidate a plan during firing; iterate stable UnitIDs, never a plan iterator.

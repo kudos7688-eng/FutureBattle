@@ -8,6 +8,7 @@
 #include "Engine/StaticMeshActor.h"
 #include "EngineUtils.h"
 #include "NavigationSystem.h"
+#include "AI/NavDataGenerator.h"
 
 void UBattleCover::BuildSlots(bool bForce)
 {
@@ -20,6 +21,9 @@ void UBattleCover::BuildSlots(bool bForce)
 		for (ABattleUnit* Unit : Mode->Units) if (Unit) Query.AddIgnoredActor(Unit);
  if(const auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime->IsEnabled())
   for(const auto& Body:Runtime->GetBodies())if(Body.Value.Capsule.IsValid())Query.AddIgnoredComponent(Body.Value.Capsule.Get());
+	// Duplicate check "any slot within 100 cm (2D)" through a 100 cm grid (3x3 cells): same result and order as scanning all slots.
+	TMap<FIntPoint, TArray<int32>> SlotGrid;
+	auto Cell = [](const FVector& P) { return FIntPoint(FMath::FloorToInt(P.X / 100.), FMath::FloorToInt(P.Y / 100.)); };
 	for (TActorIterator<AStaticMeshActor> It(GetWorld()); It; ++It)
 	{
 		FVector Center, Extent; It->GetActorBounds(true, Center, Extent);
@@ -39,9 +43,25 @@ void UBattleCover::BuildSlots(bool bForce)
 			FNavLocation NavPoint;
 			if (!Nav->ProjectPointToNavigation(Candidate, NavPoint, FVector(70, 70, 300))) continue;
 			if (GetWorld()->OverlapBlockingTestByChannel(NavPoint.Location + FVector(0, 0, 94), FQuat::Identity, ECC_Pawn, FCollisionShape::MakeCapsule(40.f, 90.f), Query)) continue;
-			if (!Slots.ContainsByPredicate([&](const FVector& Point) { return FVector::DistSquared2D(Point, NavPoint.Location) < FMath::Square(100.f); })) Slots.Add(NavPoint.Location);
+			const FIntPoint C = Cell(NavPoint.Location); bool bNear = false;
+			for (int32 DX = -1; DX <= 1 && !bNear; ++DX) for (int32 DY = -1; DY <= 1 && !bNear; ++DY)
+				if (const auto* Near = SlotGrid.Find(C + FIntPoint(DX, DY)))
+					for (int32 Index : *Near) if (FVector::DistSquared2D(Slots[Index], NavPoint.Location) < FMath::Square(100.f)) { bNear = true; break; }
+			if (!bNear) SlotGrid.FindOrAdd(C).Add(Slots.Add(NavPoint.Location));
 		}
 	}
+}
+
+void UBattleCover::PrebuildSlots()
+{
+	if (bBuilt) return;
+	// Only the default (infantry) navmesh decides the slots; the vehicle navmesh keeps building at runtime during the wait.
+	auto* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+	const ANavigationData* Data = Nav ? Nav->GetDefaultNavDataInstance() : nullptr;
+	if (!Data || (Data->GetGenerator() && Data->GetGenerator()->IsBuildInProgressCheckDirty())) return;
+	const double Start = FPlatformTime::Seconds();
+	BuildSlots();
+	UE_LOG(LogTemp, Display, TEXT("BATTLE_COVER_PREBUILT slots=%d ms=%.1f t=%.1f"), Slots.Num(), (FPlatformTime::Seconds() - Start) * 1000., GetWorld()->GetTimeSeconds());
 }
 
 TArray<int32> UBattleCover::NearbySlots(FVector Origin, float Radius, int32 Limit) const

@@ -102,11 +102,11 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
 }
 
 // Full sight update right after a hire or scout handover. It scans every observer in one frame
-// (30-60 ms on map E early in a match, 2026-11-18 trace). Trial -BattleHireSightRefresh=0 skips it:
-// the new soldiers then enter perception on their next regular scan. Changes discovery timing, so matches change.
+// (30-60 ms on map E early in a match, 2026-11-18 trace). Skipped by default (user decision 2026-11-18):
+// the new soldiers enter perception on their next regular scan. -BattleHireSightRefresh=1 restores the full update.
 bool UBattleLeaderRuntime::HireSightRefresh()
 {
- static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleHireSightRefresh="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleHireSightRefresh="),V);return V!=0;}();
  return bOn;
 }
 

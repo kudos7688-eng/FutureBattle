@@ -18,6 +18,10 @@ class UBattleCover : public UWorldSubsystem
 	GENERATED_BODY()
 public:
 	void BuildSlots(bool bForce = false);
+	// Builds the slots while the match waits to start, once navigation has finished building (same slots as a later
+	// lazy build: soldiers are ignored and only the map and the navmesh decide them). Moves ~100 ms out of the first step.
+	void PrebuildSlots();
+	bool IsBuilt() const { return bBuilt; }
 	const TArray<FVector>& GetSlots() const { return Slots; }
 	TArray<int32> NearbySlots(FVector Origin, float Radius, int32 Limit) const;
 	bool IsAvailable(int32 Slot, int32 UnitID, double Now) const;
