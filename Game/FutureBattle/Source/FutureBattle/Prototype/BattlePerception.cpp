@@ -147,10 +147,10 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			Contact.Confidence = FMath::Clamp(1.f - static_cast<float>(Age / Profile.MemorySeconds), 0.f, 1.f);
 		}
 	};
-	// Trial -BattleSightParallel=1 (performance, default OFF): the line traces of all observers scanned this update run in a
+	// -BattleSightParallel (performance, default ON since 2026-11-17 by user decision; =0 restores the serial scan): the line traces of all observers scanned this update run in a
 	// ParallelFor between gathering and applying, in the same frame and order. Mixed runtime with reused sight contexts only; the
 	// sight pair reuse trial writes shared state while tracing, so it keeps the serial path.
-	static const bool bParallelTrial = [] { int32 V = 0; FParse::Value(FCommandLine::Get(), TEXT("BattleSightParallel="), V); return V != 0; }();
+	static const bool bParallelTrial = [] { int32 V = 1; FParse::Value(FCommandLine::Get(), TEXT("BattleSightParallel="), V); return V != 0; }();
 	static const bool bPairReuseTrial = [] { int32 V = 0; FParse::Value(FCommandLine::Get(), TEXT("BattleSightPairReuse="), V); return V != 0; }();
 	const bool bParallel = bParallelTrial && !bPairReuseTrial && Mixed && bReuseSightContext;
 	struct FSightJob { const TPair<int32, FLiveUnit>* Pair = nullptr; FBattleSightContext Sight; bool bFarPulse = false; int32 First = 0, Num = 0; };

@@ -50,6 +50,11 @@ void UBattleLeaderRuntime::RunSmoke()
  Check(!Fire(2,Position(2),FVector::ForwardVector,false),TEXT("second shot within interval is rejected"));
  auto* Wall=NewObject<UBoxComponent>(DisplayHost); DisplayHost->AddInstanceComponent(Wall); Wall->SetBoxExtent(FVector(25,100,200)); Wall->SetCollisionEnabled(ECollisionEnabled::QueryOnly); Wall->SetCollisionResponseToAllChannels(ECR_Block); Wall->RegisterComponent(); Wall->SetWorldLocation(FVector(-600,-2100,100));
  Check(!CanSee(2,22),TEXT("Mass perception respects a blocking wall"));
+ // Mechanism of the -BattleSightTeamMask trial: a body with the mask bit of the observer's side is skipped, any other side's still blocks.
+ {FBattleSightContext C=Sight(2);FVector End;const bool bTrace=PrepareSightTrace(C,22,End);FHitResult H;Wall->SetMaskFilterOnBodyInstance(1);
+  C.Query.IgnoreMask=1;GetWorld()->LineTraceSingleByChannel(H,C.Eye,End,ECC_Visibility,C.Query);const bool bOwnSide=SightHitVisible(H,22);
+  C.Query.IgnoreMask=2;H=FHitResult();GetWorld()->LineTraceSingleByChannel(H,C.Eye,End,ECC_Visibility,C.Query);const bool bOtherSide=SightHitVisible(H,22);
+  Wall->SetMaskFilterOnBodyInstance(0);Check(bTrace&&bOwnSide&&!bOtherSide&&!CanSee(2,22),TEXT("sight team mask skips only a body of the observer's side"));}
  const FVector Known=Sense->FindContact(2,22)->LastKnownPosition;
  Place(22,FVector(-400,-2100,95),-FVector::ForwardVector); Sense->Update(Mode->Units,Now+.9);
  Check(Sense->FindContact(2,22) && !Sense->FindContact(2,22)->bVisible && Sense->FindContact(2,22)->LastKnownPosition==Known,TEXT("occluded contact retains last known position not live position"));
