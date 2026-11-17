@@ -292,6 +292,8 @@ public:
  void RunSightTrial();
  void RunWeaponRangeTrial();
  void RunWideMapAudit();
+ // Map statistics (-BattleMapStats=<json>, BattleMapStats.cpp): sight lengths, clearance, cover and routes of the map as built.
+ void RunMapStats();
  void RunSightVisual();
  int32 SightVisualStage=0;
  // Stance visuals check (-BattleStanceShot, BattleStanceShot.cpp): close-up screenshots of a leader and a follower.

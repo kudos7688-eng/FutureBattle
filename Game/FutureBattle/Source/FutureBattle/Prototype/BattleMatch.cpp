@@ -23,6 +23,10 @@ void UBattleMatch::InitializeMatch()
 		const FString Map = GetWorld()->GetMapName();
 		for (int32 Index = 0; Index < BattleFieldLayout::ObjectiveCountForMap(Map); ++Index)
 		{ FBattleObjective Point; Point.Position = BattleFieldLayout::ObjectiveForMap(Map, Index); Objectives.Add(Point); }
+		// Objectives a side holds from the start (the depots of map F). Side 0 is the team of the west home, which is team 1 in a swapped trial.
+		const auto& Def = BattleFieldLayout::ByName(Map); const int32 Swap = int32(FParse::Param(FCommandLine::Get(), TEXT("BattleTrialSwap")));
+		for (int32 Index = 0; Index < Objectives.Num(); ++Index)
+			if (const int32 Side = BattleFieldLayout::ObjectiveOwnerSide(Def, Index); Side == 0 || Side == 1) Objectives[Index].Owner = Side ^ Swap;
 	}
 	else for (const FVector Position : { FVector(-800, -1800, 0), FVector(0, 1800, 0), FVector(800, -1800, 0) })
 	{
@@ -180,6 +184,7 @@ void UBattleMatch::Update(float DeltaSeconds)
 	CheckTimeLimit();
 }
 
+float UBattleMatch::ObjectiveValue(int32 Point) const { return BattleFieldLayout::ObjectiveValue(BattleFieldLayout::Of(GetWorld()), Point); }
 float UBattleMatch::MatchTimeLimit() const { return BattleFieldLayout::Of(GetWorld()).MatchSeconds; }
 
 void UBattleMatch::CheckTimeLimit()
@@ -345,6 +350,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  // S1 (default ON, -BattleAreaStrategy=0 = old round-robin): weighted point spread from observed ownership only.
  const bool bStrategy=bArea&&BattleTactics::AreaStrategy().bEnabled;
  const FAreaIntent TeamIntent=AreaIntent(Team);
+ // Routes (map F): what the team sees now, gathered once for all its squads.
+ const bool bRoutes=bStrategy&&RoutesOn();TArray<FVector> RouteEnemies;if(bRoutes)RouteEnemies=RouteKnownEnemies(Team);
 	for (const auto& Pair : Store->GetSquads()) if (Pair.Value.Team == Team)
 	{
 		// Public objective status only; never use an unseen enemy's location.
@@ -380,13 +387,22 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     if(FVector::Dist2D(Runtime->Position(Pair.Value.LeaderUnitID),AreaHome(1-Team))>BattleTactics::AreaStrategy().InfiltrateRadius)Order=EBattleOrder::Move;
   // S7 trial: a home-assault squad first heads for a flank waypoint beside the centre line (away from the central point),
   // then for the enemy home once its leader is past the middle of the field. Static map positions and own leader only.
-  if(BaseAssault&&bStrategy&&TeamIntent.FlankOffset>0)
+  if(BaseAssault&&bStrategy&&TeamIntent.FlankOffset>0&&!bRoutes)
    if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
    {
     const FVector Own=AreaHome(Team),Axis=AreaHome(1-Team)-Own,P=Runtime->Position(Pair.Value.LeaderUnitID);
     const FVector Way=BattleFieldLayout::Expand(FVector(0,((TeamIntent.bFlankSameSide||(Pair.Key/10)%2)?1:-1)*TeamIntent.FlankOffset*12000.f,0),BattleFieldLayout::IsExpanded(GetWorld()));
     const double T=FVector::DotProduct(P-Own,Axis)/FMath::Max(1.0,Axis.SizeSquared2D());
     if(T<0.45&&FVector::Dist2D(P,Way)>2500)Center=Way;
+   }
+  // Routes: a distant goal is reached junction by junction along the roads of the map (BattleRoutes.cpp). Not for scout pairs
+  // (their posts and fall-backs are their own) or the home defence.
+  if(bRoutes&&!bScout&&!bHomeDefence)
+   if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
+   {
+    const FVector P=Runtime->Position(Pair.Value.LeaderUnitID);
+    const FVector Step=RouteStep(P,Center,BaseAssault?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies);
+    if(!Step.Equals(Center,1)){Center=Step;if(Order==EBattleOrder::Defend)Order=EBattleOrder::AttackMove;}
    }
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())
   {

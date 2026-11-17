@@ -19,13 +19,15 @@ int32 UBattleMatch::AreaScore(int32 Team)const
  // War score trial: points held over time + enemy losses + unspent resources replace the living/resource/point formula.
  if(BattleWarScore::Tuning().bEnabled)return WarScore(Team);
  int32 Total=Credits[Team];for(const auto& U:GetWorld()->GetSubsystem<UBattleState>()->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive())++Total;
- for(const auto& P:Objectives)if(P.Owner==Team)Total+=20;return Total;
+ for(int32 I=0;I<Objectives.Num();++I)if(Objectives[I].Owner==Team)Total+=FMath::RoundToInt(20*ObjectiveValue(I));return Total;
 }
 void UBattleMatch::InitializeArea()
 {
  Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
+ // A team knows the objectives it holds from the start (the depots of map F).
+ for(int32 I=0;I<Objectives.Num();++I)if(const int32 Owner=Objectives[I].Owner;Owner==0||Owner==1){Area.KnownOwners[Owner*Objectives.Num()+I]=Owner;Area.SeenAt[Owner*Objectives.Num()+I]=0.f;}
  for(int32 Team=0;Team<2;++Team)
  {
   auto* Base=GetWorld()->SpawnActor<AStaticMeshActor>(AreaHome(Team)*(28./27.)+FVector(0,0,200),FRotator::ZeroRotator);
@@ -182,7 +184,7 @@ void UBattleMatch::UpdateArea(float Dt)
    for(int32 Team=0;Team<2;++Team)
    {
     const bool bUrban=BattleFieldLayout::IsUrban(GetWorld());
-    int32 Gain=I.BaseFor(bUrban);for(const auto& P:Objectives)Gain+=P.Owner==Team?I.PerPointFor(bUrban):0;
+    int32 Gain=I.BaseFor(bUrban);for(int32 Point=0;Point<Objectives.Num();++Point)Gain+=Objectives[Point].Owner==Team?FMath::RoundToInt(I.PerPointFor(bUrban)*ObjectiveValue(Point)):0;
     if(I.Ramp>0)Gain=FMath::RoundToInt(Gain*(1.f+I.Ramp*Elapsed/60.f));
     Credits[Team]+=Gain;Area.Income[Team]+=Gain;
    }

@@ -8,9 +8,12 @@ namespace BattleFieldLayout
 	inline FVector Objective(int32 Index,bool Expanded=false) { return Expand(Index==0?FVector(-7000,12000,0):Index==1?FVector::ZeroVector:FVector(7000,-12000,0),Expanded); }
 
 	// Map definitions (2026-11-18). Everything that differs by map lives in one table entry: to add a map, add an entry to Maps()
-	// and a generator branch in BattleMapCommandlet. Code asks the definition (Of(World) / ByName(Map)) instead of testing map names.
+	// and a generator branch in BattleMapCommandlet (and the map letter in the Setup scripts that take -Map). Code asks the definition (Of(World) / ByName(Map)) instead of testing map names.
 	// Arena = the 80m x 60m prototype arena and any other level; Field500 = the fixed 500-soldier field; Wide = the area-battle maps.
 	enum class EMapKind : uint8 { Arena, Field500, Wide };
+	// Road network (BattleRoutes.cpp): the three main routes and the connectors between them.
+	enum class ERouteLane : uint8 { Centre, North, South, Connector };
+	struct FRouteEdge { int32 A=0,B=0; ERouteLane Lane=ERouteLane::Connector; };
 	struct FMapDef
 	{
 		const TCHAR* Name=TEXT("");
@@ -28,6 +31,16 @@ namespace BattleFieldLayout
 		double SpawnX=25000;
 		// Objectives of the wide maps. Index I and Num-1-I are 180-degree counterparts, which the team order rotation relies on.
 		TArray<FVector> Objectives;
+		// Per objective, both empty on maps without them. Owner: the side that holds it when the match starts (0 = the team of the
+		// west home, 1 = of the east home, -1 = nobody). Value: multiplies its income and its end score (a depot is worth more).
+		TArray<int32> ObjectiveOwners;
+		TArray<float> ObjectiveValues;
+		// Junctions and road sections of the map's routes; empty = squads go straight to their goal.
+		TArray<FVector> RouteNodes;
+		TArray<FRouteEdge> RouteEdges;
+		// A* node budget of the vehicle navmesh; 0 = the engine default (2048). On map E a tank's path to a goal beyond about 550m
+		// came back partial with the default (Setup/Benchmarks/MapStats/mapstats-E-r1), so map F raises it like the infantry one.
+		int32 VehicleSearchNodes=0;
 		// Lookouts (ROADMAP 2026-11-14): public places where a still soldier sees far (UBattleTuning::LookoutSightRange).
 		TArray<FVector> Lookouts;
 		// Half size of the built-up centre (slow for vehicles, framed on the minimap); zero = none.
@@ -56,12 +69,42 @@ namespace BattleFieldLayout
 			}
 			// E (2026-11-14): 1000m x 700m, urban centre (500m x 300m) with five objectives at its crossings, open flanks, lookouts at
 			// the city edges overlooking the flanks.
+			FMapDef Urban;Urban.Kind=EMapKind::Wide;Urban.bUrban=true;
+			Urban.HalfExtent=FVector2D(50000,35000);Urban.HomeDistance=42000;Urban.SpawnX=39000;
+			Urban.Lookouts={FVector(0,16500,0),FVector(0,-16500,0)};
+			Urban.CityHalf=FVector2D(25000,15000);Urban.MatchSeconds=900;Urban.CameraMaxHeight=160000;Urban.SaveLimit=FVector2D(52000,37000);
 			{
-				FMapDef D;D.Name=TEXT("Lvl_BattleWide_E");D.Kind=EMapKind::Wide;D.bUrban=true;
-				D.HalfExtent=FVector2D(50000,35000);D.HomeDistance=42000;D.SpawnX=39000;
+				FMapDef D=Urban;D.Name=TEXT("Lvl_BattleWide_E");
 				D.Objectives={FVector(-13000,7500,0),FVector(-13000,-7500,0),FVector::ZeroVector,FVector(13000,7500,0),FVector(13000,-7500,0)};
-				D.Lookouts={FVector(0,16500,0),FVector(0,-16500,0)};
-				D.CityHalf=FVector2D(25000,15000);D.MatchSeconds=900;D.CameraMaxHeight=160000;D.SaveLimit=FVector2D(52000,37000);T.Add(D);
+				T.Add(D);
+			}
+			// F (2026-11-18): the size, homes and city objectives of E; plus a flank objective and a depot for each side, and roads.
+			// Objectives: 0 A, 1 D, 2 north flank, 3 west depot, 4 C, 5 east depot, 6 south flank, 7 B, 8 E.
+			{
+				FMapDef D=Urban;D.Name=TEXT("Lvl_BattleWide_F");
+				D.Objectives={FVector(-13000,7500,0),FVector(-13000,-7500,0),FVector(-15000,25000,0),FVector(-33000,-20000,0),FVector::ZeroVector,
+					FVector(33000,20000,0),FVector(15000,-25000,0),FVector(13000,7500,0),FVector(13000,-7500,0)};
+				D.ObjectiveOwners={-1,-1,-1,0,-1,1,-1,-1,-1};
+				D.ObjectiveValues={1,1,1,2,1,2,1,1,1};
+				D.VehicleSearchNodes=32768;
+				// Roads: the avenue (centre), the flank roads at y = +-250m (north, south), and connectors: the streets and edges of the
+				// city, the x = 0 / +-130m / +-250m roads from the city to the flank roads, the x = +-380m road in front of each home,
+				// and a spur to each depot. The same lines are kept free of scattered cover in BattleMapLayoutF.inl.
+				auto Node=[&D](double X,double Y){const FVector P(X,Y,0);for(int32 I=0;I<D.RouteNodes.Num();++I)if(D.RouteNodes[I].Equals(P,1))return I;return D.RouteNodes.Add(P);};
+				auto Edge=[&](double X0,double Y0,double X1,double Y1,ERouteLane Lane){FRouteEdge E;E.A=Node(X0,Y0);E.B=Node(X1,Y1);E.Lane=Lane;D.RouteEdges.Add(E);};
+				const double AvenueX[]={-42000,-38000,-25000,-13000,0,13000,25000,38000,42000};
+				for(int32 I=0;I<8;++I)Edge(AvenueX[I],0,AvenueX[I+1],0,ERouteLane::Centre);
+				const double RoadX[]={-38000,-25000,-13000,0,13000,25000,38000};
+				for(int32 I=0;I<6;++I){Edge(RoadX[I],25000,RoadX[I+1],25000,ERouteLane::North);Edge(RoadX[I],-25000,RoadX[I+1],-25000,ERouteLane::South);}
+				const double CityX[]={-25000,-13000,0,13000,25000},RowY[]={25000,15000,7500,0,-7500,-15000,-25000};
+				for(double Y:{15000.,7500.,-7500.,-15000.})for(int32 I=0;I<4;++I)Edge(CityX[I],Y,CityX[I+1],Y,ERouteLane::Connector);
+				for(double X:CityX)for(int32 I=0;I<6;++I)Edge(X,RowY[I],X,RowY[I+1],ERouteLane::Connector);
+				for(double S:{-1.,1.})
+				{
+					Edge(S*38000,25000,S*38000,0,ERouteLane::Connector);Edge(S*38000,0,S*38000,-25000,ERouteLane::Connector);
+					Edge(S*33000,S*20000,S*38000,S*25000,ERouteLane::Connector);Edge(S*33000,S*20000,S*25000,S*15000,ERouteLane::Connector);Edge(S*33000,S*20000,S*25000,S*25000,ERouteLane::Connector);
+				}
+				T.Add(D);
 			}
 			return T;
 		}();
@@ -101,6 +144,9 @@ namespace BattleFieldLayout
 		const FMapDef& D=ByName(Map);
 		return D.Kind==EMapKind::Wide?D.Objectives[FMath::Clamp(Index,0,D.Objectives.Num()-1)]:Objective(Index);
 	}
+	// Starting owner and worth of an objective (see FMapDef); -1 and 1 where the map sets none.
+	inline int32 ObjectiveOwnerSide(const FMapDef& D,int32 Index) {return D.ObjectiveOwners.IsValidIndex(Index)?D.ObjectiveOwners[Index]:INDEX_NONE;}
+	inline float ObjectiveValue(const FMapDef& D,int32 Index) {return D.ObjectiveValues.IsValidIndex(Index)?D.ObjectiveValues[Index]:1.f;}
 	inline FVector WideSpawnFor(const UWorld* World,int32 Team,int32 Group)
 	{
 		const FMapDef& D=Of(World);

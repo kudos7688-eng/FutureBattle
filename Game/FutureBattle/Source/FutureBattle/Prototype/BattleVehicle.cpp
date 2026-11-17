@@ -5,6 +5,7 @@
 #include "BattleState.h"
 #include "BattleUnit.h"
 #include "BattleVehicleNavMesh.h"
+#include "BattleFieldLayout.h"
 #include "BattleRanges.h"
 #include "BattleStance.h"
 #include "Components/CapsuleComponent.h"
@@ -95,7 +96,12 @@ ANavigationData* UBattleLeaderRuntime::NavFor(int32 ID) const
 {
  if(!IsVehicle(ID))return nullptr;
  ABattleUnit* A=Actor(ID);auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
- return A&&Nav?Nav->GetNavDataForProps(A->GetNavAgentPropertiesRef()):nullptr;
+ ANavigationData* Data=A&&Nav?Nav->GetNavDataForProps(A->GetNavAgentPropertiesRef()):nullptr;
+ // Maps that ask for it (FMapDef::VehicleSearchNodes) get a larger A* budget, so long vehicle paths are not cut short.
+ if(auto* Recast=Cast<ARecastNavMesh>(Data))
+  if(const int32 Nodes=BattleFieldLayout::Of(GetWorld()).VehicleSearchNodes;Nodes>0&&Recast->DefaultMaxSearchNodes<Nodes)
+  {Recast->DefaultMaxSearchNodes=float(Nodes);const_cast<FNavigationQueryFilter&>(*Recast->GetDefaultQueryFilter()).SetMaxSearchNodes(Nodes);}
+ return Data;
 }
 
 bool UBattleLeaderRuntime::CanSeeVehicleFar(int32 ObserverID,const FBattleSightContext& C,int32 Target,double Now) const

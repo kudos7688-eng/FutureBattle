@@ -210,6 +210,8 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunStanceShot,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleSightVisual")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSightVisual,4.f,false); }
+  else if(FString StatsFile;FParse::Value(FCommandLine::Get(),TEXT("BattleMapStats="),StatsFile))
+  { bMovementTrial=true;FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunMapStats,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleWideMapAudit")))
   { bMovementTrial=true;FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWideMapAudit,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleSightTrial")))

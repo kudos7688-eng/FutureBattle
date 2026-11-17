@@ -10,8 +10,8 @@ class UBattleSave;
 struct FAreaIntent
 {
  float AttackWeight=2.f,BaseShare=0.2f; bool bFrontBalance=false; float FrontGain=1.f,FocusGain=0.f;
- static constexpr int32 MaxObjectives=8; // three objectives on maps A-D, five on map E
- float PointWeight[MaxObjectives]={1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f}; // per objective index, multiplies the S1 weight
+ static constexpr int32 MaxObjectives=12; // three objectives on maps A-D, five on map E, nine on map F
+ float PointWeight[MaxObjectives]={1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f}; // per objective index, multiplies the S1 weight
  int32 HireReserve=0;                 // resources kept back before an AI purchase (above pending replacements)
  float FlankOffset=1.3f; bool bFlankSameSide=true; // S7/S8 route of home-assault squads (0 = straight; FS13BR5 default since 2026-11-17)
  int32 BaseReturnLiving=5;            // S8: living count at which home-assault squads return for supply (0 = SupplyReturnLiving; 5 by default since 2026-11-17)
@@ -146,6 +146,13 @@ public:
 	// Positions from the team's scout reports of the last ScoutReportMemory seconds (keys below zero, never unit IDs).
 	void AddScoutReportSightings(int32 Team, TMap<int32, FVector>& Seen) const;
 	void AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObjectives]) const;
+	// Objective worth (FMapDef::ObjectiveValues; 1 where the map sets none): multiplies its income and its end score.
+	float ObjectiveValue(int32 Point) const;
+	// Routes (BattleRoutes.cpp): on maps with a road network, the next junction a squad at From is sent to on its way to Goal.
+	bool RoutesOn() const;
+	TArray<FVector> RouteKnownEnemies(int32 Team) const;
+	int32 RouteFlankSide(const FVector& From, const FVector& OwnHome, const TArray<FVector>& KnownEnemies, int32 SquadID) const;
+	FVector RouteStep(const FVector& From, const FVector& Goal, int32 FlankSide, const TArray<FVector>& KnownEnemies) const;
 	void CheckTimeLimit();
 	void UpdateEnemyOrders();
 	void UpdateTeamOrders(int32 Team, bool bDelegatedOnly = false);

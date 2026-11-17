@@ -113,7 +113,8 @@ void ABattleHUD::DrawHUD()
 			if (PC->ProjectWorldLocationToScreen(Point.Position + FVector(0, 0, 45), Center) && Center.Y > 160 && Center.Y < H - 135)
 			{
 				DrawRect(Ink, Center.X - 48, Center.Y - 18, 170, 24);
-    Label(Match->bArea?(Point.Owner==-2?FString::Printf(TEXT("%c ／ 不明"),'A'+Index):FString::Printf(TEXT("%c ／ %s ／ %.0f秒前に確認"),'A'+Index,Point.Owner==0?TEXT("味方"):Point.Owner==1?TEXT("敵"):TEXT("中立"),Match->Area.SeenAt[Index])):FString::Printf(TEXT("%c / %s %.0f%%"), 'A' + Index, Point.bContested ? TEXT("争奪中") : Point.Owner == 0 ? TEXT("味方") : Point.Owner == 1 ? TEXT("敵") : TEXT("中立"), Point.CaptureProgress / 8.f * 100.f), Center.X - 42, Center.Y - 12, Color, .85f);
+    const TCHAR* Kind=Match->ObjectiveValue(Index)>1.f?TEXT("（集積所）"):TEXT("");
+    Label(Match->bArea?(Point.Owner==-2?FString::Printf(TEXT("%c%s ／ 不明"),'A'+Index,Kind):FString::Printf(TEXT("%c%s ／ %s ／ %.0f秒前に確認"),'A'+Index,Kind,Point.Owner==0?TEXT("味方"):Point.Owner==1?TEXT("敵"):TEXT("中立"),Match->Area.SeenAt[Index])):FString::Printf(TEXT("%c / %s %.0f%%"), 'A' + Index, Point.bContested ? TEXT("争奪中") : Point.Owner == 0 ? TEXT("味方") : Point.Owner == 1 ? TEXT("敵") : TEXT("中立"), Point.CaptureProgress / 8.f * 100.f), Center.X - 42, Center.Y - 12, Color, .85f);
 			}
 			for (int32 Segment = 0; Segment < 32; ++Segment)
 			{
@@ -384,6 +385,12 @@ void ABattleHUD::DrawMinimap()
  DrawRect(Ground,Map.Origin.X,Map.Origin.Y,Map.Size.X,Map.Size.Y);
  // Map E: the city block outline (public map knowledge).
  if(const FVector2D City=BattleFieldLayout::Of(GetWorld()).CityHalf;City.X>0) Frame(Map.ToScreen(FVector(City.X,-City.Y,0)),Map.ToScreen(FVector(-City.X,City.Y,0)),Muted);
+ // Roads of the map (public map knowledge): the routes squads follow. The three main routes are brighter than the connectors.
+ {
+  const auto& Def=BattleFieldLayout::Of(GetWorld());const FLinearColor Road(.3f,.36f,.42f,.9f),Side(.2f,.25f,.3f,.8f);
+  for(const auto& E:Def.RouteEdges)
+  {const FVector2D A=Map.ToScreen(Def.RouteNodes[E.A]),B=Map.ToScreen(Def.RouteNodes[E.B]);DrawLine(A.X,A.Y,B.X,B.Y,E.Lane==BattleFieldLayout::ERouteLane::Connector?Side:Road,1);}
+ }
  const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Homes are public; objective ownership is what the player's side last observed.
  if(Match->bArea) for(int32 Team=0;Team<2;++Team)
@@ -394,6 +401,8 @@ void ABattleHUD::DrawMinimap()
   const FLinearColor Color=Holder==0?Mint:Holder==1?Enemy:Holder==-2?Muted:White;
   const FVector2D P=Map.ToScreen(Match->Objectives[Index].Position);
   DrawRect(Color,P.X-5,P.Y-5,10,10);
+  // An objective worth more than the others (a depot) gets a frame around its square.
+  if(Match->ObjectiveValue(Index)>1.f)Frame(P-FVector2D(8,8),P+FVector2D(8,8),Color);
   DrawText(FString::Printf(TEXT("%c"),'A'+Index),Color,P.X+7,P.Y-7,GEngine->GetSmallFont(),.8f);
  }
  // Lookouts (public map places): a small diamond.

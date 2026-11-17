@@ -42,6 +42,8 @@
 | 保存・復元 | @UBattleMatch::SaveMatch 、 @UBattleMatch::LoadMatch 、 @UBattleMatch::CaptureSnapshot 、 @UBattleMatch::RestoreSnapshot | 検証は @UBattleSave::Validate 、 @UBattleSave::ValidateMixed 。戦術状態は @UBattleSquadTactics::CaptureSave |
 | 表示（混成の体・遠距離 VAT） | @UBattleLeaderRuntime::CreateBody 、 @UBattleLeaderRuntime::RefreshDisplay 、 @ABattleVATDisplay::Tick | 復元時は @UBattleLeaderRuntime::RestoreMixedBodies |
 | マップの定義・配置 | `BattleFieldLayout.h`（マップごとの表 `Maps()`） | 生成は @UBattleMapCommandlet::Main （既存の手編集を `-Force` で上書きしない） |
+| 通り道（道路網に沿った移動の指示） | @UBattleMatch::RouteStep 、 @UBattleMatch::RouteFlankSide | 呼び出しは @UBattleMatch::UpdateTeamOrders 。道路網は `FMapDef::RouteNodes/RouteEdges` |
+| マップの数値監査（試合なし） | @UBattleLeaderRuntime::RunMapStats | `Setup/Test-MapStats.ps1`。拠点ごとの持ち主・価値は `FMapDef::ObjectiveOwners/ObjectiveValues` |
 | 計測の記録 | @UBattleMetrics::BeginFrame 、 @UBattleMetrics::Finish | 段取りは MEASURE.md |
 | ネットワーク試作 | @ABattleNetGameMode::BeginPlay 、 @ABattleNetController::ServerOrder_Implementation | |
 | 基本回帰（BATTLE_SMOKE_RESULT） | @ABattleGameMode::RunSmokeTest 、 @ABattleGameMode::FinishSmokeTest | 個別の試験は各 `*Smoke.cpp` の `Run…` |
@@ -111,3 +113,4 @@ BattleViewVisibility | 視点ごとの描画の切替（T5 試験用）
 BattleWarScore | 戦果点（UBattleMatch の一部）
 BattleWeaponPreview | 武器の見た目の確認
 BattleMapStats | マップの統計（区域ごとの見通し・遮蔽、経路の長さ）を JSON に書き出す。試合は行わない（UBattleLeaderRuntime の一部）
+BattleRoutes | 通り道：道路網のあるマップ（F）で、遠い目的地へ交差点を順に指示する。本拠地へ向かう部隊は観測した敵の少ない側面路を選ぶ（UBattleMatch の一部）

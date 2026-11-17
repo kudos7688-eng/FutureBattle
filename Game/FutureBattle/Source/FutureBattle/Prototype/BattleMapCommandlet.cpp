@@ -36,16 +36,20 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 {
 #if WITH_EDITOR
 	FString Wide;FParse::Value(*Params,TEXT("WideField="),Wide);
-	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D") && Wide!=TEXT("E")) return 6;
+	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D") && Wide!=TEXT("E") && Wide!=TEXT("F")) return 6;
 	const bool Expanded=Wide==TEXT("D");
 	// Map E (2026-11-14): 1000m x 700m, urban centre with five objectives, open flanks with hedges and low walls.
-	const bool Urban=Wide==TEXT("E");
+	// Map F (2026-11-18): the size, homes and city objectives of E; a city of districts with an avenue tanks can use, two flank
+	// objectives, two depots and a road network (centre, north and south routes with connectors). See ROADMAP 2026-11-18.
+	const bool UrbanF=Wide==TEXT("F");
+	const bool Urban=Wide==TEXT("E")||UrbanF;
+	const FString WideName=TEXT("Lvl_BattleWide_")+Wide;
 	const bool Sight=!Wide.IsEmpty();
 	const bool Large = Sight || FParse::Param(*Params,TEXT("LargeField"));
 	const FString Name=Sight?TEXT("Lvl_BattleWide_")+Wide:Large?TEXT("Lvl_BattleField500"):TEXT("Lvl_BattlePrototype");
 	const FString Asset=TEXT("/Game/Prototype/")+Name;
 	const FString MapFile=FPaths::ProjectContentDir()/TEXT("Prototype")/(Name+TEXT(".umap"));
-	// Map E is still being designed: it may be regenerated with -Force. Maps A-D are never replaced.
+	// Maps E and F may be regenerated with -Force (E is a measurement baseline: do not regenerate it without need). Maps A-D are never replaced.
 	if(Sight && !(Urban && FParse::Param(*Params,TEXT("Force"))) && FPaths::FileExists(MapFile)){UE_LOG(LogTemp,Error,TEXT("Sight trial map already exists; refusing replacement even with Force"));return 1;}
 	if (FPaths::FileExists(MapFile) && !FParse::Param(*Params, TEXT("Force"))) { UE_LOG(LogTemp, Error, TEXT("Map already exists; use -Force only to regenerate the test arena.")); return 1; }
 	UWorld* World = UEditorLoadingAndSavingUtils::NewBlankMap(false);
@@ -105,9 +109,10 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 			Box(TEXT("UrbanBoundary"),FVector(Sign*50000,0,180),FVector(100,70000,360),WallMat);
 			Box(TEXT("HomeMarker"),FVector(Sign*42000,0,2),FVector(3000,3000,3),Sign<0?AllyMat:EnemyMat,false);
 			Box(TEXT("LookoutMarker"),FVector(0,Sign*16500,2),FVector(800,800,3),AllyMat,false);
-			Box(TEXT("DepotMarker"),FVector(Sign*33000,Sign*15000,2),FVector(1200,1200,3),AllyMat,false);
+			// Map F: the depots are objectives and get the objective marker below.
+			if(!UrbanF)Box(TEXT("DepotMarker"),FVector(Sign*33000,Sign*15000,2),FVector(1200,1200,3),AllyMat,false);
 		}
-		for(int32 I=0;I<5;++I) Box(TEXT("UrbanObjective"),BattleFieldLayout::ObjectiveForMap(TEXT("Lvl_BattleWide_E"),I)+FVector(0,0,2),FVector(1400,1400,3),AllyMat,false);
+		for(int32 I=0;I<BattleFieldLayout::ObjectiveCountForMap(WideName);++I) Box(TEXT("UrbanObjective"),BattleFieldLayout::ObjectiveForMap(WideName,I)+FVector(0,0,2),FVector(1400,1400,3),AllyMat,false);
 		// Layout v2 (2026-11-15). The first layout used 52m x 29m solid blocks: stepping 2-4m sideways from a corner still left a
 		// soldier behind the block, so only about 5% of cover requests succeeded. v2 is built from pieces the cover action and
 		// the stances can use: houses and wings a few metres wide, ruins with doorways and window sills, cars, barriers,
@@ -123,6 +128,12 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 			if(Height>=100. && Height<=125.)Height=130.; else if(Height>=150. && Height<=165.)Height=140.;
 			Pair(Label,FVector(X,Y,Height*.5),FVector(SizeX,SizeY,Height),bConcealment);++Objects;
 		};
+		if(UrbanF)
+		{
+#include "BattleMapLayoutF.inl"
+		}
+		else
+		{
 		// City: 500m x 300m. Streets (16m) run along x = -130/0/130m and y = -75/0/75m; each block holds 2 x 2 lots split by 8m alleys.
 		const double BlockX[4][2]={{-25000,-13800},{-12200,-800},{800,12200},{13800,25000}};
 		const double BlockY[4][2]={{-15000,-8300},{-6700,-800},{800,6700},{8300,15000}};
@@ -242,6 +253,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 		Emit(TEXT("DepotCrate"),33000,15600,600,400,200);Emit(TEXT("DepotWall"),32200,14400,60,500,120);
 		Emit(TEXT("LookoutSandbags"),300,16900,400,90,120);Emit(TEXT("LookoutSandbags"),-300,-16900,400,90,120);
 		UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_LAYOUT objects=%d (x2 by rotation) layout=urban-v2"),Objects);
+		}
 	}
 	else if (Sight)
 	{
@@ -363,7 +375,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 			// Homes and the five objectives must all connect. Direct lines of sight between them are only reported: the v2 city is
 			// made of small pieces and low walls, so a clear line at standing height can exist without being a design error.
 			TArray<FVector> Points={FVector(-42000,0,0),FVector(42000,0,0)};
-			for(int32 I=0;I<5;++I)Points.Add(BattleFieldLayout::ObjectiveForMap(TEXT("Lvl_BattleWide_E"),I));
+			for(int32 I=0;I<BattleFieldLayout::ObjectiveCountForMap(WideName);++I)Points.Add(BattleFieldLayout::ObjectiveForMap(WideName,I));
 			int32 Failures=0,OpenLines=0;
 			for(int32 I=0;I<Points.Num();++I) for(int32 J=I+1;J<Points.Num();++J)
 			{
@@ -373,7 +385,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 				Failures+=!Reach;OpenLines+=!Blocked;
 				UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_PAIR from=%d to=%d reachable=%d length_cm=%.1f blocked=%d"),I,J,Reach,Reach?Path->GetPathLength():-1,Blocked);
 			}
-			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=urban-v2 rotation=180"),Failures,OpenLines);
+			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=%s rotation=180"),Failures,OpenLines,UrbanF?TEXT("districts-v1"):TEXT("urban-v2"));
 			if(Failures) return 7;
 		}
 		else if(Sight)
