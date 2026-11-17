@@ -11,7 +11,8 @@ param(
  [string]$Tag='r1',
  [ValidateRange(-1,1)][int]$TrialTeam=-1,   # 0/1: the S3-S6 trial flags apply to that team only (use a distinct -Tag)
  [ValidateRange(10,120)][int]$Fps=60,       # fixed simulation step (2026-11-16: 30 = about twice as fast; compare only runs with the same Fps)
- [switch]$NoRoundTripSave                   # skip the 80 s save round trip (strategy screening only; regressions keep it)
+ [switch]$NoRoundTripSave,                  # skip the 80 s save round trip (strategy screening only; regressions keep it)
+ [switch]$NoReuse                           # 2026-11-18: by default a match whose build, map, Config and arguments equal an earlier passed one copies its result
 )
 $ErrorActionPreference='Stop'
 Set-Location $PSScriptRoot
@@ -147,6 +148,7 @@ foreach($r in $runs){
   '-CoverActions','1','-FlankCoordination','1','-ObserveTactics','-BehaviorConcurrency',"$Concurrency",'-FrozenBuild',$frozen)+$supply[$c]
  if($TrialTeam -ge 0){$pa+=@('-AreaTrialTeam',"$TrialTeam")}
  if(!$NoRoundTripSave){$pa+='-RoundTripSave'}
+ if(!$NoReuse){$pa+='-ReuseIdentical'}
  if($Fps -ne 60){$pa+=@('-Fps',"$Fps")}
  if($swap){$pa+='-Swap'}
  while(@($jobs|Where-Object{!$_.HasExited}).Count -ge $Concurrency){Start-Sleep 5}

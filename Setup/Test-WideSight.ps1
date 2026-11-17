@@ -1,20 +1,23 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E')][string]$Map='A',[string]$OutputName='audit-A',[switch]$Rendered,[switch]$Experiment,[switch]$Visual,[switch]$FirstPerson,[switch]$GeometryOnly,[ValidateRange(0,10000)][int]$WeaponRange=0,[int]$SightRange=5000,[int]$Seed=7,[switch]$Swap,[ValidateRange(1,16)][int]$BehaviorConcurrency=1,[string]$FrozenBuild='',[ValidateSet(0,1)][int]$FlankEnabled=1,[switch]$ObserveTactics,[switch]$RoundTripSave,[switch]$Area,[ValidateSet(0,1)][int]$FlankRelaxed=0,[ValidateRange(0,3)][int]$FlankTeams=3,[switch]$FlankTrial,[ValidateSet(0,1)][int]$CoverActions=0,[ValidateSet(0,1)][int]$FlankCoordination=0,[ValidateSet(0,1)][int]$AICoverProbe=0,[ValidateSet(0,1)][int]$CoverApproach=0,[ValidateSet(-1,0,1)][int]$ReacquireGrace=-1,[ValidateSet(-1,0,1)][int]$CoverFire=-1,[ValidateSet(-1,0,1)][int]$CoverValidation=-1,[ValidateSet(-1,0,1)][int]$CoverPeekSight=-1,[ValidateSet(0,1)][int]$PerceptionOpt=0,[ValidateSet(0,1)][int]$LeaderGuard=0,[ValidateRange(0,10)][int]$LeaderHealth=0,[int]$SupplyReturnLiving=-1,[int]$SupplyResumeLiving=-1,[double]$SupplyAwayRatio=-1,[double]$SupplyHeal=-1,[double]$SupplyResumeHealth=-1,[ValidateSet(-1,0,1)][int]$AreaHire=-1,[ValidateSet(-1,0,1)][int]$AreaIncome=-1,[int]$AreaHireReserve=-1,[double]$AreaHireInterval=-1,[double]$AreaHireStop=-1,[ValidateSet(-1,0,1)][int]$AreaStrategy=-1,[double]$AreaAttackWeight=-1,[double]$AreaBaseShare=-1,[ValidateSet(-1,0,1)][int]$AreaBaseRule=-1,[double]$AreaBaseShareLow=-1,[double]$AreaBaseShareHigh=-1,[ValidateSet(-1,0,1)][int]$AreaFrontBalance=-1,[double]$AreaFrontGain=-1,[double]$AreaBaseInfiltrate=-1,[double]$AreaFocus=-1,[double]$AreaBaseFlank=-1,[int]$AreaBaseFlankSide=-1,[int]$AreaBaseReturnLiving=-1,[int]$AreaTrialTeam=-1,[int]$AreaIncomeBase=-1,[int]$AreaIncomePerPoint=-1,[double]$AreaIncomeRamp=-1,[int]$AreaStartCredits=-1,[int]$AreaHirePurpose=-1,[int]$AreaPlan=-1,[double]$AreaHeavyShare=-1,[ValidateSet(-1,0,1)][int]$ReturnFire=-1,[int]$AreaIncomeUrbanBase=-1,[int]$AreaIncomeUrbanPerPoint=-1,[ValidateRange(10,120)][int]$Fps=60,[ValidateSet(-1,0,1)][int]$Suppression=-1,[double]$SuppressionPin=-1,[double]$SuppressionSpread=-1,[double]$SuppressionPerShot=-1,[double]$SuppressionSupport=-1,[ValidateSet(-1,0,1)][int]$AreaWarScore=-1,[int]$AreaWarTarget=-1,[ValidateSet(-1,0,1)][int]$RangeProfile=-1,[int]$RangeSight=-1,[int]$RangeEngage=-1,[int]$RangeEngageSupport=-1,[int]$RangeReach=-1,[ValidateSet(-1,0,1)][int]$Stances=-1,[ValidateSet(-1,0,1)][int]$CoverArrival=-1,[int]$HeavyMembers=-1,[double]$HeavyHealth=-1,[double]$HeavySpeed=-1,[int]$HeavyCost=-1,[double]$HeavyDamage=-1,[int]$AreaScoutKeep=-1,[ValidateSet(-1,0,1)][int]$AreaIntel=-1,[ValidateSet(-1,0,1)][int]$ScoutRetreat=-1,[int]$AreaATKeep=-1,[int]$AreaTankKeep=-1,[string]$Trace='',[ValidateSet(-1,0,1)][int]$SightPairReuse=-1,[double]$SightScanInterval=-1,[ValidateSet(-1,0,1)][int]$SightHitStats=-1,[ValidateSet(-1,0,1)][int]$SightParallel=-1,[ValidateSet(-1,0,1)][int]$SightSlowFar=-1,[ValidateSet(-1,0,1)][int]$SightTeamMask=-1)
+param([ValidateSet('A','B','C','D','E')][string]$Map='A',[string]$OutputName='audit-A',[switch]$Rendered,[switch]$Experiment,[switch]$Visual,[switch]$FirstPerson,[switch]$GeometryOnly,[ValidateRange(0,10000)][int]$WeaponRange=0,[int]$SightRange=5000,[int]$Seed=7,[switch]$Swap,[ValidateRange(1,16)][int]$BehaviorConcurrency=1,[string]$FrozenBuild='',[ValidateSet(0,1)][int]$FlankEnabled=1,[switch]$ObserveTactics,[switch]$RoundTripSave,[switch]$Area,[ValidateSet(0,1)][int]$FlankRelaxed=0,[ValidateRange(0,3)][int]$FlankTeams=3,[switch]$FlankTrial,[ValidateSet(0,1)][int]$CoverActions=0,[ValidateSet(0,1)][int]$FlankCoordination=0,[ValidateSet(0,1)][int]$AICoverProbe=0,[ValidateSet(0,1)][int]$CoverApproach=0,[ValidateSet(-1,0,1)][int]$ReacquireGrace=-1,[ValidateSet(-1,0,1)][int]$CoverFire=-1,[ValidateSet(-1,0,1)][int]$CoverValidation=-1,[ValidateSet(-1,0,1)][int]$CoverPeekSight=-1,[ValidateSet(0,1)][int]$PerceptionOpt=0,[ValidateSet(0,1)][int]$LeaderGuard=0,[ValidateRange(0,10)][int]$LeaderHealth=0,[int]$SupplyReturnLiving=-1,[int]$SupplyResumeLiving=-1,[double]$SupplyAwayRatio=-1,[double]$SupplyHeal=-1,[double]$SupplyResumeHealth=-1,[ValidateSet(-1,0,1)][int]$AreaHire=-1,[ValidateSet(-1,0,1)][int]$AreaIncome=-1,[int]$AreaHireReserve=-1,[double]$AreaHireInterval=-1,[double]$AreaHireStop=-1,[ValidateSet(-1,0,1)][int]$AreaStrategy=-1,[double]$AreaAttackWeight=-1,[double]$AreaBaseShare=-1,[ValidateSet(-1,0,1)][int]$AreaBaseRule=-1,[double]$AreaBaseShareLow=-1,[double]$AreaBaseShareHigh=-1,[ValidateSet(-1,0,1)][int]$AreaFrontBalance=-1,[double]$AreaFrontGain=-1,[double]$AreaBaseInfiltrate=-1,[double]$AreaFocus=-1,[double]$AreaBaseFlank=-1,[int]$AreaBaseFlankSide=-1,[int]$AreaBaseReturnLiving=-1,[int]$AreaTrialTeam=-1,[int]$AreaIncomeBase=-1,[int]$AreaIncomePerPoint=-1,[double]$AreaIncomeRamp=-1,[int]$AreaStartCredits=-1,[int]$AreaHirePurpose=-1,[int]$AreaPlan=-1,[double]$AreaHeavyShare=-1,[ValidateSet(-1,0,1)][int]$ReturnFire=-1,[int]$AreaIncomeUrbanBase=-1,[int]$AreaIncomeUrbanPerPoint=-1,[ValidateRange(10,120)][int]$Fps=60,[ValidateSet(-1,0,1)][int]$Suppression=-1,[double]$SuppressionPin=-1,[double]$SuppressionSpread=-1,[double]$SuppressionPerShot=-1,[double]$SuppressionSupport=-1,[ValidateSet(-1,0,1)][int]$AreaWarScore=-1,[int]$AreaWarTarget=-1,[ValidateSet(-1,0,1)][int]$RangeProfile=-1,[int]$RangeSight=-1,[int]$RangeEngage=-1,[int]$RangeEngageSupport=-1,[int]$RangeReach=-1,[ValidateSet(-1,0,1)][int]$Stances=-1,[ValidateSet(-1,0,1)][int]$CoverArrival=-1,[int]$HeavyMembers=-1,[double]$HeavyHealth=-1,[double]$HeavySpeed=-1,[int]$HeavyCost=-1,[double]$HeavyDamage=-1,[int]$AreaScoutKeep=-1,[ValidateSet(-1,0,1)][int]$AreaIntel=-1,[ValidateSet(-1,0,1)][int]$ScoutRetreat=-1,[int]$AreaATKeep=-1,[int]$AreaTankKeep=-1,[string]$Trace='',[ValidateSet(-1,0,1)][int]$SightPairReuse=-1,[double]$SightScanInterval=-1,[ValidateSet(-1,0,1)][int]$SightHitStats=-1,[ValidateSet(-1,0,1)][int]$SightParallel=-1,[ValidateSet(-1,0,1)][int]$SightSlowFar=-1,[ValidateSet(-1,0,1)][int]$SightTeamMask=-1,[switch]$ReuseIdentical)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Get-MeasurementMachine.ps1')
 if($OutputName -notmatch '^[A-Za-z0-9_-]+$'){throw 'Simple output name required'}
 $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$project=Join-Path $root 'Game/FutureBattle/FutureBattle.uproject'
+$snapshot=$null
+if($FrozenBuild){$snapshot=Get-Content -LiteralPath $FrozenBuild -Raw|ConvertFrom-Json}
+# 2026-11-18: snapshots made by New-BattleBuildSnapshot.ps1 carry their own project copy; UE then runs from that copy and
+# the checks below look at the copied DLL/Config/map, so builds and Config edits in the working tree do not affect the run.
+$projDir=if($snapshot -and $snapshot.projectCopy){$snapshot.projectCopy}else{Join-Path $root 'Game/FutureBattle'}
+$project=Join-Path $projDir 'FutureBattle.uproject'
 $out=Join-Path $PSScriptRoot ('Benchmarks/SightTrial-20261111/'+$OutputName)
 if(Test-Path $out){throw "Output exists: $out"}
 New-Item -ItemType Directory -Path $out | Out-Null
-$dll=Join-Path $root 'Game/FutureBattle/Binaries/Win64/UnrealEditor-FutureBattle.dll'
-$mapFile=Join-Path $root "Game/FutureBattle/Content/Prototype/Lvl_BattleWide_$Map.umap"
+$dll=Join-Path $projDir 'Binaries/Win64/UnrealEditor-FutureBattle.dll'
+$mapFile=Join-Path $projDir "Content/Prototype/Lvl_BattleWide_$Map.umap"
 $hashes=@()
 if(!$FrozenBuild){$hashes=@(Get-ChildItem (Join-Path $root 'Game/FutureBattle/Source'),(Join-Path $root 'Game/FutureBattle/Config') -File -Recurse | ForEach-Object {@{path=$_.FullName;sha256=(Get-FileHash $_.FullName).Hash}})}
-$snapshot=$null
 if($FrozenBuild){
- $snapshot=Get-Content -LiteralPath $FrozenBuild -Raw|ConvertFrom-Json
  if((Get-FileHash $dll).Hash -ne $snapshot.dll -or (Get-FileHash $snapshot.sourceArchive).Hash -ne $snapshot.sourceArchiveSha256){throw 'Frozen build or source archive changed'}
  foreach($file in $snapshot.files){if($file.path -notmatch '[\\/]Source[\\/]' -and (Get-FileHash $file.path).Hash -ne $file.sha256){throw 'Runtime configuration changed since snapshot'}}
  $expectedMap=@($snapshot.maps|Where-Object{$_.path -eq $mapFile})
@@ -22,7 +25,7 @@ if($FrozenBuild){
  # C++ edits may continue, but this run executes the pinned DLL and unchanged runtime configuration.
  $hashes=$snapshot.files
 }
-$savedSettings=@(Get-ChildItem (Join-Path $root 'Game/FutureBattle/Saved/Config/WindowsEditor') -Filter '*.ini' -File | ForEach-Object {@{path=$_.FullName;sha256=(Get-FileHash $_.FullName).Hash}})
+$savedSettings=@(Get-ChildItem (Join-Path $projDir 'Saved/Config/WindowsEditor') -Filter '*.ini' -File | ForEach-Object {@{path=$_.FullName;sha256=(Get-FileHash $_.FullName).Hash}})
 $log=Join-Path $out 'run.log'
 $a=@(('"'+$project+'"'),"/Game/Prototype/Lvl_BattleWide_$Map",'-game','-unattended','-nosound','-nosplash','-BattleWideMixed','-BattleRangeAware=1',"-BattleSightRange=$SightRange",('-abslog="'+$log+'"'))
 $a+=@("-BattleSquadFlank=$FlankEnabled","-BattleCoverActions=$CoverActions","-BattleFlankCoordination=$FlankCoordination","-BattleAICoverProbe=$AICoverProbe","-BattleCoverApproach=$CoverApproach","-BattleLeaderGuard=$LeaderGuard")
@@ -75,7 +78,37 @@ if($SightScanInterval -ge 0){$a+=("-BattleSightScanInterval="+$SightScanInterval
 # Unknown far enemies on alternate scan pulses (trial, 2026-11-17); -1 = not passed (off).
 if($SightSlowFar -ge 0){$a+="-BattleSightSlowFar=$SightSlowFar"}
 if($Rendered -and $BehaviorConcurrency -ne 1){throw 'Rendered measurements must run alone'}
-@{machine=(Get-MeasurementMachine);dll=(Get-FileHash $dll).Hash;map=(Get-FileHash $mapFile).Hash;files=$hashes;source_snapshot=$snapshot;savedSettings=$savedSettings;arguments=$a;behaviorConcurrency=$BehaviorConcurrency;timingComparable=($BehaviorConcurrency -eq 1)} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $out 'manifest.json') -Encoding utf8
+# Identical-run key (2026-11-18): DLL, map, runtime Config/.uproject contents and the game arguments without per-output
+# paths. Written for every frozen-build NullRHI experiment so later runs with the same key can reuse its result.
+$reuseKey=$null;$reusedFrom=$null
+if($snapshot -and $Experiment -and !$Rendered -and !$Trace){
+ $runtime=@($hashes|Where-Object{$_.path -notmatch '[\\/]Source[\\/]'}|ForEach-Object{($_.path -replace '^.*[\\/](Config[\\/].*|FutureBattle\.uproject)$','$1' -replace '\\','/')+'='+$_.sha256}|Sort-Object)
+ $keyArgs=@($a|Select-Object -Skip 1|Where-Object{$_ -notmatch '^-(abslog|BattleSightExperiment|BattleWideScreens|tracefile)='})
+ $keyText=(@('dll='+(Get-FileHash $dll).Hash,'map='+(Get-FileHash $mapFile).Hash)+$runtime+$keyArgs) -join "`n"
+ $reuseKey=[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($keyText))) -replace '-',''
+ Set-Content (Join-Path $out 'reuse-key.txt') $reuseKey -Encoding ascii
+ if($ReuseIdentical){
+  foreach($d in Get-ChildItem (Split-Path $out) -Directory){
+   if($d.FullName -eq $out){continue}
+   $k=Join-Path $d.FullName 'reuse-key.txt';$r=Join-Path $d.FullName 'result.json'
+   if(!(Test-Path $k) -or !(Test-Path $r) -or !(Test-Path (Join-Path $d.FullName 'metrics.json'))){continue}
+   if((Get-Content $k -Raw).Trim() -ne $reuseKey){continue}
+   $prev=Get-Content $r -Raw|ConvertFrom-Json
+   if($prev.passed -and !$prev.reusedFrom){$reusedFrom=$d.Name;break}
+  }
+ }
+}
+@{machine=(Get-MeasurementMachine);dll=(Get-FileHash $dll).Hash;map=(Get-FileHash $mapFile).Hash;files=$hashes;source_snapshot=$snapshot;savedSettings=$savedSettings;arguments=$a;behaviorConcurrency=$BehaviorConcurrency;timingComparable=(($BehaviorConcurrency -eq 1) -and !$reusedFrom);reuseKey=$reuseKey;reusedFrom=$reusedFrom} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $out 'manifest.json') -Encoding utf8
+if($reusedFrom){
+ # Same build, map, Config and arguments already played and passed: copy its outcome instead of playing again.
+ $src=Join-Path (Split-Path $out) $reusedFrom
+ Copy-Item (Join-Path $src 'metrics.json'),(Join-Path $src 'run.log') $out
+ $prev=Get-Content (Join-Path $src 'result.json') -Raw|ConvertFrom-Json
+ @{passed=$true;exitCode=$prev.exitCode;dll=$prev.dll;reusedFrom=$reusedFrom} | ConvertTo-Json | Set-Content (Join-Path $out 'result.json') -Encoding utf8
+ "REUSED identical run $reusedFrom"
+ Get-Content $log | Where-Object {$_ -match 'WIDE_AUDIT|SIGHT_EXPERIMENT|SIGHT_VISUAL'} | Write-Output
+ return
+}
 $p=Start-Process 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe' -ArgumentList $a -WindowStyle Hidden -PassThru
 $timeout=if($Experiment){2700000}else{210000}
 if(!$p.WaitForExit($timeout)){Stop-Process -Id $p.Id;throw "Timeout: $log"}

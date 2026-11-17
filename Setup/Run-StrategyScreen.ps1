@@ -13,13 +13,14 @@ param(
  [double]$Threshold=0,
  [ValidateRange(10,120)][int]$Fps=60,
  [switch]$NoRoundTripSave,
+ [switch]$NoReuse,   # 2026-11-18: identical matches (e.g. the baseline of an earlier screen on the same build) are reused unless set
  [ValidateRange(1,16)][int]$Concurrency=12,
  [string[]]$Maps=@('D','A')   # 2026-11-17: map E screens pass -Maps E
 )
 $ErrorActionPreference='Stop'
 Set-Location $PSScriptRoot
 $root=Join-Path $PSScriptRoot 'Benchmarks/SightTrial-20261111'
-$common=@{FrozenBuild=$FrozenBuild;Fps=$Fps;NoRoundTripSave=$NoRoundTripSave;Concurrency=$Concurrency;Maps=$Maps}
+$common=@{FrozenBuild=$FrozenBuild;Fps=$Fps;NoRoundTripSave=$NoRoundTripSave;Concurrency=$Concurrency;Maps=$Maps;NoReuse=$NoReuse}
 $stages=@(@{Name='s1';Seeds=@(7,19,43)},@{Name='s2';Seeds=@(61,89,101,131,157,173)})
 function Read-Runs([string]$Condition,[string]$RunTag){
  $runs=@()
