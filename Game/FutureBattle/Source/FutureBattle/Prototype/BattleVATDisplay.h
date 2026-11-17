@@ -17,6 +17,7 @@ public:
  int32 UnitID=0;
  bool VATFar=false;
  bool HasNativeTick=false;
+ uint64 NativeTickFrame=0;
  virtual void TickComponent(float Dt,ELevelTick TickType,FActorComponentTickFunction* TickFunction) override;
  virtual bool ShouldCreateRenderState() const override;
 };
@@ -29,6 +30,7 @@ struct FBattleVATEntry
  float Time=0,Rate=1;
  bool Far=false,Visible=true,Dead=false,Initialized=false;
  FVector3f PreviousFrames=FVector3f::ZeroVector;
+ uint64 AdvancedFrame=0;
 };
 // Mass follower presentation. No writes to simulation, capsules, perception or hit IDs.
 UCLASS()
@@ -68,5 +70,6 @@ private:
  TMap<int32,FBattleVATEntry> Entries;
  void Enter(FBattleVATEntry& E);
  void Leave(FBattleVATEntry& E);
+ void AdvanceFar(FBattleVATEntry& E,float Dt);
  FVector3f Frames(const FBattleVATEntry& E) const;
 };
