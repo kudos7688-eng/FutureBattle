@@ -339,9 +339,13 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
    const FVector From=B.Capsule->GetComponentLocation();
    { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSweepSoldier); SweepSoldier(GetWorld(),B.Capsule.Get(),From,Delta,Result); }
    const float Fraction=Result.bBlockingHit?FMath::Max(0.f,Result.Time-.001f):1.f;
-   { TRACE_CPUPROFILER_EVENT_SCOPE(BattleMoveCapsule); B.Capsule->MoveComponent(Delta*Fraction,Direction.Rotation().Quaternion(),true); }
-   // Evaluation (2026-11-17, collision cost): what stopped the own sweep (a soldier or the world), and whether the engine's own
-   // sweep inside MoveComponent shortened the move further (it ignores the shared owner, so it only sees the world).
+   // Trial -BattleEngineMoveSweep=0 (performance, 2026-11-17): the own sweep above already stops at soldiers and the world, so the
+   // capsule could move without the second engine sweep (it ignores the shared owner and only sees the world; it never shortened a
+   // move by 0.5 cm in 7.5 million moves on map E). Default ON: without it the matches change (tiny position differences), saving 0.3 ms.
+   static const bool bEngineSweep=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleEngineMoveSweep="),V);return V!=0;}();
+   { TRACE_CPUPROFILER_EVENT_SCOPE(BattleMoveCapsule); B.Capsule->MoveComponent(Delta*Fraction,Direction.Rotation().Quaternion(),bEngineSweep); }
+   // Evaluation (2026-11-17, collision cost): what stopped the own sweep (a soldier or the world), and (with the engine sweep)
+   // whether the engine's sweep shortened the move further.
    ++MoveSweeps;
    if(Result.bBlockingHit){if(HitIDs.FindRef(Result.GetComponent())>0)++MoveHitSoldier;else ++MoveHitWorld;}
    const double Wanted=(Delta*Fraction).Size2D(),Moved=FVector::Dist2D(From,B.Capsule->GetComponentLocation());
