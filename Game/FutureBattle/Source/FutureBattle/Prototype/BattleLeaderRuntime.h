@@ -115,7 +115,8 @@ public:
  // Return fire (trial -BattleReturnFire=1, ROADMAP range table): a soldier hit within the last ReturnFireSeconds may engage a
  // contact it can currently see up to its weapon reach instead of the shorter AI engagement distance; its squad may pick such a target.
  // Only differs from the old rule where the range profile separates reach from engagement (map E).
- void NoteUnderFire(int32 ID){if(BattleTactics::ReturnFireEnabled())UnderFireUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);}
+ // One-team trials (-BattleAreaTrialTeam=t, 2026-11-17): only that team's soldiers return fire.
+ void NoteUnderFire(int32 ID);
  bool UnderFire(int32 ID) const {const double* T=UnderFireUntil.Find(ID);return T&&*T>GetWorld()->GetTimeSeconds();}
  TMap<int32,double> UnderFireUntil;
  // Squad target search range for one member: the AI engagement distance, or its weapon reach while under fire (return fire).

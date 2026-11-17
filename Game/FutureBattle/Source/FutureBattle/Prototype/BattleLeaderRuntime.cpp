@@ -99,7 +99,15 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
  int32 Grid=GetDefault<UBattleTuning>()->bPerceptionGrid?1:0; FParse::Value(FCommandLine::Get(),TEXT("BattlePerceptionGrid="),Grid);
  if(Grid!=0 && Grid!=1) return false;
  GetWorld()->GetSubsystem<UBattlePerception>()->bUseSpatialGrid=Grid==1;
- UE_LOG(LogFutureBattle,Display,TEXT("PERCEPTION_GRID enabled=%d far=0 scope=existing_candidate_grid"),Grid);
+ // Trial -BattleSightSlowFar=1 (2026-11-17, default OFF): unknown enemies beyond 12 m are considered on every other 0.2 s scan
+ // pulse only (the 2026-11-04 "Far" sense mode, tested then only on the dense 500 map). Known contacts and started detections never wait.
+ int32 SlowFar=0; FParse::Value(FCommandLine::Get(),TEXT("BattleSightSlowFar="),SlowFar);
+ GetWorld()->GetSubsystem<UBattlePerception>()->bSlowUnknownFar=SlowFar==1;
+ // Scan interval of observers that saw no enemy (user decision 2026-11-17: 0.4 s; -BattleSightScanInterval=0.2 = old uniform 0.2 s).
+ {double Interval=.4,Near=1.e7;FParse::Value(FCommandLine::Get(),TEXT("BattleSightScanInterval="),Interval);FParse::Value(FCommandLine::Get(),TEXT("BattleSightScanNear="),Near);
+  auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();Sense->UnseenScanInterval=FMath::Clamp(Interval,.2,2.);Sense->ScanNearCm=FMath::Max(0.,Near);
+  UE_LOG(LogFutureBattle,Display,TEXT("SIGHT_SCAN_INTERVAL unseen=%.2f near_cm=%.0f"),Sense->UnseenScanInterval,Sense->ScanNearCm);}
+ UE_LOG(LogFutureBattle,Display,TEXT("PERCEPTION_GRID enabled=%d far=%d scope=existing_candidate_grid"),Grid,SlowFar==1);
  UE_LOG(LogFutureBattle,Display,TEXT("SIGHT_CONTEXT_REUSE enabled=%d scope=observer_scan"),ReuseSight);
  Phase3=GetWorld()->GetSubsystem<UBattlePhase3>();
  if(!Phase3->Configure(*this)) return false;
@@ -892,4 +900,12 @@ bool UBattleLeaderRuntime::HasLongSight(int32 ID) const
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
  return (S&&S->SquadType==BattleSquadType::Scout)||AtLookout(ID);
+}
+
+void UBattleLeaderRuntime::NoteUnderFire(int32 ID)
+{
+ if(!BattleTactics::ReturnFireEnabled())return;
+ const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;
+ if(Trial>=0){const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);if(!U||U->Team!=Trial)return;}
+ UnderFireUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);
 }

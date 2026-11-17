@@ -86,9 +86,11 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	if (Mixed && Leader && Leader->VehicleIDs.Num()) { VehicleSpot2 = FMath::Square(Leader->VehicleSpotRange()); for (const auto& L : Alive) if (Leader->IsVehicle(L.Key)) VehicleUnits.Add(&L.Value); }
 	// Never slow known contacts or acquisition already in progress. Short glimpses
 	// cannot carry a partly completed timer across skipped far scans.
+	// One-team trials (-BattleAreaTrialTeam=t): only that team's observers slow their far scans (candidates are enemies).
+	const int32 SlowFarTeam = BattleTactics::AreaStrategy().TrialTeam;
 	auto SkipFar = [&](const FBattleObserver& Observer, const FBattleSightContext& Sight, bool bFarPulse, const FLiveUnit& Candidate)
 	{
-		return bSlowUnknownFar && SliceCount == 0 && !bFarPulse &&
+		return bSlowUnknownFar && SliceCount == 0 && !bFarPulse && (SlowFarTeam < 0 || Candidate.State->Team != SlowFarTeam) &&
 			FVector::DistSquared(Sight.Position, Candidate.Position) > FMath::Square(1200.f) &&
 			!Observer.Contacts.Contains(Candidate.State->UnitID) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID);
 	};
@@ -178,10 +180,11 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 				}
 				if (Now + 1.e-6 < *Due) continue;
 				Lateness = FMath::Max(0., Now - *Due);
-				// Trial -BattleSightScanInterval=s (performance, default 0.2 = unchanged; user idea 2026-11-17): an observer with no
-				// enemy in sight at its last scan (or none within -BattleSightScanNear cm when given) looks again only every s seconds.
-				static const double ScanInterval = [] { double V = .2; FParse::Value(FCommandLine::Get(), TEXT("BattleSightScanInterval="), V); return FMath::Clamp(V, .2, 2.); }();
-				static const double ScanNear2 = [] { double V = 1.e7; FParse::Value(FCommandLine::Get(), TEXT("BattleSightScanNear="), V); return FMath::Square(FMath::Max(0., V)); }();
+				// Scan interval (performance; user idea and decision 2026-11-17, default 0.4 s): an observer with no enemy in sight at
+				// its last scan (or none within -BattleSightScanNear cm when given) looks again only every s seconds; an observer that
+				// sees an enemy keeps 0.2 s. -BattleSightScanInterval=0.2 restores the old uniform 0.2 s.
+				// Set by the battle runtime for the match perception only (UBattleLeaderRuntime); other perception instances (tests) keep 0.2 s.
+				const double ScanInterval = FMath::Clamp(UnseenScanInterval, .2, 2.); const double ScanNear2 = FMath::Square(FMath::Max(0., ScanNearCm));
 				double Step = .2;
 				if (ScanInterval > .2 + 1.e-6)
 				{

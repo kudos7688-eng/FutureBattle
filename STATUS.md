@@ -1,5 +1,17 @@
 # 現在地と次の作業
 
+## 2026-11-17 18時55分 Claude（経済・AI戦略）：負荷対策2つを既定に（ユーザー決定）、マップEの試験の準備
+- **既定に変更**（どちらも試合の結果が変わる。新しい基準は未計測）
+  - 見回しの間隔：前回の見回しで敵を見ていなかった兵は0.4秒ごと、見ていた兵は0.2秒のまま（`UBattlePerception::UnseenScanInterval`、試合用の認識だけ `UBattleLeaderRuntime` が設定。試験で別に作る認識は0.2秒）。戻し方 `-BattleSightScanInterval=0.2`。計測（マップE・描画あり・トレースあり）：認識 5.56→4.05ms。
+  - 部下の移動：自前の判定のあとのエンジンの判定を省く（`-BattleEngineMoveSweep=1` で戻す）。移動の処理 −0.3ms。
+  - 最初、間隔の既定を認識の処理そのものに入れたため、基本回帰の認識の時刻の検査3件（Even/Far の診断）が失敗した。試合用の認識だけに効くよう直した。
+- **マップEの試験の準備**（ユーザー依頼：撃ち返し・遠い未知の敵の隔回検索・本拠地攻撃の集中をマップEで）
+  - `Run-StrategyScreen.ps1 -Maps E`（片側試験をマップEで）。
+  - 遠い未知の敵の隔回検索をエリア戦で使えるように：`-BattleSightSlowFar=1`（条件 `SF`、Test-WideSight `-SightSlowFar`）。見回し0.4秒の兵には効かない（1回おきがいつも検索する回に当たる）ので、効くのは敵を見ている兵だけ。
+  - 撃ち返し（`RF`）と隔回検索は、試験側のチーム（`-BattleAreaTrialTeam`）を指定したときはそのチームだけに効くように（これまで撃ち返しは両軍に効いていた）。
+- Build成功、Battle/Area/MixedSave とも failures=0（`claude-def1117-r2`）。
+- **未実施**：新しい既定での基準試合、マップEの3条件の片側試験（ロックの順番待ち）。
+
 ## 2026-11-17 12時15分 Claude（視線判定の負荷対策）：視線を遮る物の集計と、視線判定の並列化（どちらも既定OFF・試合は不変）
 - **変更範囲**：`BattleLeaderRuntime.cpp/.h`、`BattlePerception.cpp/.h`、`BattleVehicle.cpp`、`BattleArea.cpp`、`BattleMatch.cpp`、`BattleScoutReport.cpp`、`Setup/Test-WideSight.ps1`（`-SightHitStats 1`、`-SightParallel 1`）。
 - **検証1：視線を遮る物の集計** `-BattleSightHitStats=1`（評価用、挙動は不変）。視線判定（認識の `CanSeeWithContext`、直接の `CanSee`、遠くの戦車 `CanSeeVehicleFar`、本拠地の `AreaVisible`）で最初に当たった物を種類別に数え、所要時間も測る。試合終了時に `BATTLE_SIGHT_HITS`（合計）、`_KIND`（種類別）、`_SOURCE`（呼び出し元別）、`_CLASS`（部品のクラス名）、`_TAG`（Actorのタグ）、`_ACTOR`（種類:Actor名の上位40）をログに出す。
