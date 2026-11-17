@@ -16,6 +16,16 @@
 #include "NavigationSystem.h"
 #include "FutureBattle.h"
 
+// Stage 3 values (2026-11-18, first values; to move into UBattleTuning once settled).
+namespace BattleGroupValues
+{
+ constexpr double CommitRatio=1.2;   // advance only with this many times the living soldiers of the enemies known at the point
+ constexpr float WaitMax=120.f;      // seconds a gathered group waits for better odds before it goes into reserve
+ constexpr float ReserveMin=45.f;    // seconds a group stays in reserve at an own point before it attacks again
+ constexpr double DeepRatio=1.3;     // after a stall, another point only when it is not this much farther from the own home
+ constexpr double StageMax=2.5;      // an own point within this x the rally distance of the objective is the rally point
+}
+
 bool BattleTactics::DefendEngage(int32 Team)
 {
  static const bool bOn=[]{int32 V=GetDefault<UBattleTuning>()->bDefendEngage?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleDefendEngage="),V);return V!=0;}();
@@ -104,6 +114,16 @@ FVector UBattleMatch::GroupRally(int32 Team,int32 Point) const
  const FVector P=Objectives[Point].Position,Home=AreaHome(Team);const double Length=FVector::Dist2D(Home,P);
  const double Back=FMath::Clamp(double(BattleRanges::Get().bActive?T->GroupRallyBackProfile:T->GroupRallyBack),0.,FMath::Max(0.,Length-3000.));
  FVector Rally=P+(Home-P).GetSafeNormal2D()*Back;
+ // An own point (observed) nearer the own home than the objective and close to it: gather there, where the squads also hold ground.
+ {
+  int32 Stage=INDEX_NONE;double StageD=Back*BattleGroupValues::StageMax;
+  for(int32 I=0;I<Objectives.Num();++I)
+  {
+   if(I==Point||ObservedOwner(Team,I)!=Team||FVector::Dist2D(Objectives[I].Position,Home)>=Length)continue;
+   const double D=FVector::Dist2D(Objectives[I].Position,P);if(D<StageD){StageD=D;Stage=I;}
+  }
+  if(Stage!=INDEX_NONE)Rally=Objectives[Stage].Position;
+ }
  if(auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld())){FNavLocation L;if(Nav->ProjectPointToNavigation(Rally,L,FVector(1500,1500,500)))Rally=L.Location;}
  return Rally;
 }
@@ -218,37 +238,96 @@ void UBattleMatch::UpdateGroups(int32 Team)
    Ready+=FVector::Dist2D(P,G->Rally)<=FMath::Max(500.f,T->GroupRallyRadius);
   }
   if(Present)Center/=Present;
+  // Stage 3: what the group decides as a whole. Own squads' numbers, observed ownership, known enemies (AreaIntelView).
+  const auto& V=AreaIntelView(Team);const FVector Home=AreaHome(Team),EnemyHome=AreaHome(1-Team);
+  int32 Living=0;
+  for(int32 SID:G->Squads)if(const auto* S=Store->FindSquad(SID);S&&!BattleSquadType::IsVehicle(S->SquadType))
+   for(int32 UID:S->Members)if(const auto* U=Store->Find(UID);U&&U->IsAlive())++Living;
+  // The next point to attack: not observed as own, the nearest to the own home; not the avoided one while it is avoided, and
+  // not one much deeper than it (a group that failed at the front does not go for the enemy's rear).
+  auto AttackPoint=[&]()->int32
+  {
+   const bool bAvoid=Elapsed<G->AvoidUntil&&Objectives.IsValidIndex(G->Avoid);
+   const double Limit=bAvoid?FVector::Dist2D(Objectives[G->Avoid].Position,Home)*BattleGroupValues::DeepRatio:DBL_MAX;
+   int32 Best=INDEX_NONE;double BestD=DBL_MAX;
+   for(int32 I=0;I<Objectives.Num();++I)
+   {
+    if(ObservedOwner(Team,I)==Team||(bAvoid&&I==G->Avoid))continue;
+    const double D=FVector::Dist2D(Objectives[I].Position,Home);if(D>Limit)continue;
+    if(D<BestD){BestD=D;Best=I;}
+   }
+   return Best;
+  };
+  // The own point to stand at in reserve: the one with the largest known enemy surplus, else the own point nearest the enemy home.
+  auto ReservePoint=[&]()->int32
+  {
+   const int32 Threat=AreaIntelThreat(Team);if(Threat!=INDEX_NONE&&Threat>=0)return Threat;
+   int32 Best=INDEX_NONE;double BestD=DBL_MAX;
+   for(int32 I=0;I<Objectives.Num();++I)if(ObservedOwner(Team,I)==Team){const double D=FVector::Dist2D(Objectives[I].Position,EnemyHome);if(D<BestD){BestD=D;Best=I;}}
+   return Best;
+  };
+  auto Attack=[&](int32 Point,const TCHAR* Why){G->Objective=Point;G->Rally=GroupRally(Team,Point);Enter(0,Why);};
+  auto Reserve=[&](const TCHAR* Why)->bool
+  {
+   const int32 Point=ReservePoint();if(Point==INDEX_NONE)return false;
+   G->Objective=Point;G->Rally=Objectives[Point].Position;Enter(3,Why);return true;
+  };
   if(!Objectives.IsValidIndex(G->Objective))
   {
-   const int32 Next=GroupFocus(Team,Present?Center:AreaHome(Team),Elapsed<G->AvoidUntil?G->Avoid:INDEX_NONE);
-   if(Next==INDEX_NONE){if(!G->bPlayer){DissolveGroup(ID,TEXT("no_objective"));}continue;}
-   G->Objective=Next;G->Rally=GroupRally(Team,Next);Enter(0,TEXT("new_objective"));continue;
+   const int32 Next=AttackPoint();
+   if(Next!=INDEX_NONE){Attack(Next,TEXT("new_objective"));continue;}
+   if(!Reserve(TEXT("no_attack_point"))&&!G->bPlayer)DissolveGroup(ID,TEXT("no_objective"));
+   continue;
   }
   const bool bOwn=ObservedOwner(Team,G->Objective)==Team;
   if(G->Phase==0)
   {
    if(bOwn){Enter(2,TEXT("already_own"));continue;}
-   if(Present>=2&&Ready>=FMath::CeilToInt(Present*FMath::Clamp(T->GroupReadyShare,.1f,1.f)))Enter(1,TEXT("assembled"));
-   else if(Elapsed-G->PhaseAt>=FMath::Max(0.f,T->GroupAssembleMax))Enter(1,TEXT("assemble_timeout"));
+   const bool bAssembled=Present>=2&&Ready>=FMath::CeilToInt(Present*FMath::Clamp(T->GroupReadyShare,.1f,1.f));
+   const float Waited=Elapsed-G->PhaseAt;
+   if(!bAssembled&&Waited<FMath::Max(0.f,T->GroupAssembleMax))continue;
+   // Commit: go in only with enough soldiers for the enemies the team knows of at the point; otherwise wait for more, then stand back.
+   const int32 Known=V.EnemyAt.IsValidIndex(G->Objective)?V.EnemyAt[G->Objective]:0;
+   if(Living>=Known*BattleGroupValues::CommitRatio)Enter(1,bAssembled?TEXT("assembled"):TEXT("assemble_timeout"));
+   else if(Waited>=FMath::Max(T->GroupAssembleMax,BattleGroupValues::WaitMax))
+   {
+    G->Avoid=G->Objective;G->AvoidUntil=Elapsed+FMath::Max(0.f,T->GroupAvoidSeconds);
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_HOLD_BACK group=%d team=%d objective=%d living=%d known=%d time=%.1f"),ID,Team,G->Objective,Living,Known,Elapsed);
+    if(!Reserve(TEXT("outnumbered")))Enter(1,TEXT("no_reserve_point"));
+   }
   }
   else if(G->Phase==1)
   {
    if(bOwn)Enter(2,TEXT("point_taken"));
    else if(Elapsed-G->PhaseAt>=FMath::Max(10.f,T->GroupAdvanceMax))
    {
-    // Stalled: the point is not taken. Another point if there is one (this one is avoided for a while); otherwise gather again.
-    const int32 Next=GroupFocus(Team,Present?Center:AreaHome(Team),G->Objective);
-    if(Next!=INDEX_NONE&&Next!=G->Objective)
-    {G->Avoid=G->Objective;G->AvoidUntil=Elapsed+FMath::Max(0.f,T->GroupAvoidSeconds);G->Objective=Next;G->Rally=GroupRally(Team,Next);Enter(0,TEXT("stalled_switch"));}
-    else Enter(0,TEXT("stalled_regroup"));
+    // Stalled: the point is not taken. It is avoided for a while; another front point if there is one, else the group stands in
+    // reserve at an own point (it used to go on to the enemy's rear points and back, holding nothing).
+    G->Avoid=G->Objective;G->AvoidUntil=Elapsed+FMath::Max(0.f,T->GroupAvoidSeconds);
+    const int32 Next=AttackPoint();
+    if(Next!=INDEX_NONE)Attack(Next,TEXT("stalled_switch"));
+    else if(!Reserve(TEXT("stalled_reserve")))Enter(0,TEXT("stalled_regroup"));
    }
   }
-  else if(Elapsed-G->PhaseAt>=FMath::Max(0.f,T->GroupHoldSeconds)||!bOwn)
+  else if(G->Phase==2)
   {
-   // The next point: the nearest one the team does not hold, from where the group stands. It gathers again short of it.
-   const int32 Next=bOwn?GroupFocus(Team,Present?Center:AreaHome(Team),Elapsed<G->AvoidUntil?G->Avoid:INDEX_NONE):G->Objective;
-   if(Next==INDEX_NONE){G->PhaseAt=Elapsed;continue;}
-   G->Objective=Next;G->Rally=GroupRally(Team,Next);Enter(0,bOwn?TEXT("next_objective"):TEXT("point_lost"));
+   if(!bOwn){Attack(G->Objective,TEXT("point_lost"));continue;}
+   if(Elapsed-G->PhaseAt<FMath::Max(0.f,T->GroupHoldSeconds))continue;
+   // A threatened own point comes first; then the next point to attack; with neither, the group stays.
+   if(const int32 Threat=AreaIntelThreat(Team);Threat!=INDEX_NONE&&Threat>=0&&Threat!=G->Objective){Reserve(TEXT("defend_threat"));continue;}
+   const int32 Next=AttackPoint();
+   if(Next!=INDEX_NONE)Attack(Next,TEXT("next_objective"));else G->PhaseAt=Elapsed;
+  }
+  else
+  {
+   // Reserve at an own point: follow the threat; attack again after ReserveMin when its point is not threatened and a point is open.
+   if(!bOwn){Attack(G->Objective,TEXT("reserve_point_lost"));continue;}
+   const int32 Want=ReservePoint();
+   const bool bThreatHere=AreaIntelThreatAt(Team,G->Objective);
+   if(Want!=INDEX_NONE&&Want!=G->Objective&&AreaIntelThreatAt(Team,Want)&&!bThreatHere){Reserve(TEXT("defend_threat"));continue;}
+   if(bThreatHere||Elapsed-G->PhaseAt<BattleGroupValues::ReserveMin)continue;
+   const int32 Next=AttackPoint();
+   if(Next!=INDEX_NONE)Attack(Next,TEXT("attack_again"));
   }
  }
 }
@@ -266,10 +345,12 @@ bool UBattleMatch::GroupOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOr
   // point itself); a mortar team keeps its standoff from known enemies.
   Center=bMortar?AreaArtilleryPost(Team,SquadID,G->Rally):G->Rally;Order=EBattleOrder::AttackMove;return true;
  }
+ // Always an attack-move order: at a point the team holds, the group's squads stay there and fight what comes within range (a Defend
+ // order only watches DefenseRadius around the place).
  const FVector Point=Objectives[G->Objective].Position;const bool bOwn=ObservedOwner(Team,G->Objective)==Team;
- Order=bOwn?EBattleOrder::Defend:EBattleOrder::AttackMove;
- // Support and guard squads fire from the support post until the point is the team's, then move up to it.
- if((Role==1||Role==4)&&!bOwn){Center=GroupSupportPost(Team,G->Objective);return true;}
+ Order=EBattleOrder::AttackMove;
+ // Support and guard squads fire from the support post while the group advances, then move up to the point.
+ if((Role==1||Role==4)&&!bOwn&&G->Phase==1){Center=GroupSupportPost(Team,G->Objective);return true;}
  if(Role==2)
  {
   // Close behind its infantry instead of the lone overwatch distance; a post near the current mission is kept.
