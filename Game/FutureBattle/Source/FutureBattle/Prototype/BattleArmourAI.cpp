@@ -178,13 +178,13 @@ int32 UBattleMatch::AreaVehicleChoice(int32 SquadID,TFunctionRef<double(int32)> 
  return Best;
 }
 
-FVector UBattleMatch::AreaTankPost(int32 Team,int32 Point) const
+FVector UBattleMatch::AreaTankPost(int32 Team,int32 Point,float Overwatch) const
 {
  // Overwatch: TankOverwatch short of the point on the own side, further back (20 m steps) while a known anti-tank soldier reaches it.
  if(!Objectives.IsValidIndex(Point))return AreaHome(Team);
  const FVector P=Objectives[Point].Position,Back=(AreaHome(Team)-P).GetSafeNormal2D();
  const double Length=FVector::Dist2D(AreaHome(Team),P);
- double Step=FMath::Clamp(double(GetDefault<UBattleTuning>()->TankOverwatch),0.,FMath::Max(0.,Length-3000.));
+ double Step=FMath::Clamp(double(Overwatch>=0.f?Overwatch:GetDefault<UBattleTuning>()->TankOverwatch),0.,FMath::Max(0.,Length-3000.));
  for(int32 I=0;I<6&&Step+2000.<Length&&AreaArmourThreat(Team,P+Back*Step,false);++I)Step+=2000.;
  return P+Back*Step;
 }

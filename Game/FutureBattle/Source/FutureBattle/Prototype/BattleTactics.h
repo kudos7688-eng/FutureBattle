@@ -81,6 +81,8 @@ namespace BattleTactics
  bool ArmourAI(int32 Team);
  // Strategic layer trial -BattleAreaComposition=0/1 (UBattleTuning::bAreaComposition, default 0; the trial team with -BattleAreaTrialTeam).
  bool AreaComposition(int32 Team);
+ // Squad groups trial -BattleAreaGroups=0/1 (UBattleTuning::bAreaGroups, default 0; the trial team with -BattleAreaTrialTeam): the AI forms one attack group per team (BattleGroups.cpp).
+ bool AreaGroups(int32 Team);
 	// SpreadScale: extra multiplier from runtime effects (suppression trial); 1 = none.
 	float SpreadDegrees(const FBattleUnitState& State, double Now, float SpreadScale = 1.f);
 	FVector ShotDirection(const FBattleUnitState& State, FVector Aim, double Now, float SpreadScale = 1.f);

@@ -144,7 +144,23 @@ public:
 	int32 AreaArmourReaction(int32 Team, int32 SquadID, float DamageRatio, FVector& Goal, FString& Why) const;
 	// Tank objective (the point with the most known enemies, outside the city of map E) and its overwatch post short of that point.
 	int32 AreaTankTarget(int32 Team, int32 SquadID) const;
-	FVector AreaTankPost(int32 Team, int32 Point) const;
+	FVector AreaTankPost(int32 Team, int32 Point, float Overwatch = -1.f) const; // Overwatch below zero: UBattleTuning::TankOverwatch
+	// Squad groups, stage 1 (BattleGroups.cpp): members, one objective, a phase (0 assemble at Rally, 1 advance, 2 hold). Not saved.
+	struct FBattleGroup { int32 ID = 0, Team = 0; TArray<int32> Squads; int32 Objective = INDEX_NONE; uint8 Phase = 0; float PhaseAt = 0.f; FVector Rally = FVector::ZeroVector; bool bPlayer = false; };
+	TMap<int32, FBattleGroup> Groups;
+	TMap<int32, int32> SquadGroup; // squad -> group
+	int32 NextGroupID = 1;
+	int32 GroupOf(int32 SquadID) const; // INDEX_NONE when the squad is in no group
+	// A new group of active squads of one team (they leave their old groups). bPlayer: formed by the player (may hold one squad).
+	int32 FormGroup(int32 Team, const TArray<int32>& Squads, bool bPlayer);
+	void DissolveGroup(int32 GroupID, const TCHAR* Why);
+	bool GroupAIRun(const FBattleGroup& Group) const;
+	int32 GroupFocus(int32 Team, const FVector& From) const;
+	FVector GroupRally(int32 Team, int32 Point) const;
+	// Every director update, before the team's orders: members, AI formation (trial -BattleAreaGroups=1), phases.
+	void UpdateGroups(int32 Team);
+	// The order of a squad in a group the AI runs (false: the squad keeps the normal allocation).
+	bool GroupOrder(int32 SquadID, int32 Team, FVector& Center, EBattleOrder& Order) const;
 	// Anti-tank team objective: the point nearest a known enemy vehicle; INDEX_NONE while the team knows of none.
 	int32 AreaATTarget(int32 Team, int32 SquadID) const;
 	int32 AreaVehicleChoice(int32 SquadID, TFunctionRef<double(int32)> ScoreOf) const;

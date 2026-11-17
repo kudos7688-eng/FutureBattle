@@ -328,6 +328,38 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      Check(Calm==0&&(Shock==0||(Shock==1&&!BackGoal.ContainsNaN()))&&NoneKnown==0&&NoATTarget==INDEX_NONE&&KnownNow==1&&ATTarget==SeenPoint,TEXT("armour AI: no reaction without a threat; a known enemy vehicle draws the anti-tank teams to the nearest point"));
      Check(Mix0.ATKeep==0&&Mix0.TankKeep==0&&Mix0.SPGKeep==0&&Mix0.ACKeep==1&&Mix0.MortarKeep==1&&Mix6.ATKeep==1&&Mix6.TankKeep==FMath::Min(2,TT->AreaTankLimit)&&Mix6.SPGKeep==0&&!BattleTactics::AreaComposition(1),
       TEXT("composition: car and mortar first, a tank after six purchases, anti-tank teams and a second tank against known armour; off by default"));
+     // Squad groups, stage 1 (BattleGroups.cpp): a player group of two squads; not run by the AI until both are delegated; then it gathers
+     // at a rally point short of its objective, advances after the assembly time, and a regrouped squad leaves its old group.
+     {
+      TArray<int32> Two;for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Value.SquadType==BattleSquadType::Rifle&&P.Value.CommandStatus==EBattleCommandStatus::Active&&Two.Num()<2)Two.Add(P.Key);
+      const auto SavedGroups=M->Groups;const auto SavedSquadGroup=M->SquadGroup;const int32 SavedNext=M->NextGroupID;
+      const int32 GID=Two.Num()==2?M->FormGroup(0,Two,true):INDEX_NONE;const auto* GG=M->Groups.Find(GID);
+      bool bFormed=GG&&M->GroupOf(Two[0])==GID&&M->GroupOf(Two[1])==GID&&GG->Phase==0&&!BattleTactics::AreaGroups(0);
+      bool bManual=false,bGather=false,bAdvance=false,bLeft=false;
+      if(bFormed)
+      {
+       const bool D0=Store->FindSquad(Two[0])->bPlayerDelegated,D1=Store->FindSquad(Two[1])->bPlayerDelegated;
+       FVector GroupCenter=FVector::ZeroVector;EBattleOrder GroupOrderValue=EBattleOrder::Hold;
+       Store->SetSquadDelegated(Two[0],false);Store->SetSquadDelegated(Two[1],false);
+       bManual=!M->GroupAIRun(*GG)&&!M->GroupOrder(Two[0],0,GroupCenter,GroupOrderValue);
+       Store->SetSquadDelegated(Two[0],true);Store->SetSquadDelegated(Two[1],true);
+       const bool bValid=M->Objectives.IsValidIndex(GG->Objective);
+       bGather=bValid&&M->GroupAIRun(*GG)&&M->GroupOrder(Two[0],0,GroupCenter,GroupOrderValue)&&GroupOrderValue==EBattleOrder::Defend&&GroupCenter.Equals(GG->Rally,1.)&&
+        FVector::Dist2D(GG->Rally,M->AreaHome(0))<FVector::Dist2D(M->Objectives[GG->Objective].Position,M->AreaHome(0));
+       if(bValid&&M->ObservedOwner(0,GG->Objective)!=0)
+       {
+        M->Groups[GID].PhaseAt=M->Elapsed-1000.f;M->UpdateGroups(0);GG=M->Groups.Find(GID);
+        bAdvance=GG&&GG->Phase==1&&M->GroupOrder(Two[0],0,GroupCenter,GroupOrderValue)&&GroupCenter.Equals(M->Objectives[GG->Objective].Position,1.)&&GroupOrderValue==EBattleOrder::AttackMove;
+       }
+       else bAdvance=true; // every point already observed as own in this fixture: nothing to advance on
+       const int32 Solo=M->FormGroup(0,{Two[1]},true);
+       bLeft=Solo!=INDEX_NONE&&M->GroupOf(Two[1])==Solo&&M->GroupOf(Two[0])==GID&&M->Groups.Contains(GID)&&M->Groups[GID].Squads.Num()==1;
+       Store->SetSquadDelegated(Two[0],D0);Store->SetSquadDelegated(Two[1],D1);
+      }
+      M->Groups=SavedGroups;M->SquadGroup=SavedSquadGroup;M->NextGroupID=SavedNext;
+      Check(bFormed&&bManual&&bGather&&bAdvance&&bLeft,TEXT("squad groups: a player group follows the AI only when delegated; gather short of the objective, then advance; one group per squad"));
+      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_GROUP_SMOKE formed=%d manual=%d gather=%d advance=%d left=%d"),bFormed?1:0,bManual?1:0,bGather?1:0,bAdvance?1:0,bLeft?1:0);
+     }
      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_ARMOUR_AI_SMOKE tank_target=%d post=%s turned=%.2f shock=%d why=%s at_target=%d mix6=at%d/tank%d/ac%d/mortar%d/spg%d"),TankPick,*WatchPost.ToCompactString(),Turned,Shock,*Why,ATTarget,Mix6.ATKeep,Mix6.TankKeep,Mix6.ACKeep,Mix6.MortarKeep,Mix6.SPGKeep);
     }
     Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);

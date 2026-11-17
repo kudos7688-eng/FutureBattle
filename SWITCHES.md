@@ -3,12 +3,12 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 201 種類。
+計 202 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
 | `-BattleAICoverProbe` | Value | 0 | BattleTactics.cpp:9 |  |
-| `-BattleAimAssist` | Value | 1 | BattleController.cpp:943 |  |
+| `-BattleAimAssist` | Value | 1 | BattleController.cpp:975 |  |
 | `-BattleArea` | Param | off | BattleLeaderRuntime.cpp:70 |  |
 | `-BattleAreaACKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:92 |  |
 | `-BattleAreaATKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:90 |  |
@@ -26,6 +26,7 @@
 | `-BattleAreaFocus` | Value | 0.f | BattleTactics.cpp:81 |  |
 | `-BattleAreaFrontBalance` | Value | S.bFrontBalance?1:0（bFrontBalance=false） | BattleTactics.cpp:76 |  |
 | `-BattleAreaFrontGain` | Value | 1.f | BattleTactics.cpp:77 |  |
+| `-BattleAreaGroups` | Value | GetDefault<UBattleTuning>()->bAreaGroups?1:0 | BattleGroups.cpp:21 |  |
 | `-BattleAreaHeavyShare` | Value | 0.f / -1.f（同名のメンバーが複数） | BattleTactics.cpp:88 |  |
 | `-BattleAreaHire` | Value | T->bAreaHire?1:0 | BattleTactics.cpp:51 |  |
 | `-BattleAreaHireInterval` | Value | T->AreaHireIntervalSeconds | BattleTactics.cpp:53 |  |
@@ -205,6 +206,6 @@
 | `-BattleWideMapAudit` | Param | off | BattleLeaderRuntime.cpp:212 |  |
 | `-BattleWideMapGeometryOnly` | Param | off | BattleWideMapAudit.cpp:157 |  |
 | `-BattleWideMixed` | Param | off | BattleGameMode.cpp:55, BattleLeaderRuntime.cpp:68 |  |
-| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:650, BattleContactTrial.cpp:97, BattleMixedFastSmoke.cpp:34 ほか12 |  |
+| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:682, BattleContactTrial.cpp:97, BattleMixedFastSmoke.cpp:34 ほか12 |  |
 | `-BattleWideSmoke` | Param | off | BattleLeaderRuntime.cpp:226 |  |
 | `-BattleWideSoak` | Param | off | BattleLeaderRuntime.cpp:228 |  |

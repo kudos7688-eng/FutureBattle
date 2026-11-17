@@ -89,6 +89,8 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("ToggleMode"), EKeys::Tab, &ABattleController::ToggleMode);
 	Button(TEXT("ControlSelected"), EKeys::E, &ABattleController::ControlSelected);
 	Button(TEXT("SelectAll"), EKeys::Q, &ABattleController::SelectAll);
+	Button(TEXT("FormGroup"), EKeys::F, &ABattleController::FormGroupSelected);
+	Button(TEXT("SelectGroup"), EKeys::V, &ABattleController::SelectGroupSelected);
 	Button(TEXT("DelegateSelected"), EKeys::J, &ABattleController::DelegateSelected);
 	Button(TEXT("TakeCommandSelected"), EKeys::K, &ABattleController::TakeCommandSelected);
 	Button(TEXT("Hold"), EKeys::H, &ABattleController::HoldSelected);
@@ -305,6 +307,36 @@ void ABattleController::SelectAll()
 	Selected.Reset();
 	if (ABattleGameMode* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>())
 		for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0 && LeaderSelectable(Unit)) Selected.Add(Unit);
+}
+
+void ABattleController::FormGroupSelected()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!bTactical || !Match || !Match->bArea) return;
+	TArray<int32> Squads;
+	for (ABattleUnit* Unit : Selected) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0 && LeaderSelectable(Unit)) Squads.AddUnique(Unit->GetState()->SquadID);
+	if (Squads.IsEmpty()) { ShowNotice(TEXT("群：部隊を選択してから F")); return; }
+	// The selection is exactly one whole group: disband it.
+	const int32 Current = Match->GroupOf(Squads[0]);
+	if (Current != INDEX_NONE && Match->Groups[Current].Squads.Num() == Squads.Num())
+	{
+		bool bSame = true; for (int32 ID : Squads) bSame &= Match->GroupOf(ID) == Current;
+		if (bSame) { Match->DissolveGroup(Current, TEXT("player")); ShowNotice(FString::Printf(TEXT("群%d を解散"), Current)); return; }
+	}
+	const int32 Group = Match->FormGroup(0, Squads, true);
+	ShowNotice(Group != INDEX_NONE ? FString::Printf(TEXT("群%d を編成：%d 部隊（V で群を選択）"), Group, Squads.Num()) : FString(TEXT("群を編成できません")));
+}
+
+void ABattleController::SelectGroupSelected()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>(); auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>();
+	if (!bTactical || !Match || !Mode) return;
+	TSet<int32> Wanted;
+	for (ABattleUnit* Unit : Selected) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0)
+		if (const int32 Group = Match->GroupOf(Unit->GetState()->SquadID); Group != INDEX_NONE) Wanted.Add(Group);
+	if (Wanted.IsEmpty()) { ShowNotice(TEXT("群に入っている部隊を選択してから V")); return; }
+	for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0 && LeaderSelectable(Unit) && Wanted.Contains(Match->GroupOf(Unit->GetState()->SquadID))) Selected.AddUnique(Unit);
+	ShowNotice(FString::Printf(TEXT("群を選択：%d 部隊"), Selected.Num()));
 }
 
 bool ABattleController::CanShowDelegation() const

@@ -80,6 +80,9 @@ public:
 	void IssueMoveAt(FVector Target);
 	void IssueOrderAt(FVector Target, EBattleOrder Order);
 	void SelectAll();
+	// Squad groups (BattleGroups.cpp): F forms a group from the selected squads (or disbands it when the selection is exactly one group); V selects the whole groups of the selected squads.
+	void FormGroupSelected();
+	void SelectGroupSelected();
 	bool CanShowDelegation() const;
 	void SetSelectedDelegated(bool bDelegated);
 	void DelegateSelected() { SetSelectedDelegated(true); }

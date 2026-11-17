@@ -426,6 +426,19 @@ public:
 	UPROPERTY(Config, EditAnywhere) float VehicleMemory = 120.f;
 	UPROPERTY(Config, EditAnywhere) float TankOverwatch = 12000.f;
 	UPROPERTY(Config, EditAnywhere) bool bAreaComposition = false;
+	// Squad groups, stage 1 (2026-11-18, BattleGroups.cpp; first values). An AI attack group: GroupRifleSquads rifle squads with a tank and a
+	// mortar team when the team has them. It gathers GroupRallyBack (GroupRallyBackProfile with the range profile) short of its objective,
+	// advances once GroupReadyShare of the squads present are within GroupRallyRadius of the rally point or after GroupAssembleMax seconds,
+	// holds a taken point GroupHoldSeconds, then goes for the next. Its tank follows GroupTankBack behind the point.
+	UPROPERTY(Config, EditAnywhere) bool bAreaGroups = false;
+	UPROPERTY(Config, EditAnywhere) int32 GroupRifleSquads = 3;
+	UPROPERTY(Config, EditAnywhere) float GroupRallyBack = 12000.f;
+	UPROPERTY(Config, EditAnywhere) float GroupRallyBackProfile = 20000.f;
+	UPROPERTY(Config, EditAnywhere) float GroupRallyRadius = 4000.f;
+	UPROPERTY(Config, EditAnywhere) float GroupReadyShare = .6f;
+	UPROPERTY(Config, EditAnywhere) float GroupAssembleMax = 60.f;
+	UPROPERTY(Config, EditAnywhere) float GroupHoldSeconds = 30.f;
+	UPROPERTY(Config, EditAnywhere) float GroupTankBack = 6000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRange = 30000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRangeProfile = 40000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutStillSpeed = 30.f;

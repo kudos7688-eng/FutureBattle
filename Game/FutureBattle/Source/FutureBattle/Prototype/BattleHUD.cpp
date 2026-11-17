@@ -480,6 +480,8 @@ void ABattleHUD::DrawSquadList()
   FString Name=S.Name.Len()>12?S.Name.Left(11)+TEXT("…"):S.Name;
   DrawText(Name,Color,Layout.Origin.X+9,Y+4,GEngine->GetSmallFont(),1);
   DrawText(State,Color,Layout.Origin.X+Layout.Width-110,Y+4,GEngine->GetSmallFont(),1);
+  // Squad group number (BattleGroups.cpp), left of the state.
+  if(const int32 Group=GetWorld()->GetSubsystem<UBattleMatch>()->GroupOf(S.SquadID);Group!=INDEX_NONE)DrawText(FString::Printf(TEXT("群%d"),Group),FLinearColor(1.f,.85f,.35f),Layout.Origin.X+Layout.Width-152,Y+4,GEngine->GetSmallFont(),1);
   if(const auto* Squad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(S.SquadID))
   {
    const auto& Plan=Squad->TacticalPlan;

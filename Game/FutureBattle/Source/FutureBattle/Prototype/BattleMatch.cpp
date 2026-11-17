@@ -345,6 +345,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  // S1 (default ON, -BattleAreaStrategy=0 = old round-robin): weighted point spread from observed ownership only.
  const bool bStrategy=bArea&&BattleTactics::AreaStrategy().bEnabled;
  const FAreaIntent TeamIntent=AreaIntent(Team);
+ // Squad groups (BattleGroups.cpp): members, AI formation (trial) and phases, before the orders that read them.
+ UpdateGroups(Team);
 	for (const auto& Pair : Store->GetSquads()) if (Pair.Value.Team == Team)
 	{
 		// Public objective status only; never use an unseen enemy's location.
@@ -404,6 +406,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   if(bArtillery&&bArea)Center=AreaArtilleryPost(Team,Pair.Key,Center);
   // The tank's overwatch post; a post near its current mission is kept (no new order for every small change in what the team knows).
   if(bTankPost){Center=AreaTankPost(Team,Target);if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2500.)Center=Pair.Value.MissionDestination;}
+  // A squad in a group the AI runs follows its group: the rally point while gathering, then the group's objective together.
+  if(bStrategy&&!Purpose&&!Groups.IsEmpty())GroupOrder(Pair.Key,Team,Center,Order);
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())
   {
    const auto& S=Pair.Value;
