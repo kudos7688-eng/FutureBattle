@@ -8,7 +8,8 @@
 - `BattleAnimTaskTrial.cpp`: ABattleAnimTaskTrial::ABattleAnimTaskTrial:10, ABattleAnimTaskTrial::Start:15, ABattleAnimTaskTrial::Compare:34, ABattleAnimTaskTrial::Tick:50
 - `BattleAnimTasks.cpp`: FBattleAnimTasks::Apply:6
 - `BattleAntiTank.cpp`: UBattleLeaderRuntime::Explode:6
-- `BattleArea.cpp`: UBattleMatch::AreaHome:15, UBattleMatch::ObservedOwner:16, UBattleMatch::AreaScore:17, UBattleMatch::InitializeArea:24, UBattleMatch::AreaVisible:42, UBattleMatch::CanFireAtBase:51, UBattleMatch::DamageBase:59, UBattleMatch::ActiveSquads:67, UBattleMatch::ActiveScouts:72, UBattleMatch::ActiveOfType:73, UBattleMatch::HireAreaSquad:78, UBattleMatch::UpdateAreaHiring:113, UBattleMatch::AreaIncomeGain:158, UBattleMatch::UpdateArea:165, UBattleMatch::AreaHireNeed:242, UBattleMatch::AreaIntent:270, UBattleMatch::AreaFronts:314, UBattleMatch::AreaHeavyTarget:338, UBattleMatch::AreaScoutPost:354
+- `BattleArea.cpp`: UBattleMatch::AreaHome:15, UBattleMatch::ObservedOwner:16, UBattleMatch::AreaScore:17, UBattleMatch::InitializeArea:24, UBattleMatch::AreaVisible:42, UBattleMatch::CanFireAtBase:51, UBattleMatch::DamageBase:59, UBattleMatch::ActiveSquads:67, UBattleMatch::ActiveScouts:72, UBattleMatch::ActiveOfType:73, UBattleMatch::HireAreaSquad:78, UBattleMatch::UpdateAreaHiring:113, UBattleMatch::AreaIncomeGain:158, UBattleMatch::UpdateArea:165, UBattleMatch::AreaHireNeed:242, UBattleMatch::AreaIntent:270, UBattleMatch::AreaFronts:315, UBattleMatch::AreaHeavyTarget:339, UBattleMatch::AreaScoutPost:355
+- `BattleAreaDepot.cpp`: UBattleMatch::ApplyDepotWeights:20
 - `BattleAreaIntel.cpp`: UBattleMatch::AreaIntelOn:12, UBattleMatch::AreaIntelView:19, UBattleMatch::AreaIntelThreatAt:52, UBattleMatch::AreaIntelThreat:58, UBattleMatch::UpdateIntelPurposes:65
 - `BattleAreaSmoke.cpp`: UBattleLeaderRuntime::RunAreaSmoke:23
 - `BattleBenchmark.cpp`: ABattleGameMode::ConfigureBenchmark:26, ABattleGameMode::PrepareBenchmarkOrders:60, ABattleGameMode::UpdateBenchmark:90
@@ -44,7 +45,7 @@
 - `BattleMapCommandlet.cpp`: UBattleMapCommandlet::UBattleMapCommandlet:30, UBattleMapCommandlet::Main:35
 - `BattleMapStats.cpp`: UBattleLeaderRuntime::RunMapStats:38
 - `BattleMassTrial.cpp`: ABattleMassTrialUnit::ABattleMassTrialUnit:6, UBattleTrialMovement::PlanStep:11, UBattleTrialMovement::ApplyStep:21, UBattleMassTrial::Start:38, UBattleMassTrial::Update:52, UBattleMassTrial::Stop:80
-- `BattleMatch.h`: UBattleMatch::IsEnabled:171
+- `BattleMatch.h`: UBattleMatch::IsEnabled:175
 - `BattleMatch.cpp`: UBattleMatch::InitializeMatch:15, UBattleMatch::SquadPrice:38, UBattleMatch::CurrentSquadPrice:51, UBattleMatch::HireSquad:56, UBattleMatch::StartCombat:123, UBattleMatch::CanDelegateAllies:136, UBattleMatch::SetAllyDelegated:143, UBattleMatch::Update:150, UBattleMatch::ObjectiveValue:187, UBattleMatch::MatchTimeLimit:188, UBattleMatch::CheckTimeLimit:190, UBattleMatch::UpdateObjectives:200, UBattleMatch::InObjective:219, UBattleMatch::AdvanceObjectiveControl:224, UBattleMatch::UpdateEnemyOrders:259, UBattleMatch::ChooseObjective:264, UBattleMatch::AreaStrategyTarget:277, UBattleMatch::UpdateTeamOrders:344, UBattleMatch::Resupply:429, UBattleMatch::Finish:448
 - `BattleMatchSmoke.cpp`: ABattleGameMode::RunMatchSmokeTest:11
 - `BattleMatchSoak.cpp`: ABattleGameMode::UpdateMatchSoak:12

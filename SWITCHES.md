@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 199 種類。
+計 201 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -21,6 +21,8 @@
 | `-BattleAreaBaseShare` | Value | T->AreaBaseShare | BattleTactics.cpp:71 |  |
 | `-BattleAreaBaseShareHigh` | Value | 0.3f | BattleTactics.cpp:74 |  |
 | `-BattleAreaBaseShareLow` | Value | 0.f | BattleTactics.cpp:73 |  |
+| `-BattleAreaDepot` | Value | 0 | BattleAreaDepot.cpp:22 |  |
+| `-BattleAreaDepotRaid` | Value | DepotRaid | BattleAreaDepot.cpp:23 |  |
 | `-BattleAreaFocus` | Value | 0.f | BattleTactics.cpp:81 |  |
 | `-BattleAreaFrontBalance` | Value | S.bFrontBalance?1:0（bFrontBalance=false） | BattleTactics.cpp:76 |  |
 | `-BattleAreaFrontGain` | Value | 1.f | BattleTactics.cpp:77 |  |
@@ -192,7 +194,7 @@
 | `-BattleTeamSupport` | Value | 1 | BattleTeamAI.cpp:12 |  |
 | `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:886 |  |
 | `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:185 |  |
-| `-BattleTrialSwap` | Param | off | BattleArea.cpp:15, BattleLeaderRuntime.cpp:75, BattleMatch.cpp:27 ほか3 |  |
+| `-BattleTrialSwap` | Param | off | BattleArea.cpp:15, BattleAreaDepot.cpp:32, BattleLeaderRuntime.cpp:75 ほか4 |  |
 | `-BattleUnits` | Value | 1000 / 20 | BattleBenchmark.cpp:36, BattleSquadTrial.cpp:28 |  |
 | `-BattleVATFarLight` | Value | 0 | BattleVATDisplay.cpp:37 |  |
 | `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:228, BattleSightExperiment.cpp:39 |  |

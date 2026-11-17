@@ -150,6 +150,10 @@ public:
 	float ObjectiveValue(int32 Point) const;
 	// Resources a team gains per income tick from the objectives it truly owns now (before the time ramp): base + per point x value x map scale.
 	int32 AreaIncomeGain(int32 Team) const;
+	// Depots in the point allocation (BattleAreaDepot.cpp): multiplies Intent.PointWeight of the objectives worth more than one.
+	void ApplyDepotWeights(int32 Team, bool bTrialTeam, struct FAreaIntent& Intent) const;
+	mutable TArray<float> DepotWeights[2];
+	mutable float DepotWeightsAt[2]={-1.f,-1.f};
 	// Routes (BattleRoutes.cpp): on maps with a road network, the next junction a squad at From is sent to on its way to Goal.
 	bool RoutesOn() const;
 	TArray<FVector> RouteKnownEnemies(int32 Team) const;
