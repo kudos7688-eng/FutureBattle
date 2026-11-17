@@ -14,7 +14,7 @@ $project=Join-Path $root 'Game/FutureBattle/FutureBattle.uproject'
 $dll=Join-Path $root 'Game/FutureBattle/Binaries/Win64/UnrealEditor-FutureBattle.dll'
 $log=Join-Path $out 'run.log'
 $a=@(('"'+$project+'"'),"/Game/Prototype/Lvl_BattleWide_$Map",'-game','-unattended','-nosound','-nosplash','-BattleWideMixed','-BattleStanceShot','-BattleStances=1','-RenderOffscreen','-ForceRes','-ResX=1280','-ResY=720',('-BattleWideScreens="'+(Join-Path $out 'shot')+'"'),('-abslog="'+$log+'"'))
-if($Anim){$a+='-BattleStanceAnim=1'}
+$a+=('-BattleStanceAnim='+[int][bool]$Anim)
 @{machine=(Get-MeasurementMachine);dll=(Get-FileHash $dll).Hash;arguments=$a}|ConvertTo-Json -Depth 8|Set-Content (Join-Path $out 'manifest.json') -Encoding utf8
 $p=Start-Process 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe' -ArgumentList $a -WindowStyle Hidden -PassThru
 if(!$p.WaitForExit(240000)){Stop-Process -Id $p.Id;throw 'Stance shot timeout'}

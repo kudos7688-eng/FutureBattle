@@ -28,7 +28,8 @@ float BattleStance::SpreadScale(uint8 Stance){return Stance==Prone?.6f:Stance==C
 float BattleStance::VisualScale(uint8 Stance){return Stance==Prone?.3f:Stance==Crouch?.65f:1.f;}
 bool BattleStance::AnimEnabled()
 {
- static const bool bOn=[]{int32 Mode=0;FParse::Value(FCommandLine::Get(),TEXT("BattleStanceAnim="),Mode);return Mode!=0;}();
+ // Default on since 2026-11-17 (user decision); -BattleStanceAnim=0 restores the squashed placeholder.
+ static const bool bOn=[]{int32 Mode=1;FParse::Value(FCommandLine::Get(),TEXT("BattleStanceAnim="),Mode);return Mode!=0;}();
  return bOn;
 }
 UAnimSequence* BattleStance::CrouchClip(bool bWalk)

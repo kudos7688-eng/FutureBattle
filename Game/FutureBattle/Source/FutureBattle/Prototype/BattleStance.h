@@ -19,7 +19,7 @@ namespace BattleStance
  float TopOffset(uint8 Stance);    // 95 / 20 / -35
  float SpreadScale(uint8 Stance);  // 1 / 0.8 / 0.6
  float VisualScale(uint8 Stance);  // 1 / 0.65 / 0.3
- // Stance visuals trial (2026-11-17, -BattleStanceAnim=1, default off): a crouch plays Lyra's rifle crouch clips
+ // Stance visuals (2026-11-17, default on by user decision; -BattleStanceAnim=0 turns it off): a crouch plays Lyra's rifle crouch clips
  // (/Game/Characters/Mannequins/Anims/Rifle/Crouch/) at full body scale instead of the squashed body. Prone has no clip
  // and keeps the squash. Display only: heights, sight and hits are unchanged. Far VAT followers still show the standing clip.
  bool AnimEnabled();

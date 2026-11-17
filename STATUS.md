@@ -1,5 +1,9 @@
 # 現在地と次の作業
 
+## 2026-11-17 Claude（新機能・suppression ワークツリー）：しゃがみアニメを既定ONに
+- **ユーザー決定**：`-BattleStanceAnim` を既定ONにした。`-BattleStanceAnim=0` で従来の仮の見た目（体を縮める）に戻せる。姿勢の仕組み自体は従来どおりマップEだけ既定ON（`-BattleStances`）なので、マップA/Dの見た目は変わらない。`Test-StanceShot.ps1` は `-Anim` がないとき `=0` を明示して渡す。
+- 確認は下の項目を参照。
+
 ## 2026-11-17 12時40分 Claude（新機能・suppression ワークツリー）：しゃがみの見た目にLyraのアニメ（試験切替）
 - **ユーザー依頼**：手元のLyra（`Documents/Unreal Projects/LyraStarterGame`、UE 5.8）とGame Animation Sampleの活用。Game Animation Sampleのしゃがみは素手でUEFN骨格（変換が必要）、Lyraには小銃を持ったしゃがみ一式があるので、Lyraを採用。伏せはどちらにもない。
 - **取り込み**：`MM_Rifle_Crouch_Idle / Walk_Fwd / Entry / Exit` を `/Game/Characters/Mannequins/Anims/Rifle/Crouch/` に置いた。Lyraのファイルを一時的にLyraと同じ場所に置き、`-run=BattleVATBake -ImportStanceAnims`（`BattleStanceAnimImport.cpp`）で複製した。骨格は今の `SK_Mannequin` に付け替え（骨の名前が同じなので変換は不要）、Lyra専用の足音の合図は削除。中継のコピーは削除済みで、取り込んだ4本はLyraのファイルを参照しない。
