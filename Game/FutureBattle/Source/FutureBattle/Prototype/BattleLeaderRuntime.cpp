@@ -18,6 +18,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Animation/AnimSequence.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "NavigationSystem.h"
@@ -98,7 +99,15 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
  int32 Grid=GetDefault<UBattleTuning>()->bPerceptionGrid?1:0; FParse::Value(FCommandLine::Get(),TEXT("BattlePerceptionGrid="),Grid);
  if(Grid!=0 && Grid!=1) return false;
  GetWorld()->GetSubsystem<UBattlePerception>()->bUseSpatialGrid=Grid==1;
- UE_LOG(LogFutureBattle,Display,TEXT("PERCEPTION_GRID enabled=%d far=0 scope=existing_candidate_grid"),Grid);
+ // Trial -BattleSightSlowFar=1 (2026-11-17, default OFF): unknown enemies beyond 12 m are considered on every other 0.2 s scan
+ // pulse only (the 2026-11-04 "Far" sense mode, tested then only on the dense 500 map). Known contacts and started detections never wait.
+ int32 SlowFar=0; FParse::Value(FCommandLine::Get(),TEXT("BattleSightSlowFar="),SlowFar);
+ GetWorld()->GetSubsystem<UBattlePerception>()->bSlowUnknownFar=SlowFar==1;
+ // Scan interval of observers that saw no enemy (user decision 2026-11-17: 0.4 s; -BattleSightScanInterval=0.2 = old uniform 0.2 s).
+ {double Interval=.4,Near=1.e7;FParse::Value(FCommandLine::Get(),TEXT("BattleSightScanInterval="),Interval);FParse::Value(FCommandLine::Get(),TEXT("BattleSightScanNear="),Near);
+  auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();Sense->UnseenScanInterval=FMath::Clamp(Interval,.2,2.);Sense->ScanNearCm=FMath::Max(0.,Near);
+  UE_LOG(LogFutureBattle,Display,TEXT("SIGHT_SCAN_INTERVAL unseen=%.2f near_cm=%.0f"),Sense->UnseenScanInterval,Sense->ScanNearCm);}
+ UE_LOG(LogFutureBattle,Display,TEXT("PERCEPTION_GRID enabled=%d far=%d scope=existing_candidate_grid"),Grid,SlowFar==1);
  UE_LOG(LogFutureBattle,Display,TEXT("SIGHT_CONTEXT_REUSE enabled=%d scope=observer_scan"),ReuseSight);
  Phase3=GetWorld()->GetSubsystem<UBattlePhase3>();
  if(!Phase3->Configure(*this)) return false;
@@ -228,6 +237,7 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
 }
 void UBattleLeaderRuntime::Deinitialize()
 {
+ LogSightHitStats(TEXT("deinitialize"));
  if(bEnabled)
  {
   if(auto* Store=GetWorld()->GetSubsystem<UBattleState>()) Store->OnUnitDied.Remove(DeathHandle);
@@ -267,7 +277,9 @@ bool UBattleLeaderRuntime::CanSee(int32 ID,int32 Target) const
  if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
  const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
  if(FVector::DistSquared(P,C.Position)>(IsVehicle(Target)?FMath::Max(C.RangeSquared,FMath::Square(VehicleSpotRange())):C.RangeSquared) || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
+ const bool bStats=SightHitStatsEnabled();const uint64 T0=bStats?FPlatformTime::Cycles64():0;
  FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
+ if(bStats) RecordSightHit(Hit,Target,FPlatformTime::Cycles64()-T0,SightFromCanSee);
  return !Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
 }
 bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 Target,int32 Observer) const
@@ -289,7 +301,9 @@ bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 
   if(const auto* E=SightPairs.Find(Key);E&&E->bLowObserver!=bObserverLow&&Now>=E->At&&Now-E->At<.2-1.e-6&&
      FVector::DistSquared(E->Low,bObserverLow?C.Position:P)<=1.e4&&FVector::DistSquared(E->High,bObserverLow?P:C.Position)<=1.e4)
   {++SightPairReused;return E->bVisible;}
+ const bool bStats=SightHitStatsEnabled();const uint64 T0=bStats?FPlatformTime::Cycles64():0;
  FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
+ if(bStats) RecordSightHit(Hit,Target,FPlatformTime::Cycles64()-T0,SightFromPerception);
  const bool bVisible=!Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
  if(bPair)
  {
@@ -298,6 +312,84 @@ bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 
   SightPairs.Add(Key,{Now,bObserverLow?C.Position:P,bObserverLow?P:C.Position,bObserverLow,bVisible});
  }
  return bVisible;
+}
+bool UBattleLeaderRuntime::PrepareSightTrace(const FBattleSightContext& C,int32 Target,FVector& End) const
+{
+ // Keep identical to the checks of CanSeeWithContext above (same expressions, so the same candidates are traced).
+ const auto* T=GetWorld()->GetSubsystem<UBattleState>()->Find(Target);
+ if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
+ const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
+ if(FVector::DistSquared(P,C.Position)>(IsVehicle(Target)?FMath::Max(C.RangeSquared,FMath::Square(VehicleSpotRange())):C.RangeSquared) || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
+ End=P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))); return true;
+}
+bool UBattleLeaderRuntime::SightHitStatsEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSightHitStats="),V);return V!=0;}();
+ return bOn;
+}
+namespace
+{
+ const TCHAR* SightHitKindNames[]={TEXT("clear"),TEXT("target"),TEXT("soldier"),TEXT("vehicle"),TEXT("floor"),TEXT("concealment"),TEXT("static_mesh"),TEXT("instanced_mesh"),TEXT("unit_part"),TEXT("other"),TEXT("soldier_target_side"),TEXT("soldier_observer_side")};
+ const TCHAR* SightHitSourceNames[]={TEXT("perception"),TEXT("cansee"),TEXT("vehicle_far"),TEXT("area")};
+ // Actor names without the numeric suffix (Wall_12 -> Wall).
+ FString SightHitActorGroup(const AActor* A)
+ {
+  if(!A) return TEXT("(none)");
+  FString N=A->GetActorNameOrLabel();int32 End=N.Len();
+  while(End>0&&(FChar::IsDigit(N[End-1])||N[End-1]==TEXT('_')))--End;
+  return End>0?N.Left(End):N;
+ }
+}
+void UBattleLeaderRuntime::RecordSightHit(const FHitResult& Hit,int32 Target,uint64 Cycles,ESightHitSource Source) const
+{
+ // Game thread only (the parallel trial records in its apply stage). Kinds: see SightHitKindNames.
+ int32 Kind=0;const UPrimitiveComponent* C=Hit.GetComponent();const AActor* A=Hit.GetActor();
+ if(Hit.bBlockingHit)
+ {
+  const FString Group=SightHitActorGroup(A);
+  if(const int32* ID=HitIDs.Find(Hit.GetComponent()))
+  {
+   // Another soldier: on the target's side (the observer's enemies) or the observer's side (target unknown: plain soldier).
+   Kind=*ID==Target?1:IsVehicle(*ID)?3:2;
+   const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* B=Store->Find(*ID);const auto* T=Target>=0?Store->Find(Target):nullptr;
+   if(Kind==2&&B&&T) Kind=B->Team==T->Team?10:11;
+  }
+  else if(!C) Kind=9;
+  else if(A&&A->ActorHasTag(TEXT("BattleConcealment"))) Kind=5;
+  else if(C->GetClass()->GetName().Contains(TEXT("Landscape"))||Group.Contains(TEXT("Floor"))) Kind=4;
+  else if(A&&(Cast<ABattleUnit>(A)||A==DisplayHost.Get())) Kind=8;
+  else if(C->IsA<UInstancedStaticMeshComponent>()) Kind=7;
+  else if(C->IsA<UStaticMeshComponent>()) Kind=6;
+  else Kind=9;
+  ++SightHitClasses.FindOrAdd(C?C->GetClass()->GetName():FString(TEXT("(none)")));
+  if(A&&A->Tags.Num()) {for(const FName& Tag:A->Tags) ++SightHitTags.FindOrAdd(Tag.ToString());} else ++SightHitTags.FindOrAdd(TEXT("(none)"));
+  ++SightHitActors.FindOrAdd(FString(SightHitKindNames[Kind])+TEXT(":")+Group);
+ }
+ ++SightHitKinds[Kind].Count;SightHitKinds[Kind].Cycles+=Cycles;
+ ++SightHitSources[Source].Count;SightHitSources[Source].Cycles+=Cycles;
+}
+void UBattleLeaderRuntime::LogSightHitStats(const TCHAR* Why) const
+{
+ if(!SightHitStatsEnabled()||bSightHitsLogged) return;
+ int64 N=0;uint64 Cy=0;for(const auto& K:SightHitKinds){N+=K.Count;Cy+=K.Cycles;}
+ if(N==0) return; // other worlds (editor, previews) trace nothing
+ bSightHitsLogged=true;
+ const double Ms=FPlatformTime::ToMilliseconds64(Cy);
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SIGHT_HITS when=%s traces=%lld ms=%.1f us_per_trace=%.3f"),Why,N,Ms,N?Ms*1000./N:0.);
+ for(int32 K=0;K<SightHitKindCount;++K) if(SightHitKinds[K].Count)
+ {
+  const double KMs=FPlatformTime::ToMilliseconds64(SightHitKinds[K].Cycles);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SIGHT_HITS_KIND kind=%s traces=%lld share=%.4f ms=%.1f us_per_trace=%.3f"),SightHitKindNames[K],SightHitKinds[K].Count,double(SightHitKinds[K].Count)/FMath::Max<int64>(1,N),KMs,KMs*1000./SightHitKinds[K].Count);
+ }
+ for(int32 S=0;S<SightSourceCount;++S) if(SightHitSources[S].Count)
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SIGHT_HITS_SOURCE source=%s traces=%lld ms=%.1f"),SightHitSourceNames[S],SightHitSources[S].Count,FPlatformTime::ToMilliseconds64(SightHitSources[S].Cycles));
+ auto Top=[](const TMap<FString,int64>& Map,const TCHAR* Tag,int32 Limit)
+ {
+  TArray<TPair<FString,int64>> Rows;for(const auto& P:Map)Rows.Add(P);
+  Rows.Sort([](const TPair<FString,int64>& L,const TPair<FString,int64>& R){return L.Value!=R.Value?L.Value>R.Value:L.Key<R.Key;});
+  for(int32 I=0;I<FMath::Min(Limit,Rows.Num());++I) UE_LOG(LogFutureBattle,Display,TEXT("%s name=%s hits=%lld"),Tag,*Rows[I].Key,Rows[I].Value);
+ };
+ Top(SightHitClasses,TEXT("BATTLE_SIGHT_HITS_CLASS"),20);Top(SightHitTags,TEXT("BATTLE_SIGHT_HITS_TAG"),20);Top(SightHitActors,TEXT("BATTLE_SIGHT_HITS_ACTOR"),40);
 }
 bool UBattleLeaderRuntime::CanSelectLeader(int32 ID) const { return Actor(ID) && GetWorld()->GetSubsystem<UBattleState>()->CanSelectLeader(ID); }
 bool UBattleLeaderRuntime::CanControlLeader(int32 ID) const { return CanSelectLeader(ID) && Mode && !Mode->bBattleEnded; }
@@ -810,4 +902,12 @@ bool UBattleLeaderRuntime::HasLongSight(int32 ID) const
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
  return (S&&S->SquadType==BattleSquadType::Scout)||AtLookout(ID);
+}
+
+void UBattleLeaderRuntime::NoteUnderFire(int32 ID)
+{
+ if(!BattleTactics::ReturnFireEnabled())return;
+ const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;
+ if(Trial>=0){const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);if(!U||U->Team!=Trial)return;}
+ UnderFireUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);
 }

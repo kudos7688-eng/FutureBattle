@@ -433,6 +433,7 @@ void UBattleMatch::Finish(int32 WinningTeam, const FString& Reason)
 {
 	if (Phase != EBattleMatchPhase::Combat) return;
 	Phase = EBattleMatchPhase::Finished; Winner = WinningTeam;
+	if (auto* Runtime = GetWorld()->GetSubsystem<UBattleLeaderRuntime>()) Runtime->LogSightHitStats(TEXT("finish"));
 	if (auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>())
 	{
 		Mode->bBattleEnded = true; Mode->Result = Reason;

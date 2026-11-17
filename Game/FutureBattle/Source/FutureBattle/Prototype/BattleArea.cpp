@@ -43,7 +43,9 @@ bool UBattleMatch::AreaVisible(int32 ID,FVector Point,AActor* Target)const
  if(!C.bAlive||FVector::DistSquared(C.Position,Point)>C.RangeSquared)return false;
  const FVector D=(Point-C.Position).GetSafeNormal2D();
  if(!C.bOmnidirectional&&FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)return false;
+ const bool bStats=UBattleLeaderRuntime::SightHitStatsEnabled();const uint64 T0=bStats?FPlatformTime::Cycles64():0;
  FHitResult Hit;GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,Point,ECC_Visibility,C.Query);
+ if(bStats) R->RecordSightHit(Hit,-1,FPlatformTime::Cycles64()-T0,UBattleLeaderRuntime::SightFromArea);
  return !Hit.bBlockingHit || (Target&&Hit.GetActor()==Target);
 }
 bool UBattleMatch::CanFireAtBase(int32 ID,FVector& Target)const
