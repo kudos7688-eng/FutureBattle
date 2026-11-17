@@ -261,13 +261,16 @@ FBattleSightContext UBattleLeaderRuntime::Sight(int32 ID) const
  const float EyeZ=BattleStance::EyeOffset(StanceOf(ID));
  // Scout pairs see ScoutSightRange while still (moving: their normal profile).
  const float Still=ScoutStillSight(ID);
- if(auto* A=Actor(ID)) {auto Context=A->CaptureSightContext();Context.Eye.Z+=EyeZ-60.f;if(Still>0.f)Context.RangeSquared=FMath::Max(Context.RangeSquared,FMath::Square(Still));return Context;}
+ // Trial -BattleSightTeamMask=1: the observer's own side does not block its sight (its soldiers' bodies carry the side's mask bit).
+ const FMaskFilter TeamMask=SightTeamMaskFor(ID);
+ if(auto* A=Actor(ID)) {auto Context=A->CaptureSightContext();Context.Eye.Z+=EyeZ-60.f;if(Still>0.f)Context.RangeSquared=FMath::Max(Context.RangeSquared,FMath::Square(Still));Context.Query.IgnoreMask=TeamMask;return Context;}
  FBattleSightContext C; const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
  C.Position=Position(ID); C.Eye=C.Position+FVector(0,0,EyeZ); C.Forward=Forward(ID); C.bAlive=U && U->IsAlive();
  if(U) { C.RangeSquared=FMath::Square(U->Perception.SightRange); C.HalfAngleCos=FMath::Cos(FMath::DegreesToRadians(U->Perception.FieldOfView*.5)); C.bOmnidirectional=U->Perception.FieldOfView>=360; }
  if(Still>0.f) C.RangeSquared=FMath::Max(C.RangeSquared,FMath::Square(Still));
  C.Metrics=GetWorld()->GetSubsystem<UBattleMetrics>(); C.Query=FCollisionQueryParams(SCENE_QUERY_STAT(LeaderSight),false);
- if(const auto* B=Bodies.Find(ID)) C.Query.AddIgnoredComponent(B->Capsule.Get()); return C;
+ if(const auto* B=Bodies.Find(ID)) C.Query.AddIgnoredComponent(B->Capsule.Get());
+ C.Query.IgnoreMask=TeamMask; return C;
 }
 bool UBattleLeaderRuntime::CanSee(int32 ID,int32 Target) const
 {
@@ -324,6 +327,25 @@ bool UBattleLeaderRuntime::SightHitStatsEnabled()
 {
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSightHitStats="),V);return V!=0;}();
  return bOn;
+}
+bool UBattleLeaderRuntime::SightTeamMaskEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSightTeamMask="),V);return V!=0;}();
+ return bOn;
+}
+FMaskFilter UBattleLeaderRuntime::SightTeamMaskFor(int32 ObserverID) const
+{
+ if(!SightTeamMaskEnabled()) return 0;
+ const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ObserverID);
+ return U&&U->Team>=0&&U->Team<2?FMaskFilter(1<<U->Team):FMaskFilter(0);
+}
+void UBattleLeaderRuntime::RefreshSightTeamMasks()
+{
+ // Every body registered for hits (spawned, hired, replaced or restored) gets its side's bit; unchanged masks return at once.
+ if(!SightTeamMaskEnabled()) return;
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ for(const auto& P:HitIDs) if(UPrimitiveComponent* C=P.Key.Get()) if(const auto* U=Store->Find(P.Value); U&&U->Team>=0&&U->Team<2)
+  C->SetMaskFilterOnBodyInstance(FMaskFilter(1<<U->Team));
 }
 namespace
 {
@@ -851,6 +873,7 @@ void UBattleLeaderRuntime::Step(float Dt)
  if(!Mode->bCombatPaused && !Mode->bBattleEnded && Now>=Mode->CombatStartsAt)
  {
   if(!bWideField) Store->AdvanceReloads(Now);
+  RefreshSightTeamMasks();
   if(!bMovementTrial) { TRACE_CPUPROFILER_EVENT_SCOPE(BattlePerceptionUpdate); GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now,-1,0); }
   { TRACE_CPUPROFILER_EVENT_SCOPE(BattleThink); for(auto& P:Plans) if(Now>=P.Value.NextThink || (Store->FindSquad(P.Key) && P.Value.OrderRevision!=Store->FindSquad(P.Key)->OrderRevision)) Think(P.Key,Now); }
   AvoidanceGrid.Reset();

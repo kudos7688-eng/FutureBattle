@@ -206,6 +206,12 @@ public:
  // with the trace time; class names, actor tags and actor names of the hits. Logged as BATTLE_SIGHT_HITS* at match end.
  enum ESightHitSource : uint8 {SightFromPerception,SightFromCanSee,SightFromVehicleFar,SightFromArea,SightSourceCount};
  static bool SightHitStatsEnabled();
+ // Trial -BattleSightTeamMask=1 (rules, default OFF; user request 2026-11-17): soldiers of one side do not block their own side's line of
+ // sight. Each soldier body carries the mask bit 1<<team (FBodyInstance mask filter) and sight queries ignore the observer's bit
+ // (FCollisionQueryParams::IgnoreMask; Chaos skips a shape when the two masks share a bit). The trace channel stays ECC_Visibility.
+ static bool SightTeamMaskEnabled();
+ FMaskFilter SightTeamMaskFor(int32 ObserverID) const;
+ void RefreshSightTeamMasks();
  void RecordSightHit(const FHitResult& Hit,int32 TargetID,uint64 Cycles,ESightHitSource Source) const;
  void LogSightHitStats(const TCHAR* Why) const;
  struct FSightHitCount{int64 Count=0;uint64 Cycles=0;};
