@@ -16,6 +16,13 @@
 #include "NavigationSystem.h"
 #include "FutureBattle.h"
 
+bool BattleTactics::DefendEngage(int32 Team)
+{
+ static const bool bOn=[]{int32 V=GetDefault<UBattleTuning>()->bDefendEngage?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleDefendEngage="),V);return V!=0;}();
+ const int32 Trial=AreaStrategy().TrialTeam;
+ return bOn&&(Trial<0||Trial==Team);
+}
+
 bool BattleTactics::AreaGroups(int32 Team)
 {
  static const bool bOn=[]{int32 V=GetDefault<UBattleTuning>()->bAreaGroups?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaGroups="),V);return V!=0;}();
@@ -37,17 +44,56 @@ void UBattleMatch::DissolveGroup(int32 GroupID,const TCHAR* Why)
  Groups.Remove(GroupID);
 }
 
-int32 UBattleMatch::GroupFocus(int32 Team,const FVector& From) const
+int32 UBattleMatch::GroupFocus(int32 Team,const FVector& From,int32 Avoid) const
 {
  // The group's objective: a point the team does not observe as its own, the nearest to From (the group's own position, or its home);
  // INDEX_NONE when the team observes every point as its own.
  int32 Best=INDEX_NONE;double BestD=DBL_MAX;
  for(int32 I=0;I<Objectives.Num();++I)
  {
-  if(ObservedOwner(Team,I)==Team)continue;
+  if(ObservedOwner(Team,I)==Team||I==Avoid)continue;
   const double D=FVector::DistSquared2D(Objectives[I].Position,From);if(D<BestD){BestD=D;Best=I;}
  }
+ // Only the avoided point is left: better that than nothing.
+ if(Best==INDEX_NONE&&Objectives.IsValidIndex(Avoid)&&ObservedOwner(Team,Avoid)!=Team)Best=Avoid;
  return Best;
+}
+
+FVector UBattleMatch::GroupSupportPost(int32 Team,int32 Point) const
+{
+ // GroupSupportBack x the rifle engagement distance short of the point on the own side (within range of the point, outside its centre).
+ if(!Objectives.IsValidIndex(Point))return AreaHome(Team);
+ const auto* T=GetDefault<UBattleTuning>();
+ const FVector P=Objectives[Point].Position,Home=AreaHome(Team);const double Length=FVector::Dist2D(Home,P);
+ const double Range=BattleRanges::Get().bActive?BattleRanges::Engage(EBattleWeapon::Carbine):T->EffectiveWeaponRange();
+ FVector Post=P+(Home-P).GetSafeNormal2D()*FMath::Clamp(double(T->GroupSupportBack)*Range,0.,FMath::Max(0.,Length-3000.));
+ if(auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld())){FNavLocation L;if(Nav->ProjectPointToNavigation(Post,L,FVector(1000,1000,500)))Post=L.Location;}
+ return Post;
+}
+
+uint8 UBattleMatch::GroupRole(const FBattleGroup& G,int32 SquadID) const
+{
+ if(const uint8* Role=G.Roles.Find(SquadID))return *Role;
+ // A squad that joined after the roles were given: by its type.
+ const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SquadID);const uint8 Type=S?S->SquadType:BattleSquadType::Rifle;
+ return Type==BattleSquadType::Tank?2:BattleSquadType::IsArtillery(Type)?3:Type==BattleSquadType::AntiTank?4:Type==BattleSquadType::Heavy?1:Type==BattleSquadType::Rifle?0:255;
+}
+
+void UBattleMatch::AssignGroupRoles(FBattleGroup& G) const
+{
+ // Own squads' type and living numbers only. Rifle squads assault; with three or more the weakest supports. Heavy infantry supports.
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ G.Roles.Reset();
+ struct FRifle{int32 SID;int32 Living;};TArray<FRifle> Rifles;
+ for(int32 SID:G.Squads)
+ {
+  const auto* S=Store->FindSquad(SID);if(!S)continue;
+  if(S->SquadType!=BattleSquadType::Rifle){FBattleGroup None;G.Roles.Add(SID,GroupRole(None,SID));continue;}
+  int32 Living=0;for(int32 ID:S->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())++Living;
+  Rifles.Add({SID,Living});
+ }
+ Rifles.Sort([](const FRifle& A,const FRifle& B){return A.Living!=B.Living?A.Living>B.Living:A.SID<B.SID;});
+ for(int32 I=0;I<Rifles.Num();++I)G.Roles.Add(Rifles[I].SID,Rifles.Num()>=3&&I==Rifles.Num()-1?1:0);
 }
 
 FVector UBattleMatch::GroupRally(int32 Team,int32 Point) const
@@ -112,32 +158,43 @@ void UBattleMatch::UpdateGroups(int32 Team)
  }
  // 2. AI formation (trial): one attack group per team from its AI-led rifle squads outside the home-assault slots, the nearest to the
  //    rally point first, with one tank and one mortar team when the team has them.
- bool bHasAIGroup=false;for(const auto& P:Groups)bHasAIGroup|=P.Value.Team==Team&&!P.Value.bPlayer;
- if(BattleTactics::AreaGroups(Team)&&bStrategy&&!bHasAIGroup)
+ int32 AIGroup=INDEX_NONE;for(const auto& P:Groups)if(P.Value.Team==Team&&!P.Value.bPlayer)AIGroup=AIGroup==INDEX_NONE?P.Key:FMath::Min(AIGroup,P.Key);
+ if(BattleTactics::AreaGroups(Team)&&bStrategy)
  {
-  const int32 Focus=GroupFocus(Team,AreaHome(Team));
-  if(Focus!=INDEX_NONE)
+  const int32 Focus=AIGroup!=INDEX_NONE?Groups[AIGroup].Objective:GroupFocus(Team,AreaHome(Team));
+  if(Focus!=INDEX_NONE||AIGroup!=INDEX_NONE)
   {
-   const FVector Rally=GroupRally(Team,Focus);
+   const FVector Rally=AIGroup!=INDEX_NONE?Groups[AIGroup].Rally:GroupRally(Team,Focus);
    struct FFree{int32 SID;uint8 Type;double D;};TArray<FFree> Free;
    for(const auto& P:Store->GetSquads())
    {
     const auto& S=P.Value;
     if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(P.Key)!=INDEX_NONE)continue;
     if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key))continue;
-    if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Tank&&S.SquadType!=BattleSquadType::Mortar)continue;
+    if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Tank&&S.SquadType!=BattleSquadType::Mortar&&S.SquadType!=BattleSquadType::AntiTank)continue;
     bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase)continue;
     Free.Add({P.Key,S.SquadType,FVector::DistSquared2D(R->Position(S.LeaderUnitID),Rally)});
    }
    Free.Sort([](const FFree& A,const FFree& B){return A.D!=B.D?A.D<B.D:A.SID<B.SID;});
-   TArray<int32> Pick;int32 Rifles=0;bool bTank=false,bMortar=false;const int32 Want=FMath::Clamp(T->GroupRifleSquads,2,6);
+   // What the group already has (a new group: nothing), then the nearest free squads up to its numbers.
+   TArray<int32> Pick;int32 Rifles=0;bool bTank=false,bMortar=false,bAT=false;const int32 Want=FMath::Clamp(T->GroupRifleSquads,2,6);
+   if(AIGroup!=INDEX_NONE)for(int32 SID:Groups[AIGroup].Squads)if(const auto* S=Store->FindSquad(SID))
+   {Rifles+=S->SquadType==BattleSquadType::Rifle;bTank|=S->SquadType==BattleSquadType::Tank;bMortar|=S->SquadType==BattleSquadType::Mortar;bAT|=S->SquadType==BattleSquadType::AntiTank;}
    for(const auto& F:Free)
    {
     if(F.Type==BattleSquadType::Rifle){if(Rifles<Want){Pick.Add(F.SID);++Rifles;}}
     else if(F.Type==BattleSquadType::Tank){if(!bTank){Pick.Add(F.SID);bTank=true;}}
-    else if(!bMortar){Pick.Add(F.SID);bMortar=true;}
+    else if(F.Type==BattleSquadType::Mortar){if(!bMortar){Pick.Add(F.SID);bMortar=true;}}
+    else if(!bAT){Pick.Add(F.SID);bAT=true;}
    }
-   if(Rifles>=2)FormGroup(Team,Pick,false);
+   if(AIGroup==INDEX_NONE){if(Rifles>=2)FormGroup(Team,Pick,false);}
+   else if(Pick.Num())
+   {
+    auto& G=Groups[AIGroup];
+    for(int32 SID:Pick){G.Squads.Add(SID);SquadGroup.Add(SID,AIGroup);}
+    G.Squads.Sort();
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_JOIN group=%d team=%d joined=%d squads=%d time=%.1f"),AIGroup,Team,Pick.Num(),G.Squads.Num(),Elapsed);
+   }
   }
  }
  // 3. Phases of the groups the AI runs.
@@ -148,6 +205,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
   auto Enter=[&](uint8 To,const TCHAR* Why)
   {
    G->Phase=To;G->PhaseAt=Elapsed;
+   if(To==1)AssignGroupRoles(*G);
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_PHASE group=%d team=%d phase=%d objective=%d squads=%d reason=%s time=%.1f"),ID,Team,int32(To),G->Objective,G->Squads.Num(),Why,Elapsed);
   };
   // Squads away at home for supply do not hold the group up.
@@ -162,7 +220,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
   if(Present)Center/=Present;
   if(!Objectives.IsValidIndex(G->Objective))
   {
-   const int32 Next=GroupFocus(Team,Present?Center:AreaHome(Team));
+   const int32 Next=GroupFocus(Team,Present?Center:AreaHome(Team),Elapsed<G->AvoidUntil?G->Avoid:INDEX_NONE);
    if(Next==INDEX_NONE){if(!G->bPlayer){DissolveGroup(ID,TEXT("no_objective"));}continue;}
    G->Objective=Next;G->Rally=GroupRally(Team,Next);Enter(0,TEXT("new_objective"));continue;
   }
@@ -173,11 +231,22 @@ void UBattleMatch::UpdateGroups(int32 Team)
    if(Present>=2&&Ready>=FMath::CeilToInt(Present*FMath::Clamp(T->GroupReadyShare,.1f,1.f)))Enter(1,TEXT("assembled"));
    else if(Elapsed-G->PhaseAt>=FMath::Max(0.f,T->GroupAssembleMax))Enter(1,TEXT("assemble_timeout"));
   }
-  else if(G->Phase==1){if(bOwn)Enter(2,TEXT("point_taken"));}
+  else if(G->Phase==1)
+  {
+   if(bOwn)Enter(2,TEXT("point_taken"));
+   else if(Elapsed-G->PhaseAt>=FMath::Max(10.f,T->GroupAdvanceMax))
+   {
+    // Stalled: the point is not taken. Another point if there is one (this one is avoided for a while); otherwise gather again.
+    const int32 Next=GroupFocus(Team,Present?Center:AreaHome(Team),G->Objective);
+    if(Next!=INDEX_NONE&&Next!=G->Objective)
+    {G->Avoid=G->Objective;G->AvoidUntil=Elapsed+FMath::Max(0.f,T->GroupAvoidSeconds);G->Objective=Next;G->Rally=GroupRally(Team,Next);Enter(0,TEXT("stalled_switch"));}
+    else Enter(0,TEXT("stalled_regroup"));
+   }
+  }
   else if(Elapsed-G->PhaseAt>=FMath::Max(0.f,T->GroupHoldSeconds)||!bOwn)
   {
    // The next point: the nearest one the team does not hold, from where the group stands. It gathers again short of it.
-   const int32 Next=bOwn?GroupFocus(Team,Present?Center:AreaHome(Team)):G->Objective;
+   const int32 Next=bOwn?GroupFocus(Team,Present?Center:AreaHome(Team),Elapsed<G->AvoidUntil?G->Avoid:INDEX_NONE):G->Objective;
    if(Next==INDEX_NONE){G->PhaseAt=Elapsed;continue;}
    G->Objective=Next;G->Rally=GroupRally(Team,Next);Enter(0,bOwn?TEXT("next_objective"):TEXT("point_lost"));
   }
@@ -189,15 +258,19 @@ bool UBattleMatch::GroupOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOr
  const int32 ID=GroupOf(SquadID);const auto* G=ID!=INDEX_NONE?Groups.Find(ID):nullptr;
  const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SquadID);
  if(!G||!S||G->Team!=Team||!Objectives.IsValidIndex(G->Objective)||!GroupAIRun(*G))return false;
- const bool bMortar=BattleSquadType::IsArtillery(S->SquadType);
+ const uint8 Role=GroupRole(*G,SquadID);if(Role==255)return false;
+ const bool bMortar=Role==3;
  if(G->Phase==0)
  {
-  // Gather at the rally point; a mortar team keeps its standoff from known enemies.
-  Center=bMortar?AreaArtilleryPost(Team,SquadID,G->Rally):G->Rally;Order=EBattleOrder::Defend;return true;
+  // Gather at the rally point, fighting what comes within range on the way and there (a Defend order would only watch the rally
+  // point itself); a mortar team keeps its standoff from known enemies.
+  Center=bMortar?AreaArtilleryPost(Team,SquadID,G->Rally):G->Rally;Order=EBattleOrder::AttackMove;return true;
  }
  const FVector Point=Objectives[G->Objective].Position;const bool bOwn=ObservedOwner(Team,G->Objective)==Team;
  Order=bOwn?EBattleOrder::Defend:EBattleOrder::AttackMove;
- if(S->SquadType==BattleSquadType::Tank)
+ // Support and guard squads fire from the support post until the point is the team's, then move up to it.
+ if((Role==1||Role==4)&&!bOwn){Center=GroupSupportPost(Team,G->Objective);return true;}
+ if(Role==2)
  {
   // Close behind its infantry instead of the lone overwatch distance; a post near the current mission is kept.
   Center=AreaTankPost(Team,G->Objective,GetDefault<UBattleTuning>()->GroupTankBack);

@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 202 種類。
+計 203 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -26,7 +26,7 @@
 | `-BattleAreaFocus` | Value | 0.f | BattleTactics.cpp:81 |  |
 | `-BattleAreaFrontBalance` | Value | S.bFrontBalance?1:0（bFrontBalance=false） | BattleTactics.cpp:76 |  |
 | `-BattleAreaFrontGain` | Value | 1.f | BattleTactics.cpp:77 |  |
-| `-BattleAreaGroups` | Value | GetDefault<UBattleTuning>()->bAreaGroups?1:0 | BattleGroups.cpp:21 |  |
+| `-BattleAreaGroups` | Value | GetDefault<UBattleTuning>()->bAreaGroups?1:0 | BattleGroups.cpp:28 |  |
 | `-BattleAreaHeavyShare` | Value | 0.f / -1.f（同名のメンバーが複数） | BattleTactics.cpp:88 |  |
 | `-BattleAreaHire` | Value | T->bAreaHire?1:0 | BattleTactics.cpp:51 |  |
 | `-BattleAreaHireInterval` | Value | T->AreaHireIntervalSeconds | BattleTactics.cpp:53 |  |
@@ -58,7 +58,7 @@
 | `-BattleArmourAITeam` | Value | -1 | BattleArmourAI.cpp:32 |  |
 | `-BattleBenchmark` | Param | off | BattleBenchmark.cpp:28, BattleController.cpp:52, BattleLeaderRuntime.cpp:66 |  |
 | `-BattleBenchmarkFPS` | Param | off | BattleBenchmark.cpp:120, BattleBenchmark.cpp:154 |  |
-| `-BattleConcealment` | other |  | BattleLeaderRuntime.cpp:376, BattleLeaderRuntime.cpp:787, BattleMapCommandlet.cpp:98 |  |
+| `-BattleConcealment` | other |  | BattleLeaderRuntime.cpp:376, BattleLeaderRuntime.cpp:789, BattleMapCommandlet.cpp:98 |  |
 | `-BattleContactAvoidance` | Value | 1 | BattleLeaderRuntime.cpp:78 |  |
 | `-BattleContactTrial` | Param | off | BattleLeaderRuntime.cpp:79 |  |
 | `-BattleCoverActions` | Value | 0 | BattleSquadTactics.cpp:19, BattleTactics.cpp:173 |  |
@@ -68,6 +68,7 @@
 | `-BattleCoverFire` | Value | GetDefault<UBattleTuning>()->bAICoverFire?1:0 | BattleTactics.cpp:143 |  |
 | `-BattleCoverPeekSight` | Value | GetDefault<UBattleTuning>()->bAICoverPeekSight?1:0 | BattleTactics.cpp:155 |  |
 | `-BattleCoverValidation` | Value | GetDefault<UBattleTuning>()->bAICoverValidation?1:0 | BattleTactics.cpp:149 |  |
+| `-BattleDefendEngage` | Value | GetDefault<UBattleTuning>()->bDefendEngage?1:0 | BattleGroups.cpp:21 |  |
 | `-BattleDelegationScreens` | Value |  | BattleDelegationSmoke.cpp:89 |  |
 | `-BattleDiagnosticOmit` | Value |  | BattleBenchmark.cpp:114, BattleBenchmark.cpp:146 |  |
 | `-BattleDisplayLOD` | Value | 1 | BattleLeaderRuntime.cpp:115, BattleWideMixedSmoke.cpp:170 |  |
@@ -206,6 +207,6 @@
 | `-BattleWideMapAudit` | Param | off | BattleLeaderRuntime.cpp:212 |  |
 | `-BattleWideMapGeometryOnly` | Param | off | BattleWideMapAudit.cpp:157 |  |
 | `-BattleWideMixed` | Param | off | BattleGameMode.cpp:55, BattleLeaderRuntime.cpp:68 |  |
-| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:682, BattleContactTrial.cpp:97, BattleMixedFastSmoke.cpp:34 ほか12 |  |
+| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:700, BattleContactTrial.cpp:97, BattleMixedFastSmoke.cpp:34 ほか12 |  |
 | `-BattleWideSmoke` | Param | off | BattleLeaderRuntime.cpp:226 |  |
 | `-BattleWideSoak` | Param | off | BattleLeaderRuntime.cpp:228 |  |

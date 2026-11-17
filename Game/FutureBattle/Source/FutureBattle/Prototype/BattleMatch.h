@@ -146,7 +146,13 @@ public:
 	int32 AreaTankTarget(int32 Team, int32 SquadID) const;
 	FVector AreaTankPost(int32 Team, int32 Point, float Overwatch = -1.f) const; // Overwatch below zero: UBattleTuning::TankOverwatch
 	// Squad groups, stage 1 (BattleGroups.cpp): members, one objective, a phase (0 assemble at Rally, 1 advance, 2 hold). Not saved.
-	struct FBattleGroup { int32 ID = 0, Team = 0; TArray<int32> Squads; int32 Objective = INDEX_NONE; uint8 Phase = 0; float PhaseAt = 0.f; FVector Rally = FVector::ZeroVector; bool bPlayer = false; };
+	// Stage 2: roles while advancing (0 assault: to the point; 1 support: fires from a post short of it; 2 armour: the tank's post behind
+	// the infantry; 3 fire: mortar or gun at its firing post; 4 guard: the anti-tank team beside the support post; 255 none: the squad
+	// keeps its own type's rules). A point the group could not take is avoided until AvoidUntil.
+	struct FBattleGroup { int32 ID = 0, Team = 0; TArray<int32> Squads; int32 Objective = INDEX_NONE; uint8 Phase = 0; float PhaseAt = 0.f; FVector Rally = FVector::ZeroVector; bool bPlayer = false; TMap<int32, uint8> Roles; int32 Avoid = INDEX_NONE; float AvoidUntil = 0.f; };
+	uint8 GroupRole(const FBattleGroup& Group, int32 SquadID) const;
+	void AssignGroupRoles(FBattleGroup& Group) const;
+	FVector GroupSupportPost(int32 Team, int32 Point) const;
 	TMap<int32, FBattleGroup> Groups;
 	TMap<int32, int32> SquadGroup; // squad -> group
 	int32 NextGroupID = 1;
@@ -155,7 +161,7 @@ public:
 	int32 FormGroup(int32 Team, const TArray<int32>& Squads, bool bPlayer);
 	void DissolveGroup(int32 GroupID, const TCHAR* Why);
 	bool GroupAIRun(const FBattleGroup& Group) const;
-	int32 GroupFocus(int32 Team, const FVector& From) const;
+	int32 GroupFocus(int32 Team, const FVector& From, int32 Avoid = INDEX_NONE) const;
 	FVector GroupRally(int32 Team, int32 Point) const;
 	// Every director update, before the team's orders: members, AI formation (trial -BattleAreaGroups=1), phases.
 	void UpdateGroups(int32 Team);

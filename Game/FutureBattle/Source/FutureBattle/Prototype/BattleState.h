@@ -439,6 +439,16 @@ public:
 	UPROPERTY(Config, EditAnywhere) float GroupAssembleMax = 60.f;
 	UPROPERTY(Config, EditAnywhere) float GroupHoldSeconds = 30.f;
 	UPROPERTY(Config, EditAnywhere) float GroupTankBack = 6000.f;
+	// Stage 2 (2026-11-18): with three or more rifle squads the weakest supports from a post GroupSupportBack x the rifle engagement
+	// distance short of the point (heavy infantry always supports; an anti-tank team guards there). A group that has not taken its point
+	// GroupAdvanceMax seconds after it advanced goes for another point (the stalled one is avoided GroupAvoidSeconds) or, with none,
+	// gathers again. An AI group below its numbers takes free squads in.
+	UPROPERTY(Config, EditAnywhere) float GroupSupportBack = .6f;
+	UPROPERTY(Config, EditAnywhere) float GroupAdvanceMax = 150.f;
+	UPROPERTY(Config, EditAnywhere) float GroupAvoidSeconds = 180.f;
+	// Trial -BattleDefendEngage=1 (default 0; the trial team with -BattleAreaTrialTeam): a squad on a Defend order may target any enemy
+	// within its weapon range, not only those within DefenseRadius of the defended place (it still does not leave its position).
+	UPROPERTY(Config, EditAnywhere) bool bDefendEngage = false;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRange = 30000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRangeProfile = 40000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutStillSpeed = 30.f;

@@ -335,7 +335,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
       const auto SavedGroups=M->Groups;const auto SavedSquadGroup=M->SquadGroup;const int32 SavedNext=M->NextGroupID;
       const int32 GID=Two.Num()==2?M->FormGroup(0,Two,true):INDEX_NONE;const auto* GG=M->Groups.Find(GID);
       bool bFormed=GG&&M->GroupOf(Two[0])==GID&&M->GroupOf(Two[1])==GID&&GG->Phase==0&&!BattleTactics::AreaGroups(0);
-      bool bManual=false,bGather=false,bAdvance=false,bLeft=false;
+      bool bManual=false,bGather=false,bAdvance=false,bLeft=false,bRoles=true,bStall=true;
       if(bFormed)
       {
        const bool D0=Store->FindSquad(Two[0])->bPlayerDelegated,D1=Store->FindSquad(Two[1])->bPlayerDelegated;
@@ -344,7 +344,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
        bManual=!M->GroupAIRun(*GG)&&!M->GroupOrder(Two[0],0,GroupCenter,GroupOrderValue);
        Store->SetSquadDelegated(Two[0],true);Store->SetSquadDelegated(Two[1],true);
        const bool bValid=M->Objectives.IsValidIndex(GG->Objective);
-       bGather=bValid&&M->GroupAIRun(*GG)&&M->GroupOrder(Two[0],0,GroupCenter,GroupOrderValue)&&GroupOrderValue==EBattleOrder::Defend&&GroupCenter.Equals(GG->Rally,1.)&&
+       bGather=bValid&&M->GroupAIRun(*GG)&&M->GroupOrder(Two[0],0,GroupCenter,GroupOrderValue)&&GroupOrderValue==EBattleOrder::AttackMove&&GroupCenter.Equals(GG->Rally,1.)&&
         FVector::Dist2D(GG->Rally,M->AreaHome(0))<FVector::Dist2D(M->Objectives[GG->Objective].Position,M->AreaHome(0));
        if(bValid&&M->ObservedOwner(0,GG->Objective)!=0)
        {
@@ -352,12 +352,30 @@ void UBattleLeaderRuntime::RunAreaSmoke()
         bAdvance=GG&&GG->Phase==1&&M->GroupOrder(Two[0],0,GroupCenter,GroupOrderValue)&&GroupCenter.Equals(M->Objectives[GG->Objective].Position,1.)&&GroupOrderValue==EBattleOrder::AttackMove;
        }
        else bAdvance=true; // every point already observed as own in this fixture: nothing to advance on
+       // Stage 2: a group of three rifle squads has exactly one support squad, posted short of the point; a stalled advance ends.
+       if(GG&&GG->Phase==1)
+       {
+        int32 ThirdSquad=INDEX_NONE;for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Value.SquadType==BattleSquadType::Rifle&&P.Value.CommandStatus==EBattleCommandStatus::Active&&!Two.Contains(P.Key)){ThirdSquad=P.Key;break;}
+        if(ThirdSquad!=INDEX_NONE)
+        {
+         auto& Three=M->Groups[GID];Three.Squads.Add(ThirdSquad);M->SquadGroup.Add(ThirdSquad,GID);M->AssignGroupRoles(Three);
+         int32 SupportCount=0,AssaultCount=0,SupportID=INDEX_NONE;for(int32 SID:Three.Squads){const uint8 RoleValue=M->GroupRole(Three,SID);AssaultCount+=RoleValue==0;if(RoleValue==1){++SupportCount;SupportID=SID;}}
+         const bool D2=Store->FindSquad(ThirdSquad)->bPlayerDelegated;Store->SetSquadDelegated(ThirdSquad,true);
+         const FVector TakePoint=M->Objectives[Three.Objective].Position;
+         bRoles=SupportCount==1&&AssaultCount==2&&M->GroupOrder(SupportID,0,GroupCenter,GroupOrderValue)&&GroupOrderValue==EBattleOrder::AttackMove&&
+          FVector::Dist2D(GroupCenter,TakePoint)>500.&&FVector::Dist2D(GroupCenter,M->AreaHome(0))<FVector::Dist2D(TakePoint,M->AreaHome(0));
+         Store->SetSquadDelegated(ThirdSquad,D2);Three.Squads.Remove(ThirdSquad);M->SquadGroup.Remove(ThirdSquad);M->AssignGroupRoles(Three);
+        }
+        M->Groups[GID].PhaseAt=M->Elapsed-1000.f;M->UpdateGroups(0);GG=M->Groups.Find(GID);
+        bStall=GG&&GG->Phase==0;
+       }
        const int32 Solo=M->FormGroup(0,{Two[1]},true);
        bLeft=Solo!=INDEX_NONE&&M->GroupOf(Two[1])==Solo&&M->GroupOf(Two[0])==GID&&M->Groups.Contains(GID)&&M->Groups[GID].Squads.Num()==1;
        Store->SetSquadDelegated(Two[0],D0);Store->SetSquadDelegated(Two[1],D1);
       }
       M->Groups=SavedGroups;M->SquadGroup=SavedSquadGroup;M->NextGroupID=SavedNext;
       Check(bFormed&&bManual&&bGather&&bAdvance&&bLeft,TEXT("squad groups: a player group follows the AI only when delegated; gather short of the objective, then advance; one group per squad"));
+      Check(bFormed&&bRoles&&bStall&&!BattleTactics::DefendEngage(0),TEXT("squad groups, stage 2: one support squad short of the point, a stalled advance gathers again; defend-engage trial off by default"));
       UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_GROUP_SMOKE formed=%d manual=%d gather=%d advance=%d left=%d"),bFormed?1:0,bManual?1:0,bGather?1:0,bAdvance?1:0,bLeft?1:0);
      }
      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_ARMOUR_AI_SMOKE tank_target=%d post=%s turned=%.2f shock=%d why=%s at_target=%d mix6=at%d/tank%d/ac%d/mortar%d/spg%d"),TankPick,*WatchPost.ToCompactString(),Turned,Shock,*Why,ATTarget,Mix6.ATKeep,Mix6.TankKeep,Mix6.ACKeep,Mix6.MortarKeep,Mix6.SPGKeep);

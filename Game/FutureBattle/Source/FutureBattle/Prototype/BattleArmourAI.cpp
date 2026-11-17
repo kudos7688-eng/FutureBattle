@@ -55,7 +55,7 @@ void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P)
   const bool bGunner=U->Weapon==EBattleWeapon::AntiTank&&U->Ammo+U->Reserve>0;const FVector Pos=Position(ID);
   for(const auto& C:*Contacts)if(C.Value.bVisible&&!C.Value.bShared)
   {
-   if(S->Order==EBattleOrder::Defend&&FVector::Dist2D(C.Value.LastKnownPosition,S->Destination)>S->DefenseRadius)continue;
+   if(S->Order==EBattleOrder::Defend&&!BattleTactics::DefendEngage(S->Team)&&FVector::Dist2D(C.Value.LastKnownPosition,S->Destination)>S->DefenseRadius)continue;
    if(S->TacticalPlan.Action==EBattleSquadTactic::Support&&C.Key!=S->TacticalPlan.SupportTarget)continue;
    const bool bVehicle=IsVehicle(C.Key);bSeesVehicle|=bVehicle;
    const double Range2=FVector::DistSquared(Pos,C.Value.LastKnownPosition);double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
