@@ -47,6 +47,7 @@ public:
 	bool bUseSpatialGrid = false;
 	bool bReuseSightContext = false; // Opt-in: observer-local, synchronous mixed-runtime scan only.
 	bool bEvenSchedule = false;
+	int64 SlowScans = 0, NormalScans = 0; // scan interval trial counters (BATTLE_SIGHT_SCAN)
 	bool bSlowUnknownFar = false; // Diagnostic only: unknown targets beyond 1200cm on alternate visits.
 	void Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double Now, int32 Slice = 0, int32 SliceCount = 1);
 	const TMap<int32, FBattleContact>* GetContacts(int32 ObserverID) const;

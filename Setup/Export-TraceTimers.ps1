@@ -10,7 +10,7 @@ if(-not $Output){$Output=[IO.Path]::ChangeExtension($Trace,$null).TrimEnd('.')+'
 $Output=[IO.Path]::GetFullPath($Output)
 $log=[IO.Path]::ChangeExtension($Output,'.log')
 $insights='C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealInsights.exe'
-$cmd="TimingInsights.ExportTimerStatistics `"$Output`" -threads=`"$Threads`" -sortBy=TotalInclusiveTime"
+$cmd="TimingInsights.ExportTimerStatistics `"$($Output -replace '\\','/')`" -threads=`"$Threads`" -sortBy=TotalInclusiveTime"
 if($StartTime -ge 0){$cmd+=" -startTime=$StartTime"};if($EndTime -ge 0){$cmd+=" -endTime=$EndTime"}
 # The command goes through a command file (@=path): nested quotes on the command line would split it.
 $cmdFile=[IO.Path]::ChangeExtension($Output,'.cmd.txt');[IO.File]::WriteAllText($cmdFile,$cmd)

@@ -51,6 +51,10 @@ void UBattleMatch::UpdateScoutReports()
  // Evaluation log (not AI input): tank positions and speeds every 10 s of match time.
  if(R->VehicleIDs.Num()&&FMath::FloorToInt(Now/10.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/10.))
   for(int32 VID:R->VehicleIDs)if(const auto* A=R->Actor(VID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_SAMPLE t=%.0f unit=%d team=%d pos=%s speed=%.0f"),Now,VID,Store->Find(VID)->Team,*A->GetActorLocation().ToCompactString(),A->GetVelocity().Size2D());
+ if(R->SightPairTraced+R->SightPairReused>0&&FMath::FloorToInt(Now/60.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/60.))
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SIGHT_PAIR t=%.0f traced=%lld reused=%lld"),Now,R->SightPairTraced,R->SightPairReused);
+ if(Perception->SlowScans+Perception->NormalScans>0&&FMath::FloorToInt(Now/60.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/60.))
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SIGHT_SCAN t=%.0f slow=%lld normal=%lld"),Now,Perception->SlowScans,Perception->NormalScans);
  if(R->VehicleIDs.Num()&&FMath::FloorToInt(Now/60.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/60.))
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_COST t=%.0f sight_traces=%lld sight_reused=%lld sight_ms=%.1f orders=%d order_ms=%.1f order_skips=%lld gun_shots=%lld gun_hits=%lld gun_vehicle_hits=%lld gun_kills=%lld gun_base_hits=%lld gun_picks=%lld gun_ms=%.1f"),Now,R->TankSightTraces,R->TankSightReused,R->TankSightMs,R->TankOrders,R->TankOrderMs,R->TankOrderSkips,
    R->TankGunShots,R->TankGunHits,R->TankGunVehicleHits,R->TankGunKills,R->TankGunBaseHits,R->TankGunPicks,R->TankGunMs);

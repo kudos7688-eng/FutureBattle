@@ -66,10 +66,23 @@ const TMap<FString,FString>& Words()
 struct FPattern { const TCHAR* Regex; const TCHAR* Format; };
 }
 
+static FString JaUncached(const FString& Text);
 FString BattleUIText::Ja(const FString& Text)
 {
  if(Text.IsEmpty()) return Text;
  if(const FString* Hit=Words().Find(Text)) return *Hit;
+ // Performance (2026-11-17): the HUD translates the same reason strings every frame, and a miss compiles up to 14 regular
+ // expressions. Results are remembered (game thread only; the table is cleared when it grows large). Same output.
+ if(!IsInGameThread()) return JaUncached(Text);
+ static TMap<FString,FString> Memo;
+ if(const FString* Known=Memo.Find(Text)) return *Known;
+ if(Memo.Num()>=4096) Memo.Reset();
+ FString Out=JaUncached(Text);
+ Memo.Add(Text,Out);
+ return Out;
+}
+static FString JaUncached(const FString& Text)
+{
  // Notices with numbers. Groups are inserted with {0}, {1}, {2}; a group that is itself English text is translated.
  static const FPattern Patterns[]={
   {TEXT("^GAME SPEED x(\\d+) \\[\\.\\]$"),TEXT("速度 x{0} [.]")},
@@ -96,7 +109,7 @@ FString BattleUIText::Ja(const FString& Text)
   {
    const FString Key=FString::Printf(TEXT("{%d}"),G-1); if(!Out.Contains(Key)) continue;
    const FString Part=M.GetCaptureGroup(G);
-   Out.ReplaceInline(*Key,*(Part.IsNumeric()?Part:Ja(Part)));
+   Out.ReplaceInline(*Key,*(Part.IsNumeric()?Part:BattleUIText::Ja(Part)));
   }
   return Out;
  }

@@ -108,7 +108,19 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 				}
 				if (Now + 1.e-6 < *Due) continue;
 				Lateness = FMath::Max(0., Now - *Due);
-				*Due += .2;
+				// Trial -BattleSightScanInterval=s (performance, default 0.2 = unchanged; user idea 2026-11-17): an observer with no
+				// enemy in sight at its last scan (or none within -BattleSightScanNear cm when given) looks again only every s seconds.
+				static const double ScanInterval = [] { double V = .2; FParse::Value(FCommandLine::Get(), TEXT("BattleSightScanInterval="), V); return FMath::Clamp(V, .2, 2.); }();
+				static const double ScanNear2 = [] { double V = 1.e7; FParse::Value(FCommandLine::Get(), TEXT("BattleSightScanNear="), V); return FMath::Square(FMath::Max(0., V)); }();
+				double Step = .2;
+				if (ScanInterval > .2 + 1.e-6)
+				{
+					Step = ScanInterval;
+					for (const auto& Contact : Observer.Contacts)
+						if (Contact.Value.bVisible && !Contact.Value.bShared && FVector::DistSquared(Pair.Value.Position, Contact.Value.LastKnownPosition) <= ScanNear2) { Step = .2; break; }
+					++(Step > .2 ? SlowScans : NormalScans);
+				}
+				*Due += Step;
 				if (*Due <= Now + 1.e-6) *Due = (FMath::FloorToDouble((Now - Phase) / .2) + 1.) * .2 + Phase;
 			}
 			UpdatedObservers.Add(Pair.Key);
@@ -129,7 +141,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 					FVector::DistSquared(Sight.Position, Candidate.Position) > FMath::Square(1200.f) &&
 					!Observer.Contacts.Contains(Candidate.State->UnitID) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID))
 				{ if (Metrics->bRecording) ++Metrics->FarCandidatesSkipped; return; }
-				if (Mixed ? !(bReuseSightContext ? (VehicleSpot2 > 0. && FVector::DistSquared(Sight.Position, Candidate.Position) > Sight.RangeSquared && Leader->IsVehicle(Candidate.State->UnitID) ? Leader->CanSeeVehicleFar(Pair.Key, Sight, Candidate.State->UnitID, Now) : Leader->CanSeeWithContext(Sight,Candidate.State->UnitID)) : Leader->CanSee(Pair.Key,Candidate.State->UnitID)) : !Unit->CanSeeSnapshot(Sight, Candidate.Unit, Candidate.Position, true)) return;
+				if (Mixed ? !(bReuseSightContext ? (VehicleSpot2 > 0. && FVector::DistSquared(Sight.Position, Candidate.Position) > Sight.RangeSquared && Leader->IsVehicle(Candidate.State->UnitID) ? Leader->CanSeeVehicleFar(Pair.Key, Sight, Candidate.State->UnitID, Now) : Leader->CanSeeWithContext(Sight,Candidate.State->UnitID,Pair.Key)) : Leader->CanSee(Pair.Key,Candidate.State->UnitID)) : !Unit->CanSeeSnapshot(Sight, Candidate.Unit, Candidate.Position, true)) return;
 				const int32 TargetID = Candidate.State->UnitID;
 				InView.Add(TargetID);
 				double* Started = Observer.DetectionStarted.Find(TargetID);
@@ -239,10 +251,25 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			const double LocalRange2 = FMath::Square(SourceState->Perception.SightRange * 1.1);
 			for (const auto& Contact : Observers.FindChecked(Source.Key).Contacts) if (Contact.Value.bVisible) if (FVector::DistSquared(Source.Value.Position, Contact.Value.LastKnownPosition) <= LocalRange2) VisibleContacts.Add(&Contact.Value);
 			if (VisibleContacts.IsEmpty()) continue;
-			for (const auto& Receiver : Alive)
+			// Performance (2026-11-17): receivers come from the sight grid cells around the source instead of every living unit,
+			// in the same (ordinal) order, so the reports and their order are unchanged.
+			const double Share2 = FMath::Square(SourceState->Perception.ShareRange);
+			TArray<const FLiveUnit*, TInlineAllocator<64>> Receivers;
+			const int32 ShareCells = FMath::CeilToInt(SourceState->Perception.ShareRange / CellSize);
+			if (bUseSpatialGrid && ShareCells <= 4)
 			{
-				if (Source.Key == Receiver.Key || SourceState->Team != Receiver.Value.State->Team ||
-					FVector::DistSquared(Source.Value.Position, Receiver.Value.Position) > FMath::Square(SourceState->Perception.ShareRange)) continue;
+				const int32 CX = Cell(Source.Value.Position.X), CY = Cell(Source.Value.Position.Y);
+				for (int32 X = CX - ShareCells; X <= CX + ShareCells; ++X) for (int32 Y = CY - ShareCells; Y <= CY + ShareCells; ++Y)
+					if (const auto* Bucket = Grid.Find(FIntPoint(X, Y))) for (const FLiveUnit* R : *Bucket)
+						if (R->State->Team == SourceState->Team && FVector::DistSquared(Source.Value.Position, R->Position) <= Share2) Receivers.Add(R);
+				Receivers.Sort([](const FLiveUnit& A, const FLiveUnit& B) { return A.Ordinal < B.Ordinal; });
+			}
+			else for (const auto& R : Alive) if (R.Value.State->Team == SourceState->Team && FVector::DistSquared(Source.Value.Position, R.Value.Position) <= Share2) Receivers.Add(&R.Value);
+			for (const FLiveUnit* ReceiverUnit : Receivers)
+			{
+				const int32 ReceiverKey = ReceiverUnit->State->UnitID;
+				if (Source.Key == ReceiverKey) continue;
+				const struct { int32 Key; const FLiveUnit& Value; } Receiver{ReceiverKey, *ReceiverUnit};
 				const auto& ReceiverContacts = Observers.FindChecked(Receiver.Key).Contacts;
 				for (const FBattleContact* Contact : VisibleContacts)
 				{

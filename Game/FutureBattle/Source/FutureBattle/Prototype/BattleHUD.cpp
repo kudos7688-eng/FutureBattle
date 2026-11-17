@@ -18,6 +18,7 @@
 
 void ABattleHUD::DrawHUD()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(BattleHUD_DrawHUD);
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattleHUD);
 	Super::DrawHUD();
 	ABattleController* PC = Cast<ABattleController>(PlayerOwner);
@@ -370,6 +371,7 @@ void ABattleHUD::DrawHUD()
 
 void ABattleHUD::DrawMinimap()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(BattleHUD_DrawMinimap);
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); if(!L->IsEnabled()) return;
  auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas || !PC->IsTactical()) return;
  const auto Map=FBattleMinimapLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld()); if(Map.Size.X<=0) return;
@@ -444,6 +446,7 @@ void ABattleHUD::DrawMinimap()
 
 void ABattleHUD::DrawSquadList()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(BattleHUD_DrawSquadList);
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); if(!L->IsEnabled()) return;
  auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas || !PC->IsTactical()) return;
  PC->ScrollSquadList(0); const auto Layout=FBattleSquadListLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY));
@@ -504,6 +507,7 @@ void ABattleHUD::DrawSquadList()
 
 void ABattleHUD::DrawNoticeLog()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(BattleHUD_DrawNoticeLog);
  auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas || !PC->IsTactical()) return;
  const auto Notices=PC->VisibleNotices(); if(Notices.IsEmpty()) return;
  const auto Layout=FBattleNoticeLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld(),Notices.Num(),PC->NoticeLogTop()); if(Layout.Rows<=0) return;
@@ -522,6 +526,7 @@ void ABattleHUD::DrawNoticeLog()
 
 void ABattleHUD::DrawOrderMarks()
 {
+ TRACE_CPUPROFILER_EVENT_SCOPE(BattleHUD_DrawOrderMarks);
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); if(!L->IsEnabled()) return;
  auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas || !PC->IsTactical() || PC->GetSelection().IsEmpty()) return;
  const float H=Canvas->SizeY; const auto* Store=GetWorld()->GetSubsystem<UBattleState>();

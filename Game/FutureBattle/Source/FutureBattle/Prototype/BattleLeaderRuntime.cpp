@@ -268,7 +268,7 @@ bool UBattleLeaderRuntime::CanSee(int32 ID,int32 Target) const
  FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
  return !Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
 }
-bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 Target) const
+bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 Target,int32 Observer) const
 {
  // Keep reference arithmetic, target reads, query and hit policy unchanged.
  // Only the observer Context construction is hoisted by the perception caller.
@@ -276,8 +276,26 @@ bool UBattleLeaderRuntime::CanSeeWithContext(const FBattleSightContext& C,int32 
  if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
  const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
  if(FVector::DistSquared(P,C.Position)>(IsVehicle(Target)?FMath::Max(C.RangeSquared,FMath::Square(VehicleSpotRange())):C.RangeSquared) || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
+ // Trial -BattleSightPairReuse=1 (performance, default OFF): two soldiers looking at each other trace nearly the same line. A result
+ // traced in the other direction within SightPairSeconds is reused while neither has moved more than 1 m since.
+ static const bool bPairReuse=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSightPairReuse="),V);return V!=0;}();
+ const bool bPair=bPairReuse&&Observer>=0&&Observer!=Target;
+ const double Now=bPair?GetWorld()->GetTimeSeconds():0.;
+ const uint64 Key=bPair?(uint64(uint32(FMath::Min(Observer,Target)))<<32)|uint32(FMath::Max(Observer,Target)):0;
+ const bool bObserverLow=Observer<Target;
+ if(bPair)
+  if(const auto* E=SightPairs.Find(Key);E&&E->bLowObserver!=bObserverLow&&Now>=E->At&&Now-E->At<.2-1.e-6&&
+     FVector::DistSquared(E->Low,bObserverLow?C.Position:P)<=1.e4&&FVector::DistSquared(E->High,bObserverLow?P:C.Position)<=1.e4)
+  {++SightPairReused;return E->bVisible;}
  FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))),ECC_Visibility,C.Query);
- return !Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
+ const bool bVisible=!Hit.bBlockingHit || HitIDs.FindRef(Hit.GetComponent())==Target;
+ if(bPair)
+ {
+  ++SightPairTraced;
+  if(Now>=SightPairsPruneAt){SightPairsPruneAt=Now+1.;for(auto It=SightPairs.CreateIterator();It;++It)if(Now-It.Value().At>.5)It.RemoveCurrent();}
+  SightPairs.Add(Key,{Now,bObserverLow?C.Position:P,bObserverLow?P:C.Position,bObserverLow,bVisible});
+ }
+ return bVisible;
 }
 bool UBattleLeaderRuntime::CanSelectLeader(int32 ID) const { return Actor(ID) && GetWorld()->GetSubsystem<UBattleState>()->CanSelectLeader(ID); }
 bool UBattleLeaderRuntime::CanControlLeader(int32 ID) const { return CanSelectLeader(ID) && Mode && !Mode->bBattleEnded; }
@@ -723,7 +741,9 @@ void UBattleLeaderRuntime::RefreshDisplay()
 void UBattleLeaderRuntime::Step(float Dt)
 {
  if(!bEnabled) return;
- if(SightExperiment.Enabled) StepSightExperiment(Dt);
+ // Named CPU trace scopes (Unreal Insights, -trace=cpu): free when no trace is recording.
+ TRACE_CPUPROFILER_EVENT_SCOPE(BattleRuntimeStep);
+ if(SightExperiment.Enabled) { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightExperiment); StepSightExperiment(Dt); }
  if(Phase3 && Phase3->bEnabled) { Phase3->Step(Dt); return; }
  if(bMovementTrial && MoveTrialStage==1 && !Mode->bCombatPaused) MoveTrialFrameMS.Add(Dt*1000);
  const double Now=GetWorld()->GetTimeSeconds(); auto* Store=GetWorld()->GetSubsystem<UBattleState>();
@@ -733,18 +753,18 @@ void UBattleLeaderRuntime::Step(float Dt)
  if(bWideField) Store->AdvanceReloads(Now);
  if(bWideField && !bMovementTrial && Now>=Mode->CombatStartsAt)
  {
-  GetWorld()->GetSubsystem<UBattleMatch>()->Update(Dt);
-  GetWorld()->GetSubsystem<UBattleSquadTactics>()->Step(Dt);
+  { TRACE_CPUPROFILER_EVENT_SCOPE(BattleMatchUpdate); GetWorld()->GetSubsystem<UBattleMatch>()->Update(Dt); }
+  { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSquadTacticsStep); GetWorld()->GetSubsystem<UBattleSquadTactics>()->Step(Dt); }
  }
  if(!Mode->bCombatPaused && !Mode->bBattleEnded && Now>=Mode->CombatStartsAt)
  {
   if(!bWideField) Store->AdvanceReloads(Now);
-  if(!bMovementTrial) GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now,-1,0);
-  for(auto& P:Plans) if(Now>=P.Value.NextThink || (Store->FindSquad(P.Key) && P.Value.OrderRevision!=Store->FindSquad(P.Key)->OrderRevision)) Think(P.Key,Now);
+  if(!bMovementTrial) { TRACE_CPUPROFILER_EVENT_SCOPE(BattlePerceptionUpdate); GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now,-1,0); }
+  { TRACE_CPUPROFILER_EVENT_SCOPE(BattleThink); for(auto& P:Plans) if(Now>=P.Value.NextThink || (Store->FindSquad(P.Key) && P.Value.OrderRevision!=Store->FindSquad(P.Key)->OrderRevision)) Think(P.Key,Now); }
   AvoidanceGrid.Reset();
   for(const auto& B:Bodies) if(Store->Find(B.Key)->IsAlive()) { const FVector P=Position(B.Key); AvoidanceGrid.FindOrAdd(FIntPoint(FMath::FloorToInt(P.X/150.),FMath::FloorToInt(P.Y/150.))).Add(B.Key); }
   // Death may invalidate a plan during firing; iterate stable UnitIDs, never a plan iterator.
-  for(const auto& B:Bodies) Follow(B.Key,FMath::Min(Dt,.05f),Now);
+  { TRACE_CPUPROFILER_EVENT_SCOPE(BattleFollow); for(const auto& B:Bodies) Follow(B.Key,FMath::Min(Dt,.05f),Now); }
  }
  int32 Living[2]={0,0}; for(const auto& U:Store->GetUnits()) if(U.Value.IsAlive()) ++Living[U.Value.Team];
  if(!bArea && !Mode->bBattleEnded && (!Living[0] || !Living[1]))
@@ -752,7 +772,7 @@ void UBattleLeaderRuntime::Step(float Dt)
   if(bWideField) GetWorld()->GetSubsystem<UBattleMatch>()->Finish(Living[0]?0:1,Living[0]?TEXT("VICTORY / ENEMY ELIMINATED"):TEXT("DEFEAT / FORCE ELIMINATED"));
   else { Mode->bBattleEnded=true; Mode->Result=Living[0]?TEXT("VICTORY"):TEXT("DEFEAT"); }
  }
- RefreshDisplay();
+ { TRACE_CPUPROFILER_EVENT_SCOPE(BattleRefreshDisplay); RefreshDisplay(); }
 }
 
 float UBattleLeaderRuntime::TargetRange(int32 ID) const
