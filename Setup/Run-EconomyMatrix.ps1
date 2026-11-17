@@ -12,7 +12,8 @@ param(
  [ValidateRange(-1,1)][int]$TrialTeam=-1,   # 0/1: the S3-S6 trial flags apply to that team only (use a distinct -Tag)
  [ValidateRange(10,120)][int]$Fps=60,       # fixed simulation step (2026-11-16: 30 = about twice as fast; compare only runs with the same Fps)
  [switch]$NoRoundTripSave,                  # skip the 80 s save round trip (strategy screening only; regressions keep it)
- [switch]$NoReuse                           # 2026-11-18: by default a match whose build, map, Config and arguments equal an earlier passed one copies its result
+ [switch]$NoReuse,                          # 2026-11-18: by default a match whose build, map, Config and arguments equal an earlier passed one copies its result
+ [switch]$PlanOnly                          # 2026-11-18: output the runs still missing ({Name, Args}) without starting them (Run-StrategyScreen pools them)
 )
 $ErrorActionPreference='Stop'
 Set-Location $PSScriptRoot
@@ -151,9 +152,11 @@ foreach($r in $runs){
  if(!$NoReuse){$pa+='-ReuseIdentical'}
  if($Fps -ne 60){$pa+=@('-Fps',"$Fps")}
  if($swap){$pa+='-Swap'}
+ if($PlanOnly){[pscustomobject]@{Name=$name;Args=$pa};continue}
  while(@($jobs|Where-Object{!$_.HasExited}).Count -ge $Concurrency){Start-Sleep 5}
  $jobs+=Start-Process powershell.exe -ArgumentList $pa -RedirectStandardOutput "Econ-$name.txt" -RedirectStandardError "Econ-$name.err.txt" -WindowStyle Hidden -PassThru
  Start-Sleep 3
 }
+if($PlanOnly){return}
 $jobs|ForEach-Object{$_.WaitForExit()}
 "started=$($jobs.Count) skipped(existing)=$skipped"

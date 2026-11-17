@@ -13,6 +13,20 @@
 
 古い項目：11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-18 2時00分 Claude（計測の簡略化と高速化）：12並列での確認、選別の早期打ち切り、30FPS選別→60FPS確認を既定に
+- **1時05分の項の確認（12並列・60FPS・保存往復あり）**：凍結ビルド `claude-selfcontained-t2`（1時20分のビルド＝`-BattleHireSightRefresh` 入り）から `Run-EconomyMatrix -Conditions HI -Seeds 7,19,43 -Maps A,D -Tag selfc1`。12戦すべて合格、621秒（従来の12戦約10.5分と同じ）。全戦が写しの `.uproject` から起動した。同じコマンドを `-Tag selfc2` で再実行すると、12戦すべてが `selfc1` の結果の写しになり36秒で終わった（大半は起動間隔の3秒×12）。ロックは1時38分〜1時50分に使い、「現状の負荷問題」セッションへ渡した。
+- **`Run-StrategyScreen.ps1` の作り直し**（`Run-EconomyMatrix.ps1` に、試合を起動せず予定だけを返す `-PlanOnly` を追加）
+  - **seedを少しずつ回して途中で打ち切る**：seed 7, 19, 43, 61, 89, 101, 131, 157, 173 を、`-Concurrency` を埋める数ずつ回す（マップA・Dで条件1つなら1seed＝12戦ずつ、マップEなら2seedずつ）。基準と試験側の両チームを1つのプールで同時に回すので、従来の「基準→チーム0→チーム1」の待ち合わせによる空きもなくなる。seedごとの得点差の伸び（両チームの平均）の平均 m と、se = max(標本の標準偏差, `-SeedSd` 既定60) / √n で判定する。
+    - m + 2se < 閾値 → 打ち切り（明らかに悪い。1seedなら m < −120、2seedなら m < −85 程度）
+    - 3seed以上で m − 2se > 閾値 → 早めに通過（明らかに良い）
+    - ちょうど3seedで m ≤ 閾値 → 打ち切り（従来の第1段の規則）
+    - 9seedすべて終わったら m > 閾値 で通過
+  - **30FPSで選別 → 60FPSで確認を既定に**：`-Fps` の既定を30にした。通過した条件だけ、`-ConfirmFps`（既定60）で同じ規則のもう一度の選別にかける。出力のタグは `<Tag>f60`。`-NoConfirm` を付けるか、`-Fps` と `-ConfirmFps` が同じなら確認を省く。両方を通過した条件だけが採用の候補になる。
+  - フォルダ名は従来どおり（`<Tag>s1t0` など）なので、過去の選別の結果もそのまま読める。`-DryRun` を付けると、試合をせずに今ある結果だけで判定する。
+  - **空走りでの確認**（11-17 のマップEの結果）：e1 では RF（−17.8）と SF（−57.0）が3seedで打ち切り、FS13BR5（+70.6）は第2段の結果がないので3seedのまま通過。e2 の FS0 は7seedの時点で「明らかに良い」として通過（+73.6、2seed分早い）。seedごとの標準偏差は8〜54だったので、`-SeedSd` の下限は60にした。
+- **制限**：新しい `Run-StrategyScreen` で試合を実際に回したのは空走りだけ（計測はしていない）。早めに打ち切る規則は11-17のマップEの2つの選別だけで決めた。試合の失敗で一部のseedがそろわないと、そのseedは数えずに先へ進むので、9seedより少ないまま「通過」になることがある（要約の行にseed数が出る）。
+- **次の一手**：次の戦略の選別で使い、打ち切りが早すぎないかを確かめる。
+
 ## 2026-11-18 1時20分 Claude（現状の負荷問題）：雇用時の視線判定の一斉更新を省く試験切替 `-BattleHireSightRefresh`（既定1＝従来どおり）
 - **変更範囲**：`BattleMixedRecruitment.cpp`（`SpawnPurchasedSquad` と `PromoteScout` の最後の `Mode->RefreshVisibility()` を `HireSightRefresh()` の条件付きに）、`BattleLeaderRuntime.h`（宣言）、`Setup/Test-WideSight.ps1`（`-HireSightRefresh 0/1`）。`=0` にすると、新しい兵は次の通常の見回しで認識に入る。補充（`ReplaceFollower`）はもともと一斉更新を呼ばない。
 - **回帰**（既定のまま）：Build成功、Test-Battle・Test-Area（`hiresight-area-r1`）・Test-MixedSave（`hiresight-save-r1`）すべて failures=0。
