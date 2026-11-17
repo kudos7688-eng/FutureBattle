@@ -7,10 +7,11 @@
 |資料|役割|
 |---|---|
 |[AGENTS.md](AGENTS.md)|全AI共通の開発・検証ルール。必読|
-|[STATUS.md](STATUS.md)|現在地、既知の制限、次の一手。冒頭の最新節から読む|
+|[STATUS.md](STATUS.md)|現在地、既知の制限、次の一手。冒頭の「要約」の表から読む。直近の項目だけを置き、古い項目は `Docs/journal/` にある|
+|[MEASURE.md](MEASURE.md)|計測・試験の手順（1ページ）。計測の前に読む|
 |[ROADMAP.md](ROADMAP.md)|承認済み方針・段階と範囲|
 |[PROTOTYPE.md](PROTOTYPE.md)|起動、操作、試験の案内|
-|[PERFORMANCE.md](PERFORMANCE.md)|性能評価の条件・制限|
+|[PERFORMANCE.md](PERFORMANCE.md)|性能の現在の基準値だけ（11-11 までの経緯は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`）|
 |[HANDOFF.md](HANDOFF.md)|過去の作業経緯|
 |[README.md](README.md)|元の全体構想。全機能が実装済みという意味ではない|
 

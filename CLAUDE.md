@@ -1,6 +1,6 @@
 # Claude 向け開発指示
 
-共通ルールの正本は [AGENTS.md](AGENTS.md)。開始時に必ず読み、[STATUS.md](STATUS.md) の最新状況を確認する。実務手順は [CLAUDE_HANDOFF.md](CLAUDE_HANDOFF.md)、計画は [ROADMAP.md](ROADMAP.md)、操作は [PROTOTYPE.md](PROTOTYPE.md)。過去のチャットを読めることを前提にしない。
+共通ルールの正本は [AGENTS.md](AGENTS.md)。開始時に必ず読み、[STATUS.md](STATUS.md) 冒頭の「要約」で最新状況を確認する。計測・試験の前は [MEASURE.md](MEASURE.md) を読む（性能の基準値は [PERFORMANCE.md](PERFORMANCE.md)）。古い記録は `Docs/journal/` にあり、必要なときだけ Grep で引く（全文は読まない）。実務手順は [CLAUDE_HANDOFF.md](CLAUDE_HANDOFF.md)、計画は [ROADMAP.md](ROADMAP.md)、操作は [PROTOTYPE.md](PROTOTYPE.md)。過去のチャットを読めることを前提にしない。
 
 - 日本語で対応し、現在の依頼を優先する。資料整理だけの依頼から実装を始めない。
 - UE 5.8.4 / Windows / C++。既存プロジェクトは `Game/FutureBattle/FutureBattle.uproject`。セットアップやマップ生成を最初からやり直さない。

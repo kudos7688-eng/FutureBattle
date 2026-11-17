@@ -1,0 +1,8 @@
+# ripgrep / Claude Grep only (git is unaffected): skip bulk run evidence when searching code and docs.
+# To search them, pass the path explicitly with --no-ignore (or use grep -r).
+Setup/Benchmarks/
+Setup/Runs/
+Setup/CPUProfiles/
+Setup/MatchRuns/
+Setup/ScaleRuns/
+Setup/NetworkRuns/

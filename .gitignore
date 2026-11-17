@@ -20,3 +20,6 @@ Setup/*.before-timeout
 __pycache__/
 *.py[cod]
 /Game/FutureBattle/Build/Windows/FileOpenOrder/*.log
+
+# Old run stdout/screenshots moved out of Setup/ (2026-11-18, see MEASURE.md)
+Setup/Runs/
