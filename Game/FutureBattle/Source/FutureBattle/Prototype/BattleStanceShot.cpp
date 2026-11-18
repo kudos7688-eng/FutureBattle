@@ -16,6 +16,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "TimerManager.h"
+#include "DrawDebugHelpers.h"
 #include "UnrealClient.h"
 #include "FutureBattle.h"
 
@@ -81,6 +82,15 @@ void UBattleLeaderRuntime::RunStanceShot()
  // With the trial on, a crouch must play the crouch clip at full height (the shot taken a frame later still shows it).
  if(BattleStance::Enabled(GetWorld())&&BattleStance::AnimEnabled()&&Order[Step]==BattleStance::Crouch&&!Far&&(!Clip.Contains(TEXT("Crouch"))||Mesh->GetRelativeScale3D().Z<.99))++SmokeFailures;
  if(!BattleStance::AnimEnabled()&&Clip.Contains(TEXT("Crouch")))++SmokeFailures;
+ // Tracer check (-BattleTracerShot): a 6 m line from where this soldier's tracer would start, kept for the photograph.
+ if(FParse::Param(FCommandLine::Get(),TEXT("BattleTracerShot")))
+ {
+  const FVector ShotEye=P+FVector(0,0,BattleStance::EyeOffset(StanceOf(ID))),From=TracerStart(ID,ShotEye,Forward);
+  DrawDebugLine(GetWorld(),From,From+Forward*600,FColor::Cyan,false,.9f,0,2);
+  // Offset from the eye in the soldier's own axes (forward, right, up), cm.
+  const FVector Off=From-ShotEye;
+  UE_LOG(LogFutureBattle,Display,TEXT("TRACER_SHOT stance=%s body=%s id=%d far=%d forward=%.1f right=%.1f up=%.1f"),Names[Step],Phase==1?TEXT("leader"):TEXT("follower"),ID,Far,FVector::DotProduct(Off,Forward),FVector::DotProduct(Off,Side),Off.Z);
+ }
  FString Prefix;FParse::Value(FCommandLine::Get(),TEXT("BattleWideScreens="),Prefix);
  // Capture after the camera has settled (temporal anti-aliasing needs a few frames at the new position).
  const FString File=Prefix+FString::Printf(TEXT("-%s-%s.png"),Names[Step],Phase==1?TEXT("leader"):TEXT("follower"));

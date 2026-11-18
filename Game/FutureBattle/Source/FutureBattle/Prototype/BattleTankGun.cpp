@@ -133,7 +133,7 @@ bool UBattleLeaderRuntime::FireTankGun(int32 ID,const FVector& Aim,double Now)
  Explode(ID,Impact,Victim,T->TankGunSplashRadius,T->TankGunSplashDamage);
  if(Team==0||(Actor(ID)&&Actor(ID)->bRevealed))
  {
-  DrawDebugLine(GetWorld(),Start,Impact,Team?FColor::Red:FColor::Yellow,false,.25f,0,6);
+  DrawDebugLine(GetWorld(),TracerStart(ID,Start,Direction),Impact,Team?FColor::Red:FColor::Yellow,false,.25f,0,6);
   DrawDebugSphere(GetWorld(),Impact,FMath::Max(50.f,T->TankGunSplashRadius),10,Team?FColor::Red:FColor::Yellow,false,.4f,0,3);
  }
  return true;

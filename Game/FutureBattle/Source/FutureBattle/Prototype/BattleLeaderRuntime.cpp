@@ -901,8 +901,17 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  if(bAT)Explode(ID,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Victim);
  if(Damaged)
   if(bPlayerShot) if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())) PC->HitMarkerUntil=Now+.18;
- if(U->Team==0 || (Actor(ID) && Actor(ID)->bRevealed)) DrawDebugLine(GetWorld(),Start,Hit.bBlockingHit?Hit.ImpactPoint:End,U->Team?FColor::Orange:FColor::Cyan,false,.09f,0,2);
+ if(U->Team==0 || (Actor(ID) && Actor(ID)->bRevealed)) DrawDebugLine(GetWorld(),TracerStart(ID,Start,Direction),Hit.bBlockingHit?Hit.ImpactPoint:End,U->Team?FColor::Orange:FColor::Cyan,false,.09f,0,2);
  return true;
+}
+FVector UBattleLeaderRuntime::TracerStart(int32 ID,const FVector& Start,const FVector& Direction) const
+{
+ // Display only (the shot itself is still traced from the eye): the tracer leaves the gun.
+ // Tank: the end of the barrel (BattleVehicle.cpp: 340 cm ahead of the turret centre, in the turret's 1.7 scale).
+ if(const auto* Turret=Turrets.Find(ID);Turret&&Turret->IsValid())return (*Turret)->GetComponentTransform().TransformPosition(FVector(200,0,0));
+ const ABattleUnit* A=Actor(ID);const auto* B=Bodies.Find(ID);
+ const UStaticMeshComponent* Model=A?A->Rifle.Get():B&&!(VAT&&VAT->IsFar(ID))?B->Weapon.Get():nullptr;
+ return ABattleUnit::TracerStart(Model,Start,Direction);
 }
 void UBattleLeaderRuntime::RefreshDisplay()
 {

@@ -18,6 +18,8 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
+#include "Engine/StaticMesh.h"
+#include "StaticMeshResources.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
@@ -222,8 +224,7 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 	}
 	if (bRevealed)
 	{
-		const FVector TracerStart = bPlayerShot ? Start + Direction.GetSafeNormal() * 70.f + FirstPersonCamera->GetRightVector() * 12.f - FVector(0, 0, 10) : Start;
-		DrawDebugLine(GetWorld(), TracerStart, Hit.bBlockingHit ? Hit.ImpactPoint : End,
+		DrawDebugLine(GetWorld(), TracerStart(Rifle, Start, Direction), Hit.bBlockingHit ? Hit.ImpactPoint : End,
 			GetState()->Team == 0 ? FColor(100, 245, 230) : FColor(255, 120, 65), false, .09f, 0, 2.f);
 		if (Hit.bBlockingHit) DrawDebugPoint(GetWorld(), Hit.ImpactPoint, 10, FColor::Yellow, false, .12f);
 	}
@@ -248,6 +249,38 @@ void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Pare
 		const FTransform Grip = Gun.GetRelativeTransform(Hand);
 		Model->SetRelativeLocationAndRotation(Grip.GetLocation(),Grip.GetRotation());
 	}
+}
+
+FVector ABattleUnit::TracerStart(const UStaticMeshComponent* Model, const FVector& Eye, const FVector& Direction)
+{
+	// No visible model (far soldiers, hidden bodies, legacy visuals): about where a shouldered rifle ends.
+	const FVector Forward = Direction.GetSafeNormal();
+	const FVector Guess = Eye + Forward * 70.f + FVector::CrossProduct(FVector::UpVector, Forward).GetSafeNormal() * 12.f - FVector(0, 0, 10);
+	const UStaticMesh* Mesh = Model && Model->IsVisible() ? Model->GetStaticMesh() : nullptr;
+	if (!Mesh) return Guess;
+	// The weapon models point along their local -Y (see MountWeapon). The muzzle is the middle of the
+	// vertices at that end; without vertex data on the CPU, the middle of that face of the bounding box.
+	static TMap<TWeakObjectPtr<const UStaticMesh>, FVector> Muzzles;
+	const FVector* Local = Muzzles.Find(Mesh);
+	if (!Local)
+	{
+		const FBox Box = Mesh->GetBoundingBox();
+		FVector Tip(Box.GetCenter().X, Box.Min.Y, Box.GetCenter().Z), Sum = FVector::ZeroVector; int32 Count = 0;
+		if (const FStaticMeshRenderData* Data = Mesh->GetRenderData(); Data && Data->LODResources.Num())
+		{
+			const FPositionVertexBuffer& Positions = Data->LODResources[0].VertexBuffers.PositionVertexBuffer;
+			if (Positions.GetAllowCPUAccess() && Positions.GetVertexData())
+				for (uint32 I = 0; I < Positions.GetNumVertices(); ++I)
+					if (const FVector P(Positions.VertexPosition(I)); P.Y <= Box.Min.Y + 1.) { Sum += P; ++Count; }
+		}
+		if (Count) Tip = FVector(Sum.X / Count, Box.Min.Y, Sum.Z / Count);
+		Local = &Muzzles.Add(Mesh, Tip);
+	}
+	const FVector Muzzle = Model->GetComponentTransform().TransformPosition(*Local);
+	// Only a muzzle ahead of the eye and near it: a body whose pose has not been evaluated (never rendered yet)
+	// or is not a firing pose holds the model elsewhere, and a tracer must not start at the feet.
+	const FVector Off = Muzzle - Eye;
+	return FVector::DotProduct(Off, Forward.GetSafeNormal2D()) >= 30. && Off.SizeSquared() <= FMath::Square(140.) ? Muzzle : Guess;
 }
 
 void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)

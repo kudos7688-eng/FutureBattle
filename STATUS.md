@@ -14,6 +14,20 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-18 22時05分 Claude（表示）：曳光線の始点を体の中心から銃口へ（表示だけ。射撃の判定は不変）
+- **依頼**：ユーザー「発射エフェクトが体の中央から出ている。銃口から出ていないと不自然」。
+- **原因**：曳光線（`DrawDebugLine`）の始点に、射撃の判定の始点（目の高さの体の中心 `Pos+EyeOffset`）をそのまま使っていた。
+- **変更範囲**：`BattleUnit.cpp/.h`（`ABattleUnit::TracerStart`）、`BattleLeaderRuntime.cpp/.h`（`UBattleLeaderRuntime::TracerStart`、`Fire` の線）、`BattleTankGun.cpp`（主砲の線）、`BattleStanceShot.cpp`・`Setup/Test-StanceShot.ps1`（確認用の `-BattleTracerShot`／`-Tracer`）。
+  - **歩兵**（隊長・部下・直接操作のTPS/FPS）：手に持つ武器モデルの銃口の先端から。先端は、モデルの −Y 側の端にある頂点の平均（頂点が読めないときは外接箱のその面の中央）。メッシュごとに1回だけ求める。
+  - **戦車**（主砲・機銃）：砲身の先端（砲塔の中心から前へ340cm）。
+  - **武器モデルを使えないとき**（遠くのVAT表示の兵、体を隠している兵、姿勢がまだ計算されていない兵＝銃口が目の前方30cm未満か140cmより遠い）：目から前へ70cm・右へ12cm・下へ10cm の点。
+  - 弾の判定（始点・方向・命中・制圧）は従来どおり目の位置から。線の始点だけを変えた。
+- **検証**（ロックは21時58分〜22時05分、「複数兵種のAI改善」から受け取り返却）：Build成功。Test-Battle failures=0（`Battle-Smoke-20261118-220302.log`）。`Test-StanceShot.ps1 -Name tracer-muzzle-r2 -Anim -Tracer`（マップE）failures=0。
+  - ログ `TRACER_SHOT`：銃口は目から 前70〜79cm・右5〜14cm・上下−10〜+6cm（立ち・しゃがみ・伏せ、隊長と部下）。
+  - **画像を目で確認**：`Setup/Benchmarks/StanceAnim-20261117/tracer-muzzle-r1/shot-crouch-leader.png`、`shot-stand-follower.png` で、線が銃口の先端から出ている。r1 の最初の1枚（`shot-stand-leader`）は姿勢の計算前で足元から出ていた（下へ132cm）ので、上の「使えないとき」の条件を足した。r2 のログではその1枚も目の前の点になった（r2 の画像は目では見ていない）。
+- **未実施・制限**：実際の試合の画面（作戦画面・TPS・FPS）での確認、戦車の線の画像確認。試合の結果の一致確認（線の始点しか変えていないので実施していない）。歩き・リロード中の姿勢では銃口が下がるので、線もそこから出る。銃口の閃光などの新しいエフェクトは足していない（線の始点だけ）。
+- **次の一手**：ユーザーの画面確認（`Setup\Play-Area.ps1 -Map E`）。必要なら銃口の閃光の追加。
+
 ## 2026-11-18 14時30分 Claude（現状の負荷問題）：負荷の試験切替3つ（すべて既定0）。骨の計算の上限と重なり検査なしは試合不変で効果あり、視線判定の並列化は効果なし
 - **依頼**：ユーザー「V2、S4、M4を進めて」（`-BattleFollowerAnimSkip` は既定OFFのまま、見た目の確認は後で）。
 - **変更範囲**：`BattleVATDisplay.cpp/.h`、`BattleLeaderRuntime.cpp/.h`、`BattleMixedBodies.cpp`、`BattleScoutReport.cpp`、`Setup/Test-WideSight.ps1`（`-FollowerAnimBudget`、`-FollowSightParallel`、`-FollowerNoOverlap`）。

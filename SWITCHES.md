@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 207 種類。
+計 208 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -72,7 +72,7 @@
 | `-BattleFieldRecord` | Value |  | BattleSquadTrial.cpp:15 |  |
 | `-BattleFieldReplay` | Value |  | BattleSquadTrial.cpp:16 |  |
 | `-BattleFieldSeed` | Value | 1 / 0 / 7（同名のメンバーが複数） | BattleSquadTrial.cpp:19 |  |
-| `-BattleFirstPerson` | Param | off | BattleUnit.cpp:31 |  |
+| `-BattleFirstPerson` | Param | off | BattleUnit.cpp:33 |  |
 | `-BattleFlankBayTrial` | Param | off | BattleLeaderRuntime.cpp:206 |  |
 | `-BattleFlankCoordination` | Value | 0 | BattleSquadTactics.cpp:20 |  |
 | `-BattleFlankRelaxed` | Value | 0 | BattleSquadTactics.cpp:23 |  |
@@ -98,8 +98,8 @@
 | `-BattleLeaderQA` | Value |  | BattleLeaderRuntime.cpp:242 |  |
 | `-BattleLeaderSmoke` | Param | off | BattleLeaderRuntime.cpp:240 |  |
 | `-BattleLeaderUnits` | Value | bMixedFastMatch?20:bWideField?500:40 | BattleLeaderRuntime.cpp:86 |  |
-| `-BattleLegacyAnimationLOD` | Param | off | BattleUnit.cpp:315 |  |
-| `-BattleLegacyWeaponVisuals` | Param | off | BattleUnit.cpp:94 |  |
+| `-BattleLegacyAnimationLOD` | Param | off | BattleUnit.cpp:348 |  |
+| `-BattleLegacyWeaponVisuals` | Param | off | BattleUnit.cpp:96 |  |
 | `-BattleMapStats` | Value |  | BattleLeaderRuntime.cpp:218, BattleMapStats.cpp:40 |  |
 | `-BattleMassMovement` | Param | off | BattleBenchmark.cpp:39 |  |
 | `-BattleMatchReport` | Value |  | BattleMatchSoak.cpp:56 |  |
@@ -127,7 +127,7 @@
 | `-BattleOpponentPreset` | other |  | BattleBenchmark.cpp:48 |  |
 | `-BattlePerceptionGrid` | Value | GetDefault<UBattleTuning>()->bPerceptionGrid?1:0 | BattleLeaderRuntime.cpp:101 |  |
 | `-BattlePerceptionSlices` | Value | 4 | BattleBenchmark.cpp:56 |  |
-| `-BattlePhase3` | Value |  | BattlePhase3.cpp:45, BattleUnit.cpp:32, BattleVATDisplay.cpp:382 ほか1 |  |
+| `-BattlePhase3` | Value |  | BattlePhase3.cpp:45, BattleUnit.cpp:34, BattleVATDisplay.cpp:382 ほか1 |  |
 | `-BattlePlayerRouteTest` | Param | off | BattlePlayerRoutes.cpp:125 |  |
 | `-BattlePreset` | other |  | BattleBenchmark.cpp:48 |  |
 | `-BattleProfileCSV` | Param | off | BattleBenchmark.cpp:133, BattleBenchmark.cpp:144, BattleBenchmark.cpp:145 |  |
@@ -174,7 +174,7 @@
 | `-BattleSquadFlank` | Value | 1 | BattleSquadTactics.cpp:22 |  |
 | `-BattleSquadST2` | Value | 1 | BattleSquadTactics.cpp:21 |  |
 | `-BattleSquadTactics` | Value | 1 | BattleSquadTactics.cpp:17 |  |
-| `-BattleSquadTrial` | Value/other |  | BattleGameMode.cpp:64, BattleLeaderRuntime.cpp:69, BattleUnit.cpp:95 |  |
+| `-BattleSquadTrial` | Value/other |  | BattleGameMode.cpp:64, BattleLeaderRuntime.cpp:69, BattleUnit.cpp:97 |  |
 | `-BattleST2Smoke` | Param | off | BattleLeaderRuntime.cpp:232 |  |
 | `-BattleStableLoad` | Param | off | BattleBenchmark.cpp:49 |  |
 | `-BattleStableMovement` | Value | 1 | BattleLeaderRuntime.cpp:79 |  |
@@ -198,7 +198,8 @@
 | `-BattleSuppressionSupport` | other |  | BattleSuppression.cpp:14 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |
 | `-BattleTeamSupport` | Value | 1 | BattleTeamAI.cpp:12 |  |
-| `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:954 |  |
+| `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:963 |  |
+| `-BattleTracerShot` | Param | off | BattleStanceShot.cpp:86 |  |
 | `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:185 |  |
 | `-BattleTrialSwap` | Param | off | BattleArea.cpp:15, BattleAreaDepot.cpp:32, BattleLeaderRuntime.cpp:76 ほか4 |  |
 | `-BattleUnits` | Value | 1000 / 20 | BattleBenchmark.cpp:36, BattleSquadTrial.cpp:28 |  |

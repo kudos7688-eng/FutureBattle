@@ -31,6 +31,8 @@ public:
 	void InitializeUnit(int32 ID);
 	void MountWeapon(UStaticMeshComponent* Model, USceneComponent* Parent, EBattleWeapon Weapon, bool bFirstPerson) const;
 	bool HasWeaponVisuals() const { return bWeaponVisuals; }
+	// Display only: where a tracer starts. The muzzle of a visible weapon model, else a point ahead of the eye the shot is traced from.
+	static FVector TracerStart(const UStaticMeshComponent* Model, const FVector& Eye, const FVector& Direction);
 	virtual void Tick(float DeltaTime) override;
 	virtual void CalcCamera(float DeltaTime, FMinimalViewInfo& OutResult) override;
 	bool UsesThirdPersonView() const { return bThirdPersonView; }
