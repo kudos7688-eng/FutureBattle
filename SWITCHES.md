@@ -202,7 +202,7 @@
 | `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:46 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |
 | `-BattleTeamSupport` | Value | 1 | BattleTeamAI.cpp:12 |  |
-| `-BattleTerrainLineBodies` | Value | 0 | BattleTactics.cpp:225 |  |
+| `-BattleTerrainLineBodies` | Value | 1 | BattleTactics.cpp:226 |  |
 | `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:202 |  |
 | `-BattleTrialSwap` | Param | off | BattleArea.cpp:15, BattleLeaderRuntime.cpp:74, BattleMatch.cpp:262 ほか2 |  |
 | `-BattleUnits` | Value | 1000 / 20 | BattleBenchmark.cpp:36, BattleSquadTrial.cpp:28 |  |

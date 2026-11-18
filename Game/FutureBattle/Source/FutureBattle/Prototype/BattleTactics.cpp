@@ -219,10 +219,11 @@ bool BattleTactics::HasTerrainLine(UWorld* World, FVector From, FVector To)
 	if (const auto* Mode = World->GetAuthGameMode<ABattleGameMode>())
 		for (ABattleUnit* Unit : Mode->Units) if (Unit) Query.AddIgnoredActor(Unit);
 	World->LineTraceSingleByChannel(Hit, From, To, ECC_Visibility, Query);
-	// Trial -BattleTerrainLineBodies=1 (default 0): soldiers' bodies do not block a terrain line. The ignore list above holds only the
-	// leaders' actors; a follower is a bare capsule that blocks every channel, so a line to the place where a follower stands always
-	// ended on his own capsule and every cover test against him read "hidden, no line of fire".
-	static const bool bSkipBodies = []() { int32 Value = 0; FParse::Value(FCommandLine::Get(), TEXT("BattleTerrainLineBodies="), Value); return Value != 0; }();
+	// Soldiers' bodies do not block a terrain line (default since 2026-11-19, user decision; -BattleTerrainLineBodies=0 restores the
+	// old behaviour). The ignore list above holds only the leaders' actors; a follower is a bare capsule that blocks every channel,
+	// so a line to the place where a follower stands always ended on his own capsule and every cover test against him read
+	// "hidden, no line of fire".
+	static const bool bSkipBodies = []() { int32 Value = 1; FParse::Value(FCommandLine::Get(), TEXT("BattleTerrainLineBodies="), Value); return Value != 0; }();
 	if (bSkipBodies)
 		for (int32 Pass = 0; Pass < 8 && Hit.bBlockingHit && Hit.GetComponent() && Hit.GetComponent()->GetCollisionObjectType() == ECC_Pawn; ++Pass)
 		{
