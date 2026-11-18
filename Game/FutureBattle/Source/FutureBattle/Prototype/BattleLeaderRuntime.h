@@ -224,6 +224,7 @@ public:
  mutable TMap<FString,int64> SightHitClasses,SightHitTags,SightHitActors;
  mutable bool bSightHitsLogged=false;
  int64 MoveSweeps=0,MoveHitSoldier=0,MoveHitWorld=0,MoveShortened=0; // Mass follower moves (BATTLE_MOVE_SWEEP)
+ mutable int64 FollowSightTraced=0,FollowSightUsed=0; // evaluation counters (BATTLE_FOLLOW_SIGHT)
  bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot);
  bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f);
  void CancelCoverAction(int32 ID);
@@ -350,6 +351,12 @@ private:
  FDelegateHandle DeathHandle;
  void Think(int32 SquadID,double Now);
  void Follow(int32 ID,float Dt,double Now);
+ // Trial -BattleFollowSightParallel: sight tests of the Follow loop traced in parallel before it (soldier -> target, visible).
+ void PrefetchFollowSight();
+ static bool FollowerOverlapsOff();
+ bool FollowCanSee(int32 ID,int32 Target) const;
+ TMap<int32,TPair<int32,bool>> FollowSight;
+
  void BuildMovementPlan(int32 SquadID);
  bool StableMove(int32 ID,float Dt,double Now,FVector& Direction);
  bool IsStationaryAlly(int32 Observer,int32 Other) const;

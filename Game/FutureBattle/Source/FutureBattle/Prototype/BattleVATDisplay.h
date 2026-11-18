@@ -52,6 +52,10 @@ public:
  void ResetBodies();
  void Advance(int32 ID,float Dt);
  int64 StatAnimTicks=0,StatAnimEvals=0;
+ float AnimDemand=0;
+ uint64 AnimDemandFrame=0;
+ int32 AnimStretch=1;
+ int64 StatAnimStretch=0,StatAnimStretchFrames=0;
  virtual void Tick(float Dt) override;
  virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 private:

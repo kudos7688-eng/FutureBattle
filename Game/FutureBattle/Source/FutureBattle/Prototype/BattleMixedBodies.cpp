@@ -38,13 +38,14 @@ bool UBattleLeaderRuntime::CreateBody(const FBattleSavedUnit& Entry,AActor* Host
  Capsule->InitCapsuleSize(36,90);Capsule->SetCollisionObjectType(ECC_Pawn);
  Capsule->SetCollisionEnabled(ECollisionEnabled::QueryOnly);Capsule->SetCollisionResponseToAllChannels(ECR_Block);
  Capsule->SetCanEverAffectNavigation(false);Capsule->SetupAttachment(Host->GetRootComponent());
+ if(FollowerOverlapsOff())Capsule->SetGenerateOverlapEvents(false);
  Capsule->RegisterComponent();Capsule->SetWorldLocation(Entry.Position);B.Capsule=Capsule;
  auto* Mesh=bDisplayLODEnabled?NewObject<USkeletalMeshComponent>(Host,UBattleVATSkeletalMeshComponent::StaticClass()):NewObject<USkeletalMeshComponent>(Host);
  Host->AddInstanceComponent(Mesh);Mesh->SetSkeletalMesh(MeshAsset);Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
  Mesh->SetupAttachment(Capsule);Mesh->SetRelativeLocation(FVector(0,0,-90));
- Mesh->SetRelativeRotation(FRotator(0,-90,0));Mesh->RegisterComponent();Mesh->PlayAnimation(IdlePose,true);B.Mesh=Mesh;
+ Mesh->SetRelativeRotation(FRotator(0,-90,0));if(FollowerOverlapsOff())Mesh->SetGenerateOverlapEvents(false);Mesh->RegisterComponent();Mesh->PlayAnimation(IdlePose,true);B.Mesh=Mesh;
  auto* Weapon=NewObject<UStaticMeshComponent>(Host);Host->AddInstanceComponent(Weapon);
- Weapon->SetCollisionEnabled(ECollisionEnabled::NoCollision);Weapon->RegisterComponent();
+ Weapon->SetCollisionEnabled(ECollisionEnabled::NoCollision);if(FollowerOverlapsOff())Weapon->SetGenerateOverlapEvents(false);Weapon->RegisterComponent();
  GetDefault<ABattleUnit>()->MountWeapon(Weapon,Mesh,Entry.State.Weapon,false);B.Weapon=Weapon;
  return true;
 }

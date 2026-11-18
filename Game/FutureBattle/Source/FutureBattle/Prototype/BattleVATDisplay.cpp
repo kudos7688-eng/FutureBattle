@@ -40,9 +40,17 @@ static bool FarLight()
 // Trial -BattleFollowerAnimSkip=1 (2026-11-18, default 0, display only): a near follower's skeleton is evaluated every
 // frame only at mesh LOD 0; every 2nd frame at LOD 1, every 3rd beyond, every 4th while not on screen (staggered by unit).
 // The engine's own update-rate optimisation shares one rate per owning actor, and all followers share one host actor.
+// Trial -BattleFollowerAnimBudget=K (2026-11-18, default 0 = none, display only): at most about K follower skeleton
+// evaluations per frame. When the skip rule above would evaluate more, every interval is stretched by the same whole
+// factor (up to 8x; LOD 0 by half of it), so the cost stays level as the number of near followers grows. Implies the skip rule.
+static int32 AnimBudget()
+{
+ static const int32 K=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleFollowerAnimBudget="),V);return FMath::Max(0,V);}();
+ return K;
+}
 static bool AnimSkip()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleFollowerAnimSkip="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleFollowerAnimSkip="),V);return V!=0 || AnimBudget()>0;}();
  return bOn;
 }
 void UBattleVATSkeletalMeshComponent::TickComponent(float Dt,ELevelTick Type,FActorComponentTickFunction* Function)
@@ -59,7 +67,21 @@ void UBattleVATSkeletalMeshComponent::TickComponent(float Dt,ELevelTick Type,FAc
    // Evaluate every Nth frame and hold the pose in between (no interpolation: that would keep the per-frame work).
    // The clip time still advances by the full elapsed time on the frames that do evaluate.
    const int32 LOD=GetPredictedLODLevel();
-   const int32 N=!bRecentlyRendered?4:LOD<=0?1:LOD==1?2:3;
+   const int32 Base=!bRecentlyRendered?4:LOD<=0?1:LOD==1?2:3;
+   int32 Stretch=1;
+   if(AnimBudget()>0 && Presenter.IsValid())
+   {
+    // Demand = evaluations per frame the skip rule alone would do, measured over the previous frame.
+    auto* P=Presenter.Get();
+    if(P->AnimDemandFrame!=GFrameCounter)
+    {
+     P->AnimStretch=FMath::Clamp(FMath::CeilToInt32(P->AnimDemand/float(AnimBudget())),1,8);
+     P->StatAnimStretch+=P->AnimStretch;++P->StatAnimStretchFrames;
+     P->AnimDemand=0;P->AnimDemandFrame=GFrameCounter;
+    }
+    P->AnimDemand+=1.f/Base;Stretch=P->AnimStretch;
+   }
+   const int32 N=Base==1?FMath::Max(1,Stretch/2):Base*Stretch;
    const bool bUpdate=N<=1 || (GFrameCounter+uint64(UnitID))%uint64(N)==0;
    if(ShouldTickPose())PendingDt+=Dt;
    EnableExternalTickRateControl(true);EnableExternalEvaluationRateLimiting(N>1);EnableExternalInterpolation(false);
@@ -368,7 +390,7 @@ void ABattleVATDisplay::Tick(float Dt)
 }
 void ABattleVATDisplay::EndPlay(const EEndPlayReason::Type Reason)
 {
- UE_LOG(LogTemp,Display,TEXT("VAT_DISPLAY_STATS frames=%lld far_mean=%.6f visible_far_mean=%.6f presenter_ms=%.6f anim_skip=%d anim_ticks=%lld anim_evals=%lld"),StatFrames,StatFrames?double(StatFar)/StatFrames:0.,StatFrames?double(StatShown)/StatFrames:0.,StatFrames?StatMS/StatFrames:0.,int32(AnimSkip()),StatAnimTicks,StatAnimEvals);
+ UE_LOG(LogTemp,Display,TEXT("VAT_DISPLAY_STATS frames=%lld far_mean=%.6f visible_far_mean=%.6f presenter_ms=%.6f anim_skip=%d anim_ticks=%lld anim_evals=%lld anim_budget=%d anim_stretch_mean=%.3f"),StatFrames,StatFrames?double(StatFar)/StatFrames:0.,StatFrames?double(StatShown)/StatFrames:0.,StatFrames?StatMS/StatFrames:0.,int32(AnimSkip()),StatAnimTicks,StatAnimEvals,AnimBudget(),StatAnimStretchFrames?double(StatAnimStretch)/StatAnimStretchFrames:1.);
  Super::EndPlay(Reason);
  if(RaySettingsChanged)
  {

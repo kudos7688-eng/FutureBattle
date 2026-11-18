@@ -55,6 +55,8 @@ void UBattleMatch::UpdateScoutReports()
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SIGHT_PAIR t=%.0f traced=%lld reused=%lld"),Now,R->SightPairTraced,R->SightPairReused);
  if(R->MoveSweeps>0&&FMath::FloorToInt(Now/60.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/60.))
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MOVE_SWEEP t=%.0f moves=%lld hit_soldier=%lld hit_world=%lld engine_shortened=%lld"),Now,R->MoveSweeps,R->MoveHitSoldier,R->MoveHitWorld,R->MoveShortened);
+ if(R->FollowSightTraced>0&&FMath::FloorToInt(Now/60.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/60.))
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FOLLOW_SIGHT t=%.0f traced=%lld used=%lld"),Now,R->FollowSightTraced,R->FollowSightUsed);
  if(Perception->SlowScans+Perception->NormalScans>0&&FMath::FloorToInt(Now/60.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/60.))
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SIGHT_SCAN t=%.0f slow=%lld normal=%lld"),Now,Perception->SlowScans,Perception->NormalScans);
  if(Perception->ParallelUpdates>0&&FMath::FloorToInt(Now/60.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/60.))
