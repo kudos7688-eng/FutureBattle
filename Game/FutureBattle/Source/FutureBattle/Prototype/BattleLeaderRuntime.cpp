@@ -1,4 +1,5 @@
 #include "BattleLeaderRuntime.h"
+#include "BattleMuzzleFlash.h"
 #include "Async/ParallelFor.h"
 #include "BattleFollowerBones.h"
 #include "BattleVATDisplay.h"
@@ -213,6 +214,8 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWeaponRangeTrial,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleStanceShot")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunStanceShot,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleScopeShot")))
+  { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunScopeShot,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleSightVisual")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSightVisual,4.f,false); }
   else if(FString StatsFile;FParse::Value(FCommandLine::Get(),TEXT("BattleMapStats="),StatsFile))
@@ -815,7 +818,9 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  if(Phase3 && Phase3->bEnabled) ++Phase3->Shots;
  const float SuppressedScale=SuppressionSpreadScale(ID,Now);
  if(SuppressedScale>1.25f)SightExperiment.Cover(TEXT("suppressed_shots"));
- Direction=BattleTactics::ShotDirection(*U,Direction,Now,SuppressedScale*BattleStance::SpreadScale(StanceOf(ID)));
+ // The player's own shot is tighter while he aims or looks through the scope (never the AI's shots).
+ const float AimScale=bPlayerShot&&Actor(ID)?Actor(ID)->AimSpreadScale():1.f;
+ Direction=BattleTactics::ShotDirection(*U,Direction,Now,SuppressedScale*BattleStance::SpreadScale(StanceOf(ID))*AimScale);
  auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon);
  // Concealment (hedges) hides soldiers from sight but does not stop bullets.
  if(!bConcealmentBuilt)
@@ -901,7 +906,13 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  if(bAT)Explode(ID,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Victim);
  if(Damaged)
   if(bPlayerShot) if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())) PC->HitMarkerUntil=Now+.18;
- if(U->Team==0 || (Actor(ID) && Actor(ID)->bRevealed)) DrawDebugLine(GetWorld(),TracerStart(ID,Start,Direction),Hit.bBlockingHit?Hit.ImpactPoint:End,U->Team?FColor::Orange:FColor::Cyan,false,.09f,0,2);
+ if(U->Team==0 || (Actor(ID) && Actor(ID)->bRevealed))
+ {
+  const FVector From=TracerStart(ID,Start,Direction);
+  DrawDebugLine(GetWorld(),From,Hit.bBlockingHit?Hit.ImpactPoint:End,U->Team?FColor::Orange:FColor::Cyan,false,.09f,0,2);
+  // Not the player's own flash through a scope: at x4-x8 it would cover the whole view.
+  if(!(bPlayerShot&&Actor(ID)&&Actor(ID)->ScopeView()))BattleMuzzleFlash::Show(GetWorld(),From,Direction,U->Weapon==EBattleWeapon::Carbine?1.f:1.4f);
+ }
  return true;
 }
 FVector UBattleLeaderRuntime::TracerStart(int32 ID,const FVector& Start,const FVector& Direction) const

@@ -147,6 +147,10 @@ public:
 	FKey GamepadToKey(const FKey& Key) const;
 	void UpdateGamepad(float DeltaTime);
 	float AimAssistScale() const;
+	float ViewMagnification() const;
+	// Direct control: the right button is held (aim), and the view level it gives (1 aim, 2 scope x4, 3 scope x8).
+	bool bAimHeld = false;
+	int32 AimLevel = 1;
 	UFUNCTION(Exec) void BattleVerify();
 private:
 	UPROPERTY() TObjectPtr<ABattleCameraPawn> TacticalPawn;

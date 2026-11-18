@@ -2,6 +2,7 @@
 // Combat is paused; a leader (Actor) and one of his Mass followers are put in each stance in turn and photographed from
 // 4 m in front. Logs the clip each body plays and its vertical scale. Run with and without -BattleStanceAnim=1.
 #include "BattleLeaderRuntime.h"
+#include "BattleMuzzleFlash.h"
 #include "BattleGameMode.h"
 #include "BattleController.h"
 #include "BattleStance.h"
@@ -87,6 +88,7 @@ void UBattleLeaderRuntime::RunStanceShot()
  {
   const FVector ShotEye=P+FVector(0,0,BattleStance::EyeOffset(StanceOf(ID))),From=TracerStart(ID,ShotEye,Forward);
   DrawDebugLine(GetWorld(),From,From+Forward*600,FColor::Cyan,false,.9f,0,2);
+  BattleMuzzleFlash::Show(GetWorld(),From,Forward,1.f,.9f);
   // Offset from the eye in the soldier's own axes (forward, right, up), cm.
   const FVector Off=From-ShotEye;
   UE_LOG(LogFutureBattle,Display,TEXT("TRACER_SHOT stance=%s body=%s id=%d far=%d forward=%.1f right=%.1f up=%.1f"),Names[Step],Phase==1?TEXT("leader"):TEXT("follower"),ID,Far,FVector::DotProduct(Off,Forward),FVector::DotProduct(Off,Side),Off.Z);

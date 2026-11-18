@@ -93,6 +93,8 @@ BattleStableMovement | 混成の移動計画と実行（UBattleLeaderRuntime の
 BattleStance | 姿勢（立ち・しゃがみ）の数値と切替
 BattleStanceAnimImport | 姿勢アニメーションの取り込み（エディタ用。宣言は BattleVATBake.h）
 BattleStanceShot | 姿勢の撮影試験（UBattleLeaderRuntime の一部）
+BattleScopeShot | 構え・スコープの撮影試験（UBattleLeaderRuntime の一部）
+BattleMuzzleFlash | 銃口の閃光（表示だけ。発光する楕円体の使い回し）
 BattleState | 正規状態：兵・部隊の記録、命令、弾薬、被害、調整値 UBattleTuning、兵科の差
 BattleSupport | 旧アリーナの支援砲撃（UBattleMatch の一部）
 BattleSuppression | 制圧の値と効果

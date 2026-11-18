@@ -28,6 +28,28 @@ void ABattleHUD::DrawHUD()
 	const FLinearColor Ink(.025f, .04f, .065f, .92f), Mint(.28f, .95f, .8f), Muted(.62f, .7f, .77f), White(.94f, .97f, 1.f);
 	auto Label = [&](const FString& Text, float X, float Y, FLinearColor Color, float Scale = 1.f)
 	{ DrawText(Text, Color, X, Y, GEngine->GetSmallFont(), Scale); };
+	// Scope (direct control, right button + wheel): black outside the lens and a reticle, under the rest of the HUD.
+	const ABattleUnit* ScopeUnit = PC->IsTactical() ? nullptr : Cast<ABattleUnit>(PC->GetPawn());
+	const bool bScope = ScopeUnit && ScopeUnit->ScopeView();
+	if (bScope)
+	{
+		const float R = H * .46f, Cx = W * .5f, Cy = H * .5f;
+		const FLinearColor Black(0, 0, 0, 1), Line(.95f, .16f, .1f, 1); // red: readable on a dark and on a bright scene
+		DrawRect(Black, 0, 0, Cx - R, H); DrawRect(Black, Cx + R, 0, W - Cx - R, H);
+		DrawRect(Black, Cx - R, 0, 2 * R, Cy - R); DrawRect(Black, Cx - R, Cy + R, 2 * R, H - Cy - R);
+		for (float Y = -R; Y < R; Y += 3.f)
+		{
+			const float Mid = FMath::Min(FMath::Abs(Y), FMath::Abs(Y + 3.f)), Half = FMath::Sqrt(FMath::Max(0.f, R * R - Mid * Mid));
+			DrawRect(Black, Cx - R, Cy + Y, R - Half + 1, 3); DrawRect(Black, Cx + Half - 1, Cy + Y, R - Half + 1, 3);
+		}
+		const FLinearColor Hair = PC->HitMarkerUntil > GetWorld()->GetTimeSeconds() ? FLinearColor::Yellow : Line;
+		DrawLine(Cx - R, Cy, Cx - 10, Cy, Hair, 1.f); DrawLine(Cx + 10, Cy, Cx + R, Cy, Hair, 1.f);
+		DrawLine(Cx, Cy - R, Cx, Cy - 10, Hair, 1.f); DrawLine(Cx, Cy + 10, Cx, Cy + R, Hair, 1.f);
+		DrawLine(Cx - R, Cy, Cx - R * .35f, Cy, Hair, 4.f); DrawLine(Cx + R * .35f, Cy, Cx + R, Cy, Hair, 4.f);
+		DrawLine(Cx, Cy + R * .35f, Cx, Cy + R, Hair, 4.f);
+		DrawRect(Hair, Cx - 1, Cy - 1, 2, 2);
+		DrawText(FString::Printf(TEXT("×%.0f"), ScopeUnit->AimMagnification()), FLinearColor(.94f, .97f, 1.f), Cx + R * .62f, Cy + R * .62f, GEngine->GetSmallFont(), 1.2f);
+	}
 	DrawRect(Ink, 16, 16, W - 32, 66);
 	DrawRect(Mint, 16, 16, 4, 66);
 	Label(TEXT("FUTURE BATTLE"), 34, 25, White, 1.55f);
@@ -340,15 +362,19 @@ void ABattleHUD::DrawHUD()
 	}
 	else
 	{
-		if (PC->bGamepadActive) Label(TEXT("左スティック：移動   右スティック：照準（補助あり）   RT：射撃   X：装填   A：ジャンプ   B：姿勢   Y：遮蔽   ビュー：作戦画面"), 34, H - 80, Mint);
+		if (PC->bGamepadActive) Label(TEXT("左スティック：移動   右スティック：照準（補助あり）   RT：射撃   LT：構える（十字↑↓：倍率）   X：装填   A：ジャンプ   B：姿勢   Y：遮蔽   ビュー：作戦画面"), 34, H - 80, Mint);
 		else
-		Label(TEXT("WASD：移動   マウス：照準   左クリック：射撃   R：装填   Space：ジャンプ   Tab：作戦画面"), 34, H - 80, Mint);
+		Label(TEXT("WASD：移動   マウス：照準   左クリック：射撃   右クリック：構える（＋ホイール：スコープ）   R：装填   Space：ジャンプ   Tab：作戦画面"), 34, H - 80, Mint);
 		Label(TEXT("P：AI一時停止   F5：戦闘をやり直す   ｜   操作を切り替えても、兵・HP・弾薬・命令は引き継がれる"), 34, H - 53, Muted, .9f);
 		const FLinearColor CrossColor = PC->HitMarkerUntil > GetWorld()->GetTimeSeconds() ? FLinearColor::Yellow : White;
+		// Aiming tightens the player's shots: say so next to the crosshair while it applies.
+		if (ScopeUnit && ScopeUnit->AimSpreadScale() < 1.f) Label(FString::Printf(TEXT("構え：散らばり ×%.1f"), ScopeUnit->AimSpreadScale()), W / 2 + 26, H / 2 + 18, Mint, .9f);
+		if (!bScope) {
 		DrawLine(W / 2 - 13, H / 2, W / 2 - 4, H / 2, CrossColor, 1.5f);
 		DrawLine(W / 2 + 4, H / 2, W / 2 + 13, H / 2, CrossColor, 1.5f);
 		DrawLine(W / 2, H / 2 - 13, W / 2, H / 2 - 4, CrossColor, 1.5f);
 		DrawLine(W / 2, H / 2 + 4, W / 2, H / 2 + 13, CrossColor, 1.5f);
+		}
 	}
 	if (PC->NoticeUntil > GetWorld()->GetTimeSeconds()) Label(BattleUIText::Ja(PC->Notice), 35, PC->CanShowDelegation() ? H - 156 : Match->IsEnabled() ? 235 : 96, Mint, 1.1f);
 	if (PC->IsTactical() && PC->PendingOrder != EBattleOrder::Move)

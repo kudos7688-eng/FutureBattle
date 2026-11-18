@@ -300,6 +300,8 @@ public:
  int32 SightVisualStage=0;
  // Stance visuals check (-BattleStanceShot, BattleStanceShot.cpp): close-up screenshots of a leader and a follower.
  void RunStanceShot();
+ // Aim / scope view check (-BattleScopeShot, BattleScopeShot.cpp): leader 1 under direct control in each view.
+ void RunScopeShot();
  int32 StanceShotStage=0,StanceShotFollower=0;
  void StepSightExperiment(float DeltaSeconds);
  FBattleSightExperiment SightExperiment;

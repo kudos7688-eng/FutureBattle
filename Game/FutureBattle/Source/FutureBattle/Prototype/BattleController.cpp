@@ -145,8 +145,10 @@ void ABattleController::Right(const FInputActionValue& Value)
 		if (Unit->IsAlive()){if(FMath::Abs(Axis)>.01f)GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->CancelCoverAction(Unit->GetUnitID());Unit->AddMovementInput(FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::Y), Axis);}
 }
 
-void ABattleController::LookYaw(const FInputActionValue& Value) { if (!bTactical) AddYawInput(Value.Get<float>() * .8f); }
-void ABattleController::LookPitch(const FInputActionValue& Value) { if (!bTactical) AddPitchInput(-Value.Get<float>() * .8f); }
+// Aim / scope: the look speed drops with the magnification, so the picture moves at the same speed on screen.
+float ABattleController::ViewMagnification() const { const auto* Unit = Cast<ABattleUnit>(GetPawn()); return Unit ? FMath::Max(1.f, Unit->AimMagnification()) : 1.f; }
+void ABattleController::LookYaw(const FInputActionValue& Value) { if (!bTactical) AddYawInput(Value.Get<float>() * .8f / ViewMagnification()); }
+void ABattleController::LookPitch(const FInputActionValue& Value) { if (!bTactical) AddPitchInput(-Value.Get<float>() * .8f / ViewMagnification()); }
 
 void ABattleController::CycleTrainingSelected()
 {
@@ -367,6 +369,12 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
  }
  // Any keyboard key or mouse button switches the HUD hints back to keyboard and mouse.
  if(Params.Key.IsMouseButton()||!Params.Key.IsAnalog()) bGamepadActive=false;
+ // Direct control: hold the right button to aim; while aiming, the wheel steps the view through
+ // aim (x1.6) -> scope x4 -> scope x8. Display only; the level is kept for the next time.
+ if(!bTactical && Params.Key==EKeys::RightMouseButton && (Params.Event==IE_Pressed||Params.Event==IE_Released))
+ { bAimHeld=Params.Event==IE_Pressed; return true; }
+ if(!bTactical && bAimHeld && (Params.Key==EKeys::MouseScrollUp||Params.Key==EKeys::MouseScrollDown))
+ { if(Params.Event==IE_Pressed) AimLevel=FMath::Clamp(AimLevel+(Params.Key==EKeys::MouseScrollUp?1:-1),1,3); return true; }
  // Stances (map E): X cycles stand -> crouch -> prone for the directly controlled soldier.
  if(!bTactical && Params.Key==EKeys::X && Params.Event==IE_Pressed)
   if(auto* U=Cast<ABattleUnit>(GetPawn()))
@@ -662,8 +670,10 @@ void ABattleController::PlayerTick(float DeltaTime)
 	UpdateNoticeLog();
 	UpdateGamepad(DeltaTime);
 	Selected.RemoveAll([](const TObjectPtr<ABattleUnit>& Unit) { return !Unit || !Unit->IsAlive(); });
+	if (bTactical) bAimHeld = false;
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
 	{
+		Unit->SetAimLevel(bAimHeld && Unit->IsAlive() ? AimLevel : 0);
 		if (!Unit->IsAlive()) { if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled()) OnLeaderUnitDied(Unit->GetUnitID()); else { EnterTactical(); ShowNotice(TEXT("UNIT DOWN / select another ally")); } }
 		else if (bTriggerHeld)
 		{
@@ -956,6 +966,9 @@ FKey ABattleController::GamepadToKey(const FKey& Key) const
  else
  {
   if(Key==EKeys::Gamepad_RightTrigger) return EKeys::LeftMouseButton;        // RT: fire
+  if(Key==EKeys::Gamepad_LeftTrigger) return EKeys::RightMouseButton;        // LT: aim (held)
+  if(Key==EKeys::Gamepad_DPad_Up) return EKeys::MouseScrollUp;               // while aiming: more magnification
+  if(Key==EKeys::Gamepad_DPad_Down) return EKeys::MouseScrollDown;           // while aiming: less
   if(Key==EKeys::Gamepad_FaceButton_Bottom) return EKeys::SpaceBar;          // A: jump
   if(Key==EKeys::Gamepad_FaceButton_Left) return EKeys::R;                   // X: reload (held: future interact)
   if(Key==EKeys::Gamepad_FaceButton_Right) return EKeys::X;                  // B: stance
@@ -1001,7 +1014,7 @@ void ABattleController::UpdateGamepad(float DeltaTime)
  }
  else if(RX!=0||RY!=0)
  {
-  const float Assist=AimAssistScale();
+  const float Assist=AimAssistScale()/ViewMagnification();
   FRotator R=GetControlRotation();
   R.Yaw+=RX*150.f*Assist*DeltaTime;
   R.Pitch=FMath::Clamp(FRotator::NormalizeAxis(R.Pitch+RY*110.f*Assist*DeltaTime),-80.f,80.f);

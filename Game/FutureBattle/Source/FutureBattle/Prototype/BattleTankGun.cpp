@@ -4,6 +4,7 @@
 // AI cognition: the gun aims at what the tank sees itself, or, beyond its own sight, at positions its team knows (soldiers' sightings and
 // scout/lookout reports, UBattleMatch::AreaIntelView). True positions of unseen enemies are never used.
 #include "BattleLeaderRuntime.h"
+#include "BattleMuzzleFlash.h"
 #include "BattleState.h"
 #include "BattleMatch.h"
 #include "BattlePerception.h"
@@ -133,7 +134,9 @@ bool UBattleLeaderRuntime::FireTankGun(int32 ID,const FVector& Aim,double Now)
  Explode(ID,Impact,Victim,T->TankGunSplashRadius,T->TankGunSplashDamage);
  if(Team==0||(Actor(ID)&&Actor(ID)->bRevealed))
  {
-  DrawDebugLine(GetWorld(),TracerStart(ID,Start,Direction),Impact,Team?FColor::Red:FColor::Yellow,false,.25f,0,6);
+  const FVector From=TracerStart(ID,Start,Direction);
+  BattleMuzzleFlash::Show(GetWorld(),From,Direction,6.f,.12f);
+  DrawDebugLine(GetWorld(),From,Impact,Team?FColor::Red:FColor::Yellow,false,.25f,0,6);
   DrawDebugSphere(GetWorld(),Impact,FMath::Max(50.f,T->TankGunSplashRadius),10,Team?FColor::Red:FColor::Yellow,false,.4f,0,3);
  }
  return true;

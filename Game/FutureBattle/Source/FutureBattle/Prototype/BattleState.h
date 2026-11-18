@@ -376,6 +376,10 @@ public:
 	UPROPERTY(Config, EditAnywhere) float StandingSpreadDegrees = 1.2f;
 	UPROPERTY(Config, EditAnywhere) float MovingSpreadDegrees = 4.f;
 	UPROPERTY(Config, EditAnywhere) float SettledSpreadDegrees = .35f;
+	// Direct control only: spread multiplier while the player aims (right button), through the x4 scope, through the x8 scope.
+	UPROPERTY(Config, EditAnywhere) float AimSpreadScale = .6f;
+	UPROPERTY(Config, EditAnywhere) float Scope4SpreadScale = .4f;
+	UPROPERTY(Config, EditAnywhere) float Scope8SpreadScale = .3f;
 	UPROPERTY(Config, EditAnywhere) float AimSettleSeconds = .8f;
 	UPROPERTY(Config, EditAnywhere) float AimResetDegrees = 3.f;
 	UPROPERTY(Config, EditAnywhere) float AimStationarySpeed = 20.f;

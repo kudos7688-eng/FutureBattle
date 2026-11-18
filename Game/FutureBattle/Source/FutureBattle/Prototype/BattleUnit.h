@@ -54,6 +54,13 @@ public:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Rifle;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UTextRenderComponent> TeamLabel;
 	UPROPERTY() TObjectPtr<AAIController> SavedAI;
+	// Direct control view (display only; the shot's spread and range do not change):
+	// 0 none, 1 aim over the shoulder (x1.6), 2 scope x4, 3 scope x8. Set every frame by the controller.
+	void SetAimLevel(int32 Level) { AimLevel = FMath::Clamp(Level, 0, 3); }
+	float AimMagnification() const { return AimZoom; }
+	bool ScopeView() const { return ScopeAlpha > .5f; }
+	// Spread multiplier for the player's own shot (UBattleTuning): below 1 once the view has settled on an aim level.
+	float AimSpreadScale() const;
 	bool bRevealed = true;
 	// Stance shown by the body (set by UBattleLeaderRuntime::SetStance); with -BattleStanceAnim=1 a crouch plays Lyra's clip.
 	uint8 VisualStance = 0;
@@ -71,6 +78,10 @@ private:
 	UPROPERTY() TObjectPtr<UAnimSequence> RifleReload;
 	UPROPERTY() TObjectPtr<UAnimSequence> CurrentPose;
 	double LastVisualShot = -10.;
+	int32 AimLevel = 0;
+	float AimZoom = 1.f, ScopeAlpha = 0.f;
+	bool bScopeHidden = false;
+	void UpdateAimView();
 	void UpdateWeaponPose(const FBattleUnitState& S);
 };
 
