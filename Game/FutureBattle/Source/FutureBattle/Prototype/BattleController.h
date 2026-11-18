@@ -124,6 +124,17 @@ public:
 	void CycleRouteSelected();
 	// The route the selected squads share: 0-3, or -1 when nothing is selected or the choices differ.
 	int32 SelectedRouteLane() const;
+	// Player input helpers (BattlePlayerPath.cpp): the point an order is given at (upper floors behind their walls, Alt for the
+	// ground floor), a way drawn by dragging the right button, the camera speed, and vaulting over a low obstacle.
+	bool PickOrderPoint(FVector2D Screen, FVector& Out, int32* Level = nullptr);
+	void BeginPathDraw();
+	void UpdatePathDraw();
+	void EndPathDraw();
+	bool IsDrawingPath() const { return bPathDraw; }
+	const TArray<FVector>& GetDrawnPath() const { return DrawnPath; }
+	float PanSpeed() const;
+	bool TryVault(ABattleUnit* Unit);
+	void UpdateVault(float DeltaTime);
 	void ApplyGameSpeed();
 	int32 GetGameSpeed() const { return GameSpeed; }
 	bool ShowsUnspottedBodies() const;
@@ -172,6 +183,9 @@ private:
 	bool bTactical = true;
 	int32 GameSpeed = 1;
 	bool bTriggerHeld = false;
+	bool bPathDraw = false; TArray<FVector> DrawnPath; double DrawnLength = 0;
+	UPROPERTY() TObjectPtr<ABattleUnit> VaultUnit;
+	FVector VaultFrom = FVector::ZeroVector, VaultTo = FVector::ZeroVector; double VaultPeak = 0; float VaultTime = 0, VaultDuration = .4f;
 	int32 DelegationPress = INDEX_NONE;
  bool bSquadListPress=false;
  // A left press that started on the minimap (moves the tactical camera); its release is swallowed too.

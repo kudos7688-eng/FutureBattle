@@ -8,7 +8,7 @@
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
 | `-BattleAICoverProbe` | Value | 0 | BattleTactics.cpp:9 |  |
-| `-BattleAimAssist` | Value | 1 | BattleController.cpp:1070 |  |
+| `-BattleAimAssist` | Value | 1 | BattleController.cpp:1074 |  |
 | `-BattleArea` | Param | off | BattleLeaderRuntime.cpp:73 |  |
 | `-BattleAreaACKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:95 |  |
 | `-BattleAreaATKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:93 |  |
@@ -143,7 +143,7 @@
 | `-BattlePerceptionGrid` | Value | GetDefault<UBattleTuning>()->bPerceptionGrid?1:0 | BattleLeaderRuntime.cpp:102 |  |
 | `-BattlePerceptionSlices` | Value | 4 | BattleBenchmark.cpp:56 |  |
 | `-BattlePhase3` | Value |  | BattlePhase3.cpp:45, BattleUnit.cpp:36, BattleVATDisplay.cpp:382 ほか1 |  |
-| `-BattlePlayerRouteTest` | Param | off | BattlePlayerRoutes.cpp:125 |  |
+| `-BattlePlayerRouteTest` | Param | off | BattlePlayerRoutes.cpp:127 |  |
 | `-BattlePreset` | other |  | BattleBenchmark.cpp:48 |  |
 | `-BattleProfileCSV` | Param | off | BattleBenchmark.cpp:133, BattleBenchmark.cpp:144, BattleBenchmark.cpp:145 |  |
 | `-BattleRangeAware` | Value | 1 | BattleLeaderRuntime.cpp:78 |  |

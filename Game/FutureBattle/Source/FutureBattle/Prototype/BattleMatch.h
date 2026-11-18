@@ -63,6 +63,8 @@ struct FPlayerRoute
 	bool bMission = false;                   // a routed manual order under way: Order and Goal are the player's, Step the junction last ordered
 	EBattleOrder Order = EBattleOrder::Move;
 	FVector Goal = FVector::ZeroVector, Step = FVector::ZeroVector;
+	// A way drawn by the player (BattlePlayerPath.cpp): the points still ahead of Step, and when Step is given up as unreachable.
+	bool bPath = false; TArray<FVector> Waypoints; float StepDeadline = 0.f;
 };
 inline const TCHAR* BattleRouteLaneName(int32 Lane)
 {
@@ -248,6 +250,11 @@ public:
 	// The next junction for a squad with a chosen route (RouteStep without one).
 	FVector PlayerRouteStep(int32 SquadID, const FVector& From, const FVector& Goal);
 	void UpdatePlayerRoutes(float DeltaSeconds);
+	// Drawn way (BattlePlayerPath.cpp): the squad walks Points in order and takes Order at the last. 1 accepted, 0 refused.
+	int32 PlayerPathOrder(int32 SquadID, EBattleOrder Order, const TArray<FVector>& Points);
+	bool PlayerPathNext(FPlayerRoute& Route, const FVector& Leader, FVector& Step) const;
+	// The points a routed or drawn order still has ahead of the one being walked to (display).
+	bool PlayerRoutePreview(int32 SquadID, TArray<FVector>& Out) const;
 	// Self-test of the height differences (BattleTerrainTest.cpp, -BattleHeightTest).
 	void UpdateTerrainTest(float DeltaSeconds);
 	void CheckTimeLimit();

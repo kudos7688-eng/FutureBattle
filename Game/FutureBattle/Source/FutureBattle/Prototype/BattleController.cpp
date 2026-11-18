@@ -131,7 +131,7 @@ void ABattleController::Forward(const FInputActionValue& Value)
 	const float Axis = Value.Get<float>();
 	if (bTactical && TacticalPawn)
 	{
-		FVector P = TacticalPawn->GetActorLocation() + FVector(Axis * 1800 * GetWorld()->GetDeltaSeconds(), 0, 0);
+		FVector P = TacticalPawn->GetActorLocation() + FVector(Axis * PanSpeed() * GetWorld()->DeltaRealTimeSeconds, 0, 0);
 		const float Limit=float(BattleFieldLayout::Of(GetWorld()).HalfExtent.X)-500.f;
 		P.X = FMath::Clamp(P.X,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
@@ -144,7 +144,7 @@ void ABattleController::Right(const FInputActionValue& Value)
 	const float Axis = Value.Get<float>();
 	if (bTactical && TacticalPawn)
 	{
-		FVector P = TacticalPawn->GetActorLocation() + FVector(0, Axis * 1800 * GetWorld()->GetDeltaSeconds(), 0);
+		FVector P = TacticalPawn->GetActorLocation() + FVector(0, Axis * PanSpeed() * GetWorld()->DeltaRealTimeSeconds, 0);
 		const float Limit=float(BattleFieldLayout::Of(GetWorld()).HalfExtent.Y)-500.f;
 		P.Y = FMath::Clamp(P.Y,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
@@ -527,7 +527,9 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 		else if (Params.Event == IE_Released) PrimaryReleased();
 		return true;
 	}
-	if (Params.Key == EKeys::RightMouseButton && Params.Event == IE_Pressed) { MoveSelected(); return true; }
+	// The order is given on release: a click orders the point, a drag draws a way (BattlePlayerPath.cpp).
+	if (Params.Key == EKeys::RightMouseButton && Params.Event == IE_Pressed) { BeginPathDraw(); return true; }
+	if (Params.Key == EKeys::RightMouseButton && Params.Event == IE_Released) { EndPathDraw(); return true; }
 	return bHandled;
 }
 
@@ -563,11 +565,11 @@ void ABattleController::PrimaryReleased()
 void ABattleController::MoveSelected()
 {
 	if (!bTactical || Selected.IsEmpty()) return;
-	FHitResult Hit;
+	FVector Target;
 	FVector2D Position;
-	if (GetPointerPosition(Position) && GetHitResultAtScreenPosition(Position, ECC_Visibility, false, Hit))
+	if (GetPointerPosition(Position) && PickOrderPoint(Position, Target))
 	{
-		IssueOrderAt(Hit.ImpactPoint, PendingOrder);
+		IssueOrderAt(Target, PendingOrder);
 		PendingOrder = EBattleOrder::Move;
 	}
 }
@@ -724,7 +726,7 @@ void ABattleController::UpdatePlayerAmmo(ABattleUnit* Unit)
 	if (S->Reserve > AmmoReserveSeen + 1) ShowNotice(FString::Printf(TEXT("弾を補充した（予備 %d）"), S->Reserve));
 	AmmoReserveSeen = S->Reserve;
 }
-void ABattleController::JumpPressed() { if (ABattleUnit* U = Cast<ABattleUnit>(GetPawn())) if (U->IsAlive()) U->Jump(); }
+void ABattleController::JumpPressed() { if (ABattleUnit* U = Cast<ABattleUnit>(GetPawn())) if (U->IsAlive() && !TryVault(U)) U->Jump(); }
 void ABattleController::JumpReleased() { if (ABattleUnit* U = Cast<ABattleUnit>(GetPawn())) U->StopJumping(); }
 void ABattleController::ZoomIn() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->Zoom(BattleFieldLayout::IsLarge(GetWorld()) ? -600 : -220); }
 void ABattleController::ZoomOut() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->Zoom(BattleFieldLayout::IsLarge(GetWorld()) ? 600 : 220); }
@@ -749,6 +751,8 @@ void ABattleController::PlayerTick(float DeltaTime)
 	Super::PlayerTick(DeltaTime);
 	UpdateNoticeLog();
 	UpdateGamepad(DeltaTime);
+	UpdatePathDraw();
+	UpdateVault(DeltaTime);
 	Selected.RemoveAll([](const TObjectPtr<ABattleUnit>& Unit) { return !Unit || !Unit->IsAlive(); });
 	if (bTactical) bAimHeld = false;
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))

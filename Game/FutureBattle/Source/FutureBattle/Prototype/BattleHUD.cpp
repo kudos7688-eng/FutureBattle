@@ -407,6 +407,7 @@ void ABattleHUD::DrawHUD()
  DrawOrderMarks();
  DrawSquadList();
  DrawMinimap();
+ DrawOrderWays();
  DrawNoticeLog();
 }
 
@@ -607,7 +608,8 @@ void ABattleHUD::DrawOrderMarks()
   if(Order==EBattleOrder::Hold) continue;
   const FLinearColor Color=Order==EBattleOrder::AttackMove?FLinearColor(1,.6f,.2f,.9f):Order==EBattleOrder::Defend?FLinearColor(.45f,.7f,1,.9f):FLinearColor(.28f,.95f,.8f,.9f);
   // Line from the leader to the destination, and a diamond at the destination.
-  Segment(L->Position(S->LeaderUnitID)+FVector(0,0,40),Goal,Color,1.5f);
+  // (The way itself is drawn by DrawOrderWays; the straight line stays only as a faint hint of the direction.)
+  Segment(L->Position(S->LeaderUnitID)+FVector(0,0,40),Goal,Color*FLinearColor(1,1,1,.25f),1.f);
   FVector2D G; if(Screen(Goal,G)){DrawLine(G.X,G.Y-9,G.X+9,G.Y,Color,2);DrawLine(G.X+9,G.Y,G.X,G.Y+9,Color,2);DrawLine(G.X,G.Y+9,G.X-9,G.Y,Color,2);DrawLine(G.X-9,G.Y,G.X,G.Y-9,Color,2);}
   // Defence radius.
   if(Order==EBattleOrder::Defend)

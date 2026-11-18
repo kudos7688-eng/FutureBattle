@@ -22,6 +22,8 @@ namespace
  struct FRouteTestRow { int32 Squad=INDEX_NONE,Lane=0; double MaxY=-DBL_MAX,MinY=DBL_MAX,MinGoal=DBL_MAX; int32 Phase=0; };
  TArray<FRouteTestRow> RouteTestRows;
  int32 RouteTestState=0; // 0 not started, 1 running, 2 reported
+ // A fourth squad walks a drawn way (BattlePlayerPath.cpp): a zigzag of four points; the nearest its leader came to each.
+ int32 PathTestSquad=INDEX_NONE;TArray<FVector> PathTestPoints;TArray<double> PathTestNearest;
 }
 
 int32 UBattleMatch::PlayerRouteLane(int32 SquadID) const
@@ -40,7 +42,7 @@ void UBattleMatch::SetPlayerRouteLane(int32 SquadID,int32 Lane)
 
 void UBattleMatch::ClearPlayerRouteMission(int32 SquadID)
 {
- if(FPlayerRoute* R=PlayerRoutes.Find(SquadID))R->bMission=false;
+ if(FPlayerRoute* R=PlayerRoutes.Find(SquadID)){R->bMission=false;R->bPath=false;R->Waypoints.Reset();}
 }
 
 FVector UBattleMatch::PlayerRouteStep(int32 SquadID,const FVector& From,const FVector& Goal)
@@ -105,7 +107,7 @@ FVector UBattleMatch::PlayerRouteStep(int32 SquadID,const FVector& From,const FV
 int32 UBattleMatch::PlayerRouteOrder(int32 SquadID,EBattleOrder Order,const FVector& Goal)
 {
  FPlayerRoute* R=PlayerRoutes.Find(SquadID);
- if(R)R->bMission=false;
+ if(R){R->bMission=false;R->bPath=false;R->Waypoints.Reset();}
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  const auto* S=Store->FindSquad(SquadID);
  if(!R||R->Lane==0||Order==EBattleOrder::Hold||!RoutesOn()||!Runtime||!Runtime->IsWideField()||!S||!Store->Find(S->LeaderUnitID))return -1;
@@ -142,6 +144,14 @@ void UBattleMatch::UpdatePlayerRoutes(float DeltaSeconds)
    FRouteTestRow Row;Row.Squad=IDs[Lane-1];Row.Lane=Lane;RouteTestRows.Add(Row);
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_PLAYER_ROUTE_TEST start squad=%d lane=%d accepted=%d"),IDs[Lane-1],Lane,Result);
   }
+  PathTestSquad=INDEX_NONE;PathTestPoints.Reset();PathTestNearest.Reset();
+  if(IDs.Num()>3)if(const auto* S=Store->FindSquad(IDs[3]))
+  {
+   const FVector From=Runtime->Position(S->LeaderUnitID);
+   for(const FVector2D Offset:{FVector2D(3500,4000),FVector2D(8000,-3500),FVector2D(12500,3500),FVector2D(17000,0)})PathTestPoints.Add(FVector(From.X+Offset.X,From.Y+Offset.Y,0));
+   PathTestNearest.Init(DBL_MAX,PathTestPoints.Num());PathTestSquad=IDs[3];
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_PLAYER_PATH_TEST start squad=%d points=%d accepted=%d"),PathTestSquad,PathTestPoints.Num(),PlayerPathOrder(PathTestSquad,EBattleOrder::Move,PathTestPoints));
+  }
   PlayerRouteClock=0;
  }
  for(auto It=PlayerRoutes.CreateIterator();It;++It)
@@ -152,12 +162,21 @@ void UBattleMatch::UpdatePlayerRoutes(float DeltaSeconds)
   if(!R.bMission)continue;
   const auto* Leader=Store->Find(S->LeaderUnitID);
   if(S->CommandStatus!=EBattleCommandStatus::Active||S->bPlayerDelegated||!Leader||!Leader->IsAlive()){R.bMission=false;continue;}
-  const FVector Step=R.Lane?PlayerRouteStep(It.Key(),Runtime->Position(S->LeaderUnitID),R.Goal):R.Goal;
-  if(Step.Equals(R.Step,1))continue;
-  const bool bFinal=Step.Equals(R.Goal,1);
+  const FVector LeaderAt=Runtime->Position(S->LeaderUnitID);
+  FVector Step=R.Goal;
+  // A drawn way hands on its next point; a route its next junction.
+  if(R.bPath){if(!PlayerPathNext(R,LeaderAt,Step))continue;}
+  else{if(R.Lane)Step=PlayerRouteStep(It.Key(),LeaderAt,R.Goal);if(Step.Equals(R.Step,1))continue;}
+  const bool bFinal=R.bPath?R.Waypoints.IsEmpty():Step.Equals(R.Goal,1);
   // On the way the squad moves (or attack-moves); the player's own order is given with the goal.
   const EBattleOrder Order=bFinal?R.Order:R.Order==EBattleOrder::Move?EBattleOrder::Move:EBattleOrder::AttackMove;
-  if(Runtime->IssueOrder(It.Key(),Order,Step)){R.Step=Step;if(bFinal)R.bMission=false;}
+  if(Runtime->IssueOrder(It.Key(),Order,Step))
+  {
+   R.Step=Step;R.StepDeadline=Elapsed+20.f+float(FVector::Dist2D(LeaderAt,Step)/250.);
+   if(R.bPath&&R.Waypoints.Num())R.Waypoints.RemoveAt(0);
+   if(bFinal){R.bMission=false;R.bPath=false;}
+  }
+  else if(R.bPath&&!bFinal)R.Waypoints.RemoveAt(0); // a point that takes no order is skipped
   else if(bFinal){R.bMission=false;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_PLAYER_ROUTE squad=%d final order refused"),It.Key());}
  }
  if(bTest&&RouteTestState==1)
@@ -168,9 +187,19 @@ void UBattleMatch::UpdatePlayerRoutes(float DeltaSeconds)
    Row.MaxY=FMath::Max(Row.MaxY,P.Y);Row.MinY=FMath::Min(Row.MinY,P.Y);Row.MinGoal=FMath::Min(Row.MinGoal,FVector::Dist2D(P,TestGoal));
    if(const FPlayerRoute* R=PlayerRoutes.Find(Row.Squad))Row.Phase=FMath::Max(Row.Phase,R->Phase);
   }
+  if(const auto* S=Store->FindSquad(PathTestSquad))if(const auto* Leader=Store->Find(S->LeaderUnitID);Leader&&Leader->IsAlive())
+   for(int32 I=0;I<PathTestPoints.Num();++I)PathTestNearest[I]=FMath::Min(PathTestNearest[I],FVector::Dist2D(Runtime->Position(S->LeaderUnitID),PathTestPoints[I]));
   if(Elapsed>=420)
   {
    RouteTestState=2;int32 Failures=RouteTestRows.Num()==3?0:1;
+   {
+    // Drawn way: every point visited (within 25m), in the order drawn (the mission is over).
+    int32 Reached=0;FString Nearest;
+    for(double D:PathTestNearest){Reached+=D<2500;Nearest+=FString::Printf(TEXT("%s%.0f"),Nearest.IsEmpty()?TEXT(""):TEXT("/"),D/100);}
+    const FPlayerRoute* R=PlayerRoutes.Find(PathTestSquad);const bool bDone=R&&!R->bMission;
+    const bool bOK=PathTestPoints.Num()==4&&Reached==4&&bDone;Failures+=!bOK;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_PLAYER_PATH_TEST squad=%d points=%d reached=%d nearest_m=%s finished=%d ok=%d"),PathTestSquad,PathTestPoints.Num(),Reached,*Nearest,bDone?1:0,bOK?1:0);
+   }
    for(const auto& Row:RouteTestRows)
    {
     // Centre: never out on a flank road. North/south: reached its flank road (y = +-250m on map F) and never the other one.

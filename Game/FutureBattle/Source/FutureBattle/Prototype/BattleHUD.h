@@ -17,6 +17,8 @@ private:
  void DrawNoticeLog();
  // Ground marks for the selected squads: line to the order destination, destination mark, defence radius, arrival slots.
  void DrawOrderMarks();
+ // The predicted way of the selected squads and the way being drawn (BattlePlayerPath.cpp).
+ void DrawOrderWays();
 	double NextLabelCheck = 0;
 	TSet<int32> ClearLabels;
 	TWeakObjectPtr<APawn> LabelViewPawn;
