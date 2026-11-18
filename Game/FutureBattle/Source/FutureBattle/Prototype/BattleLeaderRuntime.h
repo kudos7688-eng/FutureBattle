@@ -154,7 +154,9 @@ public:
  bool FireExoLauncher(int32 ID,const FVector& Aim,double Now);
  double ExoNextPick=0;int64 ExoLauncherShots=0,ExoLauncherHits=0;
  // Look: armour parts on a rig that follows the chest and keeps the body's heading, the launcher tube, and a shield bubble shown while shield points are left.
- struct FExoLook{TWeakObjectPtr<USceneComponent> Rig;TWeakObjectPtr<class UStaticMeshComponent> Bubble;TWeakObjectPtr<class UMaterialInstanceDynamic> BubblePaint;};
+ // bSuit: the AC01 suit (ApplyExoSuit: own body, clips and weapon models) instead of the placeholder plates.
+ struct FExoLook{TWeakObjectPtr<USceneComponent> Rig;TWeakObjectPtr<class UStaticMeshComponent> Bubble;TWeakObjectPtr<class UMaterialInstanceDynamic> BubblePaint;bool bSuit=false;};
+ bool ApplyExoSuit(int32 ID);
  TMap<int32,FExoLook> ExoLooks;
  void UpdateExoLooks();
  void RefreshVehicles();

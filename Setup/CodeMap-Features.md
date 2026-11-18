@@ -60,7 +60,7 @@ BattleAreaState | エリア戦の保存される状態（拠点 HP、収入、�
 BattleArmourAI | 兵種を扱うAI：効かない車両を狙わない、対戦車兵の弾の温存、知っている敵車両、戦車の待機位置、兵種の構成（UBattleLeaderRuntime と UBattleMatch の一部）
 BattleArtillery | 迫撃砲と自走砲：間接射撃の目標選び、着弾、陣地の位置（UBattleLeaderRuntime と UBattleMatch の一部）
 BattleContactMovement | 停止中の味方との接触・到着地点の重なりの解消（UBattleLeaderRuntime の一部）
-BattleExo | 外骨格兵：盾の回復、副武器（肩の対戦車火器）、専用の部隊判断と軍の割り当て
+BattleExo | 外骨格兵：盾の回復、副武器（肩の対戦車火器）、専用の部隊判断と軍の割り当て、見た目（AC01の体と武器＝ApplyExoSuit）
 BattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド
 BattleCover | 遮蔽の場所の一覧と予約
 BattleCoverAction | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部）

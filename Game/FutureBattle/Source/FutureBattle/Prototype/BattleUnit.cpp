@@ -278,8 +278,27 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 	return true;
 }
 
+void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequence* CrouchIdle, UAnimSequence* CrouchMove, UStaticMesh* Weapon, FName Bone, const FTransform& Grip)
+{
+	LookIdle = Idle; LookMove = Move; LookCrouchIdle = CrouchIdle; LookCrouchMove = CrouchMove;
+	LookWeapon = Weapon; LookBone = Bone; LookGrip = Grip;
+	CurrentPose = nullptr;
+	const bool bFirstPerson = IsPlayerControlled() && !bThirdPersonView;
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
+}
+
 void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Parent, EBattleWeapon Weapon, bool bFirstPerson) const
 {
+	if (LookWeapon)
+	{
+		// The look's own model: origin at its grip, barrel along local -Y like the other weapon models.
+		Model->SetStaticMesh(LookWeapon);
+		Model->AttachToComponent(Parent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, bFirstPerson ? NAME_None : LookBone);
+		Model->SetRelativeScale3D(FVector(1.));
+		if (bFirstPerson) Model->SetRelativeLocationAndRotation(FVector(47,15,-16), FRotator(0,90,0));
+		else Model->SetRelativeLocationAndRotation(LookGrip.GetLocation(), LookGrip.GetRotation());
+		return;
+	}
 	// No anti-tank or mortar model yet: the support gun model, larger.
 	const bool Support = Weapon == EBattleWeapon::SupportGun || Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar;
 	Model->SetStaticMesh(Support ? SupportModel : CarbineModel);
@@ -339,6 +358,11 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 	auto* Pose = Reloading ? RifleReload.Get() : Moving ? RifleWalk.Get() : RifleIdle.Get();
 	// Stance visuals trial: a crouched soldier plays the crouch clip (reloading included: there is no crouched reload clip).
 	if (auto* Crouch = VisualStance == BattleStance::Crouch ? BattleStance::CrouchClip(Moving) : nullptr) Pose = Crouch;
+	if (LookIdle)
+	{
+		const bool Crouched = VisualStance == BattleStance::Crouch && LookCrouchIdle && BattleStance::AnimEnabled();
+		Pose = Crouched ? (Moving && LookCrouchMove ? LookCrouchMove.Get() : LookCrouchIdle.Get()) : Moving && LookMove ? LookMove.Get() : LookIdle.Get();
+	}
 	const bool Looping = !Reloading || Pose != RifleReload.Get();
 	if (Pose && CurrentPose != Pose)
 	{

@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 228 種類。
+計 229 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -79,6 +79,7 @@
 | `-BattleDiagnosticOmit` | Value |  | BattleBenchmark.cpp:114, BattleBenchmark.cpp:146 |  |
 | `-BattleDisplayLOD` | Value | 1 | BattleLeaderRuntime.cpp:118, BattleWideMixedSmoke.cpp:170 |  |
 | `-BattleEngineMoveSweep` | Value | 0 | BattleStableMovement.cpp:368 |  |
+| `-BattleExoPlaceholder` | Param | off | BattleExo.cpp:45 |  |
 | `-BattleExoShot` | Param | off | BattleLeaderRuntime.cpp:217 |  |
 | `-BattleFastMatch` | Param | off | BattleGameMode.cpp:72, BattleLeaderRuntime.cpp:69 |  |
 | `-BattleFieldDiagnostics` | Param | off | BattleSquadTrial.cpp:17 |  |
@@ -112,7 +113,7 @@
 | `-BattleLeaderQA` | Value |  | BattleLeaderRuntime.cpp:249 |  |
 | `-BattleLeaderSmoke` | Param | off | BattleLeaderRuntime.cpp:247 |  |
 | `-BattleLeaderUnits` | Value | bMixedFastMatch?20:bWideField?500:40 | BattleLeaderRuntime.cpp:87 |  |
-| `-BattleLegacyAnimationLOD` | Param | off | BattleUnit.cpp:396 |  |
+| `-BattleLegacyAnimationLOD` | Param | off | BattleUnit.cpp:420 |  |
 | `-BattleLegacyWeaponVisuals` | Param | off | BattleUnit.cpp:98 |  |
 | `-BattleMapStats` | Value |  | BattleLeaderRuntime.cpp:225, BattleMapStats.cpp:40 |  |
 | `-BattleMassMovement` | Param | off | BattleBenchmark.cpp:39 |  |

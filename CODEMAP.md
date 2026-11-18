@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（133 モジュール、27591 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（133 モジュール、27704 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -77,7 +77,7 @@
 | `BattleController` | .h/.cpp | 218 + 1163 | ABattleCameraPawn, FBattleNoticeEntry, FBattleNoticeLayout, FBattleCommandBarLayout, ABattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド |
 | `BattleCover` | .h/.cpp | 39 + 200 | FBattleCoverReservation, UBattleCover | 遮蔽の場所の一覧と予約 |
 | `BattleCoverAction` | .cpp | 381 |  | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部） |
-| `BattleExo` | .cpp | 198 |  | 外骨格兵：盾の回復、副武器（肩の対戦車火器）、専用の部隊判断と軍の割り当て |
+| `BattleExo` | .cpp | 273 |  | 外骨格兵：盾の回復、副武器（肩の対戦車火器）、専用の部隊判断と軍の割り当て、見た目（AC01の体と武器＝ApplyExoSuit） |
 | `BattleFieldLayout` | .h | 182 | BattleFieldLayout, FMapDef | マップごとの定義（広さ、拠点、試合時間）を1つの表にまとめたもの |
 | `BattleFieldReplay` | .cpp | 206 |  | 広域試験の記録と再生（UBattleSquadTrial の一部） |
 | `BattleFieldTurn` | .cpp | 168 |  | 広域試験 T2b（UBattleSquadTrial の一部） |
@@ -85,7 +85,7 @@
 | `BattleGameMode` | .h/.cpp | 97 + 363 | ABattleGameMode | モードの統合、起動時の組み立て、毎フレームの入口、基本回帰 |
 | `BattleGroups` | .cpp | 447 |  | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部） |
 | `BattleHUD` | .h/.cpp | 25 + 621 | ABattleHUD | 画面表示（HUD、ミニマップ、部隊一覧、通知、命令の印） |
-| `BattleLeaderRuntime` | .h/.cpp | 430 + 1114 | FBattleFollowerFragment, FBattleSquadSummary, FBattleSquadListLayout, FBattleMinimapLayout, FBattleLeaderBody, FBattleLeaderPlan, UBattleLeaderRuntime | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新 |
+| `BattleLeaderRuntime` | .h/.cpp | 432 + 1114 | FBattleFollowerFragment, FBattleSquadSummary, FBattleSquadListLayout, FBattleMinimapLayout, FBattleLeaderBody, FBattleLeaderPlan, UBattleLeaderRuntime | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新 |
 | `BattleMapStats` | .cpp | 186 |  | マップの統計（区域ごとの見通し・遮蔽、経路の長さ）を JSON に書き出す。試合は行わない（UBattleLeaderRuntime の一部） |
 | `BattleMatch` | .h/.cpp | 276 + 490 | FAreaIntent, FBattleObjective, FBattleStrike, FPlayerRoute, UBattleMatch | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗 |
 | `BattleMetrics` | .h/.cpp | 65 + 142 | FBattleMetricFrame, UBattleMetrics, FBattleScopedMetric | 計測値の記録（1フレームの時間、判断の回数） |
@@ -125,7 +125,7 @@
 | `BattleTeamAI` | .h/.cpp | 24 + 138 | UBattleTeamAI | 陣営全体の判断 |
 | `BattleTerrain` | .h | 176 | BattleTerrain, FHeightPatch, FHeights, FHouseShape | 地面の高さの表（マップG）：丘・階段・2階の矩形と、その場所の高さを返す `FHeights::Ground`。家と丘の位置（`HousesG/HillsG`）は生成と共通 |
 | `BattleUIText` | .h/.cpp | 11 + 136 | BattleUIText | 画面の文言の日本語化 |
-| `BattleUnit` | .h/.cpp | 125 + 429 | FBattleSightContext, ABattleUnit, ABattleAIController | 兵の Actor（表示と直接操作。正規状態は BattleState 側） |
+| `BattleUnit` | .h/.cpp | 137 + 453 | FBattleSightContext, ABattleUnit, ABattleAIController | 兵の Actor（表示と直接操作。正規状態は BattleState 側） |
 | `BattleVATBake` | .h/.cpp | 8 + 194 |  | VAT の焼き込み・検証・修復（エディタ用） |
 | `BattleVATData` | .h | 40 | FBattleVATClip, FBattleVATMesh, UBattleVATData | VAT のデータ型 |
 | `BattleVATDisplay` | .h/.cpp | 82 + 400 | UBattleVATSkeletalMeshComponent, FBattleVATEntry, ABattleVATDisplay | 遠距離の兵を VAT で描く表示 |

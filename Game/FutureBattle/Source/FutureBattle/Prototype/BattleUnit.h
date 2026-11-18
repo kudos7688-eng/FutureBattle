@@ -9,6 +9,8 @@
 class UCameraComponent;
 class UStaticMeshComponent;
 class UTextRenderComponent;
+class UAnimSequence;
+class UStaticMesh;
 struct FBattleContact;
 class UBattleMetrics;
 
@@ -66,7 +68,17 @@ public:
 	bool bRevealed = true;
 	// Stance shown by the body (set by UBattleLeaderRuntime::SetStance); with -BattleStanceAnim=1 a crouch plays Lyra's clip.
 	uint8 VisualStance = 0;
+	// A squad type's own look (the exoskeleton soldier's AC01 suit): its own clips and its own weapon model held at a bone
+	// (Grip = the model relative to that bone). There is no reload clip: the pose stays. Set by UBattleLeaderRuntime::ApplySquadLook.
+	void SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequence* CrouchIdle, UAnimSequence* CrouchMove, UStaticMesh* Weapon, FName Bone, const FTransform& Grip);
 private:
+	UPROPERTY() TObjectPtr<UAnimSequence> LookIdle;
+	UPROPERTY() TObjectPtr<UAnimSequence> LookMove;
+	UPROPERTY() TObjectPtr<UAnimSequence> LookCrouchIdle;
+	UPROPERTY() TObjectPtr<UAnimSequence> LookCrouchMove;
+	UPROPERTY() TObjectPtr<UStaticMesh> LookWeapon;
+	FName LookBone;
+	FTransform LookGrip;
 	UPROPERTY() int32 UnitID = INDEX_NONE;
 	bool bDeathApplied = false;
 	bool bThirdPersonView = true;

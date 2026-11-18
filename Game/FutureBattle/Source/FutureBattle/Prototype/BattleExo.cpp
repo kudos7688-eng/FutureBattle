@@ -17,9 +17,76 @@
 #include "Components/CapsuleComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/SkeletalMesh.h"
+#include "Animation/AnimSequence.h"
+#include "Animation/Skeleton.h"
+#include "Misc/CommandLine.h"
+#include "UObject/StrongObjectPtr.h"
 #include "BattleFieldLayout.h"
 #include "DrawDebugHelpers.h"
 #include "FutureBattle.h"
+
+// A bone of a clip's first frame in component space (the clips are authored on the suit's own proportions).
+static FTransform ExoClipBone(const UAnimSequence* Clip,FName Bone)
+{
+ const FReferenceSkeleton& Ref=Clip->GetSkeleton()->GetReferenceSkeleton();FTransform T=FTransform::Identity;
+ const FAnimExtractContext At(0.);
+ for(int32 I=Ref.FindBoneIndex(Bone);I!=INDEX_NONE;I=Ref.GetParentIndex(I))
+ {FTransform Local;Clip->GetBoneTransform(Local,FSkeletonPoseBoneIndex(I),At,WITH_EDITOR!=0);T=T*Local;}
+ return T;
+}
+
+// The AC01 suit (2026-11-19, user request): the Tripo-based armoured body with its dual-equipment clips, the rifle in the left hand
+// and the launcher on the right shoulder (Art/AC01_Tripo_v2, Art/Weapons; assets under /Game/Art/AC01T2, imported by
+// Setup/Import-AC01T2.py and Setup/Import-AC01Exo.py). Display only. False (and the placeholder look is used) when an asset is
+// missing or with -BattleExoPlaceholder.
+bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
+{
+ static const bool bOff=FParse::Param(FCommandLine::Get(),TEXT("BattleExoPlaceholder"));
+ if(bOff)return false;
+ struct FAssets{TStrongObjectPtr<USkeletalMesh> Suit;TStrongObjectPtr<UAnimSequence> Idle,Move,CrouchIdle,CrouchMove;TStrongObjectPtr<UStaticMesh> Rifle,Launcher;bool bLoaded=false,bOk=false;};
+ static FAssets X;
+ if(!X.bLoaded)
+ {
+  X.bLoaded=true;
+  auto Clip=[](const TCHAR* Name){return LoadObject<UAnimSequence>(nullptr,*FString::Printf(TEXT("/Game/Art/AC01T2/Anims/A_AC01T2_Dual_%s.A_AC01T2_Dual_%s"),Name,Name),nullptr,LOAD_NoWarn);};
+  X.Suit.Reset(LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Art/AC01T2/SK_AC01T2.SK_AC01T2"),nullptr,LOAD_NoWarn));
+  X.Idle.Reset(Clip(TEXT("Idle")));X.Move.Reset(Clip(TEXT("Jog_Fwd")));X.CrouchIdle.Reset(Clip(TEXT("Crouch_Idle")));X.CrouchMove.Reset(Clip(TEXT("Crouch_Walk_Fwd")));
+  X.Rifle.Reset(LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Rifle.SM_AC01_Rifle"),nullptr,LOAD_NoWarn));
+  X.Launcher.Reset(LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Launcher.SM_AC01_Launcher"),nullptr,LOAD_NoWarn));
+  X.bOk=X.Suit.IsValid()&&X.Idle.IsValid()&&X.Move.IsValid()&&X.Rifle.IsValid()&&X.Launcher.IsValid();
+  UE_LOG(LogFutureBattle,Display,TEXT("EXO_SUIT assets=%d suit=%d idle=%d move=%d crouch=%d/%d rifle=%d launcher=%d"),X.bOk,X.Suit.IsValid(),X.Idle.IsValid(),X.Move.IsValid(),
+   X.CrouchIdle.IsValid(),X.CrouchMove.IsValid(),X.Rifle.IsValid(),X.Launcher.IsValid());
+ }
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();ABattleUnit* A=Actor(ID);const auto* U=Store->Find(ID);
+ if(!X.bOk||!A||!U)return false;
+ auto* Body=A->GetMesh();Body->SetSkeletalMesh(X.Suit.Get());
+ // The visor glows in the team's colour (the material's default is the painted red).
+ if(auto* Paint=Body->CreateDynamicMaterialInstance(0))Paint->SetVectorParameterValue(TEXT("VisorColor"),U->Team==0?FLinearColor(.25f,2.2f,4.f):FLinearColor(4.f,.35f,.25f));
+ // Each weapon sits where the dual-equipment pose holds it in the first idle frame: its grip 86 % of the way from the wrist to the
+ // middle knuckle, barrel forward (the launcher 6 degrees down), upright; from there it follows the hand.
+ auto Grip=[&](FName Hand,FName Knuckle,float Down)
+ {
+  const FTransform H=ExoClipBone(X.Idle.Get(),Hand);const FVector At=FMath::Lerp(H.GetLocation(),ExoClipBone(X.Idle.Get(),Knuckle).GetLocation(),.86);
+  // Component space: +Y is the body's front; the models point along their local -Y.
+  const FVector Barrel=FRotator(-Down,90.f,0.f).Vector();
+  return FTransform(FRotationMatrix::MakeFromYZ(-Barrel,FVector::UpVector).ToQuat(),At).GetRelativeTransform(H);
+ };
+ A->SetLook(X.Idle.Get(),X.Move.Get(),X.CrouchIdle.Get(),X.CrouchMove.Get(),X.Rifle.Get(),TEXT("hand_l"),Grip(TEXT("hand_l"),TEXT("middle_01_l"),0.f));
+ auto* Tube=NewObject<UStaticMeshComponent>(A);Tube->SetStaticMesh(X.Launcher.Get());Tube->SetCollisionEnabled(ECollisionEnabled::NoCollision);Tube->SetCanEverAffectNavigation(false);
+ Tube->SetupAttachment(Body,TEXT("hand_r"));Tube->SetRelativeTransform(Grip(TEXT("hand_r"),TEXT("middle_01_r"),6.f));Tube->RegisterComponent();A->AddInstanceComponent(Tube);
+ // The rig only marks the look as applied here (no plates hang on it); the shield bubble is the same as the placeholder's.
+ auto* Rig=NewObject<USceneComponent>(A);Rig->SetupAttachment(Body);Rig->RegisterComponent();A->AddInstanceComponent(Rig);
+ FExoLook Look;Look.Rig=Rig;Look.bSuit=true;
+ auto* Clear=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/EngineDebugMaterials/M_SimpleUnlitTranslucent.M_SimpleUnlitTranslucent"));
+ Look.BubblePaint=Clear?UMaterialInstanceDynamic::Create(Clear,A):nullptr;
+ auto* Bubble=NewObject<UStaticMeshComponent>(A);Bubble->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere")));
+ Bubble->SetCollisionEnabled(ECollisionEnabled::NoCollision);Bubble->SetCanEverAffectNavigation(false);Bubble->SetupAttachment(A->GetCapsuleComponent());
+ Bubble->SetRelativeLocation(FVector(0,0,18));Bubble->SetRelativeScale3D(FVector(1.7f,1.7f,2.5f));if(Look.BubblePaint.IsValid())Bubble->SetMaterial(0,Look.BubblePaint.Get());
+ Bubble->SetCastShadow(false);Bubble->RegisterComponent();A->AddInstanceComponent(Bubble);Look.Bubble=Bubble;
+ ExoLooks.Add(ID,Look);UpdateExoLooks();
+ return true;
+}
 
 void UBattleLeaderRuntime::ApplySquadLook(int32 SquadID)
 {
@@ -30,6 +97,7 @@ void UBattleLeaderRuntime::ApplySquadLook(int32 SquadID)
  ABattleUnit* A=Actor(S->LeaderUnitID);const auto* U=Store->Find(S->LeaderUnitID);if(!A||!U||!A->GetMesh())return;
  if(const auto* Old=ExoLooks.Find(S->LeaderUnitID);Old&&Old->Rig.IsValid())return;
  auto* Body=A->GetMesh();Body->SetRelativeScale3D(FVector(1.2f));
+ if(ApplyExoSuit(S->LeaderUnitID))return;
  auto* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));auto* Cylinder=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
  auto* Sphere=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
  auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
@@ -76,9 +144,16 @@ void UBattleLeaderRuntime::UpdateExoLooks()
  {
   const auto* U=Store->Find(It.Key());ABattleUnit* A=Actor(It.Key());auto& L=It.Value();
   if(!U||!A||!L.Rig.IsValid()){It.RemoveCurrent();continue;}
-  L.Rig->SetWorldRotation(FRotator(0,A->GetActorRotation().Yaw,0));
+  if(L.bSuit)
+  {
+   // A stance change resets the body's scale (SetStance); the suit stays 1.2x, crouches by its own clip and is squashed only when prone.
+   const float Squash=A->VisualStance==BattleStance::Crouch&&BattleStance::AnimEnabled()?1.f:BattleStance::VisualScale(A->VisualStance);
+   const FVector Want(1.2f,1.2f,1.2f*Squash);
+   if(A->GetMesh()&&!A->GetMesh()->GetRelativeScale3D().Equals(Want,.001f))A->GetMesh()->SetRelativeScale3D(Want);
+  }
+  else L.Rig->SetWorldRotation(FRotator(0,A->GetActorRotation().Yaw,0));
   // The placeholder stances squash the body; the rig (absolute scale) follows its height so the plates do not tower over a prone soldier.
-  if(A->GetMesh())L.Rig->SetWorldScale3D(FVector(1.f,1.f,FMath::Clamp(float(A->GetMesh()->GetRelativeScale3D().Z)/1.2f,.35f,1.f)));
+  if(!L.bSuit&&A->GetMesh())L.Rig->SetWorldScale3D(FVector(1.f,1.f,FMath::Clamp(float(A->GetMesh()->GetRelativeScale3D().Z)/1.2f,.35f,1.f)));
   const float Max=Store->MaxShieldOf(It.Key());const float Ratio=Max>0.f&&U->IsAlive()?FMath::Clamp(U->Shield/Max,0.f,1.f):0.f;
   if(L.Bubble.IsValid())
   {
