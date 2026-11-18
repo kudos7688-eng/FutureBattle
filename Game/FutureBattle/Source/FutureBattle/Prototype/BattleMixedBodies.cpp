@@ -70,7 +70,7 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  if(!PC || !Mode) {Error=TEXT("Player or game mode unavailable; battle retained");return false;}
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
  if(!Nav) {Error=TEXT("Navigation unavailable; battle retained");return false;}
- CoverApproaches.Reset();
+ CoverApproaches.Reset();FirePositions.Reset();
  SuppressionZeroAt.Reset();
  Stances.Reset();StanceLockedUntil.Reset();
  TMap<int32,FVector> Positions;

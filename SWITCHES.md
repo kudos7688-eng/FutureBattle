@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 208 種類。
+計 210 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -59,11 +59,12 @@
 | `-BattleArmourAITeam` | Value | -1 | BattleArmourAI.cpp:32 |  |
 | `-BattleBenchmark` | Param | off | BattleBenchmark.cpp:28, BattleController.cpp:52, BattleLeaderRuntime.cpp:66 |  |
 | `-BattleBenchmarkFPS` | Param | off | BattleBenchmark.cpp:120, BattleBenchmark.cpp:154 |  |
-| `-BattleConcealment` | other |  | BattleLeaderRuntime.cpp:380, BattleLeaderRuntime.cpp:814, BattleMapCommandlet.cpp:98 |  |
+| `-BattleConcealment` | other |  | BattleLeaderRuntime.cpp:380, BattleLeaderRuntime.cpp:818, BattleMapCommandlet.cpp:98 |  |
 | `-BattleContactAvoidance` | Value | 1 | BattleLeaderRuntime.cpp:78 |  |
-| `-BattleContactCover` | Value | 0 | BattleTactics.cpp:175 |  |
+| `-BattleContactCover` | Value | 0 | BattleTactics.cpp:181 |  |
+| `-BattleContactCoverTeam` | Value | -1 | BattleTactics.cpp:175 |  |
 | `-BattleContactTrial` | Param | off | BattleLeaderRuntime.cpp:79 |  |
-| `-BattleCoverActions` | Value | 0 | BattleSquadTactics.cpp:19, BattleTactics.cpp:181 |  |
+| `-BattleCoverActions` | Value | 0 | BattleSquadTactics.cpp:19, BattleTactics.cpp:187 |  |
 | `-BattleCoverActionSmoke` | Param | off | BattleLeaderRuntime.cpp:200 |  |
 | `-BattleCoverApproach` | Value | 0 | BattleTactics.cpp:169 |  |
 | `-BattleCoverArrival` | Value | 1 | BattleStableMovement.cpp:70 |  |
@@ -201,10 +202,11 @@
 | `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:46 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |
 | `-BattleTeamSupport` | Value | 1 | BattleTeamAI.cpp:12 |  |
-| `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:196 |  |
+| `-BattleTerrainLineBodies` | Value | 0 | BattleTactics.cpp:225 |  |
+| `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:202 |  |
 | `-BattleTrialSwap` | Param | off | BattleArea.cpp:15, BattleLeaderRuntime.cpp:74, BattleMatch.cpp:262 ほか2 |  |
 | `-BattleUnits` | Value | 1000 / 20 | BattleBenchmark.cpp:36, BattleSquadTrial.cpp:28 |  |
-| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:228, BattleSightExperiment.cpp:40 |  |
+| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:229, BattleSightExperiment.cpp:40 |  |
 | `-BattleWeaponLoadouts` | Param | off | BattleSquadTrial.cpp:50 |  |
 | `-BattleWeaponPreview` | Value |  | BattleWeaponPreview.cpp:19 |  |
 | `-BattleWeaponRange` | Value |  | BattleState.cpp:42 |  |

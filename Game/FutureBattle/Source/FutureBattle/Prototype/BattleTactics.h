@@ -23,6 +23,10 @@ namespace BattleTactics
  // more often (per-frame probe budget, 2 s retry) and further away (20 m), walks only to a slot he could fire from, and keeps walking
  // while his own sighting of the threat is fresh even if the squad's target flickers. Implies the probe budget and the approach.
  bool ContactCoverEnabled();
+ // The same switch for one soldier's team (-BattleContactCoverTeam=0/1 limits the trial to that team; default both).
+ // With it, a soldier who finds no cover slot also looks at the ground around him (12 m) for a place he can fire from with less of
+ // his body in the threat's view (UBattleLeaderRuntime::StartFirePosition), and moves there.
+ bool ContactCover(int32 Team);
  // AI cover firing window (UBattleTuning::bAICoverFire, default ON; -BattleCoverFire=0/1 overrides).
  bool CoverFireEnabled();
  // AI cover range check and peek line revalidation (UBattleTuning::bAICoverValidation, default ON; -BattleCoverValidation=0/1 overrides).

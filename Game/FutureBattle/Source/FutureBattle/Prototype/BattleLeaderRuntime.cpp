@@ -653,7 +653,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   // Getting up takes time: no walking until the soldier is standing.
   if(WillMove && StanceOf(ID)!=BattleStance::Stand){Store->SetAction(ID,EBattleAction::Idle);return;}
  }
- const bool ProbeBudget=BattleTactics::AICoverProbeBudgetEnabled();
+ // -BattleContactCover (this soldier's team): per-frame probe budget, 2 s retry, walks to cover and to free firing positions.
+ const bool bContactCover=BattleTactics::ContactCover(U->Team) && !bVehicleBody;
+ const bool ProbeBudget=BattleTactics::AICoverProbeBudgetEnabled() || bContactCover;
  if(ProbeBudget && CoverProbeFrame!=GFrameCounter){CoverProbeFrame=GFrameCounter;CoverProbesThisFrame=0;}
  const auto* CoverTuning=GetDefault<UBattleTuning>();
  // Trial -BattleLeaderGuard=1: an AI leader (one per squad) does not wait for the shared probe slot.
@@ -671,18 +673,20 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  if(BattleTactics::CoverActionsEnabled() && StopForCombat && Contact && Contact->bVisible && CoverInRange && ProbeSlot && Now>=CoverProbeAfter.FindRef(ID) && U->Weapon!=EBattleWeapon::Mortar && !bVehicleBody)
  {
   if(LeaderFirst){}else if(ProbeBudget)++CoverProbesThisFrame;else NextCoverProbe=Now+FMath::Max(0.f,CoverTuning->AICoverProbeInterval);
-  CoverProbeAfter.Add(ID,Now+FMath::Max(0.f,LeaderFirst?CoverTuning->LeaderGuardCoverRetrySeconds:BattleTactics::ContactCoverEnabled()?2.f:CoverTuning->AICoverRetrySeconds));
+  CoverProbeAfter.Add(ID,Now+FMath::Max(0.f,LeaderFirst?CoverTuning->LeaderGuardCoverRetrySeconds:bContactCover?2.f:CoverTuning->AICoverRetrySeconds));
   // Map E: cover is plentiful but small, so AI looks a little further for it (6.5m instead of 3.5m; AI cognition only).
   const float LocalRadius=(ProbeBudget||LeaderFirst)?CoverTuning->AICoverSearchRadius:BattleFieldLayout::IsUrban(GetWorld())?650.f:CoverTuning->CoverActionSearchRadius;
   if(RequestCoverAction(ID,Contact->LastKnownPosition,TargetID,LocalRadius)){CoverApproaches.Remove(ID);return;}
   // Trial -BattleCoverApproach=1: no usable cover here, so walk to a hidden slot beyond the local search radius.
-  if(BattleTactics::CoverApproachEnabled() && !CoverApproaches.Contains(ID))StartCoverApproach(ID,Contact->LastKnownPosition,TargetID,Now,LocalRadius);
+  if((BattleTactics::CoverApproachEnabled() || bContactCover) && !CoverApproaches.Contains(ID))
+   if(!StartCoverApproach(ID,Contact->LastKnownPosition,TargetID,Now,LocalRadius) && bContactCover)StartFirePosition(ID,Contact->LastKnownPosition,TargetID,Now);
  }
  const bool Approaching=CoverApproaches.Contains(ID) && StepCoverApproach(ID,Dt,Now,StopForCombat?TargetID:INDEX_NONE);
  if(StopForCombat || S->Order==EBattleOrder::Hold) B.bTrafficWait=false;
  const bool bDriving=S->Order!=EBattleOrder::Hold && !StopForCombat && P->Path.IsValidIndex(B.Waypoint);
+ if(bDriving && !Approaching && FirePositions.Num())FirePositions.Remove(ID); // back on the march: the place is free again
  // -BattleContactCover: a soldier walking to cover finishes that walk before he follows the squad's path again.
- if(S->Order!=EBattleOrder::Hold && !StopForCombat && P->Path.IsValidIndex(B.Waypoint) && !(Approaching && BattleTactics::ContactCoverEnabled()))
+ if(S->Order!=EBattleOrder::Hold && !StopForCombat && P->Path.IsValidIndex(B.Waypoint) && !(Approaching && bContactCover))
  {
   if(bWideField && bStableMovement) StableMove(ID,Dt,Now,Direction);
   else
@@ -861,6 +865,13 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
     if(VictimSquadState && VictimSquadState->SquadType<BattleSquadType::Count && VictimTeam>=0 && VictimTeam<2){E.TypeTaken[VictimTeam][VictimSquadState->SquadType]+=Dealt;E.TypeDeaths[VictimTeam][VictimSquadState->SquadType]+=Killed;} }
   (VictimLeader?E.LeaderHits:E.FollowerHits)[VictimTeam]++;
   E.Cover(HitKeys[VictimCoverState]);if(Killed)E.Cover(DeathKeys[VictimCoverState]);
+  // Evaluation only: how much of a standing body at the victim's place the shooter could see, and hits at a settled firing position.
+  if(!IsVehicle(Victim))
+  {
+   const float Seen=BattleTactics::ExposureAt(GetWorld(),Position(Victim),Forward(Victim),Start).Fraction();
+   E.Cover(Seen>.81f?TEXT("victim_hit_body_open"):Seen>.41f?TEXT("victim_hit_body_part_covered"):TEXT("victim_hit_body_mostly_covered"));
+   if(const FVector* Settled=FirePositions.Find(Victim);Settled && FVector::DistSquared2D(*Settled,Position(Victim))<FMath::Square(150.))E.Cover(TEXT("victim_hit_at_fire_position"));
+  }
   if(Killed && !VictimLeader) E.FollowerCombatDeaths[VictimTeam]++;
   if(Killed && VictimLeader)
   {

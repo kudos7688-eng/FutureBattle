@@ -80,7 +80,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
   if(Hidden>.6f)continue;
   Stage=FMath::Max(Stage,4);
   // -BattleContactCover: wider rules for the firing point (ContactFirePoint).
-  if(BattleTactics::ContactCoverEnabled() && !(Bodies.FindChecked(ID).Actor.IsValid() && Bodies.FindChecked(ID).Actor->IsPlayerControlled()))
+  if(BattleTactics::ContactCover(U->Team) && !(Bodies.FindChecked(ID).Actor.IsValid() && Bodies.FindChecked(ID).Actor->IsPlayerControlled()))
   {
    FVector Point;
    if(!ContactFirePoint(ID,Anchor,Threat,Point))continue;
@@ -141,6 +141,7 @@ bool UBattleLeaderRuntime::ContactFirePoint(int32 ID,FVector Anchor,FVector Thre
   const FVector Point=Projected.Location+FVector(0,0,90);
   if(GetWorld()->SweepTestByObjectType(Anchor,Point,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))continue;
   if(!BattleTactics::HasTerrainLine(GetWorld(),Point+FVector(0,0,60),Eye))continue;
+  if(const double Step=FVector::Dist2D(Anchor,Point);Step<100.||Step>450.)continue; // the range a saved cover action may hold
   Peek=Point;SightExperiment.Cover(TEXT("contact_point_step"));return true;
  }
  return false;
@@ -158,7 +159,7 @@ bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Targ
  const double Near=FMath::Max(0.f,LocalRadius),Base=FVector::Dist2D(Pos,Threat);
  auto Clear=[&](FVector A,FVector B){return !GetWorld()->SweepTestByObjectType(A,B,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88));};
  // -BattleContactCover: look further, and only for a slot the soldier could fire from once he is there.
- const bool bContactCover=BattleTactics::ContactCoverEnabled();
+ const bool bContactCover=BattleTactics::ContactCover(U->Team);
  const int32 Limit=bContactCover?16:FMath::Max(1,T->AICoverApproachCandidates);int32 Evaluated=0;
  for(int32 Slot:Cover->NearbySlots(Pos,bContactCover?2000.f:FMath::Max(0.f,T->AICoverApproachRadius),Limit+32))
  {
@@ -179,26 +180,88 @@ bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Targ
  Diag.Cover(TEXT("approach_none_found"));return false;
 }
 
+bool UBattleLeaderRuntime::StartFirePosition(int32 ID,FVector Threat,int32 Target,double Now)
+{
+ auto& Diag=SightExperiment;
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
+ if(!U || !U->IsAlive() || U->CoverPhase || Threat.ContainsNaN() || !Bodies.Contains(ID) || CoverApproaches.Contains(ID))return false;
+ const auto* Squad=Store->FindSquad(U->SquadID);if(!Squad || Squad->Order==EBattleOrder::Hold || Squad->Order==EBattleOrder::Move)return false;
+ auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!Nav)return false;
+ const FVector Pos=Position(ID),Eye=Threat+FVector(0,0,60);
+ const double Base=FVector::Dist2D(Pos,Threat);
+ const float Here=BattleTactics::ExposureAt(GetWorld(),Pos,Forward(ID),Eye).Fraction();
+ const bool bStances=BattleStance::Enabled(GetWorld());
+ // Already out of sight when crouched here: nothing better to look for.
+ if(bStances && !BattleTactics::HasTerrainLine(GetWorld(),Pos+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch)),Eye)){Diag.Cover(TEXT("fire_position_here_is_good"));return false;}
+ struct FPlace{FVector Point;float Score;bool bStandUp;};
+ TArray<FPlace> Places;
+ int32 Ring=0;
+ for(float Radius:{150.f,300.f,500.f,800.f,1200.f})
+ {
+  for(int32 Step=0;Step<10;++Step)
+  {
+   const float Angle=FMath::DegreesToRadians(Step*36.f+Ring*18.f);
+   const FVector Try=Pos+FVector(FMath::Cos(Angle),FMath::Sin(Angle),0)*Radius;
+   if(FVector::Dist2D(Try,Threat)<Base-200.)continue; // not much closer to the threat
+   if(Squad->Order==EBattleOrder::Defend && FVector::Dist2D(Try,Squad->Destination)>Squad->DefenseRadius)continue;
+   FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Try-FVector(0,0,90),Projected,FVector(50,50,150)))continue;
+   const FVector Point=Projected.Location+FVector(0,0,90);
+   if(!BattleTactics::HasTerrainLine(GetWorld(),Point+FVector(0,0,60),Eye))continue; // he must be able to fire from it
+   const bool bStandUp=bStances && !BattleTactics::HasTerrainLine(GetWorld(),Point+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch)),Eye);
+   const float Seen=BattleTactics::ExposureAt(GetWorld(),Point,Forward(ID),Eye).Fraction();
+   if(!bStandUp && Seen>Here-.39f)continue; // clearly less of the body in view than here
+   bool Taken=false;for(const auto& Other:CoverApproaches)if(FVector::DistSquared2D(Other.Value.Goal,Point)<FMath::Square(120.)){Taken=true;break;}
+   if(!Taken)for(const auto& Other:FirePositions)if(Other.Key!=ID && FVector::DistSquared2D(Other.Value,Point)<FMath::Square(120.)){Taken=true;break;}
+   if(Taken)continue;
+   Places.Add({Point,Seen-(bStandUp?.5f:0.f)+Radius/6000.f,bStandUp});
+  }
+  ++Ring;
+ }
+ Places.Sort([](const FPlace& A,const FPlace& B){return A.Score<B.Score;});
+ for(int32 I=0;I<Places.Num() && I<4;++I)
+ {
+  if(GetWorld()->SweepTestByObjectType(Pos,Places[I].Point,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))continue;
+  FCoverApproach A;A.Goal=Places[I].Point;A.Target=Target;A.Revision=U->OrderRevision;A.Until=Now+8.;A.bFree=true;A.bStandUp=Places[I].bStandUp;
+  CoverApproaches.Add(ID,A);FirePositions.Remove(ID);Diag.Cover(Places[I].bStandUp?TEXT("fire_position_started_stand_up"):TEXT("fire_position_started_partial"));return true;
+ }
+ Diag.Cover(Places.Num()?TEXT("fire_position_blocked"):TEXT("fire_position_none"));return false;
+}
+
 bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 Target)
 {
  auto* A=CoverApproaches.Find(ID);if(!A)return false;
  auto& Diag=SightExperiment;
- auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);
+ const bool bContactCover=U && BattleTactics::ContactCover(U->Team);
  const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,A->Target);
  const FVector Pos=Position(ID);const TCHAR* End=nullptr;
  if(!U || !U->IsAlive())End=TEXT("approach_cancel_died");
  else if(U->OrderRevision!=A->Revision)End=TEXT("approach_cancel_new_order");
  // -BattleContactCover: the squad's target flickers; the walk goes on while this soldier's own sighting is fresh (the stale check below).
- else if(Target==INDEX_NONE && !BattleTactics::ContactCoverEnabled())End=TEXT("approach_cancel_disengaged");
+ else if(Target==INDEX_NONE && !bContactCover)End=TEXT("approach_cancel_disengaged");
  // The squad re-picks its target every think; keep walking while this soldier still sees its own threat.
- else if(Target!=A->Target && !(Contact && Contact->bVisible) && !BattleTactics::ContactCoverEnabled())End=TEXT("approach_cancel_target_changed");
+ else if(Target!=A->Target && !(Contact && Contact->bVisible) && !bContactCover)End=TEXT("approach_cancel_target_changed");
  else if(!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds))End=TEXT("approach_cancel_contact_stale");
- else if(!GetWorld()->GetSubsystem<UBattleCover>()->IsAvailable(A->Slot,ID,Now))End=TEXT("approach_cancel_slot_taken");
+ else if(!A->bFree && !GetWorld()->GetSubsystem<UBattleCover>()->IsAvailable(A->Slot,ID,Now))End=TEXT("approach_cancel_slot_taken");
  else if(FVector::Dist2D(Pos,A->Goal)<120)
  {
   End=TEXT("approach_arrived");CoverProbeAfter.Remove(ID);
   // -BattleContactCover: take the cover at once (the slot was checked before the walk), without waiting for a probe slot.
-  if(BattleTactics::ContactCoverEnabled() && Contact)
+  if(bContactCover && A->bFree)
+  {
+   // A free firing position: behind low cover the soldier starts the crouch-and-stand cycle there; otherwise he fights from the
+   // place as usual and does not look for another for a while.
+   const FCoverApproach Done=*A;CoverApproaches.Remove(ID);
+   if(Done.bStandUp && !U->CoverPhase)
+   {
+    U->CoverAnchor=Done.Goal;U->CoverPeek=Done.Goal;U->CoverSlot=FreeCoverSlot;U->CoverPhase=1;U->CoverSeconds=3;
+    U->CoverOrderRevision=U->OrderRevision;U->CoverTargetID=Done.Target;U->DecisionReason=TEXT("COVER / FIRING POSITION");
+    Diag.Cover(TEXT("fire_position_cover"));
+   }
+   else{FirePositions.Add(ID,Done.Goal);CoverProbeAfter.Add(ID,Now+8.);Diag.Cover(TEXT("fire_position_settled"));}
+   return false;
+  }
+  if(bContactCover && Contact)
   {
    const int32 Goal=A->Target;const FVector Threat=Contact->LastKnownPosition;
    Diag.Cover(End);CoverApproaches.Remove(ID);
@@ -207,7 +270,7 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
   }
  }
  else if(Now>A->Until)End=TEXT("approach_cancel_timeout");
- if(End){Diag.Cover(End);CoverApproaches.Remove(ID);return false;}
+ if(End){Diag.Cover(A->bFree?TEXT("fire_position_cancelled"):End);CoverApproaches.Remove(ID);return false;}
  if(Target!=A->Target && !A->bKeptTargetChange){A->bKeptTargetChange=true;Diag.Cover(TEXT("approach_kept_after_target_change"));}
  auto& B=Bodies.FindChecked(ID);const FVector D=(A->Goal-Pos).GetSafeNormal2D();
  if(B.Actor.IsValid()){B.Actor->AddMovementInput(D);B.Velocity=B.Actor->GetVelocity();}
@@ -229,8 +292,9 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  {Diag.Cover(!U->IsAlive()?TEXT("cancel_died"):(!Squad || Squad->CommandStatus!=EBattleCommandStatus::Active)?TEXT("cancel_squad_inactive"):TEXT("cancel_new_order"));CancelCoverAction(ID);return false;}
  auto* Cover=GetWorld()->GetSubsystem<UBattleCover>();Cover->BuildSlots();
  // Reservations are rebuilt after loading, against saved positions in this same map.
- if(U->CoverSlot==INDEX_NONE)for(int32 Slot:Cover->NearbySlots(U->CoverAnchor,120,4))if(FVector::Dist2D(Cover->GetSlots()[Slot],U->CoverAnchor)<100 && Cover->Reserve(Slot,ID,Now)){U->CoverSlot=Slot;break;}
- if(!Cover->Reserve(U->CoverSlot,ID,Now)){Diag.Cover(TEXT("cancel_slot_lost"));CancelCoverAction(ID);return false;}
+ if(U->CoverSlot==FreeCoverSlot){}
+ else if(U->CoverSlot==INDEX_NONE)for(int32 Slot:Cover->NearbySlots(U->CoverAnchor,120,4))if(FVector::Dist2D(Cover->GetSlots()[Slot],U->CoverAnchor)<100 && Cover->Reserve(Slot,ID,Now)){U->CoverSlot=Slot;break;}
+ if(U->CoverSlot!=FreeCoverSlot && !Cover->Reserve(U->CoverSlot,ID,Now)){Diag.Cover(TEXT("cancel_slot_lost"));CancelCoverAction(ID);return false;}
  U->CoverSeconds=FMath::Max(0.f,U->CoverSeconds-Dt);
  const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,U->CoverTargetID);
  if(!Player && (!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds))){Diag.Cover(U->CoverPhase==1?TEXT("cancel_contact_stale_entering"):TEXT("cancel_contact_stale_in_cover"));CancelCoverAction(ID);return false;}

@@ -277,7 +277,9 @@ public:
  uint64 CoverProbeFrame=0;int32 CoverProbesThisFrame=0;
  TMap<int32,double> CoverProbeAfter;
  // Trial -BattleCoverApproach: runtime-only walk toward a hidden cover slot (not saved; cleared on restore).
- struct FCoverApproach{FVector Goal=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false;};
+ struct FCoverApproach{FVector Goal=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false,bFree=false,bStandUp=false;};
+ // -BattleContactCover: where a soldier settled after walking to a firing position that is not a cover slot (runtime only, evaluation).
+ TMap<int32,FVector> FirePositions;
  TMap<int32,FCoverApproach> CoverApproaches;
  // -BattleCoverFire: shots fired during the current AI peek (runtime only; a restored peek starts from zero).
  TMap<int32,int32> CoverPeekShots;
@@ -313,6 +315,12 @@ public:
  // out of sight and stand up to fire, or when he can fire from it with most of his body covered; otherwise the nearest step sideways
  // (1 to 4 m) with a line to the threat. False when the slot is too exposed or offers no such point.
  bool ContactFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& Peek);
+ // -BattleContactCover: no cover slot serves, so look at the ground around the soldier (rings out to 12 m) for a place with a line
+ // of fire to the observed threat position where less of his body is in view than here - best of all one where he is out of
+ // sight crouched - and start walking to it. Uses static geometry and the observed threat position only.
+ bool StartFirePosition(int32 ID,FVector Threat,int32 Target,double Now);
+ // CoverSlot value of a cover action at such a free place (no slot reservation).
+ static constexpr int32 FreeCoverSlot=-2;
  bool StepCoverApproach(int32 ID,float Dt,double Now,int32 Target);
  bool IssueOrder(int32 SquadID,EBattleOrder Order,FVector Goal,bool bMissionUpdate=false);
  bool CanSelectLeader(int32 ID) const;
