@@ -24,6 +24,13 @@ namespace BattleGroupValues
  constexpr float ReserveMin=45.f;    // seconds a group stays in reserve at an own point before it attacks again
  constexpr double DeepRatio=1.3;     // after a stall, another point only when it is not this much farther from the own home
  constexpr double StageMax=2.5;      // an own point within this x the rally distance of the objective is the rally point
+ constexpr double LossAbort=.6;      // an advance ends when the group's living soldiers fall below this share of those it began with
+ constexpr double ReadyStrength=.8;  // a group in reserve attacks again only with this share of its full numbers
+ constexpr float OpeningSeconds=120.f; // a group formed this early goes straight for the first contested point (no gathering)
+ constexpr double OwnSideRatio=.75;  // a point nearer the own home than this x its distance to the enemy home is an own-side point
+ constexpr double ArriveRadius=10000.; // an advance has arrived when a squad of the group is this near the point (the stall clock starts)
+ constexpr float TravelMax=300.f;      // an advance that has not arrived after this long is given up
+ constexpr float AvoidCap=3600.f;    // a failed point is avoided GroupAvoidSeconds x 2^(failures in a row - 1), up to this
 }
 
 bool BattleTactics::DefendEngage(int32 Team)
@@ -152,6 +159,16 @@ int32 UBattleMatch::FormGroup(int32 Team,const TArray<int32>& Squads,bool bPlaye
  return ID;
 }
 
+int32 UBattleMatch::GroupLiving(const FBattleGroup& G,int32* Full) const
+{
+ // Living soldiers of the group's squads on foot (vehicles do not count), and their full number.
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();int32 Living=0,All=0;
+ for(int32 SID:G.Squads)if(const auto* S=Store->FindSquad(SID);S&&!BattleSquadType::IsVehicle(S->SquadType))
+ {All+=S->Members.Num();for(int32 UID:S->Members)if(const auto* U=Store->Find(UID);U&&U->IsAlive())++Living;}
+ if(Full)*Full=All;
+ return Living;
+}
+
 bool UBattleMatch::GroupAIRun(const FBattleGroup& G) const
 {
  // The enemy team's groups always; an own group only while every active squad of it is delegated to the AI.
@@ -225,7 +242,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
   auto Enter=[&](uint8 To,const TCHAR* Why)
   {
    G->Phase=To;G->PhaseAt=Elapsed;
-   if(To==1)AssignGroupRoles(*G);
+   if(To==1){AssignGroupRoles(*G);G->StartLiving=GroupLiving(*G);G->bArrived=false;}
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_PHASE group=%d team=%d phase=%d objective=%d squads=%d reason=%s time=%.1f"),ID,Team,int32(To),G->Objective,G->Squads.Num(),Why,Elapsed);
   };
   // Squads away at home for supply do not hold the group up.
@@ -240,9 +257,14 @@ void UBattleMatch::UpdateGroups(int32 Team)
   if(Present)Center/=Present;
   // Stage 3: what the group decides as a whole. Own squads' numbers, observed ownership, known enemies (AreaIntelView).
   const auto& V=AreaIntelView(Team);const FVector Home=AreaHome(Team),EnemyHome=AreaHome(1-Team);
-  int32 Living=0;
-  for(int32 SID:G->Squads)if(const auto* S=Store->FindSquad(SID);S&&!BattleSquadType::IsVehicle(S->SquadType))
-   for(int32 UID:S->Members)if(const auto* U=Store->Find(UID);U&&U->IsAlive())++Living;
+  int32 Full=0;const int32 Living=GroupLiving(*G,&Full);
+  // A failed attack is remembered: the point is avoided longer each time the group fails at it in a row.
+  auto Failed=[&]()
+  {
+   if(G->StallPoint==G->Objective)++G->Stalls;else{G->StallPoint=G->Objective;G->Stalls=1;}
+   G->Avoid=G->Objective;
+   G->AvoidUntil=Elapsed+FMath::Min(BattleGroupValues::AvoidCap,FMath::Max(0.f,T->GroupAvoidSeconds)*float(1<<FMath::Min(G->Stalls-1,5)));
+  };
   // The next point to attack: not observed as own, the nearest to the own home; not the avoided one while it is avoided, and
   // not one much deeper than it (a group that failed at the front does not go for the enemy's rear).
   auto AttackPoint=[&]()->int32
@@ -272,6 +294,24 @@ void UBattleMatch::UpdateGroups(int32 Team)
    const int32 Point=ReservePoint();if(Point==INDEX_NONE)return false;
    G->Objective=Point;G->Rally=Objectives[Point].Position;Enter(3,Why);return true;
   };
+  // Opening (stage 3c): the first minutes decide who takes the contested points, and gathering first costs about 90 s. A group formed
+  // early skips the own-side points (the team's other squads take those) and goes straight for the nearest point that is not on
+  // its own side. Fixed map positions and observed ownership only.
+  if(!G->bPlayer&&!G->bOpened)
+  {
+   G->bOpened=true;
+   if(Elapsed<BattleGroupValues::OpeningSeconds)
+   {
+    int32 Best=INDEX_NONE;double BestD=DBL_MAX;
+    for(int32 I=0;I<Objectives.Num();++I)
+    {
+     const FVector P=Objectives[I].Position;const double D=FVector::Dist2D(P,Home);
+     if(ObservedOwner(Team,I)==Team||D<FVector::Dist2D(P,EnemyHome)*BattleGroupValues::OwnSideRatio)continue;
+     if(D<BestD){BestD=D;Best=I;}
+    }
+    if(Best!=INDEX_NONE){G->Objective=Best;G->Rally=GroupRally(Team,Best);Enter(1,TEXT("opening_rush"));continue;}
+   }
+  }
   if(!Objectives.IsValidIndex(G->Objective))
   {
    const int32 Next=AttackPoint();
@@ -291,19 +331,28 @@ void UBattleMatch::UpdateGroups(int32 Team)
    if(Living>=Known*BattleGroupValues::CommitRatio)Enter(1,bAssembled?TEXT("assembled"):TEXT("assemble_timeout"));
    else if(Waited>=FMath::Max(T->GroupAssembleMax,BattleGroupValues::WaitMax))
    {
-    G->Avoid=G->Objective;G->AvoidUntil=Elapsed+FMath::Max(0.f,T->GroupAvoidSeconds);
+    Failed();
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_HOLD_BACK group=%d team=%d objective=%d living=%d known=%d time=%.1f"),ID,Team,G->Objective,Living,Known,Elapsed);
     if(!Reserve(TEXT("outnumbered")))Enter(1,TEXT("no_reserve_point"));
    }
   }
   else if(G->Phase==1)
   {
-   if(bOwn)Enter(2,TEXT("point_taken"));
-   else if(Elapsed-G->PhaseAt>=FMath::Max(10.f,T->GroupAdvanceMax))
+   // The stall clock runs from the arrival at the point, not from the decision to go (the walk may take longer than the clock).
+   if(!G->bArrived)
    {
+    bool bNear=false;
+    for(int32 SID:G->Squads)if(const auto* S=Store->FindSquad(SID))bNear|=FVector::Dist2D(R->Position(S->LeaderUnitID),Objectives[G->Objective].Position)<=BattleGroupValues::ArriveRadius;
+    if(bNear){G->bArrived=true;G->PhaseAt=Elapsed;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_ARRIVED group=%d team=%d objective=%d time=%.1f"),ID,Team,G->Objective,Elapsed);}
+   }
+   const bool bLosses=G->StartLiving>0&&Living<G->StartLiving*BattleGroupValues::LossAbort;
+   if(bOwn){if(G->StallPoint==G->Objective){G->StallPoint=INDEX_NONE;G->Stalls=0;}Enter(2,TEXT("point_taken"));}
+   else if(bLosses||Elapsed-G->PhaseAt>=(G->bArrived?FMath::Max(10.f,T->GroupAdvanceMax):BattleGroupValues::TravelMax))
+   {
+    if(bLosses)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_LOSSES group=%d team=%d objective=%d living=%d began=%d after=%.0f time=%.1f"),ID,Team,G->Objective,Living,G->StartLiving,Elapsed-G->PhaseAt,Elapsed);
     // Stalled: the point is not taken. It is avoided for a while; another front point if there is one, else the group stands in
     // reserve at an own point (it used to go on to the enemy's rear points and back, holding nothing).
-    G->Avoid=G->Objective;G->AvoidUntil=Elapsed+FMath::Max(0.f,T->GroupAvoidSeconds);
+    Failed();
     const int32 Next=AttackPoint();
     if(Next!=INDEX_NONE)Attack(Next,TEXT("stalled_switch"));
     else if(!Reserve(TEXT("stalled_reserve")))Enter(0,TEXT("stalled_regroup"));
@@ -326,6 +375,8 @@ void UBattleMatch::UpdateGroups(int32 Team)
    const bool bThreatHere=AreaIntelThreatAt(Team,G->Objective);
    if(Want!=INDEX_NONE&&Want!=G->Objective&&AreaIntelThreatAt(Team,Want)&&!bThreatHere){Reserve(TEXT("defend_threat"));continue;}
    if(bThreatHere||Elapsed-G->PhaseAt<BattleGroupValues::ReserveMin)continue;
+   // Not below strength: squads that lost soldiers go home for replacements by their own rules first.
+   if(Full>0&&Living<Full*BattleGroupValues::ReadyStrength)continue;
    const int32 Next=AttackPoint();
    if(Next!=INDEX_NONE)Attack(Next,TEXT("attack_again"));
   }
