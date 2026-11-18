@@ -40,7 +40,7 @@ struct FBattleNoticeLayout
 struct FBattleCommandBarLayout
 {
  FVector2D Origin=FVector2D::ZeroVector; float ButtonWidth=124, ButtonHeight=26, Gap=6;
- static constexpr int32 Count=11; // move, attack move, defend, hold, manual command, delegate to AI, buy a rifle squad, heavy infantry, a scout pair, an anti-tank team, a tank
+ static constexpr int32 Count=12; // move, attack move, defend, hold, manual command, delegate to AI, buy a rifle squad, heavy infantry, a scout pair, an anti-tank team, a tank, route
  static FBattleCommandBarLayout Make(FVector2D View){FBattleCommandBarLayout L;L.Origin=FVector2D(34,View.Y-90);return L;}
  int32 ButtonAt(FVector2D P) const
  {
@@ -109,6 +109,10 @@ public:
 	bool IsTactical() const { return bTactical; }
 	// Play-speed toggle (tactical view, standalone only): [.] cycles x1/x2/x4 via global time dilation; direct control always runs at x1.
 	void CycleGameSpeed();
+	// Route choice (BattlePlayerRoutes.cpp): the next of automatic, centre, north, south for the selected squads.
+	void CycleRouteSelected();
+	// The route the selected squads share: 0-3, or -1 when nothing is selected or the choices differ.
+	int32 SelectedRouteLane() const;
 	void ApplyGameSpeed();
 	int32 GetGameSpeed() const { return GameSpeed; }
 	bool ShowsUnspottedBodies() const;

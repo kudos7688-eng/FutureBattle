@@ -325,10 +325,13 @@ void ABattleHUD::DrawHUD()
 			for (int32 I = 0; I < FBattleCommandBarLayout::Count; ++I)
 			{
 				const float X = Bar.Origin.X + I * (Bar.ButtonWidth + Bar.Gap);
-				const bool bUsable = I >= 6 ? (Match->bArea && BattleTactics::AreaHire().bEnabled) : bAny;
-				const bool bPending = (I == 1 && PC->PendingOrder == EBattleOrder::AttackMove) || (I == 2 && PC->PendingOrder == EBattleOrder::Defend);
+				// Route of the selected squads (maps with a road network): shows the current choice, lit when one is set.
+				const int32 RouteLane = I == 11 ? PC->SelectedRouteLane() : 0;
+				const bool bUsable = I == 11 ? (bAny && Match->RoutesOn()) : I >= 6 ? (Match->bArea && BattleTactics::AreaHire().bEnabled) : bAny;
+				const bool bPending = (I == 1 && PC->PendingOrder == EBattleOrder::AttackMove) || (I == 2 && PC->PendingOrder == EBattleOrder::Defend) || (I == 11 && bUsable && RouteLane != 0);
 				DrawRect(bPending ? FLinearColor(.45f, .4f, .1f, .98f) : bUsable ? FLinearColor(.10f, .24f, .24f, .98f) : FLinearColor(.08f, .11f, .15f, .98f), X, Bar.Origin.Y, Bar.ButtonWidth, Bar.ButtonHeight);
-				Label(Names[I], X + 8, Bar.Origin.Y + 5, bPending ? FLinearColor::Yellow : bUsable ? Mint : Muted, .85f);
+				const FString RouteName = I == 11 ? FString::Printf(TEXT("通り道：%s%s"), !bUsable ? TEXT("―") : RouteLane < 0 ? TEXT("混在") : BattleRouteLaneName(RouteLane), PC->bGamepadActive ? TEXT("") : TEXT(" [V]")) : FString();
+				Label(I == 11 ? *RouteName : Names[I], X + 8, Bar.Origin.Y + 5, bPending ? FLinearColor::Yellow : bUsable ? Mint : Muted, .85f);
 			}
 		}
 		if (PC->bGamepadActive) Label(TEXT("右スティック：カーソル   A：選択・決定   左スティック：視点移動   LT/RT：拡大縮小   LB：全選択   ビュー：直接操作   メニュー：AI一時停止   十字→：速度"), 34, H - 53, Muted, .9f);
@@ -391,6 +394,14 @@ void ABattleHUD::DrawMinimap()
   const auto& Def=BattleFieldLayout::Of(GetWorld());const FLinearColor Road(.3f,.36f,.42f,.9f),Side(.2f,.25f,.3f,.8f);
   for(const auto& E:Def.RouteEdges)
   {const FVector2D A=Map.ToScreen(Def.RouteNodes[E.A]),B=Map.ToScreen(Def.RouteNodes[E.B]);DrawLine(A.X,A.Y,B.X,B.Y,E.Lane==BattleFieldLayout::ERouteLane::Connector?Side:Road,1);}
+  // The routes chosen for the selected squads (BattlePlayerRoutes.cpp) are drawn over the roads.
+  if(!Def.RouteEdges.IsEmpty())
+  {
+   bool bChosen[4]={false,false,false,false};const auto* Routes=GetWorld()->GetSubsystem<UBattleMatch>();
+   for(const ABattleUnit* U:PC->GetSelection())if(U&&U->IsAlive()&&U->GetState()->Team==0)bChosen[FMath::Clamp(Routes->PlayerRouteLane(U->GetState()->SquadID),0,3)]=true;
+   for(const auto& E:Def.RouteEdges)if(E.Lane!=BattleFieldLayout::ERouteLane::Connector&&bChosen[int32(E.Lane)+1])
+   {const FVector2D A=Map.ToScreen(Def.RouteNodes[E.A]),B=Map.ToScreen(Def.RouteNodes[E.B]);DrawLine(A.X,A.Y,B.X,B.Y,FLinearColor(1.f,.85f,.2f),2);}
+  }
  }
  const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Homes are public; objective ownership is what the player's side last observed.
@@ -503,6 +514,8 @@ void ABattleHUD::DrawSquadList()
    FString Reason=!S.bActive?Squad->StopReason.ToString():!Squad->bPlayerDelegated?TEXT("手動指揮"):
     Waiting>0?FString::Printf(TEXT("通行待ち %d"),Waiting):!Mission?Plan.Reason:Sample?Sample->Reason:TEXT("報告待ち");
    Reason=BattleUIText::Ja(Reason);
+   // The route chosen for the squad (BattlePlayerRoutes.cpp).
+   if(const int32 RouteLane=GetWorld()->GetSubsystem<UBattleMatch>()->PlayerRouteLane(S.SquadID))Reason=FString::Printf(TEXT("道：%s ／ %s"),BattleRouteLaneName(RouteLane),*Reason);
    if(Reason.Len()>44)Reason=Reason.Left(43)+TEXT("...");
    DrawText(Reason,FLinearColor(.72f,.78f,.8f),Layout.Origin.X+9,Y+40,GEngine->GetSmallFont(),.7f);
   }

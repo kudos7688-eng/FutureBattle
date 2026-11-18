@@ -143,6 +143,7 @@ bool UBattleMatch::CanDelegateAllies() const
 bool UBattleMatch::SetAllyDelegated(int32 SquadID, bool bDelegated)
 {
 	if (!CanDelegateAllies() || !GetWorld()->GetSubsystem<UBattleState>()->SetSquadDelegated(SquadID, bDelegated)) return false;
+	ClearPlayerRouteMission(SquadID);
 	if (bDelegated) DelegationClock = 5.f;
 	return true;
 }
@@ -152,6 +153,7 @@ void UBattleMatch::Update(float DeltaSeconds)
 	auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>();
 	if (Phase != EBattleMatchPhase::Combat || !Mode || Mode->bCombatPaused || !FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) return;
 	Elapsed += DeltaSeconds;
+	UpdatePlayerRoutes(DeltaSeconds);
 	if (CanDelegateAllies())
 	{
 		DelegationClock += DeltaSeconds;
@@ -370,6 +372,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   ++Group;
 		// Keep assignment stable when only some squads are delegated.
 		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated) continue;
+  // A routed manual order of the player is under way (BattlePlayerRoutes.cpp): the team AI leaves the squad alone.
+  if(!PlayerRoutes.IsEmpty())if(const FPlayerRoute* Routed=PlayerRoutes.Find(Pair.Key);Routed&&Routed->bMission)continue;
   const bool BaseAssault=bStrategy?bStrategyBase:(bArea&&Group%5==0);
   FVector Center=BaseAssault?AreaHome(1-Team)*(25./27.):bHomeDefence?AreaHome(Team)*(25./27.):Objectives[Target].Position;
   EBattleOrder Order=bHomeDefence||(!BaseAssault&&ObservedOwner(Team,Target)==Team)?EBattleOrder::Defend:EBattleOrder::AttackMove;
@@ -401,7 +405,9 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
    if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
    {
     const FVector P=Runtime->Position(Pair.Value.LeaderUnitID);
-    const FVector Step=RouteStep(P,Center,BaseAssault?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies);
+    // The player's route choice for the squad comes before the AI's own (empty map in matches without a player's choice).
+    const bool bChosen=!PlayerRoutes.IsEmpty()&&PlayerRouteLane(Pair.Key)!=0;
+    const FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies);
     if(!Step.Equals(Center,1)){Center=Step;if(Order==EBattleOrder::Defend)Order=EBattleOrder::AttackMove;}
    }
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())

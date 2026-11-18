@@ -162,6 +162,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 	if (!Save || !Save->Validate(LastMessage)) { if (!Save) LastMessage = TEXT("No compatible save found"); return false; }
 	auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>(); auto* PC = Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
 	if (!Mode || !PC) return false;
+ PlayerRoutes.Reset(); // route choices are not saved (BattlePlayerRoutes.cpp)
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const bool Mixed=Runtime->IsWideField();
  auto* T=GetWorld()->GetSubsystem<UBattleSquadTactics>();auto* Team=GetWorld()->GetSubsystem<UBattleTeamAI>();

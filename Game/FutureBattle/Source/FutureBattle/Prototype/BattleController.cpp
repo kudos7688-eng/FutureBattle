@@ -109,6 +109,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("Reload"), EKeys::R, &ABattleController::Reload);
 	Button(TEXT("ToggleCombat"), EKeys::P, &ABattleController::ToggleCombat);
 	Button(TEXT("GameSpeed"), EKeys::Period, &ABattleController::CycleGameSpeed);
+	Button(TEXT("Route"), EKeys::V, &ABattleController::CycleRouteSelected);
 	Button(TEXT("Restart"), EKeys::F5, &ABattleController::RestartBattle);
 	Button(TEXT("ZoomIn"), EKeys::MouseScrollUp, &ABattleController::ZoomIn);
 	Button(TEXT("ZoomOut"), EKeys::MouseScrollDown, &ABattleController::ZoomOut);
@@ -548,7 +549,13 @@ void ABattleController::IssueOrderAt(FVector Target, EBattleOrder Order)
  if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled())
  {
   int32 Accepted=0,Rejected=0;
-  for(ABattleUnit* U:Selected) if(LeaderSelectable(U)) { if(L->IssueOrder(U->GetState()->SquadID,Order,Target)) ++Accepted; else ++Rejected; }
+  auto* Routes=GetWorld()->GetSubsystem<UBattleMatch>();
+  for(ABattleUnit* U:Selected) if(LeaderSelectable(U))
+  {
+   // A squad with a chosen route walks a distant order over it (BattlePlayerRoutes.cpp); -1 = not routed, the ordinary order.
+   const int32 SID=U->GetState()->SquadID,Routed=Routes->PlayerRouteOrder(SID,Order,Target);
+   if(Routed<0?L->IssueOrder(SID,Order,Target):Routed>0) ++Accepted; else ++Rejected;
+  }
   if(L->IsWideField()) ShowNotice(FString::Printf(TEXT("ORDER: %d SQUADS / %d REJECTED"),Accepted,Rejected));
   return;
  }
@@ -606,7 +613,7 @@ void ABattleController::IssueOrderAt(FVector Target, EBattleOrder Order)
 void ABattleController::HoldSelected()
 {
  if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled())
- { for(ABattleUnit* U:Selected) if(LeaderSelectable(U)) L->IssueOrder(U->GetState()->SquadID,EBattleOrder::Hold,U->GetActorLocation()); return; }
+ { for(ABattleUnit* U:Selected) if(LeaderSelectable(U)) { GetWorld()->GetSubsystem<UBattleMatch>()->ClearPlayerRouteMission(U->GetState()->SquadID); L->IssueOrder(U->GetState()->SquadID,EBattleOrder::Hold,U->GetActorLocation()); } return; }
 	if (!bTactical) return;
 	PendingOrder = EBattleOrder::Move;
 	UBattleState* Store = GetWorld()->GetSubsystem<UBattleState>();
@@ -713,6 +720,33 @@ int32 ABattleController::SquadListIDAt(FVector2D P) const
  int32 W,H; GetViewportSize(W,H);
  const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H)).RowAt(P); const auto Rows=SquadListRows();
  return R!=INDEX_NONE && Rows.IsValidIndex(R+SquadListScroll)?Rows[R+SquadListScroll].SquadID:INDEX_NONE;
+}
+
+int32 ABattleController::SelectedRouteLane() const
+{
+ const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();int32 Lane=-1;
+ for(const ABattleUnit* U:Selected) if(U && U->IsAlive() && U->GetState()->Team==0)
+ {
+  const int32 Own=Match->PlayerRouteLane(U->GetState()->SquadID);
+  if(Lane>=0 && Lane!=Own) return -1;
+  Lane=Own;
+ }
+ return Lane;
+}
+
+void ABattleController::CycleRouteSelected()
+{
+ if(!bTactical) return;
+ auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ if(!Match->RoutesOn()) { ShowNotice(TEXT("このマップには通り道がありません")); return; }
+ TSet<int32> IDs;
+ for(const ABattleUnit* U:Selected) if(U && U->IsAlive() && U->GetState()->Team==0) IDs.Add(U->GetState()->SquadID);
+ if(IDs.IsEmpty()) { ShowNotice(TEXT("通り道：先に部隊を選択")); return; }
+ // Differing choices start again from automatic.
+ const int32 Next=(SelectedRouteLane()+1)%4;
+ for(int32 ID:IDs) Match->SetPlayerRouteLane(ID,Next);
+ ShowNotice(FString::Printf(TEXT("通り道：%s（%d部隊）"),BattleRouteLaneName(Next),IDs.Num()));
+ UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_INPUT Route=%d Squads=%d"), Next, IDs.Num());
 }
 
 void ABattleController::CycleGameSpeed()
@@ -894,6 +928,7 @@ void ABattleController::PressCommandButton(int32 Index)
  case 8: HireScout(); break; // area battle: scout pair
  case 9: HireAntiTank(); break; // area battle: anti-tank team
  case 10: HireTank(); break; // area battle: tank
+ case 11: CycleRouteSelected(); break; // maps with a road network: route of the selected squads
  default: break;
  }
 }

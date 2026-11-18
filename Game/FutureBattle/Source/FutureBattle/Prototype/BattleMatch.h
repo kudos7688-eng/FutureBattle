@@ -50,6 +50,21 @@ struct FBattleStrike
 };
 
 // Match economy is independent of actors and possession. All purchases pass through this store.
+// Player route choice (BattlePlayerRoutes.cpp): the main route a player's squad takes on maps with a road network.
+struct FPlayerRoute
+{
+	int32 Lane = 0;                          // 0 automatic, 1 centre, 2 north, 3 south
+	int32 Phase = 0;                         // 0 to the route, 1 along it, 2 from it to the goal
+	FVector PhaseGoal = FVector(FLT_MAX);    // the goal the phase belongs to
+	bool bMission = false;                   // a routed manual order under way: Order and Goal are the player's, Step the junction last ordered
+	EBattleOrder Order = EBattleOrder::Move;
+	FVector Goal = FVector::ZeroVector, Step = FVector::ZeroVector;
+};
+inline const TCHAR* BattleRouteLaneName(int32 Lane)
+{
+	return Lane == 1 ? TEXT("\u4e2d\u592e") : Lane == 2 ? TEXT("\u5317") : Lane == 3 ? TEXT("\u5357") : TEXT("\u81ea\u52d5");
+}
+
 UCLASS()
 class UBattleMatch : public UWorldSubsystem
 {
@@ -159,6 +174,17 @@ public:
 	TArray<FVector> RouteKnownEnemies(int32 Team) const;
 	int32 RouteFlankSide(const FVector& From, const FVector& OwnHome, const TArray<FVector>& KnownEnemies, int32 SquadID) const;
 	FVector RouteStep(const FVector& From, const FVector& Goal, int32 FlankSide, const TArray<FVector>& KnownEnemies) const;
+	// Player route choice (BattlePlayerRoutes.cpp), per squad of the player's team. Empty in matches without a player's choice.
+	TMap<int32, FPlayerRoute> PlayerRoutes;
+	float PlayerRouteClock = 0.f;
+	int32 PlayerRouteLane(int32 SquadID) const;
+	void SetPlayerRouteLane(int32 SquadID, int32 Lane);
+	void ClearPlayerRouteMission(int32 SquadID);
+	// A manual order over the squad's chosen route: -1 not routed (give the ordinary order), 0 refused, 1 accepted.
+	int32 PlayerRouteOrder(int32 SquadID, EBattleOrder Order, const FVector& Goal);
+	// The next junction for a squad with a chosen route (RouteStep without one).
+	FVector PlayerRouteStep(int32 SquadID, const FVector& From, const FVector& Goal);
+	void UpdatePlayerRoutes(float DeltaSeconds);
 	void CheckTimeLimit();
 	void UpdateEnemyOrders();
 	void UpdateTeamOrders(int32 Team, bool bDelegatedOnly = false);
