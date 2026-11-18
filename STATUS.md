@@ -18,6 +18,11 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-19 AC01のバズーカを持つ右腕の調整（Blender）
+- 両装備の待機姿勢で右手首を従来より前方へ16cm移動。右肘の内角は初期フレームで約99度。手首の向きを前腕に合わせ、筒先を水平から6度下げた。再読込後、待機の5時点で右肩装甲と筒下面の格子上の最短鉛直間隔は0.50〜0.76cm。比較は Art/AC01_Tripo_v2/Preview/AC01_RightArm_Comparison.jpg。
+
+## 2026-11-19 AC01両手装備の姿勢修正（Blender）
+- AC01_DualEquipment.blend の待機242フレームを更新。首2節と頭をモデル正面に整え、左手のライフルを前に出し、右肩装甲に沿ってバズーカ後部を下げた。再読込した頭・首は基準回転との差0.04度以内。右肩上面と筒下面の縦方向の最短間隔は指定領域の格子上で5時点0.40〜0.59cm。ゲーム内への反映は未実施。
 ## 2026-11-19 2時20分 Claude（複数兵種のAI改善）：suppression を main へ取り込み（ユーザー決定）。射線の判定の修正が main の既定になる
 - ユーザーの決定「取り込む」。suppression（f233013 まで）に main（2b9a3ed、マップG・通り道のキー Z まで）をマージし、その合流コミットへ main を早送りする。
 - **main に入るもの**（suppression の分）：新兵種（装甲車・迫撃砲・自走砲・外骨格兵）と兵種を扱うAI、部隊群（F＝編成、V＝選択）、試験切替（`-BattleAreaComposition`・`-BattleAreaGroups`・`-BattleDefendEngage`・`-BattleSymmetricStart`・`-BattleContactCover`、すべて既定0）、対称性の検査、**射線の判定の修正（`-BattleTerrainLineBodies`、既定1）**、保存の検査の修正。
