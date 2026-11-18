@@ -589,6 +589,26 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    // Map E: a partial path still moves the squad as far as the route goes, instead of leaving it standing.
    if(Path && Path->IsValid() && Path->IsPartial() && BattleFieldLayout::IsUrban(GetWorld())) SightExperiment.Cover(TEXT("path_partial_used"));
    if(Path && Path->IsValid() && (!Path->IsPartial() || BattleFieldLayout::IsUrban(GetWorld()) || VehicleNav)) P.Path=Path->PathPoints;
+   // Symmetric start trial (-BattleSymmetricStart=1): the navigation mesh is not a mirror image of itself, so the same trip takes
+   // other streets from the east than from the west (up to 34 m apart on map E). An east-side squad on foot takes the 180-degree
+   // image of the route a west-side squad would take, when every point of it lies on the mesh.
+   if(bArea && !VehicleNav && P.Path.Num()>1 && BattleTactics::SymmetricStart() && GetWorld()->GetSubsystem<UBattleMatch>()->AreaHome(S->Team).X>0)
+   {
+    FNavLocation MirrorFrom,MirrorTo;
+    if(Nav->ProjectPointToNavigation(FVector(-From.Location.X,-From.Location.Y,From.Location.Z),MirrorFrom,FVector(100,100,300)) && Nav->ProjectPointToNavigation(FVector(-To.Location.X,-To.Location.Y,To.Location.Z),MirrorTo,FVector(100,100,300)))
+     if(auto* West=Nav->FindPathToLocationSynchronously(GetWorld(),MirrorFrom.Location,MirrorTo.Location);West && West->IsValid() && !West->IsPartial() && West->PathPoints.Num()>1)
+     {
+      TArray<FVector> Image;bool bOnMesh=true;
+      for(const FVector& Q:West->PathPoints)
+      {
+       FNavLocation On;
+       if(!Nav->ProjectPointToNavigation(FVector(-Q.X,-Q.Y,Q.Z),On,FVector(60,60,300))){bOnMesh=false;break;}
+       Image.Add(On.Location);
+      }
+      if(bOnMesh){Image[0]=From.Location;Image.Last()=To.Location;P.Path=MoveTemp(Image);SightExperiment.Cover(TEXT("path_mirrored"));}
+      else SightExperiment.Cover(TEXT("path_mirror_off_mesh"));
+     }
+   }
    if(S->TacticalPlan.bAutonomous && S->TacticalPlan.Action==EBattleSquadTactic::Regroup && FVector::Dist2D(From.Location,To.Location)<50)
     P.Path={From.Location,To.Location}; // Followers can converge even when the leader is already at the rally point.
   }
