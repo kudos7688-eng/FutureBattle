@@ -309,6 +309,10 @@ public:
  TArray<AActor*> ConcealmentActors;
  bool bConcealmentBuilt=false;
  bool StartCoverApproach(int32 ID,FVector Threat,int32 Target,double Now,float LocalRadius);
+ // -BattleContactCover: the firing point of a cover slot against Threat (observed position). The slot itself when a soldier can crouch
+ // out of sight and stand up to fire, or when he can fire from it with most of his body covered; otherwise the nearest step sideways
+ // (1 to 4 m) with a line to the threat. False when the slot is too exposed or offers no such point.
+ bool ContactFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& Peek);
  bool StepCoverApproach(int32 ID,float Dt,double Now,int32 Target);
  bool IssueOrder(int32 SquadID,EBattleOrder Order,FVector Goal,bool bMissionUpdate=false);
  bool CanSelectLeader(int32 ID) const;

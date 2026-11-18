@@ -7,7 +7,7 @@
 bool BattleTactics::AICoverProbeBudgetEnabled()
 {
  static const bool Enabled=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAICoverProbe="),Value);return Value!=0;}();
- return Enabled;
+ return Enabled || ContactCoverEnabled();
 }
 
 bool BattleTactics::LeaderGuardEnabled()
@@ -167,6 +167,12 @@ bool BattleTactics::ReturnFireEnabled()
 bool BattleTactics::CoverApproachEnabled()
 {
  static const bool Enabled=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverApproach="),Value);return Value!=0;}();
+ return Enabled || ContactCoverEnabled();
+}
+
+bool BattleTactics::ContactCoverEnabled()
+{
+ static const bool Enabled=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleContactCover="),Value);return Value!=0;}();
  return Enabled;
 }
 

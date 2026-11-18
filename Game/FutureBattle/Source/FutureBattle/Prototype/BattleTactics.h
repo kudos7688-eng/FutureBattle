@@ -19,6 +19,10 @@ namespace BattleTactics
  bool AICoverProbeBudgetEnabled();
  // Trial switch -BattleCoverApproach=1: an engaged AI soldier with no cover nearby walks to a hidden cover slot within a wider radius.
  bool CoverApproachEnabled();
+ // Trial switch -BattleContactCover=1 (needs -BattleCoverActions=1): on contact an AI soldier looks for a firing position behind cover
+ // more often (per-frame probe budget, 2 s retry) and further away (20 m), walks only to a slot he could fire from, and keeps walking
+ // while his own sighting of the threat is fresh even if the squad's target flickers. Implies the probe budget and the approach.
+ bool ContactCoverEnabled();
  // AI cover firing window (UBattleTuning::bAICoverFire, default ON; -BattleCoverFire=0/1 overrides).
  bool CoverFireEnabled();
  // AI cover range check and peek line revalidation (UBattleTuning::bAICoverValidation, default ON; -BattleCoverValidation=0/1 overrides).
