@@ -190,6 +190,9 @@ private:
 	void PrimaryReleased();
 	void MoveSelected();
 	void Reload();
+	// Direct control: empty reserve -> one magazine from the squad mate who carries the most (UBattleTuning::PlayerAmmoShareRange).
+	void UpdatePlayerAmmo(class ABattleUnit* Unit);
+	int32 AmmoUnit = 0, AmmoReserveSeen = 0; double NextAmmoShare = 0.;
 	void JumpPressed();
 	void JumpReleased();
 	void ToggleCombat();

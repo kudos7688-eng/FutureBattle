@@ -76,6 +76,15 @@ int32 UBattleState::AddReserve(int32 ID, int32 Rounds)
 	Unit->Reserve += Added; return Added;
 }
 
+int32 UBattleState::MoveReserve(int32 FromID, int32 ToID, int32 Rounds)
+{
+	auto* From = Units.Find(FromID); auto* To = Units.Find(ToID);
+	if (!From || !To || From == To || !From->IsAlive() || !To->IsAlive() || UBattleTuning::AmmoKind(From->Weapon) != UBattleTuning::AmmoKind(To->Weapon)) return 0;
+	const int32 Moved = FMath::Min3(Rounds, From->Reserve, GetDefault<UBattleTuning>()->ReserveFor(To->Weapon) - To->Reserve);
+	if (Moved <= 0) return 0;
+	From->Reserve -= Moved; To->Reserve += Moved; return Moved;
+}
+
 float UBattleState::Heal(int32 ID, float Amount)
 {
  auto* Unit = Units.Find(ID);

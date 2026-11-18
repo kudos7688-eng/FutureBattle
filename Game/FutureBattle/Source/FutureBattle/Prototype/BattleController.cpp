@@ -697,6 +697,33 @@ void ABattleController::HoldSelected()
 }
 
 void ABattleController::Reload() { if (ABattleUnit* U = Cast<ABattleUnit>(GetPawn())) GetWorld()->GetSubsystem<UBattleState>()->StartReload(U->GetUnitID(), GetWorld()->GetTimeSeconds()); }
+void ABattleController::UpdatePlayerAmmo(ABattleUnit* Unit)
+{
+	auto* Store = GetWorld()->GetSubsystem<UBattleState>(); auto* L = GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+	const auto* S = Unit->GetState(); if (!S) return;
+	const int32 ID = S->UnitID; const double Now = GetWorld()->GetTimeSeconds();
+	if (AmmoUnit != ID) { AmmoUnit = ID; AmmoReserveSeen = S->Reserve; }
+	const float Range = GetDefault<UBattleTuning>()->PlayerAmmoShareRange;
+	if (S->Reserve == 0 && Range > 0.f && L->IsEnabled() && Now >= NextAmmoShare)
+	{
+		NextAmmoShare = Now + 1.;
+		if (const auto* Squad = Store->FindSquad(S->SquadID))
+		{
+			int32 Donor = 0, Most = 0; const FVector Here = L->Position(ID);
+			for (int32 Mate : Squad->Members) if (Mate != ID)
+				if (const auto* M = Store->Find(Mate); M && M->IsAlive() && M->Reserve > Most && UBattleTuning::AmmoKind(M->Weapon) == UBattleTuning::AmmoKind(S->Weapon) && FVector::DistSquared(L->Position(Mate), Here) <= FMath::Square(Range))
+				{ Donor = Mate; Most = M->Reserve; }
+			if (const int32 Moved = Donor ? Store->MoveReserve(Donor, ID, GetDefault<UBattleTuning>()->Capacity(S->Weapon)) : 0; Moved > 0)
+			{
+				UE_LOG(LogFutureBattle, Display, TEXT("PLAYER_AMMO_SHARE unit=%d from=%d rounds=%d"), ID, Donor, Moved);
+				ShowNotice(FString::Printf(TEXT("部下から弾を受け取った（+%d）"), Moved)); AmmoReserveSeen = S->Reserve;
+			}
+		}
+	}
+	// Home or point refill of the soldier the player controls.
+	if (S->Reserve > AmmoReserveSeen + 1) ShowNotice(FString::Printf(TEXT("弾を補充した（予備 %d）"), S->Reserve));
+	AmmoReserveSeen = S->Reserve;
+}
 void ABattleController::JumpPressed() { if (ABattleUnit* U = Cast<ABattleUnit>(GetPawn())) if (U->IsAlive()) U->Jump(); }
 void ABattleController::JumpReleased() { if (ABattleUnit* U = Cast<ABattleUnit>(GetPawn())) U->StopJumping(); }
 void ABattleController::ZoomIn() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->Zoom(BattleFieldLayout::IsLarge(GetWorld()) ? -600 : -220); }
@@ -727,6 +754,7 @@ void ABattleController::PlayerTick(float DeltaTime)
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
 	{
 		Unit->SetAimLevel(bAimHeld && Unit->IsAlive() ? AimLevel : 0);
+		if (Unit->IsAlive()) UpdatePlayerAmmo(Unit);
 		if (!Unit->IsAlive()) { if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled()) OnLeaderUnitDied(Unit->GetUnitID()); else { EnterTactical(); ShowNotice(TEXT("UNIT DOWN / select another ally")); } }
 		else if (bTriggerHeld)
 		{

@@ -297,6 +297,8 @@ public:
 	UPROPERTY(Config, EditAnywhere) float MortarShotInterval = .5f;
 	int32 Capacity(EBattleWeapon W) const { return W == EBattleWeapon::Mortar ? MortarMagazine : W == EBattleWeapon::AntiTank ? ATMagazine : W == EBattleWeapon::SupportGun ? SupportMagazine : Magazine; }
 	float ReloadTime(EBattleWeapon W) const { return W == EBattleWeapon::Mortar ? MortarReloadSeconds : W == EBattleWeapon::AntiTank ? ATReloadSeconds : W == EBattleWeapon::SupportGun ? SupportReloadSeconds : ReloadSeconds; }
+	// Soldiers hand reserve rounds only to a weapon of the same kind.
+	static int32 AmmoKind(EBattleWeapon W) { return W == EBattleWeapon::Mortar ? 2 : W == EBattleWeapon::AntiTank ? 1 : 0; }
 	int32 ReserveFor(EBattleWeapon W) const { return W == EBattleWeapon::Mortar ? MortarReserve : W == EBattleWeapon::AntiTank ? ATReserve : ReserveAmmo; }
 	float ShotInterval(EBattleWeapon W, bool bPlayer) const
 	{
@@ -546,6 +548,15 @@ public:
 	UPROPERTY(Config, EditAnywhere) float AimSpreadScale = .6f;
 	UPROPERTY(Config, EditAnywhere) float Scope4SpreadScale = .4f;
 	UPROPERTY(Config, EditAnywhere) float Scope8SpreadScale = .3f;
+	// Direct control only (2026-11-19, user request): every shot of the possessed soldier has this spread multiplier (x the aim/scope one).
+	UPROPERTY(Config, EditAnywhere) float PlayerSpreadScale = .4f;
+	// Direct control only: with an empty reserve the possessed soldier takes one magazine from the squad mate (same kind of weapon, within
+	// PlayerAmmoShareRange) who carries the most. Rounds are moved, never created; 0 turns it off.
+	UPROPERTY(Config, EditAnywhere) float PlayerAmmoShareRange = 2000.f;
+	// Area trial -BattleAreaPointSupply=1 (default OFF until measured; Play-Area.ps1 turns it on): a squad whose leader stands within
+	// AreaPointSupplyRadius of a point its team owns (not contested, not being captured) gets the home ammunition refill there.
+	UPROPERTY(Config, EditAnywhere) bool bAreaPointSupply = false;
+	UPROPERTY(Config, EditAnywhere) float AreaPointSupplyRadius = 2500.f;
 	UPROPERTY(Config, EditAnywhere) float AimSettleSeconds = .8f;
 	UPROPERTY(Config, EditAnywhere) float AimResetDegrees = 3.f;
 	UPROPERTY(Config, EditAnywhere) float AimStationarySpeed = 20.f;
@@ -710,6 +721,8 @@ public:
 	bool HasShields() const { return bShields; }
 	bool ApplyDamage(int32 ID, int32 AttackingTeam, float Damage);
 	int32 AddReserve(int32 ID, int32 Rounds);
+	// Moves reserve rounds between two living soldiers with the same kind of weapon; returns the rounds moved.
+	int32 MoveReserve(int32 FromID, int32 ToID, int32 Rounds);
 	// Heals a living unit up to MaxHealthOf(ID); returns the amount applied.
 	float Heal(int32 ID, float Amount);
 	void RestoreRecords(const TArray<FBattleUnitState>& SavedUnits, const TArray<FBattleSquadState>& SavedSquads, bool PreservePlans=false);

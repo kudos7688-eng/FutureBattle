@@ -226,6 +226,16 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     int32 Gunners=0;if(ATGood)for(int32 ID:AS->Members){const auto* U=Store->Find(ID);if(U->Weapon==EBattleWeapon::AntiTank){++Gunners;ATGood&=U->Ammo==1&&U->Reserve==3;}}
     if(ATGood){const int32 G=AS->Members[1];Store->AddReserve(G,90);ATGood&=Store->Find(G)->Reserve==3;}
     Check(ATGood&&Gunners==2,TEXT("anti-tank team: 4 soldiers, 2 anti-tank weapons with 4 rounds, 12 resources"));
+    if(AS)
+    {
+     // Reserve rounds move between squad mates with the same kind of weapon, up to the receiver's limit; nothing is created.
+     const int32 Rifle0=AS->Members[0],Rifle3=AS->Members[3],Gun=AS->Members[1];auto& Taker=Store->Units.FindChecked(Rifle0);
+     const int32 Full=Taker.Reserve,Giver=Store->Find(Rifle3)->Reserve;Taker.Reserve=0;
+     bool Share=Store->MoveReserve(Rifle3,Rifle0,30)==30&&Taker.Reserve==30&&Store->Find(Rifle3)->Reserve==Giver-30;
+     Share&=Store->MoveReserve(Gun,Rifle0,30)==0&&Store->MoveReserve(Rifle0,Rifle0,30)==0&&Store->MoveReserve(Rifle3,Rifle0,1000)==Giver-30&&Taker.Reserve==Giver;
+     Store->Units.FindChecked(Rifle3).Reserve=Giver;Taker.Reserve=Full;
+     Check(Share&&Store->MoveReserve(Rifle3,Rifle0,30)==0,TEXT("reserve rounds move between squad mates of the same kind of weapon without creating any"));
+    }
     int32 Enemy=INDEX_NONE;for(const auto& P:Store->GetUnits())if(P.Value.Team==1&&P.Value.IsAlive()&&Bodies.Contains(P.Key)){Enemy=P.Key;break;}
     const int32 Ally=AS?AS->Members[0]:INDEX_NONE;
     const float EnemyBefore=Enemy!=INDEX_NONE?Store->Find(Enemy)->HP:0.f,AllyBefore=Ally!=INDEX_NONE?Store->Find(Ally)->HP:0.f;

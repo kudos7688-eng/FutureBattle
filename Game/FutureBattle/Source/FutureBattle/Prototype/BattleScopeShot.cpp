@@ -37,9 +37,9 @@ void UBattleLeaderRuntime::RunScopeShot()
  const bool Scope=Step==2||Step==3;
  const auto* T=GetDefault<UBattleTuning>();
  const float WantSpread[]={1.f,T->AimSpreadScale,T->Scope4SpreadScale,T->Scope8SpreadScale,1.f};
- const float Spread=BattleTactics::SpreadDegrees(*A->GetState(),GetWorld()->GetTimeSeconds(),A->AimSpreadScale());
+ const float Spread=BattleTactics::SpreadDegrees(*A->GetState(),GetWorld()->GetTimeSeconds(),A->PlayerSpreadScale());
  UE_LOG(LogFutureBattle,Display,TEXT("SCOPE_SHOT view=%s spread_scale=%.2f spread_degrees=%.3f"),Names[Step],A->AimSpreadScale(),Spread);
- const bool Ok=FMath::IsNearlyEqual(A->AimSpreadScale(),WantSpread[Step],.001f)&&FMath::IsNearlyEqual(A->AimMagnification(),Want[Step],.01f)&&A->ScopeView()==Scope&&bool(A->GetMesh()->bOwnerNoSee)==(Scope&&A->UsesThirdPersonView());
+ const bool Ok=FMath::IsNearlyEqual(A->AimSpreadScale(),WantSpread[Step],.001f)&&FMath::IsNearlyEqual(A->PlayerSpreadScale(),FMath::Clamp(T->PlayerSpreadScale,.05f,1.f)*WantSpread[Step],.001f)&&FMath::IsNearlyEqual(A->AimMagnification(),Want[Step],.01f)&&A->ScopeView()==Scope&&bool(A->GetMesh()->bOwnerNoSee)==(Scope&&A->UsesThirdPersonView());
  if(!Ok)++SmokeFailures;
  UE_LOG(LogFutureBattle,Display,TEXT("SCOPE_SHOT view=%s magnification=%.2f fov=%.1f camera=%s scope=%d body_hidden=%d ok=%d"),Names[Step],A->AimMagnification(),View.FOV,*Offset.ToCompactString(),A->ScopeView(),bool(A->GetMesh()->bOwnerNoSee),Ok);
  FString Prefix;FParse::Value(FCommandLine::Get(),TEXT("BattleWideScreens="),Prefix);

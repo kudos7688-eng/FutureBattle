@@ -25,7 +25,7 @@
 | 遮蔽の動作（接近・のぞき撃ち） | @UBattleLeaderRuntime::RequestCoverAction 、 @UBattleLeaderRuntime::StepCoverAction | 切替は @BattleTactics::CoverActionsEnabled ほか |
 | 姿勢（立ち・しゃがみ） | @UBattleLeaderRuntime::SetStance 、 @UBattleLeaderRuntime::UpdateAIStance | 数値は @BattleStance::EyeOffset ほか |
 | 制圧（撃たれて動けない） | @UBattleLeaderRuntime::AddSuppression 、 @UBattleLeaderRuntime::IsPinned | 調整値は @BattleSuppression::Tuning |
-| 射撃の散らばり | @BattleTactics::SpreadDegrees 、 @BattleTactics::ShotDirection | 照準の遅れは @UBattleState::UpdateAim |
+| 射撃の散らばり | @BattleTactics::SpreadDegrees 、 @BattleTactics::ShotDirection | 照準の遅れは @UBattleState::UpdateAim 。プレイヤーの直接操作だけの倍率は @ABattleUnit::PlayerSpreadScale |
 | 部隊の戦術（撤退・集合・援護・迂回） | @UBattleSquadTactics::Step 、 @UBattleSquadTactics::Evaluate 、 @UBattleSquadTactics::Apply | 撤退 @UBattleSquadTactics::RetreatGoal 、援護 @UBattleSquadTactics::AcceptSupport 、迂回 @UBattleSquadTactics::TryFlank |
 | 陣営全体の判断（援護・迂回の割り振り） | @UBattleTeamAI::Step | |
 | 試合の進行・勝敗・制限時間 | @UBattleMatch::InitializeMatch 、 @UBattleMatch::Update 、 @UBattleMatch::Finish | 拠点の占領は @UBattleMatch::UpdateObjectives |
@@ -34,7 +34,7 @@
 | エリア戦の収入・拠点 HP | @UBattleMatch::UpdateArea （収入の支払いもここ）、 @UBattleMatch::DamageBase | 調整値は @BattleTactics::AreaIncome 。状態は `BattleAreaState.h` |
 | エリア戦の AI 戦略（どこを攻めるか） | @UBattleMatch::UpdateEnemyOrders → @UBattleMatch::UpdateTeamOrders 、 @UBattleMatch::AreaStrategyTarget 、 @UBattleMatch::AreaIntent | 調整値は @BattleTactics::AreaStrategy 。前線は @UBattleMatch::AreaFronts |
 | 偵察・情報（見えていない区域の扱い） | @UBattleMatch::UpdateScoutReports 、 @UBattleMatch::AreaIntelView | 偵察兵の配置は @UBattleMatch::AreaScoutPost 。昇格は @UBattleLeaderRuntime::PromoteScout |
-| 補給（弾薬） | @UBattleMatch::Resupply 、 @BattleTactics::Supply | 往復時間の記録（評価用）は @UBattleSquadTactics::SupplyTripEnd |
+| 補給（弾薬） | @UBattleMatch::Resupply 、 @BattleTactics::Supply | 往復時間の記録（評価用）は @UBattleSquadTactics::SupplyTripEnd 。エリア戦の本拠地・味方の拠点での弾の補充は @UBattleMatch::UpdateArea 、直接操作中に部下から弾を受け取るのは @ABattleController::UpdatePlayerAmmo |
 | 補充（倒れた部下の補充） | @UBattleLeaderRuntime::ReplaceFollower 、 @UBattleState::ReplaceDeadFollower | |
 | 戦果点 | @UBattleMatch::UpdateWarScore 、 @UBattleMatch::WarScoreBreakdown | 調整値は @BattleWarScore::Tuning |
 | 支援砲撃（旧アリーナ） | @UBattleMatch::RequestSupport 、 @UBattleMatch::UpdateSupport | 混成には未接続 |

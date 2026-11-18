@@ -313,7 +313,7 @@ void ABattleHUD::DrawHUD()
 		/* Suppression trial: the shown spread includes the same multiplier the shot uses. */ const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); const float SuppressedScale = Leaders->SuppressionSpreadScale(S->UnitID, GetWorld()->GetTimeSeconds());
 		if (SuppressedScale > 1.f) CoverText = FString::Printf(TEXT("制圧 %d%%  %s"), FMath::RoundToInt(Leaders->Suppression(S->UnitID, GetWorld()->GetTimeSeconds()) * 100.f), *CoverText);
 		const float Steady = S->AimStableSince < 0. ? 0.f : static_cast<float>(GetWorld()->GetTimeSeconds() - S->AimStableSince);
-		Label(FString::Printf(TEXT("照準 %.1f秒   拡散 %.2f度   %s"), FMath::Min(Steady, GetDefault<UBattleTuning>()->AimSettleSeconds), BattleTactics::SpreadDegrees(*S, GetWorld()->GetTimeSeconds(), SuppressedScale), *CoverText), W - 566, 148, White, .85f);
+		Label(FString::Printf(TEXT("照準 %.1f秒   拡散 %.2f度   %s"), FMath::Min(Steady, GetDefault<UBattleTuning>()->AimSettleSeconds), BattleTactics::SpreadDegrees(*S, GetWorld()->GetTimeSeconds(), SuppressedScale * Focus->PlayerSpreadScale()), *CoverText), W - 566, 148, White, .85f);
 		DrawRect(Ink, W - 576, 170, 560, 27);
 		Label(S->DecisionReason.IsEmpty() ? TEXT("方針：命令に従う") : FString::Printf(TEXT("方針：%s ／ 位置 %d"), *BattleUIText::Ja(S->DecisionReason), S->CoverSlot), W - 566, 177, Mint, .85f);
 		DrawRect(Ink, W - 576, 199, 560, 27);

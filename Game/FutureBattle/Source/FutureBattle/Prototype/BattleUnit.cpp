@@ -141,6 +141,12 @@ float ABattleUnit::AimSpreadScale() const
 	return FMath::Clamp(AimLevel == 1 ? Tuning->AimSpreadScale : AimLevel == 2 ? Tuning->Scope4SpreadScale : Tuning->Scope8SpreadScale, .05f, 1.f);
 }
 
+float ABattleUnit::PlayerSpreadScale() const
+{
+	// Only a soldier a human really controls: test shots flagged as player shots on AI soldiers keep the common cone.
+	return IsPlayerControlled() ? FMath::Clamp(GetDefault<UBattleTuning>()->PlayerSpreadScale, .05f, 1.f) * AimSpreadScale() : 1.f;
+}
+
 void ABattleUnit::UpdateAimView()
 {
 	if (!IsPlayerControlled()) AimLevel = 0;
@@ -247,7 +253,7 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 	if (Metrics->bRecording) ++Metrics->Shots;
 	LastVisualShot = GetWorld()->GetTimeSeconds();
 	// Apply exactly the same bounded cone to AI and directly controlled shots.
-	Direction = BattleTactics::ShotDirection(*GetState(), Direction, GetWorld()->GetTimeSeconds(), bPlayerShot ? AimSpreadScale() : 1.f);
+	Direction = BattleTactics::ShotDirection(*GetState(), Direction, GetWorld()->GetTimeSeconds(), bPlayerShot ? PlayerSpreadScale() : 1.f);
 	FHitResult Hit;
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleShot), false, this);
 	const FVector End = Start + Direction.GetSafeNormal() * BattleRanges::Reach(GetState()->Weapon);

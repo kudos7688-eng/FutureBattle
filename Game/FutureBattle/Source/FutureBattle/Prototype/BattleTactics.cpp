@@ -34,6 +34,9 @@ const BattleTactics::FSupplyTuning& BattleTactics::Supply()
   FParse::Value(Line,TEXT("BattleSupplyReturnLiving="),S.ReturnLiving);FParse::Value(Line,TEXT("BattleSupplyResumeLiving="),S.ResumeLiving);
   FParse::Value(Line,TEXT("BattleSupplyAwayRatio="),S.AwayRatio);FParse::Value(Line,TEXT("BattleSupplyHeal="),S.HealPerSecond);
   FParse::Value(Line,TEXT("BattleSupplyResumeHealth="),S.ResumeHealthRatio);
+  // Ammunition at owned points: UBattleTuning::bAreaPointSupply, -BattleAreaPointSupply=0/1 overrides (default OFF).
+  int32 PointAmmo=T->bAreaPointSupply?1:0;FParse::Value(Line,TEXT("BattleAreaPointSupply="),PointAmmo);S.bPointAmmo=PointAmmo!=0;
+  S.PointRadius=FMath::IsFinite(T->AreaPointSupplyRadius)?FMath::Clamp(T->AreaPointSupplyRadius,100.f,10000.f):2500.f;
   S.ReturnLiving=FMath::Clamp(S.ReturnLiving,1,9);S.ResumeLiving=FMath::Clamp(S.ResumeLiving,1,10);
   S.AwayRatio=FMath::IsFinite(S.AwayRatio)?FMath::Clamp(S.AwayRatio,.05f,1.f):1.f;
   S.HealPerSecond=FMath::IsFinite(S.HealPerSecond)?FMath::Clamp(S.HealPerSecond,0.f,1000.f):0.f;

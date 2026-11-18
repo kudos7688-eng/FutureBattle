@@ -61,6 +61,8 @@ public:
 	bool ScopeView() const { return ScopeAlpha > .5f; }
 	// Spread multiplier for the player's own shot (UBattleTuning): below 1 once the view has settled on an aim level.
 	float AimSpreadScale() const;
+	// The whole multiplier of a possessed soldier's shot: UBattleTuning::PlayerSpreadScale x AimSpreadScale(). 1 for everybody else.
+	float PlayerSpreadScale() const;
 	bool bRevealed = true;
 	// Stance shown by the body (set by UBattleLeaderRuntime::SetStance); with -BattleStanceAnim=1 a crouch plays Lyra's clip.
 	uint8 VisualStance = 0;

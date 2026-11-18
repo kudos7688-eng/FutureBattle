@@ -884,7 +884,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  const float SuppressedScale=SuppressionSpreadScale(ID,Now);
  if(SuppressedScale>1.25f)SightExperiment.Cover(TEXT("suppressed_shots"));
  // The player's own shot is tighter while he aims or looks through the scope (never the AI's shots).
- const float AimScale=bPlayerShot&&Actor(ID)?Actor(ID)->AimSpreadScale():1.f;
+ /* tighter for the player at all times (PlayerSpreadScale), more so while aiming */ const float AimScale=bPlayerShot&&Actor(ID)?Actor(ID)->PlayerSpreadScale():1.f;
  Direction=BattleTactics::ShotDirection(*U,Direction,Now,SuppressedScale*BattleStance::SpreadScale(StanceOf(ID))*AimScale);
  auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon);
  // Concealment (hedges) hides soldiers from sight but does not stop bullets.

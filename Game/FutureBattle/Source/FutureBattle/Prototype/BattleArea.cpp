@@ -248,12 +248,22 @@ void UBattleMatch::UpdateArea(float Dt)
  TArray<int32> Squads;Store->GetSquads().GetKeys(Squads);Squads.Sort();
  for(int32 SID:Squads)
  {
-  const auto* S=Store->FindSquad(SID);if(!AtHome.Contains(SID)){Area.AmmoTimers.Remove(SID);continue;}
+  const auto* S=Store->FindSquad(SID);const bool bHome=AtHome.Contains(SID);
+  // Trial -BattleAreaPointSupply=1: the same ammunition refill at a point the squad's team owns (calm: not contested, not being captured).
+  bool bPoint=false;
+  if(!bHome&&BattleTactics::Supply().bPointAmmo&&S->CommandStatus==EBattleCommandStatus::Active)
+  {
+   const FVector Leader=R->Position(S->LeaderUnitID);const float Radius=BattleTactics::Supply().PointRadius;
+   for(const auto& Point:Objectives)if(Point.Owner==S->Team&&!Point.bContested&&Point.CapturingTeam==INDEX_NONE&&FVector::Dist2D(Leader,Point.Position)<=Radius){bPoint=true;break;}
+  }
+  if(!bHome&&!bPoint){Area.AmmoTimers.Remove(SID);continue;}
   float& AmmoTime=Area.AmmoTimers.FindOrAdd(SID);AmmoTime+=Step;
   if(AmmoTime>=10)
   {
-   AmmoTime=0;for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive()){Store->AddReserve(ID,GetDefault<UBattleTuning>()->ReserveAmmo);Store->RefillLauncher(ID);}
+   AmmoTime=0;int32 Rounds=0;for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive()){Rounds+=Store->AddReserve(ID,GetDefault<UBattleTuning>()->ReserveAmmo);Store->RefillLauncher(ID);}
+   if(bPoint&&Rounds>0)UE_LOG(LogFutureBattle,Display,TEXT("AREA_POINT_SUPPLY time=%.0f squad=%d team=%d rounds=%d"),Elapsed,SID,S->Team,Rounds);
   }
+  if(!bHome)continue; // a point gives ammunition only: no healing, no replacements
   // Trial -BattleSupplyHeal>0: living members (leader included) recover HP at home, up to their own maximum.
   if(const float Heal=BattleTactics::Supply().HealPerSecond;Heal>0.f)
    for(int32 ID:S->Members)Store->Heal(ID,Heal*Step);
