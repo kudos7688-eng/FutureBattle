@@ -490,6 +490,8 @@ public:
 	// Trial -BattleDefendEngage=1 (default 0; the trial team with -BattleAreaTrialTeam): a squad on a Defend order may target any enemy
 	// within its weapon range, not only those within DefenseRadius of the defended place (it still does not leave its position).
 	UPROPERTY(Config, EditAnywhere) bool bDefendEngage = false;
+	// Trial -BattleSymmetricStart=1 (default 0): point-symmetric starting rows, allocation slots and flank route for both teams (see BattleTactics.h).
+	UPROPERTY(Config, EditAnywhere) bool bSymmetricStart = false;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRange = 30000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRangeProfile = 40000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutStillSpeed = 30.f;

@@ -134,7 +134,9 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
  {
   TArray<int32> IDs;
   const int32 Side=Swap?1-Team:Team;
-  const FVector Center=bMixedFastMatch?FVector((Team?1:-1)*(BattleFieldLayout::HomeDistance(GetWorld())-(BattleFieldLayout::IsSightField(GetWorld())?1000:500)),0,100):BattleFieldLayout::IsSightField(GetWorld())?BattleFieldLayout::WideSpawnFor(GetWorld(),Side,Group):bWideField?FVector((Team?1:-1)*(9000+(Group%5)*400),(Group/5-2)*2800,100):Phase3->bEnabled?Phase3->SpawnCenter(Team,Group):FVector(Team ? 1800:-1800, (Group-(Count/20-1)*.5)*800, 95);
+  // Symmetric start trial: the east side's rows are the west side's rotated 180 degrees (north-south reversed), on the area maps.
+  const FVector RowSign(1.,bArea&&Side&&BattleTactics::SymmetricStart()?-1.:1.,1.);
+  const FVector Center=RowSign*(bMixedFastMatch?FVector((Team?1:-1)*(BattleFieldLayout::HomeDistance(GetWorld())-(BattleFieldLayout::IsSightField(GetWorld())?1000:500)),0,100):BattleFieldLayout::IsSightField(GetWorld())?BattleFieldLayout::WideSpawnFor(GetWorld(),Side,Group):bWideField?FVector((Team?1:-1)*(9000+(Group%5)*400),(Group/5-2)*2800,100):Phase3->bEnabled?Phase3->SpawnCenter(Team,Group):FVector(Team ? 1800:-1800, (Group-(Count/20-1)*.5)*800, 95));
   ABattleUnit* Leader=nullptr;
   for(int32 Slot=0;Slot<10;++Slot)
   {

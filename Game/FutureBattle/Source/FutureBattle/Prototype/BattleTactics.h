@@ -83,6 +83,13 @@ namespace BattleTactics
  bool AreaComposition(int32 Team);
  // Squad groups trial -BattleAreaGroups=0/1 (UBattleTuning::bAreaGroups, default 0; the trial team with -BattleAreaTrialTeam): the AI forms one attack group per team (BattleGroups.cpp).
  bool AreaGroups(int32 Team);
+ // Trial -BattleSymmetricStart=0/1 (UBattleTuning::bSymmetricStart, default 0): a point-symmetric start for both teams. The maps and
+ // objectives are 180-degree symmetric, but (1) the east side's squads started in the same north-south rows as the west side's (now
+ // rotated), (2) the allocation slot came from the squad ID, so team 1 (IDs 26-50) got another pattern than team 0 (now the squad's
+ // number within its own team), (3) both teams' home-assault flank route went north (now the east side goes south).
+ bool SymmetricStart();
+ // The number that picks a squad's allocation slot: the squad ID, or with the symmetric start its number within its own team.
+ int32 AllocationIndex(const class UWorld* World,int32 SquadID,int32 Team);
  // Trial -BattleDefendEngage=0/1 (UBattleTuning::bDefendEngage, default 0; the trial team with -BattleAreaTrialTeam): defending squads target enemies within weapon range, not only within DefenseRadius of the defended place.
  bool DefendEngage(int32 Team);
 	// SpreadScale: extra multiplier from runtime effects (suppression trial); 1 = none.

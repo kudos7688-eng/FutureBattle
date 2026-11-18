@@ -328,7 +328,7 @@ int32 UBattleMatch::AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) c
  }
  // Intel trial (3): the enemy home was observed (own sight or a scout report) with few enemies around it: more squads assault it.
  if(AreaIntelOn(Team)){const auto& V=AreaIntelView(Team);if(V.bHomeCovered&&V.HomeEnemies<=GetDefault<UBattleTuning>()->AreaIntelHomeWeak)Share=FMath::Max(Share,double(GetDefault<UBattleTuning>()->AreaIntelHomeShare));}
- const double Slot=FMath::Frac(double(SquadID)*0.6180339887498949);
+ const double Slot=FMath::Frac(double(BattleTactics::AllocationIndex(GetWorld(),SquadID,Team))*0.6180339887498949);
  bBase=Slot>=1.0-Share;
  const double Pos=Slot/FMath::Max(1e-6,1.0-Share)*Sum;
  double Acc=0;
@@ -402,7 +402,9 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
    if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
    {
     const FVector Own=AreaHome(Team),Axis=AreaHome(1-Team)-Own,P=Runtime->Position(Pair.Value.LeaderUnitID);
-    const FVector Way=BattleFieldLayout::Expand(FVector(0,((TeamIntent.bFlankSameSide||(Pair.Key/10)%2)?1:-1)*TeamIntent.FlankOffset*12000.f,0),BattleFieldLayout::IsExpanded(GetWorld()));
+    // Symmetric start trial: the east side's route is the west side's rotated 180 degrees (south instead of north).
+    const float SideSign=BattleTactics::SymmetricStart()&&Own.X>0?-1.f:1.f;
+    const FVector Way=BattleFieldLayout::Expand(FVector(0,SideSign*((TeamIntent.bFlankSameSide||(Pair.Key/10)%2)?1:-1)*TeamIntent.FlankOffset*12000.f,0),BattleFieldLayout::IsExpanded(GetWorld()));
     const double T=FVector::DotProduct(P-Own,Axis)/FMath::Max(1.0,Axis.SizeSquared2D());
     if(T<0.45&&FVector::Dist2D(P,Way)>2500)Center=Way;
    }

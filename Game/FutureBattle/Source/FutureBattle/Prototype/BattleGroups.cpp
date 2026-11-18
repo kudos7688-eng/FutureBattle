@@ -48,6 +48,21 @@ bool BattleTactics::DefendEngage(int32 Team)
  return bOn&&(Trial<0||Trial==Team);
 }
 
+bool BattleTactics::SymmetricStart()
+{
+ static const bool bOn=[]{int32 V=GetDefault<UBattleTuning>()->bSymmetricStart?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleSymmetricStart="),V);return V!=0;}();
+ return bOn;
+}
+
+int32 BattleTactics::AllocationIndex(const UWorld* World,int32 SquadID,int32 Team)
+{
+ if(!SymmetricStart()||!World)return SquadID;
+ // The squad's number within its team (squads of the team with a lower or equal ID; IDs are never reused, so it never changes).
+ int32 Index=0;
+ for(const auto& P:World->GetSubsystem<UBattleState>()->GetSquads())Index+=P.Value.Team==Team&&P.Key<=SquadID;
+ return FMath::Max(1,Index);
+}
+
 bool BattleTactics::AreaGroups(int32 Team)
 {
  static const bool bOn=[]{int32 V=GetDefault<UBattleTuning>()->bAreaGroups?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaGroups="),V);return V!=0;}();
