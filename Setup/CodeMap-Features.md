@@ -57,11 +57,15 @@ BattleAntiTank | 対戦車弾の爆発（UBattleLeaderRuntime の一部）
 BattleArea | エリア戦の本体：初期化、収入、拠点、AI の雇用と意図（UBattleMatch の一部）
 BattleAreaIntel | エリア戦の情報：観測に基づく区域の見え方と脅威（UBattleMatch の一部）
 BattleAreaState | エリア戦の保存される状態（拠点 HP、収入、観測）
+BattleArmourAI | 兵種を扱うAI：効かない車両を狙わない、対戦車兵の弾の温存、知っている敵車両、戦車の待機位置、兵種の構成（UBattleLeaderRuntime と UBattleMatch の一部）
+BattleArtillery | 迫撃砲と自走砲：間接射撃の目標選び、着弾、陣地の位置（UBattleLeaderRuntime と UBattleMatch の一部）
 BattleContactMovement | 停止中の味方との接触・到着地点の重なりの解消（UBattleLeaderRuntime の一部）
+BattleExo | 外骨格兵：盾の回復、副武器（肩の対戦車火器）、専用の部隊判断と軍の割り当て
 BattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド
 BattleCover | 遮蔽の場所の一覧と予約
 BattleCoverAction | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部）
 BattleFieldLayout | マップごとの定義（広さ、拠点、試合時間）を1つの表にまとめたもの
+BattleGroups | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部）
 BattleFieldReplay | 広域試験の記録と再生（UBattleSquadTrial の一部）
 BattleFieldTurn | 広域試験 T2b（UBattleSquadTrial の一部）
 BattleFollowerBones | 霧で隠れた部下のボーン表示の切替
@@ -111,6 +115,7 @@ BattleVATData | VAT のデータ型
 BattleVATDisplay | 遠距離の兵を VAT で描く表示
 BattleVATMaterial | VAT 用マテリアルの作成（エディタ用。宣言は BattleVATBake.h）
 BattleVehicle | 車両の設定、操舵、砲塔、車両どうしの視認（UBattleLeaderRuntime の一部）
+BattleVehicleTactics | 車両の戦術：車両への脅威の見積もり、装甲車の行き先（UBattleMatch の一部）
 BattleVehicleNavMesh | 車両専用のナビメッシュの型（歩兵用と分けるため）
 BattleViewVisibility | 視点ごとの描画の切替（T5 試験用）
 BattleWarScore | 戦果点（UBattleMatch の一部）
