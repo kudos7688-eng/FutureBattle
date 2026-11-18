@@ -86,7 +86,7 @@ void UBattleLeaderRuntime::RunMapStats()
  {
   FVector Center,Extent;It->GetActorBounds(true,Center,Extent);const double Top=Center.Z+Extent.Z;
   // Floors, ground markers and the boundary walls are not obstacles.
-  if(Top<10||Extent.X>20000||Extent.Y>20000)continue;
+  if(Top<10||Extent.X>20000||Extent.Y>20000||BattleTerrain::IsGround(*It))continue;
   FMapZone& Z=Zones[ZoneOf(Center)];
   if(It->ActorHasTag(TEXT("BattleConcealment")))++Z.Conceal;else if(Top<150)++Z.Low;else if(Top<350)++Z.Mid;else ++Z.Tall;
  }

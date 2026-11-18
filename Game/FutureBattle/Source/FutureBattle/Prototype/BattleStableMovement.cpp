@@ -20,13 +20,34 @@ void SweepSoldier(UWorld* World,const UPrimitiveComponent* Ignore,FVector From,F
  {
   // Match UE movement's handling of initial contacts when moving away from them.
   if(Candidate.bStartPenetrating && FVector::DotProduct(Delta,Candidate.ImpactNormal)>0) continue;
+  // Map with heights: the ground pieces are followed by height (TerrainStep), they do not stop a soldier.
+  if(BattleTerrain::IsGround(Candidate)) continue;
   Result=Candidate;break;
  }
 }
 }
 
+bool UBattleLeaderRuntime::TerrainStep(const FVector& From,FVector& Step) const
+{
+ const auto& Heights=BattleFieldLayout::Of(GetWorld()).Heights;
+ if(Heights.IsEmpty())return true;
+ double Here=0,There=0,Slope=0;
+ Heights.Ground(From.X,From.Y,From.Z-100,Here,nullptr,1.e9);
+ if(!Heights.Ground(From.X+Step.X,From.Y+Step.Y,Here,There,&Slope))return false;
+ Step.Z=There+BattleTerrain::CentreAbove(Slope)-From.Z;return true;
+}
+
 bool UBattleLeaderRuntime::ClearMovementSegment(FVector A,FVector B) const
 {
+ if(const auto& Heights=BattleFieldLayout::Of(GetWorld()).Heights;!Heights.IsEmpty())
+ {
+  // Map with heights: each end at capsule height above the level it is on (the ends arrive as feet or as capsule centres);
+  // the ground pieces themselves do not block.
+  for(FVector* P:{&A,&B}){double Level=0,Slope=0;Heights.Ground(P->X,P->Y,P->Z-50,Level,&Slope,1.e9);P->Z=Level+BattleTerrain::CentreAbove(Slope)+8;}
+  TArray<FHitResult> Hits;GetWorld()->SweepMultiByObjectType(Hits,A,B,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,75));
+  for(const auto& Hit:Hits)if(Hit.bBlockingHit&&!BattleTerrain::IsGround(Hit))return false;
+  return true;
+ }
  // This runtime currently uses the flat wide field. Query static geometry, not nearby soldiers.
  A.Z=FMath::Max(A.Z,100.); B.Z=FMath::Max(B.Z,100.);
  return !GetWorld()->SweepTestByObjectType(A,B,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,75));
@@ -331,7 +352,9 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  else
  {
   FHitResult Hit; const FVector Before=B.Capsule->GetComponentLocation();
-  const FVector Step=Direction*FMath::Min(Speed*Dt*Scale,float(FVector::Dist2D(Way,Pos)));
+  FVector Step=Direction*FMath::Min(Speed*Dt*Scale,float(FVector::Dist2D(Way,Pos)));
+  // Map with heights: the step follows the ground; a place that cannot be stepped onto stops it.
+  if(!TerrainStep(Before,Step))Step=FVector::ZeroVector;
   // MoveComponent ignores its owner. Mass capsules share DisplayHost, so explicitly
   // sweep against sibling capsules too, excluding only the moving component.
   auto SweepMove=[&](FVector Delta,FHitResult& Result)
@@ -354,7 +377,8 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   SweepMove(Step,Hit);
   if(Hit.bBlockingHit)
   {
-   const FVector Slide=FVector::VectorPlaneProject(Step*(1-Hit.Time),Hit.Normal);
+   FVector Slide=FVector::VectorPlaneProject(Step*(1-Hit.Time),Hit.Normal);
+   if(!TerrainStep(B.Capsule->GetComponentLocation(),Slide))Slide=FVector::ZeroVector;
    if(!Slide.IsNearlyZero()) {FHitResult SlideHit;SweepMove(Slide,SlideHit);}
   }
   auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity); F.Position=B.Capsule->GetComponentLocation();

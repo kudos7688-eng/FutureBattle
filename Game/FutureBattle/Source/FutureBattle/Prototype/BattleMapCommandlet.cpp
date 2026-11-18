@@ -36,12 +36,15 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 {
 #if WITH_EDITOR
 	FString Wide;FParse::Value(*Params,TEXT("WideField="),Wide);
-	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D") && Wide!=TEXT("E") && Wide!=TEXT("F")) return 6;
+	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D") && Wide!=TEXT("E") && Wide!=TEXT("F") && Wide!=TEXT("G")) return 6;
 	const bool Expanded=Wide==TEXT("D");
 	// Map E (2026-11-14): 1000m x 700m, urban centre with five objectives, open flanks with hedges and low walls.
 	// Map F (2026-11-18): the size, homes and city objectives of E; a city of districts with an avenue tanks can use, two flank
 	// objectives, two depots and a road network (centre, north and south routes with connectors). See ROADMAP 2026-11-18.
-	const bool UrbanF=Wide==TEXT("F");
+	// Map G (2026-11-18): map F with height differences (hills, two-storey houses that can be entered) and more cover beside the
+	// roads. It shares the layout of F (BattleMapLayoutF.inl) and adds BattleMapLayoutG.inl; the heights are in BattleTerrain.h.
+	const bool UrbanG=Wide==TEXT("G");
+	const bool UrbanF=Wide==TEXT("F")||UrbanG;
 	const bool Urban=Wide==TEXT("E")||UrbanF;
 	const FString WideName=TEXT("Lvl_BattleWide_")+Wide;
 	const bool Sight=!Wide.IsEmpty();
@@ -127,6 +130,34 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 			// standing one sees and fires over it); cars, wrecks and boulders are 140cm (a standing soldier still fires over them).
 			if(Height>=100. && Height<=125.)Height=130.; else if(Height>=150. && Height<=165.)Height=140.;
 			Pair(Label,FVector(X,Y,Height*.5),FVector(SizeX,SizeY,Height),bConcealment);++Objects;
+		};
+		// Map G: a box that stands on Z0, and a ramp over the rectangle X0..X1, Y0..Y1 that rises from the ground to Top along X
+		// (bAlongX) or Y, towards the larger coordinate when bRisesPositive. Each with its 180-degree partner (east half given).
+		// bTerrain marks ground to walk on (BattleTerrain.h).
+		auto Piece=[&](const TCHAR* Label,double X,double Y,double Z0,double SizeX,double SizeY,double Height,bool bTerrain=false)
+		{
+			for(int32 Sign:{-1,1})
+			{
+				AStaticMeshActor* Actor=Box(Label,FVector(X*Sign,Y*Sign,Z0+Height*.5),FVector(SizeX,SizeY,Height),WallMat);
+				if(bTerrain)Actor->Tags.Add(BattleTerrain::Tag());
+			}
+			++Objects;
+		};
+		auto Ramp=[&](const TCHAR* Label,double X0,double X1,double Y0,double Y1,bool bAlongX,bool bRisesPositive,double Top)
+		{
+			const double Run=bAlongX?X1-X0:Y1-Y0,Width=bAlongX?Y1-Y0:X1-X0,Angle=FMath::Atan2(Top,Run),Length=FMath::Sqrt(Run*Run+Top*Top);
+			// Thick enough that the underside is below the ground along the whole ramp: nothing to walk under.
+			const double Thick=Top/FMath::Cos(Angle)+30;
+			for(int32 Sign:{-1,1})
+			{
+				const double Dir=(bRisesPositive?1:-1)*Sign,CosA=FMath::Cos(Angle),SinA=FMath::Sin(Angle);
+				const FVector Normal=bAlongX?FVector(-Dir*SinA,0,CosA):FVector(0,-Dir*SinA,CosA);
+				const FVector Mid(Sign*(X0+X1)*.5,Sign*(Y0+Y1)*.5,Top*.5);
+				AStaticMeshActor* Actor=Box(Label,Mid-Normal*Thick*.5,FVector(Length,Width,Thick),WallMat);
+				Actor->SetActorRotation(FRotator(FMath::RadiansToDegrees(Angle),bAlongX?(Dir>0?0.:180.):(Dir>0?90.:-90.),0));
+				Actor->Tags.Add(BattleTerrain::Tag());
+			}
+			++Objects;
 		};
 		if(UrbanF)
 		{
@@ -349,11 +380,37 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 	UActorFactory::CreateBrushForVolumeActor(Bounds, Builder);
 	Bounds->GetBrushComponent()->BuildSimpleBrushCollision();
 	Bounds->PostEditChange();
+	// Map G: the ground volume stays below the tops of the obstacles (see above), so every hill, staircase and upper floor gets a
+	// volume of its own that reaches just over it. Cover that stands on those is 130cm high, above the volume.
+	TArray<ANavMeshBoundsVolume*> TerrainVolumes;
+	if(UrbanG)
+	{
+		auto Extra=[&](double X0,double X1,double Y0,double Y1,double Z0,double Z1)
+		{
+			for(int32 Sign:{-1,1})
+			{
+				ANavMeshBoundsVolume* Volume=World->SpawnActor<ANavMeshBoundsVolume>(FVector(Sign*(X0+X1)*.5,Sign*(Y0+Y1)*.5,(Z0+Z1)*.5),FRotator::ZeroRotator);
+				Volume->SetActorLabel(TEXT("TerrainNavigationBounds"));
+				UCubeBuilder* Cube=NewObject<UCubeBuilder>(Volume);Cube->X=X1-X0;Cube->Y=Y1-Y0;Cube->Z=Z1-Z0;
+				UActorFactory::CreateBrushForVolumeActor(Volume,Cube);Volume->GetBrushComponent()->BuildSimpleBrushCollision();Volume->PostEditChange();
+				TerrainVolumes.Add(Volume);
+			}
+		};
+		for(const BattleTerrain::FHouse& B:BattleTerrain::HousesG())
+		{
+			const BattleTerrain::FHouseShape S(B);const double F=BattleTerrain::FloorZ;
+			Extra(S.W0-20,S.E0+20,S.S0y-20,S.N0y+20,F-30,F+120);
+			Extra(S.S0-30,S.S1+30,S.SY-10,S.N0y+10,100,F+120);
+		}
+		for(const BattleTerrain::FHill& H:BattleTerrain::HillsG())
+			Extra(H.X-H.W*.5-H.Run-50,H.X+H.W*.5+H.Run+50,H.Y-H.H*.5-H.Run-50,H.Y+H.H*.5+H.Run+50,100,H.Top+120);
+	}
 	if (UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
 	{
 		// Commandlets do not tick the editor loading loop that normally releases this lock.
 		Nav->RemoveNavigationBuildLock(ENavigationBuildLock::AsyncLoadLock, UNavigationSystemV1::ELockRemovalRebuildAction::NoRebuild);
 		Nav->OnNavigationBoundsUpdated(Bounds);
+		for(ANavMeshBoundsVolume* Volume:TerrainVolumes)Nav->OnNavigationBoundsUpdated(Volume);
 		Nav->Tick(.1f);
 		Nav->Build();
 		FNavLocation TestPoint;
@@ -385,7 +442,35 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 				Failures+=!Reach;OpenLines+=!Blocked;
 				UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_PAIR from=%d to=%d reachable=%d length_cm=%.1f blocked=%d"),I,J,Reach,Reach?Path->GetPathLength():-1,Blocked);
 			}
-			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=%s rotation=180"),Failures,OpenLines,UrbanF?TEXT("districts-v1"):TEXT("urban-v2"));
+			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=%s rotation=180"),Failures,OpenLines,UrbanG?TEXT("heights-v1"):UrbanF?TEXT("districts-v1"):TEXT("urban-v2"));
+			if(UrbanG)
+			{
+				// The geometry agrees with the height table (a trace down at nine points of every patch; points under a crate or a
+				// wall that stands on the patch are skipped), and every upper floor and hilltop is reached from the west home.
+				const BattleTerrain::FHeights Heights=BattleTerrain::MakeG(FVector2D(50000,35000));
+				int32 Samples=0,Mismatched=0,Unreached=0,Goals=0;
+				for(const auto& P:Heights.Patches) for(double U:{.25,.5,.75}) for(double V:{.25,.5,.75})
+				{
+					const double X=FMath::Lerp(P.Min.X,P.Max.X,U),Y=FMath::Lerp(P.Min.Y,P.Max.Y,V),Z=P.HeightAt(X,Y);FHitResult Hit;
+					const bool bHit=World->LineTraceSingleByObjectType(Hit,FVector(X,Y,Z+110),FVector(X,Y,Z-110),FCollisionObjectQueryParams(ECC_WorldStatic));
+					if(bHit&&!BattleTerrain::IsGround(Hit))continue;
+					++Samples;
+					if(!bHit||FMath::Abs(Hit.ImpactPoint.Z-Z)>3){if(++Mismatched<=8)UE_LOG(LogTemp,Warning,TEXT("TERRAIN_MAP_MISMATCH x=%.0f y=%.0f table=%.1f traced=%.1f hit=%d"),X,Y,Z,bHit?Hit.ImpactPoint.Z:-1.,bHit);}
+				}
+				auto Reach=[&](const FVector& Goal)
+				{
+					++Goals;auto* Path=Nav->FindPathToLocationSynchronously(World,FVector(-42000,0,0),Goal);
+					const bool bOK=Path&&Path->IsValid()&&!Path->IsPartial()&&Path->PathPoints.Num()>1&&FMath::Abs(Path->PathPoints.Last().Z-Goal.Z)<40;
+					if(!bOK){++Unreached;UE_LOG(LogTemp,Warning,TEXT("TERRAIN_MAP_UNREACHED x=%.0f y=%.0f z=%.0f end_z=%.1f"),Goal.X,Goal.Y,Goal.Z,Path&&Path->PathPoints.Num()?Path->PathPoints.Last().Z:-1.);}
+				};
+				for(int32 Sign:{-1,1})
+				{
+					for(const BattleTerrain::FHouse& B:BattleTerrain::HousesG()){const BattleTerrain::FHouseShape S(B);Reach(FVector(Sign*B.X,Sign*(S.S0y+S.SY)*.5+60,BattleTerrain::FloorZ));}
+					for(const BattleTerrain::FHill& H:BattleTerrain::HillsG())Reach(FVector(Sign*H.X,Sign*H.Y,H.Top));
+				}
+				UE_LOG(LogTemp,Display,TEXT("TERRAIN_MAP_RESULT failures=%d samples=%d mismatched=%d goals=%d unreached=%d volumes=%d"),Mismatched+Unreached,Samples,Mismatched,Goals,Unreached,TerrainVolumes.Num());
+				if(Mismatched+Unreached) return 8;
+			}
 			if(Failures) return 7;
 		}
 		else if(Sight)

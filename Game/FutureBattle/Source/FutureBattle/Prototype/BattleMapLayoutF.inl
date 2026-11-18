@@ -10,7 +10,7 @@
 // south inner block, warehouses in the south outer blocks, houses in the north outer blocks.
 {
 	// Share of 25m cells that get a piece of scattered cover (map E: 0.6 on the flanks, 0.45 on the approaches).
-	const double FlankChance=.35,ApproachChance=.35;
+	const double FlankChance=UrbanG?.45:.35,ApproachChance=UrbanG?.45:.35;
 	auto OnRoad=[](double X,double Y,double Margin)
 	{
 		const double AX=FMath::Abs(X),AY=FMath::Abs(Y);
@@ -26,7 +26,8 @@
 		switch(((Kind%4)+4)%4)
 		{
 		case 0:
-			Emit(TEXT("House"),CX-W*.2,CY,W*.42,H-600,600);
+			// Map G: a two-storey house that can be entered stands here instead (BattleMapLayoutG.inl).
+			if(!UrbanG)Emit(TEXT("House"),CX-W*.2,CY,W*.42,H-600,600);
 			for(int32 I=0;I<3;++I)
 			{
 				Emit(TEXT("YardWall"),CX+W*.12+I*550,CY-H*.5+250,300,60,120);
@@ -155,7 +156,8 @@
 	{
 		const double X=15000,Y=-25000;
 		for(int32 Side:{-1,1}){Emit(TEXT("HamletWall"),X,Y+Side*500,400,60,120);Emit(TEXT("HamletCrate"),X+Side*700,Y+Side*700,140,140,130);Emit(TEXT("HamletCrate"),X+Side*700,Y-Side*700,140,140,130);}
-		Emit(TEXT("FarmHouse"),X+1900,Y-1700,1100,800,450);Emit(TEXT("FarmWall"),X+2800,Y-900,70,700,130);
+		if(!UrbanG)Emit(TEXT("FarmHouse"),X+1900,Y-1700,1100,800,450);
+		Emit(TEXT("FarmWall"),X+2800,Y-900,70,700,130);
 		Emit(TEXT("Shed"),X+1600,Y+1500,500,400,280);Emit(TEXT("StoneWall"),X-600,Y+1500,600,70,130);
 	}
 	// East depot (the west one is its rotation): stacked crates and a container around the objective, between the city and the home.
@@ -174,7 +176,7 @@
 		{
 			const double X=GX+Cell*(.25+.5*Random.FRand()),Y=GY+Cell*(.25+.5*Random.FRand());
 			const double Roll=Random.FRand(),Kind=Random.FRand();const bool bAlongX=Random.FRand()<.5;
-			if(Roll>Chance||OnRoad(X,Y,700))continue;
+			if(Roll>Chance||OnRoad(X,Y,700)||(UrbanG&&BattleTerrain::NearHillG(X,Y,1300)))continue;
 			if(Kind<.25)Emit(TEXT("StoneWall"),X,Y,bAlongX?600:70,bAlongX?70:600,130);
 			else if(Kind<.45)Emit(TEXT("Hedge"),X,Y,bAlongX?900:100,bAlongX?100:900,220,true);
 			else if(Kind<.60){Emit(TEXT("Tree"),X,Y,70,70,700);Emit(TEXT("Tree"),X+(bAlongX?450:0),Y+(bAlongX?0:450),70,70,700);}
@@ -206,5 +208,7 @@
 	// Home yards and lookouts as on map E.
 	Emit(TEXT("HomeYardWall"),36000,3000,100,2400,130);Emit(TEXT("HomeYardWall"),36000,-3000,100,2400,130);
 	Emit(TEXT("LookoutSandbags"),300,16900,400,90,120);Emit(TEXT("LookoutSandbags"),-300,-16900,400,90,120);
-	UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_LAYOUT objects=%d (x2 by rotation) layout=districts-v1"),Objects);
+	if(UrbanG)
+#include "BattleMapLayoutG.inl"
+	UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_LAYOUT objects=%d (x2 by rotation) layout=%s"),Objects,UrbanG?TEXT("heights-v1"):TEXT("districts-v1"));
 }

@@ -26,6 +26,8 @@ void UBattleCover::BuildSlots(bool bForce)
 	auto Cell = [](const FVector& P) { return FIntPoint(FMath::FloorToInt(P.X / 100.), FMath::FloorToInt(P.Y / 100.)); };
 	for (TActorIterator<AStaticMeshActor> It(GetWorld()); It; ++It)
 	{
+		// Ground pieces of a map with heights (ramps, hilltops, upper floors) are no cover.
+		if (BattleTerrain::IsGround(*It)) continue;
 		FVector Center, Extent; It->GetActorBounds(true, Center, Extent);
 		// Map E: city buildings are up to 52m x 30m, so they count as cover and get slots nearer their corners as well.
 		const bool Urban=BattleFieldLayout::IsUrban(GetWorld());

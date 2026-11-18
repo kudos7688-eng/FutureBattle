@@ -366,4 +366,7 @@ private:
  void ReassignOccupiedArrival(int32 ID,double Now);
  bool ResolveStoppedContact(int32 ID,FVector Way,double Now,FVector& Direction,float& Scale);
  bool ClearMovementSegment(FVector A,FVector B) const;
+ // Map with heights (BattleTerrain.h): gives the step of a hand-moved soldier the height change of the ground; false = the
+ // ground there cannot be stepped onto from here. Flat maps: true, the step is untouched.
+ bool TerrainStep(const FVector& From,FVector& Step) const;
 };

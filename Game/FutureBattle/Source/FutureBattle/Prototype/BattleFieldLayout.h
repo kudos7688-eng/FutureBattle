@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Engine/World.h"
+#include "BattleTerrain.h"
 
 namespace BattleFieldLayout
 {
@@ -52,6 +53,8 @@ namespace BattleFieldLayout
 		float CameraMaxHeight=4500;
 		// Largest |X|, |Y| a saved position may have.
 		FVector2D SaveLimit=FVector2D(32000,22000);
+		// Ground heights (BattleTerrain.h): hills, stairs and upper floors. Empty on the flat maps A-F.
+		BattleTerrain::FHeights Heights;
 	};
 	inline const TArray<FMapDef>& Maps()
 	{
@@ -108,6 +111,13 @@ namespace BattleFieldLayout
 					Edge(S*38000,25000,S*38000,0,ERouteLane::Connector);Edge(S*38000,0,S*38000,-25000,ERouteLane::Connector);
 					Edge(S*33000,S*20000,S*38000,S*25000,ERouteLane::Connector);Edge(S*33000,S*20000,S*25000,S*15000,ERouteLane::Connector);Edge(S*33000,S*20000,S*25000,S*25000,ERouteLane::Connector);
 				}
+				T.Add(D);
+			}
+			// G (2026-11-18): map F with height differences: hills on the flanks and the approaches, two-storey houses that can be
+			// entered (stairs, an upper floor with windows), more cover beside the roads. Objectives, roads and rules as on F.
+			{
+				FMapDef D=T.Last();D.Name=TEXT("Lvl_BattleWide_G");
+				D.Heights=BattleTerrain::MakeG(D.HalfExtent);
 				T.Add(D);
 			}
 			return T;

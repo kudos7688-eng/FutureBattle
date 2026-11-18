@@ -154,6 +154,7 @@ void UBattleMatch::Update(float DeltaSeconds)
 	if (Phase != EBattleMatchPhase::Combat || !Mode || Mode->bCombatPaused || !FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) return;
 	Elapsed += DeltaSeconds;
 	UpdatePlayerRoutes(DeltaSeconds);
+	UpdateTerrainTest(DeltaSeconds);
 	if (CanDelegateAllies())
 	{
 		DelegationClock += DeltaSeconds;

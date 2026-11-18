@@ -185,6 +185,8 @@ public:
 	// The next junction for a squad with a chosen route (RouteStep without one).
 	FVector PlayerRouteStep(int32 SquadID, const FVector& From, const FVector& Goal);
 	void UpdatePlayerRoutes(float DeltaSeconds);
+	// Self-test of the height differences (BattleTerrainTest.cpp, -BattleHeightTest).
+	void UpdateTerrainTest(float DeltaSeconds);
 	void CheckTimeLimit();
 	void UpdateEnemyOrders();
 	void UpdateTeamOrders(int32 Team, bool bDelegatedOnly = false);
