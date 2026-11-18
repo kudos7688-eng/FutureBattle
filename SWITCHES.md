@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 201 種類。
+計 202 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -79,6 +79,7 @@
 | `-BattleFlankSmoke` | Param | off | BattleLeaderRuntime.cpp:223 |  |
 | `-BattleFlankTeams` | Value | 3 | BattleSquadTactics.cpp:24 |  |
 | `-BattleFlankTrial` | Param | off | BattleSightExperiment.cpp:36, BattleSquadFlank.cpp:115, BattleSquadRetreat.cpp:18 |  |
+| `-BattleFollowerAnimSkip` | Value | 0 | BattleVATDisplay.cpp:45 |  |
 | `-BattleHeavyCost` | other |  | BattleState.cpp:453 |  |
 | `-BattleHeavyDamage` | other |  | BattleState.cpp:453 |  |
 | `-BattleHeavyHealth` | other |  | BattleState.cpp:452 |  |
@@ -122,7 +123,7 @@
 | `-BattleOpponentPreset` | other |  | BattleBenchmark.cpp:48 |  |
 | `-BattlePerceptionGrid` | Value | GetDefault<UBattleTuning>()->bPerceptionGrid?1:0 | BattleLeaderRuntime.cpp:100 |  |
 | `-BattlePerceptionSlices` | Value | 4 | BattleBenchmark.cpp:56 |  |
-| `-BattlePhase3` | Value |  | BattlePhase3.cpp:45, BattleUnit.cpp:32, BattleVATDisplay.cpp:324 ほか1 |  |
+| `-BattlePhase3` | Value |  | BattlePhase3.cpp:45, BattleUnit.cpp:32, BattleVATDisplay.cpp:360 ほか1 |  |
 | `-BattlePreset` | other |  | BattleBenchmark.cpp:48 |  |
 | `-BattleProfileCSV` | Param | off | BattleBenchmark.cpp:133, BattleBenchmark.cpp:144, BattleBenchmark.cpp:145 |  |
 | `-BattleRangeAware` | Value | 1 | BattleLeaderRuntime.cpp:76 |  |

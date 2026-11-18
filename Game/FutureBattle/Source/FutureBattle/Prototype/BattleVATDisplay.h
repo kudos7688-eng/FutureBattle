@@ -18,8 +18,10 @@ public:
  bool VATFar=false;
  bool HasNativeTick=false;
  uint64 NativeTickFrame=0;
+ float PendingDt=0;
  virtual void TickComponent(float Dt,ELevelTick TickType,FActorComponentTickFunction* TickFunction) override;
  virtual bool ShouldCreateRenderState() const override;
+ void EndAnimSkip();
 };
 struct FBattleVATEntry
 {
@@ -49,6 +51,7 @@ public:
  void RemoveUnit(int32 ID);
  void ResetBodies();
  void Advance(int32 ID,float Dt);
+ int64 StatAnimTicks=0,StatAnimEvals=0;
  virtual void Tick(float Dt) override;
  virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 private:

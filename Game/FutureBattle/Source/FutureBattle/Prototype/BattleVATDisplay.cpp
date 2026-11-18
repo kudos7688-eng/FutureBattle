@@ -37,6 +37,14 @@ static bool FarLight()
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleVATFarLight="),V);return V!=0;}();
  return bOn;
 }
+// Trial -BattleFollowerAnimSkip=1 (2026-11-18, default 0, display only): a near follower's skeleton is evaluated every
+// frame only at mesh LOD 0; every 2nd frame at LOD 1, every 3rd beyond, every 4th while not on screen (staggered by unit).
+// The engine's own update-rate optimisation shares one rate per owning actor, and all followers share one host actor.
+static bool AnimSkip()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleFollowerAnimSkip="),V);return V!=0;}();
+ return bOn;
+}
 void UBattleVATSkeletalMeshComponent::TickComponent(float Dt,ELevelTick Type,FActorComponentTickFunction* Function)
 {
 #if WITH_EDITOR
@@ -44,7 +52,28 @@ void UBattleVATSkeletalMeshComponent::TickComponent(float Dt,ELevelTick Type,FAc
 #endif
  if(VATFar && Presenter.IsValid())
  {if(ShouldTickPose() && ShouldTickAnimation())Presenter->Advance(UnitID,Dt);}
- else {Super::TickComponent(Dt,Type,Function);HasNativeTick|=PoseTickedThisFrame();NativeTickFrame=GFrameCounter;}
+ else
+ {
+  if(AnimSkip())
+  {
+   // Evaluate every Nth frame and hold the pose in between (no interpolation: that would keep the per-frame work).
+   // The clip time still advances by the full elapsed time on the frames that do evaluate.
+   const int32 LOD=GetPredictedLODLevel();
+   const int32 N=!bRecentlyRendered?4:LOD<=0?1:LOD==1?2:3;
+   const bool bUpdate=N<=1 || (GFrameCounter+uint64(UnitID))%uint64(N)==0;
+   if(ShouldTickPose())PendingDt+=Dt;
+   EnableExternalTickRateControl(true);EnableExternalEvaluationRateLimiting(N>1);EnableExternalInterpolation(false);
+   EnableExternalUpdate(bUpdate);SetExternalDeltaTime(PendingDt);
+   if(bUpdate)PendingDt=0;
+   if(Presenter.IsValid()){++Presenter->StatAnimTicks;Presenter->StatAnimEvals+=bUpdate;}
+  }
+  Super::TickComponent(Dt,Type,Function);HasNativeTick|=PoseTickedThisFrame();NativeTickFrame=GFrameCounter;
+ }
+}
+// Hands the body back to the engine's own per-frame update (far display, death, or a pose that must be current now).
+void UBattleVATSkeletalMeshComponent::EndAnimSkip()
+{
+ EnableExternalTickRateControl(false);EnableExternalEvaluationRateLimiting(false);EnableExternalUpdate(false);PendingDt=0;
 }
 // One advance per frame for a far body whose own tick is off. A body that enters or leaves the far display earlier in
 // the frame than the presenter's tick (Phase 3 selects from the game mode tick) still gets exactly one advance.
@@ -150,7 +179,7 @@ bool ABattleVATDisplay::IsFar(int32 ID)const{const auto* E=Entries.Find(ID);retu
 void ABattleVATDisplay::SetVisible(int32 ID,bool Visible){if(auto* E=Entries.Find(ID))E->Visible=Visible;}
 void ABattleVATDisplay::ChangePose(int32 ID,int32 Pose)
 {
- if(auto* E=Entries.Find(ID)){if(!E->Far)E->Body->HandleExistingParallelEvaluationTask(true,true);E->Pose=Pose;if(E->Far){E->Time=0;E->Rate=1;}}
+ if(auto* E=Entries.Find(ID)){if(!E->Far){E->Body->HandleExistingParallelEvaluationTask(true,true);CastChecked<UBattleVATSkeletalMeshComponent>(E->Body.Get())->PendingDt=0;}E->Pose=Pose;if(E->Far){E->Time=0;E->Rate=1;}}
  if(const auto* I=AuditIndices.Find(ID)){AuditBodies[*I]->HandleExistingParallelEvaluationTask(true,true);AuditBodies[*I]->PlayAnimation(Data->Clips[Pose].Clip,true);}
 }
 void ABattleVATDisplay::Freeze(int32 ID)
@@ -182,6 +211,13 @@ void ABattleVATDisplay::Enter(FBattleVATEntry& E)
  M->HandleExistingParallelEvaluationTask(true,true);
  auto* Node=M->GetSingleNodeInstance();if(!Node || !BattleFollowerBones::Eligible(M))return;
  E.Time=Node->GetCurrentTime();E.Rate=Node->GetPlayRate()*M->GlobalAnimRateScale;
+ // Frame skipping (trial): the clip time is behind by the frames not yet evaluated. Catch up, then let the far display
+ // advance it every frame again.
+ if(auto* Skip=CastChecked<UBattleVATSkeletalMeshComponent>(M);Skip->IsUsingExternalTickRateControl())
+ {
+  if(Skip->PendingDt>0 && M->IsComponentTickEnabled())FAnimationRuntime::AdvanceTime(true,(E.Rate*Data->Clips[E.Pose].Clip->RateScale)*Skip->PendingDt,E.Time,Data->Clips[E.Pose].Length);
+  Skip->EndAnimSkip();
+ }
  E.BodyRelative=M->GetRelativeTransform();E.WeaponRelative=W->GetRelativeTransform();
  E.Dead=!M->IsComponentTickEnabled();
  W->UnregisterComponent();W->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
@@ -332,7 +368,7 @@ void ABattleVATDisplay::Tick(float Dt)
 }
 void ABattleVATDisplay::EndPlay(const EEndPlayReason::Type Reason)
 {
- UE_LOG(LogTemp,Display,TEXT("VAT_DISPLAY_STATS frames=%lld far_mean=%.6f visible_far_mean=%.6f presenter_ms=%.6f"),StatFrames,StatFrames?double(StatFar)/StatFrames:0.,StatFrames?double(StatShown)/StatFrames:0.,StatFrames?StatMS/StatFrames:0.);
+ UE_LOG(LogTemp,Display,TEXT("VAT_DISPLAY_STATS frames=%lld far_mean=%.6f visible_far_mean=%.6f presenter_ms=%.6f anim_skip=%d anim_ticks=%lld anim_evals=%lld"),StatFrames,StatFrames?double(StatFar)/StatFrames:0.,StatFrames?double(StatShown)/StatFrames:0.,StatFrames?StatMS/StatFrames:0.,int32(AnimSkip()),StatAnimTicks,StatAnimEvals);
  Super::EndPlay(Reason);
  if(RaySettingsChanged)
  {
