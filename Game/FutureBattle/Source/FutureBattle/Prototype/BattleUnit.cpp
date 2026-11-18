@@ -1,5 +1,6 @@
 #include "BattleUnit.h"
 #include "BattleLeaderRuntime.h"
+#include "BattleMuzzleFlash.h"
 #include "Animation/AnimSequence.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 #include "BattleGameMode.h"
@@ -18,11 +19,14 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
+#include "Engine/StaticMesh.h"
+#include "StaticMeshResources.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Misc/CommandLine.h"
+#include "Misc/App.h"
 
 ABattleUnit::ABattleUnit(const FObjectInitializer& Init) : Super(Init)
 {
@@ -109,14 +113,50 @@ FVector ABattleUnit::EyePosition() const { return GetActorLocation() + FVector(0
 void ABattleUnit::CalcCamera(float DeltaTime, FMinimalViewInfo& View)
 {
 	Super::CalcCamera(DeltaTime, View);
-	if (!bThirdPersonView || !IsPlayerControlled()) return;
+	if (!IsPlayerControlled()) return;
+	// Aim / scope: the magnification narrows the field of view.
+	if (AimZoom > 1.001f) View.FOV = FMath::RadiansToDegrees(2.f * FMath::Atan(FMath::Tan(FMath::DegreesToRadians(View.FOV * .5f)) / AimZoom));
+	if (!bThirdPersonView) return;
 	View.Rotation = GetControlRotation();
 	const FVector Pivot = FirstPersonCamera->GetComponentLocation();
-	const FVector Desired = Pivot + View.Rotation.RotateVector(FVector(-350, 65, 45));
+	// Aiming pulls the rear camera in over the shoulder; a scope looks from the eye itself.
+	const float Aim = FMath::Clamp((AimZoom - 1.f) / .6f, 0.f, 1.f);
+	const FVector Offset = FMath::Lerp(FVector(-350, 65, 45), FVector(-150, 55, 28), Aim) * (1.f - ScopeAlpha);
+	View.Location = Pivot;
+	if (Offset.IsNearlyZero()) return;
+	const FVector Desired = Pivot + View.Rotation.RotateVector(Offset);
 	FHitResult Hit;
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleThirdPersonCamera), false, this);
 	GetWorld()->SweepSingleByChannel(Hit, Pivot, Desired, FQuat::Identity, ECC_Camera, FCollisionShape::MakeSphere(12.f), Query);
 	View.Location = Hit.bBlockingHit ? Hit.Location : Desired;
+}
+
+static const float Magnification[] = { 1.f, 1.6f, 4.f, 8.f };
+
+float ABattleUnit::AimSpreadScale() const
+{
+	// Only once the view has (nearly) reached the level: a tap of the button gives nothing.
+	if (!AimLevel || !IsPlayerControlled() || AimZoom < Magnification[AimLevel] * .9f) return 1.f;
+	const UBattleTuning* Tuning = GetDefault<UBattleTuning>();
+	return FMath::Clamp(AimLevel == 1 ? Tuning->AimSpreadScale : AimLevel == 2 ? Tuning->Scope4SpreadScale : Tuning->Scope8SpreadScale, .05f, 1.f);
+}
+
+void ABattleUnit::UpdateAimView()
+{
+	if (!IsPlayerControlled()) AimLevel = 0;
+	// The view follows the real clock, not the game speed.
+	const float Dt = FMath::Min(float(FApp::GetDeltaTime()), .1f);
+	AimZoom = FMath::FInterpTo(AimZoom, Magnification[AimLevel], Dt, 14.f);
+	if (FMath::IsNearlyEqual(AimZoom, Magnification[AimLevel], .005f)) AimZoom = Magnification[AimLevel];
+	ScopeAlpha = FMath::FInterpConstantTo(ScopeAlpha, AimLevel >= 2 ? 1.f : 0.f, Dt, 8.f);
+	// Through the scope the soldier's own body and rifle would fill the view.
+	const bool Hide = ScopeView();
+	if (Hide != bScopeHidden)
+	{
+		bScopeHidden = Hide;
+		Rifle->SetOwnerNoSee(Hide);
+		if (bThirdPersonView) GetMesh()->SetOwnerNoSee(Hide);
+	}
 }
 
 void ABattleUnit::GetPlayerShot(FVector& Start, FVector& Direction)
@@ -144,6 +184,7 @@ void ABattleUnit::Tick(float DeltaTime)
 {
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattleUnitTick);
 	Super::Tick(DeltaTime);
+	if (AimLevel || AimZoom > 1.f || ScopeAlpha > 0.f) UpdateAimView();
 	if (const auto* State = GetState())
 	{
 		if (State->IsAlive()) GetWorld()->GetSubsystem<UBattleState>()->UpdateAim(UnitID, GetWorld()->GetTimeSeconds(), GetVelocity().Size2D(), GetBaseAimRotation().Vector(), GetCharacterMovement()->IsMovingOnGround());
@@ -206,7 +247,7 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 	if (Metrics->bRecording) ++Metrics->Shots;
 	LastVisualShot = GetWorld()->GetTimeSeconds();
 	// Apply exactly the same bounded cone to AI and directly controlled shots.
-	Direction = BattleTactics::ShotDirection(*GetState(), Direction, GetWorld()->GetTimeSeconds());
+	Direction = BattleTactics::ShotDirection(*GetState(), Direction, GetWorld()->GetTimeSeconds(), bPlayerShot ? AimSpreadScale() : 1.f);
 	FHitResult Hit;
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleShot), false, this);
 	const FVector End = Start + Direction.GetSafeNormal() * BattleRanges::Reach(GetState()->Weapon);
@@ -222,8 +263,9 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 	}
 	if (bRevealed)
 	{
-		const FVector TracerStart = bPlayerShot ? Start + Direction.GetSafeNormal() * 70.f + FirstPersonCamera->GetRightVector() * 12.f - FVector(0, 0, 10) : Start;
-		DrawDebugLine(GetWorld(), TracerStart, Hit.bBlockingHit ? Hit.ImpactPoint : End,
+		const FVector From = TracerStart(Rifle, Start, Direction);
+		if (!(bPlayerShot && ScopeView())) BattleMuzzleFlash::Show(GetWorld(), From, Direction);
+		DrawDebugLine(GetWorld(), From, Hit.bBlockingHit ? Hit.ImpactPoint : End,
 			GetState()->Team == 0 ? FColor(100, 245, 230) : FColor(255, 120, 65), false, .09f, 0, 2.f);
 		if (Hit.bBlockingHit) DrawDebugPoint(GetWorld(), Hit.ImpactPoint, 10, FColor::Yellow, false, .12f);
 	}
@@ -248,6 +290,38 @@ void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Pare
 		const FTransform Grip = Gun.GetRelativeTransform(Hand);
 		Model->SetRelativeLocationAndRotation(Grip.GetLocation(),Grip.GetRotation());
 	}
+}
+
+FVector ABattleUnit::TracerStart(const UStaticMeshComponent* Model, const FVector& Eye, const FVector& Direction)
+{
+	// No visible model (far soldiers, hidden bodies, legacy visuals): about where a shouldered rifle ends.
+	const FVector Forward = Direction.GetSafeNormal();
+	const FVector Guess = Eye + Forward * 70.f + FVector::CrossProduct(FVector::UpVector, Forward).GetSafeNormal() * 12.f - FVector(0, 0, 10);
+	const UStaticMesh* Mesh = Model && Model->IsVisible() ? Model->GetStaticMesh() : nullptr;
+	if (!Mesh) return Guess;
+	// The weapon models point along their local -Y (see MountWeapon). The muzzle is the middle of the
+	// vertices at that end; without vertex data on the CPU, the middle of that face of the bounding box.
+	static TMap<TWeakObjectPtr<const UStaticMesh>, FVector> Muzzles;
+	const FVector* Local = Muzzles.Find(Mesh);
+	if (!Local)
+	{
+		const FBox Box = Mesh->GetBoundingBox();
+		FVector Tip(Box.GetCenter().X, Box.Min.Y, Box.GetCenter().Z), Sum = FVector::ZeroVector; int32 Count = 0;
+		if (const FStaticMeshRenderData* Data = Mesh->GetRenderData(); Data && Data->LODResources.Num())
+		{
+			const FPositionVertexBuffer& Positions = Data->LODResources[0].VertexBuffers.PositionVertexBuffer;
+			if (Positions.GetAllowCPUAccess() && Positions.GetVertexData())
+				for (uint32 I = 0; I < Positions.GetNumVertices(); ++I)
+					if (const FVector P(Positions.VertexPosition(I)); P.Y <= Box.Min.Y + 1.) { Sum += P; ++Count; }
+		}
+		if (Count) Tip = FVector(Sum.X / Count, Box.Min.Y, Sum.Z / Count);
+		Local = &Muzzles.Add(Mesh, Tip);
+	}
+	const FVector Muzzle = Model->GetComponentTransform().TransformPosition(*Local);
+	// Only a muzzle ahead of the eye and near it: a body whose pose has not been evaluated (never rendered yet)
+	// or is not a firing pose holds the model elsewhere, and a tracer must not start at the feet.
+	const FVector Off = Muzzle - Eye;
+	return FVector::DotProduct(Off, Forward.GetSafeNormal2D()) >= 30. && Off.SizeSquared() <= FMath::Square(140.) ? Muzzle : Guess;
 }
 
 void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
@@ -297,6 +371,7 @@ void ABattleUnit::SetDirectControl(bool bDirect)
 	bUseControllerRotationYaw = bDirect;
 	GetCharacterMovement()->bOrientRotationToMovement = !bDirect;
 	const bool bFirstPerson = bDirect && !bThirdPersonView;
+	AimLevel = 0; AimZoom = 1.f; ScopeAlpha = 0.f; bScopeHidden = false; Rifle->SetOwnerNoSee(false);
 	GetMesh()->SetOwnerNoSee(bFirstPerson);
 	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
 	TeamLabel->SetVisibility(false);

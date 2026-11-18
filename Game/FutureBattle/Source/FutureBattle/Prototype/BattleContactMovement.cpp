@@ -1,4 +1,5 @@
 #include "BattleLeaderRuntime.h"
+#include "BattleTerrain.h"
 #include "Components/CapsuleComponent.h"
 #include "NavigationSystem.h"
 
@@ -64,7 +65,7 @@ void UBattleLeaderRuntime::ReassignOccupiedArrival(int32 ID,double Now)
    FCollisionQueryParams Q(SCENE_QUERY_STAT(ArrivalAccess));Q.AddIgnoredComponent(B.Actor.IsValid()?B.Actor->GetCapsuleComponent():B.Capsule.Get());
    FVector End=Projected.Location;End.Z=Position(ID).Z;TArray<FHitResult> Hits;
    ++P.ContactProbes;GetWorld()->SweepMultiByChannel(Hits,Position(ID),End,FQuat::Identity,ECC_Pawn,FCollisionShape::MakeCapsule(36,75),Q);
-   bool Blocked=false;for(const auto& Hit:Hits)if(Hit.bBlockingHit && !(Hit.bStartPenetrating && FVector::DotProduct(End-Position(ID),Hit.ImpactNormal)>0)){Blocked=true;break;}
+   bool Blocked=false;for(const auto& Hit:Hits)if(Hit.bBlockingHit && !(Hit.bStartPenetrating && FVector::DotProduct(End-Position(ID),Hit.ImpactNormal)>0) && !BattleTerrain::IsGround(Hit)){Blocked=true;break;}
    if(Blocked)continue;
   }
   P.ArrivalGoals[ID]=Projected.Location;++P.ArrivalReassignments;
@@ -100,7 +101,7 @@ bool UBattleLeaderRuntime::ResolveStoppedContact(int32 ID,FVector Way,double Now
   ++Plans.FindChecked(GetWorld()->GetSubsystem<UBattleState>()->Find(ID)->SquadID).ContactProbes;
   FCollisionQueryParams Q(SCENE_QUERY_STAT(StoppedContact));Q.AddIgnoredComponent(Ignore);
   TArray<FHitResult> Hits;GetWorld()->SweepMultiByChannel(Hits,A,C,FQuat::Identity,ECC_Pawn,FCollisionShape::MakeCapsule(36,75),Q);
-  for(const auto& Hit:Hits)if(Hit.bBlockingHit && !(Hit.bStartPenetrating && FVector::DotProduct(C-A,Hit.ImpactNormal)>0))return false;
+  for(const auto& Hit:Hits)if(Hit.bBlockingHit && !(Hit.bStartPenetrating && FVector::DotProduct(C-A,Hit.ImpactNormal)>0) && !BattleTerrain::IsGround(Hit))return false;
   return true;
  };
  // Near the goal, a gap between standing soldiers can be shorter than going

@@ -40,7 +40,7 @@ ABattleCameraPawn::ABattleCameraPawn()
 void ABattleCameraPawn::Zoom(float Delta)
 {
 	const FVector Current = Camera->GetRelativeLocation();
-	const float Height = FMath::Clamp(Current.Z + Delta, 1000.f, BattleFieldLayout::IsUrban(GetWorld()) ? 160000.f : BattleFieldLayout::IsExpanded(GetWorld()) ? 130000.f : BattleFieldLayout::IsSightField(GetWorld()) ? 100000.f : BattleFieldLayout::IsLarge(GetWorld()) ? 30000.f : 4500.f);
+	const float Height = FMath::Clamp(Current.Z + Delta, 1000.f, BattleFieldLayout::Of(GetWorld()).CameraMaxHeight);
 	Camera->SetRelativeLocation(FVector(-Height * .65f, 0, Height));
 }
 
@@ -115,6 +115,8 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("Reload"), EKeys::R, &ABattleController::Reload);
 	Button(TEXT("ToggleCombat"), EKeys::P, &ABattleController::ToggleCombat);
 	Button(TEXT("GameSpeed"), EKeys::Period, &ABattleController::CycleGameSpeed);
+	// Z: V and F belong to the squad groups (select, form) on the suppression branch.
+	Button(TEXT("Route"), EKeys::Z, &ABattleController::CycleRouteSelected);
 	Button(TEXT("Restart"), EKeys::F5, &ABattleController::RestartBattle);
 	Button(TEXT("ZoomIn"), EKeys::MouseScrollUp, &ABattleController::ZoomIn);
 	Button(TEXT("ZoomOut"), EKeys::MouseScrollDown, &ABattleController::ZoomOut);
@@ -130,7 +132,7 @@ void ABattleController::Forward(const FInputActionValue& Value)
 	if (bTactical && TacticalPawn)
 	{
 		FVector P = TacticalPawn->GetActorLocation() + FVector(Axis * 1800 * GetWorld()->GetDeltaSeconds(), 0, 0);
-		const float Limit=BattleFieldLayout::IsUrban(GetWorld())?49500.f:BattleFieldLayout::IsExpanded(GetWorld())?39500.f:BattleFieldLayout::IsSightField(GetWorld())?29500.f:BattleFieldLayout::IsLarge(GetWorld())?11500.f:3500.f;
+		const float Limit=float(BattleFieldLayout::Of(GetWorld()).HalfExtent.X)-500.f;
 		P.X = FMath::Clamp(P.X,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
 	else if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
@@ -143,15 +145,17 @@ void ABattleController::Right(const FInputActionValue& Value)
 	if (bTactical && TacticalPawn)
 	{
 		FVector P = TacticalPawn->GetActorLocation() + FVector(0, Axis * 1800 * GetWorld()->GetDeltaSeconds(), 0);
-		const float Limit=BattleFieldLayout::IsUrban(GetWorld())?34500.f:BattleFieldLayout::IsExpanded(GetWorld())?29500.f:BattleFieldLayout::IsSightField(GetWorld())?19500.f:BattleFieldLayout::IsLarge(GetWorld())?8500.f:2500.f;
+		const float Limit=float(BattleFieldLayout::Of(GetWorld()).HalfExtent.Y)-500.f;
 		P.Y = FMath::Clamp(P.Y,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
 	else if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
 		if (Unit->IsAlive()){if(FMath::Abs(Axis)>.01f)GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->CancelCoverAction(Unit->GetUnitID());Unit->AddMovementInput(FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::Y), Axis);}
 }
 
-void ABattleController::LookYaw(const FInputActionValue& Value) { if (!bTactical) AddYawInput(Value.Get<float>() * .8f); }
-void ABattleController::LookPitch(const FInputActionValue& Value) { if (!bTactical) AddPitchInput(-Value.Get<float>() * .8f); }
+// Aim / scope: the look speed drops with the magnification, so the picture moves at the same speed on screen.
+float ABattleController::ViewMagnification() const { const auto* Unit = Cast<ABattleUnit>(GetPawn()); return Unit ? FMath::Max(1.f, Unit->AimMagnification()) : 1.f; }
+void ABattleController::LookYaw(const FInputActionValue& Value) { if (!bTactical) AddYawInput(Value.Get<float>() * .8f / ViewMagnification()); }
+void ABattleController::LookPitch(const FInputActionValue& Value) { if (!bTactical) AddPitchInput(-Value.Get<float>() * .8f / ViewMagnification()); }
 
 void ABattleController::CycleTrainingSelected()
 {
@@ -402,6 +406,12 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
  }
  // Any keyboard key or mouse button switches the HUD hints back to keyboard and mouse.
  if(Params.Key.IsMouseButton()||!Params.Key.IsAnalog()) bGamepadActive=false;
+ // Direct control: hold the right button to aim; while aiming, the wheel steps the view through
+ // aim (x1.6) -> scope x4 -> scope x8. Display only; the level is kept for the next time.
+ if(!bTactical && Params.Key==EKeys::RightMouseButton && (Params.Event==IE_Pressed||Params.Event==IE_Released))
+ { bAimHeld=Params.Event==IE_Pressed; return true; }
+ if(!bTactical && bAimHeld && (Params.Key==EKeys::MouseScrollUp||Params.Key==EKeys::MouseScrollDown))
+ { if(Params.Event==IE_Pressed) AimLevel=FMath::Clamp(AimLevel+(Params.Key==EKeys::MouseScrollUp?1:-1),1,3); return true; }
  // Stances (map E): X cycles stand -> crouch -> prone for the directly controlled soldier.
  if(!bTactical && Params.Key==EKeys::X && Params.Event==IE_Pressed)
   if(auto* U=Cast<ABattleUnit>(GetPawn()))
@@ -454,8 +464,14 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
   {
    FVector2D BarPointer; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH);
    if(GetPointerPosition(BarPointer))
-    if(const int32 Button=FBattleCommandBarLayout::Make(FVector2D(ViewW,ViewH)).ButtonAt(BarPointer);Button!=INDEX_NONE)
+   {
+    const auto Bar=FBattleCommandBarLayout::Make(FVector2D(ViewW,ViewH));
+    if(const int32 Button=Bar.ButtonAt(BarPointer);Button!=INDEX_NONE)
     {bMinimapPress=true;bTriggerHeld=false;PressCommandButton(Button);return true;}
+    // The route button stands apart from the bar and exists only on maps with a road network.
+    if(Bar.RouteAt(BarPointer)&&GetWorld()->GetSubsystem<UBattleMatch>()->RoutesOn())
+    {bMinimapPress=true;bTriggerHeld=false;CycleRouteSelected();return true;}
+   }
   }
   // Notification log: a left click on a row moves the tactical camera to that event (its release is swallowed like the minimap's).
   if(Params.Key==EKeys::LeftMouseButton && Params.Event==IE_Pressed)
@@ -594,7 +610,13 @@ void ABattleController::IssueOrderAt(FVector Target, EBattleOrder Order)
  if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled())
  {
   int32 Accepted=0,Rejected=0;
-  for(ABattleUnit* U:Selected) if(LeaderSelectable(U)) { if(L->IssueOrder(U->GetState()->SquadID,Order,Target)) ++Accepted; else ++Rejected; }
+  auto* Routes=GetWorld()->GetSubsystem<UBattleMatch>();
+  for(ABattleUnit* U:Selected) if(LeaderSelectable(U))
+  {
+   // A squad with a chosen route walks a distant order over it (BattlePlayerRoutes.cpp); -1 = not routed, the ordinary order.
+   const int32 SID=U->GetState()->SquadID,Routed=Routes->PlayerRouteOrder(SID,Order,Target);
+   if(Routed<0?L->IssueOrder(SID,Order,Target):Routed>0) ++Accepted; else ++Rejected;
+  }
   if(L->IsWideField()) ShowNotice(FString::Printf(TEXT("ORDER: %d SQUADS / %d REJECTED"),Accepted,Rejected));
   return;
  }
@@ -652,7 +674,7 @@ void ABattleController::IssueOrderAt(FVector Target, EBattleOrder Order)
 void ABattleController::HoldSelected()
 {
  if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled())
- { for(ABattleUnit* U:Selected) if(LeaderSelectable(U)) L->IssueOrder(U->GetState()->SquadID,EBattleOrder::Hold,U->GetActorLocation()); return; }
+ { for(ABattleUnit* U:Selected) if(LeaderSelectable(U)) { GetWorld()->GetSubsystem<UBattleMatch>()->ClearPlayerRouteMission(U->GetState()->SquadID); L->IssueOrder(U->GetState()->SquadID,EBattleOrder::Hold,U->GetActorLocation()); } return; }
 	if (!bTactical) return;
 	PendingOrder = EBattleOrder::Move;
 	UBattleState* Store = GetWorld()->GetSubsystem<UBattleState>();
@@ -701,8 +723,10 @@ void ABattleController::PlayerTick(float DeltaTime)
 	UpdateNoticeLog();
 	UpdateGamepad(DeltaTime);
 	Selected.RemoveAll([](const TObjectPtr<ABattleUnit>& Unit) { return !Unit || !Unit->IsAlive(); });
+	if (bTactical) bAimHeld = false;
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
 	{
+		Unit->SetAimLevel(bAimHeld && Unit->IsAlive() ? AimLevel : 0);
 		if (!Unit->IsAlive()) { if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled()) OnLeaderUnitDied(Unit->GetUnitID()); else { EnterTactical(); ShowNotice(TEXT("UNIT DOWN / select another ally")); } }
 		else if (bTriggerHeld)
 		{
@@ -759,6 +783,33 @@ int32 ABattleController::SquadListIDAt(FVector2D P) const
  int32 W,H; GetViewportSize(W,H);
  const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H)).RowAt(P); const auto Rows=SquadListRows();
  return R!=INDEX_NONE && Rows.IsValidIndex(R+SquadListScroll)?Rows[R+SquadListScroll].SquadID:INDEX_NONE;
+}
+
+int32 ABattleController::SelectedRouteLane() const
+{
+ const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();int32 Lane=-1;
+ for(const ABattleUnit* U:Selected) if(U && U->IsAlive() && U->GetState()->Team==0)
+ {
+  const int32 Own=Match->PlayerRouteLane(U->GetState()->SquadID);
+  if(Lane>=0 && Lane!=Own) return -1;
+  Lane=Own;
+ }
+ return Lane;
+}
+
+void ABattleController::CycleRouteSelected()
+{
+ if(!bTactical) return;
+ auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ if(!Match->RoutesOn()) { ShowNotice(TEXT("このマップには通り道がありません")); return; }
+ TSet<int32> IDs;
+ for(const ABattleUnit* U:Selected) if(U && U->IsAlive() && U->GetState()->Team==0) IDs.Add(U->GetState()->SquadID);
+ if(IDs.IsEmpty()) { ShowNotice(TEXT("通り道：先に部隊を選択")); return; }
+ // Differing choices start again from automatic.
+ const int32 Next=(SelectedRouteLane()+1)%4;
+ for(int32 ID:IDs) Match->SetPlayerRouteLane(ID,Next);
+ ShowNotice(FString::Printf(TEXT("通り道：%s（%d部隊）"),BattleRouteLaneName(Next),IDs.Num()));
+ UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_INPUT Route=%d Squads=%d"), Next, IDs.Num());
 }
 
 void ABattleController::CycleGameSpeed()
@@ -972,6 +1023,9 @@ FKey ABattleController::GamepadToKey(const FKey& Key) const
  {
   if(Key==EKeys::Gamepad_RightTrigger) return EKeys::LeftMouseButton;        // RT: fire
   if(Key==EKeys::Gamepad_LeftShoulder) return EKeys::F;                      // LB: exoskeleton launcher
+  if(Key==EKeys::Gamepad_LeftTrigger) return EKeys::RightMouseButton;        // LT: aim (held)
+  if(Key==EKeys::Gamepad_DPad_Up) return EKeys::MouseScrollUp;               // while aiming: more magnification
+  if(Key==EKeys::Gamepad_DPad_Down) return EKeys::MouseScrollDown;           // while aiming: less
   if(Key==EKeys::Gamepad_FaceButton_Bottom) return EKeys::SpaceBar;          // A: jump
   if(Key==EKeys::Gamepad_FaceButton_Left) return EKeys::R;                   // X: reload (held: future interact)
   if(Key==EKeys::Gamepad_FaceButton_Right) return EKeys::X;                  // B: stance
@@ -1017,7 +1071,7 @@ void ABattleController::UpdateGamepad(float DeltaTime)
  }
  else if(RX!=0||RY!=0)
  {
-  const float Assist=AimAssistScale();
+  const float Assist=AimAssistScale()/ViewMagnification();
   FRotator R=GetControlRotation();
   R.Yaw+=RX*150.f*Assist*DeltaTime;
   R.Pitch=FMath::Clamp(FRotator::NormalizeAxis(R.Pitch+RY*110.f*Assist*DeltaTime),-80.f,80.f);

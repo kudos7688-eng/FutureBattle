@@ -533,9 +533,9 @@ bool BattleSquadType::HasMainGun(uint8 Type){return Type==Tank;}
 bool BattleSquadType::IsArtillery(uint8 Type){return Type==Mortar||Type==SPGun;}
 float BattleSquadType::SpeedAt(uint8 Type,const UWorld* World,const FVector& P)
 {
- // Vehicles: the urban speed inside the city of map E (x +-250 m, y +-150 m), the open speed elsewhere. Others: SpeedScale.
+ // Vehicles: the urban speed inside the city of the map (FMapDef::CityHalf; map E: x +-250 m, y +-150 m), the open speed elsewhere. Others: SpeedScale.
  if(!IsVehicle(Type))return SpeedScale(Type);
- const auto* T=GetDefault<UBattleTuning>();const bool City=BattleFieldLayout::IsUrban(World)&&FMath::Abs(P.X)<25000&&FMath::Abs(P.Y)<15000;
+ const auto* T=GetDefault<UBattleTuning>();const FVector2D CityHalf=BattleFieldLayout::Of(World).CityHalf;const bool City=FMath::Abs(P.X)<CityHalf.X&&FMath::Abs(P.Y)<CityHalf.Y;
  const float Open=VehicleOpenSpeed(Type),Urban=VehicleUrbanSpeed(Type);
  return FMath::Max(.1f,City?Urban:Open)/FMath::Max(1.f,T->MoveSpeed);
 }

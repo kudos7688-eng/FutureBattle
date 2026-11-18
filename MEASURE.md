@@ -18,7 +18,8 @@
 | 変えた箇所ごとの専用試験 | 下の「専用試験」の表 | 各スクリプトの `BATTLE_*_RESULT failures=0` |
 | AI・経済の勝ち負けの比較（並列・描画なし） | `Setup\New-BattleBuildSnapshot.ps1 -Name <未使用名>` で固定ビルドを作る → `Setup\Run-EconomyMatrix.ps1`（総当たり）または `Setup\Run-StrategyScreen.ps1`（片側試験を2段で絞る） → `Setup\Analyze-EconomyMatrix.ps1` | 試合ごとの `result.json` の `passed`、`metrics.json` の得点・勝敗 |
 | 性能（1フレームの時間） | `Setup\Test-WideSight.ps1 -Map E -Area -ObserveTactics -Experiment -Rendered -Fps 30 -OutputName <未使用名>`。内訳が要るときだけ `-Trace 'cpu,frame'` を足す | `metrics.json` の1フレームの平均/p95/最大、認識、描画スレッド |
-| 結果を変えない最適化の確認 | 変更前後で同じ条件の試合を回し、勝者・得点・射撃数・射撃距離の列のハッシュを比べる（共通のスクリプトはまだ無い。11-17 22時40分の `dd0-*`/`dd1-*` の例は `Docs/journal/` を参照） | すべて一致 |
+| 結果を変えない最適化の確認 | 変更前後で同じ条件の試合を回し、`python.exe -I Setup/Compare-MatchResults.py <変更前> <変更後> ...` で比べる（時間の値を除く全項目。11-18 から） | すべて `IDENTICAL`（終了コード0） |
+| マップの形を数字で見る（試合はしない） | `Setup\Test-MapStats.ps1 -Map E -OutputName <未使用名>` | `Setup/Benchmarks/MapStats/<名前>/stats.json`：区域ごとの視線の長さ・空き幅・遮蔽の密度、本拠地からの経路の長さ、戦車の到達、見張り所と拠点から見える割合 |
 
 ### 勝ち負けの比較の決まり
 

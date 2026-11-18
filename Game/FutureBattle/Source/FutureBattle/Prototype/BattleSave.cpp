@@ -15,15 +15,15 @@
 namespace
 {
 	bool InRange(double Value, double Min, double Max) { return FMath::IsFinite(Value) && Value >= Min && Value <= Max; }
-	// Map E (urban) is 1000m x 700m; D is 800m x 600m; the other wide maps 600m x 400m.
-	bool ValidSnapshotPosition(const FVector& P, bool Mixed,bool Expanded,bool Urban=false) { return !P.ContainsNaN() && FMath::Abs(P.X) <= (Urban?52000:Expanded?42000:Mixed?32000:10000) && FMath::Abs(P.Y) <= (Urban?37000:Expanded?32000:Mixed?22000:10000) && InRange(P.Z, -1000, 10000); }
+	// Limit: FMapDef::SaveLimit of the map for mixed saves, 100m for the old all-actor saves.
+	bool ValidSnapshotPosition(const FVector& P, FVector2D Limit) { return !P.ContainsNaN() && FMath::Abs(P.X) <= Limit.X && FMath::Abs(P.Y) <= Limit.Y && InRange(P.Z, -1000, 10000); }
 	bool ValidTeam(int32 Team, bool bNeutral = false) { return Team == 0 || Team == 1 || (bNeutral && Team == INDEX_NONE); }
 }
 
 bool UBattleSave::Validate(FString& Error) const
 {
 	const bool Mixed=Version==2||Version==3;
- auto ValidPosition=[&](const FVector& P){return ValidSnapshotPosition(P,Mixed,MapName==TEXT("Lvl_BattleWide_D"),BattleFieldLayout::IsUrbanMap(MapName));};
+ auto ValidPosition=[&](const FVector& P){return ValidSnapshotPosition(P,Mixed?BattleFieldLayout::ByName(MapName).SaveLimit:FVector2D(10000,10000));};
 	auto Fail = [&Error](const TCHAR* Message) { Error = Message; return false; };
 	if ((Version != 1 && Version != 2 && Version!=3) || (Version==3)!=(Ruleset==TEXT("Area")) || !MatchID.IsValid() || Phase < 1 || Phase > 3 || !ValidTeam(Winner, true) || Result.Len() > 200 || ViewRotation.ContainsNaN()) return Fail(TEXT("Unsupported or invalid match header"));
 	if (!InRange(AllyCredits, 0, 1000000) || !InRange(EnemyCredits, 0, 1000000) || !InRange(AllyScore, 0, 1000) || !InRange(EnemyScore, 0, 1000) || !InRange(Elapsed, 0, 1000) || !InRange(DirectorClock, 0, 5) || !InRange(SupplyClock, 0, Mixed?1000:1)) return Fail(TEXT("Invalid economy or match timers"));
@@ -163,6 +163,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 	if (!Save || !Save->Validate(LastMessage)) { if (!Save) LastMessage = TEXT("No compatible save found"); return false; }
 	auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>(); auto* PC = Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
 	if (!Mode || !PC) return false;
+ PlayerRoutes.Reset(); // route choices are not saved (BattlePlayerRoutes.cpp)
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const bool Mixed=Runtime->IsWideField();
  auto* T=GetWorld()->GetSubsystem<UBattleSquadTactics>();auto* Team=GetWorld()->GetSubsystem<UBattleTeamAI>();

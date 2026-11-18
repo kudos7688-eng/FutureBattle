@@ -129,7 +129,7 @@ public:
  bool ReplaceFollower(int32 DeadID);
  // Scout pairs: the surviving follower becomes the squad leader (its Mass body is replaced by an Actor in place).
  bool PromoteScout(int32 SquadID,int32 NewLeaderID);
- // Trial -BattleHireSightRefresh=0 (default 1): skip the full sight update after a hire or scout handover.
+ // -BattleHireSightRefresh=1 restores the full sight update after a hire or scout handover (default 0 = skipped, user decision 2026-11-18).
  static bool HireSightRefresh();
  // Long sight of a still observer: a scout pair member, or any soldier at a lookout (0 when moving or neither).
  // AtLookout: within LookoutRadius of a lookout (public map places).
@@ -268,7 +268,9 @@ public:
  mutable TMap<FString,int64> SightHitClasses,SightHitTags,SightHitActors;
  mutable bool bSightHitsLogged=false;
  int64 MoveSweeps=0,MoveHitSoldier=0,MoveHitWorld=0,MoveShortened=0; // Mass follower moves (BATTLE_MOVE_SWEEP)
+ mutable int64 FollowSightTraced=0,FollowSightUsed=0; // evaluation counters (BATTLE_FOLLOW_SIGHT)
  bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot);
+ FVector TracerStart(int32 ID,const FVector& Start,const FVector& Direction) const;
  bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f);
  void CancelCoverAction(int32 ID);
  bool StepCoverAction(int32 ID,float Dt,double Now);
@@ -348,12 +350,16 @@ public:
  void RunSightTrial();
  void RunWeaponRangeTrial();
  void RunWideMapAudit();
+ // Map statistics (-BattleMapStats=<json>, BattleMapStats.cpp): sight lengths, clearance, cover and routes of the map as built.
+ void RunMapStats();
  void RunSightVisual();
  int32 SightVisualStage=0;
  // Stance visuals check (-BattleStanceShot, BattleStanceShot.cpp): close-up screenshots of a leader and a follower.
  void RunStanceShot();
  void RunExoShot();
  int32 ExoShotStage=0,ExoShotIDs[2]={0,0};
+ // Aim / scope view check (-BattleScopeShot, BattleScopeShot.cpp): leader 1 under direct control in each view.
+ void RunScopeShot();
  int32 StanceShotStage=0,StanceShotFollower=0;
  void StepSightExperiment(float DeltaSeconds);
  FBattleSightExperiment SightExperiment;
@@ -406,10 +412,19 @@ private:
  FDelegateHandle DeathHandle;
  void Think(int32 SquadID,double Now);
  void Follow(int32 ID,float Dt,double Now);
+ // Trial -BattleFollowSightParallel: sight tests of the Follow loop traced in parallel before it (soldier -> target, visible).
+ void PrefetchFollowSight();
+ static bool FollowerOverlapsOff();
+ bool FollowCanSee(int32 ID,int32 Target) const;
+ TMap<int32,TPair<int32,bool>> FollowSight;
+
  void BuildMovementPlan(int32 SquadID);
  bool StableMove(int32 ID,float Dt,double Now,FVector& Direction);
  bool IsStationaryAlly(int32 Observer,int32 Other) const;
  void ReassignOccupiedArrival(int32 ID,double Now);
  bool ResolveStoppedContact(int32 ID,FVector Way,double Now,FVector& Direction,float& Scale);
  bool ClearMovementSegment(FVector A,FVector B) const;
+ // Map with heights (BattleTerrain.h): gives the step of a hand-moved soldier the height change of the ground; false = the
+ // ground there cannot be stepped onto from here. Flat maps: true, the step is untouched.
+ bool TerrainStep(const FVector& From,FVector& Step) const;
 };

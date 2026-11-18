@@ -1,4 +1,6 @@
 #include "BattleLeaderRuntime.h"
+#include "BattleMuzzleFlash.h"
+#include "Async/ParallelFor.h"
 #include "BattleFollowerBones.h"
 #include "BattleVATDisplay.h"
 #include "BattlePhase3.h"
@@ -22,6 +24,7 @@
 #include "Animation/AnimSequence.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "NavigationSystem.h"
+#include "BattleCover.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "NavigationPath.h"
 #include "DrawDebugHelpers.h"
@@ -165,14 +168,18 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
     auto* Capsule=NewObject<UCapsuleComponent>(DisplayHost); DisplayHost->AddInstanceComponent(Capsule);
     Capsule->InitCapsuleSize(36,90); Capsule->SetCollisionObjectType(ECC_Pawn);
     Capsule->SetCollisionEnabled(ECollisionEnabled::QueryOnly); Capsule->SetCollisionResponseToAllChannels(ECR_Block);
-    Capsule->SetCanEverAffectNavigation(false); Capsule->SetupAttachment(Root); Capsule->RegisterComponent(); Capsule->SetWorldLocation(P);
+    Capsule->SetCanEverAffectNavigation(false); Capsule->SetupAttachment(Root);
+    if(FollowerOverlapsOff())Capsule->SetGenerateOverlapEvents(false);
+    Capsule->RegisterComponent(); Capsule->SetWorldLocation(P);
     B.Capsule=Capsule; HitIDs.Add(Capsule,ID);
     auto* Mesh=DisplayLOD==1?NewObject<USkeletalMeshComponent>(DisplayHost,UBattleVATSkeletalMeshComponent::StaticClass()):NewObject<USkeletalMeshComponent>(DisplayHost); DisplayHost->AddInstanceComponent(Mesh);
     Mesh->SetSkeletalMesh(MeshAsset); Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); Mesh->SetupAttachment(Capsule);
-    Mesh->SetRelativeLocation(FVector(0,0,-90)); Mesh->SetRelativeRotation(FRotator(0,-90,0)); Mesh->RegisterComponent();
+    Mesh->SetRelativeLocation(FVector(0,0,-90)); Mesh->SetRelativeRotation(FRotator(0,-90,0));
+    if(FollowerOverlapsOff())Mesh->SetGenerateOverlapEvents(false);
+    Mesh->RegisterComponent();
     Mesh->PlayAnimation(Idle,true); B.Mesh=Mesh;
     auto* Weapon=NewObject<UStaticMeshComponent>(DisplayHost); DisplayHost->AddInstanceComponent(Weapon);
-    Weapon->SetCollisionEnabled(ECollisionEnabled::NoCollision); Weapon->RegisterComponent(); Leader->MountWeapon(Weapon,Mesh,Store->Find(ID)->Weapon,false); B.Weapon=Weapon;
+    Weapon->SetCollisionEnabled(ECollisionEnabled::NoCollision); if(FollowerOverlapsOff())Weapon->SetGenerateOverlapEvents(false); Weapon->RegisterComponent(); Leader->MountWeapon(Weapon,Mesh,Store->Find(ID)->Weapon,false); B.Weapon=Weapon;
    }
    Bodies.Add(ID,B);
   }
@@ -211,8 +218,12 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunExoShot,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleStanceShot")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunStanceShot,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleScopeShot")))
+  { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunScopeShot,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleSightVisual")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSightVisual,4.f,false); }
+  else if(FString StatsFile;FParse::Value(FCommandLine::Get(),TEXT("BattleMapStats="),StatsFile))
+  { bMovementTrial=true;FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunMapStats,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleWideMapAudit")))
   { bMovementTrial=true;FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWideMapAudit,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleSightTrial")))
@@ -616,6 +627,69 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   else for(int32 ID:S->Members) if(auto* B=Bodies.Find(ID)) B->Waypoint=1;
  }
 }
+// Trial -BattleFollowSightParallel=1 (2026-11-18, performance, default 0): the line of sight test each soldier makes before
+// firing (Follow -> CanSee) is traced for all soldiers in one ParallelFor before the Follow loop. The conditions checked
+// before the trace are the same as in Follow. The traces see every body where it stood at the start of the step, not after the
+// soldiers earlier in the loop have moved (at most 14 cm), so match results can differ from the serial order.
+static bool FollowSightParallel()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleFollowSightParallel="),V);return V!=0;}();
+ return bOn;
+}
+// Trial -BattleFollowerNoOverlap=1 (2026-11-18, performance, default 0): follower capsules, bodies and weapons do not
+// generate overlap events. Nothing in the game listens for them; every capsule move otherwise runs an overlap query.
+bool UBattleLeaderRuntime::FollowerOverlapsOff()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleFollowerNoOverlap="),V);return V!=0;}();
+ return bOn;
+}
+void UBattleLeaderRuntime::PrefetchFollowSight()
+{
+ FollowSight.Reset();
+ if(!FollowSightParallel() || !bWideField)return;
+ TRACE_CPUPROFILER_EVENT_SCOPE(BattleFollowSightPrefetch);
+ struct FJob{int32 ID,Target;FBattleSightContext Sight;FVector End;FHitResult Hit;uint64 Cycles=0;};
+ static TArray<FJob> Jobs;Jobs.Reset();
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();
+ for(const auto& Body:Bodies)
+ {
+  const int32 ID=Body.Key;const auto* U=Store->Find(ID);if(!U || !U->IsAlive())continue;
+  if(Body.Value.Actor.IsValid() && Body.Value.Actor->IsPlayerControlled())continue;
+  const auto* S=Store->FindSquad(U->SquadID);const auto* P=Plans.Find(U->SquadID);
+  if(!S || !P || S->CommandStatus!=EBattleCommandStatus::Active || P->TargetID==INDEX_NONE)continue;
+  const auto* Contact=Sense->FindContact(ID,P->TargetID);
+  if(!Contact || !Contact->bVisible || Contact->bShared)continue;
+  if(bRangeAwareCombat && FVector::DistSquared(Position(ID),Contact->LastKnownPosition)>FMath::Square(UnderFire(ID)?BattleRanges::Reach(U->Weapon):BattleRanges::Engage(U->Weapon)))continue;
+  if(S->TacticalPlan.Action==EBattleSquadTactic::Support && P->TargetID!=S->TacticalPlan.SupportTarget)continue;
+  FJob J;J.ID=ID;J.Target=P->TargetID;J.Sight=Sight(ID);
+  if(!PrepareSightTrace(J.Sight,J.Target,J.End)){FollowSight.Add(ID,{J.Target,false});continue;}
+  Jobs.Add(MoveTemp(J));
+ }
+ const UWorld* World=GetWorld();const bool bStats=SightHitStatsEnabled();
+ // Worker threads: line traces only (each takes the physics scene read lock itself, like the perception scan).
+ ParallelFor(TEXT("BattleFollowSightTraces"),Jobs.Num(),8,[&](int32 I)
+ {
+  FJob& J=Jobs[I];const uint64 T0=bStats?FPlatformTime::Cycles64():0;
+  World->LineTraceSingleByChannel(J.Hit,J.Sight.Eye,J.End,ECC_Visibility,J.Sight.Query);
+  if(bStats)J.Cycles=FPlatformTime::Cycles64()-T0;
+ });
+ for(const FJob& J:Jobs)
+ {
+  if(bStats)RecordSightHit(J.Hit,J.Target,J.Cycles,SightFromCanSee);
+  FollowSight.Add(J.ID,{J.Target,SightHitVisible(J.Hit,J.Target)});
+ }
+ FollowSightTraced+=Jobs.Num();
+}
+bool UBattleLeaderRuntime::FollowCanSee(int32 ID,int32 Target) const
+{
+ if(const auto* E=FollowSight.Find(ID);E && E->Key==Target)
+ {
+  // A target killed earlier in this step is no longer visible (the serial test checks this first).
+  const auto* T=GetWorld()->GetSubsystem<UBattleState>()->Find(Target);
+  ++FollowSightUsed;return E->Value && T && T->IsAlive();
+ }
+ return CanSee(ID,Target);
+}
 void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()) return;
@@ -641,7 +715,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  if(bWideField && U->Ammo==0 && U->Reserve>0 && U->ReloadEndTime==0) Store->StartReload(ID,Now);
  const bool CanEngage=Contact && Contact->bVisible && !Contact->bShared && !bSaveRounds &&
   (!bRangeAwareCombat || FVector::DistSquared(Pos,Contact->LastKnownPosition)<=FMath::Square(UnderFire(ID)?BattleRanges::Reach(U->Weapon):BattleRanges::Engage(U->Weapon))) &&
-  (S->TacticalPlan.Action!=EBattleSquadTactic::Support || TargetID==S->TacticalPlan.SupportTarget) && CanSee(ID,TargetID);
+  (S->TacticalPlan.Action!=EBattleSquadTactic::Support || TargetID==S->TacticalPlan.SupportTarget) && FollowCanSee(ID,TargetID);
  // Evaluation only: an engagement that only the return-fire rule allows (beyond the AI engagement distance, within reach).
  if(CanEngage&&SightExperiment.Enabled&&bRangeAwareCombat&&UnderFire(ID)&&FVector::DistSquared(Pos,Contact->LastKnownPosition)>FMath::Square(BattleRanges::Engage(U->Weapon)))SightExperiment.Cover(TEXT("return_fire_engage"));
  const bool StopForCombat=(P->TargetID!=INDEX_NONE || (bArmourAI && P->ArmourTargetID!=INDEX_NONE)) && S->Order!=EBattleOrder::Move;
@@ -809,7 +883,9 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  if(Phase3 && Phase3->bEnabled) ++Phase3->Shots;
  const float SuppressedScale=SuppressionSpreadScale(ID,Now);
  if(SuppressedScale>1.25f)SightExperiment.Cover(TEXT("suppressed_shots"));
- Direction=BattleTactics::ShotDirection(*U,Direction,Now,SuppressedScale*BattleStance::SpreadScale(StanceOf(ID)));
+ // The player's own shot is tighter while he aims or looks through the scope (never the AI's shots).
+ const float AimScale=bPlayerShot&&Actor(ID)?Actor(ID)->AimSpreadScale():1.f;
+ Direction=BattleTactics::ShotDirection(*U,Direction,Now,SuppressedScale*BattleStance::SpreadScale(StanceOf(ID))*AimScale);
  auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon);
  // Concealment (hedges) hides soldiers from sight but does not stop bullets.
  if(!bConcealmentBuilt)
@@ -902,8 +978,23 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  if(bAT)Explode(ID,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Victim);
  if(Damaged)
   if(bPlayerShot) if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())) PC->HitMarkerUntil=Now+.18;
- if(U->Team==0 || (Actor(ID) && Actor(ID)->bRevealed)) DrawDebugLine(GetWorld(),Start,Hit.bBlockingHit?Hit.ImpactPoint:End,U->Team?FColor::Orange:FColor::Cyan,false,.09f,0,2);
+ if(U->Team==0 || (Actor(ID) && Actor(ID)->bRevealed))
+ {
+  const FVector From=TracerStart(ID,Start,Direction);
+  DrawDebugLine(GetWorld(),From,Hit.bBlockingHit?Hit.ImpactPoint:End,U->Team?FColor::Orange:FColor::Cyan,false,.09f,0,2);
+  // Not the player's own flash through a scope: at x4-x8 it would cover the whole view.
+  if(!(bPlayerShot&&Actor(ID)&&Actor(ID)->ScopeView()))BattleMuzzleFlash::Show(GetWorld(),From,Direction,U->Weapon==EBattleWeapon::Carbine?1.f:1.4f);
+ }
  return true;
+}
+FVector UBattleLeaderRuntime::TracerStart(int32 ID,const FVector& Start,const FVector& Direction) const
+{
+ // Display only (the shot itself is still traced from the eye): the tracer leaves the gun.
+ // Tank: the end of the barrel (BattleVehicle.cpp: 340 cm ahead of the turret centre, in the turret's 1.7 scale).
+ if(const auto* Turret=Turrets.Find(ID);Turret&&Turret->IsValid())return (*Turret)->GetComponentTransform().TransformPosition(FVector(200,0,0));
+ const ABattleUnit* A=Actor(ID);const auto* B=Bodies.Find(ID);
+ const UStaticMeshComponent* Model=A?A->Rifle.Get():B&&!(VAT&&VAT->IsFar(ID))?B->Weapon.Get():nullptr;
+ return ABattleUnit::TracerStart(Model,Start,Direction);
 }
 void UBattleLeaderRuntime::RefreshDisplay()
 {
@@ -931,6 +1022,8 @@ void UBattleLeaderRuntime::Step(float Dt)
  if(Phase3 && Phase3->bEnabled) { Phase3->Step(Dt); return; }
  if(bMovementTrial && MoveTrialStage==1 && !Mode->bCombatPaused) MoveTrialFrameMS.Add(Dt*1000);
  const double Now=GetWorld()->GetTimeSeconds(); auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ // Build the cover slots while the match waits to start (they were built lazily by the first decision: ~100 ms in one frame).
+ if(bWideField && (Mode->bCombatPaused || Now<Mode->CombatStartsAt)) GetWorld()->GetSubsystem<UBattleCover>()->PrebuildSlots();
  if(bWideField && bStableMovement && Mode->bCombatPaused)
   for(auto& Body:Bodies) {Body.Value.LastProgressTime=Now;Body.Value.StalledSince=0;}
  // P pauses AI decisions, not the directly controlled soldier's reload (same as the wide Actor mode).
@@ -947,10 +1040,23 @@ void UBattleLeaderRuntime::Step(float Dt)
   if(Store->HasShields()) StepExoLaunchers(Now);
   RefreshSightTeamMasks();
   if(!bMovementTrial) { TRACE_CPUPROFILER_EVENT_SCOPE(BattlePerceptionUpdate); GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now,-1,0); }
-  { TRACE_CPUPROFILER_EVENT_SCOPE(BattleThink); for(auto& P:Plans) if(Now>=P.Value.NextThink || (Store->FindSquad(P.Key) && P.Value.OrderRevision!=Store->FindSquad(P.Key)->OrderRevision)) Think(P.Key,Now); }
+  {
+   TRACE_CPUPROFILER_EVENT_SCOPE(BattleThink);
+   // Trial -BattleThinkCap=N (0 = no cap, default): at most N squad decisions per step. Squads over the cap stay due and
+   // think on the next steps in the same order. Normally 2-3 squads are due per step; the cap only binds when many fall due
+   // together (match start: all 50 in one 139 ms frame, 2026-11-18 trace).
+   static const int32 ThinkCap=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleThinkCap="),V);return FMath::Max(0,V);}();
+   int32 Thought=0;
+   for(auto& P:Plans) if(Now>=P.Value.NextThink || (Store->FindSquad(P.Key) && P.Value.OrderRevision!=Store->FindSquad(P.Key)->OrderRevision))
+   {
+    if(ThinkCap>0 && Thought>=ThinkCap) break;
+    Think(P.Key,Now);++Thought;
+   }
+  }
   AvoidanceGrid.Reset();
   for(const auto& B:Bodies) if(Store->Find(B.Key)->IsAlive()) { const FVector P=Position(B.Key); AvoidanceGrid.FindOrAdd(FIntPoint(FMath::FloorToInt(P.X/150.),FMath::FloorToInt(P.Y/150.))).Add(B.Key); }
   // Death may invalidate a plan during firing; iterate stable UnitIDs, never a plan iterator.
+  PrefetchFollowSight();
   { TRACE_CPUPROFILER_EVENT_SCOPE(BattleFollow); for(const auto& B:Bodies) Follow(B.Key,FMath::Min(Dt,.05f),Now); }
   // Indirect-fire shells in flight land after their flight time (paused with the combat).
   if(bArea && ArtilleryShells.Num()) StepArtilleryShells(Dt);

@@ -1,6 +1,6 @@
 # FutureBattle の継続開発指示
 
-- 日本語で対応する。開始時に `STATUS.md` 冒頭の要約と直近の項目を読み、次の作業と既知の制限を確認する。計測・試験の手順は `MEASURE.md`。STATUS が約80KBを超えたら、前日より前の項目を `Docs/journal/` へ移す（消さない）。実装計画は `ROADMAP.md`、起動・操作・検証は `PROTOTYPE.md`、元の全体構想は `README.md`、過去の経緯は `HANDOFF.md`。
+- 日本語で対応する。開始時に `STATUS.md` 冒頭の要約と直近の項目を読み、次の作業と既知の制限を確認する。計測・試験の手順は `MEASURE.md`。STATUS が約80KBを超えたら、前日より前の項目を `Docs/journal/` へ移す（消さない）。実装計画は `ROADMAP.md`、起動・操作・検証は `PROTOTYPE.md`、元の全体構想は `README.md`、過去の経緯は `HANDOFF.md`。コードのどこに何があるかは `CODEMAP.md`（機能 → 入口の関数とファイル。`Setup/Export-CodeMap.py` で自動生成、手書き部分は `Setup/CodeMap-Features.md`）で引いてから読む。
 - 現在の依頼を優先する。「続きから進めて」などの実装依頼ならSTATUSの次の工程に進む。相談・計画・資料整理の依頼ではゲーム実装を勝手に開始しない。ロードマップ全体を一度に実装しない。
 - UE 5.8.4を使用。プロジェクトは `Game/FutureBattle/FutureBattle.uproject`。環境構築・20体試作は完了済み。古い5.7.4指定や未導入の履歴に戻らない。
 - UE標準機能・既存テンプレート資産を活用し、独自のゲームルールはC++中心に実装する。新しい外部資産・プラグインの導入時は出典・利用条件・必要性を記録する。

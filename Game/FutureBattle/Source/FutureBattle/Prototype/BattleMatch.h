@@ -10,8 +10,8 @@ class UBattleSave;
 struct FAreaIntent
 {
  float AttackWeight=2.f,BaseShare=0.2f; bool bFrontBalance=false; float FrontGain=1.f,FocusGain=0.f;
- static constexpr int32 MaxObjectives=8; // three objectives on maps A-D, five on map E
- float PointWeight[MaxObjectives]={1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f}; // per objective index, multiplies the S1 weight
+ static constexpr int32 MaxObjectives=12; // three objectives on maps A-D, five on map E, nine on map F
+ float PointWeight[MaxObjectives]={1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f}; // per objective index, multiplies the S1 weight
  int32 HireReserve=0;                 // resources kept back before an AI purchase (above pending replacements)
  float FlankOffset=1.3f; bool bFlankSameSide=true; // S7/S8 route of home-assault squads (0 = straight; FS13BR5 default since 2026-11-17)
  int32 BaseReturnLiving=5;            // S8: living count at which home-assault squads return for supply (0 = SupplyReturnLiving; 5 by default since 2026-11-17)
@@ -54,6 +54,21 @@ struct FBattleStrike
 };
 
 // Match economy is independent of actors and possession. All purchases pass through this store.
+// Player route choice (BattlePlayerRoutes.cpp): the main route a player's squad takes on maps with a road network.
+struct FPlayerRoute
+{
+	int32 Lane = 0;                          // 0 automatic, 1 centre, 2 north, 3 south
+	int32 Phase = 0;                         // 0 to the route, 1 along it, 2 from it to the goal
+	FVector PhaseGoal = FVector(FLT_MAX);    // the goal the phase belongs to
+	bool bMission = false;                   // a routed manual order under way: Order and Goal are the player's, Step the junction last ordered
+	EBattleOrder Order = EBattleOrder::Move;
+	FVector Goal = FVector::ZeroVector, Step = FVector::ZeroVector;
+};
+inline const TCHAR* BattleRouteLaneName(int32 Lane)
+{
+	return Lane == 1 ? TEXT("\u4e2d\u592e") : Lane == 2 ? TEXT("\u5317") : Lane == 3 ? TEXT("\u5357") : TEXT("\u81ea\u52d5");
+}
+
 UCLASS()
 class UBattleMatch : public UWorldSubsystem
 {
@@ -209,6 +224,32 @@ public:
 	// Positions from the team's scout reports of the last ScoutReportMemory seconds (keys below zero, never unit IDs).
 	void AddScoutReportSightings(int32 Team, TMap<int32, FVector>& Seen) const;
 	void AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObjectives]) const;
+	// Objective worth (FMapDef::ObjectiveValues; 1 where the map sets none): multiplies its income and its end score.
+	float ObjectiveValue(int32 Point) const;
+	// Resources a team gains per income tick from the objectives it truly owns now (before the time ramp): base + per point x value x map scale.
+	int32 AreaIncomeGain(int32 Team) const;
+	// Depots in the point allocation (BattleAreaDepot.cpp): multiplies Intent.PointWeight of the objectives worth more than one.
+	void ApplyDepotWeights(int32 Team, bool bTrialTeam, struct FAreaIntent& Intent) const;
+	mutable TArray<float> DepotWeights[2];
+	mutable float DepotWeightsAt[2]={-1.f,-1.f};
+	// Routes (BattleRoutes.cpp): on maps with a road network, the next junction a squad at From is sent to on its way to Goal.
+	bool RoutesOn() const;
+	TArray<FVector> RouteKnownEnemies(int32 Team) const;
+	int32 RouteFlankSide(const FVector& From, const FVector& OwnHome, const TArray<FVector>& KnownEnemies, int32 SquadID) const;
+	FVector RouteStep(const FVector& From, const FVector& Goal, int32 FlankSide, const TArray<FVector>& KnownEnemies) const;
+	// Player route choice (BattlePlayerRoutes.cpp), per squad of the player's team. Empty in matches without a player's choice.
+	TMap<int32, FPlayerRoute> PlayerRoutes;
+	float PlayerRouteClock = 0.f;
+	int32 PlayerRouteLane(int32 SquadID) const;
+	void SetPlayerRouteLane(int32 SquadID, int32 Lane);
+	void ClearPlayerRouteMission(int32 SquadID);
+	// A manual order over the squad's chosen route: -1 not routed (give the ordinary order), 0 refused, 1 accepted.
+	int32 PlayerRouteOrder(int32 SquadID, EBattleOrder Order, const FVector& Goal);
+	// The next junction for a squad with a chosen route (RouteStep without one).
+	FVector PlayerRouteStep(int32 SquadID, const FVector& From, const FVector& Goal);
+	void UpdatePlayerRoutes(float DeltaSeconds);
+	// Self-test of the height differences (BattleTerrainTest.cpp, -BattleHeightTest).
+	void UpdateTerrainTest(float DeltaSeconds);
 	void CheckTimeLimit();
 	void UpdateEnemyOrders();
 	void UpdateTeamOrders(int32 Team, bool bDelegatedOnly = false);

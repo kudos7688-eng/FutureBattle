@@ -22,13 +22,15 @@ int32 UBattleMatch::AreaScore(int32 Team)const
  // An exoskeleton soldier counts as ScoreCount soldiers (user decision 2026-11-18: one-soldier types are not penalised by the head count).
  if(const auto* Store=GetWorld()->GetSubsystem<UBattleState>();Store->HasShields())for(const auto& S:Store->GetSquads())
   if(S.Value.Team==Team&&BattleSquadType::ScoreCount(S.Value.SquadType)>1)for(int32 ID:S.Value.Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())Total+=BattleSquadType::ScoreCount(S.Value.SquadType)-1;
- for(const auto& P:Objectives)if(P.Owner==Team)Total+=20;return Total;
+ for(int32 I=0;I<Objectives.Num();++I)if(Objectives[I].Owner==Team)Total+=FMath::RoundToInt(20*ObjectiveValue(I));return Total;
 }
 void UBattleMatch::InitializeArea()
 {
- Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;Score[0]=Score[1]=0;
+ Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
+ // A team knows the objectives it holds from the start (the depots of map F).
+ for(int32 I=0;I<Objectives.Num();++I)if(const int32 Owner=Objectives[I].Owner;Owner==0||Owner==1){Area.KnownOwners[Owner*Objectives.Num()+I]=Owner;Area.SeenAt[Owner*Objectives.Num()+I]=0.f;}
  for(int32 Team=0;Team<2;++Team)
  {
   auto* Base=GetWorld()->SpawnActor<AStaticMeshActor>(AreaHome(Team)*(28./27.)+FVector(0,0,200),FRotator::ZeroRotator);
@@ -177,6 +179,13 @@ void UBattleMatch::UpdateAreaHiring()
   LastMessage=Message;
  }
 }
+int32 UBattleMatch::AreaIncomeGain(int32 Team) const
+{
+ // Whole numbers on maps without objective values or an income scale (A-E): the sum below is then exact.
+ const auto& I=BattleTactics::AreaIncome();const auto& Def=BattleFieldLayout::Of(GetWorld());
+ double Points=0;for(int32 Point=0;Point<Objectives.Num();++Point)if(Objectives[Point].Owner==Team)Points+=BattleFieldLayout::ObjectiveValue(Def,Point);
+ return I.BaseFor(Def.bUrban)+FMath::RoundToInt(I.PerPointFor(Def.bUrban)*Points*Def.PointIncomeScale);
+}
 void UBattleMatch::UpdateArea(float Dt)
 {
  const auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>();
@@ -205,8 +214,7 @@ void UBattleMatch::UpdateArea(float Dt)
    Area.IncomeClock-=I.Seconds;
    for(int32 Team=0;Team<2;++Team)
    {
-    const bool bUrban=BattleFieldLayout::IsUrban(GetWorld());
-    int32 Gain=I.BaseFor(bUrban);for(const auto& P:Objectives)Gain+=P.Owner==Team?I.PerPointFor(bUrban):0;
+    int32 Gain=AreaIncomeGain(Team);
     if(I.Ramp>0)Gain=FMath::RoundToInt(Gain*(1.f+I.Ramp*Elapsed/60.f));
     Credits[Team]+=Gain;Area.Income[Team]+=Gain;
    }
@@ -329,6 +337,7 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
   const bool bHoldPhase=(S.Plan==1&&I.Phase>=2)||(S.Plan==2&&I.Phase==2);
   I.HeavyShare=FMath::Clamp(I.HeavyShare*(bHoldPhase?1.5f:.5f),0.f,.8f);
  }
+ ApplyDepotWeights(Team,bTrial,I);
  return I;
 }
 void UBattleMatch::AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObjectives]) const

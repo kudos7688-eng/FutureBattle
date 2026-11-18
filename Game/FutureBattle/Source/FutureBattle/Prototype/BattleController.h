@@ -41,7 +41,11 @@ struct FBattleCommandBarLayout
 {
  FVector2D Origin=FVector2D::ZeroVector; float ButtonWidth=116, ButtonHeight=26, Gap=6; // 15 buttons: 1824 px wide (x 34..1858, inside the 1904 px panel at 1920)
  static constexpr int32 Count=15; // move, attack move, defend, hold, manual command, delegate to AI, buy a rifle squad, heavy infantry, a scout pair, an anti-tank team, a tank, an armoured car, a mortar team, a self-propelled gun
- static FBattleCommandBarLayout Make(FVector2D View){FBattleCommandBarLayout L;L.Origin=FVector2D(34,View.Y-90);return L;}
+ // Route choice of the selected squads (BattlePlayerRoutes.cpp): a button of its own at the right end of the panel's top row, so
+ // the bar's indices stay the orders and the purchases (more purchase buttons are added on other branches).
+ FVector2D RouteOrigin=FVector2D::ZeroVector; float RouteWidth=176;
+ static FBattleCommandBarLayout Make(FVector2D View){FBattleCommandBarLayout L;L.Origin=FVector2D(34,View.Y-90);L.RouteOrigin=FVector2D(View.X-34-L.RouteWidth,View.Y-122);return L;}
+ bool RouteAt(FVector2D P) const {return P.X>=RouteOrigin.X&&P.X<RouteOrigin.X+RouteWidth&&P.Y>=RouteOrigin.Y&&P.Y<RouteOrigin.Y+ButtonHeight;}
  int32 ButtonAt(FVector2D P) const
  {
   if(P.Y<Origin.Y||P.Y>=Origin.Y+ButtonHeight||P.X<Origin.X) return INDEX_NONE;
@@ -116,6 +120,10 @@ public:
 	bool IsTactical() const { return bTactical; }
 	// Play-speed toggle (tactical view, standalone only): [.] cycles x1/x2/x4 via global time dilation; direct control always runs at x1.
 	void CycleGameSpeed();
+	// Route choice (BattlePlayerRoutes.cpp): the next of automatic, centre, north, south for the selected squads.
+	void CycleRouteSelected();
+	// The route the selected squads share: 0-3, or -1 when nothing is selected or the choices differ.
+	int32 SelectedRouteLane() const;
 	void ApplyGameSpeed();
 	int32 GetGameSpeed() const { return GameSpeed; }
 	bool ShowsUnspottedBodies() const;
@@ -150,6 +158,10 @@ public:
 	FKey GamepadToKey(const FKey& Key) const;
 	void UpdateGamepad(float DeltaTime);
 	float AimAssistScale() const;
+	float ViewMagnification() const;
+	// Direct control: the right button is held (aim), and the view level it gives (1 aim, 2 scope x4, 3 scope x8).
+	bool bAimHeld = false;
+	int32 AimLevel = 1;
 	UFUNCTION(Exec) void BattleVerify();
 private:
 	UPROPERTY() TObjectPtr<ABattleCameraPawn> TacticalPawn;

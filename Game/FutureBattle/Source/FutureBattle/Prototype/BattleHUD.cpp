@@ -28,6 +28,28 @@ void ABattleHUD::DrawHUD()
 	const FLinearColor Ink(.025f, .04f, .065f, .92f), Mint(.28f, .95f, .8f), Muted(.62f, .7f, .77f), White(.94f, .97f, 1.f);
 	auto Label = [&](const FString& Text, float X, float Y, FLinearColor Color, float Scale = 1.f)
 	{ DrawText(Text, Color, X, Y, GEngine->GetSmallFont(), Scale); };
+	// Scope (direct control, right button + wheel): black outside the lens and a reticle, under the rest of the HUD.
+	const ABattleUnit* ScopeUnit = PC->IsTactical() ? nullptr : Cast<ABattleUnit>(PC->GetPawn());
+	const bool bScope = ScopeUnit && ScopeUnit->ScopeView();
+	if (bScope)
+	{
+		const float R = H * .46f, Cx = W * .5f, Cy = H * .5f;
+		const FLinearColor Black(0, 0, 0, 1), Line(.95f, .16f, .1f, 1); // red: readable on a dark and on a bright scene
+		DrawRect(Black, 0, 0, Cx - R, H); DrawRect(Black, Cx + R, 0, W - Cx - R, H);
+		DrawRect(Black, Cx - R, 0, 2 * R, Cy - R); DrawRect(Black, Cx - R, Cy + R, 2 * R, H - Cy - R);
+		for (float Y = -R; Y < R; Y += 3.f)
+		{
+			const float Mid = FMath::Min(FMath::Abs(Y), FMath::Abs(Y + 3.f)), Half = FMath::Sqrt(FMath::Max(0.f, R * R - Mid * Mid));
+			DrawRect(Black, Cx - R, Cy + Y, R - Half + 1, 3); DrawRect(Black, Cx + Half - 1, Cy + Y, R - Half + 1, 3);
+		}
+		const FLinearColor Hair = PC->HitMarkerUntil > GetWorld()->GetTimeSeconds() ? FLinearColor::Yellow : Line;
+		DrawLine(Cx - R, Cy, Cx - 10, Cy, Hair, 1.f); DrawLine(Cx + 10, Cy, Cx + R, Cy, Hair, 1.f);
+		DrawLine(Cx, Cy - R, Cx, Cy - 10, Hair, 1.f); DrawLine(Cx, Cy + 10, Cx, Cy + R, Hair, 1.f);
+		DrawLine(Cx - R, Cy, Cx - R * .35f, Cy, Hair, 4.f); DrawLine(Cx + R * .35f, Cy, Cx + R, Cy, Hair, 4.f);
+		DrawLine(Cx, Cy + R * .35f, Cx, Cy + R, Hair, 4.f);
+		DrawRect(Hair, Cx - 1, Cy - 1, 2, 2);
+		DrawText(FString::Printf(TEXT("×%.0f"), ScopeUnit->AimMagnification()), FLinearColor(.94f, .97f, 1.f), Cx + R * .62f, Cy + R * .62f, GEngine->GetSmallFont(), 1.2f);
+	}
 	DrawRect(Ink, 16, 16, W - 32, 66);
 	DrawRect(Mint, 16, 16, 4, 66);
 	Label(TEXT("FUTURE BATTLE"), 34, 25, White, 1.55f);
@@ -61,8 +83,8 @@ void ABattleHUD::DrawHUD()
   FString IncomeText;
   if(Match->bArea&&BattleTactics::AreaIncome().bEnabled)
   {
-   const auto& I=BattleTactics::AreaIncome();const bool bUrban=BattleFieldLayout::IsUrban(GetWorld());
-   int32 Gain=I.BaseFor(bUrban);for(const auto& P:Match->Objectives)Gain+=P.Owner==0?I.PerPointFor(bUrban):0;
+   const auto& I=BattleTactics::AreaIncome();
+   int32 Gain=Match->AreaIncomeGain(0);
    if(I.Ramp>0)Gain=FMath::RoundToInt(Gain*(1.f+I.Ramp*Match->Elapsed/60.f));
    IncomeText=FString::Printf(TEXT(" (+%d / %.0fs)"),Gain,I.Seconds);
   }
@@ -82,7 +104,8 @@ void ABattleHUD::DrawHUD()
    // Command UI top bar (2026-11-16): own final score as it stands, from own state and the points the own side observes as its own;
    // the opponent only from observed points (its living soldiers and resources are not shown).
    int32 Living=0;for(const auto& U:GetWorld()->GetSubsystem<UBattleState>()->GetUnits())Living+=U.Value.Team==0&&U.Value.IsAlive();
-   int32 OwnPoints=0,EnemyPoints=0;for(int32 I=0;I<Match->Objectives.Num();++I){const int32 O=Match->ObservedOwner(0,I);OwnPoints+=O==0;EnemyPoints+=O==1;}
+   // An objective counts by its worth (a depot of map F counts as two), like the end score.
+   int32 OwnPoints=0,EnemyPoints=0;for(int32 I=0;I<Match->Objectives.Num();++I){const int32 O=Match->ObservedOwner(0,I);const int32 Worth=FMath::RoundToInt(Match->ObjectiveValue(I));OwnPoints+=O==0?Worth:0;EnemyPoints+=O==1?Worth:0;}
    DrawRect(Ink,576,112,260,51);
    Label(FString::Printf(TEXT("得点 %d ＝ 生存 %d ＋ 資源 %d ＋ 拠点 %d×20"),Living+Match->Credits[0]+OwnPoints*20,Living,Match->Credits[0],OwnPoints),28,141,Mint,.85f);
    Label(FString::Printf(TEXT("敵：拠点 %d×20（観測）"),EnemyPoints),588,119,Muted,.85f);
@@ -113,7 +136,8 @@ void ABattleHUD::DrawHUD()
 			if (PC->ProjectWorldLocationToScreen(Point.Position + FVector(0, 0, 45), Center) && Center.Y > 160 && Center.Y < H - 135)
 			{
 				DrawRect(Ink, Center.X - 48, Center.Y - 18, 170, 24);
-    Label(Match->bArea?(Point.Owner==-2?FString::Printf(TEXT("%c ／ 不明"),'A'+Index):FString::Printf(TEXT("%c ／ %s ／ %.0f秒前に確認"),'A'+Index,Point.Owner==0?TEXT("味方"):Point.Owner==1?TEXT("敵"):TEXT("中立"),Match->Area.SeenAt[Index])):FString::Printf(TEXT("%c / %s %.0f%%"), 'A' + Index, Point.bContested ? TEXT("争奪中") : Point.Owner == 0 ? TEXT("味方") : Point.Owner == 1 ? TEXT("敵") : TEXT("中立"), Point.CaptureProgress / 8.f * 100.f), Center.X - 42, Center.Y - 12, Color, .85f);
+    const TCHAR* Kind=Match->ObjectiveValue(Index)>1.f?TEXT("（集積所）"):TEXT("");
+    Label(Match->bArea?(Point.Owner==-2?FString::Printf(TEXT("%c%s ／ 不明"),'A'+Index,Kind):FString::Printf(TEXT("%c%s ／ %s ／ %.0f秒前に確認"),'A'+Index,Kind,Point.Owner==0?TEXT("味方"):Point.Owner==1?TEXT("敵"):TEXT("中立"),Match->Area.SeenAt[Index])):FString::Printf(TEXT("%c / %s %.0f%%"), 'A' + Index, Point.bContested ? TEXT("争奪中") : Point.Owner == 0 ? TEXT("味方") : Point.Owner == 1 ? TEXT("敵") : TEXT("中立"), Point.CaptureProgress / 8.f * 100.f), Center.X - 42, Center.Y - 12, Color, .85f);
 			}
 			for (int32 Segment = 0; Segment < 32; ++Segment)
 			{
@@ -332,6 +356,15 @@ void ABattleHUD::DrawHUD()
 				DrawRect(bPending ? FLinearColor(.45f, .4f, .1f, .98f) : bUsable ? FLinearColor(.10f, .24f, .24f, .98f) : FLinearColor(.08f, .11f, .15f, .98f), X, Bar.Origin.Y, Bar.ButtonWidth, Bar.ButtonHeight);
 				Label(Names[I], X + 8, Bar.Origin.Y + 5, bPending ? FLinearColor::Yellow : bUsable ? Mint : Muted, .85f);
 			}
+			// Route of the selected squads (maps with a road network only): its own button at the right end of the panel's top row,
+			// apart from the bar. Shows the current choice, lit when one is set.
+			if (Match->RoutesOn())
+			{
+				const int32 RouteLane = PC->SelectedRouteLane();
+				const bool bLit = bAny && RouteLane != 0;
+				DrawRect(bLit ? FLinearColor(.45f, .4f, .1f, .98f) : bAny ? FLinearColor(.10f, .24f, .24f, .98f) : FLinearColor(.08f, .11f, .15f, .98f), Bar.RouteOrigin.X, Bar.RouteOrigin.Y, Bar.RouteWidth, Bar.ButtonHeight);
+				Label(FString::Printf(TEXT("通り道：%s%s"), !bAny ? TEXT("―") : RouteLane < 0 ? TEXT("混在") : BattleRouteLaneName(RouteLane), PC->bGamepadActive ? TEXT("") : TEXT(" [Z]")), Bar.RouteOrigin.X + 8, Bar.RouteOrigin.Y + 5, bLit ? FLinearColor::Yellow : bAny ? Mint : Muted, .85f);
+			}
 		}
 		if (PC->bGamepadActive) Label(TEXT("右スティック：カーソル   A：選択・決定   左スティック：視点移動   LT/RT：拡大縮小   LB：全選択   ビュー：直接操作   メニュー：AI一時停止   十字→：速度"), 34, H - 53, Muted, .9f);
 		else
@@ -339,15 +372,19 @@ void ABattleHUD::DrawHUD()
 	}
 	else
 	{
-		if (PC->bGamepadActive) Label(TEXT("左スティック：移動   右スティック：照準（補助あり）   RT：射撃   X：装填   A：ジャンプ   B：姿勢   Y：遮蔽   ビュー：作戦画面"), 34, H - 80, Mint);
+		if (PC->bGamepadActive) Label(TEXT("左スティック：移動   右スティック：照準（補助あり）   RT：射撃   LT：構える（十字↑↓：倍率）   X：装填   A：ジャンプ   B：姿勢   Y：遮蔽   ビュー：作戦画面"), 34, H - 80, Mint);
 		else
-		Label(TEXT("WASD：移動   マウス：照準   左クリック：射撃   R：装填   Space：ジャンプ   Tab：作戦画面"), 34, H - 80, Mint);
+		Label(TEXT("WASD：移動   マウス：照準   左クリック：射撃   右クリック：構える（＋ホイール：スコープ）   R：装填   Space：ジャンプ   Tab：作戦画面"), 34, H - 80, Mint);
 		Label(TEXT("P：AI一時停止   F5：戦闘をやり直す   ｜   操作を切り替えても、兵・HP・弾薬・命令は引き継がれる"), 34, H - 53, Muted, .9f);
 		const FLinearColor CrossColor = PC->HitMarkerUntil > GetWorld()->GetTimeSeconds() ? FLinearColor::Yellow : White;
+		// Aiming tightens the player's shots: say so next to the crosshair while it applies.
+		if (ScopeUnit && ScopeUnit->AimSpreadScale() < 1.f) Label(FString::Printf(TEXT("構え：散らばり ×%.1f"), ScopeUnit->AimSpreadScale()), W / 2 + 26, H / 2 + 18, Mint, .9f);
+		if (!bScope) {
 		DrawLine(W / 2 - 13, H / 2, W / 2 - 4, H / 2, CrossColor, 1.5f);
 		DrawLine(W / 2 + 4, H / 2, W / 2 + 13, H / 2, CrossColor, 1.5f);
 		DrawLine(W / 2, H / 2 - 13, W / 2, H / 2 - 4, CrossColor, 1.5f);
 		DrawLine(W / 2, H / 2 + 4, W / 2, H / 2 + 13, CrossColor, 1.5f);
+		}
 	}
 	if (PC->NoticeUntil > GetWorld()->GetTimeSeconds()) Label(BattleUIText::Ja(PC->Notice), 35, PC->CanShowDelegation() ? H - 156 : Match->IsEnabled() ? 235 : 96, Mint, 1.1f);
 	if (PC->IsTactical() && PC->PendingOrder != EBattleOrder::Move)
@@ -387,7 +424,21 @@ void ABattleHUD::DrawMinimap()
  DrawText(TEXT("地図（観測情報のみ）"),Muted,Map.Origin.X,Map.Origin.Y-20,GEngine->GetSmallFont(),.8f);
  DrawRect(Ground,Map.Origin.X,Map.Origin.Y,Map.Size.X,Map.Size.Y);
  // Map E: the city block outline (public map knowledge).
- if(BattleFieldLayout::IsUrban(GetWorld())) Frame(Map.ToScreen(FVector(25000,-15000,0)),Map.ToScreen(FVector(-25000,15000,0)),Muted);
+ if(const FVector2D City=BattleFieldLayout::Of(GetWorld()).CityHalf;City.X>0) Frame(Map.ToScreen(FVector(City.X,-City.Y,0)),Map.ToScreen(FVector(-City.X,City.Y,0)),Muted);
+ // Roads of the map (public map knowledge): the routes squads follow. The three main routes are brighter than the connectors.
+ {
+  const auto& Def=BattleFieldLayout::Of(GetWorld());const FLinearColor Road(.3f,.36f,.42f,.9f),Side(.2f,.25f,.3f,.8f);
+  for(const auto& E:Def.RouteEdges)
+  {const FVector2D A=Map.ToScreen(Def.RouteNodes[E.A]),B=Map.ToScreen(Def.RouteNodes[E.B]);DrawLine(A.X,A.Y,B.X,B.Y,E.Lane==BattleFieldLayout::ERouteLane::Connector?Side:Road,1);}
+  // The routes chosen for the selected squads (BattlePlayerRoutes.cpp) are drawn over the roads.
+  if(!Def.RouteEdges.IsEmpty())
+  {
+   bool bChosen[4]={false,false,false,false};const auto* Routes=GetWorld()->GetSubsystem<UBattleMatch>();
+   for(const ABattleUnit* U:PC->GetSelection())if(U&&U->IsAlive()&&U->GetState()->Team==0)bChosen[FMath::Clamp(Routes->PlayerRouteLane(U->GetState()->SquadID),0,3)]=true;
+   for(const auto& E:Def.RouteEdges)if(E.Lane!=BattleFieldLayout::ERouteLane::Connector&&bChosen[int32(E.Lane)+1])
+   {const FVector2D A=Map.ToScreen(Def.RouteNodes[E.A]),B=Map.ToScreen(Def.RouteNodes[E.B]);DrawLine(A.X,A.Y,B.X,B.Y,FLinearColor(1.f,.85f,.2f),2);}
+  }
+ }
  const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Homes are public; objective ownership is what the player's side last observed.
  if(Match->bArea) for(int32 Team=0;Team<2;++Team)
@@ -398,6 +449,8 @@ void ABattleHUD::DrawMinimap()
   const FLinearColor Color=Holder==0?Mint:Holder==1?Enemy:Holder==-2?Muted:White;
   const FVector2D P=Map.ToScreen(Match->Objectives[Index].Position);
   DrawRect(Color,P.X-5,P.Y-5,10,10);
+  // An objective worth more than the others (a depot) gets a frame around its square.
+  if(Match->ObjectiveValue(Index)>1.f)Frame(P-FVector2D(8,8),P+FVector2D(8,8),Color);
   DrawText(FString::Printf(TEXT("%c"),'A'+Index),Color,P.X+7,P.Y-7,GEngine->GetSmallFont(),.8f);
  }
  // Lookouts (public map places): a small diamond.
@@ -499,6 +552,8 @@ void ABattleHUD::DrawSquadList()
    FString Reason=!S.bActive?Squad->StopReason.ToString():!Squad->bPlayerDelegated?TEXT("手動指揮"):
     Waiting>0?FString::Printf(TEXT("通行待ち %d"),Waiting):!Mission?Plan.Reason:Sample?Sample->Reason:TEXT("報告待ち");
    Reason=BattleUIText::Ja(Reason);
+   // The route chosen for the squad (BattlePlayerRoutes.cpp).
+   if(const int32 RouteLane=GetWorld()->GetSubsystem<UBattleMatch>()->PlayerRouteLane(S.SquadID))Reason=FString::Printf(TEXT("道：%s ／ %s"),BattleRouteLaneName(RouteLane),*Reason);
    if(Reason.Len()>44)Reason=Reason.Left(43)+TEXT("...");
    DrawText(Reason,FLinearColor(.72f,.78f,.8f),Layout.Origin.X+9,Y+40,GEngine->GetSmallFont(),.7f);
   }
