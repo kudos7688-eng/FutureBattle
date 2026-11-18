@@ -8,7 +8,7 @@
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
 | `-BattleAICoverProbe` | Value | 0 | BattleTactics.cpp:9 |  |
-| `-BattleAimAssist` | Value | 1 | BattleController.cpp:1074 |  |
+| `-BattleAimAssist` | Value | 1 | BattleController.cpp:1076 |  |
 | `-BattleArea` | Param | off | BattleLeaderRuntime.cpp:73 |  |
 | `-BattleAreaACKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:95 |  |
 | `-BattleAreaATKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:93 |  |
@@ -232,6 +232,6 @@
 | `-BattleWideMapAudit` | Param | off | BattleLeaderRuntime.cpp:227 |  |
 | `-BattleWideMapGeometryOnly` | Param | off | BattleWideMapAudit.cpp:157 |  |
 | `-BattleWideMixed` | Param | off | BattleGameMode.cpp:55, BattleLeaderRuntime.cpp:71 |  |
-| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:766, BattleContactTrial.cpp:97, BattleExoShot.cpp:68 ほか14 |  |
+| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:775, BattleContactTrial.cpp:97, BattleExoShot.cpp:68 ほか14 |  |
 | `-BattleWideSmoke` | Param | off | BattleLeaderRuntime.cpp:241 |  |
 | `-BattleWideSoak` | Param | off | BattleLeaderRuntime.cpp:243 |  |

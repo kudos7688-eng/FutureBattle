@@ -120,6 +120,8 @@ public:
  // Active scout pairs of a team (at most UBattleTuning::AreaScoutLimit).
  int32 ActiveScouts(int32 Team) const;
  int32 ActiveOfType(int32 Team,uint8 SquadType) const;
+ // A commanded supply team of this team has its living leader within UBattleTuning::SupplyTeamRadius of the position.
+ bool SupplyTeamNear(int32 Team,const FVector& Position) const;
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;

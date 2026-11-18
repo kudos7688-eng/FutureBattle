@@ -20,7 +20,7 @@ inline EBattleWeapon WeaponForSlot(int32 Slot)
 class UWorld;
 namespace BattleSquadType
 {
- enum : uint8 { Rifle=0, Heavy=1, Scout=2, AntiTank=3, Tank=4, ArmoredCar=5, Mortar=6, SPGun=7, Exo=8, Count=9 };
+ enum : uint8 { Rifle=0, Heavy=1, Scout=2, AntiTank=3, Tank=4, ArmoredCar=5, Mortar=6, SPGun=7, Exo=8, Supply=9, Count=10 };
  int32 Members(uint8 Type);
  float HealthScale(uint8 Type);
  float SpeedScale(uint8 Type);
@@ -50,6 +50,9 @@ namespace BattleSquadType
  int32 LauncherRounds(uint8 Type); // anti-tank rounds of the second weapon (0 = none)
  int32 ScoreCount(uint8 Type);     // how many soldiers one living member counts for in the final score (1 for all but the exoskeleton)
  float SpeedAt(uint8 Type,const UWorld* World,const FVector& Position); // scale of UBattleTuning::MoveSpeed
+ // Supply team (2026-11-19, user request): 3 riflemen. Squads of its team whose leader stays within UBattleTuning::SupplyTeamRadius of
+ // its living leader get the home ammunition refill (UBattleMatch::UpdateArea). Cost AreaSupplyCost, at most AreaSupplyLimit per team.
+ // The AI does not buy it.
 }
 
 UENUM(BlueprintType)
@@ -357,6 +360,10 @@ public:
 	// goes home to be repaired like a vehicle. The AI keeps AreaExoKeep of them (trial -BattleAreaExoKeep=n; default 0 until measured).
 	UPROPERTY(Config, EditAnywhere) int32 AreaExoCost = 30;
 	UPROPERTY(Config, EditAnywhere) int32 AreaExoLimit = 3;
+	// Supply team (squad type 9): see BattleSquadType.
+	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyCost = 10;
+	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyLimit = 2;
+	UPROPERTY(Config, EditAnywhere) float SupplyTeamRadius = 3000.f;
 	UPROPERTY(Config, EditAnywhere) int32 AreaExoKeep = 0;
 	UPROPERTY(Config, EditAnywhere) float ExoHealthScale = 2.f;
 	UPROPERTY(Config, EditAnywhere) float ExoArmorSmallArms = .3f;

@@ -50,7 +50,7 @@ struct FBattleSightExperiment
  float FrontTimeline[2][20][MaxObjectives][4]={};int32 NextFrontSample=1;
  // Evaluation only (squad types, 2026-11-16): per team and squad type (0 rifle, 1 heavy): living person-seconds, person-seconds
  // within 100 m of an objective, shots, damage dealt, kills, damage taken, deaths. Squad type is that of the soldier's squad.
- static constexpr int32 MaxSquadTypes=9; // BattleSquadType::Count (checked in BattleSightExperiment.cpp)
+ static constexpr int32 MaxSquadTypes=10; // BattleSquadType::Count (checked in BattleSightExperiment.cpp)
  double TypePersonSec[2][MaxSquadTypes]={},TypePointSec[2][MaxSquadTypes]={},TypeDamage[2][MaxSquadTypes]={},TypeTaken[2][MaxSquadTypes]={}; int32 TypeShots[2][MaxSquadTypes]={},TypeKills[2][MaxSquadTypes]={},TypeDeaths[2][MaxSquadTypes]={};
  void Cover(const TCHAR* Key){if(Enabled)++CoverDiag.FindOrAdd(FName(Key));}
 };

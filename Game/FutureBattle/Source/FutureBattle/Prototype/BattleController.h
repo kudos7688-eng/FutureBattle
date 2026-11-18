@@ -39,8 +39,8 @@ struct FBattleNoticeLayout
 // Command bar (command UI 2026-11-16): buttons on the bottom panel that call the same actions as the keys.
 struct FBattleCommandBarLayout
 {
- FVector2D Origin=FVector2D::ZeroVector; float ButtonWidth=116, ButtonHeight=26, Gap=6; // 15 buttons: 1824 px wide (x 34..1858, inside the 1904 px panel at 1920)
- static constexpr int32 Count=15; // move, attack move, defend, hold, manual command, delegate to AI, buy a rifle squad, heavy infantry, a scout pair, an anti-tank team, a tank, an armoured car, a mortar team, a self-propelled gun
+ FVector2D Origin=FVector2D::ZeroVector; float ButtonWidth=108, ButtonHeight=26, Gap=6; // 16 buttons: 1818 px wide (x 34..1852, inside the 1904 px panel at 1920)
+ static constexpr int32 Count=16; // the 16th buys a supply team; // move, attack move, defend, hold, manual command, delegate to AI, buy a rifle squad, heavy infantry, a scout pair, an anti-tank team, a tank, an armoured car, a mortar team, a self-propelled gun
  // Route choice of the selected squads (BattlePlayerRoutes.cpp): a button of its own at the right end of the panel's top row, so
  // the bar's indices stay the orders and the purchases (more purchase buttons are added on other branches).
  FVector2D RouteOrigin=FVector2D::ZeroVector; float RouteWidth=176;
@@ -111,6 +111,7 @@ public:
 	void HireMortar();
 	void HireSPGun();
 	void HireExo();
+	void HireSupply();
 	void StartMatch();
 	void SaveMatch();
 	void LoadMatch();

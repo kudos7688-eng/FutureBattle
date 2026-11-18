@@ -108,6 +108,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("HireMortar"), EKeys::Eight, &ABattleController::HireMortar);
 	Button(TEXT("HireSPGun"), EKeys::Nine, &ABattleController::HireSPGun);
 	Button(TEXT("HireExo"), EKeys::Zero, &ABattleController::HireExo);
+	Button(TEXT("HireSupply"), EKeys::Hyphen, &ABattleController::HireSupply);
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
 	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
 	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
@@ -1027,6 +1028,7 @@ void ABattleController::PressCommandButton(int32 Index)
  case 12: HireMortar(); break; // area battle: mortar team
  case 13: HireSPGun(); break; // area battle: self-propelled gun
  case 14: HireExo(); break; // area battle: armoured exoskeleton soldier
+ case 15: HireSupply(); break; // area battle: supply team
  default: break;
  }
 }
@@ -1137,6 +1139,13 @@ void ABattleController::HireMortar()
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
 	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Mortar); ShowNotice(Match->LastMessage);
+}
+// Area battle: the - key buys a supply team (squad type 9, at most AreaSupplyLimit per team).
+void ABattleController::HireSupply()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Supply); ShowNotice(Match->LastMessage);
 }
 // Area battle: key 0 buys an armoured exoskeleton soldier (squad type 8, at most AreaExoLimit per team).
 void ABattleController::HireExo()

@@ -73,6 +73,18 @@ int32 UBattleMatch::ActiveSquads(int32 Team)const
  return Count;
 }
 int32 UBattleMatch::ActiveScouts(int32 Team)const{return ActiveOfType(Team,BattleSquadType::Scout);}
+bool UBattleMatch::SupplyTeamNear(int32 Team,const FVector& Position)const
+{
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ const float Radius=FMath::Clamp(GetDefault<UBattleTuning>()->SupplyTeamRadius,100.f,20000.f);
+ for(const auto& Pair:Store->GetSquads())
+ {
+  const auto& S=Pair.Value;if(S.Team!=Team||S.SquadType!=BattleSquadType::Supply||S.CommandStatus!=EBattleCommandStatus::Active)continue;
+  const auto* Leader=Store->Find(S.LeaderUnitID);
+  if(Leader&&Leader->IsAlive()&&FVector::Dist2D(R->Position(S.LeaderUnitID),Position)<=Radius)return true;
+ }
+ return false;
+}
 int32 UBattleMatch::ActiveOfType(int32 Team,uint8 SquadType)const
 {
  int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==SquadType;
@@ -97,6 +109,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(SquadType==BattleSquadType::Mortar&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaMortarLimit))return Fail(TEXT("Mortar team limit reached"));
  if(SquadType==BattleSquadType::SPGun&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaSPGLimit))return Fail(TEXT("Self-propelled gun limit reached"));
  if(SquadType==BattleSquadType::Exo&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaExoLimit))return Fail(TEXT("Exoskeleton soldier limit reached"));
+ if(SquadType==BattleSquadType::Supply&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaSupplyLimit))return Fail(TEXT("Supply team limit reached"));
  if(Credits[Team]<Cost)return Fail(TEXT("Insufficient resources"));
  if(GetWorld()->GetSubsystem<UBattleState>()->GetSquads().Num()>=100)return Fail(TEXT("Squad record capacity reached (100 including lost squads)"));
  auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
@@ -114,7 +127,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(R->SightExperiment.Enabled)R->SightExperiment.HireTimes[Team].Add(Elapsed);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE team=%d squad=%d auto=%d cost=%d credits=%d cancelled_replacements=%d active=%d time=%.1f leader=%s home=%s"),
   Team,SID,bAuto?1:0,Cost,Credits[Team],Cancelled,ActiveSquads(Team),Elapsed,*R->Position(Store->FindSquad(SID)->LeaderUnitID).ToCompactString(),*AreaHome(Team).ToCompactString());
- LastMessage=SquadType==BattleSquadType::Exo?FString::Printf(TEXT("Exoskeleton soldier deployed / -%d resources"),Cost):SquadType==BattleSquadType::SPGun?FString::Printf(TEXT("Self-propelled gun deployed / -%d resources"),Cost):SquadType==BattleSquadType::Mortar?FString::Printf(TEXT("Mortar team deployed / -%d resources"),Cost):SquadType==BattleSquadType::ArmoredCar?FString::Printf(TEXT("Armoured car deployed / -%d resources"),Cost):SquadType==BattleSquadType::Tank?FString::Printf(TEXT("Tank deployed / -%d resources"),Cost):SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
+ LastMessage=SquadType==BattleSquadType::Supply?FString::Printf(TEXT("Supply team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Exo?FString::Printf(TEXT("Exoskeleton soldier deployed / -%d resources"),Cost):SquadType==BattleSquadType::SPGun?FString::Printf(TEXT("Self-propelled gun deployed / -%d resources"),Cost):SquadType==BattleSquadType::Mortar?FString::Printf(TEXT("Mortar team deployed / -%d resources"),Cost):SquadType==BattleSquadType::ArmoredCar?FString::Printf(TEXT("Armoured car deployed / -%d resources"),Cost):SquadType==BattleSquadType::Tank?FString::Printf(TEXT("Tank deployed / -%d resources"),Cost):SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
  return true;
 }
 void UBattleMatch::UpdateAreaHiring()
@@ -256,12 +269,15 @@ void UBattleMatch::UpdateArea(float Dt)
    const FVector Leader=R->Position(S->LeaderUnitID);const float Radius=BattleTactics::Supply().PointRadius;
    for(const auto& Point:Objectives)if(Point.Owner==S->Team&&!Point.bContested&&Point.CapturingTeam==INDEX_NONE&&FVector::Dist2D(Leader,Point.Position)<=Radius){bPoint=true;break;}
   }
-  if(!bHome&&!bPoint){Area.AmmoTimers.Remove(SID);continue;}
+  // A supply team of the squad's side nearby gives the same refill anywhere (always on; the AI does not buy supply teams).
+  const bool bTeamSupply=!bHome&&!bPoint&&S->CommandStatus==EBattleCommandStatus::Active&&SupplyTeamNear(S->Team,R->Position(S->LeaderUnitID));
+  if(!bHome&&!bPoint&&!bTeamSupply){Area.AmmoTimers.Remove(SID);continue;}
   float& AmmoTime=Area.AmmoTimers.FindOrAdd(SID);AmmoTime+=Step;
   if(AmmoTime>=10)
   {
    AmmoTime=0;int32 Rounds=0;for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive()){Rounds+=Store->AddReserve(ID,GetDefault<UBattleTuning>()->ReserveAmmo);Store->RefillLauncher(ID);}
    if(bPoint&&Rounds>0)UE_LOG(LogFutureBattle,Display,TEXT("AREA_POINT_SUPPLY time=%.0f squad=%d team=%d rounds=%d"),Elapsed,SID,S->Team,Rounds);
+   if(bTeamSupply&&Rounds>0)UE_LOG(LogFutureBattle,Display,TEXT("AREA_TEAM_SUPPLY time=%.0f squad=%d team=%d rounds=%d"),Elapsed,SID,S->Team,Rounds);
   }
   if(!bHome)continue; // a point gives ammunition only: no healing, no replacements
   // Trial -BattleSupplyHeal>0: living members (leader included) recover HP at home, up to their own maximum.

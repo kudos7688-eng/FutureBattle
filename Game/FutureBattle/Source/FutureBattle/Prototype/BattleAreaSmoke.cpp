@@ -218,6 +218,15 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    {
     for(int32 Leader:{91,101})Store->ApplyDamage(Leader,1,10000);
     M->UpdateArea(1);M->Area.Replacements.Reset();
+    {
+     const int32 SCost=BattleSquadType::AreaCost(BattleSquadType::Supply);
+     if(M->Credits[0]<SCost){const int32 Add=SCost-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
+     const int32 C1=M->Credits[0];const bool SHired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Supply);
+     int32 SupplyID=0;for(const auto& P:Store->GetSquads())SupplyID=FMath::Max(SupplyID,P.Key);const auto* SS=Store->FindSquad(SupplyID);
+     bool SGood=SHired&&SS&&SCost==10&&M->Credits[0]==C1-SCost&&SS->SquadType==BattleSquadType::Supply&&SS->Members.Num()==3&&SS->DisplayName.Contains(TEXT("補給班"));
+     if(SGood){const FVector At=Position(SS->LeaderUnitID);SGood=M->SupplyTeamNear(0,At+FVector(2000,0,0))&&!M->SupplyTeamNear(0,At+FVector(4000,0,0))&&!M->SupplyTeamNear(1,At);}
+     Check(SGood,TEXT("supply team: 3 soldiers, 10 resources, own squads within 30 m of its leader are supplied"));
+    }
     const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::AntiTank);
     if(M->Credits[0]<Cost){const int32 Add=Cost-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
     const int32 C0=M->Credits[0];const bool Hired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::AntiTank);

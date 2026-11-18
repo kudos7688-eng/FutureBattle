@@ -512,7 +512,7 @@ namespace
   return V;
  }
 }
-int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:Type==Scout?2:Type==AntiTank?4:Type==Mortar?3:Type==Exo||IsVehicle(Type)?1:10;}
+int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:Type==Scout?2:Type==AntiTank?4:Type==Mortar||Type==Supply?3:Type==Exo||IsVehicle(Type)?1:10;}
 bool BattleSquadType::Replenished(uint8 Type){return Type!=Scout&&Type!=Exo;}
 bool BattleSquadType::LeaderHandover(uint8 Type){return Type==Scout;}
 float BattleSquadType::ShieldMax(uint8 Type){return Type==Exo?FMath::Clamp(GetDefault<UBattleTuning>()->ExoShield,0.f,1000.f):0.f;}
@@ -549,7 +549,7 @@ float BattleSquadType::SpeedAt(uint8 Type,const UWorld* World,const FVector& P)
  return FMath::Max(.1f,City?Urban:Open)/FMath::Max(1.f,T->MoveSpeed);
 }
 float BattleSquadType::DamageScale(uint8 Type){if(Type==Exo)return FMath::Clamp(GetDefault<UBattleTuning>()->ExoDamageScale,.1f,10.f);return Type==Heavy?HeavyValues().Damage:1.f;}
-int32 BattleSquadType::AreaCost(uint8 Type){if(Type==Exo)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaExoCost,1,200);if(Type==SPGun)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaSPGCost,1,200);if(Type==Mortar)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaMortarCost,1,100);if(Type==ArmoredCar)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaACCost,1,200);if(Type==Tank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaTankCost,1,200);if(Type==AntiTank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaATCost,1,100);if(Type==Scout)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaScoutCost,1,100);return Type==Heavy?HeavyValues().Cost:FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
+int32 BattleSquadType::AreaCost(uint8 Type){if(Type==Supply)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaSupplyCost,1,200);if(Type==Exo)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaExoCost,1,200);if(Type==SPGun)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaSPGCost,1,200);if(Type==Mortar)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaMortarCost,1,100);if(Type==ArmoredCar)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaACCost,1,200);if(Type==Tank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaTankCost,1,200);if(Type==AntiTank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaATCost,1,100);if(Type==Scout)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaScoutCost,1,100);return Type==Heavy?HeavyValues().Cost:FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
 EBattleWeapon BattleSquadType::Weapon(uint8 Type,int32 Slot){if(IsVehicle(Type))return EBattleWeapon::SupportGun; // the machine gun (a tank's main gun is separate)
  if(Type==AntiTank)return Slot==1||Slot==2?EBattleWeapon::AntiTank:EBattleWeapon::Carbine;
  if(Type==Mortar)return Slot==1?EBattleWeapon::Mortar:EBattleWeapon::Carbine; // the leader keeps a rifle; slot 1 carries the mortar
@@ -567,6 +567,7 @@ void UBattleState::SetSquadType(int32 SquadID,uint8 Type)
  if(Type==BattleSquadType::Mortar) S->DisplayName=FString::Printf(TEXT("第%d迫撃砲班"),SquadID);
  if(Type==BattleSquadType::SPGun) S->DisplayName=FString::Printf(TEXT("第%d自走砲"),SquadID);
  if(Type==BattleSquadType::Exo) S->DisplayName=FString::Printf(TEXT("第%d外骨格兵"),SquadID);
+ if(Type==BattleSquadType::Supply) S->DisplayName=FString::Printf(TEXT("第%d補給班"),SquadID);
  const float Shield=BattleSquadType::ShieldMax(Type);bShields|=Shield>0.f;
  for(int32 ID:S->Members) if(auto* U=Units.Find(ID); U&&U->IsAlive()) {U->HP=MaxHealthOf(ID);U->Shield=Shield;U->ShieldWait=0.f;U->Launcher=BattleSquadType::LauncherRounds(Type);U->LauncherWait=0.f;}
 }
