@@ -30,6 +30,14 @@ namespace BattleGroupValues
  constexpr double OwnSideRatio=.75;  // a point nearer the own home than this x its distance to the enemy home is an own-side point
  constexpr double ArriveRadius=10000.; // an advance has arrived when a squad of the group is this near the point (the stall clock starts)
  constexpr float TravelMax=300.f;      // an advance that has not arrived after this long is given up
+ // Stage 3d: a group that is pushing stays. Pushing = the team sees the point being captured by itself, or it has PushRatio times the
+ // known enemies in soldiers around the point (at least PushMin). The stall clock is then extended PushExtend seconds at a time, up to
+ // PushMax seconds after the arrival, and the loss limit drops to PushLossAbort.
+ constexpr double PushRatio=1.5;
+ constexpr int32 PushMin=8;
+ constexpr float PushExtend=30.f;
+ constexpr float PushMax=480.f;
+ constexpr double PushLossAbort=.4;
  constexpr float AvoidCap=3600.f;    // a failed point is avoided GroupAvoidSeconds x 2^(failures in a row - 1), up to this
 }
 
@@ -343,9 +351,20 @@ void UBattleMatch::UpdateGroups(int32 Team)
    {
     bool bNear=false;
     for(int32 SID:G->Squads)if(const auto* S=Store->FindSquad(SID))bNear|=FVector::Dist2D(R->Position(S->LeaderUnitID),Objectives[G->Objective].Position)<=BattleGroupValues::ArriveRadius;
-    if(bNear){G->bArrived=true;G->PhaseAt=Elapsed;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_ARRIVED group=%d team=%d objective=%d time=%.1f"),ID,Team,G->Objective,Elapsed);}
+    if(bNear){G->bArrived=true;G->PhaseAt=Elapsed;G->ArrivedAt=Elapsed;G->Extensions=0;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_ARRIVED group=%d team=%d objective=%d time=%.1f"),ID,Team,G->Objective,Elapsed);}
    }
-   const bool bLosses=G->StartLiving>0&&Living<G->StartLiving*BattleGroupValues::LossAbort;
+   // Pushing (observed only): the point is in the team's sight now and its capture marker shows the team capturing, or the team's
+   // own soldiers around the point outnumber the enemies it knows of there.
+   const int32 Slot=Team*Objectives.Num()+G->Objective;
+   const bool bSeen=Area.SeenAt.IsValidIndex(Slot)&&Area.SeenAt[Slot]>=0.f&&Elapsed-Area.SeenAt[Slot]<=1.f;
+   const int32 OwnThere=V.OwnAt.IsValidIndex(G->Objective)?V.OwnAt[G->Objective]:0,KnownThere=V.EnemyAt.IsValidIndex(G->Objective)?V.EnemyAt[G->Objective]:0;
+   const bool bPushing=G->bArrived&&((bSeen&&Objectives[G->Objective].CapturingTeam==Team)||(OwnThere>=BattleGroupValues::PushMin&&OwnThere>=KnownThere*BattleGroupValues::PushRatio));
+   const bool bLosses=G->StartLiving>0&&Living<G->StartLiving*(bPushing?BattleGroupValues::PushLossAbort:BattleGroupValues::LossAbort);
+   if(bPushing&&!bOwn&&!bLosses&&Elapsed-G->PhaseAt>=FMath::Max(10.f,T->GroupAdvanceMax)&&Elapsed-G->ArrivedAt<BattleGroupValues::PushMax)
+   {
+    G->PhaseAt+=BattleGroupValues::PushExtend;++G->Extensions;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_PUSH group=%d team=%d objective=%d own=%d known=%d capturing=%d extensions=%d time=%.1f"),ID,Team,G->Objective,OwnThere,KnownThere,bSeen?Objectives[G->Objective].CapturingTeam:-2,G->Extensions,Elapsed);
+   }
    if(bOwn){if(G->StallPoint==G->Objective){G->StallPoint=INDEX_NONE;G->Stalls=0;}Enter(2,TEXT("point_taken"));}
    else if(bLosses||Elapsed-G->PhaseAt>=(G->bArrived?FMath::Max(10.f,T->GroupAdvanceMax):BattleGroupValues::TravelMax))
    {

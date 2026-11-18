@@ -154,7 +154,8 @@ public:
 		// Stage 3b: the living soldiers when the advance began (losses end it early) and how often in a row the group failed at StallPoint.
 		int32 StartLiving = 0, StallPoint = INDEX_NONE, Stalls = 0;
 		bool bOpened = false; /* the opening rush was decided (once per group) */
-		bool bArrived = false; /* this advance has reached its point: the stall clock (PhaseAt) runs from then */ };
+		bool bArrived = false; /* this advance has reached its point: the stall clock (PhaseAt) runs from then */
+		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */ };
 	uint8 GroupRole(const FBattleGroup& Group, int32 SquadID) const;
 	void AssignGroupRoles(FBattleGroup& Group) const;
 	FVector GroupSupportPost(int32 Team, int32 Point) const;
