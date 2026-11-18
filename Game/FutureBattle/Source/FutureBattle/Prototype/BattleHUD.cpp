@@ -347,13 +347,19 @@ void ABattleHUD::DrawHUD()
 			for (int32 I = 0; I < FBattleCommandBarLayout::Count; ++I)
 			{
 				const float X = Bar.Origin.X + I * (Bar.ButtonWidth + Bar.Gap);
-				// Route of the selected squads (maps with a road network): shows the current choice, lit when one is set.
-				const int32 RouteLane = I == 11 ? PC->SelectedRouteLane() : 0;
-				const bool bUsable = I == 11 ? (bAny && Match->RoutesOn()) : I >= 6 ? (Match->bArea && BattleTactics::AreaHire().bEnabled) : bAny;
-				const bool bPending = (I == 1 && PC->PendingOrder == EBattleOrder::AttackMove) || (I == 2 && PC->PendingOrder == EBattleOrder::Defend) || (I == 11 && bUsable && RouteLane != 0);
+				const bool bUsable = I >= 6 ? (Match->bArea && BattleTactics::AreaHire().bEnabled) : bAny;
+				const bool bPending = (I == 1 && PC->PendingOrder == EBattleOrder::AttackMove) || (I == 2 && PC->PendingOrder == EBattleOrder::Defend);
 				DrawRect(bPending ? FLinearColor(.45f, .4f, .1f, .98f) : bUsable ? FLinearColor(.10f, .24f, .24f, .98f) : FLinearColor(.08f, .11f, .15f, .98f), X, Bar.Origin.Y, Bar.ButtonWidth, Bar.ButtonHeight);
-				const FString RouteName = I == 11 ? FString::Printf(TEXT("通り道：%s%s"), !bUsable ? TEXT("―") : RouteLane < 0 ? TEXT("混在") : BattleRouteLaneName(RouteLane), PC->bGamepadActive ? TEXT("") : TEXT(" [V]")) : FString();
-				Label(I == 11 ? *RouteName : Names[I], X + 8, Bar.Origin.Y + 5, bPending ? FLinearColor::Yellow : bUsable ? Mint : Muted, .85f);
+				Label(Names[I], X + 8, Bar.Origin.Y + 5, bPending ? FLinearColor::Yellow : bUsable ? Mint : Muted, .85f);
+			}
+			// Route of the selected squads (maps with a road network only): its own button at the right end of the panel's top row,
+			// apart from the bar. Shows the current choice, lit when one is set.
+			if (Match->RoutesOn())
+			{
+				const int32 RouteLane = PC->SelectedRouteLane();
+				const bool bLit = bAny && RouteLane != 0;
+				DrawRect(bLit ? FLinearColor(.45f, .4f, .1f, .98f) : bAny ? FLinearColor(.10f, .24f, .24f, .98f) : FLinearColor(.08f, .11f, .15f, .98f), Bar.RouteOrigin.X, Bar.RouteOrigin.Y, Bar.RouteWidth, Bar.ButtonHeight);
+				Label(FString::Printf(TEXT("通り道：%s%s"), !bAny ? TEXT("―") : RouteLane < 0 ? TEXT("混在") : BattleRouteLaneName(RouteLane), PC->bGamepadActive ? TEXT("") : TEXT(" [Z]")), Bar.RouteOrigin.X + 8, Bar.RouteOrigin.Y + 5, bLit ? FLinearColor::Yellow : bAny ? Mint : Muted, .85f);
 			}
 		}
 		if (PC->bGamepadActive) Label(TEXT("右スティック：カーソル   A：選択・決定   左スティック：視点移動   LT/RT：拡大縮小   LB：全選択   ビュー：直接操作   メニュー：AI一時停止   十字→：速度"), 34, H - 53, Muted, .9f);

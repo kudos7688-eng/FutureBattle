@@ -40,8 +40,12 @@ struct FBattleNoticeLayout
 struct FBattleCommandBarLayout
 {
  FVector2D Origin=FVector2D::ZeroVector; float ButtonWidth=124, ButtonHeight=26, Gap=6;
- static constexpr int32 Count=12; // move, attack move, defend, hold, manual command, delegate to AI, buy a rifle squad, heavy infantry, a scout pair, an anti-tank team, a tank, route
- static FBattleCommandBarLayout Make(FVector2D View){FBattleCommandBarLayout L;L.Origin=FVector2D(34,View.Y-90);return L;}
+ static constexpr int32 Count=11; // move, attack move, defend, hold, manual command, delegate to AI, buy a rifle squad, heavy infantry, a scout pair, an anti-tank team, a tank
+ // Route choice of the selected squads (BattlePlayerRoutes.cpp): a button of its own at the right end of the panel's top row, so
+ // the bar's indices stay the orders and the purchases (more purchase buttons are added on other branches).
+ FVector2D RouteOrigin=FVector2D::ZeroVector; float RouteWidth=176;
+ static FBattleCommandBarLayout Make(FVector2D View){FBattleCommandBarLayout L;L.Origin=FVector2D(34,View.Y-90);L.RouteOrigin=FVector2D(View.X-34-L.RouteWidth,View.Y-122);return L;}
+ bool RouteAt(FVector2D P) const {return P.X>=RouteOrigin.X&&P.X<RouteOrigin.X+RouteWidth&&P.Y>=RouteOrigin.Y&&P.Y<RouteOrigin.Y+ButtonHeight;}
  int32 ButtonAt(FVector2D P) const
  {
   if(P.Y<Origin.Y||P.Y>=Origin.Y+ButtonHeight||P.X<Origin.X) return INDEX_NONE;

@@ -109,7 +109,8 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("Reload"), EKeys::R, &ABattleController::Reload);
 	Button(TEXT("ToggleCombat"), EKeys::P, &ABattleController::ToggleCombat);
 	Button(TEXT("GameSpeed"), EKeys::Period, &ABattleController::CycleGameSpeed);
-	Button(TEXT("Route"), EKeys::V, &ABattleController::CycleRouteSelected);
+	// Z: V and F belong to the squad groups (select, form) on the suppression branch.
+	Button(TEXT("Route"), EKeys::Z, &ABattleController::CycleRouteSelected);
 	Button(TEXT("Restart"), EKeys::F5, &ABattleController::RestartBattle);
 	Button(TEXT("ZoomIn"), EKeys::MouseScrollUp, &ABattleController::ZoomIn);
 	Button(TEXT("ZoomOut"), EKeys::MouseScrollDown, &ABattleController::ZoomOut);
@@ -417,8 +418,14 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
   {
    FVector2D BarPointer; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH);
    if(GetPointerPosition(BarPointer))
-    if(const int32 Button=FBattleCommandBarLayout::Make(FVector2D(ViewW,ViewH)).ButtonAt(BarPointer);Button!=INDEX_NONE)
+   {
+    const auto Bar=FBattleCommandBarLayout::Make(FVector2D(ViewW,ViewH));
+    if(const int32 Button=Bar.ButtonAt(BarPointer);Button!=INDEX_NONE)
     {bMinimapPress=true;bTriggerHeld=false;PressCommandButton(Button);return true;}
+    // The route button stands apart from the bar and exists only on maps with a road network.
+    if(Bar.RouteAt(BarPointer)&&GetWorld()->GetSubsystem<UBattleMatch>()->RoutesOn())
+    {bMinimapPress=true;bTriggerHeld=false;CycleRouteSelected();return true;}
+   }
   }
   // Notification log: a left click on a row moves the tactical camera to that event (its release is swallowed like the minimap's).
   if(Params.Key==EKeys::LeftMouseButton && Params.Event==IE_Pressed)
@@ -938,7 +945,6 @@ void ABattleController::PressCommandButton(int32 Index)
  case 8: HireScout(); break; // area battle: scout pair
  case 9: HireAntiTank(); break; // area battle: anti-tank team
  case 10: HireTank(); break; // area battle: tank
- case 11: CycleRouteSelected(); break; // maps with a road network: route of the selected squads
  default: break;
  }
 }
