@@ -20,6 +20,16 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-20 3時40分 Claude（アセット参考資料）：HUD に被弾方向・画面外マーカー・撃破ログ（表示だけ。ブランチ `hitdir`）
+
+- 変更：`UBattleState::ApplyDamageFrom`（撃った位置・撃った兵・武器の種類を添えて `ApplyDamage` を呼ぶ。表示用の記録だけで、規則・AI は読まない。保存しない）。小銃・機関銃・爆発・砲撃・戦車砲・バズーカの呼び出し元をこれに替えた。
+- `ABattleHUD::DrawHitDirection`：操作中の兵が撃たれた方向を赤い弧で1.5秒。方向が分からない被弾は淡い輪。切替 `-BattleHitDirection=0`。
+- `ABattleHUD::DrawOffscreenMarkers`：画面外の拠点（持ち主の色）と小隊の目標（黄）を画面の縁に距離付きで。作戦画面では選んだ小隊。切替 `-BattleOffscreenMarkers=0`。
+- `ABattleHUD::DrawKillLog`：味方が関わる戦死で倒した側が分かるものを、右上に最大5行・8秒。敵は「敵／敵兵／敵の隊長／敵の車両」だけで、小隊名・兵種は出さない。切替 `-BattleKillLog=0`。
+- 検証：main 9b17f8e を取り込んで `Build-Editor` 成功、`Test-Battle` は `BATTLE_SMOKE_RESULT failures=0`（212件。足した確認「Hits on the controlled unit keep their source」「Kill log keeps a death with its killer」も合格。`Setup/Battle-Smoke-20261120-033718.log`）。
+- 未実施：**実画面の確認はまだ**（ユーザー）。マップF（拠点9）でのマーカーの込み具合、大人数の戦いでの撃破ログの流れの速さを見る。性能計測はしていない（表示だけで、毎フレームの追加は拠点数＋選択小隊数の投影だけ）。
+- 制限：落下死、外骨格のシールド切れ、旧闘技場の支援砲撃、試験用の被弾は撃った位置を持たないので、輪だけ出て撃破ログに載らない。
+
 ## 2026-11-20 3時05分 Claude（小隊の人数）：止まった味方をすり抜ける試験切替 `-BattleAllyPass=1`（既定0）の検証（既定0のまま main へ取り込み。ユーザー決定）
 
 - 中身：止まった味方の群れに塞がれ、ほかの回避手段も尽きて3秒以上進めない兵は、半径8m以内の止まった味方の当たり判定を5秒間だけ無視して進む。ログ `BATTLE_ALLY_PASS`。
