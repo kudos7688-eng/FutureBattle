@@ -74,6 +74,19 @@ namespace BattleTerrain
 			Out=Best;if(Slope)*Slope=BestSlope;
 			return BestGap<=Step;
 		}
+		// Raises a point that lies inside solid ground (a goal given at height 0 under a hill) onto that ground. Hills higher than
+		// the reach of the navigation projection (4m) need it; lower ones are unaffected in effect.
+		void Lift(FVector& Point) const
+		{
+			if(Patches.IsEmpty())return;
+			const int32 CX=FMath::FloorToInt((Point.X+Half.X)/Cell),CY=FMath::FloorToInt((Point.Y+Half.Y)/Cell);
+			if(CX<0||CY<0||CX>=Columns||CY>=Rows)return;
+			for(int32 I:Cells[CY*Columns+CX])
+			{
+				const FHeightPatch& P=Patches[I];if(!P.bSolid||!P.Contains(Point.X,Point.Y))continue;
+				const double Z=P.HeightAt(Point.X,Point.Y);if(Point.Z<Z-30)Point.Z=Z;
+			}
+		}
 	};
 	// How far above the ground the centre of a hand-moved soldier's capsule (radius 36) is kept: 100cm on the flat (as on maps
 	// A-F), a little more on a slope so the round bottom clears it.

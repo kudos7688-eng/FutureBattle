@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "Engine/World.h"
 #include "BattleTerrain.h"
+#include "BattleMapI.h"
 
 namespace BattleFieldLayout
 {
@@ -118,6 +119,28 @@ namespace BattleFieldLayout
 			{
 				FMapDef D=T.Last();D.Name=TEXT("Lvl_BattleWide_G");
 				D.Heights=BattleTerrain::MakeG(D.HalfExtent);
+				T.Add(D);
+			}
+			// I (2026-11-19): designed from 50m sectors (BattleMapI.h): a town on both sides of the middle, fields, woods, a river with
+			// a bridge and a ford on each side, hills of 5m and 7m. Eight objectives, each the middle of one sector; the depots (0, 7)
+			// start owned and are worth double. Roads on sector borders: the avenue, a north and a south road, seven cross roads.
+			{
+				FMapDef D=Urban;D.Name=TEXT("Lvl_BattleWide_I");
+				D.Objectives=BattleMapI::Objectives();
+				D.ObjectiveOwners={0,-1,-1,-1,-1,-1,-1,1};
+				D.ObjectiveValues={2,1,1,1,1,1,1,2};
+				D.PointIncomeScale=.5f;
+				D.CityHalf=FVector2D(25000,20000);
+				// Lookouts: the knolls inside the town's edge.
+				D.Lookouts={FVector(22500,7500,500),FVector(-22500,-7500,500)};
+				auto Node=[&D](double X,double Y){const FVector P(X,Y,0);for(int32 I=0;I<D.RouteNodes.Num();++I)if(D.RouteNodes[I].Equals(P,1))return I;return D.RouteNodes.Add(P);};
+				auto Edge=[&](double X0,double Y0,double X1,double Y1,ERouteLane Lane){FRouteEdge E;E.A=Node(X0,Y0);E.B=Node(X1,Y1);E.Lane=Lane;D.RouteEdges.Add(E);};
+				const double AvenueX[]={-42000,-35000,-25000,-10000,0,10000,25000,35000,42000};
+				for(int32 I=0;I<8;++I)Edge(AvenueX[I],0,AvenueX[I+1],0,ERouteLane::Centre);
+				const double RoadX[]={-35000,-25000,-10000,0,10000,25000,35000};
+				for(int32 I=0;I<6;++I){Edge(RoadX[I],20000,RoadX[I+1],20000,ERouteLane::North);Edge(RoadX[I],-20000,RoadX[I+1],-20000,ERouteLane::South);}
+				for(double X:RoadX){Edge(X,20000,X,0,ERouteLane::Connector);Edge(X,0,X,-20000,ERouteLane::Connector);}
+				D.Heights=BattleMapI::MakeHeights(D.HalfExtent);
 				T.Add(D);
 			}
 			return T;

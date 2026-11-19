@@ -476,6 +476,8 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
  const FVector AskedGoal=Goal;
  if(bWideField && Order!=EBattleOrder::Hold)
  {
+  // A goal under a hill (given at height 0) is the place on the hill above it (map I: hills above the projection's reach).
+  BattleFieldLayout::Of(GetWorld()).Heights.Lift(Goal);
   // A vehicle's order (with its path searches, partial routes into the city explore the whole reachable area) is timed for BATTLE_TANK_COST.
   const bool bVehicleOrder=IsVehicle(S->LeaderUnitID);const double OrderStart=bVehicleOrder?FPlatformTime::Seconds():0.;
   ON_SCOPE_EXIT{if(bVehicleOrder){TankOrderMs+=(FPlatformTime::Seconds()-OrderStart)*1000.;++TankOrders;}};

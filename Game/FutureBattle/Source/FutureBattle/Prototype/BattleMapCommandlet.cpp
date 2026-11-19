@@ -3,6 +3,7 @@
 #include "Misc/Paths.h"
 #include "Misc/Parse.h"
 #include "BattleFieldLayout.h"
+#include "BattleMapI.h"
 #include "NavigationPath.h"
 
 #if WITH_EDITOR
@@ -17,6 +18,8 @@
 #include "Components/BrushComponent.h"
 #include "GameFramework/WorldSettings.h"
 #include "NavMesh/NavMeshBoundsVolume.h"
+#include "NavModifierVolume.h"
+#include "NavAreas/NavArea_Null.h"
 #include "NavigationSystem.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "Builders/CubeBuilder.h"
@@ -36,7 +39,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 {
 #if WITH_EDITOR
 	FString Wide;FParse::Value(*Params,TEXT("WideField="),Wide);
-	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D") && Wide!=TEXT("E") && Wide!=TEXT("F") && Wide!=TEXT("G")) return 6;
+	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D") && Wide!=TEXT("E") && Wide!=TEXT("F") && Wide!=TEXT("G") && Wide!=TEXT("I")) return 6;
 	const bool Expanded=Wide==TEXT("D");
 	// Map E (2026-11-14): 1000m x 700m, urban centre with five objectives, open flanks with hedges and low walls.
 	// Map F (2026-11-18): the size, homes and city objectives of E; a city of districts with an avenue tanks can use, two flank
@@ -45,7 +48,14 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 	// roads. It shares the layout of F (BattleMapLayoutF.inl) and adds BattleMapLayoutG.inl; the heights are in BattleTerrain.h.
 	const bool UrbanG=Wide==TEXT("G");
 	const bool UrbanF=Wide==TEXT("F")||UrbanG;
-	const bool Urban=Wide==TEXT("E")||UrbanF;
+	// Map I (2026-11-19): a map designed from 50m sectors (BattleMapI.h, BattleMapLayoutI.inl): town, fields, woods, a river with a
+	// bridge and a ford on each side, hills of 5m and 7m. It takes the rules of map E and the height table of map G.
+	const bool UrbanI=Wide==TEXT("I");
+	const bool Urban=Wide==TEXT("E")||UrbanF||UrbanI;
+	// Maps with a height table: their houses and hills (east half), for the navigation volumes and the checks below.
+	const bool Terrain=UrbanG||UrbanI;
+	const TArray<BattleTerrain::FHouse> TerrainHouses=UrbanI?BattleMapI::Houses():UrbanG?BattleTerrain::HousesG():TArray<BattleTerrain::FHouse>();
+	const TArray<BattleTerrain::FHill> TerrainHills=UrbanI?BattleMapI::Hills():UrbanG?BattleTerrain::HillsG():TArray<BattleTerrain::FHill>();
 	const FString WideName=TEXT("Lvl_BattleWide_")+Wide;
 	const bool Sight=!Wide.IsEmpty();
 	const bool Large = Sight || FParse::Param(*Params,TEXT("LargeField"));
@@ -111,9 +121,9 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 			Box(TEXT("UrbanBoundary"),FVector(0,Sign*35000,180),FVector(100000,100,360),WallMat);
 			Box(TEXT("UrbanBoundary"),FVector(Sign*50000,0,180),FVector(100,70000,360),WallMat);
 			Box(TEXT("HomeMarker"),FVector(Sign*42000,0,2),FVector(3000,3000,3),Sign<0?AllyMat:EnemyMat,false);
-			Box(TEXT("LookoutMarker"),FVector(0,Sign*16500,2),FVector(800,800,3),AllyMat,false);
+			if(!UrbanI)Box(TEXT("LookoutMarker"),FVector(0,Sign*16500,2),FVector(800,800,3),AllyMat,false);
 			// Map F: the depots are objectives and get the objective marker below.
-			if(!UrbanF)Box(TEXT("DepotMarker"),FVector(Sign*33000,Sign*15000,2),FVector(1200,1200,3),AllyMat,false);
+			if(!UrbanF&&!UrbanI)Box(TEXT("DepotMarker"),FVector(Sign*33000,Sign*15000,2),FVector(1200,1200,3),AllyMat,false);
 		}
 		for(int32 I=0;I<BattleFieldLayout::ObjectiveCountForMap(WideName);++I) Box(TEXT("UrbanObjective"),BattleFieldLayout::ObjectiveForMap(WideName,I)+FVector(0,0,2),FVector(1400,1400,3),AllyMat,false);
 		// Layout v2 (2026-11-15). The first layout used 52m x 29m solid blocks: stepping 2-4m sideways from a corner still left a
@@ -159,7 +169,11 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 			}
 			++Objects;
 		};
-		if(UrbanF)
+		if(UrbanI)
+		{
+#include "BattleMapLayoutI.inl"
+		}
+		else if(UrbanF)
 		{
 #include "BattleMapLayoutF.inl"
 		}
@@ -383,7 +397,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 	// Map G: the ground volume stays below the tops of the obstacles (see above), so every hill, staircase and upper floor gets a
 	// volume of its own that reaches just over it. Cover that stands on those is 130cm high, above the volume.
 	TArray<ANavMeshBoundsVolume*> TerrainVolumes;
-	if(UrbanG)
+	if(Terrain)
 	{
 		auto Extra=[&](double X0,double X1,double Y0,double Y1,double Z0,double Z1)
 		{
@@ -396,14 +410,29 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 				TerrainVolumes.Add(Volume);
 			}
 		};
-		for(const BattleTerrain::FHouse& B:BattleTerrain::HousesG())
+		for(const BattleTerrain::FHouse& B:TerrainHouses)
 		{
 			const BattleTerrain::FHouseShape S(B);const double F=BattleTerrain::FloorZ;
 			Extra(S.W0-20,S.E0+20,S.S0y-20,S.N0y+20,F-30,F+120);
 			Extra(S.S0-30,S.S1+30,S.SY-10,S.N0y+10,100,F+120);
 		}
-		for(const BattleTerrain::FHill& H:BattleTerrain::HillsG())
+		for(const BattleTerrain::FHill& H:TerrainHills)
 			Extra(H.X-H.W*.5-H.Run-50,H.X+H.W*.5+H.Run+50,H.Y-H.H*.5-H.Run-50,H.Y+H.H*.5+H.Run+50,100,H.Top+120);
+	}
+	// Map I: the rivers are holes in the navigation mesh (no collision: sight and shots cross the water). The gaps between the
+	// pieces are the bridge (10m, vehicles too) and the ford (3m, too narrow for the vehicle agent).
+	if(UrbanI)
+	{
+		using namespace BattleMapI;
+		const double Cuts[4][2]={{RiverY0,BridgeY-BridgeHalf},{BridgeY+BridgeHalf,FordY-FordHalf},{FordY+FordHalf,RiverY1},{0,0}};
+		for(int32 I=0;I<3;++I)for(int32 Sign:{-1,1})
+		{
+			ANavModifierVolume* Water=World->SpawnActor<ANavModifierVolume>(FVector(Sign*(RiverX0+RiverX1)*.5,Sign*(Cuts[I][0]+Cuts[I][1])*.5,60),FRotator::ZeroRotator);
+			Water->SetActorLabel(TEXT("RiverNoWalk"));
+			UCubeBuilder* WaterCube=NewObject<UCubeBuilder>(Water);WaterCube->X=RiverX1-RiverX0;WaterCube->Y=Cuts[I][1]-Cuts[I][0];WaterCube->Z=320;
+			UActorFactory::CreateBrushForVolumeActor(Water,WaterCube);Water->GetBrushComponent()->BuildSimpleBrushCollision();
+			Water->SetAreaClass(UNavArea_Null::StaticClass());Water->PostEditChange();
+		}
 	}
 	if (UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
 	{
@@ -442,12 +471,12 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 				Failures+=!Reach;OpenLines+=!Blocked;
 				UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_PAIR from=%d to=%d reachable=%d length_cm=%.1f blocked=%d"),I,J,Reach,Reach?Path->GetPathLength():-1,Blocked);
 			}
-			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=%s rotation=180"),Failures,OpenLines,UrbanG?TEXT("heights-v1"):UrbanF?TEXT("districts-v1"):TEXT("urban-v2"));
-			if(UrbanG)
+			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=%s rotation=180"),Failures,OpenLines,UrbanI?TEXT("sectors-v1"):UrbanG?TEXT("heights-v1"):UrbanF?TEXT("districts-v1"):TEXT("urban-v2"));
+			if(Terrain)
 			{
 				// The geometry agrees with the height table (a trace down at nine points of every patch; points under a crate or a
 				// wall that stands on the patch are skipped), and every upper floor and hilltop is reached from the west home.
-				const BattleTerrain::FHeights Heights=BattleTerrain::MakeG(FVector2D(50000,35000));
+				const BattleTerrain::FHeights Heights=UrbanI?BattleMapI::MakeHeights(FVector2D(50000,35000)):BattleTerrain::MakeG(FVector2D(50000,35000));
 				int32 Samples=0,Mismatched=0,Unreached=0,Goals=0;
 				for(const auto& P:Heights.Patches) for(double U:{.25,.5,.75}) for(double V:{.25,.5,.75})
 				{
@@ -465,11 +494,43 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 				};
 				for(int32 Sign:{-1,1})
 				{
-					for(const BattleTerrain::FHouse& B:BattleTerrain::HousesG()){const BattleTerrain::FHouseShape S(B);Reach(FVector(Sign*B.X,Sign*(S.S0y+S.SY)*.5+60,BattleTerrain::FloorZ));}
-					for(const BattleTerrain::FHill& H:BattleTerrain::HillsG())Reach(FVector(Sign*H.X,Sign*H.Y,H.Top));
+					for(const BattleTerrain::FHouse& B:TerrainHouses){const BattleTerrain::FHouseShape S(B);Reach(FVector(Sign*B.X,Sign*(S.S0y+S.SY)*.5+60,BattleTerrain::FloorZ));}
+					for(const BattleTerrain::FHill& H:TerrainHills)Reach(FVector(Sign*H.X,Sign*H.Y,H.Top));
 				}
 				UE_LOG(LogTemp,Display,TEXT("TERRAIN_MAP_RESULT failures=%d samples=%d mismatched=%d goals=%d unreached=%d volumes=%d"),Mismatched+Unreached,Samples,Mismatched,Goals,Unreached,TerrainVolumes.Num());
 				if(Mismatched+Unreached) return 8;
+			}
+			if(UrbanI)
+			{
+				using namespace BattleMapI;
+				// River: no ground to stand on in the water; the ford and the bridge are crossed on foot; a tank crosses by the bridge only.
+				FNavLocation InWater;const double MidX=(RiverX0+RiverX1)*.5;
+				const bool bWet=!Nav->ProjectPointToNavigation(FVector(MidX,15000,0),InWater,FVector(60,60,200));
+				auto Cross=[&](double Y){auto* Path=Nav->FindPathToLocationSynchronously(World,FVector(RiverX0-600,Y,0),FVector(RiverX1+600,Y,0));return Path&&Path->IsValid()&&!Path->IsPartial()?Path->GetPathLength():-1.f;};
+				const float Ford=Cross(FordY),Bridge=Cross(BridgeY),Bank=Cross(15000);
+				const bool bRiver=bWet&&Ford>0&&Ford<4000&&Bridge>0&&Bridge<4000&&(Bank<0||Bank>8000);
+				UE_LOG(LogTemp,Display,TEXT("SECTOR_MAP_RIVER ok=%d water_blocked=%d ford_cm=%.0f bridge_cm=%.0f bank_to_bank_cm=%.0f"),bRiver?1:0,bWet?1:0,Ford,Bridge,Bank);
+				// Cover of every sector: standing places (2.5m grid, on the navigation mesh, ground level) that are shielded within 2.5m
+				// from each of the four sides, the test the cover-first arrival uses. Every sector but fields, rivers, hills and the
+				// home bases must offer at least six per side.
+				int32 Checked=0,Short=0,Least=MAX_int32;int32 FieldSum=0,FieldCount=0;
+				for(int32 C=0;C<Columns;++C)for(int32 R=0;R<Rows;++R)
+				{
+					const TCHAR K=Kind(C,R);const FVector2D M=Centre(C,R);int32 N[4]={0,0,0,0};
+					for(double DX=-2250;DX<=2250;DX+=250)for(double DY=-2250;DY<=2250;DY+=250)
+					{
+						FNavLocation At;if(!Nav->ProjectPointToNavigation(FVector(M.X+DX,M.Y+DY,0),At,FVector(40,40,60)))continue;
+						const FVector Eye=At.Location+FVector(0,0,100);const FVector Dirs[4]={FVector(0,1,0),FVector(1,0,0),FVector(0,-1,0),FVector(-1,0,0)};
+						for(int32 D=0;D<4;++D)N[D]+=World->LineTraceTestByObjectType(Eye,Eye+Dirs[D]*250,FCollisionObjectQueryParams(ECC_WorldStatic));
+					}
+					const int32 Min=FMath::Min(FMath::Min(N[0],N[1]),FMath::Min(N[2],N[3]));
+					if(K==TEXT('F')){FieldSum+=Min;++FieldCount;continue;}
+					if(K==TEXT('R')||K==TEXT('h')||K==TEXT('S'))continue;
+					++Checked;Least=FMath::Min(Least,Min);
+					if(Min<6){++Short;UE_LOG(LogTemp,Warning,TEXT("SECTOR_MAP_COVER_SHORT c=%d r=%d kind=%c n=%d e=%d s=%d w=%d"),C,R,K,N[0],N[1],N[2],N[3]);}
+				}
+				UE_LOG(LogTemp,Display,TEXT("SECTOR_MAP_COVER sectors=%d checked=%d short=%d least_per_side=%d fields=%d field_mean_per_side=%.1f"),Columns*Rows,Checked,Short,Least,FieldCount,FieldCount?double(FieldSum)/FieldCount:0.);
+				UE_LOG(LogTemp,Display,TEXT("SECTOR_MAP_RESULT failures=%d"),(bRiver?0:1)+Short);
 			}
 			if(Failures) return 7;
 		}
