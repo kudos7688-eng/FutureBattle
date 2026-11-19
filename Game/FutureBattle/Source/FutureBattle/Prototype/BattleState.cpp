@@ -513,9 +513,10 @@ namespace
   return V;
  }
 }
-// Rifle squad size: 10 by default; the trial switch -BattleRifleMembers= (2..10, user request 2026-11-19, trial value 8) sets it per run.
-// The starting squads, hires and the save checks all read it here; cost (AreaSquadCost) is unchanged.
-int32 BattleSquadType::RifleMembers(){static const int32 N=[]{int32 V=10;FParse::Value(FCommandLine::Get(),TEXT("BattleRifleMembers="),V);return FMath::Clamp(V,2,10);}();return N;}
+// Rifle squad size: UBattleTuning::RifleMembers (8 since 2026-11-19, user decision; was 10) in area matches (-BattleArea, the played mode);
+// the older non-area fields and their test fixtures keep 10. -BattleRifleMembers= (2..10) overrides per run in any mode.
+// The starting squads, hires and the save checks all read it here; cost is AreaSquadCost.
+int32 BattleSquadType::RifleMembers(){static const int32 N=[]{const TCHAR* C=FCommandLine::Get();int32 V=FParse::Param(C,TEXT("BattleArea"))?GetDefault<UBattleTuning>()->RifleMembers:10;FParse::Value(C,TEXT("BattleRifleMembers="),V);return FMath::Clamp(V,2,10);}();return N;}
 int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:Type==Scout?2:Type==AntiTank?4:Type==Mortar||Type==Supply?3:Type==Exo||IsVehicle(Type)?1:RifleMembers();}
 bool BattleSquadType::Replenished(uint8 Type){return Type!=Scout&&Type!=Exo;}
 bool BattleSquadType::LeaderHandover(uint8 Type){return Type==Scout;}

@@ -22,7 +22,7 @@ namespace BattleSquadType
 {
  enum : uint8 { Rifle=0, Heavy=1, Scout=2, AntiTank=3, Tank=4, ArmoredCar=5, Mortar=6, SPGun=7, Exo=8, Supply=9, Count=10 };
  int32 Members(uint8 Type);
- int32 RifleMembers(); // rifle squad size (10; trial -BattleRifleMembers=)
+ int32 RifleMembers(); // rifle squad size (UBattleTuning::RifleMembers, 8; -BattleRifleMembers= overrides)
  float HealthScale(uint8 Type);
  float SpeedScale(uint8 Type);
  float DamageScale(uint8 Type);
@@ -624,10 +624,12 @@ public:
 	UPROPERTY(Config, EditAnywhere) float SupplyHealPerSecond = 0.f;
 	UPROPERTY(Config, EditAnywhere) float SupplyResumeHealthRatio = 0.f;
 	// Area new-squad hiring (adopted 2026-11-14; -BattleAreaHire=0 disables): a team with fewer than 25 active squads may buy
-	// a fresh 10-soldier regular squad at home for AreaSquadCost resources. AI buys only when resources minus pending
+	// a fresh RifleMembers-soldier regular squad at home for AreaSquadCost resources. AI buys only when resources minus pending
 	// replenishments >= AreaSquadCost + AreaHireReserve.
+	// Rifle squad size (2026-11-19 user decision: 10 -> 8, cost 15 -> 12; area matches only, other modes keep 10). -BattleRifleMembers= overrides per run (2..10).
+	UPROPERTY(Config, EditAnywhere) int32 RifleMembers = 8;
 	UPROPERTY(Config, EditAnywhere) bool bAreaHire = true;
-	UPROPERTY(Config, EditAnywhere) int32 AreaSquadCost = 15;
+	UPROPERTY(Config, EditAnywhere) int32 AreaSquadCost = 12;
 	UPROPERTY(Config, EditAnywhere) int32 AreaHireReserve = 0;
 	// AI purchase pacing (0 = off, the first implementation): at least AreaHireIntervalSeconds between a team's AI purchases,
 	// and no AI purchase in the last AreaHireStopSeconds of the time limit. Trials: -BattleAreaHireReserve= / -Interval= / -Stop=.

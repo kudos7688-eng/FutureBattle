@@ -27,13 +27,16 @@ void UBattleLeaderRuntime::RunAreaSmoke()
 {
  auto Check=[&](bool OK,const TCHAR* Label){if(!OK)++SmokeFailures;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_CHECK %s %s"),OK?TEXT("PASS"):TEXT("FAIL"),Label);};
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* M=GetWorld()->GetSubsystem<UBattleMatch>();
+ // Rifle squad size and cost (8 and 12 since 2026-11-19): unit IDs run squad by squad, so squad k (1-based, team 0 first) has IDs
+ // (k-1)*N+1 .. k*N with its leader first; the starting roster is 50*N.
+ const int32 N=BattleSquadType::RifleMembers(),Total=50*N,HireCost=BattleSquadType::AreaCost(BattleSquadType::Rifle);auto Lead=[N](int32 K){return (K-1)*N+1;};
  auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
  auto Place=[&](int32 ID,FVector P){auto& B=Bodies.FindChecked(ID);if(B.Actor.IsValid()){B.Actor->SetActorLocation(P,false,nullptr,ETeleportType::TeleportPhysics);B.Actor->SetActorRotation(FRotator::ZeroRotator);}else{B.Capsule->SetWorldLocation(P);auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=P;F.Forward=FVector::ForwardVector;}};
  if(SmokeStage==0)
  {
   Mode->CombatStartsAt=1.e6;Mode->bCombatPaused=false;M->bAreaIncomeHeld=true; // exact resource fixtures; income is checked separately below
   Check(bArea&&M->bArea&&M->BaseActors.Num()==2&&M->Credits[0]==100&&M->Credits[1]==100,TEXT("area starts with symmetric bases and resources"));
-  for(int32 ID=1;ID<=10;++ID)Place(ID,FVector(-26500+(ID/5)*130,(ID%5-2)*130,100));
+  for(int32 ID=1;ID<=N;++ID)Place(ID,FVector(-26500+(ID/5)*130,(ID%5-2)*130,100));
   Store->ApplyDamage(2,1,10000);Store->ApplyDamage(3,1,10000);
   M->UpdateArea(1);Check(M->Area.Replacements.Contains(2)&&M->Area.Replacements.Contains(3)&&M->Credits[0]==100,TEXT("home queues missing soldiers without spending resources"));
   const int32 BeforeScore=M->AreaScore(0);
@@ -51,10 +54,10 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   Check(GetWorld()->OverlapBlockingTestByChannel(Position(1)+FVector(250,0,0),FQuat::Identity,ECC_Pawn,FCollisionShape::MakeCapsule(40,90)),TEXT("blocked spawn fixture has a real blocking volume"));
   Mode->bCombatPaused=false;for(int32 I=0;I<5;++I)M->UpdateArea(1);
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_BLOCKED credits=%d records=%d pending=%.2f bodies=%d home=%s blocker=%s"),M->Credits[0],Store->GetUnits().Num(),M->Area.Replacements.FindRef(2),Bodies.Num(),*Position(1).ToCompactString(),*Blocker->GetActorLocation().ToCompactString());
-  Check(M->Credits[0]==100&&Store->GetUnits().Num()==500&&M->Area.Replacements.FindRef(2)==10,TEXT("blocked completion retains resources IDs and pending work"));
+  Check(M->Credits[0]==100&&Store->GetUnits().Num()==Total&&M->Area.Replacements.FindRef(2)==10,TEXT("blocked completion retains resources IDs and pending work"));
   Blocker->Destroy();M->UpdateArea(1);
-  Check(M->Credits[0]==98&&Store->Find(2)->bRetired&&Store->Find(3)->bRetired&&Store->Find(501)&&Store->Find(502),TEXT("completion spends one resource per fresh soldier identity"));
-  Check(Bodies.Num()==500&&Store->GetUnits().Num()==502&&M->AreaScore(0)==BeforeScore,TEXT("replenishment preserves body capacity and resource score"));
+  Check(M->Credits[0]==98&&Store->Find(2)->bRetired&&Store->Find(3)->bRetired&&Store->Find(Total+1)&&Store->Find(Total+2),TEXT("completion spends one resource per fresh soldier identity"));
+  Check(Bodies.Num()==Total&&Store->GetUnits().Num()==Total+2&&M->AreaScore(0)==BeforeScore,TEXT("replenishment preserves body capacity and resource score"));
   Save=M->CaptureSnapshot();Check(Save&&Save->Validate(Error)&&M->RestoreSnapshot(Save),TEXT("retired contacts and new roster restore atomically"));
   M->Objectives[0].Owner=1;M->Area.KnownOwners[0]=-2;M->UpdateArea(1);
   Check(M->ObservedOwner(0,0)==-2,TEXT("unobserved objective ownership remains unknown"));
@@ -74,38 +77,38 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    Check(M->AreaStrategyTarget(7,0,bBase)==Before,TEXT("unseen true ownership cannot alter S1 allocation"));
    M->Objectives[1].Owner=SavedOwner1;M->Area.KnownOwners=SavedKnown;
   }
-  const FVector ObserverStart=Position(11);Place(11,M->Objectives[0].Position+FVector(-200,0,100));M->UpdateArea(1);
-  Check(M->ObservedOwner(0,0)==0,TEXT("actual own line of sight updates point ownership"));Place(11,ObserverStart);
+  const FVector ObserverStart=Position(Lead(2));Place(Lead(2),M->Objectives[0].Position+FVector(-200,0,100));M->UpdateArea(1);
+  Check(M->ObservedOwner(0,0)==0,TEXT("actual own line of sight updates point ownership"));Place(Lead(2),ObserverStart);
   M->Objectives[0].Owner=1;M->UpdateArea(1);Check(M->ObservedOwner(0,0)==0,TEXT("lost sight retains old ownership instead of reading truth"));
   M->Objectives[0].Owner=INDEX_NONE;
   Store->ApplyDamage(4,1,10000);M->UpdateArea(1);const int32 Credits=M->Credits[0];
   Store->ApplyDamage(1,1,10000);M->UpdateArea(1);
   Check(!M->Area.Replacements.Contains(4)&&M->Credits[0]==Credits,TEXT("leader death cancels replacement without spending"));
-  Store->ApplyDamage(12,1,10000);Store->ApplyDamage(13,1,10000);Store->SetSquadDelegated(2,true);
+  Store->ApplyDamage(Lead(2)+1,1,10000);Store->ApplyDamage(Lead(2)+2,1,10000);Store->SetSquadDelegated(2,true);
   auto* T=GetWorld()->GetSubsystem<UBattleSquadTactics>();auto Observation=T->Observe(*Store->FindSquad(2));Observation.Contacts.Reset();Observation.RecentDamage=0;
   const FVector Mission=Store->FindSquad(2)->MissionDestination;T->Evaluate(2,Observation,1);
   Check(Store->FindSquad(2)->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY"))&&Store->FindSquad(2)->MissionDestination.Equals(Mission),TEXT("depleted delegated squad returns home while preserving mission"));
   Store->CancelSquadTacticalPlan(2,TEXT("RESOURCE EXHAUSTION FIXTURE"));M->Credits[0]=0;T->Evaluate(2,Observation,1);
   Check(!Store->FindSquad(2)->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY")),TEXT("armed squad does not repeatedly return when replacement resources are exhausted"));M->Credits[0]=Credits;
   Mode->bBattleEnded=false;M->Phase=EBattleMatchPhase::Combat;
-  Place(11,FVector(27400,0,100));FVector Target;
-  Check(M->CanFireAtBase(11,Target),TEXT("own line of sight and weapon range permit base engagement"));
-  auto* Shooter=const_cast<FBattleUnitState*>(Store->Find(11));Shooter->NextShotTime=0;
-  Check(Fire(11,Position(11)+FVector(0,0,60),(M->BaseActors[1]->GetActorLocation()-(Position(11)+FVector(0,0,60))).GetSafeNormal(),true)&&M->Area.BaseHP[1]<1000,TEXT("shared player and AI shot path damages physical enemy base"));
+  Place(Lead(2),FVector(27400,0,100));FVector Target;
+  Check(M->CanFireAtBase(Lead(2),Target),TEXT("own line of sight and weapon range permit base engagement"));
+  auto* Shooter=const_cast<FBattleUnitState*>(Store->Find(Lead(2)));Shooter->NextShotTime=0;
+  Check(Fire(Lead(2),Position(Lead(2))+FVector(0,0,60),(M->BaseActors[1]->GetActorLocation()-(Position(Lead(2))+FVector(0,0,60))).GetSafeNormal(),true)&&M->Area.BaseHP[1]<1000,TEXT("shared player and AI shot path damages physical enemy base"));
   Check(!M->DamageBase(M->BaseActors[0],0,100),TEXT("friendly base cannot be damaged"));
   // New-squad hiring (squad 1 lost its leader above, so team 0 has one free slot).
   {
    const int32 Before=M->Credits[0],Records=Store->GetUnits().Num(),SquadCount=Store->GetSquads().Num(),Active=M->ActiveSquads(0);
    Check(Active==24&&!M->HireSquad(0,EBattleTraining::Veteran)&&!M->HireSquad(0,EBattleTraining::Recruit)&&M->Credits[0]==Before&&Store->GetUnits().Num()==Records,TEXT("area hiring accepts regulars only without mutation"));
-   M->Credits[0]=14;Check(!M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==14&&Store->GetSquads().Num()==SquadCount,TEXT("area hiring needs 15 resources"));
+   M->Credits[0]=HireCost-1;Check(!M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==HireCost-1&&Store->GetSquads().Num()==SquadCount,TEXT("area hiring needs the squad cost in resources"));
    M->Credits[0]=Before;int32 MaxID=0;for(const auto& U:Store->GetUnits())MaxID=FMath::Max(MaxID,U.Key);
-   Check(M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==Before-15&&M->Area.HireSpent[0]==15&&Store->GetUnits().Num()==Records+10&&Store->GetSquads().Num()==SquadCount+1&&M->ActiveSquads(0)==25,TEXT("area hire charges 15 for ten fresh soldiers"));
+   Check(M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==Before-HireCost&&M->Area.HireSpent[0]==HireCost&&Store->GetUnits().Num()==Records+N&&Store->GetSquads().Num()==SquadCount+1&&M->ActiveSquads(0)==25,TEXT("area hire charges the squad cost for a fresh rifle squad"));
    int32 NewSID=0;for(const auto& P:Store->GetSquads())NewSID=FMath::Max(NewSID,P.Key);const auto* NewSquad=Store->FindSquad(NewSID);
-   bool Fresh=NewSquad&&NewSquad->Team==0&&NewSquad->Members.Num()==10&&NewSquad->CommandStatus==EBattleCommandStatus::Active&&NewSquad->bPlayerDelegated;
+   bool Fresh=NewSquad&&NewSquad->Team==0&&NewSquad->Members.Num()==N&&NewSquad->CommandStatus==EBattleCommandStatus::Active&&NewSquad->bPlayerDelegated;
    if(Fresh)for(int32 ID:NewSquad->Members)Fresh&=ID>MaxID&&Store->Find(ID)->IsAlive()&&Store->Find(ID)->bActorRepresentation==(ID==NewSquad->LeaderUnitID);
    const int32 NewLeader=NewSquad?NewSquad->LeaderUnitID:0;
    Check(Fresh&&NewSID==51&&FVector::Dist2D(Position(NewSquad->LeaderUnitID),M->AreaHome(0))<=2500,TEXT("hired squad gets a new number, new IDs, an Actor leader and home placement"));
-   Check(!M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==Before-15,TEXT("no free slot rejects hiring at 25 active squads"));
+   Check(!M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==Before-HireCost,TEXT("no free slot rejects hiring at 25 active squads"));
    if (Fresh)
    {
     auto* Leader = Actor(NewLeader);
@@ -125,24 +128,24 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    Check(Save&&Save->Validate(Error)&&Save->Squads.Num()==51,TEXT("save with a hired squad validates"));
    if(Save)
    {
-    Save->Area.HireSpent[0]=0;Check(!M->RestoreSnapshot(Save)&&M->Credits[0]==Before-15,TEXT("hire spending outside conservation rejected"));Save->Area.HireSpent[0]=15;
-    Check(M->RestoreSnapshot(Save)&&Store->GetSquads().Num()==SquadCount+1&&M->Area.HireSpent[0]==15&&M->Credits[0]==Before-15&&Bodies.Contains(NewLeader)&&Store->Find(NewLeader)->IsAlive(),TEXT("hired squad survives restore"));
+    Save->Area.HireSpent[0]=0;Check(!M->RestoreSnapshot(Save)&&M->Credits[0]==Before-HireCost,TEXT("hire spending outside conservation rejected"));Save->Area.HireSpent[0]=HireCost;
+    Check(M->RestoreSnapshot(Save)&&Store->GetSquads().Num()==SquadCount+1&&M->Area.HireSpent[0]==HireCost&&M->Credits[0]==Before-HireCost&&Bodies.Contains(NewLeader)&&Store->Find(NewLeader)->IsAlive(),TEXT("hired squad survives restore"));
    }
    Mode->bCombatPaused=false;
    // A purchase that leaves fewer resources than queued replenishments cancels the least advanced ones.
-   Store->ApplyDamage(21,1,10000);M->UpdateArea(1);
-   M->Credits[0]=16;M->Area.Replacements.Add(12,5);M->Area.Replacements.Add(13,1);
-   Check(M->ActiveSquads(0)==24&&M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==1&&M->Area.Replacements.Contains(12)&&!M->Area.Replacements.Contains(13)&&M->Area.HireSpent[0]==30,TEXT("purchase cancels uncovered replenishment reservations"));
+   Store->ApplyDamage(Lead(3),1,10000);M->UpdateArea(1);
+   M->Credits[0]=HireCost+1;M->Area.Replacements.Add(Lead(2)+1,5);M->Area.Replacements.Add(Lead(2)+2,1);
+   Check(M->ActiveSquads(0)==24&&M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==1&&M->Area.Replacements.Contains(Lead(2)+1)&&!M->Area.Replacements.Contains(Lead(2)+2)&&M->Area.HireSpent[0]==2*HireCost,TEXT("purchase cancels uncovered replenishment reservations"));
    // The fixture forced 16 resources; restore the conserving amount (100 - replenished - hire spending) and re-validate.
    int32 Retired0=0;for(const auto& U:Store->GetUnits())Retired0+=U.Value.bRetired&&U.Value.Team==0;
    M->Credits[0]=100-Retired0-M->Area.HireSpent[0];
    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();Check(Save&&Save->Validate(Error)&&Save->Squads.Num()==52,TEXT("two hires and a reservation validate"));Mode->bCombatPaused=false;
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE_SMOKE squads=%d records=%d credits=%d validation=%s"),Store->GetSquads().Num(),Store->GetUnits().Num(),M->Credits[0],*Error);
    M->Area.Replacements.Reset();
-   // Heavy infantry (squad type 1): a freed slot (leader 41 lost), 15 resources, 6 soldiers with support guns at 3x health;
+   // Heavy infantry (squad type 1): a freed slot (the leader of squad 5 lost), 15 resources, 6 soldiers with support guns at 3x health;
    // the type and health survive save and restore.
    {
-    Store->ApplyDamage(41,1,10000);M->UpdateArea(1);
+    Store->ApplyDamage(Lead(5),1,10000);M->UpdateArea(1);
     if(M->Credits[0]<BattleSquadType::AreaCost(BattleSquadType::Heavy)){const int32 Add=BattleSquadType::AreaCost(BattleSquadType::Heavy)-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
     const int32 C0=M->Credits[0],Spent0=M->Area.HireSpent[0],HeavyRecords=Store->GetUnits().Num();
     const bool Hired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Heavy);
@@ -160,7 +163,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    // Scout pairs (squad type 2): 2 rifles for 8 resources, at most 3 per team, long sight while still, the survivor takes
    // command when the leader falls, never replenished, and the handed-over squad survives save and restore.
    {
-    for(int32 Leader:{51,61,71,81})Store->ApplyDamage(Leader,1,10000);
+    for(int32 Leader:{Lead(6),Lead(7),Lead(8),Lead(9)})Store->ApplyDamage(Leader,1,10000);
     M->UpdateArea(1);M->Area.Replacements.Reset();
     const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::Scout);
     if(M->Credits[0]<Cost*4){const int32 Add=Cost*4-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
@@ -232,7 +235,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    // Anti-tank team (squad type 3): 4 soldiers, two anti-tank weapons (1 loaded + 3 reserve, never refilled beyond that), 12
    // resources; its explosion hurts an enemy at the impact by ATSplashDamage and never an ally. Lookouts exist on this map.
    {
-    for(int32 Leader:{91,101})Store->ApplyDamage(Leader,1,10000);
+    for(int32 Leader:{Lead(10),Lead(11)})Store->ApplyDamage(Leader,1,10000);
     M->UpdateArea(1);M->Area.Replacements.Reset();
     {
      const int32 SCost=BattleSquadType::AreaCost(BattleSquadType::Supply);
@@ -273,7 +276,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    // Tank (squad type 4, stage 1): one wide, armoured vehicle for 40 resources, at most 2 per team, its own navigation data,
    // seen from farther away, 8 m/s in the open; the vehicle survives save and restore.
    {
-    for(int32 Leader:{111,121,131})Store->ApplyDamage(Leader,1,10000);
+    for(int32 Leader:{Lead(12),Lead(13),Lead(14)})Store->ApplyDamage(Leader,1,10000);
     M->UpdateArea(1);M->Area.Replacements.Reset();
     const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::Tank);
     if(M->Credits[0]<Cost*3){const int32 Add=Cost*3-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}

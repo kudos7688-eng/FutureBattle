@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（135 モジュール、28099 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（135 モジュール、28107 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -22,7 +22,7 @@
 | 機能 | 入口（ここから読む） | 関連 |
 |---|---|---|
 | 正規状態・UnitID・部隊 | `UBattleState::RegisterUnit` (BattleState.cpp:96) 、 `UBattleState::CreateSquad` (BattleState.cpp:165) 、 `UBattleState::ApplyDamage` (BattleState.cpp:418) | 構造体は `BattleState.h`（FBattleUnitState、FBattleSquadState）。調整値は同じ .h の `UBattleTuning`（ini で上書き） |
-| 兵科（歩兵・重火器・偵察・対戦車・戦車）の差 | `BattleSquadType::Members` (BattleState.cpp:519) から `BattleSquadType::Weapon` (BattleState.cpp:557) までの一群、 `UBattleState::SetSquadType` (BattleState.cpp:562) | 射程は `BattleRanges::Get` (BattleRanges.cpp:6) |
+| 兵科（歩兵・重火器・偵察・対戦車・戦車）の差 | `BattleSquadType::Members` (BattleState.cpp:520) から `BattleSquadType::Weapon` (BattleState.cpp:558) までの一群、 `UBattleState::SetSquadType` (BattleState.cpp:563) | 射程は `BattleRanges::Get` (BattleRanges.cpp:6) |
 | 命令（移動・攻撃移動・防御・待機） | 入力 `ABattleController::IssueOrderAt` (BattleController.cpp:613) → 状態 `UBattleState::SetSquadOrder` (BattleState.cpp:196) → 混成 `UBattleLeaderRuntime::IssueOrder` (BattleLeaderRuntime.cpp:474) | 委任は `UBattleState::SetSquadDelegated` (BattleState.cpp:183) 、 `UBattleMatch::SetAllyDelegated` (BattleMatch.cpp:144) |
 | 入力・RTS/TPS 切替・ゲームパッド | `ABattleController::SetupInputComponent` (BattleController.cpp:58) 、 `ABattleController::InputKey` (BattleController.cpp:400) 、 `ABattleController::ToggleMode` (BattleController.cpp:302) 、 `ABattleController::ControlUnit` (BattleController.cpp:273) | ゲームパッドは `ABattleController::UpdateGamepad` (BattleController.cpp:1093) 。隊長交代は `UBattleState::HandOverLeader` (BattleState.cpp:484) |
 | HUD・ミニマップ・部隊一覧・通知 | `ABattleHUD::DrawHUD` (BattleHUD.cpp:19) 、 `ABattleHUD::DrawMinimap` (BattleHUD.cpp:431) 、 `ABattleHUD::DrawSquadList` (BattleHUD.cpp:522) 、 `ABattleHUD::DrawNoticeLog` (BattleHUD.cpp:587) | 通知の中身は `ABattleController::UpdateNoticeLog` (BattleController.cpp:900) 、 `ABattleController::PushNotice` (BattleController.cpp:884) 。日本語化は `BattleUIText::Ja` (BattleUIText.cpp:76) |
@@ -116,7 +116,7 @@
 | `BattleStableMovement` | .cpp | 449 |  | 混成の移動計画と実行（UBattleLeaderRuntime の一部） |
 | `BattleStance` | .h/.cpp | 28 + 98 | BattleStance | 姿勢（立ち・しゃがみ）の数値と切替 |
 | `BattleStanceAnimImport` | .cpp | 43 |  | 姿勢アニメーションの取り込み（エディタ用。宣言は BattleVATBake.h） |
-| `BattleState` | .h/.cpp | 745 + 577 | BattleSquadType, FBattleDecisionProfile, FBattleSquadTacticalPlan, FBattleSquadState, FBattlePerceptionProfile, FBattleUnitState, UBattleTuning, UBattleState | 正規状態：兵・部隊の記録、命令、弾薬、被害、調整値 UBattleTuning、兵科の差 |
+| `BattleState` | .h/.cpp | 747 + 578 | BattleSquadType, FBattleDecisionProfile, FBattleSquadTacticalPlan, FBattleSquadState, FBattlePerceptionProfile, FBattleUnitState, UBattleTuning, UBattleState | 正規状態：兵・部隊の記録、命令、弾薬、被害、調整値 UBattleTuning、兵科の差 |
 | `BattleSupport` | .cpp | 60 |  | 旧アリーナの支援砲撃（UBattleMatch の一部） |
 | `BattleSuppression` | .h/.cpp | 16 + 73 | BattleSuppression | 制圧の値と効果 |
 | `BattleTacticalAI` | .cpp | 124 |  | 旧全Actor経路の兵の戦術行動（ABattleAIController の一部） |
@@ -145,7 +145,7 @@
 |---|---|---|---|---|
 | `BattleAbilitySmoke` | .cpp | 125 |  |  |
 | `BattleAnimTaskTrial` | .h/.cpp | 29 + 85 | ABattleAnimTaskTrial |  |
-| `BattleAreaSmoke` | .cpp | 824 |  |  |
+| `BattleAreaSmoke` | .cpp | 827 |  |  |
 | `BattleBenchmark` | .cpp | 194 |  |  |
 | `BattleConeTrialCommandlet` | .h/.cpp | 12 + 48 | UBattleConeTrialCommandlet | Closest distance between a forward ray and the capsule's vertical centre segment. |
 | `BattleContactTrial` | .cpp | 101 |  | Fixed contact fixtures retain all 500 bodies, collision, and the normal executor. |
@@ -168,7 +168,7 @@
 | `BattleMatchSoak` | .cpp | 60 |  |  |
 | `BattleMaterialTrial` | .cpp | 106 |  |  |
 | `BattleMixedFastSmoke` | .cpp | 41 |  |  |
-| `BattleMixedSaveSmoke` | .cpp | 121 |  |  |
+| `BattleMixedSaveSmoke` | .cpp | 123 |  |  |
 | `BattleMixedSaveValidation` | .cpp | 112 |  |  |
 | `BattleMovementTrial` | .cpp | 112 |  |  |
 | `BattleMovingSquadTrial` | .cpp | 222 |  |  |
