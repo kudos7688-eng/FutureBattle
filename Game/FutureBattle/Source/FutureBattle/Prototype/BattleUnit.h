@@ -61,6 +61,7 @@ public:
 	// Direct control view (display only; the shot's spread and range do not change):
 	// 0 none, 1 aim over the shoulder (x1.6), 2 scope x4, 3 scope x8. Set every frame by the controller.
 	void SetAimLevel(int32 Level) { AimLevel = FMath::Clamp(Level, 0, 3); }
+	int32 GetAimLevel() const { return AimLevel; }
 	float AimMagnification() const { return AimZoom; }
 	bool ScopeView() const { return ScopeAlpha > .5f; }
 	// Spread multiplier for the player's own shot (UBattleTuning): below 1 once the view has settled on an aim level.

@@ -14,6 +14,7 @@
 #include "BattleRanges.h"
 #include "BattleSuppression.h"
 #include "BattleStance.h"
+#include "BattleBlindFire.h"
 #include "EngineUtils.h"
 #include "BattleMetrics.h"
 #include "MassEntitySubsystem.h"
@@ -940,10 +941,24 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  // A mortar has no direct fire (its shells go through FireArtillery, BattleArtillery.cpp).
  if(U->Weapon==EBattleWeapon::Mortar) return false;
  const double Now=GetWorld()->GetTimeSeconds(); const auto* T=GetDefault<UBattleTuning>();
+ bool bBlind=false;
  if(U->CoverPhase && U->CoverPhase!=4)
  {
-  if(bPlayerShot && U->CoverPhase==2){auto& Cover=Store->Units.FindChecked(ID);Cover.CoverPhase=3;Cover.CoverSeconds=3;}
-  return false;
+  // Blind fire (BattleBlindFire.cpp): the player fires without aiming, or an AI soldier in the trial; the shot leaves above or
+  // beside the cover while the body stays hidden. Aiming and firing (or no free origin) peeks as before.
+  const bool bWantBlind=U->CoverPhase==2 && U->Weapon!=EBattleWeapon::AntiTank && !U->bLauncherSelected &&
+   (bPlayerShot?BattleBlindFire::PlayerEnabled() && Actor(ID) && Actor(ID)->GetAimLevel()==0:bAIBlindShot);
+  FVector Origin;
+  if(bWantBlind && BlindFireOrigin(ID,Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon),Origin))
+  {
+   const FVector Aim=Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon);
+   Start=Origin;Direction=(Aim-Origin).GetSafeNormal();bBlind=true;
+  }
+  else
+  {
+   if(bPlayerShot && U->CoverPhase==2){auto& Cover=Store->Units.FindChecked(ID);Cover.CoverPhase=3;Cover.CoverSeconds=3;}
+   return false;
+  }
  }
  if(bPlayerShot && U->bLauncherSelected)
   return FireExoLauncher(ID,Start+Direction.GetSafeNormal()*BattleRanges::Reach(EBattleWeapon::AntiTank),Now);
@@ -962,7 +977,9 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  if(SuppressedScale>1.25f)SightExperiment.Cover(TEXT("suppressed_shots"));
  // The player's own shot is tighter while he aims or looks through the scope (never the AI's shots).
  /* tighter for the player at all times (PlayerSpreadScale), more so while aiming */ const float AimScale=bPlayerShot&&Actor(ID)?Actor(ID)->PlayerSpreadScale():1.f;
- Direction=BattleTactics::ShotDirection(*U,Direction,Now,SuppressedScale*BattleStance::SpreadScale(StanceOf(ID))*AimScale);
+ // Blind fire: the shooter cannot see along the barrel, so neither stance nor the player's aim tightens it.
+ if(bBlind){BlindFireUntil.Add(ID,Now+BattleBlindFire::ClipHoldSeconds);SightExperiment.Cover(bPlayerShot?TEXT("blind_shots_player"):TEXT("blind_shots_ai"));}
+ Direction=BattleTactics::ShotDirection(*U,Direction,Now,bBlind?SuppressedScale*BattleBlindFire::SpreadScale():SuppressedScale*BattleStance::SpreadScale(StanceOf(ID))*AimScale);
  auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon);
  // Concealment (hedges) hides soldiers from sight but does not stop bullets.
  if(!bConcealmentBuilt)

@@ -77,6 +77,8 @@ struct FBattleLeaderBody
  FVector LastProgressPosition=FVector::ZeroVector;
  double LastProgressTime=0;
  bool bTrafficWait=false, bArrived=false;
+ // Display: the near follower mesh shows the blind fire clip (BattleBlindFire.cpp).
+ bool bBlindPose=false;
  int32 PassingID=INDEX_NONE;
 
  FVector PassingWaypoint=FVector::ZeroVector, PassingForward=FVector::ForwardVector, PassingOffset=FVector::ZeroVector;
@@ -305,6 +307,17 @@ public:
  TMap<int32,FCoverApproach> CoverApproaches;
  // -BattleCoverFire: shots fired during the current AI peek (runtime only; a restored peek starts from zero).
  TMap<int32,int32> CoverPeekShots;
+ // Blind fire (2026-11-19, user request; BattleBlindFire.cpp): a soldier hidden behind cover (CoverPhase 2) fires over a low
+ // cover or around the edge of a wide one without leaving it. The player does it by firing without aiming (aiming and firing
+ // still peeks); AI soldiers only with the trial -BattleAIBlindFire=1, while pinned. -BattleBlindFire=0 turns it off.
+ // Runtime only (display): until when the blind fire clip shows.
+ TMap<int32,double> BlindFireUntil;
+ bool IsBlindFiring(int32 ID,double Now) const {const double* T=BlindFireUntil.Find(ID);return T&&*T>Now;}
+ // Where a blind shot leaves: above the top of a low cover, or just past the edge of a wide one, with a clear first stretch
+ // toward AimPoint. False when neither works (the caller falls back to the old peek).
+ bool BlindFireOrigin(int32 ID,FVector AimPoint,FVector& Origin) const;
+ bool bAIBlindShot=false;
+ bool TryAIBlindFire(int32 ID,FVector Threat,double Now);
  // Evaluation only: records how an AI peek ended (peek_end_*) and its shot count; removes the CoverPeekShots entry.
  void EndPeekDiag(int32 ID,const TCHAR* Cause);
  // Cover validation: a visibility line from a standing position at From to the observed threat position

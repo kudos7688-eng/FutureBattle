@@ -3,6 +3,7 @@
 #include "BattleTactics.h"
 #include "BattleRanges.h"
 #include "BattleStance.h"
+#include "BattleBlindFire.h"
 #include "BattleFieldLayout.h"
 #include "BattlePerception.h"
 #include "BattleGameMode.h"
@@ -310,7 +311,8 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  if(U->CoverPhase==2 && !Player && U->CoverSeconds<=0 && U->ReloadEndTime==0)
  {
   // Suppression trial: a pinned AI soldier stays behind cover and checks again shortly.
-  if(IsPinned(ID,Now)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_suppressed"));}
+  // Trial -BattleAIBlindFire=1: a pinned AI soldier fires blind at the threat's last known position instead of waiting idle.
+  if(IsPinned(ID,Now)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_suppressed"));if(BattleBlindFire::AIEnabled())TryAIBlindFire(ID,Contact->LastKnownPosition,Now);}
   else if(Validate && !RevalidatePeek(ID,Contact->LastKnownPosition)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_no_line"));}
   else{U->CoverPhase=3;U->CoverSeconds=3;}
  }
@@ -374,9 +376,10 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  if(!B.Actor.IsValid())
  {
   const int32 Pose=U->ReloadEndTime>Now?2:B.Velocity.SizeSquared2D()>400?1:0;
-  if(Pose!=B.Pose){B.Pose=Pose;if(VAT)VAT->ChangePose(ID,Pose);if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(FollowerClip(ID,Pose),true);}
+  const bool Blind=IsBlindFiring(ID,Now);
+  if(Pose!=B.Pose || Blind!=B.bBlindPose){B.Pose=Pose;B.bBlindPose=Blind;if(VAT)VAT->ChangePose(ID,Pose);if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(FollowerClip(ID,Pose),true);}
  }
- U->DecisionReason=U->CoverPhase==2?TEXT("COVER / HIDDEN - FIRE TO PEEK"):U->CoverPhase==4?TEXT("COVER / EXPOSED FIRING WINDOW"):TEXT("COVER / MOVING - FIRE BLOCKED");
+ U->DecisionReason=U->CoverPhase==2?(IsBlindFiring(ID,Now)?TEXT("COVER / BLIND FIRE"):TEXT("COVER / HIDDEN - FIRE TO PEEK")):U->CoverPhase==4?TEXT("COVER / EXPOSED FIRING WINDOW"):TEXT("COVER / MOVING - FIRE BLOCKED");
  if(!Player)U->Action=U->CoverPhase==2?EBattleAction::TakingCover:U->CoverPhase==4?EBattleAction::Engaging:EBattleAction::Moving;
  // Stances: crouch while hidden behind cover, stand to move and to fire from the peek point.
  // (Direct control too: behind low cover the player is only hidden while crouched.)

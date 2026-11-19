@@ -22,6 +22,7 @@
 | 隊長の判断と兵の実行（混成） | @UBattleLeaderRuntime::Think 、 @UBattleLeaderRuntime::Follow 、 @UBattleLeaderRuntime::Fire | 兵単位の実行は @FBattleMixedDriver::Tick 、 @FBattleMixedDriver::TryTacticalAction |
 | 移動・経路・混雑 | @UBattleLeaderRuntime::StableMove 、 @UBattleLeaderRuntime::BuildMovementPlan | 到着地点の重なりは @UBattleLeaderRuntime::ReassignOccupiedArrival 。目的地の補正は @BattleNavigation::ResolveGoal |
 | 遮蔽（場所の予約） | @UBattleCover::BuildSlots 、 @UBattleCover::Reserve | 露出の計算は @BattleTactics::ExposureAt |
+| ブラインドファイア | @UBattleLeaderRuntime::BlindFireOrigin 、 @UBattleLeaderRuntime::Fire | AIの試験は @UBattleLeaderRuntime::TryAIBlindFire |
 | 遮蔽の動作（接近・のぞき撃ち） | @UBattleLeaderRuntime::RequestCoverAction 、 @UBattleLeaderRuntime::StepCoverAction | 切替は @BattleTactics::CoverActionsEnabled ほか |
 | 姿勢（立ち・しゃがみ） | @UBattleLeaderRuntime::SetStance 、 @UBattleLeaderRuntime::UpdateAIStance | 数値は @BattleStance::EyeOffset ほか |
 | 制圧（撃たれて動けない） | @UBattleLeaderRuntime::AddSuppression 、 @UBattleLeaderRuntime::IsPinned | 調整値は @BattleSuppression::Tuning |
@@ -64,6 +65,8 @@ BattleExo | 外骨格兵：盾の回復、副武器（肩の対戦車火器）�
 BattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド
 BattleCover | 遮蔽の場所の一覧と予約
 BattleCoverAction | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部）
+BattleBlindFire | 遮蔽の陰からのブラインドファイア（弾の出る位置・AIの試験・アニメ。UBattleLeaderRuntime の一部）
+BattleCoverAnimImport | 遮蔽アニメーションの取り込みと計測（エディタ用。宣言は BattleVATBake.h）
 BattleFieldLayout | マップごとの定義（広さ、拠点、試合時間）を1つの表にまとめたもの
 BattleGroups | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部）
 BattleFieldReplay | 広域試験の記録と再生（UBattleSquadTrial の一部）

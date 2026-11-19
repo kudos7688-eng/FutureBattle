@@ -1,4 +1,5 @@
 #include "BattleLeaderRuntime.h"
+#include "BattleBlindFire.h"
 #include "BattleGameMode.h"
 #include "BattleMatch.h"
 #include "BattleSave.h"
@@ -106,8 +107,21 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    Check(F.CoverPhase==1 || F.CoverPhase==2,TEXT("pinned AI soldier ducks back from an exposed peek"));
    SuppressionZeroAt.Reset();Tune=Saved;
   }
+  {
+   // Blind fire: firing without aiming shoots from past the cover edge while the body stays at the anchor.
+   auto& P=Store->Units.FindChecked(1);P.NextShotTime=0;P.ReloadEndTime=0;
+   const int32 Before=P.Ammo;const FVector Eye=Position(1)+FVector(0,0,60);
+   FVector Origin;const bool HasOrigin=BlindFireOrigin(1,Threat,Origin);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BLINDFIRE has_origin=%d over_top=%d origin=%s anchor=%s"),HasOrigin,BattleBlindFire::IsOverTop(P),*Origin.ToCompactString(),*P.CoverAnchor.ToCompactString());
+   Check(HasOrigin,TEXT("hidden player has a blind fire origin past the cover"));
+   Actor(1)->SetAimLevel(0);
+   Check(Fire(1,Eye,(Threat-Eye).GetSafeNormal(),true)&&Store->Find(1)->Ammo<Before,TEXT("unaimed trigger behind cover blind-fires"));
+   Check(Store->Find(1)->CoverPhase==2&&IsBlindFiring(1,Now)&&FVector::Dist2D(Position(1),Store->Find(1)->CoverAnchor)<40,TEXT("blind fire keeps the body hidden at the anchor"));
+  }
+  Actor(1)->SetAimLevel(1);
   const int32 Ammo=Store->Find(1)->Ammo;
-  Check(!Fire(1,Position(1)+FVector(0,0,60),FVector(-1,0,0),true)&&Store->Find(1)->Ammo==Ammo,TEXT("hidden trigger requests emergence without firing through cover"));
+  Check(!Fire(1,Position(1)+FVector(0,0,60),FVector(-1,0,0),true)&&Store->Find(1)->Ammo==Ammo,TEXT("aimed trigger requests emergence without firing through cover"));
+  Actor(1)->SetAimLevel(0);
   Check(Store->Find(1)->CoverPhase==3,TEXT("trigger starts physical peek movement"));
   BayStart=Now;SmokeStage=2;Later(.1);return;
  }

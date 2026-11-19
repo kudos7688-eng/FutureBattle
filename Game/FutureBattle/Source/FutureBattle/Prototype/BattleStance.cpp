@@ -1,4 +1,6 @@
 #include "BattleStance.h"
+#include "BattleBlindFire.h"
+#include "BattleState.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleFieldLayout.h"
 #include "BattleUnit.h"
@@ -69,6 +71,9 @@ bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForc
 
 UAnimSequence* UBattleLeaderRuntime::FollowerClip(int32 ID,int32 Pose) const
 {
+ // Blind fire (BattleBlindFire.cpp): the clip that raises the rifle over or around the cover, while it lasts.
+ if(Pose!=2 && IsBlindFiring(ID,GetWorld()->GetTimeSeconds()))
+  if(const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID))if(auto* Blind=BattleBlindFire::Clip(BattleBlindFire::IsOverTop(*U)))return Blind;
  if(StanceOf(ID)==BattleStance::Crouch)if(auto* Crouch=BattleStance::CrouchClip(Pose==1))return Crouch;
  return Pose==2?ReloadPose.Get():Pose==1?WalkPose.Get():IdlePose.Get();
 }

@@ -9,6 +9,7 @@
 #include "BattleRanges.h"
 #include "BattleCover.h"
 #include "BattleStance.h"
+#include "BattleBlindFire.h"
 #include "BattleSquadAI.h"
 #include "BattleMetrics.h"
 #include "BattleMatch.h"
@@ -363,6 +364,9 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 		const bool Crouched = VisualStance == BattleStance::Crouch && LookCrouchIdle && BattleStance::AnimEnabled();
 		Pose = Crouched ? (Moving && LookCrouchMove ? LookCrouchMove.Get() : LookCrouchIdle.Get()) : Moving && LookMove ? LookMove.Get() : LookIdle.Get();
 	}
+	// Blind fire (BattleBlindFire.cpp): the clip that raises the rifle over or around the cover while it lasts.
+	if (!Reloading) if (const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leaders && Leaders->IsBlindFiring(UnitID, Now))
+		if (auto* Blind = BattleBlindFire::Clip(BattleBlindFire::IsOverTop(S))) Pose = Blind;
 	const bool Looping = !Reloading || Pose != RifleReload.Get();
 	if (Pose && CurrentPose != Pose)
 	{
