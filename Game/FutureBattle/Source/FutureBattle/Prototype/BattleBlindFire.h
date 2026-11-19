@@ -17,6 +17,12 @@ namespace BattleBlindFire
  bool AIEnabled();
  // Spread multiplier of a blind shot (replaces the stance and aim multipliers). -BattleBlindFireSpread=, default 4.
  float SpreadScale();
+ // Counterplay (2026-11-20, user decision): over the top the head comes up over the cover while the blind fire clip shows
+ // (ClipHoldSeconds after each shot). For that time sight aims at, and bullets stop at, the head instead of the crouched
+ // body (heights above the capsule centre, which stands 90 cm above the ground). Around the edge the body stays hidden.
+ // -BattleBlindFireExpose=0 restores the fully hidden blind fire (the hands then lift the rifle alone).
+ bool ExposeEnabled();
+ constexpr float ExposedAimOffset=60.f,ExposedTopOffset=80.f;
  // How long the blind fire clip stays after a shot.
  constexpr double ClipHoldSeconds=.6;
  // Low cover (the soldier stands up in place to fire, so the peek point is the anchor): blind fire goes over the top.

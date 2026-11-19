@@ -369,7 +369,7 @@ bool UBattleLeaderRuntime::PrepareSightTrace(const FBattleSightContext& C,int32 
  if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
  const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
  if(FVector::DistSquared(P,C.Position)>(IsVehicle(Target)?FMath::Max(C.RangeSquared,FMath::Square(VehicleSpotRange())):C.RangeSquared) || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
- End=P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))); return true;
+ End=P+FVector(0,0,TargetAimOffset(Target)); return true;
 }
 bool UBattleLeaderRuntime::SightHitStatsEnabled()
 {
@@ -905,7 +905,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  // Stances: fire from the current eye height, and aim at the height the visible target presents.
  const FVector Muzzle(0,0,BattleStance::EyeOffset(StanceOf(ID)));
  if(BaseEngage)Direction=(BaseTarget-(Pos+Muzzle)).GetSafeNormal();
- else if(CanEngage) Direction=(Contact->LastKnownPosition+FVector(0,0,BattleStance::AimOffset(StanceOf(TargetID)))-(Pos+Muzzle)).GetSafeNormal();
+ else if(CanEngage) Direction=(Contact->LastKnownPosition+FVector(0,0,TargetAimOffset(TargetID))-(Pos+Muzzle)).GetSafeNormal();
  else if(S->TacticalPlan.Action==EBattleSquadTactic::Flank)
  {
   // Movement has already consumed its steering vector. Keep watch toward known
@@ -1007,7 +1007,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  for(int32 Pass=0;Pass<4&&Hit.bBlockingHit;++Pass)
  {
   const int32 Over=HitIDs.FindRef(Hit.GetComponent());const uint8 OverStance=Over>0?StanceOf(Over):0;
-  if(OverStance==BattleStance::Stand||Hit.ImpactPoint.Z<=Position(Over).Z+BattleStance::TopOffset(OverStance))break;
+  if(OverStance==BattleStance::Stand||Hit.ImpactPoint.Z<=Position(Over).Z+(Over>0?TargetTopOffset(Over):BattleStance::TopOffset(OverStance)))break;
   SightExperiment.Cover(TEXT("shot_passed_over"));Q.AddIgnoredComponent(Hit.GetComponent());
   Hit=FHitResult();GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_Visibility,Q);
  }

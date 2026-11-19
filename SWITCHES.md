@@ -3,11 +3,11 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 243 種類。
+計 244 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
-| `-BattleAIBlindFire` | other |  | BattleBlindFire.cpp:25 |  |
+| `-BattleAIBlindFire` | other |  | BattleBlindFire.cpp:27 |  |
 | `-BattleAICoverProbe` | Value | 0 | BattleTactics.cpp:10 |  |
 | `-BattleAimAssist` | Value | 1 | BattleController.cpp:1080 |  |
 | `-BattleArea` | Param/other | off | BattleLeaderRuntime.cpp:75, BattleState.cpp:527 |  |
@@ -63,12 +63,13 @@
 | `-BattleArmourAITeam` | Value | -1 | BattleArmourAI.cpp:32 |  |
 | `-BattleBenchmark` | Param | off | BattleBenchmark.cpp:28, BattleController.cpp:53, BattleLeaderRuntime.cpp:71 |  |
 | `-BattleBenchmarkFPS` | Param | off | BattleBenchmark.cpp:120, BattleBenchmark.cpp:154 |  |
-| `-BattleBlindFire` | other |  | BattleBlindFire.cpp:24 |  |
-| `-BattleBlindFireClipSide` | Value | TEXT("AS_CoverLo_AimR") | BattleBlindFire.cpp:42 |  |
-| `-BattleBlindFireClipTop` | Value | TEXT("AS_CoverLo_AimU_down") | BattleBlindFire.cpp:42 |  |
-| `-BattleBlindFireSpread` | Value | 4.f | BattleBlindFire.cpp:28 |  |
-| `-BattleBodyAnim` | Value | 1 | BattleBodyAnim.cpp:53 |  |
-| `-BattleConcealment` | other |  | BattleLeaderRuntime.cpp:426, BattleLeaderRuntime.cpp:1000, BattleMapCommandlet.cpp:116 ほか1 |  |
+| `-BattleBlindFire` | other |  | BattleBlindFire.cpp:26 |  |
+| `-BattleBlindFireClipSide` | Value | TEXT("AS_CoverLo_AimR") | BattleBlindFire.cpp:44 |  |
+| `-BattleBlindFireClipTop` | Value | TEXT("AS_CoverLo_AimU_down") | BattleBlindFire.cpp:44 |  |
+| `-BattleBlindFireExpose` | other |  | BattleBlindFire.cpp:77 |  |
+| `-BattleBlindFireSpread` | Value | 4.f | BattleBlindFire.cpp:30 |  |
+| `-BattleBodyAnim` | Value | 1 | BattleBodyAnim.cpp:56 |  |
+| `-BattleConcealment` | other |  | BattleLeaderRuntime.cpp:426, BattleLeaderRuntime.cpp:1002, BattleMapCommandlet.cpp:116 ほか1 |  |
 | `-BattleContactAvoidance` | Value | 1 | BattleLeaderRuntime.cpp:83 |  |
 | `-BattleContactCover` | Value | 0 | BattleTactics.cpp:185 |  |
 | `-BattleContactCoverTeam` | Value | -1 | BattleTactics.cpp:179 |  |
@@ -119,7 +120,7 @@
 | `-BattleLeaderQA` | Value |  | BattleLeaderRuntime.cpp:253 |  |
 | `-BattleLeaderSmoke` | Param | off | BattleLeaderRuntime.cpp:251 |  |
 | `-BattleLeaderUnits` | Value | bMixedFastMatch?20:bWideField?500:40 | BattleLeaderRuntime.cpp:89 |  |
-| `-BattleLegacyAnimationLOD` | Param | off | BattleUnit.cpp:498 |  |
+| `-BattleLegacyAnimationLOD` | Param | off | BattleUnit.cpp:566 |  |
 | `-BattleLegacyWeaponVisuals` | Param | off | BattleUnit.cpp:100 |  |
 | `-BattleMapStats` | Value |  | BattleLeaderRuntime.cpp:229, BattleMapStats.cpp:40 |  |
 | `-BattleMassMovement` | Param | off | BattleBenchmark.cpp:39 |  |
@@ -180,7 +181,7 @@
 | `-BattleSeconds` | Value | 20.f | BattleBenchmark.cpp:41 |  |
 | `-BattleSectorAI` | Value | 0 | BattleMatch.cpp:445, BattleMatch.cpp:456 |  |
 | `-BattleSectorAudit` | Param | off | BattleSectorAudit.cpp:28 |  |
-| `-BattleSectorContact` | Value | 0 | BattleLeaderRuntime.cpp:1221 |  |
+| `-BattleSectorContact` | Value | 0 | BattleLeaderRuntime.cpp:1223 |  |
 | `-BattleSectorFlank` | Value | 0 | BattleSectorRoute.cpp:35 |  |
 | `-BattleSectorFront` | Value | 0 | BattleSectorRoute.cpp:41 |  |
 | `-BattleSectorRoute` | Value | 0 | BattleSectorRoute.cpp:16 |  |
@@ -233,7 +234,7 @@
 | `-BattleTeamSupport` | Value | 1 | BattleTeamAI.cpp:12 |  |
 | `-BattleTerrain` | other |  | BattleTerrain.h:18 |  |
 | `-BattleTerrainLineBodies` | Value | 1 | BattleTactics.cpp:230 |  |
-| `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:1158 |  |
+| `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:1160 |  |
 | `-BattleTracerShot` | Param | off | BattleStanceShot.cpp:87 |  |
 | `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:206 |  |
 | `-BattleTrialSwap` | Param | off | BattleArea.cpp:15, BattleAreaDepot.cpp:32, BattleLeaderRuntime.cpp:79 ほか4 |  |

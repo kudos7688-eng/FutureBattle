@@ -264,7 +264,7 @@ void UBattleLeaderRuntime::StepExoLaunchers(double Now)
   }
   if(Best==INDEX_NONE)continue;
   // Line of fire from the shoulder: clear, or ending on the target or close enough for the explosion.
-  const FVector Muzzle=Pos+FVector(0,0,BattleStance::EyeOffset(StanceOf(ID))),Aim=BestAt+FVector(0,0,BattleStance::AimOffset(StanceOf(Best)));
+  const FVector Muzzle=Pos+FVector(0,0,BattleStance::EyeOffset(StanceOf(ID))),Aim=BestAt+FVector(0,0,TargetAimOffset(Best));
   auto Q=Sight(ID).Query;FHitResult Hit;GetWorld()->LineTraceSingleByChannel(Hit,Muzzle,Aim,ECC_Visibility,Q);
   if(Hit.bBlockingHit&&HitIDs.FindRef(Hit.GetComponent())!=Best&&FVector::DistSquared(Hit.ImpactPoint,Aim)>Splash2)continue;
   FireExoLauncher(ID,Aim,Now);

@@ -74,6 +74,25 @@ bool UBattleLeaderRuntime::BlindFireOrigin(int32 ID,FVector AimPoint,FVector& Or
  return false;
 }
 
+bool BattleBlindFire::ExposeEnabled(){static const bool bOn=Switch(TEXT("BattleBlindFireExpose="),1)!=0;return bOn;}
+
+bool UBattleLeaderRuntime::IsHeadExposed(int32 ID,double Now) const
+{
+ if(!BattleBlindFire::ExposeEnabled() || !IsBlindFiring(ID,Now))return false;
+ const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
+ return U && U->CoverPhase==2 && BattleBlindFire::IsOverTop(*U);
+}
+
+float UBattleLeaderRuntime::TargetAimOffset(int32 ID) const
+{
+ return IsHeadExposed(ID,GetWorld()->GetTimeSeconds())?BattleBlindFire::ExposedAimOffset:BattleStance::AimOffset(StanceOf(ID));
+}
+
+float UBattleLeaderRuntime::TargetTopOffset(int32 ID) const
+{
+ return IsHeadExposed(ID,GetWorld()->GetTimeSeconds())?BattleBlindFire::ExposedTopOffset:BattleStance::TopOffset(StanceOf(ID));
+}
+
 float BattleBlindFire::CoverTop(UWorld* World,const FVector& Origin,const FVector& Body)
 {
  // Three lines down, at the origin and 25 / 55 cm further toward the threat (the cover may stand a little ahead). The

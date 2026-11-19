@@ -399,11 +399,14 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	}
 	{
 		UAnimSequence* CoverBase = nullptr; bool bCoverLoop = true; float Yaw = 0.f;
-		// Blind fire: around the edge the clip is a crouched aim of the whole body; over the top it raises the rifle above the
-		// head (a standing clip), so only its upper body shows over the hidden pose and the head stays below the cover.
+		// Blind fire: around the edge the clip is a crouched aim of the whole body. Over the top the clip stands with the rifle
+		// above the head: the whole body shows it while the head is exposed (the rules aim at and hit the head then,
+		// BattleBlindFire::ExposeEnabled); with -BattleBlindFireExpose=0 only its upper body shows over the hidden pose and the
+		// hands lift the rifle over the cover, the head staying below it.
 		UAnimSequence* Blind = S.CoverPhase && Leaders && Leaders->IsBlindFiring(UnitID, Now) ? BattleBlindFire::Clip(BattleBlindFire::IsOverTop(S)) : nullptr;
 		UAnimSequence* BlindUpper = nullptr;
-		if (Blind && BattleBlindFire::IsOverTop(S) && CoverClip(CoverClipSet.Hidden)) { CoverBase = CoverClip(CoverClipSet.Hidden); BlindUpper = Blind; Yaw = BattleBlindFire::OverTopYaw(CoverClipSet.Hidden); }
+		if (Blind && BattleBlindFire::IsOverTop(S) && BattleBlindFire::ExposeEnabled()) CoverBase = Blind;
+		else if (Blind && BattleBlindFire::IsOverTop(S) && CoverClip(CoverClipSet.Hidden)) { CoverBase = CoverClip(CoverClipSet.Hidden); BlindUpper = Blind; Yaw = BattleBlindFire::OverTopYaw(CoverClipSet.Hidden); }
 		// Around the edge: the side's own crouched aim (AimL or AimR of the cover set), else the default side clip.
 		// The body turns so the rifle points around the corner (BlindFireLook), not into the cover.
 		else if (Blind) { CoverBase = CoverClip(CoverClipSet.Aim) ? CoverClip(CoverClipSet.Aim) : Blind; Yaw = Leaders->BlindFireYaw(UnitID, GetActorForwardVector()); }
@@ -475,9 +478,11 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 		Pose = Crouched ? (Moving && LookCrouchMove ? LookCrouchMove.Get() : LookCrouchIdle.Get()) : Moving && LookMove ? LookMove.Get() : LookIdle.Get();
 	}
 	// Blind fire (BattleBlindFire.cpp): the clip that raises the rifle over or around the cover while it lasts.
-	// Not for a soldier with its own look (other skeleton), nor over the top (a standing clip: whole-body, the head would show).
-	if (!Reloading && !LookIdle && !BattleBlindFire::IsOverTop(S)) if (const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leaders && Leaders->IsBlindFiring(UnitID, Now))
-		if (auto* Blind = BattleBlindFire::Clip(false)) Pose = Blind;
+	// Not for a soldier with its own look (other skeleton). Over the top it is a standing clip (the head shows): only while the
+	// rules expose the head (BattleBlindFire::ExposeEnabled).
+	const bool bOverTop = BattleBlindFire::IsOverTop(S);
+	if (!Reloading && !LookIdle && (!bOverTop || BattleBlindFire::ExposeEnabled())) if (const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leaders && Leaders->IsBlindFiring(UnitID, Now))
+		if (auto* Blind = BattleBlindFire::Clip(bOverTop)) Pose = Blind;
 	const bool Looping = !Reloading || Pose != RifleReload.Get();
 	if (Pose && CurrentPose != Pose)
 	{
