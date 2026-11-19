@@ -16,7 +16,9 @@ namespace
  // the 130cm low walls of the urban maps and taller sandbags; the first that has a clear first stretch is used.
  const float OverTopHeights[]={85.f,110.f};
  // Around the edge: the shot leaves at chest height of a crouched soldier, first point past the edge toward the peek point.
- constexpr float SideHeight=30.f,SideFirst=45.f,SideStep=35.f,SideMax=150.f;
+ // The search reaches the peek point (cover action anchors sit up to about 220cm from it; at 150cm the cover test's anchor
+ // found no point past the edge), capped at 250cm. The body stays at the anchor whatever the distance.
+ constexpr float SideHeight=30.f,SideFirst=45.f,SideStep=35.f,SideMax=250.f;
  // Length of the first stretch toward the aim point that must be free of walls.
  constexpr float ProbeCm=150.f;
 }

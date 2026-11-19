@@ -39,10 +39,11 @@ namespace BattleCoverClips
    {
     case ESide::Left: return {TEXT("AS_CoverLo_CoverL"),nullptr,TEXT("AS_CoverLo_CoverL2AimL"),TEXT("AS_CoverLo_AimL"),TEXT("AS_CoverLo_AimL2CoverL")};
     case ESide::Right:return {TEXT("AS_coverlo_R_idle"),TEXT("AS_CoverLo_Idle2CoverR"),TEXT("AS_CoverLo_CoverR2AimR"),TEXT("AS_CoverLo_AimR"),TEXT("AS_CoverLo_AimR2CoverR")};
-    // Over the top. The hidden pose stays on the right; the UE5 set has no plain AimU loop, so AimU_down is the candidate
-    // (the blind fire default too). If its head height is well below the standing eye (the firing point stays at standing
-    // height in the rules), keep the ordinary standing aim for phase 4 instead (Docs/COVER_CLIPS.md, question 1).
-    default:          return {TEXT("AS_coverlo_R_idle"),TEXT("AS_CoverLo_Idle2CoverR"),TEXT("AS_CoverLo_CoverR2AimU"),TEXT("AS_CoverLo_AimU_down"),TEXT("AS_CoverLo_AimU2CoverR")};
+    // Over the top. The hidden pose stays on the right. Phase 4 has no cover clip (nullptr): the ordinary standing rifle body
+    // shows, as the rules fire from the standing eye. AimU_down was measured (BATTLE_BODY_CLIP 2026-11-20): a standing body
+    // (head 158 cm) holding the rifle above the head (hand 168 cm) and pointing down, so it is the over-the-top blind fire
+    // pose (upper body only, over the hidden pose; BattleBlindFire.cpp), not an aimed peek. CoverR2AimU ends standing (head 159).
+    default:          return {TEXT("AS_coverlo_R_idle"),TEXT("AS_CoverLo_Idle2CoverR"),TEXT("AS_CoverLo_CoverR2AimU"),nullptr,TEXT("AS_CoverLo_AimU2CoverR")};
    }
   }
   if(Side==ESide::Left)return {TEXT("AS_CoverHi_CoverL"),nullptr,TEXT("AS_CoverHi_CoverL2AimL"),TEXT("AS_CoverHi_AimL"),TEXT("AS_CoverHi_AimL2CoverL")};
@@ -67,11 +68,12 @@ namespace BattleCoverClips
  }
 
  // Mesh yaw offset (degrees) added to the body's facing while a clip of this phase plays. The game keeps the body facing the
- // threat; the hidden clips have the back to the cover, so they are turned until the measured clip forward lines up with the
- // cover. Initial guesses until the import logs BATTLE_BODY_CLIP (pelvis and gun direction per clip): hidden and enter 180
- // (back to the wall, facing away from the threat), aim 0. Replace with the measured values (Docs/COVER_CLIPS.md, step 2).
- inline float YawOffset(uint8 CoverPhase)
+ // threat. Measured 2026-11-20 (BATTLE_BODY_CLIP chest_yaw against the square standing MM_Rifle_Fire = 0; the ordinary rifle
+ // stance is +34): the clips turn the body themselves. Hidden: R idle +94 (low) / +92 (high), CoverL -130 / -151, i.e. already
+ // side-on or back to the cover; aim: AimR +23 / +66, AimL +39 / +24, all facing the threat. So no extra turn (the initial
+ // guess, hidden 180, would have turned the hidden body toward the threat).
+ inline float YawOffset(uint8)
  {
-  return CoverPhase==2?180.f:0.f;
+  return 0.f;
  }
 }

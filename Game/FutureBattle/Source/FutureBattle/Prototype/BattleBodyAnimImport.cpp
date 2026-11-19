@@ -75,6 +75,8 @@ int32 ImportBattleBodyAnims()
   const FString Source=FString(Entry.Source)+Entry.Name;
   auto* Src=LoadObject<UAnimSequence>(nullptr,*Source);
   if(!Src){UE_LOG(LogTemp,Error,TEXT("BODY_ANIM_IMPORT missing source %s"),*Source);++Failures;continue;}
+  // The source and the copy compress on worker threads; duplicating or saving during that crashed (UAnimCompress::ByteSwapOut).
+  Src->WaitOnExistingCompression();
   UPackage* Package=CreatePackage(*Path);
   auto* Dst=DuplicateObject<UAnimSequence>(Src,Package,Entry.Name);
   Dst->SetFlags(RF_Public|RF_Standalone);
@@ -84,10 +86,12 @@ int32 ImportBattleBodyAnims()
   if(!Dst->ReplaceSkeleton(Target,false)){UE_LOG(LogTemp,Error,TEXT("BODY_ANIM_IMPORT skeleton replace failed %s"),Entry.Name);++Failures;continue;}
   Dst->RefreshCacheData();
   Dst->PostEditChange();
+  Dst->WaitOnExistingCompression();
   Dst->MarkPackageDirty();
   FAssetRegistryModule::AssetCreated(Dst);
   FSavePackageArgs Args;Args.TopLevelFlags=RF_Public|RF_Standalone;
   const bool Saved=UPackage::SavePackage(Package,Dst,*FPackageName::LongPackageNameToFilename(Path,FPackageName::GetAssetPackageExtension()),Args);
+  Dst->WaitOnExistingCompression();
   UE_LOG(LogTemp,Display,TEXT("BODY_ANIM_IMPORT %s saved=%d length=%.3f keys=%d skeleton=%s dropped_notifies=%d"),*Path,Saved,Dst->GetPlayLength(),Dst->GetNumberOfSampledKeys(),*GetPathNameSafe(Dst->GetSkeleton()),Notifies);
   if(!Saved){++Failures;continue;}
   Clips.Add(Dst);
@@ -112,8 +116,13 @@ int32 ImportBattleBodyAnims()
    const FVector Pelvis=Body->GetBoneLocation(TEXT("pelvis"),EBoneSpaces::ComponentSpace);
    // Rifle yaw relative to the body's facing (+Y = 0 deg, positive = to the body's right), pitch up positive.
    const FVector Gun=(HandL-HandR).GetSafeNormal();
+   // Facing of the chest and hips: yaw in degrees of the left-minus-right shoulder (hip) line in mesh space. Read it against a
+   // standing clip (MM_Rifle_Fire): the difference is how far the clip turns the body.
+   const FVector Chest=Body->GetBoneLocation(TEXT("upperarm_l"),EBoneSpaces::ComponentSpace)-Body->GetBoneLocation(TEXT("upperarm_r"),EBoneSpaces::ComponentSpace);
+   const FVector Hips=Body->GetBoneLocation(TEXT("thigh_l"),EBoneSpaces::ComponentSpace)-Body->GetBoneLocation(TEXT("thigh_r"),EBoneSpaces::ComponentSpace);
+   const float ChestYaw=FMath::RadiansToDegrees(FMath::Atan2(Chest.Y,Chest.X)),HipYaw=FMath::RadiansToDegrees(FMath::Atan2(Hips.Y,Hips.X));
    const float Yaw=FMath::RadiansToDegrees(FMath::Atan2(-Gun.X,Gun.Y)),Pitch=FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Gun.Z,-1.f,1.f)));
-   Line+=FString::Printf(TEXT(" t%.0f[head_z=%.0f hand_r_z=%.0f hand_l_z=%.0f gun_yaw=%.0f gun_pitch=%.0f pelvis=%.0f,%.0f,%.0f]"),Fraction*100,Head.Z,HandR.Z,HandL.Z,Yaw,Pitch,Pelvis.X,Pelvis.Y,Pelvis.Z);
+   Line+=FString::Printf(TEXT(" t%.0f[head_z=%.0f hand_r_z=%.0f hand_l_z=%.0f gun_yaw=%.0f gun_pitch=%.0f chest_yaw=%.0f hip_yaw=%.0f pelvis=%.0f,%.0f,%.0f]"),Fraction*100,Head.Z,HandR.Z,HandL.Z,Yaw,Pitch,ChestYaw,HipYaw,Pelvis.X,Pelvis.Y,Pelvis.Z);
   }
   UE_LOG(LogTemp,Display,TEXT("BATTLE_BODY_CLIP %s length=%.2f root_lock=%d%s"),*Clip->GetName(),Clip->GetPlayLength(),Clip->bForceRootLock,*Line);
  }
