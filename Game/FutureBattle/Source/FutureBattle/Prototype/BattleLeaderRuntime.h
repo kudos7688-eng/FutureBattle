@@ -8,6 +8,7 @@
 #include "BattleUnit.h"
 #include "BattleSightExperiment.h"
 #include "BattleTactics.h"
+#include "BattleCoverClips.h"
 #include "BattleLeaderRuntime.generated.h"
 
 class ABattleGameMode;
@@ -79,6 +80,9 @@ struct FBattleLeaderBody
  bool bTrafficWait=false, bArrived=false;
  // Display: the near follower mesh shows the blind fire clip (BattleBlindFire.cpp).
  bool bBlindPose=false;
+ // Display: cover phase whose clip the near follower mesh shows (2 hidden, 4 firing; 0 none) and the table picked for it.
+ uint8 CoverClipPhase=0;
+ BattleCoverClips::FSet CoverClipSet{};
  int32 PassingID=INDEX_NONE;
 
  FVector PassingWaypoint=FVector::ZeroVector, PassingForward=FVector::ForwardVector, PassingOffset=FVector::ZeroVector;

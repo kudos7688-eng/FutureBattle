@@ -362,6 +362,13 @@ UBattleBodyAnimInstance* ABattleUnit::BodyAnim() const
 	return LookIdle ? nullptr : Cast<UBattleBodyAnimInstance>(GetMesh()->GetAnimInstance());
 }
 
+void ABattleUnit::SetMeshYaw(float Yaw)
+{
+	if (FMath::IsNearlyEqual(Yaw, MeshYawShown)) return;
+	MeshYawShown = Yaw;
+	GetMesh()->SetRelativeRotation(FRotator(0, -90 + Yaw, 0));
+}
+
 void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUnitState& S)
 {
 	using namespace BattleBodyAnim;
@@ -374,6 +381,42 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 		TransitionUntil = TransitionClip ? Now + TransitionClip->GetPlayLength() : 0.;
 		BodyStance = VisualStance;
 	}
+	// Cover clips (BattleCoverClips.h): hidden and firing poses of the cover action, with a one-shot between phases. The table
+	// is picked once per cover action. While a cover clip shows, it is the whole body (reload still layers on the upper body).
+	if (S.CoverPhase != ShownCoverPhase)
+	{
+		using namespace BattleCoverClips;
+		if (!ShownCoverPhase && S.CoverPhase) CoverClipSet = CoverSet(GetWorld(), S, GetActorForwardVector());
+		const TCHAR* Shot = nullptr; float ShotYaw = 0.f;
+		if (S.CoverPhase == 2 && ShownCoverPhase == 1) { Shot = CoverClipSet.Enter; ShotYaw = YawOffset(2); }
+		else if (S.CoverPhase == 4) { Shot = CoverClipSet.ToAim; ShotYaw = YawOffset(4); }
+		else if (ShownCoverPhase == 4 && S.CoverPhase && BattleBlindFire::IsOverTop(S)) { Shot = CoverClipSet.FromAim; ShotYaw = YawOffset(2); }
+		CoverOneShot = S.CoverPhase ? CoverClip(Shot) : nullptr;
+		CoverOneShotUntil = CoverOneShot ? Now + CoverOneShot->GetPlayLength() : 0.;
+		CoverOneShotYaw = ShotYaw;
+		ShownCoverPhase = S.CoverPhase;
+	}
+	{
+		UAnimSequence* CoverBase = nullptr; bool bCoverLoop = true; float Yaw = 0.f;
+		if (S.CoverPhase && Leaders && Leaders->IsBlindFiring(UnitID, Now)) CoverBase = BattleBlindFire::Clip(BattleBlindFire::IsOverTop(S));
+		else if (CoverOneShot && Now < CoverOneShotUntil) { CoverBase = CoverOneShot; bCoverLoop = false; Yaw = CoverOneShotYaw; }
+		else if (S.CoverPhase == 2) { CoverBase = CoverClip(CoverClipSet.Hidden); Yaw = BattleCoverClips::YawOffset(2); }
+		else if (S.CoverPhase == 4) { CoverBase = CoverClip(CoverClipSet.Aim); Yaw = BattleCoverClips::YawOffset(4); }
+		if (CoverBase)
+		{
+			SetMeshYaw(Yaw);
+			Body.SetBase(CoverBase, bCoverLoop);
+			Body.SetAim(0.f, 0.f);
+			const float ReloadSeconds = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
+			UAnimSequence* CoverReload = Get(EClip::Reload);
+			if (S.ReloadEndTime > Now && CoverReload) Body.SetUpper(CoverReload, 1.f, CoverReload->GetPlayLength() * FMath::Clamp(1. - (S.ReloadEndTime - Now) / ReloadSeconds, 0., 1.));
+			else Body.SetUpper(nullptr, 0.f);
+			if (LastVisualShot > ShownShot) ShownShot = LastVisualShot;
+			ShownHP = S.HP;
+			return;
+		}
+	}
+	SetMeshYaw(0.f);
 	const bool bTransition = TransitionClip && Now < TransitionUntil;
 	const FVector Local = GetActorRotation().UnrotateVector(GetVelocity());
 	const bool bJog = Local.Size2D() > GetDefault<UBattleTuning>()->MoveSpeed * 1.15f;
@@ -528,7 +571,7 @@ void ABattleUnit::ApplyDeath()
 	const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
 	if (UAnimSequence* Death = Body ? BattleBodyAnim::Death(GetActorForwardVector(), Leaders ? Leaders->LastShotDirection(UnitID) : FVector::ZeroVector, UnitID) : nullptr)
 	{
-		GetMesh()->SetRelativeScale3D(FVector(1.));
+		GetMesh()->SetRelativeScale3D(FVector(1.)); SetMeshYaw(0.f);
 		Body->SetUpper(nullptr, 0.f); Body->SetAim(0.f, 0.f); Body->SetBase(Death, false);
 	}
 	else

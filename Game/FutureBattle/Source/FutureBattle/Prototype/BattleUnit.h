@@ -4,6 +4,7 @@
 #include "AIController.h"
 #include "BattleState.h"
 #include "CollisionQueryParams.h"
+#include "BattleCoverClips.h"
 #include "BattleUnit.generated.h"
 
 class UCameraComponent;
@@ -85,6 +86,13 @@ private:
 	UPROPERTY() TObjectPtr<UAnimSequence> TransitionClip;
 	double TransitionUntil = 0., ShownShot = -10.;
 	float ShownHP = -1.f;
+	// Cover clips (BattleCoverClips.h): the set picked when the cover action starts, the one-shot between phases, mesh yaw.
+	uint8 ShownCoverPhase = 0;
+	BattleCoverClips::FSet CoverClipSet{};
+	UPROPERTY() TObjectPtr<UAnimSequence> CoverOneShot;
+	double CoverOneShotUntil = 0.;
+	float CoverOneShotYaw = 0.f, MeshYawShown = 0.f;
+	void SetMeshYaw(float Yaw);
 	UPROPERTY() TObjectPtr<UAnimSequence> LookIdle;
 	UPROPERTY() TObjectPtr<UAnimSequence> LookMove;
 	UPROPERTY() TObjectPtr<UAnimSequence> LookCrouchIdle;

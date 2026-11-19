@@ -4,6 +4,7 @@
 #include "BattleRanges.h"
 #include "BattleStance.h"
 #include "BattleBlindFire.h"
+#include "BattleBodyAnim.h"
 #include "BattleFieldLayout.h"
 #include "BattlePerception.h"
 #include "BattleGameMode.h"
@@ -21,6 +22,12 @@ void UBattleLeaderRuntime::CancelCoverAction(int32 ID)
  if(U->CoverPhase==4)EndPeekDiag(ID,U->IsAlive()?TEXT("cancel"):TEXT("died"));
  if(U->CoverPhase){GetWorld()->GetSubsystem<UBattleCover>()->Release(ID);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVER_RELEASE unit=%d phase=%d position=%s remaining=%.2f revision=%d/%d"),ID,U->CoverPhase,*Position(ID).ToCompactString(),U->CoverSeconds,U->OrderRevision,U->CoverOrderRevision);}
  U->CoverPhase=0;U->CoverSeconds=0;U->CoverTargetID=INDEX_NONE;U->CoverSlot=INDEX_NONE;
+ // A near follower showing a cover clip returns to his ordinary clip and facing.
+ if(auto* B=Bodies.Find(ID);B && B->CoverClipPhase && !B->Actor.IsValid() && B->Mesh.IsValid())
+ {
+  B->CoverClipPhase=0;
+  if(U->IsAlive()){B->Mesh->SetRelativeRotation(FRotator(0,-90,0));RefreshFollowerPose(ID);}
+ }
 }
 
 void UBattleLeaderRuntime::EndPeekDiag(int32 ID,const TCHAR* Cause)
@@ -377,7 +384,18 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  {
   const int32 Pose=U->ReloadEndTime>Now?2:B.Velocity.SizeSquared2D()>400?1:0;
   const bool Blind=IsBlindFiring(ID,Now);
-  if(Pose!=B.Pose || Blind!=B.bBlindPose){B.Pose=Pose;B.bBlindPose=Blind;if(VAT)VAT->ChangePose(ID,Pose);if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(FollowerClip(ID,Pose),true);}
+  // Cover clips (BattleCoverClips.h): one whole-body loop per phase for a near follower (no one-shots), the mesh turned by the table.
+  const uint8 ClipPhase=(U->CoverPhase==2||U->CoverPhase==4)&&BattleBodyAnim::Enabled()?U->CoverPhase:0;
+  if(ClipPhase && !B.CoverClipPhase)B.CoverClipSet=BattleBodyAnim::CoverSet(GetWorld(),*U,Forward(ID));
+  if(Pose!=B.Pose || Blind!=B.bBlindPose || ClipPhase!=B.CoverClipPhase)
+  {
+   B.Pose=Pose;B.bBlindPose=Blind;B.CoverClipPhase=ClipPhase;if(VAT)VAT->ChangePose(ID,Pose);
+   if(!VAT || !VAT->IsFar(ID))
+   {
+    B.Mesh->SetRelativeRotation(FRotator(0,-90+(ClipPhase && !Blind && Pose!=2?BattleCoverClips::YawOffset(ClipPhase):0.f),0));
+    B.Mesh->PlayAnimation(FollowerClip(ID,Pose),true);
+   }
+  }
  }
  U->DecisionReason=U->CoverPhase==2?(IsBlindFiring(ID,Now)?TEXT("COVER / BLIND FIRE"):TEXT("COVER / HIDDEN - FIRE TO PEEK")):U->CoverPhase==4?TEXT("COVER / EXPOSED FIRING WINDOW"):TEXT("COVER / MOVING - FIRE BLOCKED");
  if(!Player)U->Action=U->CoverPhase==2?EBattleAction::TakingCover:U->CoverPhase==4?EBattleAction::Engaging:EBattleAction::Moving;

@@ -3,6 +3,8 @@
 #include "Animation/AnimationPoseData.h"
 #include "Animation/AnimNodeBase.h"
 #include "BonePose.h"
+#include "BattleState.h"
+#include "BattleTactics.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "UObject/StrongObjectPtr.h"
@@ -103,6 +105,27 @@ UAnimSequence* BattleBodyAnim::Death(const FVector& BodyForward,const FVector& S
 UAnimSequence* BattleBodyAnim::Hit(const FVector& BodyForward,const FVector& ShotDirection,int32 Seed)
 {
  return Side(BodyForward,ShotDirection)==1?Get(EClip::HitBack):Get(EClip(int32(EClip::HitFront1)+FMath::Abs(Seed)%4));
+}
+
+UAnimSequence* BattleBodyAnim::CoverClip(const TCHAR* Name)
+{
+ if(!Enabled() || !Name)return nullptr;
+ static TMap<FName,TStrongObjectPtr<UAnimSequence>> Cache;
+ const FName Key(Name);
+ if(const auto* Found=Cache.Find(Key))return Found->Get();
+ UAnimSequence* Clip=LoadObject<UAnimSequence>(nullptr,*(FString(BattleCoverClips::Folder())+Name));
+ if(!Clip)UE_LOG(LogTemp,Warning,TEXT("BATTLE_BODY_ANIM missing cover clip %s"),Name);
+ Cache.Add(Key,TStrongObjectPtr<UAnimSequence>(Clip));
+ return Clip;
+}
+
+BattleCoverClips::FSet BattleBodyAnim::CoverSet(UWorld* World,const FBattleUnitState& U,const FVector& Forward)
+{
+ const FVector Threat=U.CoverAnchor+Forward.GetSafeNormal2D()*1000.f;
+ const BattleCoverClips::ESide Side=BattleCoverClips::SideOf(U.CoverAnchor,U.CoverPeek,Threat);
+ // CoverAnchor is the capsule centre: the standing eye is 60 cm above it.
+ const bool bBlocked=Side!=BattleCoverClips::ESide::Up && !BattleTactics::HasTerrainLine(World,U.CoverAnchor+FVector(0,0,60),Threat+FVector(0,0,60));
+ return BattleCoverClips::Pick(BattleCoverClips::HeightOf(Side,bBlocked),Side);
 }
 
 void UBattleBodyAnimInstance::SetBase(UAnimSequence* Clip,bool bLoop)

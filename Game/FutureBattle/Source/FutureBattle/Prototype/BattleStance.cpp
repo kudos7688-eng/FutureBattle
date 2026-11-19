@@ -85,6 +85,9 @@ UAnimSequence* UBattleLeaderRuntime::FollowerClip(int32 ID,int32 Pose) const
  // Blind fire (BattleBlindFire.cpp): the clip that raises the rifle over or around the cover, while it lasts.
  if(Pose!=2 && IsBlindFiring(ID,GetWorld()->GetTimeSeconds()))
   if(const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID))if(auto* Blind=BattleBlindFire::Clip(BattleBlindFire::IsOverTop(*U)))return Blind;
+ // Cover clips (BattleCoverClips.h): hidden or firing loop while the follower's cover action is in that phase.
+ if(Pose!=2)if(const auto* B=Bodies.Find(ID);B && B->CoverClipPhase)
+  if(auto* Cover=BattleBodyAnim::CoverClip(B->CoverClipPhase==2?B->CoverClipSet.Hidden:B->CoverClipSet.Aim))return Cover;
  if(StanceOf(ID)==BattleStance::Crouch)if(auto* Crouch=BattleStance::CrouchClip(Pose==1))return Crouch;
  if(StanceOf(ID)==BattleStance::Prone)
   if(auto* Prone=BattleBodyAnim::Get(Pose==2?BattleBodyAnim::EClip::ProneReload:Pose==1?BattleBodyAnim::EClip::ProneFwd:BattleBodyAnim::EClip::ProneIdle))return Prone;

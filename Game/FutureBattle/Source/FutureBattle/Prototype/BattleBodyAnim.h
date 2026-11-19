@@ -2,9 +2,11 @@
 #include "CoreMinimal.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimInstanceProxy.h"
+#include "BattleCoverClips.h"
 #include "BattleBodyAnim.generated.h"
 
 class UAnimSequence;
+struct FBattleUnitState;
 
 // Body animation (2026-11-19, user request; display only: sight, hits, heights and every rule are unchanged).
 // Clips come from the asset samples (BattleBodyAnimImport.cpp): Lyra (rifle locomotion, crouch, death, hit, fire, aim poses)
@@ -36,6 +38,11 @@ namespace BattleBodyAnim
  // Death and hit clips by where the shot came from (ShotDirection = travel direction of the bullet; zero when unknown).
  UAnimSequence* Death(const FVector& BodyForward,const FVector& ShotDirection,int32 Seed);
  UAnimSequence* Hit(const FVector& BodyForward,const FVector& ShotDirection,int32 Seed);
+ // Cover clips (BattleCoverClips.h, the table by the asset review session): a clip of /Game/.../Rifle/Cover/ by name (cached),
+ // and the set for a cover action from its anchor, peek point and the body's facing toward the threat. Height costs one
+ // terrain line, so callers pick the set once per cover action.
+ UAnimSequence* CoverClip(const TCHAR* Name);
+ BattleCoverClips::FSet CoverSet(UWorld* World,const FBattleUnitState& U,const FVector& Forward);
 }
 
 struct FBattleBodyLayer
