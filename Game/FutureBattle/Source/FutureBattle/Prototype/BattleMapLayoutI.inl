@@ -116,7 +116,8 @@
 			if(Mix<2)Emit(TEXT("Shed"),X+1500,Y+1500,450,350,260);else Emit(TEXT("YardWall"),X+1300,Y+1500,60,600,130);
 			break;
 		case TEXT('P'):
-			Emit(TEXT("Fountain"),X,Y,300,300,150);
+			// The middle of the sector stays free: a sector order goes to the middle, and an order into an obstacle is refused.
+			Emit(TEXT("Fountain"),X+Flip*700,Y-700,300,300,150);
 			for(int32 Side:{-1,1})
 			{
 				Emit(TEXT("PlazaWall"),X+Flip*300,Y+Side*1300,500,60,130);Emit(TEXT("PlazaWall"),X+Side*1300,Y-Flip*300,60,500,130);
