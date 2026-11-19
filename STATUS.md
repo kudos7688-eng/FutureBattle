@@ -20,6 +20,17 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-20 3時05分 Claude（小隊の人数）：止まった味方をすり抜ける試験切替 `-BattleAllyPass=1`（既定0）の検証（既定0のまま main へ取り込み。ユーザー決定）
+
+- 中身：止まった味方の群れに塞がれ、ほかの回避手段も尽きて3秒以上進めない兵は、半径8m以内の止まった味方の当たり判定を5秒間だけ無視して進む。ログ `BATTLE_ALLY_PASS`。
+- 検証（各1試合。-Area -Experiment -ObserveTactics -RoundTripSave -CoverActions 1 -FlankCoordination 1、種7、8人小隊、60fps。出力 `av2-<マップ>-p<0|1>-s7`）：
+  - 全8試合が完走（passed=true、保存の往復 failures=0）。
+  - マップHの区画監査：オフでは小隊8（F2）が止まったまま failures=1、オンでは failures=0（present=6、hold=1）。
+  - 移動停止ログ（オフ→オン）：H 429→247、A 316→228、I 568→551、E 794→811。すり抜けの発動は H 80、A 65人で75、I 215人で356、E 198人で806。
+  - マップEの制限：同じ兵が何十回も発動する（unit 540 は43回）。目的地そのものが味方25人の群れに埋まった場所では、すり抜けても着けず、5秒ごとに繰り返すだけで停止は減らない。
+- 回帰（オフ）：Test-Battle failures=0、Test-Area failures=0、Test-MixedSave failures=0。
+- オフの試合は main の旧DLLとはビルドが違う（AC01 の変更が入った）ため、一致比較はしていない。
+- 決定：既定0のまま main へ（ユーザー決定）。区画AIの 4499bac（-BattleSectorSlotReserve、未ビルドだった）と AC01 の変更を含む main の最新を取り込んでビルドが通り、回帰（Test-Battle・Test-Area・Test-MixedSave）failures=0、マップHの監査（すり抜けオン、種7、`av3-H-p1-s7`）failures=0・完走・保存往復 failures=0。
 ## 2026-11-20 1時05分 Claude（カバーアクション）：ブラインドファイアと体のアニメをビルド・試験（ブランチ `blindfire`、作業ツリー `FutureBattle-blindfire`）
 - **変更範囲**：
   - ブラインドファイア（`BattleBlindFire.*`）。隠れている間（CoverPhase 2）に構えずに撃つと、遮蔽の上（低い遮蔽）または角の先（覗き位置の方向、最大250cm）から撃ち、体は隠れ位置に残る。散らばりは4倍（`-BattleBlindFireSpread=`）。`-BattleBlindFire=0` で従来の覗き。AIは試験切替 `-BattleAIBlindFire=1`（既定0、制圧されている間だけ）。
@@ -80,6 +91,17 @@
 - **依頼**：アセット（`../アセット/`：Lyra、GameAnimationサンプル、TPS遮蔽シューター）の参考になる点を調べ、遮蔽アニメから取り込む。取り込みと再生は「カバーアクション現状確認とTPS視点実装」（`blindfire` ブランチ）が担当しているので、その外側を受け持った。
 - **作ったもの**：`Docs/CoverClips/BattleCoverClips.h`（遮蔽の段階・高さ・側からクリップ5本を引く表。ヘッダーだけで完結）と `Docs/CoverClips/README.md`（判断の根拠・部下の扱い・使わないクリップ・未決事項）。計測中に Source を変えないため Docs に置いた。`blindfire` 側が Source へ写してつなぐ。
 - **未実施・未決**：ビルド・試合・画面の確認はなし。向きの補正（隠れる姿勢は180度と推測）と、低い遮蔽で立ち上がって撃つときのクリップ（AimU_down で頭が低すぎないか）は、`blindfire` の取り込みログ `BATTLE_BODY_CLIP` を見て決める。
+
+## 2026-11-20 3時10分 Claude（AC01）：外骨格兵の背中の武器の位置を修正（表示だけ）
+- **依頼**：ユーザー「直して」（2時55分の撮影で、背中のバズーカが右ひざまで垂れ、背中のライフルが肩から突き出ていた件）。
+- `ApplyExoSuit`：背中の武器を上背部の中央に斜めに付け直した。バズーカは縦から50度（上端が左肩、下端は腰より上）、ライフルは銃床を左肩・銃口を右腰へ向ける。伏せ（つぶした仮表示）では背中に横向きに寝かせる（`UpdateExoLooks` が姿勢の変化で切り替え。`FExoLook` に2つの位置を保持）。武器は絶対スケール1.2にして、伏せのつぶしで太さがつぶれないようにした。
+- **検証**：`Build-Editor` 成功。`Test-ExoShot.ps1 -Name ac01-stow-20261120` failures=0、画像で上記の位置を確認（shot-3・5・8）。`Test-Area.ps1 -OutputName ac01-stow-20261120` failures=0。
+- **残り**：正面から見ると、背中のバズーカの下端が右腰から少しのぞく（shot-1）。実際の操作での確認はユーザー待ち。
+
+## 2026-11-20 2時55分 Claude（AC01）：外骨格兵の撮影にバズーカを構えた姿を追加し、新しい本体で撮影
+- `BattleExoShot.cpp` にバズーカを右手・ライフルを背中にした正面・背面の2枚を追加（AIの発射時の見た目を保持して撮る）。`Test-ExoShot.ps1 -Name ac01-switch-body-20261120` は `EXO_SHOT_RESULT failures=0`、9枚は `Setup/Benchmarks/ExoShot-20261118/ac01-switch-body-20261120/`。
+- 画像で見た点：ライフル・バズーカとも右手に収まり、背中の武器も体に付いている。気になる点は、ライフル装備時に背中のバズーカの下端が右ひざの高さまで下がっていること（shot-3）、バズーカ装備時に背中のライフルが左肩から斜めに大きく突き出ること（shot-5）、伏せの仮表示（縦につぶす）ではバズーカが体から垂直に立つこと（shot-8）。
+- ビルドは main の他セッションの未コミット変更（`BattleStableMovement.cpp`・`Test-WideSight.ps1`）を含んだ状態で行った（こちらは触っていない）。
 
 ## 2026-11-20 0時50分 Claude（AC01）：関節の内装を作り込んだ AC01 本体を UE へ再取り込み
 - **依頼**：ユーザー「Refresh-AC01Body.pyも実行して取り込んでください」。
