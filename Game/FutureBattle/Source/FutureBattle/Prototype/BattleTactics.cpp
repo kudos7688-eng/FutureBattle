@@ -1,4 +1,5 @@
 #include "BattleTactics.h"
+#include "BattleFieldLayout.h"
 #include "BattleState.h"
 #include "BattleUnit.h"
 #include "BattleGameMode.h"
@@ -167,10 +168,10 @@ bool BattleTactics::ReturnFireEnabled()
  return Enabled;
 }
 
-bool BattleTactics::CoverApproachEnabled()
+bool BattleTactics::CoverApproachEnabled(const UWorld* World)
 {
- static const bool Enabled=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverApproach="),Value);return Value!=0;}();
- return Enabled;
+ static const int32 Mode=[](){int32 Value=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverApproach="),Value);return Value;}();
+ return Mode<0 ? BattleFieldLayout::Of(World).bSectors : Mode!=0;
 }
 
 bool BattleTactics::ContactCover(int32 Team)

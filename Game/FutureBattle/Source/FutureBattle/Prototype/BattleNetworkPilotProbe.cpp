@@ -26,7 +26,7 @@ void ABattleNetController::RunPilotProbe()
 	{
 		if (Now < PilotProbeAt)
 		{
-			if (Now >= NextInputAt) { NextInputAt = Now + .05; ServerDirectInput(View.ControlEpoch, NextInputSequence++, FVector2D(1, 0), FRotator(60, View.Team ? 180 : 0, 0), true, false); }
+			if (Now >= NextInputAt) { NextInputAt = Now + .05; ServerDirectInput(View.ControlEpoch, NextInputSequence++, FVector2D(1, 0), FRotator(60, View.Team ? 180 : 0, 0), true, false, false); }
 			return;
 		}
 		PilotProbeStage = 4; PilotProbeAt = Now + .8; return; // Stop sending, exercising the stale-input timeout.
@@ -50,8 +50,8 @@ void ABattleNetController::RunPilotProbe()
 		if (Distance < 100 || Distance > 500 || Spent < 1 || Spent > 8 || Current->HP != PilotProbeHP) { Finish(false, *FString::Printf(TEXT("Invalid server movement or fire rate: distance=%.1f spent=%d"), Distance, Spent)); return; }
 		UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_NET_PILOT team=%d moved=%.1f spent=%d timeout=1"), View.Team, Distance, Spent);
 		PilotProbeStart = Current->Position; PilotProbeAmmo = Current->Ammo;
-		ServerDirectInput(View.ControlEpoch - 1, NextInputSequence++, FVector2D(1, 0), FRotator::ZeroRotator, true, false);
-		ServerDirectInput(View.ControlEpoch, NextInputSequence++, FVector2D(100, 0), FRotator::ZeroRotator, true, false);
+		ServerDirectInput(View.ControlEpoch - 1, NextInputSequence++, FVector2D(1, 0), FRotator::ZeroRotator, true, false, false);
+		ServerDirectInput(View.ControlEpoch, NextInputSequence++, FVector2D(100, 0), FRotator::ZeroRotator, true, false, false);
 		PilotProbeStage = 5; PilotProbeAt = Now + .5; return;
 	}
 	if (PilotProbeStage == 5)

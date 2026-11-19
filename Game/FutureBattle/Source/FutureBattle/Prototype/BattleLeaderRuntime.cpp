@@ -204,7 +204,9 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
     if(auto* Recast=Cast<ARecastNavMesh>(NavSystem->GetDefaultNavDataInstance()))
     {Recast->DefaultMaxSearchNodes=32768.f;const_cast<FNavigationQueryFilter&>(*Recast->GetDefaultQueryFilter()).SetMaxSearchNodes(32768);}
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WIDE_MIXED_READY squads=50 actors=50 mass=450 objectives=%d paused=1"),Match->Objectives.Num());
-  if(FParse::Param(FCommandLine::Get(),TEXT("BattleCoverActionSmoke")))
+  if(FParse::Param(FCommandLine::Get(),TEXT("BattleSectorSmoke")))
+  {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSectorSmoke,6.f,false);}
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleCoverActionSmoke")))
   {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunCoverActionSmoke,4.f,false);}
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleFlankBayTrial")))
   {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunFlankBayTrial,4.f,false);}
@@ -469,11 +471,18 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
  }
  bSummaryDirty=true;
 }
-bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,bool bMissionUpdate)
+bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,bool bMissionUpdate,bool bSector)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID);
  if(!Mode || Mode->bBattleEnded || !S || S->CommandStatus!=EBattleCommandStatus::Active || Goal.ContainsNaN()) return false;
  const FVector AskedGoal=Goal;
+ if(bSector)
+ {
+  const FIntPoint Cell=BattleSectors::Cell(Goal);
+  if(!BattleFieldLayout::Of(GetWorld()).bSectors || !BattleSectors::Valid(Cell) || IsVehicle(S->LeaderUnitID))return false;
+  Goal=BattleSectors::Center(Cell);
+  BattleFieldLayout::Of(GetWorld()).Heights.Ground(Goal.X,Goal.Y,0,Goal.Z,nullptr,1.e9);
+ }
  if(bWideField && Order!=EBattleOrder::Hold)
  {
   // A vehicle's order (with its path searches, partial routes into the city explore the whole reachable area) is timed for BATTLE_TANK_COST.
@@ -512,7 +521,7 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
   Goals.Add(ID,MemberGoal);
  }
  const int32 Revision=S->OrderRevision;
- const bool OK=Store->SetSquadOrder(SID,Order,Goal,Goals,bMissionUpdate);
+ const bool OK=Store->SetSquadOrder(SID,Order,Goal,Goals,bMissionUpdate,bSector);
  if(OK)
  {
   if(S->OrderRevision!=Revision) { auto& P=Plans.FindOrAdd(SID); P.bReplan=true; P.NextThink=0; }
@@ -532,6 +541,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  P.NextThink=Now+FMath::Max(.2f,GetDefault<UBattleTuning>()->SquadDecisionSeconds);
  const int32 PreviousTarget=P.TargetID;
  // Trial -BattleDefendEngage=1: a defending squad targets any enemy within weapon range (BattleGroups.cpp).
+ const bool Sector=S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission;
  const bool bDefendEngage=S->Order==EBattleOrder::Defend && BattleTactics::DefendEngage(S->Team);
  P.TargetID=INDEX_NONE; double Best=DBL_MAX;
  P.Center=FVector::ZeroVector; int32 Count=0; for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) { P.Center+=Position(ID); ++Count; } if(Count) P.Center/=Count;
@@ -539,7 +549,8 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   for(const auto& C:*Contacts) if(C.Value.bVisible && !C.Value.bShared)
   {
    if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C.Value.LastKnownPosition)>FMath::Square(TargetRange(ID))) continue;
-   if(S->Order==EBattleOrder::Defend && !bDefendEngage && FVector::Dist2D(C.Value.LastKnownPosition,S->Destination)>S->DefenseRadius) continue;
+   if(Sector && BattleSectors::Cell(C.Value.LastKnownPosition)!=BattleSectors::Cell(S->Destination)) continue;
+   if(!Sector && S->Order==EBattleOrder::Defend && !bDefendEngage && FVector::Dist2D(C.Value.LastKnownPosition,S->Destination)>S->DefenseRadius) continue;
    if(S->TacticalPlan.Action==EBattleSquadTactic::Support && C.Key!=S->TacticalPlan.SupportTarget) continue;
    const double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
    if(D<Best || (D==Best && C.Key<P.TargetID)) { Best=D; P.TargetID=C.Key; }
@@ -554,7 +565,8 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    {
     if(C->bShared || Now-C->LastSeenTime>Hold+1.e-6) continue;
     if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C->LastKnownPosition)>FMath::Square(TargetRange(ID))) continue;
-    if(S->Order==EBattleOrder::Defend && !bDefendEngage && FVector::Dist2D(C->LastKnownPosition,S->Destination)>S->DefenseRadius) continue;
+    if(Sector && BattleSectors::Cell(C->LastKnownPosition)!=BattleSectors::Cell(S->Destination)) continue;
+   if(!Sector && S->Order==EBattleOrder::Defend && !bDefendEngage && FVector::Dist2D(C->LastKnownPosition,S->Destination)>S->DefenseRadius) continue;
     P.TargetID=PreviousTarget;SightExperiment.Cover(TEXT("squad_target_held"));break;
    }
  }
@@ -578,6 +590,17 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
     const double Gap=Now-*Lost;E.SquadTargetLostAt.Remove(SID);
     E.Cover(Gap<=.51?TEXT("squad_target_gap_le_0_5s"):Gap<=1.01?TEXT("squad_target_gap_0_5_1s"):Gap<=2.01?TEXT("squad_target_gap_1_2s"):Gap<=5.01?TEXT("squad_target_gap_2_5s"):TEXT("squad_target_gap_gt_5s"));
    }
+ }
+ if(Sector && S->Order==EBattleOrder::AttackMove && P.TargetID==INDEX_NONE)
+ {
+  int32 Present=0;
+  for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive() && BattleSectors::Cell(Position(ID))==BattleSectors::Cell(S->Destination))++Present;
+  if(Present*2>Count)
+  {
+   // Keep the assigned places and mission revision when the deployed squad begins holding.
+   Store->Squads.FindChecked(SID).Order=EBattleOrder::Defend;
+   for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive())Store->Units.FindChecked(ID).Order=EBattleOrder::Defend;
+  }
  }
  const bool NewOrder=P.OrderRevision!=S->OrderRevision;
  if(NewOrder) { P.OrderRevision=S->OrderRevision; P.bReplan=true; }
@@ -752,7 +775,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   const float LocalRadius=(ProbeBudget||LeaderFirst)?CoverTuning->AICoverSearchRadius:BattleFieldLayout::IsUrban(GetWorld())?650.f:CoverTuning->CoverActionSearchRadius;
   if(RequestCoverAction(ID,Contact->LastKnownPosition,TargetID,LocalRadius)){CoverApproaches.Remove(ID);return;}
   // Trial -BattleCoverApproach=1: no usable cover here, so walk to a hidden slot beyond the local search radius.
-  if((BattleTactics::CoverApproachEnabled() || bContactCover) && !CoverApproaches.Contains(ID))
+  if((BattleTactics::CoverApproachEnabled(GetWorld()) || bContactCover) && !CoverApproaches.Contains(ID))
    if(!StartCoverApproach(ID,Contact->LastKnownPosition,TargetID,Now,LocalRadius) && bContactCover)StartFirePosition(ID,Contact->LastKnownPosition,TargetID,Now);
  }
  const bool Approaching=CoverApproaches.Contains(ID) && StepCoverApproach(ID,Dt,Now,StopForCombat?TargetID:INDEX_NONE);

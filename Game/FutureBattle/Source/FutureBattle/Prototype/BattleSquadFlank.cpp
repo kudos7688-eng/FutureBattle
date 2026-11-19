@@ -6,6 +6,7 @@
 #include "NavigationPath.h"
 #include "FutureBattle.h"
 #include "BattleMatch.h"
+#include "BattleFieldLayout.h"
 
 bool UBattleSquadTactics::SoloFlankRisk(const FBattleSquadObservation& O,FVector Start,double Length,double Exposure) const
 {
@@ -75,13 +76,25 @@ bool UBattleSquadTactics::TryFlank(int32 SID,int32 Supporter)
  // At most two candidates per side, independent of the number of soldiers.
  for(int32 Side:{-1,1}) for(float Angle:{30.f,55.f})
  {
-  const FVector Raw=Threat+Away.RotateAngleAxis(Side*Angle,FVector::UpVector)*FMath::Clamp(Nearest*.85,800.,3500.);
+  FVector Raw=Threat+Away.RotateAngleAxis(Side*Angle,FVector::UpVector)*FMath::Clamp(Nearest*.85,800.,3500.);
+  // At long range a position on the far contact's ring can already exceed the 50 m route budget.
+  // Try a lateral firing position near the squad, leaving some budget for navigation detours.
+  if(BattleFieldLayout::Of(GetWorld()).bSectors && FVector::DistSquared2D(Start,Raw)>FMath::Square(4500.))
+  {
+   const FVector Lateral(-Away.Y,Away.X,0);
+   Raw=Start+Side*Lateral*(Angle<45.f?2000.:3500.)-Away*500.;
+  }
   FNavLocation Goal;
   if(!Nav->ProjectPointToNavigation(Raw,Goal,FVector(150,150,400))) {Event(TEXT("FlankCandidateOffNav"));continue;}
   if(GetWorld()->LineTraceTestByObjectType(Goal.Location+FVector(0,0,170),Threat+FVector(0,0,70),FCollisionObjectQueryParams(ECC_WorldStatic))) {Event(TEXT("FlankCandidateBlockedFiringPosition"));continue;}
   Event(TEXT("FlankPathRequest"));
   auto* Path=Nav->FindPathToLocationSynchronously(GetWorld(),Start,Goal.Location);
-  if(!Path || !Path->IsValid() || Path->IsPartial() || Path->GetPathLength()>5000) {Event(TEXT("FlankCandidateUnreachableOrLong"));continue;}
+  if(!Path || !Path->IsValid() || Path->IsPartial() || Path->GetPathLength()>5000)
+  {
+   Event(TEXT("FlankCandidateUnreachableOrLong"));
+   Event(Path && Path->IsValid() && !Path->IsPartial()?TEXT("FlankCandidateOverBudget"):TEXT("FlankCandidateUnreachable"));
+   continue;
+  }
   int32 Visible=0,Total=0; bool Unsafe=false;
   for(int32 J=1;J<Path->PathPoints.Num();++J)
   {

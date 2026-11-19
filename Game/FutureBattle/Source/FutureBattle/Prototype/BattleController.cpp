@@ -281,6 +281,8 @@ bool ABattleController::ControlUnit(ABattleUnit* Unit)
 	const FBattleUnitState Before = *Unit->GetState();
 	if (AAIController* AI = Cast<AAIController>(Unit->GetController())) { Unit->SavedAI = AI; AI->StopMovement(); AI->UnPossess(); }
 	Possess(Unit);
+	if (const auto* Squad = GetWorld()->GetSubsystem<UBattleState>()->FindSquad(Before.SquadID); Squad && Squad->bPlayerDelegated)
+		Match->SetAllyDelegated(Before.SquadID, false);
 	Unit->SetDirectControl(true);
 	SetControlRotation(FRotator(0, Unit->GetActorRotation().Yaw, 0));
 	LastControlled = Unit;
@@ -577,12 +579,12 @@ void ABattleController::MoveSelected()
 
 void ABattleController::ChooseAttackMove()
 {
-	if (bTactical) { PendingOrder = EBattleOrder::AttackMove; ShowNotice(TEXT("ATTACK MOVE: right-click destination")); }
+	if (bTactical) { PendingOrder = EBattleOrder::AttackMove; ShowNotice(BattleFieldLayout::Of(GetWorld()).bSectors?TEXT("区画制圧：対象区画を右クリック"):TEXT("ATTACK MOVE: right-click destination")); }
 }
 
 void ABattleController::ChooseDefend()
 {
-	if (bTactical) { PendingOrder = EBattleOrder::Defend; ShowNotice(TEXT("DEFEND: right-click center")); }
+	if (bTactical) { PendingOrder = EBattleOrder::Defend; ShowNotice(BattleFieldLayout::Of(GetWorld()).bSectors?TEXT("区画維持：対象区画を右クリック"):TEXT("DEFEND: right-click center")); }
 }
 
 bool ABattleController::GetPointerPosition(FVector2D& Position) const
@@ -618,7 +620,8 @@ void ABattleController::IssueOrderAt(FVector Target, EBattleOrder Order)
   {
    // A squad with a chosen route walks a distant order over it (BattlePlayerRoutes.cpp); -1 = not routed, the ordinary order.
    const int32 SID=U->GetState()->SquadID,Routed=Routes->PlayerRouteOrder(SID,Order,Target);
-   if(Routed<0?L->IssueOrder(SID,Order,Target):Routed>0) ++Accepted; else ++Rejected;
+   const bool Sector=BattleFieldLayout::Of(GetWorld()).bSectors && !L->IsVehicle(U->GetUnitID()) && (Order==EBattleOrder::Defend || Order==EBattleOrder::AttackMove);
+   if(Routed<0?L->IssueOrder(SID,Order,Target,false,Sector):Routed>0) ++Accepted; else ++Rejected;
   }
   if(L->IsWideField()) ShowNotice(FString::Printf(TEXT("ORDER: %d SQUADS / %d REJECTED"),Accepted,Rejected));
   return;
@@ -759,6 +762,7 @@ void ABattleController::PlayerTick(float DeltaTime)
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
 	{
 		Unit->SetAimLevel(bAimHeld && Unit->IsAlive() ? AimLevel : 0);
+		Unit->SetSprinting(!bAimHeld && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift) || IsInputKeyDown(EKeys::Gamepad_LeftThumbstick)));
 		if (Unit->IsAlive()) UpdatePlayerAmmo(Unit);
 		if (!Unit->IsAlive()) { if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled()) OnLeaderUnitDied(Unit->GetUnitID()); else { EnterTactical(); ShowNotice(TEXT("UNIT DOWN / select another ally")); } }
 		else if (bTriggerHeld)
@@ -766,6 +770,7 @@ void ABattleController::PlayerTick(float DeltaTime)
 			ABattleGameMode* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>();
 			if (!Mode || !Mode->bBattleEnded) Unit->FireFromPlayerView();
 		}
+		if (Unit->IsAlive()) Unit->ReloadIfEmpty();
 	}
 }
 

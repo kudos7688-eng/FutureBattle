@@ -6,7 +6,7 @@
 	// Two-storey houses: outer walls in sections (a door on the south and east sides of the ground floor, window sills in every
 	// second section on both floors, the north wall closed), stairs along the north wall, an upper floor without a roof (the
 	// tactical camera looks in from above), a crate on each floor.
-	for(const BattleTerrain::FHouse& B:BattleTerrain::HousesG())
+	for(const BattleTerrain::FHouse& B:(UrbanH?BattleSectors::Houses():BattleTerrain::HousesG()))
 	{
 		const BattleTerrain::FHouseShape S(B);const double T=BattleTerrain::WallThick,F=BattleTerrain::FloorZ;
 		const double X0=B.X-B.W*.5,X1=B.X+B.W*.5,Y0=B.Y-B.H*.5,Y1=B.Y+B.H*.5;
@@ -36,7 +36,7 @@
 	}
 	// Hills: a flat top with a ramp on each side; on top low walls along the two long edges (60cm thick, so the navigation mesh
 	// gets no island on them).
-	for(const BattleTerrain::FHill& H:BattleTerrain::HillsG())
+	for(const BattleTerrain::FHill& H:(UrbanH?BattleSectors::Hills():BattleTerrain::HillsG()))
 	{
 		const double X0=H.X-H.W*.5,X1=H.X+H.W*.5,Y0=H.Y-H.H*.5,Y1=H.Y+H.H*.5;
 		Piece(TEXT("HillTop"),H.X,H.Y,0,H.W,H.H,H.Top,true);
@@ -51,8 +51,8 @@
 	}
 	// More cover than on map F along the roads: low walls beside the avenue outside the city and beside the flank roads, on
 	// alternating sides every 50m (never on a junction).
-	for(int32 I=0;I<4;++I){const double X=27000+I*2500;Piece(TEXT("RoadsideWall"),X,(I%2?1:-1)*1500,0,500,60,130);}
-	for(int32 SideY:{-1,1}) for(int32 I=0;I<9;++I)
+	if(!UrbanH)for(int32 I=0;I<4;++I){const double X=27000+I*2500;Piece(TEXT("RoadsideWall"),X,(I%2?1:-1)*1500,0,500,60,130);}
+	if(!UrbanH)for(int32 SideY:{-1,1}) for(int32 I=0;I<9;++I)
 	{
 		const double X=2500+I*5000;
 		if(FMath::Abs(X-13000)<1500||FMath::Abs(X-25000)<1500||FMath::Abs(X-38000)<1500)continue;

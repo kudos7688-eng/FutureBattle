@@ -70,6 +70,10 @@ struct FBattleLeaderBody
  TWeakObjectPtr<UStaticMeshComponent> Weapon;
  FVector Velocity=FVector::ZeroVector;
  double StalledSince=0;
+ // Position and continuous movement ticks for the headless experiment only.
+ FVector MoveSampleOrigin=FVector::ZeroVector;
+ uint64 LastMoveSampleFrame=0;
+ float StationaryMoveSeconds=0;
  FVector LastProgressPosition=FVector::ZeroVector;
  double LastProgressTime=0;
  bool bTrafficWait=false, bArrived=false;
@@ -277,6 +281,7 @@ public:
  void CancelCoverAction(int32 ID);
  bool StepCoverAction(int32 ID,float Dt,double Now);
  void RunCoverActionSmoke();
+ void RunSectorSmoke();
  double NextCoverProbe=0;
  uint64 CoverProbeFrame=0;int32 CoverProbesThisFrame=0;
  TMap<int32,double> CoverProbeAfter;
@@ -326,7 +331,7 @@ public:
  // CoverSlot value of a cover action at such a free place (no slot reservation).
  static constexpr int32 FreeCoverSlot=-2;
  bool StepCoverApproach(int32 ID,float Dt,double Now,int32 Target);
- bool IssueOrder(int32 SquadID,EBattleOrder Order,FVector Goal,bool bMissionUpdate=false);
+ bool IssueOrder(int32 SquadID,EBattleOrder Order,FVector Goal,bool bMissionUpdate=false,bool bSector=false);
  bool CanSelectLeader(int32 ID) const;
  bool CanControlLeader(int32 ID) const;
  const TArray<FBattleSquadSummary>& Summaries();

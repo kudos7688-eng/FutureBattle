@@ -57,6 +57,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID); auto& P=Plans.FindChecked(SID);
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+ const bool Sector=S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission;
+ const auto Cell=BattleSectors::Cell(S->Destination);
  const bool NewOrder=P.ArrivalRevision!=S->OrderRevision;
  if(NewOrder || P.ArrivalGoals.IsEmpty())
  {
@@ -75,9 +77,10 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    const FVector Offset=Forward*(Row*200)+Right*(Col*200);
    // Converging squads fill their own approach half-plane rather than crossing
    // the rally point to claim a slot behind the opposing incoming stream.
-   if(FVector::DotProduct(Offset,Forward)>20) continue;
+   if(Sector && BattleSectors::Cell(S->Destination+Offset)!=Cell)continue;
+   if(!Sector && FVector::DotProduct(Offset,Forward)>20) continue;
    if(Rally && Offset.Size2D()>450) continue;
-   if(S->Order==EBattleOrder::Defend && Offset.Size2D()>S->DefenseRadius-80) continue;
+   if(!Sector && S->Order==EBattleOrder::Defend && Offset.Size2D()>S->DefenseRadius-80) continue;
    Candidates.Add(S->Destination+Offset);
   }
   // Fill from the approach side, so converging squads don't seek slots beyond each other.
@@ -94,9 +97,10 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   if(CoverArrival)
   {
    auto* Cover=GetWorld()->GetSubsystem<UBattleCover>(); Cover->BuildSlots();
-   for(int32 Slot:Cover->NearbySlots(S->Destination,1400.f,48))
+   for(int32 Slot:Cover->NearbySlots(S->Destination,Sector?3600.f:1400.f,Sector?256:48))
    {
     const FVector At=Cover->GetSlots()[Slot];
+    if(Sector && BattleSectors::Cell(At)!=Cell)continue;
     if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic))) CoverCandidates.Add(At);
    }
   }
@@ -104,7 +108,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive())
   {
    bool Found=false;
-   if(CoverArrival && (ID==S->LeaderUnitID || OpenMembers++>=3))
+   if(CoverArrival && (Sector || ID==S->LeaderUnitID || OpenMembers++>=3))
     for(const FVector& At:CoverCandidates)
     {
      if(TailQueries>=24) break;
@@ -112,7 +116,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
      if(Taken) continue;
      ++TailQueries;
      auto* Tail=Nav->FindPathToLocationSynchronously(GetWorld(),P.Path.Num()?P.Path.Last():S->Destination,At);
-     if(!Tail || !Tail->IsValid() || Tail->IsPartial() || Tail->PathPoints.Num()<2 || Tail->GetPathLength()>2500) continue;
+     if(!Tail || !Tail->IsValid() || Tail->IsPartial() || Tail->PathPoints.Num()<2 || Tail->GetPathLength()>(Sector?6500:2500)) continue;
      P.ArrivalGoals.Add(ID,At); P.ArrivalTails.Add(ID,Tail->PathPoints); Reserved.Add(At); CoverAssigned.Add(ID); Found=true;
      SightExperiment.Cover(TEXT("arrival_cover_slot"));
      break;
@@ -233,12 +237,15 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  B.bTrafficWait=false; B.bArrived=false;
  auto Stop=[&](){if(B.Actor.IsValid()) B.Actor->GetCharacterMovement()->StopMovementImmediately();B.Velocity=FVector::ZeroVector;};
  if(B.bArrivalOccupied){B.bTrafficWait=true;Stop();return false;}
- if(!Goal || !Route || !Route->IsValidIndex(B.Waypoint))
+ if(!Goal || !Route || B.Waypoint<1 || !Route->IsValidIndex(B.Waypoint))
  {
-  B.bTrafficWait=!Goal;
-  // Missing slots remain a visible wait; retry through the existing one-second
-  // shared path budget instead of leaving a restored/crowded squad stuck forever.
-  if(!Goal){P.bReplan=true;P.ArrivalRevision=INDEX_NONE;}
+  if(Goal && FVector::DistSquared2D(Position(ID),*Goal)<FMath::Square(20.))
+  {B.bArrived=true;Stop();return true;}
+  B.bTrafficWait=true;
+  // A reserved destination can survive a failed route build. Retry that route
+  // through the squad's existing path budget, keeping its arrival reservation.
+  P.bReplan=true;
+  if(!Goal)P.ArrivalRevision=INDEX_NONE;
   Stop();return false;
  }
  const FVector Pos=Position(ID);
@@ -256,6 +263,19 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  }
  if(Final && FVector::Dist2D(Pos,*Goal)<20)
  {B.bArrived=true;Stop();return true;}
+ if(SightExperiment.Started && !SightExperiment.Finished)
+ {
+  if(B.LastMoveSampleFrame+1!=GFrameCounter || FVector::DistSquared2D(Pos,B.MoveSampleOrigin)>FMath::Square(40.))
+  {
+   B.MoveSampleOrigin=Pos;
+   B.StationaryMoveSeconds=0;
+  }
+  B.LastMoveSampleFrame=GFrameCounter;
+  const float Previous=B.StationaryMoveSeconds;
+  B.StationaryMoveSeconds+=Dt;
+  if(Previous<3.f && B.StationaryMoveSeconds>=3.f)
+   UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_STALL unit=%d team=%d squad=%d pos=%s waypoint=%s"),ID,U->Team,U->SquadID,*Pos.ToString(),*Way.ToString());
+ }
  if(!Final && FVector::Dist2D(Pos,Way)<65) {++B.Waypoint;Way=(*Route)[B.Waypoint];Final=B.Waypoint==Route->Num()-1;}
  FVector D=(Way-Pos).GetSafeNormal2D(); const FVector Right(-D.Y,D.X,0);
  const bool Confined=NarrowHere;

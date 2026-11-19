@@ -113,6 +113,7 @@ bool UBattleMatch::HireSquad(int32 Team, EBattleTraining Training)
 	}
 	const int32 Squad = Store->CreateSquad(Team, Members);
 	Store->SetSquadOrder(Squad, EBattleOrder::Hold, Positions[2], Goals);
+	if (Team == 0) Store->SetSquadDelegated(Squad, true);
 	Credits[Team] -= Price;
 	LastMessage = FString::Printf(TEXT("%s squad deployed / -%d credits"), BattleTrainingName(Training), Price);
 	if (Team == 0) if (auto* PC = Cast<ABattleController>(GetWorld()->GetFirstPlayerController())) PC->SetSelection(Spawned[0]);
@@ -210,7 +211,7 @@ void UBattleMatch::UpdateObjectives(float DeltaSeconds)
   if(auto* L=Mode->GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled())
   {
    const auto* Store=Mode->GetWorld()->GetSubsystem<UBattleState>();
-   for(const auto& B:L->GetBodies()) if(const auto* U=Store->Find(B.Key); U && U->IsAlive() && InObjective(L->Position(B.Key),Point)) Teams|=1<<U->Team;
+   for(const auto& B:L->GetBodies()) if(const auto* U=Store->Find(B.Key); U && U->IsAlive() && (BattleFieldLayout::Of(Mode->GetWorld()).bSectors ? BattleSectors::Cell(L->Position(B.Key))==BattleSectors::Cell(Point.Position) : InObjective(L->Position(B.Key),Point))) Teams|=1<<U->Team;
    return Teams;
   }
 		for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive() && InObjective(Unit->GetActorLocation(), Point))
@@ -427,6 +428,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   if(bStrategy&&!Purpose&&!Groups.IsEmpty())GroupOrder(Pair.Key,Team,Center,Order);
   // Routes: a distant goal is reached junction by junction along the roads of the map (BattleRoutes.cpp). Not for scout pairs
   // (their posts and fall-backs are their own) or the home defence.
+  bool bRoadWaypoint=false;
   if(bRoutes&&!bScout&&!bHomeDefence)
    if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
    {
@@ -434,14 +436,18 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     // The player's route choice for the squad comes before the AI's own (empty map in matches without a player's choice).
     const bool bChosen=!PlayerRoutes.IsEmpty()&&PlayerRouteLane(Pair.Key)!=0;
     const FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies);
-    if(!Step.Equals(Center,1)){Center=Step;if(Order==EBattleOrder::Defend)Order=EBattleOrder::AttackMove;}
+    if(!Step.Equals(Center,1)){bRoadWaypoint=true;Center=Step;if(Order==EBattleOrder::Defend)Order=EBattleOrder::AttackMove;}
    }
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())
   {
    const auto& S=Pair.Value;
    if(S.CommandStatus!=EBattleCommandStatus::Active) continue;
    // A tank keeps the goal it was given even when it drives only to the end of a partial route (SameVehicleMission).
-   if(!S.bHasMission || S.MissionOrder!=Order || !S.MissionDestination.Equals(Center,20)) if(!Leader->SameVehicleMission(Pair.Key,Order,Center)) Leader->IssueOrder(Pair.Key,Order,Center,true);
+   static const bool EnableSectorAI=[](){int32 V=0; FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
+   const bool Sector=EnableSectorAI && !bRoadWaypoint && BattleFieldLayout::Of(GetWorld()).bSectors && !BaseAssault && !Purpose && !Leader->IsVehicle(S.LeaderUnitID)
+      && (Order==EBattleOrder::AttackMove || Order==EBattleOrder::Defend) && BattleSectors::Valid(BattleSectors::Cell(Center));
+   if(Sector)Center=BattleSectors::Center(BattleSectors::Cell(Center));
+   if(!S.bHasMission || S.bSectorMission!=Sector || S.MissionOrder!=Order || !(Sector?BattleSectors::Cell(S.MissionDestination)==BattleSectors::Cell(Center):S.MissionDestination.Equals(Center,20))) if(!Leader->SameVehicleMission(Pair.Key,Order,Center)) Leader->IssueOrder(Pair.Key,Order,Center,true,Sector);
    continue;
   }
 		TMap<int32, FVector> Goals; bool bNeedsOrder = Pair.Value.Order != Order || !Pair.Value.Destination.Equals(Center, 20); bool bReachable = true;

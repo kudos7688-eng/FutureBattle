@@ -1,4 +1,5 @@
 #include "BattleLeaderRuntime.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "BattleMatch.h"
 #include "BattleSave.h"
 #include "BattleGameMode.h"
@@ -100,11 +101,26 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    M->Credits[0]=Before;int32 MaxID=0;for(const auto& U:Store->GetUnits())MaxID=FMath::Max(MaxID,U.Key);
    Check(M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==Before-15&&M->Area.HireSpent[0]==15&&Store->GetUnits().Num()==Records+10&&Store->GetSquads().Num()==SquadCount+1&&M->ActiveSquads(0)==25,TEXT("area hire charges 15 for ten fresh soldiers"));
    int32 NewSID=0;for(const auto& P:Store->GetSquads())NewSID=FMath::Max(NewSID,P.Key);const auto* NewSquad=Store->FindSquad(NewSID);
-   bool Fresh=NewSquad&&NewSquad->Team==0&&NewSquad->Members.Num()==10&&NewSquad->CommandStatus==EBattleCommandStatus::Active&&!NewSquad->bPlayerDelegated;
+   bool Fresh=NewSquad&&NewSquad->Team==0&&NewSquad->Members.Num()==10&&NewSquad->CommandStatus==EBattleCommandStatus::Active&&NewSquad->bPlayerDelegated;
    if(Fresh)for(int32 ID:NewSquad->Members)Fresh&=ID>MaxID&&Store->Find(ID)->IsAlive()&&Store->Find(ID)->bActorRepresentation==(ID==NewSquad->LeaderUnitID);
    const int32 NewLeader=NewSquad?NewSquad->LeaderUnitID:0;
    Check(Fresh&&NewSID==51&&FVector::Dist2D(Position(NewSquad->LeaderUnitID),M->AreaHome(0))<=2500,TEXT("hired squad gets a new number, new IDs, an Actor leader and home placement"));
    Check(!M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==Before-15,TEXT("no free slot rejects hiring at 25 active squads"));
+   if (Fresh)
+   {
+    auto* Leader = Actor(NewLeader);
+    Check(PC->ControlUnit(Leader) && !NewSquad->bPlayerDelegated,TEXT("direct control takes the purchased squad out of AI command"));
+    const float WalkSpeed = Leader->GetCharacterMovement()->MaxWalkSpeed;
+    Leader->SetSprinting(true);
+    Check(Leader->GetCharacterMovement()->MaxWalkSpeed > WalkSpeed,TEXT("sprint increases direct movement speed"));
+    const double Now = GetWorld()->GetTimeSeconds();
+    const int32 Rounds = Leader->GetState()->Ammo;
+    for (int32 I = 0; I < Rounds; ++I) Store->ConsumeShot(NewLeader, Now + I, .1);
+    PC->PlayerTick(.01f);
+    Check(Leader->GetState()->Ammo == 0 && Leader->GetState()->ReloadEndTime > Now,TEXT("empty magazine starts reload without fire or reload input"));
+    PC->EnterTactical();
+    Check(Leader->GetCharacterMovement()->MaxWalkSpeed == WalkSpeed,TEXT("walk speed restored for AI movement"));
+   }
    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();
    Check(Save&&Save->Validate(Error)&&Save->Squads.Num()==51,TEXT("save with a hired squad validates"));
    if(Save)
@@ -776,4 +792,33 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   SmokeStage=1;FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunAreaSmoke,.5f,false);return;
  }
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_RESULT failures=%d"),SmokeFailures);FPlatformMisc::RequestExitWithStatus(false,SmokeFailures?1:0);
+}
+
+void UBattleLeaderRuntime::RunSectorSmoke()
+{
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ int32 Failures=0,Orders=0;
+ auto Check=[&](bool OK,const TCHAR* What){if(!OK){++Failures;UE_LOG(LogFutureBattle,Error,TEXT("BATTLE_SECTOR_FAIL %s"),What);}};
+ Check(BattleFieldLayout::Of(GetWorld()).bSectors,TEXT("map H"));
+ for(const auto& Pair:Store->GetSquads())
+ {
+  const auto& S=Pair.Value;if(S.Team!=0||S.CommandStatus!=EBattleCommandStatus::Active||IsVehicle(S.LeaderUnitID))continue;
+  const FIntPoint Cell(11,5); // Residential block alongside the central crossing.
+  const FVector Goal=BattleSectors::Center(Cell);
+  if(!IssueOrder(Pair.Key,EBattleOrder::AttackMove,Goal,false,true)){Check(false,TEXT("sector order rejected"));break;}
+  Think(Pair.Key,GetWorld()->GetTimeSeconds());
+  const auto& Plan=Plans.FindChecked(Pair.Key);
+  Check(S.bSectorMission && BattleSectors::Cell(S.Destination)==Cell,TEXT("mission"));
+  Check(!Plan.ArrivalGoals.IsEmpty(),TEXT("arrival assignments"));
+  for(const auto& Place:Plan.ArrivalGoals)Check(BattleSectors::Cell(Place.Value)==Cell,TEXT("outside parcel"));
+  ++Orders;if(Orders==3)
+  {
+   Check(IssueOrder(Pair.Key,EBattleOrder::Defend,Goal,false,true),TEXT("hold"));
+   Check(IssueOrder(Pair.Key,EBattleOrder::Move,Goal+FVector(400,0,0))&&!S.bSectorMission,TEXT("point move"));
+   break;
+  }
+ }
+ Check(Orders==3,TEXT("three squads"));
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SECTOR_RESULT failures=%d orders=%d"),Failures,Orders);
+ FPlatformMisc::RequestExitWithStatus(false,Failures?1:0);
 }

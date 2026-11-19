@@ -69,7 +69,7 @@ public:
 	UFUNCTION(Client, Reliable) void ClientOrderResult(int32 Sequence, bool bAccepted, const FString& Message);
 	UFUNCTION(Server, Reliable) void ServerControl(int32 UnitID, int32 Sequence);
 	UFUNCTION(Client, Reliable) void ClientControlResult(int32 Sequence, bool bAccepted, const FString& Message);
-	UFUNCTION(Server, Unreliable) void ServerDirectInput(int32 Epoch, int32 Sequence, FVector2D Move, FRotator Aim, bool bFire, bool bJump);
+	UFUNCTION(Server, Unreliable) void ServerDirectInput(int32 Epoch, int32 Sequence, FVector2D Move, FRotator Aim, bool bFire, bool bJump, bool bSprint);
 	UFUNCTION(Server, Reliable) void ServerReload(int32 Epoch);
 	UFUNCTION(Server, Unreliable) void ServerEcho(double ClientStamp);
 	UFUNCTION(Client, Unreliable) void ClientEcho(double ClientStamp);
@@ -97,7 +97,7 @@ private:
 	double LastControlAt = -100;
 	FVector2D PilotMove = FVector2D::ZeroVector;
 	FRotator PilotAim = FRotator::ZeroRotator;
-	bool bPilotFire = false, bPilotJump = false, bLocalFire = false;
+	bool bPilotFire = false, bPilotJump = false, bPilotSprint = false, bLocalFire = false;
 	void UpdateLocalPilot(float DeltaTime);
 	void UpdatePilotCamera(int32 PreviousID, int32 PreviousEpoch);
 	void RunPilotProbe();

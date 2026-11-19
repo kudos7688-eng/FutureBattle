@@ -56,7 +56,7 @@ void ABattleNetController::UpdateNetworkBenchmark()
 	{
 		NextInputAt = Now + .05;
 		const float Direction = FMath::Fmod(Now - NetBenchStart, 3.) < 1.5 ? 1.f : -1.f;
-		ServerDirectInput(View.ControlEpoch, NextInputSequence++, FVector2D(Direction, 0), FRotator(0, View.Team ? 180 : 0, 0), true, false);
+		ServerDirectInput(View.ControlEpoch, NextInputSequence++, FVector2D(Direction, 0), FRotator(0, View.Team ? 180 : 0, 0), true, false, false);
 		for (const auto& U : View.Units) if (U.ID == View.ControlledID && U.Ammo == 0 && U.ReloadRemaining <= 0) ServerReload(View.ControlEpoch);
 	}
 	if (Now >= NetBenchNextPing) { NetBenchNextPing = Now + .5; ServerEcho(Now); }

@@ -1,7 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Engine/World.h"
-#include "BattleTerrain.h"
+#include "BattleSectors.h"
 
 namespace BattleFieldLayout
 {
@@ -24,6 +24,7 @@ namespace BattleFieldLayout
 		// Rule set introduced with map E: range profile, stances, cover-first arrival, partial paths, own re-paths, denser cover slots,
 		// the larger income. Independent of the geometry below, so a new map can take it without being map E.
 		bool bUrban=false;
+		bool bSectors=false;
 		FVector Scale=FVector::OneVector;
 		// Half size of the playable floor (X, Y) in cm.
 		FVector2D HalfExtent=FVector2D(4000,3000);
@@ -120,7 +121,31 @@ namespace BattleFieldLayout
 				D.Heights=BattleTerrain::MakeG(D.HalfExtent);
 				T.Add(D);
 			}
-			return T;
+            {
+                FMapDef D=Urban; D.Name=TEXT("Lvl_BattleWide_H"); D.bSectors=true;
+                D.PointIncomeScale=.5f; D.Lookouts.Reset(); D.CityHalf=FVector2D::ZeroVector;
+                for(FIntPoint Cell : {FIntPoint(3,11),FIntPoint(6,9),FIntPoint(8,7),FIntPoint(9,2),
+                                      FIntPoint(10,11),FIntPoint(11,6),FIntPoint(13,4),FIntPoint(16,2)})
+                    D.Objectives.Add(BattleSectors::Center(Cell));
+                D.ObjectiveOwners={0,-1,-1,-1,-1,-1,-1,1};
+                D.ObjectiveValues={2,1,1,1,1,1,1,2};
+                // The main avenue connects both homes. Farm and depot roads reach the two outer bridges.
+                auto Road=[&](ERouteLane Lane,std::initializer_list<FIntPoint> Junctions){
+                    int Previous=INDEX_NONE;
+                    for(FIntPoint At:Junctions){
+                        const int Current=D.RouteNodes.AddUnique(FVector(100*At.X,100*At.Y,0));
+                        if(Previous!=INDEX_NONE)D.RouteEdges.Add({Previous,Current,Lane});
+                        Previous=Current;
+                    }
+                };
+#include "BattleSectorRoads.inl"
+                for(const auto& House:BattleSectors::Houses())BattleTerrain::AddHouse(D.Heights,House);
+                for(const auto& Hill:BattleSectors::Hills())BattleTerrain::AddHill(D.Heights,Hill);
+                const int32 East=D.Heights.Patches.Num();
+                for(int32 I=0;I<East;++I){auto Patch=D.Heights.Patches[I].Rotated();D.Heights.Patches.Add(Patch);}
+                D.Heights.Build(D.HalfExtent);T.Add(MoveTemp(D));
+            }
+            return T;
 		}();
 		return Table;
 	}

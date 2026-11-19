@@ -18,7 +18,7 @@ namespace BattleTactics
  // Trial switch -BattleAICoverProbe=1: per-frame AI cover probe budget and wider AI search instead of one shared probe per interval.
  bool AICoverProbeBudgetEnabled();
  // Trial switch -BattleCoverApproach=1: an engaged AI soldier with no cover nearby walks to a hidden cover slot within a wider radius.
- bool CoverApproachEnabled();
+ bool CoverApproachEnabled(const UWorld* World);
  // Trial switch -BattleContactCover=1 (needs -BattleCoverActions=1): on contact an AI soldier looks for a firing position behind cover
  // more often (per-frame probe budget, 2 s retry) and further away (20 m), walks only to a slot he could fire from, and keeps walking
  // while his own sighting of the threat is fresh even if the squad's target flickers. Implies the probe budget and the approach.

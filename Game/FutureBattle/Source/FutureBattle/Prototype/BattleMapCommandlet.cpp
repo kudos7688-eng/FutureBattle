@@ -36,7 +36,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 {
 #if WITH_EDITOR
 	FString Wide;FParse::Value(*Params,TEXT("WideField="),Wide);
-	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D") && Wide!=TEXT("E") && Wide!=TEXT("F") && Wide!=TEXT("G")) return 6;
+	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D") && Wide!=TEXT("E") && Wide!=TEXT("F") && Wide!=TEXT("G") && Wide!=TEXT("H")) return 6;
 	const bool Expanded=Wide==TEXT("D");
 	// Map E (2026-11-14): 1000m x 700m, urban centre with five objectives, open flanks with hedges and low walls.
 	// Map F (2026-11-18): the size, homes and city objectives of E; a city of districts with an avenue tanks can use, two flank
@@ -45,7 +45,8 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 	// roads. It shares the layout of F (BattleMapLayoutF.inl) and adds BattleMapLayoutG.inl; the heights are in BattleTerrain.h.
 	const bool UrbanG=Wide==TEXT("G");
 	const bool UrbanF=Wide==TEXT("F")||UrbanG;
-	const bool Urban=Wide==TEXT("E")||UrbanF;
+	const bool UrbanH=Wide==TEXT("H");
+	const bool Urban=UrbanH||Wide==TEXT("E")||UrbanF;
 	const FString WideName=TEXT("Lvl_BattleWide_")+Wide;
 	const bool Sight=!Wide.IsEmpty();
 	const bool Large = Sight || FParse::Param(*Params,TEXT("LargeField"));
@@ -105,15 +106,15 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 				if(bConcealment)Actor->Tags.Add(TEXT("BattleConcealment"));
 			}
 		};
-		Box(TEXT("UrbanFloor"),FVector(0,0,-60),FVector(100000,70000,120),FloorMat);
+		if(!UrbanH)Box(TEXT("UrbanFloor"),FVector(0,0,-60),FVector(100000,70000,120),FloorMat);
 		for(int32 Sign:{-1,1})
 		{
 			Box(TEXT("UrbanBoundary"),FVector(0,Sign*35000,180),FVector(100000,100,360),WallMat);
 			Box(TEXT("UrbanBoundary"),FVector(Sign*50000,0,180),FVector(100,70000,360),WallMat);
 			Box(TEXT("HomeMarker"),FVector(Sign*42000,0,2),FVector(3000,3000,3),Sign<0?AllyMat:EnemyMat,false);
-			Box(TEXT("LookoutMarker"),FVector(0,Sign*16500,2),FVector(800,800,3),AllyMat,false);
+			if(!UrbanH)Box(TEXT("LookoutMarker"),FVector(0,Sign*16500,2),FVector(800,800,3),AllyMat,false);
 			// Map F: the depots are objectives and get the objective marker below.
-			if(!UrbanF)Box(TEXT("DepotMarker"),FVector(Sign*33000,Sign*15000,2),FVector(1200,1200,3),AllyMat,false);
+			if(!UrbanF&&!UrbanH)Box(TEXT("DepotMarker"),FVector(Sign*33000,Sign*15000,2),FVector(1200,1200,3),AllyMat,false);
 		}
 		for(int32 I=0;I<BattleFieldLayout::ObjectiveCountForMap(WideName);++I) Box(TEXT("UrbanObjective"),BattleFieldLayout::ObjectiveForMap(WideName,I)+FVector(0,0,2),FVector(1400,1400,3),AllyMat,false);
 		// Layout v2 (2026-11-15). The first layout used 52m x 29m solid blocks: stepping 2-4m sideways from a corner still left a
@@ -159,7 +160,9 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 			}
 			++Objects;
 		};
-		if(UrbanF)
+		if(UrbanH)
+#include "BattleMapLayoutH.inl"
+		else if(UrbanF)
 		{
 #include "BattleMapLayoutF.inl"
 		}
@@ -383,7 +386,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 	// Map G: the ground volume stays below the tops of the obstacles (see above), so every hill, staircase and upper floor gets a
 	// volume of its own that reaches just over it. Cover that stands on those is 130cm high, above the volume.
 	TArray<ANavMeshBoundsVolume*> TerrainVolumes;
-	if(UrbanG)
+	if(UrbanG||UrbanH)
 	{
 		auto Extra=[&](double X0,double X1,double Y0,double Y1,double Z0,double Z1)
 		{
@@ -396,13 +399,13 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 				TerrainVolumes.Add(Volume);
 			}
 		};
-		for(const BattleTerrain::FHouse& B:BattleTerrain::HousesG())
+		for(const BattleTerrain::FHouse& B:(UrbanH?BattleSectors::Houses():BattleTerrain::HousesG()))
 		{
 			const BattleTerrain::FHouseShape S(B);const double F=BattleTerrain::FloorZ;
 			Extra(S.W0-20,S.E0+20,S.S0y-20,S.N0y+20,F-30,F+120);
 			Extra(S.S0-30,S.S1+30,S.SY-10,S.N0y+10,100,F+120);
 		}
-		for(const BattleTerrain::FHill& H:BattleTerrain::HillsG())
+		for(const BattleTerrain::FHill& H:(UrbanH?BattleSectors::Hills():BattleTerrain::HillsG()))
 			Extra(H.X-H.W*.5-H.Run-50,H.X+H.W*.5+H.Run+50,H.Y-H.H*.5-H.Run-50,H.Y+H.H*.5+H.Run+50,100,H.Top+120);
 	}
 	if (UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
@@ -442,12 +445,34 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 				Failures+=!Reach;OpenLines+=!Blocked;
 				UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_PAIR from=%d to=%d reachable=%d length_cm=%.1f blocked=%d"),I,J,Reach,Reach?Path->GetPathLength():-1,Blocked);
 			}
-			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=%s rotation=180"),Failures,OpenLines,UrbanG?TEXT("heights-v1"):UrbanF?TEXT("districts-v1"):TEXT("urban-v2"));
-			if(UrbanG)
+            if(UrbanH)
+            {
+                const auto& Def=BattleFieldLayout::ByName(WideName);
+                int BlockedRoads=0;
+                for(const auto& Edge:Def.RouteEdges){
+                    const FVector A=Def.RouteNodes[Edge.A],B=Def.RouteNodes[Edge.B];
+                    const FVector Direction=(B-A).GetSafeNormal2D();
+                    const FVector Across(-Direction.Y,Direction.X,0);
+                    const double HalfWidth=(Edge.Lane==BattleFieldLayout::ERouteLane::Centre?BattleSectors::MainWidth:
+                        Edge.Lane==BattleFieldLayout::ERouteLane::Connector?BattleSectors::StreetWidth:BattleSectors::SideWidth)*.5;
+                    for(double Fraction:{-.85,0.,.85}){
+                        const FVector Offset=Across*(HalfWidth*Fraction)+FVector(0,0,100);
+                        if(World->LineTraceTestByChannel(A+Offset,B+Offset,ECC_Visibility)){
+                            ++BlockedRoads;
+                            UE_LOG(LogTemp,Warning,TEXT("SECTOR_ROAD_BLOCKED from=%s to=%s"),*A.ToString(),*B.ToString());
+                            break;
+                        }
+                    }
+                }
+                Failures+=BlockedRoads;
+                UE_LOG(LogTemp,Display,TEXT("SECTOR_ROAD_RESULT blocked=%d segments=%d"),BlockedRoads,Def.RouteEdges.Num());
+            }
+			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=%s rotation=180"),Failures,OpenLines,UrbanH?TEXT("river-town-v2"):UrbanG?TEXT("heights-v1"):UrbanF?TEXT("districts-v1"):TEXT("urban-v2"));
+			if(UrbanG||UrbanH)
 			{
 				// The geometry agrees with the height table (a trace down at nine points of every patch; points under a crate or a
 				// wall that stands on the patch are skipped), and every upper floor and hilltop is reached from the west home.
-				const BattleTerrain::FHeights Heights=BattleTerrain::MakeG(FVector2D(50000,35000));
+				const auto& Heights=BattleFieldLayout::ByName(WideName).Heights;
 				int32 Samples=0,Mismatched=0,Unreached=0,Goals=0;
 				for(const auto& P:Heights.Patches) for(double U:{.25,.5,.75}) for(double V:{.25,.5,.75})
 				{
@@ -465,8 +490,8 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 				};
 				for(int32 Sign:{-1,1})
 				{
-					for(const BattleTerrain::FHouse& B:BattleTerrain::HousesG()){const BattleTerrain::FHouseShape S(B);Reach(FVector(Sign*B.X,Sign*(S.S0y+S.SY)*.5+60,BattleTerrain::FloorZ));}
-					for(const BattleTerrain::FHill& H:BattleTerrain::HillsG())Reach(FVector(Sign*H.X,Sign*H.Y,H.Top));
+					for(const BattleTerrain::FHouse& B:(UrbanH?BattleSectors::Houses():BattleTerrain::HousesG())){const BattleTerrain::FHouseShape S(B);Reach(FVector(Sign*B.X,Sign*(S.S0y+S.SY)*.5+60,BattleTerrain::FloorZ));}
+					for(const BattleTerrain::FHill& H:(UrbanH?BattleSectors::Hills():BattleTerrain::HillsG()))Reach(FVector(Sign*H.X,Sign*H.Y,H.Top));
 				}
 				UE_LOG(LogTemp,Display,TEXT("TERRAIN_MAP_RESULT failures=%d samples=%d mismatched=%d goals=%d unreached=%d volumes=%d"),Mismatched+Unreached,Samples,Mismatched,Goals,Unreached,TerrainVolumes.Num());
 				if(Mismatched+Unreached) return 8;

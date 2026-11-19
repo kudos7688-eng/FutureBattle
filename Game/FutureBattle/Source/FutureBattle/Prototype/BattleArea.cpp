@@ -122,7 +122,6 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  TArray<int32> Queued;for(const auto& Q:Area.Replacements)if(Store->Find(Q.Key)->Team==Team)Queued.Add(Q.Key);
  Queued.Sort([this](int32 A,int32 B){const float PA=Area.Replacements.FindChecked(A),PB=Area.Replacements.FindChecked(B);return PA!=PB?PA<PB:A>B;});
  int32 Cancelled=0;for(int32 I=0;I<Queued.Num()-Credits[Team];++I){Area.Replacements.Remove(Queued[I]);++Cancelled;}
- if(bAuto&&Team==0)Store->SetSquadDelegated(SID,true);
  if(bAuto){if(Area.LastAIHireAt.Num()!=2)Area.LastAIHireAt={-1000,-1000};Area.LastAIHireAt[Team]=Elapsed;}
  if(R->SightExperiment.Enabled)R->SightExperiment.HireTimes[Team].Add(Elapsed);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE team=%d squad=%d auto=%d cost=%d credits=%d cancelled_replacements=%d active=%d time=%.1f leader=%s home=%s"),

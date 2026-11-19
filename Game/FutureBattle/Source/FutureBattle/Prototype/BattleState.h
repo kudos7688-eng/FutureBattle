@@ -178,6 +178,7 @@ struct FBattleSquadState
 	UPROPERTY(VisibleAnywhere) int32 OrderRevision = 0;
  // Intent is distinct from the currently executing Order/Destination.
  UPROPERTY() bool bHasMission = false;
+ UPROPERTY() bool bSectorMission=false;
  UPROPERTY() EBattleOrder MissionOrder = EBattleOrder::Hold;
  UPROPERTY() FVector MissionDestination = FVector::ZeroVector;
  UPROPERTY() TMap<int32, FVector> MissionGoals;
@@ -701,7 +702,7 @@ public:
  friend class UBattleSquadTactics;
  friend class UBattleLeaderRuntime;
 	const TMap<int32, FBattleSquadState>& GetSquads() const { return Squads; }
-	bool SetSquadOrder(int32 ID, EBattleOrder Order, FVector Destination, const TMap<int32, FVector>& Goals, bool bMissionUpdate = false);
+	bool SetSquadOrder(int32 ID, EBattleOrder Order, FVector Destination, const TMap<int32, FVector>& Goals, bool bMissionUpdate = false, bool bSector = false);
  bool SetSquadTacticalPlan(int32 ID, EBattleSquadTactic Action, EBattleOrder Order, FVector Destination,
   const TMap<int32, FVector>& Goals, float Lifetime, const FString& Reason);
  void CancelSquadTacticalPlan(int32 ID, const FString& Reason);
