@@ -24,4 +24,8 @@ namespace BattleBlindFire
  bool IsOverTop(const FBattleUnitState& U);
  // nullptr when the clip is not imported or -BattleStanceAnim=0.
  UAnimSequence* Clip(bool bOverTop);
+ // Over the top the clip shows only above spine_01 over the hidden pose, so its chest turns with the hidden hips. Mesh yaw
+ // (degrees, right positive) that brings the hips to the over-top clip's own facing, so the rifle points over the cover:
+ // measured hip yaw (BATTLE_BODY_CLIP 2026-11-20) of AS_CoverLo_AimU_down 64 minus that of the hidden clip.
+ float OverTopYaw(const TCHAR* HiddenClip);
 }

@@ -392,7 +392,8 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
    B.Pose=Pose;B.bBlindPose=Blind;B.CoverClipPhase=ClipPhase;if(VAT)VAT->ChangePose(ID,Pose);
    if(!VAT || !VAT->IsFar(ID))
    {
-    B.Mesh->SetRelativeRotation(FRotator(0,-90+(ClipPhase && !Blind && Pose!=2?BattleCoverClips::YawOffset(ClipPhase):0.f),0));
+    // Blind fire around the edge turns the body so the rifle points around the corner (BlindFireYaw, 0 over the top).
+    B.Mesh->SetRelativeRotation(FRotator(0,-90+(Pose==2?0.f:Blind?BlindFireYaw(ID,Forward(ID)):ClipPhase?BattleCoverClips::YawOffset(ClipPhase):0.f),0));
     B.Mesh->PlayAnimation(FollowerClip(ID,Pose),true);
    }
   }

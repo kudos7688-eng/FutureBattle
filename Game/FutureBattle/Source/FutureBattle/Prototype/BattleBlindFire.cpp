@@ -74,6 +74,24 @@ bool UBattleLeaderRuntime::BlindFireOrigin(int32 ID,FVector AimPoint,FVector& Or
  return false;
 }
 
+float BattleBlindFire::OverTopYaw(const TCHAR* HiddenClip)
+{
+ if(!HiddenClip)return 0.f;
+ struct FHip{const TCHAR* Name;float Yaw;};
+ static const FHip Hips[]={{TEXT("AS_coverlo_R_idle"),98.f},{TEXT("AS_CoverLo_CoverL"),-109.f},{TEXT("AS_cover_hi_r_idle"),104.f},{TEXT("AS_CoverHi_CoverL"),-163.f}};
+ for(const FHip& H:Hips)if(FCString::Stricmp(H.Name,HiddenClip)==0)return FRotator::NormalizeAxis(64.f-H.Yaw);
+ return 0.f;
+}
+
+float UBattleLeaderRuntime::BlindFireYaw(int32 ID,const FVector& Forward) const
+{
+ const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);const FVector* Look=BlindFireLook.Find(ID);
+ if(!U || !Look || BattleBlindFire::IsOverTop(*U))return 0.f;
+ const FVector F=Forward.GetSafeNormal2D(),To=(*Look-Position(ID)).GetSafeNormal2D();
+ if(F.IsNearlyZero() || To.IsNearlyZero())return 0.f;
+ return FMath::RadiansToDegrees(FMath::Atan2(FVector::CrossProduct(F,To).Z,FVector::DotProduct(F,To)));
+}
+
 bool UBattleLeaderRuntime::TryAIBlindFire(int32 ID,FVector Threat,double Now)
 {
  const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);

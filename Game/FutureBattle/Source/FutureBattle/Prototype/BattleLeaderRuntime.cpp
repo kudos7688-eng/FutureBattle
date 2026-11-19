@@ -965,6 +965,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   {
    const FVector Aim=Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon);
    Start=Origin;Direction=(Aim-Origin).GetSafeNormal();bBlind=true;
+   BlindFireLook.Add(ID,Origin+Direction.GetSafeNormal2D()*200.f);
   }
   else
   {

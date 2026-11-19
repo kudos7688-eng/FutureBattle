@@ -316,6 +316,11 @@ public:
  // still peeks); AI soldiers only with the trial -BattleAIBlindFire=1, while pinned. -BattleBlindFire=0 turns it off.
  // Runtime only (display): until when the blind fire clip shows.
  TMap<int32,double> BlindFireUntil;
+ // Runtime only (display): the point the body turns its rifle toward during a blind fire around the edge, 2 m past the
+ // origin toward the aim, so the clip points around the corner rather than into the cover.
+ TMap<int32,FVector> BlindFireLook;
+ // Mesh yaw (degrees, right positive) that turns a body facing Forward toward BlindFireLook; 0 over the top or when unknown.
+ float BlindFireYaw(int32 ID,const FVector& Forward) const;
  // Body animation (BattleBodyAnim.h; display only, runtime only): travel direction of the last shot that hit each soldier,
  // and near followers whose one-shot clip ends at a time (a death clip then freezes; a stance transition returns to the loop).
  TMap<int32,FVector> LastShotDirs;
@@ -439,7 +444,7 @@ private:
  FVector WideStart=FVector::ZeroVector;
  UPROPERTY() TObjectPtr<class UBattlePhase3> Phase3;
  UPROPERTY() TObjectPtr<class ABattleVATDisplay> VAT;
- int32 SmokeFailures=0, SmokeStage=0, QAStage=0;
+ int32 SmokeFailures=0, SmokeStage=0, QAStage=0; FVector SmokeSavedPeek=FVector::ZeroVector;
  FString QAPrefix;
  FVector SmokePosition=FVector::ZeroVector;
  TSharedPtr<FMassEntityManager> Manager;

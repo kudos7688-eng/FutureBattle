@@ -402,8 +402,10 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 		// head (a standing clip), so only its upper body shows over the hidden pose and the head stays below the cover.
 		UAnimSequence* Blind = S.CoverPhase && Leaders && Leaders->IsBlindFiring(UnitID, Now) ? BattleBlindFire::Clip(BattleBlindFire::IsOverTop(S)) : nullptr;
 		UAnimSequence* BlindUpper = nullptr;
-		if (Blind && BattleBlindFire::IsOverTop(S) && CoverClip(CoverClipSet.Hidden)) { CoverBase = CoverClip(CoverClipSet.Hidden); BlindUpper = Blind; }
-		else if (Blind) CoverBase = Blind;
+		if (Blind && BattleBlindFire::IsOverTop(S) && CoverClip(CoverClipSet.Hidden)) { CoverBase = CoverClip(CoverClipSet.Hidden); BlindUpper = Blind; Yaw = BattleBlindFire::OverTopYaw(CoverClipSet.Hidden); }
+		// Around the edge: the side's own crouched aim (AimL or AimR of the cover set), else the default side clip.
+		// The body turns so the rifle points around the corner (BlindFireLook), not into the cover.
+		else if (Blind) { CoverBase = CoverClip(CoverClipSet.Aim) ? CoverClip(CoverClipSet.Aim) : Blind; Yaw = Leaders->BlindFireYaw(UnitID, GetActorForwardVector()); }
 		else if (CoverOneShot && Now < CoverOneShotUntil) { CoverBase = CoverOneShot; bCoverLoop = false; Yaw = CoverOneShotYaw; }
 		else if (S.CoverPhase == 2) { CoverBase = CoverClip(CoverClipSet.Hidden); Yaw = BattleCoverClips::YawOffset(2); }
 		else if (S.CoverPhase == 4) { CoverBase = CoverClip(CoverClipSet.Aim); Yaw = BattleCoverClips::YawOffset(4); }

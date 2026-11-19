@@ -14,6 +14,7 @@
 #include "BattleSuppression.h"
 #include "Components/CapsuleComponent.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/CameraActor.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
 #include "FutureBattle.h"
@@ -27,6 +28,47 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
  const double Now=GetWorld()->GetTimeSeconds();
  auto Fixture=[&](FVector P){return BattleFieldLayout::IsExpanded(GetWorld())?BattleFieldLayout::Expand(P-FVector(-200,16000,0),true)+FVector(-1733.333333,-4500,0):P;};
  const FVector Threat=Fixture(FVector(-3000,16000,100));
+ // Rendered run (-CoverScreenshot=): a close view of the player's soldier from beside the cover line, for the body clips.
+ auto BodyShotPrefix=[]{FString Prefix;FParse::Value(FCommandLine::Get(),TEXT("CoverScreenshot="),Prefix);return Prefix;};
+ auto BodyShot=[&](const TCHAR* Name)
+ {
+  const FVector Body=Position(1),ToThreat=(Threat-Body).GetSafeNormal2D(),Side=FVector::CrossProduct(FVector::UpVector,ToThreat);
+  // The camera is placed one stage before the picture (stage 5): a picture on the frame of a camera cut is smeared by motion blur.
+  if(!PC || Cast<ACameraActor>(PC->GetViewTarget())==nullptr)
+  {
+   const FVector Eye=Body+Side*260.f-ToThreat*100.f+FVector(0,0,90);
+   if(auto* Camera=GetWorld()->SpawnActor<ACameraActor>(Eye,(Body-Eye).Rotation());Camera && PC){PC->bAutoManageActiveCameraTarget=false;PC->SetViewTarget(Camera);}
+   return;
+  }
+  const FString Path=FPaths::ChangeExtension(BodyShotPrefix(),TEXT(""))+TEXT("-")+Name+TEXT(".png");
+  FScreenshotRequest::RequestScreenshot(Path,true,false);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVER_BODY_SHOT %s phase=%d blind=%d base=%s"),*Path,Store->Find(1)->CoverPhase,IsBlindFiring(1,GetWorld()->GetTimeSeconds()),
+   *GetNameSafe(Cast<UBattleBodyAnimInstance>(Actor(1)->GetMesh()->GetAnimInstance())?Cast<UBattleBodyAnimInstance>(Actor(1)->GetMesh()->GetAnimInstance())->GetBase():nullptr));
+ };
+ auto BlindFire=[&]
+ {
+   // Blind fire: firing without aiming shoots from past the cover edge while the body stays at the anchor.
+   auto& P=Store->Units.FindChecked(1);P.NextShotTime=0;P.ReloadEndTime=0;
+   const int32 Before=P.Ammo;const FVector Eye=Position(1)+FVector(0,0,60);
+   // Already facing the threat: the aim switch delay is a separate check (a rendered run waits here, and the AI may turn the rifle).
+   P.WeaponAimDirection=(Threat-Eye).GetSafeNormal();
+   FVector Origin;const bool HasOrigin=BlindFireOrigin(1,Threat,Origin);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BLINDFIRE has_origin=%d over_top=%d origin=%s anchor=%s"),HasOrigin,BattleBlindFire::IsOverTop(P),*Origin.ToCompactString(),*P.CoverAnchor.ToCompactString());
+   Check(HasOrigin,TEXT("hidden player has a blind fire origin past the cover"));
+   Actor(1)->SetAimLevel(0);
+   Check(Fire(1,Eye,(Threat-Eye).GetSafeNormal(),true)&&Store->Find(1)->Ammo<Before,TEXT("unaimed trigger behind cover blind-fires"));
+   Check(Store->Find(1)->CoverPhase==2&&IsBlindFiring(1,Now)&&FVector::Dist2D(Position(1),Store->Find(1)->CoverAnchor)<40,TEXT("blind fire keeps the body hidden at the anchor"));
+ };
+ auto AfterBlindFire=[&]
+ {
+  if(PC && PC->GetPawn() && Cast<ACameraActor>(PC->GetViewTarget())){PC->bAutoManageActiveCameraTarget=true;PC->SetViewTarget(PC->GetPawn());}
+  Actor(1)->SetAimLevel(1);
+  const int32 Ammo=Store->Find(1)->Ammo;
+  Check(!Fire(1,Position(1)+FVector(0,0,60),FVector(-1,0,0),true)&&Store->Find(1)->Ammo==Ammo,TEXT("aimed trigger requests emergence without firing through cover"));
+  Actor(1)->SetAimLevel(0);
+  Check(Store->Find(1)->CoverPhase==3,TEXT("trigger starts physical peek movement"));
+  BayStart=Now;SmokeStage=2;Later(.1);
+ };
  if(SmokeStage==0)
  {
   Mode->CombatStartsAt=0;Mode->bCombatPaused=false;Match->DirectorClock=-1000;Match->DelegationClock=-1000;
@@ -122,24 +164,33 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    Check(F.CoverPhase==1 || F.CoverPhase==2,TEXT("pinned AI soldier ducks back from an exposed peek"));
    SuppressionZeroAt.Reset();Tune=Saved;
   }
-  {
-   // Blind fire: firing without aiming shoots from past the cover edge while the body stays at the anchor.
-   auto& P=Store->Units.FindChecked(1);P.NextShotTime=0;P.ReloadEndTime=0;
-   const int32 Before=P.Ammo;const FVector Eye=Position(1)+FVector(0,0,60);
-   FVector Origin;const bool HasOrigin=BlindFireOrigin(1,Threat,Origin);
-   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BLINDFIRE has_origin=%d over_top=%d origin=%s anchor=%s"),HasOrigin,BattleBlindFire::IsOverTop(P),*Origin.ToCompactString(),*P.CoverAnchor.ToCompactString());
-   Check(HasOrigin,TEXT("hidden player has a blind fire origin past the cover"));
-   Actor(1)->SetAimLevel(0);
-   Check(Fire(1,Eye,(Threat-Eye).GetSafeNormal(),true)&&Store->Find(1)->Ammo<Before,TEXT("unaimed trigger behind cover blind-fires"));
-   Check(Store->Find(1)->CoverPhase==2&&IsBlindFiring(1,Now)&&FVector::Dist2D(Position(1),Store->Find(1)->CoverAnchor)<40,TEXT("blind fire keeps the body hidden at the anchor"));
-  }
-  Actor(1)->SetAimLevel(1);
-  const int32 Ammo=Store->Find(1)->Ammo;
-  Check(!Fire(1,Position(1)+FVector(0,0,60),FVector(-1,0,0),true)&&Store->Find(1)->Ammo==Ammo,TEXT("aimed trigger requests emergence without firing through cover"));
-  Actor(1)->SetAimLevel(0);
-  Check(Store->Find(1)->CoverPhase==3,TEXT("trigger starts physical peek movement"));
-  BayStart=Now;SmokeStage=2;Later(.1);return;
+  // Rendered run: close views of the hidden body and of the blind fire before going on (stages 5 to 7).
+  if(!BodyShotPrefix().IsEmpty()){SmokeStage=5;Later(.6);return;}
+  BlindFire();
+  AfterBlindFire();
+  return;
  }
+ if(SmokeStage==5){BodyShot(nullptr);SmokeStage=8;Later(.5);return;}
+ if(SmokeStage==8){BodyShot(TEXT("hidden"));SmokeStage=6;Later(.2);return;}
+ if(SmokeStage==6){BlindFire();SmokeStage=7;Later(.3);return;}
+ if(SmokeStage==7){BodyShot(TEXT("blind"));SmokeStage=9;Later(.7);return;}
+ if(SmokeStage==9)
+ {
+  // Over the top (display only): the same anchor as the stand-up kind (peek point = anchor) shows the upper-body layer.
+  auto& P=Store->Units.FindChecked(1);SmokeSavedPeek=P.CoverPeek;P.CoverPeek=P.CoverAnchor;
+  P.NextShotTime=0;const FVector Eye=Position(1)+FVector(0,0,60);P.WeaponAimDirection=(Threat-Eye).GetSafeNormal();
+  FVector Origin;const bool HasOrigin=BlindFireOrigin(1,Threat,Origin);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BLINDFIRE_TOP has_origin=%d fired=%d"),HasOrigin,Fire(1,Eye,(Threat-Eye).GetSafeNormal(),true));
+  SmokeStage=10;Later(.3);return;
+ }
+ if(SmokeStage==10)
+ {
+  BodyShot(TEXT("blind-top"));
+  Store->Units.FindChecked(1).CoverPeek=SmokeSavedPeek;
+  // The picture is taken at the end of this frame: the view goes back to the soldier on the next stage.
+  SmokeStage=11;Later(.1);return;
+ }
+ if(SmokeStage==11){AfterBlindFire();return;}
  if(SmokeStage==2)
  {
   if(Store->Find(1)->CoverPhase!=4 && Now-BayStart<5){Later(.1);return;}
