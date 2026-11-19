@@ -89,9 +89,9 @@ void ABattleHUD::DrawHUD()
    IncomeText=FString::Printf(TEXT(" (+%d / %.0fs)"),Gain,I.Seconds);
   }
   if(Match->bArea)Label(FString::Printf(TEXT("資源 %d%s ／ 本拠地の耐久 %.0f ／ 敵本拠地の耐久（最後に見た値） %s%s"),Match->Credits[0],*IncomeText,Match->Area.BaseHP[0],Match->Area.KnownEnemyBaseHP[0]<0?TEXT("不明"):*FString::Printf(TEXT("%.0f"),Match->Area.KnownEnemyBaseHP[0]),
-   BattleTactics::AreaHire().bEnabled?*FString::Printf(TEXT(" ／ [2] 小隊を購入 %d（得点 %+d、%d/25）"),BattleTactics::AreaHire().Cost,10-BattleTactics::AreaHire().Cost,Match->ActiveSquads(0)):TEXT("")),28,90,Mint,.9f);
-  else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch) Label(FString::Printf(TEXT("%s ／ 資源 %d ／ [1] %d [2] %d [3] %d ／ 10人"),Phase,Match->Credits[0],Match->CurrentSquadPrice(EBattleTraining::Recruit),Match->CurrentSquadPrice(EBattleTraining::Regular),Match->CurrentSquadPrice(EBattleTraining::Veteran)),28,90,Mint,.9f);
-  else if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("500人 ／ 拠点3か所 ／ P：一時停止・再開"),28,90,Mint,.9f);
+   BattleTactics::AreaHire().bEnabled?*FString::Printf(TEXT(" ／ [2] 小隊を購入 %d（得点 %+d、%d/25）"),BattleTactics::AreaHire().Cost,BattleSquadType::RifleMembers()-BattleTactics::AreaHire().Cost,Match->ActiveSquads(0)):TEXT("")),28,90,Mint,.9f);
+  else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch) Label(FString::Printf(TEXT("%s ／ 資源 %d ／ [1] %d [2] %d [3] %d ／ %d人"),Phase,Match->Credits[0],Match->CurrentSquadPrice(EBattleTraining::Recruit),Match->CurrentSquadPrice(EBattleTraining::Regular),Match->CurrentSquadPrice(EBattleTraining::Veteran),BattleSquadType::RifleMembers()),28,90,Mint,.9f);
+  else if (BattleFieldLayout::IsLarge(GetWorld())) Label(*FString::Printf(TEXT("%d人 ／ 拠点3か所 ／ P：一時停止・再開"),50*BattleSquadType::RifleMembers()),28,90,Mint,.9f);
 		else Label(FString::Printf(TEXT("%s   資源 %d   [1] 新兵 %d   [2] 正規兵 %d   [3] 熟練兵 %d ／ 5体"), Phase, Match->Credits[0], UBattleMatch::SquadPrice(EBattleTraining::Recruit), UBattleMatch::SquadPrice(EBattleTraining::Regular), UBattleMatch::SquadPrice(EBattleTraining::Veteran)), 28, 90, Mint, .9f);
 		DrawRect(Ink, 16, 112, 560, 51);
 		const float Limit=BattleFieldLayout::IsSightField(GetWorld())?600.f:180.f;
