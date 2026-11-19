@@ -241,6 +241,18 @@ public:
 	TArray<FVector> RouteKnownEnemies(int32 Team) const;
 	int32 RouteFlankSide(const FVector& From, const FVector& OwnHome, const TArray<FVector>& KnownEnemies, int32 SquadID) const;
 	FVector RouteStep(const FVector& From, const FVector& Goal, int32 FlankSide, const TArray<FVector>& KnownEnemies) const;
+	// Sector routes (BattleSectorRoute.cpp, trial -BattleSectorRoute=1): the sector beside the next junction an AI squad stops in.
+	static bool SectorRouteOn();
+	static bool SectorFlankOn(); // -BattleSectorFlank=1: stops beside the known enemy's front near the goal
+	// -BattleSectorFront=1: each team's sectors (1 own soldiers, 2 known enemies, 3 both) and its front (own sectors next to enemies).
+	static bool SectorFrontOn();
+	void UpdateSectorFront(int32 Team, const TArray<FVector>& KnownEnemies) const;
+	mutable TMap<FIntPoint, uint8> SectorState[2];
+	mutable TSet<FIntPoint> SectorFrontCells[2];
+	mutable double SectorFrontAt[2] = {0, 0}, SectorFrontLogAt[2] = {0, 0};
+	int32 SectorCoverCount(FIntPoint Cell) const;
+	bool SectorStage(const struct FBattleSquadState& S, const FVector& Leader, const FVector& Step, const FVector& Goal, const TArray<FVector>& KnownEnemies, FVector& Stage) const;
+	mutable TMap<FIntPoint, int32> SectorCover;
 	// Player route choice (BattlePlayerRoutes.cpp), per squad of the player's team. Empty in matches without a player's choice.
 	TMap<int32, FPlayerRoute> PlayerRoutes;
 	float PlayerRouteClock = 0.f;

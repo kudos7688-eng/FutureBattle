@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 232 種類。
+計 236 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -62,7 +62,7 @@
 | `-BattleArmourAITeam` | Value | -1 | BattleArmourAI.cpp:32 |  |
 | `-BattleBenchmark` | Param | off | BattleBenchmark.cpp:28, BattleController.cpp:52, BattleLeaderRuntime.cpp:69 |  |
 | `-BattleBenchmarkFPS` | Param | off | BattleBenchmark.cpp:120, BattleBenchmark.cpp:154 |  |
-| `-BattleConcealment` | other |  | BattleLeaderRuntime.cpp:393, BattleLeaderRuntime.cpp:919, BattleMapCommandlet.cpp:116 ほか1 |  |
+| `-BattleConcealment` | other |  | BattleLeaderRuntime.cpp:424, BattleLeaderRuntime.cpp:969, BattleMapCommandlet.cpp:116 ほか1 |  |
 | `-BattleContactAvoidance` | Value | 1 | BattleLeaderRuntime.cpp:81 |  |
 | `-BattleContactCover` | Value | 0 | BattleTactics.cpp:185 |  |
 | `-BattleContactCoverTeam` | Value | -1 | BattleTactics.cpp:179 |  |
@@ -95,9 +95,9 @@
 | `-BattleFlankTrial` | Param | off | BattleSightExperiment.cpp:37, BattleSquadFlank.cpp:128, BattleSquadRetreat.cpp:18 |  |
 | `-BattleFollowerAnimBudget` | Value | 0 | BattleVATDisplay.cpp:48 |  |
 | `-BattleFollowerAnimSkip` | Value | 0 | BattleVATDisplay.cpp:53 |  |
-| `-BattleFollowerNoOverlap` | Value | 0 | BattleLeaderRuntime.cpp:668 |  |
-| `-BattleFollowSightParallel` | Value | 0 | BattleLeaderRuntime.cpp:661 |  |
-| `-BattleFollowSightTraces` | other |  | BattleLeaderRuntime.cpp:695 |  |
+| `-BattleFollowerNoOverlap` | Value | 0 | BattleLeaderRuntime.cpp:709 |  |
+| `-BattleFollowSightParallel` | Value | 0 | BattleLeaderRuntime.cpp:702 |  |
+| `-BattleFollowSightTraces` | other |  | BattleLeaderRuntime.cpp:736 |  |
 | `-BattleHeavyCost` | other |  | BattleState.cpp:507 |  |
 | `-BattleHeavyDamage` | other |  | BattleState.cpp:507 |  |
 | `-BattleHeavyHealth` | other |  | BattleState.cpp:506 |  |
@@ -171,20 +171,24 @@
 | `-BattleScopeShot` | Param | off | BattleLeaderRuntime.cpp:223 |  |
 | `-BattleScoutRetreat` | Value | GetDefault<UBattleTuning>()->bScoutRetreat?1:0 | BattleScoutReport.cpp:20 |  |
 | `-BattleSeconds` | Value | 20.f | BattleBenchmark.cpp:41 |  |
-| `-BattleSectorAI` | Value | 0 | BattleMatch.cpp:446 |  |
+| `-BattleSectorAI` | Value | 0 | BattleMatch.cpp:445, BattleMatch.cpp:456 |  |
 | `-BattleSectorAudit` | Param | off | BattleSectorAudit.cpp:28 |  |
+| `-BattleSectorContact` | Value | 0 | BattleLeaderRuntime.cpp:1186 |  |
+| `-BattleSectorFlank` | Value | 0 | BattleSectorRoute.cpp:35 |  |
+| `-BattleSectorFront` | Value | 0 | BattleSectorRoute.cpp:41 |  |
+| `-BattleSectorRoute` | Value | 0 | BattleSectorRoute.cpp:16 |  |
 | `-BattleSectorSmoke` | Param | off | BattleLeaderRuntime.cpp:207 |  |
 | `-BattleSeed` | Value | 7 | BattleBenchmark.cpp:42 |  |
 | `-BattleSenseMode` | Value |  | BattleBenchmark.cpp:29 |  |
 | `-BattleSightExperiment` | Value |  | BattleLeaderRuntime.cpp:75 |  |
-| `-BattleSightHitStats` | Value | 0 | BattleLeaderRuntime.cpp:343 |  |
-| `-BattleSightPairReuse` | Value | 0 | BattleLeaderRuntime.cpp:306, BattlePerception.cpp:154 |  |
+| `-BattleSightHitStats` | Value | 0 | BattleLeaderRuntime.cpp:374 |  |
+| `-BattleSightPairReuse` | Value | 0 | BattleLeaderRuntime.cpp:337, BattlePerception.cpp:154 |  |
 | `-BattleSightParallel` | Value | 1 | BattlePerception.cpp:153 |  |
 | `-BattleSightRange` | Value |  | BattleState.cpp:17 |  |
 | `-BattleSightScanInterval` | Value | .4 | BattleLeaderRuntime.cpp:110 |  |
 | `-BattleSightScanNear` | Value | 1.e7 | BattleLeaderRuntime.cpp:110 |  |
 | `-BattleSightSlowFar` | Value | 0 | BattleLeaderRuntime.cpp:107 |  |
-| `-BattleSightTeamMask` | Value | 0 | BattleLeaderRuntime.cpp:348 |  |
+| `-BattleSightTeamMask` | Value | 0 | BattleLeaderRuntime.cpp:379 |  |
 | `-BattleSightTraces` | other |  | BattlePerception.cpp:267 |  |
 | `-BattleSightTrial` | Param | off | BattleLeaderRuntime.cpp:231 |  |
 | `-BattleSightVisual` | Param | off | BattleLeaderRuntime.cpp:225 |  |
@@ -222,7 +226,7 @@
 | `-BattleTeamSupport` | Value | 1 | BattleTeamAI.cpp:12 |  |
 | `-BattleTerrain` | other |  | BattleTerrain.h:18 |  |
 | `-BattleTerrainLineBodies` | Value | 1 | BattleTactics.cpp:230 |  |
-| `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:1073 |  |
+| `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:1123 |  |
 | `-BattleTracerShot` | Param | off | BattleStanceShot.cpp:87 |  |
 | `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:206 |  |
 | `-BattleTrialSwap` | Param | off | BattleArea.cpp:15, BattleAreaDepot.cpp:32, BattleLeaderRuntime.cpp:77 ほか4 |  |
