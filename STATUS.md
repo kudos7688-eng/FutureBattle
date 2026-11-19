@@ -19,6 +19,18 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-20 3時05分 Claude（小隊の人数）：止まった味方をすり抜ける試験切替 `-BattleAllyPass=1`（既定0）の検証（ブランチ `stallfix`、b9ac38e。main へは未取り込み）
+
+- 中身：止まった味方の群れに塞がれ、ほかの回避手段も尽きて3秒以上進めない兵は、半径8m以内の止まった味方の当たり判定を5秒間だけ無視して進む。ログ `BATTLE_ALLY_PASS`。
+- 検証（各1試合。-Area -Experiment -ObserveTactics -RoundTripSave -CoverActions 1 -FlankCoordination 1、種7、8人小隊、60fps。出力 `av2-<マップ>-p<0|1>-s7`）：
+  - 全8試合が完走（passed=true、保存の往復 failures=0）。
+  - マップHの区画監査：オフでは小隊8（F2）が止まったまま failures=1、オンでは failures=0（present=6、hold=1）。
+  - 移動停止ログ（オフ→オン）：H 429→247、A 316→228、I 568→551、E 794→811。すり抜けの発動は H 80、A 65人で75、I 215人で356、E 198人で806。
+  - マップEの制限：同じ兵が何十回も発動する（unit 540 は43回）。目的地そのものが味方25人の群れに埋まった場所では、すり抜けても着けず、5秒ごとに繰り返すだけで停止は減らない。
+- 回帰（オフ）：Test-Battle failures=0、Test-Area failures=0、Test-MixedSave failures=0。
+- オフの試合は main の旧DLLとはビルドが違う（AC01 の変更が入った）ため、一致比較はしていない。
+- 未決：既定にするか、main へ取り込むか（ユーザー判断）。main の作業ツリーには他セッションの未コミット変更（BattleStableMovement.cpp・Test-WideSight.ps1）があり、取り込むとそこにぶつかる。
+
 ## 2026-11-19 22時30分 Claude（AC01）：外骨格兵の武器切替（ライフル⇔バズーカ）と関節の内装を main へ
 - **依頼**：ユーザーが本番の外（`../AC01_Review_20261119/`）に作った AC01 改善版を確認し、問題がなければ実装する。
 - **コード**（`AC01-game.patch` をそのまま適用＋LBのコメント1行）：`UBattleState::ToggleExoWeapon` と `FBattleUnitState::bLauncherSelected`（保存される）。直接操作の F／LB は発射ではなく切替（通知 `LAUNCHER/RIFLE EQUIPPED`）。`Fire` はプレイヤーの射撃でバズーカ選択中なら `FireExoLauncher` へ（照準距離は対戦車火器の射程）。見た目は構えた武器を右手（片手持ち／両手装備のクリップを切替）、もう一方を `spine_05` の背中に。AIが発射した瞬間は0.5秒だけバズーカを右手に見せる。本体のマテリアルスロット名が `AC01_InnerFrame` でない古いメッシュには、16本の骨の間に球を伸ばした内装（インスタンス1つ、骨の更新時だけ動く）を付ける。HUDは選択中「バズーカ」、案内は「[Fで切替]」。PROTOTYPE.md に1行。
