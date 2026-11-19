@@ -11,8 +11,8 @@ bool UBattleSave::ValidateMixed(FString& Error) const
  if(!BattleFieldLayout::IsMixedSaveMap(MapName)) return Fail(TEXT("Unknown mixed map"));
  if((Ruleset!=TEXT("Wide")&&Ruleset!=TEXT("MixedFast")&&Ruleset!=TEXT("Area")) || !Finite(BaseSightRange,100,50000)||!Finite(WeaponRange,100,100000)||TacticalFeatures<0||TacticalFeatures>((90<<9)|511) ||
     !Finite(TacticalClock,0,1000)||!Finite(TeamNextAssignment,0,TacticalClock+1.1)||!Finite(DelegationClock,0,5.1))return Fail(TEXT("Invalid mixed rules/clocks"));
- if(Ruleset==TEXT("Wide")&&(Units.Num()!=500 || Squads.Num()!=50))return Fail(TEXT("Fixed wide roster must contain 500 soldiers and 50 squads"));
- if(Ruleset==TEXT("MixedFast")&&(Units.Num()<20||Units.Num()>500||Units.Num()!=Squads.Num()*10))return Fail(TEXT("Invalid purchased roster"));
+ if(Ruleset==TEXT("Wide")&&(Units.Num()!=50*BattleSquadType::RifleMembers() || Squads.Num()!=50))return Fail(TEXT("Fixed wide roster must contain 500 soldiers and 50 squads"));
+ if(Ruleset==TEXT("MixedFast")&&(Units.Num()<20||Units.Num()>500||Units.Num()!=Squads.Num()*BattleSquadType::RifleMembers()))return Fail(TEXT("Invalid purchased roster"));
  TMap<int32,const FBattleSavedUnit*> ByID;
  TMap<int32,const FBattleSquadState*> BySquad;
  for(const auto& U:Units)ByID.Add(U.State.UnitID,&U);

@@ -15,6 +15,7 @@
 | 新機能（`FutureBattle-suppression` ワークツリー） | しゃがみアニメ（`-BattleStanceAnim`）を既定ON。姿勢の仕組みはマップEだけ既定ON | 遠くのVAT表示の兵はしゃがんでも立ったまま |
 | AC01ゲーム用モデル | **11-19 3時45分：外骨格兵（種類8）の見た目を AC01 に差し替えた**（本体＋左手ライフル＋右肩ランチャー、両手装備のアニメ5本。資産が無い環境と `-BattleExoPlaceholder` では従来の基本図形）。改修版の本体もUEへ再取り込み済み | `Content/Art/AC01T2` は 8d40c95 でコミット済み（ユーザー決定。main を取り込んでいない作業ツリーでは従来の見た目）。伏せは縦につぶす仮表示のまま。射撃・装填・副武器の発射の動きは無い。実際の操作での確認はユーザー待ち |
 | 直接操作の表示 | 曳光線は銃口から出る。銃口の閃光あり。右クリックで構え（1.6倍）、＋ホイールでスコープ4倍・8倍。構えるとプレイヤーの射撃の散らばりが 0.6／0.4／0.3倍（AIは不変）。**11-19**：直接操作の射撃は構えなくても散らばり0.4倍。予備の弾が0になると部下から弾倉1つ分を受け取る。味方の拠点での弾の補充（`-BattleAreaPointSupply`、既定OFF・`Play-Area.ps1` でON） | 実際の操作での確認はユーザー待ち。散らばりの倍率と閃光の見た目は初期値。拠点での補充を既定にするか（勝敗への影響は未計測）。補給班（`-` キー、兵種9、11-19 3時15分）は操作しての確認がまだ。持つ弾に上限なし、AIは買わない |
+| 小隊の人数 | **11-19：エリア戦の小銃小隊を既定8人・費用12にした**（ユーザー決定。`UBattleTuning::RifleMembers`、`-BattleRifleMembers=` で上書き。エリア戦以外の古い場は10人のまま）。回帰試験とマップA・Eの完走は合格。main へ取り込み済み | マップHの区画監査で、8人のときだけ第8小隊が出発直後に詰まった（10人では合格。H の作り直し後に再確認）。画面での確認は未実施。本拠地の耐久など、10人の頃に決めた値は据え置き |
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
@@ -52,6 +53,25 @@
 - 区画外を部隊目標から除く条件は現在目標・直前目標の再取得の双方にある。auditは280区画受理、240秒でG8/I8全滅、生存6部隊は維持。死亡部隊は合格条件から除外される。死因は未特定。
 - 遮蔽到着率と被弾時に遮蔽行動外だった割合は先行集計と一致。旧mapH-ai-20261119-123001はmanifest上CoverActions=1、30FPS。比較ツールでA/E/Fの既存before/afterを再比較し、差は側面候補の診断キーだけ。
 - 区画フラグは反映対象の構造体を丸ごと保存・復元する経路に含まれる。専用の実機往復は未確認。維持移行時は到着予約を保つ一方、戦術終了時に元の制圧命令を再適用し得る。ゲームコード変更なし。
+## 2026-11-19 20時 Claude（小隊の人数）：エリア戦の小銃小隊を既定8人・費用12に（ユーザー決定）
+
+- **決定**：ユーザーが「8人を既定にする」と決めた（下の 19時05分 の試験切替の続き）。片側試験はしない（戦力評価が目的ではない、ユーザー指示）。
+- **変更**：`UBattleTuning::RifleMembers=8`（DefaultGame.ini）。**エリア戦（`-BattleArea`。プレイ・計測の両方）だけ**で、ほかの古い場（500人の広い場・40人の場・MixedFast）は10人のまま（それらの試験は兵の番号を直接使う）。`-BattleRifleMembers=` は全モードで上書きできる。費用 `AreaSquadCost` 15→12（1人1.5を保つ）。補給に戻る基準はもともと人数に比例するので変えていない（8人なら残り6人、本拠地攻撃は残り4人、復帰は全員）。
+- **試験の直し**：`BattleAreaSmoke.cpp` と `BattleMixedSaveSmoke.cpp` で、兵の番号（11・21・41・51・251・491・501 など）、費用15、合計500人を直接書いていた箇所を、人数 N と費用から計算する形にした（第k小隊の隊長＝(k-1)×N+1）。
+- **検証**：Build 成功。`Test-Battle` failures=0、`Test-WideMixed` failures=0（どちらも10人の場）。`Test-Area`（8人、130項目）failures=0、`Test-MixedSave`（35項目）failures=0。既定のままのマップA・E（seed7、60FPS、保存往復あり、`-CoverActions 1 -FlankCoordination 1`）の2試合はどちらも完走して `passed=true`。開始時の部下 `mass=350`、80秒目の保存往復 `SAVE_SOAK_RESULT failures=0`。AIの購入は、小銃小隊が費用12（マップA 20回、E 15回）、重装歩兵が従来どおり15（A 11回、E 8回）。出力は `Setup/Benchmarks/SightTrial-20261111/rifle8-{A,E}-default8-s7`。重装歩兵（6人・15）は1人あたり2.5で、小銃小隊（1.5）との差は以前（15で10人＝1.5、重装 2.5）と変わらない。
+- **制限**：画面での確認は未実施。本拠地の耐久1000などは10人の頃の計算のまま（ROADMAP の 2026-11-19 の項）。性能の計測はしていない（兵が500→400人に減るので軽くなるはず）。
+- **main への取り込み（21時30分）**：main 21494ec に rifle8 を merge（STATUS・SWITCHES・CODEMAP・Test-WideSight.ps1 の衝突を解決）。main で Build、`Test-Battle`、`Test-Area`（`rifle8-merge-area`）、`Test-MixedSave`（`rifle8-merge-save`）が failures=0。
+- **未解決（マップHの区画監査）**：`Test-WideSight -Map H -Area -Experiment -ObserveTactics -SectorAudit -CoverActions 1 -FlankCoordination 1 -Seed 7` が、8人で `BATTLE_SECTOR_AUDIT_RESULT failures=1`（`rifle8-merge-H-audit-s7`）。同じビルドで `-RifleMembers 10` にすると failures=0（`rifle8-merge-H-audit-n10-s7`）。落ちたのは第8小隊（F2、畑）で、出発地点の近く（x≈-392m）で開始直後に7人が `BATTLE_MOVE_STALL` を出し、240秒で区画内は8人中1人、命令は攻撃移動のまま。10人では x≈-293m で詰まりが出たが、10人中7人が到着した。ほかの7小隊は8人でも合格。マップHは川底の不具合の作り直し待ち（「マップの現状と改善案」が H・I で監査を取り直す予定）なので、作り直した後に8人で F2 を確かめる。詰まりが続くなら、8人の隊形（前列5・後列3）と出発地点の障害物の関係を調べる。
+
+## 2026-11-19 19時05分 Claude（小隊の人数）：小銃小隊の人数の試験切替 `-BattleRifleMembers=`（既定10）
+
+- **依頼**：1小隊10人は多いので減らす案。ユーザーの依頼で8人を試験切替として実装する。戦力評価が目的の変更ではないので、片側試験はしない（ユーザー指示）。
+- **作業場所**：ワークツリー `FutureBattle-rifle8`（ブランチ `rifle8`、main e12ee29 から）。main の作業ツリーでは別セッションが同じファイルを編集中だったため分けた。main へは未取り込み。
+- **変更**：`BattleSquadType::RifleMembers()`（`-BattleRifleMembers=`、2〜10、既定10）を追加し、小銃小隊の人数をここから取る。開始時の小隊（`UBattleLeaderRuntime` の編成のループ）、購入（`BattleSquadType::Members` 経由）、保存の検査（Wide・MixedFast の人数）、画面上部の「得点 %+d」と人数の表示、`BATTLE_WIDE_MIXED_READY` の mass 数を人数に合わせた。小隊の数は変えない（各軍25隊）ので、8人なら開始時は1軍200人（全体400人）。武器は従来どおり枠4・9が支援火器なので、8人では支援火器1丁。**費用（AreaSquadCost=15）は変えていない**。`Test-WideSight.ps1` に `-RifleMembers` を追加した。
+- **検証**：Build 成功。既定（10人）で `Test-Battle` `BATTLE_SMOKE_RESULT failures=0`、`Test-Area` failures=0、`Test-MixedSave` failures=0。8人と10人でマップA・E（seed7、保存往復あり、`-CoverActions 1 -FlankCoordination 1`、60FPS、描画なし）を各1試合：4試合とも完走して `passed=true`。8人では開始時の部下が `mass=350`（10人は450）、75秒目の購入の後の80秒目の保存往復も `SAVE_SOAK_RESULT failures=0`。出力は `Setup/Benchmarks/SightTrial-20261111/rifle8-{A,E}-n{8,10}-s7`。
+- **参考（1seedずつで、評価ではない）**：得点（西/東）はマップA 8人 492/172、10人 319/109。マップE 8人 505/586、10人 594/646。
+- **制限**：`Test-Area` のエリア回帰は10人・500人を前提にした検査が多く、8人では回していない（8人の確認は上の実戦と保存往復）。補給に戻る人数の基準などの絶対値（例：残り5人で補給）は人数に比例させていない（`BattleSquadRetreat` の ReturnLiving だけは10人未満で比例）。画面での確認は未実施。
+- **次の一手（ユーザー判断）**：8人を既定にするか。既定にするなら、費用（例：15→12）、本拠地の耐久、補給の基準などを人数に合わせるかを決める。
 
 ## 2026-11-19 17時55分 Claude（マップ）：Codex の区画命令・区画AI（939e066）の検証
 - **依頼**：ユーザー「codexの区画命令区画AIについて検証してください」。対象は 939e066（マップH、区画の制圧・維持、`-BattleSectorAI`）。コードを読み、main でビルドして試験した。**Codex のコードは直していない**。足したのは検証用の `BattleSectorAudit.cpp`（`-BattleSectorAudit`）、その入口（`BattleTerrainTest.cpp` の1行）、`Test-WideSight.ps1` の引数 `-SectorAudit`・`-SectorAI 0|1`（従来は H で常に1）。
