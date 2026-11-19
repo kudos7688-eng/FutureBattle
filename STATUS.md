@@ -88,6 +88,13 @@
 - **検証**：`Test-Area.ps1 -OutputName ac01-body-20261120 -CoverActions 1 -FlankCoordination 1` は failures=0（`EXO_SUIT assets=1`）。
 - **未実施**：画面での見た目の確認（ユーザー待ち）。負荷の計測。
 
+## 2026-11-19 22時20分 Claude（小隊数）：稼働小隊の上限25を設定値に（`AreaMaxActiveSquads`、試験切替 `-BattleAreaMaxSquads=N`。既定25で試合は不変）
+- **依頼**：ユーザーが、小隊を8人にしたのに合わせて小隊数を40まで増やしたい。懸念点の確認のあと「設定値化を進める」とした。
+- **コード**（ブランチ `squadcap`、ワークツリー `FutureBattle-squadcap`）：上限の判定がコードに直接 25 と書かれていたのを、`UBattleTuning::AreaMaxActiveSquads`（DefaultGame.ini、既定25）と `-BattleAreaMaxSquads=N`（1〜100）にした。値は `BattleTactics::AreaHire().MaxActive`。プレイヤーの購入（`HireSquad`）、AIの購入、HUDの「n/上限」、保存の照合（稼働数が上限以下）がこの値を見る。断るときの文言は「部隊の空きがありません（稼働部隊の上限）」。**開始時の小隊数（1チーム25）は変えていない**。上限40なら、25小隊で始めて40まで買える。保存の照合の「雇用数＝小隊数−25」は開始時の数なので25のまま。
+- **試験の器具**：空き枠を作る処理は上限に合わせる。「満員なら断る」の確認は、器具が25小隊で始まるので上限25のときだけ行う。
+- **検証**：`Build-Editor` 成功。`Test-Battle` failures=0、`Test-Area -CoverActions 1 -FlankCoordination 1` failures=0、`Test-MixedSave -CoverActions 1 -FlankCoordination 1` failures=0（既定の上限25）。
+- **未実施**：`-BattleAreaMaxSquads=40` で実際に25を超えて買えること、40小隊での性能（マップE、1フレームの時間）と勝敗の比較。収入 INC4 は上限25で釣り合わせた値なので、40では見直しが要る見込み。懸念点（負荷・経済・市街地の混雑・画面の一覧）は、この会話でユーザーに伝えた。main には未取り込み。
+
 ## 2026-11-19 22時30分 Claude（AC01）：外骨格兵の武器切替（ライフル⇔バズーカ）と関節の内装を main へ
 - **依頼**：ユーザーが本番の外（`../AC01_Review_20261119/`）に作った AC01 改善版を確認し、問題がなければ実装する。
 - **コード**（`AC01-game.patch` をそのまま適用＋LBのコメント1行）：`UBattleState::ToggleExoWeapon` と `FBattleUnitState::bLauncherSelected`（保存される）。直接操作の F／LB は発射ではなく切替（通知 `LAUNCHER/RIFLE EQUIPPED`）。`Fire` はプレイヤーの射撃でバズーカ選択中なら `FireExoLauncher` へ（照準距離は対戦車火器の射程）。見た目は構えた武器を右手（片手持ち／両手装備のクリップを切替）、もう一方を `spine_05` の背中に。AIが発射した瞬間は0.5秒だけバズーカを右手に見せる。本体のマテリアルスロット名が `AC01_InnerFrame` でない古いメッシュには、16本の骨の間に球を伸ばした内装（インスタンス1つ、骨の更新時だけ動く）を付ける。HUDは選択中「バズーカ」、案内は「[Fで切替]」。PROTOTYPE.md に1行。
