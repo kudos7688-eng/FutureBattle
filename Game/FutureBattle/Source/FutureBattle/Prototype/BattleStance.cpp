@@ -84,13 +84,17 @@ UAnimSequence* UBattleLeaderRuntime::FollowerClip(int32 ID,int32 Pose) const
 {
  // Blind fire (BattleBlindFire.cpp): the clip that raises the rifle over or around the cover, while it lasts.
  if(Pose!=2 && IsBlindFiring(ID,GetWorld()->GetTimeSeconds()))
-  // Over the top the clip is a standing body holding the rifle above the head: a whole-body clip would show the head over
-  // the cover, so a follower (one whole-body clip, no upper layer) keeps its hidden pose there.
-  // Around the edge: the side's own crouched aim of the cover set (AimL or AimR), else the default side clip.
-  if(const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);U && !BattleBlindFire::IsOverTop(*U))
+  if(const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID))
   {
-   if(const auto* B=Bodies.Find(ID);B && B->CoverClipPhase)if(auto* Aim=BattleBodyAnim::CoverClip(B->CoverClipSet.Aim))return Aim;
-   if(auto* Blind=BattleBlindFire::Clip(false))return Blind;
+   // Over the top the clip is a standing body holding the rifle above the head: shown while the rules expose the head
+   // (BattleBlindFire::ExposeEnabled); otherwise a follower (one whole-body clip, no upper layer) keeps its hidden pose.
+   if(BattleBlindFire::IsOverTop(*U)){if(BattleBlindFire::ExposeEnabled())if(auto* Top=BattleBlindFire::Clip(true))return Top;}
+   else
+   {
+    // Around the edge: the side's own crouched aim of the cover set (AimL or AimR), else the default side clip.
+    if(const auto* B=Bodies.Find(ID);B && B->CoverClipPhase)if(auto* Aim=BattleBodyAnim::CoverClip(B->CoverClipSet.Aim))return Aim;
+    if(auto* Blind=BattleBlindFire::Clip(false))return Blind;
+   }
   }
  // Cover clips (BattleCoverClips.h): hidden or firing loop while the follower's cover action is in that phase.
  if(Pose!=2)if(const auto* B=Bodies.Find(ID);B && B->CoverClipPhase)

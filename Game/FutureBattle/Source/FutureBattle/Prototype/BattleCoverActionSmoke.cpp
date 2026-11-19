@@ -58,6 +58,43 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    Actor(1)->SetAimLevel(0);
    Check(Fire(1,Eye,(Threat-Eye).GetSafeNormal(),true)&&Store->Find(1)->Ammo<Before,TEXT("unaimed trigger behind cover blind-fires"));
    Check(Store->Find(1)->CoverPhase==2&&IsBlindFiring(1,Now)&&FVector::Dist2D(Position(1),Store->Find(1)->CoverAnchor)<40,TEXT("blind fire keeps the body hidden at the anchor"));
+   Check(!IsHeadExposed(1,Now)&&TargetAimOffset(1)==BattleStance::AimOffset(StanceOf(1)),TEXT("blind fire around the edge does not expose the head"));
+   if(BattleBlindFire::ExposeEnabled())
+   {
+    // A little of the body shows past the edge: it is seen and looks from there, and a bullet through it hits.
+    FVector Shown;const bool bShown=SideExposure(1,Now,Shown);
+    Check(bShown&&Shown.Equals(Origin,1.)&&Sight(1).Eye.Equals(Shown,1.),TEXT("blind fire around the edge shows a little of the body past the edge"));
+    if(bShown)
+    {
+     auto& E=Store->Units.FindChecked(251);E.NextShotTime=0;E.ReloadEndTime=0;E.Ammo=FMath::Max(E.Ammo,1);
+     const FVector Dir=(Threat-Shown).GetSafeNormal(),From=Shown+Dir*120.;E.WeaponAimDirection=-Dir;
+     const float HP=Store->Find(1)->HP;Fire(251,From,-Dir,false);
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BLINDFIRE_SIDE shown=%s hp_before=%.0f hp_after=%.0f"),*Shown.ToCompactString(),HP,Store->Find(1)->HP);
+     Check(Store->Find(1)->HP<HP,TEXT("a bullet through the part past the edge hits the blind-firing soldier"));
+     Store->Units.FindChecked(1).HP=HP;
+    }
+   }
+ };
+ // Over the top (the stand-up kind: peek point = anchor): the head comes up while the clip shows, so others aim at and hit it.
+ auto FireOverTop=[&]
+ {
+  auto& P=Store->Units.FindChecked(1);SmokeSavedPeek=P.CoverPeek;P.CoverPeek=P.CoverAnchor;
+  P.NextShotTime=0;const FVector Eye=Position(1)+FVector(0,0,60);P.WeaponAimDirection=(Threat-Eye).GetSafeNormal();
+  FVector Origin;const bool HasOrigin=BlindFireOrigin(1,Threat,Origin);const bool Fired=Fire(1,Eye,(Threat-Eye).GetSafeNormal(),true);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BLINDFIRE_TOP has_origin=%d fired=%d exposed=%d aim=%.0f top=%.0f"),HasOrigin,Fired,IsHeadExposed(1,Now),TargetAimOffset(1),TargetTopOffset(1));
+  Check(HasOrigin&&Fired,TEXT("over-the-top blind fire fires from above the cover"));
+  if(BattleBlindFire::ExposeEnabled())
+  {
+   Check(IsHeadExposed(1,Now)&&TargetAimOffset(1)==BattleBlindFire::ExposedAimOffset&&TargetTopOffset(1)==BattleBlindFire::ExposedTopOffset,TEXT("over-the-top blind fire exposes the head to sight and hits"));
+   Check(FMath::IsNearlyEqual(Sight(1).Eye.Z-Position(1).Z,BattleBlindFire::ExposedEyeOffset,1.f),TEXT("the exposed head looks over the cover from its own height"));
+  }
+ };
+ auto EndOverTop=[&]
+ {
+  Store->Units.FindChecked(1).CoverPeek=SmokeSavedPeek;BlindFireUntil.Remove(1);
+  FVector Shown;
+  Check(!IsHeadExposed(1,GetWorld()->GetTimeSeconds())&&!SideExposure(1,GetWorld()->GetTimeSeconds(),Shown)&&TargetTopOffset(1)==BattleStance::TopOffset(StanceOf(1))
+   &&FMath::IsNearlyEqual(Sight(1).Eye.Z-Position(1).Z,BattleStance::EyeOffset(StanceOf(1)),1.f),TEXT("head is hidden again once the blind fire ends (sight and eye)"));
  };
  auto AfterBlindFire=[&]
  {
@@ -167,6 +204,7 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
   // Rendered run: close views of the hidden body and of the blind fire before going on (stages 5 to 7).
   if(!BodyShotPrefix().IsEmpty()){SmokeStage=5;Later(.6);return;}
   BlindFire();
+  FireOverTop();EndOverTop();
   AfterBlindFire();
   return;
  }
@@ -176,17 +214,21 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
  if(SmokeStage==7){BodyShot(TEXT("blind"));SmokeStage=9;Later(.7);return;}
  if(SmokeStage==9)
  {
-  // Over the top (display only): the same anchor as the stand-up kind (peek point = anchor) shows the upper-body layer.
-  auto& P=Store->Units.FindChecked(1);SmokeSavedPeek=P.CoverPeek;P.CoverPeek=P.CoverAnchor;
-  P.NextShotTime=0;const FVector Eye=Position(1)+FVector(0,0,60);P.WeaponAimDirection=(Threat-Eye).GetSafeNormal();
-  FVector Origin;const bool HasOrigin=BlindFireOrigin(1,Threat,Origin);
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BLINDFIRE_TOP has_origin=%d fired=%d"),HasOrigin,Fire(1,Eye,(Threat-Eye).GetSafeNormal(),true));
+  FireOverTop();
   SmokeStage=10;Later(.3);return;
  }
  if(SmokeStage==10)
  {
   BodyShot(TEXT("blind-top"));
-  Store->Units.FindChecked(1).CoverPeek=SmokeSavedPeek;
+  {
+   // The rifle is above the cover; the head shows over it while exposed (rules), else stays below (display; posed by the
+   // anim tick between the stages).
+   auto* Mesh=Actor(1)->GetMesh();const float* Top=BlindFireTop.Find(1);
+   const float Hand=Mesh->GetSocketLocation(TEXT("hand_r")).Z,Head=Mesh->GetSocketLocation(TEXT("head")).Z;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BLINDFIRE_TOP_POSE cover_top=%.0f hand_r=%.0f head=%.0f ground=%.0f exposed_top=%.0f"),Top?*Top:-1.f,Hand,Head,Mesh->GetComponentLocation().Z,Position(1).Z+TargetTopOffset(1));
+   Check(Top && Hand>*Top && (BattleBlindFire::ExposeEnabled()?Head>*Top:Head<*Top),TEXT("over-the-top blind fire shows the rifle (and the exposed head) above the cover"));
+  }
+  EndOverTop();
   // The picture is taken at the end of this frame: the view goes back to the soldier on the next stage.
   SmokeStage=11;Later(.1);return;
  }

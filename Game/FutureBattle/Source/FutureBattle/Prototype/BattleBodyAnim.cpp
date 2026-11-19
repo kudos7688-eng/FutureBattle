@@ -1,4 +1,5 @@
 #include "BattleBodyAnim.h"
+#include "TwoBoneIK.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimationPoseData.h"
 #include "Animation/AnimNodeBase.h"
@@ -182,6 +183,7 @@ void FBattleBodyAnimProxy::PreUpdate(UAnimInstance* InAnimInstance,float DeltaSe
  Upper={I->UpperClip,I->UpperTime,!I->bUpperDriven};UpperWeight=I->UpperClip?I->UpperWeight:0.f;
  Overlay={I->OverlayClip,I->OverlayTime,false};OverlayWeight=I->OverlayClip?I->OverlayWeight:0.f;
  AimPitch=I->AimPitch;AimWeight=I->AimWeight;
+ RaiseTarget=I->RaiseTarget;RaiseWeight=I->RaiseWeight;
  Aim[0]=BattleBodyAnim::Get(BattleBodyAnim::EClip::AimDown);
  Aim[1]=BattleBodyAnim::Get(BattleBodyAnim::EClip::AimCenter);
  Aim[2]=BattleBodyAnim::Get(BattleBodyAnim::EClip::AimUp);
@@ -190,6 +192,35 @@ void FBattleBodyAnimProxy::PreUpdate(UAnimInstance* InAnimInstance,float DeltaSe
 bool FBattleBodyAnimProxy::Evaluate(FPoseContext& Output)
 {
  if(!Base.Clip){Output.ResetToRefPose();return true;}
+ EvaluateLayers(Output);
+ if(RaiseWeight>0.f)RaiseHands(Output.Pose);
+ return true;
+}
+
+void FBattleBodyAnimProxy::RaiseHands(FCompactPose& Pose) const
+{
+ const FBoneContainer& Bones=Pose.GetBoneContainer();
+ auto Find=[&](const TCHAR* Name){const int32 I=Bones.GetPoseBoneIndexForBoneName(Name);return I==INDEX_NONE?FCompactPoseBoneIndex(INDEX_NONE):Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(I));};
+ const FCompactPoseBoneIndex Arm[2][3]={{Find(TEXT("upperarm_r")),Find(TEXT("lowerarm_r")),Find(TEXT("hand_r"))},{Find(TEXT("upperarm_l")),Find(TEXT("lowerarm_l")),Find(TEXT("hand_l"))}};
+ for(const auto& Side:Arm)for(const auto& Bone:Side)if(!Bone.IsValid())return;
+ FCSPose<FCompactPose> CS;CS.InitPose(Pose);
+ // One offset for both hands: the right hand to the target, the left hand by the same amount, so the grip holds.
+ const FVector Offset=(RaiseTarget-CS.GetComponentSpaceTransform(Arm[0][2]).GetLocation())*RaiseWeight;
+ TArray<FBoneTransform,TInlineAllocator<6>> Solved;
+ for(const auto& Side:Arm)
+ {
+  FTransform ArmUpper=CS.GetComponentSpaceTransform(Side[0]),ArmLower=CS.GetComponentSpaceTransform(Side[1]),ArmHand=CS.GetComponentSpaceTransform(Side[2]);
+  // The elbow bends the way it already does (its current position is the pole); no stretching.
+  AnimationCore::SolveTwoBoneIK(ArmUpper,ArmLower,ArmHand,ArmLower.GetLocation(),ArmHand.GetLocation()+Offset,false,1.,1.);
+  Solved.Add(FBoneTransform(Side[0],ArmUpper));Solved.Add(FBoneTransform(Side[1],ArmLower));Solved.Add(FBoneTransform(Side[2],ArmHand));
+ }
+ Solved.Sort([](const FBoneTransform& A,const FBoneTransform& B){return A.BoneIndex<B.BoneIndex;});
+ CS.SafeSetCSBoneTransforms(Solved);
+ FCSPose<FCompactPose>::ConvertComponentPosesToLocalPoses(MoveTemp(CS),Pose);
+}
+
+void FBattleBodyAnimProxy::EvaluateLayers(FPoseContext& Output)
+{
  auto Sample=[](const FBattleBodyLayer& Layer,FPoseContext& Into)
  {
   FAnimationPoseData Data(Into);
@@ -203,7 +234,7 @@ bool FBattleBodyAnimProxy::Evaluate(FPoseContext& Output)
  Sample(Base,Output);
  if(PreviousWeight>0.f && Previous.Clip){FPoseContext Old(Output);Sample(Previous,Old);BlendInto(Output.Pose,Old.Pose,PreviousWeight);}
  const bool bAim=AimWeight>0.f && Aim[1];
- if(!bAim && UpperWeight<=0.f && OverlayWeight<=0.f)return true;
+ if(!bAim && UpperWeight<=0.f && OverlayWeight<=0.f)return;
  // The upper body: aim pose (by pitch), then the upper clip, then the one-shot overlay, each over the previous.
  FPoseContext Top(Output);Top.Pose.CopyBonesFrom(Output.Pose);
  if(bAim)
@@ -218,7 +249,7 @@ bool FBattleBodyAnimProxy::Evaluate(FPoseContext& Output)
  // Above spine_01 only: spine_01 takes half, everything below it in the hierarchy takes all.
  const FBoneContainer& Bones=Output.Pose.GetBoneContainer();
  const int32 SpinePose=Bones.GetPoseBoneIndexForBoneName(TEXT("spine_01"));
- if(SpinePose==INDEX_NONE){Output.Pose.CopyBonesFrom(Top.Pose);return true;}
+ if(SpinePose==INDEX_NONE){Output.Pose.CopyBonesFrom(Top.Pose);return;}
  const FCompactPoseBoneIndex Spine=Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(SpinePose));
  TArray<float,TInlineAllocator<128>> Mask;Mask.SetNumZeroed(Output.Pose.GetNumBones());
  for(const FCompactPoseBoneIndex Index:Output.Pose.ForEachBoneIndex())
@@ -229,5 +260,5 @@ bool FBattleBodyAnimProxy::Evaluate(FPoseContext& Output)
  }
  for(const FCompactPoseBoneIndex Index:Output.Pose.ForEachBoneIndex())
   if(const float W=Mask[Index.GetInt()];W>0.f){FTransform Mixed;Mixed.Blend(Output.Pose[Index],Top.Pose[Index],W);Output.Pose[Index]=Mixed;}
- return true;
+ return;
 }

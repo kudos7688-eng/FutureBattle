@@ -93,6 +93,10 @@ private:
 	double CoverOneShotUntil = 0.;
 	float CoverOneShotYaw = 0.f, MeshYawShown = 0.f;
 	void SetMeshYaw(float Yaw);
+	// Blind fire around an edge (BattleBlindFire::SideLeanBack): the body is drawn leaning out to the edge while that part of
+	// it shows; the offset of the mesh from its place in the capsule, eased in and out (display only).
+	FVector MeshLeanShown = FVector::ZeroVector;
+	void SetMeshLean(const FVector& WorldOffset, float DeltaSeconds);
 	UPROPERTY() TObjectPtr<UAnimSequence> LookIdle;
 	UPROPERTY() TObjectPtr<UAnimSequence> LookMove;
 	UPROPERTY() TObjectPtr<UAnimSequence> LookCrouchIdle;

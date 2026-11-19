@@ -94,6 +94,10 @@ struct FBattleLeaderBody
  TArray<FVector> ContactRoute;
  double NextContactProbe=0, ContactRouteUntil=0, NextArrivalProbe=0;
  bool bArrivalOccupied=false, bContactWaiting=false;
+ // Trial -BattleAllyPass=1 (2026-11-19, user request): after waiting 3 s in front of a stopped ally cluster that no detour gets
+ // around, the soldier may walk through stopped allies (only them) until AllyPassUntil. The components it ignores meanwhile.
+ double AllyPassUntil=0;
+ TArray<TWeakObjectPtr<UPrimitiveComponent>> AllyPassIgnored;
  int32 Waypoint=1, Pose=0;
  FBattleAnimTasks AnimTasks;
 };
@@ -178,7 +182,7 @@ public:
  double ExoNextPick=0;int64 ExoLauncherShots=0,ExoLauncherHits=0;
  // Look: armour parts on a rig that follows the chest and keeps the body's heading, the launcher tube, and a shield bubble shown while shield points are left.
  // bSuit: the AC01 suit (ApplyExoSuit: own body, clips and weapon models) instead of the placeholder plates.
- struct FExoLook{TWeakObjectPtr<USceneComponent> Rig;TWeakObjectPtr<class UStaticMeshComponent> Bubble;TWeakObjectPtr<class UMaterialInstanceDynamic> BubblePaint;TWeakObjectPtr<class UStaticMeshComponent> Stowed;bool bSuit=false,bShowingLauncher=false;double AILauncherUntil=0.;};
+ struct FExoLook{TWeakObjectPtr<USceneComponent> Rig;TWeakObjectPtr<class UStaticMeshComponent> Bubble;TWeakObjectPtr<class UMaterialInstanceDynamic> BubblePaint;TWeakObjectPtr<class UStaticMeshComponent> Stowed;FTransform StowUpright,StowProne;bool bSuit=false,bShowingLauncher=false,bStowProne=false;double AILauncherUntil=0.;};
  bool ApplyExoSuit(int32 ID);
  TMap<int32,FExoLook> ExoLooks;
  void UpdateExoLooks();
@@ -319,6 +323,17 @@ public:
  // Runtime only (display): the point the body turns its rifle toward during a blind fire around the edge, 2 m past the
  // origin toward the aim, so the clip points around the corner rather than into the cover.
  TMap<int32,FVector> BlindFireLook;
+ // Runtime only (display): the top of the cover under an over-the-top blind fire origin (world Z), where the body's hands
+ // raise the rifle to (ABattleUnit::UpdateBodyAnim). Measured once per blind shot by one line down from the origin.
+ TMap<int32,float> BlindFireTop;
+ // Over-the-top blind fire shows the head (BattleBlindFire::ExposeEnabled): while it does, the heights others aim at and
+ // hit are the head's. Every rule that reads a target's stance height goes through these two.
+ bool IsHeadExposed(int32 ID,double Now) const;
+ // Around the edge: the origin of the last side blind shot, and whether that part of the body shows now (Point = its centre).
+ TMap<int32,FVector> BlindFireSide;
+ bool SideExposure(int32 ID,double Now,FVector& Point) const;
+ float TargetAimOffset(int32 ID) const;
+ float TargetTopOffset(int32 ID) const;
  // Mesh yaw (degrees, right positive) that turns a body facing Forward toward BlindFireLook; 0 over the top or when unknown.
  float BlindFireYaw(int32 ID,const FVector& Forward) const;
  // Body animation (BattleBodyAnim.h; display only, runtime only): travel direction of the last shot that hit each soldier,
@@ -470,6 +485,8 @@ private:
  void BuildMovementPlan(int32 SquadID);
  bool StableMove(int32 ID,float Dt,double Now,FVector& Direction);
  bool IsStationaryAlly(int32 Observer,int32 Other) const;
+ void BeginAllyPass(int32 ID,double Now);
+ void EndAllyPass(int32 ID);
  void ReassignOccupiedArrival(int32 ID,double Now);
  bool ResolveStoppedContact(int32 ID,FVector Way,double Now,FVector& Direction,float& Scale);
  bool ClearMovementSegment(FVector A,FVector B) const;

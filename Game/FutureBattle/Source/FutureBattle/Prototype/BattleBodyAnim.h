@@ -57,10 +57,13 @@ struct FBattleBodyAnimProxy : public FAnimInstanceProxy
  FBattleBodyAnimProxy()=default;
  explicit FBattleBodyAnimProxy(UAnimInstance* Instance):FAnimInstanceProxy(Instance){}
  FBattleBodyLayer Base,Previous,Upper,Overlay;
- float PreviousWeight=0.f,UpperWeight=0.f,OverlayWeight=0.f,AimWeight=0.f,AimPitch=0.f;
+ float PreviousWeight=0.f,UpperWeight=0.f,OverlayWeight=0.f,AimWeight=0.f,AimPitch=0.f,RaiseWeight=0.f;
+ FVector RaiseTarget=FVector::ZeroVector;
  UAnimSequence* Aim[3]={nullptr,nullptr,nullptr};
  virtual void PreUpdate(UAnimInstance* InAnimInstance,float DeltaSeconds) override;
  virtual bool Evaluate(FPoseContext& Output) override;
+ void EvaluateLayers(FPoseContext& Output);
+ void RaiseHands(FCompactPose& Pose) const;
 };
 
 UCLASS(Transient)
@@ -77,6 +80,10 @@ public:
  void SetAim(float PitchDegrees,float Weight);
  // One-shot upper-body overlay (recoil, hit reaction): plays once at Weight, then fades.
  void PlayOverlay(UAnimSequence* Clip,float Weight);
+ // Both hands moved together (the rifle keeps its grip and direction) so the right hand reaches Target, in the mesh
+ // component's space, by two-bone IK on each arm after every layer; Weight 0 turns it off. The arms only reach as far as
+ // they are long: the body itself does not rise. Used by the over-the-top blind fire (the rifle held above the cover).
+ void SetHandRaise(const FVector& Target,float Weight){RaiseTarget=Target;RaiseWeight=FMath::Clamp(Weight,0.f,1.f);}
  UAnimSequence* GetBase() const {return BaseClip;}
 protected:
  virtual void NativeUpdateAnimation(float DeltaSeconds) override;
@@ -88,6 +95,7 @@ private:
  UPROPERTY(Transient) TObjectPtr<UAnimSequence> PreviousClip;
  UPROPERTY(Transient) TObjectPtr<UAnimSequence> UpperClip;
  UPROPERTY(Transient) TObjectPtr<UAnimSequence> OverlayClip;
- float BaseTime=0.f,PreviousTime=0.f,PreviousWeight=0.f,UpperTime=0.f,UpperWeight=0.f,OverlayTime=0.f,OverlayWeight=0.f,AimPitch=0.f,AimWeight=0.f;
+ float BaseTime=0.f,PreviousTime=0.f,PreviousWeight=0.f,UpperTime=0.f,UpperWeight=0.f,OverlayTime=0.f,OverlayWeight=0.f,AimPitch=0.f,AimWeight=0.f,RaiseWeight=0.f;
+ FVector RaiseTarget=FVector::ZeroVector;
  bool bBaseLoop=true,bPreviousLoop=true,bUpperDriven=false;
 };
