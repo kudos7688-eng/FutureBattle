@@ -74,6 +74,21 @@ bool UBattleLeaderRuntime::BlindFireOrigin(int32 ID,FVector AimPoint,FVector& Or
  return false;
 }
 
+float BattleBlindFire::CoverTop(UWorld* World,const FVector& Origin,const FVector& Body)
+{
+ // Three lines down, at the origin and 25 / 55 cm further toward the threat (the cover may stand a little ahead). The
+ // highest hit more than 30 cm above the capsule's lower half is the cover; lower hits are the ground.
+ float Top=Body.Z+45.f;bool bFound=false;
+ const FVector Ahead=FVector(Origin.X-Body.X,Origin.Y-Body.Y,0.f).GetSafeNormal();
+ for(const float Extra:{0.f,25.f,55.f})
+ {
+  const FVector From=Origin+Ahead*Extra;FHitResult Hit;
+  if(World && World->LineTraceSingleByObjectType(Hit,From,FVector(From.X,From.Y,Body.Z-80.f),FCollisionObjectQueryParams(ECC_WorldStatic))
+   && Hit.ImpactPoint.Z>Body.Z-30.f && (!bFound || Hit.ImpactPoint.Z>Top)){Top=Hit.ImpactPoint.Z;bFound=true;}
+ }
+ return Top;
+}
+
 float BattleBlindFire::OverTopYaw(const TCHAR* HiddenClip)
 {
  if(!HiddenClip)return 0.f;

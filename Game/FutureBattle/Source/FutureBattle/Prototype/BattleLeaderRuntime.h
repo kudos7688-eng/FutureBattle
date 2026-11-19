@@ -319,6 +319,9 @@ public:
  // Runtime only (display): the point the body turns its rifle toward during a blind fire around the edge, 2 m past the
  // origin toward the aim, so the clip points around the corner rather than into the cover.
  TMap<int32,FVector> BlindFireLook;
+ // Runtime only (display): the top of the cover under an over-the-top blind fire origin (world Z), where the body's hands
+ // raise the rifle to (ABattleUnit::UpdateBodyAnim). Measured once per blind shot by one line down from the origin.
+ TMap<int32,float> BlindFireTop;
  // Mesh yaw (degrees, right positive) that turns a body facing Forward toward BlindFireLook; 0 over the top or when unknown.
  float BlindFireYaw(int32 ID,const FVector& Forward) const;
  // Body animation (BattleBodyAnim.h; display only, runtime only): travel direction of the last shot that hit each soldier,

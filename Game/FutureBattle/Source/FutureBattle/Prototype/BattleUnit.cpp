@@ -374,6 +374,7 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	using namespace BattleBodyAnim;
 	const double Now = GetWorld()->GetTimeSeconds();
 	const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+	Body.SetHandRaise(FVector::ZeroVector, 0.f);
 	// Lower body: a stance change plays its transition once, then the idle or the walk in the direction of travel.
 	if (VisualStance != BodyStance)
 	{
@@ -412,6 +413,17 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 		if (CoverBase)
 		{
 			SetMeshYaw(Yaw);
+			// Over the top: the hands lift the rifle above the cover (two-bone IK) while the body stays crouched behind it.
+			// Target: 12 cm over the measured cover top, 30 cm ahead of the body toward the shot (display only).
+			if (BlindUpper)
+			{
+				const FVector Pos = GetActorLocation();
+				const FVector* Look = Leaders->BlindFireLook.Find(UnitID);
+				const FVector Ahead = Look ? (*Look - Pos).GetSafeNormal2D() : GetActorForwardVector().GetSafeNormal2D();
+				const float* Top = Leaders->BlindFireTop.Find(UnitID);
+				const FVector Target = Pos + Ahead * 30.f + FVector(0, 0, (Top ? *Top - Pos.Z : 45.f) + 12.f);
+				Body.SetHandRaise(GetMesh()->GetComponentTransform().InverseTransformPosition(Target), 1.f);
+			}
 			Body.SetBase(CoverBase, bCoverLoop);
 			Body.SetAim(0.f, 0.f);
 			const float ReloadSeconds = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);

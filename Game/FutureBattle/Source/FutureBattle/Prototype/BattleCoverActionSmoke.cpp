@@ -186,6 +186,13 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
  if(SmokeStage==10)
  {
   BodyShot(TEXT("blind-top"));
+  {
+   // The hands lift the rifle over the cover while the head stays below its top (display; posed by the anim tick above).
+   auto* Mesh=Actor(1)->GetMesh();const float* Top=BlindFireTop.Find(1);
+   const float Hand=Mesh->GetSocketLocation(TEXT("hand_r")).Z,Head=Mesh->GetSocketLocation(TEXT("head")).Z;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BLINDFIRE_TOP_POSE cover_top=%.0f hand_r=%.0f head=%.0f ground=%.0f"),Top?*Top:-1.f,Hand,Head,Mesh->GetComponentLocation().Z);
+   Check(Top && Hand>*Top && Head<*Top,TEXT("over-the-top blind fire holds the rifle above the cover and the head below it"));
+  }
   Store->Units.FindChecked(1).CoverPeek=SmokeSavedPeek;
   // The picture is taken at the end of this frame: the view goes back to the soldier on the next stage.
   SmokeStage=11;Later(.1);return;

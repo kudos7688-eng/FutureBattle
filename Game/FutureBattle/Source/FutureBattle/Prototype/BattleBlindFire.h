@@ -28,4 +28,7 @@ namespace BattleBlindFire
  // (degrees, right positive) that brings the hips to the over-top clip's own facing, so the rifle points over the cover:
  // measured hip yaw (BATTLE_BODY_CLIP 2026-11-20) of AS_CoverLo_AimU_down 64 minus that of the hidden clip.
  float OverTopYaw(const TCHAR* HiddenClip);
+ // Display: world Z of the top of the cover below an over-the-top origin (one line straight down, static geometry only);
+ // without a hit, 45 cm above the body's capsule centre (about the top of the 130 cm low walls).
+ float CoverTop(UWorld* World,const FVector& Origin,const FVector& Body);
 }
