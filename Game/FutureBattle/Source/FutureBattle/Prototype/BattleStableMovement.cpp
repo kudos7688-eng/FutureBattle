@@ -67,6 +67,21 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   for(const auto& Other:Plans) if(Other.Key!=SID)
    if(const auto* OS=Store->FindSquad(Other.Key); OS && OS->Team==S->Team && OS->Order!=EBattleOrder::Hold && OS->CommandStatus==EBattleCommandStatus::Active)
     for(const auto& G:Other.Value.ArrivalGoals) if(Store->Find(G.Key)->IsAlive()) Reserved.Add(G.Value);
+  // Sector missions (2026-11-20): a squad that already holds the sector (order Hold, so its arrival places are no longer
+  // reserved above) still stands in its cover slots. Without this, the next squad sent into the sector was given those same
+  // slots and its soldiers stood beside the occupied one for good (map I: 850 move stalls a match at one shed corner in G8
+  // with -BattleSectorRoute=1). Reserve where the team's other soldiers in the sector stand, and the places of holding squads.
+  // -BattleSectorSlotReserve=0 turns it off for comparison. Maps without sectors are unchanged.
+  static const bool SectorSlotReserve=[](){int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSlotReserve="),V);return V!=0;}();
+  if(Sector && SectorSlotReserve)
+   for(const auto& Other:Plans) if(Other.Key!=SID)
+    if(const auto* OS=Store->FindSquad(Other.Key); OS && OS->Team==S->Team)
+    {
+     for(int32 MID:OS->Members) if(const auto* M=Store->Find(MID); M && M->IsAlive())
+      if(const FVector At=Position(MID); BattleSectors::Cell(At)==Cell) Reserved.Add(At);
+     if(OS->Order==EBattleOrder::Hold)
+      for(const auto& G:Other.Value.ArrivalGoals) if(Store->Find(G.Key)->IsAlive() && BattleSectors::Cell(G.Value)==Cell) Reserved.Add(G.Value);
+    }
   const FVector Forward=P.Path.Num()>1?(P.Path.Last()-P.Path[P.Path.Num()-2]).GetSafeNormal2D():FVector::ForwardVector;
   const FVector Right(-Forward.Y,Forward.X,0);
   const bool Rally=S->TacticalPlan.bAutonomous &&
