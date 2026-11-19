@@ -137,13 +137,30 @@ bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
  const FTransform Grip(FRotationMatrix::MakeFromYZ(-Barrel,FVector::UpVector).ToQuat(),Palm);
  A->SetLook(Pose.Idle.Get(),Pose.Move.Get(),Pose.CrouchIdle.Get(),Pose.CrouchMove.Get(),Launcher?X.Launcher.Get():X.Rifle.Get(),TEXT("hand_r"),Grip.GetRelativeTransform(Hand));
  const FTransform Spine=ExoClipBone(Pose.Idle.Get(),TEXT("spine_05"));
- const FVector SlingAxis=FVector(.43,0,.90).GetSafeNormal();
- const FTransform Sling(FRotationMatrix::MakeFromYZ(-SlingAxis,FVector(0,-1,0)).ToQuat(),Spine.GetLocation()+FVector(0,-36,-7));
- Back->SetStaticMesh(Launcher?X.Rifle.Get():X.Launcher.Get());Back->SetRelativeTransform(Sling.GetRelativeTransform(Spine));
- if(Existing){Existing->bShowingLauncher=Launcher;return true;}
+ // The carried weapon lies diagonally across the upper back, centred on the plate (component space: +X is the suit's left, -Y its back).
+ // Launcher: muzzle up to the left shoulder, 50 degrees from upright, so its rear end stays above the hip. Rifle: stock up at the left
+ // shoulder, muzzle down to the right hip, clear of the launcher on the right shoulder. Prone (the squashed placeholder): flat across the back.
+ // The models' origin is the grip; their middle is 10 cm behind it (launcher) or 19 cm ahead of it (rifle).
+ auto Stow=[&](bool bProne)
+ {
+  const FVector Axis=(bProne?FVector(1,0,0):Launcher?FVector(-.55,0,-.83):FVector(.77,0,.64)).GetSafeNormal();
+  const float Middle=Launcher?19.f:-10.f;
+  const FVector At=Spine.GetLocation()+FVector(0,Launcher?-32.f:-36.f,bProne?0.f:Launcher?-15.f:-10.f)-Axis*Middle;
+  FTransform Sling=FTransform(FRotationMatrix::MakeFromYZ(-Axis,FVector(0,-1,0)).ToQuat(),At).GetRelativeTransform(Spine);
+  Sling.SetScale3D(FVector(1.2f));  // absolute scale: the prone squash of the body does not stretch the weapon
+  return Sling;
+ };
+ Back->SetUsingAbsoluteScale(true);Back->SetStaticMesh(Launcher?X.Rifle.Get():X.Launcher.Get());
+ const FTransform Upright=Stow(false),Flat=Stow(true);
+ if(Existing)
+ {
+  Existing->bShowingLauncher=Launcher;Existing->StowUpright=Upright;Existing->StowProne=Flat;
+  Back->SetRelativeTransform(Existing->bStowProne?Flat:Upright);return true;
+ }
+ Back->SetRelativeTransform(Upright);
  // The rig only marks the look as applied here (no plates hang on it); the shield bubble is the same as the placeholder's.
  auto* Rig=NewObject<USceneComponent>(A);Rig->SetupAttachment(Body);Rig->RegisterComponent();A->AddInstanceComponent(Rig);
- FExoLook Look;Look.Rig=Rig;Look.bSuit=true;Look.Stowed=Back;Look.bShowingLauncher=Launcher;
+ FExoLook Look;Look.Rig=Rig;Look.bSuit=true;Look.Stowed=Back;Look.bShowingLauncher=Launcher;Look.StowUpright=Upright;Look.StowProne=Flat;
  auto* Clear=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/EngineDebugMaterials/M_SimpleUnlitTranslucent.M_SimpleUnlitTranslucent"));
  Look.BubblePaint=Clear?UMaterialInstanceDynamic::Create(Clear,A):nullptr;
  auto* Bubble=NewObject<UStaticMeshComponent>(A);Bubble->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere")));
@@ -219,6 +236,8 @@ void UBattleLeaderRuntime::UpdateExoLooks()
    const float Squash=A->VisualStance==BattleStance::Crouch&&BattleStance::AnimEnabled()?1.f:BattleStance::VisualScale(A->VisualStance);
    const FVector Want(1.2f,1.2f,1.2f*Squash);
    if(A->GetMesh()&&!A->GetMesh()->GetRelativeScale3D().Equals(Want,.001f))A->GetMesh()->SetRelativeScale3D(Want);
+   // Prone: the carried weapon lies flat instead of standing up from the squashed body.
+   if(auto* Back=L.Stowed.Get();Back&&(Squash<.99f)!=L.bStowProne){L.bStowProne=Squash<.99f;Back->SetRelativeTransform(L.bStowProne?L.StowProne:L.StowUpright);}
   }
   else L.Rig->SetWorldRotation(FRotator(0,A->GetActorRotation().Yaw,0));
   // The placeholder stances squash the body; the rig (absolute scale) follows its height so the plates do not tower over a prone soldier.
