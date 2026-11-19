@@ -98,6 +98,8 @@ struct FBattleLeaderPlan
  int32 ArmourTargetID=INDEX_NONE;
  double NextThink=0, NextPath=0;
  bool bReplan=true;
+ // Trial -BattleSectorContact=1: the target is an enemy outside the sector the squad was sent to, picked because it shot at them.
+ bool bSectorContact=false;
  TArray<FVector> Path;
  FVector Center=FVector::ZeroVector;
  TMap<int32,FVector> ArrivalGoals;
@@ -125,6 +127,17 @@ public:
  void NoteUnderFire(int32 ID);
  bool UnderFire(int32 ID) const {const double* T=UnderFireUntil.Find(ID);return T&&*T>GetWorld()->GetTimeSeconds();}
  TMap<int32,double> UnderFireUntil;
+ // Trial -BattleSectorContact=1 (2026-11-19, default 0): a squad on a sector mission that is shot at (hit or near miss within
+ // the last 5 s) fights back against enemies outside the sector: members take cover or a safer firing place nearby (also
+ // outside the sector) and fight from it; members that find none keep going to the sector and fire on the way.
+ static bool SectorContactEnabled();
+ TMap<int32,double> SectorHitUntil;
+ // Fall guard (2026-11-19): a soldier body (an Actor) that drops 5 m below the ground (the open river channel of map H has no
+ // floor) is put back where it last stood on the ground and stops; without such a place it dies. Never happens on solid ground.
+ void GuardFalls(double Now);
+ TMap<int32,FVector> LastGround;
+ double NextFallCheck=0;
+ bool SquadShotAt(const struct FBattleSquadState& S,double Now) const;
  // Squad target search range for one member: the AI engagement distance, or its weapon reach while under fire (return fire).
  float TargetRange(int32 ID) const;
  bool bMixedFastMatch=false;

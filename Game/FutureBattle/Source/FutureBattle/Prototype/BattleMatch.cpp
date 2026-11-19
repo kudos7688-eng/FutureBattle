@@ -428,7 +428,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   if(bStrategy&&!Purpose&&!Groups.IsEmpty())GroupOrder(Pair.Key,Team,Center,Order);
   // Routes: a distant goal is reached junction by junction along the roads of the map (BattleRoutes.cpp). Not for scout pairs
   // (their posts and fall-backs are their own) or the home defence.
-  bool bRoadWaypoint=false;
+  bool bRoadWaypoint=false,bSectorStage=false;
   if(bRoutes&&!bScout&&!bHomeDefence)
    if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
    {
@@ -436,7 +436,17 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     // The player's route choice for the squad comes before the AI's own (empty map in matches without a player's choice).
     const bool bChosen=!PlayerRoutes.IsEmpty()&&PlayerRouteLane(Pair.Key)!=0;
     const FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies);
-    if(!Step.Equals(Center,1)){bRoadWaypoint=true;Center=Step;if(Order==EBattleOrder::Defend)Order=EBattleOrder::AttackMove;}
+    // -BattleSectorFlank: the last leg (no junction left) may also stop in a sector beside the enemy's front first.
+    if(!Step.Equals(Center,1) || (SectorFlankOn()&&SectorRouteOn()))
+    {
+     // Trial -BattleSectorRoute=1 (BattleSectorRoute.cpp): infantry on a map with sectors stops in a sector beside the junction
+     // (a sector mission) instead of walking to the junction itself.
+     FVector Stage;
+     static const bool bSectorAI=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
+     if(SectorRouteOn()&&bSectorAI&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&!Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&SectorStage(Pair.Value,P,Step,Center,RouteEnemies,Stage))
+     {Center=Stage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
+     else if(!Step.Equals(Center,1)){bRoadWaypoint=true;Center=Step;if(Order==EBattleOrder::Defend)Order=EBattleOrder::AttackMove;}
+    }
    }
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())
   {
@@ -444,7 +454,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
    if(S.CommandStatus!=EBattleCommandStatus::Active) continue;
    // A tank keeps the goal it was given even when it drives only to the end of a partial route (SameVehicleMission).
    static const bool EnableSectorAI=[](){int32 V=0; FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
-   const bool Sector=EnableSectorAI && !bRoadWaypoint && BattleFieldLayout::Of(GetWorld()).bSectors && !BaseAssault && !Purpose && !Leader->IsVehicle(S.LeaderUnitID)
+   const bool Sector=EnableSectorAI && !bRoadWaypoint && BattleFieldLayout::Of(GetWorld()).bSectors && (bSectorStage || !BaseAssault) && !Purpose && !Leader->IsVehicle(S.LeaderUnitID)
       && (Order==EBattleOrder::AttackMove || Order==EBattleOrder::Defend) && BattleSectors::Valid(BattleSectors::Cell(Center));
    if(Sector)Center=BattleSectors::Center(BattleSectors::Cell(Center));
    if(!S.bHasMission || S.bSectorMission!=Sector || S.MissionOrder!=Order || !(Sector?BattleSectors::Cell(S.MissionDestination)==BattleSectors::Cell(Center):S.MissionDestination.Equals(Center,20))) if(!Leader->SameVehicleMission(Pair.Key,Order,Center)) Leader->IssueOrder(Pair.Key,Order,Center,true,Sector);
