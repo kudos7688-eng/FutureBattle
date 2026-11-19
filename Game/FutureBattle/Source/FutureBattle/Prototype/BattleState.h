@@ -22,6 +22,7 @@ namespace BattleSquadType
 {
  enum : uint8 { Rifle=0, Heavy=1, Scout=2, AntiTank=3, Tank=4, ArmoredCar=5, Mortar=6, SPGun=7, Exo=8, Supply=9, Count=10 };
  int32 Members(uint8 Type);
+ int32 RifleMembers(); // rifle squad size (10; trial -BattleRifleMembers=)
  float HealthScale(uint8 Type);
  float SpeedScale(uint8 Type);
  float DamageScale(uint8 Type);

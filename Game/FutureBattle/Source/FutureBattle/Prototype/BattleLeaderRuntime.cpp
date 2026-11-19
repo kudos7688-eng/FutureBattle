@@ -141,7 +141,7 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   const FVector RowSign(1.,bArea&&Side&&BattleTactics::SymmetricStart()?-1.:1.,1.);
   const FVector Center=RowSign*(bMixedFastMatch?FVector((Team?1:-1)*(BattleFieldLayout::HomeDistance(GetWorld())-(BattleFieldLayout::IsSightField(GetWorld())?1000:500)),0,100):BattleFieldLayout::IsSightField(GetWorld())?BattleFieldLayout::WideSpawnFor(GetWorld(),Side,Group):bWideField?FVector((Team?1:-1)*(9000+(Group%5)*400),(Group/5-2)*2800,100):Phase3->bEnabled?Phase3->SpawnCenter(Team,Group):FVector(Team ? 1800:-1800, (Group-(Count/20-1)*.5)*800, 95));
   ABattleUnit* Leader=nullptr;
-  for(int32 Slot=0;Slot<10;++Slot)
+  for(int32 Slot=0;Slot<BattleSquadType::RifleMembers();++Slot)
   {
    const int32 ID=Store->RegisterUnit(Team,Phase3->bStable?10000.f:0.f,WeaponForSlot(Slot)); IDs.Add(ID);
    const FVector P=Center+FVector((Slot/5)*-130*(Side?-1:1),(Slot%5-2)*110*(BattleFieldLayout::IsSightField(GetWorld()) && Side?-1:1),0);
@@ -203,7 +203,7 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
    if(auto* NavSystem=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
     if(auto* Recast=Cast<ARecastNavMesh>(NavSystem->GetDefaultNavDataInstance()))
     {Recast->DefaultMaxSearchNodes=32768.f;const_cast<FNavigationQueryFilter&>(*Recast->GetDefaultQueryFilter()).SetMaxSearchNodes(32768);}
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WIDE_MIXED_READY squads=50 actors=50 mass=450 objectives=%d paused=1"),Match->Objectives.Num());
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WIDE_MIXED_READY squads=50 actors=50 mass=%d objectives=%d paused=1"),50*(BattleSquadType::RifleMembers()-1),Match->Objectives.Num());
   if(FParse::Param(FCommandLine::Get(),TEXT("BattleSectorSmoke")))
   {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSectorSmoke,6.f,false);}
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleCoverActionSmoke")))

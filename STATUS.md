@@ -18,6 +18,16 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-19 19時05分 Claude（小隊の人数）：小銃小隊の人数の試験切替 `-BattleRifleMembers=`（既定10）
+
+- **依頼**：1小隊10人は多いので減らす案。ユーザーの依頼で8人を試験切替として実装する。戦力評価が目的の変更ではないので、片側試験はしない（ユーザー指示）。
+- **作業場所**：ワークツリー `FutureBattle-rifle8`（ブランチ `rifle8`、main e12ee29 から）。main の作業ツリーでは別セッションが同じファイルを編集中だったため分けた。main へは未取り込み。
+- **変更**：`BattleSquadType::RifleMembers()`（`-BattleRifleMembers=`、2〜10、既定10）を追加し、小銃小隊の人数をここから取る。開始時の小隊（`UBattleLeaderRuntime` の編成のループ）、購入（`BattleSquadType::Members` 経由）、保存の検査（Wide・MixedFast の人数）、画面上部の「得点 %+d」と人数の表示、`BATTLE_WIDE_MIXED_READY` の mass 数を人数に合わせた。小隊の数は変えない（各軍25隊）ので、8人なら開始時は1軍200人（全体400人）。武器は従来どおり枠4・9が支援火器なので、8人では支援火器1丁。**費用（AreaSquadCost=15）は変えていない**。`Test-WideSight.ps1` に `-RifleMembers` を追加した。
+- **検証**：Build 成功。既定（10人）で `Test-Battle` `BATTLE_SMOKE_RESULT failures=0`、`Test-Area` failures=0、`Test-MixedSave` failures=0。8人と10人でマップA・E（seed7、保存往復あり、`-CoverActions 1 -FlankCoordination 1`、60FPS、描画なし）を各1試合：4試合とも完走して `passed=true`。8人では開始時の部下が `mass=350`（10人は450）、75秒目の購入の後の80秒目の保存往復も `SAVE_SOAK_RESULT failures=0`。出力は `Setup/Benchmarks/SightTrial-20261111/rifle8-{A,E}-n{8,10}-s7`。
+- **参考（1seedずつで、評価ではない）**：得点（西/東）はマップA 8人 492/172、10人 319/109。マップE 8人 505/586、10人 594/646。
+- **制限**：`Test-Area` のエリア回帰は10人・500人を前提にした検査が多く、8人では回していない（8人の確認は上の実戦と保存往復）。補給に戻る人数の基準などの絶対値（例：残り5人で補給）は人数に比例させていない（`BattleSquadRetreat` の ReturnLiving だけは10人未満で比例）。画面での確認は未実施。
+- **次の一手（ユーザー判断）**：8人を既定にするか。既定にするなら、費用（例：15→12）、本拠地の耐久、補給の基準などを人数に合わせるかを決める。
+
 ## 2026-11-19 17時55分 Claude（マップ）：Codex の区画命令・区画AI（939e066）の検証
 - **依頼**：ユーザー「codexの区画命令区画AIについて検証してください」。対象は 939e066（マップH、区画の制圧・維持、`-BattleSectorAI`）。コードを読み、main でビルドして試験した。**Codex のコードは直していない**。足したのは検証用の `BattleSectorAudit.cpp`（`-BattleSectorAudit`）、その入口（`BattleTerrainTest.cpp` の1行）、`Test-WideSight.ps1` の引数 `-SectorAudit`・`-SectorAI 0|1`（従来は H で常に1）。
 - **合格したこと**
