@@ -22,6 +22,9 @@ private:
  // Hit direction (2026-11-19, display only): while the player controls a soldier, a red arc around the crosshair points to
  // where each recent hit came from (1.5 s fade; a faint ring when the source is unknown). -BattleHitDirection=0 hides it.
  void DrawHitDirection(class ABattleController* PC);
+ // Off-screen markers (2026-11-20, display only): in direct control the objectives and the soldier's own
+ // order goal, in the tactical view the selected squads, that are off the screen get an arrow on the screen edge. -BattleOffscreenMarkers=0 hides them.
+ void DrawOffscreenMarkers(class ABattleController* PC);
 	double NextLabelCheck = 0;
 	TSet<int32> ClearLabels;
 	TWeakObjectPtr<APawn> LabelViewPawn;

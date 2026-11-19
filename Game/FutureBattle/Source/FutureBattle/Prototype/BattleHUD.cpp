@@ -407,6 +407,7 @@ void ABattleHUD::DrawHUD()
 		}
 	}
 	DrawHitDirection(PC);
+	DrawOffscreenMarkers(PC);
 	if (PC->NoticeUntil > GetWorld()->GetTimeSeconds()) Label(BattleUIText::Ja(PC->Notice), 35, PC->CanShowDelegation() ? H - 156 : Match->IsEnabled() ? 235 : 96, Mint, 1.1f);
 	if (PC->IsTactical() && PC->PendingOrder != EBattleOrder::Move)
 		Label(FString::Printf(TEXT("%s：右クリックで目的地 ／ Hで取消"), *BattleUIText::Ja(BattleOrderName(PC->PendingOrder))), 35, 148, FLinearColor::Yellow);
@@ -676,5 +677,72 @@ void ABattleHUD::DrawHitDirection(ABattleController* PC)
   const FVector2D Tip(Cx+FMath::Sin(Angle)*(R+18.f),Cy-FMath::Cos(Angle)*(R+18.f));
   for(const float Side:{-1.f,1.f})
   {const float A=Angle+Side*FMath::DegreesToRadians(7.f);DrawLine(Cx+FMath::Sin(A)*(R+3.f),Cy-FMath::Cos(A)*(R+3.f),Tip.X,Tip.Y,Red,3.f);}
+ }
+}
+
+void ABattleHUD::DrawOffscreenMarkers(ABattleController* PC)
+{
+ static const bool bOn=[]{int32 Mode=1;FParse::Value(FCommandLine::Get(),TEXT("BattleOffscreenMarkers="),Mode);return Mode!=0;}();
+ if(!bOn||!Canvas||!PC->PlayerCameraManager)return;
+ auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ const float W=Canvas->SizeX,H=Canvas->SizeY;
+ // The free part of the screen: the top bar and the bottom help lines are kept clear (same bounds as the on-screen labels).
+ const float Left=40.f,Right=W-40.f,Top=110.f,Bottom=H-140.f;const FVector2D Center(W*.5f,(Top+Bottom)*.5f);
+ const FVector CamLoc=PC->PlayerCameraManager->GetCameraLocation();const FRotator CamRot=PC->PlayerCameraManager->GetCameraRotation();
+ const ABattleUnit* Unit=PC->IsTactical()?nullptr:Cast<ABattleUnit>(PC->GetPawn());
+ const FLinearColor Mint(.28f,.95f,.8f),Enemy(1,.35f,.25f),Muted(.62f,.7f,.77f),White(.94f,.97f,1.f),Ink(.025f,.04f,.065f,.8f);
+ auto Marker=[&](const FVector& World,const FString& Text,FLinearColor Color)
+ {
+  const FVector Local=CamRot.UnrotateVector(World-CamLoc); // X forward, Y right, Z up
+  FVector2D Dir;FVector2D P;
+  if(Local.X>1.f&&PC->ProjectWorldLocationToScreen(World,P))
+  {
+   if(P.X>=Left&&P.X<=Right&&P.Y>=Top&&P.Y<=Bottom)return; // on the screen: the normal labels show it
+   Dir=P-Center;
+  }
+  else Dir=FVector2D(Local.Y,-Local.Z); // behind the camera: never use the mirrored projection
+  if(Dir.IsNearlyZero())Dir=FVector2D(0,1);
+  Dir.Normalize();
+  // Where the ray from the centre leaves the free rectangle.
+  const float Tx=Dir.X>0?(Right-Center.X)/Dir.X:Dir.X<0?(Left-Center.X)/Dir.X:BIG_NUMBER;
+  const float Ty=Dir.Y>0?(Bottom-Center.Y)/Dir.Y:Dir.Y<0?(Top-Center.Y)/Dir.Y:BIG_NUMBER;
+  const FVector2D Edge=Center+Dir*FMath::Min(Tx,Ty);
+  const FVector2D Side(-Dir.Y,Dir.X),Tip=Edge+Dir*10.f,Back=Edge-Dir*8.f;
+  DrawLine(Tip.X,Tip.Y,Back.X+Side.X*9.f,Back.Y+Side.Y*9.f,Color,3.f);
+  DrawLine(Tip.X,Tip.Y,Back.X-Side.X*9.f,Back.Y-Side.Y*9.f,Color,3.f);
+  DrawLine(Back.X+Side.X*9.f,Back.Y+Side.Y*9.f,Back.X-Side.X*9.f,Back.Y-Side.Y*9.f,Color,2.f);
+  // Label inside the arrow, pulled toward the centre so it stays on the screen.
+  const FString Full=Unit?FString::Printf(TEXT("%s %.0fm"),*Text,FVector::Dist2D(World,Unit->GetActorLocation())/100.f):Text;
+  float TW=0,TH=0;GetTextSize(Full,TW,TH,GEngine->GetSmallFont(),.85f);
+  const FVector2D L=Back-Dir*(16.f+FMath::Abs(Dir.X)*TW*.5f+FMath::Abs(Dir.Y)*TH*.5f)-FVector2D(TW*.5f,TH*.5f);
+  DrawRect(Ink,L.X-3,L.Y-1,TW+6,TH+2);DrawText(Full,Color,L.X,L.Y,GEngine->GetSmallFont(),.85f);
+ };
+ // Objectives only in direct control: the tactical view has the minimap and a free camera.
+ if(Match&&Unit)for(int32 Index=0;Index<Match->Objectives.Num();++Index)
+ {
+  const int32 Holder=Match->bArea?Match->ObservedOwner(0,Index):Match->Objectives[Index].Owner;
+  const FLinearColor Color=Holder==0?Mint:Holder==1?Enemy:Holder==-2?Muted:White;
+  Marker(Match->Objectives[Index].Position+FVector(0,0,45),FString::Printf(TEXT("%c"),'A'+Index),Color);
+ }
+ if(Unit)
+ {
+  // Direct control: where the soldier's own squad has been ordered to go.
+  const auto* U=Unit->GetState();const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
+  if(S&&S->CommandStatus==EBattleCommandStatus::Active)
+  {
+   const EBattleOrder Order=S->bHasMission?S->MissionOrder:S->Order;
+   if(Order!=EBattleOrder::Hold)Marker((S->bHasMission?S->MissionDestination:S->Destination)+FVector(0,0,25),TEXT("目標"),FLinearColor::Yellow);
+  }
+ }
+ else
+ {
+  // Tactical view: the selected squads (one marker per squad, at its leader).
+  TSet<int32> Done;
+  for(const auto& Selected:PC->GetSelection())
+  {
+   if(!Selected||!Selected->GetState()||!Selected->IsAlive())continue;const int32 SID=Selected->GetState()->SquadID;
+   if(SID==INDEX_NONE||Done.Contains(SID))continue;Done.Add(SID);
+   const auto* S=Store->FindSquad(SID);Marker(Selected->GetActorLocation()+FVector(0,0,120),S?S->DisplayName:FString(TEXT("選択中")),Mint);
+  }
  }
 }
