@@ -56,6 +56,7 @@ const BattleTactics::FAreaHireTuning& BattleTactics::AreaHire()
   H.bEnabled=Enabled!=0;H.Cost=FMath::Clamp(T->AreaSquadCost,1,100);H.Reserve=T->AreaHireReserve;H.Interval=T->AreaHireIntervalSeconds;H.Stop=T->AreaHireStopSeconds;
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHireReserve="),H.Reserve);FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHireInterval="),H.Interval);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHireStop="),H.Stop);
+  H.MaxActive=T->AreaMaxActiveSquads;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaMaxSquads="),H.MaxActive);H.MaxActive=FMath::Clamp(H.MaxActive,1,100);
   int32 Purpose=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHirePurpose="),Purpose);H.bPurpose=Purpose!=0;
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaHirePurposeFront="),H.PurposeFront);H.PurposeFront=FMath::Clamp(H.PurposeFront,1,100);
   H.Reserve=FMath::Clamp(H.Reserve,0,1000);H.Interval=FMath::IsFinite(H.Interval)?FMath::Clamp(H.Interval,0.f,600.f):0.f;H.Stop=FMath::IsFinite(H.Stop)?FMath::Clamp(H.Stop,0.f,600.f):0.f;

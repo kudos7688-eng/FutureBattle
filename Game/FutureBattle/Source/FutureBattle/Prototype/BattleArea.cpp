@@ -98,7 +98,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(!bArea||!H.bEnabled)return Fail(TEXT("Area battle: new squads disabled"));
  if(Team<0||Team>1||Phase!=EBattleMatchPhase::Combat)return Fail(TEXT("Recruitment unavailable"));
  if(Training!=EBattleTraining::Regular)return Fail(TEXT("Area battle: regular squads only [2]"));
- if(ActiveSquads(Team)>=25)return Fail(TEXT("No free squad slot (25 active squads)"));
+ if(ActiveSquads(Team)>=BattleTactics::AreaHire().MaxActive)return Fail(TEXT("No free squad slot (active squad limit)"));
  // Squad type: rifle squad (AreaSquadCost) or heavy infantry (AreaHeavyCost).
  if(SquadType>=BattleSquadType::Count)return Fail(TEXT("Recruitment unavailable"));
  const int32 Cost=SquadType==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(SquadType);
@@ -174,7 +174,7 @@ void UBattleMatch::UpdateAreaHiring()
   // Composition trial: an expensive type the team is far from affording (below 60% of its cost) does not hold up the plain purchases.
   if(bComposition&&Type!=PlainType&&BattleSquadType::AreaCost(Type)>=20&&Credits[Team]-Pending<FMath::CeilToInt(BattleSquadType::AreaCost(Type)*.6f)+HireIntent.HireReserve)Type=PlainType;
   const int32 TypeCost=Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
-  if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=25)continue;
+  if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=BattleTactics::AreaHire().MaxActive)continue;
   // Pacing (own clock and own purchase history only): spacing between purchases and no purchases near the time limit,
   // where a squad costs score (15 resources for 10 living) and has little time to take a point.
   if(H.Stop>0&&Elapsed>=MatchTimeLimit()-H.Stop)continue;

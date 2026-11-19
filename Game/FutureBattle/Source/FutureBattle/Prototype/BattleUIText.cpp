@@ -56,7 +56,7 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("Supply team limit reached"),TEXT("補給班は1軍2班まで"));
   M.Add(TEXT("Match restored"),TEXT("試合を読み込みました"));M.Add(TEXT("Match saved [F9 to load]"),TEXT("試合を保存しました [F9で読込]"));
   M.Add(TEXT("Mixed recruitment unavailable"),TEXT("購入できません"));M.Add(TEXT("Navigation unavailable"),TEXT("経路がありません"));
-  M.Add(TEXT("No compatible save found"),TEXT("使える保存データがありません"));M.Add(TEXT("No free squad slot (25 active squads)"),TEXT("部隊の空きがありません（稼働25部隊）"));
+  M.Add(TEXT("No compatible save found"),TEXT("使える保存データがありません"));M.Add(TEXT("No free squad slot (active squad limit)"),TEXT("部隊の空きがありません（稼働部隊の上限）"));
   M.Add(TEXT("No reliable known enemy position / scout or receive a report"),TEXT("確かな敵の位置がありません ／ 偵察するか報告を待ってください"));
   M.Add(TEXT("Recruitment unavailable"),TEXT("今は購入できません"));M.Add(TEXT("Representation staging failed; purchase retained"),TEXT("表示の準備に失敗（購入は有効）"));
   M.Add(TEXT("Restore failed; current battle retained"),TEXT("読込に失敗（今の試合を続けます）"));

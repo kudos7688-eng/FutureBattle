@@ -1,5 +1,6 @@
 #include "BattleSave.h"
 #include "BattleFieldLayout.h"
+#include "BattleTactics.h"
 namespace {
 bool Finite(double V,double Low,double High){return FMath::IsFinite(V)&&V>=Low&&V<=High;}
 bool ValidPoint(FVector P,FVector2D Limit){return !P.ContainsNaN()&&FMath::Abs(P.X)<=Limit.X&&FMath::Abs(P.Y)<=Limit.Y&&Finite(P.Z,-1000,10000);}
@@ -25,14 +26,14 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   int32 Retired[2]={0,0};for(const auto& U:Units)if(U.State.bRetired)
   {const auto* S=BySquad.FindRef(U.State.SquadID);if(!S||S->Team!=U.State.Team)return Fail(TEXT("Invalid retired squad reference"));++Retired[U.State.Team];}
   // New-squad hiring (2026-11-14): each team starts with 25 squads; every extra squad is a purchase of 10 fresh soldiers,
-  // at most 25 active per team, and resources spent on hires join the conservation law. Pre-hiring saves have none.
+  // at most BattleTactics::AreaHire().MaxActive (default 25) active per team, and resources spent on hires join the conservation law. Pre-hiring saves have none.
   int32 TeamSquads[2]={0,0},TeamActive[2]={0,0};
   for(const auto& S:Squads){if(S.Team<0||S.Team>1)return Fail(TEXT("Invalid squad team"));++TeamSquads[S.Team];TeamActive[S.Team]+=S.CommandStatus==EBattleCommandStatus::Active;}
   if(Area.HireSpent.Num()!=2)return Fail(TEXT("Invalid area hire record"));
   for(int32 Team=0;Team<2;++Team)
   {
    const int32 Hires=TeamSquads[Team]-25;
-   if(Hires<0||TeamActive[Team]>25||Area.HireSpent[Team]<Hires||Area.HireSpent[Team]>100100||(Hires==0)!=(Area.HireSpent[Team]==0))return Fail(TEXT("Invalid area squad hiring"));
+   if(Hires<0||TeamActive[Team]>BattleTactics::AreaHire().MaxActive||Area.HireSpent[Team]<Hires||Area.HireSpent[Team]>100100||(Hires==0)!=(Area.HireSpent[Team]==0))return Fail(TEXT("Invalid area squad hiring"));
   }
   // Income (2026-11-14) adds to the starting 100. Pre-income saves have Income {0,0} and IncomeClock 0.
   if(Area.Income.Num()!=2||Area.Income[0]<0||Area.Income[1]<0||Area.Income[0]>100000||Area.Income[1]>100000||!Finite(Area.IncomeClock,0,600))return Fail(TEXT("Invalid area income record"));

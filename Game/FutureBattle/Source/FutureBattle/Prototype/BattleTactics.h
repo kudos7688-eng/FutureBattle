@@ -50,12 +50,13 @@ namespace BattleTactics
  struct FSupplyTuning { int32 ReturnLiving=8, ResumeLiving=10; float AwayRatio=1.f, HealPerSecond=0.f, ResumeHealthRatio=0.f; bool bPointAmmo=false; float PointRadius=2500.f; };
  const FSupplyTuning& Supply();
  // Area new-squad hiring: UBattleTuning::bAreaHire/AreaSquadCost/AreaHireReserve; -BattleAreaHire=0/1 overrides.
+ // MaxActive = UBattleTuning::AreaMaxActiveSquads (default 25), -BattleAreaMaxSquads=N (1..100) overrides; the save check uses it.
  // AI pacing: Interval between a team's AI purchases and Stop = no AI purchase in the last N seconds
  // (-BattleAreaHireReserve= / -BattleAreaHireInterval= / -BattleAreaHireStop= override; not part of the save check).
  // P1 trial -BattleAreaHirePurpose=1 (default OFF; -BattleAreaHirePurposeFront=N, default 10): the AI buys only for an observed need
  // (own home hit in the last 30 s or enemies seen within 150 m of it, a point with fewer than N own soldiers within 100 m, or the
  // enemy home seen at or below 500 HP) and gives the new squad that mission; otherwise it keeps its resources.
- struct FAreaHireTuning { bool bEnabled=true; int32 Cost=15, Reserve=10; float Interval=0.f, Stop=0.f; bool bPurpose=false; int32 PurposeFront=10; };
+ struct FAreaHireTuning { bool bEnabled=true; int32 Cost=15, Reserve=10, MaxActive=25; float Interval=0.f, Stop=0.f; bool bPurpose=false; int32 PurposeFront=10; };
  const FAreaHireTuning& AreaHire();
  // Area income: UBattleTuning::bAreaIncome/AreaIncomeSeconds/AreaBaseIncome/AreaPointIncome; -BattleAreaIncome=0/1 overrides.
  // Trials (not part of the save check): -BattleAreaIncomeBase= / -BattleAreaIncomePerPoint= override the amounts; -BattleAreaIncomeRamp=r
