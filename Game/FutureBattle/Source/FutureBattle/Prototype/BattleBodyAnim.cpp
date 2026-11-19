@@ -209,10 +209,10 @@ void FBattleBodyAnimProxy::RaiseHands(FCompactPose& Pose) const
  TArray<FBoneTransform,TInlineAllocator<6>> Solved;
  for(const auto& Side:Arm)
  {
-  FTransform Upper=CS.GetComponentSpaceTransform(Side[0]),Lower=CS.GetComponentSpaceTransform(Side[1]),Hand=CS.GetComponentSpaceTransform(Side[2]);
+  FTransform ArmUpper=CS.GetComponentSpaceTransform(Side[0]),ArmLower=CS.GetComponentSpaceTransform(Side[1]),ArmHand=CS.GetComponentSpaceTransform(Side[2]);
   // The elbow bends the way it already does (its current position is the pole); no stretching.
-  AnimationCore::SolveTwoBoneIK(Upper,Lower,Hand,Lower.GetLocation(),Hand.GetLocation()+Offset,false,1.,1.);
-  Solved.Add(FBoneTransform(Side[0],Upper));Solved.Add(FBoneTransform(Side[1],Lower));Solved.Add(FBoneTransform(Side[2],Hand));
+  AnimationCore::SolveTwoBoneIK(ArmUpper,ArmLower,ArmHand,ArmLower.GetLocation(),ArmHand.GetLocation()+Offset,false,1.,1.);
+  Solved.Add(FBoneTransform(Side[0],ArmUpper));Solved.Add(FBoneTransform(Side[1],ArmLower));Solved.Add(FBoneTransform(Side[2],ArmHand));
  }
  Solved.Sort([](const FBoneTransform& A,const FBoneTransform& B){return A.BoneIndex<B.BoneIndex;});
  CS.SafeSetCSBoneTransforms(Solved);
