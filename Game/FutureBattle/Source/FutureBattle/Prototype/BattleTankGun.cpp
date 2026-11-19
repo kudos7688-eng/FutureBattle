@@ -99,7 +99,7 @@ bool UBattleLeaderRuntime::TankGunHit(int32 ID,int32 Victim)
  const auto* T=GetDefault<UBattleTuning>();const int32 Team=U->Team;
  const float BeforeHP=Before->HP;const auto* VS=Store->FindSquad(Before->SquadID);const uint8 VictimType=VS?VS->SquadType:0;const int32 VictimTeam=Before->Team;
  const bool Vehicle=IsVehicle(Victim);
- if(!Store->ApplyDamageFrom(Victim,Team,T->TankGunDamage,Position(ID)))return false;
+ if(!Store->ApplyDamageFrom(Victim,Team,T->TankGunDamage,Position(ID),ID,EBattleKillKind::TankGun))return false;
  ++TankGunHits;TankGunVehicleHits+=Vehicle;const bool Killed=!Store->Find(Victim)->IsAlive();TankGunKills+=Killed;
  if(SightExperiment.Started)
  {

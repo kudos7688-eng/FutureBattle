@@ -446,17 +446,30 @@ bool UBattleState::ApplyDamage(int32 ID, int32 AttackingTeam, float Damage)
    for (int32 Member : Squad->Members) if (const auto* U = Find(Member); U && U->IsAlive()) bSurvivor = true;
    if (!bSurvivor) CancelSquadTacticalPlan(Squad->SquadID, TEXT("NO LIVING MEMBERS"));
   }
+		NoteKill(ID);
 		if (State->bLeaderManaged) { State->DeathCause = TEXT("Combat"); OnUnitDied.Broadcast(ID); }
 	}
 	NoteHit(ID);
 	return true;
 }
 
-bool UBattleState::ApplyDamageFrom(int32 ID, int32 AttackingTeam, float Damage, const FVector& From)
+bool UBattleState::ApplyDamageFrom(int32 ID, int32 AttackingTeam, float Damage, const FVector& From, int32 KillerID, EBattleKillKind Kind)
 {
- PendingHitFrom=From;bPendingHitFrom=!From.ContainsNaN();
+ PendingHitFrom=From;bPendingHitFrom=!From.ContainsNaN();PendingKiller=KillerID;PendingKind=Kind;
  const bool bHit=ApplyDamage(ID,AttackingTeam,Damage);
- bPendingHitFrom=false;return bHit;
+ bPendingHitFrom=false;PendingKiller=INDEX_NONE;PendingKind=EBattleKillKind::Unknown;return bHit;
+}
+
+void UBattleState::NoteKill(int32 ID)
+{
+ const auto* V=Find(ID);const auto* K=Find(PendingKiller);
+ if(!V||!K||(V->Team!=0&&K->Team!=0))return;
+ if(KillNotices.Num()>=8)KillNotices.RemoveAt(0);
+ FBattleKillNotice N;N.Time=GetWorld()->GetTimeSeconds();N.KillerID=K->UnitID;N.VictimID=ID;N.KillerTeam=K->Team;N.VictimTeam=V->Team;
+ N.Kind=PendingKind;N.KillerWeapon=K->Weapon;
+ if(const auto* S=FindSquad(K->SquadID)){N.KillerSquad=S->DisplayName;N.bKillerVehicle=BattleSquadType::IsVehicle(S->SquadType);}
+ if(const auto* S=FindSquad(V->SquadID)){N.VictimSquad=S->DisplayName;N.bVictimLeader=S->LeaderUnitID==ID;N.bVictimVehicle=BattleSquadType::IsVehicle(S->SquadType);}
+ KillNotices.Add(N);
 }
 
 void UBattleState::NoteHit(int32 ID)

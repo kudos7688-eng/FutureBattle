@@ -684,6 +684,21 @@ public:
 	UPROPERTY(Config, EditAnywhere) int32 PerceptionSlices = 4;
 };
 
+// What killed a unit, for the HUD's kill log (display only).
+enum class EBattleKillKind : uint8 { Unknown, Shot, Blast, Artillery, TankGun, Launcher };
+
+// A death that involves the player's team (team 0) with a known killer (display only: the HUD's kill log; not saved).
+// Names are copied when it happens, so the entry stays readable after the squad is gone.
+struct FBattleKillNotice
+{
+	double Time = 0.;
+	int32 KillerID = INDEX_NONE, VictimID = INDEX_NONE, KillerTeam = 0, VictimTeam = 0;
+	EBattleKillKind Kind = EBattleKillKind::Unknown;
+	EBattleWeapon KillerWeapon = EBattleWeapon::Carbine;
+	FString KillerSquad, VictimSquad;
+	bool bVictimLeader = false, bVictimVehicle = false, bKillerVehicle = false;
+};
+
 // A hit on the unit the player controls (display only: the HUD's hit direction; rules never read it, not saved).
 struct FBattleHitNotice
 {
@@ -742,11 +757,14 @@ public:
 	bool HasShields() const { return bShields; }
 	bool ApplyDamage(int32 ID, int32 AttackingTeam, float Damage);
 	// ApplyDamage plus where the shot or blast came from, for the HUD's hit direction (display only, same result as ApplyDamage).
-	bool ApplyDamageFrom(int32 ID, int32 AttackingTeam, float Damage, const FVector& From);
+	// KillerID and Kind (optional) feed the kill log when the hit kills.
+	bool ApplyDamageFrom(int32 ID, int32 AttackingTeam, float Damage, const FVector& From, int32 KillerID = INDEX_NONE, EBattleKillKind Kind = EBattleKillKind::Unknown);
 	// Hit direction (2026-11-19, display only): the HUD sets HitWatchID to the unit the player controls every frame; hits on
 	// that unit are kept here (newest last, at most 6). Hits through ApplyDamage alone have no known source.
 	int32 HitWatchID = INDEX_NONE;
 	TArray<FBattleHitNotice> HitNotices;
+	// Kill log (2026-11-20, display only): deaths with a known killer where either side is team 0, newest last, at most 8.
+	TArray<FBattleKillNotice> KillNotices;
 	int32 AddReserve(int32 ID, int32 Rounds);
 	// Moves reserve rounds between two living soldiers with the same kind of weapon; returns the rounds moved.
 	int32 MoveReserve(int32 FromID, int32 ToID, int32 Rounds);
@@ -761,5 +779,7 @@ private:
 	bool bShields = false; // a squad type with a shield exists (purchase or restore)
 	int32 NextID = 1;
 	FVector PendingHitFrom = FVector::ZeroVector; bool bPendingHitFrom = false; // set only inside ApplyDamageFrom
+	int32 PendingKiller = INDEX_NONE; EBattleKillKind PendingKind = EBattleKillKind::Unknown;
 	void NoteHit(int32 ID);
+	void NoteKill(int32 ID);
 };

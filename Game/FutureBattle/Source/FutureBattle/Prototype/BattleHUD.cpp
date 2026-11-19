@@ -408,6 +408,7 @@ void ABattleHUD::DrawHUD()
 	}
 	DrawHitDirection(PC);
 	DrawOffscreenMarkers(PC);
+	DrawKillLog(PC);
 	if (PC->NoticeUntil > GetWorld()->GetTimeSeconds()) Label(BattleUIText::Ja(PC->Notice), 35, PC->CanShowDelegation() ? H - 156 : Match->IsEnabled() ? 235 : 96, Mint, 1.1f);
 	if (PC->IsTactical() && PC->PendingOrder != EBattleOrder::Move)
 		Label(FString::Printf(TEXT("%s：右クリックで目的地 ／ Hで取消"), *BattleUIText::Ja(BattleOrderName(PC->PendingOrder))), 35, 148, FLinearColor::Yellow);
@@ -744,5 +745,51 @@ void ABattleHUD::DrawOffscreenMarkers(ABattleController* PC)
    if(SID==INDEX_NONE||Done.Contains(SID))continue;Done.Add(SID);
    const auto* S=Store->FindSquad(SID);Marker(Selected->GetActorLocation()+FVector(0,0,120),S?S->DisplayName:FString(TEXT("選択中")),Mint);
   }
+ }
+}
+
+void ABattleHUD::DrawKillLog(ABattleController* PC)
+{
+ static const bool bOn=[]{int32 Mode=1;FParse::Value(FCommandLine::Get(),TEXT("BattleKillLog="),Mode);return Mode!=0;}();
+ if(!bOn||!Canvas)return;
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();if(Store->KillNotices.IsEmpty())return;
+ const double Now=GetWorld()->GetTimeSeconds();const float Life=8.f,RowH=22.f,Width=340.f;
+ const ABattleUnit* Unit=PC->IsTactical()?nullptr:Cast<ABattleUnit>(PC->GetPawn());const int32 Me=Unit?Unit->GetUnitID():INDEX_NONE;
+ const float W=Canvas->SizeX;
+ float X=W-16.f-Width,Y=96.f;
+ if(PC->IsTactical()&&GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled())
+ {const auto List=FBattleSquadListLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY));if(List.Height>0){X=List.Origin.X-10.f-Width;Y=List.Origin.Y;}}
+ auto Weapon=[](const FBattleKillNotice& N)->const TCHAR*
+ {
+  switch(N.Kind)
+  {
+   case EBattleKillKind::Blast:return TEXT("対戦車弾");
+   case EBattleKillKind::Artillery:return TEXT("砲撃");
+   case EBattleKillKind::TankGun:return TEXT("戦車砲");
+   case EBattleKillKind::Launcher:return TEXT("バズーカ");
+   case EBattleKillKind::Shot:
+    if(N.bKillerVehicle)return TEXT("車載機関銃");
+    return N.KillerWeapon==EBattleWeapon::SupportGun?TEXT("機関銃"):N.KillerWeapon==EBattleWeapon::AntiTank?TEXT("対戦車兵"):N.KillerWeapon==EBattleWeapon::Mortar?TEXT("砲"):TEXT("小銃");
+   default:return TEXT("");
+  }
+ };
+ int32 Row=0;
+ for(int32 I=Store->KillNotices.Num()-1;I>=0&&Row<5;--I)
+ {
+  const FBattleKillNotice& N=Store->KillNotices[I];const float Age=float(Now-N.Time);if(Age<0.f||Age>Life)continue;
+  const float Alpha=FMath::Clamp(Life-Age,0.f,1.f);
+  const FString Killer=N.KillerID==Me?FString(TEXT("あなた")):N.KillerTeam==0?(N.KillerSquad.IsEmpty()?FString(TEXT("味方")):N.KillerSquad):FString(TEXT("敵"));
+  const FString Victim=N.VictimID==Me?FString(TEXT("あなた"))
+   :N.VictimTeam==0?(N.VictimSquad.IsEmpty()?FString(TEXT("味方の兵")):N.VictimSquad+(N.bVictimVehicle?TEXT(""):N.bVictimLeader?TEXT("の隊長"):TEXT("の兵")))
+   :FString(N.bVictimVehicle?TEXT("敵の車両"):N.bVictimLeader?TEXT("敵の隊長"):TEXT("敵兵"));
+  const bool bMine=N.KillerID==Me||N.VictimID==Me;
+  const FLinearColor Color=bMine?FLinearColor(1,.9f,.35f,Alpha):N.KillerTeam==0?FLinearColor(.28f,.95f,.8f,Alpha):FLinearColor(1,.45f,.35f,Alpha);
+  const float RowY=Y+Row*RowH;
+  DrawRect(FLinearColor(.025f,.04f,.065f,.8f*Alpha),X,RowY,Width,RowH-2);
+  DrawRect(Color,X,RowY,3,RowH-2);
+  DrawText(FString::Printf(TEXT("%s → %s"),*Killer,*Victim),Color,X+9,RowY+3,GEngine->GetSmallFont(),.85f);
+  const FString Tag=Weapon(N);
+  if(!Tag.IsEmpty()){float TW=0,TH=0;GetTextSize(Tag,TW,TH,GEngine->GetSmallFont(),.8f);DrawText(Tag,FLinearColor(.62f,.7f,.77f,Alpha),X+Width-TW-8,RowY+4,GEngine->GetSmallFont(),.8f);}
+  ++Row;
  }
 }

@@ -260,7 +260,7 @@ int32 UBattleLeaderRuntime::ArtilleryImpact(const FArtilleryShell& Shell)
  {
   const auto* Before=Store->Find(H.Key);if(!Before||!Before->IsAlive())continue;
   const float BeforeHP=Before->HP;const int32 VictimTeam=Before->Team;const auto* VictimSquad=Store->FindSquad(Before->SquadID);const uint8 VictimType=VictimSquad?VictimSquad->SquadType:0;
-  if(!Store->ApplyDamageFrom(H.Key,Team,H.Value,Shell.At))continue;
+  if(!Store->ApplyDamageFrom(H.Key,Team,H.Value,Shell.At,Shell.ShooterID,EBattleKillKind::Artillery))continue;
   ++Damaged;++ArtilleryHits;const bool Killed=!Store->Find(H.Key)->IsAlive();ArtilleryKills+=Killed;
   if(SightExperiment.Started)
   {

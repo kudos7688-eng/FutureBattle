@@ -3,14 +3,14 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 245 種類。
+計 246 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
 | `-BattleAIBlindFire` | other |  | BattleBlindFire.cpp:27 |  |
 | `-BattleAICoverProbe` | Value | 0 | BattleTactics.cpp:10 |  |
 | `-BattleAimAssist` | Value | 1 | BattleController.cpp:1080 |  |
-| `-BattleArea` | Param/other | off | BattleLeaderRuntime.cpp:75, BattleState.cpp:542 |  |
+| `-BattleArea` | Param/other | off | BattleLeaderRuntime.cpp:75, BattleState.cpp:555 |  |
 | `-BattleAreaACKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:96 |  |
 | `-BattleAreaATKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:94 |  |
 | `-BattleAreaAttackWeight` | Value | T->AreaAttackWeight | BattleTactics.cpp:74 |  |
@@ -104,14 +104,15 @@
 | `-BattleFollowerNoOverlap` | Value | 0 | BattleLeaderRuntime.cpp:722 |  |
 | `-BattleFollowSightParallel` | Value | 0 | BattleLeaderRuntime.cpp:715 |  |
 | `-BattleFollowSightTraces` | other |  | BattleLeaderRuntime.cpp:749 |  |
-| `-BattleHeavyCost` | other |  | BattleState.cpp:530 |  |
-| `-BattleHeavyDamage` | other |  | BattleState.cpp:530 |  |
-| `-BattleHeavyHealth` | other |  | BattleState.cpp:529 |  |
-| `-BattleHeavyMembers` | other |  | BattleState.cpp:529 |  |
-| `-BattleHeavySpeed` | other |  | BattleState.cpp:530 |  |
+| `-BattleHeavyCost` | other |  | BattleState.cpp:543 |  |
+| `-BattleHeavyDamage` | other |  | BattleState.cpp:543 |  |
+| `-BattleHeavyHealth` | other |  | BattleState.cpp:542 |  |
+| `-BattleHeavyMembers` | other |  | BattleState.cpp:542 |  |
+| `-BattleHeavySpeed` | other |  | BattleState.cpp:543 |  |
 | `-BattleHeightTest` | Param | off | BattleTerrainTest.cpp:27 |  |
 | `-BattleHireSightRefresh` | Value | 0 | BattleMixedRecruitment.cpp:111 |  |
-| `-BattleHitDirection` | Value | 1 | BattleHUD.cpp:647 |  |
+| `-BattleHitDirection` | Value | 1 | BattleHUD.cpp:648 |  |
+| `-BattleKillLog` | Value | 1 | BattleHUD.cpp:753 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
 | `-BattleLeaderCommand` | Value | 0 | BattleGameMode.cpp:54 |  |
 | `-BattleLeaderGuard` | Value | 0 | BattleTactics.cpp:16 |  |
@@ -147,7 +148,7 @@
 | `-BattleNoAnimationLOD` | Param | off | BattleBenchmark.cpp:157, BattleBenchmark.cpp:158, BattleNetworkBenchmark.cpp:78 ほか1 |  |
 | `-BattleNoMuzzleFlash` | Param | off | BattleMuzzleFlash.cpp:65 |  |
 | `-BattleNoStagger` | Param | off | BattleBenchmark.cpp:54 |  |
-| `-BattleOffscreenMarkers` | Value | 1 | BattleHUD.cpp:685 |  |
+| `-BattleOffscreenMarkers` | Value | 1 | BattleHUD.cpp:686 |  |
 | `-BattleOpponentPreset` | other |  | BattleBenchmark.cpp:48 |  |
 | `-BattlePerceptionGrid` | Value | GetDefault<UBattleTuning>()->bPerceptionGrid?1:0 | BattleLeaderRuntime.cpp:104 |  |
 | `-BattlePerceptionSlices` | Value | 4 | BattleBenchmark.cpp:56 |  |
@@ -172,7 +173,7 @@
 | `-BattleReport` | Value |  | BattleBenchmark.cpp:50 |  |
 | `-BattleReturnFire` | Value | 0 | BattleTactics.cpp:167 |  |
 | `-BattleReuseSightContext` | Value | GetDefault<UBattleTuning>()->bReuseSightContext?1:0 | BattleLeaderRuntime.cpp:101 |  |
-| `-BattleRifleMembers` | other |  | BattleState.cpp:542 |  |
+| `-BattleRifleMembers` | other |  | BattleState.cpp:555 |  |
 | `-BattleRoutes` | Value | -1 | BattleRoutes.cpp:17 |  |
 | `-BattleScaleScreenshot` | Value |  | BattleLargeFieldTest.cpp:19, BattleScaleSmoke.cpp:17 |  |
 | `-BattleScaleSmoke` | Param | off | BattleGameMode.cpp:147 |  |

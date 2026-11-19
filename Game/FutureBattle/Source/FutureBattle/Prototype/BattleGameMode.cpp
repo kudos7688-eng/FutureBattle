@@ -348,7 +348,10 @@ void ABattleGameMode::FinishSmokeTest()
 		A->SavedAI->Tick(.3f);
 		bCombatPaused = true;
 		CheckSmoke(A->GetState()->Action == EBattleAction::Idle && A->GetState()->Order == EBattleOrder::Move && Store->FindSquad(A->GetState()->SquadID)->Order == EBattleOrder::Move, TEXT("Arrival idles member without cancelling squad intent"));
-		Store->ApplyDamage(A->GetUnitID(), 1, 10000); A->ApplyDeath();
+		// Kill log (display only): a death with a known killer on the player's team side is kept.
+		const int32 KillsBefore = Store->KillNotices.Num();
+		Store->ApplyDamageFrom(A->GetUnitID(), 1, 10000, Enemy->GetActorLocation(), Enemy->GetUnitID(), EBattleKillKind::Shot); A->ApplyDeath();
+		CheckSmoke(Store->KillNotices.Num() == FMath::Min(8, KillsBefore + 1) && Store->KillNotices.Last().VictimID == A->GetUnitID() && Store->KillNotices.Last().KillerID == Enemy->GetUnitID() && Store->KillNotices.Last().Kind == EBattleKillKind::Shot, TEXT("Kill log keeps a death with its killer"));
 		CheckSmoke(!A->IsAlive() && !Store->ConsumeShot(A->GetUnitID(), GetWorld()->GetTimeSeconds(), .1), TEXT("Dead units cannot fire"));
 		if (ABattleController* PC = Cast<ABattleController>(GetWorld()->GetFirstPlayerController())) CheckSmoke(!PC->ControlUnit(A), TEXT("Dead units cannot be possessed"));
 		CheckSmoke(Store->Find(A->GetUnitID()) != nullptr, TEXT("Dead unit keeps authoritative record"));

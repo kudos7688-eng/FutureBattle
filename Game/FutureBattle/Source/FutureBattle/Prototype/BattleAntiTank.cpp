@@ -22,7 +22,7 @@ int32 UBattleLeaderRuntime::Explode(int32 ShooterID,FVector At,int32 ExcludeID,f
  {
   const auto* Before=Store->Find(H.Key);if(!Before||!Before->IsAlive())continue;
   const float BeforeHP=Before->HP;const int32 VictimTeam=Before->Team;const auto* VictimSquad=Store->FindSquad(Before->SquadID);const uint8 VictimType=VictimSquad?VictimSquad->SquadType:0;
-  if(!Store->ApplyDamageFrom(H.Key,Team,H.Value,At))continue;++Damaged;
+  if(!Store->ApplyDamageFrom(H.Key,Team,H.Value,At,ShooterID,EBattleKillKind::Blast))continue;++Damaged;
   if(SightExperiment.Started)
   {
    auto& E=SightExperiment;const float Dealt=FMath::Min(BeforeHP,H.Value);const bool Killed=!Store->Find(H.Key)->IsAlive();

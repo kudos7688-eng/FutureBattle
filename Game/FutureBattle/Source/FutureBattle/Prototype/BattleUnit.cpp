@@ -268,7 +268,7 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 	GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Query);
 	if (ABattleUnit* Victim = Cast<ABattleUnit>(Hit.GetActor()))
 	{
-		if (Store->ApplyDamageFrom(Victim->GetUnitID(), GetState()->Team, Tuning->ShotDamage, Start))
+		if (Store->ApplyDamageFrom(Victim->GetUnitID(), GetState()->Team, Tuning->ShotDamage, Start, UnitID, EBattleKillKind::Shot))
 		{
 			if (Metrics->bRecording) ++Metrics->Hits;
 			if (bPlayerShot) if (ABattleController* PC = Cast<ABattleController>(GetController())) PC->HitMarkerUntil = GetWorld()->GetTimeSeconds() + .18;
