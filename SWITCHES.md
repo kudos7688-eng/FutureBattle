@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 244 種類。
+計 245 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -77,7 +77,7 @@
 | `-BattleCoverActions` | Value | 0 | BattleSquadTactics.cpp:19, BattleTactics.cpp:191 |  |
 | `-BattleCoverActionSmoke` | Param | off | BattleLeaderRuntime.cpp:211 |  |
 | `-BattleCoverApproach` | Value | -1 | BattleTactics.cpp:173 |  |
-| `-BattleCoverArrival` | Value | 1 | BattleStableMovement.cpp:97 |  |
+| `-BattleCoverArrival` | Value | 1 | BattleStableMovement.cpp:112 |  |
 | `-BattleCoverFire` | Value | GetDefault<UBattleTuning>()->bAICoverFire?1:0 | BattleTactics.cpp:149 |  |
 | `-BattleCoverPeekSight` | Value | GetDefault<UBattleTuning>()->bAICoverPeekSight?1:0 | BattleTactics.cpp:161 |  |
 | `-BattleCoverValidation` | Value | GetDefault<UBattleTuning>()->bAICoverValidation?1:0 | BattleTactics.cpp:155 |  |
@@ -85,7 +85,7 @@
 | `-BattleDelegationScreens` | Value |  | BattleDelegationSmoke.cpp:90 |  |
 | `-BattleDiagnosticOmit` | Value |  | BattleBenchmark.cpp:114, BattleBenchmark.cpp:146 |  |
 | `-BattleDisplayLOD` | Value | 1 | BattleLeaderRuntime.cpp:120, BattleWideMixedSmoke.cpp:170 |  |
-| `-BattleEngineMoveSweep` | Value | 0 | BattleStableMovement.cpp:398 |  |
+| `-BattleEngineMoveSweep` | Value | 0 | BattleStableMovement.cpp:413 |  |
 | `-BattleExoPlaceholder` | Param | off | BattleExo.cpp:104 |  |
 | `-BattleExoShot` | Param | off | BattleLeaderRuntime.cpp:221 |  |
 | `-BattleFastMatch` | Param | off | BattleGameMode.cpp:72, BattleLeaderRuntime.cpp:71 |  |
@@ -185,6 +185,7 @@
 | `-BattleSectorFlank` | Value | 0 | BattleSectorRoute.cpp:35 |  |
 | `-BattleSectorFront` | Value | 0 | BattleSectorRoute.cpp:41 |  |
 | `-BattleSectorRoute` | Value | 0 | BattleSectorRoute.cpp:16 |  |
+| `-BattleSectorSlotReserve` | Value | 1 | BattleStableMovement.cpp:78 |  |
 | `-BattleSectorSmoke` | Param | off | BattleLeaderRuntime.cpp:209 |  |
 | `-BattleSeed` | Value | 7 | BattleBenchmark.cpp:42 |  |
 | `-BattleSenseMode` | Value |  | BattleBenchmark.cpp:29 |  |

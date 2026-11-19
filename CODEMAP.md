@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（141 モジュール、29736 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（141 モジュール、29751 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -28,7 +28,7 @@
 | HUD・ミニマップ・部隊一覧・通知 | `ABattleHUD::DrawHUD` (BattleHUD.cpp:19) 、 `ABattleHUD::DrawMinimap` (BattleHUD.cpp:431) 、 `ABattleHUD::DrawSquadList` (BattleHUD.cpp:522) 、 `ABattleHUD::DrawNoticeLog` (BattleHUD.cpp:587) | 通知の中身は `ABattleController::UpdateNoticeLog` (BattleController.cpp:899) 、 `ABattleController::PushNotice` (BattleController.cpp:883) 。日本語化は `BattleUIText::Ja` (BattleUIText.cpp:76) |
 | 認識（見えた敵の記憶） | `UBattlePerception::Update` (BattlePerception.cpp:57) 、 `UBattlePerception::GetContacts` (BattlePerception.cpp:36) | 視線は `UBattleLeaderRuntime::CanSee` (BattleLeaderRuntime.cpp:327) 、 `UBattleLeaderRuntime::TraceSight` (BattleLeaderRuntime.cpp:358) 。試験用の視界切替は `BattleSightExperiment` |
 | 隊長の判断と兵の実行（混成） | `UBattleLeaderRuntime::Think` (BattleLeaderRuntime.cpp:579) 、 `UBattleLeaderRuntime::Follow` (BattleLeaderRuntime.cpp:772) 、 `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:948) | 兵単位の実行は `FBattleMixedDriver::Tick` (BattleMixedDriver.cpp:126) 、 `FBattleMixedDriver::TryTacticalAction` (BattleMixedDriver.cpp:239) |
-| 移動・経路・混雑 | `UBattleLeaderRuntime::StableMove` (BattleStableMovement.cpp:234) 、 `UBattleLeaderRuntime::BuildMovementPlan` (BattleStableMovement.cpp:59) | 到着地点の重なりは `UBattleLeaderRuntime::ReassignOccupiedArrival` (BattleContactMovement.cpp:16) 。目的地の補正は `BattleNavigation::ResolveGoal` (BattleNavigation.cpp:7) |
+| 移動・経路・混雑 | `UBattleLeaderRuntime::StableMove` (BattleStableMovement.cpp:249) 、 `UBattleLeaderRuntime::BuildMovementPlan` (BattleStableMovement.cpp:59) | 到着地点の重なりは `UBattleLeaderRuntime::ReassignOccupiedArrival` (BattleContactMovement.cpp:16) 。目的地の補正は `BattleNavigation::ResolveGoal` (BattleNavigation.cpp:7) |
 | 遮蔽（場所の予約） | `UBattleCover::BuildSlots` (BattleCover.cpp:14) 、 `UBattleCover::Reserve` (BattleCover.cpp:187) | 露出の計算は `BattleTactics::ExposureAt` (BattleTactics.cpp:240) |
 | 体のアニメーション | `ABattleUnit::UpdateBodyAnim` (BattleUnit.cpp:372) 、 `FBattleBodyAnimProxy::Evaluate` (BattleBodyAnim.cpp:190) | 部下は `UBattleLeaderRuntime::FollowerClip` (BattleStance.cpp:83) 、 `UBattleLeaderRuntime::StepBodyTimers` (BattleStance.cpp:104) |
 | ブラインドファイア | `UBattleLeaderRuntime::BlindFireOrigin` (BattleBlindFire.cpp:53) 、 `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:948) | AIの試験は `UBattleLeaderRuntime::TryAIBlindFire` (BattleBlindFire.cpp:95) |
@@ -121,7 +121,7 @@
 | `BattleSquadRetreat` | .cpp | 234 |  | 撤退の判断と適用（UBattleSquadTactics の一部。Evaluate と Apply はここ） |
 | `BattleSquadSupport` | .cpp | 119 |  | 援護の受け渡し（UBattleSquadTactics の一部） |
 | `BattleSquadTactics` | .h/.cpp | 100 + 151 | FBattleSquadObservation, UBattleSquadTactics | 部隊の戦術の土台：観測、毎フレームの更新、記録 |
-| `BattleStableMovement` | .cpp | 459 |  | 混成の移動計画と実行（UBattleLeaderRuntime の一部） |
+| `BattleStableMovement` | .cpp | 474 |  | 混成の移動計画と実行（UBattleLeaderRuntime の一部） |
 | `BattleStance` | .h/.cpp | 28 + 141 | BattleStance | 姿勢（立ち・しゃがみ）の数値と切替 |
 | `BattleStanceAnimImport` | .cpp | 43 |  | 姿勢アニメーションの取り込み（エディタ用。宣言は BattleVATBake.h） |
 | `BattleState` | .h/.cpp | 749 + 586 | BattleSquadType, FBattleDecisionProfile, FBattleSquadTacticalPlan, FBattleSquadState, FBattlePerceptionProfile, FBattleUnitState, UBattleTuning, UBattleState | 正規状態：兵・部隊の記録、命令、弾薬、被害、調整値 UBattleTuning、兵科の差 |
