@@ -20,9 +20,11 @@ namespace BattleBlindFire
  // Counterplay (2026-11-20, user decision): over the top the head comes up over the cover while the blind fire clip shows
  // (ClipHoldSeconds after each shot). For that time sight aims at, and bullets stop at, the head instead of the crouched
  // body (heights above the capsule centre, which stands 90 cm above the ground). Around the edge the body stays hidden.
+ // The head that shows also looks (user decision, 2026-11-20): the shooter's eye is at the head for that time, so he can
+ // spot over the cover what a standing soldier would (the standing eye, 60 cm above the capsule centre).
  // -BattleBlindFireExpose=0 restores the fully hidden blind fire (the hands then lift the rifle alone).
  bool ExposeEnabled();
- constexpr float ExposedAimOffset=60.f,ExposedTopOffset=80.f;
+ constexpr float ExposedAimOffset=60.f,ExposedTopOffset=80.f,ExposedEyeOffset=60.f;
  // How long the blind fire clip stays after a shot.
  constexpr double ClipHoldSeconds=.6;
  // Low cover (the soldier stands up in place to fire, so the peek point is the anchor): blind fire goes over the top.

@@ -309,8 +309,9 @@ void UBattleLeaderRuntime::GuardFalls(double Now)
 }
 FBattleSightContext UBattleLeaderRuntime::Sight(int32 ID) const
 {
- // Stances lower the eye (60cm above the body centre when standing).
- const float EyeZ=BattleStance::EyeOffset(StanceOf(ID));
+ // Stances lower the eye (60cm above the body centre when standing); a head shown by an over-the-top blind fire looks
+ // from its own height (BattleBlindFire::ExposedEyeOffset).
+ const float EyeZ=IsHeadExposed(ID,GetWorld()->GetTimeSeconds())?BattleBlindFire::ExposedEyeOffset:BattleStance::EyeOffset(StanceOf(ID));
  // Scout pairs see ScoutSightRange while still (moving: their normal profile).
  const float Still=ScoutStillSight(ID);
  // Trial -BattleSightTeamMask=1: the observer's own side does not block its sight (its soldiers' bodies carry the side's mask bit).

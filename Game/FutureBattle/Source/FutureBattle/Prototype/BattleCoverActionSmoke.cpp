@@ -68,12 +68,17 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
   FVector Origin;const bool HasOrigin=BlindFireOrigin(1,Threat,Origin);const bool Fired=Fire(1,Eye,(Threat-Eye).GetSafeNormal(),true);
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BLINDFIRE_TOP has_origin=%d fired=%d exposed=%d aim=%.0f top=%.0f"),HasOrigin,Fired,IsHeadExposed(1,Now),TargetAimOffset(1),TargetTopOffset(1));
   Check(HasOrigin&&Fired,TEXT("over-the-top blind fire fires from above the cover"));
-  if(BattleBlindFire::ExposeEnabled())Check(IsHeadExposed(1,Now)&&TargetAimOffset(1)==BattleBlindFire::ExposedAimOffset&&TargetTopOffset(1)==BattleBlindFire::ExposedTopOffset,TEXT("over-the-top blind fire exposes the head to sight and hits"));
+  if(BattleBlindFire::ExposeEnabled())
+  {
+   Check(IsHeadExposed(1,Now)&&TargetAimOffset(1)==BattleBlindFire::ExposedAimOffset&&TargetTopOffset(1)==BattleBlindFire::ExposedTopOffset,TEXT("over-the-top blind fire exposes the head to sight and hits"));
+   Check(FMath::IsNearlyEqual(Sight(1).Eye.Z-Position(1).Z,BattleBlindFire::ExposedEyeOffset,1.f),TEXT("the exposed head looks over the cover from its own height"));
+  }
  };
  auto EndOverTop=[&]
  {
   Store->Units.FindChecked(1).CoverPeek=SmokeSavedPeek;BlindFireUntil.Remove(1);
-  Check(!IsHeadExposed(1,GetWorld()->GetTimeSeconds())&&TargetTopOffset(1)==BattleStance::TopOffset(StanceOf(1)),TEXT("head is hidden again once the blind fire ends"));
+  Check(!IsHeadExposed(1,GetWorld()->GetTimeSeconds())&&TargetTopOffset(1)==BattleStance::TopOffset(StanceOf(1))
+   &&FMath::IsNearlyEqual(Sight(1).Eye.Z-Position(1).Z,BattleStance::EyeOffset(StanceOf(1)),1.f),TEXT("head is hidden again once the blind fire ends (sight and eye)"));
  };
  auto AfterBlindFire=[&]
  {
