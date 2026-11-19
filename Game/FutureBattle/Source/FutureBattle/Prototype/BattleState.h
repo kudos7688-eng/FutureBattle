@@ -260,6 +260,7 @@ struct FBattleUnitState
 	UPROPERTY() float ShieldWait = 0.f;
 	// Exoskeleton second weapon: anti-tank rounds left and seconds until the next one is loaded (relative). 0 for other types.
 	UPROPERTY() int32 Launcher = 0;
+	UPROPERTY() bool bLauncherSelected = false;
 	UPROPERTY() float LauncherWait = 0.f;
 	// Carries a weapon that hurts armour: an anti-tank soldier or an exoskeleton with launcher rounds left.
 	bool CarriesAntiTank() const { return Weapon == EBattleWeapon::AntiTank || Launcher > 0; }
@@ -726,6 +727,7 @@ public:
 	// Exoskeleton shields and launchers: counts down the pause after a hit, then refills the shield; counts down the launcher's load.
 	// Does nothing while no such squad exists.
 	void AdvanceShields(float DeltaSeconds);
+	bool ToggleExoWeapon(int32 UnitID);
 	bool UseLauncher(int32 UnitID); // one round out, the load time starts; false when empty or still loading
 	void RefillLauncher(int32 UnitID);
 	float MaxShieldOf(int32 UnitID) const;

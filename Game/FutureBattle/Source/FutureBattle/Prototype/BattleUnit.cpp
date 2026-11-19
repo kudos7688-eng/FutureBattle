@@ -173,7 +173,7 @@ void ABattleUnit::GetPlayerShot(FVector& Start, FVector& Direction)
 	if (!bThirdPersonView) return;
 	FMinimalViewInfo View; CalcCamera(0.f, View);
 	// Aim to wherever the bullet can reach (range profile: further than the AI engagement distance).
-	const FVector End = View.Location + View.Rotation.Vector() * BattleRanges::Reach(GetState()->Weapon);
+	const FVector End = View.Location + View.Rotation.Vector() * BattleRanges::Reach(GetState()->bLauncherSelected ? EBattleWeapon::AntiTank : GetState()->Weapon);
 	FHitResult Hit;
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleThirdPersonAim), false, this);
 	GetWorld()->LineTraceSingleByChannel(Hit, View.Location, End, ECC_Visibility, Query);

@@ -14,6 +14,7 @@
 #include "BattleUnit.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/StaticMesh.h"
@@ -36,48 +37,113 @@ static FTransform ExoClipBone(const UAnimSequence* Clip,FName Bone)
  return T;
 }
 
-// The AC01 suit (2026-11-19, user request): the Tripo-based armoured body with its dual-equipment clips, the rifle in the left hand
-// and the launcher on the right shoulder (Art/AC01_Tripo_v2, Art/Weapons; assets under /Game/Art/AC01T2, imported by
-// Setup/Import-AC01T2.py and Setup/Import-AC01Exo.py). Display only. False (and the placeholder look is used) when an asset is
-// missing or with -BattleExoPlaceholder.
+// Older installed suit packages contain only the armour shells. Cover the open joints
+// with one instanced inner frame, updated when (and only when) the suit evaluates its bones.
+static void FitExoInnerFrame(ABattleUnit* Unit)
+{
+ auto* Body=Unit->GetMesh();
+ if(Body->GetMaterialIndex(TEXT("AC01_InnerFrame"))!=INDEX_NONE)return;
+ struct FLink { FName Start,End; float Radius; };
+ static const FLink Links[]={
+  {TEXT("pelvis"),TEXT("spine_03"),15.f},{TEXT("spine_03"),TEXT("spine_05"),16.f},{TEXT("spine_05"),TEXT("neck_01"),10.f},{TEXT("neck_01"),TEXT("head"),7.f},
+  {TEXT("clavicle_l"),TEXT("upperarm_l"),9.f},{TEXT("clavicle_r"),TEXT("upperarm_r"),9.f},
+  {TEXT("upperarm_l"),TEXT("lowerarm_l"),8.f},{TEXT("upperarm_r"),TEXT("lowerarm_r"),8.f},
+  {TEXT("lowerarm_l"),TEXT("hand_l"),6.f},{TEXT("lowerarm_r"),TEXT("hand_r"),6.f},
+  {TEXT("pelvis"),TEXT("thigh_l"),9.f},{TEXT("pelvis"),TEXT("thigh_r"),9.f},
+  {TEXT("thigh_l"),TEXT("calf_l"),10.f},{TEXT("thigh_r"),TEXT("calf_r"),10.f},
+  {TEXT("calf_l"),TEXT("foot_l"),7.5f},{TEXT("calf_r"),TEXT("foot_r"),7.5f}
+ };
+ auto* Sphere=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+ auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+ if(!Sphere||!Base)return;
+ auto* Pieces=NewObject<UInstancedStaticMeshComponent>(Unit);
+ Pieces->SetupAttachment(Body);Pieces->SetStaticMesh(Sphere);
+ Pieces->SetCollisionEnabled(ECollisionEnabled::NoCollision);Pieces->SetCanEverAffectNavigation(false);
+ auto* Graphite=UMaterialInstanceDynamic::Create(Base,Pieces);
+ Graphite->SetVectorParameterValue(TEXT("Color"),FLinearColor(.075f,.08f,.09f));
+ Pieces->SetMaterial(0,Graphite);Pieces->RegisterComponent();Unit->AddInstanceComponent(Pieces);
+ auto Refresh=[Body,Pieces]()
+ {
+  Pieces->SetOwnerNoSee(Body->bOwnerNoSee);
+  Pieces->SetVisibility(Body->IsVisible());
+  if(!Body->IsVisible())return;
+  TArray<FTransform,TInlineAllocator<UE_ARRAY_COUNT(Links)>> Shapes;
+  for(const FLink& Link:Links)
+  {
+   const FVector A=Body->GetSocketTransform(Link.Start,RTS_Component).GetLocation();
+   const FVector B=Body->GetSocketTransform(Link.End,RTS_Component).GetLocation();
+   const FVector Axis=B-A;
+   const FVector Scale(2*Link.Radius/100.,1.8*Link.Radius/100.,(Axis.Size()+1.65*Link.Radius)/100.);
+   Shapes.Emplace(FRotationMatrix::MakeFromZ(Axis.GetSafeNormal(UE_SMALL_NUMBER,FVector::UpVector)).ToQuat(),(A+B)*.5,Scale);
+  }
+  if(Pieces->GetInstanceCount()==0)
+   for(const auto& Shape:Shapes)Pieces->AddInstance(Shape);
+  else Pieces->BatchUpdateInstancesTransforms(0,MakeArrayView(static_cast<const FTransform*>(Shapes.GetData()),Shapes.Num()),false,true,true);
+ };
+ Refresh();
+ Body->RegisterOnBoneTransformsFinalizedDelegate(FOnBoneTransformsFinalizedMultiCast::FDelegate::CreateWeakLambda(Pieces,Refresh));
+}
+
+// Load each carry pose with its matching right-hand mount; the other prop follows the upper spine.
+struct FExoCarryPose
+{
+ TStrongObjectPtr<UAnimSequence> Idle,Move,CrouchIdle,CrouchMove;
+ void Load(const TCHAR* Family)
+ {
+  auto Clip=[Family](const TCHAR* Name){
+   const FString Asset=FString::Printf(TEXT("A_AC01T2_%s_%s"),Family,Name);
+   return LoadObject<UAnimSequence>(nullptr,*FString::Printf(TEXT("/Game/Art/AC01T2/Anims/%s.%s"),*Asset,*Asset),nullptr,LOAD_NoWarn);
+  };
+  Idle.Reset(Clip(TEXT("Idle")));Move.Reset(Clip(TEXT("Jog_Fwd")));
+  CrouchIdle.Reset(Clip(TEXT("Crouch_Idle")));CrouchMove.Reset(Clip(TEXT("Crouch_Walk_Fwd")));
+ }
+};
+
 bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
 {
  static const bool bOff=FParse::Param(FCommandLine::Get(),TEXT("BattleExoPlaceholder"));
  if(bOff)return false;
- struct FAssets{TStrongObjectPtr<USkeletalMesh> Suit;TStrongObjectPtr<UAnimSequence> Idle,Move,CrouchIdle,CrouchMove;TStrongObjectPtr<UStaticMesh> Rifle,Launcher;bool bLoaded=false,bOk=false;};
+ struct FAssets{TStrongObjectPtr<USkeletalMesh> Suit;FExoCarryPose Primary,Secondary;TStrongObjectPtr<UStaticMesh> Rifle,Launcher;bool bLoaded=false,bOk=false;};
  static FAssets X;
  if(!X.bLoaded)
  {
   X.bLoaded=true;
-  auto Clip=[](const TCHAR* Name){return LoadObject<UAnimSequence>(nullptr,*FString::Printf(TEXT("/Game/Art/AC01T2/Anims/A_AC01T2_Dual_%s.A_AC01T2_Dual_%s"),Name,Name),nullptr,LOAD_NoWarn);};
   X.Suit.Reset(LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Art/AC01T2/SK_AC01T2.SK_AC01T2"),nullptr,LOAD_NoWarn));
-  X.Idle.Reset(Clip(TEXT("Idle")));X.Move.Reset(Clip(TEXT("Jog_Fwd")));X.CrouchIdle.Reset(Clip(TEXT("Crouch_Idle")));X.CrouchMove.Reset(Clip(TEXT("Crouch_Walk_Fwd")));
+  X.Primary.Load(TEXT("OneHand"));X.Secondary.Load(TEXT("Dual"));
   X.Rifle.Reset(LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Rifle.SM_AC01_Rifle"),nullptr,LOAD_NoWarn));
   X.Launcher.Reset(LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Launcher.SM_AC01_Launcher"),nullptr,LOAD_NoWarn));
-  X.bOk=X.Suit.IsValid()&&X.Idle.IsValid()&&X.Move.IsValid()&&X.Rifle.IsValid()&&X.Launcher.IsValid();
-  UE_LOG(LogFutureBattle,Display,TEXT("EXO_SUIT assets=%d suit=%d idle=%d move=%d crouch=%d/%d rifle=%d launcher=%d"),X.bOk,X.Suit.IsValid(),X.Idle.IsValid(),X.Move.IsValid(),
-   X.CrouchIdle.IsValid(),X.CrouchMove.IsValid(),X.Rifle.IsValid(),X.Launcher.IsValid());
+  X.bOk=X.Suit.IsValid()&&X.Primary.Idle.IsValid()&&X.Primary.Move.IsValid()&&X.Secondary.Idle.IsValid()&&X.Secondary.Move.IsValid()&&X.Rifle.IsValid()&&X.Launcher.IsValid();
+  UE_LOG(LogFutureBattle,Display,TEXT("EXO_SUIT assets=%d"),X.bOk);
  }
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();ABattleUnit* A=Actor(ID);const auto* U=Store->Find(ID);
  if(!X.bOk||!A||!U)return false;
- auto* Body=A->GetMesh();Body->SetSkeletalMesh(X.Suit.Get());
- // The visor glows in the team's colour (the material's default is the painted red).
- if(auto* Paint=Body->CreateDynamicMaterialInstance(0))Paint->SetVectorParameterValue(TEXT("VisorColor"),U->Team==0?FLinearColor(.25f,2.2f,4.f):FLinearColor(4.f,.35f,.25f));
- // Each weapon sits where the dual-equipment pose holds it in the first idle frame: its grip 86 % of the way from the wrist to the
- // middle knuckle, barrel forward (the launcher 6 degrees down), upright; from there it follows the hand.
- auto Grip=[&](FName Hand,FName Knuckle,float Down)
+ auto* Body=A->GetMesh();
+ auto* Existing=ExoLooks.Find(ID);
+ const bool Launcher=U->Action==EBattleAction::DirectControl?U->bLauncherSelected:(Existing && GetWorld()->GetTimeSeconds()<Existing->AILauncherUntil);
+ auto* Back=Existing?Existing->Stowed.Get():nullptr;
+ if(!Back)
  {
-  const FTransform H=ExoClipBone(X.Idle.Get(),Hand);const FVector At=FMath::Lerp(H.GetLocation(),ExoClipBone(X.Idle.Get(),Knuckle).GetLocation(),.86);
-  // Component space: +Y is the body's front; the models point along their local -Y.
-  const FVector Barrel=FRotator(-Down,90.f,0.f).Vector();
-  return FTransform(FRotationMatrix::MakeFromYZ(-Barrel,FVector::UpVector).ToQuat(),At).GetRelativeTransform(H);
- };
- A->SetLook(X.Idle.Get(),X.Move.Get(),X.CrouchIdle.Get(),X.CrouchMove.Get(),X.Rifle.Get(),TEXT("hand_l"),Grip(TEXT("hand_l"),TEXT("middle_01_l"),0.f));
- auto* Tube=NewObject<UStaticMeshComponent>(A);Tube->SetStaticMesh(X.Launcher.Get());Tube->SetCollisionEnabled(ECollisionEnabled::NoCollision);Tube->SetCanEverAffectNavigation(false);
- Tube->SetupAttachment(Body,TEXT("hand_r"));Tube->SetRelativeTransform(Grip(TEXT("hand_r"),TEXT("middle_01_r"),6.f));Tube->RegisterComponent();A->AddInstanceComponent(Tube);
+  Body->SetSkeletalMesh(X.Suit.Get());
+  FitExoInnerFrame(A);
+  if(auto* Paint=Body->CreateDynamicMaterialInstance(0))Paint->SetVectorParameterValue(TEXT("VisorColor"),U->Team==0?FLinearColor(.25f,2.2f,4.f):FLinearColor(4.f,.35f,.25f));
+  Back=NewObject<UStaticMeshComponent>(A);Back->SetupAttachment(Body,TEXT("spine_05"));
+  Back->SetCollisionEnabled(ECollisionEnabled::NoCollision);Back->SetCanEverAffectNavigation(false);
+  Back->RegisterComponent();A->AddInstanceComponent(Back);
+ }
+ const auto& Pose=Launcher?X.Secondary:X.Primary;
+ const FTransform Hand=ExoClipBone(Pose.Idle.Get(),TEXT("hand_r"));
+ const FVector Palm=FMath::Lerp(Hand.GetLocation(),ExoClipBone(Pose.Idle.Get(),TEXT("middle_01_r")).GetLocation(),.86);
+ const FVector Barrel=FRotator(Launcher?-6.f:0.f,90.f,0.f).Vector();
+ const FTransform Grip(FRotationMatrix::MakeFromYZ(-Barrel,FVector::UpVector).ToQuat(),Palm);
+ A->SetLook(Pose.Idle.Get(),Pose.Move.Get(),Pose.CrouchIdle.Get(),Pose.CrouchMove.Get(),Launcher?X.Launcher.Get():X.Rifle.Get(),TEXT("hand_r"),Grip.GetRelativeTransform(Hand));
+ const FTransform Spine=ExoClipBone(Pose.Idle.Get(),TEXT("spine_05"));
+ const FVector SlingAxis=FVector(.43,0,.90).GetSafeNormal();
+ const FTransform Sling(FRotationMatrix::MakeFromYZ(-SlingAxis,FVector(0,-1,0)).ToQuat(),Spine.GetLocation()+FVector(0,-36,-7));
+ Back->SetStaticMesh(Launcher?X.Rifle.Get():X.Launcher.Get());Back->SetRelativeTransform(Sling.GetRelativeTransform(Spine));
+ if(Existing){Existing->bShowingLauncher=Launcher;return true;}
  // The rig only marks the look as applied here (no plates hang on it); the shield bubble is the same as the placeholder's.
  auto* Rig=NewObject<USceneComponent>(A);Rig->SetupAttachment(Body);Rig->RegisterComponent();A->AddInstanceComponent(Rig);
- FExoLook Look;Look.Rig=Rig;Look.bSuit=true;
+ FExoLook Look;Look.Rig=Rig;Look.bSuit=true;Look.Stowed=Back;Look.bShowingLauncher=Launcher;
  auto* Clear=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/EngineDebugMaterials/M_SimpleUnlitTranslucent.M_SimpleUnlitTranslucent"));
  Look.BubblePaint=Clear?UMaterialInstanceDynamic::Create(Clear,A):nullptr;
  auto* Bubble=NewObject<UStaticMeshComponent>(A);Bubble->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere")));
@@ -146,6 +212,9 @@ void UBattleLeaderRuntime::UpdateExoLooks()
   if(!U||!A||!L.Rig.IsValid()){It.RemoveCurrent();continue;}
   if(L.bSuit)
   {
+   const bool ShowLauncher=U->Action==EBattleAction::DirectControl?U->bLauncherSelected:GetWorld()->GetTimeSeconds()<L.AILauncherUntil;
+   if(ShowLauncher!=L.bShowingLauncher)ApplyExoSuit(It.Key());
+   if(auto* Back=L.Stowed.Get()){Back->SetOwnerNoSee(A->GetMesh()->bOwnerNoSee);Back->SetVisibility(A->GetMesh()->IsVisible());}
    // A stance change resets the body's scale (SetStance); the suit stays 1.2x, crouches by its own clip and is squashed only when prone.
    const float Squash=A->VisualStance==BattleStance::Crouch&&BattleStance::AnimEnabled()?1.f:BattleStance::VisualScale(A->VisualStance);
    const FVector Want(1.2f,1.2f,1.2f*Squash);
@@ -208,6 +277,7 @@ bool UBattleLeaderRuntime::FireExoLauncher(int32 ID,const FVector& Aim,double No
  if(!U||!U->IsAlive()||!Bodies.Contains(ID))return false;
  const int32 Sequence=U->Launcher;
  if(!Store->UseLauncher(ID))return false;
+ if(auto* Look=ExoLooks.Find(ID))Look->AILauncherUntil=Now+.5;
  const auto* T=GetDefault<UBattleTuning>();const int32 Team=U->Team;const auto* SS=Store->FindSquad(U->SquadID);
  const FVector Start=Position(ID)+FVector(0,0,BattleStance::EyeOffset(StanceOf(ID)));
  // Deterministic spread per soldier and round (half a degree).

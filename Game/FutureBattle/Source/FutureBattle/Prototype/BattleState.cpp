@@ -403,6 +403,14 @@ void UBattleState::AdvanceShields(float DeltaSeconds)
  }
 }
 
+bool UBattleState::ToggleExoWeapon(int32 UnitID)
+{
+ auto* U=Units.Find(UnitID);
+ if(!U || !U->IsAlive() || MaxShieldOf(UnitID)<=0.f)return false;
+ U->bLauncherSelected=!U->bLauncherSelected;
+ return true;
+}
+
 bool UBattleState::UseLauncher(int32 UnitID)
 {
  auto* U=Units.Find(UnitID);if(!U||!U->IsAlive()||U->Launcher<=0||U->LauncherWait>0.f)return false;
