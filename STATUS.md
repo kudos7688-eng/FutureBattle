@@ -81,6 +81,11 @@
 - **作ったもの**：`Docs/CoverClips/BattleCoverClips.h`（遮蔽の段階・高さ・側からクリップ5本を引く表。ヘッダーだけで完結）と `Docs/CoverClips/README.md`（判断の根拠・部下の扱い・使わないクリップ・未決事項）。計測中に Source を変えないため Docs に置いた。`blindfire` 側が Source へ写してつなぐ。
 - **未実施・未決**：ビルド・試合・画面の確認はなし。向きの補正（隠れる姿勢は180度と推測）と、低い遮蔽で立ち上がって撃つときのクリップ（AimU_down で頭が低すぎないか）は、`blindfire` の取り込みログ `BATTLE_BODY_CLIP` を見て決める。
 
+## 2026-11-20 2時55分 Claude（AC01）：外骨格兵の撮影にバズーカを構えた姿を追加し、新しい本体で撮影
+- `BattleExoShot.cpp` にバズーカを右手・ライフルを背中にした正面・背面の2枚を追加（AIの発射時の見た目を保持して撮る）。`Test-ExoShot.ps1 -Name ac01-switch-body-20261120` は `EXO_SHOT_RESULT failures=0`、9枚は `Setup/Benchmarks/ExoShot-20261118/ac01-switch-body-20261120/`。
+- 画像で見た点：ライフル・バズーカとも右手に収まり、背中の武器も体に付いている。気になる点は、ライフル装備時に背中のバズーカの下端が右ひざの高さまで下がっていること（shot-3）、バズーカ装備時に背中のライフルが左肩から斜めに大きく突き出ること（shot-5）、伏せの仮表示（縦につぶす）ではバズーカが体から垂直に立つこと（shot-8）。
+- ビルドは main の他セッションの未コミット変更（`BattleStableMovement.cpp`・`Test-WideSight.ps1`）を含んだ状態で行った（こちらは触っていない）。
+
 ## 2026-11-20 0時50分 Claude（AC01）：関節の内装を作り込んだ AC01 本体を UE へ再取り込み
 - **依頼**：ユーザー「Refresh-AC01Body.pyも実行して取り込んでください」。
 - `Content/Art/AC01T2/SK_AC01T2` を `Art/AC01_Tripo_v2/Exports/SK_AC01T2_LOD0〜2.fbx`（`12_joint_sleeves.py` の閉じた筒入り）で置き換えた。マテリアル（バイザーの色）とスケルトンは既存のまま。頂点数は LOD0〜2 で 81,625／43,211／19,333。スロット名が `AC01_InnerFrame` になったので、実行時の球の内装（`FitExoInnerFrame`）は出なくなる。
