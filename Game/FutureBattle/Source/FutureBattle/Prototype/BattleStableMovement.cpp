@@ -295,7 +295,29 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   const float Previous=B.StationaryMoveSeconds;
   B.StationaryMoveSeconds+=Dt;
   if(Previous<3.f && B.StationaryMoveSeconds>=3.f)
+  {
    UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_STALL unit=%d team=%d squad=%d pos=%s waypoint=%s"),ID,U->Team,U->SquadID,*Pos.ToString(),*Way.ToString());
+   // Detail (2026-11-20, diagnosis of the map I sector jams): what the soldier walks to, whether the way is clear of walls,
+   // and who stands within 1.5m (same squad / other squad of the team / enemy; and how many of them stand still).
+   int32 Own=0,Team=0,Enemy=0,Still=0;
+   for(const auto& Pair:Bodies)if(Pair.Key!=ID)if(const auto* O=Store->Find(Pair.Key);O&&O->IsAlive()&&FVector::DistSquared2D(Position(Pair.Key),Pos)<FMath::Square(150.))
+   {(O->Team!=U->Team?Enemy:O->SquadID==U->SquadID?Own:Team)++;Still+=Pair.Value.Velocity.Size2D()<20;}
+   UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_STALL_DETAIL unit=%d squad=%d order=%d action=%d sector=%d final=%d wp=%d/%d goal=%s clear=%d own=%d team=%d enemy=%d still=%d cover=%d"),
+    ID,U->SquadID,int32(S->Order),int32(S->TacticalPlan.Action),S->bSectorMission?1:0,Final?1:0,B.Waypoint,Route->Num(),Goal?*Goal->ToString():TEXT("-"),
+    ClearMovementSegment(Pos,Way)?1:0,Own,Team,Enemy,Still,U->CoverPhase?1:0);
+  }
+ }
+ // Trial -BattleWaypointPass=1 (2026-11-20, default 0): a soldier pushed past a corner of his route by the crowd (within 4m of
+ // the corner point, already on the far side towards the next point, and the next point reachable in a straight swept line)
+ // goes on to the next point instead of turning back to touch the corner. On map I with sector routes the whole west army
+ // queued at one shed corner in G8 (850 stalls a match), a fifth of them past the corner and walking back into the queue.
+ static const bool WaypointPass=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleWaypointPass="),V);return V!=0;}();
+ if(WaypointPass && !Final && B.Waypoint+1<Route->Num())
+ {
+  const FVector& Next=(*Route)[B.Waypoint+1];
+  if(FVector::DistSquared2D(Pos,Way)<FMath::Square(400.) && FVector::DistSquared2D(Pos,Way)>=FMath::Square(65.) &&
+     FVector::DotProduct((Pos-Way).GetSafeNormal2D(),(Next-Way).GetSafeNormal2D())>0.f && ClearMovementSegment(Pos,Next))
+  {++B.Waypoint;Way=Next;Final=B.Waypoint==Route->Num()-1;SightExperiment.Cover(TEXT("waypoint_pass"));}
  }
  if(!Final && FVector::Dist2D(Pos,Way)<65) {++B.Waypoint;Way=(*Route)[B.Waypoint];Final=B.Waypoint==Route->Num()-1;}
  FVector D=(Way-Pos).GetSafeNormal2D(); const FVector Right(-D.Y,D.X,0);
