@@ -312,6 +312,13 @@ public:
  // still peeks); AI soldiers only with the trial -BattleAIBlindFire=1, while pinned. -BattleBlindFire=0 turns it off.
  // Runtime only (display): until when the blind fire clip shows.
  TMap<int32,double> BlindFireUntil;
+ // Body animation (BattleBodyAnim.h; display only, runtime only): travel direction of the last shot that hit each soldier,
+ // and near followers whose one-shot clip ends at a time (a death clip then freezes; a stance transition returns to the loop).
+ TMap<int32,FVector> LastShotDirs;
+ FVector LastShotDirection(int32 ID) const {return LastShotDirs.FindRef(ID);}
+ struct FBodyTimer{double At=0;bool bFreeze=false;};
+ TMap<int32,FBodyTimer> BodyTimers;
+ void StepBodyTimers();
  bool IsBlindFiring(int32 ID,double Now) const {const double* T=BlindFireUntil.Find(ID);return T&&*T>Now;}
  // Where a blind shot leaves: above the top of a low cover, or just past the edge of a wide one, with a clear first stretch
  // toward AimPoint. False when neither works (the caller falls back to the old peek).

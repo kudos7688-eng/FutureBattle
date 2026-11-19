@@ -10,7 +10,7 @@ class UAnimSequence;
 // - Player: firing without aiming blind-fires; aiming and firing peeks as before. -BattleBlindFire=0 restores the old peek.
 // - AI: trial -BattleAIBlindFire=1 (default 0): a pinned soldier fires blind at the last known position instead of waiting.
 // - Display: the clips imported from the cover shooter sample (/Game/Characters/Mannequins/Anims/Rifle/Cover/, see
-//   BattleCoverAnimImport.cpp) while the blind fire lasts; without them the crouch clip stays.
+//   BattleBodyAnimImport.cpp) while the blind fire lasts; without them the crouch clip stays.
 namespace BattleBlindFire
 {
  bool PlayerEnabled();

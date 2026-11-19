@@ -1,6 +1,8 @@
 #include "BattleStance.h"
 #include "BattleBlindFire.h"
 #include "BattleState.h"
+#include "BattleBodyAnim.h"
+#include "BattleFollowerBones.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleFieldLayout.h"
 #include "BattleUnit.h"
@@ -47,7 +49,8 @@ UAnimSequence* BattleStance::CrouchClip(bool bWalk)
  }
  return bWalk&&Walk.IsValid()?Walk.Get():Idle.Get();
 }
-float BattleStance::BodyScale(uint8 Stance){return Stance==Crouch&&CrouchClip(false)?1.f:VisualScale(Stance);}
+// With a clip for the stance (crouch: Lyra; prone: the cover shooter sample, BattleBodyAnim) the body keeps its full size.
+float BattleStance::BodyScale(uint8 Stance){return (Stance==Crouch&&CrouchClip(false))||(Stance==Prone&&BattleBodyAnim::Get(BattleBodyAnim::EClip::ProneIdle))?1.f:VisualScale(Stance);}
 
 bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForce)
 {
@@ -62,8 +65,16 @@ bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForc
  if(const auto* B=Bodies.Find(ID))
  {
   const FVector Scale(1,1,BattleStance::BodyScale(Stance));
-  if(B->Actor.IsValid()){B->Actor->VisualStance=Stance;if(auto* Mesh=B->Actor->GetMesh())Mesh->SetRelativeScale3D(Scale);}
-  else if(B->Mesh.IsValid()){B->Mesh->SetRelativeScale3D(Scale);if(BattleStance::AnimEnabled())RefreshFollowerPose(ID);}
+  // A soldier with his own look has no prone clip: he keeps the squashed body.
+  if(B->Actor.IsValid()){B->Actor->VisualStance=Stance;if(auto* Mesh=B->Actor->GetMesh())Mesh->SetRelativeScale3D(B->Actor->HasLook()&&Stance==BattleStance::Prone?FVector(1,1,BattleStance::VisualScale(Stance)):Scale);}
+  else if(B->Mesh.IsValid())
+  {
+   B->Mesh->SetRelativeScale3D(Scale);
+   // Body animation: a near follower plays the stance transition once (StepBodyTimers returns him to his loop).
+   UAnimSequence* Change=B->Mesh->IsComponentTickEnabled()&&!(VAT&&VAT->IsFar(ID))?BattleBodyAnim::Transition(Current,Stance):nullptr;
+   if(Change){B->Mesh->PlayAnimation(Change,false);BodyTimers.Add(ID,{Now+Change->GetPlayLength(),false});}
+   else if(BattleStance::AnimEnabled())RefreshFollowerPose(ID);
+  }
  }
  SightExperiment.Cover(Stance==BattleStance::Prone?TEXT("stance_to_prone"):Stance==BattleStance::Crouch?TEXT("stance_to_crouch"):TEXT("stance_to_stand"));
  return true;
@@ -75,7 +86,24 @@ UAnimSequence* UBattleLeaderRuntime::FollowerClip(int32 ID,int32 Pose) const
  if(Pose!=2 && IsBlindFiring(ID,GetWorld()->GetTimeSeconds()))
   if(const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID))if(auto* Blind=BattleBlindFire::Clip(BattleBlindFire::IsOverTop(*U)))return Blind;
  if(StanceOf(ID)==BattleStance::Crouch)if(auto* Crouch=BattleStance::CrouchClip(Pose==1))return Crouch;
+ if(StanceOf(ID)==BattleStance::Prone)
+  if(auto* Prone=BattleBodyAnim::Get(Pose==2?BattleBodyAnim::EClip::ProneReload:Pose==1?BattleBodyAnim::EClip::ProneFwd:BattleBodyAnim::EClip::ProneIdle))return Prone;
  return Pose==2?ReloadPose.Get():Pose==1?WalkPose.Get():IdlePose.Get();
+}
+
+void UBattleLeaderRuntime::StepBodyTimers()
+{
+ if(BodyTimers.IsEmpty())return;
+ const double Now=GetWorld()->GetTimeSeconds();
+ for(auto It=BodyTimers.CreateIterator();It;++It)
+ {
+  if(Now<It.Value().At)continue;
+  const int32 ID=It.Key();const bool bFreeze=It.Value().bFreeze;It.RemoveCurrent();
+  const auto* B=Bodies.Find(ID);
+  if(!B||B->Actor.IsValid()||!B->Mesh.IsValid())continue;
+  if(bFreeze){BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones);B->Mesh->SetComponentTickEnabled(false);}
+  else RefreshFollowerPose(ID);
+ }
 }
 
 void UBattleLeaderRuntime::RefreshFollowerPose(int32 ID)

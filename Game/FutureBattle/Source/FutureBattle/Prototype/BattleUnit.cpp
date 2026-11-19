@@ -10,6 +10,7 @@
 #include "BattleCover.h"
 #include "BattleStance.h"
 #include "BattleBlindFire.h"
+#include "BattleBodyAnim.h"
 #include "BattleSquadAI.h"
 #include "BattleMetrics.h"
 #include "BattleMatch.h"
@@ -99,6 +100,12 @@ void ABattleUnit::InitializeUnit(int32 ID)
 	bWeaponVisuals = !FParse::Param(FCommandLine::Get(), TEXT("BattleLegacyWeaponVisuals"));
 	bTrialPose = FParse::Value(FCommandLine::Get(), TEXT("BattleSquadTrial="), TrialVariant);
 	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, GetMesh(), GetState()->Weapon, false);
+	// Body animation (BattleBodyAnim.h; -BattleBodyAnim=0 keeps the single whole-body clip).
+	if (bWeaponVisuals && !bTrialPose && BattleBodyAnim::Enabled() && BattleBodyAnim::Get(BattleBodyAnim::EClip::StandIdle))
+	{
+		GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		GetMesh()->SetAnimInstanceClass(UBattleBodyAnimInstance::StaticClass());
+	}
 	SpawnDefaultController();
 	SavedAI = Cast<AAIController>(GetController());
 }
@@ -350,12 +357,53 @@ FVector ABattleUnit::TracerStart(const UStaticMeshComponent* Model, const FVecto
 	return FVector::DotProduct(Off, Forward.GetSafeNormal2D()) >= 30. && Off.SizeSquared() <= FMath::Square(140.) ? Muzzle : Guess;
 }
 
+UBattleBodyAnimInstance* ABattleUnit::BodyAnim() const
+{
+	return LookIdle ? nullptr : Cast<UBattleBodyAnimInstance>(GetMesh()->GetAnimInstance());
+}
+
+void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUnitState& S)
+{
+	using namespace BattleBodyAnim;
+	const double Now = GetWorld()->GetTimeSeconds();
+	const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+	// Lower body: a stance change plays its transition once, then the idle or the walk in the direction of travel.
+	if (VisualStance != BodyStance)
+	{
+		TransitionClip = Transition(BodyStance, VisualStance);
+		TransitionUntil = TransitionClip ? Now + TransitionClip->GetPlayLength() : 0.;
+		BodyStance = VisualStance;
+	}
+	const bool bTransition = TransitionClip && Now < TransitionUntil;
+	const FVector Local = GetActorRotation().UnrotateVector(GetVelocity());
+	const bool bJog = Local.Size2D() > GetDefault<UBattleTuning>()->MoveSpeed * 1.15f;
+	Body.SetBase(bTransition ? TransitionClip.Get() : Locomotion(VisualStance, Local, bJog), !bTransition);
+	// Upper body: reload (synced to the reload timer), blind fire, otherwise the aim pose at the weapon's pitch.
+	const float Duration = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
+	const bool bProne = VisualStance == BattleStance::Prone;
+	UAnimSequence* Reload = Get(bProne ? EClip::ProneReload : EClip::Reload);
+	if (S.ReloadEndTime > Now && Reload)
+		Body.SetUpper(Reload, 1.f, Reload->GetPlayLength() * FMath::Clamp(1. - (S.ReloadEndTime - Now) / Duration, 0., 1.));
+	else if (UAnimSequence* Blind = Leaders && Leaders->IsBlindFiring(UnitID, Now) ? BattleBlindFire::Clip(BattleBlindFire::IsOverTop(S)) : nullptr)
+		Body.SetUpper(Blind, 1.f);
+	else Body.SetUpper(nullptr, 0.f);
+	const FVector AimDir = IsPlayerControlled() ? GetControlRotation().Vector() : S.WeaponAimDirection;
+	Body.SetAim(FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(AimDir.GetSafeNormal().Z, -1., 1.))), bProne || bTransition ? 0.f : 1.f);
+	// One-shot overlays: recoil for each shot, a flinch when hit (from the side the shot came from).
+	if (LastVisualShot > ShownShot) { ShownShot = LastVisualShot; if (!bProne) Body.PlayOverlay(Get(EClip::Fire), .55f); }
+	if (ShownHP >= 0.f && S.HP < ShownHP - .01f && !bProne)
+		Body.PlayOverlay(Hit(GetActorForwardVector(), Leaders ? Leaders->LastShotDirection(UnitID) : FVector::ZeroVector, UnitID + int32(Now * 10.)), 1.f);
+	ShownHP = S.HP;
+}
+
 void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 {
 	const double Now = GetWorld()->GetTimeSeconds();
 	const float Duration = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
 	const bool Reloading = S.ReloadEndTime > Now;
 	const bool Moving = GetVelocity().SizeSquared2D() > 400.;
+	if (auto* Body = BodyAnim()) UpdateBodyAnim(*Body, S);
+	else {
 	auto* Pose = Reloading ? RifleReload.Get() : Moving ? RifleWalk.Get() : RifleIdle.Get();
 	// Stance visuals trial: a crouched soldier plays the crouch clip (reloading included: there is no crouched reload clip).
 	if (auto* Crouch = VisualStance == BattleStance::Crouch ? BattleStance::CrouchClip(Moving) : nullptr) Pose = Crouch;
@@ -374,6 +422,7 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 		GetMesh()->PlayAnimation(Pose,Looping);
 		GetMesh()->SetPlayRate(!Looping ? Pose->GetPlayLength()/Duration : 1.f);
 		if (!Looping) GetMesh()->SetPosition(Pose->GetPlayLength()*FMath::Clamp(1.-(S.ReloadEndTime-Now)/Duration,0.,1.), false);
+	}
 	}
 	if (IsPlayerControlled() && Rifle->GetAttachParent()==FirstPersonCamera)
 	{
@@ -474,8 +523,19 @@ void ABattleUnit::ApplyDeath()
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	if (AAIController* AI = Cast<AAIController>(GetController())) AI->StopMovement();
-	GetMesh()->SetRelativeRotation(FRotator(0, -90, 85));
-	GetMesh()->SetRelativeLocation(FVector(0, 0, -65));
+	// Body animation: a death clip chosen by where the killing shot came from, holding its last frame; otherwise the body tips over.
+	UBattleBodyAnimInstance* Body = BodyAnim();
+	const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+	if (UAnimSequence* Death = Body ? BattleBodyAnim::Death(GetActorForwardVector(), Leaders ? Leaders->LastShotDirection(UnitID) : FVector::ZeroVector, UnitID) : nullptr)
+	{
+		GetMesh()->SetRelativeScale3D(FVector(1.));
+		Body->SetUpper(nullptr, 0.f); Body->SetAim(0.f, 0.f); Body->SetBase(Death, false);
+	}
+	else
+	{
+		GetMesh()->SetRelativeRotation(FRotator(0, -90, 85));
+		GetMesh()->SetRelativeLocation(FVector(0, 0, -65));
+	}
 	TeamLabel->SetText(FText::FromString(TEXT("DOWN")));
 	TeamLabel->SetTextRenderColor(FColor(140, 140, 140));
 	Rifle->SetVisibility(false);

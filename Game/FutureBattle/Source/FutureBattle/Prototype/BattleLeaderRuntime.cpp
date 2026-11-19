@@ -15,6 +15,7 @@
 #include "BattleSuppression.h"
 #include "BattleStance.h"
 #include "BattleBlindFire.h"
+#include "BattleBodyAnim.h"
 #include "EngineUtils.h"
 #include "BattleMetrics.h"
 #include "MassEntitySubsystem.h"
@@ -499,7 +500,18 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
  {
   B->Velocity=FVector::ZeroVector;
   if(B->Actor.IsValid()) B->Actor->ApplyDeath();
-  else { B->Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision); if(VAT)VAT->Freeze(ID); if(!VAT || !VAT->IsFar(ID)){BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones); B->Mesh->SetComponentTickEnabled(false); B->Mesh->SetRelativeRotation(FRotator(0,-90,85)); B->Weapon->SetVisibility(false);} }
+  else
+  {
+   B->Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision); if(VAT)VAT->Freeze(ID);
+   if(!VAT || !VAT->IsFar(ID))
+   {
+    B->Weapon->SetVisibility(false);
+    // Body animation: a near follower plays a death clip and freezes on its last frame (StepBodyTimers); otherwise it tips over.
+    UAnimSequence* Death=B->Mesh.IsValid()?BattleBodyAnim::Death(Forward(ID),LastShotDirs.FindRef(ID),ID):nullptr;
+    if(Death){B->Mesh->SetRelativeScale3D(FVector(1.));B->Mesh->PlayAnimation(Death,false);BodyTimers.Add(ID,{GetWorld()->GetTimeSeconds()+Death->GetPlayLength(),true});}
+    else {BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones); B->Mesh->SetComponentTickEnabled(false); B->Mesh->SetRelativeRotation(FRotator(0,-90,85));}
+   }
+  }
  }
  bSummaryDirty=true;
 }
@@ -999,6 +1011,9 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  }
  SuppressNear(U->Team,Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Now,U->Weapon==EBattleWeapon::SupportGun?BattleSuppression::Tuning().SupportScale:1.f);
  const int32 Victim=HitIDs.FindRef(Hit.GetComponent());
+ // Display only (BattleBodyAnim): the hit and death clips face the side the shot came from.
+ if(Victim>0)LastShotDirs.Add(Victim,Direction.GetSafeNormal2D());
+ if(auto* Shooter=Actor(ID))Shooter->NoteVisualShot(Now);
  // Per-shot damage by the shooter's squad type (heavy infantry may hit harder; rifle squads 1x).
  // An anti-tank round hits for ATDamage (and ATBaseDamage on an enemy home); its explosion follows below.
  const bool bAT=U->Weapon==EBattleWeapon::AntiTank;
@@ -1114,6 +1129,7 @@ void UBattleLeaderRuntime::Step(float Dt)
  TRACE_CPUPROFILER_EVENT_SCOPE(BattleRuntimeStep);
  if(SightExperiment.Enabled) { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightExperiment); StepSightExperiment(Dt); }
  if(Phase3 && Phase3->bEnabled) { Phase3->Step(Dt); return; }
+ StepBodyTimers();
  if(bMovementTrial && MoveTrialStage==1 && !Mode->bCombatPaused) MoveTrialFrameMS.Add(Dt*1000);
  const double Now=GetWorld()->GetTimeSeconds(); auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Build the cover slots while the match waits to start (they were built lazily by the first decision: ~100 ms in one frame).

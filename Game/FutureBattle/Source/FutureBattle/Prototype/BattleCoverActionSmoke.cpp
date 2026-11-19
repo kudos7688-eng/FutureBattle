@@ -1,5 +1,9 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleBlindFire.h"
+#include "BattleBodyAnim.h"
+#include "BattleStance.h"
+#include "BattleUnit.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "BattleGameMode.h"
 #include "BattleMatch.h"
 #include "BattleSave.h"
@@ -75,6 +79,17 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
  {
   if(Store->Find(1)->CoverPhase!=2 && Now-BayStart<5){Later(.1);return;}
   Check(Store->Find(1)->CoverPhase==2,TEXT("Actor reaches protected anchor"));
+  // Body animation (BattleBodyAnim.h): the leader body uses the layered instance once the clips are imported, and every clip loads.
+  if(BattleBodyAnim::Enabled())
+  {
+   int32 Missing=0;for(int32 C=0;C<int32(BattleBodyAnim::EClip::Count);++C)Missing+=!BattleBodyAnim::Get(BattleBodyAnim::EClip(C));
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_ANIM_SMOKE missing=%d instance=%s"),Missing,*GetNameSafe(Actor(1)->GetMesh()->GetAnimInstance()));
+   Check(Missing==0,TEXT("all body animation clips load"));
+   Check(Cast<UBattleBodyAnimInstance>(Actor(1)->GetMesh()->GetAnimInstance())!=nullptr,TEXT("leader body uses the layered body animation"));
+   Check(BattleStance::BodyScale(BattleStance::Prone)==1.f,TEXT("prone body keeps its size with the prone clip"));
+   Check(BattleBodyAnim::Locomotion(0,FVector(-200,0,0),false)==BattleBodyAnim::Get(BattleBodyAnim::EClip::StandBwd)&&BattleBodyAnim::Locomotion(1,FVector(0,200,0),false)==BattleBodyAnim::Get(BattleBodyAnim::EClip::CrouchRight),TEXT("walk clip follows the direction of travel"));
+   Check(BattleBodyAnim::Death(FVector(1,0,0),FVector(1,0,0),0)==BattleBodyAnim::Get(BattleBodyAnim::EClip::DeathBack),TEXT("a shot from behind picks the back death clip"));
+  }
   Match->DirectorClock=0;Match->DelegationClock=0;
   FString Error;auto* Snapshot=Match->CaptureSnapshot();Check(Snapshot&&Snapshot->Validate(Error),TEXT("active cover snapshot validates"));
   Check(Match->SaveMatch(TEXT("FutureBattleSmokeOnly"))&&Match->LoadMatch(TEXT("FutureBattleSmokeOnly")),TEXT("active cover serializes and restores"));

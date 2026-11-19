@@ -74,7 +74,17 @@ public:
 	// A squad type's own look (the exoskeleton soldier's AC01 suit): its own clips and its own weapon model held at a bone
 	// (Grip = the model relative to that bone). There is no reload clip: the pose stays. Set by UBattleLeaderRuntime::ApplySquadLook.
 	void SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequence* CrouchIdle, UAnimSequence* CrouchMove, UStaticMesh* Weapon, FName Bone, const FTransform& Grip);
+	bool HasLook() const { return LookIdle != nullptr; }
+	// Recoil display of the body (BattleBodyAnim): set by the shared fire path for every shot of this soldier.
+	void NoteVisualShot(double Time) { LastVisualShot = Time; }
 private:
+	// Body animation (BattleBodyAnim.h): lower body by stance, direction and transition, upper-body layers and overlays.
+	void UpdateBodyAnim(class UBattleBodyAnimInstance& Body, const FBattleUnitState& S);
+	class UBattleBodyAnimInstance* BodyAnim() const;
+	uint8 BodyStance = 0;
+	UPROPERTY() TObjectPtr<UAnimSequence> TransitionClip;
+	double TransitionUntil = 0., ShownShot = -10.;
+	float ShownHP = -1.f;
 	UPROPERTY() TObjectPtr<UAnimSequence> LookIdle;
 	UPROPERTY() TObjectPtr<UAnimSequence> LookMove;
 	UPROPERTY() TObjectPtr<UAnimSequence> LookCrouchIdle;

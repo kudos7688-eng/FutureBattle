@@ -5,5 +5,5 @@ int32 BuildBattleVATMaterials();
 int32 ValidateBattleVAT();
 int32 RepairBattleVATMetadata();
 int32 ImportBattleStanceAnims();
-int32 ImportBattleCoverAnims();
+int32 ImportBattleBodyAnims();
 #endif
