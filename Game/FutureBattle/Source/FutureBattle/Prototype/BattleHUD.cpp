@@ -15,6 +15,9 @@
 #include "BattleFieldLayout.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 void ABattleHUD::DrawHUD()
 {
@@ -403,6 +406,7 @@ void ABattleHUD::DrawHUD()
 		DrawLine(W / 2, H / 2 + 4, W / 2, H / 2 + 13, CrossColor, 1.5f);
 		}
 	}
+	DrawHitDirection(PC);
 	if (PC->NoticeUntil > GetWorld()->GetTimeSeconds()) Label(BattleUIText::Ja(PC->Notice), 35, PC->CanShowDelegation() ? H - 156 : Match->IsEnabled() ? 235 : 96, Mint, 1.1f);
 	if (PC->IsTactical() && PC->PendingOrder != EBattleOrder::Move)
 		Label(FString::Printf(TEXT("%s：右クリックで目的地 ／ Hで取消"), *BattleUIText::Ja(BattleOrderName(PC->PendingOrder))), 35, 148, FLinearColor::Yellow);
@@ -634,5 +638,43 @@ void ABattleHUD::DrawOrderMarks()
   // Arrival slots of living members.
   if(const auto* Plan=L->PlanOf(SID)) for(const auto& Slot:Plan->ArrivalGoals) if(const auto* M=Store->Find(Slot.Key); M&&M->IsAlive())
   {FVector2D P; if(Screen(Slot.Value+FVector(0,0,20),P)) DrawRect(Color*FLinearColor(1,1,1,.7f),P.X-2,P.Y-2,4,4);}
+ }
+}
+
+void ABattleHUD::DrawHitDirection(ABattleController* PC)
+{
+ static const bool bOn=[]{int32 Mode=1;FParse::Value(FCommandLine::Get(),TEXT("BattleHitDirection="),Mode);return Mode!=0;}();
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ const ABattleUnit* Unit=PC->IsTactical()?nullptr:Cast<ABattleUnit>(PC->GetPawn());
+ const int32 Watch=Unit?Unit->GetUnitID():INDEX_NONE;
+ if(Store->HitWatchID!=Watch){Store->HitWatchID=Watch;Store->HitNotices.Reset();}
+ if(!bOn||!Unit||!Canvas)return;
+ const double Now=GetWorld()->GetTimeSeconds();const float Fade=1.5f;
+ const float W=Canvas->SizeX,H=Canvas->SizeY,Cx=W*.5f,Cy=H*.5f,R=FMath::Min(W,H)*.14f;
+ const float CameraYaw=PC->PlayerCameraManager?PC->PlayerCameraManager->GetCameraRotation().Yaw:PC->GetControlRotation().Yaw;
+ const FVector Here=Unit->GetActorLocation();
+ for(const FBattleHitNotice& N:Store->HitNotices)
+ {
+  const float Age=float(Now-N.Time);if(Age<0.f||Age>Fade)continue;
+  const float Alpha=1.f-Age/Fade;const FLinearColor Red(1.f,.12f,.08f,.9f*Alpha);
+  const FVector To=N.From-Here;
+  if(!N.bKnown||To.SizeSquared2D()<100.f*100.f)
+  {
+   // Source unknown or right on top of the soldier: a thin ring.
+   for(int32 I=0;I<32;++I){const float A0=I*2*PI/32,A1=(I+1)*2*PI/32;DrawLine(Cx+FMath::Sin(A0)*R,Cy-FMath::Cos(A0)*R,Cx+FMath::Sin(A1)*R,Cy-FMath::Cos(A1)*R,Red*FLinearColor(1,1,1,.6f),2.f);}
+   continue;
+  }
+  // Angle on screen: 0 = straight ahead (top), clockwise to the right.
+  const float Angle=FMath::DegreesToRadians(FMath::FindDeltaAngleDegrees(CameraYaw,FMath::RadiansToDegrees(FMath::Atan2(To.Y,To.X))));
+  const float Half=FMath::DegreesToRadians(20.f);
+  for(int32 I=0;I<8;++I)
+  {
+   const float A0=Angle-Half+2*Half*I/8,A1=Angle-Half+2*Half*(I+1)/8;
+   DrawLine(Cx+FMath::Sin(A0)*R,Cy-FMath::Cos(A0)*R,Cx+FMath::Sin(A1)*R,Cy-FMath::Cos(A1)*R,Red,6.f);
+  }
+  // A short point outward so the arc reads as an arrow.
+  const FVector2D Tip(Cx+FMath::Sin(Angle)*(R+18.f),Cy-FMath::Cos(Angle)*(R+18.f));
+  for(const float Side:{-1.f,1.f})
+  {const float A=Angle+Side*FMath::DegreesToRadians(7.f);DrawLine(Cx+FMath::Sin(A)*(R+3.f),Cy-FMath::Cos(A)*(R+3.f),Tip.X,Tip.Y,Red,3.f);}
  }
 }

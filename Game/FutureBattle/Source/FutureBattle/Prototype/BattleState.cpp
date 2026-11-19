@@ -432,7 +432,7 @@ bool UBattleState::ApplyDamage(int32 ID, int32 AttackingTeam, float Damage)
  {
   State->ShieldWait=FMath::Max(0.f,GetDefault<UBattleTuning>()->ExoShieldDelay);
   const float Absorbed=FMath::Min(FMath::Max(0.f,State->Shield),Damage);State->Shield-=Absorbed;Damage-=Absorbed;
-  if(Damage<=0.f){if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>())Runtime->NoteUnderFire(ID);return true;}
+  if(Damage<=0.f){if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>())Runtime->NoteUnderFire(ID);NoteHit(ID);return true;}
  }
   GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordDamage(State->SquadID, FMath::Min(State->HP, Damage));
  if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>())Runtime->NoteUnderFire(ID);
@@ -448,7 +448,22 @@ bool UBattleState::ApplyDamage(int32 ID, int32 AttackingTeam, float Damage)
   }
 		if (State->bLeaderManaged) { State->DeathCause = TEXT("Combat"); OnUnitDied.Broadcast(ID); }
 	}
+	NoteHit(ID);
 	return true;
+}
+
+bool UBattleState::ApplyDamageFrom(int32 ID, int32 AttackingTeam, float Damage, const FVector& From)
+{
+ PendingHitFrom=From;bPendingHitFrom=!From.ContainsNaN();
+ const bool bHit=ApplyDamage(ID,AttackingTeam,Damage);
+ bPendingHitFrom=false;return bHit;
+}
+
+void UBattleState::NoteHit(int32 ID)
+{
+ if(ID!=HitWatchID||ID==INDEX_NONE)return;
+ if(HitNotices.Num()>=6)HitNotices.RemoveAt(0);
+ FBattleHitNotice N;N.Time=GetWorld()->GetTimeSeconds();N.From=PendingHitFrom;N.bKnown=bPendingHitFrom;HitNotices.Add(N);
 }
 
 int32 UBattleState::CreateLeaderSquad(int32 Team, const TArray<int32>& Members, int32 LeaderID, bool bAllowControl)

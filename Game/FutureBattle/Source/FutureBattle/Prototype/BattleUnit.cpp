@@ -260,7 +260,7 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 	GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Query);
 	if (ABattleUnit* Victim = Cast<ABattleUnit>(Hit.GetActor()))
 	{
-		if (Store->ApplyDamage(Victim->GetUnitID(), GetState()->Team, Tuning->ShotDamage))
+		if (Store->ApplyDamageFrom(Victim->GetUnitID(), GetState()->Team, Tuning->ShotDamage, Start))
 		{
 			if (Metrics->bRecording) ++Metrics->Hits;
 			if (bPlayerShot) if (ABattleController* PC = Cast<ABattleController>(GetController())) PC->HitMarkerUntil = GetWorld()->GetTimeSeconds() + .18;

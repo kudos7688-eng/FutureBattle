@@ -1008,7 +1008,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   {++SquadLiving;if(Member!=Victim && FVector::DistSquared2D(Position(Member),Start)<LeaderDistance)++LeaderRank;}
  }
  // Armour: a vehicle takes only anti-tank hits (rifles and machine guns do nothing to it).
- const bool Damaged=Victim>0 && ArmorScale(Victim,U->Weapon)>0.f && Store->ApplyDamage(Victim,U->Team,ShotDmg*ArmorScale(Victim,U->Weapon));
+ const bool Damaged=Victim>0 && ArmorScale(Victim,U->Weapon)>0.f && Store->ApplyDamageFrom(Victim,U->Team,ShotDmg*ArmorScale(Victim,U->Weapon),Start);
  if(SightExperiment.Started && Damaged && BeforeVictim)
  {
   auto& E=SightExperiment;const bool Killed=BeforeHP>0 && !Store->Find(Victim)->IsAlive();

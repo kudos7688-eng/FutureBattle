@@ -297,7 +297,7 @@ bool UBattleLeaderRuntime::FireExoLauncher(int32 ID,const FVector& Aim,double No
  if(const auto* Before=Store->Find(Victim);Before&&Before->IsAlive()&&Before->Team!=Team)
  {
   const float BeforeHP=Before->HP;const int32 VictimTeam=Before->Team;const auto* VS=Store->FindSquad(Before->SquadID);const uint8 VictimType=VS?VS->SquadType:0;
-  if(Store->ApplyDamage(Victim,Team,T->ATDamage))
+  if(Store->ApplyDamageFrom(Victim,Team,T->ATDamage,Start))
   {
    ++ExoLauncherHits;
    if(SightExperiment.Started)

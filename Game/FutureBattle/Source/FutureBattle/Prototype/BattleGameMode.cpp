@@ -245,7 +245,14 @@ void ABattleGameMode::RunSmokeTest()
 	}
 	CheckSmoke(bSquadsValid, TEXT("Four persistent five-member squads with matching team membership"));
 	const double Now = GetWorld()->GetTimeSeconds();
-	Store->ApplyDamage(A->GetUnitID(), 1, 17);
+	// Hit direction (display only): hits on the watched unit are kept, with the source when the caller gives one.
+	// The same 17 damage as before, in two hits (10 with a source, 7 without), so the rest of the test is unchanged.
+	Store->HitWatchID = A->GetUnitID(); Store->HitNotices.Reset();
+	const FVector HitFrom = A->GetActorLocation() + FVector(0, 1000, 0);
+	Store->ApplyDamageFrom(A->GetUnitID(), 1, 10, HitFrom);
+	Store->ApplyDamage(A->GetUnitID(), 1, 7);
+	CheckSmoke(Store->HitNotices.Num() == 2 && Store->HitNotices[0].bKnown && Store->HitNotices[0].From.Equals(HitFrom) && !Store->HitNotices[1].bKnown, TEXT("Hits on the controlled unit keep their source"));
+	Store->HitWatchID = INDEX_NONE; Store->HitNotices.Reset();
 	Store->ConsumeShot(A->GetUnitID(), Now - 1., .1);
 	Store->SetOrder(A->GetUnitID(), EBattleOrder::Move, FVector(-1400, -600, 0));
 	const FBattleUnitState Before = *A->GetState();

@@ -684,6 +684,14 @@ public:
 	UPROPERTY(Config, EditAnywhere) int32 PerceptionSlices = 4;
 };
 
+// A hit on the unit the player controls (display only: the HUD's hit direction; rules never read it, not saved).
+struct FBattleHitNotice
+{
+	double Time = 0.;
+	FVector From = FVector::ZeroVector; // where the shot or blast came from; meaningless when !bKnown
+	bool bKnown = false;
+};
+
 UCLASS()
 class UBattleState : public UWorldSubsystem
 {
@@ -733,6 +741,12 @@ public:
 	float MaxShieldOf(int32 UnitID) const;
 	bool HasShields() const { return bShields; }
 	bool ApplyDamage(int32 ID, int32 AttackingTeam, float Damage);
+	// ApplyDamage plus where the shot or blast came from, for the HUD's hit direction (display only, same result as ApplyDamage).
+	bool ApplyDamageFrom(int32 ID, int32 AttackingTeam, float Damage, const FVector& From);
+	// Hit direction (2026-11-19, display only): the HUD sets HitWatchID to the unit the player controls every frame; hits on
+	// that unit are kept here (newest last, at most 6). Hits through ApplyDamage alone have no known source.
+	int32 HitWatchID = INDEX_NONE;
+	TArray<FBattleHitNotice> HitNotices;
 	int32 AddReserve(int32 ID, int32 Rounds);
 	// Moves reserve rounds between two living soldiers with the same kind of weapon; returns the rounds moved.
 	int32 MoveReserve(int32 FromID, int32 ToID, int32 Rounds);
@@ -746,4 +760,6 @@ private:
 	int32 NextSquadID = 1;
 	bool bShields = false; // a squad type with a shield exists (purchase or restore)
 	int32 NextID = 1;
+	FVector PendingHitFrom = FVector::ZeroVector; bool bPendingHitFrom = false; // set only inside ApplyDamageFrom
+	void NoteHit(int32 ID);
 };
