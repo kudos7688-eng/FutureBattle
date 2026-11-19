@@ -88,6 +88,10 @@ struct FBattleLeaderBody
  TArray<FVector> ContactRoute;
  double NextContactProbe=0, ContactRouteUntil=0, NextArrivalProbe=0;
  bool bArrivalOccupied=false, bContactWaiting=false;
+ // Trial -BattleAllyPass=1 (2026-11-19, user request): after waiting 3 s in front of a stopped ally cluster that no detour gets
+ // around, the soldier may walk through stopped allies (only them) until AllyPassUntil. The components it ignores meanwhile.
+ double AllyPassUntil=0;
+ TArray<TWeakObjectPtr<UPrimitiveComponent>> AllyPassIgnored;
  int32 Waypoint=1, Pose=0;
  FBattleAnimTasks AnimTasks;
 };
@@ -441,6 +445,8 @@ private:
  void BuildMovementPlan(int32 SquadID);
  bool StableMove(int32 ID,float Dt,double Now,FVector& Direction);
  bool IsStationaryAlly(int32 Observer,int32 Other) const;
+ void BeginAllyPass(int32 ID,double Now);
+ void EndAllyPass(int32 ID);
  void ReassignOccupiedArrival(int32 ID,double Now);
  bool ResolveStoppedContact(int32 ID,FVector Way,double Now,FVector& Direction,float& Scale);
  bool ClearMovementSegment(FVector A,FVector B) const;

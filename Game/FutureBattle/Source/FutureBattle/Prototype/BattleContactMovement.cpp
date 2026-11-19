@@ -128,3 +128,34 @@ bool UBattleLeaderRuntime::ResolveStoppedContact(int32 ID,FVector Way,double Now
  }
  B.bContactWaiting=true;B.EscapeUntil=0;B.PassingID=INDEX_NONE;Scale=0;return true;
 }
+
+// Trial -BattleAllyPass=1 (2026-11-19, user request; off by default). A soldier that waited 3 s in front of a stopped ally cluster
+// that ResolveStoppedContact found no way around walks through the stopped allies within 8 m for 5 s: its own sweep (Mass) or its
+// capsule's movement (Actor leader) ignores their bodies. Walls, the ground, moving soldiers and enemies still block it. Only the
+// passing soldier changes; the stopped allies keep their places. Found with map H's sector audit (8-soldier squads, squad 8).
+void UBattleLeaderRuntime::BeginAllyPass(int32 ID,double Now)
+{
+ EndAllyPass(ID);
+ auto& B=Bodies.FindChecked(ID);const FVector Pos=Position(ID);
+ UPrimitiveComponent* Own=B.Actor.IsValid()?static_cast<UPrimitiveComponent*>(B.Actor->GetCapsuleComponent()):static_cast<UPrimitiveComponent*>(B.Capsule.Get());
+ for(const auto& Other:Bodies)
+ {
+  if(!IsStationaryAlly(ID,Other.Key)||FVector::DistSquared2D(Position(Other.Key),Pos)>FMath::Square(800.))continue;
+  UPrimitiveComponent* C=Other.Value.Actor.IsValid()?static_cast<UPrimitiveComponent*>(Other.Value.Actor->GetCapsuleComponent()):static_cast<UPrimitiveComponent*>(Other.Value.Capsule.Get());
+  if(!C)continue;
+  B.AllyPassIgnored.Add(C);
+  if(B.Actor.IsValid()&&Own)Own->IgnoreComponentWhenMoving(C,true);
+ }
+ B.AllyPassUntil=Now+5;
+ const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
+ UE_LOG(LogTemp,Display,TEXT("BATTLE_ALLY_PASS unit=%d squad=%d team=%d ignored=%d t=%.1f pos=%s"),ID,U?U->SquadID:-1,U?U->Team:-1,B.AllyPassIgnored.Num(),Now,*Pos.ToCompactString());
+}
+
+void UBattleLeaderRuntime::EndAllyPass(int32 ID)
+{
+ auto* B=Bodies.Find(ID);if(!B)return;
+ if(B->Actor.IsValid())
+  if(UPrimitiveComponent* Own=B->Actor->GetCapsuleComponent())
+   for(const auto& C:B->AllyPassIgnored)if(C.IsValid())Own->IgnoreComponentWhenMoving(C.Get(),false);
+ B->AllyPassIgnored.Reset();B->AllyPassUntil=0;
+}
