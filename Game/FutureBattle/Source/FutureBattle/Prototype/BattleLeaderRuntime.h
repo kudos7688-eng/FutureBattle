@@ -325,6 +325,9 @@ public:
  // Over-the-top blind fire shows the head (BattleBlindFire::ExposeEnabled): while it does, the heights others aim at and
  // hit are the head's. Every rule that reads a target's stance height goes through these two.
  bool IsHeadExposed(int32 ID,double Now) const;
+ // Around the edge: the origin of the last side blind shot, and whether that part of the body shows now (Point = its centre).
+ TMap<int32,FVector> BlindFireSide;
+ bool SideExposure(int32 ID,double Now,FVector& Point) const;
  float TargetAimOffset(int32 ID) const;
  float TargetTopOffset(int32 ID) const;
  // Mesh yaw (degrees, right positive) that turns a body facing Forward toward BlindFireLook; 0 over the top or when unknown.

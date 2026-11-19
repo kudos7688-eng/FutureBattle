@@ -25,6 +25,11 @@ namespace BattleBlindFire
  // -BattleBlindFireExpose=0 restores the fully hidden blind fire (the hands then lift the rifle alone).
  bool ExposeEnabled();
  constexpr float ExposedAimOffset=60.f,ExposedTopOffset=80.f,ExposedEyeOffset=60.f;
+ // Around the edge (user decision, 2026-11-20) a little of the body shows past the edge for the same time: a sphere of
+ // SideExposedRadius at the blind fire origin. Sight aims at it and looks from it, and a bullet whose line passes through it
+ // before anything else hits the soldier. The body is drawn leaning out there (its centre SideLeanBack behind the origin,
+ // toward the anchor); the capsule, movement and every other rule stay at the anchor.
+ constexpr float SideExposedRadius=25.f,SideLeanBack=30.f;
  // How long the blind fire clip stays after a shot.
  constexpr double ClipHoldSeconds=.6;
  // Low cover (the soldier stands up in place to fire, so the peek point is the anchor): blind fire goes over the top.

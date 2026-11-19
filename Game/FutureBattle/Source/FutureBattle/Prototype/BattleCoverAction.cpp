@@ -394,6 +394,11 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
    {
     // Blind fire around the edge turns the body so the rifle points around the corner (BlindFireYaw, 0 over the top).
     B.Mesh->SetRelativeRotation(FRotator(0,-90+(Pose==2?0.f:Blind?BlindFireYaw(ID,Forward(ID)):ClipPhase?BattleCoverClips::YawOffset(ClipPhase):0.f),0));
+    // Leaning out past the edge while the side blind fire shows part of the body (BattleBlindFire::SideLeanBack).
+    FVector Lean=FVector::ZeroVector,Shown;
+    if(Blind && SideExposure(ID,Now,Shown)){const FVector Pos=Position(ID),Out=(Shown-Pos).GetSafeNormal2D();Lean=Shown-Out*BattleBlindFire::SideLeanBack-Pos;Lean.Z=0.;}
+    const USceneComponent* Parent=B.Mesh->GetAttachParent();
+    B.Mesh->SetRelativeLocation(FVector(0,0,-90)+(Parent?Parent->GetComponentTransform().InverseTransformVectorNoScale(Lean):Lean));
     B.Mesh->PlayAnimation(FollowerClip(ID,Pose),true);
    }
   }

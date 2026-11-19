@@ -362,6 +362,16 @@ UBattleBodyAnimInstance* ABattleUnit::BodyAnim() const
 	return LookIdle ? nullptr : Cast<UBattleBodyAnimInstance>(GetMesh()->GetAnimInstance());
 }
 
+void ABattleUnit::SetMeshLean(const FVector& WorldOffset, float DeltaSeconds)
+{
+	const FVector Target = GetActorTransform().InverseTransformVectorNoScale(WorldOffset);
+	if (Target.Equals(MeshLeanShown, .1)) return;
+	const FVector Base = GetMesh()->GetRelativeLocation() - MeshLeanShown;
+	// About a quarter of a second to the edge of a 2 m lean and back.
+	MeshLeanShown = FMath::VInterpConstantTo(MeshLeanShown, Target, DeltaSeconds, 900.f);
+	GetMesh()->SetRelativeLocation(Base + MeshLeanShown);
+}
+
 void ABattleUnit::SetMeshYaw(float Yaw)
 {
 	if (FMath::IsNearlyEqual(Yaw, MeshYawShown)) return;
@@ -375,6 +385,16 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	const double Now = GetWorld()->GetTimeSeconds();
 	const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
 	Body.SetHandRaise(FVector::ZeroVector, 0.f);
+	{
+		// Leaning out past the edge for a side blind shot: the body centre goes to SideLeanBack behind the shown part.
+		FVector Shown, Lean = FVector::ZeroVector;
+		if (Leaders && Leaders->SideExposure(UnitID, Now, Shown))
+		{
+			const FVector Pos = GetActorLocation(), Out = (Shown - Pos).GetSafeNormal2D();
+			Lean = Shown - Out * BattleBlindFire::SideLeanBack - Pos; Lean.Z = 0.;
+		}
+		SetMeshLean(Lean, GetWorld()->GetDeltaSeconds());
+	}
 	// Lower body: a stance change plays its transition once, then the idle or the walk in the direction of travel.
 	if (VisualStance != BodyStance)
 	{

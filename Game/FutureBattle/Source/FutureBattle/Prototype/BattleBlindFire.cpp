@@ -83,6 +83,14 @@ bool UBattleLeaderRuntime::IsHeadExposed(int32 ID,double Now) const
  return U && U->CoverPhase==2 && BattleBlindFire::IsOverTop(*U);
 }
 
+bool UBattleLeaderRuntime::SideExposure(int32 ID,double Now,FVector& Point) const
+{
+ if(!BattleBlindFire::ExposeEnabled() || !IsBlindFiring(ID,Now))return false;
+ const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);const FVector* Origin=BlindFireSide.Find(ID);
+ if(!U || !Origin || U->CoverPhase!=2 || BattleBlindFire::IsOverTop(*U))return false;
+ Point=*Origin;return true;
+}
+
 float UBattleLeaderRuntime::TargetAimOffset(int32 ID) const
 {
  return IsHeadExposed(ID,GetWorld()->GetTimeSeconds())?BattleBlindFire::ExposedAimOffset:BattleStance::AimOffset(StanceOf(ID));

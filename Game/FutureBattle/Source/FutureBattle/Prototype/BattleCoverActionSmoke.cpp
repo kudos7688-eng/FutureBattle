@@ -59,6 +59,21 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    Check(Fire(1,Eye,(Threat-Eye).GetSafeNormal(),true)&&Store->Find(1)->Ammo<Before,TEXT("unaimed trigger behind cover blind-fires"));
    Check(Store->Find(1)->CoverPhase==2&&IsBlindFiring(1,Now)&&FVector::Dist2D(Position(1),Store->Find(1)->CoverAnchor)<40,TEXT("blind fire keeps the body hidden at the anchor"));
    Check(!IsHeadExposed(1,Now)&&TargetAimOffset(1)==BattleStance::AimOffset(StanceOf(1)),TEXT("blind fire around the edge does not expose the head"));
+   if(BattleBlindFire::ExposeEnabled())
+   {
+    // A little of the body shows past the edge: it is seen and looks from there, and a bullet through it hits.
+    FVector Shown;const bool bShown=SideExposure(1,Now,Shown);
+    Check(bShown&&Shown.Equals(Origin,1.)&&Sight(1).Eye.Equals(Shown,1.),TEXT("blind fire around the edge shows a little of the body past the edge"));
+    if(bShown)
+    {
+     auto& E=Store->Units.FindChecked(251);E.NextShotTime=0;E.ReloadEndTime=0;E.Ammo=FMath::Max(E.Ammo,1);
+     const FVector Dir=(Threat-Shown).GetSafeNormal(),From=Shown+Dir*120.;E.WeaponAimDirection=-Dir;
+     const float HP=Store->Find(1)->HP;Fire(251,From,-Dir,false);
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BLINDFIRE_SIDE shown=%s hp_before=%.0f hp_after=%.0f"),*Shown.ToCompactString(),HP,Store->Find(1)->HP);
+     Check(Store->Find(1)->HP<HP,TEXT("a bullet through the part past the edge hits the blind-firing soldier"));
+     Store->Units.FindChecked(1).HP=HP;
+    }
+   }
  };
  // Over the top (the stand-up kind: peek point = anchor): the head comes up while the clip shows, so others aim at and hit it.
  auto FireOverTop=[&]
@@ -77,7 +92,8 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
  auto EndOverTop=[&]
  {
   Store->Units.FindChecked(1).CoverPeek=SmokeSavedPeek;BlindFireUntil.Remove(1);
-  Check(!IsHeadExposed(1,GetWorld()->GetTimeSeconds())&&TargetTopOffset(1)==BattleStance::TopOffset(StanceOf(1))
+  FVector Shown;
+  Check(!IsHeadExposed(1,GetWorld()->GetTimeSeconds())&&!SideExposure(1,GetWorld()->GetTimeSeconds(),Shown)&&TargetTopOffset(1)==BattleStance::TopOffset(StanceOf(1))
    &&FMath::IsNearlyEqual(Sight(1).Eye.Z-Position(1).Z,BattleStance::EyeOffset(StanceOf(1)),1.f),TEXT("head is hidden again once the blind fire ends (sight and eye)"));
  };
  auto AfterBlindFire=[&]
