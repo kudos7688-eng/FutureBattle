@@ -135,6 +135,9 @@ $supply=@{
  'CA0'=@('-CoverArrival','0')
  # TP3 = stances with stronger suppression per shot (0.3 instead of 0.12).
  'TP3'=@('-Suppression','1','-SuppressionPerShot','0.3')
+ # Active squad limit (2026-11-19, -BattleAreaMaxSquads; default 25 = HI): MS32/MS40 let both teams hire up to 32/40 active squads.
+ 'MS32'=@('-AreaMaxSquads','32')
+ 'MS40'=@('-AreaMaxSquads','40')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}
