@@ -83,6 +83,8 @@ int32 ImportBattleBodyAnims()
   const int32 Notifies=Dst->Notifies.Num();
   Dst->Notifies.Empty();
   Dst->bForceRootLock=true;
+  // The sample's preview mesh lives in the staging folder that is deleted afterwards: point it at the project's body.
+  Dst->SetPreviewMesh(BodyMesh,false);
   if(!Dst->ReplaceSkeleton(Target,false)){UE_LOG(LogTemp,Error,TEXT("BODY_ANIM_IMPORT skeleton replace failed %s"),Entry.Name);++Failures;continue;}
   Dst->RefreshCacheData();
   Dst->PostEditChange();
