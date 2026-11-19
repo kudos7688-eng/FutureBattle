@@ -68,7 +68,7 @@ void ABattleController::EndPathDraw()
  if(!GetPointerPosition(Pointer)||!PickOrderPoint(Pointer,End,&Level)){if(Drawn.IsEmpty())return;End=Drawn.Last();}
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const double Length=DrawnLength+(Drawn.Num()?FVector::Dist2D(End,Drawn.Last()):0.);
- if(Length<2500||!L->IsEnabled()||!L->IsWideField())
+ if((BattleFieldLayout::Of(GetWorld()).bSectors && PendingOrder!=EBattleOrder::Move)||Length<2500||!L->IsEnabled()||!L->IsWideField())
  {
   // A click (or a drag too short to be a way): the ordinary order at the point.
   IssueOrderAt(End,PendingOrder);

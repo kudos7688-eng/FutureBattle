@@ -48,6 +48,8 @@ public:
 	bool CanSeeSnapshot(const FBattleSightContext& Context, const ABattleUnit* Other, const FVector& Position, bool bAlive) const;
 	bool FireAt(FVector Start, FVector Direction, bool bPlayerShot);
 	void SetDirectControl(bool bDirect);
+	void SetSprinting(bool bRequested);
+	void ReloadIfEmpty();
 	void SetAnimationDetail(bool bDirect);
 	void SetRevealed(bool bVisible);
 	void ApplyDeath();
@@ -83,6 +85,7 @@ private:
 	bool bDeathApplied = false;
 	bool bThirdPersonView = true;
 	bool bDirectAvoidanceOverride = false;
+	float WalkSpeedBeforeSprint = 0.f;
 	float SavedAvoidanceWeight = .5f;
 	bool bWeaponVisuals = true, bTrialPose = false;
 	UPROPERTY() TObjectPtr<UStaticMesh> CarbineModel;

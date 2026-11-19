@@ -17,6 +17,9 @@ if (!$process.WaitForExit(180000)) {
     Stop-Process -Id $process.Id
     throw "Battle smoke test timed out. See $log"
 }
+if (!(Test-Path -LiteralPath $log -PathType Leaf)) {
+    throw "Battle smoke test produced no UE log (exit code $($process.ExitCode)). No test result is available. Expected: $log"
+}
 $text = Get-Content -LiteralPath $log -Raw
 $text -split "`n" | Where-Object { $_ -match 'BATTLE_(TEST|CORNER|SMOKE_RESULT)' } | Write-Output
 if ($text -notmatch 'BATTLE_SMOKE_RESULT failures=0' -or $text -match 'BATTLE_TEST FAIL|Fatal error:|Assertion failed:') {

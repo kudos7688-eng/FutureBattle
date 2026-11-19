@@ -94,6 +94,7 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  ApplySquadLook(SID);
  FBattleLeaderPlan Plan;Plan.Center=Positions[0];Plans.Add(SID,Plan);
  IssueOrder(SID,EBattleOrder::Hold,Positions[0]);bSummaryDirty=true;
+ if (Team == 0) Store->SetSquadDelegated(SID, true);
  if(OutSquadID)*OutSquadID=SID;
  if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())){PC->BindLeaderDeaths();if(Team==0&&bSelect)PC->SetSelection(Actor(Members[0]));}
  // Newly purchased followers use the normal skeletal fallback until next load.

@@ -319,7 +319,21 @@ void ABattleHUD::DrawHUD()
 		DrawRect(Ink, W - 576, 199, 560, 27);
 		const FString RoleText = S->Role == EBattleRole::Independent ? TEXT("単独") : FString::Printf(TEXT("%s ／ 集中 %02d"), BattleRoleName(S->Role), S->CoordinatedTarget);
 		Label(FString::Printf(TEXT("%s ／ 試験費用 %d ／ 役割：%s"), BattleTrainingName(S->Training), S->HireCost, *RoleText), W - 566, 206, White, .85f);
-		if (PC->IsTactical() && S->Role == EBattleRole::Flank)
+		if(const auto* Squad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(S->SquadID);Squad && Squad->bSectorMission && Squad->TacticalPlan.Action==EBattleSquadTactic::Mission)
+        {
+            const auto Cell=BattleSectors::Cell(Squad->Destination);
+            int Living=0,Present=0;
+            for(int ID:Squad->Members)if(GetWorld()->GetSubsystem<UBattleState>()->Find(ID)->IsAlive())
+            {++Living;if(BattleSectors::Cell(Leaders->Position(ID))==Cell)++Present;}
+            const TCHAR* State=Leaders->SquadTargetID(S->SquadID)!=INDEX_NONE?TEXT("交戦中"):Present*2>Living?TEXT("維持中"):TEXT("展開中");
+            Label(FString::Printf(TEXT("区画 %c%d　%s　%d/%d"),'A'+Cell.X,1+Cell.Y,State,Present,Living),W-566,234,Mint,.85f);
+            if(PC->IsTactical()){
+                const FVector C=BattleSectors::Center(Cell);
+                const FVector Corners[]={C+FVector(-2500,-2500,10),C+FVector(2500,-2500,10),C+FVector(2500,2500,10),C+FVector(-2500,2500,10)};
+                for(int I=0;I<4;++I){FVector2D A,B;if(PC->ProjectWorldLocationToScreen(Corners[I],A)&&PC->ProjectWorldLocationToScreen(Corners[(I+1)%4],B))DrawLine(A.X,A.Y,B.X,B.Y,Mint,2);}
+            }
+        }
+        if (PC->IsTactical() && S->Role == EBattleRole::Flank)
 		{
 			FVector2D Goal, Origin;
 			if (PC->ProjectWorldLocationToScreen(S->TacticalDestination, Goal) && PC->ProjectWorldLocationToScreen(Focus->GetActorLocation(), Origin))
@@ -354,7 +368,10 @@ void ABattleHUD::DrawHUD()
 				const bool bUsable = I >= 6 ? (Match->bArea && BattleTactics::AreaHire().bEnabled) : bAny;
 				const bool bPending = (I == 1 && PC->PendingOrder == EBattleOrder::AttackMove) || (I == 2 && PC->PendingOrder == EBattleOrder::Defend);
 				DrawRect(bPending ? FLinearColor(.45f, .4f, .1f, .98f) : bUsable ? FLinearColor(.10f, .24f, .24f, .98f) : FLinearColor(.08f, .11f, .15f, .98f), X, Bar.Origin.Y, Bar.ButtonWidth, Bar.ButtonHeight);
-				Label(Names[I], X + 8, Bar.Origin.Y + 5, bPending ? FLinearColor::Yellow : bUsable ? Mint : Muted, .85f);
+				const TCHAR* Caption=Names[I];
+                if(BattleFieldLayout::Of(GetWorld()).bSectors && (I==1 || I==2))
+                    Caption=I==1?(PC->bGamepadActive?TEXT("区画制圧 [Y]"):TEXT("区画制圧 [T]")):(PC->bGamepadActive?TEXT("区画維持 [RB]"):TEXT("区画維持 [G]"));
+                Label(Caption, X + 8, Bar.Origin.Y + 5, bPending ? FLinearColor::Yellow : bUsable ? Mint : Muted, .85f);
 			}
 			// Route of the selected squads (maps with a road network only): its own button at the right end of the panel's top row,
 			// apart from the bar. Shows the current choice, lit when one is set.

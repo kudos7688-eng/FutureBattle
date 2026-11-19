@@ -193,7 +193,7 @@ bool UBattleState::SetSquadDelegated(int32 ID, bool bDelegated)
 	return true;
 }
 
-bool UBattleState::SetSquadOrder(int32 ID, EBattleOrder Order, FVector Destination, const TMap<int32, FVector>& Goals, bool bMissionUpdate)
+bool UBattleState::SetSquadOrder(int32 ID, EBattleOrder Order, FVector Destination, const TMap<int32, FVector>& Goals, bool bMissionUpdate, bool bSector)
 {
 	auto* Squad = Squads.Find(ID);
 	if (!Squad || Destination.ContainsNaN() || static_cast<uint8>(Order) > static_cast<uint8>(EBattleOrder::Defend)) return false;
@@ -208,6 +208,7 @@ bool UBattleState::SetSquadOrder(int32 ID, EBattleOrder Order, FVector Destinati
 	if (!Living) return false;
  if (!Squad->bHasMission || Squad->MissionOrder != Order || !Squad->MissionDestination.Equals(Destination, .01f) || !bMissionUpdate)
   ++Squad->MissionRevision;
+ Squad->bSectorMission=bSector;
  Squad->bHasMission = true; Squad->MissionOrder = Order; Squad->MissionDestination = Destination; Squad->MissionGoals = Goals;
  if (bMissionUpdate && Squad->TacticalPlan.Action != EBattleSquadTactic::Mission)
  {
@@ -244,7 +245,7 @@ bool UBattleState::SetSquadTacticalPlan(int32 ID, EBattleSquadTactic Action, EBa
  const FBattleSquadState Before = *S;
  // Validate every living member before making any change, using the normal order path.
  if (!SetSquadOrder(ID, Order, Destination, Goals)) return false;
- S->bHasMission = Before.bHasMission; S->MissionOrder = Before.MissionOrder;
+ S->bSectorMission=Before.bSectorMission; S->bHasMission = Before.bHasMission; S->MissionOrder = Before.MissionOrder;
  S->MissionDestination = Before.MissionDestination; S->MissionGoals = Before.MissionGoals; S->MissionRevision = Before.MissionRevision;
  S->TacticalPlan.Action = Action; S->TacticalPlan.Destination = Destination; S->TacticalPlan.Remaining = Lifetime;
  S->TacticalPlan.Revision = Before.TacticalPlan.Revision + 1; S->TacticalPlan.Reason = Reason;
@@ -262,7 +263,7 @@ void UBattleState::AdvanceSquadTacticalPlan(int32 ID, float DeltaSeconds)
  if (S->TacticalPlan.Remaining > 0) return;
  CancelSquadTacticalPlan(ID, TEXT("PLAN EXPIRED"));
  const auto Goals = S->MissionGoals;
- if (S->bHasMission && !SetSquadOrder(ID, S->MissionOrder, S->MissionDestination, Goals, true))
+ if (S->bHasMission && !SetSquadOrder(ID, S->MissionOrder, S->MissionDestination, Goals, true, S->bSectorMission))
   S->TacticalPlan.Reason = TEXT("MISSION RESUME FAILED / KEEP EXECUTION");
 }
 

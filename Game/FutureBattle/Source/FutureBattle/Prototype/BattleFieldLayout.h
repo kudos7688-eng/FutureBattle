@@ -1,7 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Engine/World.h"
-#include "BattleTerrain.h"
+#include "BattleSectors.h"
 #include "BattleMapI.h"
 
 namespace BattleFieldLayout
@@ -25,6 +25,10 @@ namespace BattleFieldLayout
 		// Rule set introduced with map E: range profile, stances, cover-first arrival, partial paths, own re-paths, denser cover slots,
 		// the larger income. Independent of the geometry below, so a new map can take it without being map E.
 		bool bUrban=false;
+		bool bSectors=false;
+		// Kind of a sector on a map with sectors, in the letters of BattleSectors.h (R river, B bridge approach, S ford, J junction or
+		// plaza, H house, W warehouse, F field, T wood, ^ hill). Null on maps without sectors.
+		char (*SectorKind)(FIntPoint)=nullptr;
 		FVector Scale=FVector::OneVector;
 		// Half size of the playable floor (X, Y) in cm.
 		FVector2D HalfExtent=FVector2D(4000,3000);
@@ -126,6 +130,17 @@ namespace BattleFieldLayout
 			// start owned and are worth double. Roads on sector borders: the avenue, a north and a south road, seven cross roads.
 			{
 				FMapDef D=Urban;D.Name=TEXT("Lvl_BattleWide_I");
+				// Sector orders as on map H (the same 20 x 14 grid of 50m, the same origin): capture and hold by sector, objectives held by
+				// the whole sector. Map I's own kinds are given in the letters of BattleSectors.h.
+				D.bSectors=true;
+				D.SectorKind=[](FIntPoint C)->char
+				{
+					switch(BattleMapI::Kind(C.X,C.Y))
+					{
+					case TEXT('h'):return '^';case TEXT('P'):case TEXT('O'):return 'J';case TEXT('D'):case TEXT('W'):return 'W';
+					case TEXT('H'):return 'H';case TEXT('T'):return 'T';case TEXT('R'):return 'R';default:return 'F';
+					}
+				};
 				D.Objectives=BattleMapI::Objectives();
 				D.ObjectiveOwners={0,-1,-1,-1,-1,-1,-1,1};
 				D.ObjectiveValues={2,1,1,1,1,1,1,2};
@@ -143,7 +158,31 @@ namespace BattleFieldLayout
 				D.Heights=BattleMapI::MakeHeights(D.HalfExtent);
 				T.Add(D);
 			}
-			return T;
+            {
+                FMapDef D=Urban; D.Name=TEXT("Lvl_BattleWide_H"); D.bSectors=true; D.SectorKind=&BattleSectors::Kind;
+                D.PointIncomeScale=.5f; D.Lookouts.Reset(); D.CityHalf=FVector2D::ZeroVector;
+                for(FIntPoint Cell : {FIntPoint(3,11),FIntPoint(6,9),FIntPoint(8,7),FIntPoint(9,2),
+                                      FIntPoint(10,11),FIntPoint(11,6),FIntPoint(13,4),FIntPoint(16,2)})
+                    D.Objectives.Add(BattleSectors::Center(Cell));
+                D.ObjectiveOwners={0,-1,-1,-1,-1,-1,-1,1};
+                D.ObjectiveValues={2,1,1,1,1,1,1,2};
+                // The main avenue connects both homes. Farm and depot roads reach the two outer bridges.
+                auto Road=[&](ERouteLane Lane,std::initializer_list<FIntPoint> Junctions){
+                    int Previous=INDEX_NONE;
+                    for(FIntPoint At:Junctions){
+                        const int Current=D.RouteNodes.AddUnique(FVector(100*At.X,100*At.Y,0));
+                        if(Previous!=INDEX_NONE)D.RouteEdges.Add({Previous,Current,Lane});
+                        Previous=Current;
+                    }
+                };
+#include "BattleSectorRoads.inl"
+                for(const auto& House:BattleSectors::Houses())BattleTerrain::AddHouse(D.Heights,House);
+                for(const auto& Hill:BattleSectors::Hills())BattleTerrain::AddHill(D.Heights,Hill);
+                const int32 East=D.Heights.Patches.Num();
+                for(int32 I=0;I<East;++I){auto Patch=D.Heights.Patches[I].Rotated();D.Heights.Patches.Add(Patch);}
+                D.Heights.Build(D.HalfExtent);T.Add(MoveTemp(D));
+            }
+            return T;
 		}();
 		return Table;
 	}
@@ -169,6 +208,8 @@ namespace BattleFieldLayout
 		return *Def;
 	}
 
+	// Kind of a sector of the world's map (see FMapDef::SectorKind); 'F' where the map has no sectors or the cell is outside.
+	inline char SectorKind(const UWorld* World,FIntPoint Cell) {const FMapDef& D=Of(World);return D.SectorKind&&BattleSectors::Valid(Cell)?D.SectorKind(Cell):'F';}
 	inline bool IsExpanded(const UWorld* World) {return Of(World).bExpanded;}
 	inline bool IsUrbanMap(const FString& Map) {return ByName(Map).bUrban;}
 	inline bool IsUrban(const UWorld* World) {return Of(World).bUrban;}

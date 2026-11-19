@@ -58,9 +58,10 @@ namespace BattleMapI
 		for(const FRoad& R:Roads())if(R.bAlongX==bAlongX&&FMath::Abs(R.At-At)<1.&&Mid>R.From&&Mid<R.To)return true;
 		return false;
 	}
-	// The river of the east half: a strip beside the x = +100m road from the pond at y = +100m to the north edge. The north road
+	// The river of the east half: a strip (x = 55..71m, so the middle of its sectors is on the east bank and a sector order can be
+	// given) from the pond at y = +100m to the north edge. The north road
 	// crosses it on a bridge (vehicles too); a ford further north is for infantry only (3m wide). The west river is the rotation.
-	constexpr double RiverX0=6500.,RiverX1=8500.,RiverY0=10000.,RiverY1=35000.,BridgeY=20000.,BridgeHalf=500.,FordY=28000.,FordHalf=150.;
+	constexpr double RiverX0=5500.,RiverX1=7100.,RiverY0=10000.,RiverY1=35000.,BridgeY=20000.,BridgeHalf=500.,FordY=28000.,FordHalf=150.;
 	// Houses of the east half: one in every H sector, and a smaller one in the north-east corner of an objective plaza (O), whose
 	// middle stays free for the capture area.
 	inline const TArray<BattleTerrain::FHouse>& Houses()

@@ -18,8 +18,12 @@ namespace
  float HeightTestClock=0;
 }
 
+// Sector orders audit (BattleSectorAudit.cpp, -BattleSectorAudit): shares this per-tick entry.
+void BattleSectorAudit(UBattleMatch& Match,float DeltaSeconds);
+
 void UBattleMatch::UpdateTerrainTest(float DeltaSeconds)
 {
+ BattleSectorAudit(*this,DeltaSeconds);
  static const bool bTest=FParse::Param(FCommandLine::Get(),TEXT("BattleHeightTest"));
  if(!bTest||HeightTestState==2)return;
  HeightTestClock+=DeltaSeconds;if(HeightTestClock<1.f)return;

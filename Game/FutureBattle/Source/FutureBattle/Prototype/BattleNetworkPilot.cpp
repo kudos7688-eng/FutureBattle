@@ -55,7 +55,8 @@ void ABattleNetController::ReleaseDirect()
 {
 	if (!ServerControlled) return;
 	auto* Unit = ServerControlled.Get(); ServerControlled = nullptr; ++ControlEpoch;
-	PilotMove = FVector2D::ZeroVector; bPilotFire = bPilotJump = false; LastInputAt = -100;
+	PilotMove = FVector2D::ZeroVector; bPilotFire = bPilotJump = bPilotSprint = false; LastInputAt = -100;
+	Unit->SetSprinting(false);
 	if (Unit->IsAlive()) Unit->SetDirectControl(false);
 	if (Unit->SavedAI)
 	{
@@ -77,13 +78,13 @@ void ABattleNetController::ClientControlResult_Implementation(int32 Sequence, bo
 	if (Sequence == 3) bPilotReleased = bAccepted;
 }
 
-void ABattleNetController::ServerDirectInput_Implementation(int32 Epoch, int32 Sequence, FVector2D Move, FRotator Aim, bool bFire, bool bJump)
+void ABattleNetController::ServerDirectInput_Implementation(int32 Epoch, int32 Sequence, FVector2D Move, FRotator Aim, bool bFire, bool bJump, bool bSprint)
 {
 	if (!ServerControlled || Epoch != ControlEpoch || Sequence <= LastInputSequence || Sequence > 100000000 || Move.ContainsNaN() || Aim.ContainsNaN() || FMath::Abs(Move.X) > 1 || FMath::Abs(Move.Y) > 1) return;
 	const double Now = GetWorld()->GetTimeSeconds(); if (Now - LastInputAt < .01) return;
 	LastInputSequence = Sequence; LastInputAt = Now; PilotMove = Move.GetClampedToMaxSize(1);
 	PilotAim = FRotator(FMath::Clamp(FRotator::NormalizeAxis(Aim.Pitch), -85.f, 85.f), FRotator::NormalizeAxis(Aim.Yaw), 0);
-	bPilotFire = bFire; bPilotJump = bJump;
+	bPilotFire = bFire; bPilotJump = bJump; bPilotSprint = bSprint;
 }
 
 void ABattleNetController::ServerReload_Implementation(int32 Epoch)
@@ -98,9 +99,11 @@ void ABattleNetController::TickDirect(float DeltaTime)
 	if (!ServerControlled) return;
 	auto* Mode = GetWorld()->GetAuthGameMode<ABattleNetGameMode>();
 	if (!ServerControlled->IsAlive() || !Mode || Mode->bBattleEnded) { ReleaseDirect(); return; }
-	if (Mode->bCombatPaused || GetWorld()->GetTimeSeconds() - LastInputAt > .25) { ServerControlled->StopJumping(); return; }
+	if (!Mode->bCombatPaused) ServerControlled->ReloadIfEmpty();
+	if (Mode->bCombatPaused || GetWorld()->GetTimeSeconds() - LastInputAt > .25) { ServerControlled->SetSprinting(false); ServerControlled->StopJumping(); return; }
 	auto* Unit = ServerControlled.Get(); Unit->SavedAI->SetControlRotation(PilotAim); Unit->SetActorRotation(FRotator(0, PilotAim.Yaw, 0));
 	const FRotationMatrix Facing(FRotator(0, PilotAim.Yaw, 0));
+	Unit->SetSprinting(bPilotSprint);
 	Unit->AddMovementInput(Facing.GetUnitAxis(EAxis::X), PilotMove.X, true); Unit->AddMovementInput(Facing.GetUnitAxis(EAxis::Y), PilotMove.Y, true);
 	if (bPilotJump) Unit->Jump(); else Unit->StopJumping();
 	if (bPilotFire) Unit->FireAt(Unit->EyePosition(), PilotAim.Vector(), true);
@@ -136,5 +139,5 @@ void ABattleNetController::UpdateLocalPilot(float DeltaTime)
 	if (FParse::Param(FCommandLine::Get(), TEXT("BattleNetPilotProbe")) || FParse::Param(FCommandLine::Get(), TEXT("BattleNetBenchmark"))) return;
 	const double Now = GetWorld()->GetTimeSeconds(); if (Now < NextInputAt) return; NextInputAt = Now + .05;
 	const FVector2D Move((IsInputKeyDown(EKeys::W) ? 1 : 0) - (IsInputKeyDown(EKeys::S) ? 1 : 0), (IsInputKeyDown(EKeys::D) ? 1 : 0) - (IsInputKeyDown(EKeys::A) ? 1 : 0));
-	ServerDirectInput(View.ControlEpoch, NextInputSequence++, Move.GetClampedToMaxSize(1), Aim, bLocalFire, IsInputKeyDown(EKeys::SpaceBar));
+	ServerDirectInput(View.ControlEpoch, NextInputSequence++, Move.GetClampedToMaxSize(1), Aim, bLocalFire, IsInputKeyDown(EKeys::SpaceBar), IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift));
 }

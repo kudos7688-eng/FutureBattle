@@ -170,7 +170,7 @@ bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Targ
   bool Taken=false;for(const auto& Other:CoverApproaches)if(Other.Key!=ID && Other.Value.Slot==Slot){Taken=true;break;}
   if(Taken)continue;
   if(FVector::Dist2D(Anchor,Threat)<Base-T->AICoverApproachMaxAdvance)continue;
-  if(Squad->Order==EBattleOrder::Defend && FVector::Dist2D(Anchor,Squad->Destination)>Squad->DefenseRadius)continue;
+  if(Squad->bSectorMission && Squad->TacticalPlan.Action==EBattleSquadTactic::Mission ? BattleSectors::Cell(Anchor)!=BattleSectors::Cell(Squad->Destination) : Squad->Order==EBattleOrder::Defend && FVector::Dist2D(Anchor,Squad->Destination)>Squad->DefenseRadius)continue;
   if(!Clear(Pos,Anchor))continue;
   FVector FirePoint;
   if(bContactCover?!ContactFirePoint(ID,Anchor,Threat,FirePoint):BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Eye).Fraction()>.6f)continue;
@@ -203,7 +203,7 @@ bool UBattleLeaderRuntime::StartFirePosition(int32 ID,FVector Threat,int32 Targe
    const float Angle=FMath::DegreesToRadians(Step*36.f+Ring*18.f);
    const FVector Try=Pos+FVector(FMath::Cos(Angle),FMath::Sin(Angle),0)*Radius;
    if(FVector::Dist2D(Try,Threat)<Base-200.)continue; // not much closer to the threat
-   if(Squad->Order==EBattleOrder::Defend && FVector::Dist2D(Try,Squad->Destination)>Squad->DefenseRadius)continue;
+   if(Squad->bSectorMission && Squad->TacticalPlan.Action==EBattleSquadTactic::Mission ? BattleSectors::Cell(Try)!=BattleSectors::Cell(Squad->Destination) : Squad->Order==EBattleOrder::Defend && FVector::Dist2D(Try,Squad->Destination)>Squad->DefenseRadius)continue;
    FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Try-FVector(0,0,90),Projected,FVector(50,50,150)))continue;
    const FVector Point=Projected.Location+FVector(0,0,90);
    if(!BattleTactics::HasTerrainLine(GetWorld(),Point+FVector(0,0,60),Eye))continue; // he must be able to fire from it

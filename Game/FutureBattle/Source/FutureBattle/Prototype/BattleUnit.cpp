@@ -380,8 +380,33 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 	}
 }
 
+void ABattleUnit::SetSprinting(bool bRequested)
+{
+ auto* Movement = GetCharacterMovement();
+ const bool bSprint = bRequested && bDirectAvoidanceOverride && IsAlive() && VisualStance == BattleStance::Stand
+  && !GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsVehicle(UnitID);
+ if (bSprint && WalkSpeedBeforeSprint == 0.f && Movement->MaxWalkSpeed > 0.f)
+ {
+  WalkSpeedBeforeSprint = Movement->MaxWalkSpeed;
+  Movement->MaxWalkSpeed = WalkSpeedBeforeSprint * 1.6f;
+ }
+ else if (!bSprint && WalkSpeedBeforeSprint > 0.f)
+ {
+  Movement->MaxWalkSpeed = WalkSpeedBeforeSprint;
+  WalkSpeedBeforeSprint = 0.f;
+ }
+}
+
+void ABattleUnit::ReloadIfEmpty()
+{
+ const auto* State = GetState();
+ if (State && State->Ammo == 0 && State->Reserve > 0 && State->ReloadEndTime == 0.)
+  GetWorld()->GetSubsystem<UBattleState>()->StartReload(UnitID, GetWorld()->GetTimeSeconds());
+}
+
 void ABattleUnit::SetDirectControl(bool bDirect)
 {
+ if (!bDirect) SetSprinting(false);
 	auto* Movement = GetCharacterMovement();
 	if (bDirect && !bDirectAvoidanceOverride)
 	{

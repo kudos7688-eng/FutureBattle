@@ -170,7 +170,8 @@ void UBattleMatch::UpdatePlayerRoutes(float DeltaSeconds)
   const bool bFinal=R.bPath?R.Waypoints.IsEmpty():Step.Equals(R.Goal,1);
   // On the way the squad moves (or attack-moves); the player's own order is given with the goal.
   const EBattleOrder Order=bFinal?R.Order:R.Order==EBattleOrder::Move?EBattleOrder::Move:EBattleOrder::AttackMove;
-  if(Runtime->IssueOrder(It.Key(),Order,Step))
+  const bool Sector=bFinal && !R.bPath && BattleFieldLayout::Of(GetWorld()).bSectors && !Runtime->IsVehicle(S->LeaderUnitID) && (Order==EBattleOrder::AttackMove || Order==EBattleOrder::Defend);
+  if(Runtime->IssueOrder(It.Key(),Order,Step,false,Sector))
   {
    R.Step=Step;R.StepDeadline=Elapsed+20.f+float(FVector::Dist2D(LeaderAt,Step)/250.);
    if(R.bPath&&R.Waypoints.Num())R.Waypoints.RemoveAt(0);

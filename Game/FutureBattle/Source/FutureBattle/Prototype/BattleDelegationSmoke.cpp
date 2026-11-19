@@ -60,7 +60,8 @@ void ABattleGameMode::RunDelegationSmokeTest()
 	bCombatPaused = false; Match->DelegationClock = 5; Match->Update(.1f); bCombatPaused = true;
 	CheckSmoke(A->GetState()->Action == EBattleAction::DirectControl && PC->GetPawn() == A && A->GetState()->HP == Before.HP && A->GetState()->Ammo == Before.Ammo, TEXT("AI command updates do not steal TPS possession or change resources"));
 	PC->EnterTactical();
-	CheckSmoke(Store->FindSquad(SA)->bPlayerDelegated, TEXT("Delegation survives TPS RTS handoff"));
+	CheckSmoke(!Store->FindSquad(SA)->bPlayerDelegated, TEXT("Direct takeover retains manual authority on return to RTS"));
+	PC->DelegateSelected();
 	PC->SelectAll();
 	int32 Manual = 0, Automatic = 0; PC->GetDelegationCounts(Manual, Automatic);
 	CheckSmoke(Manual > 0 && Automatic == 1, TEXT("Mixed selection reports manual and AI squad counts"));
