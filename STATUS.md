@@ -20,7 +20,7 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
-## 2026-11-20 3時05分 Claude（小隊の人数）：止まった味方をすり抜ける試験切替 `-BattleAllyPass=1`（既定0）の検証（ブランチ `stallfix`、b9ac38e。main へは未取り込み）
+## 2026-11-20 3時05分 Claude（小隊の人数）：止まった味方をすり抜ける試験切替 `-BattleAllyPass=1`（既定0）の検証（既定0のまま main へ取り込み。ユーザー決定）
 
 - 中身：止まった味方の群れに塞がれ、ほかの回避手段も尽きて3秒以上進めない兵は、半径8m以内の止まった味方の当たり判定を5秒間だけ無視して進む。ログ `BATTLE_ALLY_PASS`。
 - 検証（各1試合。-Area -Experiment -ObserveTactics -RoundTripSave -CoverActions 1 -FlankCoordination 1、種7、8人小隊、60fps。出力 `av2-<マップ>-p<0|1>-s7`）：
@@ -30,7 +30,7 @@
   - マップEの制限：同じ兵が何十回も発動する（unit 540 は43回）。目的地そのものが味方25人の群れに埋まった場所では、すり抜けても着けず、5秒ごとに繰り返すだけで停止は減らない。
 - 回帰（オフ）：Test-Battle failures=0、Test-Area failures=0、Test-MixedSave failures=0。
 - オフの試合は main の旧DLLとはビルドが違う（AC01 の変更が入った）ため、一致比較はしていない。
-- 未決：既定にするか、main へ取り込むか（ユーザー判断）。main の作業ツリーには他セッションの未コミット変更（BattleStableMovement.cpp・Test-WideSight.ps1）があり、取り込むとそこにぶつかる。
+- 決定：既定0のまま main へ（ユーザー決定）。区画AIの 4499bac（-BattleSectorSlotReserve、未ビルドだった）と AC01 の変更を含む main の最新を取り込んでビルドが通り、回帰（Test-Battle・Test-Area・Test-MixedSave）failures=0、マップHの監査（すり抜けオン、種7、`av3-H-p1-s7`）failures=0・完走・保存往復 failures=0。
 ## 2026-11-20 1時05分 Claude（カバーアクション）：ブラインドファイアと体のアニメをビルド・試験（ブランチ `blindfire`、作業ツリー `FutureBattle-blindfire`）
 - **変更範囲**：
   - ブラインドファイア（`BattleBlindFire.*`）。隠れている間（CoverPhase 2）に構えずに撃つと、遮蔽の上（低い遮蔽）または角の先（覗き位置の方向、最大250cm）から撃ち、体は隠れ位置に残る。散らばりは4倍（`-BattleBlindFireSpread=`）。`-BattleBlindFire=0` で従来の覗き。AIは試験切替 `-BattleAIBlindFire=1`（既定0、制圧されている間だけ）。
