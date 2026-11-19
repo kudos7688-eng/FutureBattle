@@ -14,6 +14,8 @@
 #include "BattleRanges.h"
 #include "BattleSuppression.h"
 #include "BattleStance.h"
+#include "BattleBlindFire.h"
+#include "BattleBodyAnim.h"
 #include "EngineUtils.h"
 #include "BattleMetrics.h"
 #include "MassEntitySubsystem.h"
@@ -498,7 +500,18 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
  {
   B->Velocity=FVector::ZeroVector;
   if(B->Actor.IsValid()) B->Actor->ApplyDeath();
-  else { B->Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision); if(VAT)VAT->Freeze(ID); if(!VAT || !VAT->IsFar(ID)){BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones); B->Mesh->SetComponentTickEnabled(false); B->Mesh->SetRelativeRotation(FRotator(0,-90,85)); B->Weapon->SetVisibility(false);} }
+  else
+  {
+   B->Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision); if(VAT)VAT->Freeze(ID);
+   if(!VAT || !VAT->IsFar(ID))
+   {
+    B->Weapon->SetVisibility(false);
+    // Body animation: a near follower plays a death clip and freezes on its last frame (StepBodyTimers); otherwise it tips over.
+    UAnimSequence* Death=B->Mesh.IsValid()?BattleBodyAnim::Death(Forward(ID),LastShotDirs.FindRef(ID),ID):nullptr;
+    if(Death){B->Mesh->SetRelativeScale3D(FVector(1.));B->Mesh->PlayAnimation(Death,false);BodyTimers.Add(ID,{GetWorld()->GetTimeSeconds()+Death->GetPlayLength(),true});}
+    else {BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones); B->Mesh->SetComponentTickEnabled(false); B->Mesh->SetRelativeRotation(FRotator(0,-90,85));}
+   }
+  }
  }
  bSummaryDirty=true;
 }
@@ -940,10 +953,25 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  // A mortar has no direct fire (its shells go through FireArtillery, BattleArtillery.cpp).
  if(U->Weapon==EBattleWeapon::Mortar) return false;
  const double Now=GetWorld()->GetTimeSeconds(); const auto* T=GetDefault<UBattleTuning>();
+ bool bBlind=false;
  if(U->CoverPhase && U->CoverPhase!=4)
  {
-  if(bPlayerShot && U->CoverPhase==2){auto& Cover=Store->Units.FindChecked(ID);Cover.CoverPhase=3;Cover.CoverSeconds=3;}
-  return false;
+  // Blind fire (BattleBlindFire.cpp): the player fires without aiming, or an AI soldier in the trial; the shot leaves above or
+  // beside the cover while the body stays hidden. Aiming and firing (or no free origin) peeks as before.
+  const bool bWantBlind=U->CoverPhase==2 && U->Weapon!=EBattleWeapon::AntiTank && !U->bLauncherSelected &&
+   (bPlayerShot?BattleBlindFire::PlayerEnabled() && Actor(ID) && Actor(ID)->GetAimLevel()==0:bAIBlindShot);
+  FVector Origin;
+  if(bWantBlind && BlindFireOrigin(ID,Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon),Origin))
+  {
+   const FVector Aim=Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon);
+   Start=Origin;Direction=(Aim-Origin).GetSafeNormal();bBlind=true;
+   BlindFireLook.Add(ID,Origin+Direction.GetSafeNormal2D()*200.f);
+  }
+  else
+  {
+   if(bPlayerShot && U->CoverPhase==2){auto& Cover=Store->Units.FindChecked(ID);Cover.CoverPhase=3;Cover.CoverSeconds=3;}
+   return false;
+  }
  }
  if(bPlayerShot && U->bLauncherSelected)
   return FireExoLauncher(ID,Start+Direction.GetSafeNormal()*BattleRanges::Reach(EBattleWeapon::AntiTank),Now);
@@ -962,7 +990,9 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  if(SuppressedScale>1.25f)SightExperiment.Cover(TEXT("suppressed_shots"));
  // The player's own shot is tighter while he aims or looks through the scope (never the AI's shots).
  /* tighter for the player at all times (PlayerSpreadScale), more so while aiming */ const float AimScale=bPlayerShot&&Actor(ID)?Actor(ID)->PlayerSpreadScale():1.f;
- Direction=BattleTactics::ShotDirection(*U,Direction,Now,SuppressedScale*BattleStance::SpreadScale(StanceOf(ID))*AimScale);
+ // Blind fire: the shooter cannot see along the barrel, so neither stance nor the player's aim tightens it.
+ if(bBlind){BlindFireUntil.Add(ID,Now+BattleBlindFire::ClipHoldSeconds);SightExperiment.Cover(bPlayerShot?TEXT("blind_shots_player"):TEXT("blind_shots_ai"));}
+ Direction=BattleTactics::ShotDirection(*U,Direction,Now,bBlind?SuppressedScale*BattleBlindFire::SpreadScale():SuppressedScale*BattleStance::SpreadScale(StanceOf(ID))*AimScale);
  auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon);
  // Concealment (hedges) hides soldiers from sight but does not stop bullets.
  if(!bConcealmentBuilt)
@@ -982,6 +1012,9 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  }
  SuppressNear(U->Team,Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Now,U->Weapon==EBattleWeapon::SupportGun?BattleSuppression::Tuning().SupportScale:1.f);
  const int32 Victim=HitIDs.FindRef(Hit.GetComponent());
+ // Display only (BattleBodyAnim): the hit and death clips face the side the shot came from.
+ if(Victim>0)LastShotDirs.Add(Victim,Direction.GetSafeNormal2D());
+ if(auto* Shooter=Actor(ID))Shooter->NoteVisualShot(Now);
  // Per-shot damage by the shooter's squad type (heavy infantry may hit harder; rifle squads 1x).
  // An anti-tank round hits for ATDamage (and ATBaseDamage on an enemy home); its explosion follows below.
  const bool bAT=U->Weapon==EBattleWeapon::AntiTank;
@@ -1097,6 +1130,7 @@ void UBattleLeaderRuntime::Step(float Dt)
  TRACE_CPUPROFILER_EVENT_SCOPE(BattleRuntimeStep);
  if(SightExperiment.Enabled) { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightExperiment); StepSightExperiment(Dt); }
  if(Phase3 && Phase3->bEnabled) { Phase3->Step(Dt); return; }
+ StepBodyTimers();
  if(bMovementTrial && MoveTrialStage==1 && !Mode->bCombatPaused) MoveTrialFrameMS.Add(Dt*1000);
  const double Now=GetWorld()->GetTimeSeconds(); auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Build the cover slots while the match waits to start (they were built lazily by the first decision: ~100 ms in one frame).

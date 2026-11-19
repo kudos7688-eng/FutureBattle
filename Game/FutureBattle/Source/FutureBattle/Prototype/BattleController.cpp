@@ -1,6 +1,7 @@
 #include "BattleController.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleStance.h"
+#include "BattleBlindFire.h"
 #include "BattleFieldLayout.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 #include "BattleUnit.h"
@@ -438,7 +439,7 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
   {
    auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
    if(U->GetState()->CoverPhase){R->CancelCoverAction(U->GetUnitID());ShowNotice(TEXT("COVER RELEASED"));}
-   else ShowNotice(R->RequestCoverAction(U->GetUnitID(),U->GetActorLocation()+GetControlRotation().Vector()*5000)?TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE"):TEXT("NO NEARBY COVER WITH SAFE PEEK"));
+   else ShowNotice(R->RequestCoverAction(U->GetUnitID(),U->GetActorLocation()+GetControlRotation().Vector()*5000)?(BattleBlindFire::PlayerEnabled()?TEXT("COVER / FIRE = BLIND FIRE / AIM + FIRE = PEEK / C OR MOVE TO RELEASE"):TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE")):TEXT("NO NEARBY COVER WITH SAFE PEEK"));
    return true;
   }
  }

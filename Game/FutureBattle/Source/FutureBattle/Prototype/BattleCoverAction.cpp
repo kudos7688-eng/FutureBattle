@@ -3,6 +3,8 @@
 #include "BattleTactics.h"
 #include "BattleRanges.h"
 #include "BattleStance.h"
+#include "BattleBlindFire.h"
+#include "BattleBodyAnim.h"
 #include "BattleFieldLayout.h"
 #include "BattlePerception.h"
 #include "BattleGameMode.h"
@@ -20,6 +22,12 @@ void UBattleLeaderRuntime::CancelCoverAction(int32 ID)
  if(U->CoverPhase==4)EndPeekDiag(ID,U->IsAlive()?TEXT("cancel"):TEXT("died"));
  if(U->CoverPhase){GetWorld()->GetSubsystem<UBattleCover>()->Release(ID);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVER_RELEASE unit=%d phase=%d position=%s remaining=%.2f revision=%d/%d"),ID,U->CoverPhase,*Position(ID).ToCompactString(),U->CoverSeconds,U->OrderRevision,U->CoverOrderRevision);}
  U->CoverPhase=0;U->CoverSeconds=0;U->CoverTargetID=INDEX_NONE;U->CoverSlot=INDEX_NONE;
+ // A near follower showing a cover clip returns to his ordinary clip and facing.
+ if(auto* B=Bodies.Find(ID);B && B->CoverClipPhase && !B->Actor.IsValid() && B->Mesh.IsValid())
+ {
+  B->CoverClipPhase=0;
+  if(U->IsAlive()){B->Mesh->SetRelativeRotation(FRotator(0,-90,0));RefreshFollowerPose(ID);}
+ }
 }
 
 void UBattleLeaderRuntime::EndPeekDiag(int32 ID,const TCHAR* Cause)
@@ -310,7 +318,8 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  if(U->CoverPhase==2 && !Player && U->CoverSeconds<=0 && U->ReloadEndTime==0)
  {
   // Suppression trial: a pinned AI soldier stays behind cover and checks again shortly.
-  if(IsPinned(ID,Now)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_suppressed"));}
+  // Trial -BattleAIBlindFire=1: a pinned AI soldier fires blind at the threat's last known position instead of waiting idle.
+  if(IsPinned(ID,Now)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_suppressed"));if(BattleBlindFire::AIEnabled())TryAIBlindFire(ID,Contact->LastKnownPosition,Now);}
   else if(Validate && !RevalidatePeek(ID,Contact->LastKnownPosition)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_no_line"));}
   else{U->CoverPhase=3;U->CoverSeconds=3;}
  }
@@ -374,9 +383,22 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  if(!B.Actor.IsValid())
  {
   const int32 Pose=U->ReloadEndTime>Now?2:B.Velocity.SizeSquared2D()>400?1:0;
-  if(Pose!=B.Pose){B.Pose=Pose;if(VAT)VAT->ChangePose(ID,Pose);if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(FollowerClip(ID,Pose),true);}
+  const bool Blind=IsBlindFiring(ID,Now);
+  // Cover clips (BattleCoverClips.h): one whole-body loop per phase for a near follower (no one-shots), the mesh turned by the table.
+  const uint8 ClipPhase=(U->CoverPhase==2||U->CoverPhase==4)&&BattleBodyAnim::Enabled()?U->CoverPhase:0;
+  if(ClipPhase && !B.CoverClipPhase)B.CoverClipSet=BattleBodyAnim::CoverSet(GetWorld(),*U,Forward(ID));
+  if(Pose!=B.Pose || Blind!=B.bBlindPose || ClipPhase!=B.CoverClipPhase)
+  {
+   B.Pose=Pose;B.bBlindPose=Blind;B.CoverClipPhase=ClipPhase;if(VAT)VAT->ChangePose(ID,Pose);
+   if(!VAT || !VAT->IsFar(ID))
+   {
+    // Blind fire around the edge turns the body so the rifle points around the corner (BlindFireYaw, 0 over the top).
+    B.Mesh->SetRelativeRotation(FRotator(0,-90+(Pose==2?0.f:Blind?BlindFireYaw(ID,Forward(ID)):ClipPhase?BattleCoverClips::YawOffset(ClipPhase):0.f),0));
+    B.Mesh->PlayAnimation(FollowerClip(ID,Pose),true);
+   }
+  }
  }
- U->DecisionReason=U->CoverPhase==2?TEXT("COVER / HIDDEN - FIRE TO PEEK"):U->CoverPhase==4?TEXT("COVER / EXPOSED FIRING WINDOW"):TEXT("COVER / MOVING - FIRE BLOCKED");
+ U->DecisionReason=U->CoverPhase==2?(IsBlindFiring(ID,Now)?TEXT("COVER / BLIND FIRE"):TEXT("COVER / HIDDEN - FIRE TO PEEK")):U->CoverPhase==4?TEXT("COVER / EXPOSED FIRING WINDOW"):TEXT("COVER / MOVING - FIRE BLOCKED");
  if(!Player)U->Action=U->CoverPhase==2?EBattleAction::TakingCover:U->CoverPhase==4?EBattleAction::Engaging:EBattleAction::Moving;
  // Stances: crouch while hidden behind cover, stand to move and to fire from the peek point.
  // (Direct control too: behind low cover the player is only hidden while crouched.)

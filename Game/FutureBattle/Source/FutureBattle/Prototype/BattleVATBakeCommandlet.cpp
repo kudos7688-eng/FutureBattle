@@ -18,6 +18,7 @@ int32 UBattleVATBakeCommandlet::Main(const FString& Params)
  if(FParse::Param(*Params,TEXT("Validate"))) return ValidateBattleVAT();
  if(FParse::Param(*Params,TEXT("RepairMetadata"))) return RepairBattleVATMetadata();
  if(FParse::Param(*Params,TEXT("ImportStanceAnims"))) return ImportBattleStanceAnims();
+ if(FParse::Param(*Params,TEXT("ImportBodyAnims"))) return ImportBattleBodyAnims();
  if(!FParse::Param(*Params,TEXT("Inspect"))) return BakeBattleVAT();
  auto* Skel=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple"));
  if(!Skel) return 1;
