@@ -225,7 +225,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
  }
  // 2. AI formation (trial): one attack group per team from its AI-led rifle squads outside the home-assault slots, the nearest to the
  //    rally point first, with one tank, one mortar team, one anti-tank team and one supply vehicle when the team has them.
- int32 AIGroup=INDEX_NONE;for(const auto& P:Groups)if(P.Value.Team==Team&&!P.Value.bPlayer)AIGroup=AIGroup==INDEX_NONE?P.Key:FMath::Min(AIGroup,P.Key);
+ int32 AIGroup=INDEX_NONE;for(const auto& P:Groups)if(P.Value.Team==Team&&!P.Value.bPlayer&&P.Value.Kind==0)AIGroup=AIGroup==INDEX_NONE?P.Key:FMath::Min(AIGroup,P.Key);
  if(BattleTactics::AreaGroups(Team)&&bStrategy)
  {
   const int32 Focus=AIGroup!=INDEX_NONE?Groups[AIGroup].Objective:GroupFocus(Team,AreaHome(Team));
@@ -270,6 +270,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
  for(int32 ID:IDs)
  {
   auto* G=Groups.Find(ID);if(!G||G->Team!=Team||!GroupAIRun(*G))continue;
+  if(G->Kind!=0)continue; // front-holding and surprise groups: UpdateFrontLine / UpdateSurpriseGroup
   auto Enter=[&](uint8 To,const TCHAR* Why)
   {
    G->Phase=To;G->PhaseAt=Elapsed;
@@ -425,12 +426,16 @@ void UBattleMatch::UpdateGroups(int32 Team)
    if(Next!=INDEX_NONE)Attack(Next,TEXT("attack_again"));
   }
  }
+ // 4. Front line and the front-holding group (trial -BattleFrontLine=1, BattleFrontLine.cpp).
+ UpdateFrontLine(Team);
 }
 
 bool UBattleMatch::GroupOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const
 {
  const int32 ID=GroupOf(SquadID);const auto* G=ID!=INDEX_NONE?Groups.Find(ID):nullptr;
  const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SquadID);
+ if(G&&S&&G->Kind==1)return G->Team==Team&&GroupAIRun(*G)&&FrontGroupOrder(SquadID,Team,Center,Order); // BattleFrontLine.cpp
+ if(G&&S&&G->Kind==2)return G->Team==Team&&GroupAIRun(*G)&&SurpriseGroupOrder(ID,SquadID,Team,Center,Order);
  if(!G||!S||G->Team!=Team||!Objectives.IsValidIndex(G->Objective)||!GroupAIRun(*G))return false;
  const uint8 Role=GroupRole(*G,SquadID);if(Role==255||Role==5)return false; // 5 supply: SupplyCarOrder (BattleSupplyCar.cpp)
  const bool bMortar=Role==3;

@@ -135,6 +135,21 @@ public:
  // Where a squad short of ammunition gets it in the field: the position of a supply vehicle of its team with stock within
  // UBattleTuning::FieldSupplyRange (its own group's first). False: none (the squad goes home as before).
  bool FieldSupplyPoint(int32 SquadID,FVector& Where,int32* CarID=nullptr) const;
+ // Front line and front-holding group (2026-11-20, user proposal; group stage 4, BattleFrontLine.cpp). Trial -BattleFrontLine=1 (default
+ // 0; with -BattleAreaTrialTeam for that team only), maps with sectors only. FrontLine[Team][Row]: the line's sector column in that
+ // sector row, counted from the team's own home edge (0); empty while off. Built from own positions and known enemies only.
+ bool FrontLineOn(int32 Team) const;
+ void UpdateFrontLine(int32 Team);
+ bool FrontGroupOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ FIntPoint FrontCell(int32 Team,int32 Column,int32 Row) const; // a line column/row of the team -> grid cell
+ TArray<int32> FrontLine[2];
+ // Surprise group (trial -BattleSurpriseGroup=1, needs the front line): along an edge row to the enemy home, then strikes it.
+ bool SurpriseOn(int32 Team) const;
+ void UpdateSurpriseGroup(int32 Team,int32 FrontID);
+ bool SurpriseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ float SurpriseNextAt[2]={0.f,0.f};
+ TMap<int32,FVector> FrontPosts; // squad of a front-holding group -> the sector centre it holds (transient)
+ float FrontLineAt[2]={-1.f,-1.f},FrontLineLogAt[2]={-1.f,-1.f};
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;
@@ -188,7 +203,9 @@ public:
 		int32 StartLiving = 0, StallPoint = INDEX_NONE, Stalls = 0;
 		bool bOpened = false; /* the opening rush was decided (once per group) */
 		bool bArrived = false; /* this advance has reached its point: the stall clock (PhaseAt) runs from then */
-		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */ };
+		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */
+		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp) */
+		int32 SurpriseRow = 0; /* surprise group: the edge sector row it moves along */ };
 	uint8 GroupRole(const FBattleGroup& Group, int32 SquadID) const;
 	void AssignGroupRoles(FBattleGroup& Group) const;
 	FVector GroupSupportPost(int32 Team, int32 Point) const;

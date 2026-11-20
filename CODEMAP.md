@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（144 モジュール、31736 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（145 モジュール、32081 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -25,7 +25,7 @@
 | 兵科（歩兵・重火器・偵察・対戦車・戦車）の差 | `BattleSquadType::Members` (BattleState.cpp:556) から `BattleSquadType::Weapon` (BattleState.cpp:594) までの一群、 `UBattleState::SetSquadType` (BattleState.cpp:599) | 射程は `BattleRanges::Get` (BattleRanges.cpp:6) |
 | 命令（移動・攻撃移動・防御・待機） | 入力 `ABattleController::IssueOrderAt` (BattleController.cpp:628) → 状態 `UBattleState::SetSquadOrder` (BattleState.cpp:196) → 混成 `UBattleLeaderRuntime::IssueOrder` (BattleLeaderRuntime.cpp:525) | 委任は `UBattleState::SetSquadDelegated` (BattleState.cpp:183) 、 `UBattleMatch::SetAllyDelegated` (BattleMatch.cpp:144) |
 | 入力・RTS/TPS 切替・ゲームパッド | `ABattleController::SetupInputComponent` (BattleController.cpp:59) 、 `ABattleController::InputKey` (BattleController.cpp:403) 、 `ABattleController::ToggleMode` (BattleController.cpp:305) 、 `ABattleController::ControlUnit` (BattleController.cpp:276) | ゲームパッドは `ABattleController::UpdateGamepad` (BattleController.cpp:1153) 。隊長交代は `UBattleState::HandOverLeader` (BattleState.cpp:520) |
-| HUD・ミニマップ・部隊一覧・通知 | `ABattleHUD::DrawHUD` (BattleHUD.cpp:27) 、 `ABattleHUD::DrawMinimap` (BattleHUD.cpp:445) 、 `ABattleHUD::DrawSquadList` (BattleHUD.cpp:537) 、 `ABattleHUD::DrawNoticeLog` (BattleHUD.cpp:632) | 通知の中身は `ABattleController::UpdateNoticeLog` (BattleController.cpp:933) 、 `ABattleController::PushNotice` (BattleController.cpp:917) 。日本語化は `BattleUIText::Ja` (BattleUIText.cpp:76) 。被弾方向は `ABattleHUD::DrawHitDirection` (BattleHUD.cpp:685) （記録は `UBattleState::ApplyDamageFrom` (BattleState.cpp:456) ）、画面外マーカーは `ABattleHUD::DrawOffscreenMarkers` (BattleHUD.cpp:723) 、撃破ログは `ABattleHUD::DrawKillLog` (BattleHUD.cpp:790) （記録は `UBattleState::NoteKill` (BattleState.cpp:463) ）。作戦画面の戦場の霧・区画の格子と区画の状態は `ABattleHUD::DrawFieldOverlay` (BattleHUD.cpp:863) 、 `ABattleHUD::DrawSectorPanel` (BattleHUD.cpp:999) （計算は `BattleSectorView`） |
+| HUD・ミニマップ・部隊一覧・通知 | `ABattleHUD::DrawHUD` (BattleHUD.cpp:27) 、 `ABattleHUD::DrawMinimap` (BattleHUD.cpp:445) 、 `ABattleHUD::DrawSquadList` (BattleHUD.cpp:537) 、 `ABattleHUD::DrawNoticeLog` (BattleHUD.cpp:635) | 通知の中身は `ABattleController::UpdateNoticeLog` (BattleController.cpp:933) 、 `ABattleController::PushNotice` (BattleController.cpp:917) 。日本語化は `BattleUIText::Ja` (BattleUIText.cpp:76) 。被弾方向は `ABattleHUD::DrawHitDirection` (BattleHUD.cpp:688) （記録は `UBattleState::ApplyDamageFrom` (BattleState.cpp:456) ）、画面外マーカーは `ABattleHUD::DrawOffscreenMarkers` (BattleHUD.cpp:726) 、撃破ログは `ABattleHUD::DrawKillLog` (BattleHUD.cpp:793) （記録は `UBattleState::NoteKill` (BattleState.cpp:463) ）。作戦画面の戦場の霧・区画の格子と区画の状態は `ABattleHUD::DrawFieldOverlay` (BattleHUD.cpp:866) 、 `ABattleHUD::DrawSectorPanel` (BattleHUD.cpp:1016) （計算は `BattleSectorView`） |
 | 認識（見えた敵の記憶） | `UBattlePerception::Update` (BattlePerception.cpp:57) 、 `UBattlePerception::GetContacts` (BattlePerception.cpp:36) | 視線は `UBattleLeaderRuntime::CanSee` (BattleLeaderRuntime.cpp:330) 、 `UBattleLeaderRuntime::TraceSight` (BattleLeaderRuntime.cpp:361) 。試験用の視界切替は `BattleSightExperiment` |
 | 隊長の判断と兵の実行（混成） | `UBattleLeaderRuntime::Think` (BattleLeaderRuntime.cpp:587) 、 `UBattleLeaderRuntime::Follow` (BattleLeaderRuntime.cpp:829) 、 `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:1028) | 兵単位の実行は `FBattleMixedDriver::Tick` (BattleMixedDriver.cpp:126) 、 `FBattleMixedDriver::TryTacticalAction` (BattleMixedDriver.cpp:239) |
 | 移動・経路・混雑 | `UBattleLeaderRuntime::StableMove` (BattleStableMovement.cpp:299) 、 `UBattleLeaderRuntime::BuildMovementPlan` (BattleStableMovement.cpp:60) | 到着地点の重なりは `UBattleLeaderRuntime::ReassignOccupiedArrival` (BattleContactMovement.cpp:16) 。目的地の補正は `BattleNavigation::ResolveGoal` (BattleNavigation.cpp:7) |
@@ -91,13 +91,14 @@
 | `BattleFieldReplay` | .cpp | 206 |  | 広域試験の記録と再生（UBattleSquadTrial の一部） |
 | `BattleFieldTurn` | .cpp | 168 |  | 広域試験 T2b（UBattleSquadTrial の一部） |
 | `BattleFollowerBones` | .h/.cpp | 10 + 39 | BattleFollowerBones | 霧で隠れた部下のボーン表示の切替 |
+| `BattleFrontLine` | .cpp | 306 |  | 前線・前線維持群 `-BattleFrontLine`・奇襲群 `-BattleSurpriseGroup`（区画のあるマップ）：区画の行ごとの前線の列（自軍の兵・観測した拠点・知っている敵、隣の行と1列以内）、維持群の帯と維持する区画、押し上げ、奇襲群（装甲優先・端の行を進んで敵本拠地へ）（UBattleMatch の一部。表示は ABattleHUD::DrawFieldOverlay） |
 | `BattleGameMode` | .h/.cpp | 97 + 373 | ABattleGameMode | モードの統合、起動時の組み立て、毎フレームの入口、基本回帰 |
-| `BattleGroups` | .cpp | 457 |  | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部） |
-| `BattleHUD` | .h/.cpp | 45 + 1087 | ABattleHUD | 画面表示（HUD、ミニマップ、部隊一覧、通知、命令の印） |
+| `BattleGroups` | .cpp | 462 |  | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部） |
+| `BattleHUD` | .h/.cpp | 45 + 1104 | ABattleHUD | 画面表示（HUD、ミニマップ、部隊一覧、通知、命令の印） |
 | `BattleLeaderRuntime` | .h/.cpp | 592 + 1385 | FBattleFollowerFragment, FBattleSquadSummary, FBattleSquadListRow, FBattleSquadListLayout, FBattleMinimapLayout, FBattleLeaderBody, FBattleLeaderPlan, UBattleLeaderRuntime | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新 |
 | `BattleMapI` | .h | 112 | BattleMapI | マップI（区画を前提にした設計）の表：50mの区画 20×14 の種類 `Kind`、道路 `Roads`、川・橋・浅瀬の位置、家 `Houses`・丘 `Hills`、高さの表 `MakeHeights`、拠点 `Objectives`。配置は `BattleMapLayoutI.inl`（生成と共有） |
 | `BattleMapStats` | .cpp | 186 |  | マップの統計（区域ごとの見通し・遮蔽、経路の長さ）を JSON に書き出す。試合は行わない（UBattleLeaderRuntime の一部） |
-| `BattleMatch` | .h/.cpp | 309 + 514 | FAreaIntent, FBattleObjective, FBattleStrike, FPlayerRoute, UBattleMatch | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗 |
+| `BattleMatch` | .h/.cpp | 326 + 514 | FAreaIntent, FBattleObjective, FBattleStrike, FPlayerRoute, UBattleMatch | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗 |
 | `BattleMetrics` | .h/.cpp | 65 + 142 | FBattleMetricFrame, UBattleMetrics, FBattleScopedMetric | 計測値の記録（1フレームの時間、判断の回数） |
 | `BattleMixedBodies` | .cpp | 172 |  | 混成の兵の体の生成・破棄・復元（UBattleLeaderRuntime の一部） |
 | `BattleMixedDriver` | .h/.cpp | 50 + 339 | FBattleMixedUnit, FBattleMixedDriver, MixedNavigation | 混成の兵1人ぶんの実行（旧 AIController と同じ役を Actor なしで行う） |

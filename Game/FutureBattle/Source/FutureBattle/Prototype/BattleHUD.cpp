@@ -584,7 +584,10 @@ void ABattleHUD::DrawSquadList()
    static const TCHAR* const PhaseNames[]={TEXT("集結"),TEXT("前進"),TEXT("保持")};
    FString Goal=TEXT("目標なし");
    if(Match->Objectives.IsValidIndex(G->Objective)) Goal=FString::Printf(TEXT("拠点%c ／ %.0fm"),TCHAR('A'+G->Objective),Placed?FVector::Dist2D(Center,Match->Objectives[G->Objective].Position)/100.:0.);
-   DrawText(FString::Printf(TEXT("%s ／ %s"),G->Phase<3?PhaseNames[G->Phase]:TEXT("？"),*Goal),Gold,Layout.Origin.X+9,Y+23,GEngine->GetSmallFont(),.8f);
+   static const TCHAR* const SurpriseNames[]={TEXT("集結"),TEXT("潜行"),TEXT("突入")};
+   if(G->Kind==1) Goal=TEXT("前線維持");
+   if(G->Kind==2) Goal=FString::Printf(TEXT("奇襲 ／ %s ／ 敵本拠地"),G->Phase<3?SurpriseNames[G->Phase]:TEXT("？"));
+   DrawText(G->Kind!=0?Goal:FString::Printf(TEXT("%s ／ %s"),G->Phase<3?PhaseNames[G->Phase]:TEXT("？"),*Goal),Gold,Layout.Origin.X+9,Y+23,GEngine->GetSmallFont(),.8f);
    static const TCHAR* const RoleNames[]={TEXT("突撃"),TEXT("支援"),TEXT("装甲"),TEXT("火力"),TEXT("護衛"),TEXT("補給")};
    int32 Roles[7]={0,0,0,0,0,0,0}; for(int32 SID:G->Squads){const uint8 R=Match->GroupRole(*G,SID);++Roles[R<6?R:6];}
    FString RoleText; for(int32 R=0;R<7;++R) if(Roles[R]) RoleText+=FString::Printf(TEXT("%s%s %d"),RoleText.IsEmpty()?TEXT(""):TEXT("　"),R<6?RoleNames[R]:TEXT("役割なし"),Roles[R]);
@@ -960,6 +963,20 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
   if(Info.Objective!=INDEX_NONE)Text+=FString::Printf(TEXT(" 拠点%c"),TCHAR('A'+Info.Objective));
   FLinearColor Color=Status>=1&&Status<=4?SectorTint(Status):FLinearColor(.85f,.9f,1.f);Color.A=.8f;
   DrawText(Text,Color,S.X-14,S.Y-8,GEngine->GetSmallFont(),.8f);
+ }
+ // The own team's front line (trial -BattleFrontLine=1, BattleFrontLine.cpp): the forward edge of each row's line sector, joined
+ // across the rows. It is the team's own picture (own positions and known enemies), so it may be shown.
+ if(const auto* FM=GetWorld()->GetSubsystem<UBattleMatch>();FM&&FM->FrontLine[0].Num()==BattleSectors::Rows)
+ {
+  const FLinearColor FrontInk(1.f,.55f,.15f,.9f);const double Sign=FM->AreaHome(0).X<0?1.:-1.;
+  auto EdgeX=[&](int32 Row){return BattleSectors::Center(FM->FrontCell(0,FM->FrontLine[0][Row],Row)).X+Sign*Size*.5;};
+  auto Thick=[&](FVector A,FVector B){FVector2D SA,SB;if(PC->ProjectWorldLocationToScreen(A,SA)&&PC->ProjectWorldLocationToScreen(B,SB)&&(OnScreen(SA)||OnScreen(SB)))DrawLine(SA.X,SA.Y,SB.X,SB.Y,FrontInk,3.f);};
+  for(int32 R=0;R<BattleSectors::Rows;++R)
+  {
+   const double X=EdgeX(R),Y0=-HY+R*Size;
+   for(double Y=Y0;Y<Y0+Size-1;Y+=StepLen)Thick(Ground(X,Y),Ground(X,FMath::Min(Y+StepLen,Y0+Size)));
+   if(R+1<BattleSectors::Rows&&EdgeX(R+1)!=X){const double X1=EdgeX(R+1),Y=Y0+Size;for(double T=0;T<1;T+=.25)Thick(Ground(FMath::Lerp(X,X1,T),Y),Ground(FMath::Lerp(X,X1,T+.25),Y));}
+  }
  }
  // The sector under the pointer: a bright outline.
  FIntPoint Hover;
