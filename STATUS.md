@@ -20,6 +20,13 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-20 21時25分 Claude（個人AI）：段階A `-BattleThreatCover` をマップIで計測（悪化、既定0のまま）、段階B1 `-BattleSoldierMove` を実装（未計測）。ブランチ `soldierai`、作業ツリー `FutureBattle-soldierai`
+- **変更**：段階A（95f3132）と段階B1（0650a2c）。内容は ROADMAP「2026-11-20 個人AI」。どちらも既定0。
+- **検証**（ロックは21時00分に区画AIから受け取った）：`Build-Editor` 成功。`Test-Battle` は1回目 failures=1（`Setup/Battle-Smoke-20261120-210142.log`、「Attack move stops and fires on a visible enemy during world ticks」）、同じビルドの2回目は failures=0（`Setup/Battle-Smoke-20261120-210356.log`）。切替は既定0で、この試験に触れるコードは動かないので、時々落ちる試験と見ている（未調査）。凍結ビルド `soldierai-a1f3dd4`。切替なしの試合は区画AIの基準と一致（`s7-I-shot2-s7` と `sa-I-off-s7` が IDENTICAL、81項目。段階A・B1とも0）。`Test-MixedSave` は回していない（段階A・B1の追加の状態は保存しない実行時の表だけ）。
+- **計測**：マップI 12種、60FPS・保存往復なし（基準 `s7-I-shot2` と同じ条件。区画AIの切替一式＋`-BattleShotDirection=1`）。基準（`s7-I-shot2`、main のフォルダ）→ 段階A両軍（`sa-I-tc`）、1試合あたり：被弾のうち遮蔽外（遮蔽外÷(遮蔽外＋遮蔽の動作中)）80.1% → 84.4%、遮蔽外の被弾 3424 → 3464、遮蔽外の戦死 233 → 236、戦死 301 → 286、遮蔽からの射撃 1787 → 1384（−23%）、勝ち 8:4 → 9:3、得点 827:810 → 840:816、AIの時間 1.77 → 2.01 ms/フレーム（＋0.24）。カウンタ：確認 3959回、破られて出た 461回（ほかの脅威 438・狙いの敵 23）、選ぶときにほかの脅威で後回し 1532回・2段目 512回。
+- **判断**：悪化。兵が遮蔽から出る回数が多すぎて（1試合460回）、遮蔽からの射撃が減り、遮蔽外の被弾の割合が上がった。戦死が5%減ったのは、撃ち合いそのものが減ったためと見られる。ほかの脅威の範囲（自分で4秒以内に見た、射程の中の敵すべて）が広すぎる。マップEは回していない（マップIで悪化したため）。
+- **次の一手**（数値の調整は任されている範囲）：ほかの脅威を「自分を撃った敵」と「交戦距離の中で自分の方を向いている敵」に絞り、遮蔽から出るのは2回続けて破られたときだけにする案で取り直す。段階B1の計測もそのときに行う。
+
 ## 2026-11-20 16時30分 Claude（実装計画ロードマップ）：段階0の決定を反映（対称な開始を E〜I で既定、部隊群を全マップで既定、squadcap・マップI sectors-v2 の取り込み。ブランチ `defaults`、作業ツリー `FutureBattle-defaults`）
 - **決定（ユーザー、ROADMAP 11-20「今後の実装計画」の段階0）**：`-BattleSymmetricStart` は E〜I（`FMapDef::bUrban` のマップ）で既定ON・A/D は不変。`-BattleAreaGroups` は全マップで既定ON。`-BattleDefendEngage` は切替のまま。区画マップは I が主・H は比較用。`squadcap` は既定25のまま取り込む。`-BattleFollowerAnimSkip` は画面で確認してから（`Play-Area.ps1` にだけ付けた）。計測してから尋ねるもの：区画AIの組み合わせ → `-BattleWaypointPass` → `-BattleSightTeamMask` → `-BattleAIBlindFire` → `-BattleAreaPointSupply` → `-BattleAreaComposition`。
 - **変更**：`BattleTactics::SymmetricStart(const UWorld*)`（起動引数で 0/1 を明示すればそれが優先、無ければ `UBattleTuning::bSymmetricStart` か、マップが市街地の規則なら ON）。呼び出し3か所に World を渡す。`UBattleTuning::bAreaGroups=true`。`BattleTactics::AreaGroups` は、`-BattleAreaGroups=1` を明示したときだけ `-BattleAreaTrialTeam` で片側に絞る（既定ONのときに別の切替の片側試験をしても、両軍に部隊群が残る）。`BattleAreaSmoke.cpp` の部隊群の確認から「AIの部隊群がOFF」の条件を外した。squadcap（小隊上限の設定化 `AreaMaxActiveSquads`=25、保存の検証の上限の拡大）と mapi（sectors-v2：畑44%→25%、拠点の低い塀を9m外へ、区画監査の掃討小隊）をマージ。マップIを `-run=BattleMap -WideField=I -Force` で作り直した（`URBAN_MAP_RESULT failures=0 layout=sectors-v2`、`TERRAIN_MAP_RESULT failures=0`、`SECTOR_MAP_RESULT failures=0`）。
