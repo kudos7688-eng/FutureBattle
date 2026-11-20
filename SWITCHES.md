@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 278 種類。
+計 280 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -25,6 +25,8 @@
 | `-BattleAreaBaseShareHigh` | Value | 0.3f | BattleTactics.cpp:79 |  |
 | `-BattleAreaBaseShareLow` | Value | 0.f | BattleTactics.cpp:78 |  |
 | `-BattleAreaComposition` | Value | GetDefault<UBattleTuning>()->bAreaComposition?1:0 | BattleArmourAI.cpp:38 |  |
+| `-BattleAreaCompositionPlanner` | Value | 0 | BattleComposition.cpp:11 |  |
+| `-BattleAreaCompositionPlannerTeams` | Value | 0 | BattleComposition.cpp:12 |  |
 | `-BattleAreaDepot` | Value | 0 | BattleAreaDepot.cpp:22 |  |
 | `-BattleAreaDepotRaid` | Value | DepotRaid | BattleAreaDepot.cpp:23 |  |
 | `-BattleAreaExoKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:101 |  |
@@ -32,7 +34,7 @@
 | `-BattleAreaFrontBalance` | Value | S.bFrontBalance?1:0（bFrontBalance=false） | BattleTactics.cpp:81 |  |
 | `-BattleAreaFrontGain` | Value | 1.f | BattleTactics.cpp:82 |  |
 | `-BattleAreaGroups` | Value | -1 | BattleGroups.cpp:76 |  |
-| `-BattleAreaHeavyShare` | Value | 0.f / -1.f（同名のメンバーが複数） | BattleTactics.cpp:93 |  |
+| `-BattleAreaHeavyShare` | Value | 0 / 0.f / -1.f（同名のメンバーが複数） | BattleTactics.cpp:93 |  |
 | `-BattleAreaHire` | Value | T->bAreaHire?1:0 | BattleTactics.cpp:55 |  |
 | `-BattleAreaHireInterval` | Value | T->AreaHireIntervalSeconds | BattleTactics.cpp:57 |  |
 | `-BattleAreaHirePurpose` | Value | 0 | BattleTactics.cpp:60 |  |
@@ -51,7 +53,7 @@
 | `-BattleAreaPlan` | Value | 0 | BattleTactics.cpp:92 |  |
 | `-BattleAreaPointSupply` | other |  | BattleTactics.cpp:39 |  |
 | `-BattleAreaScoutKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:94 |  |
-| `-BattleAreaSmoke` | Param | off | BattleArea.cpp:42, BattleMixedBodies.cpp:117 |  |
+| `-BattleAreaSmoke` | Param | off | BattleArea.cpp:44, BattleMixedBodies.cpp:117 |  |
 | `-BattleAreaSPGKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:99 |  |
 | `-BattleAreaStartCredits` | Value | 100 | BattleTactics.cpp:128 |  |
 | `-BattleAreaStrategy` | Value | T->bAreaStrategy?1:0 | BattleTactics.cpp:74 |  |
@@ -268,7 +270,7 @@
 | `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:1356 |  |
 | `-BattleTracerShot` | Param | off | BattleStanceShot.cpp:87 |  |
 | `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:207 |  |
-| `-BattleTrialSwap` | Param | off | BattleArea.cpp:15, BattleAreaDepot.cpp:32, BattleLeaderRuntime.cpp:80 ほか4 |  |
+| `-BattleTrialSwap` | Param | off | BattleArea.cpp:16, BattleAreaDepot.cpp:32, BattleLeaderRuntime.cpp:80 ほか4 |  |
 | `-BattleUnderFireCover` | Value | 0 | BattleLeaderRuntime.cpp:1454 |  |
 | `-BattleUnits` | Value | 1000 / 20 | BattleBenchmark.cpp:36, BattleSquadTrial.cpp:28 |  |
 | `-BattleVATFarLight` | Value | 0 | BattleVATDisplay.cpp:37 |  |
@@ -282,6 +284,6 @@
 | `-BattleWideMapAudit` | Param | off | BattleLeaderRuntime.cpp:232 |  |
 | `-BattleWideMapGeometryOnly` | Param | off | BattleWideMapAudit.cpp:157 |  |
 | `-BattleWideMixed` | Param | off | BattleGameMode.cpp:55, BattleLeaderRuntime.cpp:74 |  |
-| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:1084, BattleContactTrial.cpp:97, BattleExoShot.cpp:78 ほか14 |  |
+| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:1140, BattleContactTrial.cpp:97, BattleExoShot.cpp:78 ほか14 |  |
 | `-BattleWideSmoke` | Param | off | BattleLeaderRuntime.cpp:246 |  |
 | `-BattleWideSoak` | Param | off | BattleLeaderRuntime.cpp:248 |  |

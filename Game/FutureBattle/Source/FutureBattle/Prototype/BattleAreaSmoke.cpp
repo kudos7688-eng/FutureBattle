@@ -1,6 +1,7 @@
 #include "BattleLeaderRuntime.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "BattleMatch.h"
+#include "BattleComposition.h"
 #include "BattleSave.h"
 #include <limits>
 #include "BattleGameMode.h"
@@ -35,6 +36,56 @@ void UBattleLeaderRuntime::RunAreaSmoke()
  auto Place=[&](int32 ID,FVector P){auto& B=Bodies.FindChecked(ID);if(B.Actor.IsValid()){B.Actor->SetActorLocation(P,false,nullptr,ETeleportType::TeleportPhysics);B.Actor->SetActorRotation(FRotator::ZeroRotator);}else{B.Capsule->SetWorldLocation(P);auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=P;F.Forward=FVector::ForwardVector;}};
  if(SmokeStage==0)
  {
+  {
+   BattleComposition::FSettings CompositionOff;
+   Check(!CompositionOff.Applies(0)&&!CompositionOff.Applies(1),TEXT("composition planner defaults OFF for both teams"));
+   bool CompositionMasksOK=true;
+   for(int32 CompositionMask=0;CompositionMask<4;++CompositionMask)
+   {
+    BattleComposition::FSettings CompositionOptions;CompositionOptions.bEnabled=true;CompositionOptions.Teams=CompositionMask;
+    CompositionMasksOK&=CompositionOptions.Applies(0)==((CompositionMask&1)!=0)&&CompositionOptions.Applies(1)==((CompositionMask&2)!=0);
+    CompositionMasksOK&=!CompositionOptions.Applies(-1)&&!CompositionOptions.Applies(2);
+    CompositionOptions.bEnabled=false;CompositionMasksOK&=!CompositionOptions.Applies(0)&&!CompositionOptions.Applies(1);
+   }
+   Check(CompositionMasksOK,TEXT("composition independent team masks and disabled gate"));
+   const auto& CompositionDefs=BattleComposition::Definitions();const auto* CompositionTuning=GetDefault<UBattleTuning>();
+   const int32 CompositionLimits[]={BattleTactics::AreaHire().MaxActive,BattleTactics::AreaHire().MaxActive,CompositionTuning->AreaScoutLimit,CompositionTuning->AreaATLimit,CompositionTuning->AreaTankLimit,CompositionTuning->AreaACLimit,CompositionTuning->AreaMortarLimit,CompositionTuning->AreaSPGLimit,CompositionTuning->AreaExoLimit,CompositionTuning->AreaSupplyLimit};
+   bool CompositionDefsOK=CompositionDefs.Num()==BattleSquadType::Count;
+   for(const auto& CompositionDef:CompositionDefs)
+   {
+    const uint8 CompositionType=CompositionDef.TypeID;
+    CompositionDefsOK&=CompositionDef.Cost==(CompositionType==BattleSquadType::Rifle?BattleTactics::AreaHire().Cost:BattleSquadType::AreaCost(CompositionType));
+    CompositionDefsOK&=CompositionDef.Members==BattleSquadType::Members(CompositionType)&&CompositionDef.HardActiveLimit==FMath::Max(0,CompositionLimits[CompositionType]);
+    CompositionDefsOK&=CompositionDef.bAIEligible==(CompositionType!=BattleSquadType::Supply);
+   }
+   Check(CompositionDefsOK,TEXT("composition definitions match executor prices limits members and supply exclusion"));
+   // Exercise the actual group fallback for every type, then restore the fixture immediately.
+   auto* CompositionSquad=const_cast<FBattleSquadState*>(Store->FindSquad(1));
+   if(CompositionSquad)
+   {
+    const uint8 CompositionOriginalType=CompositionSquad->SquadType;bool CompositionRolesOK=true;FBattleGroup CompositionEmptyGroup;
+    for(const auto& CompositionDef:CompositionDefs){CompositionSquad->SquadType=CompositionDef.TypeID;CompositionRolesOK&=M->GroupRole(CompositionEmptyGroup,1)==CompositionDef.DefaultGroupRole;}
+    CompositionSquad->SquadType=CompositionOriginalType;
+    Check(CompositionRolesOK&&(CompositionDefs[0].AllowedGroupRoles&3)==3,TEXT("composition roles match live group fallback; rifle can support"));
+   }
+   FAreaIntent CompositionIntent;CompositionIntent.HireReserve=7;CompositionIntent.ScoutKeep=2;CompositionIntent.ATKeep=3;
+   const auto CompositionInput=BattleComposition::Capture(*M,*Store,0,CompositionIntent,true,false);
+   const FString CompositionBefore=BattleComposition::Describe(CompositionInput);
+   Check(CompositionInput.Active==M->ActiveSquads(0)&&CompositionInput.Free==FMath::Max(0,M->Credits[0]-CompositionInput.Pending-7)&&!CompositionInput.bAutoAllowed,
+    TEXT("composition input preserves player ownership and subtracts reservations once"));
+   Check(CompositionInput.Types[BattleSquadType::AntiTank].PacedTarget==3&&CompositionInput.Types[BattleSquadType::Supply].PacedTarget==0,
+    TEXT("composition observes immediate AT target without enabling supply"));
+   const auto CompositionPaced=BattleComposition::Capture(*M,*Store,0,CompositionIntent,false,false);
+   Check(CompositionPaced.Types[BattleSquadType::AntiTank].PacedTarget==FMath::Min(3,CompositionInput.LegacyBought/FMath::Max(1,CompositionTuning->AreaScoutAfterHires)),TEXT("composition preserves legacy purchase pacing"));
+   auto* CompositionEnemy=const_cast<FBattleUnitState*>(Store->Find(Lead(26)));
+   if(CompositionEnemy)
+   {
+    const float CompositionEnemyHP=CompositionEnemy->HP;CompositionEnemy->HP=0;
+    Check(BattleComposition::Describe(BattleComposition::Capture(*M,*Store,0,CompositionIntent,true,false))==CompositionBefore,TEXT("composition ignores unobserved enemy HP"));
+    CompositionEnemy->HP=CompositionEnemyHP;
+   }
+   Check(BattleComposition::Describe(BattleComposition::Capture(*M,*Store,0,CompositionIntent,true,false))==CompositionBefore,TEXT("composition repeated input collection is stable"));
+  }
   {
    FBattleSquadState S;S.Order=EBattleOrder::Move;S.DefenseRadius=1000;S.Destination=FVector::ZeroVector;
    Check(!BattleTactics::OrderAllowsTarget(S,10,FVector::ZeroVector),TEXT("weapon order permission rejects move"));
@@ -143,7 +194,12 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    if(Save)
    {
     Save->Area.HireSpent[0]=0;Check(!M->RestoreSnapshot(Save)&&M->Credits[0]==Before-HireCost,TEXT("hire spending outside conservation rejected"));Save->Area.HireSpent[0]=HireCost;
+    const FAreaIntent CompositionSaveIntent;
+    const auto CompositionBeforeRestore=BattleComposition::Capture(*M,*Store,0,CompositionSaveIntent,false,false);
     Check(M->RestoreSnapshot(Save)&&Store->GetSquads().Num()==SquadCount+1&&M->Area.HireSpent[0]==HireCost&&M->Credits[0]==Before-HireCost&&Bodies.Contains(NewLeader)&&Store->Find(NewLeader)->IsAlive(),TEXT("hired squad survives restore"));
+    const auto CompositionAfterRestore=BattleComposition::Capture(*M,*Store,0,CompositionSaveIntent,false,false);
+    Check(CompositionBeforeRestore.Free==CompositionAfterRestore.Free&&CompositionBeforeRestore.Pending==CompositionAfterRestore.Pending&&CompositionBeforeRestore.Active==CompositionAfterRestore.Active&&CompositionBeforeRestore.LegacyBought==CompositionAfterRestore.LegacyBought&&CompositionBeforeRestore.Elapsed==CompositionAfterRestore.Elapsed,
+     TEXT("composition stage one rebuilds budget roster and time from existing save"));
    }
    Mode->bCombatPaused=false;
    // A purchase that leaves fewer resources than queued replenishments cancels the least advanced ones.

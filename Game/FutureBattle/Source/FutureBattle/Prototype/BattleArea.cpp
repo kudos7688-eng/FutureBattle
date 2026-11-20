@@ -1,4 +1,5 @@
 #include "BattleMatch.h"
+#include "BattleComposition.h"
 #include "BattleFieldLayout.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
@@ -26,6 +27,7 @@ int32 UBattleMatch::AreaScore(int32 Team)const
 }
 void UBattleMatch::InitializeArea()
 {
+ BattleComposition::LogStart(); // stage 1: returns before constructing definitions when OFF
  Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
@@ -146,6 +148,9 @@ void UBattleMatch::UpdateAreaHiring()
   // Strategic layer trial -BattleAreaComposition=1: the AI sets the numbers of special squad types it keeps (BattleArmourAI.cpp).
   const bool bComposition=BattleTactics::AreaComposition(Team);const uint8 PlainType=Type;
   if(bComposition)AreaComposition(Team,HireIntent,Bought);
+  // Read-only stage 1 probe. OFF/non-target teams never collect inputs or initialize definitions.
+  if(BattleComposition::Settings().Applies(Team))
+   BattleComposition::LogInput(BattleComposition::Capture(*this,*Store,Team,HireIntent,bComposition,true));
   // Scout pairs first when the team has fewer active pairs than it wants: none during the first purchases (taking points),
   // then one more per AreaScoutAfterHires purchases up to the intent's ScoutKeep; a lost pair is bought again.
   {
