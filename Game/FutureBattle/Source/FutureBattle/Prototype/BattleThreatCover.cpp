@@ -85,7 +85,7 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
  // check, also before a break is confirmed.
  const int32 Relocate=ThreatCoverRelocate();
  const bool bOthersSee=Relocate>0 && (ByOther || ExposedToThreats(ID,Anchor,Threats));
- if(Relocate==2 && bOthersSee)U->CoverSeconds=FMath::Max(U->CoverSeconds,1.1f);
+ if(Relocate==2 && bOthersSee && !U->bSoldierOrder)U->CoverSeconds=FMath::Max(U->CoverSeconds,1.1f); // not under the player's order to him
  // Narrowed: one break may be a glimpse; he leaves when the next check (1 s later) finds the place broken again.
  if(ThreatCoverMode(U->Team)==2)
  {
@@ -125,7 +125,12 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
    const float Radius=FMath::Max(1200.f,GetDefault<UBattleTuning>()->AICoverSearchRadius);
    bFound=RequestCoverAction(ID,Primary,Before.CoverTargetID,Radius,bOthersSee,Accept);
   }
-  else Diag.Cover(TEXT("threat_relocate_frame_full"));
+  else
+  {
+   // No search this frame: not a failed search. He keeps his place and decides at the next check, which counts as a
+   // confirmed break again (the first break is kept), so a full frame never makes him leave without having looked.
+   BrokenCover.Remove(ID);U->CoverFirstBreak=Now;Diag.Cover(TEXT("threat_relocate_frame_full"));return false;
+  }
   if(bFound)
   {
    // A longer walk keeps its cover timer while it lasts and is not ended halfway (as for stage B1); no B1 move right after it.
