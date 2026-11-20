@@ -27,6 +27,12 @@
 - **未実施**：計画器ON の試合（勝敗・性能）はまだ一度も回していない。ゲームパッドのエイム上下の反転は実機で未確認。
 - **次の一手**：計画器ON の試合（例：`-Map I -Area -Experiment -Seed 7 -AreaComposition 1 -AreaCompositionPlanner 1 -AreaCompositionPlannerTeams 2 -RoundTripSave -CoverActions 1 -FlankCoordination 1`）で動作を確かめ、片側試験へ。
 
+## 2026-11-21 6時20分 Claude（AC01）：Codex のレビューの残り（首の部品の面の向き・見た目を外したときの傾き）を直した
+- **依頼**：2時30分の項目で残した Codex の指摘も直し、main に入れる（ユーザー指示）。
+- **変更**：`ABattleUnit::SetLook` で見た目を外すと（Idle が null）、傾きと速度の履歴を消して、体をまっすぐに戻す。`Art/AC01_Tripo_v2/Scripts/15_neck_fill_outward.py`（新規・未追跡）で首の楕円体の面を外向きに直した（LOD0〜2 で128／72／32面。2回目の実行では0面で、何も変えない）。`14_torso_fill.py` の楕円体も外向きに作るよう直した。`Refresh-AC01Body` で `SK_AC01T2` を取り込み直した（`AC01_BODY_REFRESH_OK [82722, 43893, 19695]`）。
+- **検証**（ロックは6時に群制御から受け取り、区画AIへ渡した）：作業ツリー `FutureBattle-ac01`（main e3f9d98 の上）で `Build-Editor` 成功。`Test-Battle` failures=0（`Setup/Battle-Smoke-20261121-061149.log`）。`Test-ExoShot`（`ac01-neck-20261121`）`EXO_SHOT_RESULT failures=0`、背面の画像で首まわりに異常がないことを確かめた。
+- **制限**：材質が両面なので、画面上の見た目は前と同じはず。見た目を外す処理は今のゲームに無いため、リセットは実行されていない。main の Binaries は作り直していない。
+
 ## 2026-11-21 2時30分 Claude（AC01）：Codex のレビューを受けて、外骨格兵の傾きと滑走の取り込み確認を直した
 - **依頼**：AC01 の現状（傾き・胴体の穴埋め・滑走）を Codex に読み取り専用でレビューさせ、指摘のうち2件を直す（ユーザー承認）。
 - **変更**：`ABattleUnit::UpdateLookTilt`：しゃがみ・伏せ・姿勢の切り替え中は、平滑化した速度を捨て、傾きを毎秒8の割合で直立へ戻す。これまでは目標速度だけ0になり、制動の式で約2°後ろへ跳ねていた。非数値の速度が入ったら履歴を消す。`Setup/Import-AC01Glide.py`：取り込みタスクの `imported_object_paths` に当該クリップがあることと、長さ0.1秒超を確かめる（古い同名アセットで合格になっていた）。
