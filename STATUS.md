@@ -111,6 +111,11 @@
 - 回帰（オフ）：Test-Battle failures=0、Test-Area failures=0、Test-MixedSave failures=0。
 - オフの試合は main の旧DLLとはビルドが違う（AC01 の変更が入った）ため、一致比較はしていない。
 - 決定：既定0のまま main へ（ユーザー決定）。区画AIの 4499bac（-BattleSectorSlotReserve、未ビルドだった）と AC01 の変更を含む main の最新を取り込んでビルドが通り、回帰（Test-Battle・Test-Area・Test-MixedSave）failures=0、マップHの監査（すり抜けオン、種7、`av3-H-p1-s7`）failures=0・完走・保存往復 failures=0。
+## 2026-11-20 12時35分 Claude（カバーアクション）：撃ちながら走る・撃たれたときに上半身が消える不具合を修正
+- **原因**：Lyra の反動（`MM_Rifle_Fire`、メッシュ空間の差分）、被弾（`MM_HitReact_*`、ローカル空間の差分）、照準（`MM_Rifle_Idle_ADS_AO_*`、メッシュ空間の差分）は additive クリップ。上半身の層ではこれを普通の姿勢として混ぜていたため、骨の大きさが0に寄って上半身が潰れていた（走りながら撃つと反動＋照準が、撃たれると被弾が全量で乗る）。朝の「TPSで上半身が消える」報告も、本当の原因はこれと見られる（カメラの修正は残す）。
+- **変更**（`BattleBodyAnim.cpp` EvaluateLayers）：additive のクリップは `FAnimationRuntime::AccumulateAdditivePose` で下の姿勢に足す。照準は中央と上下の傾きを差分のまま混ぜてから足す。普通のクリップ（装填など）は従来どおり混ぜる。
+- **検証**：main（0df09ad）を取り込んでビルド成功。Test-CoverActions 描画あり `additive-r1` failures=0。遮蔽の外で立った兵に被弾と反動を再生させ、頭の高さと胸の骨の大きさを測った（被弾 head=153 spine_scale=1.00、反動 head=159 spine_scale=1.00）。描画なし `additive-n1` failures=0、Test-Battle failures=0。
+- **制限**：照準の上下の傾きの見た目は、差分として足す形に変わった（以前は姿勢として混ぜていた）。画面ではまだ見ていない。修正前の版で測った値（潰れていたこと）は取っていない。
 ## 2026-11-20 10時35分 Claude（カバーアクション）：体の表示の不具合2件と、移動中は銃を下げて走る
 - **変更範囲**（表示のみ。判定・視線・命中は不変）：
   - TPSで上半身が消える（ユーザー報告、マップF）：後方カメラが壁に押されて目から70cm以内に寄ると、カメラが頭・胸の中に入る。そのときは体と銃を隠す（スコープ時と同じ）（`BattleUnit.cpp` CalcCamera／UpdateAimView）。
