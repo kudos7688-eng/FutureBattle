@@ -54,7 +54,7 @@ bool UBattleLeaderRuntime::StepSoldierMove(int32 ID,FVector Primary,double Now,f
  // Once a second per soldier, half a second away from the stage A check (same stateless phase rule).
  const double Phase=double((ID+8)%16)/16.;
  if(FMath::FloorToDouble(Now+Phase)==FMath::FloorToDouble(Now-Dt+Phase))return false;
- if(const double* After=SoldierMoveAfter.Find(ID);After && Now<*After)return false;
+ if(Now<U->SoldierMoveAfter)return false;
  const FIntPoint Sector=BattleSectors::Cell(Squad->Destination);
  const FVector Pos=Position(ID);
  if(BattleSectors::Cell(Pos)!=Sector)return false; // the squad brings him into the sector first
@@ -98,9 +98,9 @@ bool UBattleLeaderRuntime::StepSoldierMove(int32 ID,FVector Primary,double Now,f
  if(!Cover->Reserve(Best,ID,Now)){Cover->Reserve(U->CoverSlot,ID,Now);Diag.Cover(TEXT("soldier_move_reserve_failed"));return false;}
  const double Walk=FVector::Dist2D(Pos,BestAnchor);
  UE_LOG(LogFutureBattle,Verbose,TEXT("BATTLE_SOLDIER_MOVE unit=%d from=%d to=%d walk_cm=%.0f here=%.2f there=%.2f"),ID,U->CoverSlot,Best,Walk,Here,BestScore);
- U->CoverAnchor=BestAnchor;U->CoverPeek=BestPeek;U->CoverSlot=Best;U->CoverPhase=1;U->CoverSeconds=3.f;SoldierRelocating.Add(ID,Now+Walk/250.+1.5);
+ U->CoverAnchor=BestAnchor;U->CoverPeek=BestPeek;U->CoverSlot=Best;U->CoverPhase=1;U->CoverSeconds=3.f;U->SoldierMoveUntil=Now+Walk/250.+1.5;U->CoverFirstBreak=0;
  U->DecisionReason=TEXT("COVER / MOVING TO A BETTER PLACE");
- SoldierMoveAfter.Add(ID,Now+8.);
+ U->SoldierMoveAfter=Now+8.;
  Diag.Cover(TEXT("soldier_move_started"));
  return true;
 }

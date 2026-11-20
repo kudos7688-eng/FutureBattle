@@ -246,6 +246,10 @@ struct FBattleUnitState
  UPROPERTY() bool bSoldierReturn=false;
  UPROPERTY() FVector SoldierGoal=FVector::ZeroVector;
  UPROPERTY() int32 SoldierOrderMission=0;
+ // Individual AI timers (BattleSoldierMove.cpp, BattleThreatCover.cpp), saved relative to the save time like ReloadEndTime.
+ UPROPERTY() double SoldierMoveUntil=0; // a B1 walk keeps its cover timer at 3 s until then
+ UPROPERTY() double SoldierMoveAfter=0; // no B1 decision before this time
+ UPROPERTY() double CoverFirstBreak=0; // -BattleThreatCover=2: first break of the current place (cleared when he leaves it)
 	UPROPERTY(VisibleAnywhere) bool bMovingShot = false;
 	UPROPERTY(VisibleAnywhere) float SpreadSkillScale = 1.f;
 	UPROPERTY(VisibleAnywhere) int32 ShotSequence = 0;

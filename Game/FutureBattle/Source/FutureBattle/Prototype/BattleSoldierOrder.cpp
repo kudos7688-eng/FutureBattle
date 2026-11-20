@@ -49,7 +49,11 @@ bool UBattleLeaderRuntime::ReturnSoldier(int32 ID)
  // On the march he simply follows the squad's path again; a stopped squad gets him back to his own place in it.
  if(!S || !P || (S->Order!=EBattleOrder::Hold && P->Path.Num()>1)){ClearSoldierOrder(ID,TEXT("returned"));return true;}
  FString Why;const int32 Mission=U->SoldierOrderMission;
- if(!IssueSoldierOrder(ID,U->Destination,Why)){ClearSoldierOrder(ID,TEXT("returned"));return true;}
+ if(!IssueSoldierOrder(ID,U->Destination,Why))
+ {
+  // No full path back (or his place is out of reach): he still walks back; the stuck rule ends the order if he cannot.
+  CancelCoverAction(ID);SoldierPaths.Remove(ID);U->SoldierGoal=U->Destination;
+ }
  U->bSoldierReturn=true;U->SoldierOrderMission=Mission;return true;
 }
 
@@ -65,7 +69,9 @@ bool UBattleLeaderRuntime::SoldierOrderActive(int32 ID)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);if(!U || !U->bSoldierOrder)return false;
  const auto* S=Store->FindSquad(U->SquadID);const auto* P=Plans.Find(U->SquadID);
+ const auto* B=Bodies.Find(ID);
  const TCHAR* End=!U->IsAlive()?TEXT("died"):(!S || !P || S->CommandStatus!=EBattleCommandStatus::Active)?TEXT("squad_inactive"):
+  (B && B->Actor.IsValid() && B->Actor->IsPlayerControlled())?TEXT("player_control"):
   S->MissionRevision!=U->SoldierOrderMission?TEXT("new_squad_order"):
   // The squad walked off (retreat, resupply): he goes with it.
   FVector::Dist2D(P->Center,U->SoldierGoal)>SoldierOrderLeash+1500.f?TEXT("squad_left"):
@@ -97,9 +103,11 @@ void UBattleLeaderRuntime::StepSoldierOrder(int32 ID,float Dt,double Now,FVector
  if(B.Actor.IsValid()){B.Actor->GetCharacterMovement()->MaxWalkSpeed=Speed;B.Actor->AddMovementInput(D);B.Velocity=B.Actor->GetVelocity();bStuck=B.Velocity.Size2D()<10;}
  else
  {
-  FHitResult Hit;B.Capsule->MoveComponent(D*FMath::Min(Speed*Dt,float(FVector::Dist2D(Way,Pos))),D.Rotation().Quaternion(),true,&Hit);
+  // Map with heights: the step follows the ground (TerrainStep, as in the squad's movement); a place that cannot be stepped onto stops it.
+  FVector Step=D*FMath::Min(Speed*Dt,float(FVector::Dist2D(Way,Pos)));if(!TerrainStep(B.Capsule->GetComponentLocation(),Step))Step=FVector::ZeroVector;
+  FHitResult Hit;B.Capsule->MoveComponent(Step,D.Rotation().Quaternion(),true,&Hit);
   auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=B.Capsule->GetComponentLocation();
-  B.Velocity=(F.Position-Pos)/FMath::Max(Dt,.001f);bStuck=Hit.bBlockingHit && B.Velocity.Size2D()<Speed*.3f;
+  B.Velocity=(F.Position-Pos)/FMath::Max(Dt,.001f);bStuck=(Hit.bBlockingHit || Step.IsNearlyZero()) && B.Velocity.Size2D()<Speed*.3f;
  }
  if(!bStuck){Path.StalledSince=0;return;}
  if(Path.StalledSince==0){Path.StalledSince=Now;return;}
@@ -150,6 +158,8 @@ void ABattleController::OrderSoldierAt(FVector2D Screen)
 bool ABattleController::ReturnSelectedSoldier()
 {
  if(SoldierSelection==INDEX_NONE)return false;
+ // A soldier who died since he was picked: H is the squad's hold again.
+ if(const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(SoldierSelection);!U || !U->IsAlive()){SoldierSelection=INDEX_NONE;return false;}
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  ShowNotice(L->ReturnSoldier(SoldierSelection)?TEXT("兵を部隊へ戻す"):TEXT("この兵には個別の命令がありません"));
  return true;
@@ -236,7 +246,7 @@ void UBattleLeaderRuntime::StepSoldierOrderTest()
  const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  auto& T=SoldierTest;auto Finish=[&](const TCHAR* Why){++T.Failures;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER_TEST fail stage=%d why=%s"),T.Stage,Why);T.Stage=6;};
  const auto* U=Store->Find(T.Unit);
- if(T.Stage>0 && (!U || !U->IsAlive())){Finish(TEXT("soldier_died"));}
+ if(T.Stage>0 && T.Stage<5 && (!U || !U->IsAlive())){Finish(TEXT("soldier_died"));}
  else if(T.Stage==0 && Match && Match->Phase==EBattleMatchPhase::Combat && Match->Elapsed>=20.f)
  {
   TArray<int32> IDs;for(const auto& Pair:Store->GetSquads())if(Pair.Value.Team==0 && Pair.Value.SquadType==0 && Pair.Value.CommandStatus==EBattleCommandStatus::Active && !IsVehicle(Pair.Value.LeaderUnitID))IDs.Add(Pair.Key);
@@ -315,9 +325,18 @@ void UBattleLeaderRuntime::StepSoldierOrderTest()
   if(!U->bSoldierOrder || !SoldierOrderActive(T.Unit))
   {
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER_TEST cleared_by_squad_order unit=%d"),T.Unit);
-   T.Stage=6;
+   // Last: ordered again, then killed; his order must end with him (a dead soldier with an order fails the save check).
+   FString Why;
+   if(!IssueSoldierOrder(T.Unit,T.Goal,Why)){Finish(TEXT("third_order_refused"));return;}
+   Store->ApplyDamage(T.Unit,1,100000);T.Stage=5;
   }
   else if(Now-T.Since>2.)Finish(TEXT("not_cleared_by_squad_order"));
+ }
+ else if(T.Stage==5)
+ {
+  if(U && U->IsAlive())Finish(TEXT("not_killed"));
+  else if(U && U->bSoldierOrder)Finish(TEXT("order_kept_after_death"));
+  else{UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER_TEST cleared_by_death unit=%d"),T.Unit);T.Stage=6;}
  }
  if(T.Stage==6)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER_RESULT failures=%d"),T.Failures);
 }

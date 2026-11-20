@@ -174,6 +174,8 @@ $timeout=if($Experiment){2700000}else{210000}
 if(!$p.WaitForExit($timeout)){Stop-Process -Id $p.Id;throw "Timeout: $log"}
 $t=Get-Content $log -Raw
 $pass=$p.ExitCode -eq 0 -and $t -match '(WIDE_AUDIT|SIGHT_EXPERIMENT|SIGHT_VISUAL)_RESULT failures=0' -and $t -notmatch 'WIDE_AUDIT_CHECK FAIL|Fatal error:|Assertion failed:'
+# The soldier order self-test must finish and pass too (a missing result line is a failure).
+if($SoldierOrderTest){$pass=$pass -and $t -match 'BATTLE_SOLDIER_ORDER_RESULT failures=0'}
 if($RoundTripSave){$pass=$pass -and $t -match 'BATTLE_MIXED_SAVE_SOAK_RESULT failures=0'}
 if($snapshot -and (Get-FileHash $dll).Hash -ne $snapshot.dll){$pass=$false}
 if($snapshot){

@@ -72,13 +72,12 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
  // The target too: it may have moved round the place since the soldier chose it.
  const bool ByTarget=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Primary+FVector(0,0,60)).Fraction()>CoverExposureLimit();
  const bool ByOther=!ByTarget && ExposedToThreats(ID,Anchor,Threats);
- if(!ByTarget && !ByOther){CoverFirstBreak.Remove(ID);return false;}
+ if(!ByTarget && !ByOther){U->CoverFirstBreak=0;return false;}
  // Narrowed: one break may be a glimpse; he leaves when the next check (1 s later) finds the place broken again.
  if(ThreatCoverMode(U->Team)==2)
  {
-  const double* First=CoverFirstBreak.Find(ID);
-  if(!First || Now-*First>2.5){CoverFirstBreak.Add(ID,Now);Diag.Cover(TEXT("threat_cover_first_break"));return false;}
-  CoverFirstBreak.Remove(ID);
+  if(U->CoverFirstBreak<=0 || Now-U->CoverFirstBreak>2.5){U->CoverFirstBreak=Now;Diag.Cover(TEXT("threat_cover_first_break"));return false;}
+  U->CoverFirstBreak=0;
  }
  Diag.Cover(ByTarget?TEXT("threat_cover_broken_by_target"):TEXT("threat_cover_broken_by_other"));
  UE_LOG(LogFutureBattle,Verbose,TEXT("BATTLE_THREAT_COVER_BROKEN unit=%d slot=%d threats=%d by=%s"),ID,U->CoverSlot,Threats.Num(),ByTarget?TEXT("target"):TEXT("other"));

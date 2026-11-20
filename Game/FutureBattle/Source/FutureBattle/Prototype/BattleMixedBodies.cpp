@@ -71,7 +71,7 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  if(!PC || !Mode) {Error=TEXT("Player or game mode unavailable; battle retained");return false;}
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
  if(!Nav) {Error=TEXT("Navigation unavailable; battle retained");return false;}
- CoverApproaches.Reset();FirePositions.Reset();
+ CoverApproaches.Reset();FirePositions.Reset();SoldierPaths.Reset();
  SuppressionZeroAt.Reset();
  Stances.Reset();StanceLockedUntil.Reset();
  TMap<int32,FVector> Positions;
@@ -132,6 +132,8 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  for(const auto& E:Save->Units)
  {
   auto U=E.State;U.ReloadEndTime=U.ReloadEndTime>0?Now+U.ReloadEndTime:0;U.NextShotTime+=Now;
+  U.SoldierMoveUntil=U.SoldierMoveUntil>0?Now+U.SoldierMoveUntil:0;U.SoldierMoveAfter=U.SoldierMoveAfter>0?Now+U.SoldierMoveAfter:0;
+  U.CoverFirstBreak=U.CoverFirstBreak>0?Now+U.CoverFirstBreak-2.5:0;
   U.CoverSlot=INDEX_NONE;U.AimStableSince=-1;U.MoveRetries=0;U.Role=EBattleRole::Independent;U.CoordinatedTarget=INDEX_NONE;
   U.Action=U.IsAlive()?EBattleAction::Idle:EBattleAction::Dead;U.DecisionReason=TEXT("RESTORED / REVALIDATE PATH");
   Records.Add(U);

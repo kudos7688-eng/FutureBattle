@@ -489,7 +489,6 @@ public:
  // within 10 s. When no place hides him from everyone he takes the best one against his target, as before.
  static bool ThreatCoverEnabled(int32 Team);
  static int32 ThreatCoverMode(int32 Team); // -BattleThreatCover=2: narrowed threats, leave after two breaks in a row
- TMap<int32,double> CoverFirstBreak; // runtime only (mode 2)
  int32 GatherThreats(int32 ID,FVector Primary,double Now,TArray<FVector,TInlineAllocator<3>>& Out) const;
  bool ExposedToThreats(int32 ID,FVector Anchor,const TArray<FVector,TInlineAllocator<3>>& Threats) const;
  bool CheckCoverThreats(int32 ID,FVector Primary,double Now,float Dt);
@@ -504,8 +503,6 @@ public:
  static bool SoldierMoveEnabled(int32 Team);
  float RateCoverPlace(int32 ID,FVector From,FVector Anchor,FVector Peek,bool bFire,const TArray<FVector,TInlineAllocator<3>>& Threats) const;
  bool StepSoldierMove(int32 ID,FVector Primary,double Now,float Dt);
- TMap<int32,double> SoldierMoveAfter; // runtime only, like CoverProbeAfter
- TMap<int32,double> SoldierRelocating; // runtime only: until when a B1 walk may keep its cover timer at 3 s
  uint64 SoldierMoveFrame=0;int32 SoldierMovesThisFrame=0;
  // -BattleSoldierAIFocus=<m>: stage A and B1 only near the player (or -BattleSoldierAIFocusAt=X,Y in metres), both teams.
  bool SoldierAIFocus(int32 ID) const;

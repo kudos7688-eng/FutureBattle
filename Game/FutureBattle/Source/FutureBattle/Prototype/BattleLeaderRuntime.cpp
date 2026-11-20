@@ -480,7 +480,7 @@ const TArray<FBattleSquadSummary>& UBattleLeaderRuntime::Summaries()
 }
 void UBattleLeaderRuntime::OnDeath(int32 ID)
 {
- CancelCoverAction(ID);
+ CancelCoverAction(ID);ClearSoldierOrder(ID,TEXT("died"));
  VehicleIDs.Remove(ID); // a destroyed vehicle is a wreck: no armour or spotting rules
  // Stances are for the living: restore the normal body shape before the death pose is applied.
  SetStance(ID,BattleStance::Stand,GetWorld()->GetTimeSeconds(),true);Stances.Remove(ID);StanceLockedUntil.Remove(ID);
@@ -830,6 +830,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()) return;
  auto& B=Bodies.FindChecked(ID);
+ // The player's order to this soldier ends (squad order, squad stopped, taken over...) before his cover action runs.
+ if(U->bSoldierOrder)SoldierOrderActive(ID);
  if(StepCoverAction(ID,Dt,Now))return;
  if(B.Actor.IsValid() && B.Actor->IsPlayerControlled())
  {

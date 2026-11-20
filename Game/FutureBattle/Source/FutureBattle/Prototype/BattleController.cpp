@@ -310,12 +310,12 @@ void ABattleController::ToggleMode()
 	else ShowNotice(TEXT("Select a friendly unit first"));
 }
 void ABattleController::ControlSelected() { if (bTactical && !Selected.IsEmpty()) ControlUnit(Selected[0]); }
-void ABattleController::SetSelection(ABattleUnit* Unit) { Selected.Reset(); if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0 && LeaderSelectable(Unit)) Selected.Add(Unit); }
+void ABattleController::SetSelection(ABattleUnit* Unit) { SoldierSelection = INDEX_NONE; Selected.Reset(); if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0 && LeaderSelectable(Unit)) Selected.Add(Unit); }
 
 void ABattleController::SelectAll()
 {
 	if (!bTactical) return;
-	Selected.Reset();
+	SoldierSelection = INDEX_NONE; Selected.Reset();
 	if (ABattleGameMode* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>())
 		for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0 && LeaderSelectable(Unit)) Selected.Add(Unit);
 }
