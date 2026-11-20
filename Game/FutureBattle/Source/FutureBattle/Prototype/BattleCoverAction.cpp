@@ -395,6 +395,8 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  {Diag.Cover(TEXT("cancel_target_out_of_range"));CancelCoverAction(ID);return false;}
  // -BattleThreatCover: a hidden soldier leaves a place that one of his threats now sees into (BattleThreatCover.cpp).
  if(!Player && CheckCoverThreats(ID,Contact->LastKnownPosition,Now,Dt))return false;
+ // -BattleSoldierMove: a hidden soldier may walk to a clearly better cover place in the sector (BattleSoldierMove.cpp).
+ if(!Player)StepSoldierMove(ID,Contact->LastKnownPosition,Now,Dt);
  if(U->CoverPhase==2 && !Player && U->CoverSeconds<=0 && U->ReloadEndTime==0)
  {
   // Suppression trial: a pinned AI soldier stays behind cover and checks again shortly.

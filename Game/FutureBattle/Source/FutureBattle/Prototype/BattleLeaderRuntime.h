@@ -479,6 +479,17 @@ public:
  bool CheckCoverThreats(int32 ID,FVector Primary,double Now,float Dt);
  bool BrokenCoverSlot(int32 ID,int32 Slot,double Now) const {const auto* B=BrokenCover.Find(ID);return B&&B->Key==Slot&&Now<B->Value;}
  TMap<int32,TPair<int32,double>> BrokenCover;
+ // Trial -BattleSoldierMove=1 (2026-11-20, default 0; individual AI stage B1, BattleSoldierMove.cpp; -BattleSoldierMoveTeam=0/1
+ // limits it to one team): an AI infantryman hidden in cover during a sector mission rates his place once a second (staggered
+ // by unit, at most 4 soldiers a frame) against up to 8 free cover places within 25 m in the squad's sector and 30 m of its
+ // centre, and walks to the best one when it is clearly better (hidden from the target and his other threats, a firing point,
+ // within engagement range, little exposure on the way, short walk, not crowded). At most half of a squad relocates at once,
+ // only while a squadmate is in cover, and not again within 8 s. The squad still chooses sectors and arrival places.
+ static bool SoldierMoveEnabled(int32 Team);
+ float RateCoverPlace(int32 ID,FVector From,FVector Anchor,FVector Peek,bool bFire,const TArray<FVector,TInlineAllocator<3>>& Threats) const;
+ bool StepSoldierMove(int32 ID,FVector Primary,double Now,float Dt);
+ TMap<int32,double> SoldierMoveAfter; // runtime only, like CoverProbeAfter
+ uint64 SoldierMoveFrame=0;int32 SoldierMovesThisFrame=0;
  // Several squads of a team in one place share the places: slots reserved by anyone and places that soldiers are already
  // walking to do not count, and the soldiers of other stopping squads near by who still look for cover are counted against it.
  bool SquadCanHide(int32 SquadID,FVector Threat,double Now) const;
