@@ -26,6 +26,7 @@
 #include "BattleFieldLayout.h"
 #include "DrawDebugHelpers.h"
 #include "FutureBattle.h"
+#include "BattleBodyAnim.h"
 
 // A bone of a clip's first frame in component space (the clips are authored on the suit's own proportions).
 static FTransform ExoClipBone(const UAnimSequence* Clip,FName Bone)
@@ -140,12 +141,26 @@ bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
  // The carried weapon lies against the back plate (component space: +X is the suit's left, -Y its back), not floating behind it.
  // Launcher: nearly upright along the back, muzzle up past the left shoulder, 15 degrees from upright and 10 cm to the left, leaning
  // forward with the back, so its rear end stays behind the right hip seen from the front. Rifle: stock up at the left shoulder, muzzle
- // down to the right hip. Prone (the squashed placeholder): flat across the back.
+ // down to the right hip. Prone with the shared prone clips: against the back plate of the lying body (its spine taken from the prone
+ // idle clip), along the body, shifted toward the feet so the launcher does not reach far past the head. Prone without them (the
+ // squashed placeholder): flat across the back.
  // The models' origin is the grip; their middle is 10 cm behind it (launcher) or 19 cm ahead of it (rifle).
+ const UAnimSequence* ProneClip=A->LookHasProneClip()?BattleBodyAnim::Get(BattleBodyAnim::EClip::ProneIdle):nullptr;
  auto Stow=[&](bool bProne)
  {
-  const FVector Axis=(bProne?FVector(1,0,0):Launcher?FVector(-.55,0,-.83):FVector(.26,.10,.96)).GetSafeNormal();
   const float Middle=Launcher?19.f:-10.f;
+  if(bProne&&ProneClip)
+  {
+   const FTransform SpineP=ExoClipBone(ProneClip,TEXT("spine_05"));
+   const FVector Head=(SpineP.GetLocation()-ExoClipBone(ProneClip,TEXT("pelvis")).GetLocation()).GetSafeNormal2D();
+   const FVector Up(0,0,1),Left=FVector::CrossProduct(Head,Up);
+   const FVector Axis=Launcher?-Head:Head;
+   const FVector At=SpineP.GetLocation()+Left*(Launcher?0.f:8.f)+Up*12.f-Head*22.f-Axis*Middle;
+   FTransform Sling=FTransform(FRotationMatrix::MakeFromYZ(-Axis,Up).ToQuat(),At).GetRelativeTransform(SpineP);
+   Sling.SetScale3D(FVector(1.2f));
+   return Sling;
+  }
+  const FVector Axis=(bProne?FVector(1,0,0):Launcher?FVector(-.55,0,-.83):FVector(.26,.10,.96)).GetSafeNormal();
   const FVector At=Spine.GetLocation()+FVector(bProne||Launcher?0.f:10.f,Launcher?-24.f:-22.f,bProne?0.f:Launcher?-15.f:4.f)-Axis*Middle;
   FTransform Sling=FTransform(FRotationMatrix::MakeFromYZ(-Axis,FVector(0,-1,0)).ToQuat(),At).GetRelativeTransform(Spine);
   Sling.SetScale3D(FVector(1.2f));  // absolute scale: the prone squash of the body does not stretch the weapon
@@ -239,7 +254,8 @@ void UBattleLeaderRuntime::UpdateExoLooks()
    const FVector Want(1.2f,1.2f,1.2f*Squash);
    if(A->GetMesh()&&!A->GetMesh()->GetRelativeScale3D().Equals(Want,.001f))A->GetMesh()->SetRelativeScale3D(Want);
    // Prone: the carried weapon lies flat instead of standing up from the squashed body.
-   if(auto* Back=L.Stowed.Get();Back&&(Squash<.99f)!=L.bStowProne){L.bStowProne=Squash<.99f;Back->SetRelativeTransform(L.bStowProne?L.StowProne:L.StowUpright);}
+   const bool bLying=Squash<.99f||(A->VisualStance==BattleStance::Prone&&A->LookHasProneClip());
+   if(auto* Back=L.Stowed.Get();Back&&bLying!=L.bStowProne){L.bStowProne=bLying;Back->SetRelativeTransform(L.bStowProne?L.StowProne:L.StowUpright);}
   }
   else L.Rig->SetWorldRotation(FRotator(0,A->GetActorRotation().Yaw,0));
   // The placeholder stances squash the body; the rig (absolute scale) follows its height so the plates do not tower over a prone soldier.
