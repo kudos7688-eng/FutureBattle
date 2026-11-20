@@ -118,6 +118,7 @@ private:
 	UPROPERTY() TObjectPtr<UAnimSequence> RifleReload;
 	UPROPERTY() TObjectPtr<UAnimSequence> CurrentPose;
 	double LastVisualShot = -10.;
+	float ShownAimPitch = 0.f;
 	int32 AimLevel = 0;
 	float AimZoom = 1.f, ScopeAlpha = 0.f;
 	bool bScopeHidden = false;

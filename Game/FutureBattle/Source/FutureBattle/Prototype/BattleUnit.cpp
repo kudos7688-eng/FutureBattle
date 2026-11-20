@@ -118,6 +118,8 @@ const FBattleUnitState* ABattleUnit::GetState() const
 bool ABattleUnit::IsAlive() const { const auto* S = GetState(); return S && S->IsAlive(); }
 FVector ABattleUnit::EyePosition() const { return GetActorLocation() + FVector(0, 0, 60); }
 
+// How long an AI soldier's body keeps his weapon pitch after his last shot.
+static constexpr double AimHoldSeconds = 3.;
 // Closer than this to the eye the rear camera is inside the head or the chest.
 static constexpr float CameraInBodyDistance = 70.f;
 
@@ -478,7 +480,12 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 		Body.SetUpper(Blind, 1.f);
 	else Body.SetUpper(nullptr, 0.f);
 	const FVector AimDir = IsPlayerControlled() ? GetControlRotation().Vector() : S.WeaponAimDirection;
-	Body.SetAim(FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(AimDir.GetSafeNormal().Z, -1., 1.))), bProne || bTransition ? 0.f : 1.f);
+	// An AI soldier's weapon direction keeps its last pitch until the aim turns far (UBattleState::UpdateAim): shown only while
+	// he fires (AimHoldSeconds after his last shot), else the body eases back level instead of staying bent over a stale aim.
+	const bool bShowPitch = IsPlayerControlled() || Now - LastVisualShot < AimHoldSeconds;
+	const float WantPitch = bShowPitch ? FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(AimDir.GetSafeNormal().Z, -1., 1.))) : 0.f;
+	ShownAimPitch = IsPlayerControlled() ? WantPitch : FMath::FInterpConstantTo(ShownAimPitch, WantPitch, GetWorld()->GetDeltaSeconds(), 60.f);
+	Body.SetAim(ShownAimPitch, bProne || bTransition ? 0.f : 1.f);
 	// One-shot overlays: recoil for each shot, a flinch when hit (from the side the shot came from).
 	if (LastVisualShot > ShownShot) { ShownShot = LastVisualShot; if (!bProne) Body.PlayOverlay(Get(EClip::Fire), .55f); }
 	if (ShownHP >= 0.f && S.HP < ShownHP - .01f && !bProne)
