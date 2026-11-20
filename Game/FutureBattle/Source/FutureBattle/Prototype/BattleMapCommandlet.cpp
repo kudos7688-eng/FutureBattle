@@ -496,7 +496,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
                 Failures+=BlockedRoads;
                 UE_LOG(LogTemp,Display,TEXT("SECTOR_ROAD_RESULT blocked=%d segments=%d"),BlockedRoads,Def.RouteEdges.Num());
             }
-			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=%s rotation=180"),Failures,OpenLines,UrbanI?TEXT("sectors-v1"):UrbanH?TEXT("river-town-v2"):UrbanG?TEXT("heights-v1"):UrbanF?TEXT("districts-v1"):TEXT("urban-v2"));
+			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=%s rotation=180"),Failures,OpenLines,UrbanI?TEXT("sectors-v2"):UrbanH?TEXT("river-town-v2"):UrbanG?TEXT("heights-v1"):UrbanF?TEXT("districts-v1"):TEXT("urban-v2"));
 			if(Terrain)
 			{
 				// The geometry agrees with the height table (a trace down at nine points of every patch; points under a crate or a
