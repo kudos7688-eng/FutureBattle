@@ -64,8 +64,14 @@ void BattleSectorAudit(UBattleMatch& Match,float DeltaSeconds)
    Row.bAccepted=Runtime->IssueOrder(Row.Squad,EBattleOrder::AttackMove,BattleSectors::Center(Row.Cell),false,true);
    SectorAuditRows.Add(Row);
   }
-  // The first squad keeps a point order (not a sector) so that it does not wander with the last audited sector.
-  Runtime->IssueOrder(IDs[0],EBattleOrder::Hold,Runtime->Position(Store->FindSquad(IDs[0])->LeaderUnitID));
+  // The first squad gets a point order (not a sector) so that it does not wander with the last audited sector: it walks
+  // 60m behind its starting place, out of the way of the others. (Left standing at the start it blocked the squad sent to F2:
+  // with squads of eight that squad did not move for 240s, "rifle8" session 2026-11-19.) Hold where it stands if that is refused.
+  {
+   const FVector At=Runtime->Position(Store->FindSquad(IDs[0])->LeaderUnitID);
+   const FVector Behind(FMath::Max(At.X-6000.,-BattleFieldLayout::Of(World).HalfExtent.X+1500.),At.Y,0);
+   if(!Runtime->IssueOrder(IDs[0],EBattleOrder::Move,Behind))Runtime->IssueOrder(IDs[0],EBattleOrder::Hold,At);
+  }
   return;
  }
  if(SectorAuditState==1&&Match.Elapsed>=15)

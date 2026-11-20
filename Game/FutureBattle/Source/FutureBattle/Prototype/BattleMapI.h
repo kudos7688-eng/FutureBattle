@@ -1,7 +1,7 @@
 #pragma once
 #include "BattleTerrain.h"
 
-// Map I ("sectors-v1", 2026-11-19): a map designed from sectors. 1000m x 700m in 20 x 14 sectors of 50m; every sector has a kind
+// Map I ("sectors-v2", 2026-11-20; v1 of 11-19 had 44% fields and a pen of low walls in the middle of each objective): a map designed from sectors. 1000m x 700m in 20 x 14 sectors of 50m; every sector has a kind
 // that decides what stands in it, at most one building that can be entered, and cover towards all four sides (fields excepted,
 // they are open on purpose). Roads run on sector borders, so a sector is what lies between the roads, walls and hedges around it.
 // The east half is listed; the west half is its 180-degree rotation. One table for the map definition (objectives, heights,
@@ -18,20 +18,20 @@ namespace BattleMapI
 		// Columns 10..19 (x = 0..500m), rows from the north (13) to the south (0).
 		static const TCHAR* East[Rows]=
 		{
-			TEXT("FRFTTFFFFF"), // 13
-			TEXT("TRHFTTFHFF"), // 12
-			TEXT("HRHHFTHFFF"), // 11
-			TEXT("HROHFHDFFF"), // 10   ---- north road on its north edge (y = +200m)
-			TEXT("HRHPHFTFFF"), //  9
-			TEXT("HHPHhTFSSS"), //  8
-			TEXT("OHHPHFFSSS"), //  7   ---- avenue on its south edge (y = 0)
-			TEXT("HPHHFTFSSS"), //  6
-			TEXT("HHWHFFHSSS"), //  5
-			TEXT("PHHFTFFFFF"), //  4   ---- south road on its south edge (y = -200m)
+			TEXT("TRFTTFTFTF"), // 13
+			TEXT("TRHFTTFHFT"), // 12
+			TEXT("HRHHFTHTFF"), // 11
+			TEXT("HROHTHDHFT"), // 10   ---- north road on its north edge (y = +200m)
+			TEXT("HRHPHFTFTF"), //  9
+			TEXT("HHPHhTHSSS"), //  8
+			TEXT("OHHPHFTSSS"), //  7   ---- avenue on its south edge (y = 0)
+			TEXT("HPHHFTHSSS"), //  6
+			TEXT("HHWHTFHSSS"), //  5
+			TEXT("PHHFTHFTFT"), //  4   ---- south road on its south edge (y = -200m)
 			TEXT("HHFOHFTHFF"), //  3
-			TEXT("FHTFFFTFFF"), //  2
-			TEXT("FFFhhFFFFF"), //  1
-			TEXT("TFFhhFTFFF"), //  0
+			TEXT("FHTHFTTFTF"), //  2
+			TEXT("TFHhhFTFFT"), //  1
+			TEXT("TFThhTTFTF"), //  0
 		};
 		if(C<0||R<0||C>=Columns||R>=Rows)return TEXT(' ');
 		if(C<Columns/2){C=Columns-1-C;R=Rows-1-R;}

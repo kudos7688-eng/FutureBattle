@@ -1,4 +1,4 @@
-// Layout of map I ("sectors-v1", 2026-11-19): every sector of BattleMapI.h is filled by its kind. Included in
+// Layout of map I ("sectors-v2", 2026-11-20): every sector of BattleMapI.h is filled by its kind. Included in
 // BattleMapCommandlet.cpp where Box, Emit(Label,X,Y,SizeX,SizeY,Height,bConcealment), Piece(Label,X,Y,Z0,SizeX,SizeY,Height,
 // bTerrain) and Ramp(...) exist; Emit, Piece and Ramp place the 180-degree partner too, so only the east half is listed.
 // Nothing stands within 4m of a sector border (the roads run there); borders that are no road get a wall or a hedge with 15m
@@ -90,13 +90,23 @@
 		Use(Grey);
 		Piece(TEXT("WarehouseCrate"),X-W*.25,Y+H*.1,0,160,160,130);Piece(TEXT("WarehouseCrate"),X+W*.25,Y-H*.1,0,160,160,130);
 	};
-	// The objective cover of map E: low walls on four sides inside the 4.5m capture radius and crates at the corners.
-	auto ObjectiveCover=[&](double X,double Y)
+	// Objective cover: low walls on four sides 9m from the middle and crates at the corners 12m out. The middle stays open.
+	// (v1 used the pen of map E, walls 3.8m from the middle inside the 4.5m capture radius. With sector orders an objective is held
+	// by the whole sector and every soldier is sent towards the middle: they jammed in the pen, 93 stalls within 5m of one
+	// objective's middle in a match, mi2-I-sector1-s7.)
+	// bHouseNE: a house stands in the north-east corner (no crate there). bNorthBuilt: a warehouse fills the north side (no wall
+	// and no crates there).
+	auto ObjectiveCover=[&](double X,double Y,bool bHouseNE,bool bNorthBuilt)
 	{
 		for(int32 Side:{-1,1})
 		{
-			Emit(TEXT("PlazaWall"),X,Y+Side*380,300,60,120);Emit(TEXT("PlazaWall"),X+Side*380,Y,60,300,120);
-			for(int32 Other:{-1,1})Emit(TEXT("PlazaCrate"),X+Side*650,Y+Other*650,140,140,130);
+			if(!(bNorthBuilt&&Side>0))Emit(TEXT("PlazaWall"),X,Y+Side*900,500,60,120);
+			Emit(TEXT("PlazaWall"),X+Side*900,Y,60,500,120);
+			for(int32 Other:{-1,1})
+			{
+				if((bNorthBuilt&&Other>0)||(bHouseNE&&Side>0&&Other>0))continue;
+				Emit(TEXT("PlazaCrate"),X+Side*1200,Y+Other*1200,140,140,130);
+			}
 		}
 	};
 	FRandomStream Random(20261119);
@@ -126,13 +136,13 @@
 			Emit(TEXT("Kiosk"),X+Flip*800,Y+800,250,250,260);Emit(TEXT("PlazaCrate"),X-Flip*800,Y-800,140,140,130);
 			break;
 		case TEXT('O'):
-			ObjectiveCover(X,Y);
+			ObjectiveCover(X,Y,true,false);
 			Emit(TEXT("YardWall"),X-1600,Y-1500,700,60,130);Emit(TEXT("YardWall"),X-1700,Y+1200,60,700,130);
 			Emit(TEXT("YardWall"),X+1500,Y-1600,60,700,130);Emit(TEXT("YardWall"),X-600,Y+1900,700,60,130);
 			Emit(TEXT("YardCar"),X+1700,Y-300,200,450,150);Emit(TEXT("YardCar"),X-300,Y-1900,450,200,150);
 			break;
 		case TEXT('D'):
-			ObjectiveCover(X,Y);
+			ObjectiveCover(X,Y,false,true);
 			Warehouse(X,Y+1450,2600,1100);Use(Grey);
 			Emit(TEXT("Container"),X-1500,Y-1500,600,250,260);Emit(TEXT("Container"),X+1600,Y-1300,250,600,260);
 			Emit(TEXT("DepotWall"),X-1800,Y+200,60,700,130);Emit(TEXT("DepotWall"),X+1800,Y+100,60,700,130);
@@ -197,5 +207,5 @@
 	Use(Grey);
 	// Bridge railings (cover on the bridge) on both sides of the deck.
 	for(int32 Side:{-1,1})Emit(TEXT("BridgeRail"),(RiverX0+RiverX1)*.5,BridgeY+Side*(BridgeHalf+30),RiverX1-RiverX0,40,110);
-	UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_LAYOUT objects=%d (x2 by rotation) layout=sectors-v1"),Objects);
+	UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_LAYOUT objects=%d (x2 by rotation) layout=sectors-v2"),Objects);
 }
