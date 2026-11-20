@@ -8,6 +8,8 @@
 #include "BattleUnit.h"
 #include "BattleVATDisplay.h"
 #include "Animation/AnimSequence.h"
+#include "Animation/AnimSingleNodeInstance.h"
+#include "FutureBattle.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "UObject/StrongObjectPtr.h"
@@ -107,8 +109,9 @@ UAnimSequence* UBattleLeaderRuntime::FollowerClip(int32 ID,int32 Pose) const
 
 void UBattleLeaderRuntime::StepBodyTimers()
 {
- if(BodyTimers.IsEmpty())return;
  const double Now=GetWorld()->GetTimeSeconds();
+ if(BattleStance::AnimEnabled() && Now>=NextPoseAudit){NextPoseAudit=Now+1.;AuditFollowerPoses(Now);}
+ if(BodyTimers.IsEmpty())return;
  for(auto It=BodyTimers.CreateIterator();It;++It)
  {
   if(Now<It.Value().At)continue;
@@ -117,6 +120,22 @@ void UBattleLeaderRuntime::StepBodyTimers()
   if(!B||B->Actor.IsValid()||!B->Mesh.IsValid())continue;
   if(bFreeze){BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones);B->Mesh->SetComponentTickEnabled(false);}
   else RefreshFollowerPose(ID);
+ }
+}
+
+void UBattleLeaderRuntime::AuditFollowerPoses(double Now)
+{
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ for(const auto& Pair:Bodies)
+ {
+  const int32 ID=Pair.Key;const auto& B=Pair.Value;
+  if(B.Actor.IsValid()||!B.Mesh.IsValid()||BodyTimers.Contains(ID)||!B.Mesh->IsComponentTickEnabled()||(VAT&&VAT->IsFar(ID)))continue;
+  const auto* U=Store->Find(ID);if(!U||!U->IsAlive())continue;
+  const UAnimationAsset* Shown=B.Mesh->GetSingleNodeInstance()?B.Mesh->GetSingleNodeInstance()->GetAnimationAsset():nullptr;
+  UAnimSequence* Want=FollowerClip(ID,B.Pose);
+  if(!Want||Shown==Want)continue;
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_POSE_RESET unit=%d shown=%s want=%s stance=%d cover=%d"),ID,Shown?*Shown->GetName():TEXT("none"),*Want->GetName(),int32(StanceOf(ID)),int32(U->CoverPhase));
+  RefreshFollowerPose(ID);
  }
 }
 

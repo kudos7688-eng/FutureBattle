@@ -343,6 +343,10 @@ public:
  struct FBodyTimer{double At=0;bool bFreeze=false;};
  TMap<int32,FBodyTimer> BodyTimers;
  void StepBodyTimers();
+ // Once a second: a near living follower whose mesh shows another clip than FollowerClip (a one-shot left on its last
+ // frame) is put back on his loop and logged (BATTLE_BODY_POSE_RESET).
+ double NextPoseAudit=0;
+ void AuditFollowerPoses(double Now);
  bool IsBlindFiring(int32 ID,double Now) const {const double* T=BlindFireUntil.Find(ID);return T&&*T>Now;}
  // Where a blind shot leaves: above the top of a low cover, or just past the edge of a wide one, with a clear first stretch
  // toward AimPoint. False when neither works (the caller falls back to the old peek).

@@ -121,6 +121,9 @@ private:
 	int32 AimLevel = 0;
 	float AimZoom = 1.f, ScopeAlpha = 0.f;
 	bool bScopeHidden = false;
+	// The rear camera pulled in by a wall to within the body (CalcCamera): the body is hidden like through a scope, rather than
+	// showing its legs with the camera inside the chest.
+	bool bCameraInBody = false;
 	void UpdateAimView();
 	void UpdateWeaponPose(const FBattleUnitState& S);
 };

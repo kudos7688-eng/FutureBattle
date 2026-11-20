@@ -118,9 +118,13 @@ const FBattleUnitState* ABattleUnit::GetState() const
 bool ABattleUnit::IsAlive() const { const auto* S = GetState(); return S && S->IsAlive(); }
 FVector ABattleUnit::EyePosition() const { return GetActorLocation() + FVector(0, 0, 60); }
 
+// Closer than this to the eye the rear camera is inside the head or the chest.
+static constexpr float CameraInBodyDistance = 70.f;
+
 void ABattleUnit::CalcCamera(float DeltaTime, FMinimalViewInfo& View)
 {
 	Super::CalcCamera(DeltaTime, View);
+	bCameraInBody = false;
 	if (!IsPlayerControlled()) return;
 	// Aim / scope: the magnification narrows the field of view.
 	if (AimZoom > 1.001f) View.FOV = FMath::RadiansToDegrees(2.f * FMath::Atan(FMath::Tan(FMath::DegreesToRadians(View.FOV * .5f)) / AimZoom));
@@ -137,6 +141,7 @@ void ABattleUnit::CalcCamera(float DeltaTime, FMinimalViewInfo& View)
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleThirdPersonCamera), false, this);
 	GetWorld()->SweepSingleByChannel(Hit, Pivot, Desired, FQuat::Identity, ECC_Camera, FCollisionShape::MakeSphere(12.f), Query);
 	View.Location = Hit.bBlockingHit ? Hit.Location : Desired;
+	bCameraInBody = Hit.bBlockingHit && FVector::DistSquared(Hit.Location, Pivot) < FMath::Square(CameraInBodyDistance);
 }
 
 static const float Magnification[] = { 1.f, 1.6f, 4.f, 8.f };
@@ -164,7 +169,7 @@ void ABattleUnit::UpdateAimView()
 	if (FMath::IsNearlyEqual(AimZoom, Magnification[AimLevel], .005f)) AimZoom = Magnification[AimLevel];
 	ScopeAlpha = FMath::FInterpConstantTo(ScopeAlpha, AimLevel >= 2 ? 1.f : 0.f, Dt, 8.f);
 	// Through the scope the soldier's own body and rifle would fill the view.
-	const bool Hide = ScopeView();
+	const bool Hide = ScopeView() || (bThirdPersonView && bCameraInBody);
 	if (Hide != bScopeHidden)
 	{
 		bScopeHidden = Hide;

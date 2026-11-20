@@ -25,7 +25,9 @@ void UBattleLeaderRuntime::CancelCoverAction(int32 ID)
  // A near follower showing a cover clip returns to his ordinary clip and facing.
  if(auto* B=Bodies.Find(ID);B && B->CoverClipPhase && !B->Actor.IsValid() && B->Mesh.IsValid())
  {
-  B->CoverClipPhase=0;
+  B->CoverClipPhase=0;B->bBlindPose=false;
+  // Back into the capsule from a lean past the edge (blind fire around it), alive or dead.
+  B->Mesh->SetRelativeLocation(FVector(0,0,-90));
   if(U->IsAlive()){B->Mesh->SetRelativeRotation(FRotator(0,-90,0));RefreshFollowerPose(ID);}
  }
 }
