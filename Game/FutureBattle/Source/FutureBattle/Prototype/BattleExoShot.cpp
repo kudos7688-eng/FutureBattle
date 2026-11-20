@@ -11,6 +11,7 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/HUD.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
 #include "FutureBattle.h"
@@ -40,7 +41,7 @@ void UBattleLeaderRuntime::RunExoShot()
  static const FShot Shots[]={
   {0,25.f,BattleStance::Stand,false,TEXT("front")},{0,100.f,BattleStance::Stand,false,TEXT("side")},{0,180.f,BattleStance::Stand,false,TEXT("back")},
   {0,25.f,BattleStance::Stand,false,TEXT("launcher_front"),true},{0,150.f,BattleStance::Stand,false,TEXT("launcher_back"),true},
-  {0,25.f,BattleStance::Stand,true,TEXT("noshield")},{0,100.f,BattleStance::Stand,true,TEXT("move_side"),false,true},{0,60.f,BattleStance::Crouch,true,TEXT("crouch")},{0,60.f,BattleStance::Prone,true,TEXT("prone")},
+  {0,25.f,BattleStance::Stand,true,TEXT("noshield")},{0,100.f,BattleStance::Stand,true,TEXT("move_side"),false,true},{0,25.f,BattleStance::Stand,true,TEXT("move_strafe"),false,true},{0,60.f,BattleStance::Crouch,true,TEXT("crouch")},{0,60.f,BattleStance::Prone,true,TEXT("prone")},
   {0,120.f,BattleStance::Prone,true,TEXT("prone_side")},{0,200.f,BattleStance::Prone,true,TEXT("prone_back")},  // after the get-down clip
   {1,25.f,BattleStance::Stand,false,TEXT("enemy")}};
  const int32 Index=ExoShotStage-1;
@@ -53,6 +54,9 @@ void UBattleLeaderRuntime::RunExoShot()
  if(auto* L=ExoLooks.Find(ID))L->AILauncherUntil=S.bLauncher?Now+1.e6:0.;
  UpdateExoLooks();
  // Move shot: the look's moving clip (the glide) played in place; the next shot changes the stance and replays its own pose.
+ // The body tilt is drawn for a full-speed move: forward on the side shot, to the soldier's right on the strafe shot.
+ const float Walk=A->GetCharacterMovement()->MaxWalkSpeed;
+ A->SetLookShotVelocity(!S.bMove?FVector::ZeroVector:FCString::Strcmp(S.Name,TEXT("move_strafe"))==0?FVector(0,Walk,0):FVector(Walk,0,0));
  if(S.bMove)if(auto* Move=A->GetLookMove())A->GetMesh()->PlayAnimation(Move,true);
  const FVector P=Position(ID);const FVector Direction=FRotator(0,A->GetActorRotation().Yaw+S.Yaw,0).Vector();
  const FVector Eye=P+Direction*430+FVector(0,0,70);

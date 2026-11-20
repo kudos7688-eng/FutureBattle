@@ -388,7 +388,25 @@ void ABattleUnit::SetMeshYaw(float Yaw)
 {
 	if (FMath::IsNearlyEqual(Yaw, MeshYawShown)) return;
 	MeshYawShown = Yaw;
-	GetMesh()->SetRelativeRotation(FRotator(0, -90 + Yaw, 0));
+	GetMesh()->SetRelativeRotation(MeshTiltShown * FRotator(0, -90 + Yaw, 0).Quaternion());
+}
+
+void ABattleUnit::UpdateLookTilt(bool bUpright)
+{
+	const float Dt = GetWorld()->GetDeltaSeconds();
+	FVector Velocity = LookShotVelocity.IsNearlyZero() ? GetActorRotation().UnrotateVector(GetVelocity()) : LookShotVelocity;
+	Velocity.Z = 0.;
+	if (!bUpright) Velocity = FVector::ZeroVector;
+	LookVelShown = FMath::VInterpTo(LookVelShown, Velocity, Dt, 4.f);
+	// Degrees per full walking speed: 5 while cruising; starting adds up to 7 more, braking takes 7 back (about 2 back at a stop).
+	const float Speed = FMath::Max(GetCharacterMovement()->MaxWalkSpeed, 100.f);
+	const FVector Lean = ((LookVelShown * 5.f + (Velocity - LookVelShown) * 7.f) / Speed).GetClampedToMaxSize(10.f);
+	const FVector Up(0, 0, 1);
+	const FQuat Tilt = Lean.IsNearlyZero(.05) ? FQuat::Identity
+		: FQuat::FindBetweenNormals(Up, (Up + Lean.GetSafeNormal() * FMath::Tan(FMath::DegreesToRadians(Lean.Size()))).GetSafeNormal());
+	if (Tilt.Equals(MeshTiltShown, 1.e-4f)) return;
+	MeshTiltShown = Tilt;
+	GetMesh()->SetRelativeRotation(MeshTiltShown * FRotator(0, -90 + MeshYawShown, 0).Quaternion());
 }
 
 void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUnitState& S)
@@ -533,6 +551,7 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 			else if (VisualStance == BattleStance::Prone)
 				if (auto* Prone = BattleBodyAnim::Locomotion(BattleStance::Prone, GetActorRotation().UnrotateVector(GetVelocity()), false)) Pose = Prone;
 		}
+		UpdateLookTilt(VisualStance == BattleStance::Stand && !bLookTransition);
 	}
 	// Blind fire (BattleBlindFire.cpp): the clip that raises the rifle over or around the cover while it lasts.
 	// Not for a soldier with its own look (other skeleton). Over the top it is a standing clip (the head shows): only while the
