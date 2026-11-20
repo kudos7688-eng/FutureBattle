@@ -16,6 +16,8 @@
 #include "BattleFieldLayout.h"
 #include "NavigationSystem.h"
 #include "FutureBattle.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 // Stage 3 values (2026-11-18, first values; to move into UBattleTuning once settled).
 namespace BattleGroupValues

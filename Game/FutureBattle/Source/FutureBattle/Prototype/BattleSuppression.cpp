@@ -2,6 +2,8 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleState.h"
 #include "BattleTactics.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 BattleSuppression::FTuning& BattleSuppression::MutableTuning()
 {
