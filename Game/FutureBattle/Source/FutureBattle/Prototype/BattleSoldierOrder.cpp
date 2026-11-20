@@ -52,7 +52,7 @@ bool UBattleLeaderRuntime::ReturnSoldier(int32 ID)
  if(!IssueSoldierOrder(ID,U->Destination,Why))
  {
   // No full path back (or his place is out of reach): he still walks back; the stuck rule ends the order if he cannot.
-  CancelCoverAction(ID);SoldierPaths.Remove(ID);U->SoldierGoal=U->Destination;
+  CancelCoverAction(ID);SoldierPaths.Remove(ID);U->SoldierGoal=U->Destination;U->SoldierRepaths=0;U->SoldierStalledSince=0;
  }
  U->bSoldierReturn=true;U->SoldierOrderMission=Mission;return true;
 }
@@ -245,7 +245,9 @@ void ABattleHUD::DrawSoldierOrders()
 void UBattleLeaderRuntime::StepSoldierOrderTest()
 {
  static const bool bTest=FParse::Param(FCommandLine::Get(),TEXT("BattleSoldierOrderTest"));
- if(!bTest || SoldierTest.Stage>=6)return;
+ if(!bTest || SoldierTest.Stage>=7)return;
+ // A failure that returned early last time: write the result line now.
+ if(SoldierTest.Stage==6){UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER_RESULT failures=%d"),SoldierTest.Failures);SoldierTest.Stage=7;return;}
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const double Now=GetWorld()->GetTimeSeconds();
  // After the opening orders of the match (the hold below takes the squad from the AI: a player order).
  const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
@@ -345,5 +347,5 @@ void UBattleLeaderRuntime::StepSoldierOrderTest()
   else if(U && U->bSoldierOrder)Finish(TEXT("order_kept_after_death"));
   else{UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER_TEST cleared_by_death unit=%d"),T.Unit);T.Stage=6;}
  }
- if(T.Stage==6)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER_RESULT failures=%d"),T.Failures);
+ if(T.Stage==6){UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER_RESULT failures=%d"),T.Failures);T.Stage=7;}
 }

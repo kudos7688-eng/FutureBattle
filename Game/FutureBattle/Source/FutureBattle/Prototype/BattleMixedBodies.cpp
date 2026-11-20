@@ -133,7 +133,8 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  {
   auto U=E.State;U.ReloadEndTime=U.ReloadEndTime>0?Now+U.ReloadEndTime:0;U.NextShotTime+=Now;
   U.SoldierMoveUntil=U.SoldierMoveUntil>0?Now+U.SoldierMoveUntil:0;U.SoldierMoveAfter=U.SoldierMoveAfter>0?Now+U.SoldierMoveAfter:0;
-  U.CoverFirstBreak=U.CoverFirstBreak>0?Now+U.CoverFirstBreak-2.5:0;U.SoldierStalledSince=U.SoldierStalledSince>0?Now-U.SoldierStalledSince:0;
+  // Past times stay positive (0 means none) even when the world clock is still early; the window then starts at most that much later.
+  U.CoverFirstBreak=U.CoverFirstBreak>0?FMath::Max(.001,Now+U.CoverFirstBreak-2.5):0;U.SoldierStalledSince=U.SoldierStalledSince>0?FMath::Max(.001,Now-U.SoldierStalledSince):0;
   U.CoverSlot=INDEX_NONE;U.AimStableSince=-1;U.MoveRetries=0;U.Role=EBattleRole::Independent;U.CoordinatedTarget=INDEX_NONE;
   U.Action=U.IsAlive()?EBattleAction::Idle:EBattleAction::Dead;U.DecisionReason=TEXT("RESTORED / REVALIDATE PATH");
   Records.Add(U);
