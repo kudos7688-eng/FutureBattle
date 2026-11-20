@@ -150,21 +150,28 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
      break;
     }
    // Trial -BattleCoverHuddle=1 (2026-11-20, default 0; sector missions where arrivals use cover): a member left without a cover
-   // slot takes a place right behind one instead of an open spot - 1.3 m back from the slot (away from the direction of advance),
-   // or 1.1 m to either side of that, still shielded ahead - so the squad gathers in the lee of walls and houses.
+   // slot lines up along the same wall as a slot instead of taking an open spot - 1 m or 2 m to either side of the slot along
+   // the obstacle face, at the slot's distance from it, where the obstacle still stands in front (within 2.5 m) - so the squad
+   // stands shoulder to shoulder in the lee of walls and houses. (The first version stood 1.3 m behind the slot: a queue in
+   // the open, user 11-20.)
    static const bool CoverHuddle=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverHuddle="),V);return V!=0;}();
    if(!Found && CoverHuddle && Sector && CoverArrival)
     for(const FVector& At:CoverCandidates)
     {
      if(Found || TailQueries>=40) break;
-     for(const float Side:{0.f,-110.f,110.f})
+     FHitResult Face;
+     if(!GetWorld()->LineTraceSingleByObjectType(Face,At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic))) continue;
+     const FVector Normal=FVector(Face.ImpactNormal.X,Face.ImpactNormal.Y,0).GetSafeNormal();
+     if(Normal.IsNearlyZero()) continue;
+     const FVector Along(-Normal.Y,Normal.X,0);
+     for(const float Side:{100.f,-100.f,200.f,-200.f})
      {
-      const FVector Want=At-Forward*130+Right*Side;
+      const FVector Want=At+Along*Side;
       if(BattleSectors::Cell(Want)!=Cell) continue;
-      bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,Want)<FMath::Square(100.)) {Taken=true;break;}
+      bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,Want)<FMath::Square(90.)) {Taken=true;break;}
       if(Taken) continue;
       FNavLocation Projected; if(!Nav->ProjectPointToNavigation(Want,Projected,FVector(30,30,200)) || FVector::Dist2D(Projected.Location,Want)>40) continue;
-      if(!GetWorld()->LineTraceTestByObjectType(Projected.Location+FVector(0,0,100),Projected.Location+Forward*400+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic))) continue;
+      if(!GetWorld()->LineTraceTestByObjectType(Projected.Location+FVector(0,0,100),Projected.Location-Normal*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic))) continue;
       ++TailQueries;
       auto* Tail=Nav->FindPathToLocationSynchronously(GetWorld(),P.Path.Num()?P.Path.Last():S->Destination,Projected.Location);
       if(!Tail || !Tail->IsValid() || Tail->IsPartial() || Tail->PathPoints.Num()<2 || Tail->GetPathLength()>6500) continue;

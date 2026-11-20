@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（143 モジュール、31313 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（143 モジュール、31368 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -28,9 +28,9 @@
 | HUD・ミニマップ・部隊一覧・通知 | `ABattleHUD::DrawHUD` (BattleHUD.cpp:27) 、 `ABattleHUD::DrawMinimap` (BattleHUD.cpp:445) 、 `ABattleHUD::DrawSquadList` (BattleHUD.cpp:537) 、 `ABattleHUD::DrawNoticeLog` (BattleHUD.cpp:602) | 通知の中身は `ABattleController::UpdateNoticeLog` (BattleController.cpp:926) 、 `ABattleController::PushNotice` (BattleController.cpp:910) 。日本語化は `BattleUIText::Ja` (BattleUIText.cpp:76) 。被弾方向は `ABattleHUD::DrawHitDirection` (BattleHUD.cpp:655) （記録は `UBattleState::ApplyDamageFrom` (BattleState.cpp:456) ）、画面外マーカーは `ABattleHUD::DrawOffscreenMarkers` (BattleHUD.cpp:693) 、撃破ログは `ABattleHUD::DrawKillLog` (BattleHUD.cpp:760) （記録は `UBattleState::NoteKill` (BattleState.cpp:463) ）。作戦画面の戦場の霧・区画の格子と区画の状態は `ABattleHUD::DrawFieldOverlay` (BattleHUD.cpp:833) 、 `ABattleHUD::DrawSectorPanel` (BattleHUD.cpp:969) （計算は `BattleSectorView`） |
 | 認識（見えた敵の記憶） | `UBattlePerception::Update` (BattlePerception.cpp:57) 、 `UBattlePerception::GetContacts` (BattlePerception.cpp:36) | 視線は `UBattleLeaderRuntime::CanSee` (BattleLeaderRuntime.cpp:330) 、 `UBattleLeaderRuntime::TraceSight` (BattleLeaderRuntime.cpp:361) 。試験用の視界切替は `BattleSightExperiment` |
 | 隊長の判断と兵の実行（混成） | `UBattleLeaderRuntime::Think` (BattleLeaderRuntime.cpp:587) 、 `UBattleLeaderRuntime::Follow` (BattleLeaderRuntime.cpp:828) 、 `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:1022) | 兵単位の実行は `FBattleMixedDriver::Tick` (BattleMixedDriver.cpp:126) 、 `FBattleMixedDriver::TryTacticalAction` (BattleMixedDriver.cpp:239) |
-| 移動・経路・混雑 | `UBattleLeaderRuntime::StableMove` (BattleStableMovement.cpp:283) 、 `UBattleLeaderRuntime::BuildMovementPlan` (BattleStableMovement.cpp:60) | 到着地点の重なりは `UBattleLeaderRuntime::ReassignOccupiedArrival` (BattleContactMovement.cpp:16) 。目的地の補正は `BattleNavigation::ResolveGoal` (BattleNavigation.cpp:7) |
+| 移動・経路・混雑 | `UBattleLeaderRuntime::StableMove` (BattleStableMovement.cpp:290) 、 `UBattleLeaderRuntime::BuildMovementPlan` (BattleStableMovement.cpp:60) | 到着地点の重なりは `UBattleLeaderRuntime::ReassignOccupiedArrival` (BattleContactMovement.cpp:16) 。目的地の補正は `BattleNavigation::ResolveGoal` (BattleNavigation.cpp:7) |
 | 遮蔽（場所の予約） | `UBattleCover::BuildSlots` (BattleCover.cpp:14) 、 `UBattleCover::Reserve` (BattleCover.cpp:187) | 露出の計算は `BattleTactics::ExposureAt` (BattleTactics.cpp:240) |
-| 体のアニメーション | `ABattleUnit::UpdateBodyAnim` (BattleUnit.cpp:394) 、 `FBattleBodyAnimProxy::Evaluate` (BattleBodyAnim.cpp:195) | 部下は `UBattleLeaderRuntime::FollowerClip` (BattleStance.cpp:85) 、 `UBattleLeaderRuntime::StepBodyTimers` (BattleStance.cpp:112) |
+| 体のアニメーション | `ABattleUnit::UpdateBodyAnim` (BattleUnit.cpp:394) 、 `FBattleBodyAnimProxy::Evaluate` (BattleBodyAnim.cpp:196) | 部下は `UBattleLeaderRuntime::FollowerClip` (BattleStance.cpp:85) 、 `UBattleLeaderRuntime::StepBodyTimers` (BattleStance.cpp:112) |
 | 死体の消滅（表示だけ） | `UBattleLeaderRuntime::StepCorpses` (BattleCorpses.cpp:36) 、 `UBattleLeaderRuntime::HideCorpse` (BattleCorpses.cpp:63) | 登録は OnDeath の `UBattleLeaderRuntime::AddCorpse` (BattleCorpses.cpp:29) |
 | 死体の姿勢（死亡アニメ・遠景VATとの切替） | `UBattleLeaderRuntime::DeathClip` (BattleCorpses.cpp:74) 、 `ABattleVATDisplay::Enter` (BattleVATDisplay.cpp:216) 、 `ABattleVATDisplay::Leave` (BattleVATDisplay.cpp:259) | 遠景では横倒し、近景へ戻ると死亡クリップの最終コマ |
 | ブラインドファイア | `UBattleLeaderRuntime::BlindFireOrigin` (BattleBlindFire.cpp:53) 、 `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:1022) | AIの試験は `UBattleLeaderRuntime::TryAIBlindFire` (BattleBlindFire.cpp:137) |
@@ -78,7 +78,7 @@
 | `BattleArmourAI` | .cpp | 239 |  | 兵種を扱うAI：効かない車両を狙わない、対戦車兵の弾の温存、知っている敵車両、戦車の待機位置、兵種の構成（UBattleLeaderRuntime と UBattleMatch の一部） |
 | `BattleArtillery` | .cpp | 284 |  | 迫撃砲と自走砲：間接射撃の目標選び、着弾、陣地の位置（UBattleLeaderRuntime と UBattleMatch の一部） |
 | `BattleBlindFire` | .h/.cpp | 47 + 145 | BattleBlindFire | 遮蔽の陰からのブラインドファイア（弾の出る位置・AIの試験・アニメ。UBattleLeaderRuntime の一部） |
-| `BattleBodyAnim` | .h/.cpp | 105 + 267 | BattleBodyAnim, EClip, FBattleBodyLayer, FBattleBodyAnimProxy, UBattleBodyAnimInstance | 体のアニメーション：隊長の下半身と上半身の重ね・反動・被弾・死亡、部下の伏せと死亡のクリップ |
+| `BattleBodyAnim` | .h/.cpp | 105 + 296 | BattleBodyAnim, EClip, FBattleBodyLayer, FBattleBodyAnimProxy, UBattleBodyAnimInstance | 体のアニメーション：隊長の下半身と上半身の重ね・反動・被弾・死亡、部下の伏せと死亡のクリップ |
 | `BattleBodyAnimImport` | .cpp | 134 |  | 体のアニメーション（遮蔽・伏せ・しゃがみの向き別）の取り込みと計測（エディタ用。宣言は BattleVATBake.h） |
 | `BattleContactMovement` | .cpp | 161 |  | 停止中の味方との接触・到着地点の重なりの解消（UBattleLeaderRuntime の一部） |
 | `BattleController` | .h/.cpp | 222 + 1194 | ABattleCameraPawn, FBattleNoticeEntry, FBattleNoticeLayout, FBattleCommandBarLayout, ABattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド |
@@ -125,7 +125,7 @@
 | `BattleSquadRetreat` | .cpp | 234 |  | 撤退の判断と適用（UBattleSquadTactics の一部。Evaluate と Apply はここ） |
 | `BattleSquadSupport` | .cpp | 119 |  | 援護の受け渡し（UBattleSquadTactics の一部） |
 | `BattleSquadTactics` | .h/.cpp | 100 + 151 | FBattleSquadObservation, UBattleSquadTactics | 部隊の戦術の土台：観測、毎フレームの更新、記録 |
-| `BattleStableMovement` | .cpp | 530 |  | 混成の移動計画と実行（UBattleLeaderRuntime の一部） |
+| `BattleStableMovement` | .cpp | 537 |  | 混成の移動計画と実行（UBattleLeaderRuntime の一部） |
 | `BattleStance` | .h/.cpp | 28 + 166 | BattleStance | 姿勢（立ち・しゃがみ）の数値と切替 |
 | `BattleStanceAnimImport` | .cpp | 43 |  | 姿勢アニメーションの取り込み（エディタ用。宣言は BattleVATBake.h） |
 | `BattleState` | .h/.cpp | 785 + 614 | BattleSquadType, FBattleDecisionProfile, FBattleSquadTacticalPlan, FBattleSquadState, FBattlePerceptionProfile, FBattleUnitState, UBattleTuning, FBattleKillNotice ほか2 | 正規状態：兵・部隊の記録、命令、弾薬、被害、調整値 UBattleTuning、兵科の差 |
@@ -163,7 +163,7 @@
 | `BattleContactTrial` | .cpp | 101 |  | Fixed contact fixtures retain all 500 bodies, collision, and the normal executor. |
 | `BattleContextTrial` | .cpp | 52 |  | Test-only full-state fingerprints. Never enabled during performance runs. |
 | `BattleCornerTrial` | .cpp | 159 |  |  |
-| `BattleCoverActionSmoke` | .cpp | 254 |  |  |
+| `BattleCoverActionSmoke` | .cpp | 273 |  |  |
 | `BattleDelegationSmoke` | .cpp | 122 |  |  |
 | `BattleDisplayLODTrial` | .cpp | 83 |  |  |
 | `BattleExoShot` | .cpp | 76 |  | Exoskeleton look check (2026-11-18): -BattleExoShot -BattleArea -BattleWideScreens=<prefix> on a wide mixed map. |

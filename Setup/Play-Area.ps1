@@ -13,9 +13,9 @@ if ($Map -eq 'H' -or $Map -eq 'I') {
     $extra += '-BattleSectorMove=1'
     if ($SectorAI) { $extra += '-BattleSectorAI=1' }
     # Sector AI trials (default off in matches): fire back when shot, sector route, flank and front stages, pass a crowded corner,
-    # fire on the move until inside the sector, gather behind cover, stop in cover only when half the squad can hide and it is
-    # at least even, bound forward by halves, flank when pinned, face the known enemy on arrival, march through cover.
-    if ($SectorTrials) { $extra += @('-BattleSectorContact=1','-BattleSectorRoute=1','-BattleSectorFlank=1','-BattleSectorFront=1','-BattleWaypointPass=1','-BattleSectorMoveFire=1','-BattleCoverHuddle=1','-BattleSquadCoverCheck=1','-BattleBounding=1','-BattlePinnedFlank=1','-BattleArrivalThreat=1','-BattleSectorCoverRoute=1') }
+    # fire on the move until inside the sector (no stop: -BattleSquadCoverCheck and -BattleBounding left out, user 11-20), line up
+    # along cover walls, flank when pinned, face the known enemy on arrival, march through cover.
+    if ($SectorTrials) { $extra += @('-BattleSectorContact=1','-BattleSectorRoute=1','-BattleSectorFlank=1','-BattleSectorFront=1','-BattleWaypointPass=1','-BattleSectorMoveFire=1','-BattleCoverHuddle=1','-BattlePinnedFlank=1','-BattleArrivalThreat=1','-BattleSectorCoverRoute=1') }
 }
 $editor = 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe'
 $playArgs = @("/Game/Prototype/Lvl_BattleWide_$Map", '-game', '-windowed', '-ResX=1920', '-ResY=1080', '-ForceRes', '-BattleWideMixed', '-BattleArea', '-BattleCoverActions=1', '-BattleFlankCoordination=1', '-BattleAreaPointSupply=1') + $extra
