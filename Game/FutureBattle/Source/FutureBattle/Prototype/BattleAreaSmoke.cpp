@@ -332,16 +332,18 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      bool Limited=false;
      if(Observer!=INDEX_NONE)
      {
-      auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();TMap<int32,FBattleObserver> OldObservers;TArray<FBattleReport> OldReports;
-      const double Now=GetWorld()->GetTimeSeconds();Sense->Capture(OldObservers,OldReports,Now);
+      auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();const auto ArmourObserversBefore=Sense->Observers;
       auto& U=Store->Units.FindChecked(Observer);const auto OldUnit=U;auto& S=Store->Squads.FindChecked(U.SquadID);const auto OldSquad=S;
       U.Weapon=EBattleWeapon::AntiTank;U.Ammo=1;S.Order=EBattleOrder::AttackMove;S.TacticalPlan.Action=EBattleSquadTactic::Mission;
       FBattleContact C;C.TargetID=TankID;C.SourceUnitID=Observer;C.bVisible=true;C.Confidence=1.f;C.LastKnownPosition=Position(Observer)+FVector(500,0,0);
-      TMap<int32,FBattleObserver> Fixture;Fixture.FindOrAdd(Observer).Contacts.Add(TankID,C);Sense->Restore(Fixture,TArray<FBattleReport>(),Now);
+      // Restore deliberately clears bVisible. Install a live observation for this helper-level test,
+      // independent of the Think switch, and preserve the exact perception state afterwards.
+      C.LastSeenTime=GetWorld()->GetTimeSeconds();
+      Sense->Observers.Reset();Sense->Observers.FindOrAdd(Observer).Contacts.Add(TankID,C);
       FBattleLeaderPlan P;P.Center=Position(Observer);TSet<int32> Allowed;
       PickArmourTargets(S.SquadID,P,&Allowed);const bool Excluded=P.TargetID==INDEX_NONE&&P.ArmourTargetID==INDEX_NONE;
       Allowed.Add(TankID);PickArmourTargets(S.SquadID,P,&Allowed);Limited=Excluded&&P.ArmourTargetID==TankID;
-      U=OldUnit;S=OldSquad;Sense->Restore(OldObservers,OldReports,Now);
+      U=OldUnit;S=OldSquad;Sense->Observers=ArmourObserversBefore;
      }
      Check(Limited,TEXT("armour reprioritization cannot introduce a target outside the accepted set"));
     }
@@ -678,10 +680,12 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      RejectStrategy([&](UBattleSave& S){S.SavedCarChoices[MSID].Age=std::numeric_limits<double>::infinity();},TEXT("non-finite armour clock rejected atomically"));
      RejectStrategy([&](UBattleSave& S){S.SavedCarChoices[MSID].bHasTime=false;},TEXT("invalid unset armour clock rejected atomically"));
      RejectStrategy([](UBattleSave& S){S.CombatStateVersion=1;},TEXT("strategic payload without its extension version rejected"));
-     M->PlayerRoutes.FindOrAdd(MSID);
+     M->PlayerRoutes.FindOrAdd(MSID).Lane=2;
      RestoreStageFailureAfter=2;
      RejectStrategy([](UBattleSave&){},TEXT("body staging failure retains existing groups and choices"));
-     Check(M->PlayerRoutes.Contains(MSID),TEXT("failed restore retains unsaved route choice"));
+     Check(M->LastMessage==TEXT("Could not stage representations; battle retained"),TEXT("restore failure reaches body staging"));
+     const auto* RetainedRouteChoice=M->PlayerRoutes.Find(MSID);
+     Check(RetainedRouteChoice&&RetainedRouteChoice->Lane==2,TEXT("failed restore retains unsaved route choice"));
      RestoreStageFailureAfter=INDEX_NONE;
      // Changing the restored match epoch must shift clocks, while retaining ages and remaining deadlines.
      auto* Shifted=DuplicateObject<UBattleSave>(Save,this);Shifted->Elapsed+=10.f;

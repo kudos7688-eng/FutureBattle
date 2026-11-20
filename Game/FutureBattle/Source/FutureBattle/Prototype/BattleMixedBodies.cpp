@@ -113,7 +113,8 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  {
   if(E.State.bRetired)continue;
   FBattleLeaderBody B;
-  const bool InjectedFailure=Staged.Num()==RestoreStageFailureAfter && FParse::Param(FCommandLine::Get(),TEXT("BattleMixedSaveSmoke"));
+  const bool InjectedFailure=Staged.Num()==RestoreStageFailureAfter &&
+   (FParse::Param(FCommandLine::Get(),TEXT("BattleMixedSaveSmoke")) || FParse::Param(FCommandLine::Get(),TEXT("BattleAreaSmoke")));
   if(InjectedFailure || !CreateBody(E,NewHost,B))
   {
    DestroyBody(B);for(auto& Pair:Staged) DestroyBody(Pair.Value);NewHost->Destroy();

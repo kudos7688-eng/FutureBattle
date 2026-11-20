@@ -63,6 +63,7 @@ public:
 	void Restore(const TMap<int32, FBattleObserver>& SavedObservers, const TArray<FBattleReport>& SavedReports, double Now);
 private:
 	friend class UBattlePhase3; // Test-only exact state/order audit.
+	friend class UBattleLeaderRuntime; // RunAreaSmoke: scoped visible-contact fixture, without save/load semantics.
 	UPROPERTY() TMap<int32, FBattleObserver> Observers;
 	UPROPERTY() TArray<FBattleReport> PendingReports;
 	TMap<FIntVector, int32> PendingCounts;

@@ -551,7 +551,7 @@ private:
  bool bEnabled=false, bSummaryDirty=true, bReduceHiddenBones=false, bReduceAnimTasks=false;
  bool bWideField=false;
  bool bDisplayLODEnabled=true;
- int32 RestoreStageFailureAfter=INDEX_NONE; // Exercised only by BattleMixedSaveSmoke.
+ int32 RestoreStageFailureAfter=INDEX_NONE; // Exercised only by BattleMixedSaveSmoke / BattleAreaSmoke.
  bool bRangeAwareCombat=true; // BattleRangeAware=0 retains the legacy trial baseline.
  bool bStableMovement=true, bMovementTrial=false, bContactTrial=false, bContactAvoidance=true;
  bool ContactBlockersHeld=true, ContactWaitObserved=false, ContactReleased=false;
