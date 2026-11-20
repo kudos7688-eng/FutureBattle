@@ -20,6 +20,16 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-21 2時20分 Claude（Codex 委任）：保存往復の修正・試験切替10個・ゲームパッドのエイム上下・計測中のマシン記録（ブランチ `codex`、作業ツリー `FutureBattle-codex`、main へ取り込み済み）
+
+ユーザーの依頼「Codex にやらせられるものを探して継続して改善」で、コードは OpenAI Codex が書き、Claude が差分の確認・ビルド・試験・取り込みをした。
+- **既定で効く修正**：保存に拡張版（`CombatStateVersion` 3）を足し、部隊群（全項目・所属・`NextGroupID`）、装甲AIの目標保持（`CarChoices`）、迫撃砲・自走砲（飛翔中の弾・設置/装填の残り・発射番号）を相対時刻で保存・復元する（旧保存は拡張なしとして読める）。外骨格兵の盾・ランチャー・砲撃の保存値を検証する。盾0の外骨格兵でも装甲とランチャーが働く（盾・装甲・副武器を別の能力にした）。`-BattleArmourAI=0` でも車両は歩兵用の姿勢・遮蔽処理に入らない。ゲームパッドの直接操作で右スティックの上下（エイム）を反転した（ユーザー報告「上に倒すと下を向く」。実機では未確認）。
+- **試験切替（すべて既定0）**：`-BattlePeekRangeCheck`（投影後の覗き位置100〜450cm）、`-BattleWeaponOrderGate`（副武器・間接射撃にも命令の交戦許可）、`-BattleArmourSectorGate`（装甲AIは区画命令で許された候補の中だけで選ぶ）、`-BattleArtilleryObserved`（本拠地砲撃は実際の観測が条件）、`-BattleSPGAmmo`（自走砲の主砲に弾数12・補給6、仮の値）、`-BattleBlastOcclusion`（爆風を壁・屋根で減衰）、`-BattleArtilleryClusters`（砲撃候補を陣営でまとめ重複を除く）、`-BattleExoShieldSuppression`（盾への被弾でも制圧、回復阻害8秒）、`-BattleGroupStrength`（群の戦力を兵種の重みで数え、補給中を除く）。どれも試合では未評価。
+- **計測**：`Setup/Watch-MeasurementMachine.ps1`（計測と並べて1秒ごとにプロセス別CPU・CPUクロック・メモリ・GPUを記録）と `Summarize-MeasurementMachine.ps1`、使い方は `Docs/measurement-machine-watch.md`。単体の5秒試験だけで、UEの計測にはまだ使っていない。設計書 `Docs/design-composition-ai.md`（編成AIを不足度・貯蓄目標で選ぶ方式。未実装）。
+- **検証**（ロックは1時51分に群制御から受け取り、AC01へ渡す）：`Build-Editor` 成功（初回はスモークの変数の隠蔽 C4456 で失敗→修正）。`Test-Battle` failures=0、`Test-MixedSave` failures=0（`codex-save-20261121b`）、`Test-Area` failures=0（`codex-area-20261121b`。初回の3件の不合格は検査の前提の誤り）。main c14d181 を取り込んだ上で、マップE・種7・`-CoverActions 1 -FlankCoordination 1`・60fps・描画なしを main の DLL と比べ、保存往復なし（`codex-id-E-s7` 対 `codexbase-id-E-s7`）・あり（`-rt`）とも `Compare-MatchResults` で **IDENTICAL**（勝者1 596/648 9722発、勝者0 736/608 10331発）。main も取り込み後にビルドし `Test-Battle` failures=0。
+- **調査の結論（Codex、読むだけ）**：要約の「歩兵だけのマップAの基準が 11-17 朝からずれている」は原因コミットではなく比較条件の混在。①80秒の保存往復の直後から試合が分かれる（往復は試合を変える既存の性質で、11-16 にも同じビルドで 302/190 対 204/193）、②6,638→6,419発の比較は起動条件が違った（視界10000/5000、遮蔽行動・連携 1/0）。`Invalid cover peek distance` は `e1b7885` で修正済みだった（過去4戦は距離0の正当な遮蔽を旧検査が拒否）。描画ありの約2倍の遅れは、同じ仕事量でGT/RT/RHIがそろって遅く、試合の途中で回復した回もあるため、他プロセスの競合かCPUの実効性能低下が有力（上の記録スクリプトで確かめる）。
+- **次の一手**：試験切替の片側試験、編成AIの段階1、記録スクリプトを使った描画あり計測の切り分け。
+
 ## 2026-11-20　ロボット6兵科の3Dモデル用コンセプトアート
 
 小銃歩兵・重装歩兵・戦車・装甲車・対戦車兵・自走砲の候補を各10案、会話内の兵科別シートに掲載。各シートの01〜10で候補を指定できる。白灰色の装甲と青緑のセンサーを同一陣営の仮配色とした。現在は外観の選定段階。採用案・寸法・背面形状は未決定。
