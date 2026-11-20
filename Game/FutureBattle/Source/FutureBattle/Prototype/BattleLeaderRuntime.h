@@ -448,6 +448,20 @@ public:
  // to the sector (the team's current sightings) instead of the direction it came from, and picks again when its target lies
  // more than 45 degrees away from that direction.
  static bool ArrivalThreatEnabled();
+ // Trial -BattleCoverStrict=1 (2026-11-20, default 0; user: "cover that does not hide from the enemy, standing in the open"):
+ // a cover place counts only when the threat sees at most 2 of the 5 body samples (was 3) - for the cover actions, for the
+ // arrival places of a sector squad and its places along the wall (checked against the known enemy nearest to the sector), and
+ // a soldier of a sector squad that finds no cover does not stand and fight in the open: he walks to a nearby place where
+ // less of him is in view (the -BattleContactCover fire position).
+ static bool CoverStrictEnabled();
+ // Trial -BattleShotDirection=1 (2026-11-20, default 0): where a soldier was last hit from (the shooter's position, kept 5 s).
+ // His cover search faces it instead of his squad's target, and a sector squad faces the newest such source of its members
+ // for its arrival places, the strict cover test and the squad's cover count. Without a recent hit: the enemy in view, as before.
+ static bool ShotDirectionEnabled();
+ TMap<int32,TPair<FVector,double>> ShotFrom;
+ bool UnitShotFrom(int32 ID,double Now,FVector& Out) const {const auto* F=ShotFrom.Find(ID);if(!F||Now-F->Value>5.)return false;Out=F->Key;return true;}
+ bool SquadShotFrom(int32 SquadID,double Now,FVector& Out) const;
+ static float CoverExposureLimit(){return CoverStrictEnabled()?.41f:.6f;}
  // Several squads of a team in one place share the places: slots reserved by anyone and places that soldiers are already
  // walking to do not count, and the soldiers of other stopping squads near by who still look for cover are counted against it.
  bool SquadCanHide(int32 SquadID,FVector Threat,double Now) const;

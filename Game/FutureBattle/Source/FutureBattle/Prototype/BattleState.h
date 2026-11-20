@@ -759,6 +759,8 @@ public:
 	// ApplyDamage plus where the shot or blast came from, for the HUD's hit direction (display only, same result as ApplyDamage).
 	// KillerID and Kind (optional) feed the kill log when the hit kills.
 	bool ApplyDamageFrom(int32 ID, int32 AttackingTeam, float Damage, const FVector& From, int32 KillerID = INDEX_NONE, EBattleKillKind Kind = EBattleKillKind::Unknown);
+	// Where the hit being applied right now came from (only inside ApplyDamageFrom; the sector AI's -BattleShotDirection).
+	bool PendingHitSource(FVector& Out) const { if (!bPendingHitFrom) return false; Out = PendingHitFrom; return true; }
 	// Hit direction (2026-11-19, display only): the HUD sets HitWatchID to the unit the player controls every frame; hits on
 	// that unit are kept here (newest last, at most 6). Hits through ApplyDamage alone have no known source.
 	int32 HitWatchID = INDEX_NONE;

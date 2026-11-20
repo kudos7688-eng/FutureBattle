@@ -93,9 +93,21 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    double Best=FMath::Square(20000.);bool bNear=false;FVector Near=FVector::ZeroVector;
    for(const FVector& E:GetWorld()->GetSubsystem<UBattleMatch>()->RouteKnownEnemies(S->Team))
     if(const double D=FVector::DistSquared2D(E,S->Destination);D<Best){Best=D;Near=E;bNear=true;}
+   // -BattleShotDirection: where the squad was just hit from comes first.
+   if(FVector From;ShotDirectionEnabled() && SquadShotFrom(SID,GetWorld()->GetTimeSeconds(),From)){Near=From;bNear=true;}
    if(bNear && FVector::Dist2D(Near,S->Destination)>100.){Forward=(Near-S->Destination).GetSafeNormal2D();SightExperiment.Cover(TEXT("arrival_threat_facing"));}
    P.ArrivalFacing=bNear?Forward:FVector::ZeroVector;
   }
+  // Trial -BattleCoverStrict=1: arrival places must hide from the known enemy nearest to the sector (at most 2 of 5 samples).
+  bool bStrictThreat=false;FVector StrictEye=FVector::ZeroVector;
+  if(Sector && CoverStrictEnabled())
+  {
+   double Best=FMath::Square(20000.);
+   for(const FVector& E:GetWorld()->GetSubsystem<UBattleMatch>()->RouteKnownEnemies(S->Team))
+    if(const double D=FVector::DistSquared2D(E,S->Destination);D<Best){Best=D;StrictEye=E+FVector(0,0,60);bStrictThreat=true;}
+   if(FVector From;ShotDirectionEnabled() && SquadShotFrom(SID,GetWorld()->GetTimeSeconds(),From)){StrictEye=From+FVector(0,0,60);bStrictThreat=true;}
+  }
+  auto HidesFromThreat=[&](const FVector& Ground){return !bStrictThreat || BattleTactics::ExposureAt(GetWorld(),Ground+FVector(0,0,90),Forward,StrictEye).VisibleSamples<=2;};
   const FVector Right(-Forward.Y,Forward.X,0);
   const bool Rally=S->TacticalPlan.bAutonomous &&
    (S->TacticalPlan.Action==EBattleSquadTactic::Retreat || S->TacticalPlan.Action==EBattleSquadTactic::Regroup || S->TacticalPlan.Action==EBattleSquadTactic::Recover || S->TacticalPlan.Action==EBattleSquadTactic::Flank);
@@ -129,7 +141,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    {
     const FVector At=Cover->GetSlots()[Slot];
     if(Sector && BattleSectors::Cell(At)!=Cell)continue;
-    if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic))) CoverCandidates.Add(At);
+    if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic)) && HidesFromThreat(At)) CoverCandidates.Add(At);
    }
   }
   int32 Queries=0, OpenMembers=0, TailQueries=0;
@@ -171,7 +183,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
       bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,Want)<FMath::Square(90.)) {Taken=true;break;}
       if(Taken) continue;
       FNavLocation Projected; if(!Nav->ProjectPointToNavigation(Want,Projected,FVector(30,30,200)) || FVector::Dist2D(Projected.Location,Want)>40) continue;
-      if(!GetWorld()->LineTraceTestByObjectType(Projected.Location+FVector(0,0,100),Projected.Location-Normal*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic))) continue;
+      if(!GetWorld()->LineTraceTestByObjectType(Projected.Location+FVector(0,0,100),Projected.Location-Normal*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic)) || !HidesFromThreat(Projected.Location)) continue;
       ++TailQueries;
       auto* Tail=Nav->FindPathToLocationSynchronously(GetWorld(),P.Path.Num()?P.Path.Last():S->Destination,Projected.Location);
       if(!Tail || !Tail->IsValid() || Tail->IsPartial() || Tail->PathPoints.Num()<2 || Tail->GetPathLength()>6500) continue;
