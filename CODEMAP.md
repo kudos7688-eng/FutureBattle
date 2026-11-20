@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（146 モジュール、32186 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（146 モジュール、32224 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -34,12 +34,12 @@
 | 死体の消滅（表示だけ） | `UBattleLeaderRuntime::StepCorpses` (BattleCorpses.cpp:36) 、 `UBattleLeaderRuntime::HideCorpse` (BattleCorpses.cpp:63) | 登録は OnDeath の `UBattleLeaderRuntime::AddCorpse` (BattleCorpses.cpp:29) |
 | 死体の姿勢（死亡アニメ・遠景VATとの切替） | `UBattleLeaderRuntime::DeathClip` (BattleCorpses.cpp:74) 、 `ABattleVATDisplay::Enter` (BattleVATDisplay.cpp:216) 、 `ABattleVATDisplay::Leave` (BattleVATDisplay.cpp:259) | 遠景では横倒し、近景へ戻ると死亡クリップの最終コマ |
 | ブラインドファイア | `UBattleLeaderRuntime::BlindFireOrigin` (BattleBlindFire.cpp:53) 、 `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:1034) | AIの試験は `UBattleLeaderRuntime::TryAIBlindFire` (BattleBlindFire.cpp:137) |
-| 遮蔽の動作（接近・のぞき撃ち） | `UBattleLeaderRuntime::RequestCoverAction` (BattleCoverAction.cpp:67) 、 `UBattleLeaderRuntime::StepCoverAction` (BattleCoverAction.cpp:376) | 切替は `BattleTactics::CoverActionsEnabled` (BattleTactics.cpp:190) ほか |
+| 遮蔽の動作（接近・のぞき撃ち） | `UBattleLeaderRuntime::RequestCoverAction` (BattleCoverAction.cpp:67) 、 `UBattleLeaderRuntime::StepCoverAction` (BattleCoverAction.cpp:377) | 切替は `BattleTactics::CoverActionsEnabled` (BattleTactics.cpp:190) ほか |
 | 姿勢（立ち・しゃがみ） | `UBattleLeaderRuntime::SetStance` (BattleStance.cpp:57) 、 `UBattleLeaderRuntime::UpdateAIStance` (BattleStance.cpp:152) | 数値は `BattleStance::EyeOffset` (BattleStance.cpp:30) ほか |
 | 制圧（撃たれて動けない） | `UBattleLeaderRuntime::AddSuppression` (BattleSuppression.cpp:45) 、 `UBattleLeaderRuntime::IsPinned` (BattleSuppression.cpp:33) | 調整値は `BattleSuppression::Tuning` (BattleSuppression.cpp:25) |
-| 兵ごとの脅威と遮蔽の取り直し（個人AI段階A） | `UBattleLeaderRuntime::GatherThreats` (BattleThreatCover.cpp:30) 、 `UBattleLeaderRuntime::CheckCoverThreats` (BattleThreatCover.cpp:68) | 試験切替 `-BattleThreatCover`（既定0）。遮蔽を選ぶ側は `UBattleLeaderRuntime::RequestCoverAction` (BattleCoverAction.cpp:67) の2段の候補 |
-| 区画の中で兵が遮蔽を移る（個人AI段階B1） | `UBattleLeaderRuntime::StepSoldierMove` (BattleSoldierMove.cpp:48) 、 `UBattleLeaderRuntime::RateCoverPlace` (BattleSoldierMove.cpp:19) | 試験切替 `-BattleSoldierMove`（既定0）。呼び出しは `UBattleLeaderRuntime::StepCoverAction` (BattleCoverAction.cpp:376) の隠れている間（1秒に1回・1フレーム4人まで） |
-| 個人AIをプレイヤーの周りだけで動かす | `UBattleLeaderRuntime::SoldierAIFocus` (BattleSoldierMove.cpp:111) | 試験切替 `-BattleSoldierAIFocus=<m>`（既定0＝全員）、`-BattleSoldierAIFocusAt=X,Y`。段階A（`UBattleLeaderRuntime::CheckCoverThreats` (BattleThreatCover.cpp:68) ほか）とB1（`UBattleLeaderRuntime::StepSoldierMove` (BattleSoldierMove.cpp:48)）の入口で見る |
+| 兵ごとの脅威と遮蔽の取り直し（個人AI段階A） | `UBattleLeaderRuntime::GatherThreats` (BattleThreatCover.cpp:32) 、 `UBattleLeaderRuntime::CheckCoverThreats` (BattleThreatCover.cpp:70) | 試験切替 `-BattleThreatCover`（既定0）。遮蔽を選ぶ側は `UBattleLeaderRuntime::RequestCoverAction` (BattleCoverAction.cpp:67) の2段の候補 |
+| 区画の中で兵が遮蔽を移る（個人AI段階B1） | `UBattleLeaderRuntime::StepSoldierMove` (BattleSoldierMove.cpp:48) 、 `UBattleLeaderRuntime::RateCoverPlace` (BattleSoldierMove.cpp:19) | 試験切替 `-BattleSoldierMove`（既定0）。呼び出しは `UBattleLeaderRuntime::StepCoverAction` (BattleCoverAction.cpp:377) の隠れている間（1秒に1回・1フレーム4人まで） |
+| 個人AIをプレイヤーの周りだけで動かす | `UBattleLeaderRuntime::SoldierAIFocus` (BattleSoldierMove.cpp:111) | 試験切替 `-BattleSoldierAIFocus=<m>`（既定0＝全員）、`-BattleSoldierAIFocusAt=X,Y`。段階A（`UBattleLeaderRuntime::CheckCoverThreats` (BattleThreatCover.cpp:70) ほか）とB1（`UBattleLeaderRuntime::StepSoldierMove` (BattleSoldierMove.cpp:48)）の入口で見る |
 | プレイヤーが兵1人に出す移動の命令（Ctrl＋クリックで選ぶ・右クリックで移動先・Hで戻す） | `UBattleLeaderRuntime::IssueSoldierOrder` (BattleSoldierOrder.cpp:20) 、 `UBattleLeaderRuntime::StepSoldierOrder` (BattleSoldierOrder.cpp:86) 、 `ABattleController::SelectSoldierAt` (BattleSoldierOrder.cpp:142) 、直接操作では `ABattleController::CommandSoldierFromView` (BattleSoldierOrder.cpp:173) （G） | 兵の状態 `bSoldierOrder`（保存される）。`UBattleLeaderRuntime::Follow` (BattleLeaderRuntime.cpp:829) の `bOwnOrder`。自動試験 `-BattleSoldierOrderTest`（`UBattleLeaderRuntime::StepSoldierOrderTest` (BattleSoldierOrder.cpp:245)） |
 | 射撃の散らばり | `BattleTactics::SpreadDegrees` (BattleTactics.cpp:196) 、 `BattleTactics::ShotDirection` (BattleTactics.cpp:204) | 照準の遅れは `UBattleState::UpdateAim` (BattleState.cpp:317) 。プレイヤーの直接操作だけの倍率は `ABattleUnit::PlayerSpreadScale` (BattleUnit.cpp:157) |
 | 部隊の戦術（撤退・集合・援護・迂回） | `UBattleSquadTactics::Step` (BattleSquadTactics.cpp:97) 、 `UBattleSquadTactics::Evaluate` (BattleSquadRetreat.cpp:79) 、 `UBattleSquadTactics::Apply` (BattleSquadRetreat.cpp:10) | 撤退 `UBattleSquadTactics::RetreatGoal` (BattleSquadRetreat.cpp:26) 、援護 `UBattleSquadTactics::AcceptSupport` (BattleSquadSupport.cpp:71) 、迂回 `UBattleSquadTactics::TryFlank` (BattleSquadFlank.cpp:46) |
@@ -88,7 +88,7 @@
 | `BattleController` | .h/.cpp | 232 + 1202 | ABattleCameraPawn, FBattleNoticeEntry, FBattleNoticeLayout, FBattleCommandBarLayout, ABattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド |
 | `BattleCorpses` | .cpp | 77 |  | 死体の消滅（表示だけ。`-BattleCorpseLifetime=秒`、既定20、0で残す。UBattleLeaderRuntime の一部） |
 | `BattleCover` | .h/.cpp | 39 + 200 | FBattleCoverReservation, UBattleCover | 遮蔽の場所の一覧と予約 |
-| `BattleCoverAction` | .cpp | 498 |  | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部） |
+| `BattleCoverAction` | .cpp | 502 |  | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部） |
 | `BattleCoverClips` | .h | 79 | BattleCoverClips, FSet | 遮蔽の状態 → 遮蔽アニメの対応表（データだけ。「アセット参考資料の検討」セッション作） |
 | `BattleExo` | .cpp | 382 |  | 外骨格兵：盾の回復、副武器（肩の対戦車火器）、専用の部隊判断と軍の割り当て、見た目（AC01の体と武器＝ApplyExoSuit） |
 | `BattleFieldLayout` | .h | 246 | BattleFieldLayout, FMapDef | マップごとの定義（広さ、拠点、試合時間）を1つの表にまとめたもの |
@@ -98,7 +98,7 @@
 | `BattleGameMode` | .h/.cpp | 97 + 373 | ABattleGameMode | モードの統合、起動時の組み立て、毎フレームの入口、基本回帰 |
 | `BattleGroups` | .cpp | 454 |  | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部） |
 | `BattleHUD` | .h/.cpp | 47 + 1058 | ABattleHUD | 画面表示（HUD、ミニマップ、部隊一覧、通知、命令の印） |
-| `BattleLeaderRuntime` | .h/.cpp | 627 + 1392 | FBattleFollowerFragment, FBattleSquadSummary, FBattleSquadListLayout, FBattleMinimapLayout, FBattleLeaderBody, FBattleLeaderPlan, UBattleLeaderRuntime | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新 |
+| `BattleLeaderRuntime` | .h/.cpp | 629 + 1392 | FBattleFollowerFragment, FBattleSquadSummary, FBattleSquadListLayout, FBattleMinimapLayout, FBattleLeaderBody, FBattleLeaderPlan, UBattleLeaderRuntime | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新 |
 | `BattleMapI` | .h | 112 | BattleMapI | マップI（区画を前提にした設計）の表：50mの区画 20×14 の種類 `Kind`、道路 `Roads`、川・橋・浅瀬の位置、家 `Houses`・丘 `Hills`、高さの表 `MakeHeights`、拠点 `Objectives`。配置は `BattleMapLayoutI.inl`（生成と共有） |
 | `BattleMapStats` | .cpp | 186 |  | マップの統計（区域ごとの見通し・遮蔽、経路の長さ）を JSON に書き出す。試合は行わない（UBattleLeaderRuntime の一部） |
 | `BattleMatch` | .h/.cpp | 295 + 512 | FAreaIntent, FBattleObjective, FBattleStrike, FPlayerRoute, UBattleMatch | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗 |
@@ -143,7 +143,7 @@
 | `BattleTankGun` | .cpp | 143 |  | 戦車砲の照準と発射（UBattleLeaderRuntime の一部） |
 | `BattleTeamAI` | .h/.cpp | 24 + 138 | UBattleTeamAI | 陣営全体の判断 |
 | `BattleTerrain` | .h | 189 | BattleTerrain, FHeightPatch, FHeights, FHouseShape | 地面の高さの表（マップG）：丘・階段・2階の矩形と、その場所の高さを返す `FHeights::Ground`。家と丘の位置（`HousesG/HillsG`）は生成と共通 |
-| `BattleThreatCover` | .cpp | 114 |  | 個人AI段階A `-BattleThreatCover`：兵ごとの脅威（自分の目撃4秒＋撃たれた方向）、全員から隠れる遮蔽、見破られた遮蔽を出て探し直す（UBattleLeaderRuntime の一部） |
+| `BattleThreatCover` | .cpp | 146 |  | 個人AI段階A `-BattleThreatCover`：兵ごとの脅威（自分の目撃4秒＋撃たれた方向）、全員から隠れる遮蔽、見破られた遮蔽を出て探し直す（UBattleLeaderRuntime の一部） |
 | `BattleUIText` | .h/.cpp | 11 + 136 | BattleUIText | 画面の文言の日本語化 |
 | `BattleUnit` | .h/.cpp | 181 + 695 | FBattleSightContext, ABattleUnit, ABattleAIController | 兵の Actor（表示と直接操作。正規状態は BattleState 側） |
 | `BattleVATBake` | .h/.cpp | 9 + 194 |  | VAT の焼き込み・検証・修復（エディタ用） |

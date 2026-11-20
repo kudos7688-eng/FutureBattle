@@ -5,6 +5,8 @@
 #include "BattleTactics.h"
 #include "BattleRanges.h"
 #include "BattlePerception.h"
+#include "BattleSectors.h"
+#include "BattleSquadTactics.h"
 #include "FutureBattle.h"
 
 bool UBattleLeaderRuntime::ThreatCoverEnabled(int32 Team)
@@ -92,21 +94,51 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
  // (he holds where he was sent). The search changes nothing when it fails, so the state before it is put back as it was.
  if(const int32 Relocate=ThreatCoverRelocate();Relocate>0 && !U->bSoldierOrder)
  {
-  Diag.Cover(TEXT("threat_relocate_try"));
-  const FBattleUnitState Before=*U;
-  U->CoverPhase=0;
-  const float Radius=FMath::Max(1200.f,GetDefault<UBattleTuning>()->AICoverSearchRadius);
-  if(RequestCoverAction(ID,Primary,Before.CoverTargetID,Radius,ByOther))
+  // Seen by another threat too (also when the target sees in): the next place must hide him from every threat.
+  const bool bOthersSee=ByOther || (ByTarget && ExposedToThreats(ID,Anchor,Threats));
+  // Searches share stage B1's budget (4 soldiers a frame). A soldier who stays (2) searches again on every third check
+  // only (a stateless phase, as for the checks themselves).
+  if(SoldierMoveFrame!=GFrameCounter){SoldierMoveFrame=GFrameCounter;SoldierMovesThisFrame=0;}
+  const bool bBudget=SoldierMovesThisFrame<4;
+  const bool bTurn=Relocate!=2 || FMath::FloorToInt(Now+Phase)%3==0;
+  bool bFound=false;FBattleUnitState Before;
+  if(bBudget && bTurn)
   {
-   // A longer walk keeps its cover timer while it lasts (as for stage B1).
-   U->SoldierMoveUntil=Now+FVector::Dist2D(Position(ID),U->CoverAnchor)/250.+1.5;U->CoverFirstBreak=0;
+   ++SoldierMovesThisFrame;Diag.Cover(TEXT("threat_relocate_try"));
+   Before=*U;U->CoverPhase=0;
+   const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Squad=Store->FindSquad(U->SquadID);const auto* Plan=Plans.Find(U->SquadID);
+   // The squad's area, as for B1: inside its sector during a sector mission (when he is in it) and within 30 m of its centre;
+   // not a place a squadmate or anyone else is already walking to. The squad's limit on how many relocate at once does not
+   // apply: the other choice (leaving the place) moves him too.
+   const bool bSector=Squad && Squad->bSectorMission && Squad->TacticalPlan.Action==EBattleSquadTactic::Mission && BattleSectors::Cell(Position(ID))==BattleSectors::Cell(Squad->Destination);
+   const FIntPoint Sector=Squad?BattleSectors::Cell(Squad->Destination):FIntPoint::ZeroValue;const FVector Center=Plan?Plan->Center:FVector::ZeroVector;
+   auto Accept=[&](int32 Slot,const FVector& A)
+   {
+    if(bSector && BattleSectors::Cell(A)!=Sector)return false;
+    if(Plan && FVector::DistSquared2D(A,Center)>FMath::Square(3000.))return false;
+    for(const auto& Ap:CoverApproaches)if(Ap.Key!=ID && Ap.Value.Slot==Slot)return false;
+    return true;
+   };
+   const float Radius=FMath::Max(1200.f,GetDefault<UBattleTuning>()->AICoverSearchRadius);
+   bFound=RequestCoverAction(ID,Primary,Before.CoverTargetID,Radius,bOthersSee,Accept);
+  }
+  else Diag.Cover(bBudget?TEXT("threat_relocate_wait_turn"):TEXT("threat_relocate_frame_full"));
+  if(bFound)
+  {
+   // A longer walk keeps its cover timer while it lasts and is not ended halfway (as for stage B1); no B1 move right after it.
+   U->SoldierMoveUntil=Now+FVector::Dist2D(Position(ID),U->CoverAnchor)/250.+1.5;U->CoverFirstBreak=0;U->SoldierMoveAfter=Now+8.;
    U->DecisionReason=TEXT("COVER / LEAVING A FLANKED PLACE");CoverApproaches.Remove(ID);
    Diag.Cover(TEXT("threat_relocate_found"));
    UE_LOG(LogFutureBattle,Verbose,TEXT("BATTLE_THREAT_COVER_RELOCATE unit=%d from=%d to=%d"),ID,Before.CoverSlot,U->CoverSlot);
    return false; // still in a cover action: on the way to the new place
   }
-  *U=Before;
-  if(Relocate==2){BrokenCover.Remove(ID);Diag.Cover(TEXT("threat_relocate_none_stay"));return false;}
+  if(bBudget && bTurn)*U=Before; // the search changes nothing when it fails
+  if(Relocate==2)
+  {
+   // He stays; while another threat sees into the place he keeps down (no peek toward the target) until the next check.
+   BrokenCover.Remove(ID);if(bOthersSee)U->CoverSeconds=FMath::Max(U->CoverSeconds,1.1f);
+   Diag.Cover(TEXT("threat_relocate_none_stay"));return false;
+  }
   Diag.Cover(TEXT("threat_relocate_none_leave"));
  }
  CancelCoverAction(ID);CoverProbeAfter.Remove(ID);

@@ -313,7 +313,7 @@ public:
  mutable int64 FollowSightTraced=0,FollowSightUsed=0; // evaluation counters (BATTLE_FOLLOW_SIGHT)
  bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot);
  FVector TracerStart(int32 ID,const FVector& Start,const FVector& Direction) const;
- bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f,bool bAllHidden=false);
+ bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f,bool bAllHidden=false,const TFunction<bool(int32,const FVector&)>& Accept=nullptr);
  void CancelCoverAction(int32 ID);
  bool StepCoverAction(int32 ID,float Dt,double Now);
  void RunCoverActionSmoke();
@@ -493,8 +493,10 @@ public:
  bool ExposedToThreats(int32 ID,FVector Anchor,const TArray<FVector,TInlineAllocator<3>>& Threats) const;
  bool CheckCoverThreats(int32 ID,FVector Primary,double Now,float Dt);
  // Trial -BattleThreatCoverRelocate (2026-11-21, default 0; with -BattleThreatCover): before leaving a broken place he looks for
- // the next one from where he is (12 m) and walks straight there when he finds one. 1 = none found: leave as before.
- // 2 = none found: stay in the broken place (better than the open) and look again at the next check.
+ // the next one from where he is (12 m, inside the squad's sector and 30 m of its centre, not a place someone walks to;
+ // hidden from every threat when another one sees in) and walks there; the walk is not ended halfway by a stale contact.
+ // 1 = none found: leave as before. 2 = none found: stay (keeping down while another threat sees in) and search again on
+ // every third check. Searches share B1's budget of 4 soldiers a frame.
  static int32 ThreatCoverRelocate();
  bool BrokenCoverSlot(int32 ID,int32 Slot,double Now) const {const auto* B=BrokenCover.Find(ID);return B&&B->Key==Slot&&Now<B->Value;}
  TMap<int32,TPair<int32,double>> BrokenCover;

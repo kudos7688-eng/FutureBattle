@@ -64,7 +64,7 @@ bool UBattleLeaderRuntime::RevalidatePeek(int32 ID,FVector Threat)
  return false;
 }
 
-bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Target,float SearchRadius,bool bAllHidden)
+bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Target,float SearchRadius,bool bAllHidden,const TFunction<bool(int32,const FVector&)>& Accept)
 {
  if(!bEnabled || !BattleTactics::CoverActionsEnabled() || !Bodies.Contains(ID) || Threat.ContainsNaN())return false;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);
@@ -95,6 +95,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
   const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
   Stage=FMath::Max(Stage,1);if(!Cover->IsAvailable(Slot,ID,Now))continue;
   if(bThreats && BrokenCoverSlot(ID,Slot,Now))continue;
+  if(Accept && !Accept(Slot,Anchor))continue; // the caller's own rules (stage A relocation: the squad's area)
   Stage=FMath::Max(Stage,2);if(!Clear(Pos,Anchor))continue;
   Stage=FMath::Max(Stage,3);
   const float Hidden=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Eye).Fraction();
@@ -388,13 +389,16 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  if(U->CoverSlot!=FreeCoverSlot && !Cover->Reserve(U->CoverSlot,ID,Now)){Diag.Cover(TEXT("cancel_slot_lost"));CancelCoverAction(ID);return false;}
  U->CoverSeconds=FMath::Max(0.f,U->CoverSeconds-Dt);
  // -BattleSoldierMove: a longer walk to the chosen cover place keeps its timer while it lasts (saved as time left).
- if(U->CoverPhase==1 && U->SoldierMoveUntil>0 && Now<U->SoldierMoveUntil)U->CoverSeconds=3.f;
+ const bool bWalkingToPlace=U->CoverPhase==1 && U->SoldierMoveUntil>0 && Now<U->SoldierMoveUntil;
+ if(bWalkingToPlace)U->CoverSeconds=3.f;
  const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,U->CoverTargetID);
- if(!Player && (!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds))){Diag.Cover(U->CoverPhase==1?TEXT("cancel_contact_stale_entering"):TEXT("cancel_contact_stale_in_cover"));CancelCoverAction(ID);return false;}
+ // The walk to a place he chose (stage A relocation, B1) is finished even when the contact goes stale or out of range on the
+ // way: stopping halfway would leave him in the open. Only a contact that is gone altogether ends it.
+ if(!Player && (!Contact || (!bWalkingToPlace && Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds)))){Diag.Cover(U->CoverPhase==1?TEXT("cancel_contact_stale_entering"):TEXT("cancel_contact_stale_in_cover"));CancelCoverAction(ID);return false;}
  // Cover validation (default ON): leave cover once the observed threat is beyond weapon range, and only step out to a
  // peek point with a clear line to the threat's last known position; otherwise stay hidden and check again shortly.
  const bool Validate=!Player && BattleTactics::CoverValidationEnabled();
- if(Validate && FVector::Dist2D(Position(ID),Contact->LastKnownPosition)>TargetRange(ID))
+ if(Validate && !bWalkingToPlace && FVector::Dist2D(Position(ID),Contact->LastKnownPosition)>TargetRange(ID))
  {Diag.Cover(TEXT("cancel_target_out_of_range"));CancelCoverAction(ID);return false;}
  // -BattleThreatCover: a hidden soldier leaves a place that one of his threats now sees into (BattleThreatCover.cpp).
  if(!Player && CheckCoverThreats(ID,Contact->LastKnownPosition,Now,Dt))return false;
