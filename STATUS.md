@@ -20,6 +20,14 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-20 16時30分 Claude（実装計画ロードマップ）：段階0の決定を反映（対称な開始を E〜I で既定、部隊群を全マップで既定、squadcap・マップI sectors-v2 の取り込み。ブランチ `defaults`、作業ツリー `FutureBattle-defaults`）
+- **決定（ユーザー、ROADMAP 11-20「今後の実装計画」の段階0）**：`-BattleSymmetricStart` は E〜I（`FMapDef::bUrban` のマップ）で既定ON・A/D は不変。`-BattleAreaGroups` は全マップで既定ON。`-BattleDefendEngage` は切替のまま。区画マップは I が主・H は比較用。`squadcap` は既定25のまま取り込む。`-BattleFollowerAnimSkip` は画面で確認してから（`Play-Area.ps1` にだけ付けた）。計測してから尋ねるもの：区画AIの組み合わせ → `-BattleWaypointPass` → `-BattleSightTeamMask` → `-BattleAIBlindFire` → `-BattleAreaPointSupply` → `-BattleAreaComposition`。
+- **変更**：`BattleTactics::SymmetricStart(const UWorld*)`（起動引数で 0/1 を明示すればそれが優先、無ければ `UBattleTuning::bSymmetricStart` か、マップが市街地の規則なら ON）。呼び出し3か所に World を渡す。`UBattleTuning::bAreaGroups=true`。`BattleTactics::AreaGroups` は、`-BattleAreaGroups=1` を明示したときだけ `-BattleAreaTrialTeam` で片側に絞る（既定ONのときに別の切替の片側試験をしても、両軍に部隊群が残る）。`BattleAreaSmoke.cpp` の部隊群の確認から「AIの部隊群がOFF」の条件を外した。squadcap（小隊上限の設定化 `AreaMaxActiveSquads`=25、保存の検証の上限の拡大）と mapi（sectors-v2：畑44%→25%、拠点の低い塀を9m外へ、区画監査の掃討小隊）をマージ。マップIを `-run=BattleMap -WideField=I -Force` で作り直した（`URBAN_MAP_RESULT failures=0 layout=sectors-v2`、`TERRAIN_MAP_RESULT failures=0`、`SECTOR_MAP_RESULT failures=0`）。
+- **検証**（ロックは16時02分に区画AIから受け取った。テストプレイの UE が1本動いている間に回したので、性能は測っていない）：作業ツリーで `Build-Editor` 成功。`Test-Battle` `BATTLE_SMOKE_RESULT failures=0`（`Setup/Battle-Smoke-20261120-160527.log`）。`Test-Area`（`defaults-area`）`BATTLE_AREA_RESULT failures=0`（130件、部隊群の2件を含む）。マップI・種7・区画監査・保存往復（`defaults-I-audit-s7`）：`BATTLE_SECTOR_AUDIT_RESULT failures=0`、完走、勝者1、経路の折り返し `path_mirrored` 1813回、部隊群の結成2。マップE・種7・保存往復（`defaults-E-s7`）：完走、勝者0、`path_mirrored` 1439回、部隊群の結成2。`Test-MixedSave` failures=0。
+- **影響**：E〜I の既定の試合と、全マップの既定の試合（部隊群）が変わる。**これより前の基準の試合とは一致しない**（比べるときは `-BattleSymmetricStart=0 -BattleAreaGroups=0`）。区画AIの基準は「区画AI」が取り直す（同セッションと合意）。
+- **制限**：各マップ1試合だけ。A/D で部隊群を既定にした試合は Test-Area 以外では回していない。マップIの作り直し後の画面確認はまだ。main への取り込みと main の Binaries のビルドは、テストプレイの UE が終わってから（main の Binaries を上書きしないため）。
+- **次の一手**：main へ取り込み → main をビルド → 段階1（区画AIの組み合わせと `-BattleWaypointPass` を I で計測）。
+
 ## 2026-11-20 15時55分 Claude（区画AI）：遮蔽は「見える点が5点中2点まで」・撃たれた方向から隠れる（試験切替2つ、既定0）
 
 - `-BattleCoverStrict=1`：遮蔽として数えるのは、脅威から体の5点のうち2点までしか見えない場所だけにする（従来3点）。対象は遮蔽行動と、区画部隊の到着位置・壁沿いの位置（区画に一番近い既知の敵から判定）。遮蔽が見つからない区画部隊の兵は、開けた場所で棒立ちにならず、近くの見えにくい位置へ歩く（`-BattleContactCover` の射撃位置）。
