@@ -140,7 +140,7 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   TArray<int32> IDs;
   const int32 Side=Swap?1-Team:Team;
   // Symmetric start trial: the east side's rows are the west side's rotated 180 degrees (north-south reversed), on the area maps.
-  const FVector RowSign(1.,bArea&&Side&&BattleTactics::SymmetricStart()?-1.:1.,1.);
+  const FVector RowSign(1.,bArea&&Side&&BattleTactics::SymmetricStart(GetWorld())?-1.:1.,1.);
   const FVector Center=RowSign*(bMixedFastMatch?FVector((Team?1:-1)*(BattleFieldLayout::HomeDistance(GetWorld())-(BattleFieldLayout::IsSightField(GetWorld())?1000:500)),0,100):BattleFieldLayout::IsSightField(GetWorld())?BattleFieldLayout::WideSpawnFor(GetWorld(),Side,Group):bWideField?FVector((Team?1:-1)*(9000+(Group%5)*400),(Group/5-2)*2800,100):Phase3->bEnabled?Phase3->SpawnCenter(Team,Group):FVector(Team ? 1800:-1800, (Group-(Count/20-1)*.5)*800, 95));
   ABattleUnit* Leader=nullptr;
   for(int32 Slot=0;Slot<BattleSquadType::RifleMembers();++Slot)
@@ -738,7 +738,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    // Symmetric start trial (-BattleSymmetricStart=1): the navigation mesh is not a mirror image of itself, so the same trip takes
    // other streets from the east than from the west (up to 34 m apart on map E). An east-side squad on foot takes the 180-degree
    // image of the route a west-side squad would take, when every point of it lies on the mesh.
-   if(bArea && !VehicleNav && P.Path.Num()>1 && BattleTactics::SymmetricStart() && GetWorld()->GetSubsystem<UBattleMatch>()->AreaHome(S->Team).X>0)
+   if(bArea && !VehicleNav && P.Path.Num()>1 && BattleTactics::SymmetricStart(GetWorld()) && GetWorld()->GetSubsystem<UBattleMatch>()->AreaHome(S->Team).X>0)
    {
     FNavLocation MirrorFrom,MirrorTo;
     if(Nav->ProjectPointToNavigation(FVector(-From.Location.X,-From.Location.Y,From.Location.Z),MirrorFrom,FVector(100,100,300)) && Nav->ProjectPointToNavigation(FVector(-To.Location.X,-To.Location.Y,To.Location.Z),MirrorTo,FVector(100,100,300)))

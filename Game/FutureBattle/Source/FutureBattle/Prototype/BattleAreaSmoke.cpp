@@ -373,7 +373,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
       TArray<int32> Two;for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Value.SquadType==BattleSquadType::Rifle&&P.Value.CommandStatus==EBattleCommandStatus::Active&&Two.Num()<2)Two.Add(P.Key);
       const auto SavedGroups=M->Groups;const auto SavedSquadGroup=M->SquadGroup;const int32 SavedNext=M->NextGroupID;
       const int32 GID=Two.Num()==2?M->FormGroup(0,Two,true):INDEX_NONE;const auto* GG=M->Groups.Find(GID);
-      bool bFormed=GG&&M->GroupOf(Two[0])==GID&&M->GroupOf(Two[1])==GID&&GG->Phase==0&&!BattleTactics::AreaGroups(0);
+      bool bFormed=GG&&M->GroupOf(Two[0])==GID&&M->GroupOf(Two[1])==GID&&GG->Phase==0;
       bool bManual=false,bGather=false,bAdvance=false,bLeft=false,bRoles=true,bStall=true;
       if(bFormed)
       {

@@ -3,7 +3,7 @@
 // phase. Assemble: members gather at a rally point short of the objective. Advance: once most of them are there (or after
 // GroupAssembleMax seconds) they go in together: infantry to the point, a tank to an overwatch post close behind them, a mortar team
 // to its firing post. Hold: after the team observes the point as its own, the group stays GroupHoldSeconds, then takes the next one.
-//  AI groups: trial -BattleAreaGroups=0/1 (UBattleTuning::bAreaGroups, default 0; the trial team with -BattleAreaTrialTeam): one attack
+//  AI groups: -BattleAreaGroups=0/1 (UBattleTuning::bAreaGroups, default 1 since 2026-11-20; the trial team with -BattleAreaTrialTeam): one attack
 //   group per team from its AI-led squads (the enemy team; own squads delegated to the AI).
 //  Player groups: the player forms a group from the selected squads and selects a whole group (ABattleController); orders then go to
 //   all its squads as before. A player group whose living squads are all delegated to the AI is run like an AI group.
@@ -13,6 +13,7 @@
 #include "BattleState.h"
 #include "BattleRanges.h"
 #include "BattleTactics.h"
+#include "BattleFieldLayout.h"
 #include "NavigationSystem.h"
 #include "FutureBattle.h"
 
@@ -48,15 +49,18 @@ bool BattleTactics::DefendEngage(int32 Team)
  return bOn&&(Trial<0||Trial==Team);
 }
 
-bool BattleTactics::SymmetricStart()
+bool BattleTactics::SymmetricStart(const UWorld* World)
 {
- static const bool bOn=[]{int32 V=GetDefault<UBattleTuning>()->bSymmetricStart?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleSymmetricStart="),V);return V!=0;}();
- return bOn;
+ // -1 = not on the command line: on by default on the maps with the urban rule set (E to I; user decision 2026-11-20), off on A/D
+ // unless UBattleTuning::bSymmetricStart. An explicit -BattleSymmetricStart=0/1 wins on every map.
+ static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSymmetricStart="),V);return V;}();
+ if(Arg>=0)return Arg!=0;
+ return GetDefault<UBattleTuning>()->bSymmetricStart||BattleFieldLayout::Of(World).bUrban;
 }
 
 int32 BattleTactics::AllocationIndex(const UWorld* World,int32 SquadID,int32 Team)
 {
- if(!SymmetricStart()||!World)return SquadID;
+ if(!World||!SymmetricStart(World))return SquadID;
  // The squad's number within its team (squads of the team with a lower or equal ID; IDs are never reused, so it never changes).
  int32 Index=0;
  for(const auto& P:World->GetSubsystem<UBattleState>()->GetSquads())Index+=P.Value.Team==Team&&P.Key<=SquadID;
@@ -65,9 +69,12 @@ int32 BattleTactics::AllocationIndex(const UWorld* World,int32 SquadID,int32 Tea
 
 bool BattleTactics::AreaGroups(int32 Team)
 {
- static const bool bOn=[]{int32 V=GetDefault<UBattleTuning>()->bAreaGroups?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaGroups="),V);return V!=0;}();
+ // On by default for both teams. Only an explicit -BattleAreaGroups=1 is a trial that -BattleAreaTrialTeam limits to one team, so a
+ // one-sided trial of another switch keeps the groups on both sides.
+ static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaGroups="),V);return V;}();
+ if(Arg<0)return GetDefault<UBattleTuning>()->bAreaGroups;
  const int32 Trial=AreaStrategy().TrialTeam;
- return bOn&&(Trial<0||Trial==Team);
+ return Arg!=0&&(Trial<0||Trial==Team);
 }
 
 int32 UBattleMatch::GroupOf(int32 SquadID) const

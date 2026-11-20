@@ -483,7 +483,8 @@ public:
 	// mortar team when the team has them. It gathers GroupRallyBack (GroupRallyBackProfile with the range profile) short of its objective,
 	// advances once GroupReadyShare of the squads present are within GroupRallyRadius of the rally point or after GroupAssembleMax seconds,
 	// holds a taken point GroupHoldSeconds, then goes for the next. Its tank follows GroupTankBack behind the point.
-	UPROPERTY(Config, EditAnywhere) bool bAreaGroups = false;
+	// Default on for every map since 2026-11-20 (user decision after the 9-seed trial with cover actions: map A +41, map E +-0).
+	UPROPERTY(Config, EditAnywhere) bool bAreaGroups = true;
 	UPROPERTY(Config, EditAnywhere) int32 GroupRifleSquads = 3;
 	UPROPERTY(Config, EditAnywhere) float GroupRallyBack = 12000.f;
 	UPROPERTY(Config, EditAnywhere) float GroupRallyBackProfile = 20000.f;
@@ -502,7 +503,7 @@ public:
 	// Trial -BattleDefendEngage=1 (default 0; the trial team with -BattleAreaTrialTeam): a squad on a Defend order may target any enemy
 	// within its weapon range, not only those within DefenseRadius of the defended place (it still does not leave its position).
 	UPROPERTY(Config, EditAnywhere) bool bDefendEngage = false;
-	// Trial -BattleSymmetricStart=1 (default 0): point-symmetric starting rows, allocation slots and flank route for both teams (see BattleTactics.h).
+	// -BattleSymmetricStart: forces it on for every map; without it on by default on maps E to I only (BattleTactics::SymmetricStart). Point-symmetric starting rows, allocation slots and flank route for both teams (see BattleTactics.h).
 	UPROPERTY(Config, EditAnywhere) bool bSymmetricStart = false;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRange = 30000.f;
 	UPROPERTY(Config, EditAnywhere) float ScoutSightRangeProfile = 40000.f;

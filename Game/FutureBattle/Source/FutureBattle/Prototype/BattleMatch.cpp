@@ -416,7 +416,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
    {
     const FVector Own=AreaHome(Team),Axis=AreaHome(1-Team)-Own,P=Runtime->Position(Pair.Value.LeaderUnitID);
     // Symmetric start trial: the east side's route is the west side's rotated 180 degrees (south instead of north).
-    const float SideSign=BattleTactics::SymmetricStart()&&Own.X>0?-1.f:1.f;
+    const float SideSign=BattleTactics::SymmetricStart(GetWorld())&&Own.X>0?-1.f:1.f;
     const FVector Way=BattleFieldLayout::Expand(FVector(0,SideSign*((TeamIntent.bFlankSameSide||(Pair.Key/10)%2)?1:-1)*TeamIntent.FlankOffset*12000.f,0),BattleFieldLayout::IsExpanded(GetWorld()));
     const double T=FVector::DotProduct(P-Own,Axis)/FMath::Max(1.0,Axis.SizeSquared2D());
     if(T<0.45&&FVector::Dist2D(P,Way)>2500)Center=Way;
