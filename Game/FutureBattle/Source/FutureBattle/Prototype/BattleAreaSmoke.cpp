@@ -779,11 +779,11 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Check(Armour,TEXT("shells and vehicles: mortar shells never hurt them, the gun only on a direct hit"));
     {
      auto& Squad=Store->Squads.FindChecked(GSID);const auto OldOrder=Squad.Order;Squad.Order=EBattleOrder::Move;
-     auto& A=Artillery.FindOrAdd(GunID);const auto Before=A;A.ReadyAt=0;const int32 Shots=A.Shots;const int32 ShellCount=ArtilleryShells.Num();
+     auto& A=Artillery.FindOrAdd(GunID);const auto SavedGun=A;A.ReadyAt=0;const int32 Shots=A.Shots;const int32 ShellCount=ArtilleryShells.Num();
      const bool Fired=FireArtillery(GunID,GPos+Dir*Mid,Now);
      Check(Fired!=BattleTactics::WeaponOrderGateEnabled()&&A.Shots==Shots+(Fired?1:0)&&ArtilleryShells.Num()==ShellCount+(Fired?1:0),
       TEXT("artillery move-order gate blocks firing only when enabled"));
-     A=Before;ArtilleryShells.SetNum(ShellCount);Squad.Order=OldOrder;
+     A=SavedGun;ArtilleryShells.SetNum(ShellCount);Squad.Order=OldOrder;
     }
     // Trial ammo: independent machine gun, last round, empty firing, capped supply and empty save round-trip.
     const int32 SavedMainAmmo=Store->Find(GunID)->SPGAmmo;
@@ -793,9 +793,9 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      U.SPGAmmo=1;
      Check(Store->UseSPGAmmo(GunID)&&U.SPGAmmo==0&&!Store->UseSPGAmmo(GunID)&&U.Ammo==MachineAmmo&&U.Reserve==MachineReserve,
       TEXT("SPG main ammunition: last round and empty rejection leave machine gun untouched"));
-     const auto Before=Artillery.FindChecked(GunID);Artillery[GunID].ReadyAt=0;const int32 ShellsBefore=ArtilleryShells.Num();
-     Check(!FireArtillery(GunID,GPos+Dir*Mid,Now)&&ArtilleryShells.Num()==ShellsBefore&&Artillery[GunID].Shots==Before.Shots,
-      TEXT("empty SPG cannot launch a shell or advance shot sequence"));Artillery[GunID]=Before;
+     const auto SavedSPG=Artillery.FindChecked(GunID);Artillery[GunID].ReadyAt=0;const int32 ShellsBefore=ArtilleryShells.Num();
+     Check(!FireArtillery(GunID,GPos+Dir*Mid,Now)&&ArtilleryShells.Num()==ShellsBefore&&Artillery[GunID].Shots==SavedSPG.Shots,
+      TEXT("empty SPG cannot launch a shell or advance shot sequence"));Artillery[GunID]=SavedSPG;
      const int32 Added=Store->RefillSPGAmmo(GunID);
      Check(Added==FMath::Min(FMath::Max(0,TT->SPGSupplyRounds),FMath::Max(0,TT->SPGAmmoCapacity))&&U.SPGAmmo==Added,
       TEXT("SPG uses configured supply batch"));
@@ -804,28 +804,28 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Check(ArtilleryClusterSmoke(),TEXT("artillery clusters: stable membership deduplication and full candidate coverage"));
     // Terrain visibility fixture high above the map: full wall, partial wall, roof and open air.
     {
-     const FVector Origin(0,0,20000),Target(1000,0,20000);
+     const FVector Origin(0,0,20000),BlastTarget(1000,0,20000);
      auto* Wall=GetWorld()->SpawnActor<AActor>();auto* Box=NewObject<UBoxComponent>(Wall);Wall->SetRootComponent(Box);
      Box->SetBoxExtent(FVector(40,200,200));Box->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
      Box->SetCollisionObjectType(ECC_WorldStatic);Box->SetCollisionResponseToAllChannels(ECR_Block);Box->RegisterComponent();Wall->SetActorLocation(Origin+FVector(500,0,0));
      const bool On=BattleTactics::BlastOcclusionEnabled();
-     Check(ArtilleryBlastTransmission(Origin,Target)==(On?0.f:1.f),TEXT("blast is blocked by a wall only with occlusion trial"));
+     Check(ArtilleryBlastTransmission(Origin,BlastTarget)==(On?0.f:1.f),TEXT("blast is blocked by a wall only with occlusion trial"));
      Box->SetBoxExtent(FVector(40,200,10));
-     const float Partial=ArtilleryBlastTransmission(Origin,Target);
+     const float Partial=ArtilleryBlastTransmission(Origin,BlastTarget);
      Check(On?(Partial>0.f&&Partial<1.f):Partial==1.f,TEXT("partial blast exposure attenuates damage"));
      Box->SetBoxExtent(FVector(200,200,40));Wall->SetActorLocation(Origin+FVector(0,0,500));
      Check(ArtilleryBlastTransmission(Origin,Origin+FVector(0,0,1000))==(On?0.f:1.f),TEXT("roof blocks vertical blast transmission"));
      Wall->Destroy();
-     Check(ArtilleryBlastTransmission(Origin,Target)==1.f,TEXT("unoccluded blast retains full damage"));
+     Check(ArtilleryBlastTransmission(Origin,BlastTarget)==1.f,TEXT("unoccluded blast retains full damage"));
     }
     // Distance-only knowledge cannot authorize a home shot, even with a retained base aim.
     if(BattleTactics::ArtilleryObservedEnabled())
     {
      const auto OldView=M->IntelViews[0];auto& V=M->IntelViews[0];V.At=M->Elapsed;V.bHomeCovered=true;V.HomeObserver=INDEX_NONE;V.HomeObservedAt=M->Elapsed;
      Check(!M->ArtilleryHomeObserved(0),TEXT("known home without an observer is not fire observation"));
-     const auto Before=Artillery.FindChecked(GunID);Artillery[GunID].bBase=true;Artillery[GunID].ReadyAt=0;
+     const auto SavedBase=Artillery.FindChecked(GunID);Artillery[GunID].bBase=true;Artillery[GunID].ReadyAt=0;
      Check(!FireArtillery(GunID,M->AreaHome(1),Now),TEXT("retained base aim revalidates fire observation"));
-     Artillery[GunID]=Before;V=OldView;
+     Artillery[GunID]=SavedBase;V=OldView;
     }
     // Save and restore: body, setup, load, target and shot sequence all survive.
     auto& BeforeSave=Artillery.FindOrAdd(GunID);BeforeSave.StillSince=Now;BeforeSave.SetupCredit=3.;BeforeSave.ReadyAt=Now+4.;BeforeSave.NextPick=Now+.5;
@@ -886,7 +886,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Armour=FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::Carbine),.3f)&&FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::SupportGun),.3f)&&ArmorScale(L,EBattleWeapon::AntiTank)==1.f&&ArmorScale(1,EBattleWeapon::Carbine)==1.f;
     // Shield capacity must not enable armour, weapon switching or the launcher reload clock.
     {
-     auto* T=GetMutableDefault<UBattleTuning>();const float ShieldConfig=T->ExoShield;T->ExoShield=0.f;
+     auto* ExoTuning=GetMutableDefault<UBattleTuning>();const float ShieldConfig=ExoTuning->ExoShield;ExoTuning->ExoShield=0.f;
      auto* Equipment=NewObject<UBattleState>(GetWorld());const int32 TestID=Equipment->RegisterUnit(0);
      const int32 TestSquad=Equipment->CreateSquad(0,{TestID});Equipment->SetSquadType(TestSquad,BattleSquadType::Exo);
      const bool BodyIndependent=Equipment->HasExoskeletons()&&!Equipment->HasShields()&&Equipment->MaxShieldOf(TestID)==0.f;
@@ -895,8 +895,8 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      const bool SeparateClock=Equipment->Find(TestID)->LauncherWait==Reload;
      Equipment->AdvanceLaunchers(Reload);
      const bool HadShields=Store->bShields;Store->bShields=false;
-     const bool ArmourWithoutShield=FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::Carbine),T->ExoArmorSmallArms);
-     Store->bShields=HadShields;T->ExoShield=ShieldConfig;
+     const bool ArmourWithoutShield=FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::Carbine),ExoTuning->ExoArmorSmallArms);
+     Store->bShields=HadShields;ExoTuning->ExoShield=ShieldConfig;
      Check(BodyIndependent&&SelectedWithoutShield&&FiredWithoutShield&&SeparateClock&&Equipment->Find(TestID)->LauncherWait==0.f&&ArmourWithoutShield,
       TEXT("zero shield leaves exoskeleton armour and launcher independent"));
     }
