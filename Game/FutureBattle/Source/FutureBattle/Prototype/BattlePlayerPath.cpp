@@ -4,6 +4,8 @@
 //    crosses is taken even when a wall of that storey hides the floor; Alt takes the ground floor beneath an upper floor.
 //  - Drawn path: holding the right button and dragging draws a line; on release the selected squads walk it point by point
 //    (UBattleMatch::PlayerPathOrder, handed on by UpdatePlayerRoutes) and take the pending order at its end. A short drag is a click.
+//    Trial -BattleSectorMove=1 on a map with sectors: a move click is a sector move (IssueOrderAt); any drag of the pointer by more
+//    than 12 pixels is a point move, along the line when it is long enough for way points, else straight to its end.
 //  - PlayerRoutePreview: the points a routed or drawn order still has ahead (HUD: the predicted way of a selected squad).
 //  - Vault: the jump key in front of a low obstacle (up to 1.6m, free ground behind) carries the directly controlled leader over.
 //  - PanSpeed: the tactical camera moves faster the higher it is, and faster again with Shift.
@@ -45,7 +47,7 @@ void ABattleController::BeginPathDraw()
  bPathDraw=false;DrawnPath.Reset();DrawnLength=0;
  if(!bTactical||Selected.IsEmpty())return;
  FVector2D Pointer;FVector At;
- if(GetPointerPosition(Pointer)&&PickOrderPoint(Pointer,At)){bPathDraw=true;DrawnPath.Add(At);}
+ if(GetPointerPosition(Pointer)&&PickOrderPoint(Pointer,At)){bPathDraw=true;DrawnPath.Add(At);PathScreenStart=Pointer;}
 }
 
 void ABattleController::UpdatePathDraw()
@@ -64,11 +66,13 @@ void ABattleController::EndPathDraw()
  bPathDraw=false;
  TArray<FVector> Drawn=MoveTemp(DrawnPath);DrawnPath.Reset();
  if(!bTactical||Selected.IsEmpty())return;
- FVector2D Pointer;FVector End;int32 Level=0;
+ FVector2D Pointer=PathScreenStart;FVector End;int32 Level=0;
  if(!GetPointerPosition(Pointer)||!PickOrderPoint(Pointer,End,&Level)){if(Drawn.IsEmpty())return;End=Drawn.Last();}
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const double Length=DrawnLength+(Drawn.Num()?FVector::Dist2D(End,Drawn.Last()):0.);
- if((BattleFieldLayout::Of(GetWorld()).bSectors && PendingOrder!=EBattleOrder::Move)||Length<2500||!L->IsEnabled()||!L->IsWideField())
+ const bool bSectorMove=UBattleLeaderRuntime::SectorMoveEnabled() && BattleFieldLayout::Of(GetWorld()).bSectors && PendingOrder==EBattleOrder::Move;
+ const bool bScreenDrag=FVector2D::Distance(Pointer,PathScreenStart)>12.;
+ if((bSectorMove?!bScreenDrag:((BattleFieldLayout::Of(GetWorld()).bSectors && PendingOrder!=EBattleOrder::Move)||Length<2500))||!L->IsEnabled()||!L->IsWideField())
  {
   // A click (or a drag too short to be a way): the ordinary order at the point.
   IssueOrderAt(End,PendingOrder);
@@ -87,7 +91,8 @@ void ABattleController::EndPathDraw()
   const int32 SID=U->GetState()->SquadID;if(Done.Contains(SID))continue;Done.Add(SID);
   if(Points.Num()>1?Match->PlayerPathOrder(SID,PendingOrder,Points)>0:L->IssueOrder(SID,PendingOrder,End))++Accepted;else ++Rejected;
  }
- ShowNotice(FString::Printf(TEXT("道筋の命令：%d部隊（中継点 %d／不可 %d）"),Accepted,FMath::Max(0,Points.Num()-1),Rejected));
+ ShowNotice(Points.Num()>1||!bSectorMove?FString::Printf(TEXT("道筋の命令：%d部隊（中継点 %d／不可 %d）"),Accepted,FMath::Max(0,Points.Num()-1),Rejected)
+  :FString::Printf(TEXT("地点へ移動：%d部隊（不可 %d）"),Accepted,Rejected));
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_INPUT DrawnPath points=%d length_m=%.0f accepted=%d rejected=%d"),Points.Num(),Length/100.,Accepted,Rejected);
  PendingOrder=EBattleOrder::Move;
 }

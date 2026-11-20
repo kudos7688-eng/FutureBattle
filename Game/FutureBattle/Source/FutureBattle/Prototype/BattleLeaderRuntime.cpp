@@ -518,6 +518,7 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
     else {BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones); B->Mesh->SetComponentTickEnabled(false); B->Mesh->SetRelativeRotation(FRotator(0,-90,85));}
    }
   }
+  AddCorpse(ID);
  }
  bSummaryDirty=true;
 }
@@ -526,6 +527,7 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID);
  if(!Mode || Mode->bBattleEnded || !S || S->CommandStatus!=EBattleCommandStatus::Active || Goal.ContainsNaN()) return false;
  const FVector AskedGoal=Goal;
+ if(!bMissionUpdate)SectorFireBack.Remove(SID);
  if(bSector)
  {
   const FIntPoint Cell=BattleSectors::Cell(Goal);
@@ -596,7 +598,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  const bool Sector=S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission;
  const bool bDefendEngage=S->Order==EBattleOrder::Defend && BattleTactics::DefendEngage(S->Team);
  // Trial -BattleSectorContact=1: shot at on the way or while holding, the squad also answers enemies outside its sector.
- const bool bShotAt=Sector && SectorContactEnabled() && SquadShotAt(*S,Now);
+ const bool bShotAt=Sector && (SectorContactEnabled() || SectorMoveFireEnabled() || SectorFireBack.Contains(SID)) && SquadShotAt(*S,Now);
  const FIntPoint SectorCell=Sector?BattleSectors::Cell(S->Destination):FIntPoint(-1,-1);
  auto OutsideOK=[&](int32 ID,const FVector& At){return bShotAt && FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));};
  P.TargetID=INDEX_NONE; double Best=DBL_MAX;
@@ -632,6 +634,21 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   for(int32 ID:S->Members)if(const auto* C=Sense->FindContact(ID,P.TargetID)){P.bSectorContact=BattleSectors::Cell(C->LastKnownPosition)!=SectorCell;break;}
   if(P.bSectorContact)SightExperiment.Cover(TEXT("sector_contact_target"));
  }
+ // Trial -BattleSquadCoverCheck=1: a squad that fires on the move decides as a whole whether to stop in cover here.
+ if(SquadCoverCheckEnabled() && Sector && (SectorMoveFireEnabled() || SectorFireBack.Contains(SID)) && P.TargetID!=INDEX_NONE &&
+    BattleSectors::Cell(P.Center)!=SectorCell)
+ {
+  if(Now>=P.CoverCheckAt)
+  {
+   P.CoverCheckAt=Now+2.;
+   FVector Threat=FVector::ZeroVector;bool bKnown=false;
+   for(int32 ID:S->Members)if(const auto* C=Sense->FindContact(ID,P.TargetID)){Threat=C->LastKnownPosition;bKnown=true;break;}
+   const bool bWas=P.bCoverStop;P.bCoverStop=bKnown && SquadCanHide(SID,Threat,Now);
+   SightExperiment.Cover(P.bCoverStop?TEXT("squad_cover_stop"):TEXT("squad_cover_move_on"));
+   if(P.bCoverStop!=bWas)P.bReplan=true;
+  }
+ }
+ else P.bCoverStop=false;
  // Armour AI (BattleArmourAI.cpp): while the squad sees a vehicle, small arms skip targets they cannot hurt and anti-tank gunners get a vehicle.
  P.ArmourTargetID=INDEX_NONE;
  if(VehicleIDs.Num() && S->Order!=EBattleOrder::Move && BattleTactics::ArmourAI(S->Team)) PickArmourTargets(SID,P);
@@ -806,8 +823,13 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  // Trial -BattleSectorContact=1: against an enemy outside the sector, a soldier stops only in cover (or on his way to it);
  // in the open he keeps going to the sector and fires on the move.
  const bool bOutsideContact=P->bSectorContact && P->TargetID!=INDEX_NONE && S->Order!=EBattleOrder::Move && !bVehicleBody;
- const bool StopForCombat=(P->TargetID!=INDEX_NONE || (bArmourAI && P->ArmourTargetID!=INDEX_NONE)) && S->Order!=EBattleOrder::Move &&
-  !(bOutsideContact && !U->CoverPhase && !CoverApproaches.Contains(ID));
+ // -BattleSectorMove (the player's sector move) and -BattleSectorMoveFire (every sector mission): fire on the move until the
+ // soldier is inside the sector (no stop, no cover walk).
+ const bool bMoveFire=(SectorMoveFireEnabled() || (!SectorFireBack.IsEmpty() && SectorFireBack.Contains(U->SquadID))) && !bVehicleBody &&
+  S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission && !P->bCoverStop &&
+  BattleSectors::Cell(Pos)!=BattleSectors::Cell(S->Destination) && !U->CoverPhase && !CoverApproaches.Contains(ID);
+ const bool StopForCombat=!bMoveFire && (P->TargetID!=INDEX_NONE || (bArmourAI && P->ArmourTargetID!=INDEX_NONE)) && S->Order!=EBattleOrder::Move &&
+  !(bOutsideContact && !U->CoverPhase && !CoverApproaches.Contains(ID) && !(P->bCoverStop && FirePositions.Contains(ID)));
  const bool CombatContact=StopForCombat || bOutsideContact;
  if(BattleStance::Enabled(GetWorld()) && !bVehicleBody)
  {
@@ -834,7 +856,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  // Cover validation (default ON): never take cover from a contact that this soldier cannot shoot at from here.
  const bool CoverInRange=!BattleTactics::CoverValidationEnabled() || (Contact && FVector::DistSquared2D(Pos,Contact->LastKnownPosition)<=FMath::Square(CoverTuning->EffectiveWeaponRange()));
  // A mortar gunner stays at his emplacement (moving would undo the set-up).
- if(BattleTactics::CoverActionsEnabled() && CombatContact && Contact && Contact->bVisible && CoverInRange && ProbeSlot && Now>=CoverProbeAfter.FindRef(ID) && U->Weapon!=EBattleWeapon::Mortar && !bVehicleBody)
+ if(BattleTactics::CoverActionsEnabled() && CombatContact && !bMoveFire && Contact && Contact->bVisible && CoverInRange && ProbeSlot && Now>=CoverProbeAfter.FindRef(ID) && U->Weapon!=EBattleWeapon::Mortar && !bVehicleBody)
  {
   if(LeaderFirst){}else if(ProbeBudget)++CoverProbesThisFrame;else NextCoverProbe=Now+FMath::Max(0.f,CoverTuning->AICoverProbeInterval);
   CoverProbeAfter.Add(ID,Now+FMath::Max(0.f,LeaderFirst?CoverTuning->LeaderGuardCoverRetrySeconds:bContactCover?2.f:CoverTuning->AICoverRetrySeconds));
@@ -842,9 +864,11 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   const float LocalRadius=(ProbeBudget||LeaderFirst)?CoverTuning->AICoverSearchRadius:BattleFieldLayout::IsUrban(GetWorld())?650.f:CoverTuning->CoverActionSearchRadius;
   if(RequestCoverAction(ID,Contact->LastKnownPosition,TargetID,LocalRadius)){CoverApproaches.Remove(ID);if(bOutsideContact)SightExperiment.Cover(TEXT("sector_contact_cover_here"));return;}
   // Trial -BattleCoverApproach=1: no usable cover here, so walk to a hidden slot beyond the local search radius.
-  if((BattleTactics::CoverApproachEnabled(GetWorld()) || bContactCover || bOutsideContact) && !CoverApproaches.Contains(ID))
+  if((BattleTactics::CoverApproachEnabled(GetWorld()) || bContactCover || bOutsideContact || P->bCoverStop) && !CoverApproaches.Contains(ID))
   {
    bool bFound=StartCoverApproach(ID,Contact->LastKnownPosition,TargetID,Now,LocalRadius);
+   // -BattleSquadCoverCheck: the squad stops in cover, so a member without a slot of his own gathers right behind one.
+   if(!bFound && P->bCoverStop)bFound=StartHuddle(ID,Contact->LastKnownPosition,TargetID,Now);
    if(!bFound && (bContactCover || bOutsideContact))bFound=StartFirePosition(ID,Contact->LastKnownPosition,TargetID,Now);
    if(bOutsideContact)SightExperiment.Cover(bFound?TEXT("sector_contact_cover_walk"):TEXT("sector_contact_keep_moving"));
   }
@@ -1147,7 +1171,9 @@ void UBattleLeaderRuntime::RefreshDisplay()
  {
   const bool Show=Store->Find(B.Key)->Team==0 || Visible.Contains(B.Key);
   const bool BodyShow=Show || DirectBodies;
+  // bRevealed is sensor knowledge the AI and HUD read: keep updating it for a hidden corpse (SetRevealed keeps it hidden).
   if(B.Value.Actor.IsValid()) B.Value.Actor->SetRevealed(Show);
+  else if(HiddenCorpses.Contains(B.Key)) continue; // removed follower corpse: its mesh stays hidden
   else { if(VAT)VAT->SetVisible(B.Key,BodyShow); if(!VAT || !VAT->IsFar(B.Key)){BattleFollowerBones::SetVisible(B.Value.Mesh.Get(),BodyShow,bReduceHiddenBones); if(bReduceAnimTasks) B.Value.AnimTasks.Apply(B.Value.Mesh.Get(),true); B.Value.Weapon->SetVisibility(BodyShow && Store->Find(B.Key)->IsAlive());} }
  }
 }
@@ -1159,6 +1185,7 @@ void UBattleLeaderRuntime::Step(float Dt)
  if(SightExperiment.Enabled) { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightExperiment); StepSightExperiment(Dt); }
  if(Phase3 && Phase3->bEnabled) { Phase3->Step(Dt); return; }
  StepBodyTimers();
+ StepCorpses();
  if(bMovementTrial && MoveTrialStage==1 && !Mode->bCombatPaused) MoveTrialFrameMS.Add(Dt*1000);
  const double Now=GetWorld()->GetTimeSeconds(); auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Build the cover slots while the match waits to start (they were built lazily by the first decision: ~100 ms in one frame).
@@ -1250,6 +1277,21 @@ bool UBattleLeaderRuntime::SectorContactEnabled()
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorContact="),V);return V!=0;}();
  return bOn;
 }
+bool UBattleLeaderRuntime::SectorMoveEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorMove="),V);return V!=0;}();
+ return bOn;
+}
+bool UBattleLeaderRuntime::SectorMoveFireEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorMoveFire="),V);return V!=0;}();
+ return bOn;
+}
+bool UBattleLeaderRuntime::SquadCoverCheckEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSquadCoverCheck="),V);return V!=0;}();
+ return bOn;
+}
 bool UBattleLeaderRuntime::SquadShotAt(const FBattleSquadState& S,double Now) const
 {
  for(int32 ID:S.Members)if(const double* T=SectorHitUntil.Find(ID);T&&*T>Now)return true;
@@ -1257,7 +1299,7 @@ bool UBattleLeaderRuntime::SquadShotAt(const FBattleSquadState& S,double Now) co
 }
 void UBattleLeaderRuntime::NoteUnderFire(int32 ID)
 {
- if(SectorContactEnabled())SectorHitUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);
+ if(SectorContactEnabled() || SectorMoveFireEnabled() || !SectorFireBack.IsEmpty())SectorHitUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);
  if(!BattleTactics::ReturnFireEnabled())return;
  const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;
  if(Trial>=0){const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);if(!U||U->Team!=Trial)return;}

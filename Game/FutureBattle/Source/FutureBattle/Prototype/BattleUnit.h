@@ -54,6 +54,8 @@ public:
 	void SetAnimationDetail(bool bDirect);
 	void SetRevealed(bool bVisible);
 	void ApplyDeath();
+	// Corpse removal (display only): hides the body for good; SetRevealed no longer shows it.
+	void HideCorpse();
 	FVector EyePosition() const;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> FirstPersonCamera;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Rifle;
@@ -106,6 +108,7 @@ private:
 	FTransform LookGrip;
 	UPROPERTY() int32 UnitID = INDEX_NONE;
 	bool bDeathApplied = false;
+	bool bCorpseHidden = false;
 	bool bThirdPersonView = true;
 	bool bDirectAvoidanceOverride = false;
 	float WalkSpeedBeforeSprint = 0.f;

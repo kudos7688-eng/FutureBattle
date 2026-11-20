@@ -336,7 +336,7 @@ void ABattleHUD::DrawHUD()
             for(int ID:Squad->Members)if(GetWorld()->GetSubsystem<UBattleState>()->Find(ID)->IsAlive())
             {++Living;if(BattleSectors::Cell(Leaders->Position(ID))==Cell)++Present;}
             const TCHAR* State=Leaders->SquadTargetID(S->SquadID)!=INDEX_NONE?TEXT("交戦中"):Present*2>Living?TEXT("維持中"):TEXT("展開中");
-            Label(FString::Printf(TEXT("区画 %c%d　%s　%d/%d"),'A'+Cell.X,1+Cell.Y,State,Present,Living),W-566,234,Mint,.85f);
+            Label(FString::Printf(TEXT("%s %c%d　%s　%d/%d"),Leaders->HasSectorFireBack(S->SquadID)?TEXT("区画移動"):TEXT("区画"),'A'+Cell.X,1+Cell.Y,State,Present,Living),W-566,234,Mint,.85f);
             if(PC->IsTactical()){
                 const FVector C=BattleSectors::Center(Cell);
                 const FVector Corners[]={C+FVector(-2500,-2500,10),C+FVector(2500,-2500,10),C+FVector(2500,2500,10),C+FVector(-2500,2500,10)};

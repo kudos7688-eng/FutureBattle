@@ -629,16 +629,27 @@ void ABattleController::IssueOrderAt(FVector Target, EBattleOrder Order)
 {
  if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled())
  {
-  int32 Accepted=0,Rejected=0;
+  int32 Accepted=0,Rejected=0,SectorMoves=0;
   auto* Routes=GetWorld()->GetSubsystem<UBattleMatch>();
   for(ABattleUnit* U:Selected) if(LeaderSelectable(U))
   {
    // A squad with a chosen route walks a distant order over it (BattlePlayerRoutes.cpp); -1 = not routed, the ordinary order.
    const int32 SID=U->GetState()->SquadID,Routed=Routes->PlayerRouteOrder(SID,Order,Target);
    const bool Sector=BattleFieldLayout::Of(GetWorld()).bSectors && !L->IsVehicle(U->GetUnitID()) && (Order==EBattleOrder::Defend || Order==EBattleOrder::AttackMove);
-   if(Routed<0?L->IssueOrder(SID,Order,Target,false,Sector):Routed>0) ++Accepted; else ++Rejected;
+   // Trial -BattleSectorMove=1: a plain move click sends the squad into the sector as an attack move that fires on the move
+   // (UBattleLeaderRuntime::SetSectorFireBack); a drawn line stays a point move (BattlePlayerPath.cpp).
+   const bool SectorMove=Order==EBattleOrder::Move && Routed<0 && UBattleLeaderRuntime::SectorMoveEnabled() && BattleFieldLayout::Of(GetWorld()).bSectors && !L->IsVehicle(U->GetUnitID());
+   if(Routed<0?L->IssueOrder(SID,SectorMove?EBattleOrder::AttackMove:Order,Target,false,Sector||SectorMove):Routed>0)
+   {
+    ++Accepted;
+    if(SectorMove){L->SetSectorFireBack(SID);++SectorMoves;}
+   }
+   else ++Rejected;
   }
-  if(L->IsWideField()) ShowNotice(FString::Printf(TEXT("ORDER: %d SQUADS / %d REJECTED"),Accepted,Rejected));
+  const FIntPoint Cell=BattleSectors::Cell(Target);
+  if(SectorMoves)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_INPUT SectorMove cell=%c%d squads=%d rejected=%d"),TCHAR('A'+Cell.X),1+Cell.Y,SectorMoves,Rejected);
+  if(SectorMoves) ShowNotice(FString::Printf(TEXT("区画移動 %c%d：%d部隊（撃たれたら移動しながら撃ち返す／不可 %d）"),TCHAR('A'+Cell.X),1+Cell.Y,Accepted,Rejected));
+  else if(L->IsWideField()) ShowNotice(FString::Printf(TEXT("ORDER: %d SQUADS / %d REJECTED"),Accepted,Rejected));
   return;
  }
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
