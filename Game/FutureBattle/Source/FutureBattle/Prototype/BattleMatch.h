@@ -210,7 +210,11 @@ public:
 		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */
 		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp) */
 		int32 SurpriseRow = 0; /* surprise group: the edge sector row it moves along */
+		uint8 SurpriseBridgeStage = 0; /* 0 none, 1 entrance, 2 exit, 3 original edge goal; retained during same-time restore */
+		int32 SurpriseBridgeLeader = INDEX_NONE;
+		FVector SurpriseBridgeEntry = FVector::ZeroVector, SurpriseBridgeExit = FVector::ZeroVector, SurpriseBridgeGoal = FVector::ZeroVector;
 		float SurpriseWaitAt = -1.f, SurpriseLogAt = 0.f, SurpriseEndAt = 0.f; /* surprise group: since when its lead waits for the others; next progress log; when it ends whatever its phase */ };
+	bool UpdateSurpriseBridge(FBattleGroup& Group,const FVector& Lead);
 	uint8 GroupRole(const FBattleGroup& Group, int32 SquadID) const;
 	void AssignGroupRoles(FBattleGroup& Group) const;
 	FVector GroupSupportPost(int32 Team, int32 Point) const;

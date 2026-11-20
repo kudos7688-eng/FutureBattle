@@ -13,6 +13,7 @@
 #include "BattleMatch.h"
 #include "BattleFieldLayout.h"
 #include "BattleLeaderRuntime.h"
+#include "BattleMapI.h"
 #include "BattleSectors.h"
 #include "BattleState.h"
 #include "BattleTactics.h"
@@ -216,6 +217,80 @@ namespace BattleSurpriseValues
  constexpr double LossEnd=.5;
 }
 
+// Fixed map geometry only. H uses the same 10 m bank strips as its generator; I has two rotated river rectangles.
+// Treat even a direct bridge crossing as a staged crossing, so the group never advances its goal halfway over the water.
+namespace BattleSurpriseRoute
+{
+ bool Intersects(const FVector& A,const FVector& B,double X0,double X1,double Y0,double Y1)
+ {
+  double Lo=0.,Hi=1.;
+  auto Clip=[&](double P,double D,double Min,double Max){if(FMath::Abs(D)<1.e-9)return P>=Min&&P<=Max;double T0=(Min-P)/D,T1=(Max-P)/D;if(T0>T1)Swap(T0,T1);Lo=FMath::Max(Lo,T0);Hi=FMath::Min(Hi,T1);return Lo<=Hi;};
+  return Clip(A.X,B.X-A.X,X0,X1)&&Clip(A.Y,B.Y-A.Y,Y0,Y1);
+ }
+ bool Bridge(const UWorld* World,const FVector& From,const FVector& Goal,int32 Row,FVector& Entry,FVector& Exit)
+ {
+  const auto& Def=BattleFieldLayout::Of(World);double Best=DBL_MAX;
+  const double EdgeY=BattleSectors::Center(FIntPoint(0,Row)).Y;
+  auto Offer=[&](double X0,double X1,double Y)
+  {
+   const double Direction=Goal.X>=From.X?1.:-1.;
+   const FVector A(Direction>0?X0:X1,Y,Goal.Z),B(Direction>0?X1:X0,Y,Goal.Z);
+   const double Cost=FVector::Dist2D(From,A)+FVector::Dist2D(B,Goal)+FMath::Abs(Y-EdgeY);
+   if(Cost<Best){Best=Cost;Entry=A;Exit=B;}
+  };
+  if(FCString::Strcmp(Def.Name,TEXT("Lvl_BattleWide_I"))==0)
+  {
+   using namespace BattleMapI;
+   for(double Sign:{-1.,1.})
+   {
+    const double X0=Sign>0?RiverX0:-RiverX1,X1=Sign>0?RiverX1:-RiverX0,Y0=Sign>0?RiverY0:-RiverY1,Y1=Sign>0?RiverY1:-RiverY0;
+    if(Intersects(From,Goal,X0,X1,Y0,Y1))Offer(X0-1000.,X1+1000.,Sign*BridgeY);
+   }
+  }
+  else if(FCString::Strcmp(Def.Name,TEXT("Lvl_BattleWide_H"))==0)
+  {
+   bool bCross=false;for(int32 Y=-34500;Y<35000&&!bCross;Y+=1000){const double X=BattleSectors::RiverX(Y);bCross=Intersects(From,Goal,X-500.,X+500.,Y-500.,Y+500.);}
+   if(bCross)for(int32 Y:BattleSectors::Crossings)if(!BattleSectors::IsFord(Y)){const double X=BattleSectors::RiverX(Y);Offer(X-2500.,X+2500.,Y);}
+  }
+  return Best<DBL_MAX;
+ }
+}
+
+bool UBattleMatch::UpdateSurpriseBridge(FBattleGroup& G,const FVector& Lead)
+{
+ // Groups survive RestoreSnapshot in the same match. These fields, like Rally, are untouched by a same-time save round trip.
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ if(G.SurpriseBridgeStage==0)
+ {
+  FVector Entry,Exit;if(!BattleSurpriseRoute::Bridge(GetWorld(),Lead,G.Rally,G.SurpriseRow,Entry,Exit))return false;
+  G.SurpriseBridgeGoal=G.Rally;G.SurpriseBridgeEntry=Entry;G.SurpriseBridgeExit=Exit;G.SurpriseBridgeStage=1;G.SurpriseBridgeLeader=INDEX_NONE;
+  double Best=DBL_MAX;for(int32 SID:G.Squads)if(const auto* S=Store->FindSquad(SID))if(const auto* U=Store->Find(S->LeaderUnitID);U&&U->IsAlive())
+  {const double D=FVector::DistSquared2D(R->Position(S->LeaderUnitID),Lead);if(D<Best){Best=D;G.SurpriseBridgeLeader=SID;}}
+  G.Rally=Entry;
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_BRIDGE group=%d team=%d stage=entry entry=(%.0f,%.0f) exit=(%.0f,%.0f) goal=(%.0f,%.0f) time=%.1f"),G.ID,G.Team,Entry.X,Entry.Y,Exit.X,Exit.Y,G.SurpriseBridgeGoal.X,G.SurpriseBridgeGoal.Y,Elapsed);
+  return true;
+ }
+ // Keep one guide through the turn; changing to the most forward column on the far bank can skip the entrance.
+ const auto* S=Store->FindSquad(G.SurpriseBridgeLeader);const auto* U=S?Store->Find(S->LeaderUnitID):nullptr;
+ const FVector P=S&&U&&U->IsAlive()&&G.Squads.Contains(G.SurpriseBridgeLeader)?R->Position(S->LeaderUnitID):Lead;
+ // Infantry may finish in cover up to 14 m from a non-sector order. Nearness alone must not count the opposite bank.
+ const double Direction=G.SurpriseBridgeExit.X>G.SurpriseBridgeEntry.X?1.:-1.;
+ if(FVector::Dist2D(P,G.Rally)>(G.SurpriseBridgeStage==3?2500.:1600.))return true;
+ if(G.SurpriseBridgeStage==1&&(P.X-G.Rally.X)*Direction>600.)return true;
+ if(G.SurpriseBridgeStage==2&&(P.X-G.Rally.X)*Direction< -600.)return true;
+ if(G.SurpriseBridgeStage==1){G.SurpriseBridgeStage=2;G.Rally=G.SurpriseBridgeExit;}
+ else if(G.SurpriseBridgeStage==2)
+ {
+  G.Rally=G.SurpriseBridgeGoal;G.SurpriseBridgeStage=0;
+  // A gathering leg can span both rivers on I. Route the remaining segment before returning to the edge.
+  if(UpdateSurpriseBridge(G,P))return true;
+  G.SurpriseBridgeStage=3;
+ }
+ else {G.SurpriseBridgeStage=0;G.SurpriseBridgeLeader=INDEX_NONE;}
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_BRIDGE group=%d team=%d stage=%s rally=(%.0f,%.0f) time=%.1f"),G.ID,G.Team,G.SurpriseBridgeStage==2?TEXT("cross"):G.SurpriseBridgeStage==3?TEXT("return"):TEXT("done"),G.Rally.X,G.Rally.Y,Elapsed);
+ return G.SurpriseBridgeStage!=0;
+}
+
 bool UBattleMatch::SurpriseOn(int32 Team) const
 {
  static const int32 On=BattleFrontValues::Arg(TEXT("BattleSurpriseGroup="),0);
@@ -234,9 +309,7 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
  const bool bLow=AreaHome(Team).X<0;auto ColOf=[&](const FIntPoint& C){return bLow?C.X:Cols-1-C.X;};
  const int32 EnemyHomeCol=FMath::Clamp(ColOf(BattleSectors::Cell(AreaHome(1-Team))),0,Cols-1);
  const auto& Line=FrontLine[Team];if(Line.Num()!=Rows)return;
- // A river sector on the edge row: the first non-river sector inward, at most three rows (Codex review 2026-11-21: one row was river
- // too on map I). Crossing points (bridges) are not searched; the squads' own routing finds the way to it.
- auto DryCell=[&](FIntPoint Cell,int32 Edge){for(int32 K=0;K<=3&&BattleFieldLayout::SectorKind(GetWorld(),Cell)=='R';++K)Cell.Y+=Edge==0?1:-1;return Cell;};
+ // Sector centres are on dry banks on H and I, even in an R parcel. Keep the edge row; the river geometry below routes crossings.
  // Form: a front-holding group exists, none running, the interval passed.
  if(SID_==INDEX_NONE)
  {
@@ -247,7 +320,7 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
   for(const FVector& E:AreaIntelView(Team).Enemies)if(const FIntPoint C=BattleSectors::Cell(E);BattleSectors::Valid(C))
   {if(C.Y<=1&&ColOf(C)>Line[0])++Ahead[0];if(C.Y>=Rows-2&&ColOf(C)>Line[Rows-1])++Ahead[1];}
   const int32 Row=Ahead[0]<Ahead[1]?0:Ahead[1]<Ahead[0]?Rows-1:(Team==0?0:Rows-1);
-  const FVector Start=BattleSectors::Center(DryCell(FrontCell(Team,FMath::Max(0,Line[Row]-1),Row),Row));
+  const FVector Start=BattleSectors::Center(FrontCell(Team,FMath::Max(0,Line[Row]-1),Row));
   struct FFree{int32 SID;double D;bool bArmour;};TArray<FFree> Free;
   for(const auto& P:Store->GetSquads())
   {
@@ -268,6 +341,9 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
   TArray<int32> Pick;for(const auto& F:Free)if(Pick.Num()<Want)Pick.Add(F.SID);
   const int32 ID=FormGroup(Team,Pick,false);auto* G=Groups.Find(ID);if(!G)return;
   G->Kind=2;G->Phase=0;G->PhaseAt=Elapsed;G->Rally=Start;G->SurpriseRow=Row;G->StartLiving=AllLiving(*G);G->SurpriseEndAt=Elapsed+AssembleMax+Max;
+  FVector Lead=R->Position(Store->FindSquad(Pick[0])->LeaderUnitID);
+  for(int32 SID:Pick)if(const auto* S=Store->FindSquad(SID)){const FVector P=R->Position(S->LeaderUnitID);if((bLow?P.X:-P.X)>(bLow?Lead.X:-Lead.X))Lead=P;}
+  UpdateSurpriseBridge(*G,Lead);
   SurpriseNextAt[Team]=Elapsed+Interval;
   int32 Armour=0;for(int32 I=0;I<Pick.Num();++I)Armour+=Free[I].bArmour;
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_FORM group=%d team=%d squads=%d armour=%d row=%d start=%c%d time=%.1f"),ID,Team,G->Squads.Num(),Armour,Row,TCHAR('A'+BattleSectors::Cell(Start).X),1+BattleSectors::Cell(Start).Y,Elapsed);
@@ -281,10 +357,11 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
  if(Elapsed>G.SurpriseEndAt){DissolveGroup(SID_,TEXT("surprise_time"));SurpriseNextAt[Team]=Elapsed+Interval;return;}
  // The group's columns: its rearmost and its leading squad's (2026-11-20 first match: stepping from the rearmost one let an armoured
  // squad held back by its own rules stop the whole group until the time ran out).
- int32 Col=Cols,Lead=-1;int32 N=0,Ready=0;FString Where;
+ int32 Col=Cols,Lead=-1;int32 N=0,Ready=0;FString Where;FVector LeadPosition=FVector::ZeroVector;double LeadX=-DBL_MAX;
  for(int32 SID:G.Squads)if(const auto* S=Store->FindSquad(SID))
  {
   const FVector P=R->Position(S->LeaderUnitID);const int32 C=ColOf(BattleSectors::Cell(P));
+  if((bLow?P.X:-P.X)>LeadX){LeadX=bLow?P.X:-P.X;LeadPosition=P;}
   Col=FMath::Min(Col,C);Lead=FMath::Max(Lead,C);++N;Ready+=FVector::Dist2D(P,G.Rally)<=2500.;
   Where+=FString::Printf(TEXT(" %d:t%d:c%d"),SID,int32(S->SquadType),C);
  }
@@ -292,23 +369,27 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
  if(Elapsed>=G.SurpriseLogAt)
  {
   G.SurpriseLogAt=Elapsed+30.f;const FIntPoint RC=BattleSectors::Cell(G.Rally);
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_STATE group=%d team=%d phase=%d rally=%c%d living=%d squads=%s time=%.1f"),SID_,Team,int32(G.Phase),TCHAR('A'+RC.X),1+RC.Y,Living,*Where,Elapsed);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_STATE group=%d team=%d phase=%d rally=%c%d bridge_stage=%d living=%d squads=%s time=%.1f"),SID_,Team,int32(G.Phase),TCHAR('A'+RC.X),1+RC.Y,int32(G.SurpriseBridgeStage),Living,*Where,Elapsed);
  }
  auto Enter=[&](uint8 To,const TCHAR* Why){G.Phase=To;G.PhaseAt=Elapsed;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_PHASE group=%d team=%d phase=%d column=%d living=%d reason=%s time=%.1f"),SID_,Team,int32(To),Col,Living,Why,Elapsed);};
+ // Finish every bridge leg before assembly timeout, lag handling or the strike can replace its waypoint.
+ if(G.Phase<2&&G.SurpriseBridgeStage!=0){UpdateSurpriseBridge(G,LeadPosition);return;}
  if(G.Phase==0)
  {
+  if(UpdateSurpriseBridge(G,LeadPosition))return;
   if(Ready>=N||Elapsed-G.PhaseAt>AssembleMax)Enter(1,Ready>=N?TEXT("assembled"):TEXT("assemble_timeout"));
   return;
  }
  if(G.Phase==1)
  {
   if(Lead>=EnemyHomeCol-2){Enter(2,TEXT("strike"));return;}
-  // Next stop: two columns ahead of the leading squad along the edge row (the first non-river row inward when the edge sector is river).
+  // Next stop: two columns ahead of the leading squad along the edge row, using a bridge when the segment crosses water.
   // The lead waits for squads more than three columns behind, at most LagWait seconds each time.
   int32 Next=FMath::Min(Lead+2,EnemyHomeCol-2);
   if(Lead-Col>3){if(G.SurpriseWaitAt<0)G.SurpriseWaitAt=Elapsed;if(Elapsed-G.SurpriseWaitAt<LagWait)Next=Lead;}
   else G.SurpriseWaitAt=-1.f;
-  G.Rally=BattleSectors::Center(DryCell(FrontCell(Team,Next,G.SurpriseRow),G.SurpriseRow));
+  G.Rally=BattleSectors::Center(FrontCell(Team,Next,G.SurpriseRow));
+  UpdateSurpriseBridge(G,LeadPosition);
  }
 }
 

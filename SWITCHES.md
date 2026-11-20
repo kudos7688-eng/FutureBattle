@@ -113,8 +113,8 @@
 | `-BattleFollowerNoOverlap` | Value | 0 | BattleLeaderRuntime.cpp:779 |  |
 | `-BattleFollowSightParallel` | Value | 0 | BattleLeaderRuntime.cpp:772 |  |
 | `-BattleFollowSightTraces` | other |  | BattleLeaderRuntime.cpp:806 |  |
-| `-BattleFrontLine` | other |  | BattleFrontLine.cpp:32 |  |
-| `-BattleFrontSquads` | other |  | BattleFrontLine.cpp:118 |  |
+| `-BattleFrontLine` | other |  | BattleFrontLine.cpp:33 |  |
+| `-BattleFrontSquads` | other |  | BattleFrontLine.cpp:119 |  |
 | `-BattleHeavyCost` | other |  | BattleState.cpp:543 |  |
 | `-BattleHeavyDamage` | other |  | BattleState.cpp:543 |  |
 | `-BattleHeavyHealth` | other |  | BattleState.cpp:542 |  |
@@ -193,7 +193,7 @@
 | `-BattleScopeShot` | Param | off | BattleLeaderRuntime.cpp:225 |  |
 | `-BattleScoutRetreat` | Value | GetDefault<UBattleTuning>()->bScoutRetreat?1:0 | BattleScoutReport.cpp:20 |  |
 | `-BattleSeconds` | Value | 20.f | BattleBenchmark.cpp:41 |  |
-| `-BattleSectorAI` | Value | 0 | BattleMatch.cpp:442, BattleMatch.cpp:453, BattleMatch.cpp:464 |  |
+| `-BattleSectorAI` | Value | 0 | BattleMatch.cpp:445, BattleMatch.cpp:456, BattleMatch.cpp:467 |  |
 | `-BattleSectorAudit` | Param | off | BattleSectorAudit.cpp:28 |  |
 | `-BattleSectorContact` | Value | 0 | BattleLeaderRuntime.cpp:1323 |  |
 | `-BattleSectorCoverRoute` | Value | 0 | BattleSectorRoute.cpp:22 |  |
@@ -249,8 +249,8 @@
 | `-BattleSuppressionRadius` | other |  | BattleSuppression.cpp:11 |  |
 | `-BattleSuppressionSpread` | other |  | BattleSuppression.cpp:12 |  |
 | `-BattleSuppressionSupport` | other |  | BattleSuppression.cpp:14 |  |
-| `-BattleSurpriseGroup` | other |  | BattleFrontLine.cpp:221 |  |
-| `-BattleSurpriseSquads` | other |  | BattleFrontLine.cpp:244 | an AI group needs two squads |
+| `-BattleSurpriseGroup` | other |  | BattleFrontLine.cpp:296 |  |
+| `-BattleSurpriseSquads` | other |  | BattleFrontLine.cpp:317 | an AI group needs two squads |
 | `-BattleSymmetricStart` | Value | -1 | BattleGroups.cpp:56 |  |
 | `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:56 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |
