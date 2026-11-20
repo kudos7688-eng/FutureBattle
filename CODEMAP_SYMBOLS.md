@@ -41,7 +41,7 @@
 - `BattleFieldViewTrial.cpp`: UBattleSquadTrial::SelectT5:39, UBattleSquadTrial::StartT5:49, UBattleSquadTrial::InspectT5Assets:85, UBattleSquadTrial::StepT5:110, UBattleSquadTrial::FinishT5:215
 - `BattleFlankBayTrial.cpp`: UBattleLeaderRuntime::RunFlankBayTrial:14
 - `BattleFollowerBones.cpp`: BattleFollowerBones::Eligible:6, BattleFollowerBones::SetVisible:14, BattleFollowerBones::PrepareFreeze:31
-- `BattleFrontLine.cpp`: UBattleMatch::FrontLineOn:31, UBattleMatch::FrontCell:39, UBattleMatch::UpdateFrontLine:45, UBattleMatch::FrontGroupOrder:198, UBattleMatch::UpdateSurpriseBridge:259, UBattleMatch::SurpriseOn:294, UBattleMatch::UpdateSurpriseGroup:300, UBattleMatch::SurpriseGroupOrder:407, UBattleMatch::SurpriseMoving:416, UBattleMatch::ClampFrontTimers:422
+- `BattleFrontLine.cpp`: UBattleMatch::FrontLineOn:31, UBattleMatch::FrontCell:39, UBattleMatch::UpdateFrontLine:45, UBattleMatch::FrontGroupOrder:199, UBattleMatch::UpdateSurpriseBridge:261, UBattleMatch::SurpriseOn:296, UBattleMatch::UpdateSurpriseGroup:302, UBattleMatch::SurpriseGroupOrder:424, UBattleMatch::SurpriseMoving:433, UBattleMatch::ClampFrontTimers:439
 - `BattleGameMode.h`: ABattleGameMode::IsVisibilityFrame:23, ABattleGameMode::InitialUnitCount:38, ABattleGameMode::InitialUnitHealth:39
 - `BattleGameMode.cpp`: ABattleGameMode::FindUnitByID:27, ABattleGameMode::ABattleGameMode:38, ABattleGameMode::HandleStartingNewPlayer_Implementation:46, ABattleGameMode::BeginPlay:51, ABattleGameMode::EndPlay:162, ABattleGameMode::Tick:169, ABattleGameMode::RefreshVisibility:209, ABattleGameMode::CheckSmoke:223, ABattleGameMode::RunSmokeTest:229, ABattleGameMode::FinishSmokeTest:338
 - `BattleGridTrial.cpp`: UBattlePhase3::VerifyGrid:11

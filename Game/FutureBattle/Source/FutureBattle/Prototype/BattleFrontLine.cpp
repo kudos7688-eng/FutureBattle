@@ -129,7 +129,8 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(P.Key)!=INDEX_NONE)continue;
    if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Heavy)continue;
    if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key))continue;
-   bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase)continue;
+   // The real orders never send heavy squads on the home assault (UpdateTeamOrders), so their base slot does not hold them (Codex 2026-11-21).
+   bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase&&S.SquadType!=BattleSquadType::Heavy)continue;
    Free.Add({P.Key,FVector::DistSquared2D(R->Position(S.LeaderUnitID),LineMid)});
   }
   Free.Sort([](const FFree& A,const FFree& B){return A.D!=B.D?A.D<B.D:A.SID<B.SID;});
@@ -215,6 +216,7 @@ namespace BattleSurpriseValues
 {
  constexpr float Interval=240.f, Max=420.f, AssembleMax=60.f, FirstAt=120.f /* the first one after the opening */, LagWait=40.f;
  constexpr double LossEnd=.5;
+ constexpr float ArmourHealth=.6f; // the least health share of an armoured squad taken into a surprise group
 }
 
 // Fixed map geometry only. H uses the same 10 m bank strips as its generator; I has two rotated river rectangles.
@@ -332,11 +334,26 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
    if(!bArmour&&S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Heavy)continue;
    if(GroupOf(P.Key)!=INDEX_NONE){Skip[0]+=bArmour;continue;}
    if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key)){Skip[1]+=bArmour;continue;}
-   bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase){Skip[2]+=bArmour;continue;}
-   // Full-strength squads only: the walk is long.
-   int32 Living=0;for(int32 UID:S.Members)if(const auto* U=Store->Find(UID);U&&U->IsAlive())++Living;
-   if(Living<S.Members.Num()){Skip[3]+=bArmour;continue;}
+   // The base slot holds only the types the real orders send on the home assault (UpdateTeamOrders: never heavy squads, armoured cars or
+   // exoskeleton soldiers; Codex review 2026-11-21: exoskeletons 72 and 77 of groupui-surprise2-I-s7 were kept out for nothing).
+   bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);
+   if(S.SquadType==BattleSquadType::Heavy||S.SquadType==BattleSquadType::ArmoredCar||S.SquadType==BattleSquadType::Exo)bBase=false;
+   if(bBase){Skip[2]+=bArmour;continue;}
+   // Full-strength squads only: the walk is long. Armour (one crew) also needs ArmourHealth of its health, not to leave half-wrecked.
+   int32 Living=0;float HP=0.f,MaxHP=0.f;for(int32 UID:S.Members)if(const auto* U=Store->Find(UID);U&&U->IsAlive()){++Living;HP+=U->HP;MaxHP+=Store->MaxHealthOf(UID);}
+   if(Living<S.Members.Num()||(bArmour&&HP<ArmourHealth*MaxHP)){Skip[3]+=bArmour;continue;}
    Free.Add({P.Key,FVector::DistSquared2D(R->Position(S.LeaderUnitID),Start),bArmour});
+  }
+  // No free armour: a healthy tank of the team's AI attack group may move over when that group keeps two squads (Codex review
+  // 2026-11-21: with one tank kept, the attack group always took it first). FormGroup takes it out of its old group.
+  if(!Free.ContainsByPredicate([](const FFree& F){return F.bArmour;}))for(const auto& GP:Groups)
+  {
+   const auto& Old=GP.Value;if(Old.Team!=Team||Old.bPlayer||Old.Kind!=0||Old.Squads.Num()<=2)continue;
+   for(int32 SID:Old.Squads)if(const auto* S=Store->FindSquad(SID);S&&S->SquadType==BattleSquadType::Tank&&S->CommandStatus==EBattleCommandStatus::Active&&(Team!=0||S->bPlayerDelegated))
+   {
+    float HP=0.f,MaxHP=0.f;for(int32 UID:S->Members)if(const auto* U=Store->Find(UID);U&&U->IsAlive()){HP+=U->HP;MaxHP+=Store->MaxHealthOf(UID);}
+    if(MaxHP>0.f&&HP>=ArmourHealth*MaxHP){Free.Add({SID,FVector::DistSquared2D(R->Position(S->LeaderUnitID),Start),true});break;}
+   }
   }
   // Armour first (nearest first), then infantry; none without armour.
   Free.Sort([](const FFree& A,const FFree& B){return A.bArmour!=B.bArmour?A.bArmour:A.D!=B.D?A.D<B.D:A.SID<B.SID;});
@@ -356,8 +373,8 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
   for(int32 SID:Pick)if(const auto* S=Store->FindSquad(SID)){const FVector P=R->Position(S->LeaderUnitID);if((bLow?P.X:-P.X)>(bLow?Lead.X:-Lead.X))Lead=P;}
   UpdateSurpriseBridge(*G,Lead);
   SurpriseNextAt[Team]=Elapsed+Interval;
-  int32 Armour=0;for(int32 I=0;I<Pick.Num();++I)Armour+=Free[I].bArmour;
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_FORM group=%d team=%d squads=%d armour=%d row=%d start=%c%d time=%.1f"),ID,Team,G->Squads.Num(),Armour,Row,TCHAR('A'+BattleSectors::Cell(Start).X),1+BattleSectors::Cell(Start).Y,Elapsed);
+  int32 Armour=0;FString Ids;for(int32 I=0;I<Pick.Num();++I){Armour+=Free[I].bArmour;Ids+=FString::Printf(TEXT("%s%d"),I?TEXT(","):TEXT(""),Pick[I]);}
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_FORM group=%d team=%d squads=%d armour=%d ids=%s row=%d start=%c%d time=%.1f"),ID,Team,G->Squads.Num(),Armour,*Ids,Row,TCHAR('A'+BattleSectors::Cell(Start).X),1+BattleSectors::Cell(Start).Y,Elapsed);
   return;
  }
  auto& G=Groups[SID_];
