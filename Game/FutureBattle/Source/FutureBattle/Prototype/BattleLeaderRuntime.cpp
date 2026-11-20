@@ -634,21 +634,54 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   for(int32 ID:S->Members)if(const auto* C=Sense->FindContact(ID,P.TargetID)){P.bSectorContact=BattleSectors::Cell(C->LastKnownPosition)!=SectorCell;break;}
   if(P.bSectorContact)SightExperiment.Cover(TEXT("sector_contact_target"));
  }
- // Trial -BattleSquadCoverCheck=1: a squad that fires on the move decides as a whole whether to stop in cover here.
- if(SquadCoverCheckEnabled() && Sector && (SectorMoveFireEnabled() || SectorFireBack.Contains(SID)) && P.TargetID!=INDEX_NONE &&
+ FVector TargetAt=FVector::ZeroVector;bool bTargetKnown=false;
+ if(P.TargetID!=INDEX_NONE)for(int32 ID:S->Members)if(const auto* C=Sense->FindContact(ID,P.TargetID)){TargetAt=C->LastKnownPosition;bTargetKnown=true;break;}
+ // Trial -BattleSquadCoverCheck=1: a squad that fires on the move decides as a whole whether to stop in cover here - only when
+ // it can hide and is at least even with the enemies it sees; otherwise it keeps firing on the move.
+ if(SquadCoverCheckEnabled() && Sector && (SectorMoveFireEnabled() || SectorFireBack.Contains(SID)) && bTargetKnown &&
     BattleSectors::Cell(P.Center)!=SectorCell)
  {
   if(Now>=P.CoverCheckAt)
   {
    P.CoverCheckAt=Now+2.;
-   FVector Threat=FVector::ZeroVector;bool bKnown=false;
-   for(int32 ID:S->Members)if(const auto* C=Sense->FindContact(ID,P.TargetID)){Threat=C->LastKnownPosition;bKnown=true;break;}
-   const bool bWas=P.bCoverStop;P.bCoverStop=bKnown && SquadCanHide(SID,Threat,Now);
-   SightExperiment.Cover(P.bCoverStop?TEXT("squad_cover_stop"):TEXT("squad_cover_move_on"));
+   int32 Own=0;TSet<int32> Seen;
+   for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive())
+   {
+    ++Own;
+    if(const auto* Contacts=Sense->GetContacts(ID))for(const auto& C:*Contacts)
+     if(C.Value.bVisible && !C.Value.bShared && FVector::DistSquared(Position(ID),C.Value.LastKnownPosition)<=FMath::Square(TargetRange(ID)))Seen.Add(C.Key);
+   }
+   for(const auto& B:Bodies)if(const auto* O=Store->Find(B.Key);O && O->IsAlive() && O->Team==S->Team && O->SquadID!=SID &&
+      FVector::DistSquared2D(Position(B.Key),P.Center)<FMath::Square(3000.))++Own;
+   const bool bEven=Own>=Seen.Num();
+   const bool bWas=P.bCoverStop;P.bCoverStop=bEven && SquadCanHide(SID,TargetAt,Now);
+   SightExperiment.Cover(P.bCoverStop?TEXT("squad_cover_stop"):bEven?TEXT("squad_cover_move_on"):TEXT("squad_cover_outnumbered"));
    if(P.bCoverStop!=bWas)P.bReplan=true;
   }
  }
  else P.bCoverStop=false;
+ // Trial -BattleBounding=1: a squad stopping in cover on the way moves on by halves.
+ if(BoundingEnabled() && P.bCoverStop)
+ {
+  if(P.BoundSwitchAt==0){P.BoundGroup=-1;P.BoundSwitchAt=Now+4.;}
+  else if(Now>=P.BoundSwitchAt){P.BoundGroup=P.BoundGroup==1?0:1;P.BoundSwitchAt=Now+7.;SightExperiment.Cover(TEXT("bounding_switch"));}
+ }
+ else {P.BoundGroup=-1;P.BoundSwitchAt=0;}
+ // Trial -BattlePinnedFlank=1: shot at on the way for 20 s without getting 10 m closer to the sector.
+ if(PinnedFlankEnabled() && Sector && bShotAt && BattleSectors::Cell(P.Center)!=SectorCell)
+ {
+  const double D=FVector::Dist2D(P.Center,S->Destination);
+  if(P.PinnedSince==0 || D<P.PinnedBestDist-1000.){P.PinnedSince=Now;P.PinnedBestDist=D;}
+  else if(!P.bPinned && bTargetKnown && Now-P.PinnedSince>=20.){P.bPinned=true;P.PinnedAt=TargetAt;SightExperiment.Cover(TEXT("squad_pinned"));}
+ }
+ else if(!bShotAt){P.PinnedSince=0;P.bPinned=false;}
+ // Trial -BattleArrivalThreat=1: in the sector, a target far off the direction the arrival places face picks them again.
+ if(ArrivalThreatEnabled() && Sector && bTargetKnown && BattleSectors::Cell(P.Center)==SectorCell && Now>=P.FacingCheckAt)
+ {
+  P.FacingCheckAt=Now+3.;
+  if(!P.ArrivalFacing.IsNearlyZero() && FVector::DotProduct((TargetAt-S->Destination).GetSafeNormal2D(),P.ArrivalFacing)<.707f)
+  {P.ArrivalGoals.Reset();P.bReplan=true;SightExperiment.Cover(TEXT("arrival_refacing"));}
+ }
  // Armour AI (BattleArmourAI.cpp): while the squad sees a vehicle, small arms skip targets they cannot hurt and anti-tank gunners get a vehicle.
  P.ArmourTargetID=INDEX_NONE;
  if(VehicleIDs.Num() && S->Order!=EBattleOrder::Move && BattleTactics::ArmourAI(S->Team)) PickArmourTargets(SID,P);
@@ -825,9 +858,14 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const bool bOutsideContact=P->bSectorContact && P->TargetID!=INDEX_NONE && S->Order!=EBattleOrder::Move && !bVehicleBody;
  // -BattleSectorMove (the player's sector move) and -BattleSectorMoveFire (every sector mission): fire on the move until the
  // soldier is inside the sector (no stop, no cover walk).
- const bool bMoveFire=(SectorMoveFireEnabled() || (!SectorFireBack.IsEmpty() && SectorFireBack.Contains(U->SquadID))) && !bVehicleBody &&
+ // -BattleBounding: this soldier's half moves on now; he leaves his cover or the place he walks to.
+ const bool bBoundMove=P->bCoverStop && P->BoundGroup>=0 && S->Members.IndexOfByKey(ID)%2==P->BoundGroup && !bVehicleBody &&
+  S->bSectorMission && BattleSectors::Cell(Pos)!=BattleSectors::Cell(S->Destination);
+ if(bBoundMove && (U->CoverPhase || CoverApproaches.Contains(ID))){CancelCoverAction(ID);CoverApproaches.Remove(ID);}
+ if(bBoundMove)FirePositions.Remove(ID);
+ const bool bMoveFire=bBoundMove || ((SectorMoveFireEnabled() || (!SectorFireBack.IsEmpty() && SectorFireBack.Contains(U->SquadID))) && !bVehicleBody &&
   S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission && !P->bCoverStop &&
-  BattleSectors::Cell(Pos)!=BattleSectors::Cell(S->Destination) && !U->CoverPhase && !CoverApproaches.Contains(ID);
+  BattleSectors::Cell(Pos)!=BattleSectors::Cell(S->Destination) && !U->CoverPhase && !CoverApproaches.Contains(ID));
  const bool StopForCombat=!bMoveFire && (P->TargetID!=INDEX_NONE || (bArmourAI && P->ArmourTargetID!=INDEX_NONE)) && S->Order!=EBattleOrder::Move &&
   !(bOutsideContact && !U->CoverPhase && !CoverApproaches.Contains(ID) && !(P->bCoverStop && FirePositions.Contains(ID)));
  const bool CombatContact=StopForCombat || bOutsideContact;
@@ -1292,6 +1330,21 @@ bool UBattleLeaderRuntime::SectorMoveFireEnabled()
 bool UBattleLeaderRuntime::SquadCoverCheckEnabled()
 {
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSquadCoverCheck="),V);return V!=0;}();
+ return bOn;
+}
+bool UBattleLeaderRuntime::BoundingEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleBounding="),V);return V!=0;}();
+ return bOn;
+}
+bool UBattleLeaderRuntime::PinnedFlankEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattlePinnedFlank="),V);return V!=0;}();
+ return bOn;
+}
+bool UBattleLeaderRuntime::ArrivalThreatEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArrivalThreat="),V);return V!=0;}();
  return bOn;
 }
 bool UBattleLeaderRuntime::SquadShotAt(const FBattleSquadState& S,double Now) const

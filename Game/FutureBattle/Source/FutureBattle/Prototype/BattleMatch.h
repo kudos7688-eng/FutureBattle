@@ -253,6 +253,13 @@ public:
 	int32 SectorCoverCount(FIntPoint Cell) const;
 	bool SectorStage(const struct FBattleSquadState& S, const FVector& Leader, const FVector& Step, const FVector& Goal, const TArray<FVector>& KnownEnemies, FVector& Stage) const;
 	mutable TMap<FIntPoint, int32> SectorCover;
+	// Trial -BattleSectorCoverRoute=1: with a known enemy within 150 m of a candidate stop, open sectors (fields, plazas) score
+	// lower, so the march goes through houses and woods.
+	static bool SectorCoverRouteOn();
+	// Trial -BattlePinnedFlank=1: a pinned squad (UBattleLeaderRuntime::PinnedThreat) is sent to the neighbouring sector most to
+	// the side of the threat (not much closer to it, not falling back) and keeps that stop for 40 s or until it is there.
+	bool PinnedFlankStage(int32 SquadID, const FVector& Leader, FVector& Stage);
+	TMap<int32, TPair<FIntPoint, double>> PinnedFlank;
 	// Player route choice (BattlePlayerRoutes.cpp), per squad of the player's team. Empty in matches without a player's choice.
 	TMap<int32, FPlayerRoute> PlayerRoutes;
 	float PlayerRouteClock = 0.f;

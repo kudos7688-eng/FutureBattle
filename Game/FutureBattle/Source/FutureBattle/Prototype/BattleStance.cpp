@@ -67,8 +67,8 @@ bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForc
  if(const auto* B=Bodies.Find(ID))
  {
   const FVector Scale(1,1,BattleStance::BodyScale(Stance));
-  // A soldier with his own look has no prone clip: he keeps the squashed body.
-  if(B->Actor.IsValid()){B->Actor->VisualStance=Stance;if(auto* Mesh=B->Actor->GetMesh())Mesh->SetRelativeScale3D(B->Actor->HasLook()&&Stance==BattleStance::Prone?FVector(1,1,BattleStance::VisualScale(Stance)):Scale);}
+  // A soldier with his own look keeps the squashed body when prone, unless his mesh plays the shared prone clips (AC01 suit).
+  if(B->Actor.IsValid()){B->Actor->VisualStance=Stance;if(auto* Mesh=B->Actor->GetMesh())Mesh->SetRelativeScale3D(B->Actor->HasLook()&&!B->Actor->LookHasProneClip()&&Stance==BattleStance::Prone?FVector(1,1,BattleStance::VisualScale(Stance)):Scale);}
   else if(B->Mesh.IsValid())
   {
    B->Mesh->SetRelativeScale3D(Scale);

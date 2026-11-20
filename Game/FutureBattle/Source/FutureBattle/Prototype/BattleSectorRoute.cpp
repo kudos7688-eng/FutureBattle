@@ -17,6 +17,44 @@ bool UBattleMatch::SectorRouteOn()
 	return bOn;
 }
 
+bool UBattleMatch::SectorCoverRouteOn()
+{
+	static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorCoverRoute="),V);return V!=0;}();
+	return bOn;
+}
+
+bool UBattleMatch::PinnedFlankStage(int32 SID,const FVector& Leader,FVector& Stage)
+{
+	const double Now=GetWorld()->GetTimeSeconds();
+	if(const auto* Kept=PinnedFlank.Find(SID))
+	{
+		if(Now<Kept->Value && BattleSectors::Cell(Leader)!=Kept->Key){Stage=BattleSectors::Center(Kept->Key);return true;}
+		PinnedFlank.Remove(SID);
+	}
+	auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();FVector Threat;
+	if(!Runtime || !Runtime->PinnedThreat(SID,Threat))return false;
+	Runtime->ClearPinned(SID);
+	const FIntPoint Here=BattleSectors::Cell(Leader);
+	const FVector Front=(Leader-Threat).GetSafeNormal2D();const double Base=FVector::Dist2D(Leader,Threat);
+	double Best=-DBL_MAX;FIntPoint Pick(-1,-1);
+	for(int32 DY=-1;DY<=1;++DY)for(int32 DX=-1;DX<=1;++DX)
+	{
+		const FIntPoint C(Here.X+DX,Here.Y+DY);
+		if((!DX&&!DY) || !BattleSectors::Valid(C) || BattleFieldLayout::SectorKind(GetWorld(),C)=='R')continue;
+		const FVector P=BattleSectors::Center(C),V=P-Threat;const double D=FVector::Dist2D(P,Threat);
+		if(D<Base-BattleSectors::Size || D>Base+BattleSectors::Size*.5)continue; // not much closer, not falling back
+		const double Side=FMath::Abs(Front.X*V.Y-Front.Y*V.X)/BattleSectors::Size;
+		if(Side<.8)continue;
+		const char K=BattleFieldLayout::SectorKind(GetWorld(),C);
+		const double FlankScore=12.*FMath::Min(Side,3.)+SectorCoverCount(C)*.25-(K=='F'?10.:0.);
+		if(FlankScore>Best){Best=FlankScore;Pick=C;}
+	}
+	if(Best==-DBL_MAX)return false;
+	PinnedFlank.Add(SID,TPair<FIntPoint,double>(Pick,Now+40.));
+	GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("SectorPinnedFlank"));
+	Stage=BattleSectors::Center(Pick);return true;
+}
+
 int32 UBattleMatch::SectorCoverCount(FIntPoint Cell) const
 {
 	if(SectorCover.IsEmpty())
@@ -113,6 +151,10 @@ bool UBattleMatch::SectorStage(const FBattleSquadState& S,const FVector& Leader,
 		// Most cover first; a little for the junction's own sector (on the road) and for progress.
 		double StageScore=SectorCoverCount(C)+(C==StepCell?4.:0.)+Closer/BattleSectors::Size;
 		if(bFrontOn && SectorFrontCells[S.Team].Contains(C))StageScore+=8.; // gather at the front, in the most cover
+		// -BattleSectorCoverRoute: an open sector within sight of a known enemy (150 m) is a poor stop on the way.
+		if(SectorCoverRouteOn())
+			if(const char K=BattleFieldLayout::SectorKind(GetWorld(),C);K=='F'||K=='P')
+				for(const FVector& E:KnownEnemies)if(FVector::DistSquared2D(E,P)<FMath::Square(15000.)){StageScore-=K=='F'?15.:6.;break;}
 		if(Near)
 		{
 			// Sideways from the enemy's front counts up to three sectors; a stop straight in front of it is avoided.
