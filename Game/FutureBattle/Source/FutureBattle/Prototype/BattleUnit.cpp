@@ -296,6 +296,16 @@ void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequenc
 	LookIdle = Idle; LookMove = Move; LookCrouchIdle = CrouchIdle; LookCrouchMove = CrouchMove;
 	LookWeapon = Weapon; LookBone = Bone; LookGrip = Grip;
 	CurrentPose = nullptr;
+	if (!Idle)
+	{
+		// The look is gone and UpdateLookTilt no longer runs: drop its lean so the plain body stands upright.
+		LookVelShown = LookShotVelocity = FVector::ZeroVector;
+		if (!MeshTiltShown.Equals(FQuat::Identity, 1.e-4f))
+		{
+			MeshTiltShown = FQuat::Identity;
+			GetMesh()->SetRelativeRotation(FRotator(0, -90 + MeshYawShown, 0));
+		}
+	}
 	const bool bFirstPerson = IsPlayerControlled() && !bThirdPersonView;
 	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
 }

@@ -1227,6 +1227,23 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
     const auto* VC=VT!=INDEX_NONE?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(Victim,VT):nullptr;
     E.Cover(VT==INDEX_NONE?TEXT("victim_still_no_target"):!VC?TEXT("victim_still_target_unknown"):!VC->bVisible?TEXT("victim_still_target_not_seen"):
      FVector::DistSquared2D(Position(Victim),VC->LastKnownPosition)>FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange())?TEXT("victim_still_target_seen_far"):TEXT("victim_still_target_seen_near"));
+    {
+     const auto* Perc=GetWorld()->GetSubsystem<UBattlePerception>();
+     const auto* SC=Perc->FindContact(Victim,ID);
+     if(SC && SC->bVisible)E.Cover(TEXT("victim_shooter_seen"));
+     else
+     {
+      E.Cover(!SC?TEXT("victim_shooter_unknown"):SC->bShared?TEXT("victim_shooter_known_shared"):TEXT("victim_shooter_known_memory"));
+      const double Dist=FVector::Dist2D(Position(Victim),Start);
+      E.Cover(Dist<5000.?TEXT("victim_shooter_unseen_lt50m"):Dist<10000.?TEXT("victim_shooter_unseen_lt100m"):Dist<15000.?TEXT("victim_shooter_unseen_lt150m"):TEXT("victim_shooter_unseen_ge150m"));
+      if(Dist>BeforeVictim->Perception.SightRange)E.Cover(TEXT("victim_shooter_unseen_beyond_sight"));
+      const uint8 St=StanceOf(ID);
+      E.Cover(St==BattleStance::Prone?TEXT("victim_shooter_unseen_prone"):St==BattleStance::Crouch?TEXT("victim_shooter_unseen_crouch"):TEXT("victim_shooter_unseen_stand"));
+      if(U->CoverPhase)E.Cover(TEXT("victim_shooter_unseen_in_cover"));
+      const auto* VS=Perc->FindContact(ID,Victim);
+      E.Cover(VS && VS->bVisible?TEXT("victim_shooter_unseen_sees_victim"):TEXT("victim_shooter_unseen_blind_fire"));
+     }
+    }
     if(VC && VC->bVisible && FVector::DistSquared2D(Position(Victim),VC->LastKnownPosition)<=FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange()))
     {
      static const TCHAR* GateKeys[]={TEXT("victim_near_gate_not_visible"),TEXT("victim_near_gate_not_stopped"),TEXT("victim_near_gate_move_fire"),TEXT("victim_near_gate_out_of_range"),
