@@ -326,8 +326,13 @@ public:
  TMap<int32,double> CoverProbeAfter;
  // Evaluation only: per soldier, the cover-search gate of his last Follow frame and how his last request ended (-1 = found).
  TMap<int32,uint8> CoverGate;TMap<int32,int8> LastCoverStage;
+ TMap<int32,double> NoCoverProneUntil; // -BattleNoCoverFallback (runtime only)
+ // -BattleCoverPriority (runtime only): own per-frame cap for hit soldiers, and when each soldier's last search found nothing.
+ uint64 PriorityProbeFrame=0;int32 PriorityProbesThisFrame=0;TMap<int32,double> CoverProbeFailedAt;
+ // Set by every StartFirePosition call: false only because the soldier is already out of sight crouched where he is.
+ bool bFirePositionHereGood=false;
  // Trial -BattleCoverApproach: runtime-only walk toward a hidden cover slot (not saved; cleared on restore).
- struct FCoverApproach{FVector Goal=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false,bFree=false,bStandUp=false;};
+ struct FCoverApproach{FVector Goal=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false,bFree=false,bStandUp=false,bFallback=false;};
  // -BattleContactCover: where a soldier settled after walking to a firing position that is not a cover slot (runtime only, evaluation).
  TMap<int32,FVector> FirePositions;
  TMap<int32,FCoverApproach> CoverApproaches;
@@ -461,6 +466,13 @@ public:
  // target is beyond the 150 m engagement distance (up to his weapon's reach for 15 s after the hit). He hides from where the
  // shot came from when that is not his target. No cover here: walks to one, else beside a taken one, else a less exposed place.
  static bool UnderFireCoverEnabled();
+ // Trial -BattleNoCoverFallback=1 (2026-11-20, default 0): a soldier fighting a visible target whose cover search found nothing
+ // (no slot, too exposed, no peek) does not stand in the open until the next search: he moves to a nearby place where less of
+ // him is in view (the fire position), else goes prone there for 5 s while he still sees his target.
+ static bool NoCoverFallbackEnabled();
+ // Trial -BattleCoverPriority=1 (2026-11-20, default 0): a soldier hit in the last 5 s does not wait for the shared 2-per-frame
+ // cover-search slot, and searches again 2 s (not 5 s) after a failed search.
+ static bool CoverPriorityEnabled();
  bool CloseInThreat(int32 SquadID,FVector& Threat) const {const auto* P=Plans.Find(SquadID);if(!P||!P->bCloseIn)return false;Threat=P->CloseInAt;return true;}
  void ClearCloseIn(int32 SquadID){if(auto* P=Plans.Find(SquadID)){P->bCloseIn=false;P->FarSince=0;}}
  // Trial -BattleArrivalThreat=1 (default 0): a sector squad picks its arrival cover places against the known enemy nearest
