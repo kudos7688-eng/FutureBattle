@@ -246,7 +246,26 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
   FString Prefix;FParse::Value(FCommandLine::Get(),TEXT("CoverScreenshot="),Prefix);if(!Prefix.IsEmpty())FScreenshotRequest::RequestScreenshot(Prefix,true,false);
   SmokeStage=3;Later(.5);return;
  }
- CancelCoverAction(1);Check(Store->Find(1)->CoverPhase==0,TEXT("explicit release clears cover action"));
+ // Rendered run: out of cover, a hit reaction and then a shot (recoil) over the standing aimed body. Lyra's hit, recoil and
+ // aim clips are additive: the upper body must keep its height and size (it vanished when they were blended as poses).
+ if(SmokeStage==3 && !BodyShotPrefix().IsEmpty())
+ {
+  CancelCoverAction(1);
+  if(auto* Body=Cast<UBattleBodyAnimInstance>(Actor(1)->GetMesh()->GetAnimInstance()))Body->PlayOverlay(BattleBodyAnim::Get(BattleBodyAnim::EClip::HitFront1),1.f);
+  SmokeStage=12;Later(.15);return;
+ }
+ if(SmokeStage==12||SmokeStage==13)
+ {
+  auto* Mesh=Actor(1)->GetMesh();
+  const float Head=Mesh->GetSocketLocation(TEXT("head")).Z-Mesh->GetComponentLocation().Z;
+  const float Size=Mesh->GetSocketTransform(TEXT("spine_03"),RTS_Component).GetScale3D().GetMin();
+  const bool bHit=SmokeStage==12;
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_OVERLAY_POSE overlay=%s head=%.0f spine_scale=%.2f"),bHit?TEXT("hit"):TEXT("recoil"),Head,Size);
+  Check(Head>120.f&&Size>.9f,bHit?TEXT("a hit reaction keeps the upper body whole (additive clip)"):TEXT("a shot's recoil keeps the upper body whole (additive clip)"));
+  if(bHit){Actor(1)->NoteVisualShot(Now);SmokeStage=13;Later(.15);return;}
+ }
+ if(BodyShotPrefix().IsEmpty())CancelCoverAction(1);
+ Check(Store->Find(1)->CoverPhase==0,TEXT("explicit release clears cover action"));
  IssueOrder(1,EBattleOrder::Move,Fixture(FVector(-1500,18000,0)));StepCoverAction(1,.1f,Now);
  Check(Store->Find(1)->CoverPhase==0,TEXT("new movement order retains movement authority"));
  CancelCoverAction(2);Check(Store->Find(2)->CoverPhase==0,TEXT("Mass release clears shared action"));

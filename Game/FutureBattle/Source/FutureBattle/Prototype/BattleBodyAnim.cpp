@@ -1,5 +1,6 @@
 #include "BattleBodyAnim.h"
 #include "TwoBoneIK.h"
+#include "AnimationRuntime.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimationPoseData.h"
 #include "Animation/AnimNodeBase.h"
@@ -234,21 +235,49 @@ void FBattleBodyAnimProxy::EvaluateLayers(FPoseContext& Output)
   if(Weight<=0.f)return;
   for(const FCompactPoseBoneIndex Index:Into.ForEachBoneIndex()){FTransform Mixed;Mixed.Blend(Into[Index],Other[Index],Weight);Into[Index]=Mixed;}
  };
+ // A clip over a pose. Lyra's recoil, hit reactions and aim poses are additive clips (a difference from a reference pose,
+ // scale 0 where nothing changes): sampled as a pose and blended they collapse the bones (the upper body vanished). They
+ // are added to the pose under them instead; an ordinary clip is blended over it.
+ auto Apply=[&](FPoseContext& Into,const FBattleBodyLayer& Layer,float Weight)
+ {
+  if(Weight<=0.f || !Layer.Clip)return;
+  if(Layer.Clip->IsValidAdditive())
+  {
+   FPoseContext Delta(Into,true);Sample(Layer,Delta);
+   FAnimationPoseData IntoData(Into);const FAnimationPoseData DeltaData(Delta);
+   FAnimationRuntime::AccumulateAdditivePose(IntoData,DeltaData,Weight,Layer.Clip->GetAdditiveAnimType());
+   Into.Pose.NormalizeRotations();
+  }
+  else{FPoseContext Layered(Into);Sample(Layer,Layered);BlendInto(Into.Pose,Layered.Pose,Weight);}
+ };
  Sample(Base,Output);
  if(PreviousWeight>0.f && Previous.Clip){FPoseContext Old(Output);Sample(Previous,Old);BlendInto(Output.Pose,Old.Pose,PreviousWeight);}
  const bool bAim=AimWeight>0.f && Aim[1];
  if(!bAim && UpperWeight<=0.f && OverlayWeight<=0.f)return;
  // The upper body: aim pose (by pitch), then the upper clip, then the one-shot overlay, each over the previous.
- FPoseContext Top(Output);Top.Pose.CopyBonesFrom(Output.Pose);
+ FPoseContext Top(Output);Top.Pose.CopyBonesFrom(Output.Pose);Top.Curve.CopyFrom(Output.Curve);
  if(bAim)
  {
-  FPoseContext Center(Output);Sample({Aim[1],0.f,false},Center);
   UAnimSequence* Toward=AimPitch>=0.f?Aim[2]:Aim[0];
-  if(Toward && FMath::Abs(AimPitch)>.5f){FPoseContext Tilt(Output);Sample({Toward,0.f,false},Tilt);BlendInto(Center.Pose,Tilt.Pose,FMath::Abs(AimPitch)/90.f);}
-  BlendInto(Top.Pose,Center.Pose,AimWeight);
+  const float Tilt=Toward && FMath::Abs(AimPitch)>.5f?FMath::Abs(AimPitch)/90.f:0.f;
+  if(Aim[1]->IsValidAdditive())
+  {
+   // Aim offset: centre and the tilt toward the pitch, blended as differences, then added to the pose (pitch 0 adds the centre).
+   FPoseContext Center(Output,true);Sample({Aim[1],0.f,false},Center);
+   if(Tilt>0.f && Toward->IsValidAdditive()){FPoseContext Tilted(Output,true);Sample({Toward,0.f,false},Tilted);BlendInto(Center.Pose,Tilted.Pose,Tilt);}
+   FAnimationPoseData TopData(Top);const FAnimationPoseData CenterData(Center);
+   FAnimationRuntime::AccumulateAdditivePose(TopData,CenterData,AimWeight,Aim[1]->GetAdditiveAnimType());
+   Top.Pose.NormalizeRotations();
+  }
+  else
+  {
+   FPoseContext Center(Output);Sample({Aim[1],0.f,false},Center);
+   if(Tilt>0.f){FPoseContext Tilted(Output);Sample({Toward,0.f,false},Tilted);BlendInto(Center.Pose,Tilted.Pose,Tilt);}
+   BlendInto(Top.Pose,Center.Pose,AimWeight);
+  }
  }
- if(UpperWeight>0.f && Upper.Clip){FPoseContext Layer(Output);Sample(Upper,Layer);BlendInto(Top.Pose,Layer.Pose,UpperWeight);}
- if(OverlayWeight>0.f && Overlay.Clip){FPoseContext Layer(Output);Sample(Overlay,Layer);BlendInto(Top.Pose,Layer.Pose,OverlayWeight);}
+ Apply(Top,Upper,UpperWeight);
+ Apply(Top,Overlay,OverlayWeight);
  // Above spine_01 only: spine_01 takes half, everything below it in the hierarchy takes all.
  const FBoneContainer& Bones=Output.Pose.GetBoneContainer();
  const int32 SpinePose=Bones.GetPoseBoneIndexForBoneName(TEXT("spine_01"));
