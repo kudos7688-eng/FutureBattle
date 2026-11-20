@@ -356,6 +356,17 @@ public:
  // frame) is put back on his loop and logged (BATTLE_BODY_POSE_RESET).
  double NextPoseAudit=0;
  void AuditFollowerPoses(double Now);
+ // Corpse removal (BattleCorpses.cpp; display only, runtime only). -BattleCorpseLifetime=S (default 20; 0 = bodies stay):
+ // S seconds after death a body sinks into the ground for 1.5 s and is then hidden. The unit record, its position and
+ // its collision (already off) are unchanged; the match still differs slightly (see BattleCorpses.cpp).
+ struct FCorpse{double SinkAt=0;FVector BaseOffset=FVector::ZeroVector;bool bSinking=false;};
+ TMap<int32,FCorpse> Corpses;
+ TSet<int32> HiddenCorpses;
+ static float CorpseLifetime();
+ void AddCorpse(int32 ID);
+ void StepCorpses();
+ void HideCorpse(int32 ID);
+ bool IsCorpseHidden(int32 ID) const {return HiddenCorpses.Contains(ID);}
  bool IsBlindFiring(int32 ID,double Now) const {const double* T=BlindFireUntil.Find(ID);return T&&*T>Now;}
  // Where a blind shot leaves: above the top of a low cover, or just past the edge of a wide one, with a clear first stretch
  // toward AimPoint. False when neither works (the caller falls back to the old peek).

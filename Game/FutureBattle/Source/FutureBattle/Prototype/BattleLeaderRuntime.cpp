@@ -518,6 +518,7 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
     else {BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones); B->Mesh->SetComponentTickEnabled(false); B->Mesh->SetRelativeRotation(FRotator(0,-90,85));}
    }
   }
+  AddCorpse(ID);
  }
  bSummaryDirty=true;
 }
@@ -1172,7 +1173,9 @@ void UBattleLeaderRuntime::RefreshDisplay()
  {
   const bool Show=Store->Find(B.Key)->Team==0 || Visible.Contains(B.Key);
   const bool BodyShow=Show || DirectBodies;
+  // bRevealed is sensor knowledge the AI and HUD read: keep updating it for a hidden corpse (SetRevealed keeps it hidden).
   if(B.Value.Actor.IsValid()) B.Value.Actor->SetRevealed(Show);
+  else if(HiddenCorpses.Contains(B.Key)) continue; // removed follower corpse: its mesh stays hidden
   else { if(VAT)VAT->SetVisible(B.Key,BodyShow); if(!VAT || !VAT->IsFar(B.Key)){BattleFollowerBones::SetVisible(B.Value.Mesh.Get(),BodyShow,bReduceHiddenBones); if(bReduceAnimTasks) B.Value.AnimTasks.Apply(B.Value.Mesh.Get(),true); B.Value.Weapon->SetVisibility(BodyShow && Store->Find(B.Key)->IsAlive());} }
  }
 }
@@ -1184,6 +1187,7 @@ void UBattleLeaderRuntime::Step(float Dt)
  if(SightExperiment.Enabled) { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightExperiment); StepSightExperiment(Dt); }
  if(Phase3 && Phase3->bEnabled) { Phase3->Step(Dt); return; }
  StepBodyTimers();
+ StepCorpses();
  if(bMovementTrial && MoveTrialStage==1 && !Mode->bCombatPaused) MoveTrialFrameMS.Add(Dt*1000);
  const double Now=GetWorld()->GetTimeSeconds(); auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Build the cover slots while the match waits to start (they were built lazily by the first decision: ~100 ms in one frame).

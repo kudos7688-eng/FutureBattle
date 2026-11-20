@@ -610,7 +610,15 @@ void ABattleUnit::SetRevealed(bool bVisible)
 	bRevealed = bVisible;
 	// bRevealed remains sensor knowledge for HUD/AI. TPS body rendering is independent.
 	const auto* PC = Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
-	SetActorHiddenInGame(!(bVisible || (PC && PC->ShowsUnspottedBodies())));
+	SetActorHiddenInGame(bCorpseHidden || !(bVisible || (PC && PC->ShowsUnspottedBodies())));
+}
+
+void ABattleUnit::HideCorpse()
+{
+	if (!bDeathApplied) return;
+	bCorpseHidden = true;
+	SetActorHiddenInGame(true);
+	GetMesh()->SetComponentTickEnabled(false);
 }
 
 void ABattleUnit::ApplyDeath()
