@@ -7,7 +7,9 @@
 import hashlib, io, json, os, sys
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Benchmarks', 'SightTrial-20261111')
-TIMING = ('duration_seconds', 'custom_ai_ms_per_second', 'sensor_timing', 'path_query_ms', 'engine_thread_samples_available')
+TIMING = ('duration_seconds', 'custom_ai_ms_per_second', 'sensor_timing', 'path_query_ms', 'engine_thread_samples_available',
+          # Divided by wall-clock time (FPlatformTime), so they differ between identical matches (review 2026-11-21 R01).
+          'decisions_per_second', 'sight_rays_per_second', 'path_queries_per_second')
 
 
 def is_timing(key):
