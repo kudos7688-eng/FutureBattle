@@ -52,6 +52,7 @@ bool UBattleSave::Validate(FString& Error) const
 		const auto& S = Entry.State; const auto& P = S.Perception; const auto& D = S.Decision;
   if(S.WeaponAimDirection.ContainsNaN() || (S.bWeaponAimInitialized && !FMath::IsNearlyEqual(S.WeaponAimDirection.SizeSquared(),1.,.01)) || S.CoverPhase>4 || !InRange(S.CoverSeconds,0,3.01) || S.CoverOrderRevision<0 || !ValidPosition(S.CoverAnchor) || !ValidPosition(S.CoverPeek) || (S.CoverPhase && (!Mixed || !(TacticalFeatures&128) || !S.IsAlive())))return Fail(TEXT("Invalid cover or weapon aim state"));
   // A soldier behind low cover stands up to fire where he is: the peek point is the anchor itself (distance 0).
+  if(S.bSoldierOrder && (!ValidPosition(S.SoldierGoal) || !Mixed || !S.IsAlive()))return Fail(TEXT("Invalid soldier order"));
   if(S.CoverPhase && FVector::Dist2D(S.CoverAnchor,S.CoverPeek)>1. && !InRange(FVector::Dist2D(S.CoverAnchor,S.CoverPeek),100,450))return Fail(TEXT("Invalid cover peek distance"));
 		if (S.UnitID <= 0 || S.UnitID > 1000000 || ByID.Contains(S.UnitID) || !ValidTeam(S.Team) || !ValidPosition(Entry.Position) || Entry.Rotation.ContainsNaN() || !ValidPosition(S.Destination)) return Fail(TEXT("Invalid or duplicate unit identity/transform"));
 		if (!InRange(S.HP, 0, 10000) || !InRange(S.Ammo, 0, 10000) || !InRange(S.Reserve, 0, 100000) || !InRange(S.ReloadEndTime, 0, 120) || !InRange(S.NextShotTime, 0, 120) || S.ShotSequence < 0 || S.OrderRevision < 0 || S.PerceptionRevision < 0 || S.DecisionRevision < 0) return Fail(TEXT("Invalid unit resources or timers"));

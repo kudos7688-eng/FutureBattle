@@ -423,6 +423,20 @@ public:
  static constexpr int32 FreeCoverSlot=-2;
  bool StepCoverApproach(int32 ID,float Dt,double Now,int32 Target);
  bool IssueOrder(int32 SquadID,EBattleOrder Order,FVector Goal,bool bMissionUpdate=false,bool bSector=false);
+ // Player's order to one soldier (2026-11-20, BattleSoldierOrder.cpp): Ctrl+click picks a soldier of a player squad in the
+ // tactical view, a right click sends him alone to a place within SoldierOrderLeash of his squad's centre. He walks his own
+ // nav path (firing on the move), holds there (taking cover within 4 m when he sees his squad's target) and ignores the
+ // individual AI stage B1 until the squad gets a new order, the squad moves away, or he is sent back (H).
+ static constexpr float SoldierOrderLeash=4000.f;
+ bool IssueSoldierOrder(int32 ID,FVector Goal,FString& Why);
+ bool ReturnSoldier(int32 ID);
+ void ClearSoldierOrder(int32 ID,const TCHAR* Why);
+ bool SoldierOrderActive(int32 ID);
+ void StepSoldierOrder(int32 ID,float Dt,double Now,FVector& Direction);
+ struct FSoldierPath{TArray<FVector> Points;int32 Next=1;double StalledSince=0;int32 Repaths=0;};
+ TMap<int32,FSoldierPath> SoldierPaths; // runtime only; rebuilt from the saved goal
+ void StepSoldierOrderTest();
+ struct FSoldierOrderTest{int32 Stage=0,Unit=INDEX_NONE,Squad=INDEX_NONE,Failures=0;FVector Goal=FVector::ZeroVector;double Since=0,Arrived=0;} SoldierTest;
  // Trial -BattleSectorMove=1 (2026-11-20, default 0; Play-Area turns it on for maps with sectors): the player's plain move click
  // is a sector mission (an attack move into the sector) whose squad, until a member is inside the sector, never stops to fight:
  // it keeps walking and fires on the move, also back at enemies outside the sector that shoot at it (as -BattleSectorContact,
@@ -489,6 +503,7 @@ public:
  float RateCoverPlace(int32 ID,FVector From,FVector Anchor,FVector Peek,bool bFire,const TArray<FVector,TInlineAllocator<3>>& Threats) const;
  bool StepSoldierMove(int32 ID,FVector Primary,double Now,float Dt);
  TMap<int32,double> SoldierMoveAfter; // runtime only, like CoverProbeAfter
+ TMap<int32,double> SoldierRelocating; // runtime only: until when a B1 walk may keep its cover timer at 3 s
  uint64 SoldierMoveFrame=0;int32 SoldierMovesThisFrame=0;
  // Several squads of a team in one place share the places: slots reserved by anyone and places that soldiers are already
  // walking to do not count, and the soldiers of other stopping squads near by who still look for cover are counted against it.

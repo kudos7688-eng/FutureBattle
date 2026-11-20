@@ -532,6 +532,9 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 		return true;
 	}
 	// The order is given on release: a click orders the point, a drag draws a way (BattlePlayerPath.cpp).
+	// A picked soldier takes the right click as his own order (no drawn way).
+	if (bTactical && SoldierSelection != INDEX_NONE && Params.Key == EKeys::RightMouseButton)
+	{ if (Params.Event == IE_Released) { FVector2D At; if (GetPointerPosition(At)) OrderSoldierAt(At); } return true; }
 	if (Params.Key == EKeys::RightMouseButton && Params.Event == IE_Pressed) { BeginPathDraw(); return true; }
 	if (Params.Key == EKeys::RightMouseButton && Params.Event == IE_Released) { EndPathDraw(); return true; }
 	return bHandled;
@@ -544,6 +547,9 @@ void ABattleController::PrimaryReleased()
 	if (!bTactical) return;
 	FVector2D End;
 	if (!GetPointerPosition(End)) return;
+	// Ctrl+click: one soldier for an order of his own (BattleSoldierOrder.cpp); any other selection drops him.
+	if ((IsInputKeyDown(EKeys::LeftControl) || IsInputKeyDown(EKeys::RightControl)) && FVector2D::Distance(End, DragOrigin) <= 10) { SelectSoldierAt(End); return; }
+	SoldierSelection = INDEX_NONE;
 	const bool bAdd = IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
 	if (!bAdd) Selected.Reset();
 	if (FVector2D::Distance(End, DragOrigin) > 10)
@@ -705,6 +711,7 @@ void ABattleController::IssueOrderAt(FVector Target, EBattleOrder Order)
 
 void ABattleController::HoldSelected()
 {
+ if(bTactical && ReturnSelectedSoldier()) return;
  if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled())
  { for(ABattleUnit* U:Selected) if(LeaderSelectable(U)) { GetWorld()->GetSubsystem<UBattleMatch>()->ClearPlayerRouteMission(U->GetState()->SquadID); L->IssueOrder(U->GetState()->SquadID,EBattleOrder::Hold,U->GetActorLocation()); } return; }
 	if (!bTactical) return;

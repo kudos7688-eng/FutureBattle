@@ -240,6 +240,12 @@ struct FBattleUnitState
  UPROPERTY() float CoverSeconds=0;
  UPROPERTY() int32 CoverOrderRevision=0;
  UPROPERTY() int32 CoverTargetID=INDEX_NONE;
+ // The player's order to this one soldier (BattleSoldierOrder.cpp): his own place inside the squad, held until the squad's
+ // next order (MissionRevision) or until he is sent back (bSoldierReturn: walking back to his squad place, then the order ends).
+ UPROPERTY() bool bSoldierOrder=false;
+ UPROPERTY() bool bSoldierReturn=false;
+ UPROPERTY() FVector SoldierGoal=FVector::ZeroVector;
+ UPROPERTY() int32 SoldierOrderMission=0;
 	UPROPERTY(VisibleAnywhere) bool bMovingShot = false;
 	UPROPERTY(VisibleAnywhere) float SpreadSkillScale = 1.f;
 	UPROPERTY(VisibleAnywhere) int32 ShotSequence = 0;

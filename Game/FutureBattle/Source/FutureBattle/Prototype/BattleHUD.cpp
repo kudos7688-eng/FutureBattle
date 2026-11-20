@@ -438,6 +438,7 @@ void ABattleHUD::DrawHUD()
  DrawSquadList();
  DrawMinimap();
  DrawOrderWays();
+ DrawSoldierOrders();
  DrawNoticeLog();
  DrawSectorPanel(PC);
 }

@@ -48,7 +48,7 @@ float UBattleLeaderRuntime::RateCoverPlace(int32 ID,FVector From,FVector Anchor,
 bool UBattleLeaderRuntime::StepSoldierMove(int32 ID,FVector Primary,double Now,float Dt)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);
- if(!U || !U->IsAlive() || U->CoverPhase!=2 || !SoldierMoveEnabled(U->Team) || IsVehicle(ID) || U->Weapon==EBattleWeapon::Mortar)return false;
+ if(!U || !U->IsAlive() || U->CoverPhase!=2 || U->bSoldierOrder || !SoldierMoveEnabled(U->Team) || IsVehicle(ID) || U->Weapon==EBattleWeapon::Mortar)return false;
  const auto* Squad=Store->FindSquad(U->SquadID);const auto* Plan=Plans.Find(U->SquadID);
  if(!Squad || !Plan || !Squad->bSectorMission || Squad->TacticalPlan.Action!=EBattleSquadTactic::Mission)return false;
  // Once a second per soldier, half a second away from the stage A check (same stateless phase rule).
@@ -98,7 +98,7 @@ bool UBattleLeaderRuntime::StepSoldierMove(int32 ID,FVector Primary,double Now,f
  if(!Cover->Reserve(Best,ID,Now)){Cover->Reserve(U->CoverSlot,ID,Now);Diag.Cover(TEXT("soldier_move_reserve_failed"));return false;}
  const double Walk=FVector::Dist2D(Pos,BestAnchor);
  UE_LOG(LogFutureBattle,Verbose,TEXT("BATTLE_SOLDIER_MOVE unit=%d from=%d to=%d walk_cm=%.0f here=%.2f there=%.2f"),ID,U->CoverSlot,Best,Walk,Here,BestScore);
- U->CoverAnchor=BestAnchor;U->CoverPeek=BestPeek;U->CoverSlot=Best;U->CoverPhase=1;U->CoverSeconds=float(Walk/250.)+1.5f;
+ U->CoverAnchor=BestAnchor;U->CoverPeek=BestPeek;U->CoverSlot=Best;U->CoverPhase=1;U->CoverSeconds=3.f;SoldierRelocating.Add(ID,Now+Walk/250.+1.5);
  U->DecisionReason=TEXT("COVER / MOVING TO A BETTER PLACE");
  SoldierMoveAfter.Add(ID,Now+8.);
  Diag.Cover(TEXT("soldier_move_started"));

@@ -31,6 +31,7 @@
 | 制圧（撃たれて動けない） | @UBattleLeaderRuntime::AddSuppression 、 @UBattleLeaderRuntime::IsPinned | 調整値は @BattleSuppression::Tuning |
 | 兵ごとの脅威と遮蔽の取り直し（個人AI段階A） | @UBattleLeaderRuntime::GatherThreats 、 @UBattleLeaderRuntime::CheckCoverThreats | 試験切替 `-BattleThreatCover`（既定0）。遮蔽を選ぶ側は @UBattleLeaderRuntime::RequestCoverAction の2段の候補 |
 | 区画の中で兵が遮蔽を移る（個人AI段階B1） | @UBattleLeaderRuntime::StepSoldierMove 、 @UBattleLeaderRuntime::RateCoverPlace | 試験切替 `-BattleSoldierMove`（既定0）。呼び出しは @UBattleLeaderRuntime::StepCoverAction の隠れている間（1秒に1回・1フレーム4人まで） |
+| プレイヤーが兵1人に出す移動の命令（Ctrl＋クリックで選ぶ・右クリックで移動先・Hで戻す） | @UBattleLeaderRuntime::IssueSoldierOrder 、 @UBattleLeaderRuntime::StepSoldierOrder 、 @ABattleController::SelectSoldierAt | 兵の状態 `bSoldierOrder`（保存される）。@UBattleLeaderRuntime::Follow の `bOwnOrder`。自動試験 `-BattleSoldierOrderTest`（@UBattleLeaderRuntime::StepSoldierOrderTest） |
 | 射撃の散らばり | @BattleTactics::SpreadDegrees 、 @BattleTactics::ShotDirection | 照準の遅れは @UBattleState::UpdateAim 。プレイヤーの直接操作だけの倍率は @ABattleUnit::PlayerSpreadScale |
 | 部隊の戦術（撤退・集合・援護・迂回） | @UBattleSquadTactics::Step 、 @UBattleSquadTactics::Evaluate 、 @UBattleSquadTactics::Apply | 撤退 @UBattleSquadTactics::RetreatGoal 、援護 @UBattleSquadTactics::AcceptSupport 、迂回 @UBattleSquadTactics::TryFlank |
 | 陣営全体の判断（援護・迂回の割り振り） | @UBattleTeamAI::Step | |
@@ -116,6 +117,7 @@ BattleSupport | 旧アリーナの支援砲撃（UBattleMatch の一部）
 BattleSuppression | 制圧の値と効果
 BattleThreatCover | 個人AI段階A `-BattleThreatCover`：兵ごとの脅威（自分の目撃4秒＋撃たれた方向）、全員から隠れる遮蔽、見破られた遮蔽を出て探し直す（UBattleLeaderRuntime の一部）
 BattleSoldierMove | 個人AI段階B1 `-BattleSoldierMove`：区画の中で、隠れている兵が近くのもっと良い遮蔽を採点して自分で移る（UBattleLeaderRuntime の一部）
+BattleSoldierOrder | プレイヤーが兵1人に出す移動の命令：命令と歩き（UBattleLeaderRuntime）、Ctrl＋クリックの選択と右クリックの命令（ABattleController）、印（ABattleHUD）、自動試験 `-BattleSoldierOrderTest`
 BattleTacticalAI | 旧全Actor経路の兵の戦術行動（ABattleAIController の一部）
 BattleTactics | 調整値の束（補給、雇用、戦略、収入）と試験切替、散らばり、露出の計算
 BattleTacticsSave | 戦術状態と陣営 AI の保存・復元

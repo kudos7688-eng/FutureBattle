@@ -21,7 +21,7 @@ void UBattleLeaderRuntime::CancelCoverAction(int32 ID)
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);if(!U)return;
  if(U->CoverPhase==4)EndPeekDiag(ID,U->IsAlive()?TEXT("cancel"):TEXT("died"));
  if(U->CoverPhase){GetWorld()->GetSubsystem<UBattleCover>()->Release(ID);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVER_RELEASE unit=%d phase=%d position=%s remaining=%.2f revision=%d/%d"),ID,U->CoverPhase,*Position(ID).ToCompactString(),U->CoverSeconds,U->OrderRevision,U->CoverOrderRevision);}
- U->CoverPhase=0;U->CoverSeconds=0;U->CoverTargetID=INDEX_NONE;U->CoverSlot=INDEX_NONE;
+ U->CoverPhase=0;U->CoverSeconds=0;U->CoverTargetID=INDEX_NONE;U->CoverSlot=INDEX_NONE;SoldierRelocating.Remove(ID);
  // A near follower showing a cover clip returns to his ordinary clip and facing.
  if(auto* B=Bodies.Find(ID);B && B->CoverClipPhase && !B->Actor.IsValid() && B->Mesh.IsValid())
  {
@@ -378,7 +378,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  auto* Squad=Store->FindSquad(U->SquadID);auto& B=Bodies.FindChecked(ID);
  const bool Player=B.Actor.IsValid()&&B.Actor->IsPlayerControlled();
  auto& Diag=SightExperiment;
- if(!BattleTactics::CoverActionsEnabled() || !U->IsAlive() || !Squad || Squad->CommandStatus!=EBattleCommandStatus::Active || U->OrderRevision!=U->CoverOrderRevision || (!Player && U->Order==EBattleOrder::Move))
+ if(!BattleTactics::CoverActionsEnabled() || !U->IsAlive() || !Squad || Squad->CommandStatus!=EBattleCommandStatus::Active || U->OrderRevision!=U->CoverOrderRevision || (!Player && U->Order==EBattleOrder::Move && !U->bSoldierOrder))
  {Diag.Cover(!U->IsAlive()?TEXT("cancel_died"):(!Squad || Squad->CommandStatus!=EBattleCommandStatus::Active)?TEXT("cancel_squad_inactive"):TEXT("cancel_new_order"));CancelCoverAction(ID);return false;}
  auto* Cover=GetWorld()->GetSubsystem<UBattleCover>();Cover->BuildSlots();
  // Reservations are rebuilt after loading, against saved positions in this same map.
@@ -386,6 +386,8 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  else if(U->CoverSlot==INDEX_NONE)for(int32 Slot:Cover->NearbySlots(U->CoverAnchor,120,4))if(FVector::Dist2D(Cover->GetSlots()[Slot],U->CoverAnchor)<100 && Cover->Reserve(Slot,ID,Now)){U->CoverSlot=Slot;break;}
  if(U->CoverSlot!=FreeCoverSlot && !Cover->Reserve(U->CoverSlot,ID,Now)){Diag.Cover(TEXT("cancel_slot_lost"));CancelCoverAction(ID);return false;}
  U->CoverSeconds=FMath::Max(0.f,U->CoverSeconds-Dt);
+ // -BattleSoldierMove: a longer walk to the chosen cover place keeps its timer while it lasts (runtime only).
+ if(U->CoverPhase==1 && !SoldierRelocating.IsEmpty())if(const double* Until=SoldierRelocating.Find(ID);Until && Now<*Until)U->CoverSeconds=3.f;
  const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,U->CoverTargetID);
  if(!Player && (!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds))){Diag.Cover(U->CoverPhase==1?TEXT("cancel_contact_stale_entering"):TEXT("cancel_contact_stale_in_cover"));CancelCoverAction(ID);return false;}
  // Cover validation (default ON): leave cover once the observed threat is beyond weapon range, and only step out to a
