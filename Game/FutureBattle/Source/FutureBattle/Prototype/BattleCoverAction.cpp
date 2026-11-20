@@ -389,9 +389,10 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
   // Cover clips (BattleCoverClips.h): one whole-body loop per phase for a near follower (no one-shots), the mesh turned by the table.
   const uint8 ClipPhase=(U->CoverPhase==2||U->CoverPhase==4)&&BattleBodyAnim::Enabled()?U->CoverPhase:0;
   if(ClipPhase && !B.CoverClipPhase)B.CoverClipSet=BattleBodyAnim::CoverSet(GetWorld(),*U,Forward(ID));
-  if(Pose!=B.Pose || Blind!=B.bBlindPose || ClipPhase!=B.CoverClipPhase)
+  const bool Run=ShowsRun(ID,Pose,Now);
+  if(Pose!=B.Pose || Blind!=B.bBlindPose || ClipPhase!=B.CoverClipPhase || Run!=B.bRunPose)
   {
-   B.Pose=Pose;B.bBlindPose=Blind;B.CoverClipPhase=ClipPhase;if(VAT)VAT->ChangePose(ID,Pose);
+   B.Pose=Pose;B.bBlindPose=Blind;B.bRunPose=Run;B.CoverClipPhase=ClipPhase;if(VAT)VAT->ChangePose(ID,Pose);
    if(!VAT || !VAT->IsFar(ID))
    {
     // Blind fire around the edge turns the body so the rifle points around the corner (BlindFireYaw, 0 over the top).

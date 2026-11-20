@@ -167,6 +167,7 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    Check(Cast<UBattleBodyAnimInstance>(Actor(1)->GetMesh()->GetAnimInstance())!=nullptr,TEXT("leader body uses the layered body animation"));
    Check(BattleStance::BodyScale(BattleStance::Prone)==1.f,TEXT("prone body keeps its size with the prone clip"));
    Check(BattleBodyAnim::Locomotion(0,FVector(-200,0,0),false)==BattleBodyAnim::Get(BattleBodyAnim::EClip::StandBwd)&&BattleBodyAnim::Locomotion(1,FVector(0,200,0),false)==BattleBodyAnim::Get(BattleBodyAnim::EClip::CrouchRight),TEXT("walk clip follows the direction of travel"));
+   Check(BattleBodyAnim::Locomotion(0,FVector(200,0,0),true)==BattleBodyAnim::Get(BattleBodyAnim::EClip::StandJog)&&BattleBodyAnim::Locomotion(0,FVector(-200,0,0),true)==BattleBodyAnim::Get(BattleBodyAnim::EClip::JogBwd)&&BattleBodyAnim::Locomotion(1,FVector(200,0,0),true)==BattleBodyAnim::Get(BattleBodyAnim::EClip::CrouchFwd),TEXT("moving without firing runs with the rifle low (standing only)"));
    Check(BattleBodyAnim::Death(FVector(1,0,0),FVector(1,0,0),0)==BattleBodyAnim::Get(BattleBodyAnim::EClip::DeathBack),TEXT("a shot from behind picks the back death clip"));
   }
   Match->DirectorClock=0;Match->DelegationClock=0;

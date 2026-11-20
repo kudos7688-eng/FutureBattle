@@ -29,11 +29,15 @@ namespace BattleBodyAnim
   Reload,ProneReload,Fire,AimUp,AimCenter,AimDown,
   HitFront1,HitFront2,HitFront3,HitFront4,HitBack,
   DeathFront1,DeathFront2,DeathFront3,DeathBack,DeathLeft,DeathRight,
+  JogBwd,JogLeft,JogRight,
   Count
  };
  UAnimSequence* Get(EClip Clip);
  // Idle or moving clip for a stance (0 stand, 1 crouch, 2 prone); LocalVelocity is in the body's frame (X forward, Y right).
- UAnimSequence* Locomotion(uint8 Stance,const FVector& LocalVelocity,bool bJog);
+ // bRun: standing, the rifle held low in a jog in the direction of travel (moving without firing); else the aimed walk.
+ UAnimSequence* Locomotion(uint8 Stance,const FVector& LocalVelocity,bool bRun);
+ // How long a soldier keeps his rifle up after his last shot before he runs with it lowered again (display only).
+ constexpr double ReadySeconds=3.;
  UAnimSequence* Transition(uint8 From,uint8 To);
  // Death and hit clips by where the shot came from (ShotDirection = travel direction of the bullet; zero when unknown).
  UAnimSequence* Death(const FVector& BodyForward,const FVector& ShotDirection,int32 Seed);

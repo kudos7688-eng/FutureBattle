@@ -35,7 +35,9 @@ namespace
   TEXT("/Game/Characters/Mannequins/Anims/Rifle/HitReact/MM_HitReact_Back_Med_01"),
   TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Front_01"),TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Front_02"),
   TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Front_03"),TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Back_01"),
-  TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Left_01"),TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Right_01")};
+  TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Left_01"),TEXT("/Game/Characters/Mannequins/Anims/Death/MM_Death_Right_01"),
+  TEXT("/Game/Characters/Mannequins/Anims/Rifle/Jog/MF_Rifle_Jog_Bwd"),TEXT("/Game/Characters/Mannequins/Anims/Rifle/Jog/MF_Rifle_Jog_Left"),
+  TEXT("/Game/Characters/Mannequins/Anims/Rifle/Jog/MF_Rifle_Jog_Right")};
  static_assert(UE_ARRAY_COUNT(ClipPaths)==int32(BattleBodyAnim::EClip::Count),"one path per clip");
  constexpr float CrossFadeSeconds=.2f,OverlayFadeSeconds=.1f;
 
@@ -70,13 +72,14 @@ UAnimSequence* BattleBodyAnim::Get(EClip Clip)
  return Clips[int32(Clip)].Get();
 }
 
-UAnimSequence* BattleBodyAnim::Locomotion(uint8 Stance,const FVector& LocalVelocity,bool bJog)
+UAnimSequence* BattleBodyAnim::Locomotion(uint8 Stance,const FVector& LocalVelocity,bool bRun)
 {
  const int32 First=Stance==2?int32(EClip::ProneIdle):Stance==1?int32(EClip::CrouchIdle):int32(EClip::StandIdle);
  if(LocalVelocity.SizeSquared2D()<=400.)return Get(EClip(First));
- if(Stance==0 && bJog && LocalVelocity.X>FMath::Abs(LocalVelocity.Y))return Get(EClip::StandJog);
  // 1 forward, 2 backward, 3 left, 4 right (the same order for every stance).
  const int32 Dir=FMath::Abs(LocalVelocity.X)>=FMath::Abs(LocalVelocity.Y)?(LocalVelocity.X>=0?1:2):(LocalVelocity.Y<0?3:4);
+ if(Stance==0 && bRun)
+  if(UAnimSequence* Jog=Get(Dir==1?EClip::StandJog:Dir==2?EClip::JogBwd:Dir==3?EClip::JogLeft:EClip::JogRight))return Jog;
  UAnimSequence* Clip=Get(EClip(First+Dir));
  return Clip?Clip:Get(EClip(First+1));
 }

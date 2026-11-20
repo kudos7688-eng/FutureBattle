@@ -118,8 +118,6 @@ const FBattleUnitState* ABattleUnit::GetState() const
 bool ABattleUnit::IsAlive() const { const auto* S = GetState(); return S && S->IsAlive(); }
 FVector ABattleUnit::EyePosition() const { return GetActorLocation() + FVector(0, 0, 60); }
 
-// How long an AI soldier's body keeps his weapon pitch after his last shot.
-static constexpr double AimHoldSeconds = 3.;
 // Closer than this to the eye the rear camera is inside the head or the chest.
 static constexpr float CameraInBodyDistance = 70.f;
 
@@ -468,8 +466,11 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	SetMeshYaw(0.f);
 	const bool bTransition = TransitionClip && Now < TransitionUntil;
 	const FVector Local = GetActorRotation().UnrotateVector(GetVelocity());
-	const bool bJog = Local.Size2D() > GetDefault<UBattleTuning>()->MoveSpeed * 1.15f;
-	Body.SetBase(bTransition ? TransitionClip.Get() : Locomotion(VisualStance, Local, bJog), !bTransition);
+	// Moving without firing (no shot for ReadySeconds, the player not aiming): a jog with the rifle held low, no aim layer.
+	// Firing on the move, or aiming, brings the rifle up: the aimed walk and the aim pose.
+	const bool bReady = Now - LastVisualShot < ReadySeconds || (IsPlayerControlled() && AimLevel > 0);
+	const bool bRun = !bReady && VisualStance == BattleStance::Stand && Local.SizeSquared2D() > 400.;
+	Body.SetBase(bTransition ? TransitionClip.Get() : Locomotion(VisualStance, Local, bRun), !bTransition);
 	// Upper body: reload (synced to the reload timer), blind fire, otherwise the aim pose at the weapon's pitch.
 	const float Duration = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
 	const bool bProne = VisualStance == BattleStance::Prone;
@@ -481,11 +482,11 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	else Body.SetUpper(nullptr, 0.f);
 	const FVector AimDir = IsPlayerControlled() ? GetControlRotation().Vector() : S.WeaponAimDirection;
 	// An AI soldier's weapon direction keeps its last pitch until the aim turns far (UBattleState::UpdateAim): shown only while
-	// he fires (AimHoldSeconds after his last shot), else the body eases back level instead of staying bent over a stale aim.
-	const bool bShowPitch = IsPlayerControlled() || Now - LastVisualShot < AimHoldSeconds;
+	// he fires (BattleBodyAnim::ReadySeconds after his last shot), else the body eases back level instead of staying bent over a stale aim.
+	const bool bShowPitch = IsPlayerControlled() || Now - LastVisualShot < ReadySeconds;
 	const float WantPitch = bShowPitch ? FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(AimDir.GetSafeNormal().Z, -1., 1.))) : 0.f;
 	ShownAimPitch = IsPlayerControlled() ? WantPitch : FMath::FInterpConstantTo(ShownAimPitch, WantPitch, GetWorld()->GetDeltaSeconds(), 60.f);
-	Body.SetAim(ShownAimPitch, bProne || bTransition ? 0.f : 1.f);
+	Body.SetAim(ShownAimPitch, bProne || bTransition || bRun ? 0.f : 1.f);
 	// One-shot overlays: recoil for each shot, a flinch when hit (from the side the shot came from).
 	if (LastVisualShot > ShownShot) { ShownShot = LastVisualShot; if (!bProne) Body.PlayOverlay(Get(EClip::Fire), .55f); }
 	if (ShownHP >= 0.f && S.HP < ShownHP - .01f && !bProne)

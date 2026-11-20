@@ -104,6 +104,8 @@ UAnimSequence* UBattleLeaderRuntime::FollowerClip(int32 ID,int32 Pose) const
  if(StanceOf(ID)==BattleStance::Crouch)if(auto* Crouch=BattleStance::CrouchClip(Pose==1))return Crouch;
  if(StanceOf(ID)==BattleStance::Prone)
   if(auto* Prone=BattleBodyAnim::Get(Pose==2?BattleBodyAnim::EClip::ProneReload:Pose==1?BattleBodyAnim::EClip::ProneFwd:BattleBodyAnim::EClip::ProneIdle))return Prone;
+ // Moving without firing: the rifle held low in a jog (ShowsRun); firing on the move keeps the aimed walk.
+ if(ShowsRun(ID,Pose,GetWorld()->GetTimeSeconds()))if(auto* Jog=BattleBodyAnim::Get(BattleBodyAnim::EClip::StandJog))return Jog;
  return Pose==2?ReloadPose.Get():Pose==1?WalkPose.Get():IdlePose.Get();
 }
 

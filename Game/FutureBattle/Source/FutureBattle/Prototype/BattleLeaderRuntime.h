@@ -9,6 +9,7 @@
 #include "BattleSightExperiment.h"
 #include "BattleTactics.h"
 #include "BattleCoverClips.h"
+#include "BattleBodyAnim.h"
 #include "BattleLeaderRuntime.generated.h"
 
 class ABattleGameMode;
@@ -80,6 +81,7 @@ struct FBattleLeaderBody
  bool bTrafficWait=false, bArrived=false;
  // Display: the near follower mesh shows the blind fire clip (BattleBlindFire.cpp).
  bool bBlindPose=false;
+ bool bRunPose=false;
  // Display: cover phase whose clip the near follower mesh shows (2 hidden, 4 firing; 0 none) and the table picked for it.
  uint8 CoverClipPhase=0;
  BattleCoverClips::FSet CoverClipSet{};
@@ -340,6 +342,10 @@ public:
  // and near followers whose one-shot clip ends at a time (a death clip then freezes; a stance transition returns to the loop).
  TMap<int32,FVector> LastShotDirs;
  FVector LastShotDirection(int32 ID) const {return LastShotDirs.FindRef(ID);}
+ // Display: when each soldier last fired. A near follower moving without firing for BattleBodyAnim::ReadySeconds runs with
+ // the rifle low (FollowerClip); B.bRunPose is the run shown, refreshed by the pose updates.
+ TMap<int32,double> LastFireTimes;
+ bool ShowsRun(int32 ID,int32 Pose,double Now) const {return Pose==1 && Now-LastFireTimes.FindRef(ID,-100.)>=BattleBodyAnim::ReadySeconds && StanceOf(ID)==0;}
  struct FBodyTimer{double At=0;bool bFreeze=false;};
  TMap<int32,FBodyTimer> BodyTimers;
  void StepBodyTimers();

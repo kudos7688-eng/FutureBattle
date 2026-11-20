@@ -949,7 +949,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity).Forward=Direction.GetSafeNormal2D();
   B.Capsule->SetWorldRotation(FRotator(0,Direction.Rotation().Yaw,0));
   const int32 Pose=U->ReloadEndTime>Now?2:B.Velocity.SizeSquared2D()>400?1:0;
-  if(Pose!=B.Pose) { B.Pose=Pose; if(VAT)VAT->ChangePose(ID,Pose); if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(FollowerClip(ID,Pose),true); }
+  const bool Run=ShowsRun(ID,Pose,Now);
+  if(Pose!=B.Pose || Run!=B.bRunPose) { B.Pose=Pose; B.bRunPose=Run; if(VAT)VAT->ChangePose(ID,Pose); if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(FollowerClip(ID,Pose),true); }
  }
  Store->UpdateAim(ID,Now,B.Velocity.Size2D(),Direction,true);
  if(BaseEngage)Fire(ID,Pos+Muzzle,Direction,false);
@@ -1042,6 +1043,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  }
  // Display only (BattleBodyAnim): the hit and death clips face the side the shot came from.
  if(Victim>0)LastShotDirs.Add(Victim,Direction.GetSafeNormal2D());
+ LastFireTimes.Add(ID,Now);
  if(auto* Shooter=Actor(ID))Shooter->NoteVisualShot(Now);
  // Per-shot damage by the shooter's squad type (heavy infantry may hit harder; rifle squads 1x).
  // An anti-tank round hits for ATDamage (and ATBaseDamage on an enemy home); its explosion follows below.

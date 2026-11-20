@@ -289,7 +289,8 @@ void UBattlePhase3::Step(float Dt)
     if(!B.Actor.IsValid())
     {
      const int32 Pose=U->ReloadEndTime>Now?2:B.Velocity.SizeSquared2D()>400?1:0;
-     if(Pose!=B.Pose) { B.Pose=Pose; if(Runtime->VAT)Runtime->VAT->ChangePose(ID,Pose); if(!Runtime->VAT || !Runtime->VAT->IsFar(ID))B.Mesh->PlayAnimation(Runtime->FollowerClip(ID,Pose),true); }
+     const bool Run=Runtime->ShowsRun(ID,Pose,Now);
+     if(Pose!=B.Pose || Run!=B.bRunPose) { B.Pose=Pose; B.bRunPose=Run; if(Runtime->VAT)Runtime->VAT->ChangePose(ID,Pose); if(!Runtime->VAT || !Runtime->VAT->IsFar(ID))B.Mesh->PlayAnimation(Runtime->FollowerClip(ID,Pose),true); }
     }
    }
   }
