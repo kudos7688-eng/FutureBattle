@@ -41,6 +41,7 @@ void UBattleMatch::InitializeArea()
   Base->SetActorScale3D(FVector(4,4,4));Base->GetStaticMeshComponent()->SetCanEverAffectNavigation(false);
   Base->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));BaseActors.Add(Base);
  }
+ InitializeComposition();
  if(FParse::Param(FCommandLine::Get(),TEXT("BattleAreaSmoke")))
  {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,GetWorld()->GetSubsystem<UBattleLeaderRuntime>(),&UBattleLeaderRuntime::RunAreaSmoke,5.f,false);}
 }
@@ -118,6 +119,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  int32 SID=INDEX_NONE;
  if(!R->SpawnPurchasedSquad(Team,EBattleTraining::Regular,LastMessage,!bAuto,&SID,SquadType))return false;
  Credits[Team]-=Cost;LastHiredSquadID=SID;
+ if((CompositionTeams&(1<<Team))!=0&&CompositionState.IsValidIndex(Team))++CompositionState[Team].Purchased[SquadType];
  if(Area.HireSpent.Num()!=2)Area.HireSpent={0,0};
  Area.HireSpent[Team]+=Cost;
  // Queued replenishments reserve one resource each; drop the least advanced ones the remaining resources cannot cover.
@@ -140,6 +142,7 @@ void UBattleMatch::UpdateAreaHiring()
  for(int32 Team=0;Team<2;++Team)
  {
   if(Team==0&&!R->SightExperiment.Enabled)continue; // The player's resources are spent only by the player.
+  if((CompositionTeams&(1<<Team))!=0){UpdateCompositionHiring(Team);continue;}
   int32 Pending=0;for(const auto& Q:Area.Replacements)Pending+=Store->Find(Q.Key)->Team==Team;
   // Squad type by the intent's heavy share: heavy infantry while the team's bought heavy squads are below that share of its purchases.
   FAreaIntent HireIntent=AreaIntent(Team); uint8 Type=BattleSquadType::Rifle;
@@ -148,9 +151,6 @@ void UBattleMatch::UpdateAreaHiring()
   // Strategic layer trial -BattleAreaComposition=1: the AI sets the numbers of special squad types it keeps (BattleArmourAI.cpp).
   const bool bComposition=BattleTactics::AreaComposition(Team);const uint8 PlainType=Type;
   if(bComposition)AreaComposition(Team,HireIntent,Bought);
-  // Read-only stage 1 probe. OFF/non-target teams never collect inputs or initialize definitions.
-  if(BattleComposition::Settings().Applies(Team))
-   BattleComposition::LogInput(BattleComposition::Capture(*this,*Store,Team,HireIntent,bComposition,true));
   // Scout pairs first when the team has fewer active pairs than it wants: none during the first purchases (taking points),
   // then one more per AreaScoutAfterHires purchases up to the intent's ScoutKeep; a lost pair is bought again.
   {

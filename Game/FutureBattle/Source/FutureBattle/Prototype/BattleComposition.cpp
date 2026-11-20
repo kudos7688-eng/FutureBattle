@@ -55,13 +55,27 @@ BattleComposition::FInput BattleComposition::Capture(const UBattleMatch& Match,c
   if(Squad.CommandStatus!=EBattleCommandStatus::Active)continue;
   ++Result.Active;if(Squad.SquadType>=BattleSquadType::Count)continue;
   auto& Type=Result.Types[Squad.SquadType];++Type.Active;
+  int32 Ready=0;bool ArmourArmed=Squad.SquadType==BattleSquadType::Tank;
   TArray<int32> Members=Squad.Members;Members.Sort();
   for(int32 MemberID:Members)if(const auto* Unit=Store.Find(MemberID);Unit&&Unit->Team==Team&&Unit->IsAlive())
   {
    ++Type.Living;Type.Armed+=Unit->Ammo>0||Unit->Reserve>0;
    Type.HealthPermilleSum+=FMath::Clamp(FMath::FloorToInt(1000.f*Unit->HP/FMath::Max(1.f,Store.MaxHealthOf(MemberID))),0,1000);
    Type.Returning+=Unit->Action==EBattleAction::Returning;
+   const int32 Health=FMath::Clamp(FMath::FloorToInt(1000.f*Unit->HP/FMath::Max(1.f,Store.MaxHealthOf(MemberID))),0,1000);
+   bool Armed=Unit->Ammo>0||Unit->Reserve>0;
+   if(Squad.SquadType==BattleSquadType::SPGun&&BattleTactics::SPGAmmoEnabled())Armed=Unit->SPGAmmo>0;
+   Ready+=Health*(Armed?1000:250)/1000;
+   ArmourArmed|=(Unit->Weapon==EBattleWeapon::AntiTank&&Armed)||Unit->Launcher>0;
   }
+  Ready=FMath::Clamp(Ready/FMath::Max(1,BattleSquadType::Members(Squad.SquadType)),0,1000);
+  // Retreat plans survive saves; do not use transient display/action state to make purchase decisions.
+  if(Squad.TacticalPlan.Action==EBattleSquadTactic::Retreat)Ready=Ready*3/4;
+  Type.Effective+=Ready;if(ArmourArmed)Type.AntiArmourEffective+=Ready;
+  if(Squad.SquadType==BattleSquadType::Rifle||Squad.SquadType==BattleSquadType::Heavy||Squad.SquadType==BattleSquadType::Exo)Result.FrontEffective+=Ready;
+  FBattleGroup Empty;const FBattleGroup* Group=&Empty;
+  if(const int32* GroupID=Match.SquadGroup.Find(SquadID))if(const auto* Found=Match.Groups.Find(*GroupID))Group=Found;
+  const uint8 Role=Match.GroupRole(*Group,SquadID);if(Role<5)Result.RoleEffective[Role]+=Ready;
  }
  // Read the already-recorded observation memory. Do not call KnownEnemyVehicles/AreaIntelView:
  // those const methods refresh mutable caches. Diagnostics must not alter the legacy path even when ON.
@@ -84,7 +98,7 @@ BattleComposition::FInput BattleComposition::Capture(const UBattleMatch& Match,c
 
 FString BattleComposition::Describe(const FInput& Input)
 {
- FString Result=FString::Printf(TEXT("stage=1 mode=legacy_observe team=%d time=%.3f remaining=%.3f auto_allowed=%d hire=%d composition=%d credits=%d pending=%d reserve=%d free=%d active=%d records=%d legacy_bought=%d legacy_heavy=%d heavy_share=%.4f observed_vehicles=%d interval=%.3f stop=%.3f last_hire=%.3f"),
+ FString Result=FString::Printf(TEXT("stage=2 mode=planner team=%d time=%.3f remaining=%.3f auto_allowed=%d hire=%d composition=%d credits=%d pending=%d reserve=%d free=%d active=%d records=%d legacy_bought=%d legacy_heavy=%d heavy_share=%.4f observed_vehicles=%d interval=%.3f stop=%.3f last_hire=%.3f"),
   Input.Team,Input.Elapsed,Input.Remaining,Input.bAutoAllowed?1:0,Input.bHireEnabled?1:0,Input.bAutoTargets?1:0,Input.Credits,Input.Pending,Input.Reserve,Input.Free,Input.Active,Input.Records,Input.LegacyBought,Input.LegacyHeavy,Input.HeavyShare,Input.ObservedVehicles,Input.Interval,Input.Stop,Input.LastHireAt);
  for(uint8 Type=0;Type<BattleSquadType::Count;++Type)
  {
@@ -97,8 +111,8 @@ FString BattleComposition::Describe(const FInput& Input)
 void BattleComposition::LogStart()
 {
  const auto Options=Settings();if(!Options.bEnabled)return;
- if(Options.Teams==0){UE_LOG(LogFutureBattle,Warning,TEXT("BATTLE_COMPOSITION_CONFIG stage=1 planner=1 teams=0: no team selected; legacy purchasing unchanged"));return;}
- UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COMPOSITION_CONFIG stage=1 planner=1 teams=%d team0=%d team1=%d purchase=legacy"),Options.Teams,Options.Applies(0)?1:0,Options.Applies(1)?1:0);
+ if(Options.Teams==0){UE_LOG(LogFutureBattle,Warning,TEXT("BATTLE_COMPOSITION_CONFIG stage=2 planner=1 teams=0: no team selected; legacy purchasing unchanged"));return;}
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COMPOSITION_CONFIG stage=2 planner=1 teams=%d team0=%d team1=%d purchase=planner"),Options.Teams,Options.Applies(0)?1:0,Options.Applies(1)?1:0);
  for(const auto& D:Definitions())UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COMPOSITION_DEF type=%d cost=%d limit=%d members=%d role=%d allowed_roles=%d capabilities=%d ai_eligible=%d"),D.TypeID,D.Cost,D.HardActiveLimit,D.Members,D.DefaultGroupRole,D.AllowedGroupRoles,D.Capabilities,D.bAIEligible?1:0);
 }
 

@@ -98,6 +98,10 @@ public:
 	UPROPERTY() int32 Version = 1;
  // Keep the existing mode versions/slot names; absent extension fields default to revision 0.
  UPROPERTY() int32 CombatStateVersion=0;
+ UPROPERTY() int32 CompositionTeams=0;
+ UPROPERTY() int32 CompositionPolicy=0;
+ UPROPERTY() FString CompositionRules;
+ UPROPERTY() TArray<FCompositionTeamState> CompositionState;
  // Revision 3: SPG main-gun rounds in State and indirect-fire trial configuration.
  UPROPERTY() int32 ArtilleryTrialFlags=0;
  UPROPERTY() int32 StrengthShieldTrialFlags=-1; // absent in older saves; additive to extension 3

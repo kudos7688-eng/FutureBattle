@@ -3,6 +3,7 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "BattleState.h"
 #include "BattleAreaState.h"
+#include "BattleCompositionState.h"
 #include "BattleMatch.generated.h"
 class UBattleSave;
 // Area strategy layer (ROADMAP 2026-11-16). The team intent is all the lower layers read: point allocation (S1 with S4/S6) and
@@ -116,6 +117,11 @@ public:
  // AI purchase rule, every director tick: own resources minus own pending replenishments >= cost + reserve, and a free slot.
  // Team 1 always; team 0 only in the all-AI sight experiment.
  void UpdateAreaHiring();
+ // Initialized only for new ON matches. Loading pre-extension-4 saves explicitly disables the planner.
+ int32 CompositionTeams=0;
+ UPROPERTY() TArray<FCompositionTeamState> CompositionState;
+ void InitializeComposition();
+ void UpdateCompositionHiring(int32 Team);
  int32 ActiveSquads(int32 Team) const;
  // Active scout pairs of a team (at most UBattleTuning::AreaScoutLimit).
  int32 ActiveScouts(int32 Team) const;

@@ -157,7 +157,7 @@ if($snapshot -and $Experiment -and !$Rendered -and !$Trace){
   }
  }
 }
-@{compositionPlanner=@{stage=1;purchase="legacy";enabled=$AreaCompositionPlanner;teams=$AreaCompositionPlannerTeams};machine=(Get-MeasurementMachine);dll=(Get-FileHash $dll).Hash;map=(Get-FileHash $mapFile).Hash;files=$hashes;source_snapshot=$snapshot;savedSettings=$savedSettings;arguments=$a;behaviorConcurrency=$BehaviorConcurrency;timingComparable=(($BehaviorConcurrency -eq 1) -and !$reusedFrom);reuseKey=$reuseKey;reusedFrom=$reusedFrom} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $out 'manifest.json') -Encoding utf8
+@{compositionPlanner=@{stage=2;purchase="planner_when_enabled";enabled=$AreaCompositionPlanner;teams=$AreaCompositionPlannerTeams};machine=(Get-MeasurementMachine);dll=(Get-FileHash $dll).Hash;map=(Get-FileHash $mapFile).Hash;files=$hashes;source_snapshot=$snapshot;savedSettings=$savedSettings;arguments=$a;behaviorConcurrency=$BehaviorConcurrency;timingComparable=(($BehaviorConcurrency -eq 1) -and !$reusedFrom);reuseKey=$reuseKey;reusedFrom=$reusedFrom} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $out 'manifest.json') -Encoding utf8
 if($reusedFrom){
  # Same build, map, Config and arguments already played and passed: copy its outcome instead of playing again.
  $src=Join-Path (Split-Path $out) $reusedFrom
@@ -176,9 +176,9 @@ $p=Start-Process 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/Unrea
 $timeout=if($Experiment){2700000}else{210000}
 if(!$p.WaitForExit($timeout)){Stop-Process -Id $p.Id;throw "Timeout: $log"}
 $t=Get-Content $log -Raw
-# Stage 1 diagnostics only: preserve actual resolved definitions and the first pre-purchase input for each observed team.
+# Planner diagnostics: preserve actual resolved definitions and the first pre-purchase input for each observed team.
 $compositionManifest=Get-Content (Join-Path $out 'manifest.json') -Raw | ConvertFrom-Json
-$compositionResolved=@($t -split "`n" | Where-Object {$_ -match 'BATTLE_COMPOSITION_CONFIG|BATTLE_COMPOSITION_DEF'})
+$compositionResolved=@($t -split "`n" | Where-Object {$_ -match 'BATTLE_COMPOSITION_CONFIG|BATTLE_COMPOSITION_DEF|BATTLE_COMPOSITION_RULES'})
 foreach($compositionTeam in 0,1){$compositionResolved+=@($t -split "`n" | Where-Object {$_ -match "BATTLE_COMPOSITION_INPUT .*team=$compositionTeam "} | Select-Object -First 1)}
 $compositionManifest | Add-Member -NotePropertyName compositionResolvedLog -NotePropertyValue $compositionResolved -Force
 $compositionManifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $out 'manifest.json') -Encoding utf8

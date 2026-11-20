@@ -14,13 +14,13 @@ $arguments=@(('"'+$project+'"'),'/Game/Prototype/Lvl_BattleWide_A','-game','-una
 $arguments+=@("-BattleAreaCompositionPlanner=$AreaCompositionPlanner","-BattleAreaCompositionPlannerTeams=$AreaCompositionPlannerTeams")
 $arguments+=@("-BattleFlankRelaxed=$FlankRelaxed","-BattleFlankTeams=$FlankTeams","-BattleCoverActions=$CoverActions","-BattleFlankCoordination=$FlankCoordination")
 if($Rendered){$arguments+=@('-RenderOffscreen','-ForceRes','-ResX=1920','-ResY=1080',('-BattleWideScreens="'+(Join-Path $out 'screen')+'"'))}else{$arguments+='-nullrhi'}
-@{compositionPlanner=@{stage=1;purchase="legacy";enabled=$AreaCompositionPlanner;teams=$AreaCompositionPlannerTeams};machine=(Get-MeasurementMachine);dll=(Get-FileHash $dll).Hash;arguments=$arguments;map=(Get-FileHash (Join-Path $root 'Game/FutureBattle/Content/Prototype/Lvl_BattleWide_A.umap')).Hash} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $out 'manifest.json') -Encoding utf8
+@{compositionPlanner=@{stage=2;purchase="planner_when_enabled";enabled=$AreaCompositionPlanner;teams=$AreaCompositionPlannerTeams};machine=(Get-MeasurementMachine);dll=(Get-FileHash $dll).Hash;arguments=$arguments;map=(Get-FileHash (Join-Path $root 'Game/FutureBattle/Content/Prototype/Lvl_BattleWide_A.umap')).Hash} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $out 'manifest.json') -Encoding utf8
 $p=Start-Process 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe' -ArgumentList $arguments -WindowStyle Hidden -PassThru
 if(!$p.WaitForExit(180000)){Stop-Process -Id $p.Id;throw "Timed out: $log"}
 $t=Get-Content $log -Raw
-# Stage 1 diagnostics only: preserve actual resolved definitions and the first pre-purchase input for each observed team.
+# Planner diagnostics: preserve actual resolved definitions and the first pre-purchase input for each observed team.
 $compositionManifest=Get-Content (Join-Path $out 'manifest.json') -Raw | ConvertFrom-Json
-$compositionResolved=@($t -split "`n" | Where-Object {$_ -match 'BATTLE_COMPOSITION_CONFIG|BATTLE_COMPOSITION_DEF'})
+$compositionResolved=@($t -split "`n" | Where-Object {$_ -match 'BATTLE_COMPOSITION_CONFIG|BATTLE_COMPOSITION_DEF|BATTLE_COMPOSITION_RULES'})
 foreach($compositionTeam in 0,1){$compositionResolved+=@($t -split "`n" | Where-Object {$_ -match "BATTLE_COMPOSITION_INPUT .*team=$compositionTeam "} | Select-Object -First 1)}
 $compositionManifest | Add-Member -NotePropertyName compositionResolvedLog -NotePropertyValue $compositionResolved -Force
 $compositionManifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $out 'manifest.json') -Encoding utf8

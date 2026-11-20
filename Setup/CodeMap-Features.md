@@ -13,7 +13,7 @@
 
 | 機能 | 入口（ここから読む） | 関連 |
 |---|---|---|
-| 編成AI・段階1の読取診断 | @BattleComposition::Definitions 、 @BattleComposition::Capture 、 @BattleComposition::LogStart | Planner/PlannerTeams は既定0。ONでも購入は旧方式。選択器・貯蓄は未実装 |
+| 編成AI・候補選択と貯蓄購入 | @UBattleMatch::UpdateCompositionHiring 、 @BattleComposition::Decide 、 @BattleComposition::ValidateSave | Planner/PlannerTeams は既定0。ONは不足・緊急性で選択し貯蓄／購入。CombatStateVersion=4、旧保存はPlanner無効。検査は @UBattleLeaderRuntime::RunCompositionSmoke |
 | 盾被弾制圧・群の兵種別戦力（試験） | @UBattleLeaderRuntime::NoteUnderFire 、 @UBattleState::AdvanceShields 、 @UBattleMatch::GroupPower 、 @UBattleMatch::GroupPointPower | `BattleExoShieldSuppression` / `BattleGroupStrength` は既定0。観測兵種は @UBattlePerception::Update で取得、重みはUBattleTuning |
 | 間接射撃の試験切替 | @UBattleMatch::ArtilleryHomeObserved 、 @UBattleMatch::AreaArtilleryClusters 、 @UBattleLeaderRuntime::FireArtillery 、 @UBattleLeaderRuntime::ArtilleryBlastTransmission | 自走砲弾は @UBattleState::UseSPGAmmo / @UBattleState::RefillSPGAmmo 。4切替は既定0、CombatStateVersion=3で弾数と切替を保存 |
 | 正規状態・UnitID・部隊 | @UBattleState::RegisterUnit 、 @UBattleState::CreateSquad 、 @UBattleState::ApplyDamage | 構造体は `BattleState.h`（FBattleUnitState、FBattleSquadState）。調整値は同じ .h の `UBattleTuning`（ini で上書き） |
@@ -148,4 +148,9 @@ BattleSectorRoute | 区画経由の移動 `-BattleSectorRoute`・側面 `-Battle
 BattleSectors | マップHの50m区画の格子（20×14）：区画の番号と中心、区画の種類の表、川・橋・浅瀬の位置
 
 BattleWeaponOrders | 命令・防衛範囲・支援対象・区画任務の交戦許可と武器/装甲AIの試験切替
-BattleComposition | 編成AI段階1の兵種定義・解決済み入力・読取専用診断。購入判断は変更しない
+BattleComposition | 編成AIの兵種定義・解決済み入力・診断
+BattleCompositionPlanner | 編成AIの純粋な候補選択・貯蓄遷移・状態検証。整数比較、乱数なし
+BattleCompositionRuntime | 編成AIと観測・収入窓・既存購入実行の接続、設定キー
+BattleCompositionState | CombatStateVersion=4で保存する編成AIの陣営状態
+BattleCompositionSave | 編成AI保存の版・陣営・時刻・参照先検証
+BattleCompositionSmoke | 編成AIの選択・貯蓄・保存往復のスモーク検査（UBattleLeaderRuntimeの一部）

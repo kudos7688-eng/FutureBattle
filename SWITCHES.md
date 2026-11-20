@@ -53,7 +53,7 @@
 | `-BattleAreaPlan` | Value | 0 | BattleTactics.cpp:92 |  |
 | `-BattleAreaPointSupply` | other |  | BattleTactics.cpp:39 |  |
 | `-BattleAreaScoutKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:94 |  |
-| `-BattleAreaSmoke` | Param | off | BattleArea.cpp:44, BattleMixedBodies.cpp:117 |  |
+| `-BattleAreaSmoke` | Param | off | BattleArea.cpp:45, BattleMixedBodies.cpp:117 |  |
 | `-BattleAreaSPGKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:99 |  |
 | `-BattleAreaStartCredits` | Value | 100 | BattleTactics.cpp:128 |  |
 | `-BattleAreaStrategy` | Value | T->bAreaStrategy?1:0 | BattleTactics.cpp:74 |  |
@@ -274,7 +274,7 @@
 | `-BattleUnderFireCover` | Value | 0 | BattleLeaderRuntime.cpp:1454 |  |
 | `-BattleUnits` | Value | 1000 / 20 | BattleBenchmark.cpp:36, BattleSquadTrial.cpp:28 |  |
 | `-BattleVATFarLight` | Value | 0 | BattleVATDisplay.cpp:37 |  |
-| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:304, BattleSightExperiment.cpp:40 |  |
+| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:326, BattleSightExperiment.cpp:40 |  |
 | `-BattleWaypointPass` | Value | 0 | BattleStableMovement.cpp:364 |  |
 | `-BattleWeaponLoadouts` | Param | off | BattleSquadTrial.cpp:50 |  |
 | `-BattleWeaponOrderGate` | Value | 0 | BattleWeaponOrders.cpp:10 |  |
@@ -284,6 +284,6 @@
 | `-BattleWideMapAudit` | Param | off | BattleLeaderRuntime.cpp:232 |  |
 | `-BattleWideMapGeometryOnly` | Param | off | BattleWideMapAudit.cpp:157 |  |
 | `-BattleWideMixed` | Param | off | BattleGameMode.cpp:55, BattleLeaderRuntime.cpp:74 |  |
-| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:1140, BattleContactTrial.cpp:97, BattleExoShot.cpp:78 ほか14 |  |
+| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:1155, BattleContactTrial.cpp:97, BattleExoShot.cpp:78 ほか14 |  |
 | `-BattleWideSmoke` | Param | off | BattleLeaderRuntime.cpp:246 |  |
 | `-BattleWideSoak` | Param | off | BattleLeaderRuntime.cpp:248 |  |

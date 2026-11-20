@@ -1,11 +1,13 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "BattleState.h"
+#include "BattleCompositionState.h"
 
 class UBattleMatch;
+class UBattleSave;
 struct FAreaIntent;
 
-// Stage 1 only: read-only diagnostics. No selection, purchase, wallet, or persistent planner state.
+// Selection is pure with respect to the world: explicit input and prior state -> decision and next state.
 namespace BattleComposition
 {
  enum ECapability : uint16 { Front=1, AntiInfantry=2, Observe=4, AntiArmour=8, Indirect=16, Mobile=32, Shield=64, SupplyAmmo=128 };
@@ -26,7 +28,7 @@ namespace BattleComposition
  {
   int32 Active=0,Living=0,Armed=0,Returning=0;
   int32 HealthPermilleSum=0; // living members' HP fractions; not yet a capability/availability score
-  int32 Keep=0,PacedTarget=0;
+  int32 Keep=0,PacedTarget=0,Effective=0,AntiArmourEffective=0;
  };
  struct FInput
  {
@@ -35,7 +37,31 @@ namespace BattleComposition
   float Elapsed=0,Remaining=0,HeavyShare=0,Interval=0,Stop=0,LastHireAt=-1000.f;
   bool bAutoAllowed=false,bAutoTargets=false,bHireEnabled=false;
   FTypeInput Types[BattleSquadType::Count];
+  int32 NowMS=0,StopAtMS=0,MaxActive=0,Mission=-1,FrontMinimum=0,FrontEffective=0;
+  int32 NetPerMinute=0,RoleEffective[5]={0,0,0,0,0};
+  int32 ArrivalMS[BattleSquadType::Count]={};
+  bool bMissionRequired=false,bHomeThreat=false,bCanPurchase=true;
  };
+ enum class EAction : uint8 { Wait, Save, Buy };
+ struct FCandidate
+ {
+  int32 Type=-1,Mission=-1,Target=0,Deficit=0,RoleDeficit=0,Urgency=0,Score=0,Cost=0,ArrivalMS=0,Waiting=0;
+  FString Excluded;
+ };
+ struct FDecision
+ {
+  EAction Action=EAction::Wait;
+  int32 Type=-1,Mission=-1;
+  FString Reason;
+  FCompositionTeamState Next;
+  TArray<FCandidate> Candidates;
+ };
+ constexpr int32 PolicyVersion=1;
+ FDecision Decide(const FInput& Input,const TArray<FTypeDef>& Defs,const FCompositionTeamState& Previous);
+ void CompletePurchase(FCompositionTeamState& State,bool bSuccess,int32 Type);
+ FString RulesKey();
+ bool ValidateState(const FCompositionTeamState& State,int32 NowMS,int32 Objectives,FString& Error);
+ bool ValidateSave(const UBattleSave& Save,FString& Error);
  FSettings Settings();
  const TArray<FTypeDef>& Definitions();
  FInput Capture(const UBattleMatch& Match,const UBattleState& Store,int32 Team,const FAreaIntent& ResolvedIntent,bool bAutoTargets,bool bAutoAllowed);

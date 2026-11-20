@@ -276,6 +276,7 @@ public:
  void RunMixedSaveSmoke();
  void RunMixedFastSmoke();
  void RunAreaSmoke();
+ void RunCompositionSmoke();
  static FVector LimitedSteering(FVector Desired, FVector Separation, float MaxSide);
  bool Start(ABattleGameMode& Mode);
  void Step(float DeltaTime);

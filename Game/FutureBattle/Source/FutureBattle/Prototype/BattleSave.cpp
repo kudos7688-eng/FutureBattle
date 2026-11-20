@@ -1,4 +1,5 @@
 #include "BattleSave.h"
+#include "BattleComposition.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleFieldLayout.h"
 #include "BattleSquadTactics.h"
@@ -23,7 +24,7 @@ namespace
 bool UBattleSave::Validate(FString& Error) const
 {
 	const bool Mixed=Version==2||Version==3;
- if(CombatStateVersion<0||CombatStateVersion>3||(!Mixed&&CombatStateVersion!=0)||
+ if(CombatStateVersion<0||CombatStateVersion>4||(!Mixed&&CombatStateVersion!=0)||
     (CombatStateVersion==0&&(!SavedArtillery.IsEmpty()||!SavedArtilleryShells.IsEmpty())))
  {Error=TEXT("Unsupported combat state extension");return false;}
  if(ArtilleryTrialFlags<0||ArtilleryTrialFlags>15||(CombatStateVersion<3&&ArtilleryTrialFlags!=0))
@@ -31,6 +32,7 @@ bool UBattleSave::Validate(FString& Error) const
  if(CombatStateVersion<2&&(!SavedGroups.IsEmpty()||!SavedSquadGroup.IsEmpty()||!SavedCarChoices.IsEmpty()||SavedNextGroupID!=1))
  {Error=TEXT("Strategic state requires combat extension 2");return false;}
  if(StrengthShieldTrialFlags < -1||StrengthShieldTrialFlags>3){Error=TEXT("Invalid strength/shield trial flags");return false;}
+ if(!BattleComposition::ValidateSave(*this,Error))return false;
  auto ValidPosition=[&](const FVector& P){return ValidSnapshotPosition(P,Mixed?BattleFieldLayout::ByName(MapName).SaveLimit:FVector2D(10000,10000));};
 	auto Fail = [&Error](const TCHAR* Message) { Error = Message; return false; };
 	if ((Version != 1 && Version != 2 && Version!=3) || (Version==3)!=(Ruleset==TEXT("Area")) || !MatchID.IsValid() || Phase < 1 || Phase > 3 || !ValidTeam(Winner, true) || Result.Len() > 200 || ViewRotation.ContainsNaN()) return Fail(TEXT("Unsupported or invalid match header"));
@@ -135,6 +137,12 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
  if(Mixed)
  {
   Save->CombatStateVersion=3;
+  // OFF keeps extension 3 and does not evaluate planner definitions/rules or allocate planner state.
+  if(bArea&&CompositionTeams!=0)
+  {
+   Save->CombatStateVersion=4;Save->CompositionTeams=CompositionTeams;Save->CompositionPolicy=BattleComposition::PolicyVersion;
+   Save->CompositionRules=BattleComposition::RulesKey();Save->CompositionState=CompositionState;
+  }
   Save->ArtilleryTrialFlags=BattleTactics::ArtilleryTrialFlags();
   Save->StrengthShieldTrialFlags=(BattleTactics::ExoShieldSuppressionEnabled()?1:0)|(BattleTactics::GroupStrengthEnabled()?2:0);
   Save->SavedNextGroupID=NextGroupID;Save->SavedSquadGroup=SquadGroup;
@@ -221,6 +229,14 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
  if(Mixed&&Save->StrengthShieldTrialFlags>=0&&Save->StrengthShieldTrialFlags!=((BattleTactics::ExoShieldSuppressionEnabled()?1:0)|(BattleTactics::GroupStrengthEnabled()?2:0)))
  {LastMessage=TEXT("Strength/shield trial configuration does not match");return false;}
  TArray<ABattleUnit*> Spawned;TArray<FBattleUnitState> Records;const double Now=GetWorld()->GetTimeSeconds();
+ if(Save->CombatStateVersion>=4)
+ {
+  const auto CompositionOptions=BattleComposition::Settings();
+  if(Save->CompositionTeams!=(CompositionOptions.bEnabled?CompositionOptions.Teams:0)||Save->CompositionRules!=BattleComposition::RulesKey())
+  {LastMessage=TEXT("Composition planner configuration does not match");return false;}
+  for(const auto& CompositionEntry:Save->CompositionState)if(CompositionEntry.SaveType>=0&&CompositionEntry.SaveCost!=BattleComposition::Definitions()[CompositionEntry.SaveType].Cost)
+  {LastMessage=TEXT("Composition saving price does not match definitions");return false;}
+ }
  if(Mixed)
  {
   if(!Runtime->RestoreMixedBodies(Save,LastMessage))return false;
@@ -257,6 +273,12 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 	Score[0] = Save->AllyScore; Score[1] = Save->EnemyScore; Elapsed = Save->Elapsed; DirectorClock = Save->DirectorClock; SupplyClock = Save->SupplyClock;
 	Objectives = Save->Objectives; Winner = Save->Winner;
  if(bArea)Area=Save->Area;
+ if(Save->CombatStateVersion>=4){CompositionTeams=Save->CompositionTeams;CompositionState=Save->CompositionState;}
+ else if(CompositionTeams!=0||!CompositionState.IsEmpty())
+ {
+  CompositionTeams=0;CompositionState.Reset();
+  UE_LOG(LogFutureBattle,Warning,TEXT("BATTLE_COMPOSITION_LOAD legacy save: planner disabled for this match (no implicit conversion)"));
+ }
  // No fallible work remains. Replace, rather than merge, the complete strategic snapshot.
  // Groups and car choices use the restored match clock; artillery uses the new world clock.
  TMap<int32,FBattleGroup> RestoredGroups;TMap<int32,FCarChoice> RestoredChoices;

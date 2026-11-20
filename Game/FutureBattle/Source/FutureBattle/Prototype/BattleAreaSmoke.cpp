@@ -36,6 +36,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
  auto Place=[&](int32 ID,FVector P){auto& B=Bodies.FindChecked(ID);if(B.Actor.IsValid()){B.Actor->SetActorLocation(P,false,nullptr,ETeleportType::TeleportPhysics);B.Actor->SetActorRotation(FRotator::ZeroRotator);}else{B.Capsule->SetWorldLocation(P);auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=P;F.Forward=FVector::ForwardVector;}};
  if(SmokeStage==0)
  {
+  RunCompositionSmoke();
   {
    BattleComposition::FSettings CompositionOff;
    Check(!CompositionOff.Applies(0)&&!CompositionOff.Applies(1),TEXT("composition planner defaults OFF for both teams"));
@@ -198,6 +199,13 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     const auto CompositionBeforeRestore=BattleComposition::Capture(*M,*Store,0,CompositionSaveIntent,false,false);
     Check(M->RestoreSnapshot(Save)&&Store->GetSquads().Num()==SquadCount+1&&M->Area.HireSpent[0]==HireCost&&M->Credits[0]==Before-HireCost&&Bodies.Contains(NewLeader)&&Store->Find(NewLeader)->IsAlive(),TEXT("hired squad survives restore"));
     const auto CompositionAfterRestore=BattleComposition::Capture(*M,*Store,0,CompositionSaveIntent,false,false);
+    if(M->CompositionTeams!=0)
+    {
+     bool CompositionRestoredState=Save->CombatStateVersion==4&&Save->CompositionTeams==M->CompositionTeams&&Save->CompositionState.Num()==M->CompositionState.Num();
+     if(CompositionRestoredState)for(int32 CompositionTeamIndex=0;CompositionTeamIndex<M->CompositionState.Num();++CompositionTeamIndex)
+      CompositionRestoredState&=FCompositionTeamState::StaticStruct()->CompareScriptStruct(&Save->CompositionState[CompositionTeamIndex],&M->CompositionState[CompositionTeamIndex],0);
+     Check(CompositionRestoredState,TEXT("planner actual snapshot restore preserves full authoritative team state"));
+    }
     Check(CompositionBeforeRestore.Free==CompositionAfterRestore.Free&&CompositionBeforeRestore.Pending==CompositionAfterRestore.Pending&&CompositionBeforeRestore.Active==CompositionAfterRestore.Active&&CompositionBeforeRestore.LegacyBought==CompositionAfterRestore.LegacyBought&&CompositionBeforeRestore.Elapsed==CompositionAfterRestore.Elapsed,
      TEXT("composition stage one rebuilds budget roster and time from existing save"));
    }
@@ -757,6 +765,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      for(int32 LegacyVersion:{0,1})
      {
       auto* Legacy=DuplicateObject<UBattleSave>(Save,this);Legacy->CombatStateVersion=LegacyVersion;Legacy->ArtilleryTrialFlags=0;for(auto& E:Legacy->Units)E.State.SPGAmmo=0;
+      Legacy->CompositionTeams=0;Legacy->CompositionPolicy=0;Legacy->CompositionRules.Reset();Legacy->CompositionState.Reset();
       Legacy->SavedGroups.Reset();Legacy->SavedSquadGroup.Reset();Legacy->SavedNextGroupID=1;Legacy->SavedCarChoices.Reset();
       if(LegacyVersion==0){Legacy->SavedArtillery.Reset();Legacy->SavedArtilleryShells.Reset();}
       Check(M->RestoreSnapshot(Legacy)&&M->Groups.IsEmpty()&&M->SquadGroup.IsEmpty()&&M->NextGroupID==1&&M->CarChoices.IsEmpty(),
@@ -895,7 +904,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     TArray<uint8> Serialized;
     const bool Encoded=Valid&&UGameplayStatics::SaveGameToMemory(Save,Serialized);
     auto* Decoded=Encoded?Cast<UBattleSave>(UGameplayStatics::LoadGameFromMemory(Serialized)):nullptr;
-    Check(Decoded&&Decoded->Validate(Error)&&Decoded->CombatStateVersion==3&&Decoded->ArtilleryTrialFlags==BattleTactics::ArtilleryTrialFlags(),
+    Check(Decoded&&Decoded->Validate(Error)&&Decoded->CombatStateVersion>=3&&Decoded->ArtilleryTrialFlags==BattleTactics::ArtilleryTrialFlags(),
      TEXT("artillery revision 3 serializes its trial configuration"));
     if(Decoded)Save=Decoded;
     const bool Restored=Valid&&M->RestoreSnapshot(Save);ABattleUnit* After=Actor(GunID);
@@ -914,9 +923,15 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      auto* Bad=DuplicateObject<UBattleSave>(Save,this);for(auto& E:Bad->Units)if(E.State.UnitID==GunID)E.State.SPGAmmo=-1;
      FString BadError;Check(!Bad->Validate(BadError),TEXT("negative SPG ammunition rejected"));
      auto* Legacy=DuplicateObject<UBattleSave>(Save,this);Legacy->CombatStateVersion=2;Legacy->ArtilleryTrialFlags=0;
+     Legacy->CompositionTeams=0;Legacy->CompositionPolicy=0;Legacy->CompositionRules.Reset();Legacy->CompositionState.Reset();
      for(auto& E:Legacy->Units)E.State.SPGAmmo=0;
      Check(Legacy->Validate(BadError)&&M->RestoreSnapshot(Legacy)&&Store->Find(GunID)->SPGAmmo==(BattleTactics::SPGAmmoEnabled()?FMath::Clamp(TT->SPGInitialAmmo,0,FMath::Max(0,TT->SPGAmmoCapacity)):0),
       TEXT("revision 2 save migrates SPG ammunition only when trial enabled"));
+     if(Save->CombatStateVersion>=4)
+     {
+      Check(M->CompositionTeams==0&&M->CompositionState.IsEmpty(),TEXT("legacy load explicitly disables planner without implicit conversion"));
+      Check(M->RestoreSnapshot(Save)&&M->CompositionTeams==Save->CompositionTeams,TEXT("revision four restores planner after legacy load"));
+     }
      Store->Units.FindChecked(GunID).SPGAmmo=SavedMainAmmo;
     }
     ArtilleryShells.Reset();
