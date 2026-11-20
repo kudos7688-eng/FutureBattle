@@ -155,6 +155,66 @@ bool UBattleLeaderRuntime::ContactFirePoint(int32 ID,FVector Anchor,FVector Thre
  return false;
 }
 
+bool UBattleLeaderRuntime::SquadCanHide(int32 SID,FVector Threat,double Now) const
+{
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* S=Store->FindSquad(SID);const auto* P=Plans.Find(SID);
+ if(!S||!P)return false;
+ int32 Living=0;for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive())++Living;
+ if(!Living)return false;
+ auto* Cover=GetWorld()->GetSubsystem<UBattleCover>();Cover->BuildSlots();
+ // Soldiers of the team's other stopping squads near by who are not in cover yet want the same places.
+ int32 Waiting=0;
+ for(const auto& Other:Plans)if(Other.Key!=SID && Other.Value.bCoverStop && FVector::DistSquared2D(Other.Value.Center,P->Center)<FMath::Square(3000.))
+  if(const auto* OS=Store->FindSquad(Other.Key);OS && OS->Team==S->Team)
+   for(int32 ID:OS->Members)if(const auto* M=Store->Find(ID);M && M->IsAlive() && !M->CoverPhase && !CoverApproaches.Contains(ID))++Waiting;
+ auto Claimed=[&](const FVector& At){for(const auto& A:CoverApproaches)if(FVector::DistSquared2D(A.Value.Goal,At)<FMath::Square(100.))return true;
+  for(const auto& F:FirePositions)if(FVector::DistSquared2D(F.Value,At)<FMath::Square(100.))return true;return false;};
+ const FVector Eye=Threat+FVector(0,0,60);int32 Hide=-Waiting;
+ for(int32 Slot:Cover->NearbySlots(P->Center,2000.f,32))
+ {
+  const FVector At=Cover->GetSlots()[Slot];
+  if(BattleTactics::ExposureAt(GetWorld(),At+FVector(0,0,90),FVector::ForwardVector,Eye).VisibleSamples>2)continue;
+  if(Cover->IsAvailable(Slot,S->LeaderUnitID,Now) && !Claimed(At))++Hide;
+  // Two places right behind the slot (seen from the threat), as members without a slot of their own would use them.
+  const FVector Back=(At-Threat).GetSafeNormal2D(),Side(-Back.Y,Back.X,0);
+  if(BattleTactics::ExposureAt(GetWorld(),At+Back*130+FVector(0,0,90),FVector::ForwardVector,Eye).VisibleSamples<=2)
+   for(const float Off:{-110.f,110.f})if(!Claimed(At+Back*130+Side*Off))++Hide;
+  if(Hide*2>=Living)return true;
+ }
+ return Hide*2>=Living;
+}
+
+bool UBattleLeaderRuntime::StartHuddle(int32 ID,FVector Threat,int32 Target,double Now)
+{
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
+ if(!U || !U->IsAlive() || U->CoverPhase || Threat.ContainsNaN() || !Bodies.Contains(ID) || CoverApproaches.Contains(ID))return false;
+ auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!Nav)return false;
+ auto* Cover=GetWorld()->GetSubsystem<UBattleCover>();Cover->BuildSlots();
+ const FVector Pos=Position(ID),Eye=Threat+FVector(0,0,60);
+ int32 Tried=0;
+ for(int32 Slot:Cover->NearbySlots(Pos,2000.f,24))
+ {
+  const FVector At=Cover->GetSlots()[Slot];
+  const FVector Back=(At-Threat).GetSafeNormal2D(),Side(-Back.Y,Back.X,0);
+  for(const float Off:{0.f,-110.f,110.f})
+  {
+   const FVector Want=At+Back*130+Side*Off;
+   bool Taken=false;
+   for(const auto& A:CoverApproaches)if(FVector::DistSquared2D(A.Value.Goal,Want)<FMath::Square(100.)){Taken=true;break;}
+   if(!Taken)for(const auto& F:FirePositions)if(F.Key!=ID && FVector::DistSquared2D(F.Value,Want)<FMath::Square(100.)){Taken=true;break;}
+   if(Taken)continue;
+   FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Want-FVector(0,0,90),Projected,FVector(40,40,150)) || FVector::Dist2D(Projected.Location,Want)>40)continue;
+   const FVector Point=Projected.Location+FVector(0,0,90);
+   if(BattleTactics::ExposureAt(GetWorld(),Point,FVector::ForwardVector,Eye).VisibleSamples>2)continue;
+   if(++Tried>8){SightExperiment.Cover(TEXT("huddle_none"));return false;}
+   if(GetWorld()->SweepTestByObjectType(Pos,Point,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))continue;
+   FCoverApproach A;A.Goal=Point;A.Target=Target;A.Revision=U->OrderRevision;A.Until=Now+8.;A.bFree=true;A.bStandUp=false;
+   CoverApproaches.Add(ID,A);FirePositions.Remove(ID);SightExperiment.Cover(TEXT("huddle_started"));return true;
+  }
+ }
+ SightExperiment.Cover(TEXT("huddle_none"));return false;
+}
+
 bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Target,double Now,float LocalRadius)
 {
  auto& Diag=SightExperiment;
