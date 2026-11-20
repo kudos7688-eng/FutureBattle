@@ -20,6 +20,12 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-20 23時50分 Claude（個人AI）：兵1人への命令の印を見やすくし、TPS視点（直接操作）からの命令（G で選ぶ・送る、H で戻す）を追加。ブランチ `soldierai`
+- **変更**（b65bd1e）：印は作戦画面とTPS視点の両方で描く。文字に暗い下地、菱形・輪・線を太く、選んだ兵の移動先に「移動先」の札。直接操作では、照準を味方の兵に合わせて G で選び（4°・60m以内）、狙った場所（100m以内）で G を押すとその兵が動く。H で戻す。G は作戦画面では今までどおり防衛の命令。
+- **検証**（ロックは23時47分に群制御から受け取った）：`Build-Editor` 成功。`Test-Battle` failures=0（`Setup/Battle-Smoke-20261120-234851.log`）。描画ありの自動撮影（`so-order-E-shots2/soldier-order-walking.png`・`-direct.png`）：作戦画面で兵の真上に寄せた画では緑の輪と「個別の命令」が読める（移動先は画面の外）。隊長を直接操作した画では、輪と「個別の命令」、黄の菱形と「移動先」、下の操作の案内が出ている。撮影の後、試合は途中で止めた（自分で止めたので、その回の `BATTLE_SOLDIER_ORDER_RESULT` は出ていない。試験の流れは前回の頭なしの回で合格している）。
+- **未実施**：G キー・マウスでの実際の操作（自動試験は関数を直接呼ぶ）。ゲームパッドの割り当てはない。
+- **次の一手**：ユーザーに実際の操作を試してもらう。`-BattleThreatCover=2` の24戦、B1 の計測、焦点の切替を戦闘の多い地点で測る。
+
 ## 2026-11-20 23時00分 Claude（個人AI）：兵1人への移動命令を作って試験に合格、段階Aの絞り込み版 `-BattleThreatCover=2`、プレイヤーの周りだけの切替 `-BattleSoldierAIFocus`。ブランチ `soldierai`
 - **変更**：(1) 兵1人への移動命令（ROADMAP「個人への移動指定」案1、`BattleSoldierOrder.cpp`）：作戦画面で Ctrl＋クリックで兵を選び、右クリックで移動先、Hで部隊へ戻す。命令は保存される。(2) `-BattleThreatCover=2`：ほかの脅威を「交戦距離の中で見えていてこちらを向いている敵」と撃たれた方向に絞り、2回続けて破られたときだけ遮蔽を出る。(3) `-BattleSoldierAIFocus=<m>`／`-BattleSoldierAIFocusAt=X,Y`：段階A・B1をプレイヤー（または指定した点）の周りだけで動かす。(4) B1が遠くの遮蔽へ移るとき、保存の検査（遮蔽の残り時間は3秒以内）に引っかからないように直した。
 - **検証**（ロックは22時12分に区画AIから受け取った）：`Build-Editor` 成功。`Test-Battle` failures=0（`Setup/Battle-Smoke-20261120-221101.log`）。自動試験 `Test-WideSight -Map E -Area -Experiment -SoldierOrderTest -RoundTripSave`（`so-order-E-s7c`）は `BATTLE_SOLDIER_ORDER_RESULT failures=0`：12m先へ2.5秒で着いて守り、Hで2.0秒後に部隊の位置へ戻って命令が終わり、2回目の命令は部隊の新しい命令で解けた。同じ試合の保存往復 `BATTLE_MIXED_SAVE_SOAK_RESULT failures=0`。最初の版（`so-order-E-s7b`）は試合の開始前に命令を出したため、開始時の群の命令で解けて failures=1。試験を開始20秒後からに直した。凍結ビルド `soldierai-order-r1`。切替なしの試合は基準と一致（`s7-I-shot2-s7` と `so-I-off-s7` が IDENTICAL）。
