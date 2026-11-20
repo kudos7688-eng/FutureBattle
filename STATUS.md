@@ -26,7 +26,8 @@
 - **検証**（ロックは16時02分に区画AIから受け取った。テストプレイの UE が1本動いている間に回したので、性能は測っていない）：作業ツリーで `Build-Editor` 成功。`Test-Battle` `BATTLE_SMOKE_RESULT failures=0`（`Setup/Battle-Smoke-20261120-160527.log`）。`Test-Area`（`defaults-area`）`BATTLE_AREA_RESULT failures=0`（130件、部隊群の2件を含む）。マップI・種7・区画監査・保存往復（`defaults-I-audit-s7`）：`BATTLE_SECTOR_AUDIT_RESULT failures=0`、完走、勝者1、経路の折り返し `path_mirrored` 1813回、部隊群の結成2。マップE・種7・保存往復（`defaults-E-s7`）：完走、勝者0、`path_mirrored` 1439回、部隊群の結成2。`Test-MixedSave` failures=0。
 - **影響**：E〜I の既定の試合と、全マップの既定の試合（部隊群）が変わる。**これより前の基準の試合とは一致しない**（比べるときは `-BattleSymmetricStart=0 -BattleAreaGroups=0`）。区画AIの基準は「区画AI」が取り直す（同セッションと合意）。
 - **制限**：各マップ1試合だけ。A/D で部隊群を既定にした試合は Test-Area 以外では回していない。マップIの作り直し後の画面確認はまだ。main への取り込みと main の Binaries のビルドは、テストプレイの UE が終わってから（main の Binaries を上書きしないため）。
-- **次の一手**：main へ取り込み → main をビルド → 段階1（区画AIの組み合わせと `-BattleWaypointPass` を I で計測）。
+- **main への取り込み**（ユーザー指示「終わったら取り込む」）：17時、main を 0647550 へ早送りして push。17時15分、main で `Build-Editor` 成功、`Test-Battle` `BATTLE_SMOKE_RESULT failures=0`（`Setup/Battle-Smoke-20261120-171518.log`）。main の Binaries は新しい既定になった。
+- **次の一手**：段階1（区画AIの組み合わせと `-BattleWaypointPass` を I で計測）。区画AIの基準は「区画AI」が新しい main で取り直す。
 
 ## 2026-11-20 16時30分 Claude（AC01）：外骨格兵が進む方向へ体ごと傾く・胴体の透け（腰の後ろ・首の後ろ）をふさいだ本体
 - **依頼**：ユーザー「移動する方向へ体を傾けたほうがそれらしいのでは？また体が透けている部分がまだあります」（前傾6°のグライドはそのまま、とのこと）。
