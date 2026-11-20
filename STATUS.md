@@ -20,6 +20,16 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-20 21時40分 Claude（群制御）：補給班（兵種9）を補給車1両に置き換え、群の役割「補給」と野戦補給（ブランチ `groupui`）
+- **決定（ユーザー）**：補給ユニットは車両にする。3人の補給班と並べず**置き換える**（狙われる側として、車両の通れる場所に位置が絞られるのがよい）。
+- **補給車**：1両（装甲車の値・自衛の軽機関銃・仮の形）。名前「第N補給車」、`-` キー、費用10、1軍2両まで（従来どおり）。`SupplyCarStock`=2400発を積み、周り `SupplyTeamRadius`（30m）の自軍部隊への補充（従来の10秒ごと）で配った分だけ減る（`AREA_TEAM_SUPPLY ... car= stock=`）。残りは `FBattleAreaState::SupplyStock` で保存される（検証あり）。`SupplyCarRestockRatio`=15% を切ると本拠地へ戻って満タンにする（`AREA_SUPPLY_RESTOCK`）。
+- **AIの動き**（`BattleSupplyCar.cpp` の `SupplyCarOrder`）：AIの群に入れば役割5「補給」。集結中は集結地点、前進中は支援の位置の `SupplyCarBack`（40m）後ろ、保持中は拠点の40m後ろ。敵の対戦車兵が届く所なら20mずつさらに下がる。群に入っていなければ、敵の本拠地に一番近い自軍の拠点の後ろ。
+- **野戦補給**（`BattleSquadRetreat.cpp` "FIELD SUPPLY"）：歩兵の部隊で、生き残りの半分以上が弾切れ・脅威と損害なし・兵の補充が要らないとき、`FieldSupplyRange`（200m）以内の補給車（自分の群のものを先）へ下がり、9割に弾が戻れば持ち場へ戻る。
+- **AIの購入**：既定では買わない（`AreaSupplyKeep=0`）。試験切替 `-BattleAreaSupplyKeep=n`（`Test-WideSight.ps1 -AreaSupplyKeep n` を追加）。
+- **検証**（ロックは21時27分に敵AIから受け取った）：`Build-Editor` 成功。`Test-Battle` failures=0。`Test-Area`（`groupui-supply`、`-CoverActions 1 -FlankCoordination 1`）failures=0（補給車の試験：1両・費用10・30m以内に補充して40mでは補充しない・弾が尽きると補充せず本拠地へ・積み直しで満タン）。マップI・種7・保存往復・`-AreaSupplyKeep 1`（`groupui-supply1-I-s7`）：完走 failures=0、勝者0、741:723。両軍が補給車を1両ずつ買い、補充55回（0軍18・1軍37）、積み直し1回。
+- **制限**：この試合で野戦補給（FIELD SUPPLY）は0回。本拠地へ戻った124回はすべて人数の減り（RETURN WITH LEADER）で、弾切れで半分以上が撃てなくなる前に戻っている。条件の見直しは比較の後。補給車が部隊の戦術で回り込み（FLANK）を始めることがある（すぐ中止）。1試合だけで勝敗への影響は計っていない。3人の補給班を含む古い保存データは読み込めない見込み（未確認）。画面での見た目は未確認。
+- **次の一手**：`-BattleAreaSupplyKeep=1` の12シード比較（マップI）。野戦補給の条件（半分 → 3割など）と、補給車の回り込みを止めること。
+
 ## 2026-11-20 19時15分 Claude（群制御）：稼働小隊の上限を30に、部隊パネルを群ごとのタブに（ブランチ `groupui`、作業ツリー `FutureBattle-groupui`）
 - **決定（ユーザー）**：部隊数を30まで増やす。部隊パネルは「群のタブで群ごとに表示し、群に入っていない部隊を未所属タブへ」。補給班（兵種9）は補給車に置き換える（次の作業。下の「次の一手」）。
 - **上限**：`UBattleTuning::AreaMaxActiveSquads` 25 → 30（`DefaultGame.ini` も）。プレイヤー・AIの両方。`-BattleAreaMaxSquads=25` で従来に戻る。**既定の試合が変わる**（開始20秒で両軍とも30隊まで買う）。収入（INC4）は25隊で調整した値のまま。

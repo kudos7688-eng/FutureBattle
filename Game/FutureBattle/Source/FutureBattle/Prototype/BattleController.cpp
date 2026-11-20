@@ -1093,7 +1093,7 @@ void ABattleController::PressCommandButton(int32 Index)
  case 12: HireMortar(); break; // area battle: mortar team
  case 13: HireSPGun(); break; // area battle: self-propelled gun
  case 14: HireExo(); break; // area battle: armoured exoskeleton soldier
- case 15: HireSupply(); break; // area battle: supply team
+ case 15: HireSupply(); break; // area battle: supply vehicle
  default: break;
  }
 }
@@ -1205,7 +1205,7 @@ void ABattleController::HireMortar()
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
 	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Mortar); ShowNotice(Match->LastMessage);
 }
-// Area battle: the - key buys a supply team (squad type 9, at most AreaSupplyLimit per team).
+// Area battle: the - key buys a supply vehicle (squad type 9, at most AreaSupplyLimit per team; BattleSupplyCar.cpp).
 void ABattleController::HireSupply()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();

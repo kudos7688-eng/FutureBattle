@@ -81,6 +81,16 @@ void UBattleLeaderRuntime::ConfigureVehicle(int32 ID)
    Turret=Part(Cylinder,Root,FVector(-60,0,0),FRotator::ZeroRotator,FVector(1.4,1.4,1.4));
    Part(Cylinder,Turret,FVector(177/1.4,0,177/1.4),FRotator(-45,0,0),FVector(.16/1.4,.16/1.4,5.0/1.4));
   }
+  else if(Type==BattleSquadType::Supply)
+  {
+   // Supply vehicle: a cab 1.6 x 2.2 x 1.4 m in front of a tall cargo box 3.2 x 2.3 x 1.9 m on four wheels, a small machine-gun mount
+   // on the cab (self-defence).
+   Part(Cube,Root,FVector(160,0,-20),FRotator::ZeroRotator,FVector(1.6,2.2,1.4));
+   Part(Cube,Root,FVector(-80,0,5),FRotator::ZeroRotator,FVector(3.2,2.3,1.9));
+   for(int32 I=0;I<4;++I)Part(Cylinder,Root,FVector(I<2?150:-150,I%2?115:-115,-85),FRotator(0,0,90),FVector(.9,.9,.3));
+   Turret=Part(Cylinder,Root,FVector(160,0,60),FRotator::ZeroRotator,FVector(.5,.5,.3));
+   Part(Cylinder,Turret,FVector(60/.5,0,0),FRotator(90,0,0),FVector(.05/.5,.05/.5,1.0/.3));
+  }
   else if(bCar)
   {
    Part(Cube,Root,FVector(0,0,-30),FRotator::ZeroRotator,FVector(4.6,2.2,1.1));

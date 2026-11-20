@@ -123,7 +123,7 @@ uint8 UBattleMatch::GroupRole(const FBattleGroup& G,int32 SquadID) const
  if(const uint8* Role=G.Roles.Find(SquadID))return *Role;
  // A squad that joined after the roles were given: by its type.
  const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SquadID);const uint8 Type=S?S->SquadType:BattleSquadType::Rifle;
- return Type==BattleSquadType::Tank?2:BattleSquadType::IsArtillery(Type)?3:Type==BattleSquadType::AntiTank?4:Type==BattleSquadType::Heavy?1:Type==BattleSquadType::Rifle?0:255;
+ return Type==BattleSquadType::Tank?2:BattleSquadType::IsArtillery(Type)?3:Type==BattleSquadType::AntiTank?4:Type==BattleSquadType::Heavy?1:Type==BattleSquadType::Rifle?0:Type==BattleSquadType::Supply?5:255;
 }
 
 void UBattleMatch::AssignGroupRoles(FBattleGroup& G) const
@@ -224,7 +224,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
   if(G->Squads.Num()<(G->bPlayer?1:2))DissolveGroup(ID,TEXT("members_lost"));
  }
  // 2. AI formation (trial): one attack group per team from its AI-led rifle squads outside the home-assault slots, the nearest to the
- //    rally point first, with one tank and one mortar team when the team has them.
+ //    rally point first, with one tank, one mortar team, one anti-tank team and one supply vehicle when the team has them.
  int32 AIGroup=INDEX_NONE;for(const auto& P:Groups)if(P.Value.Team==Team&&!P.Value.bPlayer)AIGroup=AIGroup==INDEX_NONE?P.Key:FMath::Min(AIGroup,P.Key);
  if(BattleTactics::AreaGroups(Team)&&bStrategy)
  {
@@ -238,20 +238,21 @@ void UBattleMatch::UpdateGroups(int32 Team)
     const auto& S=P.Value;
     if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(P.Key)!=INDEX_NONE)continue;
     if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key))continue;
-    if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Tank&&S.SquadType!=BattleSquadType::Mortar&&S.SquadType!=BattleSquadType::AntiTank)continue;
+    if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Tank&&S.SquadType!=BattleSquadType::Mortar&&S.SquadType!=BattleSquadType::AntiTank&&S.SquadType!=BattleSquadType::Supply)continue;
     bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase)continue;
     Free.Add({P.Key,S.SquadType,FVector::DistSquared2D(R->Position(S.LeaderUnitID),Rally)});
    }
    Free.Sort([](const FFree& A,const FFree& B){return A.D!=B.D?A.D<B.D:A.SID<B.SID;});
    // What the group already has (a new group: nothing), then the nearest free squads up to its numbers.
-   TArray<int32> Pick;int32 Rifles=0;bool bTank=false,bMortar=false,bAT=false;const int32 Want=FMath::Clamp(T->GroupRifleSquads,2,6);
+   TArray<int32> Pick;int32 Rifles=0;bool bTank=false,bMortar=false,bAT=false,bSupply=false;const int32 Want=FMath::Clamp(T->GroupRifleSquads,2,6);
    if(AIGroup!=INDEX_NONE)for(int32 SID:Groups[AIGroup].Squads)if(const auto* S=Store->FindSquad(SID))
-   {Rifles+=S->SquadType==BattleSquadType::Rifle;bTank|=S->SquadType==BattleSquadType::Tank;bMortar|=S->SquadType==BattleSquadType::Mortar;bAT|=S->SquadType==BattleSquadType::AntiTank;}
+   {Rifles+=S->SquadType==BattleSquadType::Rifle;bTank|=S->SquadType==BattleSquadType::Tank;bMortar|=S->SquadType==BattleSquadType::Mortar;bAT|=S->SquadType==BattleSquadType::AntiTank;bSupply|=S->SquadType==BattleSquadType::Supply;}
    for(const auto& F:Free)
    {
     if(F.Type==BattleSquadType::Rifle){if(Rifles<Want){Pick.Add(F.SID);++Rifles;}}
     else if(F.Type==BattleSquadType::Tank){if(!bTank){Pick.Add(F.SID);bTank=true;}}
     else if(F.Type==BattleSquadType::Mortar){if(!bMortar){Pick.Add(F.SID);bMortar=true;}}
+    else if(F.Type==BattleSquadType::Supply){if(!bSupply){Pick.Add(F.SID);bSupply=true;}}
     else if(!bAT){Pick.Add(F.SID);bAT=true;}
    }
    if(AIGroup==INDEX_NONE){if(Rifles>=2)FormGroup(Team,Pick,false);}
@@ -281,6 +282,8 @@ void UBattleMatch::UpdateGroups(int32 Team)
   {
    const auto* S=Store->FindSquad(SID);if(!S)continue;
    if(S->TacticalPlan.Action==EBattleSquadTactic::Recover&&S->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY")))continue;
+   // The supply vehicle keeps its own place (BattleSupplyCar.cpp) and does not hold the group up either.
+   if(S->SquadType==BattleSquadType::Supply)continue;
    const FVector P=R->Position(S->LeaderUnitID);++Present;Center+=P;
    Ready+=FVector::Dist2D(P,G->Rally)<=FMath::Max(500.f,T->GroupRallyRadius);
   }
@@ -429,7 +432,7 @@ bool UBattleMatch::GroupOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOr
  const int32 ID=GroupOf(SquadID);const auto* G=ID!=INDEX_NONE?Groups.Find(ID):nullptr;
  const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SquadID);
  if(!G||!S||G->Team!=Team||!Objectives.IsValidIndex(G->Objective)||!GroupAIRun(*G))return false;
- const uint8 Role=GroupRole(*G,SquadID);if(Role==255)return false;
+ const uint8 Role=GroupRole(*G,SquadID);if(Role==255||Role==5)return false; // 5 supply: SupplyCarOrder (BattleSupplyCar.cpp)
  const bool bMortar=Role==3;
  if(G->Phase==0)
  {

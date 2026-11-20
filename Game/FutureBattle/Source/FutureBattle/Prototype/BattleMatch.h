@@ -22,6 +22,7 @@ struct FAreaIntent
  int32 MortarKeep=0;                  // mortar teams the AI keeps active (same pacing as scouts; 0 = none)
  int32 SPGKeep=0;                     // self-propelled guns the AI keeps active (same pacing as scouts; 0 = none)
  int32 ExoKeep=0;                     // armoured exoskeleton soldiers the AI keeps active (same pacing as scouts; 0 = none)
+ int32 SupplyKeep=0;                  // supply vehicles the AI keeps active (same pacing as scouts; 0 = none; BattleSupplyCar.cpp)
  int32 ATKeep=0;                      // anti-tank teams the AI keeps active (same pacing as scouts; 0 = none)
  int32 ScoutKeep=0;                   // scout pairs the AI keeps active (one more per ScoutAfterHires purchases, up to this; 0 = none)
 };
@@ -120,8 +121,20 @@ public:
  // Active scout pairs of a team (at most UBattleTuning::AreaScoutLimit).
  int32 ActiveScouts(int32 Team) const;
  int32 ActiveOfType(int32 Team,uint8 SquadType) const;
- // A commanded supply team of this team has its living leader within UBattleTuning::SupplyTeamRadius of the position.
- bool SupplyTeamNear(int32 Team,const FVector& Position) const;
+ // Supply vehicles (squad type 9, BattleSupplyCar.cpp). SupplyCarNear: the nearest commanded vehicle of the team with stock left within
+ // Radius (default UBattleTuning::SupplyTeamRadius) of the position (INDEX_NONE: none); SupplyTeamNear says whether there is one.
+ int32 SupplyCarNear(int32 Team,const FVector& Position,float Radius=-1.f) const;
+ bool SupplyTeamNear(int32 Team,const FVector& Position) const { return SupplyCarNear(Team,Position)!=INDEX_NONE; }
+ int32 SupplyStockMax() const;
+ int32 SupplyStockOf(int32 SquadID) const;
+ void SpendSupply(int32 SquadID,int32 Rounds);
+ void RestockSupplyCar(int32 SquadID);
+ // The order of an AI-run supply vehicle: home to load while low; with its group (role 5) behind the group's post; otherwise behind the
+ // own point nearest the enemy home. False: not a supply vehicle.
+ bool SupplyCarOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ // Where a squad short of ammunition gets it in the field: the position of a supply vehicle of its team with stock within
+ // UBattleTuning::FieldSupplyRange (its own group's first). False: none (the squad goes home as before).
+ bool FieldSupplyPoint(int32 SquadID,FVector& Where,int32* CarID=nullptr) const;
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;
@@ -167,7 +180,8 @@ public:
 	FVector AreaTankPost(int32 Team, int32 Point, float Overwatch = -1.f) const; // Overwatch below zero: UBattleTuning::TankOverwatch
 	// Squad groups, stage 1 (BattleGroups.cpp): members, one objective, a phase (0 assemble at Rally, 1 advance, 2 hold). Not saved.
 	// Stage 2: roles while advancing (0 assault: to the point; 1 support: fires from a post short of it; 2 armour: the tank's post behind
-	// the infantry; 3 fire: mortar or gun at its firing post; 4 guard: the anti-tank team beside the support post; 255 none: the squad
+	// the infantry; 3 fire: mortar or gun at its firing post; 4 guard: the anti-tank team beside the support post; 5 supply: the supply vehicle behind
+	// the group's post (BattleSupplyCar.cpp); 255 none: the squad
 	// keeps its own type's rules). A point the group could not take is avoided until AvoidUntil.
 	struct FBattleGroup { int32 ID = 0, Team = 0; TArray<int32> Squads; int32 Objective = INDEX_NONE; uint8 Phase = 0; float PhaseAt = 0.f; FVector Rally = FVector::ZeroVector; bool bPlayer = false; TMap<int32, uint8> Roles; int32 Avoid = INDEX_NONE; float AvoidUntil = 0.f;
 		// Stage 3b: the living soldiers when the advance began (losses end it early) and how often in a row the group failed at StallPoint.

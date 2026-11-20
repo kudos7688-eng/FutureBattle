@@ -244,9 +244,14 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      if(M->Credits[0]<SCost){const int32 Add=SCost-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
      const int32 C1=M->Credits[0];const bool SHired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Supply);
      int32 SupplyID=0;for(const auto& P:Store->GetSquads())SupplyID=FMath::Max(SupplyID,P.Key);const auto* SS=Store->FindSquad(SupplyID);
-     bool SGood=SHired&&SS&&SCost==10&&M->Credits[0]==C1-SCost&&SS->SquadType==BattleSquadType::Supply&&SS->Members.Num()==3&&SS->DisplayName.Contains(TEXT("補給班"));
-     if(SGood){const FVector At=Position(SS->LeaderUnitID);SGood=M->SupplyTeamNear(0,At+FVector(2000,0,0))&&!M->SupplyTeamNear(0,At+FVector(4000,0,0))&&!M->SupplyTeamNear(1,At);}
-     Check(SGood,TEXT("supply team: 3 soldiers, 10 resources, own squads within 30 m of its leader are supplied"));
+     // Supply vehicle (2026-11-20, replaces the 3-soldier supply team): one vehicle, full stock when bought, supplies within 30 m while
+     // it has stock, none when empty; it then drives home to load; loading at home fills it again (BattleSupplyCar.cpp).
+     bool SGood=SHired&&SS&&SCost==10&&M->Credits[0]==C1-SCost&&SS->SquadType==BattleSquadType::Supply&&SS->Members.Num()==1&&IsVehicle(SS->LeaderUnitID)&&SS->DisplayName.Contains(TEXT("補給車"));
+     if(SGood){const FVector At=Position(SS->LeaderUnitID);SGood=M->SupplyStockOf(SupplyID)==M->SupplyStockMax()&&M->SupplyTeamNear(0,At+FVector(2000,0,0))&&!M->SupplyTeamNear(0,At+FVector(4000,0,0))&&!M->SupplyTeamNear(1,At)&&M->SupplyCarNear(0,At+FVector(15000,0,0),20000.f)==SupplyID;
+      M->SpendSupply(SupplyID,M->SupplyStockMax());FVector Goal;EBattleOrder Order=EBattleOrder::Hold;
+      SGood&=M->SupplyStockOf(SupplyID)==0&&!M->SupplyTeamNear(0,At+FVector(2000,0,0))&&M->SupplyCarOrder(SupplyID,0,Goal,Order)&&Order==EBattleOrder::Move&&FVector::Dist2D(Goal,M->AreaHome(0))<1500.;
+      M->RestockSupplyCar(SupplyID);SGood&=M->SupplyStockOf(SupplyID)==M->SupplyStockMax()&&M->SupplyTeamNear(0,At+FVector(2000,0,0));}
+     Check(SGood,TEXT("supply vehicle: one vehicle, 10 resources, supplies own squads within 30 m while it has stock, goes home to load when empty"));
     }
     const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::AntiTank);
     if(M->Credits[0]<Cost){const int32 Add=Cost-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}

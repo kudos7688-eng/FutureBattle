@@ -51,9 +51,11 @@ namespace BattleSquadType
  int32 LauncherRounds(uint8 Type); // anti-tank rounds of the second weapon (0 = none)
  int32 ScoreCount(uint8 Type);     // how many soldiers one living member counts for in the final score (1 for all but the exoskeleton)
  float SpeedAt(uint8 Type,const UWorld* World,const FVector& Position); // scale of UBattleTuning::MoveSpeed
- // Supply team (2026-11-19, user request): 3 riflemen. Squads of its team whose leader stays within UBattleTuning::SupplyTeamRadius of
- // its living leader get the home ammunition refill (UBattleMatch::UpdateArea). Cost AreaSupplyCost, at most AreaSupplyLimit per team.
- // The AI does not buy it.
+ // Supply vehicle (type 9; 2026-11-19 a 3-soldier supply team, 2026-11-20 replaced by one vehicle, user decision: a vehicle limits where
+ // it can go and makes it a target). The armoured car's vehicle values and machine gun (self-defence). It carries SupplyCarStock
+ // rounds: squads of its team whose leader stays within UBattleTuning::SupplyTeamRadius of it get the home ammunition refill
+ // (UBattleMatch::UpdateArea) while it has stock left; it refills at home (BattleSupplyCar.cpp). Cost AreaSupplyCost, at most
+ // AreaSupplyLimit per team. The AI keeps AreaSupplyKeep of them (trial -BattleAreaSupplyKeep=n; default 0 until measured).
 }
 
 UENUM(BlueprintType)
@@ -363,10 +365,19 @@ public:
 	// goes home to be repaired like a vehicle. The AI keeps AreaExoKeep of them (trial -BattleAreaExoKeep=n; default 0 until measured).
 	UPROPERTY(Config, EditAnywhere) int32 AreaExoCost = 30;
 	UPROPERTY(Config, EditAnywhere) int32 AreaExoLimit = 3;
-	// Supply team (squad type 9): see BattleSquadType.
+	// Supply vehicle (squad type 9): see BattleSquadType and BattleSupplyCar.cpp.
 	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyCost = 10;
 	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyLimit = 2;
 	UPROPERTY(Config, EditAnywhere) float SupplyTeamRadius = 3000.f;
+	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyKeep = 0;
+	// Rounds the vehicle carries (an empty 8-soldier rifle squad takes 720 of reserve ammunition); below SupplyCarRestockRatio of it the
+	// vehicle drives home and waits there until full again.
+	UPROPERTY(Config, EditAnywhere) int32 SupplyCarStock = 2400;
+	UPROPERTY(Config, EditAnywhere) float SupplyCarRestockRatio = .15f;
+	// How far short of its post (on the own side) the vehicle stops; further back in 20 m steps while a known anti-tank soldier reaches it.
+	UPROPERTY(Config, EditAnywhere) float SupplyCarBack = 4000.f;
+	// A squad short of ammunition drives to a supply vehicle of its team with stock within this distance instead of going home.
+	UPROPERTY(Config, EditAnywhere) float FieldSupplyRange = 20000.f;
 	UPROPERTY(Config, EditAnywhere) int32 AreaExoKeep = 0;
 	UPROPERTY(Config, EditAnywhere) float ExoHealthScale = 2.f;
 	UPROPERTY(Config, EditAnywhere) float ExoArmorSmallArms = .3f;
