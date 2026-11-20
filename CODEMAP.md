@@ -4,13 +4,13 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（150 モジュール、33513 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（150 モジュール、33675 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
 入口は `ABattleGameMode::Tick` (BattleGameMode.cpp:169) 。ここで2つの経路に分かれる。
 
-- **混成（隊長Actor＋Mass部下。広域・エリア戦の通常経路）**：`UBattleLeaderRuntime::Step` (BattleLeaderRuntime.cpp:1321) がすべてを回す。順に、試合の進行 `UBattleMatch::Update` (BattleMatch.cpp:152) → 部隊の判断 `UBattleSquadTactics::Step` (BattleSquadTactics.cpp:97) → 認識 `UBattlePerception::Update` (BattlePerception.cpp:57) → 隊長の判断 `UBattleLeaderRuntime::Think` (BattleLeaderRuntime.cpp:588) → 兵ごとの移動・射撃 `UBattleLeaderRuntime::Follow` (BattleLeaderRuntime.cpp:864) → 表示 `UBattleLeaderRuntime::RefreshDisplay` (BattleLeaderRuntime.cpp:1302) 。
+- **混成（隊長Actor＋Mass部下。広域・エリア戦の通常経路）**：`UBattleLeaderRuntime::Step` (BattleLeaderRuntime.cpp:1321) がすべてを回す。順に、試合の進行 `UBattleMatch::Update` (BattleMatch.cpp:152) → 部隊の判断 `UBattleSquadTactics::Step` (BattleSquadTactics.cpp:97) → 認識 `UBattlePerception::Update` (BattlePerception.cpp:58) → 隊長の判断 `UBattleLeaderRuntime::Think` (BattleLeaderRuntime.cpp:588) → 兵ごとの移動・射撃 `UBattleLeaderRuntime::Follow` (BattleLeaderRuntime.cpp:864) → 表示 `UBattleLeaderRuntime::RefreshDisplay` (BattleLeaderRuntime.cpp:1302) 。
 - **旧全Actor（80m×60m の試作アリーナ）**：GameMode が直接 `UBattleMatch::Update` (BattleMatch.cpp:152) 、 `UBattleSquadTactics::Step` (BattleSquadTactics.cpp:97) 、 `ABattleGameMode::RefreshVisibility` (BattleGameMode.cpp:209) 、 `UBattleSquadAI::Update` (BattleSquadAI.cpp:32) を呼ぶ。兵ごとの実行は `ABattleAIController::Tick` (BattleAIController.cpp:152) 。
 
 エリア戦のときは `UBattleMatch::Update` (BattleMatch.cpp:152) の中で `UBattleMatch::UpdateArea` (BattleArea.cpp:206) を毎フレーム、 `UBattleMatch::UpdateAreaHiring` (BattleArea.cpp:136) と `UBattleMatch::UpdateEnemyOrders` (BattleMatch.cpp:263) を5秒ごとに呼ぶ。起動時の組み立て（どのモードか、どの試験か）は `ABattleGameMode::BeginPlay` (BattleGameMode.cpp:51) と `UBattleLeaderRuntime::Start` (BattleLeaderRuntime.cpp:68) 。
@@ -21,19 +21,19 @@
 
 | 機能 | 入口（ここから読む） | 関連 |
 |---|---|---|
-| 編成AI・候補選択と貯蓄購入 | `UBattleMatch::UpdateCompositionHiring` (BattleCompositionRuntime.cpp:55) 、 `BattleComposition::Decide` (BattleCompositionPlanner.cpp:13) 、 `BattleComposition::ValidateSave` (BattleCompositionSave.cpp:4) | Planner/PlannerTeams は既定0。ONは不足・緊急性で選択し貯蓄／購入。CombatStateVersion=4、旧保存はPlanner無効。検査は `UBattleLeaderRuntime::RunCompositionSmoke` (BattleCompositionSmoke.cpp:8) |
-| 盾被弾制圧・群の兵種別戦力（試験） | `UBattleLeaderRuntime::NoteUnderFire` (BattleLeaderRuntime.cpp:1498) 、 `UBattleState::AdvanceShields` (BattleState.cpp:390) 、 `UBattleMatch::GroupPower` (BattleGroups.cpp:504) 、 `UBattleMatch::GroupPointPower` (BattleGroups.cpp:512) | `BattleExoShieldSuppression` / `BattleGroupStrength` は既定0。観測兵種は `UBattlePerception::Update` (BattlePerception.cpp:57) で取得、重みはUBattleTuning |
+| 編成AI・候補選択と貯蓄購入 | `UBattleMatch::UpdateCompositionHiring` (BattleCompositionRuntime.cpp:56) 、 `BattleComposition::Decide` (BattleCompositionPlanner.cpp:13) 、 `BattleComposition::ValidateSave` (BattleCompositionSave.cpp:5) | Planner/PlannerTeams は既定0。ONは不足・緊急性で選択し貯蓄／購入。CombatStateVersion=4、旧保存はPlanner無効。検査は `UBattleLeaderRuntime::RunCompositionSmoke` (BattleCompositionSmoke.cpp:11) |
+| 盾被弾制圧・群の兵種別戦力（試験） | `UBattleLeaderRuntime::NoteUnderFire` (BattleLeaderRuntime.cpp:1498) 、 `UBattleState::AdvanceShields` (BattleState.cpp:390) 、 `UBattleMatch::GroupPower` (BattleGroups.cpp:504) 、 `UBattleMatch::GroupPointPower` (BattleGroups.cpp:512) | `BattleExoShieldSuppression` / `BattleGroupStrength` は既定0。観測兵種は `UBattlePerception::Update` (BattlePerception.cpp:58) で取得、重みはUBattleTuning |
 | 間接射撃の試験切替 | `UBattleMatch::ArtilleryHomeObserved` (BattleAreaIntel.cpp:86) 、 `UBattleMatch::AreaArtilleryClusters` (BattleArtillery.cpp:160) 、 `UBattleLeaderRuntime::FireArtillery` (BattleArtillery.cpp:302) 、 `UBattleLeaderRuntime::ArtilleryBlastTransmission` (BattleArtillery.cpp:349) | 自走砲弾は `UBattleState::UseSPGAmmo` (BattleState.cpp:626) / `UBattleState::RefillSPGAmmo` (BattleState.cpp:634) 。4切替は既定0、CombatStateVersion=3で弾数と切替を保存 |
 | 正規状態・UnitID・部隊 | `UBattleState::RegisterUnit` (BattleState.cpp:97) 、 `UBattleState::CreateSquad` (BattleState.cpp:166) 、 `UBattleState::ApplyDamage` (BattleState.cpp:435) | 構造体は `BattleState.h`（FBattleUnitState、FBattleSquadState）。調整値は同じ .h の `UBattleTuning`（ini で上書き） |
 | 兵科（歩兵・重火器・偵察・対戦車・戦車）の差 | `BattleSquadType::Members` (BattleState.cpp:565) から `BattleSquadType::Weapon` (BattleState.cpp:603) までの一群、 `UBattleState::SetSquadType` (BattleState.cpp:608) | 射程は `BattleRanges::Get` (BattleRanges.cpp:6) |
-| 命令（移動・攻撃移動・防御・待機） | 入力 `ABattleController::IssueOrderAt` (BattleController.cpp:628) → 状態 `UBattleState::SetSquadOrder` (BattleState.cpp:197) → 混成 `UBattleLeaderRuntime::IssueOrder` (BattleLeaderRuntime.cpp:526) | 委任は `UBattleState::SetSquadDelegated` (BattleState.cpp:184) 、 `UBattleMatch::SetAllyDelegated` (BattleMatch.cpp:144) |
-| 入力・RTS/TPS 切替・ゲームパッド | `ABattleController::SetupInputComponent` (BattleController.cpp:59) 、 `ABattleController::InputKey` (BattleController.cpp:403) 、 `ABattleController::ToggleMode` (BattleController.cpp:305) 、 `ABattleController::ControlUnit` (BattleController.cpp:276) | ゲームパッドは `ABattleController::UpdateGamepad` (BattleController.cpp:1119) 。隊長交代は `UBattleState::HandOverLeader` (BattleState.cpp:529) |
-| HUD・ミニマップ・部隊一覧・通知 | `ABattleHUD::DrawHUD` (BattleHUD.cpp:27) 、 `ABattleHUD::DrawMinimap` (BattleHUD.cpp:445) 、 `ABattleHUD::DrawSquadList` (BattleHUD.cpp:537) 、 `ABattleHUD::DrawNoticeLog` (BattleHUD.cpp:602) | 通知の中身は `ABattleController::UpdateNoticeLog` (BattleController.cpp:926) 、 `ABattleController::PushNotice` (BattleController.cpp:910) 。日本語化は `BattleUIText::Ja` (BattleUIText.cpp:76) 。被弾方向は `ABattleHUD::DrawHitDirection` (BattleHUD.cpp:655) （記録は `UBattleState::ApplyDamageFrom` (BattleState.cpp:465) ）、画面外マーカーは `ABattleHUD::DrawOffscreenMarkers` (BattleHUD.cpp:693) 、撃破ログは `ABattleHUD::DrawKillLog` (BattleHUD.cpp:760) （記録は `UBattleState::NoteKill` (BattleState.cpp:472) ）。作戦画面の戦場の霧・区画の格子と区画の状態は `ABattleHUD::DrawFieldOverlay` (BattleHUD.cpp:833) 、 `ABattleHUD::DrawSectorPanel` (BattleHUD.cpp:969) （計算は `BattleSectorView`） |
-| 認識（見えた敵の記憶） | `UBattlePerception::Update` (BattlePerception.cpp:57) 、 `UBattlePerception::GetContacts` (BattlePerception.cpp:36) | 視線は `UBattleLeaderRuntime::CanSee` (BattleLeaderRuntime.cpp:331) 、 `UBattleLeaderRuntime::TraceSight` (BattleLeaderRuntime.cpp:362) 。試験用の視界切替は `BattleSightExperiment` |
+| 命令（移動・攻撃移動・防御・待機） | 入力 `ABattleController::IssueOrderAt` (BattleController.cpp:693) → 状態 `UBattleState::SetSquadOrder` (BattleState.cpp:197) → 混成 `UBattleLeaderRuntime::IssueOrder` (BattleLeaderRuntime.cpp:526) | 委任は `UBattleState::SetSquadDelegated` (BattleState.cpp:184) 、 `UBattleMatch::SetAllyDelegated` (BattleMatch.cpp:144) |
+| 入力・RTS/TPS 切替・ゲームパッド | `ABattleController::SetupInputComponent` (BattleController.cpp:60) 、 `ABattleController::InputKey` (BattleController.cpp:416) 、 `ABattleController::ToggleMode` (BattleController.cpp:318) 、 `ABattleController::ControlUnit` (BattleController.cpp:288) | ゲームパッドは `ABattleController::UpdateGamepad` (BattleController.cpp:1196) 。隊長交代は `UBattleState::HandOverLeader` (BattleState.cpp:529) |
+| HUD・ミニマップ・部隊一覧・通知 | `ABattleHUD::DrawHUD` (BattleHUD.cpp:27) 、 `ABattleHUD::DrawMinimap` (BattleHUD.cpp:445) 、 `ABattleHUD::DrawSquadList` (BattleHUD.cpp:537) 、 `ABattleHUD::DrawNoticeLog` (BattleHUD.cpp:602) | 通知の中身は `ABattleController::UpdateNoticeLog` (BattleController.cpp:1003) 、 `ABattleController::PushNotice` (BattleController.cpp:987) 。日本語化は `BattleUIText::Ja` (BattleUIText.cpp:95) 。被弾方向は `ABattleHUD::DrawHitDirection` (BattleHUD.cpp:655) （記録は `UBattleState::ApplyDamageFrom` (BattleState.cpp:465) ）、画面外マーカーは `ABattleHUD::DrawOffscreenMarkers` (BattleHUD.cpp:693) 、撃破ログは `ABattleHUD::DrawKillLog` (BattleHUD.cpp:760) （記録は `UBattleState::NoteKill` (BattleState.cpp:472) ）。作戦画面の戦場の霧・区画の格子と区画の状態は `ABattleHUD::DrawFieldOverlay` (BattleHUD.cpp:833) 、 `ABattleHUD::DrawSectorPanel` (BattleHUD.cpp:969) （計算は `BattleSectorView`） |
+| 認識（見えた敵の記憶） | `UBattlePerception::Update` (BattlePerception.cpp:58) 、 `UBattlePerception::GetContacts` (BattlePerception.cpp:37) | 視線は `UBattleLeaderRuntime::CanSee` (BattleLeaderRuntime.cpp:331) 、 `UBattleLeaderRuntime::TraceSight` (BattleLeaderRuntime.cpp:362) 。試験用の視界切替は `BattleSightExperiment` |
 | 隊長の判断と兵の実行（混成） | `UBattleLeaderRuntime::Think` (BattleLeaderRuntime.cpp:588) 、 `UBattleLeaderRuntime::Follow` (BattleLeaderRuntime.cpp:864) 、 `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:1093) | 兵単位の実行は `FBattleMixedDriver::Tick` (BattleMixedDriver.cpp:126) 、 `FBattleMixedDriver::TryTacticalAction` (BattleMixedDriver.cpp:239) |
 | 移動・経路・混雑 | `UBattleLeaderRuntime::StableMove` (BattleStableMovement.cpp:299) 、 `UBattleLeaderRuntime::BuildMovementPlan` (BattleStableMovement.cpp:60) | 到着地点の重なりは `UBattleLeaderRuntime::ReassignOccupiedArrival` (BattleContactMovement.cpp:16) 。目的地の補正は `BattleNavigation::ResolveGoal` (BattleNavigation.cpp:7) |
 | 遮蔽（場所の予約） | `UBattleCover::BuildSlots` (BattleCover.cpp:14) 、 `UBattleCover::Reserve` (BattleCover.cpp:187) | 露出の計算は `BattleTactics::ExposureAt` (BattleTactics.cpp:241) |
-| 体のアニメーション | `ABattleUnit::UpdateBodyAnim` (BattleUnit.cpp:412) 、 `FBattleBodyAnimProxy::Evaluate` (BattleBodyAnim.cpp:196) | 部下は `UBattleLeaderRuntime::FollowerClip` (BattleStance.cpp:85) 、 `UBattleLeaderRuntime::StepBodyTimers` (BattleStance.cpp:112) |
+| 体のアニメーション | `ABattleUnit::UpdateBodyAnim` (BattleUnit.cpp:422) 、 `FBattleBodyAnimProxy::Evaluate` (BattleBodyAnim.cpp:196) | 部下は `UBattleLeaderRuntime::FollowerClip` (BattleStance.cpp:85) 、 `UBattleLeaderRuntime::StepBodyTimers` (BattleStance.cpp:112) |
 | 死体の消滅（表示だけ） | `UBattleLeaderRuntime::StepCorpses` (BattleCorpses.cpp:36) 、 `UBattleLeaderRuntime::HideCorpse` (BattleCorpses.cpp:63) | 登録は OnDeath の `UBattleLeaderRuntime::AddCorpse` (BattleCorpses.cpp:29) |
 | 死体の姿勢（死亡アニメ・遠景VATとの切替） | `UBattleLeaderRuntime::DeathClip` (BattleCorpses.cpp:74) 、 `ABattleVATDisplay::Enter` (BattleVATDisplay.cpp:216) 、 `ABattleVATDisplay::Leave` (BattleVATDisplay.cpp:259) | 遠景では横倒し、近景へ戻ると死亡クリップの最終コマ |
 | ブラインドファイア | `UBattleLeaderRuntime::BlindFireOrigin` (BattleBlindFire.cpp:53) 、 `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:1093) | AIの試験は `UBattleLeaderRuntime::TryAIBlindFire` (BattleBlindFire.cpp:137) |
@@ -49,7 +49,7 @@
 | エリア戦の収入・拠点 HP | `UBattleMatch::UpdateArea` (BattleArea.cpp:206) （収入の支払いもここ）、 `UBattleMatch::DamageBase` (BattleArea.cpp:65) | 調整値は `BattleTactics::AreaIncome` (BattleTactics.cpp:114) 。状態は `BattleAreaState.h` |
 | エリア戦の AI 戦略（どこを攻めるか） | `UBattleMatch::UpdateEnemyOrders` (BattleMatch.cpp:263) → `UBattleMatch::UpdateTeamOrders` (BattleMatch.cpp:348) 、 `UBattleMatch::AreaStrategyTarget` (BattleMatch.cpp:281) 、 `UBattleMatch::AreaIntent` (BattleArea.cpp:324) | 調整値は `BattleTactics::AreaStrategy` (BattleTactics.cpp:68) 。前線は `UBattleMatch::AreaFronts` (BattleArea.cpp:373) |
 | 偵察・情報（見えていない区域の扱い） | `UBattleMatch::UpdateScoutReports` (BattleScoutReport.cpp:45) 、 `UBattleMatch::AreaIntelView` (BattleAreaIntel.cpp:19) | 偵察兵の配置は `UBattleMatch::AreaScoutPost` (BattleArea.cpp:413) 。昇格は `UBattleLeaderRuntime::PromoteScout` (BattleMixedRecruitment.cpp:116) |
-| 補給（弾薬） | `UBattleMatch::Resupply` (BattleMatch.cpp:487) 、 `BattleTactics::Supply` (BattleTactics.cpp:27) | 往復時間の記録（評価用）は `UBattleSquadTactics::SupplyTripEnd` (BattleSquadTactics.cpp:71) 。エリア戦の本拠地・味方の拠点での弾の補充は `UBattleMatch::UpdateArea` (BattleArea.cpp:206) 、直接操作中に部下から弾を受け取るのは `ABattleController::UpdatePlayerAmmo` (BattleController.cpp:732) |
+| 補給（弾薬） | `UBattleMatch::Resupply` (BattleMatch.cpp:487) 、 `BattleTactics::Supply` (BattleTactics.cpp:27) | 往復時間の記録（評価用）は `UBattleSquadTactics::SupplyTripEnd` (BattleSquadTactics.cpp:71) 。エリア戦の本拠地・味方の拠点での弾の補充は `UBattleMatch::UpdateArea` (BattleArea.cpp:206) 、直接操作中に部下から弾を受け取るのは `ABattleController::UpdatePlayerAmmo` (BattleController.cpp:809) |
 | 補充（倒れた部下の補充） | `UBattleLeaderRuntime::ReplaceFollower` (BattleMixedRecruitment.cpp:12) 、 `UBattleState::ReplaceDeadFollower` (BattleState.cpp:112) | |
 | 戦果点 | `UBattleMatch::UpdateWarScore` (BattleWarScore.cpp:52) 、 `UBattleMatch::WarScoreBreakdown` (BattleWarScore.cpp:75) | 調整値は `BattleWarScore::Tuning` (BattleWarScore.cpp:19) |
 | 支援砲撃（旧アリーナ） | `UBattleMatch::RequestSupport` (BattleSupport.cpp:8) 、 `UBattleMatch::UpdateSupport` (BattleSupport.cpp:36) | 混成には未接続 |
@@ -86,11 +86,11 @@
 | `BattleBodyAnimImport` | .cpp | 134 |  | 体のアニメーション（遮蔽・伏せ・しゃがみの向き別）の取り込みと計測（エディタ用。宣言は BattleVATBake.h） |
 | `BattleComposition` | .h/.cpp | 71 + 122 | BattleComposition, FSettings, FTypeDef, FTypeInput, FInput, FCandidate, FDecision | 編成AIの兵種定義・解決済み入力・診断 |
 | `BattleCompositionPlanner` | .cpp | 190 |  | 編成AIの純粋な候補選択・貯蓄遷移・状態検証。整数比較、乱数なし |
-| `BattleCompositionRuntime` | .cpp | 139 |  | 編成AIと観測・収入窓・既存購入実行の接続、設定キー |
-| `BattleCompositionSave` | .cpp | 38 |  | 編成AI保存の版・陣営・時刻・参照先検証 |
+| `BattleCompositionRuntime` | .cpp | 140 |  | 編成AIと観測・収入窓・既存購入実行の接続、設定キー |
+| `BattleCompositionSave` | .cpp | 39 |  | 編成AI保存の版・陣営・時刻・参照先検証 |
 | `BattleCompositionState` | .h | 33 | FCompositionTeamState | CombatStateVersion=4で保存する編成AIの陣営状態 |
 | `BattleContactMovement` | .cpp | 161 |  | 停止中の味方との接触・到着地点の重なりの解消（UBattleLeaderRuntime の一部） |
-| `BattleController` | .h/.cpp | 222 + 1195 | ABattleCameraPawn, FBattleNoticeEntry, FBattleNoticeLayout, FBattleCommandBarLayout, ABattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド |
+| `BattleController` | .h/.cpp | 227 + 1272 | ABattleCameraPawn, FBattleNoticeEntry, FBattleNoticeLayout, FBattleCommandBarLayout, ABattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド |
 | `BattleCorpses` | .cpp | 77 |  | 死体の消滅（表示だけ。`-BattleCorpseLifetime=秒`、既定20、0で残す。UBattleLeaderRuntime の一部） |
 | `BattleCover` | .h/.cpp | 39 + 200 | FBattleCoverReservation, UBattleCover | 遮蔽の場所の一覧と予約 |
 | `BattleCoverAction` | .cpp | 491 |  | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部） |
@@ -103,7 +103,7 @@
 | `BattleGameMode` | .h/.cpp | 97 + 373 | ABattleGameMode | モードの統合、起動時の組み立て、毎フレームの入口、基本回帰 |
 | `BattleGroups` | .cpp | 543 |  | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部） |
 | `BattleHUD` | .h/.cpp | 45 + 1057 | ABattleHUD | 画面表示（HUD、ミニマップ、部隊一覧、通知、命令の印） |
-| `BattleLeaderRuntime` | .h/.cpp | 620 + 1509 | FBattleFollowerFragment, FBattleSquadSummary, FBattleSquadListLayout, FBattleMinimapLayout, FBattleLeaderBody, FBattleLeaderPlan, UBattleLeaderRuntime | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新 |
+| `BattleLeaderRuntime` | .h/.cpp | 621 + 1509 | FBattleFollowerFragment, FBattleSquadSummary, FBattleSquadListLayout, FBattleMinimapLayout, FBattleLeaderBody, FBattleLeaderPlan, UBattleLeaderRuntime | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新 |
 | `BattleMapI` | .h | 112 | BattleMapI | マップI（区画を前提にした設計）の表：50mの区画 20×14 の種類 `Kind`、道路 `Roads`、川・橋・浅瀬の位置、家 `Houses`・丘 `Hills`、高さの表 `MakeHeights`、拠点 `Objectives`。配置は `BattleMapLayoutI.inl`（生成と共有） |
 | `BattleMapStats` | .cpp | 186 |  | マップの統計（区域ごとの見通し・遮蔽、経路の長さ）を JSON に書き出す。試合は行わない（UBattleLeaderRuntime の一部） |
 | `BattleMatch` | .h/.cpp | 334 + 516 | FAreaIntent, FBattleObjective, FBattleStrike, FPlayerRoute, UBattleMatch, FGroupStrength | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗 |
@@ -117,10 +117,10 @@
 | `BattleNavigation` | .h/.cpp | 11 + 44 | BattleNavigation | 目的地の補正と隊形の位置 |
 | `BattleNetwork` | .h/.cpp | 148 + 337 | FBattleNetUnit, FBattleNetFrame, ABattleNetController, ABattleNetGameMode, ABattleNetHUD | ネットワーク試作（GameMode、Controller、HUD） |
 | `BattleNetworkSerialization` | .cpp | 31 |  | ネットワーク用の兵の直列化 |
-| `BattlePerception` | .h/.cpp | 71 + 400 | FBattleContact, FBattleObserver, FBattleReport, UBattlePerception | 認識：見えた敵の記憶、保存と復元 |
+| `BattlePerception` | .h/.cpp | 71 + 403 | FBattleContact, FBattleObserver, FBattleReport, UBattlePerception | 認識：見えた敵の記憶、保存と復元 |
 | `BattlePhase3` | .h/.cpp | 90 + 425 | UBattleMixedAvoidance, UBattlePhase3, FPhase3Scope | Phase3 の大規模試験経路（通常の混成とは別の処理） |
 | `BattlePlayerPath` | .cpp | 297 |  | プレイヤーの入力の補助：命令先の点（2階は壁越しでも指せる、Alt で1階）`PickOrderPoint`、右ドラッグで引いた道筋の命令 `PlayerPathOrder`、選んだ部隊の道筋の予測表示 `DrawOrderWays`／`PlayerRoutePreview`、壁の乗り越え `TryVault`、作戦カメラの速さ `PanSpeed`（ABattleController・UBattleMatch・ABattleHUD の一部） |
-| `BattlePlayerRoutes` | .cpp | 215 |  | 通り道のプレイヤー指定：部隊ごとに 自動・中央・北・南 を選び、手動の遠い命令と委任中の移動をその道に通す。自動試験 `-BattlePlayerRouteTest`（UBattleMatch の一部） |
+| `BattlePlayerRoutes` | .cpp | 216 |  | 通り道のプレイヤー指定：部隊ごとに 自動・中央・北・南 を選び、手動の遠い命令と委任中の移動をその道に通す。自動試験 `-BattlePlayerRouteTest`（UBattleMatch の一部） |
 | `BattleRanges` | .h/.cpp | 19 + 50 | BattleRanges | 認識・交戦の距離（マップごとに決まる） |
 | `BattleReplayData` | .h | 15 | FBattleReplayHeader, FBattleReplayUnit | 再生用データの型（試験専用） |
 | `BattleRoutes` | .cpp | 89 |  | 通り道：道路網のあるマップ（F）で、遠い目的地へ交差点を順に指示する。本拠地へ向かう部隊は観測した敵の少ない側面路を選ぶ（UBattleMatch の一部） |
@@ -146,8 +146,8 @@
 | `BattleTankGun` | .cpp | 143 |  | 戦車砲の照準と発射（UBattleLeaderRuntime の一部） |
 | `BattleTeamAI` | .h/.cpp | 24 + 138 | UBattleTeamAI | 陣営全体の判断 |
 | `BattleTerrain` | .h | 189 | BattleTerrain, FHeightPatch, FHeights, FHouseShape | 地面の高さの表（マップG）：丘・階段・2階の矩形と、その場所の高さを返す `FHeights::Ground`。家と丘の位置（`HousesG/HillsG`）は生成と共通 |
-| `BattleUIText` | .h/.cpp | 11 + 136 | BattleUIText | 画面の文言の日本語化 |
-| `BattleUnit` | .h/.cpp | 181 + 695 | FBattleSightContext, ABattleUnit, ABattleAIController | 兵の Actor（表示と直接操作。正規状態は BattleState 側） |
+| `BattleUIText` | .h/.cpp | 13 + 167 | BattleUIText | 画面の文言の日本語化 |
+| `BattleUnit` | .h/.cpp | 181 + 705 | FBattleSightContext, ABattleUnit, ABattleAIController | 兵の Actor（表示と直接操作。正規状態は BattleState 側） |
 | `BattleVATBake` | .h/.cpp | 9 + 194 |  | VAT の焼き込み・検証・修復（エディタ用） |
 | `BattleVATData` | .h | 40 | FBattleVATClip, FBattleVATMesh, UBattleVATData | VAT のデータ型 |
 | `BattleVATDisplay` | .h/.cpp | 84 + 411 | UBattleVATSkeletalMeshComponent, FBattleVATEntry, ABattleVATDisplay | 遠距離の兵を VAT で描く表示 |
@@ -167,9 +167,9 @@
 |---|---|---|---|---|
 | `BattleAbilitySmoke` | .cpp | 125 |  |  |
 | `BattleAnimTaskTrial` | .h/.cpp | 29 + 85 | ABattleAnimTaskTrial |  |
-| `BattleAreaSmoke` | .cpp | 1192 |  |  |
+| `BattleAreaSmoke` | .cpp | 1193 |  |  |
 | `BattleBenchmark` | .cpp | 194 |  |  |
-| `BattleCompositionSmoke` | .cpp | 140 |  | 編成AIの選択・貯蓄・保存往復のスモーク検査（UBattleLeaderRuntimeの一部） |
+| `BattleCompositionSmoke` | .cpp | 143 |  | 編成AIの選択・貯蓄・保存往復のスモーク検査（UBattleLeaderRuntimeの一部） |
 | `BattleConeTrialCommandlet` | .h/.cpp | 12 + 48 | UBattleConeTrialCommandlet | Closest distance between a forward ray and the capsule's vertical centre segment. |
 | `BattleContactTrial` | .cpp | 101 |  | Fixed contact fixtures retain all 500 bodies, collision, and the normal executor. |
 | `BattleContextTrial` | .cpp | 52 |  | Test-only full-state fingerprints. Never enabled during performance runs. |
@@ -191,7 +191,7 @@
 | `BattleMatchSoak` | .cpp | 60 |  |  |
 | `BattleMaterialTrial` | .cpp | 106 |  |  |
 | `BattleMixedFastSmoke` | .cpp | 41 |  |  |
-| `BattleMixedSaveSmoke` | .cpp | 130 |  |  |
+| `BattleMixedSaveSmoke` | .cpp | 156 |  |  |
 | `BattleMixedSaveValidation` | .cpp | 192 |  |  |
 | `BattleMovementTrial` | .cpp | 112 |  |  |
 | `BattleMovingSquadTrial` | .cpp | 222 |  |  |

@@ -308,7 +308,7 @@ public:
 	// A manual order over the squad's chosen route: -1 not routed (give the ordinary order), 0 refused, 1 accepted.
 	int32 PlayerRouteOrder(int32 SquadID, EBattleOrder Order, const FVector& Goal);
 	// The next junction for a squad with a chosen route (RouteStep without one).
-	FVector PlayerRouteStep(int32 SquadID, const FVector& From, const FVector& Goal);
+	FVector PlayerRouteStep(int32 SquadID, const FVector& From, const FVector& Goal, FPlayerRoute* Candidate = nullptr);
 	void UpdatePlayerRoutes(float DeltaSeconds);
 	// Drawn way (BattlePlayerPath.cpp): the squad walks Points in order and takes Order at the last. 1 accepted, 0 refused.
 	int32 PlayerPathOrder(int32 SquadID, EBattleOrder Order, const TArray<FVector>& Points);

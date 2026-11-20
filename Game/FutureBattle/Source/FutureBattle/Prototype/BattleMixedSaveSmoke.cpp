@@ -81,7 +81,31 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
   {
    auto* Bad=DuplicateObject<UBattleSave>(Saved,this);Corrupt(*Bad);
    const FGuid Before=Match->MatchID;const float HP=Store->Find(Follower)->HP;auto* Body=Actor(1);const int32 Credit=Match->Credits[0];
+   // Non-empty transient state is essential: comparing empty maps missed resets before failed staging.
+   const auto OriginalApproaches=CoverApproaches;const auto OriginalFire=FirePositions;
+   const auto OriginalSuppression=SuppressionZeroAt;const auto OriginalStances=Stances;const auto OriginalLocks=StanceLockedUntil;
+   FCoverApproach Approach;Approach.Goal=Position(Follower)+FVector(120,80,0);Approach.Target=Enemy;
+   Approach.Revision=Store->FindSquad(1)->OrderRevision;Approach.Until=Now+4.;Approach.bFree=true;Approach.bStandUp=true;
+   CoverApproaches.Add(Follower,Approach);FirePositions.Add(1,Position(1)+FVector(80,120,0));
+   SuppressionZeroAt.Add(Follower,Now+3.);Stances.Add(Follower,uint8(1));StanceLockedUntil.Add(Follower,Now+2.);
+   const auto ExpectedApproaches=CoverApproaches;const auto ExpectedFire=FirePositions;
+   const auto ExpectedSuppression=SuppressionZeroAt;const auto ExpectedStances=Stances;const auto ExpectedLocks=StanceLockedUntil;
    Check(!Match->RestoreSnapshot(Bad)&&Match->MatchID==Before&&Store->Find(Follower)->HP==HP&&Actor(1)==Body&&Match->Credits[0]==Credit&&Bodies.Num()==Total,Label);
+   bool ApproachesKept=CoverApproaches.Num()==ExpectedApproaches.Num();
+   for(const auto& Entry:ExpectedApproaches)
+   {
+    const auto* Actual=CoverApproaches.Find(Entry.Key);const auto& Expected=Entry.Value;
+    ApproachesKept&=Actual && Actual->Goal==Expected.Goal && Actual->Slot==Expected.Slot && Actual->Target==Expected.Target &&
+     Actual->Revision==Expected.Revision && Actual->Until==Expected.Until && Actual->bKeptTargetChange==Expected.bKeptTargetChange &&
+     Actual->bFree==Expected.bFree && Actual->bStandUp==Expected.bStandUp && Actual->bFallback==Expected.bFallback;
+   }
+   const bool TransientsKept=ApproachesKept && FirePositions.OrderIndependentCompareEqual(ExpectedFire) &&
+    SuppressionZeroAt.OrderIndependentCompareEqual(ExpectedSuppression) && Stances.OrderIndependentCompareEqual(ExpectedStances) &&
+    StanceLockedUntil.OrderIndependentCompareEqual(ExpectedLocks);
+   Check(TransientsKept,TEXT("failed restore preserves nonempty cover/fire/suppression/stance/lock maps"));
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MIXED_SAVE_TRANSIENTS %s case=%s"),TransientsKept?TEXT("PASS"):TEXT("FAIL"),Label);
+   CoverApproaches=OriginalApproaches;FirePositions=OriginalFire;SuppressionZeroAt=OriginalSuppression;
+   Stances=OriginalStances;StanceLockedUntil=OriginalLocks;
   };
   Reject([](UBattleSave& S){S.Units[1].State.UnitID=S.Units[0].State.UnitID;},TEXT("duplicate identity rejected atomically"));
   Reject([](UBattleSave& S){S.SavedPlans[2].SupportSquad=26;},TEXT("enemy support reference rejected atomically"));
@@ -94,8 +118,10 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
   Reject([](UBattleSave& S){S.SavedArtilleryShells.Add(FBattleSavedArtilleryShell());},TEXT("invalid shell shooter rejected"));
   Reject([](UBattleSave& S){S.Version=1;},TEXT("legacy schema cannot replace mixed match"));
   Reject([](UBattleSave& S){S.Squads[0].Destination=FVector(31000,21000,0);S.SavedPlans[1].Destination=S.Squads[0].Destination;},TEXT("unreachable saved route rejected before body replacement"));
+  Check(Match->LastMessage==TEXT("Saved route unreachable; restore aborted"),TEXT("restore failure reaches route validation"));
   RestoreStageFailureAfter=2;
   Reject([](UBattleSave&){},TEXT("failure after staging Actor and Mass bodies rolls back atomically"));
+  Check(Match->LastMessage==TEXT("Could not stage representations; restore aborted"),TEXT("restore failure reaches Actor/Mass staging"));
   RestoreStageFailureAfter=INDEX_NONE;
   Check(!Match->SaveMatch(TEXT("UnexpectedSlot")),TEXT("unapproved slot does not write"));
   // Capture and restore actual direct control through the same public APIs used by F8/F9.

@@ -748,7 +748,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      M->PlayerRoutes.FindOrAdd(MSID).Lane=2;
      RestoreStageFailureAfter=2;
      RejectStrategy([](UBattleSave&){},TEXT("body staging failure retains existing groups and choices"));
-     Check(M->LastMessage==TEXT("Could not stage representations; battle retained"),TEXT("restore failure reaches body staging"));
+     Check(M->LastMessage==TEXT("Could not stage representations; restore aborted"),TEXT("restore failure reaches body staging"));
      const auto* RetainedRouteChoice=M->PlayerRoutes.Find(MSID);
      Check(RetainedRouteChoice&&RetainedRouteChoice->Lane==2,TEXT("failed restore retains unsaved route choice"));
      RestoreStageFailureAfter=INDEX_NONE;

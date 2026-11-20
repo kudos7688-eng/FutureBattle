@@ -7,5 +7,7 @@
 namespace BattleUIText
 {
  FString Ja(const FString& Text);
+ // Save UI uses the actual result; unknown diagnostics remain in the English log.
+ FString SaveResult(bool bSuccess,bool bLoading,const FString& Detail);
  inline FString Ja(const TCHAR* Text){return Ja(FString(Text));}
 }

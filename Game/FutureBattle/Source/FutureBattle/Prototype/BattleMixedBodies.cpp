@@ -69,12 +69,9 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
 {
  if(!IsWideField() || !Save || Save->Version<2) {Error=TEXT("Mixed snapshot required");return false;}
  auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
- if(!PC || !Mode) {Error=TEXT("Player or game mode unavailable; battle retained");return false;}
+ if(!PC || !Mode) {Error=TEXT("Player or game mode unavailable; restore aborted");return false;}
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
- if(!Nav) {Error=TEXT("Navigation unavailable; battle retained");return false;}
- CoverApproaches.Reset();FirePositions.Reset();
- SuppressionZeroAt.Reset();
- Stances.Reset();StanceLockedUntil.Reset();
+ if(!Nav) {Error=TEXT("Navigation unavailable; restore aborted");return false;}
  TMap<int32,FVector> Positions;
  TMap<int32,TArray<FVector>> ValidatedPaths;
  for(const auto& E:Save->Units) Positions.Add(E.State.UnitID,E.Position);
@@ -98,14 +95,14 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
      ValidatedPaths.Add(S.SquadID,{LeaderAt,S.Destination});continue;
     }
     UE_LOG(LogFutureBattle,Warning,TEXT("BATTLE_MIXED_RESTORE_ROUTE_FAIL squad=%d leader=%d order=%d at=%s destination=%s"),S.SquadID,S.LeaderUnitID,int32(S.Order),*LeaderAt.ToCompactString(),*S.Destination.ToCompactString());
-    Error=TEXT("Saved route unreachable; battle retained");return false;
+    Error=TEXT("Saved route unreachable; restore aborted");return false;
    }
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MIXED_RESTORE_ROUTE_PROJECTED squad=%d leader=%d at=%s projected=%s"),S.SquadID,S.LeaderUnitID,*LeaderAt.ToCompactString(),*From.Location.ToCompactString());
   }
   ValidatedPaths.Add(S.SquadID,Path->PathPoints);
  }
  auto* NewHost=GetWorld()->SpawnActor<AActor>();
- if(!NewHost) {Error=TEXT("Could not stage body host; battle retained");return false;}
+ if(!NewHost) {Error=TEXT("Could not stage body host; restore aborted");return false;}
  auto* Root=NewObject<USceneComponent>(NewHost);NewHost->SetRootComponent(Root);
  NewHost->AddInstanceComponent(Root);Root->RegisterComponent();
  TMap<int32,FBattleLeaderBody> Staged;
@@ -118,11 +115,14 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
   if(InjectedFailure || !CreateBody(E,NewHost,B))
   {
    DestroyBody(B);for(auto& Pair:Staged) DestroyBody(Pair.Value);NewHost->Destroy();
-   Error=TEXT("Could not stage representations; battle retained");return false;
+   Error=TEXT("Could not stage representations; restore aborted");return false;
   }
   Staged.Add(E.State.UnitID,B);
  }
  // No further fallible validation after this transaction boundary.
+ CoverApproaches.Reset();FirePositions.Reset();
+ SuppressionZeroAt.Reset();
+ Stances.Reset();StanceLockedUntil.Reset();
  PC->ResetMatchControl();
  const bool UseVAT=bDisplayLODEnabled;
  if(VAT)VAT->ResetBodies();

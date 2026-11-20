@@ -89,7 +89,8 @@ void ABattleController::EndPathDraw()
  for(ABattleUnit* U:Selected)if(LeaderSelectable(U))
  {
   const int32 SID=U->GetState()->SquadID;if(Done.Contains(SID))continue;Done.Add(SID);
-  if(Points.Num()>1?Match->PlayerPathOrder(SID,PendingOrder,Points)>0:L->IssueOrder(SID,PendingOrder,End))++Accepted;else ++Rejected;
+  if(Points.Num()>1?Match->PlayerPathOrder(SID,PendingOrder,Points)>0:L->IssueOrder(SID,PendingOrder,End))
+  {if(Points.Num()==1)Match->ClearPlayerRouteMission(SID);++Accepted;}else ++Rejected;
  }
  ShowNotice(Points.Num()>1||!bSectorMove?FString::Printf(TEXT("道筋の命令：%d部隊（中継点 %d／不可 %d）"),Accepted,FMath::Max(0,Points.Num()-1),Rejected)
   :FString::Printf(TEXT("地点へ移動：%d部隊（不可 %d）"),Accepted,Rejected));
@@ -180,7 +181,6 @@ int32 UBattleMatch::PlayerPathOrder(int32 SquadID,EBattleOrder Order,const TArra
 {
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  const auto* S=Store->FindSquad(SquadID);
- if(FPlayerRoute* Old=PlayerRoutes.Find(SquadID)){Old->bMission=false;Old->bPath=false;Old->Waypoints.Reset();}
  if(Points.Num()<2||Order==EBattleOrder::Hold||!Runtime||!Runtime->IsWideField()||!S||!Store->Find(S->LeaderUnitID))return 0;
  const EBattleOrder OnWay=Order==EBattleOrder::Move?EBattleOrder::Move:EBattleOrder::AttackMove;
  // The first point that takes an order (a point drawn on a roof or in a wall is skipped).

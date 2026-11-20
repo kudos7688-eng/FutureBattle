@@ -249,7 +249,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 	{
 		FActorSpawnParameters Params; Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 		auto* Unit = GetWorld()->SpawnActor<ABattleUnit>(Entry.Position, Entry.Rotation, Params);
-		if (!Unit) { for (auto* Rollback : Spawned) Rollback->Destroy(); LastMessage = TEXT("Restore failed; current battle retained"); return false; }
+		if (!Unit) { for (auto* Rollback : Spawned) Rollback->Destroy(); LastMessage = TEXT("Restore failed while creating units"); return false; }
 		Spawned.Add(Unit);
 	}
 	PC->ResetMatchControl();

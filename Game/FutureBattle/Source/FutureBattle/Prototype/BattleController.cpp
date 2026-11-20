@@ -1,4 +1,5 @@
 #include "BattleController.h"
+#include "BattleUIText.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleStance.h"
 #include "BattleBlindFire.h"
@@ -203,13 +204,23 @@ void ABattleController::SaveMatch()
 {
  if(const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); R->IsEnabled()&&!R->IsWideField()) { ShowNotice(TEXT("この部隊構成の保存は未対応です")); return; }
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
-	if (Match->IsEnabled()) { Match->SaveMatch(QuickSaveSlot); ShowNotice(Match->LastMessage); }
+	if (Match->IsEnabled())
+ {
+  const bool Saved=Match->SaveMatch(QuickSaveSlot);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SAVE_UI success=%d message=%s"),Saved?1:0,*Match->LastMessage);
+  ShowNotice(BattleUIText::SaveResult(Saved,false,Match->LastMessage));
+ }
 }
 void ABattleController::LoadMatch()
 {
  if(const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); R->IsEnabled()&&!R->IsWideField()) { ShowNotice(TEXT("この部隊構成の読込は未対応です")); return; }
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
-	if (Match->IsEnabled()) { Match->LoadMatch(QuickSaveSlot); ShowNotice(Match->LastMessage); }
+	if (Match->IsEnabled())
+ {
+  const bool Loaded=Match->LoadMatch(QuickSaveSlot);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_LOAD_UI success=%d message=%s"),Loaded?1:0,*Match->LastMessage);
+  ShowNotice(BattleUIText::SaveResult(Loaded,true,Match->LastMessage));
+ }
 }
 void ABattleController::ResetMatchControl()
 {
@@ -242,6 +253,7 @@ void ABattleController::RefreshBodyPresentation()
 void ABattleController::EnterTactical()
 {
 	if (!TacticalPawn) return;
+ CancelPlayerInput();
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
 	{
 		LastControlled = Unit;
@@ -280,6 +292,7 @@ bool ABattleController::ControlUnit(ABattleUnit* Unit)
 	if (!Unit || !Unit->IsAlive() || Unit->GetState()->Team != 0) return false;
  if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled() && !L->CanControlLeader(Unit->GetUnitID())) return false;
 	PendingOrder = EBattleOrder::Move;
+ CancelPlayerInput();
 	if (!bTactical) EnterTactical();
 	const FBattleUnitState Before = *Unit->GetState();
 	if (AAIController* AI = Cast<AAIController>(Unit->GetController())) { Unit->SavedAI = AI; AI->StopMovement(); AI->UnPossess(); }
@@ -402,16 +415,61 @@ void ABattleController::PrimaryPressed()
 
 bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 {
- // Gamepad: read the button as the keyboard/mouse key with the same action (see GamepadToKey).
+ if(Params.Key.IsGamepadKey()) bGamepadActive=true;
+ else if(Params.Key.IsMouseButton()||!Params.Key.IsAnalog()) bGamepadActive=false;
+ FInputKeyEventArgs Logical=Params;
  if(Params.Key.IsGamepadKey())
  {
-  bGamepadActive=true;
-  const FKey Mapped=GamepadToKey(Params.Key); if(!Mapped.IsValid()) return Super::InputKey(Params);
-  FInputKeyEventArgs Translated=Params; Translated.Key=Mapped; Translated.AmountDepressed=Params.Event==IE_Released?0.f:1.f;
-  const bool bResult=InputKey(Translated); bGamepadActive=true; return bResult;
+  const auto* Held=HeldPlayerKeys.Find(Params.Key);
+  Logical.Key=Held?Held->Key:GamepadToKey(Params.Key);
+  if(!Logical.Key.IsValid()&&!Held)return Super::InputKey(Params);
+  Logical.AmountDepressed=Params.Event==IE_Released?0.f:1.f;
  }
- // Any keyboard key or mouse button switches the HUD hints back to keyboard and mouse.
- if(Params.Key.IsMouseButton()||!Params.Key.IsAnalog()) bGamepadActive=false;
+ const bool Track=!Params.Key.IsAnalog() && Params.Key!=EKeys::MouseScrollUp && Params.Key!=EKeys::MouseScrollDown;
+ if(Track)
+ {
+  if(Params.Event==IE_Pressed)
+  {
+   if(HeldPlayerKeys.Contains(Params.Key))return true;
+   bool AlreadyHeld=false;
+   for(const auto& Pair:HeldPlayerKeys)AlreadyHeld|=Pair.Value.Key==Logical.Key;
+   HeldPlayerKeys.Add(Params.Key,Logical);
+   if(AlreadyHeld)return true;
+  }
+  else if(Params.Event==IE_Released || Params.Event==IE_Repeat)
+  {
+   const auto* Pressed=HeldPlayerKeys.Find(Params.Key);
+   if(!Pressed)return true;
+   Logical.Key=Pressed->Key;
+   if(Params.Event==IE_Released)HeldPlayerKeys.Remove(Params.Key);
+   if(!Logical.Key.IsValid())return true;
+   if(Params.Event==IE_Released)
+    for(const auto& Pair:HeldPlayerKeys)if(Pair.Value.Key==Logical.Key)return true;
+  }
+ }
+ return HandlePlayerInput(Logical);
+}
+
+void ABattleController::CancelPlayerInput()
+{
+ TMap<FKey,FInputKeyEventArgs> Released;
+ for(auto& Pair:HeldPlayerKeys)
+ {
+  if(Pair.Value.Key.IsValid())Released.FindOrAdd(Pair.Value.Key,Pair.Value);
+  Pair.Value.Key=FKey(); // Require release and a fresh press in the new mode.
+ }
+ for(auto& Pair:Released)
+ {
+  auto Release=Pair.Value;Release.Event=IE_Released;Release.AmountDepressed=0.f;
+  Super::InputKey(Release);
+ }
+ if(auto* Controlled=Cast<ABattleUnit>(GetPawn()))Controlled->StopJumping();
+ bTriggerHeld=false;bAimHeld=false;bPathDraw=false;DrawnPath.Reset();DrawnLength=0;
+ DelegationPress=INDEX_NONE;bSquadListPress=false;bMinimapPress=false;PressedSquadID=INDEX_NONE;
+}
+
+bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
+{
  // Direct control: hold the right button to aim; while aiming, the wheel steps the view through
  // aim (x1.6) -> scope x4 -> scope x8. Display only; the level is kept for the next time.
  if(!bTactical && Params.Key==EKeys::RightMouseButton && (Params.Event==IE_Pressed||Params.Event==IE_Released))
@@ -460,6 +518,13 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 			DelegationPress = INDEX_NONE; bTriggerHeld = false; return true;
 		}
 	}
+ // A world right-drag owns its release even when the pointer has entered a panel.
+ if(bTactical && Params.Key==EKeys::RightMouseButton && Params.Event==IE_Released && bPathDraw)
+ {
+  if(OverDelegation || SquadPanelAtPointer()){bPathDraw=false;DrawnPath.Reset();DrawnLength=0;}
+  else EndPathDraw();
+  Super::InputKey(Params);return true;
+ }
 	if (OverDelegation && Params.Key == EKeys::RightMouseButton) return true;
 	if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled() && bTactical)
  {
@@ -642,6 +707,7 @@ void ABattleController::IssueOrderAt(FVector Target, EBattleOrder Order)
    if(Routed<0?L->IssueOrder(SID,SectorMove?EBattleOrder::AttackMove:Order,Target,false,Sector||SectorMove):Routed>0)
    {
     ++Accepted;
+    if(Routed<0)Routes->ClearPlayerRouteMission(SID);
     if(SectorMove){L->SetSectorFireBack(SID);++SectorMoves;}
    }
    else ++Rejected;
@@ -705,10 +771,21 @@ void ABattleController::IssueOrderAt(FVector Target, EBattleOrder Order)
 
 void ABattleController::HoldSelected()
 {
+ PendingOrder=EBattleOrder::Move;bPathDraw=false;DrawnPath.Reset();DrawnLength=0;
+ if(!bTactical)return;
  if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled())
- { for(ABattleUnit* U:Selected) if(LeaderSelectable(U)) { GetWorld()->GetSubsystem<UBattleMatch>()->ClearPlayerRouteMission(U->GetState()->SquadID); L->IssueOrder(U->GetState()->SquadID,EBattleOrder::Hold,U->GetActorLocation()); } return; }
-	if (!bTactical) return;
-	PendingOrder = EBattleOrder::Move;
+ {
+  int32 Accepted=0,Rejected=0;TSet<int32> Done;
+  for(ABattleUnit* U:Selected)if(LeaderSelectable(U))
+  {
+   const int32 SID=U->GetState()->SquadID;if(Done.Contains(SID))continue;Done.Add(SID);
+   if(L->IssueOrder(SID,EBattleOrder::Hold,U->GetActorLocation()))
+   {GetWorld()->GetSubsystem<UBattleMatch>()->ClearPlayerRouteMission(SID);++Accepted;}else ++Rejected;
+  }
+  ShowNotice(FString::Printf(TEXT("ORDER: %d SQUADS / %d REJECTED"),Accepted,Rejected));
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_INPUT Hold accepted=%d rejected=%d"),Accepted,Rejected);
+  return;
+ }
 	UBattleState* Store = GetWorld()->GetSubsystem<UBattleState>();
 	ABattleGameMode* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>();
 	if (!Mode) return;
