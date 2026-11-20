@@ -61,7 +61,7 @@ if($AreaPointSupply -ge 0){$a+="-BattleAreaPointSupply=$AreaPointSupply"};if($Ar
 # Player route choice self-test (map F, BattlePlayerRoutes.cpp): three squads of team 0 walk to the centre over the three routes; read BATTLE_PLAYER_ROUTE_RESULT in run.log. Not with -RoundTripSave (a load clears the choices).
 if($PlayerRouteTest){$a+="-BattlePlayerRouteTest"}
 # The player's order to one soldier (2026-11-20): walk, hold, send back, cleared by the squad's next order (BATTLE_SOLDIER_ORDER_RESULT).
-if($SoldierOrderTest){$a+="-BattleSoldierOrderTest"}
+if($SoldierOrderTest){$a+="-BattleSoldierOrderTest";if($Rendered){$a+="-BattleSoldierOrderShots=$(Join-Path $out 'soldier-order')"}}
 # Individual AI only near the player (2026-11-20, 0 = everyone): radius in m; -SoldierAIFocusAt "X,Y" (m) fixes the point for headless runs.
 if($SoldierAIFocus -ge 0){$a+="-BattleSoldierAIFocus=$SoldierAIFocus"}; if($SoldierAIFocusAt){$a+="-BattleSoldierAIFocusAt=$SoldierAIFocusAt"}
 # Height differences self-test (map G, BattleTerrainTest.cpp): three squads of team 0 walk onto a hilltop, onto an upper floor and across a ridge; read BATTLE_HEIGHT_RESULT in run.log.

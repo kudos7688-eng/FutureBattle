@@ -147,6 +147,7 @@ public:
 	const TArray<TObjectPtr<ABattleUnit>>& GetSelection() const { return Selected; }
  // One soldier picked with Ctrl+click for an order of his own (BattleSoldierOrder.cpp); INDEX_NONE = none.
  int32 GetSoldierSelection() const { return SoldierSelection; }
+ void SetSoldierSelection(int32 ID) { SoldierSelection = ID; }
  bool PickSoldier(FVector2D Screen,int32& Out) const;
  void SelectSoldierAt(FVector2D Screen);
  void OrderSoldierAt(FVector2D Screen);

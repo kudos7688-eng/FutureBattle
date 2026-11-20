@@ -77,7 +77,7 @@ bool UBattleLeaderRuntime::StepSoldierMove(int32 ID,FVector Primary,double Now,f
  const float Here=RateCoverPlace(ID,Pos,U->CoverAnchor,U->CoverPeek,BattleTactics::HasTerrainLine(GetWorld(),U->CoverPeek+FVector(0,0,60),Eye),Threats);
  auto* Cover=GetWorld()->GetSubsystem<UBattleCover>();Cover->BuildSlots();
  auto Clear=[&](FVector A,FVector B){return !GetWorld()->SweepTestByObjectType(A,B,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88));};
- int32 Best=INDEX_NONE,Rated=0;float BestScore=Here+FMath::Max(.2f,.2f*FMath::Abs(Here));FVector BestAnchor,BestPeek;
+ int32 Best=INDEX_NONE,Rated=0;float BestScore=Here+FMath::Max(.2f,.2f*FMath::Abs(Here));FVector BestAnchor=FVector::ZeroVector,BestPeek=FVector::ZeroVector;
  for(int32 Slot:Cover->NearbySlots(Pos,2500.f,24))
  {
   if(Slot==U->CoverSlot || !Cover->IsAvailable(Slot,ID,Now) || BrokenCoverSlot(ID,Slot,Now))continue;

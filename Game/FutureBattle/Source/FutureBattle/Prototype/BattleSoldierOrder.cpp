@@ -6,11 +6,13 @@
 #include "BattleHUD.h"
 #include "BattleState.h"
 #include "BattleFieldLayout.h"
+#include "BattleMatch.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "NavigationSystem.h"
 #include "NavigationPath.h"
 #include "Engine/Canvas.h"
+#include "UnrealClient.h"
 #include "FutureBattle.h"
 
 bool UBattleLeaderRuntime::IssueSoldierOrder(int32 ID,FVector Goal,FString& Why)
@@ -191,10 +193,12 @@ void UBattleLeaderRuntime::StepSoldierOrderTest()
  static const bool bTest=FParse::Param(FCommandLine::Get(),TEXT("BattleSoldierOrderTest"));
  if(!bTest || SoldierTest.Stage>=6)return;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const double Now=GetWorld()->GetTimeSeconds();
+ // After the opening orders of the match (the hold below takes the squad from the AI: a player order).
+ const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  auto& T=SoldierTest;auto Finish=[&](const TCHAR* Why){++T.Failures;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER_TEST fail stage=%d why=%s"),T.Stage,Why);T.Stage=6;};
  const auto* U=Store->Find(T.Unit);
  if(T.Stage>0 && (!U || !U->IsAlive())){Finish(TEXT("soldier_died"));}
- else if(T.Stage==0 && Now>=5.)
+ else if(T.Stage==0 && Match && Match->Phase==EBattleMatchPhase::Combat && Match->Elapsed>=20.f)
  {
   TArray<int32> IDs;for(const auto& Pair:Store->GetSquads())if(Pair.Value.Team==0 && Pair.Value.SquadType==0 && Pair.Value.CommandStatus==EBattleCommandStatus::Active && !IsVehicle(Pair.Value.LeaderUnitID))IDs.Add(Pair.Key);
   IDs.Sort();
@@ -215,6 +219,16 @@ void UBattleLeaderRuntime::StepSoldierOrderTest()
  }
  else if(T.Stage==1)
  {
+  // -BattleSoldierOrderShots=<path prefix> (rendered runs): the tactical camera over him, picked, on the way and after arriving.
+  static const FString Shots=[]{FString V;FParse::Value(FCommandLine::Get(),TEXT("BattleSoldierOrderShots="),V);return V;}();
+  if(!Shots.IsEmpty())
+   if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController());PC && PC->IsTactical() && PC->GetPawn())
+   {
+    PC->SetSoldierSelection(T.Unit);
+    const FVector At=Position(T.Unit);PC->GetPawn()->SetActorLocation(FVector(At.X,At.Y,PC->GetPawn()->GetActorLocation().Z));
+    if(T.Shot==0 && Now-T.Since>=1.){FScreenshotRequest::RequestScreenshot(Shots+TEXT("-walking.png"),true,false);T.Shot=1;}
+    if(T.Shot==1 && T.Arrived>0 && Now-T.Arrived>=2.){FScreenshotRequest::RequestScreenshot(Shots+TEXT("-holding.png"),true,false);T.Shot=2;}
+   }
   // Walk and hold: within 1.5 m of his own place, and still under his own order 5 s later.
   const double D=FVector::Dist2D(Position(T.Unit),T.Goal);
   if(!U->bSoldierOrder)Finish(TEXT("order_lost_on_the_way"));
