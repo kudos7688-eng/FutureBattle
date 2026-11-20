@@ -353,6 +353,8 @@ public:
  // and near followers whose one-shot clip ends at a time (a death clip then freezes; a stance transition returns to the loop).
  TMap<int32,FVector> LastShotDirs;
  FVector LastShotDirection(int32 ID) const {return LastShotDirs.FindRef(ID);}
+ // The death clip a follower body shows (the same choice as OnDeath): the far display hands it back to a returning corpse.
+ class UAnimSequence* DeathClip(int32 ID) const;
  // Display: when each soldier last fired. A near follower moving without firing for BattleBodyAnim::ReadySeconds runs with
  // the rifle low (FollowerClip); B.bRunPose is the run shown, refreshed by the pose updates.
  TMap<int32,double> LastFireTimes;

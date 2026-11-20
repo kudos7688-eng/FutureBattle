@@ -28,6 +28,7 @@ struct FBattleVATEntry
  TWeakObjectPtr<USkeletalMeshComponent> Body;
  TWeakObjectPtr<UStaticMeshComponent> Weapon;
  FTransform BodyRelative,WeaponRelative;
+ FQuat NearRotation=FQuat::Identity; // the near body's own rotation (a far corpse is tipped over; a returning one is not)
  int32 ID=0,Pose=0,BodyGroup=0,Slot=0,WeaponGroup=1,WeaponSlot=0;
  float Time=0,Rate=1;
  bool Far=false,Visible=true,Dead=false,Initialized=false;
@@ -56,6 +57,7 @@ public:
  uint64 AnimDemandFrame=0;
  int32 AnimStretch=1;
  int64 StatAnimStretch=0,StatAnimStretchFrames=0;
+ int32 StatCorpseEnters=0,StatCorpseReturns=0; // corpses that went far, and came back lying on their death clip
  virtual void Tick(float Dt) override;
  virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 private:

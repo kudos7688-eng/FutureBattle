@@ -209,7 +209,7 @@ void ABattleVATDisplay::Freeze(int32 ID)
  if(auto* E=Entries.Find(ID))
  {
   E->Dead=true;
-  if(E->Far){E->BodyRelative.SetRotation(FRotator(0,-90,85).Quaternion());}
+  if(E->Far){E->NearRotation=E->BodyRelative.GetRotation();E->BodyRelative.SetRotation(FRotator(0,-90,85).Quaternion());}
   if(const auto* I=AuditIndices.Find(ID)){auto* M=AuditBodies[*I].Get();M->HandleExistingParallelEvaluationTask(true,true);M->SetComponentTickEnabled(false);M->SetRelativeRotation(FRotator(0,-90,85));}
  }
 }
@@ -240,8 +240,11 @@ void ABattleVATDisplay::Enter(FBattleVATEntry& E)
   if(Skip->PendingDt>0 && M->IsComponentTickEnabled())FAnimationRuntime::AdvanceTime(true,(E.Rate*Data->Clips[E.Pose].Clip->RateScale)*Skip->PendingDt,E.Time,Data->Clips[E.Pose].Length);
   Skip->EndAnimSkip();
  }
- E.BodyRelative=M->GetRelativeTransform();E.WeaponRelative=W->GetRelativeTransform();
- E.Dead=!M->IsComponentTickEnabled();
+ E.BodyRelative=M->GetRelativeTransform();E.WeaponRelative=W->GetRelativeTransform();E.NearRotation=E.BodyRelative.GetRotation();
+ // A body still playing its death clip ticks: death comes from Freeze, not from the tick. The far display has no death
+ // clips, so a corpse lies tipped over there (as one that died far away).
+ E.Dead=E.Dead || !M->IsComponentTickEnabled();
+ if(E.Dead && !Audit){E.BodyRelative.SetRotation(FRotator(0,-90,85).Quaternion());++StatCorpseEnters;}
  W->UnregisterComponent();W->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
  auto* Trial=CastChecked<UBattleVATSkeletalMeshComponent>(M);Trial->VATFar=true;M->SetVisibility(false);M->MarkRenderStateDirty();
  if(FarLight())
@@ -261,8 +264,16 @@ void ABattleVATDisplay::Leave(FBattleVATEntry& E)
  if(FarLight())AdvanceFar(E,GetWorld()->GetDeltaSeconds());
  if(M->GetAttachParent()!=B.Capsule.Get())M->AttachToComponent(B.Capsule.Get(),FAttachmentTransformRules::KeepRelativeTransform);
  M->SetRelativeTransform(E.BodyRelative);CastChecked<UBattleVATSkeletalMeshComponent>(M)->VATFar=false;
- M->SetVisibility(false);M->PlayAnimation(BattleStance::AnimEnabled()?Runtime->FollowerClip(E.ID,E.Pose):Data->Clips[E.Pose].Clip.Get(),true);M->SetPlayRate(E.Rate/M->GlobalAnimRateScale);
- M->SetPosition(E.Time,false);M->TickAnimation(0,false);M->VisibilityBasedAnimTickOption=EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+ M->SetVisibility(false);
+ // A corpse returns lying on the last frame of its death clip, not on the clip it moved with (which it went on playing).
+ UAnimSequence* Death=E.Dead && !Audit?Runtime->DeathClip(E.ID):nullptr;
+ if(Death)
+ {
+  M->SetRelativeRotation(E.NearRotation);M->SetRelativeScale3D(FVector(1.));
+  M->PlayAnimation(Death,false);M->SetPlayRate(1.f);M->SetPosition(Death->GetPlayLength(),false);++StatCorpseReturns;
+ }
+ else {M->PlayAnimation(BattleStance::AnimEnabled()?Runtime->FollowerClip(E.ID,E.Pose):Data->Clips[E.Pose].Clip.Get(),true);M->SetPlayRate(E.Rate/M->GlobalAnimRateScale);M->SetPosition(E.Time,false);}
+ M->TickAnimation(0,false);M->VisibilityBasedAnimTickOption=EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
  M->RefreshBoneTransforms(nullptr);M->SetComponentTickEnabled(!E.Dead);
  W->AttachToComponent(M,FAttachmentTransformRules::KeepRelativeTransform,TEXT("hand_r"));W->SetRelativeTransform(E.WeaponRelative);W->RegisterComponent();W->UpdateComponentToWorld();
  BattleFollowerBones::SetVisible(M,E.Visible,true);W->SetVisibility(E.Visible && !E.Dead);E.Far=false;
@@ -390,7 +401,7 @@ void ABattleVATDisplay::Tick(float Dt)
 }
 void ABattleVATDisplay::EndPlay(const EEndPlayReason::Type Reason)
 {
- UE_LOG(LogTemp,Display,TEXT("VAT_DISPLAY_STATS frames=%lld far_mean=%.6f visible_far_mean=%.6f presenter_ms=%.6f anim_skip=%d anim_ticks=%lld anim_evals=%lld anim_budget=%d anim_stretch_mean=%.3f"),StatFrames,StatFrames?double(StatFar)/StatFrames:0.,StatFrames?double(StatShown)/StatFrames:0.,StatFrames?StatMS/StatFrames:0.,int32(AnimSkip()),StatAnimTicks,StatAnimEvals,AnimBudget(),StatAnimStretchFrames?double(StatAnimStretch)/StatAnimStretchFrames:1.);
+ UE_LOG(LogTemp,Display,TEXT("VAT_DISPLAY_STATS frames=%lld far_mean=%.6f visible_far_mean=%.6f presenter_ms=%.6f anim_skip=%d anim_ticks=%lld anim_evals=%lld anim_budget=%d anim_stretch_mean=%.3f corpse_enters=%d corpse_returns=%d"),StatFrames,StatFrames?double(StatFar)/StatFrames:0.,StatFrames?double(StatShown)/StatFrames:0.,StatFrames?StatMS/StatFrames:0.,int32(AnimSkip()),StatAnimTicks,StatAnimEvals,AnimBudget(),StatAnimStretchFrames?double(StatAnimStretch)/StatAnimStretchFrames:1.,StatCorpseEnters,StatCorpseReturns);
  Super::EndPlay(Reason);
  if(RaySettingsChanged)
  {

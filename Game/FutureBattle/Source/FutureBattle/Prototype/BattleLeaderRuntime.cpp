@@ -513,7 +513,7 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
    {
     B->Weapon->SetVisibility(false);
     // Body animation: a near follower plays a death clip and freezes on its last frame (StepBodyTimers); otherwise it tips over.
-    UAnimSequence* Death=B->Mesh.IsValid()?BattleBodyAnim::Death(Forward(ID),LastShotDirs.FindRef(ID),ID):nullptr;
+    UAnimSequence* Death=B->Mesh.IsValid()?DeathClip(ID):nullptr;
     if(Death){B->Mesh->SetRelativeScale3D(FVector(1.));B->Mesh->PlayAnimation(Death,false);BodyTimers.Add(ID,{GetWorld()->GetTimeSeconds()+Death->GetPlayLength(),true});}
     else {BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones); B->Mesh->SetComponentTickEnabled(false); B->Mesh->SetRelativeRotation(FRotator(0,-90,85));}
    }

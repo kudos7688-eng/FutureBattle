@@ -3,6 +3,7 @@
 // save, replacement and AI read the record, never the body. Yet the match is not identical (map E seed 7: 566/618 -> 532/614,
 // same winner; an unknown display->match coupling, like -BattleVATFarLight). The user accepted that.
 #include "BattleLeaderRuntime.h"
+#include "BattleBodyAnim.h"
 #include "FutureBattle.h"
 #include "BattleState.h"
 #include "BattleUnit.h"
@@ -68,4 +69,9 @@ void UBattleLeaderRuntime::HideCorpse(int32 ID)
  if(VAT)VAT->RemoveUnit(ID);
  if(B->Mesh.IsValid()){B->Mesh->SetVisibility(false,true);B->Mesh->SetComponentTickEnabled(false);}
  if(B->Weapon.IsValid())B->Weapon->SetVisibility(false);
+}
+
+UAnimSequence* UBattleLeaderRuntime::DeathClip(int32 ID) const
+{
+ return BattleBodyAnim::Death(Forward(ID),LastShotDirs.FindRef(ID),ID);
 }

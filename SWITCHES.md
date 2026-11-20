@@ -77,7 +77,7 @@
 | `-BattleContactCover` | Value | 0 | BattleTactics.cpp:185 |  |
 | `-BattleContactCoverTeam` | Value | -1 | BattleTactics.cpp:179 |  |
 | `-BattleContactTrial` | Param | off | BattleLeaderRuntime.cpp:84 |  |
-| `-BattleCorpseLifetime` | Value | 20.f | BattleCorpses.cpp:24 |  |
+| `-BattleCorpseLifetime` | Value | 20.f | BattleCorpses.cpp:25 |  |
 | `-BattleCoverActions` | Value | 0 | BattleSquadTactics.cpp:19, BattleTactics.cpp:191 |  |
 | `-BattleCoverActionSmoke` | Param | off | BattleLeaderRuntime.cpp:211 |  |
 | `-BattleCoverApproach` | Value | -1 | BattleTactics.cpp:173 |  |
@@ -158,7 +158,7 @@
 | `-BattleOpponentPreset` | other |  | BattleBenchmark.cpp:48 |  |
 | `-BattlePerceptionGrid` | Value | GetDefault<UBattleTuning>()->bPerceptionGrid?1:0 | BattleLeaderRuntime.cpp:104 |  |
 | `-BattlePerceptionSlices` | Value | 4 | BattleBenchmark.cpp:56 |  |
-| `-BattlePhase3` | Value |  | BattlePhase3.cpp:45, BattleUnit.cpp:38, BattleVATDisplay.cpp:382 ほか1 |  |
+| `-BattlePhase3` | Value |  | BattlePhase3.cpp:45, BattleUnit.cpp:38, BattleVATDisplay.cpp:393 ほか1 |  |
 | `-BattlePinnedFlank` | Value | 0 | BattleLeaderRuntime.cpp:1342 |  |
 | `-BattlePlayerRouteTest` | Param | off | BattlePlayerRoutes.cpp:127 |  |
 | `-BattlePreset` | other |  | BattleBenchmark.cpp:48 |  |

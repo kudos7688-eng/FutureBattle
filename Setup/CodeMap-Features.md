@@ -24,6 +24,7 @@
 | 遮蔽（場所の予約） | @UBattleCover::BuildSlots 、 @UBattleCover::Reserve | 露出の計算は @BattleTactics::ExposureAt |
 | 体のアニメーション | @ABattleUnit::UpdateBodyAnim 、 @FBattleBodyAnimProxy::Evaluate | 部下は @UBattleLeaderRuntime::FollowerClip 、 @UBattleLeaderRuntime::StepBodyTimers |
 | 死体の消滅（表示だけ） | @UBattleLeaderRuntime::StepCorpses 、 @UBattleLeaderRuntime::HideCorpse | 登録は OnDeath の @UBattleLeaderRuntime::AddCorpse |
+| 死体の姿勢（死亡アニメ・遠景VATとの切替） | @UBattleLeaderRuntime::DeathClip 、 @ABattleVATDisplay::Enter 、 @ABattleVATDisplay::Leave | 遠景では横倒し、近景へ戻ると死亡クリップの最終コマ |
 | ブラインドファイア | @UBattleLeaderRuntime::BlindFireOrigin 、 @UBattleLeaderRuntime::Fire | AIの試験は @UBattleLeaderRuntime::TryAIBlindFire |
 | 遮蔽の動作（接近・のぞき撃ち） | @UBattleLeaderRuntime::RequestCoverAction 、 @UBattleLeaderRuntime::StepCoverAction | 切替は @BattleTactics::CoverActionsEnabled ほか |
 | 姿勢（立ち・しゃがみ） | @UBattleLeaderRuntime::SetStance 、 @UBattleLeaderRuntime::UpdateAIStance | 数値は @BattleStance::EyeOffset ほか |
