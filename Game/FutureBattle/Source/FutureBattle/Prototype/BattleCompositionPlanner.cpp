@@ -141,10 +141,12 @@ BattleComposition::FDecision BattleComposition::Decide(const FInput& Input,const
  }
  if(Held)
  {
-  if(Best&&Best->Urgency>Held->Urgency)
+  // Interrupt baseline: the lower of the urgency the goal started with and its current urgency (review C06 + armour that the held type also answers).
+  const int32 HeldUrgency=FMath::Min<int32>(Held->Urgency,Next.SaveUrgency);
+  if(Best&&Best->Urgency>HeldUrgency)
   {
    // Higher urgency: affordable response first, otherwise shortest reachable saving delay (stable sorted ties).
-   Chosen=EmergencyChoice(Held->Urgency,OriginalDeadline);
+   Chosen=EmergencyChoice(HeldUrgency,OriginalDeadline);
    if(Chosen)Result.Reason+=TEXT("urgent_interrupt; ");
   }
   else if(Best&&Best->Type!=Held->Type&&Best->Urgency==Held->Urgency&&Best->Score>=Held->Score+500)
