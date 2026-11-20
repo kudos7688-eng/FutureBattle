@@ -433,8 +433,8 @@ public:
  void ClearSoldierOrder(int32 ID,const TCHAR* Why);
  bool SoldierOrderActive(int32 ID);
  void StepSoldierOrder(int32 ID,float Dt,double Now,FVector& Direction);
- struct FSoldierPath{TArray<FVector> Points;int32 Next=1;double StalledSince=0;int32 Repaths=0;};
- TMap<int32,FSoldierPath> SoldierPaths; // runtime only; rebuilt from the saved goal
+ struct FSoldierPath{TArray<FVector> Points;int32 Next=1;};
+ TMap<int32,FSoldierPath> SoldierPaths; // cache only; rebuilt from the saved goal (stall time and repaths are unit state)
  void StepSoldierOrderTest();
  struct FSoldierOrderTest{int32 Stage=0,Unit=INDEX_NONE,Squad=INDEX_NONE,Failures=0;FVector Goal=FVector::ZeroVector;double Since=0,Arrived=0,ShotAt=0;int32 Shot=0;} SoldierTest;
  // Trial -BattleSectorMove=1 (2026-11-20, default 0; Play-Area turns it on for maps with sectors): the player's plain move click

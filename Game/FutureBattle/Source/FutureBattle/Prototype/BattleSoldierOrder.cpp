@@ -35,7 +35,7 @@ bool UBattleLeaderRuntime::IssueSoldierOrder(int32 ID,FVector Goal,FString& Why)
  UNavigationPath* Route=Nav->FindPathToLocationSynchronously(GetWorld(),Pos,Projected.Location);
  if(!Route || !Route->IsValid() || Route->IsPartial() || Route->PathPoints.Num()<2){Why=TEXT("そこまでの道がありません");return false;}
  CancelCoverAction(ID);CoverApproaches.Remove(ID);FirePositions.Remove(ID);CoverProbeAfter.Remove(ID);
- U->bSoldierOrder=true;U->bSoldierReturn=false;U->SoldierGoal=Projected.Location;U->SoldierOrderMission=S->MissionRevision;
+ U->bSoldierOrder=true;U->bSoldierReturn=false;U->SoldierGoal=Projected.Location;U->SoldierOrderMission=S->MissionRevision;U->SoldierRepaths=0;U->SoldierStalledSince=0;
  auto& Path=SoldierPaths.FindOrAdd(ID);Path=FSoldierPath();for(const FVector& Point:Route->PathPoints)Path.Points.Add(Point);
  U->DecisionReason=TEXT("PLAYER ORDER / OWN PLACE");
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER unit=%d squad=%d goal=%s walk_cm=%.0f"),ID,U->SquadID,*U->SoldierGoal.ToCompactString(),FVector::Dist2D(Pos,U->SoldierGoal));
@@ -61,7 +61,9 @@ void UBattleLeaderRuntime::ClearSoldierOrder(int32 ID,const TCHAR* Why)
 {
  auto* U=GetWorld()->GetSubsystem<UBattleState>()->Units.Find(ID);SoldierPaths.Remove(ID);
  if(!U || !U->bSoldierOrder)return;
- U->bSoldierOrder=false;U->bSoldierReturn=false;
+ U->bSoldierOrder=false;U->bSoldierReturn=false;U->SoldierRepaths=0;U->SoldierStalledSince=0;
+ // A cover place he took under his own order is not the squad's: he rejoins the squad's movement.
+ CancelCoverAction(ID);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER_END unit=%d why=%s"),ID,Why);
 }
 
@@ -82,7 +84,7 @@ bool UBattleLeaderRuntime::SoldierOrderActive(int32 ID)
 
 void UBattleLeaderRuntime::StepSoldierOrder(int32 ID,float Dt,double Now,FVector& Direction)
 {
- auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);const auto* S=Store->FindSquad(U->SquadID);
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);const auto* S=Store->FindSquad(U->SquadID);
  auto& B=Bodies.FindChecked(ID);const FVector Pos=Position(ID);
  auto& Path=SoldierPaths.FindOrAdd(ID);
  // The path is not saved: after loading (or after being stuck) it is searched again from where he stands.
@@ -96,11 +98,12 @@ void UBattleLeaderRuntime::StepSoldierOrder(int32 ID,float Dt,double Now,FVector
  }
  while(Path.Next<Path.Points.Num()-1 && FVector::DistSquared2D(Pos,Path.Points[Path.Next])<FMath::Square(90.))++Path.Next;
  const FVector Way=Path.Points[FMath::Min(Path.Next,Path.Points.Num()-1)];
- const FVector D=(Way-Pos).GetSafeNormal2D();if(D.IsNearlyZero())return;
- Direction=D;
+ const FVector D=(Way-Pos).GetSafeNormal2D();
  const float Speed=GetDefault<UBattleTuning>()->MoveSpeed*BattleSquadType::SpeedAt(S->SquadType,GetWorld(),Pos);
  bool bStuck=false;
- if(B.Actor.IsValid()){B.Actor->GetCharacterMovement()->MaxWalkSpeed=Speed;B.Actor->AddMovementInput(D);B.Velocity=B.Actor->GetVelocity();bStuck=B.Velocity.Size2D()<10;}
+ // At the end of the path: done near the goal; the end of a partial path short of it counts as stuck.
+ if(D.IsNearlyZero()){if(FVector::DistSquared2D(Pos,U->SoldierGoal)<FMath::Square(150.))return;bStuck=true;}
+ else if(Direction=D;B.Actor.IsValid()){B.Actor->GetCharacterMovement()->MaxWalkSpeed=Speed;B.Actor->AddMovementInput(D);B.Velocity=B.Actor->GetVelocity();bStuck=B.Velocity.Size2D()<10;}
  else
  {
   // Map with heights: the step follows the ground (TerrainStep, as in the squad's movement); a place that cannot be stepped onto stops it.
@@ -109,12 +112,13 @@ void UBattleLeaderRuntime::StepSoldierOrder(int32 ID,float Dt,double Now,FVector
   auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=B.Capsule->GetComponentLocation();
   B.Velocity=(F.Position-Pos)/FMath::Max(Dt,.001f);bStuck=(Hit.bBlockingHit || Step.IsNearlyZero()) && B.Velocity.Size2D()<Speed*.3f;
  }
- if(!bStuck){Path.StalledSince=0;return;}
- if(Path.StalledSince==0){Path.StalledSince=Now;return;}
- if(Now-Path.StalledSince<2.)return;
+ if(!bStuck){U->SoldierStalledSince=0;return;}
+ if(U->SoldierStalledSince==0){U->SoldierStalledSince=Now;return;}
+ if(Now-U->SoldierStalledSince<2.)return;
  // Stuck for 2 s: search the path again from here, twice at most, then give up and rejoin the squad.
- if(++Path.Repaths>2){ClearSoldierOrder(ID,TEXT("stuck"));return;}
- const int32 Repaths=Path.Repaths;Path=FSoldierPath();Path.Repaths=Repaths;
+ U->SoldierStalledSince=0;
+ if(++U->SoldierRepaths>2){ClearSoldierOrder(ID,TEXT("stuck"));return;}
+ Path=FSoldierPath();
 }
 
 // ---- Input (ABattleController) ----
@@ -304,6 +308,7 @@ void UBattleLeaderRuntime::StepSoldierOrderTest()
  else if(T.Stage==2)
  {
   // Sent back: the order ends when he reaches his place in the squad.
+  if(!U->bSoldierOrder && FVector::Dist2D(Position(T.Unit),U->Destination)>400.){Finish(TEXT("order_ended_away_from_squad_place"));return;}
   if(!U->bSoldierOrder)
   {
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER_TEST returned unit=%d seconds=%.1f from_goal_cm=%.0f"),T.Unit,Now-T.Since,FVector::Dist2D(Position(T.Unit),T.Goal));

@@ -246,6 +246,8 @@ struct FBattleUnitState
  UPROPERTY() bool bSoldierReturn=false;
  UPROPERTY() FVector SoldierGoal=FVector::ZeroVector;
  UPROPERTY() int32 SoldierOrderMission=0;
+ UPROPERTY() int32 SoldierRepaths=0; // path searched again after being stuck (the third time ends the order)
+ UPROPERTY() double SoldierStalledSince=0; // stuck since (saved as how long)
  // Individual AI timers (BattleSoldierMove.cpp, BattleThreatCover.cpp), saved relative to the save time like ReloadEndTime.
  UPROPERTY() double SoldierMoveUntil=0; // a B1 walk keeps its cover timer at 3 s until then
  UPROPERTY() double SoldierMoveAfter=0; // no B1 decision before this time
