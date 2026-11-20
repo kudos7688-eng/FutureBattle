@@ -31,6 +31,7 @@ bool UBattleLeaderRuntime::ReplaceFollower(int32 DeadID)
  const bool Replaced=Store->ReplaceDeadFollower(DeadID,ID,PositionToUse);check(Replaced);
  Store->Heal(ID,1.e6f); // a replacement starts at its squad type's full health (heavy infantry x3)
  if(VAT)VAT->RemoveUnit(DeadID);
+ Corpses.Remove(DeadID);HiddenCorpses.Remove(DeadID);
  if(auto* Previous=Bodies.Find(DeadID)){HitIDs.Remove(Previous->Capsule.Get());DestroyBody(*Previous);Bodies.Remove(DeadID);}
  Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity).UnitID=ID;
  Bodies.Add(ID,B);HitIDs.Add(B.Capsule.Get(),ID);Plans.FindOrAdd(SID).bReplan=true;bSummaryDirty=true;

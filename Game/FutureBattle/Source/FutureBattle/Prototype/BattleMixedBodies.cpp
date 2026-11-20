@@ -126,7 +126,7 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  if(VAT)VAT->ResetBodies();
  for(auto& Pair:Bodies) DestroyBody(Pair.Value);
  if(DisplayHost) DisplayHost->Destroy();
- DisplayHost=NewHost;Bodies=MoveTemp(Staged);HitIDs.Reset();Plans.Reset();AvoidanceGrid.Reset();Mode->Units.Reset();
+ DisplayHost=NewHost;Bodies=MoveTemp(Staged);HitIDs.Reset();Plans.Reset();AvoidanceGrid.Reset();Mode->Units.Reset();Corpses.Reset();HiddenCorpses.Reset();
  GetWorld()->GetSubsystem<UBattleSquadAI>()->Reset();GetWorld()->GetSubsystem<UBattleCover>()->ResetReservations();
  const double Now=GetWorld()->GetTimeSeconds();TArray<FBattleUnitState> Records;
  for(const auto& E:Save->Units)

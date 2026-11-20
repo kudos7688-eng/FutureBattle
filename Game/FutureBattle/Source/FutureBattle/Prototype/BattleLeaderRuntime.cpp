@@ -518,6 +518,7 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
     else {BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones); B->Mesh->SetComponentTickEnabled(false); B->Mesh->SetRelativeRotation(FRotator(0,-90,85));}
    }
   }
+  AddCorpse(ID);
  }
  bSummaryDirty=true;
 }
@@ -1145,6 +1146,7 @@ void UBattleLeaderRuntime::RefreshDisplay()
   if(const auto* Contacts=Sense->GetContacts(B.Key)) for(const auto& C:*Contacts) if(C.Value.bVisible) if(!M->bArea||!M->IsScoutLongContact(B.Key,C.Value)) Visible.Add(C.Key);
  for(auto& B:Bodies)
  {
+  if(HiddenCorpses.Contains(B.Key))continue; // removed corpse: stays hidden
   const bool Show=Store->Find(B.Key)->Team==0 || Visible.Contains(B.Key);
   const bool BodyShow=Show || DirectBodies;
   if(B.Value.Actor.IsValid()) B.Value.Actor->SetRevealed(Show);
@@ -1159,6 +1161,7 @@ void UBattleLeaderRuntime::Step(float Dt)
  if(SightExperiment.Enabled) { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightExperiment); StepSightExperiment(Dt); }
  if(Phase3 && Phase3->bEnabled) { Phase3->Step(Dt); return; }
  StepBodyTimers();
+ StepCorpses();
  if(bMovementTrial && MoveTrialStage==1 && !Mode->bCombatPaused) MoveTrialFrameMS.Add(Dt*1000);
  const double Now=GetWorld()->GetTimeSeconds(); auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Build the cover slots while the match waits to start (they were built lazily by the first decision: ~100 ms in one frame).
