@@ -386,14 +386,22 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
  // The group's columns: its rearmost and its leading squad's (2026-11-20 first match: stepping from the rearmost one let an armoured
  // squad held back by its own rules stop the whole group until the time ran out).
  int32 Col=Cols,Lead=-1;int32 N=0,Ready=0;FString Where;FVector LeadPosition=FVector::ZeroVector;double LeadX=-DBL_MAX;
+ // The armour sets the pace when it is with the group (2026-11-21 groupui-surprise3-I-*: stepping and the bridge legs followed the
+ // fastest squad, a rifle squad, which crossed and struck alone while the tank backed off known anti-tank soldiers behind the river;
+ // Codex analysis). An armoured squad driving home for repair does not count, so the others go on without it.
+ int32 ALead=-1;FVector ALeadPosition=FVector::ZeroVector;double ALeadX=-DBL_MAX;
  for(int32 SID:G.Squads)if(const auto* S=Store->FindSquad(SID))
  {
   const FVector P=R->Position(S->LeaderUnitID);const int32 C=ColOf(BattleSectors::Cell(P));
   if((bLow?P.X:-P.X)>LeadX){LeadX=bLow?P.X:-P.X;LeadPosition=P;}
   Col=FMath::Min(Col,C);Lead=FMath::Max(Lead,C);++N;Ready+=FVector::Dist2D(P,G.Rally)<=2500.;
   Where+=FString::Printf(TEXT(" %d:t%d:c%d"),SID,int32(S->SquadType),C);
+  const bool bArmour=S->SquadType==BattleSquadType::Tank||S->SquadType==BattleSquadType::ArmoredCar||S->SquadType==BattleSquadType::Exo;
+  const auto* U=Store->Find(S->LeaderUnitID);
+  if(bArmour&&U&&U->IsAlive()&&S->TacticalPlan.Action!=EBattleSquadTactic::Recover&&(bLow?P.X:-P.X)>ALeadX){ALeadX=bLow?P.X:-P.X;ALeadPosition=P;ALead=C;}
  }
  if(!N)return;
+ if(ALead>=0){Lead=ALead;LeadPosition=ALeadPosition;}
  if(Elapsed>=G.SurpriseLogAt)
  {
   G.SurpriseLogAt=Elapsed+30.f;const FIntPoint RC=BattleSectors::Cell(G.Rally);
