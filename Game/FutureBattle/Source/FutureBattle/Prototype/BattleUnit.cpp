@@ -9,6 +9,8 @@
 #include "BattleRanges.h"
 #include "BattleCover.h"
 #include "BattleStance.h"
+#include "BattleBlindFire.h"
+#include "BattleBodyAnim.h"
 #include "BattleSquadAI.h"
 #include "BattleMetrics.h"
 #include "BattleMatch.h"
@@ -98,6 +100,12 @@ void ABattleUnit::InitializeUnit(int32 ID)
 	bWeaponVisuals = !FParse::Param(FCommandLine::Get(), TEXT("BattleLegacyWeaponVisuals"));
 	bTrialPose = FParse::Value(FCommandLine::Get(), TEXT("BattleSquadTrial="), TrialVariant);
 	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, GetMesh(), GetState()->Weapon, false);
+	// Body animation (BattleBodyAnim.h; -BattleBodyAnim=0 keeps the single whole-body clip).
+	if (bWeaponVisuals && !bTrialPose && BattleBodyAnim::Enabled() && BattleBodyAnim::Get(BattleBodyAnim::EClip::StandIdle))
+	{
+		GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		GetMesh()->SetAnimInstanceClass(UBattleBodyAnimInstance::StaticClass());
+	}
 	SpawnDefaultController();
 	SavedAI = Cast<AAIController>(GetController());
 }
@@ -173,7 +181,7 @@ void ABattleUnit::GetPlayerShot(FVector& Start, FVector& Direction)
 	if (!bThirdPersonView) return;
 	FMinimalViewInfo View; CalcCamera(0.f, View);
 	// Aim to wherever the bullet can reach (range profile: further than the AI engagement distance).
-	const FVector End = View.Location + View.Rotation.Vector() * BattleRanges::Reach(GetState()->Weapon);
+	const FVector End = View.Location + View.Rotation.Vector() * BattleRanges::Reach(GetState()->bLauncherSelected ? EBattleWeapon::AntiTank : GetState()->Weapon);
 	FHitResult Hit;
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleThirdPersonAim), false, this);
 	GetWorld()->LineTraceSingleByChannel(Hit, View.Location, End, ECC_Visibility, Query);
@@ -260,7 +268,7 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 	GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Query);
 	if (ABattleUnit* Victim = Cast<ABattleUnit>(Hit.GetActor()))
 	{
-		if (Store->ApplyDamage(Victim->GetUnitID(), GetState()->Team, Tuning->ShotDamage))
+		if (Store->ApplyDamageFrom(Victim->GetUnitID(), GetState()->Team, Tuning->ShotDamage, Start, UnitID, EBattleKillKind::Shot))
 		{
 			if (Metrics->bRecording) ++Metrics->Hits;
 			if (bPlayerShot) if (ABattleController* PC = Cast<ABattleController>(GetController())) PC->HitMarkerUntil = GetWorld()->GetTimeSeconds() + .18;
@@ -349,12 +357,138 @@ FVector ABattleUnit::TracerStart(const UStaticMeshComponent* Model, const FVecto
 	return FVector::DotProduct(Off, Forward.GetSafeNormal2D()) >= 30. && Off.SizeSquared() <= FMath::Square(140.) ? Muzzle : Guess;
 }
 
+UBattleBodyAnimInstance* ABattleUnit::BodyAnim() const
+{
+	return LookIdle ? nullptr : Cast<UBattleBodyAnimInstance>(GetMesh()->GetAnimInstance());
+}
+
+void ABattleUnit::SetMeshLean(const FVector& WorldOffset, float DeltaSeconds)
+{
+	const FVector Target = GetActorTransform().InverseTransformVectorNoScale(WorldOffset);
+	if (Target.Equals(MeshLeanShown, .1)) return;
+	const FVector Base = GetMesh()->GetRelativeLocation() - MeshLeanShown;
+	// About a quarter of a second to the edge of a 2 m lean and back.
+	MeshLeanShown = FMath::VInterpConstantTo(MeshLeanShown, Target, DeltaSeconds, 900.f);
+	GetMesh()->SetRelativeLocation(Base + MeshLeanShown);
+}
+
+void ABattleUnit::SetMeshYaw(float Yaw)
+{
+	if (FMath::IsNearlyEqual(Yaw, MeshYawShown)) return;
+	MeshYawShown = Yaw;
+	GetMesh()->SetRelativeRotation(FRotator(0, -90 + Yaw, 0));
+}
+
+void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUnitState& S)
+{
+	using namespace BattleBodyAnim;
+	const double Now = GetWorld()->GetTimeSeconds();
+	const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+	Body.SetHandRaise(FVector::ZeroVector, 0.f);
+	{
+		// Leaning out past the edge for a side blind shot: the body centre goes to SideLeanBack behind the shown part.
+		FVector Shown, Lean = FVector::ZeroVector;
+		if (Leaders && Leaders->SideExposure(UnitID, Now, Shown))
+		{
+			const FVector Pos = GetActorLocation(), Out = (Shown - Pos).GetSafeNormal2D();
+			Lean = Shown - Out * BattleBlindFire::SideLeanBack - Pos; Lean.Z = 0.;
+		}
+		SetMeshLean(Lean, GetWorld()->GetDeltaSeconds());
+	}
+	// Lower body: a stance change plays its transition once, then the idle or the walk in the direction of travel.
+	if (VisualStance != BodyStance)
+	{
+		TransitionClip = Transition(BodyStance, VisualStance);
+		TransitionUntil = TransitionClip ? Now + TransitionClip->GetPlayLength() : 0.;
+		BodyStance = VisualStance;
+	}
+	// Cover clips (BattleCoverClips.h): hidden and firing poses of the cover action, with a one-shot between phases. The table
+	// is picked once per cover action. While a cover clip shows, it is the whole body (reload still layers on the upper body).
+	if (S.CoverPhase != ShownCoverPhase)
+	{
+		using namespace BattleCoverClips;
+		if (!ShownCoverPhase && S.CoverPhase) CoverClipSet = CoverSet(GetWorld(), S, GetActorForwardVector());
+		const TCHAR* Shot = nullptr; float ShotYaw = 0.f;
+		if (S.CoverPhase == 2 && ShownCoverPhase == 1) { Shot = CoverClipSet.Enter; ShotYaw = YawOffset(2); }
+		else if (S.CoverPhase == 4) { Shot = CoverClipSet.ToAim; ShotYaw = YawOffset(4); }
+		else if (ShownCoverPhase == 4 && S.CoverPhase && BattleBlindFire::IsOverTop(S)) { Shot = CoverClipSet.FromAim; ShotYaw = YawOffset(2); }
+		CoverOneShot = S.CoverPhase ? CoverClip(Shot) : nullptr;
+		CoverOneShotUntil = CoverOneShot ? Now + CoverOneShot->GetPlayLength() : 0.;
+		CoverOneShotYaw = ShotYaw;
+		ShownCoverPhase = S.CoverPhase;
+	}
+	{
+		UAnimSequence* CoverBase = nullptr; bool bCoverLoop = true; float Yaw = 0.f;
+		// Blind fire: around the edge the clip is a crouched aim of the whole body. Over the top the clip stands with the rifle
+		// above the head: the whole body shows it while the head is exposed (the rules aim at and hit the head then,
+		// BattleBlindFire::ExposeEnabled); with -BattleBlindFireExpose=0 only its upper body shows over the hidden pose and the
+		// hands lift the rifle over the cover, the head staying below it.
+		UAnimSequence* Blind = S.CoverPhase && Leaders && Leaders->IsBlindFiring(UnitID, Now) ? BattleBlindFire::Clip(BattleBlindFire::IsOverTop(S)) : nullptr;
+		UAnimSequence* BlindUpper = nullptr;
+		if (Blind && BattleBlindFire::IsOverTop(S) && BattleBlindFire::ExposeEnabled()) CoverBase = Blind;
+		else if (Blind && BattleBlindFire::IsOverTop(S) && CoverClip(CoverClipSet.Hidden)) { CoverBase = CoverClip(CoverClipSet.Hidden); BlindUpper = Blind; Yaw = BattleBlindFire::OverTopYaw(CoverClipSet.Hidden); }
+		// Around the edge: the side's own crouched aim (AimL or AimR of the cover set), else the default side clip.
+		// The body turns so the rifle points around the corner (BlindFireLook), not into the cover.
+		else if (Blind) { CoverBase = CoverClip(CoverClipSet.Aim) ? CoverClip(CoverClipSet.Aim) : Blind; Yaw = Leaders->BlindFireYaw(UnitID, GetActorForwardVector()); }
+		else if (CoverOneShot && Now < CoverOneShotUntil) { CoverBase = CoverOneShot; bCoverLoop = false; Yaw = CoverOneShotYaw; }
+		else if (S.CoverPhase == 2) { CoverBase = CoverClip(CoverClipSet.Hidden); Yaw = BattleCoverClips::YawOffset(2); }
+		else if (S.CoverPhase == 4) { CoverBase = CoverClip(CoverClipSet.Aim); Yaw = BattleCoverClips::YawOffset(4); }
+		if (CoverBase)
+		{
+			SetMeshYaw(Yaw);
+			// Over the top: the hands lift the rifle above the cover (two-bone IK) while the body stays crouched behind it.
+			// Target: 12 cm over the measured cover top, 30 cm ahead of the body toward the shot (display only).
+			if (BlindUpper)
+			{
+				const FVector Pos = GetActorLocation();
+				const FVector* Look = Leaders->BlindFireLook.Find(UnitID);
+				const FVector Ahead = Look ? (*Look - Pos).GetSafeNormal2D() : GetActorForwardVector().GetSafeNormal2D();
+				const float* Top = Leaders->BlindFireTop.Find(UnitID);
+				const FVector Target = Pos + Ahead * 30.f + FVector(0, 0, (Top ? *Top - Pos.Z : 45.f) + 12.f);
+				Body.SetHandRaise(GetMesh()->GetComponentTransform().InverseTransformPosition(Target), 1.f);
+			}
+			Body.SetBase(CoverBase, bCoverLoop);
+			Body.SetAim(0.f, 0.f);
+			const float ReloadSeconds = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
+			UAnimSequence* CoverReload = Get(EClip::Reload);
+			if (S.ReloadEndTime > Now && CoverReload) Body.SetUpper(CoverReload, 1.f, CoverReload->GetPlayLength() * FMath::Clamp(1. - (S.ReloadEndTime - Now) / ReloadSeconds, 0., 1.));
+			else Body.SetUpper(BlindUpper, BlindUpper ? 1.f : 0.f);
+			if (LastVisualShot > ShownShot) ShownShot = LastVisualShot;
+			ShownHP = S.HP;
+			return;
+		}
+	}
+	SetMeshYaw(0.f);
+	const bool bTransition = TransitionClip && Now < TransitionUntil;
+	const FVector Local = GetActorRotation().UnrotateVector(GetVelocity());
+	const bool bJog = Local.Size2D() > GetDefault<UBattleTuning>()->MoveSpeed * 1.15f;
+	Body.SetBase(bTransition ? TransitionClip.Get() : Locomotion(VisualStance, Local, bJog), !bTransition);
+	// Upper body: reload (synced to the reload timer), blind fire, otherwise the aim pose at the weapon's pitch.
+	const float Duration = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
+	const bool bProne = VisualStance == BattleStance::Prone;
+	UAnimSequence* Reload = Get(bProne ? EClip::ProneReload : EClip::Reload);
+	if (S.ReloadEndTime > Now && Reload)
+		Body.SetUpper(Reload, 1.f, Reload->GetPlayLength() * FMath::Clamp(1. - (S.ReloadEndTime - Now) / Duration, 0., 1.));
+	else if (UAnimSequence* Blind = Leaders && Leaders->IsBlindFiring(UnitID, Now) ? BattleBlindFire::Clip(BattleBlindFire::IsOverTop(S)) : nullptr)
+		Body.SetUpper(Blind, 1.f);
+	else Body.SetUpper(nullptr, 0.f);
+	const FVector AimDir = IsPlayerControlled() ? GetControlRotation().Vector() : S.WeaponAimDirection;
+	Body.SetAim(FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(AimDir.GetSafeNormal().Z, -1., 1.))), bProne || bTransition ? 0.f : 1.f);
+	// One-shot overlays: recoil for each shot, a flinch when hit (from the side the shot came from).
+	if (LastVisualShot > ShownShot) { ShownShot = LastVisualShot; if (!bProne) Body.PlayOverlay(Get(EClip::Fire), .55f); }
+	if (ShownHP >= 0.f && S.HP < ShownHP - .01f && !bProne)
+		Body.PlayOverlay(Hit(GetActorForwardVector(), Leaders ? Leaders->LastShotDirection(UnitID) : FVector::ZeroVector, UnitID + int32(Now * 10.)), 1.f);
+	ShownHP = S.HP;
+}
+
 void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 {
 	const double Now = GetWorld()->GetTimeSeconds();
 	const float Duration = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
 	const bool Reloading = S.ReloadEndTime > Now;
 	const bool Moving = GetVelocity().SizeSquared2D() > 400.;
+	if (auto* Body = BodyAnim()) UpdateBodyAnim(*Body, S);
+	else {
 	auto* Pose = Reloading ? RifleReload.Get() : Moving ? RifleWalk.Get() : RifleIdle.Get();
 	// Stance visuals trial: a crouched soldier plays the crouch clip (reloading included: there is no crouched reload clip).
 	if (auto* Crouch = VisualStance == BattleStance::Crouch ? BattleStance::CrouchClip(Moving) : nullptr) Pose = Crouch;
@@ -363,6 +497,12 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 		const bool Crouched = VisualStance == BattleStance::Crouch && LookCrouchIdle && BattleStance::AnimEnabled();
 		Pose = Crouched ? (Moving && LookCrouchMove ? LookCrouchMove.Get() : LookCrouchIdle.Get()) : Moving && LookMove ? LookMove.Get() : LookIdle.Get();
 	}
+	// Blind fire (BattleBlindFire.cpp): the clip that raises the rifle over or around the cover while it lasts.
+	// Not for a soldier with its own look (other skeleton). Over the top it is a standing clip (the head shows): only while the
+	// rules expose the head (BattleBlindFire::ExposeEnabled).
+	const bool bOverTop = BattleBlindFire::IsOverTop(S);
+	if (!Reloading && !LookIdle && (!bOverTop || BattleBlindFire::ExposeEnabled())) if (const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leaders && Leaders->IsBlindFiring(UnitID, Now))
+		if (auto* Blind = BattleBlindFire::Clip(bOverTop)) Pose = Blind;
 	const bool Looping = !Reloading || Pose != RifleReload.Get();
 	if (Pose && CurrentPose != Pose)
 	{
@@ -370,6 +510,7 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 		GetMesh()->PlayAnimation(Pose,Looping);
 		GetMesh()->SetPlayRate(!Looping ? Pose->GetPlayLength()/Duration : 1.f);
 		if (!Looping) GetMesh()->SetPosition(Pose->GetPlayLength()*FMath::Clamp(1.-(S.ReloadEndTime-Now)/Duration,0.,1.), false);
+	}
 	}
 	if (IsPlayerControlled() && Rifle->GetAttachParent()==FirstPersonCamera)
 	{
@@ -470,8 +611,19 @@ void ABattleUnit::ApplyDeath()
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	if (AAIController* AI = Cast<AAIController>(GetController())) AI->StopMovement();
-	GetMesh()->SetRelativeRotation(FRotator(0, -90, 85));
-	GetMesh()->SetRelativeLocation(FVector(0, 0, -65));
+	// Body animation: a death clip chosen by where the killing shot came from, holding its last frame; otherwise the body tips over.
+	UBattleBodyAnimInstance* Body = BodyAnim();
+	const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+	if (UAnimSequence* Death = Body ? BattleBodyAnim::Death(GetActorForwardVector(), Leaders ? Leaders->LastShotDirection(UnitID) : FVector::ZeroVector, UnitID) : nullptr)
+	{
+		GetMesh()->SetRelativeScale3D(FVector(1.)); SetMeshYaw(0.f);
+		Body->SetUpper(nullptr, 0.f); Body->SetAim(0.f, 0.f); Body->SetBase(Death, false);
+	}
+	else
+	{
+		GetMesh()->SetRelativeRotation(FRotator(0, -90, 85));
+		GetMesh()->SetRelativeLocation(FVector(0, 0, -65));
+	}
 	TeamLabel->SetText(FText::FromString(TEXT("DOWN")));
 	TeamLabel->SetTextRenderColor(FColor(140, 140, 140));
 	Rifle->SetVisibility(false);

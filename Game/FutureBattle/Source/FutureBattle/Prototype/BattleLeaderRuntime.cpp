@@ -14,6 +14,8 @@
 #include "BattleRanges.h"
 #include "BattleSuppression.h"
 #include "BattleStance.h"
+#include "BattleBlindFire.h"
+#include "BattleBodyAnim.h"
 #include "EngineUtils.h"
 #include "BattleMetrics.h"
 #include "MassEntitySubsystem.h"
@@ -307,15 +309,18 @@ void UBattleLeaderRuntime::GuardFalls(double Now)
 }
 FBattleSightContext UBattleLeaderRuntime::Sight(int32 ID) const
 {
- // Stances lower the eye (60cm above the body centre when standing).
- const float EyeZ=BattleStance::EyeOffset(StanceOf(ID));
+ // Stances lower the eye (60cm above the body centre when standing); a head shown by an over-the-top blind fire looks
+ // from its own height (BattleBlindFire::ExposedEyeOffset).
+ const float EyeZ=IsHeadExposed(ID,GetWorld()->GetTimeSeconds())?BattleBlindFire::ExposedEyeOffset:BattleStance::EyeOffset(StanceOf(ID));
  // Scout pairs see ScoutSightRange while still (moving: their normal profile).
  const float Still=ScoutStillSight(ID);
  // Trial -BattleSightTeamMask=1: the observer's own side does not block its sight (its soldiers' bodies carry the side's mask bit).
  const FMaskFilter TeamMask=SightTeamMaskFor(ID);
- if(auto* A=Actor(ID)) {auto Context=A->CaptureSightContext();Context.Eye.Z+=EyeZ-60.f;if(Still>0.f)Context.RangeSquared=FMath::Max(Context.RangeSquared,FMath::Square(Still));Context.Query.IgnoreMask=TeamMask;return Context;}
+ // Leaning out past an edge for a blind shot, he looks from there.
+ FVector Leaning;const bool bLeaning=SideExposure(ID,GetWorld()->GetTimeSeconds(),Leaning);
+ if(auto* A=Actor(ID)) {auto Context=A->CaptureSightContext();Context.Eye.Z+=EyeZ-60.f;if(bLeaning)Context.Eye=Leaning;if(Still>0.f)Context.RangeSquared=FMath::Max(Context.RangeSquared,FMath::Square(Still));Context.Query.IgnoreMask=TeamMask;return Context;}
  FBattleSightContext C; const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
- C.Position=Position(ID); C.Eye=C.Position+FVector(0,0,EyeZ); C.Forward=Forward(ID); C.bAlive=U && U->IsAlive();
+ C.Position=Position(ID); C.Eye=bLeaning?Leaning:C.Position+FVector(0,0,EyeZ); C.Forward=Forward(ID); C.bAlive=U && U->IsAlive();
  if(U) { C.RangeSquared=FMath::Square(U->Perception.SightRange); C.HalfAngleCos=FMath::Cos(FMath::DegreesToRadians(U->Perception.FieldOfView*.5)); C.bOmnidirectional=U->Perception.FieldOfView>=360; }
  if(Still>0.f) C.RangeSquared=FMath::Max(C.RangeSquared,FMath::Square(Still));
  C.Metrics=GetWorld()->GetSubsystem<UBattleMetrics>(); C.Query=FCollisionQueryParams(SCENE_QUERY_STAT(LeaderSight),false);
@@ -367,7 +372,10 @@ bool UBattleLeaderRuntime::PrepareSightTrace(const FBattleSightContext& C,int32 
  if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
  const FVector P=Position(Target), D=(P-C.Position).GetSafeNormal2D();
  if(FVector::DistSquared(P,C.Position)>(IsVehicle(Target)?FMath::Max(C.RangeSquared,FMath::Square(VehicleSpotRange())):C.RangeSquared) || (!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)) return false;
- End=P+FVector(0,0,BattleStance::AimOffset(StanceOf(Target))); return true;
+ End=P+FVector(0,0,TargetAimOffset(Target));
+ // A soldier blind-firing around an edge is seen by the part of him that shows past it.
+ FVector Shown;if(SideExposure(Target,GetWorld()->GetTimeSeconds(),Shown))End=Shown;
+ return true;
 }
 bool UBattleLeaderRuntime::SightHitStatsEnabled()
 {
@@ -498,7 +506,18 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
  {
   B->Velocity=FVector::ZeroVector;
   if(B->Actor.IsValid()) B->Actor->ApplyDeath();
-  else { B->Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision); if(VAT)VAT->Freeze(ID); if(!VAT || !VAT->IsFar(ID)){BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones); B->Mesh->SetComponentTickEnabled(false); B->Mesh->SetRelativeRotation(FRotator(0,-90,85)); B->Weapon->SetVisibility(false);} }
+  else
+  {
+   B->Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision); if(VAT)VAT->Freeze(ID);
+   if(!VAT || !VAT->IsFar(ID))
+   {
+    B->Weapon->SetVisibility(false);
+    // Body animation: a near follower plays a death clip and freezes on its last frame (StepBodyTimers); otherwise it tips over.
+    UAnimSequence* Death=B->Mesh.IsValid()?BattleBodyAnim::Death(Forward(ID),LastShotDirs.FindRef(ID),ID):nullptr;
+    if(Death){B->Mesh->SetRelativeScale3D(FVector(1.));B->Mesh->PlayAnimation(Death,false);BodyTimers.Add(ID,{GetWorld()->GetTimeSeconds()+Death->GetPlayLength(),true});}
+    else {BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones); B->Mesh->SetComponentTickEnabled(false); B->Mesh->SetRelativeRotation(FRotator(0,-90,85));}
+   }
+  }
  }
  bSummaryDirty=true;
 }
@@ -892,7 +911,12 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  // Stances: fire from the current eye height, and aim at the height the visible target presents.
  const FVector Muzzle(0,0,BattleStance::EyeOffset(StanceOf(ID)));
  if(BaseEngage)Direction=(BaseTarget-(Pos+Muzzle)).GetSafeNormal();
- else if(CanEngage) Direction=(Contact->LastKnownPosition+FVector(0,0,BattleStance::AimOffset(StanceOf(TargetID)))-(Pos+Muzzle)).GetSafeNormal();
+ else if(CanEngage)
+ {
+  // A target leaning out past an edge for a blind shot is aimed at where he shows (he is seen there, PrepareSightTrace).
+  FVector Shown;
+  Direction=((SideExposure(TargetID,Now,Shown)?Shown:Contact->LastKnownPosition+FVector(0,0,TargetAimOffset(TargetID)))-(Pos+Muzzle)).GetSafeNormal();
+ }
  else if(S->TacticalPlan.Action==EBattleSquadTactic::Flank)
  {
   // Movement has already consumed its steering vector. Keep watch toward known
@@ -940,11 +964,30 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  // A mortar has no direct fire (its shells go through FireArtillery, BattleArtillery.cpp).
  if(U->Weapon==EBattleWeapon::Mortar) return false;
  const double Now=GetWorld()->GetTimeSeconds(); const auto* T=GetDefault<UBattleTuning>();
+ bool bBlind=false;
  if(U->CoverPhase && U->CoverPhase!=4)
  {
-  if(bPlayerShot && U->CoverPhase==2){auto& Cover=Store->Units.FindChecked(ID);Cover.CoverPhase=3;Cover.CoverSeconds=3;}
-  return false;
+  // Blind fire (BattleBlindFire.cpp): the player fires without aiming, or an AI soldier in the trial; the shot leaves above or
+  // beside the cover while the body stays hidden. Aiming and firing (or no free origin) peeks as before.
+  const bool bWantBlind=U->CoverPhase==2 && U->Weapon!=EBattleWeapon::AntiTank && !U->bLauncherSelected &&
+   (bPlayerShot?BattleBlindFire::PlayerEnabled() && Actor(ID) && Actor(ID)->GetAimLevel()==0:bAIBlindShot);
+  FVector Origin;
+  if(bWantBlind && BlindFireOrigin(ID,Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon),Origin))
+  {
+   const FVector Aim=Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon);
+   Start=Origin;Direction=(Aim-Origin).GetSafeNormal();bBlind=true;
+   BlindFireLook.Add(ID,Origin+Direction.GetSafeNormal2D()*200.f);
+   if(BattleBlindFire::IsOverTop(*U))BlindFireTop.Add(ID,BattleBlindFire::CoverTop(GetWorld(),Origin,Position(ID)));
+   else BlindFireSide.Add(ID,Origin);
+  }
+  else
+  {
+   if(bPlayerShot && U->CoverPhase==2){auto& Cover=Store->Units.FindChecked(ID);Cover.CoverPhase=3;Cover.CoverSeconds=3;}
+   return false;
+  }
  }
+ if(bPlayerShot && U->bLauncherSelected)
+  return FireExoLauncher(ID,Start+Direction.GetSafeNormal()*BattleRanges::Reach(EBattleWeapon::AntiTank),Now);
  Store->UpdateAim(ID,Now,Actor(ID)?Actor(ID)->GetVelocity().Size2D():Bodies.FindChecked(ID).Velocity.Size2D(),Direction,Actor(ID)?Actor(ID)->GetCharacterMovement()->IsMovingOnGround():true);
  if(!Store->ConsumeShot(ID,Now,T->ShotInterval(U->Weapon,bPlayerShot))) return false;
  if(SightExperiment.Started)
@@ -960,7 +1003,9 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  if(SuppressedScale>1.25f)SightExperiment.Cover(TEXT("suppressed_shots"));
  // The player's own shot is tighter while he aims or looks through the scope (never the AI's shots).
  /* tighter for the player at all times (PlayerSpreadScale), more so while aiming */ const float AimScale=bPlayerShot&&Actor(ID)?Actor(ID)->PlayerSpreadScale():1.f;
- Direction=BattleTactics::ShotDirection(*U,Direction,Now,SuppressedScale*BattleStance::SpreadScale(StanceOf(ID))*AimScale);
+ // Blind fire: the shooter cannot see along the barrel, so neither stance nor the player's aim tightens it.
+ if(bBlind){BlindFireUntil.Add(ID,Now+BattleBlindFire::ClipHoldSeconds);SightExperiment.Cover(bPlayerShot?TEXT("blind_shots_player"):TEXT("blind_shots_ai"));}
+ Direction=BattleTactics::ShotDirection(*U,Direction,Now,bBlind?SuppressedScale*BattleBlindFire::SpreadScale():SuppressedScale*BattleStance::SpreadScale(StanceOf(ID))*AimScale);
  auto Q=Sight(ID).Query; FHitResult Hit; const FVector End=Start+Direction.GetSafeNormal()*BattleRanges::Reach(U->Weapon);
  // Concealment (hedges) hides soldiers from sight but does not stop bullets.
  if(!bConcealmentBuilt)
@@ -974,17 +1019,35 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  for(int32 Pass=0;Pass<4&&Hit.bBlockingHit;++Pass)
  {
   const int32 Over=HitIDs.FindRef(Hit.GetComponent());const uint8 OverStance=Over>0?StanceOf(Over):0;
-  if(OverStance==BattleStance::Stand||Hit.ImpactPoint.Z<=Position(Over).Z+BattleStance::TopOffset(OverStance))break;
+  if(OverStance==BattleStance::Stand||Hit.ImpactPoint.Z<=Position(Over).Z+(Over>0?TargetTopOffset(Over):BattleStance::TopOffset(OverStance)))break;
   SightExperiment.Cover(TEXT("shot_passed_over"));Q.AddIgnoredComponent(Hit.GetComponent());
   Hit=FHitResult();GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_Visibility,Q);
  }
  SuppressNear(U->Team,Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Now,U->Weapon==EBattleWeapon::SupportGun?BattleSuppression::Tuning().SupportScale:1.f);
- const int32 Victim=HitIDs.FindRef(Hit.GetComponent());
+ int32 Victim=HitIDs.FindRef(Hit.GetComponent());
+ // Blind fire around an edge: the part of a soldier that shows past it is hit when the bullet's line passes through it
+ // before reaching what the trace hit (BattleBlindFire::SideExposedRadius); it is not a collision body.
+ bool bShownPartHit=false;
+ if(BlindFireSide.Num())
+ {
+  const FVector To=Hit.bBlockingHit?FVector(Hit.ImpactPoint):End;double Nearest=FVector::Dist(Start,To);
+  for(const auto& Side:BlindFireSide)
+  {
+   FVector Shown;if(Side.Key==ID || !SideExposure(Side.Key,Now,Shown))continue;
+   const FVector Closest=FMath::ClosestPointOnSegment(Shown,Start,To);
+   if(FVector::DistSquared(Closest,Shown)>FMath::Square(BattleBlindFire::SideExposedRadius))continue;
+   if(const double Along=FVector::Dist(Start,Closest);Along<Nearest){Nearest=Along;Victim=Side.Key;bShownPartHit=true;}
+  }
+  if(bShownPartHit)SightExperiment.Cover(TEXT("blind_side_part_hit"));
+ }
+ // Display only (BattleBodyAnim): the hit and death clips face the side the shot came from.
+ if(Victim>0)LastShotDirs.Add(Victim,Direction.GetSafeNormal2D());
+ if(auto* Shooter=Actor(ID))Shooter->NoteVisualShot(Now);
  // Per-shot damage by the shooter's squad type (heavy infantry may hit harder; rifle squads 1x).
  // An anti-tank round hits for ATDamage (and ATBaseDamage on an enemy home); its explosion follows below.
  const bool bAT=U->Weapon==EBattleWeapon::AntiTank;
  const float ShotDmg=bAT?T->ATDamage:[&]{const auto* SS=Store->FindSquad(U->SquadID);return T->ShotDamage*BattleSquadType::DamageScale(SS?SS->SquadType:0);}();
- if(bArea)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,bAT?T->ATBaseDamage:ShotDmg);
+ if(bArea && !bShownPartHit)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,bAT?T->ATBaseDamage:ShotDmg);
  if(SightExperiment.Started && Victim>0) ++SightExperiment.Hits;
  const auto* BeforeVictim=Store->Find(Victim);
  const float BeforeHP=BeforeVictim?BeforeVictim->HP:0;
@@ -1006,7 +1069,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   {++SquadLiving;if(Member!=Victim && FVector::DistSquared2D(Position(Member),Start)<LeaderDistance)++LeaderRank;}
  }
  // Armour: a vehicle takes only anti-tank hits (rifles and machine guns do nothing to it).
- const bool Damaged=Victim>0 && ArmorScale(Victim,U->Weapon)>0.f && Store->ApplyDamage(Victim,U->Team,ShotDmg*ArmorScale(Victim,U->Weapon));
+ const bool Damaged=Victim>0 && ArmorScale(Victim,U->Weapon)>0.f && Store->ApplyDamageFrom(Victim,U->Team,ShotDmg*ArmorScale(Victim,U->Weapon),Start,ID,EBattleKillKind::Shot);
  if(SightExperiment.Started && Damaged && BeforeVictim)
  {
   auto& E=SightExperiment;const bool Killed=BeforeHP>0 && !Store->Find(Victim)->IsAlive();
@@ -1095,6 +1158,7 @@ void UBattleLeaderRuntime::Step(float Dt)
  TRACE_CPUPROFILER_EVENT_SCOPE(BattleRuntimeStep);
  if(SightExperiment.Enabled) { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightExperiment); StepSightExperiment(Dt); }
  if(Phase3 && Phase3->bEnabled) { Phase3->Step(Dt); return; }
+ StepBodyTimers();
  if(bMovementTrial && MoveTrialStage==1 && !Mode->bCombatPaused) MoveTrialFrameMS.Add(Dt*1000);
  const double Now=GetWorld()->GetTimeSeconds(); auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Build the cover slots while the match waits to start (they were built lazily by the first decision: ~100 ms in one frame).

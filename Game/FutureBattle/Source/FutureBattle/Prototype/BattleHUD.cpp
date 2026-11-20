@@ -15,6 +15,9 @@
 #include "BattleFieldLayout.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 void ABattleHUD::DrawHUD()
 {
@@ -270,7 +273,7 @@ void ABattleHUD::DrawHUD()
 	if (Focus && Focus->GetState())
 	{
 		const FBattleUnitState* S = Focus->GetState();
-		Label(FString::Printf(TEXT("%s %02d ／ 部隊%02d   HP %.0f%s   弾 %02d / %02d   %s ／ %s   再試行 %d%s"), S->Weapon == EBattleWeapon::Mortar ? TEXT("迫撃砲") : S->Weapon == EBattleWeapon::AntiTank ? TEXT("対戦車火器") : S->Weapon == EBattleWeapon::SupportGun ? TEXT("支援火器") : TEXT("小銃"), S->UnitID, S->SquadID, S->HP, GetWorld()->GetSubsystem<UBattleState>()->MaxShieldOf(S->UnitID) > 0.f ? *FString::Printf(TEXT(" ＋盾 %.0f   対戦車弾 %d%s%s"), S->Shield, S->Launcher, S->LauncherWait > 0.f ? TEXT("（装填中）") : TEXT(""), PC->IsTactical() ? TEXT("") : PC->bGamepadActive ? TEXT(" [LBで発射]") : TEXT(" [Fで発射]")) : TEXT(""), S->Ammo, S->Reserve,
+		Label(FString::Printf(TEXT("%s %02d ／ 部隊%02d   HP %.0f%s   弾 %02d / %02d   %s ／ %s   再試行 %d%s"), S->bLauncherSelected && !PC->IsTactical() ? TEXT("バズーカ") : S->Weapon == EBattleWeapon::Mortar ? TEXT("迫撃砲") : S->Weapon == EBattleWeapon::AntiTank ? TEXT("対戦車火器") : S->Weapon == EBattleWeapon::SupportGun ? TEXT("支援火器") : TEXT("小銃"), S->UnitID, S->SquadID, S->HP, GetWorld()->GetSubsystem<UBattleState>()->MaxShieldOf(S->UnitID) > 0.f ? *FString::Printf(TEXT(" ＋盾 %.0f   対戦車弾 %d%s%s"), S->Shield, S->Launcher, S->LauncherWait > 0.f ? TEXT("（装填中）") : TEXT(""), PC->IsTactical() ? TEXT("") : PC->bGamepadActive ? TEXT(" [LBで切替]") : TEXT(" [Fで切替]")) : TEXT(""), S->Ammo, S->Reserve,
 			*BattleUIText::Ja(BattleOrderName(S->Order)), *BattleUIText::Ja(BattleActionName(S->Action)), S->MoveRetries, S->ReloadEndTime > 0 ? TEXT("   装填中…") : TEXT("")), 34, H - 112, S->Action == EBattleAction::MoveFailed ? FLinearColor::Yellow : White, 1.05f);
 		if(!Mode->bLeaderCommand)
         {
@@ -403,6 +406,9 @@ void ABattleHUD::DrawHUD()
 		DrawLine(W / 2, H / 2 + 4, W / 2, H / 2 + 13, CrossColor, 1.5f);
 		}
 	}
+	DrawHitDirection(PC);
+	DrawOffscreenMarkers(PC);
+	DrawKillLog(PC);
 	if (PC->NoticeUntil > GetWorld()->GetTimeSeconds()) Label(BattleUIText::Ja(PC->Notice), 35, PC->CanShowDelegation() ? H - 156 : Match->IsEnabled() ? 235 : 96, Mint, 1.1f);
 	if (PC->IsTactical() && PC->PendingOrder != EBattleOrder::Move)
 		Label(FString::Printf(TEXT("%s：右クリックで目的地 ／ Hで取消"), *BattleUIText::Ja(BattleOrderName(PC->PendingOrder))), 35, 148, FLinearColor::Yellow);
@@ -634,5 +640,156 @@ void ABattleHUD::DrawOrderMarks()
   // Arrival slots of living members.
   if(const auto* Plan=L->PlanOf(SID)) for(const auto& Slot:Plan->ArrivalGoals) if(const auto* M=Store->Find(Slot.Key); M&&M->IsAlive())
   {FVector2D P; if(Screen(Slot.Value+FVector(0,0,20),P)) DrawRect(Color*FLinearColor(1,1,1,.7f),P.X-2,P.Y-2,4,4);}
+ }
+}
+
+void ABattleHUD::DrawHitDirection(ABattleController* PC)
+{
+ static const bool bOn=[]{int32 Mode=1;FParse::Value(FCommandLine::Get(),TEXT("BattleHitDirection="),Mode);return Mode!=0;}();
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ const ABattleUnit* Unit=PC->IsTactical()?nullptr:Cast<ABattleUnit>(PC->GetPawn());
+ const int32 Watch=Unit?Unit->GetUnitID():INDEX_NONE;
+ if(Store->HitWatchID!=Watch){Store->HitWatchID=Watch;Store->HitNotices.Reset();}
+ if(!bOn||!Unit||!Canvas)return;
+ const double Now=GetWorld()->GetTimeSeconds();const float Fade=1.5f;
+ const float W=Canvas->SizeX,H=Canvas->SizeY,Cx=W*.5f,Cy=H*.5f,R=FMath::Min(W,H)*.14f;
+ const float CameraYaw=PC->PlayerCameraManager?PC->PlayerCameraManager->GetCameraRotation().Yaw:PC->GetControlRotation().Yaw;
+ const FVector Here=Unit->GetActorLocation();
+ for(const FBattleHitNotice& N:Store->HitNotices)
+ {
+  const float Age=float(Now-N.Time);if(Age<0.f||Age>Fade)continue;
+  const float Alpha=1.f-Age/Fade;const FLinearColor Red(1.f,.12f,.08f,.9f*Alpha);
+  const FVector To=N.From-Here;
+  if(!N.bKnown||To.SizeSquared2D()<100.f*100.f)
+  {
+   // Source unknown or right on top of the soldier: a thin ring.
+   for(int32 I=0;I<32;++I){const float A0=I*2*PI/32,A1=(I+1)*2*PI/32;DrawLine(Cx+FMath::Sin(A0)*R,Cy-FMath::Cos(A0)*R,Cx+FMath::Sin(A1)*R,Cy-FMath::Cos(A1)*R,Red*FLinearColor(1,1,1,.6f),2.f);}
+   continue;
+  }
+  // Angle on screen: 0 = straight ahead (top), clockwise to the right.
+  const float Angle=FMath::DegreesToRadians(FMath::FindDeltaAngleDegrees(CameraYaw,FMath::RadiansToDegrees(FMath::Atan2(To.Y,To.X))));
+  const float Half=FMath::DegreesToRadians(20.f);
+  for(int32 I=0;I<8;++I)
+  {
+   const float A0=Angle-Half+2*Half*I/8,A1=Angle-Half+2*Half*(I+1)/8;
+   DrawLine(Cx+FMath::Sin(A0)*R,Cy-FMath::Cos(A0)*R,Cx+FMath::Sin(A1)*R,Cy-FMath::Cos(A1)*R,Red,6.f);
+  }
+  // A short point outward so the arc reads as an arrow.
+  const FVector2D Tip(Cx+FMath::Sin(Angle)*(R+18.f),Cy-FMath::Cos(Angle)*(R+18.f));
+  for(const float Side:{-1.f,1.f})
+  {const float A=Angle+Side*FMath::DegreesToRadians(7.f);DrawLine(Cx+FMath::Sin(A)*(R+3.f),Cy-FMath::Cos(A)*(R+3.f),Tip.X,Tip.Y,Red,3.f);}
+ }
+}
+
+void ABattleHUD::DrawOffscreenMarkers(ABattleController* PC)
+{
+ static const bool bOn=[]{int32 Mode=1;FParse::Value(FCommandLine::Get(),TEXT("BattleOffscreenMarkers="),Mode);return Mode!=0;}();
+ if(!bOn||!Canvas||!PC->PlayerCameraManager)return;
+ auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ const float W=Canvas->SizeX,H=Canvas->SizeY;
+ // The free part of the screen: the top bar and the bottom help lines are kept clear (same bounds as the on-screen labels).
+ const float Left=40.f,Right=W-40.f,Top=110.f,Bottom=H-140.f;const FVector2D Center(W*.5f,(Top+Bottom)*.5f);
+ const FVector CamLoc=PC->PlayerCameraManager->GetCameraLocation();const FRotator CamRot=PC->PlayerCameraManager->GetCameraRotation();
+ const ABattleUnit* Unit=PC->IsTactical()?nullptr:Cast<ABattleUnit>(PC->GetPawn());
+ const FLinearColor Mint(.28f,.95f,.8f),Enemy(1,.35f,.25f),Muted(.62f,.7f,.77f),White(.94f,.97f,1.f),Ink(.025f,.04f,.065f,.8f);
+ auto Marker=[&](const FVector& World,const FString& Text,FLinearColor Color)
+ {
+  const FVector Local=CamRot.UnrotateVector(World-CamLoc); // X forward, Y right, Z up
+  FVector2D Dir;FVector2D P;
+  if(Local.X>1.f&&PC->ProjectWorldLocationToScreen(World,P))
+  {
+   if(P.X>=Left&&P.X<=Right&&P.Y>=Top&&P.Y<=Bottom)return; // on the screen: the normal labels show it
+   Dir=P-Center;
+  }
+  else Dir=FVector2D(Local.Y,-Local.Z); // behind the camera: never use the mirrored projection
+  if(Dir.IsNearlyZero())Dir=FVector2D(0,1);
+  Dir.Normalize();
+  // Where the ray from the centre leaves the free rectangle.
+  const float Tx=Dir.X>0?(Right-Center.X)/Dir.X:Dir.X<0?(Left-Center.X)/Dir.X:BIG_NUMBER;
+  const float Ty=Dir.Y>0?(Bottom-Center.Y)/Dir.Y:Dir.Y<0?(Top-Center.Y)/Dir.Y:BIG_NUMBER;
+  const FVector2D Edge=Center+Dir*FMath::Min(Tx,Ty);
+  const FVector2D Side(-Dir.Y,Dir.X),Tip=Edge+Dir*10.f,Back=Edge-Dir*8.f;
+  DrawLine(Tip.X,Tip.Y,Back.X+Side.X*9.f,Back.Y+Side.Y*9.f,Color,3.f);
+  DrawLine(Tip.X,Tip.Y,Back.X-Side.X*9.f,Back.Y-Side.Y*9.f,Color,3.f);
+  DrawLine(Back.X+Side.X*9.f,Back.Y+Side.Y*9.f,Back.X-Side.X*9.f,Back.Y-Side.Y*9.f,Color,2.f);
+  // Label inside the arrow, pulled toward the centre so it stays on the screen.
+  const FString Full=Unit?FString::Printf(TEXT("%s %.0fm"),*Text,FVector::Dist2D(World,Unit->GetActorLocation())/100.f):Text;
+  float TW=0,TH=0;GetTextSize(Full,TW,TH,GEngine->GetSmallFont(),.85f);
+  const FVector2D L=Back-Dir*(16.f+FMath::Abs(Dir.X)*TW*.5f+FMath::Abs(Dir.Y)*TH*.5f)-FVector2D(TW*.5f,TH*.5f);
+  DrawRect(Ink,L.X-3,L.Y-1,TW+6,TH+2);DrawText(Full,Color,L.X,L.Y,GEngine->GetSmallFont(),.85f);
+ };
+ // Objectives only in direct control: the tactical view has the minimap and a free camera.
+ if(Match&&Unit)for(int32 Index=0;Index<Match->Objectives.Num();++Index)
+ {
+  const int32 Holder=Match->bArea?Match->ObservedOwner(0,Index):Match->Objectives[Index].Owner;
+  const FLinearColor Color=Holder==0?Mint:Holder==1?Enemy:Holder==-2?Muted:White;
+  Marker(Match->Objectives[Index].Position+FVector(0,0,45),FString::Printf(TEXT("%c"),'A'+Index),Color);
+ }
+ if(Unit)
+ {
+  // Direct control: where the soldier's own squad has been ordered to go.
+  const auto* U=Unit->GetState();const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
+  if(S&&S->CommandStatus==EBattleCommandStatus::Active)
+  {
+   const EBattleOrder Order=S->bHasMission?S->MissionOrder:S->Order;
+   if(Order!=EBattleOrder::Hold)Marker((S->bHasMission?S->MissionDestination:S->Destination)+FVector(0,0,25),TEXT("目標"),FLinearColor::Yellow);
+  }
+ }
+ else
+ {
+  // Tactical view: the selected squads (one marker per squad, at its leader).
+  TSet<int32> Done;
+  for(const auto& Selected:PC->GetSelection())
+  {
+   if(!Selected||!Selected->GetState()||!Selected->IsAlive())continue;const int32 SID=Selected->GetState()->SquadID;
+   if(SID==INDEX_NONE||Done.Contains(SID))continue;Done.Add(SID);
+   const auto* S=Store->FindSquad(SID);Marker(Selected->GetActorLocation()+FVector(0,0,120),S?S->DisplayName:FString(TEXT("選択中")),Mint);
+  }
+ }
+}
+
+void ABattleHUD::DrawKillLog(ABattleController* PC)
+{
+ static const bool bOn=[]{int32 Mode=1;FParse::Value(FCommandLine::Get(),TEXT("BattleKillLog="),Mode);return Mode!=0;}();
+ if(!bOn||!Canvas)return;
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();if(Store->KillNotices.IsEmpty())return;
+ const double Now=GetWorld()->GetTimeSeconds();const float Life=8.f,RowH=22.f,Width=340.f;
+ const ABattleUnit* Unit=PC->IsTactical()?nullptr:Cast<ABattleUnit>(PC->GetPawn());const int32 Me=Unit?Unit->GetUnitID():INDEX_NONE;
+ const float W=Canvas->SizeX;
+ float X=W-16.f-Width,Y=96.f;
+ if(PC->IsTactical()&&GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled())
+ {const auto List=FBattleSquadListLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY));if(List.Height>0){X=List.Origin.X-10.f-Width;Y=List.Origin.Y;}}
+ auto Weapon=[](const FBattleKillNotice& N)->const TCHAR*
+ {
+  switch(N.Kind)
+  {
+   case EBattleKillKind::Blast:return TEXT("対戦車弾");
+   case EBattleKillKind::Artillery:return TEXT("砲撃");
+   case EBattleKillKind::TankGun:return TEXT("戦車砲");
+   case EBattleKillKind::Launcher:return TEXT("バズーカ");
+   case EBattleKillKind::Shot:
+    if(N.bKillerVehicle)return TEXT("車載機関銃");
+    return N.KillerWeapon==EBattleWeapon::SupportGun?TEXT("機関銃"):N.KillerWeapon==EBattleWeapon::AntiTank?TEXT("対戦車兵"):N.KillerWeapon==EBattleWeapon::Mortar?TEXT("砲"):TEXT("小銃");
+   default:return TEXT("");
+  }
+ };
+ int32 Row=0;
+ for(int32 I=Store->KillNotices.Num()-1;I>=0&&Row<5;--I)
+ {
+  const FBattleKillNotice& N=Store->KillNotices[I];const float Age=float(Now-N.Time);if(Age<0.f||Age>Life)continue;
+  const float Alpha=FMath::Clamp(Life-Age,0.f,1.f);
+  const FString Killer=N.KillerID==Me?FString(TEXT("あなた")):N.KillerTeam==0?(N.KillerSquad.IsEmpty()?FString(TEXT("味方")):N.KillerSquad):FString(TEXT("敵"));
+  const FString Victim=N.VictimID==Me?FString(TEXT("あなた"))
+   :N.VictimTeam==0?(N.VictimSquad.IsEmpty()?FString(TEXT("味方の兵")):N.VictimSquad+(N.bVictimVehicle?TEXT(""):N.bVictimLeader?TEXT("の隊長"):TEXT("の兵")))
+   :FString(N.bVictimVehicle?TEXT("敵の車両"):N.bVictimLeader?TEXT("敵の隊長"):TEXT("敵兵"));
+  const bool bMine=N.KillerID==Me||N.VictimID==Me;
+  const FLinearColor Color=bMine?FLinearColor(1,.9f,.35f,Alpha):N.KillerTeam==0?FLinearColor(.28f,.95f,.8f,Alpha):FLinearColor(1,.45f,.35f,Alpha);
+  const float RowY=Y+Row*RowH;
+  DrawRect(FLinearColor(.025f,.04f,.065f,.8f*Alpha),X,RowY,Width,RowH-2);
+  DrawRect(Color,X,RowY,3,RowH-2);
+  DrawText(FString::Printf(TEXT("%s → %s"),*Killer,*Victim),Color,X+9,RowY+3,GEngine->GetSmallFont(),.85f);
+  const FString Tag=Weapon(N);
+  if(!Tag.IsEmpty()){float TW=0,TH=0;GetTextSize(Tag,TW,TH,GEngine->GetSmallFont(),.8f);DrawText(Tag,FLinearColor(.62f,.7f,.77f,Alpha),X+Width-TW-8,RowY+4,GEngine->GetSmallFont(),.8f);}
+  ++Row;
  }
 }

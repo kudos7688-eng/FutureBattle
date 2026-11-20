@@ -1,0 +1,49 @@
+﻿{
+    "dll":  "75C56C481DF42A4E35F9E0B270B2597233BFFAF2615CFD7459DC8D8C90243F4B",
+    "arguments":  [
+                      "\"C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\FutureBattle.uproject\"",
+                      "/Game/Prototype/Lvl_BattleWide_C",
+                      "-game",
+                      "-unattended",
+                      "-nosound",
+                      "-nosplash",
+                      "-BattleWideMixed",
+                      "-BattleCoverActionSmoke",
+                      "-BattleCoverActions=1",
+                      "-BattleSquadTactics=0",
+                      "-BattleTeamSupport=0",
+                      "-BattleSquadFlank=0",
+                      "-BattleSightRange=10000",
+                      "-abslog=\"C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Setup\\Benchmarks\\FlankStages-20261112\\expose-main-n1\\run.log\"",
+                      "-nullrhi"
+                  ],
+    "machine":  {
+                    "schema_version":  1,
+                    "captured_at_utc":  "2026-11-19T18:33:52.5227466Z",
+                    "gpus":  [
+                                 {
+                                     "name":  "NVIDIA GeForce RTX 5070 Ti",
+                                     "pnp_device_id":  "PCI\\VEN_10DE\u0026DEV_2C05\u0026SUBSYS_143D196E\u0026REV_A1\\4\u00267BE56FF\u00260\u00260008",
+                                     "driver_version":  "32.0.16.2101",
+                                     "vram_bytes":  17094934528,
+                                     "vram_source":  "Registry HardwareInformation.qwMemorySize",
+                                     "vram_note":  null,
+                                     "cim_adapter_ram_bytes":  4293918720
+                                 }
+                             ],
+                    "cpus":  [
+                                 {
+                                     "name":  "Intel(R) Core(TM) i7-14700KF",
+                                     "cores":  20,
+                                     "logical_processors":  28
+                                 }
+                             ],
+                    "memory_bytes":  68523167744,
+                    "os":  {
+                               "name":  "Microsoft Windows 11 Pro",
+                               "version":  "10.0.26300",
+                               "build_number":  "26300",
+                               "architecture":  "64-bit"
+                           }
+                }
+}

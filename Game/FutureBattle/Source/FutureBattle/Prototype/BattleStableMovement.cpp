@@ -10,9 +10,10 @@
 
 namespace
 {
-void SweepSoldier(UWorld* World,const UPrimitiveComponent* Ignore,FVector From,FVector Delta,FHitResult& Result,float HalfHeight=90)
+void SweepSoldier(UWorld* World,const UPrimitiveComponent* Ignore,FVector From,FVector Delta,FHitResult& Result,float HalfHeight=90,const TArray<TWeakObjectPtr<UPrimitiveComponent>>* AlsoIgnore=nullptr)
 {
  FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleMassMovement)); Query.AddIgnoredComponent(Ignore);
+ if(AlsoIgnore)for(const auto& C:*AlsoIgnore)if(C.IsValid())Query.AddIgnoredComponent(C.Get()); // -BattleAllyPass: stopped allies
  TArray<FHitResult> Hits;
  World->SweepMultiByChannel(Hits,From,From+Delta,FQuat::Identity,ECC_Pawn,FCollisionShape::MakeCapsule(36,HalfHeight),Query);
  Result=FHitResult();
@@ -25,6 +26,8 @@ void SweepSoldier(UWorld* World,const UPrimitiveComponent* Ignore,FVector From,F
   Result=Candidate;break;
  }
 }
+// Trial -BattleAllyPass=1 (default 0): see FBattleLeaderBody::AllyPassUntil.
+bool AllyPassOn(){static const bool V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAllyPass="),X);return X!=0;}();return V;}
 }
 
 bool UBattleLeaderRuntime::TerrainStep(const FVector& From,FVector& Step) const
@@ -67,6 +70,21 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   for(const auto& Other:Plans) if(Other.Key!=SID)
    if(const auto* OS=Store->FindSquad(Other.Key); OS && OS->Team==S->Team && OS->Order!=EBattleOrder::Hold && OS->CommandStatus==EBattleCommandStatus::Active)
     for(const auto& G:Other.Value.ArrivalGoals) if(Store->Find(G.Key)->IsAlive()) Reserved.Add(G.Value);
+  // Sector missions (2026-11-20): a squad that already holds the sector (order Hold, so its arrival places are no longer
+  // reserved above) still stands in its cover slots. Without this, the next squad sent into the sector was given those same
+  // slots and its soldiers stood beside the occupied one for good (map I: 850 move stalls a match at one shed corner in G8
+  // with -BattleSectorRoute=1). Reserve where the team's other soldiers in the sector stand, and the places of holding squads.
+  // -BattleSectorSlotReserve=0 turns it off for comparison. Maps without sectors are unchanged.
+  static const bool SectorSlotReserve=[](){int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSlotReserve="),V);return V!=0;}();
+  if(Sector && SectorSlotReserve)
+   for(const auto& Other:Plans) if(Other.Key!=SID)
+    if(const auto* OS=Store->FindSquad(Other.Key); OS && OS->Team==S->Team)
+    {
+     for(int32 MID:OS->Members) if(const auto* M=Store->Find(MID); M && M->IsAlive())
+      if(const FVector At=Position(MID); BattleSectors::Cell(At)==Cell) Reserved.Add(At);
+     if(OS->Order==EBattleOrder::Hold)
+      for(const auto& G:Other.Value.ArrivalGoals) if(Store->Find(G.Key)->IsAlive() && BattleSectors::Cell(G.Value)==Cell) Reserved.Add(G.Value);
+    }
   const FVector Forward=P.Path.Num()>1?(P.Path.Last()-P.Path[P.Path.Num()-2]).GetSafeNormal2D():FVector::ForwardVector;
   const FVector Right(-Forward.Y,Forward.X,0);
   const bool Rally=S->TacticalPlan.bAutonomous &&
@@ -249,6 +267,9 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   Stop();return false;
  }
  const FVector Pos=Position(ID);
+ // -BattleAllyPass: walking through stopped allies for a few seconds after a hopeless wait (off by default).
+ const bool bAllyPass=AllyPassOn()&&Now<B.AllyPassUntil;
+ if(!bAllyPass&&B.AllyPassUntil>0)EndAllyPass(ID);
  bool Final=B.Waypoint==Route->Num()-1;
  FVector Way=(*Route)[B.Waypoint];
  const FVector Segment=(Way-(*Route)[B.Waypoint-1]).GetSafeNormal2D(), SegmentRight(-Segment.Y,Segment.X,0);
@@ -274,7 +295,29 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   const float Previous=B.StationaryMoveSeconds;
   B.StationaryMoveSeconds+=Dt;
   if(Previous<3.f && B.StationaryMoveSeconds>=3.f)
+  {
    UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_STALL unit=%d team=%d squad=%d pos=%s waypoint=%s"),ID,U->Team,U->SquadID,*Pos.ToString(),*Way.ToString());
+   // Detail (2026-11-20, diagnosis of the map I sector jams): what the soldier walks to, whether the way is clear of walls,
+   // and who stands within 1.5m (same squad / other squad of the team / enemy; and how many of them stand still).
+   int32 Own=0,Team=0,Enemy=0,Still=0;
+   for(const auto& Pair:Bodies)if(Pair.Key!=ID)if(const auto* O=Store->Find(Pair.Key);O&&O->IsAlive()&&FVector::DistSquared2D(Position(Pair.Key),Pos)<FMath::Square(150.))
+   {(O->Team!=U->Team?Enemy:O->SquadID==U->SquadID?Own:Team)++;Still+=Pair.Value.Velocity.Size2D()<20;}
+   UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_STALL_DETAIL unit=%d squad=%d order=%d action=%d sector=%d final=%d wp=%d/%d goal=%s clear=%d own=%d team=%d enemy=%d still=%d cover=%d"),
+    ID,U->SquadID,int32(S->Order),int32(S->TacticalPlan.Action),S->bSectorMission?1:0,Final?1:0,B.Waypoint,Route->Num(),Goal?*Goal->ToString():TEXT("-"),
+    ClearMovementSegment(Pos,Way)?1:0,Own,Team,Enemy,Still,U->CoverPhase?1:0);
+  }
+ }
+ // Trial -BattleWaypointPass=1 (2026-11-20, default 0): a soldier pushed past a corner of his route by the crowd (within 4m of
+ // the corner point, already on the far side towards the next point, and the next point reachable in a straight swept line)
+ // goes on to the next point instead of turning back to touch the corner. On map I with sector routes the whole west army
+ // queued at one shed corner in G8 (850 stalls a match), a fifth of them past the corner and walking back into the queue.
+ static const bool WaypointPass=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleWaypointPass="),V);return V!=0;}();
+ if(WaypointPass && !Final && B.Waypoint+1<Route->Num())
+ {
+  const FVector& Next=(*Route)[B.Waypoint+1];
+  if(FVector::DistSquared2D(Pos,Way)<FMath::Square(400.) && FVector::DistSquared2D(Pos,Way)>=FMath::Square(65.) &&
+     FVector::DotProduct((Pos-Way).GetSafeNormal2D(),(Next-Way).GetSafeNormal2D())>0.f && ClearMovementSegment(Pos,Next))
+  {++B.Waypoint;Way=Next;Final=B.Waypoint==Route->Num()-1;SightExperiment.Cover(TEXT("waypoint_pass"));}
  }
  if(!Final && FVector::Dist2D(Pos,Way)<65) {++B.Waypoint;Way=(*Route)[B.Waypoint];Final=B.Waypoint==Route->Num()-1;}
  FVector D=(Way-Pos).GetSafeNormal2D(); const FVector Right(-D.Y,D.X,0);
@@ -295,6 +338,7 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   if(const auto* Nearby=AvoidanceGrid.Find(Cell+FIntPoint(X,Y))) for(int32 Other:*Nearby)
   {
    if(Other==ID || !Store->Find(Other)->IsAlive()) continue;
+   if(bAllyPass&&IsStationaryAlly(ID,Other)) continue;
    if(++Checked>32) break;
    const FVector Delta=Position(Other)-Pos;
    const double Along=FVector::DotProduct(Delta,D), Side=FVector::DotProduct(Delta,Right), Dist=Delta.Size2D();
@@ -336,7 +380,7 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  }
  // A stopped cluster can block a two-point pass. Probe at most twelve short,
  // fully swept alternatives once per second, without another NavMesh search.
- if(Now>=B.EscapeUntil && Now>=B.NextEscapeProbe && Now-B.LastProgressTime>1)
+ if(!bAllyPass && Now>=B.EscapeUntil && Now>=B.NextEscapeProbe && Now-B.LastProgressTime>1)
  {
   B.NextEscapeProbe=Now+1;
   const UPrimitiveComponent* Ignore=B.Actor.IsValid()?B.Actor->GetCapsuleComponent():B.Capsule.Get();
@@ -354,8 +398,11 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   if(FVector::Dist2D(Pos,B.EscapeWaypoint)<20) B.EscapeUntil=0;
   else {D=(B.EscapeWaypoint-Pos).GetSafeNormal2D();Separation=FVector::ZeroVector;Scale=1;}
  }
- if(bContactAvoidance && (Blocker!=INDEX_NONE || Now-B.LastProgressTime>1 || !B.ContactRoute.IsEmpty() || B.bContactWaiting))
+ if(bContactAvoidance && !bAllyPass && (Blocker!=INDEX_NONE || Now-B.LastProgressTime>1 || !B.ContactRoute.IsEmpty() || B.bContactWaiting))
   if(ResolveStoppedContact(ID,Way,Now,D,Scale)) Separation=FVector::ZeroVector;
+ // -BattleAllyPass: no detour around the stopped cluster and no progress for 3 s: pass through the stopped allies.
+ if(AllyPassOn()&&!bAllyPass&&B.bContactWaiting&&Now-B.LastProgressTime>3)
+ {BeginAllyPass(ID,Now);B.bContactWaiting=false;Scale=1;Separation=FVector::ZeroVector;D=(Way-Pos).GetSafeNormal2D();}
  Direction=LimitedSteering(D,Separation,GetDefault<UBattleTuning>()->WideAvoidanceMaxSide);
  B.bTrafficWait=Scale<.15f;
  // Heavy infantry moves slower (squad type speed scale); rifle squads keep the configured speed.
@@ -380,7 +427,7 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   auto SweepMove=[&](FVector Delta,FHitResult& Result)
   {
    const FVector From=B.Capsule->GetComponentLocation();
-   { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSweepSoldier); SweepSoldier(GetWorld(),B.Capsule.Get(),From,Delta,Result); }
+   { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSweepSoldier); SweepSoldier(GetWorld(),B.Capsule.Get(),From,Delta,Result,90,bAllyPass?&B.AllyPassIgnored:nullptr); }
    const float Fraction=Result.bBlockingHit?FMath::Max(0.f,Result.Time-.001f):1.f;
    // Performance (2026-11-17, user decision): the own sweep above already stops at soldiers and the world, so the capsule moves
    // without the second engine sweep (it ignores the shared owner and only sees the world; it never shortened a move by 0.5 cm in

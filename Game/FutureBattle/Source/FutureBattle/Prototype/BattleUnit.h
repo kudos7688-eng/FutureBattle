@@ -4,6 +4,7 @@
 #include "AIController.h"
 #include "BattleState.h"
 #include "CollisionQueryParams.h"
+#include "BattleCoverClips.h"
 #include "BattleUnit.generated.h"
 
 class UCameraComponent;
@@ -61,6 +62,7 @@ public:
 	// Direct control view (display only; the shot's spread and range do not change):
 	// 0 none, 1 aim over the shoulder (x1.6), 2 scope x4, 3 scope x8. Set every frame by the controller.
 	void SetAimLevel(int32 Level) { AimLevel = FMath::Clamp(Level, 0, 3); }
+	int32 GetAimLevel() const { return AimLevel; }
 	float AimMagnification() const { return AimZoom; }
 	bool ScopeView() const { return ScopeAlpha > .5f; }
 	// Spread multiplier for the player's own shot (UBattleTuning): below 1 once the view has settled on an aim level.
@@ -73,7 +75,28 @@ public:
 	// A squad type's own look (the exoskeleton soldier's AC01 suit): its own clips and its own weapon model held at a bone
 	// (Grip = the model relative to that bone). There is no reload clip: the pose stays. Set by UBattleLeaderRuntime::ApplySquadLook.
 	void SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequence* CrouchIdle, UAnimSequence* CrouchMove, UStaticMesh* Weapon, FName Bone, const FTransform& Grip);
+	bool HasLook() const { return LookIdle != nullptr; }
+	// Recoil display of the body (BattleBodyAnim): set by the shared fire path for every shot of this soldier.
+	void NoteVisualShot(double Time) { LastVisualShot = Time; }
 private:
+	// Body animation (BattleBodyAnim.h): lower body by stance, direction and transition, upper-body layers and overlays.
+	void UpdateBodyAnim(class UBattleBodyAnimInstance& Body, const FBattleUnitState& S);
+	class UBattleBodyAnimInstance* BodyAnim() const;
+	uint8 BodyStance = 0;
+	UPROPERTY() TObjectPtr<UAnimSequence> TransitionClip;
+	double TransitionUntil = 0., ShownShot = -10.;
+	float ShownHP = -1.f;
+	// Cover clips (BattleCoverClips.h): the set picked when the cover action starts, the one-shot between phases, mesh yaw.
+	uint8 ShownCoverPhase = 0;
+	BattleCoverClips::FSet CoverClipSet{};
+	UPROPERTY() TObjectPtr<UAnimSequence> CoverOneShot;
+	double CoverOneShotUntil = 0.;
+	float CoverOneShotYaw = 0.f, MeshYawShown = 0.f;
+	void SetMeshYaw(float Yaw);
+	// Blind fire around an edge (BattleBlindFire::SideLeanBack): the body is drawn leaning out to the edge while that part of
+	// it shows; the offset of the mesh from its place in the capsule, eased in and out (display only).
+	FVector MeshLeanShown = FVector::ZeroVector;
+	void SetMeshLean(const FVector& WorldOffset, float DeltaSeconds);
 	UPROPERTY() TObjectPtr<UAnimSequence> LookIdle;
 	UPROPERTY() TObjectPtr<UAnimSequence> LookMove;
 	UPROPERTY() TObjectPtr<UAnimSequence> LookCrouchIdle;

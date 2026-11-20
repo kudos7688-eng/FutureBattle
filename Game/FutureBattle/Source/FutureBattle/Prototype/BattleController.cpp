@@ -1,6 +1,7 @@
 #include "BattleController.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleStance.h"
+#include "BattleBlindFire.h"
 #include "BattleFieldLayout.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 #include "BattleUnit.h"
@@ -424,14 +425,12 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
     if(R->SetStance(U->GetUnitID(),Next,GetWorld()->GetTimeSeconds()))ShowNotice(Next==BattleStance::Prone?TEXT("PRONE / X TO STAND"):Next==BattleStance::Crouch?TEXT("CROUCHED / X FOR PRONE"):TEXT("STANDING / X TO CROUCH"));
     return true;
    }
- // Exoskeleton: F fires the shoulder launcher of the directly controlled soldier along the aim (it does not fire by itself meanwhile).
+ // F / LB swaps the hand and back mounts. Primary fire uses the equipped weapon.
  if(!bTactical && Params.Key==EKeys::F && Params.Event==IE_Pressed)
-  if(auto* U=Cast<ABattleUnit>(GetPawn());U&&U->GetState()&&GetWorld()->GetSubsystem<UBattleState>()->MaxShieldOf(U->GetUnitID())>0.f)
+  if(auto* U=Cast<ABattleUnit>(GetPawn());U && GetWorld()->GetSubsystem<UBattleState>()->ToggleExoWeapon(U->GetUnitID()))
   {
-   const auto* St=U->GetState();FVector Start,Direction;U->GetPlayerShot(Start,Direction);
-   if(St->Launcher<=0)ShowNotice(TEXT("LAUNCHER EMPTY / REFILL AT HOME"));
-   else if(St->LauncherWait>0.f)ShowNotice(TEXT("LAUNCHER LOADING"));
-   else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->FireExoLauncher(U->GetUnitID(),Start+Direction*20000.f,GetWorld()->GetTimeSeconds()))ShowNotice(FString::Printf(TEXT("LAUNCHER FIRED / %d LEFT"),St->Launcher));
+   GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->UpdateExoLooks();
+   ShowNotice(U->GetState()->bLauncherSelected ? TEXT("LAUNCHER EQUIPPED") : TEXT("RIFLE EQUIPPED"));
    return true;
   }
  if(!bTactical && Params.Key==EKeys::C && Params.Event==IE_Pressed)
@@ -440,7 +439,7 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
   {
    auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
    if(U->GetState()->CoverPhase){R->CancelCoverAction(U->GetUnitID());ShowNotice(TEXT("COVER RELEASED"));}
-   else ShowNotice(R->RequestCoverAction(U->GetUnitID(),U->GetActorLocation()+GetControlRotation().Vector()*5000)?TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE"):TEXT("NO NEARBY COVER WITH SAFE PEEK"));
+   else ShowNotice(R->RequestCoverAction(U->GetUnitID(),U->GetActorLocation()+GetControlRotation().Vector()*5000)?(BattleBlindFire::PlayerEnabled()?TEXT("COVER / FIRE = BLIND FIRE / AIM + FIRE = PEEK / C OR MOVE TO RELEASE"):TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE")):TEXT("NO NEARBY COVER WITH SAFE PEEK"));
    return true;
   }
  }
@@ -1061,7 +1060,7 @@ FKey ABattleController::GamepadToKey(const FKey& Key) const
  else
  {
   if(Key==EKeys::Gamepad_RightTrigger) return EKeys::LeftMouseButton;        // RT: fire
-  if(Key==EKeys::Gamepad_LeftShoulder) return EKeys::F;                      // LB: exoskeleton launcher
+  if(Key==EKeys::Gamepad_LeftShoulder) return EKeys::F;                      // LB: exoskeleton weapon swap
   if(Key==EKeys::Gamepad_LeftTrigger) return EKeys::RightMouseButton;        // LT: aim (held)
   if(Key==EKeys::Gamepad_DPad_Up) return EKeys::MouseScrollUp;               // while aiming: more magnification
   if(Key==EKeys::Gamepad_DPad_Down) return EKeys::MouseScrollDown;           // while aiming: less

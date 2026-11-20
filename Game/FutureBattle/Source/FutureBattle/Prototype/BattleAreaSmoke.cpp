@@ -694,9 +694,15 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Store->AdvanceShields(2.f);const bool Partial=FMath::IsNearlyEqual(LU->Shield,40.f);
     Store->AdvanceShields(100.f);Regen=Waited&&Partial&&FMath::IsNearlyEqual(LU->Shield,100.f)&&FMath::IsNearlyEqual(LU->HP,HP0-20.f);
     // Launcher: one round out (straight up, hitting nothing), then 8 s to load the next; the main weapon's ammunition is untouched.
-    const int32 Ammo0=LU->Ammo;const bool Fired=FireExoLauncher(L,Position(L)+FVector(0,0,5000),Now);const bool Loading=!FireExoLauncher(L,Position(L)+FVector(0,0,5000),Now);
+    const int32 Ammo0=LU->Ammo;
+    const bool StartsWithRifle=!LU->bLauncherSelected;
+    const bool Selected=Store->ToggleExoWeapon(L)&&LU->bLauncherSelected;
+    const bool Returned=Store->ToggleExoWeapon(L)&&!LU->bLauncherSelected;
+    const bool Switched=StartsWithRifle&&Selected&&Returned&&Store->ToggleExoWeapon(L);
+    const bool Fired=Fire(L,Position(L),FVector::UpVector,true);
+    const bool Loading=!Fire(L,Position(L),FVector::UpVector,true);
     const bool One=LU->Launcher==3&&FMath::IsNearlyEqual(LU->LauncherWait,8.f)&&LU->Ammo==Ammo0;
-    Store->AdvanceShields(8.f);Launch=Fired&&Loading&&One&&LU->LauncherWait==0.f;
+    Store->AdvanceShields(8.f);Launch=Switched&&Fired&&Loading&&One&&LU->LauncherWait==0.f;
     // Team layer: the fast reserve gets a valid objective from what its team knows.
     Reserve=M->Objectives.IsValidIndex(M->AreaExoTarget(0,XSID));
     // Save and restore: type, shield points, the pause before the refill and the launcher rounds survive.
@@ -704,7 +710,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
     const bool Restored=Valid&&M->RestoreSnapshot(Save);const auto* After=Store->FindSquad(XSID);const auto* RU=Store->Find(L);
     Kept=Restored&&After&&After->SquadType==BattleSquadType::Exo&&After->CommandStatus==EBattleCommandStatus::Active&&RU&&Actor(L)&&ExoLooks.Contains(L)&&FMath::IsNearlyEqual(RU->Shield,75.f)&&FMath::IsNearlyEqual(RU->ShieldWait,TT->ExoShieldDelay)&&
-     RU->Launcher==3&&FMath::IsNearlyEqual(RU->HP,HP0-20.f)&&Store->HasShields()&&FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::Carbine),.3f);
+     RU->Launcher==3&&RU->bLauncherSelected&&FMath::IsNearlyEqual(RU->HP,HP0-20.f)&&Store->HasShields()&&FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::Carbine),.3f);
     Mode->bCombatPaused=false;
    }
    Check(Body,TEXT("exoskeleton soldier: one soldier, 30 resources, automatic rifle at 2x damage, 4 launcher rounds, 200 health, 100 shield, 10 m/s"));

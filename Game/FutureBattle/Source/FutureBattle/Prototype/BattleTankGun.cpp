@@ -60,7 +60,7 @@ bool UBattleLeaderRuntime::TankGunTarget(int32 ID,double Now,FVector& Direction)
   auto Q=Sight(ID).Query;const FVector Muzzle=Pos+FVector(0,0,60);
   for(int32 I=0;I<Candidates.Num()&&I<3&&!G.bHasTarget;++I)
   {
-   const auto& C=Candidates[I];const FVector Aim=C.At+FVector(0,0,C.Key>0?BattleStance::AimOffset(StanceOf(C.Key)):35.f);
+   const auto& C=Candidates[I];const FVector Aim=C.At+FVector(0,0,C.Key>0?TargetAimOffset(C.Key):35.f);
    FHitResult Hit;GetWorld()->LineTraceSingleByChannel(Hit,Muzzle,Aim,ECC_Visibility,Q);
    if(!Hit.bBlockingHit||FVector::DistSquared(Hit.ImpactPoint,Aim)<=Splash2||HitIDs.FindRef(Hit.GetComponent())>0){G.bHasTarget=true;G.TargetKey=C.Key;G.Aim=Aim;}
   }
@@ -99,7 +99,7 @@ bool UBattleLeaderRuntime::TankGunHit(int32 ID,int32 Victim)
  const auto* T=GetDefault<UBattleTuning>();const int32 Team=U->Team;
  const float BeforeHP=Before->HP;const auto* VS=Store->FindSquad(Before->SquadID);const uint8 VictimType=VS?VS->SquadType:0;const int32 VictimTeam=Before->Team;
  const bool Vehicle=IsVehicle(Victim);
- if(!Store->ApplyDamage(Victim,Team,T->TankGunDamage))return false;
+ if(!Store->ApplyDamageFrom(Victim,Team,T->TankGunDamage,Position(ID),ID,EBattleKillKind::TankGun))return false;
  ++TankGunHits;TankGunVehicleHits+=Vehicle;const bool Killed=!Store->Find(Victim)->IsAlive();TankGunKills+=Killed;
  if(SightExperiment.Started)
  {

@@ -17,11 +17,13 @@
 | 兵科（歩兵・重火器・偵察・対戦車・戦車）の差 | @BattleSquadType::Members から @BattleSquadType::Weapon までの一群、 @UBattleState::SetSquadType | 射程は @BattleRanges::Get |
 | 命令（移動・攻撃移動・防御・待機） | 入力 @ABattleController::IssueOrderAt → 状態 @UBattleState::SetSquadOrder → 混成 @UBattleLeaderRuntime::IssueOrder | 委任は @UBattleState::SetSquadDelegated 、 @UBattleMatch::SetAllyDelegated |
 | 入力・RTS/TPS 切替・ゲームパッド | @ABattleController::SetupInputComponent 、 @ABattleController::InputKey 、 @ABattleController::ToggleMode 、 @ABattleController::ControlUnit | ゲームパッドは @ABattleController::UpdateGamepad 。隊長交代は @UBattleState::HandOverLeader |
-| HUD・ミニマップ・部隊一覧・通知 | @ABattleHUD::DrawHUD 、 @ABattleHUD::DrawMinimap 、 @ABattleHUD::DrawSquadList 、 @ABattleHUD::DrawNoticeLog | 通知の中身は @ABattleController::UpdateNoticeLog 、 @ABattleController::PushNotice 。日本語化は @BattleUIText::Ja |
+| HUD・ミニマップ・部隊一覧・通知 | @ABattleHUD::DrawHUD 、 @ABattleHUD::DrawMinimap 、 @ABattleHUD::DrawSquadList 、 @ABattleHUD::DrawNoticeLog | 通知の中身は @ABattleController::UpdateNoticeLog 、 @ABattleController::PushNotice 。日本語化は @BattleUIText::Ja 。被弾方向は @ABattleHUD::DrawHitDirection （記録は @UBattleState::ApplyDamageFrom ）、画面外マーカーは @ABattleHUD::DrawOffscreenMarkers 、撃破ログは @ABattleHUD::DrawKillLog （記録は @UBattleState::NoteKill ） |
 | 認識（見えた敵の記憶） | @UBattlePerception::Update 、 @UBattlePerception::GetContacts | 視線は @UBattleLeaderRuntime::CanSee 、 @UBattleLeaderRuntime::TraceSight 。試験用の視界切替は @BattleSightExperiment |
 | 隊長の判断と兵の実行（混成） | @UBattleLeaderRuntime::Think 、 @UBattleLeaderRuntime::Follow 、 @UBattleLeaderRuntime::Fire | 兵単位の実行は @FBattleMixedDriver::Tick 、 @FBattleMixedDriver::TryTacticalAction |
 | 移動・経路・混雑 | @UBattleLeaderRuntime::StableMove 、 @UBattleLeaderRuntime::BuildMovementPlan | 到着地点の重なりは @UBattleLeaderRuntime::ReassignOccupiedArrival 。目的地の補正は @BattleNavigation::ResolveGoal |
 | 遮蔽（場所の予約） | @UBattleCover::BuildSlots 、 @UBattleCover::Reserve | 露出の計算は @BattleTactics::ExposureAt |
+| 体のアニメーション | @ABattleUnit::UpdateBodyAnim 、 @FBattleBodyAnimProxy::Evaluate | 部下は @UBattleLeaderRuntime::FollowerClip 、 @UBattleLeaderRuntime::StepBodyTimers |
+| ブラインドファイア | @UBattleLeaderRuntime::BlindFireOrigin 、 @UBattleLeaderRuntime::Fire | AIの試験は @UBattleLeaderRuntime::TryAIBlindFire |
 | 遮蔽の動作（接近・のぞき撃ち） | @UBattleLeaderRuntime::RequestCoverAction 、 @UBattleLeaderRuntime::StepCoverAction | 切替は @BattleTactics::CoverActionsEnabled ほか |
 | 姿勢（立ち・しゃがみ） | @UBattleLeaderRuntime::SetStance 、 @UBattleLeaderRuntime::UpdateAIStance | 数値は @BattleStance::EyeOffset ほか |
 | 制圧（撃たれて動けない） | @UBattleLeaderRuntime::AddSuppression 、 @UBattleLeaderRuntime::IsPinned | 調整値は @BattleSuppression::Tuning |
@@ -64,6 +66,10 @@ BattleExo | 外骨格兵：盾の回復、副武器（肩の対戦車火器）�
 BattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド
 BattleCover | 遮蔽の場所の一覧と予約
 BattleCoverAction | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部）
+BattleBlindFire | 遮蔽の陰からのブラインドファイア（弾の出る位置・AIの試験・アニメ。UBattleLeaderRuntime の一部）
+BattleBodyAnimImport | 体のアニメーション（遮蔽・伏せ・しゃがみの向き別）の取り込みと計測（エディタ用。宣言は BattleVATBake.h）
+BattleCoverClips | 遮蔽の状態 → 遮蔽アニメの対応表（データだけ。「アセット参考資料の検討」セッション作）
+BattleBodyAnim | 体のアニメーション：隊長の下半身と上半身の重ね・反動・被弾・死亡、部下の伏せと死亡のクリップ
 BattleFieldLayout | マップごとの定義（広さ、拠点、試合時間）を1つの表にまとめたもの
 BattleGroups | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部）
 BattleFieldReplay | 広域試験の記録と再生（UBattleSquadTrial の一部）
