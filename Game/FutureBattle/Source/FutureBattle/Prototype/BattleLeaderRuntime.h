@@ -110,6 +110,9 @@ struct FBattleLeaderPlan
  bool bReplan=true;
  // Trial -BattleSectorContact=1: the target is an enemy outside the sector the squad was sent to, picked because it shot at them.
  bool bSectorContact=false;
+ // Trial -BattleSquadCoverCheck=1: the squad, shot at on its way to the sector, found cover for at least half of its living
+ // members near it, so it stops and fights from there instead of firing on the move (re-checked every 2 s).
+ bool bCoverStop=false;double CoverCheckAt=0;
  TArray<FVector> Path;
  FVector Center=FVector::ZeroVector;
  TMap<int32,FVector> ArrivalGoals;
@@ -400,6 +403,30 @@ public:
  static constexpr int32 FreeCoverSlot=-2;
  bool StepCoverApproach(int32 ID,float Dt,double Now,int32 Target);
  bool IssueOrder(int32 SquadID,EBattleOrder Order,FVector Goal,bool bMissionUpdate=false,bool bSector=false);
+ // Trial -BattleSectorMove=1 (2026-11-20, default 0; Play-Area turns it on for maps with sectors): the player's plain move click
+ // is a sector mission (an attack move into the sector) whose squad, until a member is inside the sector, never stops to fight:
+ // it keeps walking and fires on the move, also back at enemies outside the sector that shoot at it (as -BattleSectorContact,
+ // for this squad only, without taking cover on the way). Set after IssueOrder by the player controller; any later explicit
+ // order clears it. AI squads never have it, so matches between AIs are unchanged.
+ static bool SectorMoveEnabled();
+ // Trial -BattleSectorMoveFire=1 (2026-11-20, default 0): every squad on a sector mission (AI squads and the player's sector
+ // attack/hold orders) fights as the player's sector move does - until a member is inside the sector it fires on the move and
+ // fights back at enemies outside the sector that shoot at it, without stopping or walking to cover on the way.
+ static bool SectorMoveFireEnabled();
+ // Trial -BattleSquadCoverCheck=1 (2026-11-20, default 0; with fire on the move): the squad leader counts how many of his
+ // living members could hide from the threat near the squad - free cover slots within 20 m that show at most 2 of 5 body
+ // samples to the threat, and up to two places right behind each such slot that hide as well. Half of the squad or more:
+ // the whole squad stops and fights from cover (the -BattleSectorContact behaviour); fewer: the whole squad goes on firing.
+ static bool SquadCoverCheckEnabled();
+ // Several squads of a team in one place share the places: slots reserved by anyone and places that soldiers are already
+ // walking to do not count, and the soldiers of other stopping squads near by who still look for cover are counted against it.
+ bool SquadCanHide(int32 SquadID,FVector Threat,double Now) const;
+ // A member of a squad stopping in cover (bCoverStop) that found no slot of its own walks to a place right behind a cover slot
+ // that hides him from the threat (1.3 m back, or 1.1 m to a side of that), not taken by another soldier of any squad.
+ bool StartHuddle(int32 ID,FVector Threat,int32 Target,double Now);
+ void SetSectorFireBack(int32 SquadID){SectorFireBack.Add(SquadID);}
+ bool HasSectorFireBack(int32 SquadID) const {return SectorFireBack.Contains(SquadID);}
+ TSet<int32> SectorFireBack;
  bool CanSelectLeader(int32 ID) const;
  bool CanControlLeader(int32 ID) const;
  const TArray<FBattleSquadSummary>& Summaries();

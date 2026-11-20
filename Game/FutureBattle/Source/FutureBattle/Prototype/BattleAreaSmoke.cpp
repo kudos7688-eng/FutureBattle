@@ -822,7 +822,11 @@ void UBattleLeaderRuntime::RunSectorSmoke()
   for(const auto& Place:Plan.ArrivalGoals)Check(BattleSectors::Cell(Place.Value)==Cell,TEXT("outside parcel"));
   ++Orders;if(Orders==3)
   {
+   // -BattleSectorMove: the player's sector move (an attack move that fires on the move) ends with the next explicit order.
+   Check(IssueOrder(Pair.Key,EBattleOrder::AttackMove,Goal,false,true),TEXT("sector move"));SetSectorFireBack(Pair.Key);
+   Check(HasSectorFireBack(Pair.Key)&&S.bSectorMission,TEXT("sector move fires back"));
    Check(IssueOrder(Pair.Key,EBattleOrder::Defend,Goal,false,true),TEXT("hold"));
+   Check(!HasSectorFireBack(Pair.Key),TEXT("next order ends the sector move"));
    Check(IssueOrder(Pair.Key,EBattleOrder::Move,Goal+FVector(400,0,0))&&!S.bSectorMission,TEXT("point move"));
    break;
   }
