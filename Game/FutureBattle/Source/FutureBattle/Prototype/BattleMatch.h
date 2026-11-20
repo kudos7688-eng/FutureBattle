@@ -147,6 +147,10 @@ public:
  bool SurpriseOn(int32 Team) const;
  void UpdateSurpriseGroup(int32 Team,int32 FrontID);
  bool SurpriseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ // True while the squad's surprise group is moving along its row (phase 1): its tactics do not stop to hold at a seen enemy.
+ bool SurpriseMoving(int32 SquadID) const;
+ // After a save restore: no front/surprise timer further ahead than its own interval (an earlier save would stall them).
+ void ClampFrontTimers();
  float SurpriseNextAt[2]={0.f,0.f};
  TMap<int32,FVector> FrontPosts; // squad of a front-holding group -> the sector centre it holds (transient)
  float FrontLineAt[2]={-1.f,-1.f},FrontLineLogAt[2]={-1.f,-1.f};
@@ -205,7 +209,8 @@ public:
 		bool bArrived = false; /* this advance has reached its point: the stall clock (PhaseAt) runs from then */
 		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */
 		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp) */
-		int32 SurpriseRow = 0; /* surprise group: the edge sector row it moves along */ };
+		int32 SurpriseRow = 0; /* surprise group: the edge sector row it moves along */
+		float SurpriseWaitAt = -1.f, SurpriseLogAt = 0.f, SurpriseEndAt = 0.f; /* surprise group: since when its lead waits for the others; next progress log; when it ends whatever its phase */ };
 	uint8 GroupRole(const FBattleGroup& Group, int32 SquadID) const;
 	void AssignGroupRoles(FBattleGroup& Group) const;
 	FVector GroupSupportPost(int32 Team, int32 Point) const;

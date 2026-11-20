@@ -173,7 +173,8 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    const int32 Target=bPush?Col+1:Col;
    const double Mid=(Y0+Y1-1)*.5;
    double BestScore=-1e9;FIntPoint Best=FrontCell(Team,Target,FMath::RoundToInt(Mid));
-   for(int32 Y=Y0;Y<Y1;++Y)for(int32 C=FMath::Max(HomeCol,Target-1);C<=Target;++C)
+   // A pushing band picks among its forward column only (Codex review 2026-11-21: cover behind outscored the step forward, so it never moved).
+   for(int32 Y=Y0;Y<Y1;++Y)for(int32 C=FMath::Max(HomeCol,bPush?Target:Target-1);C<=Target;++C)
    {
     const FIntPoint Cell=FrontCell(Team,C,Y);if(!BattleSectors::Valid(Cell))continue;
     const double CellScore=Cover(BattleFieldLayout::SectorKind(GetWorld(),Cell))+(C==Target?1.5:0.)-.3*FMath::Abs(Y-Mid);
@@ -207,11 +208,11 @@ bool UBattleMatch::FrontGroupOrder(int32 SquadID,int32 Team,FVector& Center,EBat
 // armoured ones first (tank, armoured car, exoskeleton soldiers; user proposal 2026-11-20: speed and armour carry it through), at
 // least one of them, the rest full-strength rifle or heavy squads. It takes the outer row (north or south edge) with fewer known enemies ahead of the line, gathers just behind the
 // line there (phase 0), moves along that row two columns at a time (phase 1), and from two columns before the enemy home strikes the
-// enemy home (phase 2). It ends when it lost more than half its soldiers or SurpriseMax seconds passed; its squads then return to the
+// enemy home (phase 2). It ends when it lost more than half its soldiers or AssembleMax+Max seconds after it formed; its squads then return to the
 // normal allocation. Inputs: own positions, known enemies (AreaIntelView), the line, fixed homes.
 namespace BattleSurpriseValues
 {
- constexpr float Interval=240.f, Max=420.f, AssembleMax=60.f, FirstAt=120.f; // the first one after the opening
+ constexpr float Interval=240.f, Max=420.f, AssembleMax=60.f, FirstAt=120.f /* the first one after the opening */, LagWait=40.f;
  constexpr double LossEnd=.5;
 }
 
@@ -233,17 +234,20 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
  const bool bLow=AreaHome(Team).X<0;auto ColOf=[&](const FIntPoint& C){return bLow?C.X:Cols-1-C.X;};
  const int32 EnemyHomeCol=FMath::Clamp(ColOf(BattleSectors::Cell(AreaHome(1-Team))),0,Cols-1);
  const auto& Line=FrontLine[Team];if(Line.Num()!=Rows)return;
+ // A river sector on the edge row: the first non-river sector inward, at most three rows (Codex review 2026-11-21: one row was river
+ // too on map I). Crossing points (bridges) are not searched; the squads' own routing finds the way to it.
+ auto DryCell=[&](FIntPoint Cell,int32 Edge){for(int32 K=0;K<=3&&BattleFieldLayout::SectorKind(GetWorld(),Cell)=='R';++K)Cell.Y+=Edge==0?1:-1;return Cell;};
  // Form: a front-holding group exists, none running, the interval passed.
  if(SID_==INDEX_NONE)
  {
   if(FrontID==INDEX_NONE||Elapsed<SurpriseNextAt[Team]||Elapsed<FirstAt)return;
-  const int32 Want=FMath::Clamp(BattleFrontValues::Arg(TEXT("BattleSurpriseSquads="),2),1,6);
+  const int32 Want=FMath::Clamp(BattleFrontValues::Arg(TEXT("BattleSurpriseSquads="),2),2,6); // an AI group needs two squads
   // The edge row with fewer known enemies ahead of the line (rows 0-1 or Rows-2..Rows-1).
   int32 Ahead[2]={0,0};
   for(const FVector& E:AreaIntelView(Team).Enemies)if(const FIntPoint C=BattleSectors::Cell(E);BattleSectors::Valid(C))
   {if(C.Y<=1&&ColOf(C)>Line[0])++Ahead[0];if(C.Y>=Rows-2&&ColOf(C)>Line[Rows-1])++Ahead[1];}
   const int32 Row=Ahead[0]<Ahead[1]?0:Ahead[1]<Ahead[0]?Rows-1:(Team==0?0:Rows-1);
-  const FVector Start=BattleSectors::Center(FrontCell(Team,FMath::Max(0,Line[Row]-1),Row));
+  const FVector Start=BattleSectors::Center(DryCell(FrontCell(Team,FMath::Max(0,Line[Row]-1),Row),Row));
   struct FFree{int32 SID;double D;bool bArmour;};TArray<FFree> Free;
   for(const auto& P:Store->GetSquads())
   {
@@ -263,7 +267,7 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
   if(Free.Num()<FMath::Max(2,Want)||!Free[0].bArmour)return;
   TArray<int32> Pick;for(const auto& F:Free)if(Pick.Num()<Want)Pick.Add(F.SID);
   const int32 ID=FormGroup(Team,Pick,false);auto* G=Groups.Find(ID);if(!G)return;
-  G->Kind=2;G->Phase=0;G->PhaseAt=Elapsed;G->Rally=Start;G->SurpriseRow=Row;G->StartLiving=AllLiving(*G);
+  G->Kind=2;G->Phase=0;G->PhaseAt=Elapsed;G->Rally=Start;G->SurpriseRow=Row;G->StartLiving=AllLiving(*G);G->SurpriseEndAt=Elapsed+AssembleMax+Max;
   SurpriseNextAt[Team]=Elapsed+Interval;
   int32 Armour=0;for(int32 I=0;I<Pick.Num();++I)Armour+=Free[I].bArmour;
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_FORM group=%d team=%d squads=%d armour=%d row=%d start=%c%d time=%.1f"),ID,Team,G->Squads.Num(),Armour,Row,TCHAR('A'+BattleSectors::Cell(Start).X),1+BattleSectors::Cell(Start).Y,Elapsed);
@@ -272,12 +276,24 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
  auto& G=Groups[SID_];
  const int32 Living=AllLiving(G);
  if(G.StartLiving>0&&Living<G.StartLiving*(1.-LossEnd)){DissolveGroup(SID_,TEXT("surprise_losses"));SurpriseNextAt[Team]=Elapsed+Interval;return;}
- if(G.Phase>0&&Elapsed-G.PhaseAt>Max){DissolveGroup(SID_,TEXT("surprise_time"));return;}
- // The group's column: its rearmost squad's.
- int32 Col=Cols;FVector Center=FVector::ZeroVector;int32 N=0,Ready=0;
+ // One limit for the whole group (Codex review 2026-11-21: it was per phase, so a strike restarted it), and every end waits Interval before
+ // the next group (the time-out did not, so the squads were taken again at once).
+ if(Elapsed>G.SurpriseEndAt){DissolveGroup(SID_,TEXT("surprise_time"));SurpriseNextAt[Team]=Elapsed+Interval;return;}
+ // The group's columns: its rearmost and its leading squad's (2026-11-20 first match: stepping from the rearmost one let an armoured
+ // squad held back by its own rules stop the whole group until the time ran out).
+ int32 Col=Cols,Lead=-1;int32 N=0,Ready=0;FString Where;
  for(int32 SID:G.Squads)if(const auto* S=Store->FindSquad(SID))
- {const FVector P=R->Position(S->LeaderUnitID);Col=FMath::Min(Col,ColOf(BattleSectors::Cell(P)));Center+=P;++N;Ready+=FVector::Dist2D(P,G.Rally)<=2500.;}
+ {
+  const FVector P=R->Position(S->LeaderUnitID);const int32 C=ColOf(BattleSectors::Cell(P));
+  Col=FMath::Min(Col,C);Lead=FMath::Max(Lead,C);++N;Ready+=FVector::Dist2D(P,G.Rally)<=2500.;
+  Where+=FString::Printf(TEXT(" %d:t%d:c%d"),SID,int32(S->SquadType),C);
+ }
  if(!N)return;
+ if(Elapsed>=G.SurpriseLogAt)
+ {
+  G.SurpriseLogAt=Elapsed+30.f;const FIntPoint RC=BattleSectors::Cell(G.Rally);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_STATE group=%d team=%d phase=%d rally=%c%d living=%d squads=%s time=%.1f"),SID_,Team,int32(G.Phase),TCHAR('A'+RC.X),1+RC.Y,Living,*Where,Elapsed);
+ }
  auto Enter=[&](uint8 To,const TCHAR* Why){G.Phase=To;G.PhaseAt=Elapsed;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_PHASE group=%d team=%d phase=%d column=%d living=%d reason=%s time=%.1f"),SID_,Team,int32(To),Col,Living,Why,Elapsed);};
  if(G.Phase==0)
  {
@@ -286,12 +302,13 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
  }
  if(G.Phase==1)
  {
-  if(Col>=EnemyHomeCol-2){Enter(2,TEXT("strike"));return;}
-  // Next stop: two columns ahead along the edge row (the inner neighbour row when the edge sector is river).
-  const int32 Next=FMath::Min(Col+2,EnemyHomeCol-2);
-  FIntPoint Cell=FrontCell(Team,Next,G.SurpriseRow);
-  if(BattleFieldLayout::SectorKind(GetWorld(),Cell)=='R')Cell.Y+=G.SurpriseRow==0?1:-1;
-  G.Rally=BattleSectors::Center(Cell);
+  if(Lead>=EnemyHomeCol-2){Enter(2,TEXT("strike"));return;}
+  // Next stop: two columns ahead of the leading squad along the edge row (the first non-river row inward when the edge sector is river).
+  // The lead waits for squads more than three columns behind, at most LagWait seconds each time.
+  int32 Next=FMath::Min(Lead+2,EnemyHomeCol-2);
+  if(Lead-Col>3){if(G.SurpriseWaitAt<0)G.SurpriseWaitAt=Elapsed;if(Elapsed-G.SurpriseWaitAt<LagWait)Next=Lead;}
+  else G.SurpriseWaitAt=-1.f;
+  G.Rally=BattleSectors::Center(DryCell(FrontCell(Team,Next,G.SurpriseRow),G.SurpriseRow));
  }
 }
 
@@ -304,3 +321,28 @@ bool UBattleMatch::SurpriseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVe
  Center=AreaHome(1-Team);Order=EBattleOrder::AttackMove;return true;
 }
 
+bool UBattleMatch::SurpriseMoving(int32 SquadID) const
+{
+ const int32 ID=GroupOf(SquadID);if(ID==INDEX_NONE)return false;
+ const FBattleGroup* G=Groups.Find(ID);return G&&G->Kind==2&&G->Phase==1;
+}
+
+void UBattleMatch::ClampFrontTimers()
+{
+ // A no-op for the standard save round trip (saved and loaded at the same time); after loading an earlier save the timers set later
+ // in the abandoned run would otherwise stall the front line and the surprise group (Codex review 2026-11-21).
+ for(int32 T=0;T<2;++T)
+ {
+  FrontLineAt[T]=FMath::Min(FrontLineAt[T],Elapsed+BattleFrontValues::Interval);
+  FrontLineLogAt[T]=FMath::Min(FrontLineLogAt[T],Elapsed+BattleFrontValues::LogInterval);
+  SurpriseNextAt[T]=FMath::Min(SurpriseNextAt[T],Elapsed+BattleSurpriseValues::Interval);
+ }
+ for(auto& P:Groups)if(P.Value.Kind==2)
+ {
+  auto& G=P.Value;
+  G.SurpriseEndAt=FMath::Min(G.SurpriseEndAt,Elapsed+BattleSurpriseValues::AssembleMax+BattleSurpriseValues::Max);
+  G.SurpriseLogAt=FMath::Min(G.SurpriseLogAt,Elapsed+30.f);
+  if(G.SurpriseWaitAt>Elapsed)G.SurpriseWaitAt=-1.f;
+  G.PhaseAt=FMath::Min(G.PhaseAt,Elapsed);
+ }
+}

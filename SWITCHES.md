@@ -249,8 +249,8 @@
 | `-BattleSuppressionRadius` | other |  | BattleSuppression.cpp:11 |  |
 | `-BattleSuppressionSpread` | other |  | BattleSuppression.cpp:12 |  |
 | `-BattleSuppressionSupport` | other |  | BattleSuppression.cpp:14 |  |
-| `-BattleSurpriseGroup` | other |  | BattleFrontLine.cpp:220 |  |
-| `-BattleSurpriseSquads` | other |  | BattleFrontLine.cpp:240 |  |
+| `-BattleSurpriseGroup` | other |  | BattleFrontLine.cpp:221 |  |
+| `-BattleSurpriseSquads` | other |  | BattleFrontLine.cpp:244 | an AI group needs two squads |
 | `-BattleSymmetricStart` | Value | -1 | BattleGroups.cpp:56 |  |
 | `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:56 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |
@@ -263,7 +263,7 @@
 | `-BattleTrialSwap` | Param | off | BattleArea.cpp:15, BattleAreaDepot.cpp:32, BattleLeaderRuntime.cpp:79 ほか4 |  |
 | `-BattleUnits` | Value | 1000 / 20 | BattleBenchmark.cpp:36, BattleSquadTrial.cpp:28 |  |
 | `-BattleVATFarLight` | Value | 0 | BattleVATDisplay.cpp:37 |  |
-| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:232, BattleSightExperiment.cpp:40 |  |
+| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:233, BattleSightExperiment.cpp:40 |  |
 | `-BattleWaypointPass` | Value | 0 | BattleStableMovement.cpp:364 |  |
 | `-BattleWeaponLoadouts` | Param | off | BattleSquadTrial.cpp:50 |  |
 | `-BattleWeaponPreview` | Value |  | BattleWeaponPreview.cpp:19 |  |

@@ -249,12 +249,15 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  if(P.Action==EBattleSquadTactic::Support) return; // Emergency retreat above overrides team assignment.
  if(P.Action==EBattleSquadTactic::Engage)
  {
-  if(P.SafeSeconds>=4 && P.Age>=3)
+  // A moving surprise group (trial -BattleSurpriseGroup=1) goes back to its move as soon as it may (Codex review 2026-11-21: holding at
+  // every seen enemy stopped the whole group, the leading armour too).
+  const bool bSneak=Match->SurpriseMoving(SID);
+  if((P.SafeSeconds>=4 || bSneak) && P.Age>=3)
   {
    const auto Order=S->MissionOrder; const FVector Goal=S->MissionDestination;
-   if(Runtime->IssueOrder(SID,Order,Goal,true)) { Store->CancelSquadTacticalPlan(SID,TEXT("CONTACT LOST / RESUME MISSION")); Runtime->IssueOrder(SID,Order,Goal,true); }
+   if(Runtime->IssueOrder(SID,Order,Goal,true)) { Store->CancelSquadTacticalPlan(SID,bSneak?TEXT("SURPRISE MOVE / RESUME MISSION"):TEXT("CONTACT LOST / RESUME MISSION")); Runtime->IssueOrder(SID,Order,Goal,true); }
   }
   return;
  }
- if(Visible && O.Armed>0) Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("KNOWN ENEMY / HOLD FIRING POSITION"));
+ if(Visible && O.Armed>0 && !Match->SurpriseMoving(SID)) Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("KNOWN ENEMY / HOLD FIRING POSITION"));
 }

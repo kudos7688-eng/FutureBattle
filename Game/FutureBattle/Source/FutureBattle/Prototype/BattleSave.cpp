@@ -209,6 +209,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 	Score[0] = Save->AllyScore; Score[1] = Save->EnemyScore; Elapsed = Save->Elapsed; DirectorClock = Save->DirectorClock; SupplyClock = Save->SupplyClock;
 	Objectives = Save->Objectives; Winner = Save->Winner;
  if(bArea)Area=Save->Area;
+ ClampFrontTimers();
 	Strikes = Save->Strikes; SupportCooldown[0] = Save->AllySupportCooldown; SupportCooldown[1] = Save->EnemySupportCooldown; SupportUsed[0] = Save->AllySupportUsed; SupportUsed[1] = Save->EnemySupportUsed;
 	Mode->bCombatPaused = Save->bPaused; Mode->bBattleEnded = Phase == EBattleMatchPhase::Finished; Mode->Result = Save->Result; Mode->CombatStartsAt = Now;
 	for (int32 Index = 0; Index < Spawned.Num(); ++Index)
