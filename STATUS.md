@@ -20,6 +20,14 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-20 19時15分 Claude（群制御）：稼働小隊の上限を30に、部隊パネルを群ごとのタブに（ブランチ `groupui`、作業ツリー `FutureBattle-groupui`）
+- **決定（ユーザー）**：部隊数を30まで増やす。部隊パネルは「群のタブで群ごとに表示し、群に入っていない部隊を未所属タブへ」。補給班（兵種9）は補給車に置き換える（次の作業。下の「次の一手」）。
+- **上限**：`UBattleTuning::AreaMaxActiveSquads` 25 → 30（`DefaultGame.ini` も）。プレイヤー・AIの両方。`-BattleAreaMaxSquads=25` で従来に戻る。**既定の試合が変わる**（開始20秒で両軍とも30隊まで買う）。収入（INC4）は25隊で調整した値のまま。
+- **部隊パネル**（表示と選択だけ。規則・AIは不変）：タブを「群／未所属／停止／全部」の4つにした（従来の 全部・交戦・補給・待機・停止 は廃止）。最初は「群」。群タブは自軍の群ごとに見出しの行（群の番号、手動指揮／委任／AI編成、部隊数・兵 生存/定数、段階 集結・前進・保持、目標の拠点と距離、役割の内訳）とその下に字下げした所属部隊を並べる。見出しのクリックで群全体を選択、ダブルクリックで群の中心へカメラ。並び替えは群の中にも効く。`FBattleSquadListRow`、`ABattleController::{SquadListRows,SortSquadRows,OwnGroupIDs,SelectGroup}`。
+- **検証**（ロックは18時55分に区画AIから受け取った）：`Build-Editor` 成功。`Test-Battle` `BATTLE_SMOKE_RESULT failures=0`。`Test-Area`（`groupui-area2`、`-CoverActions 1 -FlankCoordination 1`）`BATTLE_AREA_RESULT failures=0`。タブの試験は一時的なプレイヤーの群を作って確かめる（群1・所属2・未所属27・停止15・全部44）。マップI・種7・保存往復（`groupui-cap30-I-s7`）：完走 failures=0、勝者1、770:796、両軍とも稼働30隊。
+- **制限**：満杯で購入を断る試験は、試験の場が25隊で始まるので上限25のときだけ通る（上限30では飛ばす。買い足すと後の保存の検証の資源の収支が崩れるため）。画面での見た目・クリックは未確認（ユーザーのプレイで）。1試合だけで、勝敗への影響は計っていない。**main とその基準の試合とは一致しない**。
+- **次の一手**：補給班を補給車へ置き換える（車両1両・積んだ弾が尽きたら本拠地で積み直し・群の役割「補給」・弾の少ない群の部隊は補給車へ下がる・AIの購入は試験切替）。
+
 ## 2026-11-20 16時30分 Claude（実装計画ロードマップ）：段階0の決定を反映（対称な開始を E〜I で既定、部隊群を全マップで既定、squadcap・マップI sectors-v2 の取り込み。ブランチ `defaults`、作業ツリー `FutureBattle-defaults`）
 - **決定（ユーザー、ROADMAP 11-20「今後の実装計画」の段階0）**：`-BattleSymmetricStart` は E〜I（`FMapDef::bUrban` のマップ）で既定ON・A/D は不変。`-BattleAreaGroups` は全マップで既定ON。`-BattleDefendEngage` は切替のまま。区画マップは I が主・H は比較用。`squadcap` は既定25のまま取り込む。`-BattleFollowerAnimSkip` は画面で確認してから（`Play-Area.ps1` にだけ付けた）。計測してから尋ねるもの：区画AIの組み合わせ → `-BattleWaypointPass` → `-BattleSightTeamMask` → `-BattleAIBlindFire` → `-BattleAreaPointSupply` → `-BattleAreaComposition`。
 - **変更**：`BattleTactics::SymmetricStart(const UWorld*)`（起動引数で 0/1 を明示すればそれが優先、無ければ `UBattleTuning::bSymmetricStart` か、マップが市街地の規則なら ON）。呼び出し3か所に World を渡す。`UBattleTuning::bAreaGroups=true`。`BattleTactics::AreaGroups` は、`-BattleAreaGroups=1` を明示したときだけ `-BattleAreaTrialTeam` で片側に絞る（既定ONのときに別の切替の片側試験をしても、両軍に部隊群が残る）。`BattleAreaSmoke.cpp` の部隊群の確認から「AIの部隊群がOFF」の条件を外した。squadcap（小隊上限の設定化 `AreaMaxActiveSquads`=25、保存の検証の上限の拡大）と mapi（sectors-v2：畑44%→25%、拠点の低い塀を9m外へ、区画監査の掃討小隊）をマージ。マップIを `-run=BattleMap -WideField=I -Force` で作り直した（`URBAN_MAP_RESULT failures=0 layout=sectors-v2`、`TERRAIN_MAP_RESULT failures=0`、`SECTOR_MAP_RESULT failures=0`）。

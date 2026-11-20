@@ -37,6 +37,15 @@ struct FBattleSquadSummary
  EBattleSquadIntent Intent=EBattleSquadIntent::Unspecified;
  uint32 ProblemFlags=0;
 };
+// One row of the command UI squad list (2026-11-20): a group header (GroupID set, bGroupHeader) or a squad (GroupID = its group in the group view).
+struct FBattleSquadListRow
+{
+ FBattleSquadSummary Squad;
+ int32 GroupID=INDEX_NONE;
+ bool bGroupHeader=false;
+ // Click identity: the squad ID, or -(GroupID+1) for a group header (never INDEX_NONE).
+ int32 Key() const { return bGroupHeader?-(GroupID+1):Squad.SquadID; }
+};
 
 // Shared by Canvas and pointer input; no stale hit rectangles from the previous draw.
 struct FBattleSquadListLayout
@@ -45,8 +54,8 @@ struct FBattleSquadListLayout
  float Width=360, Height=0, RowHeight=56, Header=44;
  int32 VisibleRows=0;
  static FBattleSquadListLayout Make(FVector2D View);
- // Header controls (command UI 2026-11-16): five filter tabs and a sort button on the second header line.
- static constexpr int32 FilterCount=5; static constexpr float TabWidth=50, TabTop=23, TabHeight=18, SortWidth=86;
+ // Header controls (command UI 2026-11-16; tabs 2026-11-20): four tabs (groups, ungrouped, stopped, all) and a sort button on the second header line.
+ static constexpr int32 FilterCount=4; static constexpr float TabWidth=64, TabTop=23, TabHeight=18, SortWidth=86;
  int32 FilterTabAt(FVector2D P) const {if(P.Y<Origin.Y+TabTop||P.Y>=Origin.Y+TabTop+TabHeight||P.X<Origin.X+6)return INDEX_NONE;const int32 I=FMath::FloorToInt((P.X-Origin.X-6)/TabWidth);return I<FilterCount?I:INDEX_NONE;}
  bool SortButtonAt(FVector2D P) const {return P.Y>=Origin.Y+TabTop&&P.Y<Origin.Y+TabTop+TabHeight&&P.X>=Origin.X+Width-SortWidth-8&&P.X<Origin.X+Width-8;}
  bool Contains(FVector2D P) const;

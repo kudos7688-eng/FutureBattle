@@ -10,6 +10,7 @@ class UInputAction;
 class UInputMappingContext;
 class ABattleUnit;
 struct FBattleSquadSummary;
+struct FBattleSquadListRow;
 struct FInputActionValue;
 
 UCLASS()
@@ -70,11 +71,16 @@ public:
  int32 SquadListScroll=0;
  bool SquadPanelAtPointer() const;
  void ScrollSquadList(int32 Delta);
- // Squad list view (command UI 2026-11-16): filter 0 all, 1 engaged, 2 home supply, 3 other active, 4 stopped;
- // sort 0 squad number, 1 heaviest losses first, 2 by nearest objective. The HUD and clicks both use SquadListRows().
+ // Squad list view (command UI 2026-11-16; tabs by group 2026-11-20, user proposal): filter 0 groups (each own group as a header row
+ // followed by its active squads), 1 ungrouped active squads, 2 stopped squads, 3 all squads. Sort (inside each group) 0 squad number,
+ // 1 heaviest losses first, 2 by nearest objective. The HUD and clicks both use SquadListRows(). Clicking a group header selects the group.
  uint8 SquadFilter=0, SquadSort=0;
- uint8 SquadCategory(const FBattleSquadSummary& Row) const;
- TArray<FBattleSquadSummary> SquadListRows() const;
+ uint8 SquadCategory(const FBattleSquadSummary& Row) const; // 0 active in a group, 1 active without a group, 2 stopped
+ TArray<FBattleSquadListRow> SquadListRows() const;
+ void SortSquadRows(TArray<FBattleSquadSummary>& Rows) const;
+ // Own groups shown in the group tab, by group number.
+ TArray<int32> OwnGroupIDs() const;
+ void SelectGroup(int32 GroupID);
  double LastRowClickTime=-10; int32 LastRowClickID=INDEX_NONE;
  void SelectSquadListRow(FVector2D Position);
  int32 SquadListIDAt(FVector2D Position) const;

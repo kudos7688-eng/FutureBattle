@@ -50,7 +50,7 @@ namespace BattleTactics
  struct FSupplyTuning { int32 ReturnLiving=8, ResumeLiving=10; float AwayRatio=1.f, HealPerSecond=0.f, ResumeHealthRatio=0.f; bool bPointAmmo=false; float PointRadius=2500.f; };
  const FSupplyTuning& Supply();
  // Area new-squad hiring: UBattleTuning::bAreaHire/AreaSquadCost/AreaHireReserve; -BattleAreaHire=0/1 overrides.
- // MaxActive = UBattleTuning::AreaMaxActiveSquads (default 25), -BattleAreaMaxSquads=N (1..100) overrides; the save check uses it.
+ // MaxActive = UBattleTuning::AreaMaxActiveSquads (default 30 since 2026-11-20, was 25), -BattleAreaMaxSquads=N (1..100) overrides; the save check uses it.
  // AI pacing: Interval between a team's AI purchases and Stop = no AI purchase in the last N seconds
  // (-BattleAreaHireReserve= / -BattleAreaHireInterval= / -BattleAreaHireStop= override; not part of the save check).
  // P1 trial -BattleAreaHirePurpose=1 (default OFF; -BattleAreaHirePurposeFront=N, default 10): the AI buys only for an observed need

@@ -542,12 +542,14 @@ void ABattleHUD::DrawSquadList()
  PC->ScrollSquadList(0); const auto Layout=FBattleSquadListLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY));
  if(Layout.VisibleRows<=0) return;
  const auto& All=L->Summaries(); int32 Active=0; for(const auto& S:All) if(S.bActive) ++Active;
- // Rows after the list filter and sort (command UI 2026-11-16); counts per filter for the tabs.
- const auto Rows=PC->SquadListRows(); int32 Counts[FBattleSquadListLayout::FilterCount]={All.Num(),0,0,0,0}; for(const auto& S:All) ++Counts[PC->SquadCategory(S)];
+ auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ // Rows of the chosen tab (groups / ungrouped / stopped / all; command UI 2026-11-20) and the counts for the tab labels.
+ const auto Rows=PC->SquadListRows(); int32 Counts[FBattleSquadListLayout::FilterCount]={PC->OwnGroupIDs().Num(),0,0,All.Num()};
+ for(const auto& S:All) if(const uint8 C=PC->SquadCategory(S);C>0) ++Counts[C];
  DrawRect(FLinearColor(.025f,.04f,.065f,.96f),Layout.Origin.X,Layout.Origin.Y,Layout.Width,Layout.Height);
  DrawText(FString::Printf(TEXT("自軍部隊　稼働 %d / 停止 %d"),Active,All.Num()-Active),FLinearColor::White,Layout.Origin.X+8,Layout.Origin.Y+5,GEngine->GetSmallFont(),1);
- DrawText(TEXT("クリックで選択・ダブルクリックで移動・Eで操作"),FLinearColor(.6f,.65f,.7f),Layout.Origin.X+8,Layout.Origin.Y+Layout.Height-18,GEngine->GetSmallFont(),.7f);
- static const TCHAR* const FilterNames[]={TEXT("全部"),TEXT("交戦"),TEXT("補給"),TEXT("待機"),TEXT("停止")};
+ DrawText(PC->SquadFilter==0?TEXT("群の行で群を選択・F で編成/解散・Eで操作"):TEXT("クリックで選択・ダブルクリックで移動・Eで操作"),FLinearColor(.6f,.65f,.7f),Layout.Origin.X+8,Layout.Origin.Y+Layout.Height-18,GEngine->GetSmallFont(),.7f);
+ static const TCHAR* const FilterNames[]={TEXT("群"),TEXT("未所属"),TEXT("停止"),TEXT("全部")};
  for(int32 T=0;T<FBattleSquadListLayout::FilterCount;++T)
  {
   const float X=Layout.Origin.X+6+T*FBattleSquadListLayout::TabWidth,Y=Layout.Origin.Y+FBattleSquadListLayout::TabTop; const bool On=PC->SquadFilter==T;
@@ -560,17 +562,45 @@ void ABattleHUD::DrawSquadList()
   DrawRect(FLinearColor(.08f,.11f,.15f),X,Y,FBattleSquadListLayout::SortWidth,FBattleSquadListLayout::TabHeight);
   DrawText(SortNames[FMath::Min<int32>(PC->SquadSort,2)],FLinearColor(.7f,.75f,.8f),X+4,Y+2,GEngine->GetSmallFont(),.75f);
  }
+ if(Rows.IsEmpty())
+  DrawText(PC->SquadFilter==0?TEXT("群はありません（部隊を選んで F で編成）"):TEXT("該当する部隊はありません"),FLinearColor(.6f,.65f,.7f),Layout.Origin.X+12,Layout.Origin.Y+Layout.Header+8,GEngine->GetSmallFont(),.85f);
  for(int32 I=0;I<Layout.VisibleRows && I+PC->SquadListScroll<Rows.Num();++I)
  {
-  const auto& S=Rows[I+PC->SquadListScroll]; const float Y=Layout.Origin.Y+Layout.Header+I*Layout.RowHeight;
+  const auto& Entry=Rows[I+PC->SquadListScroll]; const float Y=Layout.Origin.Y+Layout.Header+I*Layout.RowHeight;
+  if(Entry.bGroupHeader)
+  {
+   // Group header: number, who runs it, strength; phase and objective; roles of its squads.
+   const auto* G=Match->Groups.Find(Entry.GroupID); if(!G) continue;
+   const FLinearColor Gold(1.f,.85f,.35f);
+   int32 Leaders=0,Picked=0; FVector Center=FVector::ZeroVector; int32 Placed=0;
+   for(int32 SID:G->Squads) for(const auto& S:All) if(S.SquadID==SID && S.bActive)
+   { Center+=L->Position(S.LeaderUnitID); ++Placed; if(auto* A=L->Actor(S.LeaderUnitID)){++Leaders; Picked+=PC->IsSelected(A);} }
+   if(Placed) Center/=Placed;
+   DrawRect(Leaders>0&&Picked==Leaders?FLinearColor(.24f,.2f,.06f):FLinearColor(.13f,.11f,.05f),Layout.Origin.X+3,Y,Layout.Width-12,Layout.RowHeight-2);
+   int32 Full=0; const int32 Living=Match->GroupLiving(*G,&Full);
+   const TCHAR* Who=!G->bPlayer?TEXT("AI編成"):Match->GroupAIRun(*G)?TEXT("委任"):TEXT("手動指揮");
+   DrawText(FString::Printf(TEXT("群%d　%s"),G->ID,Who),Gold,Layout.Origin.X+9,Y+4,GEngine->GetSmallFont(),1);
+   DrawText(FString::Printf(TEXT("%d部隊 ／ 兵 %d/%d"),G->Squads.Num(),Living,Full),Gold,Layout.Origin.X+Layout.Width-150,Y+4,GEngine->GetSmallFont(),.85f);
+   static const TCHAR* const PhaseNames[]={TEXT("集結"),TEXT("前進"),TEXT("保持")};
+   FString Goal=TEXT("目標なし");
+   if(Match->Objectives.IsValidIndex(G->Objective)) Goal=FString::Printf(TEXT("拠点%c ／ %.0fm"),TCHAR('A'+G->Objective),Placed?FVector::Dist2D(Center,Match->Objectives[G->Objective].Position)/100.:0.);
+   DrawText(FString::Printf(TEXT("%s ／ %s"),G->Phase<3?PhaseNames[G->Phase]:TEXT("？"),*Goal),Gold,Layout.Origin.X+9,Y+23,GEngine->GetSmallFont(),.8f);
+   static const TCHAR* const RoleNames[]={TEXT("突撃"),TEXT("支援"),TEXT("装甲"),TEXT("火力"),TEXT("護衛")};
+   int32 Roles[6]={0,0,0,0,0,0}; for(int32 SID:G->Squads){const uint8 R=Match->GroupRole(*G,SID);++Roles[R<5?R:5];}
+   FString RoleText; for(int32 R=0;R<6;++R) if(Roles[R]) RoleText+=FString::Printf(TEXT("%s%s %d"),RoleText.IsEmpty()?TEXT(""):TEXT("　"),R<5?RoleNames[R]:TEXT("役割なし"),Roles[R]);
+   DrawText(RoleText,FLinearColor(.8f,.75f,.55f),Layout.Origin.X+9,Y+40,GEngine->GetSmallFont(),.7f);
+   continue;
+  }
+  const auto& S=Entry.Squad; const float Indent=Entry.GroupID!=INDEX_NONE?14.f:0.f;
   const FLinearColor Color=!S.bActive?FLinearColor(.55f,.55f,.55f):!S.bSelectable?FLinearColor(.95f,.7f,.3f):FLinearColor(.28f,.95f,.8f);
-  if(auto* A=L->Actor(S.LeaderUnitID); A && PC->IsSelected(A)) DrawRect(FLinearColor(.08f,.22f,.22f),Layout.Origin.X+3,Y,Layout.Width-12,Layout.RowHeight-2);
+  if(auto* A=L->Actor(S.LeaderUnitID); A && PC->IsSelected(A)) DrawRect(FLinearColor(.08f,.22f,.22f),Layout.Origin.X+3+Indent,Y,Layout.Width-12-Indent,Layout.RowHeight-2);
+  if(Indent>0) DrawRect(FLinearColor(1.f,.85f,.35f,.5f),Layout.Origin.X+8,Y,2,Layout.RowHeight-2);
   const TCHAR* State=!S.bActive?TEXT("× 停止"):!S.bSelectable?TEXT("鍵 操作不可"):TEXT("○ 稼働");
   FString Name=S.Name.Len()>12?S.Name.Left(11)+TEXT("…"):S.Name;
-  DrawText(Name,Color,Layout.Origin.X+9,Y+4,GEngine->GetSmallFont(),1);
+  DrawText(Name,Color,Layout.Origin.X+9+Indent,Y+4,GEngine->GetSmallFont(),1);
   DrawText(State,Color,Layout.Origin.X+Layout.Width-110,Y+4,GEngine->GetSmallFont(),1);
-  // Squad group number (BattleGroups.cpp), left of the state.
-  if(const int32 Group=GetWorld()->GetSubsystem<UBattleMatch>()->GroupOf(S.SquadID);Group!=INDEX_NONE)DrawText(FString::Printf(TEXT("群%d"),Group),FLinearColor(1.f,.85f,.35f),Layout.Origin.X+Layout.Width-152,Y+4,GEngine->GetSmallFont(),1);
+  // Squad group number (BattleGroups.cpp), left of the state; not repeated inside the group tab.
+  if(const int32 Group=Match->GroupOf(S.SquadID);Group!=INDEX_NONE && Indent==0)DrawText(FString::Printf(TEXT("群%d"),Group),FLinearColor(1.f,.85f,.35f),Layout.Origin.X+Layout.Width-152,Y+4,GEngine->GetSmallFont(),1);
   if(const auto* Squad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(S.SquadID))
   {
    const auto& Plan=Squad->TacticalPlan;
@@ -579,16 +609,16 @@ void ABattleHUD::DrawSquadList()
    const int32 Partner=Plan.Action==EBattleSquadTactic::Support?Plan.SupportSquad:Plan.Action==EBattleSquadTactic::Flank?Plan.FlankSupport:INDEX_NONE;
    const FString Link=Partner==INDEX_NONE?TEXT(""):FString::Printf(TEXT(" / S%d"),Partner);
    const FString Action=Mission?BattleUIText::Ja(BattleOrderName(Squad->Order)):FString::Printf(TEXT("%s %.0f秒"),*BattleUIText::Ja(BattleSquadTacticName(Plan.Action)),Plan.Age);
-   DrawText(FString::Printf(TEXT("%s ／ %.0fm%s"),*Action,FVector::Dist2D(L->Position(S.LeaderUnitID),Goal)/100.,*Link),Color,Layout.Origin.X+9,Y+23,GEngine->GetSmallFont(),.8f);
+   DrawText(FString::Printf(TEXT("%s ／ %.0fm%s"),*Action,FVector::Dist2D(L->Position(S.LeaderUnitID),Goal)/100.,*Link),Color,Layout.Origin.X+9+Indent,Y+23,GEngine->GetSmallFont(),.8f);
    const auto* Sample=GetWorld()->GetSubsystem<UBattleSquadTactics>()->Find(S.SquadID);
    int32 Waiting=0;for(int32 ID:Squad->Members)if(const auto* Body=L->GetBodies().Find(ID))Waiting+=Body->bTrafficWait;
    FString Reason=!S.bActive?Squad->StopReason.ToString():!Squad->bPlayerDelegated?TEXT("手動指揮"):
     Waiting>0?FString::Printf(TEXT("通行待ち %d"),Waiting):!Mission?Plan.Reason:Sample?Sample->Reason:TEXT("報告待ち");
    Reason=BattleUIText::Ja(Reason);
    // The route chosen for the squad (BattlePlayerRoutes.cpp).
-   if(const int32 RouteLane=GetWorld()->GetSubsystem<UBattleMatch>()->PlayerRouteLane(S.SquadID))Reason=FString::Printf(TEXT("道：%s ／ %s"),BattleRouteLaneName(RouteLane),*Reason);
+   if(const int32 RouteLane=Match->PlayerRouteLane(S.SquadID))Reason=FString::Printf(TEXT("道：%s ／ %s"),BattleRouteLaneName(RouteLane),*Reason);
    if(Reason.Len()>44)Reason=Reason.Left(43)+TEXT("...");
-   DrawText(Reason,FLinearColor(.72f,.78f,.8f),Layout.Origin.X+9,Y+40,GEngine->GetSmallFont(),.7f);
+   DrawText(Reason,FLinearColor(.72f,.78f,.8f),Layout.Origin.X+9+Indent,Y+40,GEngine->GetSmallFont(),.7f);
   }
  }
  if(Rows.Num()>Layout.VisibleRows)

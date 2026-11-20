@@ -108,8 +108,9 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    if(Fresh)for(int32 ID:NewSquad->Members)Fresh&=ID>MaxID&&Store->Find(ID)->IsAlive()&&Store->Find(ID)->bActorRepresentation==(ID==NewSquad->LeaderUnitID);
    const int32 NewLeader=NewSquad?NewSquad->LeaderUnitID:0;
    Check(Fresh&&NewSID==51&&FVector::Dist2D(Position(NewSquad->LeaderUnitID),M->AreaHome(0))<=2500,TEXT("hired squad gets a new number, new IDs, an Actor leader and home placement"));
-   // The fixture starts with 25 squads per team, so the full-slot rejection is only reachable at the default limit.
-   if(BattleTactics::AreaHire().MaxActive==25)Check(!M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==Before-HireCost,TEXT("no free slot rejects hiring at 25 active squads"));
+   // The fixture starts with 25 squads per team, so the full-slot rejection is only reachable when the limit is 25 (-BattleAreaMaxSquads=25;
+   // the default is 30 since 2026-11-20). Buying more squads here would break the resource conservation the later save checks verify.
+   if(M->ActiveSquads(0)>=BattleTactics::AreaHire().MaxActive)Check(!M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==Before-HireCost,*FString::Printf(TEXT("no free slot rejects hiring at %d active squads"),BattleTactics::AreaHire().MaxActive));
    if (Fresh)
    {
     auto* Leader = Actor(NewLeader);
@@ -785,11 +786,22 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   }
   // Notification log (command UI): the stopped squads and observed points of this fixture appear before the screenshot.
   PC->UpdateNoticeLog(true);Check(PC->VisibleNotices().Num()>0,TEXT("notification log records observed events"));
-  // Squad list view: the stopped filter shows exactly the stopped squads; the loss sort keeps every row.
+  // Squad list view (tabs by group, 2026-11-20): the stopped tab shows exactly the stopped squads; the loss sort keeps every row;
+  // the group tab lists each own group once, followed only by its own active squads; groups + ungrouped + stopped = all squads.
   {
-   PC->SquadFilter=4;const auto Stopped=PC->SquadListRows();bool AllStopped=Stopped.Num()>0;for(const auto& R:Stopped)AllStopped&=!R.bActive;
-   PC->SquadFilter=0;PC->SquadSort=1;const int32 Sorted=PC->SquadListRows().Num();PC->SquadSort=0;
-   Check(AllStopped&&Sorted==PC->SquadListRows().Num(),TEXT("squad list filter and sort"));
+   PC->SquadFilter=2;const auto Stopped=PC->SquadListRows();bool AllStopped=Stopped.Num()>0;for(const auto& R:Stopped)AllStopped&=!R.Squad.bActive&&!R.bGroupHeader;
+   PC->SquadFilter=3;PC->SquadSort=1;const int32 Sorted=PC->SquadListRows().Num();PC->SquadSort=0;
+   const int32 AllRows=PC->SquadListRows().Num();
+   // A player group of two active own squads for this check (groups are not saved; it is disbanded below).
+   TArray<int32> Pair;for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Value.CommandStatus==EBattleCommandStatus::Active&&M->GroupOf(P.Key)==INDEX_NONE&&Pair.Num()<2)Pair.Add(P.Key);
+   const int32 TestGroup=Pair.Num()==2?M->FormGroup(0,Pair,true):INDEX_NONE;
+   PC->SquadFilter=0;const auto Grouped=PC->SquadListRows();int32 Headers=0,Members=0,Current=INDEX_NONE;bool GroupsOk=true;
+   for(const auto& R:Grouped){if(R.bGroupHeader){++Headers;Current=R.GroupID;GroupsOk&=M->Groups.Contains(R.GroupID)&&M->Groups[R.GroupID].Team==0;}else{++Members;GroupsOk&=R.Squad.bActive&&R.GroupID==Current&&M->GroupOf(R.Squad.SquadID)==Current;}}
+   PC->SquadFilter=1;int32 Ungrouped=0;for(const auto& R:PC->SquadListRows()){++Ungrouped;GroupsOk&=R.Squad.bActive&&M->GroupOf(R.Squad.SquadID)==INDEX_NONE;}
+   GroupsOk&=Headers==PC->OwnGroupIDs().Num()&&Members+Ungrouped+Stopped.Num()==AllRows;
+   GroupsOk&=TestGroup!=INDEX_NONE&&Headers>=1&&Members>=2;if(TestGroup!=INDEX_NONE)M->DissolveGroup(TestGroup,TEXT("test"));
+   PC->SquadFilter=0;
+   Check(AllStopped&&Sorted==AllRows&&GroupsOk,*FString::Printf(TEXT("squad list tabs and sort (groups %d, grouped %d, ungrouped %d, stopped %d, all %d)"),Headers,Members,Ungrouped,Stopped.Num(),AllRows));
   }
   // Command bar: the attack-move button arms the same pending order as the T key; the move button clears it.
   { PC->PressCommandButton(1);const bool Armed=PC->PendingOrder==EBattleOrder::AttackMove;PC->PressCommandButton(0);
