@@ -900,7 +900,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   const bool LostSight=!CanEngage && Contact && !Contact->bVisible && Now-Contact->LastSeenTime<=4.;
   UpdateAIStance(ID,Now,WillMove,StopForCombat,LostSight);
   // Getting up takes time: no walking until the soldier is standing.
-  if(WillMove && StanceOf(ID)!=BattleStance::Stand){Store->SetAction(ID,EBattleAction::Idle);return;}
+  if(WillMove && StanceOf(ID)!=BattleStance::Stand){if(SightExperiment.Enabled)CoverGate.Add(ID,8);Store->SetAction(ID,EBattleAction::Idle);return;}
  }
  // -BattleContactCover (this soldier's team): per-frame probe budget, 2 s retry, walks to cover and to free firing positions.
  const bool bContactCover=BattleTactics::ContactCover(U->Team) && !bVehicleBody;
@@ -920,6 +920,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const bool CoverInRange=!BattleTactics::CoverValidationEnabled() || (Contact && FVector::DistSquared2D(Pos,Contact->LastKnownPosition)<=FMath::Square(CoverTuning->EffectiveWeaponRange()));
  // A mortar gunner stays at his emplacement (moving would undo the set-up).
  const bool bSeenCover=CombatContact && Contact && Contact->bVisible && CoverInRange;
+ // Evaluation only: which gate of the cover search this soldier is at (read when he is hit in the open).
+ if(SightExperiment.Enabled && !bVehicleBody)CoverGate.Add(ID,!Contact||!Contact->bVisible?0:!CombatContact?1:bMoveFire?2:!CoverInRange?3:
+  U->Weapon==EBattleWeapon::Mortar?6:Now<CoverProbeAfter.FindRef(ID)?5:!ProbeSlot?4:7);
  // -BattleUnderFireCover: just hit and standing (not walking his path): look for cover from a target he knows of, even unseen.
  FVector HitFrom;
  const bool bHitCover=UnderFireCoverEnabled() && !bSeenCover && !bMoveFire && !bVehicleBody && S->Order!=EBattleOrder::Move && !U->CoverPhase &&
@@ -1197,6 +1200,15 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
     const auto* VC=VT!=INDEX_NONE?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(Victim,VT):nullptr;
     E.Cover(VT==INDEX_NONE?TEXT("victim_still_no_target"):!VC?TEXT("victim_still_target_unknown"):!VC->bVisible?TEXT("victim_still_target_not_seen"):
      FVector::DistSquared2D(Position(Victim),VC->LastKnownPosition)>FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange())?TEXT("victim_still_target_seen_far"):TEXT("victim_still_target_seen_near"));
+    if(VC && VC->bVisible && FVector::DistSquared2D(Position(Victim),VC->LastKnownPosition)<=FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange()))
+    {
+     static const TCHAR* GateKeys[]={TEXT("victim_near_gate_not_visible"),TEXT("victim_near_gate_not_stopped"),TEXT("victim_near_gate_move_fire"),TEXT("victim_near_gate_out_of_range"),
+      TEXT("victim_near_gate_budget"),TEXT("victim_near_gate_retry"),TEXT("victim_near_gate_mortar"),TEXT("victim_near_gate_probing"),TEXT("victim_near_gate_standing_up")};
+     static const TCHAR* RetryKeys[]={TEXT("victim_near_retry_no_slot"),TEXT("victim_near_retry_slot_reserved"),TEXT("victim_near_retry_path_blocked"),
+      TEXT("victim_near_retry_too_exposed"),TEXT("victim_near_retry_no_peek"),TEXT("victim_near_retry_reserve_failed")};
+     const uint8* G=CoverGate.Find(Victim);E.Cover(G&&*G<9?GateKeys[*G]:TEXT("victim_near_gate_none"));
+     if(G&&(*G==5||*G==7)){const int8* St=LastCoverStage.Find(Victim);E.Cover(!St?TEXT("victim_near_retry_never"):*St<0?TEXT("victim_near_retry_after_success"):RetryKeys[FMath::Clamp<int32>(*St,0,5)]);}
+    }
    }
    if(VictimSquadState && VictimSquadState->bSectorMission)
    {

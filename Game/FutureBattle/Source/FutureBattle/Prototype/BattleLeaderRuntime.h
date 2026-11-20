@@ -324,6 +324,8 @@ public:
  double NextCoverProbe=0;
  uint64 CoverProbeFrame=0;int32 CoverProbesThisFrame=0;
  TMap<int32,double> CoverProbeAfter;
+ // Evaluation only: per soldier, the cover-search gate of his last Follow frame and how his last request ended (-1 = found).
+ TMap<int32,uint8> CoverGate;TMap<int32,int8> LastCoverStage;
  // Trial -BattleCoverApproach: runtime-only walk toward a hidden cover slot (not saved; cleared on restore).
  struct FCoverApproach{FVector Goal=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false,bFree=false,bStandUp=false;};
  // -BattleContactCover: where a soldier settled after walking to a firing position that is not a cover slot (runtime only, evaluation).

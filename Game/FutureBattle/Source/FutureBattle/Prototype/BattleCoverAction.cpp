@@ -79,7 +79,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
  // Evaluation-only funnel: furthest stage reached by this request (does not alter the search order or result).
  auto& Diag=SightExperiment;int32 Stage=0;
  static const TCHAR* StageKeys[]={TEXT("request_no_slot_in_radius"),TEXT("request_slot_reserved"),TEXT("request_path_to_anchor_blocked"),TEXT("request_anchor_too_exposed"),TEXT("request_no_valid_peek"),TEXT("request_reserve_failed")};
- Diag.Cover(TEXT("request_total"));
+ Diag.Cover(TEXT("request_total"));LastCoverStage.Add(ID,-1);
  for(int32 Slot:Cover->NearbySlots(Pos,FMath::Max(0.f,SearchRadius>=0?SearchRadius:Tuning->CoverActionSearchRadius),BattleFieldLayout::IsUrban(GetWorld())?12:FMath::Max(1,Tuning->CoverActionCandidateLimit)))
  {
   const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
@@ -128,7 +128,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVER_ACTION unit=%d slot=%d hidden=%.2f peek_cm=%.1f"),ID,Slot,Hidden,FVector::Dist2D(Anchor,Peek));return true;
   }
  }
- Diag.Cover(StageKeys[Stage]);
+ Diag.Cover(StageKeys[Stage]);LastCoverStage.Add(ID,(int8)Stage);
  return false;
 }
 
