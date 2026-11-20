@@ -759,6 +759,8 @@ public:
 	void RefillLauncher(int32 UnitID);
 	float MaxShieldOf(int32 UnitID) const;
 	bool HasShields() const { return bShields; }
+ bool HasExoskeletons() const { return bExoskeletons; }
+ void AdvanceLaunchers(float DeltaSeconds);
 	bool ApplyDamage(int32 ID, int32 AttackingTeam, float Damage);
 	// ApplyDamage plus where the shot or blast came from, for the HUD's hit direction (display only, same result as ApplyDamage).
 	// KillerID and Kind (optional) feed the kill log when the hit kills.
@@ -782,7 +784,8 @@ private:
 	UPROPERTY() TMap<int32, FBattleUnitState> Units;
 	UPROPERTY() TMap<int32, FBattleSquadState> Squads;
 	int32 NextSquadID = 1;
-	bool bShields = false; // a squad type with a shield exists (purchase or restore)
+	bool bExoskeletons = false; // body capability, independent of configured shield capacity
+ bool bShields = false; // a squad type with a shield exists (purchase or restore)
 	int32 NextID = 1;
 	FVector PendingHitFrom = FVector::ZeroVector; bool bPendingHitFrom = false; // set only inside ApplyDamageFrom
 	int32 PendingKiller = INDEX_NONE; EBattleKillKind PendingKind = EBattleKillKind::Unknown;

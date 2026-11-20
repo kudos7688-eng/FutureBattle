@@ -4,7 +4,7 @@
 // vehicle exists on the field, so matches without vehicles (the default: the AI buys none) are unchanged.
 //  Individual: weapon-aware targets (small arms do not pick a target they cannot hurt, anti-tank gunners pick vehicles first and keep
 //   their last rounds for them), a stopped vehicle turns its hull (and so its forward view) to its target or to the nearest known
-//   enemy, vehicles take no cover actions and no stances.
+//   enemy. Vehicle bodies take no infantry cover actions or stances regardless of this AI switch.
 //  Squad: a vehicle backs out of the reach of a known anti-tank soldier, or after a heavy hit from somewhere unknown; infantry with no
 //   anti-tank weapon falls back from a visible tank it cannot hurt; a regrouped vehicle resumes above its repair threshold.
 //  Tactical: tanks support the point with the most known enemies from an overwatch post short of it, outside known anti-tank reach;
@@ -42,7 +42,7 @@ bool BattleTactics::AreaComposition(int32 Team)
 
 // ---------------------------------------------------------------- individual
 
-void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P)
+void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P,const TSet<int32>* AllowedTargets)
 {
  // Runs after Think's nearest-contact pick, with the same filters, and replaces it only while the squad sees a vehicle.
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* S=Store->FindSquad(SID);const auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();
@@ -55,8 +55,15 @@ void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P)
   const bool bGunner=U->Weapon==EBattleWeapon::AntiTank&&U->Ammo+U->Reserve>0;const FVector Pos=Position(ID);
   for(const auto& C:*Contacts)if(C.Value.bVisible&&!C.Value.bShared)
   {
-   if(S->Order==EBattleOrder::Defend&&!BattleTactics::DefendEngage(S->Team)&&FVector::Dist2D(C.Value.LastKnownPosition,S->Destination)>S->DefenseRadius)continue;
-   if(S->TacticalPlan.Action==EBattleSquadTactic::Support&&C.Key!=S->TacticalPlan.SupportTarget)continue;
+   if(AllowedTargets)
+   {
+    if(!AllowedTargets->Contains(C.Key))continue;
+   }
+   else
+   {
+    if(S->Order==EBattleOrder::Defend&&!BattleTactics::DefendEngage(S->Team)&&FVector::Dist2D(C.Value.LastKnownPosition,S->Destination)>S->DefenseRadius)continue;
+    if(S->TacticalPlan.Action==EBattleSquadTactic::Support&&C.Key!=S->TacticalPlan.SupportTarget)continue;
+   }
    const bool bVehicle=IsVehicle(C.Key);bSeesVehicle|=bVehicle;
    const double Range2=FVector::DistSquared(Pos,C.Value.LastKnownPosition);double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
    // An anti-tank gunner's vehicle target: within the anti-tank engagement distance, the nearest to the squad.

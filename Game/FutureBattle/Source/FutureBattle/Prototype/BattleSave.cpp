@@ -153,7 +153,7 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
    const auto& A=Pair.Value;FBattleSavedArtillery E;
    E.bSettingUp=A.StillSince>=0;E.SetupElapsed=E.bSettingUp?FMath::Max(0.,Now-A.StillSince)+A.SetupCredit:0.;
    E.ReloadRemaining=FMath::Max(0.,A.ReadyAt-Now);E.PickRemaining=FMath::Max(0.,A.NextPick-Now);
-   E.Shots=A.Shots;E.Aim=A.Aim;E.bHasTarget=A.bHasTarget;E.bBase=A.bBase;
+   E.Shots=A.Shots;E.TargetKey=A.TargetKey;E.Aim=A.Aim;E.bHasTarget=A.bHasTarget;E.bBase=A.bBase;
    Save->SavedArtillery.Add(Pair.Key,E);
   }
   for(const auto& Shell:Runtime->ArtilleryShells)

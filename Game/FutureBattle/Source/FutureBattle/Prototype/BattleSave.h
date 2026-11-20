@@ -35,6 +35,7 @@ struct FBattleSavedArtillery
  UPROPERTY() double ReloadRemaining=0;
  UPROPERTY() double PickRemaining=0;
  UPROPERTY() int32 Shots=0;
+ UPROPERTY() int32 TargetKey=INDEX_NONE; // observed aim identity; older saves did not retain it
  UPROPERTY() FVector Aim=FVector::ZeroVector;
  UPROPERTY() bool bHasTarget=false;
  UPROPERTY() bool bBase=false;

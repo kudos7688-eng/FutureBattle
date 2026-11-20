@@ -168,7 +168,7 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
   const auto& E=Pair.Value;FArtillery A;
   A.StillSince=E.bSettingUp?Now:-1.;A.SetupCredit=E.SetupElapsed;
   A.ReadyAt=Now+E.ReloadRemaining;A.NextPick=Now+E.PickRemaining;
-  A.Shots=E.Shots;A.Aim=E.Aim;A.bHasTarget=E.bHasTarget;A.bBase=E.bBase;Artillery.Add(Pair.Key,A);
+  A.Shots=E.Shots;A.TargetKey=E.TargetKey;A.Aim=E.Aim;A.bHasTarget=E.bHasTarget;A.bBase=E.bBase;Artillery.Add(Pair.Key,A);
  }
  for(const auto& E:Save->SavedArtilleryShells)
  {

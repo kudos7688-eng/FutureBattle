@@ -20,7 +20,7 @@ int32 UBattleMatch::AreaScore(int32 Team)const
  if(BattleWarScore::Tuning().bEnabled)return WarScore(Team);
  int32 Total=Credits[Team];for(const auto& U:GetWorld()->GetSubsystem<UBattleState>()->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive())++Total;
  // An exoskeleton soldier counts as ScoreCount soldiers (user decision 2026-11-18: one-soldier types are not penalised by the head count).
- if(const auto* Store=GetWorld()->GetSubsystem<UBattleState>();Store->HasShields())for(const auto& S:Store->GetSquads())
+ if(const auto* Store=GetWorld()->GetSubsystem<UBattleState>();Store->HasExoskeletons())for(const auto& S:Store->GetSquads())
   if(S.Value.Team==Team&&BattleSquadType::ScoreCount(S.Value.SquadType)>1)for(int32 ID:S.Value.Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())Total+=BattleSquadType::ScoreCount(S.Value.SquadType)-1;
  for(int32 I=0;I<Objectives.Num();++I)if(Objectives[I].Owner==Team)Total+=FMath::RoundToInt(20*ObjectiveValue(I));return Total;
 }

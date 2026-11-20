@@ -6,6 +6,7 @@
 // after their flight time, so a target may have moved away. The old support strike (BattleSupport.cpp, the old all-Actor FastMatch) is
 // not reused: it works on Actors and a team-wide credit budget; only its idea (a delayed impact at an observed position) is kept.
 #include "BattleLeaderRuntime.h"
+#include "BattleTactics.h"
 #include "BattleState.h"
 #include "BattleMatch.h"
 #include "BattlePerception.h"
@@ -102,9 +103,9 @@ bool UBattleLeaderRuntime::AllyNear(int32 Team,const FVector& At,double Radius) 
  return false;
 }
 
-bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld)
+bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey)
 {
- bBase=false;bFriendlyHeld=false;
+ bBase=false;bFriendlyHeld=false;if(TargetKey)*TargetKey=INDEX_NONE;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);if(!U||!U->IsAlive())return false;
  const auto* T=GetDefault<UBattleTuning>();const bool bSPG=IsSPG(ID);
  const FVector Pos=Position(ID);
@@ -119,11 +120,15 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
  TArray<FCandidate> Candidates;
  for(const auto& K:Soldiers)
  {
+  if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,K.Key,K.Value))continue;
   int32 Around=0;FVector Sum=FVector::ZeroVector;
   for(const auto& O:Soldiers)if(FVector::DistSquared2D(O.Value,K.Value)<=Blast2){++Around;Sum+=O.Value;}
   if(Around<FMath::Max(1,T->ArtilleryMinCluster))continue;
-  const FVector Center=Sum/double(Around);const double D2=FVector::DistSquared2D(Pos,Center);
+  const auto* Squad=Store->FindSquad(U->SquadID);
+  const bool SupportAim=BattleTactics::WeaponOrderGateEnabled()&&Squad&&Squad->TacticalPlan.Action==EBattleSquadTactic::Support;
+  const FVector Center=SupportAim?K.Value:Sum/double(Around);const double D2=FVector::DistSquared2D(Pos,Center);
   if(D2<Min2||D2>Max2)continue;
+  if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,K.Key,Center))continue;
   Candidates.Add({K.Key,Center,double(Around)-FMath::Sqrt(D2)/1.e6});
  }
  Candidates.Sort([](const FCandidate& A,const FCandidate& B){return A.Score!=B.Score?A.Score>B.Score:A.Key<B.Key;});
@@ -132,14 +137,14 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
  {
   const auto& C=Candidates[I];
   if(AllyNear(U->Team,C.At,Blast+ArtillerySpread(bSPG,FVector::Dist2D(Pos,C.At)))){bFriendlyHeld=true;continue;}
-  Aim=C.At;return true;
+  Aim=C.At;if(TargetKey)*TargetKey=C.Key;return true;
  }
  // The enemy home: in range and seen by the unit itself or by its team (bHomeCovered), like the tank gun.
  const auto* M=GetWorld()->GetSubsystem<UBattleMatch>();const int32 Enemy=1-U->Team;
  if(M&&M->bArea&&M->BaseActors.IsValidIndex(Enemy)&&M->BaseActors[Enemy]&&M->Area.BaseHP.IsValidIndex(Enemy)&&M->Area.BaseHP[Enemy]>0)
  {
   const FVector Home=M->BaseActors[Enemy]->GetActorLocation();const double D2=FVector::DistSquared2D(Pos,Home);
-  if(D2>=Min2&&D2<=Max2&&(M->AreaIntelView(U->Team).bHomeCovered||M->AreaVisible(ID,Home,M->BaseActors[Enemy])))
+  if((!BattleTactics::WeaponOrderGateEnabled()||WeaponOrderAllows(ID,INDEX_NONE,Home))&&D2>=Min2&&D2<=Max2&&(M->AreaIntelView(U->Team).bHomeCovered||M->AreaVisible(ID,Home,M->BaseActors[Enemy])))
   {
    if(AllyNear(U->Team,Home,Blast+ArtillerySpread(bSPG,FMath::Sqrt(D2))))bFriendlyHeld=true;
    else{Aim=Home;bBase=true;return true;}
@@ -172,11 +177,12 @@ bool UBattleLeaderRuntime::StepArtillery(int32 ID,double Now,bool bMoving,FVecto
   const auto& V=M->AreaIntelView(U->Team);
   for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)if(!Known.Contains(V.EnemyKeys[I]))Known.Add(V.EnemyKeys[I],V.Enemies[I]);
   bool bHeld=false;
-  A.bHasTarget=PickArtilleryAim(ID,Known,A.Aim,A.bBase,bHeld);
+  A.bHasTarget=PickArtilleryAim(ID,Known,A.Aim,A.bBase,bHeld,&A.TargetKey);
   if(bHeld)++ArtilleryFriendlyHolds;
   ArtilleryMs+=(FPlatformTime::Seconds()-PickStart)*1000.;
  }
  if(!A.bHasTarget)return false;
+ if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,A.TargetKey,A.Aim)){A.bHasTarget=false;A.NextPick=Now;return false;}
  Direction=(A.Aim-Position(ID)).GetSafeNormal2D();
  if(Direction.IsNearlyZero())return false;
  const float Setup=FMath::Max(0.f,bSPG?T->SPGSetupSeconds:T->MortarSetupSeconds);
@@ -201,6 +207,8 @@ bool UBattleLeaderRuntime::FireArtillery(int32 ID,const FVector& Aim,double Now)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
  if(!U||!U->IsAlive())return false;
+ const auto* Cached=Artillery.Find(ID);
+ if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,Cached?Cached->TargetKey:INDEX_NONE,Aim))return false;
  const auto* T=GetDefault<UBattleTuning>();const bool bSPG=IsSPG(ID);
  if(!bSPG&&U->Weapon!=EBattleWeapon::Mortar)return false;
  auto& A=Artillery.FindOrAdd(ID);

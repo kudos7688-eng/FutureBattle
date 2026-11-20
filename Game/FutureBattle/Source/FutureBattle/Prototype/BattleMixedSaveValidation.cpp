@@ -80,6 +80,11 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   if((!ArtilleryType(Pair.Key,false)&&!ArtilleryType(Pair.Key,true))||!Finite(A.SetupElapsed,0,1000000)||
      (!A.bSettingUp&&A.SetupElapsed!=0)||!Finite(A.ReloadRemaining,0,1000000)||!Finite(A.PickRemaining,0,1000000)||
      A.Shots<0||A.Shots==MAX_int32||!ArtilleryPoint(A.Aim))return Fail(TEXT("Invalid saved artillery"));
+  if(A.TargetKey>0)
+  {
+   const auto* Target=ByID.FindRef(A.TargetKey);const auto* Shooter=ByID.FindRef(Pair.Key);
+   if(!Target||!Shooter||Target->State.Team==Shooter->State.Team)return Fail(TEXT("Invalid artillery observed target"));
+  }
  }
  for(const auto& Shell:SavedArtilleryShells)
  {

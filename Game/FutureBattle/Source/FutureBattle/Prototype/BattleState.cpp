@@ -51,7 +51,7 @@ float UBattleTuning::EffectiveWeaponRange() const
 
 void UBattleState::RestoreRecords(const TArray<FBattleUnitState>& SavedUnits, const TArray<FBattleSquadState>& SavedSquads, bool PreservePlans)
 {
-	Units.Reset(); Squads.Reset(); NextID = NextSquadID = 1; bShields = false;
+	Units.Reset(); Squads.Reset(); NextID = NextSquadID = 1; bShields = false; bExoskeletons = false;
 	for (const auto& Unit : SavedUnits) { Units.Add(Unit.UnitID, Unit); NextID = FMath::Max(NextID, Unit.UnitID + 1); }
 	for (auto Squad : SavedSquads)
  {
@@ -64,6 +64,7 @@ void UBattleState::RestoreRecords(const TArray<FBattleUnitState>& SavedUnits, co
   }
   Squads.Add(Squad.SquadID, Squad); NextSquadID = FMath::Max(NextSquadID, Squad.SquadID + 1);
   bShields |= BattleSquadType::ShieldMax(Squad.SquadType) > 0.f;
+  bExoskeletons |= Squad.SquadType==BattleSquadType::Exo;
  }
  GetWorld()->GetSubsystem<UBattleSquadTactics>()->Reset();
 }
@@ -396,17 +397,25 @@ void UBattleState::AdvanceShields(float DeltaSeconds)
   for(int32 ID:P.Value.Members)
   {
    auto* U=Units.Find(ID);if(!U||!U->IsAlive())continue;
-   if(U->LauncherWait>0.f)U->LauncherWait=FMath::Max(0.f,U->LauncherWait-DeltaSeconds);
    if(U->ShieldWait>0.f){U->ShieldWait=FMath::Max(0.f,U->ShieldWait-DeltaSeconds);continue;}
    if(U->Shield<Max)U->Shield=FMath::Min(Max,U->Shield+Regen*DeltaSeconds);
   }
  }
 }
 
+void UBattleState::AdvanceLaunchers(float DeltaSeconds)
+{
+ if(!bExoskeletons||DeltaSeconds<=0.f)return;
+ for(const auto& P:Squads)if(BattleSquadType::LauncherRounds(P.Value.SquadType)>0)
+  for(int32 ID:P.Value.Members)if(auto* U=Units.Find(ID);U&&U->IsAlive()&&U->LauncherWait>0.f)
+   U->LauncherWait=FMath::Max(0.f,U->LauncherWait-DeltaSeconds);
+}
+
 bool UBattleState::ToggleExoWeapon(int32 UnitID)
 {
  auto* U=Units.Find(UnitID);
- if(!U || !U->IsAlive() || MaxShieldOf(UnitID)<=0.f)return false;
+ const auto* S=U?FindSquad(U->SquadID):nullptr;
+ if(!U || !U->IsAlive() || !S || BattleSquadType::LauncherRounds(S->SquadType)<=0)return false;
  U->bLauncherSelected=!U->bLauncherSelected;
  return true;
 }
@@ -609,6 +618,6 @@ void UBattleState::SetSquadType(int32 SquadID,uint8 Type)
  if(Type==BattleSquadType::SPGun) S->DisplayName=FString::Printf(TEXT("第%d自走砲"),SquadID);
  if(Type==BattleSquadType::Exo) S->DisplayName=FString::Printf(TEXT("第%d外骨格兵"),SquadID);
  if(Type==BattleSquadType::Supply) S->DisplayName=FString::Printf(TEXT("第%d補給班"),SquadID);
- const float Shield=BattleSquadType::ShieldMax(Type);bShields|=Shield>0.f;
+ const float Shield=BattleSquadType::ShieldMax(Type);bShields|=Shield>0.f;bExoskeletons|=Type==BattleSquadType::Exo;
  for(int32 ID:S->Members) if(auto* U=Units.Find(ID); U&&U->IsAlive()) {U->HP=MaxHealthOf(ID);U->Shield=Shield;U->ShieldWait=0.f;U->Launcher=BattleSquadType::LauncherRounds(Type);U->LauncherWait=0.f;}
 }

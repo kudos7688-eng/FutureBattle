@@ -212,7 +212,7 @@ public:
  // Armour AI, stage 3 (BattleArmourAI.cpp). PickArmourTargets: weapon-aware squad targets while the squad sees a vehicle.
  // FaceVehicle: a stopped vehicle turns its hull (its forward view) at its turn rate. VehicleWatchDirection: towards the nearest
  // enemy its team knows of, else the enemy home.
- void PickArmourTargets(int32 SquadID,struct FBattleLeaderPlan& Plan);
+ void PickArmourTargets(int32 SquadID,struct FBattleLeaderPlan& Plan,const TSet<int32>* AllowedTargets=nullptr);
  void FaceVehicle(int32 ID,const FVector& Direction);
  FVector VehicleWatchDirection(int32 ID) const;
  // Navigation data for a unit's paths: the vehicle agent for tanks, nullptr (the default infantry data) otherwise.
@@ -240,10 +240,11 @@ public:
  int64 TankGunShots=0,TankGunHits=0,TankGunKills=0,TankGunVehicleHits=0,TankGunBaseHits=0,TankGunPicks=0;double TankGunMs=0;
  // Indirect fire (BattleArtillery.cpp, stage 1 2026-11-18): the mortar gunner (weapon Mortar) and the self-propelled gun (squad type 7).
  // Saved by combat extension 1. SetupCredit carries elapsed setup across a new world clock without a negative StillSince sentinel.
- struct FArtillery{double StillSince=-1,ReadyAt=0,NextPick=0,SetupCredit=0;int32 Shots=0;FVector Aim=FVector::ZeroVector;bool bHasTarget=false,bBase=false;};
+ struct FArtillery{double StillSince=-1,ReadyAt=0,NextPick=0,SetupCredit=0;int32 Shots=0,TargetKey=INDEX_NONE;FVector Aim=FVector::ZeroVector;bool bHasTarget=false,bBase=false;};
  struct FArtilleryShell{int32 ShooterID=INDEX_NONE,Team=0;uint8 ShooterType=0;bool bSPG=false;FVector At=FVector::ZeroVector;float Remaining=0;};
  TMap<int32,FArtillery> Artillery;
  TArray<FArtilleryShell> ArtilleryShells;
+ bool WeaponOrderAllows(int32 ID,int32 TargetID,const FVector& KnownPosition) const;
  bool IsArtillery(int32 ID) const; // a living mortar gunner or self-propelled gun
  bool IsSPG(int32 ID) const {return IsVehicle(ID)&&VehicleType(ID)==BattleSquadType::SPGun;}
  float ArtilleryMinRange(bool bSPG) const;
@@ -255,7 +256,7 @@ public:
  bool StepArtillery(int32 ID,double Now,bool bMoving,FVector& Direction);
  // Picks an aim point from Known (unit key -> known position): a cluster of at least ArtilleryMinCluster soldiers within range and no
  // own unit within the blast radius plus spread (bFriendlyHeld: a candidate was refused for that). Then the enemy home if seen.
- bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld);
+ bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey=nullptr);
  bool AllyNear(int32 Team,const FVector& At,double Radius) const;
  // Launches one shell at Aim (spread applied, flight time Distance / shell speed). Consumes mortar ammunition or loads the gun.
  bool FireArtillery(int32 ID,const FVector& Aim,double Now);

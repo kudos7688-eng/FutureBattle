@@ -597,7 +597,8 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  const int32 PreviousTarget=P.TargetID;
  // Trial -BattleDefendEngage=1: a defending squad targets any enemy within weapon range (BattleGroups.cpp).
  const bool Sector=S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission;
- const bool bDefendEngage=S->Order==EBattleOrder::Defend && BattleTactics::DefendEngage(S->Team);
+ const bool bArmourSectorGate=BattleTactics::ArmourSectorGateEnabled();
+ TSet<int32> AllowedArmourTargets;
  // Trial -BattleSectorContact=1: shot at on the way or while holding, the squad also answers enemies outside its sector.
  const bool bShotAt=Sector && (SectorContactEnabled() || SectorMoveFireEnabled() || SectorFireBack.Contains(SID)) && SquadShotAt(*S,Now);
  const FIntPoint SectorCell=Sector?BattleSectors::Cell(S->Destination):FIntPoint(-1,-1);
@@ -609,8 +610,8 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   {
    if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C.Value.LastKnownPosition)>FMath::Square(TargetRange(ID))) continue;
    if(Sector && BattleSectors::Cell(C.Value.LastKnownPosition)!=SectorCell && !OutsideOK(ID,C.Value.LastKnownPosition)) continue;
-   if(!Sector && S->Order==EBattleOrder::Defend && !bDefendEngage && FVector::Dist2D(C.Value.LastKnownPosition,S->Destination)>S->DefenseRadius) continue;
-   if(S->TacticalPlan.Action==EBattleSquadTactic::Support && C.Key!=S->TacticalPlan.SupportTarget) continue;
+   if(!BattleTactics::OrderAllowsTarget(*S,C.Key,C.Value.LastKnownPosition))continue;
+   if(bArmourSectorGate)AllowedArmourTargets.Add(C.Key);
    const double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
    if(D<Best || (D==Best && C.Key<P.TargetID)) { Best=D; P.TargetID=C.Key; }
   }
@@ -625,9 +626,16 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
     if(C->bShared || Now-C->LastSeenTime>Hold+1.e-6) continue;
     if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C->LastKnownPosition)>FMath::Square(TargetRange(ID))) continue;
     if(Sector && BattleSectors::Cell(C->LastKnownPosition)!=SectorCell && !OutsideOK(ID,C->LastKnownPosition)) continue;
-   if(!Sector && S->Order==EBattleOrder::Defend && !bDefendEngage && FVector::Dist2D(C->LastKnownPosition,S->Destination)>S->DefenseRadius) continue;
+    if(!BattleTactics::OrderAllowsTarget(*S,PreviousTarget,C->LastKnownPosition))continue;
+    if(bArmourSectorGate)AllowedArmourTargets.Add(PreviousTarget);
     P.TargetID=PreviousTarget;SightExperiment.Cover(TEXT("squad_target_held"));break;
    }
+ }
+ // With the trial on, reprioritize before deriving the sector-contact and cover decisions from the chosen target.
+ if(bArmourSectorGate)
+ {
+  P.ArmourTargetID=INDEX_NONE;
+  if(VehicleIDs.Num()&&S->Order!=EBattleOrder::Move&&BattleTactics::ArmourAI(S->Team))PickArmourTargets(SID,P,&AllowedArmourTargets);
  }
  P.bSectorContact=false;
  if(bShotAt && P.TargetID!=INDEX_NONE)
@@ -708,8 +716,11 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   {P.ArrivalGoals.Reset();P.bReplan=true;SightExperiment.Cover(TEXT("arrival_refacing"));}
  }
  // Armour AI (BattleArmourAI.cpp): while the squad sees a vehicle, small arms skip targets they cannot hurt and anti-tank gunners get a vehicle.
- P.ArmourTargetID=INDEX_NONE;
- if(VehicleIDs.Num() && S->Order!=EBattleOrder::Move && BattleTactics::ArmourAI(S->Team)) PickArmourTargets(SID,P);
+ if(!bArmourSectorGate)
+ {
+  P.ArmourTargetID=INDEX_NONE;
+  if(VehicleIDs.Num() && S->Order!=EBattleOrder::Move && BattleTactics::ArmourAI(S->Team)) PickArmourTargets(SID,P);
+ }
  // Evaluation only: how long a squad goes without a visible target, and whether a member had just seen it.
  if(SightExperiment.Enabled && S->Order!=EBattleOrder::Move)
  {
@@ -866,7 +877,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  // Armour AI (BattleArmourAI.cpp): an anti-tank gunner fires at the squad's vehicle target; with few rounds left and enemy vehicles
  // known to his team he does not spend them on soldiers. Vehicles take no cover actions and no stances.
  const bool bArmourAI=VehicleIDs.Num()>0 && BattleTactics::ArmourAI(U->Team);
- const bool bVehicleBody=bArmourAI && IsVehicle(ID);
+ const bool bVehicleBody=IsVehicle(ID);
  const int32 TargetID=bArmourAI && U->Weapon==EBattleWeapon::AntiTank && P->ArmourTargetID!=INDEX_NONE ? P->ArmourTargetID : P->TargetID;
  const bool bSaveRounds=bArmourAI && bArea && U->Weapon==EBattleWeapon::AntiTank && TargetID!=INDEX_NONE && !IsVehicle(TargetID) &&
   U->Ammo+U->Reserve<=GetDefault<UBattleTuning>()->ATKeepRounds && GetWorld()->GetSubsystem<UBattleMatch>()->KnownEnemyVehicles(U->Team)>0;
@@ -1040,7 +1051,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   {
    FVector GunDirection=FVector::ZeroVector; const bool bGun=!bArtilleryAim && TankGunTarget(ID,Now,GunDirection);
    // Armour AI: a stopped vehicle turns its hull, and with it its forward view, to what it fires at, or to the nearest known enemy.
-   if(bVehicleBody && !bDriving)
+   if(bArmourAI && bVehicleBody && !bDriving)
    {
     FVector Face=bArtilleryAim?ArtilleryDirection:bGun?GunDirection:(CanEngage||BaseEngage)?Direction.GetSafeNormal2D():FVector::ZeroVector;
     if(Face.IsNearlyZero()) Face=VehicleWatchDirection(ID);
@@ -1316,8 +1327,9 @@ void UBattleLeaderRuntime::Step(float Dt)
  if(!Mode->bCombatPaused && !Mode->bBattleEnded && Now>=Mode->CombatStartsAt)
  {
   if(!bWideField) Store->AdvanceReloads(Now);
+  Store->AdvanceLaunchers(Dt);
   Store->AdvanceShields(Dt);
-  if(Store->HasShields()) StepExoLaunchers(Now);
+  if(Store->HasExoskeletons()) StepExoLaunchers(Now);
   RefreshSightTeamMasks();
   if(!bMovementTrial) { TRACE_CPUPROFILER_EVENT_SCOPE(BattlePerceptionUpdate); GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now,-1,0); }
   {

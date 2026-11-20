@@ -35,6 +35,18 @@ void UBattleLeaderRuntime::RunAreaSmoke()
  auto Place=[&](int32 ID,FVector P){auto& B=Bodies.FindChecked(ID);if(B.Actor.IsValid()){B.Actor->SetActorLocation(P,false,nullptr,ETeleportType::TeleportPhysics);B.Actor->SetActorRotation(FRotator::ZeroRotator);}else{B.Capsule->SetWorldLocation(P);auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=P;F.Forward=FVector::ForwardVector;}};
  if(SmokeStage==0)
  {
+  {
+   FBattleSquadState S;S.Order=EBattleOrder::Move;S.DefenseRadius=1000;S.Destination=FVector::ZeroVector;
+   Check(!BattleTactics::OrderAllowsTarget(S,10,FVector::ZeroVector),TEXT("weapon order permission rejects move"));
+   S.Order=EBattleOrder::AttackMove;
+   Check(BattleTactics::OrderAllowsTarget(S,10,FVector(2000,0,0)),TEXT("weapon order permission accepts attack move"));
+   S.Order=EBattleOrder::Defend;
+   Check(BattleTactics::OrderAllowsTarget(S,10,FVector(1000,0,0))&&
+    BattleTactics::OrderAllowsTarget(S,10,FVector(1001,0,0))==BattleTactics::DefendEngage(S.Team),TEXT("weapon order permission respects defense radius and trial override"));
+   S.Order=EBattleOrder::Hold;S.TacticalPlan.Action=EBattleSquadTactic::Support;S.TacticalPlan.SupportTarget=10;
+   Check(BattleTactics::OrderAllowsTarget(S,10,FVector::ZeroVector)&&!BattleTactics::OrderAllowsTarget(S,11,FVector::ZeroVector)&&
+    !BattleTactics::OrderAllowsTarget(S,INDEX_NONE,FVector::ZeroVector),TEXT("weapon order permission restricts support identity including base and report aims"));
+  }
   Mode->CombatStartsAt=1.e6;Mode->bCombatPaused=false;M->bAreaIncomeHeld=true; // exact resource fixtures; income is checked separately below
   Check(bArea&&M->bArea&&M->BaseActors.Num()==2&&M->Credits[0]==100&&M->Credits[1]==100,TEXT("area starts with symmetric bases and resources"));
   for(int32 ID=1;ID<=N;++ID)Place(ID,FVector(-26500+(ID/5)*130,(ID%5-2)*130,100));
@@ -313,6 +325,25 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      Check(Reuse,TEXT("far tank sight: one trace per second per observer, reused in between"));
      const FVector Goal=Position(TankID)+FVector(400,0,0);IssueOrder(TSID,EBattleOrder::Move,Goal,true);
      Check(SameVehicleMission(TSID,EBattleOrder::Move,Goal)&&!SameVehicleMission(TSID,EBattleOrder::Move,Goal+FVector(3000,0,0))&&!SameVehicleMission(1,EBattleOrder::Move,Goal),TEXT("tank order: the same goal is not reissued every update"));
+    }
+    {
+     int32 Observer=INDEX_NONE;
+     for(const auto& P:Store->GetSquads())if(P.Value.Team==1&&P.Value.CommandStatus==EBattleCommandStatus::Active){Observer=P.Value.LeaderUnitID;break;}
+     bool Limited=false;
+     if(Observer!=INDEX_NONE)
+     {
+      auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();TMap<int32,FBattleObserver> OldObservers;TArray<FBattleReport> OldReports;
+      const double Now=GetWorld()->GetTimeSeconds();Sense->Capture(OldObservers,OldReports,Now);
+      auto& U=Store->Units.FindChecked(Observer);const auto OldUnit=U;auto& S=Store->Squads.FindChecked(U.SquadID);const auto OldSquad=S;
+      U.Weapon=EBattleWeapon::AntiTank;U.Ammo=1;S.Order=EBattleOrder::AttackMove;S.TacticalPlan.Action=EBattleSquadTactic::Mission;
+      FBattleContact C;C.TargetID=TankID;C.SourceUnitID=Observer;C.bVisible=true;C.Confidence=1.f;C.LastKnownPosition=Position(Observer)+FVector(500,0,0);
+      TMap<int32,FBattleObserver> Fixture;Fixture.FindOrAdd(Observer).Contacts.Add(TankID,C);Sense->Restore(Fixture,TArray<FBattleReport>(),Now);
+      FBattleLeaderPlan P;P.Center=Position(Observer);TSet<int32> Allowed;
+      PickArmourTargets(S.SquadID,P,&Allowed);const bool Excluded=P.TargetID==INDEX_NONE&&P.ArmourTargetID==INDEX_NONE;
+      Allowed.Add(TankID);PickArmourTargets(S.SquadID,P,&Allowed);Limited=Excluded&&P.ArmourTargetID==TankID;
+      U=OldUnit;S=OldSquad;Sense->Restore(OldObservers,OldReports,Now);
+     }
+     Check(Limited,TEXT("armour reprioritization cannot introduce a target outside the accepted set"));
     }
     // Main gun (stage 2): 300 m on maps A-D, one round per TankGunReload seconds, a direct hit pierces armour (three kill a tank),
     // never own units.
@@ -745,6 +776,14 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      Armour=MortarNone&&MissNone&&FMath::IsNearlyEqual(AfterHit,200.f-TT->SPGBlastDamage,1.f);
     }
     Check(Armour,TEXT("shells and vehicles: mortar shells never hurt them, the gun only on a direct hit"));
+    {
+     auto& Squad=Store->Squads.FindChecked(GSID);const auto OldOrder=Squad.Order;Squad.Order=EBattleOrder::Move;
+     auto& A=Artillery.FindOrAdd(GunID);const auto Before=A;A.ReadyAt=0;const int32 Shots=A.Shots;const int32 ShellCount=ArtilleryShells.Num();
+     const bool Fired=FireArtillery(GunID,Position(GunID)+FVector(20000,0,0),Now);
+     Check(Fired!=BattleTactics::WeaponOrderGateEnabled()&&A.Shots==Shots+(Fired?1:0)&&ArtilleryShells.Num()==ShellCount+(Fired?1:0),
+      TEXT("artillery move-order gate blocks firing only when enabled"));
+     A=Before;ArtilleryShells.SetNum(ShellCount);Squad.Order=OldOrder;
+    }
     // Save and restore: body, setup, load, target and shot sequence all survive.
     auto& BeforeSave=Artillery.FindOrAdd(GunID);BeforeSave.StillSince=Now;BeforeSave.SetupCredit=3.;BeforeSave.ReadyAt=Now+4.;BeforeSave.NextPick=Now+.5;
     const int32 SavedShots=BeforeSave.Shots;const FVector SavedAim=BeforeSave.Aim;
@@ -782,6 +821,22 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      FMath::IsNearlyEqual(BattleSquadType::SpeedAt(BattleSquadType::Exo,GetWorld(),FVector::ZeroVector),1000.f/TT->MoveSpeed,.01f)&&FMath::IsNearlyEqual(BattleSquadType::DamageScale(BattleSquadType::Exo),2.f);
     Scored=BattleWarScore::Tuning().bEnabled||M->AreaScore(0)==Score0-Cost+5;
     Armour=FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::Carbine),.3f)&&FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::SupportGun),.3f)&&ArmorScale(L,EBattleWeapon::AntiTank)==1.f&&ArmorScale(1,EBattleWeapon::Carbine)==1.f;
+    // Shield capacity must not enable armour, weapon switching or the launcher reload clock.
+    {
+     auto* T=GetMutableDefault<UBattleTuning>();const float ShieldConfig=T->ExoShield;T->ExoShield=0.f;
+     auto* Equipment=NewObject<UBattleState>(GetWorld());const int32 TestID=Equipment->RegisterUnit(0);
+     const int32 TestSquad=Equipment->CreateSquad(0,{TestID});Equipment->SetSquadType(TestSquad,BattleSquadType::Exo);
+     const bool BodyIndependent=Equipment->HasExoskeletons()&&!Equipment->HasShields()&&Equipment->MaxShieldOf(TestID)==0.f;
+     const bool SelectedWithoutShield=Equipment->ToggleExoWeapon(TestID);const bool FiredWithoutShield=Equipment->UseLauncher(TestID);
+     const float Reload=Equipment->Find(TestID)->LauncherWait;Equipment->AdvanceShields(Reload);
+     const bool SeparateClock=Equipment->Find(TestID)->LauncherWait==Reload;
+     Equipment->AdvanceLaunchers(Reload);
+     const bool HadShields=Store->bShields;Store->bShields=false;
+     const bool ArmourWithoutShield=FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::Carbine),T->ExoArmorSmallArms);
+     Store->bShields=HadShields;T->ExoShield=ShieldConfig;
+     Check(BodyIndependent&&SelectedWithoutShield&&FiredWithoutShield&&SeparateClock&&Equipment->Find(TestID)->LauncherWait==0.f&&ArmourWithoutShield,
+      TEXT("zero shield leaves exoskeleton armour and launcher independent"));
+    }
     // No suppression while the shield holds.
     SuppressionZeroAt.Remove(L);AddSuppression(L,1.f,Now);const bool Unshaken=Suppression(L,Now)==0.f;
     // Shield: 70 damage leaves health untouched; the next 50 empties the shield and takes 20 health.
@@ -801,7 +856,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     const bool Fired=Fire(L,Position(L),FVector::UpVector,true);
     const bool Loading=!Fire(L,Position(L),FVector::UpVector,true);
     const bool One=LU->Launcher==3&&FMath::IsNearlyEqual(LU->LauncherWait,8.f)&&LU->Ammo==Ammo0;
-    Store->AdvanceShields(8.f);Launch=Switched&&Fired&&Loading&&One&&LU->LauncherWait==0.f;
+    Store->AdvanceLaunchers(8.f);Store->AdvanceShields(8.f);Launch=Switched&&Fired&&Loading&&One&&LU->LauncherWait==0.f;
     // Team layer: the fast reserve gets a valid objective from what its team knows.
     Reserve=M->Objectives.IsValidIndex(M->AreaExoTarget(0,XSID));
     // Save and restore: type, shield points, the pause before the refill and the launcher rounds survive.
