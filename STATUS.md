@@ -21,6 +21,12 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-21 4時55分 Claude（Codex 委任）：編成AI の段階1・2を main へ取り込んだ（既定OFF）
+- **範囲**：Codex が書いた編成AI（`BattleComposition*.cpp/.h`、設計は `Docs/design-composition-ai.md`）。切替 `-AreaCompositionPlanner`・`-AreaCompositionPlannerTeams`（既定0）。保存拡張 `CombatStateVersion` 4 は計画器ON のときだけ書く。ビルド前に Codex の点検で変数名の重複・縮小変換・修飾漏れ・インクルード不足を直した。
+- **検証**：codex 作業ツリーでビルド成功、Test-Battle・Test-MixedSave・Test-Area すべて failures=0。遮蔽優先を既定ON にした main（0d75028）を取り込んだうえで、マップE seed7 `-CoverActions 1 -FlankCoordination 1 -RoundTripSave` が main と IDENTICAL（winner=1、624/669、9029発）。main へ fast-forward 後に main もビルドし直した。
+- **未実施**：計画器ON の試合（勝敗・性能）はまだ一度も回していない。ゲームパッドのエイム上下の反転は実機で未確認。
+- **次の一手**：計画器ON の試合（例：`-Map I -Area -Experiment -Seed 7 -AreaComposition 1 -AreaCompositionPlanner 1 -AreaCompositionPlannerTeams 2 -RoundTripSave -CoverActions 1 -FlankCoordination 1`）で動作を確かめ、片側試験へ。
+
 ## 2026-11-21 2時30分 Claude（AC01）：Codex のレビューを受けて、外骨格兵の傾きと滑走の取り込み確認を直した
 - **依頼**：AC01 の現状（傾き・胴体の穴埋め・滑走）を Codex に読み取り専用でレビューさせ、指摘のうち2件を直す（ユーザー承認）。
 - **変更**：`ABattleUnit::UpdateLookTilt`：しゃがみ・伏せ・姿勢の切り替え中は、平滑化した速度を捨て、傾きを毎秒8の割合で直立へ戻す。これまでは目標速度だけ0になり、制動の式で約2°後ろへ跳ねていた。非数値の速度が入ったら履歴を消す。`Setup/Import-AC01Glide.py`：取り込みタスクの `imported_object_paths` に当該クリップがあることと、長さ0.1秒超を確かめる（古い同名アセットで合格になっていた）。
