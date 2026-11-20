@@ -79,6 +79,8 @@ public:
 	void SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequence* CrouchIdle, UAnimSequence* CrouchMove, UStaticMesh* Weapon, FName Bone, const FTransform& Grip);
 	bool HasLook() const { return LookIdle != nullptr; }
 	UAnimSequence* GetLookMove() const { return LookMove; }
+	// Look check shots (BattleExoShot.cpp): the body tilt drawn as if moving at this local velocity (zero = the real one).
+	void SetLookShotVelocity(const FVector& Local) { LookShotVelocity = Local; LookVelShown = Local; UpdateLookTilt(true); }
 	// The look's mesh shares the mannequin skeleton (the AC01 suit does), so the shared prone clips (BattleBodyAnim) play on it
 	// at full size instead of the squashed body.
 	bool LookHasProneClip() const;
@@ -103,6 +105,11 @@ private:
 	// it shows; the offset of the mesh from its place in the capsule, eased in and out (display only).
 	FVector MeshLeanShown = FVector::ZeroVector;
 	void SetMeshLean(const FVector& WorldOffset, float DeltaSeconds);
+	// A soldier with its own look (the exo suit's glide) tilts its whole body from the feet toward where it moves: the eased
+	// velocity sets the lean, the difference to the real one adds a little more when starting and a little back when braking.
+	FVector LookVelShown = FVector::ZeroVector, LookShotVelocity = FVector::ZeroVector;
+	FQuat MeshTiltShown = FQuat::Identity;
+	void UpdateLookTilt(bool bUpright);
 	UPROPERTY() TObjectPtr<UAnimSequence> LookIdle;
 	UPROPERTY() TObjectPtr<UAnimSequence> LookMove;
 	UPROPERTY() TObjectPtr<UAnimSequence> LookCrouchIdle;
