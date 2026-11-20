@@ -62,6 +62,7 @@ void UBattleLeaderRuntime::ClearSoldierOrder(int32 ID,const TCHAR* Why)
  auto* U=GetWorld()->GetSubsystem<UBattleState>()->Units.Find(ID);SoldierPaths.Remove(ID);
  if(!U || !U->bSoldierOrder)return;
  U->bSoldierOrder=false;U->bSoldierReturn=false;U->SoldierRepaths=0;U->SoldierStalledSince=0;
+ if(ID==SoldierTest.Unit)SoldierTest.EndWhy=Why;
  // A cover place he took under his own order is not the squad's: he rejoins the squad's movement.
  CancelCoverAction(ID);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER_END unit=%d why=%s"),ID,Why);
@@ -102,7 +103,7 @@ void UBattleLeaderRuntime::StepSoldierOrder(int32 ID,float Dt,double Now,FVector
  const float Speed=GetDefault<UBattleTuning>()->MoveSpeed*BattleSquadType::SpeedAt(S->SquadType,GetWorld(),Pos);
  bool bStuck=false;
  // At the end of the path: done near the goal; the end of a partial path short of it counts as stuck.
- if(D.IsNearlyZero()){if(FVector::DistSquared2D(Pos,U->SoldierGoal)<FMath::Square(150.))return;bStuck=true;}
+ if(D.IsNearlyZero()){if(FVector::DistSquared2D(Pos,U->SoldierGoal)<=FMath::Square(100.))return;bStuck=true;} // 1 m: arrived, as in Follow
  else if(Direction=D;B.Actor.IsValid()){B.Actor->GetCharacterMovement()->MaxWalkSpeed=Speed;B.Actor->AddMovementInput(D);B.Velocity=B.Actor->GetVelocity();bStuck=B.Velocity.Size2D()<10;}
  else
  {
@@ -308,7 +309,8 @@ void UBattleLeaderRuntime::StepSoldierOrderTest()
  else if(T.Stage==2)
  {
   // Sent back: the order ends when he reaches his place in the squad.
-  if(!U->bSoldierOrder && FVector::Dist2D(Position(T.Unit),U->Destination)>400.){Finish(TEXT("order_ended_away_from_squad_place"));return;}
+  // Back means the order ended as "returned", within the 2.5 m of the return rule (not stuck and given up on the way).
+  if(!U->bSoldierOrder && (T.EndWhy!=TEXT("returned") || FVector::Dist2D(Position(T.Unit),U->SoldierGoal)>260.)){Finish(*(TEXT("order_ended_")+T.EndWhy));return;}
   if(!U->bSoldierOrder)
   {
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SOLDIER_ORDER_TEST returned unit=%d seconds=%.1f from_goal_cm=%.0f"),T.Unit,Now-T.Since,FVector::Dist2D(Position(T.Unit),T.Goal));
