@@ -232,7 +232,9 @@ bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Targ
  const bool bContactCover=BattleTactics::ContactCover(U->Team);
  // Trial -BattleSectorContact=1: shot at from outside the sector, cover anywhere nearby will do (searched as -BattleContactCover does).
  const auto* OwnPlan=Plans.Find(U->SquadID);const bool OutsideContact=OwnPlan && OwnPlan->bSectorContact;
- const bool bWide=bContactCover||OutsideContact;
+ // -BattleSectorCoverWalk: fighting from inside his own sector, he searches the sector as widely.
+ const bool InSector=SectorCoverWalkEnabled() && Squad->bSectorMission && BattleSectors::Cell(Pos)==BattleSectors::Cell(Squad->Destination);
+ const bool bWide=bContactCover||OutsideContact||InSector;
  const int32 Limit=bWide?16:FMath::Max(1,T->AICoverApproachCandidates);int32 Evaluated=0;
  for(int32 Slot:Cover->NearbySlots(Pos,bWide?2000.f:FMath::Max(0.f,T->AICoverApproachRadius),Limit+32))
  {

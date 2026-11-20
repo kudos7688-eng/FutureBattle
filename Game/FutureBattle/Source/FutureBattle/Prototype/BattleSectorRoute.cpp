@@ -23,6 +23,53 @@ bool UBattleMatch::SectorCoverRouteOn()
 	return bOn;
 }
 
+bool UBattleMatch::DangerRouteOn()
+{
+	static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleDangerRoute="),V);return V!=0;}();
+	return bOn;
+}
+void UBattleMatch::NoteSectorDanger(int32 Team,const FVector& At)
+{
+	const FIntPoint C=BattleSectors::Cell(At);if((Team!=0&&Team!=1)||!BattleSectors::Valid(C))return;
+	const double Now=GetWorld()->GetTimeSeconds();auto& D=SectorDangerMap[Team].FindOrAdd(C,TPair<double,double>(0.,Now));
+	D.Key=D.Key*FMath::Pow(.5,(Now-D.Value)/60.)+1.;D.Value=Now;
+}
+double UBattleMatch::SectorDanger(int32 Team,FIntPoint C) const
+{
+	if(!DangerRouteOn()||(Team!=0&&Team!=1))return 0.;const auto* D=SectorDangerMap[Team].Find(C);if(!D)return 0.;
+	return D->Key*FMath::Pow(.5,(GetWorld()->GetTimeSeconds()-D->Value)/60.);
+}
+bool UBattleMatch::CloseInStage(int32 SID,const FVector& Leader,FVector& Stage)
+{
+	const double Now=GetWorld()->GetTimeSeconds();
+	if(const auto* Kept=CloseIn.Find(SID))
+	{
+		if(Now<Kept->Value){Stage=BattleSectors::Center(Kept->Key);return true;}
+		CloseIn.Remove(SID);
+	}
+	auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();FVector Threat;
+	if(!Runtime || !Runtime->CloseInThreat(SID,Threat))return false;
+	Runtime->ClearCloseIn(SID);
+	const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);if(!S)return false;
+	const FIntPoint Here=BattleSectors::Cell(Leader);const double Base=FVector::Dist2D(Leader,Threat);
+	double Best=-DBL_MAX;FIntPoint Pick(-1,-1);
+	for(int32 DY=-1;DY<=1;++DY)for(int32 DX=-1;DX<=1;++DX)
+	{
+		const FIntPoint C(Here.X+DX,Here.Y+DY);
+		if((!DX&&!DY) || !BattleSectors::Valid(C))continue;
+		const char K=BattleFieldLayout::SectorKind(GetWorld(),C);if(K=='R'||K=='F')continue;
+		if(SectorFrontOn() && (S->Team==0||S->Team==1) && SectorState[S->Team].FindRef(C)==2)continue;
+		const double D=FVector::Dist2D(BattleSectors::Center(C),Threat);
+		if(D>Base-BattleSectors::Size*.5 || D<3000.)continue; // closer by half a sector; not onto the enemy
+		const double CloseScore=SectorCoverCount(C)*.25-3.*FMath::Min(SectorDanger(S->Team,C),8.)-(K=='P'?6.:0.);
+		if(CloseScore>Best){Best=CloseScore;Pick=C;}
+	}
+	if(Best==-DBL_MAX){GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("SectorCloseInNone"));return false;}
+	CloseIn.Add(SID,TPair<FIntPoint,double>(Pick,Now+60.));
+	GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("SectorCloseIn"));
+	Stage=BattleSectors::Center(Pick);return true;
+}
+
 bool UBattleMatch::PinnedFlankStage(int32 SID,const FVector& Leader,FVector& Stage)
 {
 	const double Now=GetWorld()->GetTimeSeconds();
@@ -46,7 +93,7 @@ bool UBattleMatch::PinnedFlankStage(int32 SID,const FVector& Leader,FVector& Sta
 		const double Side=FMath::Abs(Front.X*V.Y-Front.Y*V.X)/BattleSectors::Size;
 		if(Side<.8)continue;
 		const char K=BattleFieldLayout::SectorKind(GetWorld(),C);
-		const double FlankScore=12.*FMath::Min(Side,3.)+SectorCoverCount(C)*.25-(K=='F'?10.:0.);
+		const double FlankScore=12.*FMath::Min(Side,3.)+SectorCoverCount(C)*.25-(K=='F'?10.:0.)-3.*FMath::Min(SectorDanger(GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID)?GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID)->Team:-1,C),8.);
 		if(FlankScore>Best){Best=FlankScore;Pick=C;}
 	}
 	if(Best==-DBL_MAX)return false;
@@ -155,6 +202,7 @@ bool UBattleMatch::SectorStage(const FBattleSquadState& S,const FVector& Leader,
 		if(SectorCoverRouteOn())
 			if(const char K=BattleFieldLayout::SectorKind(GetWorld(),C);K=='F'||K=='P')
 				for(const FVector& E:KnownEnemies)if(FVector::DistSquared2D(E,P)<FMath::Square(15000.)){StageScore-=K=='F'?15.:6.;break;}
+		StageScore-=3.*FMath::Min(SectorDanger(S.Team,C),8.); // -BattleDangerRoute: sectors where the team was just hit
 		if(Near)
 		{
 			// Sideways from the enemy's front counts up to three sectors; a stop straight in front of it is avoided.

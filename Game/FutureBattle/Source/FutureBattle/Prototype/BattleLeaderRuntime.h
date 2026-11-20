@@ -123,6 +123,9 @@ struct FBattleLeaderPlan
  double PinnedSince=0,PinnedBestDist=0;bool bPinned=false;FVector PinnedAt=FVector::ZeroVector;
  // Trial -BattleArrivalThreat=1: the direction the arrival places were chosen against (zero = the direction of advance).
  FVector ArrivalFacing=FVector::ZeroVector;double FacingCheckAt=0;
+ // Trial -BattleCloseIn=1: in its sector, fighting a target over 90 m away for 8 s while at least even (the -BattleSquadCoverCheck
+ // count) = too far (the AI order loop then moves the squad one sector closer, UBattleMatch::CloseInStage).
+ double FarSince=0,FarCheckAt=0;bool bCloseIn=false;FVector CloseInAt=FVector::ZeroVector;
  TArray<FVector> Path;
  FVector Center=FVector::ZeroVector;
  TMap<int32,FVector> ArrivalGoals;
@@ -444,6 +447,15 @@ public:
  static bool PinnedFlankEnabled();
  bool PinnedThreat(int32 SquadID,FVector& Threat) const {const auto* P=Plans.Find(SquadID);if(!P||!P->bPinned)return false;Threat=P->PinnedAt;return true;}
  void ClearPinned(int32 SquadID){if(auto* P=Plans.Find(SquadID)){P->bPinned=false;P->PinnedSince=0;}}
+ // Trial -BattleCloseIn=1 (2026-11-20, default 0; user: "too many long-range firefights - close in first"): see FBattleSquadPlan.
+ static bool CloseInEnabled();
+ // Trial -BattleSectorCoverWalk=1 (2026-11-20, default 0): a soldier of a sector squad who fights from inside his sector and has
+ // no cover within the local search walks to a cover slot elsewhere in the sector (up to 20 m, one he can fire from - as
+ // -BattleContactCover searches), else lines up beside a taken slot (-BattleCoverHuddle places), else to a nearby place where
+ // less of him is in view (the fire position). Before, only the local search ran there and he stood where he was.
+ static bool SectorCoverWalkEnabled();
+ bool CloseInThreat(int32 SquadID,FVector& Threat) const {const auto* P=Plans.Find(SquadID);if(!P||!P->bCloseIn)return false;Threat=P->CloseInAt;return true;}
+ void ClearCloseIn(int32 SquadID){if(auto* P=Plans.Find(SquadID)){P->bCloseIn=false;P->FarSince=0;}}
  // Trial -BattleArrivalThreat=1 (default 0): a sector squad picks its arrival cover places against the known enemy nearest
  // to the sector (the team's current sightings) instead of the direction it came from, and picks again when its target lies
  // more than 45 degrees away from that direction.

@@ -442,6 +442,10 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     if(UBattleLeaderRuntime::PinnedFlankEnabled()&&SectorRouteOn()&&bSectorAIOn&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&
        !Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&PinnedFlankStage(Pair.Key,P,PinStage))
     {Center=PinStage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
+    // -BattleCloseIn: a sector squad trading fire at long range moves one sector closer first.
+    else if(UBattleLeaderRuntime::CloseInEnabled()&&SectorRouteOn()&&bSectorAIOn&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&
+       !Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&CloseInStage(Pair.Key,P,PinStage))
+    {Center=PinStage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
     // -BattleSectorFlank: the last leg (no junction left) may also stop in a sector beside the enemy's front first.
     else if(!Step.Equals(Center,1) || (SectorFlankOn()&&SectorRouteOn()))
     {

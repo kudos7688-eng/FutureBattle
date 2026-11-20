@@ -20,6 +20,10 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-20　ロボット6兵科の3Dモデル用コンセプトアート
+
+小銃歩兵・重装歩兵・戦車・装甲車・対戦車兵・自走砲の候補を各10案、会話内の兵科別シートに掲載。各シートの01〜10で候補を指定できる。白灰色の装甲と青緑のセンサーを同一陣営の仮配色とした。現在は外観の選定段階。採用案・寸法・背面形状は未決定。
+
 ## 2026-11-20 16時30分 Claude（実装計画ロードマップ）：段階0の決定を反映（対称な開始を E〜I で既定、部隊群を全マップで既定、squadcap・マップI sectors-v2 の取り込み。ブランチ `defaults`、作業ツリー `FutureBattle-defaults`）
 - **決定（ユーザー、ROADMAP 11-20「今後の実装計画」の段階0）**：`-BattleSymmetricStart` は E〜I（`FMapDef::bUrban` のマップ）で既定ON・A/D は不変。`-BattleAreaGroups` は全マップで既定ON。`-BattleDefendEngage` は切替のまま。区画マップは I が主・H は比較用。`squadcap` は既定25のまま取り込む。`-BattleFollowerAnimSkip` は画面で確認してから（`Play-Area.ps1` にだけ付けた）。計測してから尋ねるもの：区画AIの組み合わせ → `-BattleWaypointPass` → `-BattleSightTeamMask` → `-BattleAIBlindFire` → `-BattleAreaPointSupply` → `-BattleAreaComposition`。
 - **変更**：`BattleTactics::SymmetricStart(const UWorld*)`（起動引数で 0/1 を明示すればそれが優先、無ければ `UBattleTuning::bSymmetricStart` か、マップが市街地の規則なら ON）。呼び出し3か所に World を渡す。`UBattleTuning::bAreaGroups=true`。`BattleTactics::AreaGroups` は、`-BattleAreaGroups=1` を明示したときだけ `-BattleAreaTrialTeam` で片側に絞る（既定ONのときに別の切替の片側試験をしても、両軍に部隊群が残る）。`BattleAreaSmoke.cpp` の部隊群の確認から「AIの部隊群がOFF」の条件を外した。squadcap（小隊上限の設定化 `AreaMaxActiveSquads`=25、保存の検証の上限の拡大）と mapi（sectors-v2：畑44%→25%、拠点の低い塀を9m外へ、区画監査の掃討小隊）をマージ。マップIを `-run=BattleMap -WideField=I -Force` で作り直した（`URBAN_MAP_RESULT failures=0 layout=sectors-v2`、`TERRAIN_MAP_RESULT failures=0`、`SECTOR_MAP_RESULT failures=0`）。
@@ -35,6 +39,24 @@
 - **透け**：本体を単色の背景で16方向から描き、体に囲まれた背景の穴の縁から光線で3D位置を求めた。穴は (1) 腰の後ろ（背負った箱の下に装甲がなく、脇腹から抜ける。高さ0.94〜1.14m）と (2) 箱の上端と首の間（1.6m）。新規 `Art/AC01_Tripo_v2/Scripts/14_torso_fill.py`（`Art/` は未追跡）で、腰の芯を後ろへ広げた筒（pelvis→spine_03）と首の後ろの小さな楕円体を、関節の内装と同じ黒鉛色で全LODに追加し、FBXを書き出し。Blender上の穴の面積（LOD0、16方向の合計）は 2,542 → 1,626 ピクセル（残りは手と体・両脚の間の、形として空いている所。右腰の横に小さい点が1つ残る）。装甲の外へのはみ出しは0。変更前の blend・FBX は `AC01_Tripo_before14.blend`・`Exports/before14/`。`SK_AC01T2` を `Refresh-AC01Body.ps1` で再取り込み（頂点数 LOD0〜2：82,722／43,893／19,695）。
 - **検証**（作業ツリー `FutureBattle-ac01` でビルド・実行。main ではユーザーのテストプレイ中だったため）：`Build-Editor` 成功。`Test-ExoShot -Name ac01-tilt-20261120` は failures=0（前進で前へ、右への横移動で右へ傾くこと、背中から腰の抜けが見えないことを画像で確認）。`Test-Area -OutputName ac01-tilt-20261120 -CoverActions 1 -FlankCoordination 1` は failures=0。
 - **未実施・制限**：実際に動かしたときの傾きの出方（動き出し・停止）は画面で未確認（撮影は一定速度の姿だけ）。バズーカを構えた姿勢の穴は Blender で未検査。傾きは向きの変化（旋回）では付かない。main の Binaries はまだ古い（次のビルドで反映）。
+
+## 2026-11-20 21時00分 Claude（区画AI）：危険な区画を避ける・遠距離なら1区画詰める・区画内で遮蔽へ歩く（試験切替3つ、既定0）と、遮蔽外の被弾の内訳の診断
+- **変更**：
+  - `-BattleDangerRoute`：被弾した区画に「危険度」を付ける（1発ごとに+1、60秒で半減）。区画経路（`SectorStage`）と回り込み（`PinnedFlankStage`）の点数から 3×min(危険度,8) を引く。
+  - `-BattleCloseIn`：区画の中で目標が90m超、数で負けていない状態が8秒続いたら、敵へ半区画以上近い隣の区画（敵から30m以内と敵の区画は除く）へ進む。行き先は60秒保持。
+  - `-BattleSectorCoverWalk`：自分の区画の中で遮蔽が近くに無い兵は、区画内（20m）の撃てる遮蔽へ歩く。無ければ取られた遮蔽の横に並び、それも無ければ見えにくい射撃位置へ。
+  - 診断だけ（挙動は不変）：遮蔽外で撃たれた兵が何をしていたかを数える。`victim_open_{walking,engaging,other}`、区画小隊は `victim_open_sector_{inside,enroute}_{walking,still}`。`Test-WideSight.ps1 -DangerRoute/-CloseIn/-SectorCoverWalk`、`Play-Area.ps1 -SectorTrials` に3つを追加。
+  - ファイル：BattleLeaderRuntime.cpp/.h、BattleMatch.cpp/.h、BattleSectorRoute.cpp、BattleCoverAction.cpp。
+- **検証**：凍結ビルド `sectormove-r8`、マップI、12シード、5条件（各条件で両軍に適用。`s10-I-*`）。既定（切替なし）は s8 と IDENTICAL（81キー）。
+  - 基準：834:798、9勝3敗、撃破299、遮蔽外の被弾81.7%、到着時の遮蔽77.7%、遮蔽からの射撃1843、停止656。
+  - 危険回避：833:794、8:4、撃破287、遮蔽外79.2%、到着79.3%、遮蔽射撃2012、停止603。
+  - 危険回避＋詰める：842:797、9:3、撃破282、遮蔽外79.8%、遮蔽射撃1951。詰めるが働いたのは1試合に約1回だけ（`SectorCloseIn`=1）。
+  - 遮蔽へ歩く：843:784、10:2、撃破305、遮蔽外82.5%、遮蔽射撃1776。働いたのは1試合に約9回だけ（`sector_walk_to_cover` 7、`_to_huddle` 2）。
+  - 3つとも：833:812、8:4、撃破282、遮蔽外79.4%、到着79.4%、遮蔽射撃1960。
+  - 遮蔽外の被弾の内訳（基準、1試合あたり）：区画内で止まっている 1735、途中で止まっている 893、途中で歩いている 436、区画内で歩いている 224、区画任務なし 115。危険回避で区画内の停止が 1628、区画内の歩きが 167 に減った。
+- **制限**：遮蔽へ歩く・詰めるは、ほとんど発動していない。区画内で止まって撃たれている兵の多くは、兵ごとの遮蔽判断（`RequestCoverAction` の遮蔽探しのブロック）まで届いていないとみられる（未調査）。危険回避は遮蔽外の被弾を2.5ポイント減らしたが、撃破も約12減った（交戦が減った）。
+- **注意**：18時19分のビルド r7（`s9-*`）は、群制御の未コミット変更（小隊上限30）が混ざっていたため無効。r8 で取り直した。
+- **次の一手**：区画内で止まっている兵が、なぜ遮蔽探しまで届かないのかを調べる（兵の行動・遮蔽要求の間隔・目標の有無）。詰めるの条件（90m・8秒・数の比較）を広げる。
 
 ## 2026-11-20 18時00分 Claude（区画AI）：`-BattleShotDirection` を絞り込み（既定0のまま）
 

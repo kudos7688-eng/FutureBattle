@@ -27,6 +27,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "NavigationSystem.h"
 #include "BattleCover.h"
+#include "BattleSectors.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "NavigationPath.h"
 #include "DrawDebugHelpers.h"
@@ -676,6 +677,29 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   else if(!P.bPinned && bTargetKnown && Now-P.PinnedSince>=20.){P.bPinned=true;P.PinnedAt=TargetAt;SightExperiment.Cover(TEXT("squad_pinned"));}
  }
  else if(!bShotAt){P.PinnedSince=0;P.bPinned=false;}
+ // Trial -BattleCloseIn=1: in its sector, a squad trading fire at long range while at least even moves a sector closer.
+ if(CloseInEnabled() && Sector && bTargetKnown && !P.bCloseIn && BattleSectors::Cell(P.Center)==SectorCell && Now>=P.FarCheckAt)
+ {
+  P.FarCheckAt=Now+2.;
+  bool bFar=FVector::DistSquared2D(P.Center,TargetAt)>FMath::Square(9000.);
+  if(bFar)
+  {
+   int32 Own=0;TSet<int32> Seen;
+   for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive())
+   {
+    ++Own;
+    if(const auto* Contacts=Sense->GetContacts(ID))for(const auto& C:*Contacts)
+     if(C.Value.bVisible && !C.Value.bShared && FVector::DistSquared(Position(ID),C.Value.LastKnownPosition)<=FMath::Square(TargetRange(ID)))Seen.Add(C.Key);
+   }
+   for(const auto& B:Bodies)if(const auto* O=Store->Find(B.Key);O && O->IsAlive() && O->Team==S->Team && O->SquadID!=SID &&
+      FVector::DistSquared2D(Position(B.Key),P.Center)<FMath::Square(3000.))++Own;
+   bFar=Own>=Seen.Num();
+   if(!bFar)SightExperiment.Cover(TEXT("close_in_outnumbered"));
+  }
+  if(!bFar)P.FarSince=0;
+  else if(P.FarSince==0)P.FarSince=Now;
+  else if(Now-P.FarSince>=8.){P.bCloseIn=true;P.CloseInAt=TargetAt;SightExperiment.Cover(TEXT("close_in_wanted"));}
+ }
  // Trial -BattleArrivalThreat=1: in the sector, a target far off the direction the arrival places face picks them again.
  if(ArrivalThreatEnabled() && Sector && bTargetKnown && BattleSectors::Cell(P.Center)==SectorCell && Now>=P.FacingCheckAt)
  {
@@ -908,12 +932,15 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   if(RequestCoverAction(ID,CoverThreat,TargetID,LocalRadius)){CoverApproaches.Remove(ID);if(bOutsideContact)SightExperiment.Cover(TEXT("sector_contact_cover_here"));return;}
   // Trial -BattleCoverApproach=1: no usable cover here, so walk to a hidden slot beyond the local search radius.
   const bool bStrictSector=CoverStrictEnabled() && S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission;
-  if((BattleTactics::CoverApproachEnabled(GetWorld()) || bContactCover || bOutsideContact || P->bCoverStop || bStrictSector) && !CoverApproaches.Contains(ID))
+  // -BattleSectorCoverWalk: inside his own sector, no cover here = walk to cover in the sector.
+  const bool bSectorWalk=SectorCoverWalkEnabled() && S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission && BattleSectors::Cell(Pos)==BattleSectors::Cell(S->Destination);
+  if((BattleTactics::CoverApproachEnabled(GetWorld()) || bContactCover || bOutsideContact || P->bCoverStop || bStrictSector || bSectorWalk) && !CoverApproaches.Contains(ID))
   {
    bool bFound=StartCoverApproach(ID,CoverThreat,TargetID,Now,LocalRadius);
+   if(bSectorWalk && bFound)SightExperiment.Cover(TEXT("sector_walk_to_cover"));
    // -BattleSquadCoverCheck: the squad stops in cover, so a member without a slot of his own gathers right behind one.
-   if(!bFound && P->bCoverStop)bFound=StartHuddle(ID,CoverThreat,TargetID,Now);
-   if(!bFound && (bContactCover || bOutsideContact || bStrictSector))bFound=StartFirePosition(ID,CoverThreat,TargetID,Now);
+   if(!bFound && (P->bCoverStop || bSectorWalk)){bFound=StartHuddle(ID,CoverThreat,TargetID,Now);if(bSectorWalk && bFound)SightExperiment.Cover(TEXT("sector_walk_to_huddle"));}
+   if(!bFound && (bContactCover || bOutsideContact || bStrictSector || bSectorWalk)){bFound=StartFirePosition(ID,CoverThreat,TargetID,Now);if(bSectorWalk)SightExperiment.Cover(bFound?TEXT("sector_walk_to_fire_position"):TEXT("sector_walk_none"));}
    if(bOutsideContact)SightExperiment.Cover(bFound?TEXT("sector_contact_cover_walk"):TEXT("sector_contact_keep_moving"));
   }
  }
@@ -1131,6 +1158,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  static const TCHAR* const HitKeys[]={TEXT("victim_hit_no_cover"),TEXT("victim_hit_cover_entering"),TEXT("victim_hit_cover_hidden"),TEXT("victim_hit_cover_to_peek"),TEXT("victim_hit_cover_peek"),TEXT("victim_hit_approaching_cover")};
  static const TCHAR* const DeathKeys[]={TEXT("victim_death_no_cover"),TEXT("victim_death_cover_entering"),TEXT("victim_death_cover_hidden"),TEXT("victim_death_cover_to_peek"),TEXT("victim_death_cover_peek"),TEXT("victim_death_approaching_cover")};
  const int32 VictimCoverState=!BeforeVictim?0:BeforeVictim->CoverPhase>0?FMath::Min<int32>(BeforeVictim->CoverPhase,4):CoverApproaches.Contains(Victim)?5:0;
+ const EBattleAction VictimAction=BeforeVictim?BeforeVictim->Action:EBattleAction::Idle;
  int32 LeaderRank=-1,SquadLiving=0;
  if(SightExperiment.Started && VictimLeader)
  {
@@ -1149,6 +1177,19 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
     if(VictimSquadState && VictimSquadState->SquadType<BattleSquadType::Count && VictimTeam>=0 && VictimTeam<2){E.TypeTaken[VictimTeam][VictimSquadState->SquadType]+=Dealt;E.TypeDeaths[VictimTeam][VictimSquadState->SquadType]+=Killed;} }
   (VictimLeader?E.LeaderHits:E.FollowerHits)[VictimTeam]++;
   E.Cover(HitKeys[VictimCoverState]);if(Killed)E.Cover(DeathKeys[VictimCoverState]);
+  // Evaluation only: what a soldier hit outside cover was doing (walking, shooting, other), and for a sector squad whether
+  // he was still on the way or already inside the sector (where moving hits come from; 11-20).
+  if(VictimCoverState==0 && !IsVehicle(Victim))
+  {
+   const bool bWalking=VictimAction==EBattleAction::Moving || VictimAction==EBattleAction::Flanking || VictimAction==EBattleAction::Returning || VictimAction==EBattleAction::Regrouping || VictimAction==EBattleAction::TakingCover;
+   E.Cover(bWalking?TEXT("victim_open_walking"):VictimAction==EBattleAction::Engaging?TEXT("victim_open_engaging"):TEXT("victim_open_other"));
+   if(VictimSquadState && VictimSquadState->bSectorMission)
+   {
+    const bool bInside=BattleSectors::Cell(Position(Victim))==BattleSectors::Cell(VictimSquadState->Destination);
+    E.Cover(bInside?(bWalking?TEXT("victim_open_sector_inside_walking"):TEXT("victim_open_sector_inside_still")):(bWalking?TEXT("victim_open_sector_enroute_walking"):TEXT("victim_open_sector_enroute_still")));
+   }
+   else E.Cover(TEXT("victim_open_no_sector_mission"));
+  }
   // Evaluation only: how much of a standing body at the victim's place the shooter could see, and hits at a settled firing position.
   if(!IsVehicle(Victim))
   {
@@ -1343,6 +1384,16 @@ bool UBattleLeaderRuntime::BoundingEnabled()
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleBounding="),V);return V!=0;}();
  return bOn;
 }
+bool UBattleLeaderRuntime::SectorCoverWalkEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorCoverWalk="),V);return V!=0;}();
+ return bOn;
+}
+bool UBattleLeaderRuntime::CloseInEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCloseIn="),V);return V!=0;}();
+ return bOn;
+}
 bool UBattleLeaderRuntime::PinnedFlankEnabled()
 {
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattlePinnedFlank="),V);return V!=0;}();
@@ -1376,6 +1427,7 @@ bool UBattleLeaderRuntime::SquadShotAt(const FBattleSquadState& S,double Now) co
 }
 void UBattleLeaderRuntime::NoteUnderFire(int32 ID)
 {
+ if(UBattleMatch::DangerRouteOn())if(const auto* V=GetWorld()->GetSubsystem<UBattleState>()->Find(ID))GetWorld()->GetSubsystem<UBattleMatch>()->NoteSectorDanger(V->Team,Position(ID));
  if(ShotDirectionEnabled()){FVector From;if(GetWorld()->GetSubsystem<UBattleState>()->PendingHitSource(From))ShotFrom.Add(ID,TPair<FVector,double>(From,GetWorld()->GetTimeSeconds()));}
  if(SectorContactEnabled() || SectorMoveFireEnabled() || !SectorFireBack.IsEmpty())SectorHitUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);
  if(!BattleTactics::ReturnFireEnabled())return;

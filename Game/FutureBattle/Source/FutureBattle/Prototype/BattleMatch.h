@@ -260,6 +260,18 @@ public:
 	// the side of the threat (not much closer to it, not falling back) and keeps that stop for 40 s or until it is there.
 	bool PinnedFlankStage(int32 SquadID, const FVector& Leader, FVector& Stage);
 	TMap<int32, TPair<FIntPoint, double>> PinnedFlank;
+	// Trial -BattleCloseIn=1: a squad fighting from its sector at long range (UBattleLeaderRuntime::CloseInThreat) is sent to the
+	// neighbouring sector that is at least half a sector closer to the threat - the most cover, the least danger, not open
+	// fields, not an enemy sector - and keeps that stop for 60 s (it then fights from there; the order loop takes over again).
+	bool CloseInStage(int32 SquadID, const FVector& Leader, FVector& Stage);
+	TMap<int32, TPair<FIntPoint, double>> CloseIn;
+	// Trial -BattleDangerRoute=1 (2026-11-20, default 0; user: "tell whether the area ahead is dangerous and do not go through"):
+	// every hit on a soldier marks his sector for his team (1 per hit, halved every 60 s; own losses only, never the enemy's
+	// true positions). Route stops, pinned-flank stops and close-in stops score 3 lower per point (up to 8 points).
+	static bool DangerRouteOn();
+	void NoteSectorDanger(int32 Team, const FVector& At);
+	double SectorDanger(int32 Team, FIntPoint Cell) const;
+	TMap<FIntPoint, TPair<double, double>> SectorDangerMap[2];
 	// Player route choice (BattlePlayerRoutes.cpp), per squad of the player's team. Empty in matches without a player's choice.
 	TMap<int32, FPlayerRoute> PlayerRoutes;
 	float PlayerRouteClock = 0.f;
