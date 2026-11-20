@@ -29,8 +29,12 @@ for family in ('OneHand', 'Dual'):
     o.anim_sequence_import_data.set_editor_property('remove_redundant_keys', False)
     t.options = o
     tools.import_asset_tasks([t])
-    seq = u.load_asset(DEST + '/' + name)
+    # Check this task really imported the clip; an old asset of the same name would otherwise pass the checks below.
+    path = DEST + '/' + name
+    assert any(str(p).split('.')[0] == path for p in t.imported_object_paths), (name, list(t.imported_object_paths))
+    seq = u.load_asset(path)
     assert isinstance(seq, u.AnimSequence), name
+    assert seq.get_play_length() > 0.1, name
     assert seq.get_skeleton() == skeleton, name
     done[name] = round(seq.get_play_length(), 3)
 u.log('AC01_GLIDE_IMPORT_OK ' + str(done))

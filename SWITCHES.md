@@ -93,7 +93,7 @@
 | `-BattleCoverFire` | Value | GetDefault<UBattleTuning>()->bAICoverFire?1:0 | BattleTactics.cpp:150 |  |
 | `-BattleCoverHuddle` | Value | 0 | BattleStableMovement.cpp:166 |  |
 | `-BattleCoverPeekSight` | Value | GetDefault<UBattleTuning>()->bAICoverPeekSight?1:0 | BattleTactics.cpp:162 |  |
-| `-BattleCoverPriority` | Value | 0 | BattleLeaderRuntime.cpp:1449 |  |
+| `-BattleCoverPriority` | Value | 1 | BattleLeaderRuntime.cpp:1449 |  |
 | `-BattleCoverStrict` | Value | 0 | BattleLeaderRuntime.cpp:1479 |  |
 | `-BattleCoverValidation` | Value | GetDefault<UBattleTuning>()->bAICoverValidation?1:0 | BattleTactics.cpp:156 |  |
 | `-BattleDangerRoute` | Value | 0 | BattleSectorRoute.cpp:28 |  |
@@ -140,7 +140,7 @@
 | `-BattleLeaderQA` | Value |  | BattleLeaderRuntime.cpp:254 |  |
 | `-BattleLeaderSmoke` | Param | off | BattleLeaderRuntime.cpp:252 |  |
 | `-BattleLeaderUnits` | Value | bMixedFastMatch?20:bWideField?500:40 | BattleLeaderRuntime.cpp:90 |  |
-| `-BattleLegacyAnimationLOD` | Param | off | BattleUnit.cpp:643 |  |
+| `-BattleLegacyAnimationLOD` | Param | off | BattleUnit.cpp:653 |  |
 | `-BattleLegacyWeaponVisuals` | Param | off | BattleUnit.cpp:100 |  |
 | `-BattleMapStats` | Value |  | BattleLeaderRuntime.cpp:230, BattleMapStats.cpp:40 |  |
 | `-BattleMassMovement` | Param | off | BattleBenchmark.cpp:39 |  |

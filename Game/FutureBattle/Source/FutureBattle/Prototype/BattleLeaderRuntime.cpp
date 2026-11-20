@@ -1446,7 +1446,7 @@ bool UBattleLeaderRuntime::NoCoverFallbackEnabled()
 }
 bool UBattleLeaderRuntime::CoverPriorityEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverPriority="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverPriority="),V);return V!=0;}();
  return bOn;
 }
 bool UBattleLeaderRuntime::UnderFireCoverEnabled()
