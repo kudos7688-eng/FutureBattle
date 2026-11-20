@@ -78,6 +78,7 @@ public:
 	// (Grip = the model relative to that bone). There is no reload clip: the pose stays. Set by UBattleLeaderRuntime::ApplySquadLook.
 	void SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequence* CrouchIdle, UAnimSequence* CrouchMove, UStaticMesh* Weapon, FName Bone, const FTransform& Grip);
 	bool HasLook() const { return LookIdle != nullptr; }
+	UAnimSequence* GetLookMove() const { return LookMove; }
 	// The look's mesh shares the mannequin skeleton (the AC01 suit does), so the shared prone clips (BattleBodyAnim) play on it
 	// at full size instead of the squashed body.
 	bool LookHasProneClip() const;

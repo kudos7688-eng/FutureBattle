@@ -1,5 +1,5 @@
 [CmdletBinding()]
-# Exoskeleton look check (2026-11-18): close-up screenshots of one exoskeleton soldier per team (front, side, back, bazooka in hand front and back, shield gone,
+# Exoskeleton look check (2026-11-18): close-up screenshots of one exoskeleton soldier per team (front, side, back, bazooka in hand front and back, shield gone, the moving clip (glide) from the side,
 # crouched, prone three times (the first may still show the get-down clip), the other team's). Rendered off screen; look at the PNG files afterwards (a generated file is not a visual check).
 param([string]$Name='exo-r1',[ValidateSet('A','D','E')][string]$Map='E')
 $ErrorActionPreference='Stop'
