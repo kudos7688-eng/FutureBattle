@@ -467,6 +467,18 @@ public:
  static bool ShotFromOther(const FVector& Me,const FVector& Target,const FVector& From)
  {return FVector::DistSquared2D(From,Target)>FMath::Square(1000.) && FVector::DotProduct((From-Me).GetSafeNormal2D(),(Target-Me).GetSafeNormal2D())<0.866f;}
  static float CoverExposureLimit(){return CoverStrictEnabled()?.41f:.6f;}
+ // Trial -BattleThreatCover=1 (2026-11-20, default 0; individual AI stage A, BattleThreatCover.cpp; -BattleThreatCoverTeam=0/1
+ // limits it to one team): a soldier keeps the enemies he knows himself (his own sightings of the last 4 s within reach, and
+ // where he was last hit from) as his threats. A cover place must hide him from all of them (the target first, up to 2 more),
+ // and once a second (deterministic, staggered by unit) a soldier hidden in cover checks that it still does; when a threat
+ // sees too much of him (or the place is flanked) he leaves it and searches again at once, never taking the same place back
+ // within 10 s. When no place hides him from everyone he takes the best one against his target, as before.
+ static bool ThreatCoverEnabled(int32 Team);
+ int32 GatherThreats(int32 ID,FVector Primary,double Now,TArray<FVector,TInlineAllocator<3>>& Out) const;
+ bool ExposedToThreats(int32 ID,FVector Anchor,const TArray<FVector,TInlineAllocator<3>>& Threats) const;
+ bool CheckCoverThreats(int32 ID,FVector Primary,double Now,float Dt);
+ bool BrokenCoverSlot(int32 ID,int32 Slot,double Now) const {const auto* B=BrokenCover.Find(ID);return B&&B->Key==Slot&&Now<B->Value;}
+ TMap<int32,TPair<int32,double>> BrokenCover;
  // Several squads of a team in one place share the places: slots reserved by anyone and places that soldiers are already
  // walking to do not count, and the soldiers of other stopping squads near by who still look for cover are counted against it.
  bool SquadCanHide(int32 SquadID,FVector Threat,double Now) const;

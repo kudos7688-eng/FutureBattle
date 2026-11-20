@@ -80,14 +80,25 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
  auto& Diag=SightExperiment;int32 Stage=0;
  static const TCHAR* StageKeys[]={TEXT("request_no_slot_in_radius"),TEXT("request_slot_reserved"),TEXT("request_path_to_anchor_blocked"),TEXT("request_anchor_too_exposed"),TEXT("request_no_valid_peek"),TEXT("request_reserve_failed")};
  Diag.Cover(TEXT("request_total"));
- for(int32 Slot:Cover->NearbySlots(Pos,FMath::Max(0.f,SearchRadius>=0?SearchRadius:Tuning->CoverActionSearchRadius),BattleFieldLayout::IsUrban(GetWorld())?12:FMath::Max(1,Tuning->CoverActionCandidateLimit)))
+ // -BattleThreatCover: the first pass takes only places that also hide the soldier from his other threats; the places that
+ // hide him from the target alone are kept for a second pass (the former choice), except one he left within 10 s.
+ const bool bThreats=ThreatCoverEnabled(U->Team) && !(Bodies.FindChecked(ID).Actor.IsValid() && Bodies.FindChecked(ID).Actor->IsPlayerControlled());
+ TArray<FVector,TInlineAllocator<3>> Threats;if(bThreats)GatherThreats(ID,Threat,Now,Threats);
+ TArray<int32> Candidates=Cover->NearbySlots(Pos,FMath::Max(0.f,SearchRadius>=0?SearchRadius:Tuning->CoverActionSearchRadius),BattleFieldLayout::IsUrban(GetWorld())?12:FMath::Max(1,Tuning->CoverActionCandidateLimit));
+ TArray<int32> Deferred;
+ for(int32 Pass=0;Pass<2;++Pass)
+ {
+ if(Pass==1){if(Deferred.IsEmpty())break;Candidates=MoveTemp(Deferred);Diag.Cover(TEXT("threat_request_second_pass"));}
+ for(int32 Slot:Candidates)
  {
   const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
   Stage=FMath::Max(Stage,1);if(!Cover->IsAvailable(Slot,ID,Now))continue;
+  if(bThreats && BrokenCoverSlot(ID,Slot,Now))continue;
   Stage=FMath::Max(Stage,2);if(!Clear(Pos,Anchor))continue;
   Stage=FMath::Max(Stage,3);
   const float Hidden=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Eye).Fraction();
   if(Hidden>CoverExposureLimit())continue;
+  if(Pass==0 && Threats.Num()>1 && ExposedToThreats(ID,Anchor,Threats)){Deferred.Add(Slot);Diag.Cover(TEXT("threat_request_exposed_other"));continue;}
   Stage=FMath::Max(Stage,4);
   // -BattleContactCover: wider rules for the firing point (ContactFirePoint).
   if(BattleTactics::ContactCover(U->Team) && !(Bodies.FindChecked(ID).Actor.IsValid() && Bodies.FindChecked(ID).Actor->IsPlayerControlled()))
@@ -127,6 +138,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
    U->CoverOrderRevision=U->OrderRevision;U->CoverTargetID=Target;U->DecisionReason=TEXT("COVER / ENTER PHYSICAL SHELTER");
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVER_ACTION unit=%d slot=%d hidden=%.2f peek_cm=%.1f"),ID,Slot,Hidden,FVector::Dist2D(Anchor,Peek));return true;
   }
+ }
  }
  Diag.Cover(StageKeys[Stage]);
  return false;
@@ -234,6 +246,8 @@ bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Targ
  const auto* OwnPlan=Plans.Find(U->SquadID);const bool OutsideContact=OwnPlan && OwnPlan->bSectorContact;
  const bool bWide=bContactCover||OutsideContact;
  const int32 Limit=bWide?16:FMath::Max(1,T->AICoverApproachCandidates);int32 Evaluated=0;
+ const bool bThreats=ThreatCoverEnabled(U->Team);
+ TArray<FVector,TInlineAllocator<3>> Threats;if(bThreats)GatherThreats(ID,Threat,Now,Threats);
  for(int32 Slot:Cover->NearbySlots(Pos,bWide?2000.f:FMath::Max(0.f,T->AICoverApproachRadius),Limit+32))
  {
   const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
@@ -247,6 +261,8 @@ bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Targ
   if(!Clear(Pos,Anchor))continue;
   FVector FirePoint;
   if(bWide?!ContactFirePoint(ID,Anchor,Threat,FirePoint):BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Eye).Fraction()>CoverExposureLimit())continue;
+  // -BattleThreatCover: walk only to a place that also hides the soldier from his other threats, and not back to one he left.
+  if(bThreats && (BrokenCoverSlot(ID,Slot,Now) || ExposedToThreats(ID,Anchor,Threats))){Diag.Cover(TEXT("threat_approach_exposed_other"));continue;}
   FCoverApproach A;A.Goal=Anchor;A.Slot=Slot;A.Target=Target;A.Revision=U->OrderRevision;A.Until=Now+(bWide?8.f:FMath::Max(0.f,T->AICoverApproachSeconds));
   CoverApproaches.Add(ID,A);Diag.Cover(TEXT("approach_started"));return true;
  }
@@ -377,6 +393,8 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  const bool Validate=!Player && BattleTactics::CoverValidationEnabled();
  if(Validate && FVector::Dist2D(Position(ID),Contact->LastKnownPosition)>TargetRange(ID))
  {Diag.Cover(TEXT("cancel_target_out_of_range"));CancelCoverAction(ID);return false;}
+ // -BattleThreatCover: a hidden soldier leaves a place that one of his threats now sees into (BattleThreatCover.cpp).
+ if(!Player && CheckCoverThreats(ID,Contact->LastKnownPosition,Now,Dt))return false;
  if(U->CoverPhase==2 && !Player && U->CoverSeconds<=0 && U->ReloadEndTime==0)
  {
   // Suppression trial: a pinned AI soldier stays behind cover and checks again shortly.
