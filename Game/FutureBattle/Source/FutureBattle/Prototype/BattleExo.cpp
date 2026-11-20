@@ -116,7 +116,7 @@ bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
   X.Rifle.Reset(LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Rifle.SM_AC01_Rifle"),nullptr,LOAD_NoWarn));
   X.Launcher.Reset(LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Launcher.SM_AC01_Launcher"),nullptr,LOAD_NoWarn));
   X.bOk=X.Suit.IsValid()&&X.Primary.Idle.IsValid()&&X.Primary.Move.IsValid()&&X.Secondary.Idle.IsValid()&&X.Secondary.Move.IsValid()&&X.Rifle.IsValid()&&X.Launcher.IsValid();
-  UE_LOG(LogFutureBattle,Display,TEXT("EXO_SUIT assets=%d"),X.bOk);
+  UE_LOG(LogFutureBattle,Display,TEXT("EXO_SUIT assets=%d move=%s,%s"),X.bOk,X.Primary.Move.IsValid()?*X.Primary.Move->GetName():TEXT("none"),X.Secondary.Move.IsValid()?*X.Secondary.Move->GetName():TEXT("none"));
  }
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();ABattleUnit* A=Actor(ID);const auto* U=Store->Find(ID);
  if(!X.bOk||!A||!U)return false;
