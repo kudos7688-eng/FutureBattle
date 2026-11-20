@@ -9,16 +9,24 @@
 
 bool UBattleLeaderRuntime::ThreatCoverEnabled(int32 Team)
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleThreatCover="),V);return V!=0;}();
+ return ThreatCoverMode(Team)>0;
+}
+
+int32 UBattleLeaderRuntime::ThreatCoverMode(int32 Team)
+{
+ // 1 = the first version (every enemy he saw within reach; leave at the first break). 2 = narrowed (2026-11-20 after map I):
+ // only enemies within engagement range that he sees facing him, and where he was hit from; leave after two breaks in a row.
+ static const int32 Mode=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleThreatCover="),V);return FMath::Clamp(V,0,2);}();
  static const int32 Only=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleThreatCoverTeam="),V);return V==0||V==1?V:-1;}();
- return bOn && (Only<0 || Only==Team);
+ return Only<0 || Only==Team ? Mode : 0;
 }
 
 int32 UBattleLeaderRuntime::GatherThreats(int32 ID,FVector Primary,double Now,TArray<FVector,TInlineAllocator<3>>& Out) const
 {
  Out.Reset();Out.Add(Primary);
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);if(!U)return 1;
- const FVector Pos=Position(ID);const float Reach=BattleRanges::Reach(U->Weapon);
+ const FVector Pos=Position(ID);const bool bNarrow=ThreatCoverMode(U->Team)==2;
+ const float Reach=bNarrow?BattleRanges::Engage(U->Weapon):BattleRanges::Reach(U->Weapon);
  // Observed information only: this soldier's own sightings (not reports from others) of the last 4 s, and the place he was
  // last hit from (5 s). Threats within 5 m of one already listed count once; the nearest two besides the target are kept.
  TArray<TPair<double,FVector>,TInlineAllocator<8>> Near;
@@ -28,6 +36,8 @@ int32 UBattleLeaderRuntime::GatherThreats(int32 ID,FVector Primary,double Now,TA
    const auto& K=C.Value;if(K.bShared || Now-K.LastSeenTime>4.)continue;
    const auto* T=Store->Find(C.Key);if(!T || !T->IsAlive() || T->Team==U->Team)continue;
    const double D=FVector::DistSquared2D(Pos,K.LastKnownPosition);if(D>FMath::Square(double(Reach)))continue;
+   // Narrowed: an enemy he sees now and that faces him (within 30 degrees); its facing is what he sees of it.
+   if(bNarrow && !(K.bVisible && FVector::DotProduct(Forward(C.Key).GetSafeNormal2D(),(Pos-K.LastKnownPosition).GetSafeNormal2D())>.866f))continue;
    Near.Add({D,K.LastKnownPosition});
   }
  if(FVector From;UnitShotFrom(ID,Now,From))Near.Add({FVector::DistSquared2D(Pos,From),From});
@@ -52,7 +62,7 @@ bool UBattleLeaderRuntime::ExposedToThreats(int32 ID,FVector Anchor,const TArray
 bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now,float Dt)
 {
  auto* U=GetWorld()->GetSubsystem<UBattleState>()->Units.Find(ID);
- if(!U || U->CoverPhase!=2 || U->CoverSlot==FreeCoverSlot || !ThreatCoverEnabled(U->Team))return false;
+ if(!U || U->CoverPhase!=2 || U->CoverSlot==FreeCoverSlot || !ThreatCoverEnabled(U->Team) || !SoldierAIFocus(ID))return false;
  // Once a second per soldier, at a phase fixed by the unit ID (no state, so a saved and loaded match checks at the same times).
  const double Phase=double(ID%16)/16.;
  if(FMath::FloorToDouble(Now+Phase)==FMath::FloorToDouble(Now-Dt+Phase))return false;
@@ -62,7 +72,14 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
  // The target too: it may have moved round the place since the soldier chose it.
  const bool ByTarget=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Primary+FVector(0,0,60)).Fraction()>CoverExposureLimit();
  const bool ByOther=!ByTarget && ExposedToThreats(ID,Anchor,Threats);
- if(!ByTarget && !ByOther)return false;
+ if(!ByTarget && !ByOther){CoverFirstBreak.Remove(ID);return false;}
+ // Narrowed: one break may be a glimpse; he leaves when the next check (1 s later) finds the place broken again.
+ if(ThreatCoverMode(U->Team)==2)
+ {
+  const double* First=CoverFirstBreak.Find(ID);
+  if(!First || Now-*First>2.5){CoverFirstBreak.Add(ID,Now);Diag.Cover(TEXT("threat_cover_first_break"));return false;}
+  CoverFirstBreak.Remove(ID);
+ }
  Diag.Cover(ByTarget?TEXT("threat_cover_broken_by_target"):TEXT("threat_cover_broken_by_other"));
  UE_LOG(LogFutureBattle,Verbose,TEXT("BATTLE_THREAT_COVER_BROKEN unit=%d slot=%d threats=%d by=%s"),ID,U->CoverSlot,Threats.Num(),ByTarget?TEXT("target"):TEXT("other"));
  if(U->CoverSlot!=INDEX_NONE)BrokenCover.Add(ID,TPair<int32,double>(U->CoverSlot,Now+10.));

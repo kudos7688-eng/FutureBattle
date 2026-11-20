@@ -50,7 +50,7 @@ bool UBattleLeaderRuntime::StepSoldierMove(int32 ID,FVector Primary,double Now,f
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);
  if(!U || !U->IsAlive() || U->CoverPhase!=2 || U->bSoldierOrder || !SoldierMoveEnabled(U->Team) || IsVehicle(ID) || U->Weapon==EBattleWeapon::Mortar)return false;
  const auto* Squad=Store->FindSquad(U->SquadID);const auto* Plan=Plans.Find(U->SquadID);
- if(!Squad || !Plan || !Squad->bSectorMission || Squad->TacticalPlan.Action!=EBattleSquadTactic::Mission)return false;
+ if(!Squad || !Plan || !Squad->bSectorMission || Squad->TacticalPlan.Action!=EBattleSquadTactic::Mission || !SoldierAIFocus(ID))return false;
  // Once a second per soldier, half a second away from the stage A check (same stateless phase rule).
  const double Phase=double((ID+8)%16)/16.;
  if(FMath::FloorToDouble(Now+Phase)==FMath::FloorToDouble(Now-Dt+Phase))return false;
@@ -103,4 +103,22 @@ bool UBattleLeaderRuntime::StepSoldierMove(int32 ID,FVector Primary,double Now,f
  SoldierMoveAfter.Add(ID,Now+8.);
  Diag.Cover(TEXT("soldier_move_started"));
  return true;
+}
+
+// -BattleSoldierAIFocus=<m> (2026-11-20, default 0 = every soldier): the individual AI (stage A, B1) works only within this
+// distance of the player: the soldier he controls directly, otherwise the point the tactical camera looks at.
+// -BattleSoldierAIFocusAt=X,Y (m) fixes the point instead (headless tests have no player). Both teams alike.
+bool UBattleLeaderRuntime::SoldierAIFocus(int32 ID) const
+{
+ static const double Radius=[]{double V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSoldierAIFocus="),V);return FMath::Max(0.,V)*100.;}();
+ if(Radius<=0)return true;
+ static const TOptional<FVector> Fixed=[]()->TOptional<FVector>{FString V;if(!FParse::Value(FCommandLine::Get(),TEXT("BattleSoldierAIFocusAt="),V))return {};
+  FString X,Y;if(!V.Split(TEXT(","),&X,&Y))return {};return FVector(FCString::Atod(*X)*100.,FCString::Atod(*Y)*100.,0);}();
+ if(FocusFrame!=GFrameCounter)
+ {
+  FocusFrame=GFrameCounter;FocusValid=false;
+  if(Fixed.IsSet()){FocusPoint=Fixed.GetValue();FocusValid=true;}
+  else if(const APlayerController* PC=GetWorld()->GetFirstPlayerController();PC && PC->GetPawn()){FocusPoint=PC->GetPawn()->GetActorLocation();FocusValid=true;}
+ }
+ return FocusValid && FVector::DistSquared2D(Position(ID),FocusPoint)<=FMath::Square(Radius);
 }

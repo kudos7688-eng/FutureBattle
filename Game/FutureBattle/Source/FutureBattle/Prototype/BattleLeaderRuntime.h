@@ -488,6 +488,8 @@ public:
  // sees too much of him (or the place is flanked) he leaves it and searches again at once, never taking the same place back
  // within 10 s. When no place hides him from everyone he takes the best one against his target, as before.
  static bool ThreatCoverEnabled(int32 Team);
+ static int32 ThreatCoverMode(int32 Team); // -BattleThreatCover=2: narrowed threats, leave after two breaks in a row
+ TMap<int32,double> CoverFirstBreak; // runtime only (mode 2)
  int32 GatherThreats(int32 ID,FVector Primary,double Now,TArray<FVector,TInlineAllocator<3>>& Out) const;
  bool ExposedToThreats(int32 ID,FVector Anchor,const TArray<FVector,TInlineAllocator<3>>& Threats) const;
  bool CheckCoverThreats(int32 ID,FVector Primary,double Now,float Dt);
@@ -505,6 +507,9 @@ public:
  TMap<int32,double> SoldierMoveAfter; // runtime only, like CoverProbeAfter
  TMap<int32,double> SoldierRelocating; // runtime only: until when a B1 walk may keep its cover timer at 3 s
  uint64 SoldierMoveFrame=0;int32 SoldierMovesThisFrame=0;
+ // -BattleSoldierAIFocus=<m>: stage A and B1 only near the player (or -BattleSoldierAIFocusAt=X,Y in metres), both teams.
+ bool SoldierAIFocus(int32 ID) const;
+ mutable uint64 FocusFrame=0;mutable FVector FocusPoint=FVector::ZeroVector;mutable bool FocusValid=false;
  // Several squads of a team in one place share the places: slots reserved by anyone and places that soldiers are already
  // walking to do not count, and the soldiers of other stopping squads near by who still look for cover are counted against it.
  bool SquadCanHide(int32 SquadID,FVector Threat,double Now) const;

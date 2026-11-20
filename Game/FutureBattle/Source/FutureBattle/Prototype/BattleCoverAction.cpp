@@ -82,7 +82,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
  Diag.Cover(TEXT("request_total"));
  // -BattleThreatCover: the first pass takes only places that also hide the soldier from his other threats; the places that
  // hide him from the target alone are kept for a second pass (the former choice), except one he left within 10 s.
- const bool bThreats=ThreatCoverEnabled(U->Team) && !(Bodies.FindChecked(ID).Actor.IsValid() && Bodies.FindChecked(ID).Actor->IsPlayerControlled());
+ const bool bThreats=ThreatCoverEnabled(U->Team) && !(Bodies.FindChecked(ID).Actor.IsValid() && Bodies.FindChecked(ID).Actor->IsPlayerControlled()) && SoldierAIFocus(ID);
  TArray<FVector,TInlineAllocator<3>> Threats;if(bThreats)GatherThreats(ID,Threat,Now,Threats);
  TArray<int32> Candidates=Cover->NearbySlots(Pos,FMath::Max(0.f,SearchRadius>=0?SearchRadius:Tuning->CoverActionSearchRadius),BattleFieldLayout::IsUrban(GetWorld())?12:FMath::Max(1,Tuning->CoverActionCandidateLimit));
  TArray<int32> Deferred;
@@ -246,7 +246,7 @@ bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Targ
  const auto* OwnPlan=Plans.Find(U->SquadID);const bool OutsideContact=OwnPlan && OwnPlan->bSectorContact;
  const bool bWide=bContactCover||OutsideContact;
  const int32 Limit=bWide?16:FMath::Max(1,T->AICoverApproachCandidates);int32 Evaluated=0;
- const bool bThreats=ThreatCoverEnabled(U->Team);
+ const bool bThreats=ThreatCoverEnabled(U->Team) && SoldierAIFocus(ID);
  TArray<FVector,TInlineAllocator<3>> Threats;if(bThreats)GatherThreats(ID,Threat,Now,Threats);
  for(int32 Slot:Cover->NearbySlots(Pos,bWide?2000.f:FMath::Max(0.f,T->AICoverApproachRadius),Limit+32))
  {
