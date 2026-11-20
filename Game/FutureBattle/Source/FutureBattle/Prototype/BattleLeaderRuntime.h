@@ -112,9 +112,17 @@ struct FBattleLeaderPlan
  bool bReplan=true;
  // Trial -BattleSectorContact=1: the target is an enemy outside the sector the squad was sent to, picked because it shot at them.
  bool bSectorContact=false;
- // Trial -BattleSquadCoverCheck=1: the squad, shot at on its way to the sector, found cover for at least half of its living
+ // Trial -BattleSquadCoverCheck=1: the squad, shot at on its way to the sector, found cover for at least 80% of its living
  // members near it, so it stops and fights from there instead of firing on the move (re-checked every 2 s).
  bool bCoverStop=false;double CoverCheckAt=0;
+ // Trial -BattleBounding=1: while stopping in cover on the way, half the squad (BoundGroup = member index % 2) moves on firing
+ // while the other half fights from cover; they swap every 7 s (none moves for the first 4 s). -1 = nobody moves.
+ int32 BoundGroup=-1;double BoundSwitchAt=0;
+ // Trial -BattlePinnedFlank=1: shot at for 20 s on the way without getting 10 m closer to the sector = pinned (the AI order
+ // loop then sends the squad to a sector beside the threat first, UBattleMatch::PinnedFlankStage).
+ double PinnedSince=0,PinnedBestDist=0;bool bPinned=false;FVector PinnedAt=FVector::ZeroVector;
+ // Trial -BattleArrivalThreat=1: the direction the arrival places were chosen against (zero = the direction of advance).
+ FVector ArrivalFacing=FVector::ZeroVector;double FacingCheckAt=0;
  TArray<FVector> Path;
  FVector Center=FVector::ZeroVector;
  TMap<int32,FVector> ArrivalGoals;
@@ -425,9 +433,19 @@ public:
  static bool SectorMoveFireEnabled();
  // Trial -BattleSquadCoverCheck=1 (2026-11-20, default 0; with fire on the move): the squad leader counts how many of his
  // living members could hide from the threat near the squad - free cover slots within 20 m that show at most 2 of 5 body
- // samples to the threat, and up to two places right behind each such slot that hide as well. Half of the squad or more:
+ // samples to the threat, and up to two places right behind each such slot that hide as well. 80% of the squad or more (user, 11-20; half before):
  // the whole squad stops and fights from cover (the -BattleSectorContact behaviour); fewer: the whole squad goes on firing.
  static bool SquadCoverCheckEnabled();
+ // The squad stops only when it can also fight at least evenly: its living members and the team's other soldiers within
+ // 30 m against the enemies its members see themselves (within reach). Otherwise it keeps firing on the move (user, 11-20).
+ static bool BoundingEnabled();
+ static bool PinnedFlankEnabled();
+ bool PinnedThreat(int32 SquadID,FVector& Threat) const {const auto* P=Plans.Find(SquadID);if(!P||!P->bPinned)return false;Threat=P->PinnedAt;return true;}
+ void ClearPinned(int32 SquadID){if(auto* P=Plans.Find(SquadID)){P->bPinned=false;P->PinnedSince=0;}}
+ // Trial -BattleArrivalThreat=1 (default 0): a sector squad picks its arrival cover places against the known enemy nearest
+ // to the sector (the team's current sightings) instead of the direction it came from, and picks again when its target lies
+ // more than 45 degrees away from that direction.
+ static bool ArrivalThreatEnabled();
  // Several squads of a team in one place share the places: slots reserved by anyone and places that soldiers are already
  // walking to do not count, and the soldiers of other stopping squads near by who still look for cover are counted against it.
  bool SquadCanHide(int32 SquadID,FVector Threat,double Now) const;

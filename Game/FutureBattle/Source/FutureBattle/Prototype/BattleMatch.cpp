@@ -436,8 +436,14 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     // The player's route choice for the squad comes before the AI's own (empty map in matches without a player's choice).
     const bool bChosen=!PlayerRoutes.IsEmpty()&&PlayerRouteLane(Pair.Key)!=0;
     const FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies);
+    // -BattlePinnedFlank: a pinned AI sector squad first takes a sector beside the threat.
+    static const bool bSectorAIOn=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
+    FVector PinStage;
+    if(UBattleLeaderRuntime::PinnedFlankEnabled()&&SectorRouteOn()&&bSectorAIOn&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&
+       !Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&PinnedFlankStage(Pair.Key,P,PinStage))
+    {Center=PinStage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
     // -BattleSectorFlank: the last leg (no junction left) may also stop in a sector beside the enemy's front first.
-    if(!Step.Equals(Center,1) || (SectorFlankOn()&&SectorRouteOn()))
+    else if(!Step.Equals(Center,1) || (SectorFlankOn()&&SectorRouteOn()))
     {
      // Trial -BattleSectorRoute=1 (BattleSectorRoute.cpp): infantry on a map with sectors stops in a sector beside the junction
      // (a sector mission) instead of walking to the junction itself.

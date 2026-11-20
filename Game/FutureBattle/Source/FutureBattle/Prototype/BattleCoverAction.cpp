@@ -181,9 +181,9 @@ bool UBattleLeaderRuntime::SquadCanHide(int32 SID,FVector Threat,double Now) con
   const FVector Back=(At-Threat).GetSafeNormal2D(),Side(-Back.Y,Back.X,0);
   if(BattleTactics::ExposureAt(GetWorld(),At+Back*130+FVector(0,0,90),FVector::ForwardVector,Eye).VisibleSamples<=2)
    for(const float Off:{-110.f,110.f})if(!Claimed(At+Back*130+Side*Off))++Hide;
-  if(Hide*2>=Living)return true;
+  if(Hide*5>=Living*4)return true;
  }
- return Hide*2>=Living;
+ return Hide*5>=Living*4;
 }
 
 bool UBattleLeaderRuntime::StartHuddle(int32 ID,FVector Threat,int32 Target,double Now)

@@ -3,6 +3,7 @@
 #include "BattleTactics.h"
 #include "BattleFieldLayout.h"
 #include "BattleCover.h"
+#include "BattleMatch.h"
 #include "NavigationPath.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -85,7 +86,16 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
      if(OS->Order==EBattleOrder::Hold)
       for(const auto& G:Other.Value.ArrivalGoals) if(Store->Find(G.Key)->IsAlive() && BattleSectors::Cell(G.Value)==Cell) Reserved.Add(G.Value);
     }
-  const FVector Forward=P.Path.Num()>1?(P.Path.Last()-P.Path[P.Path.Num()-2]).GetSafeNormal2D():FVector::ForwardVector;
+  FVector Forward=P.Path.Num()>1?(P.Path.Last()-P.Path[P.Path.Num()-2]).GetSafeNormal2D():FVector::ForwardVector;
+  // Trial -BattleArrivalThreat=1: face the known enemy nearest to the sector (within 200 m) instead of the way in.
+  if(Sector && ArrivalThreatEnabled())
+  {
+   double Best=FMath::Square(20000.);bool bNear=false;FVector Near=FVector::ZeroVector;
+   for(const FVector& E:GetWorld()->GetSubsystem<UBattleMatch>()->RouteKnownEnemies(S->Team))
+    if(const double D=FVector::DistSquared2D(E,S->Destination);D<Best){Best=D;Near=E;bNear=true;}
+   if(bNear && FVector::Dist2D(Near,S->Destination)>100.){Forward=(Near-S->Destination).GetSafeNormal2D();SightExperiment.Cover(TEXT("arrival_threat_facing"));}
+   P.ArrivalFacing=bNear?Forward:FVector::ZeroVector;
+  }
   const FVector Right(-Forward.Y,Forward.X,0);
   const bool Rally=S->TacticalPlan.bAutonomous &&
    (S->TacticalPlan.Action==EBattleSquadTactic::Retreat || S->TacticalPlan.Action==EBattleSquadTactic::Regroup || S->TacticalPlan.Action==EBattleSquadTactic::Recover || S->TacticalPlan.Action==EBattleSquadTactic::Flank);
