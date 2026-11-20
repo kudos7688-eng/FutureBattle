@@ -184,7 +184,7 @@ private:
 	bool bTactical = true;
 	int32 GameSpeed = 1;
 	bool bTriggerHeld = false;
-	bool bPathDraw = false; TArray<FVector> DrawnPath; double DrawnLength = 0;
+	bool bPathDraw = false; TArray<FVector> DrawnPath; double DrawnLength = 0; FVector2D PathScreenStart = FVector2D::ZeroVector;
 	UPROPERTY() TObjectPtr<ABattleUnit> VaultUnit;
 	FVector VaultFrom = FVector::ZeroVector, VaultTo = FVector::ZeroVector; double VaultPeak = 0; float VaultTime = 0, VaultDuration = .4f;
 	int32 DelegationPress = INDEX_NONE;
