@@ -138,14 +138,15 @@ bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
  A->SetLook(Pose.Idle.Get(),Pose.Move.Get(),Pose.CrouchIdle.Get(),Pose.CrouchMove.Get(),Launcher?X.Launcher.Get():X.Rifle.Get(),TEXT("hand_r"),Grip.GetRelativeTransform(Hand));
  const FTransform Spine=ExoClipBone(Pose.Idle.Get(),TEXT("spine_05"));
  // The carried weapon lies diagonally across the upper back, centred on the plate (component space: +X is the suit's left, -Y its back).
- // Launcher: muzzle up to the left shoulder, 50 degrees from upright, so its rear end stays above the hip. Rifle: stock up at the left
+ // Launcher: muzzle up to the left shoulder, 35 degrees from upright and 10 cm to the left, so its rear end stays above the hip and
+ // inside the right hip's outline seen from the front. Rifle: stock up at the left
  // shoulder, muzzle down to the right hip, clear of the launcher on the right shoulder. Prone (the squashed placeholder): flat across the back.
  // The models' origin is the grip; their middle is 10 cm behind it (launcher) or 19 cm ahead of it (rifle).
  auto Stow=[&](bool bProne)
  {
-  const FVector Axis=(bProne?FVector(1,0,0):Launcher?FVector(-.55,0,-.83):FVector(.77,0,.64)).GetSafeNormal();
+  const FVector Axis=(bProne?FVector(1,0,0):Launcher?FVector(-.55,0,-.83):FVector(.57,0,.82)).GetSafeNormal();
   const float Middle=Launcher?19.f:-10.f;
-  const FVector At=Spine.GetLocation()+FVector(0,Launcher?-32.f:-36.f,bProne?0.f:Launcher?-15.f:-10.f)-Axis*Middle;
+  const FVector At=Spine.GetLocation()+FVector(bProne||Launcher?0.f:10.f,Launcher?-32.f:-36.f,bProne?0.f:Launcher?-15.f:-2.f)-Axis*Middle;
   FTransform Sling=FTransform(FRotationMatrix::MakeFromYZ(-Axis,FVector(0,-1,0)).ToQuat(),At).GetRelativeTransform(Spine);
   Sling.SetScale3D(FVector(1.2f));  // absolute scale: the prone squash of the body does not stretch the weapon
   return Sling;
