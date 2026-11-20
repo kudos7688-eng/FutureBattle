@@ -60,6 +60,10 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   const auto* S=BySquad.FindRef(E.State.SquadID);const auto& U=E.State;
   if(!S||S->SquadType>=BattleSquadType::Count)return Fail(TEXT("Invalid equipment squad"));
   const bool Exo=S->SquadType==BattleSquadType::Exo;
+  const bool SPG=S->SquadType==BattleSquadType::SPGun;
+  if(U.SPGAmmo<0||U.SPGAmmo>FMath::Max(0,GetDefault<UBattleTuning>()->SPGAmmoCapacity)||
+     ((!SPG||CombatStateVersion<3||(ArtilleryTrialFlags&2)==0)&&U.SPGAmmo!=0))
+   return Fail(TEXT("Invalid SPG ammunition or extension version"));
   if(!Finite(U.Shield,0,BattleSquadType::ShieldMax(S->SquadType))||!Finite(U.Launcher,0,BattleSquadType::LauncherRounds(S->SquadType))||
      !Finite(U.ShieldWait,0,Exo?FMath::Max(0.f,GetDefault<UBattleTuning>()->ExoShieldDelay):0.f)||
      !Finite(U.LauncherWait,0,Exo?FMath::Max(.5f,GetDefault<UBattleTuning>()->ExoLauncherReload):0.f)||(!Exo&&U.bLauncherSelected))

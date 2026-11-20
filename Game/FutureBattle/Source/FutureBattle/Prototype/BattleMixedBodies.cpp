@@ -1,3 +1,4 @@
+#include "BattleTactics.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleSave.h"
 #include "BattleVATDisplay.h"
@@ -134,6 +135,9 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
   auto U=E.State;U.ReloadEndTime=U.ReloadEndTime>0?Now+U.ReloadEndTime:0;U.NextShotTime+=Now;
   U.CoverSlot=INDEX_NONE;U.AimStableSince=-1;U.MoveRetries=0;U.Role=EBattleRole::Independent;U.CoordinatedTarget=INDEX_NONE;
   U.Action=U.IsAlive()?EBattleAction::Idle:EBattleAction::Dead;U.DecisionReason=TEXT("RESTORED / REVALIDATE PATH");
+  if(Save->CombatStateVersion<3&&BattleTactics::SPGAmmoEnabled())
+   for(const auto& Squad:Save->Squads)if(Squad.SquadID==U.SquadID&&Squad.SquadType==BattleSquadType::SPGun)
+    U.SPGAmmo=FMath::Clamp(GetDefault<UBattleTuning>()->SPGInitialAmmo,0,FMath::Max(0,GetDefault<UBattleTuning>()->SPGAmmoCapacity));
   Records.Add(U);
  }
  TArray<FBattleSquadState> Squads=Save->Squads;

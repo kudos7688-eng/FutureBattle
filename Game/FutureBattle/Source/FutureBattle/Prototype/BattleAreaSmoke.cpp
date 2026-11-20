@@ -695,7 +695,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      Check(ExpiredRestored&&EG&&EC&&EG->AvoidUntil==0.f&&EC->At==-1.&&EC->Target==INDEX_NONE,TEXT("expired deadline and unset armour choice survive without clamping"));
      for(int32 LegacyVersion:{0,1})
      {
-      auto* Legacy=DuplicateObject<UBattleSave>(Save,this);Legacy->CombatStateVersion=LegacyVersion;
+      auto* Legacy=DuplicateObject<UBattleSave>(Save,this);Legacy->CombatStateVersion=LegacyVersion;Legacy->ArtilleryTrialFlags=0;for(auto& E:Legacy->Units)E.State.SPGAmmo=0;
       Legacy->SavedGroups.Reset();Legacy->SavedSquadGroup.Reset();Legacy->SavedNextGroupID=1;Legacy->SavedCarChoices.Reset();
       if(LegacyVersion==0){Legacy->SavedArtillery.Reset();Legacy->SavedArtilleryShells.Reset();}
       Check(M->RestoreSnapshot(Legacy)&&M->Groups.IsEmpty()&&M->SquadGroup.IsEmpty()&&M->NextGroupID==1&&M->CarChoices.IsEmpty(),
@@ -779,16 +779,64 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     {
      auto& Squad=Store->Squads.FindChecked(GSID);const auto OldOrder=Squad.Order;Squad.Order=EBattleOrder::Move;
      auto& A=Artillery.FindOrAdd(GunID);const auto Before=A;A.ReadyAt=0;const int32 Shots=A.Shots;const int32 ShellCount=ArtilleryShells.Num();
-     const bool Fired=FireArtillery(GunID,Position(GunID)+FVector(20000,0,0),Now);
+     const bool Fired=FireArtillery(GunID,GPos+Dir*Mid,Now);
      Check(Fired!=BattleTactics::WeaponOrderGateEnabled()&&A.Shots==Shots+(Fired?1:0)&&ArtilleryShells.Num()==ShellCount+(Fired?1:0),
       TEXT("artillery move-order gate blocks firing only when enabled"));
      A=Before;ArtilleryShells.SetNum(ShellCount);Squad.Order=OldOrder;
+    }
+    // Trial ammo: independent machine gun, last round, empty firing, capped supply and empty save round-trip.
+    const int32 SavedMainAmmo=Store->Find(GunID)->SPGAmmo;
+    if(BattleTactics::SPGAmmoEnabled())
+    {
+     auto& U=Store->Units.FindChecked(GunID);const int32 MachineAmmo=U.Ammo,MachineReserve=U.Reserve;
+     U.SPGAmmo=1;
+     Check(Store->UseSPGAmmo(GunID)&&U.SPGAmmo==0&&!Store->UseSPGAmmo(GunID)&&U.Ammo==MachineAmmo&&U.Reserve==MachineReserve,
+      TEXT("SPG main ammunition: last round and empty rejection leave machine gun untouched"));
+     const auto Before=Artillery.FindChecked(GunID);Artillery[GunID].ReadyAt=0;const int32 ShellsBefore=ArtilleryShells.Num();
+     Check(!FireArtillery(GunID,GPos+Dir*Mid,Now)&&ArtilleryShells.Num()==ShellsBefore&&Artillery[GunID].Shots==Before.Shots,
+      TEXT("empty SPG cannot launch a shell or advance shot sequence"));Artillery[GunID]=Before;
+     const int32 Added=Store->RefillSPGAmmo(GunID);
+     Check(Added==FMath::Min(FMath::Max(0,TT->SPGSupplyRounds),FMath::Max(0,TT->SPGAmmoCapacity))&&U.SPGAmmo==Added,
+      TEXT("SPG uses configured supply batch"));
+     U.SPGAmmo=FMath::Max(0,TT->SPGAmmoCapacity);Check(Store->RefillSPGAmmo(GunID)==0,TEXT("SPG supply respects capacity"));U.SPGAmmo=0;
+    }
+    Check(ArtilleryClusterSmoke(),TEXT("artillery clusters: stable membership deduplication and full candidate coverage"));
+    // Terrain visibility fixture high above the map: full wall, partial wall, roof and open air.
+    {
+     const FVector Origin(0,0,20000),Target(1000,0,20000);
+     auto* Wall=GetWorld()->SpawnActor<AActor>();auto* Box=NewObject<UBoxComponent>(Wall);Wall->SetRootComponent(Box);
+     Box->SetBoxExtent(FVector(40,200,200));Box->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+     Box->SetCollisionObjectType(ECC_WorldStatic);Box->SetCollisionResponseToAllChannels(ECR_Block);Box->RegisterComponent();Wall->SetActorLocation(Origin+FVector(500,0,0));
+     const bool On=BattleTactics::BlastOcclusionEnabled();
+     Check(ArtilleryBlastTransmission(Origin,Target)==(On?0.f:1.f),TEXT("blast is blocked by a wall only with occlusion trial"));
+     Box->SetBoxExtent(FVector(40,200,10));
+     const float Partial=ArtilleryBlastTransmission(Origin,Target);
+     Check(On?(Partial>0.f&&Partial<1.f):Partial==1.f,TEXT("partial blast exposure attenuates damage"));
+     Box->SetBoxExtent(FVector(200,200,40));Wall->SetActorLocation(Origin+FVector(0,0,500));
+     Check(ArtilleryBlastTransmission(Origin,Origin+FVector(0,0,1000))==(On?0.f:1.f),TEXT("roof blocks vertical blast transmission"));
+     Wall->Destroy();
+     Check(ArtilleryBlastTransmission(Origin,Target)==1.f,TEXT("unoccluded blast retains full damage"));
+    }
+    // Distance-only knowledge cannot authorize a home shot, even with a retained base aim.
+    if(BattleTactics::ArtilleryObservedEnabled())
+    {
+     const auto OldView=M->IntelViews[0];auto& V=M->IntelViews[0];V.At=M->Elapsed;V.bHomeCovered=true;V.HomeObserver=INDEX_NONE;V.HomeObservedAt=M->Elapsed;
+     Check(!M->ArtilleryHomeObserved(0),TEXT("known home without an observer is not fire observation"));
+     const auto Before=Artillery.FindChecked(GunID);Artillery[GunID].bBase=true;Artillery[GunID].ReadyAt=0;
+     Check(!FireArtillery(GunID,M->AreaHome(1),Now),TEXT("retained base aim revalidates fire observation"));
+     Artillery[GunID]=Before;V=OldView;
     }
     // Save and restore: body, setup, load, target and shot sequence all survive.
     auto& BeforeSave=Artillery.FindOrAdd(GunID);BeforeSave.StillSince=Now;BeforeSave.SetupCredit=3.;BeforeSave.ReadyAt=Now+4.;BeforeSave.NextPick=Now+.5;
     const int32 SavedShots=BeforeSave.Shots;const FVector SavedAim=BeforeSave.Aim;
     FArtilleryShell Pending;Pending.ShooterID=GunID;Pending.Team=0;Pending.ShooterType=BattleSquadType::SPGun;Pending.bSPG=true;Pending.At=SavedAim;Pending.Remaining=4.5f;ArtilleryShells.Add(Pending);
     Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
+    TArray<uint8> Serialized;
+    const bool Encoded=Valid&&UGameplayStatics::SaveGameToMemory(Save,Serialized);
+    auto* Decoded=Encoded?Cast<UBattleSave>(UGameplayStatics::LoadGameFromMemory(Serialized)):nullptr;
+    Check(Decoded&&Decoded->Validate(Error)&&Decoded->CombatStateVersion==3&&Decoded->ArtilleryTrialFlags==BattleTactics::ArtilleryTrialFlags(),
+     TEXT("artillery revision 3 serializes its trial configuration"));
+    if(Decoded)Save=Decoded;
     const bool Restored=Valid&&M->RestoreSnapshot(Save);ABattleUnit* After=Actor(GunID);
     Check(Restored&&After&&IsSPG(GunID)&&IsArtillery(GunID)&&FMath::IsNearlyEqual(After->GetCapsuleComponent()->GetScaledCapsuleRadius(),TT->SPGRadius,1.f)&&Turrets.Contains(GunID)&&Artillery.Contains(GunID)&&
      Artillery.FindChecked(GunID).Shots==SavedShots&&Artillery.FindChecked(GunID).Aim==SavedAim&&Artillery.FindChecked(GunID).SetupCredit>=3.&&
@@ -796,6 +844,20 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      TEXT("self-propelled gun survives save and restore"));
     Check(Restored&&ArtilleryShells.Num()==1&&ArtilleryShells[0].bSPG&&ArtilleryShells[0].ShooterID==GunID&&
      ArtilleryShells[0].Remaining==4.5f&&ArtilleryShells[0].At==SavedAim,TEXT("self-propelled shell survives restore"));
+    Check(Restored&&Store->Find(GunID)->SPGAmmo==(BattleTactics::SPGAmmoEnabled()?0:SavedMainAmmo),TEXT("SPG empty ammunition survives restore without refill"));
+    if(Restored)
+    {
+     auto* WrongRules=DuplicateObject<UBattleSave>(Save,this);WrongRules->ArtilleryTrialFlags^=4;
+     const int32 AmmoBefore=Store->Find(GunID)->SPGAmmo;
+     Check(!M->RestoreSnapshot(WrongRules)&&Store->Find(GunID)->SPGAmmo==AmmoBefore,TEXT("different blast trial configuration rejected without mutation"));
+     auto* Bad=DuplicateObject<UBattleSave>(Save,this);for(auto& E:Bad->Units)if(E.State.UnitID==GunID)E.State.SPGAmmo=-1;
+     FString BadError;Check(!Bad->Validate(BadError),TEXT("negative SPG ammunition rejected"));
+     auto* Legacy=DuplicateObject<UBattleSave>(Save,this);Legacy->CombatStateVersion=2;Legacy->ArtilleryTrialFlags=0;
+     for(auto& E:Legacy->Units)E.State.SPGAmmo=0;
+     Check(Legacy->Validate(BadError)&&M->RestoreSnapshot(Legacy)&&Store->Find(GunID)->SPGAmmo==(BattleTactics::SPGAmmoEnabled()?FMath::Clamp(TT->SPGInitialAmmo,0,FMath::Max(0,TT->SPGAmmoCapacity)):0),
+      TEXT("revision 2 save migrates SPG ammunition only when trial enabled"));
+     Store->Units.FindChecked(GunID).SPGAmmo=SavedMainAmmo;
+    }
     ArtilleryShells.Reset();
     Mode->bCombatPaused=false;
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_SPG_SMOKE squad=%d gun=%d enemy=%d dir=%s after_hit=%.0f nav=%s validation=%s"),GSID,GunID,EnemyGun,*Dir.ToCompactString(),AfterHit,GN?*GN->GetName():TEXT("none"),*Error);

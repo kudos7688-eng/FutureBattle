@@ -256,11 +256,13 @@ public:
  bool StepArtillery(int32 ID,double Now,bool bMoving,FVector& Direction);
  // Picks an aim point from Known (unit key -> known position): a cluster of at least ArtilleryMinCluster soldiers within range and no
  // own unit within the blast radius plus spread (bFriendlyHeld: a candidate was refused for that). Then the enemy home if seen.
- bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey=nullptr);
+ bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey=nullptr,bool bTeamClusters=false);
  bool AllyNear(int32 Team,const FVector& At,double Radius) const;
  // Launches one shell at Aim (spread applied, flight time Distance / shell speed). Consumes mortar ammunition or loads the gun.
  bool FireArtillery(int32 ID,const FVector& Aim,double Now);
  void StepArtilleryShells(float Dt);
+ bool ArtilleryClusterSmoke() const;
+ float ArtilleryBlastTransmission(const FVector& From,const FVector& To) const;
  int32 ArtilleryImpact(const FArtilleryShell& Shell); // the explosion; returns the units damaged
  int64 ArtilleryShotsMortar=0,ArtilleryShotsSPG=0,ArtilleryImpacts=0,ArtilleryHits=0,ArtilleryKills=0,ArtilleryBaseHits=0,ArtilleryFriendlyHolds=0,ArtilleryPicks=0;double ArtilleryMs=0;
  // Evaluation counters for BATTLE_TANK_COST (not AI input).

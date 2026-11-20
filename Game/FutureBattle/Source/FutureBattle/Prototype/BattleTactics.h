@@ -15,6 +15,11 @@ struct FBattleExposure
 
 namespace BattleTactics
 {
+ int32 ArtilleryTrialFlags();
+ bool ArtilleryObservedEnabled();
+ bool SPGAmmoEnabled();
+ bool BlastOcclusionEnabled();
+ bool ArtilleryClustersEnabled();
  bool WeaponOrderGateEnabled(); // trial, default 0: apply mission permissions to launchers and artillery
  bool ArmourSectorGateEnabled(); // trial, default 0: armour priority within Think's accepted candidate set
  bool OrderAllowsTarget(const FBattleSquadState& Squad,int32 TargetID,const FVector& KnownPosition);

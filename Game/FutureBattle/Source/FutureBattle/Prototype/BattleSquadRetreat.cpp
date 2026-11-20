@@ -124,6 +124,8 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  const bool bExo=S->SquadType==BattleSquadType::Exo;const bool bMachine=bVehicle||bExo;
  const auto* ExoUnit=bExo?Store->Find(S->LeaderUnitID):nullptr;const float ExoShieldMax=bExo?BattleSquadType::ShieldMax(S->SquadType):0.f;
  const float ShieldRatio=ExoUnit&&ExoShieldMax>0.f?ExoUnit->Shield/ExoShieldMax:1.f;
+ const auto* SPGUnit=BattleTactics::SPGAmmoEnabled()&&S->SquadType==BattleSquadType::SPGun?Store->Find(S->LeaderUnitID):nullptr;
+ const bool bSPGEmpty=SPGUnit&&SPGUnit->SPGAmmo==0;
  const bool bRepair=Match->bArea&&bMachine&&Supply.HealPerSecond>0.f&&O.Health/FullHP<GetDefault<UBattleTuning>()->VehicleRepairRatio;
  if(Match->bArea && P.Action==EBattleSquadTactic::Recover && P.Reason.StartsWith(TEXT("HOME SUPPLY")))
  {
@@ -131,18 +133,18 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   const bool Home=FVector::Dist2D(Here,Match->AreaHome(S->Team))<=2500;
   const bool Manned=bNoReplenish||O.Living>=FMath::Min(S->Members.Num(),Supply.ResumeLiving)||Match->Credits[S->Team]==0;
   const bool Healed=Supply.ResumeHealthRatio<=0.f||O.Health/FullHP>=Supply.ResumeHealthRatio;
-  if(Home && O.Armed>=FMath::CeilToInt(O.Living*.6f) && Manned && Healed)
+  if(Home && !bSPGEmpty && O.Armed>=FMath::CeilToInt(O.Living*.6f) && Manned && Healed)
   {
    const auto Order=S->MissionOrder;const FVector Goal=S->MissionDestination;
    if(Runtime->IssueOrder(SID,Order,Goal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("HOME SUPPLY COMPLETE / RESUME"));Runtime->IssueOrder(SID,Order,Goal,true);Event(TEXT("HomeSupplyResume"));SupplyTripEnd(SID,true);}
   }
   return;
  }
- if(bRepair || (Match->bArea && Threats==0 && O.RecentDamage==0 && ((O.Living<=ReturnLiving&&Match->Credits[S->Team]>0)||O.Armed==0) && P.Action!=EBattleSquadTactic::Retreat && P.Action!=EBattleSquadTactic::Support && P.Action!=EBattleSquadTactic::Flank))
+ if(bRepair || (Match->bArea && Threats==0 && O.RecentDamage==0 && ((O.Living<=ReturnLiving&&Match->Credits[S->Team]>0)||O.Armed==0||bSPGEmpty) && P.Action!=EBattleSquadTactic::Retreat && P.Action!=EBattleSquadTactic::Support && P.Action!=EBattleSquadTactic::Flank))
  {
   // Trial -BattleSupplyAwayRatio<1: keep most of the team on the line; only own-team plan state is read.
   bool Allowed=true;
-  if(Supply.AwayRatio<1.f && O.Armed>0)
+  if(Supply.AwayRatio<1.f && O.Armed>0&&!bSPGEmpty)
   {
    int32 Active=0,Away=0;
    for(const auto& Other:Store->GetSquads()) if(Other.Value.Team==S->Team && Other.Value.CommandStatus==EBattleCommandStatus::Active)

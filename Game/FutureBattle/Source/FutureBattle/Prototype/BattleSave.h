@@ -97,6 +97,8 @@ public:
 	UPROPERTY() int32 Version = 1;
  // Keep the existing mode versions/slot names; absent extension fields default to revision 0.
  UPROPERTY() int32 CombatStateVersion=0;
+ // Revision 3: SPG main-gun rounds in State and indirect-fire trial configuration.
+ UPROPERTY() int32 ArtilleryTrialFlags=0;
  UPROPERTY() TMap<int32,FBattleSavedGroup> SavedGroups;
  UPROPERTY() TMap<int32,int32> SavedSquadGroup;
  UPROPERTY() int32 SavedNextGroupID=1;

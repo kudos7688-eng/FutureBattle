@@ -260,6 +260,8 @@ struct FBattleUnitState
 	UPROPERTY() float ShieldWait = 0.f;
 	// Exoskeleton second weapon: anti-tank rounds left and seconds until the next one is loaded (relative). 0 for other types.
 	UPROPERTY() int32 Launcher = 0;
+ // Separate from the SPG machine gun. Revision 3 saves retain depleted main-gun ammunition.
+ UPROPERTY() int32 SPGAmmo = 0;
 	UPROPERTY() bool bLauncherSelected = false;
 	UPROPERTY() float LauncherWait = 0.f;
 	// Carries a weapon that hurts armour: an anti-tank soldier or an exoskeleton with launcher rounds left.
@@ -447,6 +449,11 @@ public:
 	UPROPERTY(Config, EditAnywhere) float SPGMinRange = 10000.f;
 	UPROPERTY(Config, EditAnywhere) float SPGRange = 100000.f;
 	UPROPERTY(Config, EditAnywhere) float SPGReload = 10.f;
+ // Trial: 12 rounds = about two minutes at the 10 s cyclic rate; a supply cycle restores six
+ // (one minute of fire). Deliberately provisional, separate from machine-gun reserve.
+ UPROPERTY(Config, EditAnywhere) int32 SPGAmmoCapacity = 12;
+ UPROPERTY(Config, EditAnywhere) int32 SPGInitialAmmo = 12;
+ UPROPERTY(Config, EditAnywhere) int32 SPGSupplyRounds = 6;
 	UPROPERTY(Config, EditAnywhere) float SPGShellSpeed = 25000.f;
 	UPROPERTY(Config, EditAnywhere) float SPGSpread = 1500.f;
 	UPROPERTY(Config, EditAnywhere) float SPGBlastRadius = 1000.f;
@@ -757,6 +764,8 @@ public:
 	bool ToggleExoWeapon(int32 UnitID);
 	bool UseLauncher(int32 UnitID); // one round out, the load time starts; false when empty or still loading
 	void RefillLauncher(int32 UnitID);
+ bool UseSPGAmmo(int32 UnitID);
+ int32 RefillSPGAmmo(int32 UnitID);
 	float MaxShieldOf(int32 UnitID) const;
 	bool HasShields() const { return bShields; }
  bool HasExoskeletons() const { return bExoskeletons; }

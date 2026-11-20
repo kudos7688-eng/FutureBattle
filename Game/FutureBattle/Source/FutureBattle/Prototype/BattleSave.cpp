@@ -23,9 +23,11 @@ namespace
 bool UBattleSave::Validate(FString& Error) const
 {
 	const bool Mixed=Version==2||Version==3;
- if(CombatStateVersion<0||CombatStateVersion>2||(!Mixed&&CombatStateVersion!=0)||
+ if(CombatStateVersion<0||CombatStateVersion>3||(!Mixed&&CombatStateVersion!=0)||
     (CombatStateVersion==0&&(!SavedArtillery.IsEmpty()||!SavedArtilleryShells.IsEmpty())))
  {Error=TEXT("Unsupported combat state extension");return false;}
+ if(ArtilleryTrialFlags<0||ArtilleryTrialFlags>15||(CombatStateVersion<3&&ArtilleryTrialFlags!=0))
+ {Error=TEXT("Invalid artillery trial configuration");return false;}
  if(CombatStateVersion<2&&(!SavedGroups.IsEmpty()||!SavedSquadGroup.IsEmpty()||!SavedCarChoices.IsEmpty()||SavedNextGroupID!=1))
  {Error=TEXT("Strategic state requires combat extension 2");return false;}
  auto ValidPosition=[&](const FVector& P){return ValidSnapshotPosition(P,Mixed?BattleFieldLayout::ByName(MapName).SaveLimit:FVector2D(10000,10000));};
@@ -131,7 +133,8 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
  auto* Save = NewObject<UBattleSave>(); const double Now = GetWorld()->GetTimeSeconds();
  if(Mixed)
  {
-  Save->CombatStateVersion=2;
+  Save->CombatStateVersion=3;
+  Save->ArtilleryTrialFlags=BattleTactics::ArtilleryTrialFlags();
   Save->SavedNextGroupID=NextGroupID;Save->SavedSquadGroup=SquadGroup;
   for(const auto& Pair:Groups)
   {
@@ -211,6 +214,8 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
       Save->BaseSightRange!=GetDefault<UBattleTuning>()->EffectiveSightRange()||Save->WeaponRange!=GetDefault<UBattleTuning>()->EffectiveWeaponRange()||
       Save->bRangeAware!=Runtime->RangeAwareEnabled()||Save->TacticalFeatures!=(T->FeatureMask()|(Team->IsEnabled()?8:0)|BattleTactics::LeaderHealthSaveBits()))))
  {LastMessage=TEXT("Save mode, map or rule configuration does not match");return false;}
+ if(Mixed&&Save->CombatStateVersion>=3&&Save->ArtilleryTrialFlags!=BattleTactics::ArtilleryTrialFlags())
+ {LastMessage=TEXT("Indirect-fire trial configuration does not match");return false;}
  TArray<ABattleUnit*> Spawned;TArray<FBattleUnitState> Records;const double Now=GetWorld()->GetTimeSeconds();
  if(Mixed)
  {

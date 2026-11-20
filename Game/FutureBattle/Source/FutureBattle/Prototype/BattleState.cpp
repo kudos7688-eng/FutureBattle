@@ -619,5 +619,24 @@ void UBattleState::SetSquadType(int32 SquadID,uint8 Type)
  if(Type==BattleSquadType::Exo) S->DisplayName=FString::Printf(TEXT("第%d外骨格兵"),SquadID);
  if(Type==BattleSquadType::Supply) S->DisplayName=FString::Printf(TEXT("第%d補給班"),SquadID);
  const float Shield=BattleSquadType::ShieldMax(Type);bShields|=Shield>0.f;bExoskeletons|=Type==BattleSquadType::Exo;
- for(int32 ID:S->Members) if(auto* U=Units.Find(ID); U&&U->IsAlive()) {U->HP=MaxHealthOf(ID);U->Shield=Shield;U->ShieldWait=0.f;U->Launcher=BattleSquadType::LauncherRounds(Type);U->LauncherWait=0.f;}
+ for(int32 ID:S->Members) if(auto* U=Units.Find(ID); U&&U->IsAlive()) {U->HP=MaxHealthOf(ID);U->Shield=Shield;U->ShieldWait=0.f;U->Launcher=BattleSquadType::LauncherRounds(Type);U->LauncherWait=0.f;U->SPGAmmo=Type==BattleSquadType::SPGun&&BattleTactics::SPGAmmoEnabled()?FMath::Clamp(GetDefault<UBattleTuning>()->SPGInitialAmmo,0,FMath::Max(0,GetDefault<UBattleTuning>()->SPGAmmoCapacity)):0;}
+}
+
+// Main-gun rounds use the normal area supply sites/timer, independently of machine-gun ammunition.
+bool UBattleState::UseSPGAmmo(int32 UnitID)
+{
+ if(!BattleTactics::SPGAmmoEnabled())return true;
+ auto* U=Units.Find(UnitID);const auto* S=U?FindSquad(U->SquadID):nullptr;
+ if(!U||!U->IsAlive()||!S||S->SquadType!=BattleSquadType::SPGun||U->SPGAmmo<=0)return false;
+ --U->SPGAmmo;return true;
+}
+
+int32 UBattleState::RefillSPGAmmo(int32 UnitID)
+{
+ if(!BattleTactics::SPGAmmoEnabled())return 0;
+ auto* U=Units.Find(UnitID);const auto* S=U?FindSquad(U->SquadID):nullptr;
+ if(!U||!U->IsAlive()||!S||S->SquadType!=BattleSquadType::SPGun)return 0;
+ const auto* T=GetDefault<UBattleTuning>();
+ const int32 Added=FMath::Min(FMath::Max(0,T->SPGSupplyRounds),FMath::Max(0,T->SPGAmmoCapacity-U->SPGAmmo));
+ U->SPGAmmo+=Added;return Added;
 }

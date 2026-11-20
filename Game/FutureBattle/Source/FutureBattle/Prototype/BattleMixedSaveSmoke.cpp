@@ -88,7 +88,7 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
   Reject([](UBattleSave& S){S.Units[1].State.bActorRepresentation=true;},TEXT("follower Actor type corruption rejected atomically"));
   Reject([](UBattleSave& S){S.MapName=TEXT("OtherMap");},TEXT("foreign map rejected atomically"));
   Reject([](UBattleSave& S){S.WeaponRange+=100;},TEXT("changed range rules rejected atomically"));
-  Reject([](UBattleSave& S){S.CombatStateVersion=3;},TEXT("unknown combat extension rejected"));
+  Reject([](UBattleSave& S){S.CombatStateVersion=4;},TEXT("unknown combat extension rejected"));
   Reject([](UBattleSave& S){S.Units[0].State.Shield=1;},TEXT("shield on rifle soldier rejected"));
   Reject([](UBattleSave& S){S.Units[0].State.LauncherWait=-1;},TEXT("negative launcher timer rejected"));
   Reject([](UBattleSave& S){S.SavedArtilleryShells.Add(FBattleSavedArtilleryShell());},TEXT("invalid shell shooter rejected"));
@@ -102,7 +102,7 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
   PC->ControlUnit(Actor(1));auto* Direct=Match->CaptureSnapshot();
   Check(Direct&&Direct->ControlledID==1&&Match->RestoreSnapshot(Direct)&&PC->GetPawn()==Actor(1),TEXT("TPS control restored to recreated leader"));
   PC->EnterTactical();Check(PC->GetPawn()!=Actor(1),TEXT("restored leader returns to RTS"));
-  auto* Legacy=DuplicateObject<UBattleSave>(Saved,this);Legacy->CombatStateVersion=0;Legacy->SavedArtillery.Reset();Legacy->SavedArtilleryShells.Reset();
+  auto* Legacy=DuplicateObject<UBattleSave>(Saved,this);Legacy->CombatStateVersion=0;Legacy->ArtilleryTrialFlags=0;for(auto& E:Legacy->Units)E.State.SPGAmmo=0;Legacy->SavedArtillery.Reset();Legacy->SavedArtilleryShells.Reset();
   Legacy->SavedGroups.Reset();Legacy->SavedSquadGroup.Reset();Legacy->SavedNextGroupID=1;Legacy->SavedCarChoices.Reset();
   Check(Match->RestoreSnapshot(Legacy)&&Artillery.IsEmpty()&&ArtilleryShells.IsEmpty(),TEXT("pre-extension mixed snapshot remains loadable"));
   Check(Match->RestoreSnapshot(Saved),TEXT("restore fixture for live continuation"));

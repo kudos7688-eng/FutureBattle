@@ -32,6 +32,9 @@ const UBattleMatch::FAreaIntelView& UBattleMatch::AreaIntelView(int32 Team) cons
   for(int32 I=0;I<N;++I)if(FVector::DistSquared2D(P,Objectives[I].Position)<=FMath::Square(10000.)){++V.OwnAt[I];break;}
   // The enemy home is covered when a soldier's own sight (a still scout's long sight counts only through its reports) reaches it.
   if(!V.bHomeCovered&&FVector::DistSquared2D(P,EnemyHome)<=FMath::Square(U.Value.Perception.SightRange))V.bHomeCovered=true;
+  if(BattleTactics::ArtilleryObservedEnabled()&&BaseActors.IsValidIndex(1-Team)&&BaseActors[1-Team]&&
+     (V.HomeObserver==INDEX_NONE||U.Key<V.HomeObserver)&&AreaVisible(U.Key,EnemyHome,BaseActors[1-Team]))
+  {V.HomeObserver=U.Key;V.HomeObservedAt=Elapsed;V.HomeReportFrom=P;}
   if(const auto* Contacts=Perception?Perception->GetContacts(U.Key):nullptr)
    for(const auto& C:*Contacts)if(C.Value.bVisible&&!IsScoutLongContact(U.Key,C.Value))Seen.Add(C.Key,C.Value.LastKnownPosition);
  }
@@ -78,4 +81,14 @@ void UBattleMatch::UpdateIntelPurposes()
    It.RemoveCurrent();
   }
  }
+}
+
+bool UBattleMatch::ArtilleryHomeObserved(int32 Team) const
+{
+ if(Team<0||Team>1||!BaseActors.IsValidIndex(1-Team)||!BaseActors[1-Team])return false;
+ const auto& V=AreaIntelView(Team);
+ const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(V.HomeObserver);
+ // Revalidate at launch: a dead/moved observer or newly blocked LOS cannot authorize a retained aim.
+ return V.HomeObservedAt>=0&&Elapsed>=V.HomeObservedAt&&Elapsed-V.HomeObservedAt<1.&&
+  U&&U->IsAlive()&&U->Team==Team&&AreaVisible(V.HomeObserver,AreaHome(1-Team),BaseActors[1-Team]);
 }
