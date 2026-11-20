@@ -454,6 +454,11 @@ public:
  // -BattleContactCover searches), else lines up beside a taken slot (-BattleCoverHuddle places), else to a nearby place where
  // less of him is in view (the fire position). Before, only the local search ran there and he stood where he was.
  static bool SectorCoverWalkEnabled();
+ // Trial -BattleUnderFireCover=1 (2026-11-20, default 0): a soldier hit in the last 5 s who is not walking his path looks for
+ // cover even when he cannot see his target himself (a contact reported by his squad within the last 5 s is enough) or the
+ // target is beyond the 150 m engagement distance (up to his weapon's reach for 15 s after the hit). He hides from where the
+ // shot came from when that is not his target. No cover here: walks to one, else beside a taken one, else a less exposed place.
+ static bool UnderFireCoverEnabled();
  bool CloseInThreat(int32 SquadID,FVector& Threat) const {const auto* P=Plans.Find(SquadID);if(!P||!P->bCloseIn)return false;Threat=P->CloseInAt;return true;}
  void ClearCloseIn(int32 SquadID){if(auto* P=Plans.Find(SquadID)){P->bCloseIn=false;P->FarSince=0;}}
  // Trial -BattleArrivalThreat=1 (default 0): a sector squad picks its arrival cover places against the known enemy nearest
@@ -474,6 +479,7 @@ public:
  // in cover keeps it; a soldier in cover never searches again anyway). Otherwise: the enemy in view, as before.
  static bool ShotDirectionEnabled();
  TMap<int32,TPair<FVector,double>> ShotFrom;
+ bool HitWithin(int32 ID,double Now,double Seconds) const {const auto* F=ShotFrom.Find(ID);return F&&Now-F->Value<=Seconds;}
  bool UnitShotFrom(int32 ID,double Now,FVector& Out) const {const auto* F=ShotFrom.Find(ID);if(!F||Now-F->Value>5.)return false;Out=F->Key;return true;}
  bool SquadShotFrom(int32 SquadID,double Now,FVector& Out) const;
  static bool ShotFromOther(const FVector& Me,const FVector& Target,const FVector& From)
