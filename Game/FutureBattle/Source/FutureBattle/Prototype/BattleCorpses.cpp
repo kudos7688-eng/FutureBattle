@@ -1,6 +1,7 @@
-// Corpse removal (display only). Trial -BattleCorpseLifetime=S: S seconds after death a body sinks 1.2 m into the ground
+// Corpse removal (display only). -BattleCorpseLifetime=S (default 20 since 2026-11-20, user decision; 0 keeps bodies): S seconds after death a body sinks 1.2 m into the ground
 // over 1.5 s and is then hidden. The unit record (UBattleState), its position and its collision are left alone: score,
-// save, replacement and AI read the record, never the body, so the match is unchanged.
+// save, replacement and AI read the record, never the body. Yet the match is not identical (map E seed 7: 566/618 -> 532/614,
+// same winner; an unknown display->match coupling, like -BattleVATFarLight). The user accepted that.
 #include "BattleLeaderRuntime.h"
 #include "FutureBattle.h"
 #include "BattleState.h"
@@ -20,7 +21,7 @@ namespace
 
 float UBattleLeaderRuntime::CorpseLifetime()
 {
- static const float Seconds=[]{float V=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleCorpseLifetime="),V);return FMath::Max(0.f,V);}();
+ static const float Seconds=[]{float V=20.f;FParse::Value(FCommandLine::Get(),TEXT("BattleCorpseLifetime="),V);return FMath::Max(0.f,V);}();
  return Seconds;
 }
 

@@ -75,7 +75,7 @@
 | `-BattleContactCover` | Value | 0 | BattleTactics.cpp:185 |  |
 | `-BattleContactCoverTeam` | Value | -1 | BattleTactics.cpp:179 |  |
 | `-BattleContactTrial` | Param | off | BattleLeaderRuntime.cpp:84 |  |
-| `-BattleCorpseLifetime` | Value | 0.f | BattleCorpses.cpp:23 |  |
+| `-BattleCorpseLifetime` | Value | 20.f | BattleCorpses.cpp:24 |  |
 | `-BattleCoverActions` | Value | 0 | BattleSquadTactics.cpp:19, BattleTactics.cpp:191 |  |
 | `-BattleCoverActionSmoke` | Param | off | BattleLeaderRuntime.cpp:211 |  |
 | `-BattleCoverApproach` | Value | -1 | BattleTactics.cpp:173 |  |
@@ -186,7 +186,7 @@
 | `-BattleSeconds` | Value | 20.f | BattleBenchmark.cpp:41 |  |
 | `-BattleSectorAI` | Value | 0 | BattleMatch.cpp:445, BattleMatch.cpp:456 |  |
 | `-BattleSectorAudit` | Param | off | BattleSectorAudit.cpp:28 |  |
-| `-BattleSectorContact` | Value | 0 | BattleLeaderRuntime.cpp:1253 |  |
+| `-BattleSectorContact` | Value | 0 | BattleLeaderRuntime.cpp:1254 |  |
 | `-BattleSectorFlank` | Value | 0 | BattleSectorRoute.cpp:35 |  |
 | `-BattleSectorFront` | Value | 0 | BattleSectorRoute.cpp:41 |  |
 | `-BattleSectorRoute` | Value | 0 | BattleSectorRoute.cpp:16 |  |
@@ -240,7 +240,7 @@
 | `-BattleTeamSupport` | Value | 1 | BattleTeamAI.cpp:12 |  |
 | `-BattleTerrain` | other |  | BattleTerrain.h:18 |  |
 | `-BattleTerrainLineBodies` | Value | 1 | BattleTactics.cpp:230 |  |
-| `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:1190 |  |
+| `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:1191 |  |
 | `-BattleTracerShot` | Param | off | BattleStanceShot.cpp:87 |  |
 | `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:206 |  |
 | `-BattleTrialSwap` | Param | off | BattleArea.cpp:15, BattleAreaDepot.cpp:32, BattleLeaderRuntime.cpp:79 ほか4 |  |

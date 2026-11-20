@@ -1146,10 +1146,11 @@ void UBattleLeaderRuntime::RefreshDisplay()
   if(const auto* Contacts=Sense->GetContacts(B.Key)) for(const auto& C:*Contacts) if(C.Value.bVisible) if(!M->bArea||!M->IsScoutLongContact(B.Key,C.Value)) Visible.Add(C.Key);
  for(auto& B:Bodies)
  {
-  if(HiddenCorpses.Contains(B.Key))continue; // removed corpse: stays hidden
   const bool Show=Store->Find(B.Key)->Team==0 || Visible.Contains(B.Key);
   const bool BodyShow=Show || DirectBodies;
+  // bRevealed is sensor knowledge the AI and HUD read: keep updating it for a hidden corpse (SetRevealed keeps it hidden).
   if(B.Value.Actor.IsValid()) B.Value.Actor->SetRevealed(Show);
+  else if(HiddenCorpses.Contains(B.Key)) continue; // removed follower corpse: its mesh stays hidden
   else { if(VAT)VAT->SetVisible(B.Key,BodyShow); if(!VAT || !VAT->IsFar(B.Key)){BattleFollowerBones::SetVisible(B.Value.Mesh.Get(),BodyShow,bReduceHiddenBones); if(bReduceAnimTasks) B.Value.AnimTasks.Apply(B.Value.Mesh.Get(),true); B.Value.Weapon->SetVisibility(BodyShow && Store->Find(B.Key)->IsAlive());} }
  }
 }

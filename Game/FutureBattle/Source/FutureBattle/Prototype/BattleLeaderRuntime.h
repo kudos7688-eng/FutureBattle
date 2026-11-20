@@ -343,9 +343,9 @@ public:
  struct FBodyTimer{double At=0;bool bFreeze=false;};
  TMap<int32,FBodyTimer> BodyTimers;
  void StepBodyTimers();
- // Corpse removal (BattleCorpses.cpp; display only, runtime only). Trial -BattleCorpseLifetime=S (0 = bodies stay, default):
+ // Corpse removal (BattleCorpses.cpp; display only, runtime only). -BattleCorpseLifetime=S (default 20; 0 = bodies stay):
  // S seconds after death a body sinks into the ground for 1.5 s and is then hidden. The unit record, its position and
- // its collision (already off) are unchanged, so the match does not change.
+ // its collision (already off) are unchanged; the match still differs slightly (see BattleCorpses.cpp).
  struct FCorpse{double SinkAt=0;FVector BaseOffset=FVector::ZeroVector;bool bSinking=false;};
  TMap<int32,FCorpse> Corpses;
  TSet<int32> HiddenCorpses;
