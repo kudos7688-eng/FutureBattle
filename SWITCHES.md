@@ -70,7 +70,7 @@
 | `-BattleBlindFireClipTop` | Value | TEXT("AS_CoverLo_AimU_down") | BattleBlindFire.cpp:44 |  |
 | `-BattleBlindFireExpose` | other |  | BattleBlindFire.cpp:77 |  |
 | `-BattleBlindFireSpread` | Value | 4.f | BattleBlindFire.cpp:30 |  |
-| `-BattleBodyAnim` | Value | 1 | BattleBodyAnim.cpp:58 |  |
+| `-BattleBodyAnim` | Value | 1 | BattleBodyAnim.cpp:59 |  |
 | `-BattleBounding` | Value | 0 | BattleLeaderRuntime.cpp:1337 |  |
 | `-BattleConcealment` | other |  | BattleLeaderRuntime.cpp:432, BattleLeaderRuntime.cpp:1077, BattleMapCommandlet.cpp:116 ほか1 |  |
 | `-BattleContactAvoidance` | Value | 1 | BattleLeaderRuntime.cpp:83 |  |
