@@ -495,9 +495,10 @@ public:
  // Trial -BattleThreatCoverRelocate (2026-11-21, default 0; with -BattleThreatCover): before leaving a broken place he looks for
  // the next one from where he is (12 m, inside the squad's sector and 30 m of its centre, not a place someone walks to;
  // hidden from every threat when another one sees in) and walks there; the walk is not ended halfway by a stale contact.
- // 1 = none found: leave as before. 2 = none found: stay (keeping down while another threat sees in) and search again on
- // every third check. Searches share B1's budget of 4 soldiers a frame.
+ // 1 = none found: leave as before. 2 = none found: stay (keeping down while another threat sees in) and search again at
+ // each confirmed break. Searches: 2 soldiers a frame (B1 has its own 4).
  static int32 ThreatCoverRelocate();
+ uint64 RelocateFrame=0;int32 RelocatesThisFrame=0;
  bool BrokenCoverSlot(int32 ID,int32 Slot,double Now) const {const auto* B=BrokenCover.Find(ID);return B&&B->Key==Slot&&Now<B->Value;}
  TMap<int32,TPair<int32,double>> BrokenCover;
  // Trial -BattleSoldierMove=1 (2026-11-20, default 0; individual AI stage B1, BattleSoldierMove.cpp; -BattleSoldierMoveTeam=0/1

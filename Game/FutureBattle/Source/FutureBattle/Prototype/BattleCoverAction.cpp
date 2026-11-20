@@ -393,18 +393,18 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  if(bWalkingToPlace)U->CoverSeconds=3.f;
  const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,U->CoverTargetID);
  // The walk to a place he chose (stage A relocation, B1) is finished even when the contact goes stale or out of range on the
- // way: stopping halfway would leave him in the open. Only a contact that is gone altogether ends it.
- if(!Player && (!Contact || (!bWalkingToPlace && Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds)))){Diag.Cover(U->CoverPhase==1?TEXT("cancel_contact_stale_entering"):TEXT("cancel_contact_stale_in_cover"));CancelCoverAction(ID);return false;}
+ // way, and even when the contact is forgotten: stopping halfway would leave him in the open. Once there, the usual rules apply.
+ if(!Player && !bWalkingToPlace && (!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds))){Diag.Cover(U->CoverPhase==1?TEXT("cancel_contact_stale_entering"):TEXT("cancel_contact_stale_in_cover"));CancelCoverAction(ID);return false;}
  // Cover validation (default ON): leave cover once the observed threat is beyond weapon range, and only step out to a
  // peek point with a clear line to the threat's last known position; otherwise stay hidden and check again shortly.
  const bool Validate=!Player && BattleTactics::CoverValidationEnabled();
- if(Validate && !bWalkingToPlace && FVector::Dist2D(Position(ID),Contact->LastKnownPosition)>TargetRange(ID))
+ if(Validate && !bWalkingToPlace && Contact && FVector::Dist2D(Position(ID),Contact->LastKnownPosition)>TargetRange(ID))
  {Diag.Cover(TEXT("cancel_target_out_of_range"));CancelCoverAction(ID);return false;}
  // -BattleThreatCover: a hidden soldier leaves a place that one of his threats now sees into (BattleThreatCover.cpp).
- if(!Player && CheckCoverThreats(ID,Contact->LastKnownPosition,Now,Dt))return false;
+ if(!Player && Contact && CheckCoverThreats(ID,Contact->LastKnownPosition,Now,Dt))return false;
  // -BattleSoldierMove: a hidden soldier may walk to a clearly better cover place in the sector (BattleSoldierMove.cpp).
- if(!Player)StepSoldierMove(ID,Contact->LastKnownPosition,Now,Dt);
- if(U->CoverPhase==2 && !Player && U->CoverSeconds<=0 && U->ReloadEndTime==0)
+ if(!Player && Contact)StepSoldierMove(ID,Contact->LastKnownPosition,Now,Dt);
+ if(U->CoverPhase==2 && !Player && Contact && U->CoverSeconds<=0 && U->ReloadEndTime==0)
  {
   // Suppression trial: a pinned AI soldier stays behind cover and checks again shortly.
   // Trial -BattleAIBlindFire=1: a pinned AI soldier fires blind at the threat's last known position instead of waiting idle.
