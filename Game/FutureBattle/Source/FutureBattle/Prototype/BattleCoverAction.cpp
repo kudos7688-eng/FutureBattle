@@ -87,7 +87,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
   Stage=FMath::Max(Stage,2);if(!Clear(Pos,Anchor))continue;
   Stage=FMath::Max(Stage,3);
   const float Hidden=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Eye).Fraction();
-  if(Hidden>.6f)continue;
+  if(Hidden>CoverExposureLimit())continue;
   Stage=FMath::Max(Stage,4);
   // -BattleContactCover: wider rules for the firing point (ContactFirePoint).
   if(BattleTactics::ContactCover(U->Team) && !(Bodies.FindChecked(ID).Actor.IsValid() && Bodies.FindChecked(ID).Actor->IsPlayerControlled()))
@@ -136,7 +136,7 @@ bool UBattleLeaderRuntime::ContactFirePoint(int32 ID,FVector Anchor,FVector Thre
 {
  const FVector Eye=Threat+FVector(0,0,60);
  const float Hidden=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Eye).Fraction();
- if(Hidden>.6f)return false;
+ if(Hidden>CoverExposureLimit())return false;
  // Fire from the slot itself: standing up from behind low cover, or from a place that covers most of the body.
  if(BattleTactics::HasTerrainLine(GetWorld(),Anchor+FVector(0,0,60),Eye))
  {
@@ -246,7 +246,7 @@ bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Targ
   if(Squad->bSectorMission && Squad->TacticalPlan.Action==EBattleSquadTactic::Mission ? (!OutsideContact && BattleSectors::Cell(Anchor)!=BattleSectors::Cell(Squad->Destination)) : Squad->Order==EBattleOrder::Defend && FVector::Dist2D(Anchor,Squad->Destination)>Squad->DefenseRadius)continue;
   if(!Clear(Pos,Anchor))continue;
   FVector FirePoint;
-  if(bWide?!ContactFirePoint(ID,Anchor,Threat,FirePoint):BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Eye).Fraction()>.6f)continue;
+  if(bWide?!ContactFirePoint(ID,Anchor,Threat,FirePoint):BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Eye).Fraction()>CoverExposureLimit())continue;
   FCoverApproach A;A.Goal=Anchor;A.Slot=Slot;A.Target=Target;A.Revision=U->OrderRevision;A.Until=Now+(bWide?8.f:FMath::Max(0.f,T->AICoverApproachSeconds));
   CoverApproaches.Add(ID,A);Diag.Cover(TEXT("approach_started"));return true;
  }
