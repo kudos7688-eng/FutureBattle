@@ -826,7 +826,7 @@ namespace
   FCanvasTriangleItem Item(Tris,GWhiteTexture);Item.BlendMode=SE_BLEND_Translucent;Canvas->DrawItem(Item);
  }
  // Fog darkness by state (0 in sight, 1 explored, 2 never seen).
- constexpr float FogAlpha[3]={0.f,.42f,.62f};
+ constexpr float FogAlpha[3]={0.f,.52f,.74f};
  const FLinearColor FogInk(.015f,.025f,.05f);
 }
 
