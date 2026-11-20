@@ -36,6 +36,10 @@
 - **検証**（作業ツリー `FutureBattle-ac01` でビルド・実行。main ではユーザーのテストプレイ中だったため）：`Build-Editor` 成功。`Test-ExoShot -Name ac01-tilt-20261120` は failures=0（前進で前へ、右への横移動で右へ傾くこと、背中から腰の抜けが見えないことを画像で確認）。`Test-Area -OutputName ac01-tilt-20261120 -CoverActions 1 -FlankCoordination 1` は failures=0。
 - **未実施・制限**：実際に動かしたときの傾きの出方（動き出し・停止）は画面で未確認（撮影は一定速度の姿だけ）。バズーカを構えた姿勢の穴は Blender で未検査。傾きは向きの変化（旋回）では付かない。main の Binaries はまだ古い（次のビルドで反映）。
 
+## 2026-11-20 17時35分 Claude（区画AI）：新しい main（2a2bddf、対称な開始・部隊群が既定、マップI sectors-v2）で基準を取り直し
+
+凍結ビルド `sectorbase-2a2bddf`。マップI 12種、前回のテストプレイの組み合わせ（`s6-I-play-s*`）。旧 main（`s4-I-play`）→ 新 main：得点（味方:敵）787:809 → 834:798、勝ち 5:7 → 9:3、戦死 323 → 299、被弾のうち遮蔽外 81.4% → 81.7%、到着時の遮蔽 79.5% → 77.7%、遮蔽からの射撃 1850 → 1843、移動の詰まり 473 → 656（新しいマップIで増えた。場所は未調査）。以後の区画AIの比較はこの凍結ビルドを基準にする。
+
 ## 2026-11-20 17時15分 Claude（区画AI）：2点まで・撃たれた方向・視線の味方すり抜けを1つずつ比較（コード変更なし）
 
 凍結ビルド `sectormove-r4`（ce48803 + 22e2000 の内容、旧マップI）で、前回のテストプレイの組み合わせ（`s4-I-play`）に1つずつ足した（`s4-I-{strictonly,shotonly,maskonly}-s*`、12種）。順に play ／ +CoverStrict ／ +ShotDirection ／ +SightTeamMask ／ 3つとも（`s4-I-strict`）：
