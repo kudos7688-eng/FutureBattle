@@ -436,7 +436,7 @@ public:
  struct FSoldierPath{TArray<FVector> Points;int32 Next=1;double StalledSince=0;int32 Repaths=0;};
  TMap<int32,FSoldierPath> SoldierPaths; // runtime only; rebuilt from the saved goal
  void StepSoldierOrderTest();
- struct FSoldierOrderTest{int32 Stage=0,Unit=INDEX_NONE,Squad=INDEX_NONE,Failures=0;FVector Goal=FVector::ZeroVector;double Since=0,Arrived=0;int32 Shot=0;} SoldierTest;
+ struct FSoldierOrderTest{int32 Stage=0,Unit=INDEX_NONE,Squad=INDEX_NONE,Failures=0;FVector Goal=FVector::ZeroVector;double Since=0,Arrived=0,ShotAt=0;int32 Shot=0;} SoldierTest;
  // Trial -BattleSectorMove=1 (2026-11-20, default 0; Play-Area turns it on for maps with sectors): the player's plain move click
  // is a sector mission (an attack move into the sector) whose squad, until a member is inside the sector, never stops to fight:
  // it keeps walking and fires on the move, also back at enemies outside the sector that shoot at it (as -BattleSectorContact,

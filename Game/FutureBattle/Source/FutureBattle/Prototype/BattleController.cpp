@@ -591,6 +591,7 @@ void ABattleController::ChooseAttackMove()
 
 void ABattleController::ChooseDefend()
 {
+	if (!bTactical) { CommandSoldierFromView(); return; }
 	if (bTactical) { PendingOrder = EBattleOrder::Defend; ShowNotice(BattleFieldLayout::Of(GetWorld()).bSectors?TEXT("区画維持：対象区画を右クリック"):TEXT("DEFEND: right-click center")); }
 }
 
@@ -711,7 +712,7 @@ void ABattleController::IssueOrderAt(FVector Target, EBattleOrder Order)
 
 void ABattleController::HoldSelected()
 {
- if(bTactical && ReturnSelectedSoldier()) return;
+ if(ReturnSelectedSoldier()) return; // both views: a picked soldier is sent back first
  if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled())
  { for(ABattleUnit* U:Selected) if(LeaderSelectable(U)) { GetWorld()->GetSubsystem<UBattleMatch>()->ClearPlayerRouteMission(U->GetState()->SquadID); L->IssueOrder(U->GetState()->SquadID,EBattleOrder::Hold,U->GetActorLocation()); } return; }
 	if (!bTactical) return;

@@ -416,6 +416,7 @@ void ABattleHUD::DrawHUD()
 	DrawHitDirection(PC);
 	DrawOffscreenMarkers(PC);
 	DrawKillLog(PC);
+	DrawSoldierOrders();
 	if (PC->NoticeUntil > GetWorld()->GetTimeSeconds()) Label(BattleUIText::Ja(PC->Notice), 35, PC->CanShowDelegation() ? H - 156 : Match->IsEnabled() ? 235 : 96, Mint, 1.1f);
 	if (PC->IsTactical() && PC->PendingOrder != EBattleOrder::Move)
 		Label(FString::Printf(TEXT("%s：右クリックで目的地 ／ Hで取消"), *BattleUIText::Ja(BattleOrderName(PC->PendingOrder))), 35, 148, FLinearColor::Yellow);
@@ -438,7 +439,6 @@ void ABattleHUD::DrawHUD()
  DrawSquadList();
  DrawMinimap();
  DrawOrderWays();
- DrawSoldierOrders();
  DrawNoticeLog();
  DrawSectorPanel(PC);
 }

@@ -7,6 +7,8 @@
 #include "BattleState.h"
 #include "BattleFieldLayout.h"
 #include "BattleMatch.h"
+#include "BattleUnit.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "NavigationSystem.h"
@@ -153,15 +155,51 @@ bool ABattleController::ReturnSelectedSoldier()
  return true;
 }
 
+void ABattleController::CommandSoldierFromView()
+{
+ auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ auto* Own=Cast<ABattleUnit>(GetPawn());if(!L->IsEnabled() || !Own || !PlayerCameraManager)return;
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ const FVector Eye=PlayerCameraManager->GetCameraLocation(),Aim=GetControlRotation().Vector();
+ // The friendly soldier nearest the crosshair (within 4 degrees and 60 m), not the one the player is.
+ int32 Best=INDEX_NONE;double BestDot=FMath::Cos(FMath::DegreesToRadians(4.));
+ for(const auto& Pair:Store->GetUnits())
+ {
+  const auto& U=Pair.Value;if(!U.IsAlive() || U.Team!=0 || U.UnitID==Own->GetUnitID() || L->IsVehicle(U.UnitID))continue;
+  const FVector To=L->Position(U.UnitID)-Eye;if(To.SizeSquared()>FMath::Square(6000.))continue;
+  if(const double Dot=FVector::DotProduct(To.GetSafeNormal(),Aim);Dot>BestDot){BestDot=Dot;Best=U.UnitID;}
+ }
+ const auto* Picked=Store->Find(SoldierSelection);
+ if(Best!=INDEX_NONE && Best!=SoldierSelection)
+ {
+  SoldierSelection=Best;ShowNotice(TEXT("兵を選択：狙った場所でGを押すと移動、Hで部隊へ戻す"));
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_INPUT SoldierSelection=%d view=direct"),Best);return;
+ }
+ if(!Picked || !Picked->IsAlive()){SoldierSelection=INDEX_NONE;ShowNotice(TEXT("照準を味方の兵に合わせてGで選ぶ"));return;}
+ // The place under the crosshair (100 m at most).
+ FHitResult Hit;FCollisionQueryParams Params(SCENE_QUERY_STAT(BattleSoldierOrderAim),false,Own);
+ if(!GetWorld()->LineTraceSingleByChannel(Hit,Eye,Eye+Aim*10000.,ECC_Visibility,Params)){ShowNotice(TEXT("命令できません：狙った場所が遠すぎます"));return;}
+ FString Why;
+ if(L->IssueSoldierOrder(SoldierSelection,Hit.ImpactPoint,Why))ShowNotice(TEXT("兵へ命令：その場所へ移動して守る"));
+ else ShowNotice(FString::Printf(TEXT("命令できません：%s"),*Why));
+}
+
 // ---- Marks (ABattleHUD) ----
 
 void ABattleHUD::DrawSoldierOrders()
 {
+ // Both views: the tactical map and direct control (the marks stand in the 3D view there).
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(!L->IsEnabled())return;
- auto* PC=Cast<ABattleController>(PlayerOwner);if(!PC || !Canvas || !PC->IsTactical())return;
+ auto* PC=Cast<ABattleController>(PlayerOwner);if(!PC || !Canvas)return;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
- const FLinearColor Own(1.f,.85f,.3f,.9f),Back(.6f,.85f,1.f,.8f);
- auto Ring=[&](FVector2D C,float R,FLinearColor Color){for(int32 I=0;I<12;++I){const float A=I*PI/6,B=(I+1)*PI/6;DrawLine(C.X+R*FMath::Cos(A),C.Y+R*FMath::Sin(A),C.X+R*FMath::Cos(B),C.Y+R*FMath::Sin(B),Color,2);}};
+ const FLinearColor Own(1.f,.82f,.25f,.95f),Back(.55f,.82f,1.f,.9f),Pick(.3f,1.f,.6f,.95f);
+ UFont* Font=GEngine->GetSmallFont();
+ // Text on a dark plate, so it reads over squad labels and bright ground.
+ auto Tag=[&](const FString& Text,float X,float Y,FLinearColor Color)
+ {float TW=0,TH=0;GetTextSize(Text,TW,TH,Font,1.f);DrawRect(FLinearColor(0,0,0,.6f),X-4,Y-2,TW+8,TH+4);DrawText(Text,Color,X,Y,Font,1.f);};
+ auto Ring=[&](FVector2D C,float R,FLinearColor Color){for(int32 I=0;I<16;++I){const float A=I*PI/8,B=(I+1)*PI/8;DrawLine(C.X+R*FMath::Cos(A),C.Y+R*FMath::Sin(A),C.X+R*FMath::Cos(B),C.Y+R*FMath::Sin(B),Color,3);}};
+ auto Diamond=[&](FVector2D C,float R,FLinearColor Color){DrawLine(C.X-R,C.Y,C.X,C.Y-R,Color,3);DrawLine(C.X,C.Y-R,C.X+R,C.Y,Color,3);DrawLine(C.X+R,C.Y,C.X,C.Y+R,Color,3);DrawLine(C.X,C.Y+R,C.X-R,C.Y,Color,3);};
+ const int32 Picked=PC->GetSoldierSelection();
  int32 Drawn=0;
  for(const auto& Pair:Store->GetUnits())
  {
@@ -169,18 +207,19 @@ void ABattleHUD::DrawSoldierOrders()
   const FLinearColor Color=U.bSoldierReturn?Back:Own;
   FVector2D From,To;
   const bool bFrom=PC->ProjectWorldLocationToScreen(L->Position(U.UnitID),From),bTo=PC->ProjectWorldLocationToScreen(U.SoldierGoal+FVector(0,0,40),To);
-  if(bFrom && bTo)DrawLine(From.X,From.Y,To.X,To.Y,Color,1.5f);
-  if(bTo){DrawLine(To.X-7,To.Y,To.X,To.Y-7,Color,2);DrawLine(To.X,To.Y-7,To.X+7,To.Y,Color,2);DrawLine(To.X+7,To.Y,To.X,To.Y+7,Color,2);DrawLine(To.X,To.Y+7,To.X-7,To.Y,Color,2);}
+  if(bFrom && bTo)DrawLine(From.X,From.Y,To.X,To.Y,Color,2.f);
+  if(bTo){Diamond(To,11,Color);if(U.UnitID==Picked)Tag(U.bSoldierReturn?TEXT("戻り先"):TEXT("移動先"),To.X+15,To.Y-8,Color);}
  }
- const int32 Pick=PC->GetSoldierSelection();
- if(const auto* U=Store->Find(Pick);U && U->IsAlive())
+ if(const auto* U=Store->Find(Picked);U && U->IsAlive())
  {
   FVector2D At;
-  if(PC->ProjectWorldLocationToScreen(L->Position(Pick),At))
+  if(PC->ProjectWorldLocationToScreen(L->Position(Picked),At))
   {
-   Ring(At,16,FLinearColor(.3f,1.f,.6f,.95f));
-   DrawText(U->bSoldierOrder?(U->bSoldierReturn?TEXT("戻る途中"):TEXT("個別の命令")):TEXT("選択中の兵"),FLinearColor(.3f,1.f,.6f),At.X+20,At.Y-10,GEngine->GetSmallFont(),.9f);
+   Ring(At,20,Pick);
+   Tag(U->bSoldierOrder?(U->bSoldierReturn?TEXT("戻る途中"):TEXT("個別の命令")):TEXT("選択中の兵"),At.X+26,At.Y-24,Pick);
   }
+  // How to use it, at the bottom of the direct-control view.
+  if(!PC->IsTactical())Tag(TEXT("選択中の兵：狙った場所でGを押すと移動、Hで部隊へ戻す"),Canvas->SizeX*.5f-200,Canvas->SizeY-150,Pick);
  }
 }
 
@@ -221,13 +260,25 @@ void UBattleLeaderRuntime::StepSoldierOrderTest()
  {
   // -BattleSoldierOrderShots=<path prefix> (rendered runs): the tactical camera over him, picked, on the way and after arriving.
   static const FString Shots=[]{FString V;FParse::Value(FCommandLine::Get(),TEXT("BattleSoldierOrderShots="),V);return V;}();
+  // The tactical camera comes down over him (lowest zoom); after he arrives the player takes the squad leader (direct
+  // control) and looks at him.
   if(!Shots.IsEmpty())
-   if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController());PC && PC->IsTactical() && PC->GetPawn())
+   if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController());PC && PC->GetPawn())
    {
     PC->SetSoldierSelection(T.Unit);
-    const FVector At=Position(T.Unit);PC->GetPawn()->SetActorLocation(FVector(At.X,At.Y,PC->GetPawn()->GetActorLocation().Z));
-    if(T.Shot==0 && Now-T.Since>=1.){FScreenshotRequest::RequestScreenshot(Shots+TEXT("-walking.png"),true,false);T.Shot=1;}
-    if(T.Shot==1 && T.Arrived>0 && Now-T.Arrived>=2.){FScreenshotRequest::RequestScreenshot(Shots+TEXT("-holding.png"),true,false);T.Shot=2;}
+    if(auto* Camera=Cast<ABattleCameraPawn>(PC->GetPawn()))
+    {
+     const FVector At=Position(T.Unit);Camera->SetActorLocation(FVector(At.X,At.Y,Camera->GetActorLocation().Z));Camera->Zoom(-1.e6f);
+     if(T.Shot==0 && Now-T.Since>=1.){FScreenshotRequest::RequestScreenshot(Shots+TEXT("-walking.png"),true,false);T.Shot=1;}
+    }
+    if(T.Shot==1 && T.Arrived>0 && Now-T.Arrived>=1.)
+     if(const auto* S=Store->FindSquad(T.Squad);S && PC->ControlUnit(Actor(S->LeaderUnitID))){T.Shot=2;T.ShotAt=Now;}
+    if(T.Shot==2)
+    {
+     const FVector Eye=Position(Store->FindSquad(T.Squad)->LeaderUnitID)+FVector(0,0,60);
+     PC->SetControlRotation(FRotator(-12.f,(T.Goal-Eye).Rotation().Yaw,0));
+     if(Now-T.ShotAt>=1.5){FScreenshotRequest::RequestScreenshot(Shots+TEXT("-direct.png"),true,false);T.Shot=3;}
+    }
    }
   // Walk and hold: within 1.5 m of his own place, and still under his own order 5 s later.
   const double D=FVector::Dist2D(Position(T.Unit),T.Goal);

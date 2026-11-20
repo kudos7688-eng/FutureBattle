@@ -152,6 +152,8 @@ public:
  void SelectSoldierAt(FVector2D Screen);
  void OrderSoldierAt(FVector2D Screen);
  bool ReturnSelectedSoldier();
+ // Direct control (G): aim at a friendly soldier to pick him, then aim at a place to send him there (BattleSoldierOrder.cpp).
+ void CommandSoldierFromView();
 	bool IsSelected(const ABattleUnit* Unit) const { return Selected.Contains(Unit); }
 	void SetSelection(ABattleUnit* Unit);
 	bool IsDragging() const { return bTactical && bTriggerHeld; }
