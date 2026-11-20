@@ -220,6 +220,13 @@
 - **作ったもの**：`Docs/CoverClips/BattleCoverClips.h`（遮蔽の段階・高さ・側からクリップ5本を引く表。ヘッダーだけで完結）と `Docs/CoverClips/README.md`（判断の根拠・部下の扱い・使わないクリップ・未決事項）。計測中に Source を変えないため Docs に置いた。`blindfire` 側が Source へ写してつなぐ。
 - **未実施・未決**：ビルド・試合・画面の確認はなし。向きの補正（隠れる姿勢は180度と推測）と、低い遮蔽で立ち上がって撃つときのクリップ（AimU_down で頭が低すぎないか）は、`blindfire` の取り込みログ `BATTLE_BODY_CLIP` を見て決める。
 
+## 2026-11-20 13時45分 Claude（AC01）：外骨格兵の移動をグライドに（走りのクリップを置き換え。表示だけ）
+- **依頼**：ユーザー「グライド移動のような移動モーションはなかった？通常の走りになっている」→「取り込んで」。レビュー版 `AC01_Review_20261119/Glide/`（AC01_Glide.blend・create.py）はパッチに含まれておらず未取り込みだった。
+- `Art/AC01_Tripo_v2/Scripts/13_glide_anims.py`（新規、Art は未追跡）：待機（OneHand_Idle）に巡航の前傾（spine_03 を前へ6度、neck_01 を4.5度戻して顔は前）をかけたループ（8秒）を、小銃用 `A_AC01T2_OneHand_Glide` とバズーカ用 `A_AC01T2_Dual_Glide`（10_dual_anims.py の腕の配置を重ねる）として FBX に書き出す。足は動かない。レビュー版の -6 はこのリグでは後ろへ反るので符号を反転した（頭が5cm前へ出ることを確認）。加速・停止の傾きの変化は未実装。
+- `Setup/Import-AC01Glide.ps1/.py`（新規）：エディタで2本を `/Game/Art/AC01T2/Anims` に取り込む。`FExoCarryPose::Load` は移動に Glide を使い、無ければ Jog_Fwd。`EXO_SUIT` のログに移動のクリップ名を出す。`Test-ExoShot` に移動のクリップをその場で流す横からの写真（`move_side`）を追加。
+- **検証**（ロックは13時30分に「死体の自動消滅」から受け取り、終了後に区画AIへ渡す。main は 80aec6a の上）：`Import-AC01Glide` OK（2本とも8.033秒、骨格は SK_Mannequin）。`Build-Editor` 成功。`Test-ExoShot -Name ac01-glide2-20261120` failures=0、`EXO_SUIT assets=1 move=A_AC01T2_OneHand_Glide,A_AC01T2_Dual_Glide`。shot-7 で足を置いたまま構えて胸を少し前へ倒した姿を確認。`Test-Area -OutputName ac01-glide-20261120` failures=0。
+- **残り**：実際に動かしたときの見え方（滑って見えるか）はユーザーのプレイ待ち。前傾6度は控えめ。
+
 ## 2026-11-20 11時30分 Claude（AC01）：外骨格兵の伏せをクリップで表示（つぶした仮表示をやめる。表示だけ）
 - **依頼**：ユーザー「伏せをしっかりとした形にして」。
 - 外骨格兵の体（SK_AC01T2）は部下と同じマネキンの骨格なので、部下の伏せのクリップ（`BattleBodyAnim`：伏せる・起きる・伏せ待機・匍匐の前後左右）をそのまま流す。`ABattleUnit::LookHasProneClip`（クリップの骨格が look と同じときだけ真）で、`UpdateWeaponPose` の look の枝が伏せのクリップを選び、伏せの出入りで遷移クリップを1回流す（立ち↔しゃがみは今までどおり外骨格自身のクリップ）。`SetStance` と `UpdateExoLooks` は、このときは体をつぶさない（1.2倍のまま）。
