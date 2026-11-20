@@ -20,6 +20,15 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-20 23時00分 Claude（個人AI）：兵1人への移動命令を作って試験に合格、段階Aの絞り込み版 `-BattleThreatCover=2`、プレイヤーの周りだけの切替 `-BattleSoldierAIFocus`。ブランチ `soldierai`
+- **変更**：(1) 兵1人への移動命令（ROADMAP「個人への移動指定」案1、`BattleSoldierOrder.cpp`）：作戦画面で Ctrl＋クリックで兵を選び、右クリックで移動先、Hで部隊へ戻す。命令は保存される。(2) `-BattleThreatCover=2`：ほかの脅威を「交戦距離の中で見えていてこちらを向いている敵」と撃たれた方向に絞り、2回続けて破られたときだけ遮蔽を出る。(3) `-BattleSoldierAIFocus=<m>`／`-BattleSoldierAIFocusAt=X,Y`：段階A・B1をプレイヤー（または指定した点）の周りだけで動かす。(4) B1が遠くの遮蔽へ移るとき、保存の検査（遮蔽の残り時間は3秒以内）に引っかからないように直した。
+- **検証**（ロックは22時12分に区画AIから受け取った）：`Build-Editor` 成功。`Test-Battle` failures=0（`Setup/Battle-Smoke-20261120-221101.log`）。自動試験 `Test-WideSight -Map E -Area -Experiment -SoldierOrderTest -RoundTripSave`（`so-order-E-s7c`）は `BATTLE_SOLDIER_ORDER_RESULT failures=0`：12m先へ2.5秒で着いて守り、Hで2.0秒後に部隊の位置へ戻って命令が終わり、2回目の命令は部隊の新しい命令で解けた。同じ試合の保存往復 `BATTLE_MIXED_SAVE_SOAK_RESULT failures=0`。最初の版（`so-order-E-s7b`）は試合の開始前に命令を出したため、開始時の群の命令で解けて failures=1。試験を開始20秒後からに直した。凍結ビルド `soldierai-order-r1`。切替なしの試合は基準と一致（`s7-I-shot2-s7` と `so-I-off-s7` が IDENTICAL）。
+- **画面**：描画ありの撮影（`so-order-E-shots/soldier-order-walking.png`・`-holding.png`）で、移動先の黄の菱形と線、選んだ兵の緑の輪と「個別の命令」が出ることを確かめた。ただし、カメラが引いた位置のままで印が小さく、開始直後の部隊の札と重なって読みにくい。実際にマウスで選ぶ操作は試していない（自動試験は関数を直接呼ぶ）。
+- **計測**（マップI 12種、`s7-I-shot2` と同じ条件、1試合あたり）。基準（`s7-I-shot2`）→ `-BattleThreatCover=2`（`so-I-tc2`）：被弾のうち遮蔽外 80.1% → 81.1%、遮蔽外の被弾 3424 → 3286（−4%）、遮蔽外の戦死 233 → 227、戦死 301 → 283（−6%）、遮蔽からの射撃 1787 → 1784（変わらず）、勝ち 8:4 → 8:3（引き分け1）、得点 827:810 → 848:797、AIの時間 1.77 → 1.93 ms/フレーム（＋0.16）。遮蔽を出たのは1試合61回（`=1` は461回）。1回目の破れで待ったのが232回。
+- **判断**：`=1` の悪化（遮蔽からの射撃 −23%）は消えた。戦死と遮蔽外の被弾は少し減ったが、12戦では誤差の範囲と区別できない。既定にする提案はまだしない。
+- **プレイヤーの周りだけ**：`-BattleSoldierAIFocus=60 -BattleSoldierAIFocusAt=0,0`＋`=2`（`so-I-tc2f60`）では、段階Aの確認が1回も起きなかった（マップIの中心60m以内では、遮蔽に隠れて戦う場面がなかった）。範囲の外では動かないことは確かめられたが、範囲の中の効果と負荷はまだ測れていない。戦場になる場所を中心にして測り直す必要がある。
+- **次の一手**：`=2` を両軍と片側だけで24戦に増やして差を確かめる。B1 `-BattleSoldierMove` を計測する。焦点の切替は戦闘の多い地点（またはプレイヤーの操作に近い描画ありの試合）で測る。兵への命令は、印を見やすくし（文字の背景・カメラを寄せた撮影）、TPS視点からの命令を足す。
+
 ## 2026-11-20 21時25分 Claude（個人AI）：段階A `-BattleThreatCover` をマップIで計測（悪化、既定0のまま）、段階B1 `-BattleSoldierMove` を実装（未計測）。ブランチ `soldierai`、作業ツリー `FutureBattle-soldierai`
 - **変更**：段階A（95f3132）と段階B1（0650a2c）。内容は ROADMAP「2026-11-20 個人AI」。どちらも既定0。
 - **検証**（ロックは21時00分に区画AIから受け取った）：`Build-Editor` 成功。`Test-Battle` は1回目 failures=1（`Setup/Battle-Smoke-20261120-210142.log`、「Attack move stops and fires on a visible enemy during world ticks」）、同じビルドの2回目は failures=0（`Setup/Battle-Smoke-20261120-210356.log`）。切替は既定0で、この試験に触れるコードは動かないので、時々落ちる試験と見ている（未調査）。凍結ビルド `soldierai-a1f3dd4`。切替なしの試合は区画AIの基準と一致（`s7-I-shot2-s7` と `sa-I-off-s7` が IDENTICAL、81項目。段階A・B1とも0）。`Test-MixedSave` は回していない（段階A・B1の追加の状態は保存しない実行時の表だけ）。
