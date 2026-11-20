@@ -3,6 +3,7 @@
 #include "BattleTactics.h"
 #include "BattlePerception.h"
 #include "BattleLeaderRuntime.h"
+#include "Engine/World.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/SecureHash.h"

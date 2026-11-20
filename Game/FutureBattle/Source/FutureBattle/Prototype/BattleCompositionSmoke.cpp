@@ -1,7 +1,10 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleComposition.h"
+#include "BattleMatch.h"
 #include "BattleSave.h"
 #include "BattleGameMode.h"
+#include "Engine/World.h"
+#include "UObject/Class.h"
 #include "Kismet/GameplayStatics.h"
 #include "FutureBattle.h"
 

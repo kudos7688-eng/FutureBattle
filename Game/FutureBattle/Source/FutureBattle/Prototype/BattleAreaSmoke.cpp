@@ -3,6 +3,7 @@
 #include "BattleMatch.h"
 #include "BattleComposition.h"
 #include "BattleSave.h"
+#include "UObject/Class.h"
 #include <limits>
 #include "BattleGameMode.h"
 #include "BattleController.h"
@@ -64,7 +65,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    auto* CompositionSquad=const_cast<FBattleSquadState*>(Store->FindSquad(1));
    if(CompositionSquad)
    {
-    const uint8 CompositionOriginalType=CompositionSquad->SquadType;bool CompositionRolesOK=true;FBattleGroup CompositionEmptyGroup;
+    const uint8 CompositionOriginalType=CompositionSquad->SquadType;bool CompositionRolesOK=true;UBattleMatch::FBattleGroup CompositionEmptyGroup;
     for(const auto& CompositionDef:CompositionDefs){CompositionSquad->SquadType=CompositionDef.TypeID;CompositionRolesOK&=M->GroupRole(CompositionEmptyGroup,1)==CompositionDef.DefaultGroupRole;}
     CompositionSquad->SquadType=CompositionOriginalType;
     Check(CompositionRolesOK&&(CompositionDefs[0].AllowedGroupRoles&3)==3,TEXT("composition roles match live group fallback; rifle can support"));
@@ -447,9 +448,9 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      const bool bPost=M->Objectives.IsValidIndex(TankPick)&&FVector::Dist2D(WatchPost,M->AreaHome(0))<FVector::Dist2D(M->Objectives[TankPick].Position,M->AreaHome(0))&&
       FVector::Dist2D(WatchPost,M->Objectives[TankPick].Position)>=FMath::Min(double(TT->TankOverwatch),FVector::Dist2D(M->Objectives[TankPick].Position,M->AreaHome(0))-3000.)-1.;
      Check(BattleTactics::ArmourAI(0)&&BattleTactics::ArmourAI(1)&&TankPick==Again&&bPost,TEXT("armour AI: tank objective kept, overwatch post short of the point on the own side"));
-     ABattleUnit* Hull=Actor(TankID);const float Yaw0=Hull?Hull->GetActorRotation().Yaw:0.f;
+     ABattleUnit* Hull=Actor(TankID);const double Yaw0=Hull?Hull->GetActorRotation().Yaw:0.;
      FaceVehicle(TankID,FRotator(0,Yaw0+90.f,0).Vector());
-     const float Turned=Hull?FMath::Abs(FMath::FindDeltaAngleDegrees(Yaw0,Hull->GetActorRotation().Yaw)):-1.f;
+     const double Turned=Hull?FMath::Abs(FMath::FindDeltaAngleDegrees(Yaw0,Hull->GetActorRotation().Yaw)):-1.;
      Check(Hull&&Turned<=TT->TankTurnRate*.1f+.01f&&!VehicleWatchDirection(TankID).IsNearlyZero(),TEXT("armour AI: a stopped hull turns at its turn rate and has a watch direction"));
      if(Hull)Hull->SetActorRotation(FRotator(0,Yaw0,0));
      const auto SavedKnown=M->KnownVehicles[0];M->KnownVehicles[0].Reset();
@@ -723,8 +724,8 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     {
      auto RejectStrategy=[&](TFunctionRef<void(UBattleSave&)> Corrupt,const TCHAR* Label)
      {
-      auto* Bad=DuplicateObject<UBattleSave>(Save,this);Corrupt(*Bad);auto* Before=Actor(MLeader);
-      Check(!M->RestoreSnapshot(Bad)&&Actor(MLeader)==Before&&SameStrategy(),Label);
+      auto* Bad=DuplicateObject<UBattleSave>(Save,this);Corrupt(*Bad);auto* StrategyActorBefore=Actor(MLeader);
+      Check(!M->RestoreSnapshot(Bad)&&Actor(MLeader)==StrategyActorBefore&&SameStrategy(),Label);
      };
      RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].StartStrength=-.5;},TEXT("invalid weighted strength baseline rejected"));
      RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].ID+=1;},TEXT("group key identity mismatch rejected atomically"));

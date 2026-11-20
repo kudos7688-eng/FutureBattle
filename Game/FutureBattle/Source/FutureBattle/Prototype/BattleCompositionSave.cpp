@@ -1,5 +1,6 @@
 #include "BattleComposition.h"
 #include "BattleSave.h"
+#include "UObject/Class.h"
 
 bool BattleComposition::ValidateSave(const UBattleSave& Save,FString& Error)
 {

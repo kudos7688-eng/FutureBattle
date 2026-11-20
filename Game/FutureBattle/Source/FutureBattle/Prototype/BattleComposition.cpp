@@ -27,7 +27,7 @@ const TArray<BattleComposition::FTypeDef>& BattleComposition::Definitions()
   {
    FTypeDef D;D.TypeID=Type;D.Cost=Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
    D.HardActiveLimit=FMath::Max(0,Limits[Type]);D.Members=BattleSquadType::Members(Type);
-   D.DefaultGroupRole=Roles[Type];D.AllowedGroupRoles=Roles[Type]==255?0:static_cast<uint16>(1<<Roles[Type]);
+   D.DefaultGroupRole=Roles[Type];D.AllowedGroupRoles=static_cast<uint16>(Roles[Type]==255?0:1<<Roles[Type]);
    if(Type==BattleSquadType::Rifle)D.AllowedGroupRoles|=1<<1; // weakest rifle may support
    D.Capabilities=Tags[Type];D.bAIEligible=Type!=BattleSquadType::Supply;Result.Add(D);
   }
@@ -73,7 +73,7 @@ BattleComposition::FInput BattleComposition::Capture(const UBattleMatch& Match,c
   if(Squad.TacticalPlan.Action==EBattleSquadTactic::Retreat)Ready=Ready*3/4;
   Type.Effective+=Ready;if(ArmourArmed)Type.AntiArmourEffective+=Ready;
   if(Squad.SquadType==BattleSquadType::Rifle||Squad.SquadType==BattleSquadType::Heavy||Squad.SquadType==BattleSquadType::Exo)Result.FrontEffective+=Ready;
-  FBattleGroup Empty;const FBattleGroup* Group=&Empty;
+  UBattleMatch::FBattleGroup Empty;const UBattleMatch::FBattleGroup* Group=&Empty;
   if(const int32* GroupID=Match.SquadGroup.Find(SquadID))if(const auto* Found=Match.Groups.Find(*GroupID))Group=Found;
   const uint8 Role=Match.GroupRole(*Group,SquadID);if(Role<5)Result.RoleEffective[Role]+=Ready;
  }
