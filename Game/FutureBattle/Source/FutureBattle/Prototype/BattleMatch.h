@@ -151,7 +151,7 @@ public:
  bool SurpriseMoving(int32 SquadID) const;
  // After a save restore: no front/surprise timer further ahead than its own interval (an earlier save would stall them).
  void ClampFrontTimers();
- float SurpriseNextAt[2]={0.f,0.f};
+ float SurpriseNextAt[2]={0.f,0.f},SurpriseSkipLogAt[2]={0.f,0.f};
  TMap<int32,FVector> FrontPosts; // squad of a front-holding group -> the sector centre it holds (transient)
  float FrontLineAt[2]={-1.f,-1.f},FrontLineLogAt[2]={-1.f,-1.f};
  float MatchTimeLimit() const;

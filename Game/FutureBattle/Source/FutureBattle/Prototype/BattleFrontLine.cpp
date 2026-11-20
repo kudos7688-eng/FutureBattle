@@ -322,22 +322,33 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
   const int32 Row=Ahead[0]<Ahead[1]?0:Ahead[1]<Ahead[0]?Rows-1:(Team==0?0:Rows-1);
   const FVector Start=BattleSectors::Center(FrontCell(Team,FMath::Max(0,Line[Row]-1),Row));
   struct FFree{int32 SID;double D;bool bArmour;};TArray<FFree> Free;
+  // Why armour was not free (2026-11-21 groupui-surprise2-I-s7: one group in 900 s): in a group, on a hire/intel errand, on a base assault, not full strength.
+  int32 Skip[4]={0,0,0,0};
   for(const auto& P:Store->GetSquads())
   {
    const auto& S=P.Value;
-   if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(P.Key)!=INDEX_NONE)continue;
+   if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated))continue;
    const bool bArmour=S.SquadType==BattleSquadType::Tank||S.SquadType==BattleSquadType::ArmoredCar||S.SquadType==BattleSquadType::Exo;
    if(!bArmour&&S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Heavy)continue;
-   if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key))continue;
-   bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase)continue;
+   if(GroupOf(P.Key)!=INDEX_NONE){Skip[0]+=bArmour;continue;}
+   if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key)){Skip[1]+=bArmour;continue;}
+   bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase){Skip[2]+=bArmour;continue;}
    // Full-strength squads only: the walk is long.
    int32 Living=0;for(int32 UID:S.Members)if(const auto* U=Store->Find(UID);U&&U->IsAlive())++Living;
-   if(Living<S.Members.Num())continue;
+   if(Living<S.Members.Num()){Skip[3]+=bArmour;continue;}
    Free.Add({P.Key,FVector::DistSquared2D(R->Position(S.LeaderUnitID),Start),bArmour});
   }
   // Armour first (nearest first), then infantry; none without armour.
   Free.Sort([](const FFree& A,const FFree& B){return A.bArmour!=B.bArmour?A.bArmour:A.D!=B.D?A.D<B.D:A.SID<B.SID;});
-  if(Free.Num()<FMath::Max(2,Want)||!Free[0].bArmour)return;
+  if(Free.Num()<FMath::Max(2,Want)||!Free[0].bArmour)
+  {
+   if(Elapsed>=SurpriseSkipLogAt[Team])
+   {
+    SurpriseSkipLogAt[Team]=Elapsed+30.f;int32 FreeArmour=0;for(const auto& F:Free)FreeArmour+=F.bArmour;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_WAIT team=%d free=%d free_armour=%d armour_grouped=%d armour_errand=%d armour_base=%d armour_depleted=%d time=%.1f"),Team,Free.Num(),FreeArmour,Skip[0],Skip[1],Skip[2],Skip[3],Elapsed);
+   }
+   return;
+  }
   TArray<int32> Pick;for(const auto& F:Free)if(Pick.Num()<Want)Pick.Add(F.SID);
   const int32 ID=FormGroup(Team,Pick,false);auto* G=Groups.Find(ID);if(!G)return;
   G->Kind=2;G->Phase=0;G->PhaseAt=Elapsed;G->Rally=Start;G->SurpriseRow=Row;G->StartLiving=AllLiving(*G);G->SurpriseEndAt=Elapsed+AssembleMax+Max;
