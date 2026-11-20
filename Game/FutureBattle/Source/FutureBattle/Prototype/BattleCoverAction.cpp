@@ -91,7 +91,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
  // Evaluation-only funnel: furthest stage reached by this request (does not alter the search order or result).
  auto& Diag=SightExperiment;int32 Stage=0;
  static const TCHAR* StageKeys[]={TEXT("request_no_slot_in_radius"),TEXT("request_slot_reserved"),TEXT("request_path_to_anchor_blocked"),TEXT("request_anchor_too_exposed"),TEXT("request_no_valid_peek"),TEXT("request_reserve_failed")};
- Diag.Cover(TEXT("request_total"));LastCoverStage.Add(ID,-1);
+ Diag.Cover(TEXT("request_total"));if(Diag.Enabled)LastCoverStage.Add(ID,-1);
  for(int32 Slot:Cover->NearbySlots(Pos,FMath::Max(0.f,SearchRadius>=0?SearchRadius:Tuning->CoverActionSearchRadius),BattleFieldLayout::IsUrban(GetWorld())?12:FMath::Max(1,Tuning->CoverActionCandidateLimit)))
  {
   const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
@@ -141,7 +141,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVER_ACTION unit=%d slot=%d hidden=%.2f peek_cm=%.1f"),ID,Slot,Hidden,FVector::Dist2D(Anchor,Peek));return true;
   }
  }
- Diag.Cover(StageKeys[Stage]);LastCoverStage.Add(ID,(int8)Stage);
+ Diag.Cover(StageKeys[Stage]);if(Diag.Enabled)LastCoverStage.Add(ID,(int8)Stage);
  return false;
 }
 
@@ -270,6 +270,7 @@ bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Targ
 
 bool UBattleLeaderRuntime::StartFirePosition(int32 ID,FVector Threat,int32 Target,double Now)
 {
+ bFirePositionHereGood=false;
  auto& Diag=SightExperiment;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
  if(!U || !U->IsAlive() || U->CoverPhase || Threat.ContainsNaN() || !Bodies.Contains(ID) || CoverApproaches.Contains(ID))return false;
@@ -281,7 +282,7 @@ bool UBattleLeaderRuntime::StartFirePosition(int32 ID,FVector Threat,int32 Targe
  const bool bStances=BattleStance::Enabled(GetWorld());
  const auto* OwnPlan=Plans.Find(U->SquadID);const bool OutsideContact=OwnPlan && OwnPlan->bSectorContact;
  // Already out of sight when crouched here: nothing better to look for.
- if(bStances && !BattleTactics::HasTerrainLine(GetWorld(),Pos+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch)),Eye)){Diag.Cover(TEXT("fire_position_here_is_good"));return false;}
+ if(bStances && !BattleTactics::HasTerrainLine(GetWorld(),Pos+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch)),Eye)){bFirePositionHereGood=true;Diag.Cover(TEXT("fire_position_here_is_good"));return false;}
  struct FPlace{FVector Point;float Score;bool bStandUp;};
  TArray<FPlace> Places;
  int32 Ring=0;
@@ -336,7 +337,7 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
  {
   End=TEXT("approach_arrived");CoverProbeAfter.Remove(ID);
   // -BattleContactCover: take the cover at once (the slot was checked before the walk), without waiting for a probe slot.
-  if(bContactCover && A->bFree)
+  if((bContactCover || A->bFallback) && A->bFree)
   {
    // A free firing position: behind low cover the soldier starts the crouch-and-stand cycle there; otherwise he fights from the
    // place as usual and does not look for another for a while.

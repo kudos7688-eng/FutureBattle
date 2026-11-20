@@ -40,6 +40,28 @@
 - **検証**（作業ツリー `FutureBattle-ac01` でビルド・実行。main ではユーザーのテストプレイ中だったため）：`Build-Editor` 成功。`Test-ExoShot -Name ac01-tilt-20261120` は failures=0（前進で前へ、右への横移動で右へ傾くこと、背中から腰の抜けが見えないことを画像で確認）。`Test-Area -OutputName ac01-tilt-20261120 -CoverActions 1 -FlankCoordination 1` は failures=0。
 - **未実施・制限**：実際に動かしたときの傾きの出方（動き出し・停止）は画面で未確認（撮影は一定速度の姿だけ）。バズーカを構えた姿勢の穴は Blender で未検査。傾きは向きの変化（旋回）では付かない。main の Binaries はまだ古い（次のビルドで反映）。
 
+## 2026-11-21 2時00分 Claude（区画AI）：遮蔽が無いときに伏せる（`-BattleNoCoverFallback`）・撃たれた兵の遮蔽探しを優先（`-BattleCoverPriority`）（試験切替2つ、既定0）と Codex のレビューによる修正
+- **変更**：
+  - `-BattleNoCoverFallback`：目標が見えていて近い兵の遮蔽探しが何も見つけられなかったら、近くの見えにくい射撃位置（`StartFirePosition`）へ動く。それも無ければ5秒伏せる（目標が見えている間）。
+  - `-BattleCoverPriority`：直近5秒に撃たれた兵は、1フレーム2人までの遮蔽探しの順番を待たない（専用枠は1フレーム4人まで）。失敗後の再探索は5秒でなく2秒。すでに失敗後の待ちに入っていても、撃たれたら失敗から2秒で探し直す。
+  - BattleLeaderRuntime.cpp/.h、BattleStance.cpp、BattleCoverAction.cpp。`Test-WideSight.ps1 -NoCoverFallback/-CoverPriority`、`Play-Area.ps1 -SectorTrials` に追加。
+- **Codex のレビュー**（読むだけ）で直したもの：優先探索に上限が無い（→4人/フレーム）、しゃがめばもう隠れている兵まで伏せていた（→伏せない、`no_cover_here_is_good`）、`-BattleContactCover` なしでは射撃位置に着いても確保されず取り消される（→この切替で始めた移動は確保する）、待ち中に撃たれても2秒にならない、伏せの期限が移動・戦闘終了・死亡・次の探索で消えない、同じフレームで射撃位置探しを2回する、診断用の `LastCoverStage` が診断なしでも更新される。見送り：`CoverGate` の判定順（今の順でも意味は通る）、隊長が死んだ被弾では `victim_still_no_target` に数えられる（少数）。
+- **検証（修正前、凍結ビルド `sectormove-r11`）**：マップI、12シード、両軍に適用（`s13-I-{play,fall,prio,both}`）。基準は s12-I-play-s7 と IDENTICAL。Test-Battle failures=0。
+
+  | | 基準 | 伏せる | 優先 | 両方 |
+  |---|---|---|---|---|
+  | 得点 | 834:798 | 874:780 | 855:806 | 850:828 |
+  | 勝敗 | 9:3 | 10:2 | 10:2 | 6:6 |
+  | 撃破 | 299 | 279 | 281 | 261 |
+  | 遮蔽外の被弾 | 81.7% | 81.3% | **75.9%** | 75.8% |
+  | 遮蔽からの射撃 | 1843 | 1806 | **2005** | 2086 |
+  | 目標が見えて近いのに遮蔽外で撃たれた | 1014 | 870 | 767 | 652 |
+
+  伏せた回数（`stance_to_prone`）は1試合約1480回（両方で1770）。射撃位置へ動いたのは約10回。優先探索は約900回、順番待ち中の被弾 309 → 54。
+- **評価（修正前の数字）**：優先探索は遮蔽外の被弾を6ポイント減らし、遮蔽から撃つ回数も増えた。今回の中でいちばん筋がよい。伏せるは得点差は広がるが撃破が減り、遮蔽外の被弾割合は変わらない。両方は勝敗が五分になった。どれも既定0のまま。
+- **修正後（`sectormove-r12`）**：既定（切替なし）は s13-I-play-s7 と IDENTICAL。Test-Battle failures=0。両方を入れた3シード（`s14-I-both-s{7,11,19}`）は異常なく完走。「しゃがめばもう隠れている」は1試合3〜9回しかなく、伏せの大半は本当に場所が無い場合だった（撃破が減る主因ではなさそう）。効果の12シード比較はまだ。
+- **次の一手**：修正後の r12 で fall/prio/both を12シードで測り直す（伏せの条件を絞ったので撃破の減りが戻るかを見る）。優先探索を他の区画AI切替と並べて既定候補に。
+
 ## 2026-11-20 23時20分 Claude（区画AI）：目標が見えていて近いのに遮蔽の外で撃たれた兵の内訳（診断だけ、挙動不変）
 - **変更**：兵ごとに、直前フレームで遮蔽探しのどこにいたか（`CoverGate`）と、直前の遮蔽探しがどう終わったか（`LastCoverStage`）を覚える。止まって撃たれた兵のうち、目標が見えていて150m以内だった場合に `victim_near_gate_*` と `victim_near_retry_*` を数える。BattleLeaderRuntime.cpp/.h、BattleCoverAction.cpp。
 - **検証**：凍結ビルド `sectormove-r10`、マップI、12シード（`s12-I-play`）。s11-I-play-s7 と cover_diagnostics 以外 IDENTICAL。Test-Battle failures=0。
