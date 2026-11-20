@@ -233,8 +233,9 @@ void UBattleLeaderRuntime::UpdateExoLooks()
    const bool ShowLauncher=U->Action==EBattleAction::DirectControl?U->bLauncherSelected:GetWorld()->GetTimeSeconds()<L.AILauncherUntil;
    if(ShowLauncher!=L.bShowingLauncher)ApplyExoSuit(It.Key());
    if(auto* Back=L.Stowed.Get()){Back->SetOwnerNoSee(A->GetMesh()->bOwnerNoSee);Back->SetVisibility(A->GetMesh()->IsVisible());}
-   // A stance change resets the body's scale (SetStance); the suit stays 1.2x, crouches by its own clip and is squashed only when prone.
-   const float Squash=A->VisualStance==BattleStance::Crouch&&BattleStance::AnimEnabled()?1.f:BattleStance::VisualScale(A->VisualStance);
+   // A stance change resets the body's scale (SetStance); the suit stays 1.2x, crouches by its own clip and lies down by the shared prone
+   // clips (squashed only when those are missing). With the clips the carried weapon stays on the back plate and follows the spine.
+   const float Squash=(A->VisualStance==BattleStance::Crouch&&BattleStance::AnimEnabled())||(A->VisualStance==BattleStance::Prone&&A->LookHasProneClip())?1.f:BattleStance::VisualScale(A->VisualStance);
    const FVector Want(1.2f,1.2f,1.2f*Squash);
    if(A->GetMesh()&&!A->GetMesh()->GetRelativeScale3D().Equals(Want,.001f))A->GetMesh()->SetRelativeScale3D(Want);
    // Prone: the carried weapon lies flat instead of standing up from the squashed body.

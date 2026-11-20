@@ -41,6 +41,7 @@ void UBattleLeaderRuntime::RunExoShot()
   {0,25.f,BattleStance::Stand,false,TEXT("front")},{0,100.f,BattleStance::Stand,false,TEXT("side")},{0,180.f,BattleStance::Stand,false,TEXT("back")},
   {0,25.f,BattleStance::Stand,false,TEXT("launcher_front"),true},{0,150.f,BattleStance::Stand,false,TEXT("launcher_back"),true},
   {0,25.f,BattleStance::Stand,true,TEXT("noshield")},{0,60.f,BattleStance::Crouch,true,TEXT("crouch")},{0,60.f,BattleStance::Prone,true,TEXT("prone")},
+  {0,120.f,BattleStance::Prone,true,TEXT("prone_side")},{0,200.f,BattleStance::Prone,true,TEXT("prone_back")},  // after the get-down clip
   {1,25.f,BattleStance::Stand,false,TEXT("enemy")}};
  const int32 Index=ExoShotStage-1;
  if(Index>=UE_ARRAY_COUNT(Shots)){Finish();return;}

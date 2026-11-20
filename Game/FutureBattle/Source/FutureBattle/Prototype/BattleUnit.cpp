@@ -300,6 +300,13 @@ void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequenc
 	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
 }
 
+bool ABattleUnit::LookHasProneClip() const
+{
+	if (!LookIdle || !BattleStance::AnimEnabled()) return false;
+	const UAnimSequence* Prone = BattleBodyAnim::Get(BattleBodyAnim::EClip::ProneIdle);
+	return Prone && Prone->GetSkeleton() == LookIdle->GetSkeleton();
+}
+
 void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Parent, EBattleWeapon Weapon, bool bFirstPerson) const
 {
 	if (LookWeapon)
@@ -505,10 +512,27 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 	auto* Pose = Reloading ? RifleReload.Get() : Moving ? RifleWalk.Get() : RifleIdle.Get();
 	// Stance visuals trial: a crouched soldier plays the crouch clip (reloading included: there is no crouched reload clip).
 	if (auto* Crouch = VisualStance == BattleStance::Crouch ? BattleStance::CrouchClip(Moving) : nullptr) Pose = Crouch;
+	bool bLookTransition = false;
 	if (LookIdle)
 	{
 		const bool Crouched = VisualStance == BattleStance::Crouch && LookCrouchIdle && BattleStance::AnimEnabled();
 		Pose = Crouched ? (Moving && LookCrouchMove ? LookCrouchMove.Get() : LookCrouchIdle.Get()) : Moving && LookMove ? LookMove.Get() : LookIdle.Get();
+		// Prone with the shared clips: getting down or up plays the transition once, then the prone idle or the crawl in the
+		// direction of travel. Stand <-> crouch keeps the look's own clips (no transition).
+		if (LookHasProneClip())
+		{
+			const double ClipNow = GetWorld()->GetTimeSeconds();
+			if (VisualStance != BodyStance)
+			{
+				const bool bProneChange = VisualStance == BattleStance::Prone || BodyStance == BattleStance::Prone;
+				TransitionClip = bProneChange ? BattleBodyAnim::Transition(BodyStance, VisualStance) : nullptr;
+				TransitionUntil = TransitionClip ? ClipNow + TransitionClip->GetPlayLength() : 0.;
+				BodyStance = VisualStance;
+			}
+			if (TransitionClip && ClipNow < TransitionUntil) { Pose = TransitionClip; bLookTransition = true; }
+			else if (VisualStance == BattleStance::Prone)
+				if (auto* Prone = BattleBodyAnim::Locomotion(BattleStance::Prone, GetActorRotation().UnrotateVector(GetVelocity()), false)) Pose = Prone;
+		}
 	}
 	// Blind fire (BattleBlindFire.cpp): the clip that raises the rifle over or around the cover while it lasts.
 	// Not for a soldier with its own look (other skeleton). Over the top it is a standing clip (the head shows): only while the
@@ -516,13 +540,14 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 	const bool bOverTop = BattleBlindFire::IsOverTop(S);
 	if (!Reloading && !LookIdle && (!bOverTop || BattleBlindFire::ExposeEnabled())) if (const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leaders && Leaders->IsBlindFiring(UnitID, Now))
 		if (auto* Blind = BattleBlindFire::Clip(bOverTop)) Pose = Blind;
-	const bool Looping = !Reloading || Pose != RifleReload.Get();
+	const bool ReloadPose = Reloading && Pose == RifleReload.Get();
+	const bool Looping = !ReloadPose && !bLookTransition;
 	if (Pose && CurrentPose != Pose)
 	{
 		CurrentPose = Pose;
 		GetMesh()->PlayAnimation(Pose,Looping);
-		GetMesh()->SetPlayRate(!Looping ? Pose->GetPlayLength()/Duration : 1.f);
-		if (!Looping) GetMesh()->SetPosition(Pose->GetPlayLength()*FMath::Clamp(1.-(S.ReloadEndTime-Now)/Duration,0.,1.), false);
+		GetMesh()->SetPlayRate(ReloadPose ? Pose->GetPlayLength()/Duration : 1.f);
+		if (ReloadPose) GetMesh()->SetPosition(Pose->GetPlayLength()*FMath::Clamp(1.-(S.ReloadEndTime-Now)/Duration,0.,1.), false);
 	}
 	}
 	if (IsPlayerControlled() && Rifle->GetAttachParent()==FirstPersonCamera)
