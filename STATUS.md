@@ -21,6 +21,15 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-21 8時50分 Claude（Codex 委任）：Codex の総点検（9本）と修正バッチ A・B を main へ取り込んだ（既定の試合は不変）
+- **点検**：Codex が実装済みの内容を9つのテーマで読み、報告を `Docs/review-2026-11-21/01〜09` に置いた（AI層の効率と重複、既定値の漏れ、観測規則、決定性、保存、編成AI、性能、切替と試験の棚卸し、UI と総合の優先表）。コードは変えていない。
+- **直したもの**：F01（計画器 ON の陣営だけ敵の兵種を記録する）。R01（比較スクリプトから壁時計で割る3項目を除外）。バッチ A は、保存の読み込みに失敗したときに一部だけ消えていた一時状態を消さないようにした（`BATTLE_MIXED_SAVE_TRANSIENTS`）ほか、入力の押下と解放の対応、経路命令の失敗時の扱い、日本語の通知。バッチ B は計画器の中だけで C01・C03・C05・C06・C07・C10 を直し、保存の policy を 2 にした（policy 1 の保存は読まない）。C02 は見送り、設計書に案だけを残した。
+- **試験で見つけて直したもの**：C06 の変更で「敵の装甲を見たら、買える対戦車兵が戦車の貯金に割り込む」が働かなくなっていた（戦車も対装甲なので、今の緊急度が同じ2になる）。割り込みの基準を「保存した緊急度と今の緊急度の小さい方」にした（2c36ac9）。
+- **検証**：ビルド成功。Test-Battle・Test-MixedSave・Test-Area すべて failures=0。マップE seed7 `-CoverActions 1 -FlankCoordination 1 -RoundTripSave` が main（7d88d3c）と IDENTICAL（winner=1、624/669、9029発、比べた項目81）。計画器ON の初めての試合（マップI seed7、`-AreaComposition 1 -AreaCompositionPlanner 1 -AreaCompositionPlannerTeams 2 -RoundTripSave`、`Setup/Benchmarks/SightTrial-20261111/codex-planner-I-s7`、codex 作業ツリー側）は最後まで進み、往復保存も合格（`RULES policy=2`）。winner=1、778/801。
+- **分かったこと**：計画器の判断は181回あったが、178回は現役25部隊の上限で待っていた（`permission_time_capacity_or_mission`）。買ったのは重歩兵3回だけで、使えるお金は461まで貯まった。敵の車両を見た回数は0（`observed_vehicles=0`）。緊急防衛の任務は1回付き、30秒で外れた。この1試合では、計画器はほとんど何もしていない。
+- **未実施**：ゲームパッドのエイム上下は実機で未確認（点検09 の U01 は「元の向きが UE の標準」と指摘している）。バッチ A の UI の直しは画面で未確認。計画器ON の勝敗の比較もまだ。
+- **次の一手**：計画器が働く条件（現役の上限、車両のあるマップ）で試合を選び直し、片側試験へ進む。点検09 の優先表から、S02・U06〜U08・切替一覧の生成の直し（D10）・文書の同期（M01〜M07）を順に進める。
+
 ## 2026-11-21 4時55分 Claude（Codex 委任）：編成AI の段階1・2を main へ取り込んだ（既定OFF）
 - **範囲**：Codex が書いた編成AI（`BattleComposition*.cpp/.h`、設計は `Docs/design-composition-ai.md`）。切替 `-AreaCompositionPlanner`・`-AreaCompositionPlannerTeams`（既定0）。保存拡張 `CombatStateVersion` 4 は計画器ON のときだけ書く。ビルド前に Codex の点検で変数名の重複・縮小変換・修飾漏れ・インクルード不足を直した。
 - **検証**：codex 作業ツリーでビルド成功、Test-Battle・Test-MixedSave・Test-Area すべて failures=0。遮蔽優先を既定ON にした main（0d75028）を取り込んだうえで、マップE seed7 `-CoverActions 1 -FlankCoordination 1 -RoundTripSave` が main と IDENTICAL（winner=1、624/669、9029発）。main へ fast-forward 後に main もビルドし直した。
