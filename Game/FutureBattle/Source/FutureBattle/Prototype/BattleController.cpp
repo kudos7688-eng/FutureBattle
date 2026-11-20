@@ -98,6 +98,8 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("AttackMove"), EKeys::T, &ABattleController::ChooseAttackMove);
 	Button(TEXT("Defend"), EKeys::G, &ABattleController::ChooseDefend);
 	Button(TEXT("ContactDebug"), EKeys::F6, &ABattleController::ToggleContactDebug);
+	Button(TEXT("SectorGrid"), EKeys::M, &ABattleController::ToggleSectorGrid);
+	Button(TEXT("FogView"), EKeys::N, &ABattleController::ToggleFogView);
 	Button(TEXT("TrainingPreset"), EKeys::F7, &ABattleController::CycleTrainingSelected);
 	Button(TEXT("HireRecruit"), EKeys::One, &ABattleController::HireRecruit);
 	Button(TEXT("HireRegular"), EKeys::Two, &ABattleController::HireRegular);
@@ -584,6 +586,20 @@ void ABattleController::ChooseAttackMove()
 void ABattleController::ChooseDefend()
 {
 	if (bTactical) { PendingOrder = EBattleOrder::Defend; ShowNotice(BattleFieldLayout::Of(GetWorld()).bSectors?TEXT("区画維持：対象区画を右クリック"):TEXT("DEFEND: right-click center")); }
+}
+
+void ABattleController::ToggleSectorGrid()
+{
+	if (!bTactical) return;
+	bShowSectorGrid = !bShowSectorGrid;
+	ShowNotice(bShowSectorGrid ? TEXT("区画の格子：表示") : TEXT("区画の格子：非表示"));
+}
+
+void ABattleController::ToggleFogView()
+{
+	if (!bTactical) return;
+	bShowFog = !bShowFog;
+	ShowNotice(bShowFog ? TEXT("戦場の霧：表示") : TEXT("戦場の霧：非表示"));
 }
 
 bool ABattleController::GetPointerPosition(FVector2D& Position) const

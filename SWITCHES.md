@@ -3,13 +3,13 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 255 種類。
+計 256 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
 | `-BattleAIBlindFire` | other |  | BattleBlindFire.cpp:27 |  |
 | `-BattleAICoverProbe` | Value | 0 | BattleTactics.cpp:10 |  |
-| `-BattleAimAssist` | Value | 1 | BattleController.cpp:1091 |  |
+| `-BattleAimAssist` | Value | 1 | BattleController.cpp:1107 |  |
 | `-BattleAllyPass` | Value | 0 | BattleStableMovement.cpp:30 |  |
 | `-BattleArea` | Param/other | off | BattleLeaderRuntime.cpp:75, BattleState.cpp:555 |  |
 | `-BattleAreaACKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:96 |  |
@@ -115,8 +115,8 @@
 | `-BattleHeavySpeed` | other |  | BattleState.cpp:543 |  |
 | `-BattleHeightTest` | Param | off | BattleTerrainTest.cpp:27 |  |
 | `-BattleHireSightRefresh` | Value | 0 | BattleMixedRecruitment.cpp:112 |  |
-| `-BattleHitDirection` | Value | 1 | BattleHUD.cpp:648 |  |
-| `-BattleKillLog` | Value | 1 | BattleHUD.cpp:753 |  |
+| `-BattleHitDirection` | Value | 1 | BattleHUD.cpp:657 |  |
+| `-BattleKillLog` | Value | 1 | BattleHUD.cpp:762 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
 | `-BattleLeaderCommand` | Value | 0 | BattleGameMode.cpp:54 |  |
 | `-BattleLeaderGuard` | Value | 0 | BattleTactics.cpp:16 |  |
@@ -152,7 +152,7 @@
 | `-BattleNoAnimationLOD` | Param | off | BattleBenchmark.cpp:157, BattleBenchmark.cpp:158, BattleNetworkBenchmark.cpp:78 ほか1 |  |
 | `-BattleNoMuzzleFlash` | Param | off | BattleMuzzleFlash.cpp:65 |  |
 | `-BattleNoStagger` | Param | off | BattleBenchmark.cpp:54 |  |
-| `-BattleOffscreenMarkers` | Value | 1 | BattleHUD.cpp:686 |  |
+| `-BattleOffscreenMarkers` | Value | 1 | BattleHUD.cpp:695 |  |
 | `-BattleOpponentPreset` | other |  | BattleBenchmark.cpp:48 |  |
 | `-BattlePerceptionGrid` | Value | GetDefault<UBattleTuning>()->bPerceptionGrid?1:0 | BattleLeaderRuntime.cpp:104 |  |
 | `-BattlePerceptionSlices` | Value | 4 | BattleBenchmark.cpp:56 |  |
@@ -195,6 +195,7 @@
 | `-BattleSectorRoute` | Value | 0 | BattleSectorRoute.cpp:16 |  |
 | `-BattleSectorSlotReserve` | Value | 1 | BattleStableMovement.cpp:78 |  |
 | `-BattleSectorSmoke` | Param | off | BattleLeaderRuntime.cpp:209 |  |
+| `-BattleSectorViewShot` | Value/other | Center({X,Y}) | BattleHUD.cpp:808, BattleHUD.cpp:856 |  |
 | `-BattleSeed` | Value | 7 | BattleBenchmark.cpp:42 |  |
 | `-BattleSenseMode` | Value |  | BattleBenchmark.cpp:29 |  |
 | `-BattleSightExperiment` | Value |  | BattleLeaderRuntime.cpp:77 |  |

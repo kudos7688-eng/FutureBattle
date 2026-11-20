@@ -14,6 +14,11 @@
 #include "BattleMatch.h"
 #include "BattleFieldLayout.h"
 #include "Engine/Canvas.h"
+#include "CanvasItem.h"
+#include "UnrealClient.h"
+#include "GlobalRenderResources.h"
+#include "BattleSectors.h"
+#include "BattleSectorView.h"
 #include "Engine/Engine.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Misc/CommandLine.h"
@@ -53,6 +58,8 @@ void ABattleHUD::DrawHUD()
 		DrawRect(Hair, Cx - 1, Cy - 1, 2, 2);
 		DrawText(FString::Printf(TEXT("×%.0f"), ScopeUnit->AimMagnification()), FLinearColor(.94f, .97f, 1.f), Cx + R * .62f, Cy + R * .62f, GEngine->GetSmallFont(), 1.2f);
 	}
+	// Fog of war and sector grid on the field (tactical view), under every panel.
+	DrawFieldOverlay(PC);
 	DrawRect(Ink, 16, 16, W - 32, 66);
 	DrawRect(Mint, 16, 16, 4, 66);
 	Label(TEXT("FUTURE BATTLE"), 34, 25, White, 1.55f);
@@ -388,7 +395,7 @@ void ABattleHUD::DrawHUD()
 		}
 		if (PC->bGamepadActive) Label(TEXT("右スティック：カーソル   A：選択・決定   左スティック：視点移動   LT/RT：拡大縮小   LB：全選択   ビュー：直接操作   メニュー：AI一時停止   十字→：速度"), 34, H - 53, Muted, .9f);
 		else
-		Label(FString::Printf(TEXT("左ドラッグ：選択   Q：全選択   E/Tab：直接操作   WASD：視点移動   ホイール：拡大縮小   P：AI一時停止   F5：やり直し   F6：記憶表示   %s      選択中 %02d"), Match->IsEnabled() ? TEXT("1〜6：購入") : TEXT("F7：練度の切替"), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
+		Label(FString::Printf(TEXT("左ドラッグ：選択   Q：全選択   E/Tab：直接操作   WASD：視点移動   ホイール：拡大縮小   P：AI一時停止   F5：やり直し   F6：記憶表示   %s   %s      選択中 %02d"), Match->IsEnabled() ? TEXT("1〜6：購入") : TEXT("F7：練度の切替"), BattleFieldLayout::Of(GetWorld()).bSectors ? TEXT("M：区画の格子   N：霧") : TEXT("N：霧"), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
 	}
 	else
 	{
@@ -432,6 +439,7 @@ void ABattleHUD::DrawHUD()
  DrawMinimap();
  DrawOrderWays();
  DrawNoticeLog();
+ DrawSectorPanel(PC);
 }
 
 void ABattleHUD::DrawMinimap()
@@ -463,6 +471,7 @@ void ABattleHUD::DrawMinimap()
    {const FVector2D A=Map.ToScreen(Def.RouteNodes[E.A]),B=Map.ToScreen(Def.RouteNodes[E.B]);DrawLine(A.X,A.Y,B.X,B.Y,FLinearColor(1.f,.85f,.2f),2);}
   }
  }
+ DrawMinimapOverlay(PC,Map);
  const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Homes are public; objective ownership is what the player's side last observed.
  if(Match->bArea) for(int32 Team=0;Team<2;++Team)
@@ -791,5 +800,258 @@ void ABattleHUD::DrawKillLog(ABattleController* PC)
   const FString Tag=Weapon(N);
   if(!Tag.IsEmpty()){float TW=0,TH=0;GetTextSize(Tag,TW,TH,GEngine->GetSmallFont(),.8f);DrawText(Tag,FLinearColor(.62f,.7f,.77f,Alpha),X+Width-TW-8,RowY+4,GEngine->GetSmallFont(),.8f);}
   ++Row;
+ }
+}
+
+namespace
+{
+ const FString& SectorViewShotPrefix(){static const FString Prefix=[]{FString P;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorViewShot="),P);return P;}();return Prefix;}
+ // Status colours shared by the field and the minimap (index = BattleSectorView::StatusOf).
+ FLinearColor SectorTint(int32 Status)
+ {
+  switch(Status)
+  {
+  case 1:return FLinearColor(.28f,.95f,.8f);case 2:return FLinearColor(1.f,.85f,.2f);case 3:return FLinearColor(1.f,.35f,.25f);
+  case 4:return FLinearColor(.95f,.6f,.3f);case 5:return FLinearColor(.6f,.75f,.9f);default:return FLinearColor(.5f,.55f,.6f);
+  }
+ }
+ void AddQuad(TArray<FCanvasUVTri>& Tris,const FVector2D P[4],const FLinearColor C[4])
+ {
+  FCanvasUVTri T;T.V0_Pos=P[0];T.V1_Pos=P[1];T.V2_Pos=P[2];T.V0_Color=C[0];T.V1_Color=C[1];T.V2_Color=C[2];Tris.Add(T);
+  T.V0_Pos=P[0];T.V1_Pos=P[2];T.V2_Pos=P[3];T.V0_Color=C[0];T.V1_Color=C[2];T.V2_Color=C[3];Tris.Add(T);
+ }
+ void DrawTris(UCanvas* Canvas,const TArray<FCanvasUVTri>& Tris)
+ {
+  if(Tris.IsEmpty()||!Canvas)return;
+  FCanvasTriangleItem Item(Tris,GWhiteTexture);Item.BlendMode=SE_BLEND_Translucent;Canvas->DrawItem(Item);
+ }
+ // Fog darkness by state (0 in sight, 1 explored, 2 never seen).
+ constexpr float FogAlpha[3]={0.f,.52f,.74f};
+ const FLinearColor FogInk(.015f,.025f,.05f);
+}
+
+void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
+{
+ TRACE_CPUPROFILER_EVENT_SCOPE(BattleHUD_DrawFieldOverlay);
+ auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ if(!PC||!Canvas||!PC->IsTactical()||!L->IsEnabled()||!BattleFieldLayout::IsSightField(GetWorld())) return;
+ const double Now=GetWorld()->GetRealTimeSeconds();
+ // The fog is kept up to date whenever the tactical view is open, so the minimap shows it even with the field overlay hidden.
+ Fog.Update(GetWorld(),Now,400);
+ const bool bSectors=BattleFieldLayout::Of(GetWorld()).bSectors;
+ BattleSectorView::Gather(GetWorld(),Fog,Now,Sectors);
+ // Display check -BattleSectorViewShot=<prefix> (rendered game only): screenshots of the tactical view at 40 s and 90 s of game time
+ // with the pointer held at the screen centre, a BATTLE_SECTOR_VIEW line with the fog and sector counts, then quit.
+ if(const FString& Shot=SectorViewShotPrefix();!Shot.IsEmpty())
+ {
+  static int32 Stage=0;const double T=GetWorld()->GetTimeSeconds();
+  if(Stage<2&&T>(Stage==0?40.:90.))
+  {
+   int32 InSight=0,Explored=0;for(int32 I=0;I<Fog.LastSeen.Num();++I){if(Fog.InSight(I,Now))++InSight;if(Fog.Explored(I))++Explored;}
+   int32 ByStatus[6]={0,0,0,0,0,0};for(const auto& S:Sectors)++ByStatus[BattleSectorView::StatusOf(S)];
+   UE_LOG(LogTemp,Display,TEXT("BATTLE_SECTOR_VIEW t=%.0f cells=%d in_sight=%d explored=%d cycle=%.2f sectors=%d fog=%d own=%d contested=%d enemy=%d trace=%d clear=%d"),
+    T,Fog.LastSeen.Num(),InSight,Explored,Fog.CycleSeconds,Sectors.Num(),ByStatus[0],ByStatus[1],ByStatus[2],ByStatus[3],ByStatus[4],ByStatus[5]);
+   FScreenshotRequest::RequestScreenshot(Shot+(Stage?TEXT("-90s.png"):TEXT("-40s.png")),true,false);++Stage;
+  }
+  if(Stage==2&&T>93.)FPlatformMisc::RequestExit(false,TEXT("BattleSectorViewShot"));
+ }
+ if(!Fog.IsValid()) return;
+ const float W=Canvas->SizeX,H=Canvas->SizeY;
+ // Corners of the fog cells on the screen (false where the corner is behind the camera).
+ const int32 VC=Fog.Columns+1,VR=Fog.Rows+1;
+ TArray<FVector2D> Screen;Screen.SetNumUninitialized(VC*VR);TBitArray<> On(false,VC*VR);
+ for(int32 Y=0;Y<VR;++Y)for(int32 X=0;X<VC;++X)
+ {
+  const FVector2D M=Fog.CellMin(X,Y);FVector2D S;
+  if(PC->ProjectWorldLocationToScreen(FVector(M.X,M.Y,Fog.Corner(X,Y)+20),S)){Screen[Y*VC+X]=S;On[Y*VC+X]=true;}
+ }
+ auto Visible=[&](int32 X,int32 Y)
+ {
+  const int32 I[4]={Y*VC+X,Y*VC+X+1,(Y+1)*VC+X+1,(Y+1)*VC+X};
+  bool bInside=false;
+  for(int32 K:I){if(!On[K])return false;const FVector2D& S=Screen[K];if(S.X>-50&&S.X<W+50&&S.Y>-50&&S.Y<H+50)bInside=true;}
+  return bInside;
+ };
+ // Sector status tint (under the fog): seen now in a stronger tint, only remembered in a fainter one.
+ if(bSectors&&PC->bShowSectorGrid&&!Sectors.IsEmpty())
+ {
+  TArray<FCanvasUVTri> Tris;
+  for(int32 Y=0;Y<Fog.Rows;++Y)for(int32 X=0;X<Fog.Columns;++X)
+  {
+   const FVector2D Mid=Fog.CellMin(X,Y)+FVector2D(FBattleFogGrid::Cell*.5);const FIntPoint C=BattleSectors::Cell(FVector(Mid.X,Mid.Y,0));
+   if(!BattleSectors::Valid(C))continue;const int32 Status=BattleSectorView::StatusOf(Sectors[C.Y*BattleSectors::Columns+C.X]);
+   if(Status<1||Status>4||!Visible(X,Y))continue;
+   FLinearColor Tint=SectorTint(Status);Tint.A=Status==4?.10f:.16f;
+   const FVector2D P[4]={Screen[Y*VC+X],Screen[Y*VC+X+1],Screen[(Y+1)*VC+X+1],Screen[(Y+1)*VC+X]};const FLinearColor Cs[4]={Tint,Tint,Tint,Tint};
+   AddQuad(Tris,P,Cs);
+  }
+  DrawTris(Canvas,Tris);
+ }
+ // Fog: each corner takes the mean darkness of the cells around it, so the edge of sight is soft.
+ if(PC->bShowFog)
+ {
+  TArray<float> Dark;Dark.SetNumZeroed(VC*VR);TArray<uint8> Count;Count.SetNumZeroed(VC*VR);
+  for(int32 Y=0;Y<Fog.Rows;++Y)for(int32 X=0;X<Fog.Columns;++X)
+  {
+   const float A=FogAlpha[Fog.State(Y*Fog.Columns+X,Now)];
+   for(const int32 K:{Y*VC+X,Y*VC+X+1,(Y+1)*VC+X+1,(Y+1)*VC+X}){Dark[K]+=A;++Count[K];}
+  }
+  for(int32 K=0;K<Dark.Num();++K)if(Count[K])Dark[K]/=Count[K];
+  TArray<FCanvasUVTri> Tris;
+  for(int32 Y=0;Y<Fog.Rows;++Y)for(int32 X=0;X<Fog.Columns;++X)
+  {
+   const int32 I[4]={Y*VC+X,Y*VC+X+1,(Y+1)*VC+X+1,(Y+1)*VC+X};
+   if(Dark[I[0]]<=0&&Dark[I[1]]<=0&&Dark[I[2]]<=0&&Dark[I[3]]<=0)continue;
+   if(!Visible(X,Y))continue;
+   FVector2D P[4];FLinearColor Cs[4];for(int32 K=0;K<4;++K){P[K]=Screen[I[K]];Cs[K]=FogInk;Cs[K].A=Dark[I[K]];}
+   AddQuad(Tris,P,Cs);
+  }
+  DrawTris(Canvas,Tris);
+ }
+ if(!bSectors||!PC->bShowSectorGrid) return;
+ // Grid lines on the sector borders, following the ground in pieces of one fog cell.
+ const FLinearColor Line(.85f,.9f,1.f,.32f);
+ const double Size=BattleSectors::Size,HX=BattleSectors::Columns*Size*.5,HY=BattleSectors::Rows*Size*.5;
+ auto OnScreen=[&](const FVector2D& S){return S.X>=0&&S.X<=W&&S.Y>=0&&S.Y<=H;};
+ auto Piece=[&](FVector A,FVector B){FVector2D SA,SB;if(PC->ProjectWorldLocationToScreen(A,SA)&&PC->ProjectWorldLocationToScreen(B,SB)&&(OnScreen(SA)||OnScreen(SB)))DrawLine(SA.X,SA.Y,SB.X,SB.Y,Line,1.f);};
+ auto Ground=[&](double X,double Y){return FVector(X,Y,BattleSectorView::GroundZ(GetWorld(),X,Y)+25);};
+ const double StepLen=FBattleFogGrid::Cell;
+ for(int32 C=0;C<=BattleSectors::Columns;++C){const double X=-HX+C*Size;for(double Y=-HY;Y<HY-1;Y+=StepLen)Piece(Ground(X,Y),Ground(X,FMath::Min(Y+StepLen,HY)));}
+ for(int32 R=0;R<=BattleSectors::Rows;++R){const double Y=-HY+R*Size;for(double X=-HX;X<HX-1;X+=StepLen)Piece(Ground(X,Y),Ground(FMath::Min(X+StepLen,HX),Y));}
+ // Sector names where a sector is large enough on the screen; the objective's letter beside it.
+ for(int32 R=0;R<BattleSectors::Rows;++R)for(int32 C=0;C<BattleSectors::Columns;++C)
+ {
+  const FVector Mid=BattleSectors::Center({C,R});FVector2D A,B,S;
+  if(!PC->ProjectWorldLocationToScreen(Ground(Mid.X-Size*.5,Mid.Y-Size*.5),A)||!PC->ProjectWorldLocationToScreen(Ground(Mid.X+Size*.5,Mid.Y+Size*.5),B)||
+     !PC->ProjectWorldLocationToScreen(Ground(Mid.X,Mid.Y),S))continue;
+  if(FVector2D::Distance(A,B)<70||!OnScreen(S))continue;
+  const auto& Info=Sectors[R*BattleSectors::Columns+C];const int32 Status=BattleSectorView::StatusOf(Info);
+  FString Text=BattleSectorView::SectorName({C,R});
+  if(Info.Objective!=INDEX_NONE)Text+=FString::Printf(TEXT(" 拠点%c"),TCHAR('A'+Info.Objective));
+  FLinearColor Color=Status>=1&&Status<=4?SectorTint(Status):FLinearColor(.85f,.9f,1.f);Color.A=.8f;
+  DrawText(Text,Color,S.X-14,S.Y-8,GEngine->GetSmallFont(),.8f);
+ }
+ // The sector under the pointer: a bright outline.
+ FIntPoint Hover;
+ if(HoveredSector(PC,Hover))
+ {
+  const FVector Mid=BattleSectors::Center(Hover);const FLinearColor Bright(1.f,.9f,.3f,.95f);
+  const double S2=Size*.5;const FVector2D Q[4]={FVector2D(Mid.X-S2,Mid.Y-S2),FVector2D(Mid.X+S2,Mid.Y-S2),FVector2D(Mid.X+S2,Mid.Y+S2),FVector2D(Mid.X-S2,Mid.Y+S2)};
+  for(int32 E=0;E<4;++E)for(int32 K=0;K<4;++K)
+  {
+   const FVector2D P0=FMath::Lerp(Q[E],Q[(E+1)%4],K/4.f),P1=FMath::Lerp(Q[E],Q[(E+1)%4],(K+1)/4.f);FVector2D SA,SB;
+   if(PC->ProjectWorldLocationToScreen(Ground(P0.X,P0.Y),SA)&&PC->ProjectWorldLocationToScreen(Ground(P1.X,P1.Y),SB))DrawLine(SA.X,SA.Y,SB.X,SB.Y,Bright,2.f);
+  }
+ }
+}
+
+bool ABattleHUD::HoveredSector(ABattleController* PC,FIntPoint& Out) const
+{
+ if(!PC||!Canvas||!PC->IsTactical()||!BattleFieldLayout::Of(GetWorld()).bSectors) return false;
+ FVector2D P; if(!SectorViewShotPrefix().IsEmpty()) P=FVector2D(Canvas->SizeX*.5f,Canvas->SizeY*.5f); else if(!PC->GetPointerPosition(P)) return false;
+ const FVector2D View(Canvas->SizeX,Canvas->SizeY);
+ const auto Map=FBattleMinimapLayout::Make(View,GetWorld());
+ FVector World=FVector::ZeroVector;
+ if(Map.Contains(P)) World=Map.ToWorld(P);
+ else
+ {
+  // Not over the panels: the top bar, the squad list, the bottom panel, the minimap's frame.
+  const auto List=FBattleSquadListLayout::Make(View);
+  if(P.Y<100||P.Y>View.Y-150||(P.X>=List.Origin.X&&P.Y<List.Origin.Y+List.Height)) return false;
+  if(Map.Size.X>0&&P.X<Map.Origin.X+Map.Size.X+10&&P.Y>Map.Origin.Y-30) return false;
+  FVector Origin,Dir; if(!PC->DeprojectScreenPositionToWorld(P.X,P.Y,Origin,Dir)||Dir.Z>-.01) return false;
+  // The ray meets the ground: once at height 0, then again at the ground height found there.
+  double Z=0; for(int32 K=0;K<2;++K){const double T=(Z-Origin.Z)/Dir.Z;World=Origin+Dir*T;Z=BattleSectorView::GroundZ(GetWorld(),World.X,World.Y);}
+ }
+ Out=BattleSectors::Cell(World); return BattleSectors::Valid(Out);
+}
+
+void ABattleHUD::DrawSectorPanel(ABattleController* PC)
+{
+ FIntPoint Cell; if(Sectors.IsEmpty()||!HoveredSector(PC,Cell)) return;
+ const auto& Info=Sectors[Cell.Y*BattleSectors::Columns+Cell.X];
+ const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ TArray<TPair<FString,FLinearColor>> Lines;
+ const FLinearColor White(.94f,.97f,1.f),Muted(.62f,.7f,.77f);const int32 Status=BattleSectorView::StatusOf(Info);
+ Lines.Emplace(FString::Printf(TEXT("区画 %s（%s）"),*BattleSectorView::SectorName(Cell),BattleSectorView::KindName(BattleFieldLayout::SectorKind(GetWorld(),Cell))),White);
+ Lines.Emplace(FString::Printf(TEXT("状態：%s"),BattleSectorView::StatusName(Status)),SectorTint(Status));
+ Lines.Emplace(FString::Printf(TEXT("自軍 %d人 ／ 敵 確認 %d・痕跡 %d"),Info.Own,Info.Seen,Info.Remembered),White);
+ const bool bFoggy=Info.SightShare()<.5f;
+ Lines.Emplace(FString::Printf(TEXT("視界 %d%%%s"),FMath::RoundToInt(Info.SightShare()*100),bFoggy?TEXT("（霧が多い：敵がいても見えない）"):TEXT("")),bFoggy?Muted:White);
+ if(Info.Objective!=INDEX_NONE)
+ {
+  const int32 Holder=Match->bArea?Match->ObservedOwner(0,Info.Objective):Match->Objectives[Info.Objective].Owner;
+  const TCHAR* Who=Holder==0?TEXT("自軍"):Holder==1?TEXT("敵軍"):Holder==-2?TEXT("不明"):TEXT("中立");
+  Lines.Emplace(FString::Printf(TEXT("拠点 %c（%s）%s"),TCHAR('A'+Info.Objective),Who,Match->ObjectiveValue(Info.Objective)>1.f?TEXT(" 集積所"):TEXT("")),White);
+ }
+ Lines.Emplace(FString::Printf(TEXT("遮蔽位置 %d か所"),Info.Cover),Muted);
+ if(!Info.Squads.IsEmpty())
+ {
+  FString Names;
+  for(int32 I=0;I<Info.Squads.Num();++I)
+  {
+   if(I==4){Names+=FString::Printf(TEXT(" ほか%d"),Info.Squads.Num()-4);break;}
+   if(const auto* S=Store->FindSquad(Info.Squads[I])){if(!Names.IsEmpty())Names+=TEXT("、");Names+=S->DisplayName;}
+  }
+  Lines.Emplace(FString::Printf(TEXT("向かう・維持：%s"),*Names),FLinearColor(.28f,.95f,.8f));
+ }
+ else Lines.Emplace(TEXT("命令中の部隊なし"),Muted);
+ FVector2D P(Canvas->SizeX*.5f,Canvas->SizeY*.5f); if(SectorViewShotPrefix().IsEmpty()) PC->GetPointerPosition(P);
+ const float Width=330,Row=18,Height=10+Row*Lines.Num();
+ float X=P.X+22,Y=P.Y+18; if(X+Width>Canvas->SizeX-8)X=P.X-Width-14; if(Y+Height>Canvas->SizeY-8)Y=Canvas->SizeY-8-Height;
+ DrawRect(FLinearColor(.025f,.04f,.065f,.9f),X,Y,Width,Height);DrawRect(SectorTint(Status),X,Y,3,Height);
+ for(int32 I=0;I<Lines.Num();++I)DrawText(Lines[I].Key,Lines[I].Value,X+10,Y+5+I*Row,GEngine->GetSmallFont(),.85f);
+}
+
+// Minimap part of the overlay: sector tint, fog and grid, drawn over the ground and roads and under the marks.
+void ABattleHUD::DrawMinimapOverlay(ABattleController* PC,const FBattleMinimapLayout& Map)
+{
+ const double Now=GetWorld()->GetRealTimeSeconds();
+ auto Rect=[&](double X0,double Y0,double X1,double Y1,FLinearColor C,TArray<FCanvasUVTri>& Tris)
+ {
+  const FVector2D A=Map.ToScreen(FVector(X0,Y0,0)),B=Map.ToScreen(FVector(X1,Y1,0));
+  const FVector2D Lo(FMath::Max(FMath::Min(A.X,B.X),Map.Origin.X),FMath::Max(FMath::Min(A.Y,B.Y),Map.Origin.Y));
+  const FVector2D Hi(FMath::Min(FMath::Max(A.X,B.X),Map.Origin.X+Map.Size.X),FMath::Min(FMath::Max(A.Y,B.Y),Map.Origin.Y+Map.Size.Y));
+  if(Hi.X<=Lo.X||Hi.Y<=Lo.Y)return;
+  const FVector2D P[4]={Lo,FVector2D(Hi.X,Lo.Y),Hi,FVector2D(Lo.X,Hi.Y)};const FLinearColor Cs[4]={C,C,C,C};AddQuad(Tris,P,Cs);
+ };
+ const bool bSectors=BattleFieldLayout::Of(GetWorld()).bSectors&&!Sectors.IsEmpty();
+ const double Size=BattleSectors::Size,HX=BattleSectors::Columns*Size*.5,HY=BattleSectors::Rows*Size*.5;
+ if(bSectors)
+ {
+  TArray<FCanvasUVTri> Tris;
+  for(int32 R=0;R<BattleSectors::Rows;++R)for(int32 C=0;C<BattleSectors::Columns;++C)
+  {
+   const int32 Status=BattleSectorView::StatusOf(Sectors[R*BattleSectors::Columns+C]);if(Status<1||Status>4)continue;
+   FLinearColor Tint=SectorTint(Status);Tint.A=Status==4?.18f:.30f;
+   Rect(-HX+C*Size,-HY+R*Size,-HX+(C+1)*Size,-HY+(R+1)*Size,Tint,Tris);
+  }
+  DrawTris(Canvas,Tris);
+ }
+ if(PC->bShowFog&&Fog.IsValid())
+ {
+  TArray<FCanvasUVTri> Tris;
+  for(int32 Y=0;Y<Fog.Rows;++Y)for(int32 X=0;X<Fog.Columns;++X)
+  {
+   const uint8 State=Fog.State(Y*Fog.Columns+X,Now);if(!State)continue;
+   FLinearColor C=FogInk;C.A=FogAlpha[State]+.1f;const FVector2D M=Fog.CellMin(X,Y);
+   Rect(M.X,M.Y,M.X+FBattleFogGrid::Cell,M.Y+FBattleFogGrid::Cell,C,Tris);
+  }
+  DrawTris(Canvas,Tris);
+ }
+ if(!bSectors)return;
+ const FLinearColor Line(.8f,.86f,.95f,.22f),Label(.7f,.76f,.84f,.9f);
+ for(int32 C=0;C<=BattleSectors::Columns;++C){const FVector2D A=Map.ToScreen(FVector(-HX+C*Size,-HY,0)),B=Map.ToScreen(FVector(-HX+C*Size,HY,0));DrawLine(A.X,A.Y,B.X,B.Y,Line,1);}
+ for(int32 R=0;R<=BattleSectors::Rows;++R){const FVector2D A=Map.ToScreen(FVector(-HX,-HY+R*Size,0)),B=Map.ToScreen(FVector(HX,-HY+R*Size,0));DrawLine(A.X,A.Y,B.X,B.Y,Line,1);}
+ // Column letters down the left edge and row numbers along the bottom (every other one where they would crowd).
+ const float CellPx=Map.Size.Y/BattleSectors::Columns;const int32 Every=CellPx<12?2:1;
+ for(int32 C=0;C<BattleSectors::Columns;C+=Every){const FVector2D P=Map.ToScreen(BattleSectors::Center({C,0}));DrawText(FString::Printf(TEXT("%c"),TCHAR('A'+C)),Label,Map.Origin.X-12,P.Y-6,GEngine->GetSmallFont(),.6f);}
+ for(int32 R=0;R<BattleSectors::Rows;R+=Every){const FVector2D P=Map.ToScreen(BattleSectors::Center({0,R}));DrawText(FString::Printf(TEXT("%d"),R+1),Label,P.X-3,Map.Origin.Y+Map.Size.Y+1,GEngine->GetSmallFont(),.6f);}
+ FIntPoint Hover;
+ if(HoveredSector(PC,Hover))
+ {
+  const FVector M=BattleSectors::Center(Hover);const FVector2D A=Map.ToScreen(M+FVector(-Size*.5,-Size*.5,0)),B=Map.ToScreen(M+FVector(Size*.5,Size*.5,0));
+  const FLinearColor Bright(1.f,.9f,.3f);
+  DrawLine(A.X,A.Y,B.X,A.Y,Bright,1.5f);DrawLine(B.X,A.Y,B.X,B.Y,Bright,1.5f);DrawLine(B.X,B.Y,A.X,B.Y,Bright,1.5f);DrawLine(A.X,B.Y,A.X,A.Y,Bright,1.5f);
  }
 }
