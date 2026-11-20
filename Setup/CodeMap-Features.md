@@ -17,7 +17,7 @@
 | 兵科（歩兵・重火器・偵察・対戦車・戦車）の差 | @BattleSquadType::Members から @BattleSquadType::Weapon までの一群、 @UBattleState::SetSquadType | 射程は @BattleRanges::Get |
 | 命令（移動・攻撃移動・防御・待機） | 入力 @ABattleController::IssueOrderAt → 状態 @UBattleState::SetSquadOrder → 混成 @UBattleLeaderRuntime::IssueOrder | 委任は @UBattleState::SetSquadDelegated 、 @UBattleMatch::SetAllyDelegated |
 | 入力・RTS/TPS 切替・ゲームパッド | @ABattleController::SetupInputComponent 、 @ABattleController::InputKey 、 @ABattleController::ToggleMode 、 @ABattleController::ControlUnit | ゲームパッドは @ABattleController::UpdateGamepad 。隊長交代は @UBattleState::HandOverLeader |
-| HUD・ミニマップ・部隊一覧・通知 | @ABattleHUD::DrawHUD 、 @ABattleHUD::DrawMinimap 、 @ABattleHUD::DrawSquadList 、 @ABattleHUD::DrawNoticeLog | 通知の中身は @ABattleController::UpdateNoticeLog 、 @ABattleController::PushNotice 。日本語化は @BattleUIText::Ja 。被弾方向は @ABattleHUD::DrawHitDirection （記録は @UBattleState::ApplyDamageFrom ）、画面外マーカーは @ABattleHUD::DrawOffscreenMarkers 、撃破ログは @ABattleHUD::DrawKillLog （記録は @UBattleState::NoteKill ） |
+| HUD・ミニマップ・部隊一覧・通知 | @ABattleHUD::DrawHUD 、 @ABattleHUD::DrawMinimap 、 @ABattleHUD::DrawSquadList 、 @ABattleHUD::DrawNoticeLog | 通知の中身は @ABattleController::UpdateNoticeLog 、 @ABattleController::PushNotice 。日本語化は @BattleUIText::Ja 。被弾方向は @ABattleHUD::DrawHitDirection （記録は @UBattleState::ApplyDamageFrom ）、画面外マーカーは @ABattleHUD::DrawOffscreenMarkers 、撃破ログは @ABattleHUD::DrawKillLog （記録は @UBattleState::NoteKill ）。作戦画面の戦場の霧・区画の格子と区画の状態は @ABattleHUD::DrawFieldOverlay 、 @ABattleHUD::DrawSectorPanel （計算は `BattleSectorView`） |
 | 認識（見えた敵の記憶） | @UBattlePerception::Update 、 @UBattlePerception::GetContacts | 視線は @UBattleLeaderRuntime::CanSee 、 @UBattleLeaderRuntime::TraceSight 。試験用の視界切替は @BattleSightExperiment |
 | 隊長の判断と兵の実行（混成） | @UBattleLeaderRuntime::Think 、 @UBattleLeaderRuntime::Follow 、 @UBattleLeaderRuntime::Fire | 兵単位の実行は @FBattleMixedDriver::Tick 、 @FBattleMixedDriver::TryTacticalAction |
 | 移動・経路・混雑 | @UBattleLeaderRuntime::StableMove 、 @UBattleLeaderRuntime::BuildMovementPlan | 到着地点の重なりは @UBattleLeaderRuntime::ReassignOccupiedArrival 。目的地の補正は @BattleNavigation::ResolveGoal |
@@ -138,5 +138,6 @@ BattleSectorAudit | 区画命令の検証 `-BattleSectorAudit`（区画のある
 BattleSectors | マップHの区画の表（Codex）：50mの区画 20×14 の種類 `Kind`、位置から区画 `Cell`・区画の中心 `Center`、川の線 `RiverX`、家・丘の一覧。区画の種類をマップごとに引くのは `BattleFieldLayout::SectorKind`（H・I）
 BattlePlayerPath | プレイヤーの入力の補助：命令先の点（2階は壁越しでも指せる、Alt で1階）`PickOrderPoint`、右ドラッグで引いた道筋の命令 `PlayerPathOrder`、選んだ部隊の道筋の予測表示 `DrawOrderWays`／`PlayerRoutePreview`、壁の乗り越え `TryVault`、作戦カメラの速さ `PanSpeed`（ABattleController・UBattleMatch・ABattleHUD の一部）
 BattleRoutes | 通り道：道路網のあるマップ（F）で、遠い目的地へ交差点を順に指示する。本拠地へ向かう部隊は観測した敵の少ない側面路を選ぶ（UBattleMatch の一部）
+BattleSectorView | 作戦画面の表示だけ（規則・AIは読まない）：自軍の視界の格子 `FBattleFogGrid`（12.5m、自軍の兵から静的な物体への光線）と区画ごとの状態 `BattleSectorView::Gather`（自軍の人数・観測した敵・視界の割合・拠点・命令中の部隊・遮蔽位置の数）
 BattleSectorRoute | 区画経由の移動 `-BattleSectorRoute`・側面 `-BattleSectorFlank`・前線 `-BattleSectorFront`（区画のあるマップ、AIの歩兵）：道路網の次の交差点の代わりに、その周りで遮蔽の多い区画を制圧・維持しながら進む。側面は観測した敵の正面を避けた区画、前線は自軍の区画のうち敵に接する区画（UBattleMatch の一部）
 BattleSectors | マップHの50m区画の格子（20×14）：区画の番号と中心、区画の種類の表、川・橋・浅瀬の位置
