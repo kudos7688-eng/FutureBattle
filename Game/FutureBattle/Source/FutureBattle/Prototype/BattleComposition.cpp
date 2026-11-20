@@ -7,10 +7,13 @@
 
 BattleComposition::FSettings BattleComposition::Settings()
 {
- // No static cache: OFF only reads the command line, without initializing any planner state.
+ static const FSettings Resolved=[]()
+ {
  int32 Planner=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaCompositionPlanner="),Planner);
  int32 Teams=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaCompositionPlannerTeams="),Teams);
  FSettings Result;Result.bEnabled=Planner==1;Result.Teams=FMath::Clamp(Teams,0,3);return Result;
+ }();
+ return Resolved;
 }
 
 const TArray<BattleComposition::FTypeDef>& BattleComposition::Definitions()
@@ -44,6 +47,7 @@ BattleComposition::FInput BattleComposition::Capture(const UBattleMatch& Match,c
  Result.HeavyShare=ResolvedIntent.HeavyShare;Result.bAutoTargets=bAutoTargets;Result.bAutoAllowed=bAutoAllowed;
  const auto& H=BattleTactics::AreaHire();Result.bHireEnabled=H.bEnabled;Result.Interval=H.Interval;Result.Stop=H.Stop;
  if(Match.Area.LastAIHireAt.IsValidIndex(Team))Result.LastHireAt=Match.Area.LastAIHireAt[Team];
+ Result.UnitSlots=FMath::Max(0,1000-Store.GetUnits().Num());
  Result.Records=Store.GetSquads().Num(); // shared record capacity, not an enemy combat input
  for(const auto& Replacement:Match.Area.Replacements)if(const auto* Unit=Store.Find(Replacement.Key);Unit&&Unit->Team==Team)++Result.Pending;
  Result.Free=FMath::Max(0,Result.Credits-Result.Pending-Result.Reserve);
@@ -100,10 +104,11 @@ FString BattleComposition::Describe(const FInput& Input)
 {
  FString Result=FString::Printf(TEXT("stage=2 mode=planner team=%d time=%.3f remaining=%.3f auto_allowed=%d hire=%d composition=%d credits=%d pending=%d reserve=%d free=%d active=%d records=%d legacy_bought=%d legacy_heavy=%d heavy_share=%.4f observed_vehicles=%d interval=%.3f stop=%.3f last_hire=%.3f"),
   Input.Team,Input.Elapsed,Input.Remaining,Input.bAutoAllowed?1:0,Input.bHireEnabled?1:0,Input.bAutoTargets?1:0,Input.Credits,Input.Pending,Input.Reserve,Input.Free,Input.Active,Input.Records,Input.LegacyBought,Input.LegacyHeavy,Input.HeavyShare,Input.ObservedVehicles,Input.Interval,Input.Stop,Input.LastHireAt);
+ Result+=FString::Printf(TEXT(" unit_slots=%d home_defenders=%d buy_stop_ms=%d arrival_deadline_ms=%d front_effective=%d window=[at:%d,credits:%d,income:%d,hire_spent:%d] role_effective=[%d,%d,%d,%d,%d]"),Input.UnitSlots,Input.HomeDefenders,Input.StopAtMS,Input.ArrivalDeadlineMS,Input.FrontEffective,Input.WindowAtMS,Input.WindowCredits,Input.WindowIncome,Input.WindowHireSpent,Input.RoleEffective[0],Input.RoleEffective[1],Input.RoleEffective[2],Input.RoleEffective[3],Input.RoleEffective[4]);
  for(uint8 Type=0;Type<BattleSquadType::Count;++Type)
  {
   const auto& Value=Input.Types[Type];
-  Result+=FString::Printf(TEXT(" type%d=[active:%d,living:%d,armed:%d,returning:%d,hp_permille_sum:%d,keep:%d,paced:%d]"),Type,Value.Active,Value.Living,Value.Armed,Value.Returning,Value.HealthPermilleSum,Value.Keep,Value.PacedTarget);
+  Result+=FString::Printf(TEXT(" type%d=[active:%d,living:%d,armed:%d,returning:%d,hp_permille_sum:%d,keep:%d,paced:%d,effective:%d,anti_armour_effective:%d]"),Type,Value.Active,Value.Living,Value.Armed,Value.Returning,Value.HealthPermilleSum,Value.Keep,Value.PacedTarget,Value.Effective,Value.AntiArmourEffective);
  }
  return Result;
 }

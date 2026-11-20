@@ -53,6 +53,43 @@ void UBattleMatch::InitializeComposition()
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COMPOSITION_RULES policy=%d key=%s teams=%d"),BattleComposition::PolicyVersion,*BattleComposition::RulesKey(),CompositionTeams);
 }
 
+bool UBattleMatch::CompositionHomeThreat(int32 Team) const
+{
+ if(Team<0||Team>1)return false;
+ if(Area.HomeHitAt.IsValidIndex(Team)&&Elapsed-Area.HomeHitAt[Team]>=0&&Elapsed-Area.HomeHitAt[Team]<30.f)return true;
+ // Preserve P1's observed-contact trigger without calling AreaHireNeed (which suppresses an existing defender).
+ const auto* ThreatStore=GetWorld()->GetSubsystem<UBattleState>();
+ const auto* ThreatRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ const auto* ThreatPerception=GetWorld()->GetSubsystem<UBattlePerception>();
+ if(!ThreatStore||!ThreatRuntime||!ThreatPerception)return false;
+ const FVector ThreatHome=AreaHome(Team);
+ for(const auto& OwnUnit:ThreatStore->GetUnits())if(OwnUnit.Value.Team==Team&&OwnUnit.Value.IsAlive()&&FVector::DistSquared2D(ThreatRuntime->Position(OwnUnit.Key),ThreatHome)<=FMath::Square(15000.))
+  if(const auto* ThreatContacts=ThreatPerception->GetContacts(OwnUnit.Key))
+   for(const auto& ThreatContact:*ThreatContacts)if(ThreatContact.Value.bVisible&&FVector::DistSquared2D(ThreatContact.Value.LastKnownPosition,ThreatHome)<=FMath::Square(15000.))return true;
+ return false;
+}
+
+void UBattleMatch::UpdateCompositionPurposes(int32 Team)
+{
+ if(Team<0||Team>1||(CompositionTeams&(1<<Team))==0||!CompositionState.IsValidIndex(Team))return;
+ auto& Emergencies=CompositionState[Team].EmergencyUntilMS;
+ if(Emergencies.IsEmpty())return;
+ const auto* PurposeStore=GetWorld()->GetSubsystem<UBattleState>();
+ const int32 PurposeNowMS=FMath::FloorToInt(Elapsed*1000.f);
+ const bool Threat=CompositionHomeThreat(Team);
+ for(auto It=Emergencies.CreateIterator();It;++It)
+ {
+  const auto* Squad=PurposeStore->FindSquad(It.Key());
+  const int32* Purpose=Area.HirePurpose.Find(It.Key());
+  if(!Threat||PurposeNowMS>=It.Value()||!Squad||Squad->CommandStatus!=EBattleCommandStatus::Active||!Purpose||*Purpose!=101)
+  {
+   if(Purpose&&*Purpose==101)Area.HirePurpose.Remove(It.Key());
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COMPOSITION_RELEASE team=%d squad=%d now_ms=%d until_ms=%d threat=%d"),Team,It.Key(),PurposeNowMS,It.Value(),Threat?1:0);
+   It.RemoveCurrent();
+  }
+ }
+}
+
 void UBattleMatch::UpdateCompositionHiring(int32 Team)
 {
  if(Team<0||Team>1||(CompositionTeams&(1<<Team))==0||!CompositionState.IsValidIndex(Team))return;
@@ -60,6 +97,7 @@ void UBattleMatch::UpdateCompositionHiring(int32 Team)
  if(Team==0&&!Runtime->SightExperiment.Enabled)return;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Perception=GetWorld()->GetSubsystem<UBattlePerception>();
  const int32 NowMS=FMath::FloorToInt(Elapsed*1000.f);const double WorldNow=GetWorld()->GetTimeSeconds();
+ UpdateCompositionPurposes(Team);
  auto& State=CompositionState[Team];
  // Actual resource receipts, not objective truth. A 20s window spans the default income cycle; no speculative
  // saving before the first sample. Purchases (including manual ones) do not masquerade as replacement expense.
@@ -107,11 +145,20 @@ void UBattleMatch::UpdateCompositionHiring(int32 Team)
  Input.NowMS=NowMS;Input.ObservedVehicles=State.VehicleSeenMS.Num();
  const auto& Hire=BattleTactics::AreaHire();Input.MaxActive=Hire.MaxActive;Input.FrontMinimum=FMath::Min(3,Hire.MaxActive);
  Input.StopAtMS=FMath::FloorToInt((MatchTimeLimit()-Hire.Stop)*1000.f);
+ Input.ArrivalDeadlineMS=FMath::FloorToInt(MatchTimeLimit()*1000.f);
+ Input.WindowAtMS=State.WindowAtMS;Input.WindowCredits=State.WindowCredits;Input.WindowIncome=State.WindowIncome;Input.WindowHireSpent=State.WindowHireSpent;
  Input.NetPerMinute=BattleTactics::AreaIncome().bEnabled&&!bAreaIncomeHeld?State.NetPerMinute:0;
  Input.bCanPurchase=Hire.Interval<=0||Elapsed-Area.LastAIHireAt[Team]>=Hire.Interval;
  Input.bMissionRequired=Hire.bPurpose&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==Team);
- Input.bHomeThreat=Area.HomeHitAt.IsValidIndex(Team)&&Elapsed-Area.HomeHitAt[Team]>=0&&Elapsed-Area.HomeHitAt[Team]<30.f;
- Input.Mission=Input.bMissionRequired?AreaHireNeed(Team):Input.bHomeThreat?101:-1;
+ Input.bHomeThreat=CompositionHomeThreat(Team);
+ int32 HomeDefenders=0;
+ for(const auto& Purpose:Area.HirePurpose)if(Purpose.Value==101)
+  if(const auto* Defender=Store->FindSquad(Purpose.Key);Defender&&Defender->Team==Team&&Defender->CommandStatus==EBattleCommandStatus::Active)++HomeDefenders;
+ Input.HomeDefenders=HomeDefenders;
+ const bool NeedsDefender=Input.bHomeThreat&&HomeDefenders<1;
+ Input.Mission=Input.bMissionRequired?AreaHireNeed(Team):NeedsDefender?101:-1;
+ if(Input.Mission==101&&!NeedsDefender)Input.Mission=-1;
+ if(Input.Mission==101)Input.ArrivalDeadlineMS=FMath::Min(Input.ArrivalDeadlineMS,NowMS+30000);
  // Targets still unlock by successful purchase count. The live path no longer infers it from SquadID>50.
  const int32 Unlocked=Bought/FMath::Max(1,GetDefault<UBattleTuning>()->AreaScoutAfterHires);
  for(int32 Type=2;Type<BattleSquadType::Count;++Type)Input.Types[Type].PacedTarget=Type==BattleSquadType::AntiTank&&AutoTargets?Input.Types[Type].Keep:FMath::Min(Input.Types[Type].Keep,Unlocked);
@@ -128,13 +175,19 @@ void UBattleMatch::UpdateCompositionHiring(int32 Team)
  BattleComposition::LogInput(Input);
  auto Decision=BattleComposition::Decide(Input,BattleComposition::Definitions(),State);State=Decision.Next;
  for(const auto& Candidate:Decision.Candidates)
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COMPOSITION_CANDIDATE team=%d serial=%d type=%d mission=%d target=%d deficit=%d role_deficit=%d urgency=%d score=%d cost=%d arrival_ms=%d excluded=%s"),Team,State.Serial,Candidate.Type,Candidate.Mission,Candidate.Target,Candidate.Deficit,Candidate.RoleDeficit,Candidate.Urgency,Candidate.Score,Candidate.Cost,Candidate.ArrivalMS,*Candidate.Excluded);
- UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COMPOSITION_DECISION team=%d serial=%d action=%d type=%d mission=%d free=%d net_per_minute=%d deadline_ms=%d reason=%s"),Team,State.Serial,int32(Decision.Action),Decision.Type,Decision.Mission,Input.Free,Input.NetPerMinute,State.SaveDeadlineMS,*Decision.Reason);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COMPOSITION_CANDIDATE team=%d serial=%d type=%d mission=%d target=%d deficit=%d role_deficit=%d urgency=%d score=%d cost=%d arrival_ms=%d waiting=%d excluded=%s"),Team,State.Serial,Candidate.Type,Candidate.Mission,Candidate.Target,Candidate.Deficit,Candidate.RoleDeficit,Candidate.Urgency,Candidate.Score,Candidate.Cost,Candidate.ArrivalMS,Candidate.Waiting,*Candidate.Excluded);
+ FString Blocked;for(int32 BlockType=0;BlockType<State.SaveBlockedUntil.Num();++BlockType){if(BlockType)Blocked+=TEXT(",");Blocked+=FString::FromInt(State.SaveBlockedUntil[BlockType]);}
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COMPOSITION_DECISION team=%d serial=%d action=%d type=%d mission=%d free=%d net_per_minute=%d deadline_ms=%d save_started_ms=%d save_urgency=%d switch_type=%d switch_count=%d retry_until=%d save_blocked=[%s] reason=%s"),Team,State.Serial,int32(Decision.Action),Decision.Type,Decision.Mission,Input.Free,Input.NetPerMinute,State.SaveDeadlineMS,State.SaveStartedMS,State.SaveUrgency,State.SwitchType,State.SwitchCount,State.RetryUntil,*Blocked,*Decision.Reason);
  if(Decision.Action!=BattleComposition::EAction::Buy)return;
  const FString PreviousMessage=LastMessage;LastHiredSquadID=INDEX_NONE;
  const bool Purchased=HireAreaSquad(Team,EBattleTraining::Regular,true,static_cast<uint8>(Decision.Type));
  if(Purchased&&LastHiredSquadID!=INDEX_NONE&&Decision.Mission>=0)Area.HirePurpose.Add(LastHiredSquadID,Decision.Mission);
- BattleComposition::CompletePurchase(State,Purchased,Decision.Type);
- UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COMPOSITION_EXECUTE team=%d serial=%d type=%d success=%d squad=%d reason=%s"),Team,State.Serial,Decision.Type,Purchased?1:0,LastHiredSquadID,*State.Reason);
+ if(Purchased&&LastHiredSquadID!=INDEX_NONE&&Decision.Mission==101){
+  State.EmergencyUntilMS.Add(LastHiredSquadID,Input.ArrivalDeadlineMS);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COMPOSITION_PURPOSE team=%d squad=%d mission=101 until_ms=%d"),Team,LastHiredSquadID,Input.ArrivalDeadlineMS);
+ }
+ const auto Failure=BattleComposition::ClassifyFailure(LastMessage);
+ BattleComposition::CompletePurchase(State,Purchased,Decision.Type,Failure);
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COMPOSITION_EXECUTE team=%d serial=%d type=%d success=%d squad=%d failure_class=%d raw_message=\"%s\" reason=%s"),Team,State.Serial,Decision.Type,Purchased?1:0,LastHiredSquadID,Purchased?-1:int32(Failure),*LastMessage,*State.Reason);
  LastMessage=PreviousMessage;
 }

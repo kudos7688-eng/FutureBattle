@@ -39,6 +39,25 @@ void UBattleLeaderRuntime::RunAreaSmoke()
  {
   RunCompositionSmoke();
   {
+   const int32 PurposeMask=M->CompositionTeams;const auto PurposeStates=M->CompositionState;
+   const auto PurposeMap=M->Area.HirePurpose;const auto PurposeHits=M->Area.HomeHitAt;const float PurposeTime=M->Elapsed;
+   M->CompositionTeams=1;M->CompositionState.SetNum(2);M->CompositionState[0]=FCompositionTeamState();M->Area.HomeHitAt.SetNum(2);
+   M->Elapsed=10.f;M->Area.HomeHitAt[0]=10.f;
+   M->Area.HirePurpose.Add(1,101);M->Area.HirePurpose.Add(2,101); // second squad represents legacy P1
+   M->CompositionState[0].EmergencyUntilMS.Add(1,20000);
+   M->UpdateCompositionPurposes(0);
+   Check(M->Area.HirePurpose.Contains(1),TEXT("planner emergency remains before deadline while threat persists"));
+   M->Elapsed=20.f;M->UpdateCompositionPurposes(0);
+   Check(!M->Area.HirePurpose.Contains(1)&&M->Area.HirePurpose.Contains(2)&&M->CompositionState[0].EmergencyUntilMS.IsEmpty(),TEXT("planner releases at exact deadline without releasing legacy P1"));
+   M->Area.HirePurpose.Add(1,101);M->CompositionState[0].EmergencyUntilMS.Add(1,60000);
+   M->Elapsed=40.f;M->UpdateCompositionPurposes(0);
+   Check(!M->Area.HirePurpose.Contains(1)&&M->Area.HirePurpose.Contains(2),TEXT("planner releases emergency when thirty-second threat clears"));
+   M->Area.HirePurpose.Add(1,101);M->CompositionState[0].EmergencyUntilMS.Add(1,40000);M->CompositionTeams=0;
+   M->UpdateCompositionPurposes(0);
+   Check(M->Area.HirePurpose.Contains(1),TEXT("planner OFF does not touch purpose containers"));
+   M->CompositionTeams=PurposeMask;M->CompositionState=PurposeStates;M->Area.HirePurpose=PurposeMap;M->Area.HomeHitAt=PurposeHits;M->Elapsed=PurposeTime;
+  }
+  {
    BattleComposition::FSettings CompositionOff;
    Check(!CompositionOff.Applies(0)&&!CompositionOff.Applies(1),TEXT("composition planner defaults OFF for both teams"));
    bool CompositionMasksOK=true;
@@ -73,7 +92,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    FAreaIntent CompositionIntent;CompositionIntent.HireReserve=7;CompositionIntent.ScoutKeep=2;CompositionIntent.ATKeep=3;
    const auto CompositionInput=BattleComposition::Capture(*M,*Store,0,CompositionIntent,true,false);
    const FString CompositionBefore=BattleComposition::Describe(CompositionInput);
-   Check(CompositionInput.Active==M->ActiveSquads(0)&&CompositionInput.Free==FMath::Max(0,M->Credits[0]-CompositionInput.Pending-7)&&!CompositionInput.bAutoAllowed,
+   Check(CompositionInput.UnitSlots==FMath::Max(0,1000-Store->GetUnits().Num())&&CompositionInput.Active==M->ActiveSquads(0)&&CompositionInput.Free==FMath::Max(0,M->Credits[0]-CompositionInput.Pending-7)&&!CompositionInput.bAutoAllowed,
     TEXT("composition input preserves player ownership and subtracts reservations once"));
    Check(CompositionInput.Types[BattleSquadType::AntiTank].PacedTarget==3&&CompositionInput.Types[BattleSquadType::Supply].PacedTarget==0,
     TEXT("composition observes immediate AT target without enabling supply"));

@@ -7,6 +7,9 @@ USTRUCT()
 struct FCompositionTeamState
 {
  GENERATED_BODY()
+ // Planner-only provenance: squad -> absolute emergency defence expiry. At most one per team.
+ UPROPERTY() TMap<int32,int32> EmergencyUntilMS;
+ UPROPERTY() bool bConfigurationFailed=false;
  UPROPERTY() int32 Serial=0;
  UPROPERTY() TArray<int32> Purchased={0,0,0,0,0,0,0,0,0,0};
  UPROPERTY() TArray<int32> Waiting={0,0,0,0,0,0,0,0,0,0};

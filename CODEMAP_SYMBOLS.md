@@ -11,7 +11,7 @@
 - `BattleArea.cpp`: UBattleMatch::AreaHome:16, UBattleMatch::ObservedOwner:17, UBattleMatch::AreaScore:18, UBattleMatch::InitializeArea:28, UBattleMatch::AreaVisible:48, UBattleMatch::CanFireAtBase:57, UBattleMatch::DamageBase:65, UBattleMatch::ActiveSquads:73, UBattleMatch::ActiveScouts:78, UBattleMatch::SupplyTeamNear:79, UBattleMatch::ActiveOfType:91, UBattleMatch::HireAreaSquad:96, UBattleMatch::UpdateAreaHiring:136, UBattleMatch::AreaIncomeGain:199, UBattleMatch::UpdateArea:206, UBattleMatch::AreaHireNeed:296, UBattleMatch::AreaIntent:324, UBattleMatch::AreaFronts:373, UBattleMatch::AreaHeavyTarget:397, UBattleMatch::AreaScoutPost:413
 - `BattleAreaDepot.cpp`: UBattleMatch::ApplyDepotWeights:20
 - `BattleAreaIntel.cpp`: UBattleMatch::AreaIntelOn:12, UBattleMatch::AreaIntelView:19, UBattleMatch::AreaIntelThreatAt:56, UBattleMatch::AreaIntelThreat:62, UBattleMatch::UpdateIntelPurposes:69, UBattleMatch::ArtilleryHomeObserved:86
-- `BattleAreaSmoke.cpp`: UBattleLeaderRuntime::RunAreaSmoke:29, UBattleLeaderRuntime::RunSectorSmoke:1162
+- `BattleAreaSmoke.cpp`: UBattleLeaderRuntime::RunAreaSmoke:29, UBattleLeaderRuntime::RunSectorSmoke:1181
 - `BattleArmourAI.cpp`: BattleTactics::ArmourAI:28, BattleTactics::AreaComposition:36, UBattleLeaderRuntime::PickArmourTargets:45, UBattleLeaderRuntime::FaceVehicle:86, UBattleLeaderRuntime::VehicleWatchDirection:94, UBattleMatch::NoteKnownVehicles:107, UBattleMatch::KnownEnemyVehicles:116, UBattleMatch::AreaArmourReaction:128, UBattleMatch::AreaVehicleChoice:172, UBattleMatch::AreaTankPost:188, UBattleMatch::AreaTankTarget:199, UBattleMatch::AreaATTarget:219, UBattleMatch::AreaComposition:234
 - `BattleArtillery.cpp`: BattleTactics::ArtilleryObservedEnabled:21, BattleTactics::SPGAmmoEnabled:27, BattleTactics::BlastOcclusionEnabled:33, BattleTactics::ArtilleryClustersEnabled:39, UBattleLeaderRuntime::IsArtillery:45, UBattleLeaderRuntime::ArtilleryMinRange:52, UBattleLeaderRuntime::ArtilleryMaxRange:58, UBattleLeaderRuntime::ArtilleryBlastRadius:66, UBattleLeaderRuntime::ArtillerySpread:72, UBattleMatch::AreaArtilleryPost:80, UBattleLeaderRuntime::AllyNear:121, UBattleMatch::AreaArtilleryClusters:160, UBattleLeaderRuntime::PickArtilleryAim:175, UBattleLeaderRuntime::StepArtillery:251, UBattleLeaderRuntime::FireArtillery:302, UBattleLeaderRuntime::StepArtilleryShells:336, UBattleLeaderRuntime::ArtilleryBlastTransmission:349, UBattleLeaderRuntime::ArtilleryImpact:359, BattleTactics::ArtilleryTrialFlags:413, UBattleLeaderRuntime::ArtilleryClusterSmoke:418
 - `BattleBenchmark.cpp`: ABattleGameMode::ConfigureBenchmark:26, ABattleGameMode::PrepareBenchmarkOrders:60, ABattleGameMode::UpdateBenchmark:90
@@ -19,9 +19,9 @@
 - `BattleBodyAnim.h`: FBattleBodyAnimProxy::FBattleBodyAnimProxy:62, UBattleBodyAnimInstance::SetHandRaise:90, UBattleBodyAnimInstance::GetBase:91, UBattleBodyAnimInstance::CreateAnimInstanceProxy:94, UBattleBodyAnimInstance::DestroyAnimInstanceProxy:95
 - `BattleBodyAnim.cpp`: BattleBodyAnim::Enabled:57, BattleBodyAnim::Get:63, BattleBodyAnim::Locomotion:76, BattleBodyAnim::Transition:88, BattleBodyAnim::Death:99, BattleBodyAnim::Hit:110, BattleBodyAnim::CoverClip:115, BattleBodyAnim::CoverSet:127, UBattleBodyAnimInstance::SetBase:136, UBattleBodyAnimInstance::SetUpper:143, UBattleBodyAnimInstance::SetAim:151, UBattleBodyAnimInstance::PlayOverlay:153, UBattleBodyAnimInstance::NativeUpdateAnimation:159, FBattleBodyAnimProxy::PreUpdate:181, FBattleBodyAnimProxy::Evaluate:196, FBattleBodyAnimProxy::RaiseHands:204, FBattleBodyAnimProxy::EvaluateLayers:226
 - `BattleComposition.h`: BattleComposition::Applies:18
-- `BattleComposition.cpp`: BattleComposition::Settings:8, BattleComposition::Definitions:16, BattleComposition::Capture:39, BattleComposition::Describe:99, BattleComposition::LogStart:111, BattleComposition::LogInput:119
-- `BattleCompositionPlanner.cpp`: BattleComposition::Decide:13, BattleComposition::CompletePurchase:168, BattleComposition::ValidateState:176
-- `BattleCompositionRuntime.cpp`: BattleComposition::RulesKey:13, UBattleMatch::InitializeComposition:44, UBattleMatch::UpdateCompositionHiring:56
+- `BattleComposition.cpp`: BattleComposition::Settings:8, BattleComposition::Definitions:19, BattleComposition::Capture:42, BattleComposition::Describe:103, BattleComposition::LogStart:116, BattleComposition::LogInput:124
+- `BattleCompositionPlanner.cpp`: BattleComposition::Decide:13, BattleComposition::ClassifyFailure:173, BattleComposition::CompletePurchase:180, BattleComposition::ValidateState:190
+- `BattleCompositionRuntime.cpp`: BattleComposition::RulesKey:13, UBattleMatch::InitializeComposition:44, UBattleMatch::CompositionHomeThreat:56, UBattleMatch::UpdateCompositionPurposes:72, UBattleMatch::UpdateCompositionHiring:93
 - `BattleCompositionSave.cpp`: BattleComposition::ValidateSave:5
 - `BattleCompositionSmoke.cpp`: UBattleLeaderRuntime::RunCompositionSmoke:11
 - `BattleConeTrialCommandlet.cpp`: UBattleConeTrialCommandlet::UBattleConeTrialCommandlet:7, UBattleConeTrialCommandlet::Main:20
@@ -61,8 +61,8 @@
 - `BattleMapI.h`: BattleMapI::Centre:40, BattleMapI::SectorAt:41
 - `BattleMapStats.cpp`: UBattleLeaderRuntime::RunMapStats:38
 - `BattleMassTrial.cpp`: ABattleMassTrialUnit::ABattleMassTrialUnit:6, UBattleTrialMovement::PlanStep:11, UBattleTrialMovement::ApplyStep:21, UBattleMassTrial::Start:38, UBattleMassTrial::Update:52, UBattleMassTrial::Stop:80
-- `BattleMatch.h`: UBattleMatch::Total:200, UBattleMatch::IsEnabled:333
-- `BattleMatch.cpp`: UBattleMatch::InitializeMatch:15, UBattleMatch::SquadPrice:38, UBattleMatch::CurrentSquadPrice:51, UBattleMatch::HireSquad:56, UBattleMatch::StartCombat:124, UBattleMatch::CanDelegateAllies:137, UBattleMatch::SetAllyDelegated:144, UBattleMatch::Update:152, UBattleMatch::ObjectiveValue:191, UBattleMatch::MatchTimeLimit:192, UBattleMatch::CheckTimeLimit:194, UBattleMatch::UpdateObjectives:204, UBattleMatch::InObjective:223, UBattleMatch::AdvanceObjectiveControl:228, UBattleMatch::UpdateEnemyOrders:263, UBattleMatch::ChooseObjective:268, UBattleMatch::AreaStrategyTarget:281, UBattleMatch::UpdateTeamOrders:348, UBattleMatch::Resupply:487, UBattleMatch::Finish:506
+- `BattleMatch.h`: UBattleMatch::Total:202, UBattleMatch::IsEnabled:335
+- `BattleMatch.cpp`: UBattleMatch::InitializeMatch:15, UBattleMatch::SquadPrice:38, UBattleMatch::CurrentSquadPrice:51, UBattleMatch::HireSquad:56, UBattleMatch::StartCombat:124, UBattleMatch::CanDelegateAllies:137, UBattleMatch::SetAllyDelegated:144, UBattleMatch::Update:152, UBattleMatch::ObjectiveValue:191, UBattleMatch::MatchTimeLimit:192, UBattleMatch::CheckTimeLimit:194, UBattleMatch::UpdateObjectives:204, UBattleMatch::InObjective:223, UBattleMatch::AdvanceObjectiveControl:228, UBattleMatch::UpdateEnemyOrders:263, UBattleMatch::ChooseObjective:268, UBattleMatch::AreaStrategyTarget:281, UBattleMatch::UpdateTeamOrders:348, UBattleMatch::Resupply:488, UBattleMatch::Finish:507
 - `BattleMatchSmoke.cpp`: ABattleGameMode::RunMatchSmokeTest:11
 - `BattleMatchSoak.cpp`: ABattleGameMode::UpdateMatchSoak:12
 - `BattleMaterialTrial.cpp`: UBattleSquadTrial::ConfigureT5Material:43, UBattleSquadTrial::SelectT5Material:71, UBattleSquadTrial::ApplyT5Material:87
@@ -91,7 +91,7 @@
 - `BattleObjectiveSmoke.cpp`: ABattleGameMode::RunObjectiveSmokeTest:8
 - `BattleOrderSmoke.cpp`: ABattleGameMode::CompleteSmokeTest:10, ABattleGameMode::RunOrderSmokeTest:19
 - `BattlePerception.h`: UBattlePerception::Reset:61
-- `BattlePerception.cpp`: UBattlePerception::Capture:10, UBattlePerception::Restore:21, UBattlePerception::GetContacts:37, UBattlePerception::FindContact:43, UBattlePerception::CollectVisibleTargets:49, UBattlePerception::Update:58, UBattlePerception::AddHint:396
+- `BattlePerception.cpp`: UBattlePerception::Capture:10, UBattlePerception::Restore:21, UBattlePerception::GetContacts:37, UBattlePerception::FindContact:43, UBattlePerception::CollectVisibleTargets:49, UBattlePerception::Update:58, UBattlePerception::AddHint:398
 - `BattlePerceptionOptimizationSmoke.cpp`: ABattleGameMode::RunPerceptionOptimizationSmokeTest:43
 - `BattlePerceptionSmoke.cpp`: ABattleGameMode::RunPerceptionSmokeTest:10
 - `BattlePhase3.h`: UBattleMixedAvoidance::Publish:18

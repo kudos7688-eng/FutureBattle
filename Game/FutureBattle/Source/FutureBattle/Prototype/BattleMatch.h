@@ -122,6 +122,8 @@ public:
  UPROPERTY() TArray<FCompositionTeamState> CompositionState;
  void InitializeComposition();
  void UpdateCompositionHiring(int32 Team);
+ void UpdateCompositionPurposes(int32 Team);
+ bool CompositionHomeThreat(int32 Team) const;
  int32 ActiveSquads(int32 Team) const;
  // Active scout pairs of a team (at most UBattleTuning::AreaScoutLimit).
  int32 ActiveScouts(int32 Team) const;

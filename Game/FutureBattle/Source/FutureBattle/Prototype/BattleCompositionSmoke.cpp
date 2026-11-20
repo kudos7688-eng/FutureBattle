@@ -18,7 +18,7 @@ void UBattleLeaderRuntime::RunCompositionSmoke()
  BattleComposition::FInput CompositionInput;
  CompositionInput.Team=1;CompositionInput.bAutoAllowed=true;CompositionInput.bHireEnabled=true;CompositionInput.MaxActive=10;
  CompositionInput.Active=5;CompositionInput.Records=5;CompositionInput.FrontMinimum=3;CompositionInput.FrontEffective=5000;
- CompositionInput.StopAtMS=600000;CompositionInput.NetPerMinute=60;CompositionInput.HeavyShare=.33f;
+ CompositionInput.StopAtMS=600000;CompositionInput.ArrivalDeadlineMS=600000;CompositionInput.NetPerMinute=60;CompositionInput.HeavyShare=.33f;
  CompositionInput.Types[0].Effective=6000;CompositionInput.Types[1].Effective=3000;
  CompositionInput.RoleEffective[0]=6000;CompositionInput.RoleEffective[1]=3000;
  CompositionInput.Types[BattleSquadType::Tank].PacedTarget=1;
@@ -99,6 +99,47 @@ void UBattleLeaderRuntime::RunCompositionSmoke()
  auto CompositionTypeFull=CompositionInput;CompositionTypeFull.Types[4].Active=10;
  CompositionCheck(BattleComposition::Decide(CompositionTypeFull,CompositionDefs,CompositionProgress).Type!=4,TEXT("planner respects hard type capacity"));
 
+ // Batch B boundaries: shared retained-unit capacity, distinct deadlines, and current urgency.
+ auto CompositionCapacity=CompositionHeavy;CompositionCapacity.UnitSlots=1;
+ CompositionCheck(BattleComposition::Decide(CompositionCapacity,CompositionDefs,CompositionInitial).Type==BattleSquadType::Tank,TEXT("planner remaining one unit slot selects tank over heavy"));
+ CompositionCapacity.UnitSlots=0;
+ CompositionCheck(BattleComposition::Decide(CompositionCapacity,CompositionDefs,CompositionInitial).Action==BattleComposition::EAction::Wait,TEXT("planner zero unit slots excludes all candidates"));
+ CompositionCapacity.UnitSlots=CompositionDefs[1].Members;
+ const auto CompositionExactCapacity=BattleComposition::Decide(CompositionCapacity,CompositionDefs,CompositionInitial);
+ bool CompositionHeavyFits=false;
+ for(const auto& CapacityCandidate:CompositionExactCapacity.Candidates)if(CapacityCandidate.Type==1)CompositionHeavyFits=CapacityCandidate.Excluded.IsEmpty();
+ CompositionCheck(CompositionHeavyFits,TEXT("planner exact member capacity is allowed"));
+ auto CompositionLate=CompositionInput;CompositionLate.NowMS=530000;CompositionLate.StopAtMS=540000;CompositionLate.ArrivalDeadlineMS=600000;CompositionLate.ArrivalMS[4]=20000;
+ CompositionCheck(BattleComposition::Decide(CompositionLate,CompositionDefs,CompositionInitial).Action==BattleComposition::EAction::Buy,TEXT("planner may arrive after hire stop but before match end"));
+ CompositionLate.NowMS=540000;
+ CompositionCheck(BattleComposition::Decide(CompositionLate,CompositionDefs,CompositionInitial).Action==BattleComposition::EAction::Wait,TEXT("planner cannot buy at hire stop"));
+ CompositionLate.NowMS=530000;CompositionLate.ArrivalDeadlineMS=550000;
+ CompositionCheck(BattleComposition::Decide(CompositionLate,CompositionDefs,CompositionInitial).Action==BattleComposition::EAction::Wait,TEXT("planner arrival exactly at mission deadline is too late"));
+ CompositionLate.ArrivalDeadlineMS=600000;CompositionLate.Free=31;
+ CompositionCheck(BattleComposition::Decide(CompositionLate,CompositionDefs,CompositionInitial).Action==BattleComposition::EAction::Save,TEXT("planner saves when purchase precedes stop and arrival follows stop"));
+ CompositionLate.Free=30;
+ CompositionCheck(BattleComposition::Decide(CompositionLate,CompositionDefs,CompositionInitial).Action==BattleComposition::EAction::Wait,TEXT("planner saving cannot purchase exactly at stop"));
+ auto CompositionUrgency=CompositionInput;CompositionUrgency.Free=0;CompositionUrgency.bHomeThreat=true;CompositionUrgency.Mission=0;
+ CompositionUrgency.Types[4].PacedTarget=0;CompositionUrgency.Types[5].PacedTarget=1;CompositionDefs[5].Cost=40;
+ const auto CompositionUrgentSave=BattleComposition::Decide(CompositionUrgency,CompositionDefs,CompositionInitial);
+ CompositionCheck(CompositionUrgentSave.Type==5&&CompositionUrgentSave.Next.SaveUrgency==3,TEXT("planner starts home-threat car saving at urgency three"));
+ CompositionUrgency.bHomeThreat=false;CompositionUrgency.ObservedVehicles=1;CompositionUrgency.Types[3].PacedTarget=1;CompositionUrgency.Free=12;CompositionUrgency.NowMS+=5000;
+ const auto CompositionCurrentInterrupt=BattleComposition::Decide(CompositionUrgency,CompositionDefs,CompositionUrgentSave.Next);
+ CompositionCheck(CompositionCurrentInterrupt.Type==3&&CompositionCurrentInterrupt.Action==BattleComposition::EAction::Buy&&CompositionCurrentInterrupt.Reason.Contains(TEXT("urgent_interrupt")),TEXT("planner current urgency zero allows urgency two interruption despite saved urgency three"));
+ auto CompositionDefended=CompositionHomeEmergency;CompositionDefended.HomeDefenders=1;
+ CompositionCheck(BattleComposition::Decide(CompositionDefended,CompositionDefs,CompositionInitial).Action==BattleComposition::EAction::Wait,TEXT("planner emergency defence requires fewer than one existing defender"));
+ CompositionDefended.HomeDefenders=0;CompositionDefended.bHomeThreat=false;
+ CompositionCheck(BattleComposition::Decide(CompositionDefended,CompositionDefs,CompositionInitial).Action==BattleComposition::EAction::Wait,TEXT("planner emergency mission ends when threat clears"));
+ auto CompositionConfigFailure=CompositionInitial;
+ BattleComposition::CompletePurchase(CompositionConfigFailure,false,4,BattleComposition::EFailure::Configuration);
+ CompositionCheck(BattleComposition::Decide(CompositionInput,CompositionDefs,CompositionConfigFailure).Reason==TEXT("configuration_failed"),TEXT("planner configuration failure prevents repeated execution"));
+ auto CompositionCapacityFailure=CompositionInitial;
+ BattleComposition::CompletePurchase(CompositionCapacityFailure,false,4,BattleComposition::EFailure::Capacity);
+ CompositionCheck(CompositionCapacityFailure.RetryUntil==0&&!CompositionCapacityFailure.bConfigurationFailed,TEXT("planner capacity failure rechecks candidates without global placement backoff"));
+ CompositionCheck(BattleComposition::ClassifyFailure(TEXT("Match roster capacity reached (1000 including losses)"))==BattleComposition::EFailure::Capacity&&
+  BattleComposition::ClassifyFailure(TEXT("Home deployment area is blocked"))==BattleComposition::EFailure::Placement&&
+  BattleComposition::ClassifyFailure(TEXT("Navigation unavailable"))==BattleComposition::EFailure::Configuration,TEXT("planner classifies executor capacity placement and configuration messages"));
+
  // Serialize nonempty goal and window state through the real SaveGame codec, then continue the pure decision.
  auto* CompositionMatch=GetWorld()->GetSubsystem<UBattleMatch>();const FString CompositionOriginalMessage=CompositionMatch->LastMessage;
  auto* CompositionSnapshot=CompositionMatch->CaptureSnapshot();
@@ -110,6 +151,9 @@ void UBattleLeaderRuntime::RunCompositionSmoke()
   CompositionSnapshot->CompositionState.SetNum(2);CompositionSnapshot->CompositionState[0]=FCompositionTeamState();
   auto CompositionPersisted=CompositionSaved.Next;CompositionPersisted.SaveCost=BattleComposition::Definitions()[4].Cost;
   CompositionPersisted.WindowCredits=CompositionSnapshot->EnemyCredits;CompositionPersisted.NetPerMinute=60;
+  for(const auto& PersistSquad:CompositionSnapshot->Squads)if(PersistSquad.Team==1)
+  {CompositionPersisted.EmergencyUntilMS.Add(PersistSquad.SquadID,30000);CompositionSnapshot->Area.HirePurpose.Add(PersistSquad.SquadID,101);break;}
+  CompositionPersisted.bConfigurationFailed=true;
   CompositionSnapshot->CompositionState[1]=CompositionPersisted;
   FString CompositionSaveError;TArray<uint8> CompositionBytes;
   const bool CompositionEncoded=CompositionSnapshot->Validate(CompositionSaveError)&&UGameplayStatics::SaveGameToMemory(CompositionSnapshot,CompositionBytes);
@@ -117,11 +161,21 @@ void UBattleLeaderRuntime::RunCompositionSmoke()
   CompositionCheck(CompositionDecoded&&CompositionDecoded->Validate(CompositionSaveError)&&FCompositionTeamState::StaticStruct()->CompareScriptStruct(&CompositionDecoded->CompositionState[1],&CompositionPersisted,0),TEXT("planner revision four serializes full saving and income state"));
   if(CompositionDecoded)
   {
+   CompositionPersisted.bConfigurationFailed=false;CompositionDecoded->CompositionState[1].bConfigurationFailed=false;
    auto CompositionContinueInput=CompositionInput;CompositionContinueInput.Free=23;
    const auto CompositionContinuous=BattleComposition::Decide(CompositionContinueInput,BattleComposition::Definitions(),CompositionPersisted);
    const auto CompositionResumed=BattleComposition::Decide(CompositionContinueInput,BattleComposition::Definitions(),CompositionDecoded->CompositionState[1]);
    CompositionCheck(CompositionContinuous.Type==CompositionResumed.Type&&CompositionContinuous.Action==CompositionResumed.Action&&FCompositionTeamState::StaticStruct()->CompareScriptStruct(&CompositionContinuous.Next,&CompositionResumed.Next,0),TEXT("planner post-save decision and state match uninterrupted calculation"));
-   auto* CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->CompositionState[1].SaveType=99;
+   auto* CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->CompositionPolicy=1;
+   CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner rejects old policy one v4 instead of guessing emergency provenance"));
+   CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->CompositionState[1].EmergencyUntilMS.Reset();CompositionBad->CompositionState[1].EmergencyUntilMS.Add(MAX_int32,30000);
+   CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner rejects unknown emergency squad reference"));
+   CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->Area.HirePurpose.Reset();
+   CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner rejects emergency provenance without matching hire purpose"));
+   CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);
+   for(auto& EmergencyValue:CompositionBad->CompositionState[1].EmergencyUntilMS)EmergencyValue.Value=FMath::FloorToInt(CompositionBad->Elapsed*1000.f)+30001;
+   CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner rejects emergency deadline beyond thirty seconds"));
+   CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->CompositionState[1].SaveType=99;
    CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner save rejects invalid type"));
    CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->CompositionState[1].SaveDeadlineMS=CompositionBad->CompositionState[1].SaveStartedMS-1;
    CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner save rejects inverted deadline"));

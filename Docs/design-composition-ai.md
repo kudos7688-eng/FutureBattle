@@ -1,5 +1,23 @@
 # 編成AI：不足度・緊急性・貯蓄目標による購入選択
 
+## 修正バッチB（2026-11-21、policy 2）
+
+以下は今回の最新仕様。後ろの段階1・2の記述は履歴として保持する。依頼によりビルド・UE起動・試験・試合は実行していない。
+
+- C01：Plannerの購入成功時に付けたMission=101だけ、`EmergencyUntilMS`（SquadID→Elapsed上の期限ms）で由来を保存する。必要数はActiveの既存HirePurpose=101を含め1隊。期限は購入時+30秒と試合終了の早い方。再被弾でも既存任務の期限は延長しない。脅威は直近30秒の本拠地被弾またはP1同様の本拠地付近の視認接触（自軍観測者と既知位置のみ）。脅威解消・期限到達・非Active・任務変更で解除。購入判定前と群更新前に掃除するので購入停止後も解除できる。未登録の旧P1とIntelPurposeは変更しない。脅威継続中の期限後は新たに1隊を購入できる。
+- C02：**今回は未実装**。砲兵と戦車のPost関数は目的地を渡せるが、`AreaScoutPost`は全拠点から監視所を選び、`AreaCarTarget`・`AreaATTarget`・`AreaExoTarget`は別拠点を選び直す。後三者の兵種固有配置自体が拠点選択であり、目的拠点を固定する入口がない。共通の`!Purpose`緩和では任務保持と旧経路の隔離を保証できないため、依頼の安全条件に従い変更しない。後続案はPlanner専用の任務由来・目的拠点を保存し、その拠点周辺だけの監視・退避・予備配置を選ぶ専用関数を設けること。群参加も今回変更しない。
+- C03：`UnitSlots=max(0,1000-全個体記録数)`を入力とし、Membersが超える候補を`unit_record_capacity`で除外。実行失敗はPlacement=0（配置閉塞・表示生成失敗：2判断待機）、Capacity=1（上限・記録容量：次判断の再集計で別候補も評価）、Configuration=2（Nav/モード利用不可等、未知の実行契約違反を含む：当該試合のPlanner自動購入を停止）に分類。停止フラグを保存し、原文をEXECUTEへ残す。共通の購入実行は変更しない。
+- C05：購入は`StopAtMS=終了-HireStop`より前、到着は`ArrivalDeadlineMS=終了または任務期限`より前。貯蓄も待ち時間を双方へ加算して検査する。貯蓄自身の期限ちょうどは既存の期限切れ処理と整合させて不可。
+- C06：保持中候補の現在のUrgencyで割込みを比較。開始時SaveUrgencyは診断履歴として維持。消滅した候補の緊急度は0として、元の残り期限内で再選択する。
+- C07/N08：起動Settingsは一度解決して保持。認識側ではSettingsを呼ばず、試合の実効CompositionTeamsの観測者bitと既存GroupStrengthのORで記録する。旧v0〜3ロード後は実効mask=0なので起動引数がONでも識別を再有効化しない。
+- C10：INPUTにEffective/AntiArmourEffective、RoleEffective、FrontEffective、個体残枠・防衛数、購入/到着締切、収入窓基点を追加。CANDIDATEにWaiting、DECISIONにSaveStarted/SaveUrgency/Switch/Retry/SaveBlocked、EXECUTEに分類と原文、任務付与/解除にPURPOSE/RELEASEを追加。
+
+保存はCombatStateVersion=4を維持しCompositionPolicy=2に更新。追加の緊急任務mapと設定失敗フラグはUPROPERTYで往復する。緊急任務は最大1件、正のSquadIDと期限、現在+30秒以内、同陣営の実在部隊、HirePurpose=101との対応を検証。期限切れ自体は次更新で解除するため読込可能。**旧policy 1のv4はヘッダ検証で拒否**し、由来不明の101を推測変換しない。v0〜3の読込とPlanner無効化、OFFのv3保存経路は変更しない。C04/C08/C09/C11/C12は未修正（policy更新はC08のキー正規化修正ではない）。
+
+Test-Areaで走るCompositionSmokeにC01の必要数/脅威、C03の残枠0/1/人数ぴったり・失敗分類、C05の購入/到着等号と貯蓄、C06の同じ任務で緊急度3→0後の2割込み、追加状態のcodec全比較と不正保存拒否を追加。AreaSmokeには実際の期限/脅威解除、旧P1保持、OFFコンテナ不変のチェックを追加。**追加済み・未実行**。
+
+検証担当はBuild-Editor後、Test-Battle、Test-Area（既定OFFとPlanner=1/Teams=1,2,3）、Test-MixedSaveを実施する。`BATTLE_AREA_CHECK PASS ...planner...`と`BATTLE_AREA_RESULT failures=0`、基本回帰の`BATTLE_SMOKE_RESULT failures=0`を確認。初回ON試合は後述の例の出力名を新規にし、RULESのpolicy=2、INPUTの締切/残枠、DECISIONの貯蓄遷移、EXECUTEの原文、PURPOSE→RELEASEを追う。従来OFFとの同seed比較も別途必要で、静的確認を試合同一性の実証と扱わない。
+
 作成日：2026-11-21。対象：UE 5.8.4、FutureBattle-codex。本文は設計作成時の案・評価計画を保持する。最新の実装範囲は直後の追記を参照。**購入接続までコード追加済み、ビルド・実行検証・評価は未実施**。
 
 **最新の実装追記（2026-11-21、後続依頼の「段階2」）**：候補選択・貯蓄・購入への接続まで追加した（本書第10節では段階2〜4の実装部分に相当する）。ON側は `UpdateCompositionHiring → Decide → HireAreaSquad` で実際の購入を決定する。OFF側は従来の購入経路を維持。いずれも今回のビルド・UE・スモーク実行・試合・計測は依頼により未実施であり、採用評価に進める前に検証が必要。

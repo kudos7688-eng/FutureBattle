@@ -355,6 +355,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  const bool bStrategy=bArea&&BattleTactics::AreaStrategy().bEnabled;
  const FAreaIntent TeamIntent=AreaIntent(Team);
  // Squad groups (BattleGroups.cpp): members, AI formation (trial) and phases, before the orders that read them.
+ if((CompositionTeams&(1<<Team))!=0)UpdateCompositionPurposes(Team);
  UpdateGroups(Team);
  // Routes (map F): what the team sees now, gathered once for all its squads.
  const bool bRoutes=bStrategy&&RoutesOn();TArray<FVector> RouteEnemies;if(bRoutes)RouteEnemies=RouteKnownEnemies(Team);

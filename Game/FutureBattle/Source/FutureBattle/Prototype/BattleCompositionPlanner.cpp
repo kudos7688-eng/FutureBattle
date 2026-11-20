@@ -22,9 +22,12 @@ BattleComposition::FDecision BattleComposition::Decide(const FInput& Input,const
  // Explicit bounds make malformed pure-function inputs fail closed; save validation is stricter.
  if(Defs.Num()!=BattleSquadType::Count||Next.Waiting.Num()!=BattleSquadType::Count||Next.SaveBlockedUntil.Num()!=BattleSquadType::Count||Next.Purchased.Num()!=BattleSquadType::Count||Next.SaveType< -1||Next.SaveType>=BattleSquadType::Supply||Next.Serial<0||Next.Serial>=100000)
   return Finish(EAction::Wait,nullptr,TEXT("invalid_input"));
+ if(Next.bConfigurationFailed)return Finish(EAction::Wait,nullptr,TEXT("configuration_failed"));
  ++Next.Serial;
  bool Seen[BattleSquadType::Count]={};
  for(const auto& Def:Defs){if(Def.TypeID>=BattleSquadType::Count||Seen[Def.TypeID])return Finish(EAction::Wait,nullptr,TEXT("invalid_definitions"));Seen[Def.TypeID]=true;}
+ if(Input.Mission==101&&(!Input.bHomeThreat||Input.HomeDefenders>=1))
+ {ClearCompositionGoal(Next);return Finish(EAction::Wait,nullptr,TEXT("emergency_defence_not_needed"));}
  if(!Input.bAutoAllowed||!Input.bHireEnabled||Input.NowMS>=Input.StopAtMS||Input.Active>=Input.MaxActive||Input.Records>=100||(Input.bMissionRequired&&Input.Mission<0))
  {
   ClearCompositionGoal(Next);return Finish(EAction::Wait,nullptr,TEXT("permission_time_capacity_or_mission"));
@@ -73,12 +76,14 @@ BattleComposition::FDecision BattleComposition::Decide(const FInput& Input,const
   // Same weights as the design. 60s travel = 1000 penalty; no price divisor or random tie breaking.
   Candidate.Score=4*Candidate.Deficit+3*Candidate.RoleDeficit-FMath::Clamp(Candidate.ArrivalMS/60,0,1000);
   if(!Def.bAIEligible)Candidate.Excluded=TEXT("not_ai_eligible");
+  else if(Def.Members<=0||Def.Cost<=0)Candidate.Excluded=TEXT("invalid_configuration");
+  else if(Def.Members>Input.UnitSlots)Candidate.Excluded=TEXT("unit_record_capacity");
   else if(Candidate.Target<=0)Candidate.Excluded=TEXT("zero_or_locked_target");
   else if(TypeInput.Active>=Def.HardActiveLimit)Candidate.Excluded=TEXT("type_limit");
   else if(Candidate.Deficit<=0)Candidate.Excluded=TEXT("satisfied");
   else if((Input.Mission==100||Input.Mission==101)&&(Def.TypeID==BattleSquadType::Scout||(Def.Capabilities&Indirect)!=0))Candidate.Excluded=TEXT("home_mission_incompatible");
   else if(FrontShort&&!IsCompositionFrontType(Def.TypeID))Candidate.Excluded=TEXT("frontline_emergency");
-  else if(Input.NowMS+Candidate.ArrivalMS>=Input.StopAtMS)Candidate.Excluded=TEXT("too_late_to_arrive");
+  else if(int64(Input.NowMS)+Candidate.ArrivalMS>=Input.ArrivalDeadlineMS)Candidate.Excluded=TEXT("too_late_to_arrive");
   Next.Waiting[Def.TypeID]=Candidate.Excluded.IsEmpty()?FMath::Min(100000,Next.Waiting[Def.TypeID]+1):0;
   Candidate.Waiting=Next.Waiting[Def.TypeID];Result.Candidates.Add(Candidate);
  }
@@ -98,7 +103,7 @@ BattleComposition::FDecision BattleComposition::Decide(const FInput& Input,const
  {
   const int32 Delay=SaveDelay(Candidate);
   return !FrontShort&&Input.NetPerMinute>0&&Next.Serial>Next.SaveBlockedUntil[Candidate.Type]&&Delay<=60000&&
-   int64(Input.NowMS)+Delay<=Deadline&&int64(Input.NowMS)+Delay+Candidate.ArrivalMS<Input.StopAtMS;
+   int64(Input.NowMS)+Delay<Deadline&&int64(Input.NowMS)+Delay<Input.StopAtMS&&int64(Input.NowMS)+Delay+Candidate.ArrivalMS<Input.ArrivalDeadlineMS;
  };
  auto EmergencyChoice=[&](int32 PreviousUrgency,int32 Deadline)->const FCandidate*
  {
@@ -129,17 +134,17 @@ BattleComposition::FDecision BattleComposition::Decide(const FInput& Input,const
  const int32 SelectionDeadline=Previous.SaveType>=0&&Previous.SaveDeadlineMS>Input.NowMS?Previous.SaveDeadlineMS:Input.NowMS+60000;
  // A newly required home-defence mission can invalidate the old mission before the urgency comparison.
  // It is still an interruption: prefer an affordable response and do not grant a fresh 60s deadline.
- if(!Held&&Previous.SaveType>=0&&Previous.SaveDeadlineMS>Input.NowMS&&Best&&Best->Urgency>Previous.SaveUrgency)
+ if(!Held&&Previous.SaveType>=0&&Previous.SaveDeadlineMS>Input.NowMS&&Best&&Best->Urgency>0)
  {
-  Chosen=EmergencyChoice(Previous.SaveUrgency,Previous.SaveDeadlineMS);
+  Chosen=EmergencyChoice(0,Previous.SaveDeadlineMS);
   if(Chosen){OriginalDeadline=Previous.SaveDeadlineMS;Result.Reason+=TEXT("urgent_new_mission; ");}
  }
  if(Held)
  {
-  if(Best&&Best->Urgency>Next.SaveUrgency)
+  if(Best&&Best->Urgency>Held->Urgency)
   {
    // Higher urgency: affordable response first, otherwise shortest reachable saving delay (stable sorted ties).
-   Chosen=EmergencyChoice(Next.SaveUrgency,OriginalDeadline);
+   Chosen=EmergencyChoice(Held->Urgency,OriginalDeadline);
    if(Chosen)Result.Reason+=TEXT("urgent_interrupt; ");
   }
   else if(Best&&Best->Type!=Held->Type&&Best->Urgency==Held->Urgency&&Best->Score>=Held->Score+500)
@@ -165,11 +170,20 @@ BattleComposition::FDecision BattleComposition::Decide(const FInput& Input,const
  return Finish(EAction::Save,Chosen,TEXT("save"));
 }
 
-void BattleComposition::CompletePurchase(FCompositionTeamState& State,bool bSuccess,int32 Type)
+BattleComposition::EFailure BattleComposition::ClassifyFailure(const FString& Message)
+{
+ if(Message.Contains(TEXT("capacity"))||Message.Contains(TEXT("limit")))return EFailure::Capacity;
+ if(Message==TEXT("Home deployment area is blocked")||Message==TEXT("Representation staging failed; purchase retained"))return EFailure::Placement;
+ return EFailure::Configuration; // unavailable navigation/mode or unexpected executor contract failure
+}
+
+void BattleComposition::CompletePurchase(FCompositionTeamState& State,bool bSuccess,int32 Type,EFailure Failure)
 {
  ClearCompositionGoal(State);
  if(bSuccess){State.LastSuccess=State.Serial;if(State.Waiting.IsValidIndex(Type))State.Waiting[Type]=0;State.Reason=TEXT("purchased");}
- else{State.RetryUntil=State.Serial+2;State.Reason=TEXT("spawn_failed_backoff");}
+ else if(Failure==EFailure::Placement){State.RetryUntil=State.Serial+2;State.Reason=TEXT("spawn_failed_backoff");}
+ else if(Failure==EFailure::Capacity){State.RetryUntil=0;State.Reason=TEXT("capacity_recheck");}
+ else{State.bConfigurationFailed=true;State.Reason=TEXT("configuration_failed");}
  // Purchased[] is advanced only by HireAreaSquad AFTER actual successful spawning, including manual purchases.
 }
 
@@ -177,6 +191,8 @@ bool BattleComposition::ValidateState(const FCompositionTeamState& State,int32 N
 {
  auto Fail=[&](){Error=TEXT("Invalid composition planner state");return false;};
  auto MissionOK=[&](int32 Mission){return Mission==-1||(Mission>=0&&Mission<Objectives)||Mission==100||Mission==101;};
+ if(State.EmergencyUntilMS.Num()>1)return Fail();
+ for(const auto& Emergency:State.EmergencyUntilMS)if(Emergency.Key<=0||Emergency.Value<=0||Emergency.Value>NowMS+30000)return Fail();
  if(State.Serial<0||State.Serial>100000||State.Purchased.Num()!=10||State.Waiting.Num()!=10||State.SaveBlockedUntil.Num()!=10||State.Reason.Len()>200)return Fail();
  for(int32 Type=0;Type<10;++Type)if(State.Purchased[Type]<0||State.Purchased[Type]>100||State.Waiting[Type]<0||State.Waiting[Type]>100000||State.SaveBlockedUntil[Type]<0||State.SaveBlockedUntil[Type]>State.Serial+3)return Fail();
  if(State.RetryUntil<0||State.RetryUntil>State.Serial+2||State.LastSuccess<0||State.LastSuccess>State.Serial||State.SwitchType< -1||State.SwitchType>=9||State.SwitchCount<0||State.SwitchCount>100000||(State.SwitchType<0&&State.SwitchCount!=0))return Fail();

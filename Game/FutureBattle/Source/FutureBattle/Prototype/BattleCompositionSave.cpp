@@ -26,6 +26,12 @@ bool BattleComposition::ValidateSave(const UBattleSave& Save,FString& Error)
    const FCompositionTeamState Empty;
    if(!FCompositionTeamState::StaticStruct()->CompareScriptStruct(&State,&Empty,0))return Fail(TEXT("Inactive team has composition history"));
   }
+  for(const auto& Emergency:State.EmergencyUntilMS)
+  {
+   const auto* Defender=Save.Squads.FindByPredicate([&](const FBattleSquadState& Squad){return Squad.SquadID==Emergency.Key;});
+   const int32* Purpose=Save.Area.HirePurpose.Find(Emergency.Key);
+   if(!Defender||Defender->Team!=Team||!Purpose||*Purpose!=101)return Fail(TEXT("Invalid planner emergency purpose reference"));
+  }
   int32 Purchases=0;for(int32 Count:State.Purchased)Purchases+=Count;
   int32 OwnRecords=0;for(const auto& Squad:Save.Squads)OwnRecords+=Squad.Team==Team;
   if(Purchases>OwnRecords)return Fail(TEXT("Composition purchase history exceeds own records"));

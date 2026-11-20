@@ -5,7 +5,7 @@
 #include "BattleUnit.h"
 #include "BattleMetrics.h"
 #include "BattleTactics.h"
-#include "BattleComposition.h"
+#include "BattleMatch.h"
 
 void UBattlePerception::Capture(TMap<int32, FBattleObserver>& OutObservers, TArray<FBattleReport>& OutReports, double Now) const
 {
@@ -62,7 +62,9 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattlePerception);
 	if (Metrics->bRecording) ++Metrics->PerceptionUpdates;
 	// -BattleAreaCompositionPlanner reads the identified squad type too (review 2026-11-21 F01): record it when either consumer is on.
-	const bool bRecordSquadType = BattleTactics::GroupStrengthEnabled() || BattleComposition::Settings().bEnabled;
+	const bool bGroupRecordsType = BattleTactics::GroupStrengthEnabled();
+ const auto* CompositionMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+ const int32 ObserverCompositionTeams=CompositionMatch?CompositionMatch->CompositionTeams:0;
 	// Cache immutable values for this synchronous update, not between sensor ticks.
 	struct FLiveUnit { ABattleUnit* Unit; const FBattleUnitState* State; FVector Position; int32 Ordinal; };
 	TMap<int32, FLiveUnit> Alive;
@@ -132,7 +134,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			}
 		auto& Contact = Observer.Contacts.FindOrAdd(TargetID);
 		Contact.TargetID = TargetID;
-  if(bRecordSquadType)
+  if(bGroupRecordsType||(State->Team>=0&&State->Team<2&&(ObserverCompositionTeams&(1<<State->Team))!=0))
   {
    const auto* SeenSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(Candidate.State->SquadID);
    Contact.ObservedSquadType=SeenSquad?SeenSquad->SquadType:255;

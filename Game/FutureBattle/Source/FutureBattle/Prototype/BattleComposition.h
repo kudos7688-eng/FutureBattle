@@ -33,11 +33,14 @@ namespace BattleComposition
  struct FInput
  {
   int32 Team=INDEX_NONE,Credits=0,Pending=0,Reserve=0,Free=0;
+  int32 HomeDefenders=0;
+  int32 UnitSlots=1000; // shared retained-unit capacity, including losses
+  int32 WindowAtMS=0,WindowCredits=0,WindowIncome=0,WindowHireSpent=0;
   int32 Active=0,Records=0,LegacyBought=0,LegacyHeavy=0,ObservedVehicles=0;
   float Elapsed=0,Remaining=0,HeavyShare=0,Interval=0,Stop=0,LastHireAt=-1000.f;
   bool bAutoAllowed=false,bAutoTargets=false,bHireEnabled=false;
   FTypeInput Types[BattleSquadType::Count];
-  int32 NowMS=0,StopAtMS=0,MaxActive=0,Mission=-1,FrontMinimum=0,FrontEffective=0;
+  int32 NowMS=0,StopAtMS=0,ArrivalDeadlineMS=0,MaxActive=0,Mission=-1,FrontMinimum=0,FrontEffective=0;
   int32 NetPerMinute=0,RoleEffective[5]={0,0,0,0,0};
   int32 ArrivalMS[BattleSquadType::Count]={};
   bool bMissionRequired=false,bHomeThreat=false,bCanPurchase=true;
@@ -56,9 +59,11 @@ namespace BattleComposition
   FCompositionTeamState Next;
   TArray<FCandidate> Candidates;
  };
- constexpr int32 PolicyVersion=1;
+ enum class EFailure : uint8 { Placement, Capacity, Configuration };
+ EFailure ClassifyFailure(const FString& Message);
+ constexpr int32 PolicyVersion=2;
  FDecision Decide(const FInput& Input,const TArray<FTypeDef>& Defs,const FCompositionTeamState& Previous);
- void CompletePurchase(FCompositionTeamState& State,bool bSuccess,int32 Type);
+ void CompletePurchase(FCompositionTeamState& State,bool bSuccess,int32 Type,EFailure Failure=EFailure::Placement);
  FString RulesKey();
  bool ValidateState(const FCompositionTeamState& State,int32 NowMS,int32 Objectives,FString& Error);
  bool ValidateSave(const UBattleSave& Save,FString& Error);
