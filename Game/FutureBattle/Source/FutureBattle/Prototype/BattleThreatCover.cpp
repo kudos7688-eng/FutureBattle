@@ -21,6 +21,12 @@ int32 UBattleLeaderRuntime::ThreatCoverMode(int32 Team)
  return Only<0 || Only==Team ? Mode : 0;
 }
 
+int32 UBattleLeaderRuntime::ThreatCoverRelocate()
+{
+ static const int32 Mode=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleThreatCoverRelocate="),V);return FMath::Clamp(V,0,2);}();
+ return Mode;
+}
+
 int32 UBattleLeaderRuntime::GatherThreats(int32 ID,FVector Primary,double Now,TArray<FVector,TInlineAllocator<3>>& Out) const
 {
  Out.Reset();Out.Add(Primary);
@@ -82,6 +88,27 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
  Diag.Cover(ByTarget?TEXT("threat_cover_broken_by_target"):TEXT("threat_cover_broken_by_other"));
  UE_LOG(LogFutureBattle,Verbose,TEXT("BATTLE_THREAT_COVER_BROKEN unit=%d slot=%d threats=%d by=%s"),ID,U->CoverSlot,Threats.Num(),ByTarget?TEXT("target"):TEXT("other"));
  if(U->CoverSlot!=INDEX_NONE)BrokenCover.Add(ID,TPair<int32,double>(U->CoverSlot,Now+10.));
+ // -BattleThreatCoverRelocate: the next place first (the broken one is excluded above). Not under the player's order to him
+ // (he holds where he was sent). The search changes nothing when it fails, so the state before it is put back as it was.
+ if(const int32 Relocate=ThreatCoverRelocate();Relocate>0 && !U->bSoldierOrder)
+ {
+  Diag.Cover(TEXT("threat_relocate_try"));
+  const FBattleUnitState Before=*U;
+  U->CoverPhase=0;
+  const float Radius=FMath::Max(1200.f,GetDefault<UBattleTuning>()->AICoverSearchRadius);
+  if(RequestCoverAction(ID,Primary,Before.CoverTargetID,Radius,ByOther))
+  {
+   // A longer walk keeps its cover timer while it lasts (as for stage B1).
+   U->SoldierMoveUntil=Now+FVector::Dist2D(Position(ID),U->CoverAnchor)/250.+1.5;U->CoverFirstBreak=0;
+   U->DecisionReason=TEXT("COVER / LEAVING A FLANKED PLACE");CoverApproaches.Remove(ID);
+   Diag.Cover(TEXT("threat_relocate_found"));
+   UE_LOG(LogFutureBattle,Verbose,TEXT("BATTLE_THREAT_COVER_RELOCATE unit=%d from=%d to=%d"),ID,Before.CoverSlot,U->CoverSlot);
+   return false; // still in a cover action: on the way to the new place
+  }
+  *U=Before;
+  if(Relocate==2){BrokenCover.Remove(ID);Diag.Cover(TEXT("threat_relocate_none_stay"));return false;}
+  Diag.Cover(TEXT("threat_relocate_none_leave"));
+ }
  CancelCoverAction(ID);CoverProbeAfter.Remove(ID);
  return true;
 }

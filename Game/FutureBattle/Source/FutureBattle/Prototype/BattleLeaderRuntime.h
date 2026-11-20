@@ -313,7 +313,7 @@ public:
  mutable int64 FollowSightTraced=0,FollowSightUsed=0; // evaluation counters (BATTLE_FOLLOW_SIGHT)
  bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot);
  FVector TracerStart(int32 ID,const FVector& Start,const FVector& Direction) const;
- bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f);
+ bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f,bool bAllHidden=false);
  void CancelCoverAction(int32 ID);
  bool StepCoverAction(int32 ID,float Dt,double Now);
  void RunCoverActionSmoke();
@@ -492,6 +492,10 @@ public:
  int32 GatherThreats(int32 ID,FVector Primary,double Now,TArray<FVector,TInlineAllocator<3>>& Out) const;
  bool ExposedToThreats(int32 ID,FVector Anchor,const TArray<FVector,TInlineAllocator<3>>& Threats) const;
  bool CheckCoverThreats(int32 ID,FVector Primary,double Now,float Dt);
+ // Trial -BattleThreatCoverRelocate (2026-11-21, default 0; with -BattleThreatCover): before leaving a broken place he looks for
+ // the next one from where he is (12 m) and walks straight there when he finds one. 1 = none found: leave as before.
+ // 2 = none found: stay in the broken place (better than the open) and look again at the next check.
+ static int32 ThreatCoverRelocate();
  bool BrokenCoverSlot(int32 ID,int32 Slot,double Now) const {const auto* B=BrokenCover.Find(ID);return B&&B->Key==Slot&&Now<B->Value;}
  TMap<int32,TPair<int32,double>> BrokenCover;
  // Trial -BattleSoldierMove=1 (2026-11-20, default 0; individual AI stage B1, BattleSoldierMove.cpp; -BattleSoldierMoveTeam=0/1

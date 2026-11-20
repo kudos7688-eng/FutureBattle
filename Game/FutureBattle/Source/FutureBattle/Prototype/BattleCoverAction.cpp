@@ -64,7 +64,7 @@ bool UBattleLeaderRuntime::RevalidatePeek(int32 ID,FVector Threat)
  return false;
 }
 
-bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Target,float SearchRadius)
+bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Target,float SearchRadius,bool bAllHidden)
 {
  if(!bEnabled || !BattleTactics::CoverActionsEnabled() || !Bodies.Contains(ID) || Threat.ContainsNaN())return false;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);
@@ -88,7 +88,8 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
  TArray<int32> Deferred;
  for(int32 Pass=0;Pass<2;++Pass)
  {
- if(Pass==1){if(Deferred.IsEmpty())break;Candidates=MoveTemp(Deferred);Diag.Cover(TEXT("threat_request_second_pass"));}
+ // bAllHidden (a soldier leaving a flanked place): only places hidden from every threat, no second pass.
+ if(Pass==1){if(Deferred.IsEmpty() || bAllHidden)break;Candidates=MoveTemp(Deferred);Diag.Cover(TEXT("threat_request_second_pass"));}
  for(int32 Slot:Candidates)
  {
   const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
