@@ -474,8 +474,9 @@ public:
  // (no slot, too exposed, no peek) does not stand in the open until the next search: he moves to a nearby place where less of
  // him is in view (the fire position), else goes prone there for 5 s while he still sees his target.
  static bool NoCoverFallbackEnabled();
- // Trial -BattleCoverPriority=1 (2026-11-20, default 0): a soldier hit in the last 5 s does not wait for the shared 2-per-frame
- // cover-search slot, and searches again 2 s (not 5 s) after a failed search.
+ // -BattleCoverPriority (2026-11-20 trial, default ON since 2026-11-21 by user decision; =0 turns it off): a soldier hit in the
+ // last 5 s does not wait for the shared 2-per-frame cover-search slot (own cap of 4 per frame), and searches again 2 s (not 5 s)
+ // after a failed search - also when he was already waiting after one.
  static bool CoverPriorityEnabled();
  bool CloseInThreat(int32 SquadID,FVector& Threat) const {const auto* P=Plans.Find(SquadID);if(!P||!P->bCloseIn)return false;Threat=P->CloseInAt;return true;}
  void ClearCloseIn(int32 SquadID){if(auto* P=Plans.Find(SquadID)){P->bCloseIn=false;P->FarSince=0;}}
