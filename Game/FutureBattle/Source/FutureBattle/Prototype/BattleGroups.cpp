@@ -7,7 +7,7 @@
 //   group per team from its AI-led squads (the enemy team; own squads delegated to the AI).
 //  Player groups: the player forms a group from the selected squads and selects a whole group (ABattleController); orders then go to
 //   all its squads as before. A player group whose living squads are all delegated to the AI is run like an AI group.
-// Groups are not saved (a load drops them). Inputs: own squads' state and positions, observed ownership, fixed map positions.
+// Groups and their decision history are saved by combat extension 2. Inputs: own squads' state and positions, observed ownership, fixed map positions.
 #include "BattleMatch.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleState.h"

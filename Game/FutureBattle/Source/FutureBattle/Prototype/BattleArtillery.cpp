@@ -154,11 +154,11 @@ bool UBattleLeaderRuntime::StepArtillery(int32 ID,double Now,bool bMoving,FVecto
  if(!U||!U->IsAlive()){Artillery.Remove(ID);return false;}
  const auto* T=GetDefault<UBattleTuning>();const bool bSPG=IsSPG(ID);
  auto& A=Artillery.FindOrAdd(ID);
- // Times from a later clock (a restore clears this state, so these only guard against stale entries).
+ // Guard stale entries; restore rebases the clocks and carries elapsed setup separately.
  if(A.ReadyAt>Now+FMath::Max(0.f,T->SPGReload)+1.)A.ReadyAt=Now;
  if(A.StillSince>Now)A.StillSince=-1;
  // Moving undoes the set-up (the target is kept until the next pick).
- if(bMoving){A.StillSince=-1;return false;}
+ if(bMoving){A.StillSince=-1;A.SetupCredit=0;return false;}
  if(A.StillSince<0)A.StillSince=Now;
  auto* M=GetWorld()->GetSubsystem<UBattleMatch>();
  if(Now>=A.NextPick&&M&&M->bArea&&M->Phase==EBattleMatchPhase::Combat)
@@ -180,7 +180,7 @@ bool UBattleLeaderRuntime::StepArtillery(int32 ID,double Now,bool bMoving,FVecto
  Direction=(A.Aim-Position(ID)).GetSafeNormal2D();
  if(Direction.IsNearlyZero())return false;
  const float Setup=FMath::Max(0.f,bSPG?T->SPGSetupSeconds:T->MortarSetupSeconds);
- if(Now-A.StillSince>=Setup)
+ if(Now-A.StillSince+A.SetupCredit>=Setup)
  {
   bool bReady=false;
   if(bSPG)

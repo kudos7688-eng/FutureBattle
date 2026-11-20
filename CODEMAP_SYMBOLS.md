@@ -11,7 +11,7 @@
 - `BattleArea.cpp`: UBattleMatch::AreaHome:15, UBattleMatch::ObservedOwner:16, UBattleMatch::AreaScore:17, UBattleMatch::InitializeArea:27, UBattleMatch::AreaVisible:45, UBattleMatch::CanFireAtBase:54, UBattleMatch::DamageBase:62, UBattleMatch::ActiveSquads:70, UBattleMatch::ActiveScouts:75, UBattleMatch::SupplyTeamNear:76, UBattleMatch::ActiveOfType:88, UBattleMatch::HireAreaSquad:93, UBattleMatch::UpdateAreaHiring:132, UBattleMatch::AreaIncomeGain:194, UBattleMatch::UpdateArea:201, UBattleMatch::AreaHireNeed:291, UBattleMatch::AreaIntent:319, UBattleMatch::AreaFronts:368, UBattleMatch::AreaHeavyTarget:392, UBattleMatch::AreaScoutPost:408
 - `BattleAreaDepot.cpp`: UBattleMatch::ApplyDepotWeights:20
 - `BattleAreaIntel.cpp`: UBattleMatch::AreaIntelOn:12, UBattleMatch::AreaIntelView:19, UBattleMatch::AreaIntelThreatAt:53, UBattleMatch::AreaIntelThreat:59, UBattleMatch::UpdateIntelPurposes:66
-- `BattleAreaSmoke.cpp`: UBattleLeaderRuntime::RunAreaSmoke:26, UBattleLeaderRuntime::RunSectorSmoke:807
+- `BattleAreaSmoke.cpp`: UBattleLeaderRuntime::RunAreaSmoke:27, UBattleLeaderRuntime::RunSectorSmoke:923
 - `BattleArmourAI.cpp`: BattleTactics::ArmourAI:28, BattleTactics::AreaComposition:36, UBattleLeaderRuntime::PickArmourTargets:45, UBattleLeaderRuntime::FaceVehicle:79, UBattleLeaderRuntime::VehicleWatchDirection:87, UBattleMatch::NoteKnownVehicles:100, UBattleMatch::KnownEnemyVehicles:109, UBattleMatch::AreaArmourReaction:121, UBattleMatch::AreaVehicleChoice:165, UBattleMatch::AreaTankPost:181, UBattleMatch::AreaTankTarget:192, UBattleMatch::AreaATTarget:212, UBattleMatch::AreaComposition:227
 - `BattleArtillery.cpp`: UBattleLeaderRuntime::IsArtillery:18, UBattleLeaderRuntime::ArtilleryMinRange:25, UBattleLeaderRuntime::ArtilleryMaxRange:31, UBattleLeaderRuntime::ArtilleryBlastRadius:39, UBattleLeaderRuntime::ArtillerySpread:45, UBattleMatch::AreaArtilleryPost:53, UBattleLeaderRuntime::AllyNear:94, UBattleLeaderRuntime::PickArtilleryAim:105, UBattleLeaderRuntime::StepArtillery:151, UBattleLeaderRuntime::FireArtillery:200, UBattleLeaderRuntime::StepArtilleryShells:225, UBattleLeaderRuntime::ArtilleryImpact:238
 - `BattleBenchmark.cpp`: ABattleGameMode::ConfigureBenchmark:26, ABattleGameMode::PrepareBenchmarkOrders:60, ABattleGameMode::UpdateBenchmark:90
@@ -28,7 +28,7 @@
 - `BattleCorpses.cpp`: UBattleLeaderRuntime::CorpseLifetime:23, UBattleLeaderRuntime::AddCorpse:29, UBattleLeaderRuntime::StepCorpses:36, UBattleLeaderRuntime::HideCorpse:63, UBattleLeaderRuntime::DeathClip:74
 - `BattleCover.h`: UBattleCover::IsBuilt:27, UBattleCover::ResetReservations:33
 - `BattleCover.cpp`: UBattleCover::BuildSlots:14, UBattleCover::AuditSymmetry:59, UBattleCover::PrebuildSlots:147, UBattleCover::NearbySlots:159, UBattleCover::Owner:168, UBattleCover::IsAvailable:176, UBattleCover::Reserve:187, UBattleCover::Release:197
-- `BattleCoverAction.cpp`: UBattleLeaderRuntime::CancelCoverAction:19, UBattleLeaderRuntime::EndPeekDiag:35, UBattleLeaderRuntime::CoverLineClear:42, UBattleLeaderRuntime::RevalidatePeek:50, UBattleLeaderRuntime::RequestCoverAction:67, UBattleLeaderRuntime::ContactFirePoint:135, UBattleLeaderRuntime::SquadCanHide:160, UBattleLeaderRuntime::StartHuddle:189, UBattleLeaderRuntime::StartCoverApproach:220, UBattleLeaderRuntime::StartFirePosition:258, UBattleLeaderRuntime::StepCoverApproach:306, UBattleLeaderRuntime::StepCoverAction:361
+- `BattleCoverAction.cpp`: UBattleLeaderRuntime::CancelCoverAction:29, UBattleLeaderRuntime::EndPeekDiag:45, UBattleLeaderRuntime::CoverLineClear:52, UBattleLeaderRuntime::RevalidatePeek:60, UBattleLeaderRuntime::RequestCoverAction:79, UBattleLeaderRuntime::ContactFirePoint:148, UBattleLeaderRuntime::SquadCanHide:173, UBattleLeaderRuntime::StartHuddle:202, UBattleLeaderRuntime::StartCoverApproach:233, UBattleLeaderRuntime::StartFirePosition:271, UBattleLeaderRuntime::StepCoverApproach:319, UBattleLeaderRuntime::StepCoverAction:374
 - `BattleCoverActionSmoke.cpp`: UBattleLeaderRuntime::RunCoverActionSmoke:22
 - `BattleDelegationSmoke.cpp`: ABattleGameMode::RunDelegationSmokeTest:16
 - `BattleDisplayLODTrial.cpp`: UBattleSquadTrial::SelectT5LOD:16, UBattleSquadTrial::ApplyT5LOD:27, UBattleSquadTrial::ApplyT5LODCamera:65, UBattleSquadTrial::FinishT5LODFrame:78
@@ -96,7 +96,7 @@
 - `BattleRanges.cpp`: BattleRanges::Get:6, BattleRanges::Engage:34, BattleRanges::Reach:44
 - `BattleRenderDiagnostic.cpp`: UBattleSquadTrial::ConfigureT5Diagnostic:34, UBattleSquadTrial::SelectT5Diagnostic:94, UBattleSquadTrial::BeginT5Diagnostic:110, UBattleSquadTrial::FilterT5Diagnostic:138, UBattleSquadTrial::EndT5Diagnostic:162
 - `BattleRoutes.cpp`: UBattleMatch::RoutesOn:14, UBattleMatch::RouteKnownEnemies:21, UBattleMatch::RouteFlankSide:33, UBattleMatch::RouteStep:43
-- `BattleSave.cpp`: UBattleSave::Validate:23, UBattleMatch::CaptureSnapshot:115, UBattleMatch::RestoreSnapshot:163, UBattleMatch::SaveMatch:247, UBattleMatch::LoadMatch:255
+- `BattleSave.cpp`: UBattleSave::Validate:23, UBattleMatch::CaptureSnapshot:123, UBattleMatch::RestoreSnapshot:201, UBattleMatch::SaveMatch:310, UBattleMatch::LoadMatch:318
 - `BattleSaveSmoke.cpp`: ABattleGameMode::RunSaveSmokeTest:12
 - `BattleScaleSmoke.cpp`: ABattleGameMode::RunScaleSmokeTest:10
 - `BattleScopeShot.cpp`: UBattleLeaderRuntime::RunScopeShot:15

@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（143 モジュール、31650 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（143 モジュール、32002 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -34,7 +34,7 @@
 | 死体の消滅（表示だけ） | `UBattleLeaderRuntime::StepCorpses` (BattleCorpses.cpp:36) 、 `UBattleLeaderRuntime::HideCorpse` (BattleCorpses.cpp:63) | 登録は OnDeath の `UBattleLeaderRuntime::AddCorpse` (BattleCorpses.cpp:29) |
 | 死体の姿勢（死亡アニメ・遠景VATとの切替） | `UBattleLeaderRuntime::DeathClip` (BattleCorpses.cpp:74) 、 `ABattleVATDisplay::Enter` (BattleVATDisplay.cpp:216) 、 `ABattleVATDisplay::Leave` (BattleVATDisplay.cpp:259) | 遠景では横倒し、近景へ戻ると死亡クリップの最終コマ |
 | ブラインドファイア | `UBattleLeaderRuntime::BlindFireOrigin` (BattleBlindFire.cpp:53) 、 `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:1066) | AIの試験は `UBattleLeaderRuntime::TryAIBlindFire` (BattleBlindFire.cpp:137) |
-| 遮蔽の動作（接近・のぞき撃ち） | `UBattleLeaderRuntime::RequestCoverAction` (BattleCoverAction.cpp:67) 、 `UBattleLeaderRuntime::StepCoverAction` (BattleCoverAction.cpp:361) | 切替は `BattleTactics::CoverActionsEnabled` (BattleTactics.cpp:190) ほか |
+| 遮蔽の動作（接近・のぞき撃ち） | `UBattleLeaderRuntime::RequestCoverAction` (BattleCoverAction.cpp:79) 、 `UBattleLeaderRuntime::StepCoverAction` (BattleCoverAction.cpp:374) | 切替は `BattleTactics::CoverActionsEnabled` (BattleTactics.cpp:190) ほか |
 | 姿勢（立ち・しゃがみ） | `UBattleLeaderRuntime::SetStance` (BattleStance.cpp:57) 、 `UBattleLeaderRuntime::UpdateAIStance` (BattleStance.cpp:152) | 数値は `BattleStance::EyeOffset` (BattleStance.cpp:30) ほか |
 | 制圧（撃たれて動けない） | `UBattleLeaderRuntime::AddSuppression` (BattleSuppression.cpp:45) 、 `UBattleLeaderRuntime::IsPinned` (BattleSuppression.cpp:33) | 調整値は `BattleSuppression::Tuning` (BattleSuppression.cpp:25) |
 | 射撃の散らばり | `BattleTactics::SpreadDegrees` (BattleTactics.cpp:196) 、 `BattleTactics::ShotDirection` (BattleTactics.cpp:204) | 照準の遅れは `UBattleState::UpdateAim` (BattleState.cpp:317) 。プレイヤーの直接操作だけの倍率は `ABattleUnit::PlayerSpreadScale` (BattleUnit.cpp:157) |
@@ -51,7 +51,7 @@
 | 戦果点 | `UBattleMatch::UpdateWarScore` (BattleWarScore.cpp:52) 、 `UBattleMatch::WarScoreBreakdown` (BattleWarScore.cpp:75) | 調整値は `BattleWarScore::Tuning` (BattleWarScore.cpp:19) |
 | 支援砲撃（旧アリーナ） | `UBattleMatch::RequestSupport` (BattleSupport.cpp:8) 、 `UBattleMatch::UpdateSupport` (BattleSupport.cpp:36) | 混成には未接続 |
 | 車両・戦車砲・対戦車 | `UBattleLeaderRuntime::ConfigureVehicle` (BattleVehicle.cpp:50) 、 `UBattleLeaderRuntime::SteerVehicle` (BattleVehicle.cpp:107) 、 `UBattleLeaderRuntime::FireTankGun` (BattleTankGun.cpp:114) | 爆発は `UBattleLeaderRuntime::Explode` (BattleAntiTank.cpp:6) |
-| 保存・復元 | `UBattleMatch::SaveMatch` (BattleSave.cpp:247) 、 `UBattleMatch::LoadMatch` (BattleSave.cpp:255) 、 `UBattleMatch::CaptureSnapshot` (BattleSave.cpp:115) 、 `UBattleMatch::RestoreSnapshot` (BattleSave.cpp:163) | 検証は `UBattleSave::Validate` (BattleSave.cpp:23) 、 `UBattleSave::ValidateMixed` (BattleMixedSaveValidation.cpp:8) 。戦術状態は `UBattleSquadTactics::CaptureSave` (BattleTacticsSave.cpp:4) |
+| 保存・復元 | `UBattleMatch::SaveMatch` (BattleSave.cpp:310) 、 `UBattleMatch::LoadMatch` (BattleSave.cpp:318) 、 `UBattleMatch::CaptureSnapshot` (BattleSave.cpp:123) 、 `UBattleMatch::RestoreSnapshot` (BattleSave.cpp:201) | 検証は `UBattleSave::Validate` (BattleSave.cpp:23) 、 `UBattleSave::ValidateMixed` (BattleMixedSaveValidation.cpp:8) 。戦術状態は `UBattleSquadTactics::CaptureSave` (BattleTacticsSave.cpp:4) |
 | 表示（混成の体・遠距離 VAT） | `UBattleLeaderRuntime::CreateBody` (BattleMixedBodies.cpp:17) 、 `UBattleLeaderRuntime::RefreshDisplay` (BattleLeaderRuntime.cpp:1275) 、 `ABattleVATDisplay::Tick` (BattleVATDisplay.cpp:305) | 復元時は `UBattleLeaderRuntime::RestoreMixedBodies` (BattleMixedBodies.cpp:67) |
 | マップの定義・配置 | `BattleFieldLayout.h`（マップごとの表 `Maps()`） | 生成は `UBattleMapCommandlet::Main` (BattleMapCommandlet.cpp:38) （既存の手編集を `-Force` で上書きしない） |
 | 通り道（道路網に沿った移動の指示） | `UBattleMatch::RouteStep` (BattleRoutes.cpp:43) 、 `UBattleMatch::RouteFlankSide` (BattleRoutes.cpp:33) | 呼び出しは `UBattleMatch::UpdateTeamOrders` (BattleMatch.cpp:348) 。道路網は `FMapDef::RouteNodes/RouteEdges` |
@@ -84,7 +84,7 @@
 | `BattleController` | .h/.cpp | 222 + 1194 | ABattleCameraPawn, FBattleNoticeEntry, FBattleNoticeLayout, FBattleCommandBarLayout, ABattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド |
 | `BattleCorpses` | .cpp | 77 |  | 死体の消滅（表示だけ。`-BattleCorpseLifetime=秒`、既定20、0で残す。UBattleLeaderRuntime の一部） |
 | `BattleCover` | .h/.cpp | 39 + 200 | FBattleCoverReservation, UBattleCover | 遮蔽の場所の一覧と予約 |
-| `BattleCoverAction` | .cpp | 477 |  | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部） |
+| `BattleCoverAction` | .cpp | 490 |  | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部） |
 | `BattleCoverClips` | .h | 79 | BattleCoverClips, FSet | 遮蔽の状態 → 遮蔽アニメの対応表（データだけ。「アセット参考資料の検討」セッション作） |
 | `BattleExo` | .cpp | 382 |  | 外骨格兵：盾の回復、副武器（肩の対戦車火器）、専用の部隊判断と軍の割り当て、見た目（AC01の体と武器＝ApplyExoSuit） |
 | `BattleFieldLayout` | .h | 246 | BattleFieldLayout, FMapDef | マップごとの定義（広さ、拠点、試合時間）を1つの表にまとめたもの |
@@ -99,7 +99,7 @@
 | `BattleMapStats` | .cpp | 186 |  | マップの統計（区域ごとの見通し・遮蔽、経路の長さ）を JSON に書き出す。試合は行わない（UBattleLeaderRuntime の一部） |
 | `BattleMatch` | .h/.cpp | 307 + 516 | FAreaIntent, FBattleObjective, FBattleStrike, FPlayerRoute, UBattleMatch | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗 |
 | `BattleMetrics` | .h/.cpp | 65 + 142 | FBattleMetricFrame, UBattleMetrics, FBattleScopedMetric | 計測値の記録（1フレームの時間、判断の回数） |
-| `BattleMixedBodies` | .cpp | 172 |  | 混成の兵の体の生成・破棄・復元（UBattleLeaderRuntime の一部） |
+| `BattleMixedBodies` | .cpp | 184 |  | 混成の兵の体の生成・破棄・復元（UBattleLeaderRuntime の一部） |
 | `BattleMixedDriver` | .h/.cpp | 50 + 339 | FBattleMixedUnit, FBattleMixedDriver, MixedNavigation | 混成の兵1人ぶんの実行（旧 AIController と同じ役を Actor なしで行う） |
 | `BattleMixedRecruitment` | .cpp | 130 |  | 補充と購入部隊の出現、偵察兵の昇格（UBattleLeaderRuntime の一部） |
 | `BattleMixedSquadAI` | .cpp | 165 |  | 部隊 AI の混成版の更新（UBattleSquadAI の一部） |
@@ -115,7 +115,7 @@
 | `BattleRanges` | .h/.cpp | 19 + 50 | BattleRanges | 認識・交戦の距離（マップごとに決まる） |
 | `BattleReplayData` | .h | 15 | FBattleReplayHeader, FBattleReplayUnit | 再生用データの型（試験専用） |
 | `BattleRoutes` | .cpp | 89 |  | 通り道：道路網のあるマップ（F）で、遠い目的地へ交差点を順に指示する。本拠地へ向かう部隊は観測した敵の少ない側面路を選ぶ（UBattleMatch の一部） |
-| `BattleSave` | .h/.cpp | 76 + 262 | FBattleSavedUnit, FBattleSavedDamage, UBattleSave | 保存形式、試合の保存と復元、検証 |
+| `BattleSave` | .h/.cpp | 147 + 325 | FBattleSavedUnit, FBattleSavedDamage, FBattleSavedArtillery, FBattleSavedArtilleryShell, FBattleSavedGroup, FBattleSavedCarChoice, UBattleSave | 保存形式、試合の保存と復元、検証 |
 | `BattleScoutReport` | .cpp | 160 |  | 偵察報告（UBattleMatch の一部） |
 | `BattleSectorRoute` | .cpp | 218 |  | 区画経由の移動 `-BattleSectorRoute`・側面 `-BattleSectorFlank`・前線 `-BattleSectorFront`（区画のあるマップ、AIの歩兵）：道路網の次の交差点の代わりに、その周りで遮蔽の多い区画を制圧・維持しながら進む。側面は観測した敵の正面を避けた区画、前線は自軍の区画のうち敵に接する区画（UBattleMatch の一部） |
 | `BattleSectorView` | .h/.cpp | 70 + 176 | FBattleFogGrid, FBattleSectorInfo, BattleSectorView | 作戦画面の表示だけ（規則・AIは読まない）：自軍の視界の格子 `FBattleFogGrid`（12.5m、自軍の兵から静的な物体への光線）と区画ごとの状態 `BattleSectorView::Gather`（自軍の人数・観測した敵・視界の割合・拠点・命令中の部隊・遮蔽位置の数） |
@@ -157,7 +157,7 @@
 |---|---|---|---|---|
 | `BattleAbilitySmoke` | .cpp | 125 |  |  |
 | `BattleAnimTaskTrial` | .h/.cpp | 29 + 85 | ABattleAnimTaskTrial |  |
-| `BattleAreaSmoke` | .cpp | 838 |  |  |
+| `BattleAreaSmoke` | .cpp | 954 |  |  |
 | `BattleBenchmark` | .cpp | 194 |  |  |
 | `BattleConeTrialCommandlet` | .h/.cpp | 12 + 48 | UBattleConeTrialCommandlet | Closest distance between a forward ray and the capsule's vertical centre segment. |
 | `BattleContactTrial` | .cpp | 101 |  | Fixed contact fixtures retain all 500 bodies, collision, and the normal executor. |
@@ -180,8 +180,8 @@
 | `BattleMatchSoak` | .cpp | 60 |  |  |
 | `BattleMaterialTrial` | .cpp | 106 |  |  |
 | `BattleMixedFastSmoke` | .cpp | 41 |  |  |
-| `BattleMixedSaveSmoke` | .cpp | 123 |  |  |
-| `BattleMixedSaveValidation` | .cpp | 113 |  |  |
+| `BattleMixedSaveSmoke` | .cpp | 130 |  |  |
+| `BattleMixedSaveValidation` | .cpp | 183 |  |  |
 | `BattleMovementTrial` | .cpp | 112 |  |  |
 | `BattleMovingSquadTrial` | .cpp | 222 |  |  |
 | `BattleNetworkBenchmark` | .cpp | 119 |  |  |

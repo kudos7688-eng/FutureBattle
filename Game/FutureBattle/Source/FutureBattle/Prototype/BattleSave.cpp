@@ -23,6 +23,11 @@ namespace
 bool UBattleSave::Validate(FString& Error) const
 {
 	const bool Mixed=Version==2||Version==3;
+ if(CombatStateVersion<0||CombatStateVersion>2||(!Mixed&&CombatStateVersion!=0)||
+    (CombatStateVersion==0&&(!SavedArtillery.IsEmpty()||!SavedArtilleryShells.IsEmpty())))
+ {Error=TEXT("Unsupported combat state extension");return false;}
+ if(CombatStateVersion<2&&(!SavedGroups.IsEmpty()||!SavedSquadGroup.IsEmpty()||!SavedCarChoices.IsEmpty()||SavedNextGroupID!=1))
+ {Error=TEXT("Strategic state requires combat extension 2");return false;}
  auto ValidPosition=[&](const FVector& P){return ValidSnapshotPosition(P,Mixed?BattleFieldLayout::ByName(MapName).SaveLimit:FVector2D(10000,10000));};
 	auto Fail = [&Error](const TCHAR* Message) { Error = Message; return false; };
 	if ((Version != 1 && Version != 2 && Version!=3) || (Version==3)!=(Ruleset==TEXT("Area")) || !MatchID.IsValid() || Phase < 1 || Phase > 3 || !ValidTeam(Winner, true) || Result.Len() > 200 || ViewRotation.ContainsNaN()) return Fail(TEXT("Unsupported or invalid match header"));
@@ -57,6 +62,9 @@ bool UBattleSave::Validate(FString& Error) const
 		if (!InRange(S.HP, 0, 10000) || !InRange(S.Ammo, 0, 10000) || !InRange(S.Reserve, 0, 100000) || !InRange(S.ReloadEndTime, 0, 120) || !InRange(S.NextShotTime, 0, 120) || S.ShotSequence < 0 || S.OrderRevision < 0 || S.PerceptionRevision < 0 || S.DecisionRevision < 0) return Fail(TEXT("Invalid unit resources or timers"));
 		if (static_cast<uint8>(S.Weapon) > static_cast<uint8>(EBattleWeapon::Mortar) || static_cast<uint8>(S.Order) > static_cast<uint8>(EBattleOrder::Defend) || static_cast<uint8>(S.Training) > 2 || !InRange(S.SpreadSkillScale, .25, 3) || !InRange(S.HireCost, 1, 1000000)) return Fail(TEXT("Invalid unit order or training"));
 		if (!InRange(P.SightRange, 100, 20000) || !InRange(P.FieldOfView, 1, 360) || !InRange(P.DetectionSeconds, 0, 30) || !InRange(P.MemorySeconds, 0, 120) || !InRange(P.ShareRange, 0, 20000) || !InRange(P.ShareDelay, 0, 30) || !InRange(D.ThinkSeconds, .01, 10) || !InRange(D.CoverThinkSeconds, .01, 30) || !InRange(D.CoverCandidates, 1, 100)) return Fail(TEXT("Invalid unit capabilities"));
+  if(!InRange(S.Shield,0,1000)||!InRange(S.ShieldWait,0,FMath::Max(0.f,GetDefault<UBattleTuning>()->ExoShieldDelay))||
+     !InRange(S.Launcher,0,20)||!InRange(S.LauncherWait,0,FMath::Max(.5f,GetDefault<UBattleTuning>()->ExoLauncherReload)))return Fail(TEXT("Invalid shield or launcher resources"));
+  if(!Mixed&&(S.Shield!=0||S.ShieldWait!=0||S.Launcher!=0||S.LauncherWait!=0||S.bLauncherSelected))return Fail(TEXT("Exoskeleton resources outside mixed mode"));
 		if (S.IsAlive()) ++Alive; ByID.Add(S.UnitID, &S);
 	}
 	if (Alive > (Mixed?(Version==3?1000:500):100)) return Fail(TEXT("Too many living units")); // area 500 -> 1000 on 2026-11-20 (40-squad limit)
@@ -123,6 +131,36 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
  auto* Save = NewObject<UBattleSave>(); const double Now = GetWorld()->GetTimeSeconds();
  if(Mixed)
  {
+  Save->CombatStateVersion=2;
+  Save->SavedNextGroupID=NextGroupID;Save->SavedSquadGroup=SquadGroup;
+  for(const auto& Pair:Groups)
+  {
+   const auto& G=Pair.Value;FBattleSavedGroup E;
+   E.ID=G.ID;E.Team=G.Team;E.Squads=G.Squads;E.Objective=G.Objective;E.Phase=G.Phase;
+   E.PhaseAge=double(Elapsed)-double(G.PhaseAt);E.Rally=G.Rally;E.bPlayer=G.bPlayer;E.Roles=G.Roles;
+   E.Avoid=G.Avoid;E.AvoidRemaining=double(G.AvoidUntil)-double(Elapsed);E.StartLiving=G.StartLiving;
+   E.StallPoint=G.StallPoint;E.Stalls=G.Stalls;E.bOpened=G.bOpened;E.bArrived=G.bArrived;
+   E.ArrivalAge=double(Elapsed)-double(G.ArrivedAt);E.Extensions=G.Extensions;
+   Save->SavedGroups.Add(Pair.Key,E);
+  }
+  for(const auto& Pair:CarChoices)
+  {
+   FBattleSavedCarChoice E;E.Target=Pair.Value.Target;E.bHasTime=Pair.Value.At>=0;
+   E.Age=E.bHasTime?double(Elapsed)-Pair.Value.At:0.;Save->SavedCarChoices.Add(Pair.Key,E);
+  }
+  for(const auto& Pair:Runtime->Artillery)
+  {
+   const auto& A=Pair.Value;FBattleSavedArtillery E;
+   E.bSettingUp=A.StillSince>=0;E.SetupElapsed=E.bSettingUp?FMath::Max(0.,Now-A.StillSince)+A.SetupCredit:0.;
+   E.ReloadRemaining=FMath::Max(0.,A.ReadyAt-Now);E.PickRemaining=FMath::Max(0.,A.NextPick-Now);
+   E.Shots=A.Shots;E.Aim=A.Aim;E.bHasTarget=A.bHasTarget;E.bBase=A.bBase;
+   Save->SavedArtillery.Add(Pair.Key,E);
+  }
+  for(const auto& Shell:Runtime->ArtilleryShells)
+  {
+   FBattleSavedArtilleryShell E;E.ShooterID=Shell.ShooterID;E.Team=Shell.Team;E.ShooterType=Shell.ShooterType;
+   E.bSPG=Shell.bSPG;E.At=Shell.At;E.Remaining=Shell.Remaining;Save->SavedArtilleryShells.Add(E);
+  }
   Save->Version=bArea?3:2;Save->Area=Area;Save->MapName=UGameplayStatics::GetCurrentLevelName(GetWorld(),true);Save->Ruleset=Runtime->SnapshotMode();
   Save->BaseSightRange=GetDefault<UBattleTuning>()->EffectiveSightRange();Save->WeaponRange=GetDefault<UBattleTuning>()->EffectiveWeaponRange();Save->bRangeAware=Runtime->RangeAwareEnabled();
   auto* T=GetWorld()->GetSubsystem<UBattleSquadTactics>();auto* Team=GetWorld()->GetSubsystem<UBattleTeamAI>();
@@ -165,7 +203,6 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 	if (!Save || !Save->Validate(LastMessage)) { if (!Save) LastMessage = TEXT("No compatible save found"); return false; }
 	auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>(); auto* PC = Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
 	if (!Mode || !PC) return false;
- PlayerRoutes.Reset(); // route choices are not saved (BattlePlayerRoutes.cpp)
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const bool Mixed=Runtime->IsWideField();
  auto* T=GetWorld()->GetSubsystem<UBattleSquadTactics>();auto* Team=GetWorld()->GetSubsystem<UBattleTeamAI>();
@@ -205,10 +242,36 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 	}
 	GetWorld()->GetSubsystem<UBattleState>()->RestoreRecords(Records, Save->Squads);
  }
+ // Route preferences remain deliberately unsaved, and are discarded only on a successful load.
+ PlayerRoutes.Reset();
 	MatchID = Save->MatchID; Phase = static_cast<EBattleMatchPhase>(Save->Phase); Credits[0] = Save->AllyCredits; Credits[1] = Save->EnemyCredits;
 	Score[0] = Save->AllyScore; Score[1] = Save->EnemyScore; Elapsed = Save->Elapsed; DirectorClock = Save->DirectorClock; SupplyClock = Save->SupplyClock;
 	Objectives = Save->Objectives; Winner = Save->Winner;
  if(bArea)Area=Save->Area;
+ // No fallible work remains. Replace, rather than merge, the complete strategic snapshot.
+ // Groups and car choices use the restored match clock; artillery uses the new world clock.
+ TMap<int32,FBattleGroup> RestoredGroups;TMap<int32,FCarChoice> RestoredChoices;
+ if(Save->CombatStateVersion>=2)
+ {
+  for(const auto& Pair:Save->SavedGroups)
+  {
+   const auto& E=Pair.Value;FBattleGroup G;
+   G.ID=E.ID;G.Team=E.Team;G.Squads=E.Squads;G.Objective=E.Objective;G.Phase=E.Phase;
+   G.PhaseAt=float(double(Elapsed)-E.PhaseAge);G.Rally=E.Rally;G.bPlayer=E.bPlayer;G.Roles=E.Roles;
+   G.Avoid=E.Avoid;G.AvoidUntil=float(double(Elapsed)+E.AvoidRemaining);G.StartLiving=E.StartLiving;
+   G.StallPoint=E.StallPoint;G.Stalls=E.Stalls;G.bOpened=E.bOpened;G.bArrived=E.bArrived;
+   G.ArrivedAt=float(double(Elapsed)-E.ArrivalAge);G.Extensions=E.Extensions;RestoredGroups.Add(Pair.Key,MoveTemp(G));
+  }
+  for(const auto& Pair:Save->SavedCarChoices)
+  {
+   FCarChoice C;C.Target=Pair.Value.Target;C.At=Pair.Value.bHasTime?double(Elapsed)-Pair.Value.Age:-1.;
+   RestoredChoices.Add(Pair.Key,C);
+  }
+ }
+ Groups=MoveTemp(RestoredGroups);CarChoices=MoveTemp(RestoredChoices);
+ SquadGroup=Save->SavedSquadGroup;NextGroupID=Save->SavedNextGroupID;
+ // Rebuilt on demand from restored observations; never persist a cached view of the future.
+ IntelViews[0]=IntelViews[1]=FAreaIntelView();
 	Strikes = Save->Strikes; SupportCooldown[0] = Save->AllySupportCooldown; SupportCooldown[1] = Save->EnemySupportCooldown; SupportUsed[0] = Save->AllySupportUsed; SupportUsed[1] = Save->EnemySupportUsed;
 	Mode->bCombatPaused = Save->bPaused; Mode->bBattleEnded = Phase == EBattleMatchPhase::Finished; Mode->Result = Save->Result; Mode->CombatStartsAt = Now;
 	for (int32 Index = 0; Index < Spawned.Num(); ++Index)

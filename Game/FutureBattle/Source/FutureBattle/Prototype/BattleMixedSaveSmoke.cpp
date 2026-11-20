@@ -88,6 +88,10 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
   Reject([](UBattleSave& S){S.Units[1].State.bActorRepresentation=true;},TEXT("follower Actor type corruption rejected atomically"));
   Reject([](UBattleSave& S){S.MapName=TEXT("OtherMap");},TEXT("foreign map rejected atomically"));
   Reject([](UBattleSave& S){S.WeaponRange+=100;},TEXT("changed range rules rejected atomically"));
+  Reject([](UBattleSave& S){S.CombatStateVersion=3;},TEXT("unknown combat extension rejected"));
+  Reject([](UBattleSave& S){S.Units[0].State.Shield=1;},TEXT("shield on rifle soldier rejected"));
+  Reject([](UBattleSave& S){S.Units[0].State.LauncherWait=-1;},TEXT("negative launcher timer rejected"));
+  Reject([](UBattleSave& S){S.SavedArtilleryShells.Add(FBattleSavedArtilleryShell());},TEXT("invalid shell shooter rejected"));
   Reject([](UBattleSave& S){S.Version=1;},TEXT("legacy schema cannot replace mixed match"));
   Reject([](UBattleSave& S){S.Squads[0].Destination=FVector(31000,21000,0);S.SavedPlans[1].Destination=S.Squads[0].Destination;},TEXT("unreachable saved route rejected before body replacement"));
   RestoreStageFailureAfter=2;
@@ -98,6 +102,9 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
   PC->ControlUnit(Actor(1));auto* Direct=Match->CaptureSnapshot();
   Check(Direct&&Direct->ControlledID==1&&Match->RestoreSnapshot(Direct)&&PC->GetPawn()==Actor(1),TEXT("TPS control restored to recreated leader"));
   PC->EnterTactical();Check(PC->GetPawn()!=Actor(1),TEXT("restored leader returns to RTS"));
+  auto* Legacy=DuplicateObject<UBattleSave>(Saved,this);Legacy->CombatStateVersion=0;Legacy->SavedArtillery.Reset();Legacy->SavedArtilleryShells.Reset();
+  Legacy->SavedGroups.Reset();Legacy->SavedSquadGroup.Reset();Legacy->SavedNextGroupID=1;Legacy->SavedCarChoices.Reset();
+  Check(Match->RestoreSnapshot(Legacy)&&Artillery.IsEmpty()&&ArtilleryShells.IsEmpty(),TEXT("pre-extension mixed snapshot remains loadable"));
   Check(Match->RestoreSnapshot(Saved),TEXT("restore fixture for live continuation"));
   PC->QuickSaveSlot=TEXT("FutureBattleSmokeOnly");PC->SaveMatch();Resource(Follower).HP=1;PC->LoadMatch();
   Check(Store->Find(Follower)->HP==55&&Match->LastMessage==TEXT("Match restored"),TEXT("F8/F9 controller callbacks reach mixed save/load using isolated test slot"));

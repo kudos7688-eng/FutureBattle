@@ -18,6 +18,76 @@ bool UBattleSave::ValidateMixed(FString& Error) const
  TMap<int32,const FBattleSquadState*> BySquad;
  for(const auto& U:Units)ByID.Add(U.State.UnitID,&U);
  for(const auto& S:Squads)BySquad.Add(S.SquadID,&S);
+ // Groups may still contain disabled squads until the next director update. Historical Roles may
+ // also name squads that left the group. Preserve both; only current membership must be reciprocal.
+ if(SavedGroups.Num()>Squads.Num()||SavedSquadGroup.Num()>Squads.Num()||SavedCarChoices.Num()>Squads.Num()||
+    SavedNextGroupID<1||SavedNextGroupID>1000001)return Fail(TEXT("Invalid strategic collection sizes or next group ID"));
+ auto Objective=[&](int32 ID){return ID==INDEX_NONE||Objectives.IsValidIndex(ID);};
+ TSet<int32> GroupMembers;
+ for(const auto& Pair:SavedGroups)
+ {
+  const auto& G=Pair.Value;
+  if(Pair.Key!=G.ID||G.ID<1||G.ID>=SavedNextGroupID||G.Team<0||G.Team>1||G.Phase>3||
+     G.Squads.Num()<(G.bPlayer?1:2)||G.Squads.Num()>Squads.Num()||G.Roles.Num()>Squads.Num()||
+     !Objective(G.Objective)||!Objective(G.Avoid)||!Objective(G.StallPoint)||!Point(G.Rally)||
+     G.StartLiving<0||G.StartLiving>Units.Num()||G.Stalls<0||G.Stalls>1000000||G.Extensions<0||G.Extensions>1000000)
+   return Fail(TEXT("Invalid saved group identity, phase or history"));
+  // PushExtend can put PhaseAt up to 30 seconds ahead. Expired AvoidUntil must retain its signed offset.
+  if(!Finite(G.PhaseAge,-30.01,double(Elapsed))||!Finite(G.ArrivalAge,0,double(Elapsed))||
+     !Finite(G.AvoidRemaining,-double(Elapsed),3600.01))return Fail(TEXT("Invalid saved group relative clocks"));
+  for(int32 SID:G.Squads)
+  {
+   const auto* S=BySquad.FindRef(SID);const int32* Of=SavedSquadGroup.Find(SID);
+   if(!S||S->Team!=G.Team||GroupMembers.Contains(SID)||!Of||*Of!=G.ID)return Fail(TEXT("Broken saved group membership"));
+   GroupMembers.Add(SID);
+  }
+  for(const auto& Role:G.Roles)
+  {
+   const auto* S=BySquad.FindRef(Role.Key);
+   if(!S||S->Team!=G.Team||(Role.Value>4&&Role.Value!=255))return Fail(TEXT("Invalid saved group role"));
+  }
+ }
+ if(GroupMembers.Num()!=SavedSquadGroup.Num())return Fail(TEXT("Extra saved squad-to-group reference"));
+ for(const auto& Pair:SavedCarChoices)
+ {
+  if(!BySquad.Contains(Pair.Key)||!Objective(Pair.Value.Target)||
+     !Finite(Pair.Value.Age,0,double(Elapsed))||(!Pair.Value.bHasTime&&(Pair.Value.Age!=0||Pair.Value.Target!=INDEX_NONE)))
+   return Fail(TEXT("Invalid saved armour choice or relative clock"));
+ }
+ // Check every record, including retired soldiers which are no longer in Members.
+ for(const auto& E:Units)
+ {
+  const auto* S=BySquad.FindRef(E.State.SquadID);const auto& U=E.State;
+  if(!S||S->SquadType>=BattleSquadType::Count)return Fail(TEXT("Invalid equipment squad"));
+  const bool Exo=S->SquadType==BattleSquadType::Exo;
+  if(!Finite(U.Shield,0,BattleSquadType::ShieldMax(S->SquadType))||!Finite(U.Launcher,0,BattleSquadType::LauncherRounds(S->SquadType))||
+     !Finite(U.ShieldWait,0,Exo?FMath::Max(0.f,GetDefault<UBattleTuning>()->ExoShieldDelay):0.f)||
+     !Finite(U.LauncherWait,0,Exo?FMath::Max(.5f,GetDefault<UBattleTuning>()->ExoLauncherReload):0.f)||(!Exo&&U.bLauncherSelected))
+   return Fail(TEXT("Shield or launcher inconsistent with squad type"));
+ }
+ if(SavedArtillery.Num()>Units.Num()||SavedArtilleryShells.Num()>100000)return Fail(TEXT("Invalid artillery collection size"));
+ auto ArtilleryType=[&](int32 ID,bool bSPG)
+ {
+  const auto* U=ByID.FindRef(ID);const auto* S=U?BySquad.FindRef(U->State.SquadID):nullptr;
+  return S&&(bSPG?(S->SquadType==BattleSquadType::SPGun&&S->LeaderUnitID==ID):
+   (S->SquadType==BattleSquadType::Mortar&&U->State.Weapon==EBattleWeapon::Mortar));
+ };
+ // Landing spread and observed targets may lie beyond the playable map's save bounds.
+ auto ArtilleryPoint=[&](const FVector& P){return Finite(P.X,-1.e9,1.e9)&&Finite(P.Y,-1.e9,1.e9)&&Finite(P.Z,-1.e9,1.e9);};
+ for(const auto& Pair:SavedArtillery)
+ {
+  const auto& A=Pair.Value;
+  if((!ArtilleryType(Pair.Key,false)&&!ArtilleryType(Pair.Key,true))||!Finite(A.SetupElapsed,0,1000000)||
+     (!A.bSettingUp&&A.SetupElapsed!=0)||!Finite(A.ReloadRemaining,0,1000000)||!Finite(A.PickRemaining,0,1000000)||
+     A.Shots<0||A.Shots==MAX_int32||!ArtilleryPoint(A.Aim))return Fail(TEXT("Invalid saved artillery"));
+ }
+ for(const auto& Shell:SavedArtilleryShells)
+ {
+  const auto* U=ByID.FindRef(Shell.ShooterID);
+  if(!U||!ArtilleryType(Shell.ShooterID,Shell.bSPG)||Shell.Team!=U->State.Team||
+     Shell.ShooterType!=(Shell.bSPG?BattleSquadType::SPGun:BattleSquadType::Mortar)||
+     !ArtilleryPoint(Shell.At)||!Finite(Shell.Remaining,0,1000000))return Fail(TEXT("Invalid saved artillery shell"));
+ }
  if(Ruleset==TEXT("Area"))
  {
   int32 Current=0;for(const auto& U:Units)Current+=!U.State.bRetired;

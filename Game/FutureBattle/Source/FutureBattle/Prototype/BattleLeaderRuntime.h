@@ -239,8 +239,8 @@ public:
  bool TankGunHit(int32 ID,int32 VictimID); // a direct hit's damage (TankGunDamage, armour pierced)
  int64 TankGunShots=0,TankGunHits=0,TankGunKills=0,TankGunVehicleHits=0,TankGunBaseHits=0,TankGunPicks=0;double TankGunMs=0;
  // Indirect fire (BattleArtillery.cpp, stage 1 2026-11-18): the mortar gunner (weapon Mortar) and the self-propelled gun (squad type 7).
- // Runtime only, not saved: a restored unit is not set up and its gun is loaded; shells in flight are dropped on restore.
- struct FArtillery{double StillSince=-1,ReadyAt=0,NextPick=0;int32 Shots=0;FVector Aim=FVector::ZeroVector;bool bHasTarget=false,bBase=false;};
+ // Saved by combat extension 1. SetupCredit carries elapsed setup across a new world clock without a negative StillSince sentinel.
+ struct FArtillery{double StillSince=-1,ReadyAt=0,NextPick=0,SetupCredit=0;int32 Shots=0;FVector Aim=FVector::ZeroVector;bool bHasTarget=false,bBase=false;};
  struct FArtilleryShell{int32 ShooterID=INDEX_NONE,Team=0;uint8 ShooterType=0;bool bSPG=false;FVector At=FVector::ZeroVector;float Remaining=0;};
  TMap<int32,FArtillery> Artillery;
  TArray<FArtilleryShell> ArtilleryShells;

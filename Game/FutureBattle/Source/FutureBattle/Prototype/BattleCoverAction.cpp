@@ -15,6 +15,16 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "NavigationSystem.h"
 #include "FutureBattle.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+
+namespace {
+bool PeekRangeCheck()
+{
+ static const bool Enabled=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattlePeekRangeCheck="),V);return V!=0;}(); // trial: projected peeks must be 100..450 cm from their anchor
+ return Enabled;
+}
+}
 
 void UBattleLeaderRuntime::CancelCoverAction(int32 ID)
 {
@@ -50,13 +60,15 @@ bool UBattleLeaderRuntime::CoverLineClear(int32 ID,FVector From,FVector Threat) 
 bool UBattleLeaderRuntime::RevalidatePeek(int32 ID,FVector Threat)
 {
  auto* U=GetWorld()->GetSubsystem<UBattleState>()->Units.Find(ID);if(!U)return false;
- if(CoverLineClear(ID,U->CoverPeek,Threat))return true;
+ const double ExistingDistance=PeekRangeCheck()?FVector::Dist2D(U->CoverAnchor,U->CoverPeek):0.;
+ if((!PeekRangeCheck()||ExistingDistance==0.||(ExistingDistance>=100.&&ExistingDistance<=450.))&&CoverLineClear(ID,U->CoverPeek,Threat))return true;
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!Nav)return false;
  const FVector Anchor=U->CoverAnchor,Lateral=FVector::CrossProduct((Threat-Anchor).GetSafeNormal2D(),FVector::UpVector);
  for(float Offset:{-220.f,220.f,-400.f,400.f})
  {
   FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Anchor+Lateral*Offset-FVector(0,0,90),Projected,FVector(50,50,150)))continue;
   const FVector Peek=Projected.Location+FVector(0,0,90);
+  if(PeekRangeCheck()){const double D=FVector::Dist2D(Anchor,Peek);if(D<100.||D>450.)continue;}
   if(GetWorld()->SweepTestByObjectType(Anchor,Peek,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))continue;
   if(!CoverLineClear(ID,Peek,Threat))continue;
   U->CoverPeek=Peek;SightExperiment.Cover(TEXT("peek_repicked"));return true;
@@ -117,6 +129,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
   {
    FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Anchor+Lateral*Offset-FVector(0,0,90),Projected,FVector(50,50,150))){Diag.Cover(TEXT("peek_off_navmesh"));continue;}
    const FVector Peek=Projected.Location+FVector(0,0,90);
+   if(PeekRangeCheck()){const double D=FVector::Dist2D(Anchor,Peek);if(D<100.||D>450.)continue;}
    if(!Clear(Anchor,Peek)){Diag.Cover(TEXT("peek_path_blocked"));continue;}
    if(BattleTactics::ExposureAt(GetWorld(),Peek,Forward(ID),Eye).Fraction()<Hidden+.39f){Diag.Cover(TEXT("peek_not_exposed_enough"));continue;}
    if(!BattleTactics::HasTerrainLine(GetWorld(),Peek+FVector(0,0,60),Eye)){Diag.Cover(TEXT("peek_no_line_to_threat"));continue;}

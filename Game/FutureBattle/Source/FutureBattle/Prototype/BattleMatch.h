@@ -165,7 +165,7 @@ public:
 	// Tank objective (the point with the most known enemies, outside the city of map E) and its overwatch post short of that point.
 	int32 AreaTankTarget(int32 Team, int32 SquadID) const;
 	FVector AreaTankPost(int32 Team, int32 Point, float Overwatch = -1.f) const; // Overwatch below zero: UBattleTuning::TankOverwatch
-	// Squad groups, stage 1 (BattleGroups.cpp): members, one objective, a phase (0 assemble at Rally, 1 advance, 2 hold). Not saved.
+	// Squad groups, stage 1 (BattleGroups.cpp): members, one objective, a phase (0 assemble at Rally, 1 advance, 2 hold). Saved with all decision history by combat extension 2 (older saves start empty).
 	// Stage 2: roles while advancing (0 assault: to the point; 1 support: fires from a post short of it; 2 armour: the tank's post behind
 	// the infantry; 3 fire: mortar or gun at its firing post; 4 guard: the anti-tank team beside the support post; 255 none: the squad
 	// keeps its own type's rules). A point the group could not take is avoided until AvoidUntil.
@@ -202,7 +202,7 @@ public:
 	// Strategic layer trial (-BattleAreaComposition=1): the AI's own mix of special squad types, written into the intent's Keep numbers.
 	void AreaComposition(int32 Team, FAreaIntent& Intent, int32 Bought) const;
 	struct FCarChoice { int32 Target = INDEX_NONE; double At = -1; };
-	mutable TMap<int32, FCarChoice> CarChoices; // transient, squad -> current objective
+	mutable TMap<int32, FCarChoice> CarChoices; // saved, squad -> current objective (At uses match Elapsed)
 	// Scout reports (ROADMAP 2026-11-14, stage 3): what a scout pair sees beyond normal sight reaches its team only through a timed
 	// two-step report (direction after ScoutAlertSeconds, positions and size after ScoutReportSeconds). Transient: a load restarts the timers.
 	struct FScoutReport { double Started=-1, LastLong=-1, AlertAt=-1, ReportedAt=-1, NextHint=0, RetreatUntil=-1, PauseStart=-1, LastDanger=-1; FVector ReportFrom=FVector::ZeroVector; float LastHP=-1; int32 Stage=0, Living=0, Sequence=0, AlertSequence=0, Burns=0; FVector Direction=FVector::ZeroVector, Approx=FVector::ZeroVector, RetreatPoint=FVector::ZeroVector; TArray<FVector> Positions; };

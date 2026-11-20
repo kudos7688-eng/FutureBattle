@@ -2,6 +2,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "BattleMatch.h"
 #include "BattleSave.h"
+#include <limits>
 #include "BattleGameMode.h"
 #include "BattleController.h"
 #include "InputKeyEventArgs.h"
@@ -580,11 +581,100 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      Landed=Launched&&FMath::IsNearlyEqual(Flight,float(Distance/TT->MortarShellSpeed),.01f)&&Waiting&&ArtilleryShells.IsEmpty()&&ArtilleryImpacts==I0+1;
     }
     Check(Landed,TEXT("mortar shell lands after its flight time (distance / 100 m/s)"));
-    // Save and restore: the team and its mortar survive; set-up and shells in flight are not saved.
-    ArtilleryShells.Add(FArtilleryShell());
+    // Keep an actual in-flight shell, setup progress, target and sequence through serialization.
+    ArtilleryShells.Reset();
+    FArtilleryShell Pending;Pending.ShooterID=Gunner;Pending.Team=0;Pending.ShooterType=BattleSquadType::Mortar;Pending.At=Position(Gunner);Pending.Remaining=2.5f;ArtilleryShells.Add(Pending);
+    auto& SavedGun=Artillery.FindOrAdd(Gunner);SavedGun.StillSince=Now;SavedGun.SetupCredit=1.25;SavedGun.NextPick=Now+.5;SavedGun.Shots=17;
+    const int32 SavedGroup=M->FormGroup(0,{MSID},true);
+    Check(SavedGroup!=INDEX_NONE,TEXT("group persistence fixture formed"));
+    auto& Choice=M->CarChoices.FindOrAdd(MSID);Choice.Target=0;Choice.At=FMath::Max(0.,double(M->Elapsed)-2.);
+    if(auto* G=M->Groups.Find(SavedGroup))
+    {
+     G->Phase=1;G->PhaseAt=M->Elapsed+15.f;G->ArrivedAt=FMath::Max(0.f,M->Elapsed-2.f);G->AvoidUntil=M->Elapsed+60.f;
+     G->Objective=0;G->Avoid=1;G->StallPoint=1;G->Stalls=2;G->StartLiving=M->GroupLiving(*G);G->Extensions=3;
+     G->bOpened=true;G->bArrived=true;G->Roles.Add(MSID,3);
+     // A departed member's role is legitimate history, not current membership.
+     for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Key!=MSID){G->Roles.Add(P.Key,255);break;}
+    }
+    const auto GroupsBefore=M->Groups;const auto MembershipBefore=M->SquadGroup;const auto ChoicesBefore=M->CarChoices;
+    const int32 NextGroupBefore=M->NextGroupID;const float MatchClockBefore=M->Elapsed;
+    auto SameStrategy=[&]()
+    {
+     if(M->Groups.Num()!=GroupsBefore.Num()||!M->SquadGroup.OrderIndependentCompareEqual(MembershipBefore)||
+        M->NextGroupID!=NextGroupBefore||M->CarChoices.Num()!=ChoicesBefore.Num())return false;
+     for(const auto& P:GroupsBefore)
+     {
+      const auto* G=M->Groups.Find(P.Key);const auto& B=P.Value;
+      if(!G||G->ID!=B.ID||G->Team!=B.Team||G->Squads!=B.Squads||G->Objective!=B.Objective||G->Phase!=B.Phase||G->PhaseAt!=B.PhaseAt||
+         G->Rally!=B.Rally||G->bPlayer!=B.bPlayer||!G->Roles.OrderIndependentCompareEqual(B.Roles)||G->Avoid!=B.Avoid||G->AvoidUntil!=B.AvoidUntil||
+         G->StartLiving!=B.StartLiving||G->StallPoint!=B.StallPoint||G->Stalls!=B.Stalls||G->bOpened!=B.bOpened||G->bArrived!=B.bArrived||
+         G->ArrivedAt!=B.ArrivedAt||G->Extensions!=B.Extensions)return false;
+     }
+     for(const auto& P:ChoicesBefore){const auto* C=M->CarChoices.Find(P.Key);if(!C||C->Target!=P.Value.Target||C->At!=P.Value.At)return false;}
+     return true;
+    };
+    Mode->bCombatPaused=true;
+    Check(M->SaveMatch(TEXT("FutureBattleSmokeOnly")),TEXT("artillery extension written to disk"));
     Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
-    const bool Restored=Valid&&M->RestoreSnapshot(Save);const auto* GU=Gunner!=INDEX_NONE?Store->Find(Gunner):nullptr;const auto* RS=Store->FindSquad(MSID);
-    Check(Restored&&GU&&GU->Weapon==EBattleWeapon::Mortar&&RS&&RS->SquadType==BattleSquadType::Mortar&&Artillery.IsEmpty()&&ArtilleryShells.IsEmpty(),TEXT("mortar team survives save and restore (set-up and shells in flight dropped)"));
+    Artillery.Reset();ArtilleryShells.Reset();
+    M->Groups.Reset();M->SquadGroup.Reset();M->NextGroupID=NextGroupBefore+100;M->CarChoices.Reset();M->Elapsed+=37.f;
+    const bool Restored=Valid&&M->LoadMatch(TEXT("FutureBattleSmokeOnly"));const auto* GU=Gunner!=INDEX_NONE?Store->Find(Gunner):nullptr;const auto* RS=Store->FindSquad(MSID);
+    Check(Restored&&GU&&GU->Weapon==EBattleWeapon::Mortar&&RS&&RS->SquadType==BattleSquadType::Mortar&&Artillery.Contains(Gunner)&&Artillery.FindChecked(Gunner).Shots==17&&Artillery.FindChecked(Gunner).SetupCredit>=1.25&&
+     ArtilleryShells.Num()==1&&ArtilleryShells[0].Remaining==2.5f&&ArtilleryShells[0].ShooterID==Gunner,TEXT("mortar setup sequence and in-flight shell survive serialized restore"));
+    Check(Restored&&M->Elapsed==MatchClockBefore&&SameStrategy(),TEXT("serialized restore preserves all group history membership and armour choices"));
+    if(Valid&&Save->SavedGroups.Contains(SavedGroup))
+    {
+     auto RejectStrategy=[&](TFunctionRef<void(UBattleSave&)> Corrupt,const TCHAR* Label)
+     {
+      auto* Bad=DuplicateObject<UBattleSave>(Save,this);Corrupt(*Bad);auto* Before=Actor(MLeader);
+      Check(!M->RestoreSnapshot(Bad)&&Actor(MLeader)==Before&&SameStrategy(),Label);
+     };
+     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].ID+=1;},TEXT("group key identity mismatch rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].Squads.Add(MSID);},TEXT("duplicate group member rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedSquadGroup.Remove(MSID);},TEXT("missing reciprocal membership rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedSquadGroup[MSID]=S.SavedNextGroupID;},TEXT("foreign group reference rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedNextGroupID=SavedGroup;},TEXT("reused next group identity rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].Team=1;},TEXT("enemy group membership rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].Roles[MSID]=5;},TEXT("invalid role rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].Phase=4;},TEXT("invalid group phase rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].Avoid=S.Objectives.Num();},TEXT("invalid avoided objective rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].PhaseAge=std::numeric_limits<double>::quiet_NaN();},TEXT("non-finite group clock rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].ArrivalAge=-1.;},TEXT("future arrival rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].AvoidRemaining=3601.;},TEXT("excessive avoid deadline rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].Stalls=-1;},TEXT("negative failure history rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedCarChoices[MSID].Target=S.Objectives.Num();},TEXT("invalid armour objective rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedCarChoices[MSID].Age=std::numeric_limits<double>::infinity();},TEXT("non-finite armour clock rejected atomically"));
+     RejectStrategy([&](UBattleSave& S){S.SavedCarChoices[MSID].bHasTime=false;},TEXT("invalid unset armour clock rejected atomically"));
+     RejectStrategy([](UBattleSave& S){S.CombatStateVersion=1;},TEXT("strategic payload without its extension version rejected"));
+     M->PlayerRoutes.FindOrAdd(MSID);
+     RestoreStageFailureAfter=2;
+     RejectStrategy([](UBattleSave&){},TEXT("body staging failure retains existing groups and choices"));
+     Check(M->PlayerRoutes.Contains(MSID),TEXT("failed restore retains unsaved route choice"));
+     RestoreStageFailureAfter=INDEX_NONE;
+     // Changing the restored match epoch must shift clocks, while retaining ages and remaining deadlines.
+     auto* Shifted=DuplicateObject<UBattleSave>(Save,this);Shifted->Elapsed+=10.f;
+     const bool Rebased=M->RestoreSnapshot(Shifted);const auto* G=M->Groups.Find(SavedGroup);const auto* C=M->CarChoices.Find(MSID);
+     Check(Rebased&&M->PlayerRoutes.IsEmpty(),TEXT("successful restore discards unsaved route choices"));
+     Check(Rebased&&G&&C&&G->PhaseAt==GroupsBefore[SavedGroup].PhaseAt+10.f&&G->ArrivedAt==GroupsBefore[SavedGroup].ArrivedAt+10.f&&
+      G->AvoidUntil==GroupsBefore[SavedGroup].AvoidUntil+10.f&&C->At==ChoicesBefore[MSID].At+10.,TEXT("group and armour clocks rebase on restored match time"));
+     auto* Expired=DuplicateObject<UBattleSave>(Save,this);
+     Expired->SavedGroups[SavedGroup].AvoidRemaining=-double(Expired->Elapsed); // original deadline was zero
+     Expired->SavedCarChoices[MSID]=FBattleSavedCarChoice(); // original At was the -1 sentinel
+     const bool ExpiredRestored=M->RestoreSnapshot(Expired);const auto* EG=M->Groups.Find(SavedGroup);const auto* EC=M->CarChoices.Find(MSID);
+     Check(ExpiredRestored&&EG&&EC&&EG->AvoidUntil==0.f&&EC->At==-1.&&EC->Target==INDEX_NONE,TEXT("expired deadline and unset armour choice survive without clamping"));
+     for(int32 LegacyVersion:{0,1})
+     {
+      auto* Legacy=DuplicateObject<UBattleSave>(Save,this);Legacy->CombatStateVersion=LegacyVersion;
+      Legacy->SavedGroups.Reset();Legacy->SavedSquadGroup.Reset();Legacy->SavedNextGroupID=1;Legacy->SavedCarChoices.Reset();
+      if(LegacyVersion==0){Legacy->SavedArtillery.Reset();Legacy->SavedArtilleryShells.Reset();}
+      Check(M->RestoreSnapshot(Legacy)&&M->Groups.IsEmpty()&&M->SquadGroup.IsEmpty()&&M->NextGroupID==1&&M->CarChoices.IsEmpty(),
+       TEXT("legacy snapshot without group extension clears unsaved strategy"));
+     }
+     Check(M->RestoreSnapshot(Save)&&SameStrategy(),TEXT("revision two restores strategy after legacy loads"));
+    }
+    const int64 ImpactsBefore=ArtilleryImpacts;StepArtilleryShells(2.f);
+    Check(ArtilleryShells.Num()==1&&ArtilleryImpacts==ImpactsBefore,TEXT("restored shell waits remaining flight time"));
+    StepArtilleryShells(.6f);Check(ArtilleryShells.IsEmpty()&&ArtilleryImpacts==ImpactsBefore+1,TEXT("restored shell impacts exactly once"));
     Mode->bCombatPaused=false;
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_MORTAR_SMOKE squad=%d gunner=%d dir=%s lost=%.1f flight=%.2f validation=%s"),MSID,Gunner,*Dir.ToCompactString(),Lost,Flight,*Error);
    }
@@ -655,11 +745,19 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      Armour=MortarNone&&MissNone&&FMath::IsNearlyEqual(AfterHit,200.f-TT->SPGBlastDamage,1.f);
     }
     Check(Armour,TEXT("shells and vehicles: mortar shells never hurt them, the gun only on a direct hit"));
-    // Save and restore: the gun keeps its body and mount; set-up and load are not saved.
+    // Save and restore: body, setup, load, target and shot sequence all survive.
+    auto& BeforeSave=Artillery.FindOrAdd(GunID);BeforeSave.StillSince=Now;BeforeSave.SetupCredit=3.;BeforeSave.ReadyAt=Now+4.;BeforeSave.NextPick=Now+.5;
+    const int32 SavedShots=BeforeSave.Shots;const FVector SavedAim=BeforeSave.Aim;
+    FArtilleryShell Pending;Pending.ShooterID=GunID;Pending.Team=0;Pending.ShooterType=BattleSquadType::SPGun;Pending.bSPG=true;Pending.At=SavedAim;Pending.Remaining=4.5f;ArtilleryShells.Add(Pending);
     Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
     const bool Restored=Valid&&M->RestoreSnapshot(Save);ABattleUnit* After=Actor(GunID);
-    Check(Restored&&After&&IsSPG(GunID)&&IsArtillery(GunID)&&FMath::IsNearlyEqual(After->GetCapsuleComponent()->GetScaledCapsuleRadius(),TT->SPGRadius,1.f)&&Turrets.Contains(GunID)&&Artillery.IsEmpty(),
+    Check(Restored&&After&&IsSPG(GunID)&&IsArtillery(GunID)&&FMath::IsNearlyEqual(After->GetCapsuleComponent()->GetScaledCapsuleRadius(),TT->SPGRadius,1.f)&&Turrets.Contains(GunID)&&Artillery.Contains(GunID)&&
+     Artillery.FindChecked(GunID).Shots==SavedShots&&Artillery.FindChecked(GunID).Aim==SavedAim&&Artillery.FindChecked(GunID).SetupCredit>=3.&&
+     FMath::IsNearlyEqual(Artillery.FindChecked(GunID).ReadyAt-GetWorld()->GetTimeSeconds(),4.,.01),
      TEXT("self-propelled gun survives save and restore"));
+    Check(Restored&&ArtilleryShells.Num()==1&&ArtilleryShells[0].bSPG&&ArtilleryShells[0].ShooterID==GunID&&
+     ArtilleryShells[0].Remaining==4.5f&&ArtilleryShells[0].At==SavedAim,TEXT("self-propelled shell survives restore"));
+    ArtilleryShells.Reset();
     Mode->bCombatPaused=false;
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_SPG_SMOKE squad=%d gun=%d enemy=%d dir=%s after_hit=%.0f nav=%s validation=%s"),GSID,GunID,EnemyGun,*Dir.ToCompactString(),AfterHit,GN?*GN->GetName():TEXT("none"),*Error);
    }
@@ -710,6 +808,24 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Store->ApplyDamage(L,1,25);ShieldSaved=LU->Shield;
     Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
     const bool Restored=Valid&&M->RestoreSnapshot(Save);const auto* After=Store->FindSquad(XSID);const auto* RU=Store->Find(L);
+    if(Valid)
+    {
+     auto RejectEquipment=[&](TFunctionRef<void(FBattleUnitState&)> Corrupt)
+     {
+      auto* Bad=DuplicateObject<UBattleSave>(Save,this);
+      for(auto& E:Bad->Units)if(E.State.UnitID==L){Corrupt(E.State);break;}
+      FString Why;return !Bad->Validate(Why);
+     };
+     Check(RejectEquipment([](FBattleUnitState& U){U.Shield=std::numeric_limits<float>::quiet_NaN();})&&
+      RejectEquipment([](FBattleUnitState& U){U.ShieldWait=std::numeric_limits<float>::infinity();})&&
+      RejectEquipment([](FBattleUnitState& U){U.LauncherWait=std::numeric_limits<float>::quiet_NaN();}),TEXT("non-finite exoskeleton resources rejected"));
+     Check(RejectEquipment([](FBattleUnitState& U){U.Shield=-1;})&&RejectEquipment([](FBattleUnitState& U){U.ShieldWait=-1;})&&
+      RejectEquipment([](FBattleUnitState& U){U.Launcher=-1;})&&RejectEquipment([](FBattleUnitState& U){U.LauncherWait=-1;}),TEXT("negative exoskeleton resources rejected"));
+     Check(RejectEquipment([](FBattleUnitState& U){U.Shield=BattleSquadType::ShieldMax(BattleSquadType::Exo)+1;})&&
+      RejectEquipment([](FBattleUnitState& U){U.Launcher=BattleSquadType::LauncherRounds(BattleSquadType::Exo)+1;})&&
+      RejectEquipment([&](FBattleUnitState& U){U.ShieldWait=FMath::Max(0.f,TT->ExoShieldDelay)+1;})&&
+      RejectEquipment([&](FBattleUnitState& U){U.LauncherWait=FMath::Max(.5f,TT->ExoLauncherReload)+1;}),TEXT("exoskeleton resource upper bounds enforced"));
+    }
     Kept=Restored&&After&&After->SquadType==BattleSquadType::Exo&&After->CommandStatus==EBattleCommandStatus::Active&&RU&&Actor(L)&&ExoLooks.Contains(L)&&FMath::IsNearlyEqual(RU->Shield,75.f)&&FMath::IsNearlyEqual(RU->ShieldWait,TT->ExoShieldDelay)&&
      RU->Launcher==3&&RU->bLauncherSelected&&FMath::IsNearlyEqual(RU->HP,HP0-20.f)&&Store->HasShields()&&FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::Carbine),.3f);
     Mode->bCombatPaused=false;

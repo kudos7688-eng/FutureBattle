@@ -161,8 +161,20 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  }
  // Vehicles: rebuild their bodies (wide capsule, placeholder shapes) before any path is planned.
  VehicleIDs.Reset();Turrets.Reset();ExoLooks.Reset();VehicleSightCache.Reset();VehicleOrders.Reset();
- // Indirect fire is not saved: restored units start unset and loaded (the gun), shells in flight are dropped.
+ // Revision 0 saves have no artillery state. Revision 1 restores relative clocks and launch order.
  Artillery.Reset();ArtilleryShells.Reset();
+ for(const auto& Pair:Save->SavedArtillery)
+ {
+  const auto& E=Pair.Value;FArtillery A;
+  A.StillSince=E.bSettingUp?Now:-1.;A.SetupCredit=E.SetupElapsed;
+  A.ReadyAt=Now+E.ReloadRemaining;A.NextPick=Now+E.PickRemaining;
+  A.Shots=E.Shots;A.Aim=E.Aim;A.bHasTarget=E.bHasTarget;A.bBase=E.bBase;Artillery.Add(Pair.Key,A);
+ }
+ for(const auto& E:Save->SavedArtilleryShells)
+ {
+  FArtilleryShell Shell;Shell.ShooterID=E.ShooterID;Shell.Team=E.Team;Shell.ShooterType=E.ShooterType;
+  Shell.bSPG=E.bSPG;Shell.At=E.At;Shell.Remaining=E.Remaining;ArtilleryShells.Add(Shell);
+ }
  for(const auto& S:Squads)if(S.CommandStatus==EBattleCommandStatus::Active&&BattleSquadType::IsVehicle(S.SquadType))ConfigureVehicle(S.LeaderUnitID);
  for(const auto& S:Squads)ApplySquadLook(S.SquadID);
  for(const auto& U:Records) if(!U.IsAlive()) OnDeath(U.UnitID);
