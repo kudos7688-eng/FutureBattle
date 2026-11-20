@@ -100,6 +100,10 @@ public:
 	EBattleOrder PendingOrder = EBattleOrder::Move;
 	bool bShowContactDebug = false;
 	void ToggleContactDebug() { bShowContactDebug = !bShowContactDebug; }
+	// Tactical view overlays (display only, ABattleHUD::DrawFieldOverlay): M = sector grid, N = fog of war.
+	bool bShowSectorGrid = true, bShowFog = true;
+	void ToggleSectorGrid();
+	void ToggleFogView();
 	void CycleTrainingSelected();
 	void HireRecruit();
 	void HireRegular();
