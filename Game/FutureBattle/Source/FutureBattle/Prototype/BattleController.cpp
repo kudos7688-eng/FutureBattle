@@ -1139,7 +1139,8 @@ void ABattleController::UpdateGamepad(float DeltaTime)
   const float Assist=AimAssistScale()/ViewMagnification();
   FRotator R=GetControlRotation();
   R.Yaw+=RX*150.f*Assist*DeltaTime;
-  R.Pitch=FMath::Clamp(FRotator::NormalizeAxis(R.Pitch+RY*110.f*Assist*DeltaTime),-80.f,80.f);
+  // Sign flipped 2026-11-21 (user report): with +RY the view went down when the right stick was pushed up; it must look up.
+  R.Pitch=FMath::Clamp(FRotator::NormalizeAxis(R.Pitch-RY*110.f*Assist*DeltaTime),-80.f,80.f);
   SetControlRotation(R);
  }
 }
