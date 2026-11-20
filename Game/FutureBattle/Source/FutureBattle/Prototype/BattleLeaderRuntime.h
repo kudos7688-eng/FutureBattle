@@ -150,6 +150,7 @@ public:
  // contact it can currently see up to its weapon reach instead of the shorter AI engagement distance; its squad may pick such a target.
  // Only differs from the old rule where the range profile separates reach from engagement (map E).
  // One-team trials (-BattleAreaTrialTeam=t, 2026-11-17): only that team's soldiers return fire.
+ bool ExoSuppressionApplies(int32 ID) const;
  void NoteUnderFire(int32 ID);
  bool UnderFire(int32 ID) const {const double* T=UnderFireUntil.Find(ID);return T&&*T>GetWorld()->GetTimeSeconds();}
  TMap<int32,double> UnderFireUntil;

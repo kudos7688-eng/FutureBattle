@@ -1471,6 +1471,8 @@ bool UBattleLeaderRuntime::SquadShotAt(const FBattleSquadState& S,double Now) co
 }
 void UBattleLeaderRuntime::NoteUnderFire(int32 ID)
 {
+ // A direct hit adds one impulse even when a shield absorbs all damage (all weapon damage paths).
+ if(ExoSuppressionApplies(ID))AddSuppression(ID,BattleSuppression::Tuning().PerShot,GetWorld()->GetTimeSeconds());
  if(UBattleMatch::DangerRouteOn())if(const auto* V=GetWorld()->GetSubsystem<UBattleState>()->Find(ID))GetWorld()->GetSubsystem<UBattleMatch>()->NoteSectorDanger(V->Team,Position(ID));
  if(ShotDirectionEnabled() || UnderFireCoverEnabled()){FVector From;if(GetWorld()->GetSubsystem<UBattleState>()->PendingHitSource(From))ShotFrom.Add(ID,TPair<FVector,double>(From,GetWorld()->GetTimeSeconds()));}
  if(SectorContactEnabled() || SectorMoveFireEnabled() || !SectorFireBack.IsEmpty())SectorHitUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);

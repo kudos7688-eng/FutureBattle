@@ -10,6 +10,7 @@ struct FBattleContact
 {
 	GENERATED_BODY()
 	UPROPERTY() int32 TargetID = INDEX_NONE;
+ UPROPERTY() uint8 ObservedSquadType = 255; // unknown until actually identified; never refreshed from unseen truth
 	UPROPERTY() FVector LastKnownPosition = FVector::ZeroVector;
 	UPROPERTY() double LastSeenTime = 0.;
 	UPROPERTY() float Confidence = 0.f;

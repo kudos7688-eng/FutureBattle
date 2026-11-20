@@ -72,6 +72,7 @@ struct FBattleSavedGroup
  UPROPERTY() int32 Avoid=INDEX_NONE;
  UPROPERTY() double AvoidRemaining=0;
  UPROPERTY() int32 StartLiving=0;
+ UPROPERTY() double StartStrength=-1; // additive trial field; older snapshots initialize on next group update
  UPROPERTY() int32 StallPoint=INDEX_NONE;
  UPROPERTY() int32 Stalls=0;
  UPROPERTY() bool bOpened=false;
@@ -99,6 +100,7 @@ public:
  UPROPERTY() int32 CombatStateVersion=0;
  // Revision 3: SPG main-gun rounds in State and indirect-fire trial configuration.
  UPROPERTY() int32 ArtilleryTrialFlags=0;
+ UPROPERTY() int32 StrengthShieldTrialFlags=-1; // absent in older saves; additive to extension 3
  UPROPERTY() TMap<int32,FBattleSavedGroup> SavedGroups;
  UPROPERTY() TMap<int32,int32> SavedSquadGroup;
  UPROPERTY() int32 SavedNextGroupID=1;

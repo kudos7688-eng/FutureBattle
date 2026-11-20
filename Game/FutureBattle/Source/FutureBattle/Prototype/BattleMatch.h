@@ -171,7 +171,8 @@ public:
 	// keeps its own type's rules). A point the group could not take is avoided until AvoidUntil.
 	struct FBattleGroup { int32 ID = 0, Team = 0; TArray<int32> Squads; int32 Objective = INDEX_NONE; uint8 Phase = 0; float PhaseAt = 0.f; FVector Rally = FVector::ZeroVector; bool bPlayer = false; TMap<int32, uint8> Roles; int32 Avoid = INDEX_NONE; float AvoidUntil = 0.f;
 		// Stage 3b: the living soldiers when the advance began (losses end it early) and how often in a row the group failed at StallPoint.
-		int32 StartLiving = 0, StallPoint = INDEX_NONE, Stalls = 0;
+		double StartStrength = -1;
+  int32 StartLiving = 0, StallPoint = INDEX_NONE, Stalls = 0;
 		bool bOpened = false; /* the opening rush was decided (once per group) */
 		bool bArrived = false; /* this advance has reached its point: the stall clock (PhaseAt) runs from then */
 		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */ };
@@ -187,6 +188,17 @@ public:
 	void DissolveGroup(int32 GroupID, const TCHAR* Why);
 	bool GroupAIRun(const FBattleGroup& Group) const;
 	int32 GroupLiving(const FBattleGroup& Group, int32* Full = nullptr) const;
+ struct FGroupStrength {
+  double Infantry=0,Armour=0,Soft=0,Hard=0,Unknown=0;
+  void Add(uint8 Type);
+  double Total() const { return Infantry+Armour; }
+  double Against(const FGroupStrength& Other) const;
+  bool SuperiorTo(const FGroupStrength& Other,double Ratio) const;
+ };
+ static bool GroupSquadPresent(const FBattleSquadState& Squad);
+ FGroupStrength GroupPower(const FBattleGroup& Group,bool bFull=false) const;
+ FGroupStrength GroupPointPower(int32 Team,int32 Point,bool bEnemy) const;
+ bool GroupPointThreat(int32 Team,int32 Point) const;
 	int32 GroupFocus(int32 Team, const FVector& From, int32 Avoid = INDEX_NONE) const;
 	FVector GroupRally(int32 Team, int32 Point) const;
 	// Every director update, before the team's orders: members, AI formation (trial -BattleAreaGroups=1), phases.
@@ -217,6 +229,7 @@ public:
  struct FAreaIntelView { double At=-1; TArray<FVector> Enemies; TArray<int32> EnemyKeys /* unit IDs, below zero for scout report positions */; TArray<int32> OwnAt, EnemyAt; int32 HomeEnemies=0; bool bHomeCovered=false;
   // Fresh direct LOS report, distinct from knowing the base position. Match-clock timestamp.
   int32 HomeObserver=INDEX_NONE; double HomeObservedAt=-1; FVector HomeReportFrom=FVector::ZeroVector;
+  TMap<int32,uint8> EnemyTypes; // observed contact metadata only; report dots without identity remain unknown
   mutable bool bClustersBuilt[2]={false,false};
   mutable TArray<FArtilleryCluster> Clusters[2];
  };

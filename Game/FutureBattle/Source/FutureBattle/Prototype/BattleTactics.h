@@ -15,6 +15,9 @@ struct FBattleExposure
 
 namespace BattleTactics
 {
+ bool ExoShieldSuppressionEnabled();
+ float ExoShieldHitDelay();
+ bool GroupStrengthEnabled();
  int32 ArtilleryTrialFlags();
  bool ArtilleryObservedEnabled();
  bool SPGAmmoEnabled();

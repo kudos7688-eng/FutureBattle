@@ -30,6 +30,7 @@ bool UBattleSave::Validate(FString& Error) const
  {Error=TEXT("Invalid artillery trial configuration");return false;}
  if(CombatStateVersion<2&&(!SavedGroups.IsEmpty()||!SavedSquadGroup.IsEmpty()||!SavedCarChoices.IsEmpty()||SavedNextGroupID!=1))
  {Error=TEXT("Strategic state requires combat extension 2");return false;}
+ if(StrengthShieldTrialFlags < -1||StrengthShieldTrialFlags>3){Error=TEXT("Invalid strength/shield trial flags");return false;}
  auto ValidPosition=[&](const FVector& P){return ValidSnapshotPosition(P,Mixed?BattleFieldLayout::ByName(MapName).SaveLimit:FVector2D(10000,10000));};
 	auto Fail = [&Error](const TCHAR* Message) { Error = Message; return false; };
 	if ((Version != 1 && Version != 2 && Version!=3) || (Version==3)!=(Ruleset==TEXT("Area")) || !MatchID.IsValid() || Phase < 1 || Phase > 3 || !ValidTeam(Winner, true) || Result.Len() > 200 || ViewRotation.ContainsNaN()) return Fail(TEXT("Unsupported or invalid match header"));
@@ -64,7 +65,7 @@ bool UBattleSave::Validate(FString& Error) const
 		if (!InRange(S.HP, 0, 10000) || !InRange(S.Ammo, 0, 10000) || !InRange(S.Reserve, 0, 100000) || !InRange(S.ReloadEndTime, 0, 120) || !InRange(S.NextShotTime, 0, 120) || S.ShotSequence < 0 || S.OrderRevision < 0 || S.PerceptionRevision < 0 || S.DecisionRevision < 0) return Fail(TEXT("Invalid unit resources or timers"));
 		if (static_cast<uint8>(S.Weapon) > static_cast<uint8>(EBattleWeapon::Mortar) || static_cast<uint8>(S.Order) > static_cast<uint8>(EBattleOrder::Defend) || static_cast<uint8>(S.Training) > 2 || !InRange(S.SpreadSkillScale, .25, 3) || !InRange(S.HireCost, 1, 1000000)) return Fail(TEXT("Invalid unit order or training"));
 		if (!InRange(P.SightRange, 100, 20000) || !InRange(P.FieldOfView, 1, 360) || !InRange(P.DetectionSeconds, 0, 30) || !InRange(P.MemorySeconds, 0, 120) || !InRange(P.ShareRange, 0, 20000) || !InRange(P.ShareDelay, 0, 30) || !InRange(D.ThinkSeconds, .01, 10) || !InRange(D.CoverThinkSeconds, .01, 30) || !InRange(D.CoverCandidates, 1, 100)) return Fail(TEXT("Invalid unit capabilities"));
-  if(!InRange(S.Shield,0,1000)||!InRange(S.ShieldWait,0,FMath::Max(0.f,GetDefault<UBattleTuning>()->ExoShieldDelay))||
+  if(!InRange(S.Shield,0,1000)||!InRange(S.ShieldWait,0,BattleTactics::ExoShieldHitDelay())||
      !InRange(S.Launcher,0,20)||!InRange(S.LauncherWait,0,FMath::Max(.5f,GetDefault<UBattleTuning>()->ExoLauncherReload)))return Fail(TEXT("Invalid shield or launcher resources"));
   if(!Mixed&&(S.Shield!=0||S.ShieldWait!=0||S.Launcher!=0||S.LauncherWait!=0||S.bLauncherSelected))return Fail(TEXT("Exoskeleton resources outside mixed mode"));
 		if (S.IsAlive()) ++Alive; ByID.Add(S.UnitID, &S);
@@ -106,7 +107,7 @@ bool UBattleSave::Validate(FString& Error) const
 	auto ValidContact = [&](int32 Receiver, const FBattleContact& C)
 	{
 		const auto* const* Source = ByID.Find(C.SourceUnitID); const auto* const* Target = ByID.Find(C.TargetID); const auto* const* Observer = ByID.Find(Receiver);
-		return Observer && Source && Target && (*Source)->Team == (*Observer)->Team && (*Target)->Team != (*Observer)->Team && ValidPosition(C.LastKnownPosition) && InRange(C.LastSeenTime, -1000000, 0.01) && InRange(C.Confidence, 0, 1);
+		return (C.ObservedSquadType==255||C.ObservedSquadType<BattleSquadType::Count) && Observer && Source && Target && (*Source)->Team == (*Observer)->Team && (*Target)->Team != (*Observer)->Team && ValidPosition(C.LastKnownPosition) && InRange(C.LastSeenTime, -1000000, 0.01) && InRange(C.Confidence, 0, 1);
 	};
 	for (const auto& Observer : Observers)
 	{
@@ -135,13 +136,14 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
  {
   Save->CombatStateVersion=3;
   Save->ArtilleryTrialFlags=BattleTactics::ArtilleryTrialFlags();
+  Save->StrengthShieldTrialFlags=(BattleTactics::ExoShieldSuppressionEnabled()?1:0)|(BattleTactics::GroupStrengthEnabled()?2:0);
   Save->SavedNextGroupID=NextGroupID;Save->SavedSquadGroup=SquadGroup;
   for(const auto& Pair:Groups)
   {
    const auto& G=Pair.Value;FBattleSavedGroup E;
    E.ID=G.ID;E.Team=G.Team;E.Squads=G.Squads;E.Objective=G.Objective;E.Phase=G.Phase;
    E.PhaseAge=double(Elapsed)-double(G.PhaseAt);E.Rally=G.Rally;E.bPlayer=G.bPlayer;E.Roles=G.Roles;
-   E.Avoid=G.Avoid;E.AvoidRemaining=double(G.AvoidUntil)-double(Elapsed);E.StartLiving=G.StartLiving;
+   E.Avoid=G.Avoid;E.AvoidRemaining=double(G.AvoidUntil)-double(Elapsed);E.StartLiving=G.StartLiving;E.StartStrength=G.StartStrength;
    E.StallPoint=G.StallPoint;E.Stalls=G.Stalls;E.bOpened=G.bOpened;E.bArrived=G.bArrived;
    E.ArrivalAge=double(Elapsed)-double(G.ArrivedAt);E.Extensions=G.Extensions;
    Save->SavedGroups.Add(Pair.Key,E);
@@ -216,6 +218,8 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
  {LastMessage=TEXT("Save mode, map or rule configuration does not match");return false;}
  if(Mixed&&Save->CombatStateVersion>=3&&Save->ArtilleryTrialFlags!=BattleTactics::ArtilleryTrialFlags())
  {LastMessage=TEXT("Indirect-fire trial configuration does not match");return false;}
+ if(Mixed&&Save->StrengthShieldTrialFlags>=0&&Save->StrengthShieldTrialFlags!=((BattleTactics::ExoShieldSuppressionEnabled()?1:0)|(BattleTactics::GroupStrengthEnabled()?2:0)))
+ {LastMessage=TEXT("Strength/shield trial configuration does not match");return false;}
  TArray<ABattleUnit*> Spawned;TArray<FBattleUnitState> Records;const double Now=GetWorld()->GetTimeSeconds();
  if(Mixed)
  {
@@ -263,7 +267,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
    const auto& E=Pair.Value;FBattleGroup G;
    G.ID=E.ID;G.Team=E.Team;G.Squads=E.Squads;G.Objective=E.Objective;G.Phase=E.Phase;
    G.PhaseAt=float(double(Elapsed)-E.PhaseAge);G.Rally=E.Rally;G.bPlayer=E.bPlayer;G.Roles=E.Roles;
-   G.Avoid=E.Avoid;G.AvoidUntil=float(double(Elapsed)+E.AvoidRemaining);G.StartLiving=E.StartLiving;
+   G.Avoid=E.Avoid;G.AvoidUntil=float(double(Elapsed)+E.AvoidRemaining);G.StartLiving=E.StartLiving;G.StartStrength=E.StartStrength;
    G.StallPoint=E.StallPoint;G.Stalls=E.Stalls;G.bOpened=E.bOpened;G.bArrived=E.bArrived;
    G.ArrivedAt=float(double(Elapsed)-E.ArrivalAge);G.Extensions=E.Extensions;RestoredGroups.Add(Pair.Key,MoveTemp(G));
   }

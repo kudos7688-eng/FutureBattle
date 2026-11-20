@@ -439,7 +439,7 @@ bool UBattleState::ApplyDamage(int32 ID, int32 AttackingTeam, float Damage)
  // Exoskeleton shield: takes the damage first; any hit restarts the pause before it refills. A hit it absorbs whole still counts as a hit.
  if(bShields)if(const float MaxShield=MaxShieldOf(ID);MaxShield>0.f)
  {
-  State->ShieldWait=FMath::Max(0.f,GetDefault<UBattleTuning>()->ExoShieldDelay);
+  State->ShieldWait=BattleTactics::ExoShieldHitDelay();
   const float Absorbed=FMath::Min(FMath::Max(0.f,State->Shield),Damage);State->Shield-=Absorbed;Damage-=Absorbed;
   if(Damage<=0.f){if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>())Runtime->NoteUnderFire(ID);NoteHit(ID);return true;}
  }

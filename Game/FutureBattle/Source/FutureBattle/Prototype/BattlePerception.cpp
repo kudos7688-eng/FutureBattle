@@ -129,6 +129,11 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			}
 		auto& Contact = Observer.Contacts.FindOrAdd(TargetID);
 		Contact.TargetID = TargetID;
+  if(BattleTactics::GroupStrengthEnabled())
+  {
+   const auto* SeenSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(Candidate.State->SquadID);
+   Contact.ObservedSquadType=SeenSquad?SeenSquad->SquadType:255;
+  }
 		Contact.LastKnownPosition = Candidate.Position;
 		Contact.LastSeenTime = Now; Contact.Confidence = 1.f; Contact.bVisible = true;
 		Contact.SourceUnitID = Pair.Key; Contact.bShared = false;

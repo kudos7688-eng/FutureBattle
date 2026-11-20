@@ -30,7 +30,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   if(Pair.Key!=G.ID||G.ID<1||G.ID>=SavedNextGroupID||G.Team<0||G.Team>1||G.Phase>3||
      G.Squads.Num()<(G.bPlayer?1:2)||G.Squads.Num()>Squads.Num()||G.Roles.Num()>Squads.Num()||
      !Objective(G.Objective)||!Objective(G.Avoid)||!Objective(G.StallPoint)||!Point(G.Rally)||
-     G.StartLiving<0||G.StartLiving>Units.Num()||G.Stalls<0||G.Stalls>1000000||G.Extensions<0||G.Extensions>1000000)
+     !(G.StartStrength==-1||Finite(G.StartStrength,0,1.e9))||G.StartLiving<0||G.StartLiving>Units.Num()||G.Stalls<0||G.Stalls>1000000||G.Extensions<0||G.Extensions>1000000)
    return Fail(TEXT("Invalid saved group identity, phase or history"));
   // PushExtend can put PhaseAt up to 30 seconds ahead. Expired AvoidUntil must retain its signed offset.
   if(!Finite(G.PhaseAge,-30.01,double(Elapsed))||!Finite(G.ArrivalAge,0,double(Elapsed))||
@@ -65,7 +65,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
      ((!SPG||CombatStateVersion<3||(ArtilleryTrialFlags&2)==0)&&U.SPGAmmo!=0))
    return Fail(TEXT("Invalid SPG ammunition or extension version"));
   if(!Finite(U.Shield,0,BattleSquadType::ShieldMax(S->SquadType))||!Finite(U.Launcher,0,BattleSquadType::LauncherRounds(S->SquadType))||
-     !Finite(U.ShieldWait,0,Exo?FMath::Max(0.f,GetDefault<UBattleTuning>()->ExoShieldDelay):0.f)||
+     !Finite(U.ShieldWait,0,Exo?BattleTactics::ExoShieldHitDelay():0.f)||
      !Finite(U.LauncherWait,0,Exo?FMath::Max(.5f,GetDefault<UBattleTuning>()->ExoLauncherReload):0.f)||(!Exo&&U.bLauncherSelected))
    return Fail(TEXT("Shield or launcher inconsistent with squad type"));
  }

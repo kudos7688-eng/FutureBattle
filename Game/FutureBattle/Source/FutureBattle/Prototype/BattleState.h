@@ -376,6 +376,8 @@ public:
 	UPROPERTY(Config, EditAnywhere) float ExoDamageScale = 2.f;
 	UPROPERTY(Config, EditAnywhere) float ExoShield = 100.f;
 	UPROPERTY(Config, EditAnywhere) float ExoShieldDelay = 5.f;
+ // Trial: an 8 s quiet window after each hit, including hits wholly absorbed by the shield.
+ UPROPERTY(Config, EditAnywhere) float ExoShieldSuppressionDelay = 8.f;
 	UPROPERTY(Config, EditAnywhere) float ExoShieldRegen = 20.f;
 	UPROPERTY(Config, EditAnywhere) int32 ExoLauncherRounds = 4;
 	UPROPERTY(Config, EditAnywhere) float ExoLauncherReload = 8.f;
@@ -493,6 +495,13 @@ public:
 	// Default on for every map since 2026-11-20 (user decision after the 9-seed trial with cover actions: map A +41, map E +-0).
 	UPROPERTY(Config, EditAnywhere) bool bAreaGroups = true;
 	UPROPERTY(Config, EditAnywhere) int32 GroupRifleSquads = 3;
+ // Trial strength per living member (not per squad), indexed by BattleSquadType.
+ // Rifle=1 against infantry; heavy sustained fire=1.5, vehicles/Exo count as multiple rifles.
+ // Anti-armour values represent dedicated weapons, not price or AI shooting skill.
+ UPROPERTY(Config, EditAnywhere) TArray<float> GroupAntiInfantry = {1.f,1.5f,.5f,.6f,6.f,5.f,2.f,8.f,5.f,.3f};
+ UPROPERTY(Config, EditAnywhere) TArray<float> GroupAntiArmour = {0.f,0.f,0.f,3.f,8.f,1.f,0.f,2.f,4.f,0.f};
+ // Unknown reports stay separate: each adds this many rifle-equivalent risk points.
+ UPROPERTY(Config, EditAnywhere) float GroupUnknownRisk = 1.5f;
 	UPROPERTY(Config, EditAnywhere) float GroupRallyBack = 12000.f;
 	UPROPERTY(Config, EditAnywhere) float GroupRallyBackProfile = 20000.f;
 	UPROPERTY(Config, EditAnywhere) float GroupRallyRadius = 4000.f;

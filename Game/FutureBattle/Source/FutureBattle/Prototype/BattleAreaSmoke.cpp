@@ -622,7 +622,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     if(auto* G=M->Groups.Find(SavedGroup))
     {
      G->Phase=1;G->PhaseAt=M->Elapsed+15.f;G->ArrivedAt=FMath::Max(0.f,M->Elapsed-2.f);G->AvoidUntil=M->Elapsed+60.f;
-     G->Objective=0;G->Avoid=1;G->StallPoint=1;G->Stalls=2;G->StartLiving=M->GroupLiving(*G);G->Extensions=3;
+     G->Objective=0;G->Avoid=1;G->StallPoint=1;G->Stalls=2;G->StartLiving=M->GroupLiving(*G);G->StartStrength=23.5;G->Extensions=3;
      G->bOpened=true;G->bArrived=true;G->Roles.Add(MSID,3);
      // A departed member's role is legitimate history, not current membership.
      for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Key!=MSID){G->Roles.Add(P.Key,255);break;}
@@ -638,7 +638,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
       const auto* G=M->Groups.Find(P.Key);const auto& B=P.Value;
       if(!G||G->ID!=B.ID||G->Team!=B.Team||G->Squads!=B.Squads||G->Objective!=B.Objective||G->Phase!=B.Phase||G->PhaseAt!=B.PhaseAt||
          G->Rally!=B.Rally||G->bPlayer!=B.bPlayer||!G->Roles.OrderIndependentCompareEqual(B.Roles)||G->Avoid!=B.Avoid||G->AvoidUntil!=B.AvoidUntil||
-         G->StartLiving!=B.StartLiving||G->StallPoint!=B.StallPoint||G->Stalls!=B.Stalls||G->bOpened!=B.bOpened||G->bArrived!=B.bArrived||
+         G->StartStrength!=B.StartStrength||G->StartLiving!=B.StartLiving||G->StallPoint!=B.StallPoint||G->Stalls!=B.Stalls||G->bOpened!=B.bOpened||G->bArrived!=B.bArrived||
          G->ArrivedAt!=B.ArrivedAt||G->Extensions!=B.Extensions)return false;
      }
      for(const auto& P:ChoicesBefore){const auto* C=M->CarChoices.Find(P.Key);if(!C||C->Target!=P.Value.Target||C->At!=P.Value.At)return false;}
@@ -660,6 +660,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
       auto* Bad=DuplicateObject<UBattleSave>(Save,this);Corrupt(*Bad);auto* Before=Actor(MLeader);
       Check(!M->RestoreSnapshot(Bad)&&Actor(MLeader)==Before&&SameStrategy(),Label);
      };
+     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].StartStrength=-.5;},TEXT("invalid weighted strength baseline rejected"));
      RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].ID+=1;},TEXT("group key identity mismatch rejected atomically"));
      RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].Squads.Add(MSID);},TEXT("duplicate group member rejected atomically"));
      RejectStrategy([&](UBattleSave& S){S.SavedSquadGroup.Remove(MSID);},TEXT("missing reciprocal membership rejected atomically"));
@@ -900,13 +901,13 @@ void UBattleLeaderRuntime::RunAreaSmoke()
       TEXT("zero shield leaves exoskeleton armour and launcher independent"));
     }
     // No suppression while the shield holds.
-    SuppressionZeroAt.Remove(L);AddSuppression(L,1.f,Now);const bool Unshaken=Suppression(L,Now)==0.f;
+    SuppressionZeroAt.Remove(L);AddSuppression(L,1.f,Now);const bool Unshaken=BattleTactics::ExoShieldSuppressionEnabled()?Suppression(L,Now)>0.f:Suppression(L,Now)==0.f;
     // Shield: 70 damage leaves health untouched; the next 50 empties the shield and takes 20 health.
     Store->ApplyDamage(L,1,70);const bool First=FMath::IsNearlyEqual(LU->HP,HP0)&&FMath::IsNearlyEqual(LU->Shield,30.f);
     Store->ApplyDamage(L,1,50);Shield=First&&FMath::IsNearlyEqual(LU->HP,HP0-20.f)&&LU->Shield==0.f;
-    AddSuppression(L,1.f,Now);Calm=Unshaken&&(!BattleSuppression::Tuning().bEnabled||Suppression(L,Now)>0.f);SuppressionZeroAt.Remove(L);
+    AddSuppression(L,1.f,Now);Calm=Unshaken&&((!BattleSuppression::Tuning().bEnabled&&!BattleTactics::ExoShieldSuppressionEnabled())||Suppression(L,Now)>0.f);SuppressionZeroAt.Remove(L);
     // Refill: nothing for 5 s after the last hit, then 20 points/s up to 100; health does not refill.
-    Store->AdvanceShields(2.5f);Store->AdvanceShields(2.5f);const bool Waited=LU->Shield==0.f;
+    Store->AdvanceShields(BattleTactics::ExoShieldHitDelay()*.5f);Store->AdvanceShields(BattleTactics::ExoShieldHitDelay()*.5f);const bool Waited=LU->Shield==0.f;
     Store->AdvanceShields(2.f);const bool Partial=FMath::IsNearlyEqual(LU->Shield,40.f);
     Store->AdvanceShields(100.f);Regen=Waited&&Partial&&FMath::IsNearlyEqual(LU->Shield,100.f)&&FMath::IsNearlyEqual(LU->HP,HP0-20.f);
     // Launcher: one round out (straight up, hitting nothing), then 8 s to load the next; the main weapon's ammunition is untouched.
@@ -921,12 +922,57 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Store->AdvanceLaunchers(8.f);Store->AdvanceShields(8.f);Launch=Switched&&Fired&&Loading&&One&&LU->LauncherWait==0.f;
     // Team layer: the fast reserve gets a valid objective from what its team knows.
     Reserve=M->Objectives.IsValidIndex(M->AreaExoTarget(0,XSID));
+    // Isolated hit/recovery fixture. Keep subsequent legacy equipment checks unchanged.
+    {
+     auto& Unit=Store->Units.FindChecked(L);const auto Before=Unit;const auto OldSuppression=SuppressionZeroAt;
+     const auto OldTuning=BattleSuppression::MutableTuning();BattleSuppression::MutableTuning().bEnabled=true;
+     SuppressionZeroAt.Remove(L);Store->ApplyDamage(L,1,1.f);
+     const double HitNow=GetWorld()->GetTimeSeconds();const float Level=Suppression(L,HitNow);
+     Check(BattleTactics::ExoShieldSuppressionEnabled()?Level>0.f:Level==0.f,TEXT("absorbed hit suppresses only under exoskeleton trial"));
+     const float ShieldAfter=Unit.Shield;const float Delay=BattleTactics::ExoShieldHitDelay();
+     Store->AdvanceShields(Delay*.5f);Check(Unit.Shield==ShieldAfter,TEXT("shield cannot recover during hit inhibition"));
+     Store->ApplyDamage(L,1,1.f);
+     Check(FMath::IsNearlyEqual(Unit.ShieldWait,Delay),TEXT("repeated shield hits restart inhibition"));
+     Check(BattleTactics::ExoShieldSuppressionEnabled()?Suppression(L,HitNow)>Level:Suppression(L,HitNow)==0.f,TEXT("repeated absorbed hits accumulate suppression"));
+     Store->AdvanceShields(Delay);const float AfterWait=Unit.Shield;Store->AdvanceShields(.1f);
+     Check(Unit.Shield>AfterWait,TEXT("shield recovery resumes after quiet inhibition window"));
+     Unit=Before;SuppressionZeroAt=OldSuppression;BattleSuppression::MutableTuning()=OldTuning;
+    }
+    {
+     UBattleMatch::FGroupStrength Rifle,Tank,Exo,AT,Unknown;
+     Rifle.Add(BattleSquadType::Rifle);Tank.Add(BattleSquadType::Tank);Exo.Add(BattleSquadType::Exo);AT.Add(BattleSquadType::AntiTank);Unknown.Add(255);
+     Check(Tank.Total()>Rifle.Total()&&Exo.Total()>Rifle.Total()&&AT.Armour>Rifle.Armour&&Tank.Hard==1&&Exo.Soft==1,
+      TEXT("group strength counts vehicle and exoskeleton capabilities, not one head each"));
+     Check(Unknown.Unknown==1&&Unknown.Total()==0&&Unknown.Soft==0&&Unknown.Hard==0&&!Rifle.SuperiorTo(Unknown,1.),
+      TEXT("unidentified enemy remains separate uncertainty, not an invented infantry type"));
+     UBattleMatch::FBattleGroup G;G.Team=0;G.Squads.Add(XSID);
+     const auto Present=M->GroupPower(G);auto& Squad=Store->Squads.FindChecked(XSID);const auto Plan=Squad.TacticalPlan;
+     Squad.TacticalPlan.Action=EBattleSquadTactic::Recover;Squad.TacticalPlan.Reason=TEXT("HOME SUPPLY / SMOKE");
+     Check(Present.Total()==Exo.Total()&&M->GroupPower(G).Total()==0&&M->GroupPower(G,true).Total()==0&&!UBattleMatch::GroupSquadPresent(Squad),
+      TEXT("returning supply squad contributes no field strength or full field strength"));Squad.TacticalPlan=Plan;
+     const auto OldIntel=M->IntelViews[0];auto& V=M->IntelViews[0];V=UBattleMatch::FAreaIntelView();V.At=M->Elapsed;
+     V.Enemies.Add(M->Objectives[0].Position);V.EnemyKeys.Add(900000);V.EnemyTypes.Add(900000,BattleSquadType::Tank);
+     const auto Known=M->GroupPointPower(0,0,true);V.EnemyTypes.Reset();const auto Unidentified=M->GroupPointPower(0,0,true);
+     Check(Known.Total()==Tank.Total()&&Known.Hard==1&&Unidentified.Unknown==1&&Unidentified.Total()==0,
+      TEXT("enemy strength uses recorded type without looking up live enemy state"));V=OldIntel;
+     auto* Metadata=NewObject<UBattleSave>(this);FBattleContact Identified,UnknownContact;
+     Identified.ObservedSquadType=BattleSquadType::Tank;
+     Metadata->Observers.FindOrAdd(1).Contacts.Add(2,Identified);Metadata->Observers[1].Contacts.Add(3,UnknownContact);
+     TArray<uint8> Bytes;const bool Written=UGameplayStatics::SaveGameToMemory(Metadata,Bytes);
+     const auto* Read=Written?Cast<UBattleSave>(UGameplayStatics::LoadGameFromMemory(Bytes)):nullptr;
+     const auto* Observer=Read?Read->Observers.Find(1):nullptr;
+     Check(Observer&&Observer->Contacts.Contains(2)&&Observer->Contacts.Contains(3)&&Observer->Contacts[2].ObservedSquadType==BattleSquadType::Tank&&Observer->Contacts[3].ObservedSquadType==255,
+      TEXT("identified and unknown contact metadata survive serialization"));
+    }
     // Save and restore: type, shield points, the pause before the refill and the launcher rounds survive.
     Store->ApplyDamage(L,1,25);ShieldSaved=LU->Shield;
     Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
     const bool Restored=Valid&&M->RestoreSnapshot(Save);const auto* After=Store->FindSquad(XSID);const auto* RU=Store->Find(L);
     if(Valid)
     {
+     auto* WrongTrial=DuplicateObject<UBattleSave>(Save,this);WrongTrial->StrengthShieldTrialFlags^=1;
+     const auto* BeforeActor=Actor(L);
+     Check(!M->RestoreSnapshot(WrongTrial)&&Actor(L)==BeforeActor,TEXT("strength/shield trial mismatch rejected before mutation"));
      auto RejectEquipment=[&](TFunctionRef<void(FBattleUnitState&)> Corrupt)
      {
       auto* Bad=DuplicateObject<UBattleSave>(Save,this);
@@ -940,10 +986,10 @@ void UBattleLeaderRuntime::RunAreaSmoke()
       RejectEquipment([](FBattleUnitState& U){U.Launcher=-1;})&&RejectEquipment([](FBattleUnitState& U){U.LauncherWait=-1;}),TEXT("negative exoskeleton resources rejected"));
      Check(RejectEquipment([](FBattleUnitState& U){U.Shield=BattleSquadType::ShieldMax(BattleSquadType::Exo)+1;})&&
       RejectEquipment([](FBattleUnitState& U){U.Launcher=BattleSquadType::LauncherRounds(BattleSquadType::Exo)+1;})&&
-      RejectEquipment([&](FBattleUnitState& U){U.ShieldWait=FMath::Max(0.f,TT->ExoShieldDelay)+1;})&&
+      RejectEquipment([&](FBattleUnitState& U){U.ShieldWait=BattleTactics::ExoShieldHitDelay()+1;})&&
       RejectEquipment([&](FBattleUnitState& U){U.LauncherWait=FMath::Max(.5f,TT->ExoLauncherReload)+1;}),TEXT("exoskeleton resource upper bounds enforced"));
     }
-    Kept=Restored&&After&&After->SquadType==BattleSquadType::Exo&&After->CommandStatus==EBattleCommandStatus::Active&&RU&&Actor(L)&&ExoLooks.Contains(L)&&FMath::IsNearlyEqual(RU->Shield,75.f)&&FMath::IsNearlyEqual(RU->ShieldWait,TT->ExoShieldDelay)&&
+    Kept=Restored&&After&&After->SquadType==BattleSquadType::Exo&&After->CommandStatus==EBattleCommandStatus::Active&&RU&&Actor(L)&&ExoLooks.Contains(L)&&FMath::IsNearlyEqual(RU->Shield,75.f)&&FMath::IsNearlyEqual(RU->ShieldWait,BattleTactics::ExoShieldHitDelay())&&
      RU->Launcher==3&&RU->bLauncherSelected&&FMath::IsNearlyEqual(RU->HP,HP0-20.f)&&Store->HasShields()&&FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::Carbine),.3f);
     Mode->bCombatPaused=false;
    }
@@ -951,8 +997,8 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    Check(Scored,TEXT("exoskeleton soldier counts as 5 soldiers in the score"));
    Check(Armour,TEXT("exoskeleton armour: small arms do 0.3, anti-tank weapons full damage, other soldiers unchanged"));
    Check(Shield,TEXT("exoskeleton shield takes damage before health"));
-   Check(Calm,TEXT("exoskeleton is not suppressed while its shield holds"));
-   Check(Regen,TEXT("exoskeleton shield refills 5 s after the last hit at 20 points per second"));
+   Check(Calm,TEXT("exoskeleton suppression follows shield trial setting"));
+   Check(Regen,TEXT("exoskeleton shield refills after the configured quiet window"));
    Check(Launch,TEXT("exoskeleton launcher: one round per 8 s, separate from the main weapon"));
    Check(Reserve,TEXT("exoskeleton soldier: the team layer gives it an objective as the fast reserve"));
    Check(Kept,TEXT("exoskeleton soldier survives save and restore with its shield, launcher rounds and look"));

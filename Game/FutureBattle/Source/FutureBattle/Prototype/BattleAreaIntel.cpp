@@ -36,7 +36,7 @@ const UBattleMatch::FAreaIntelView& UBattleMatch::AreaIntelView(int32 Team) cons
      (V.HomeObserver==INDEX_NONE||U.Key<V.HomeObserver)&&AreaVisible(U.Key,EnemyHome,BaseActors[1-Team]))
   {V.HomeObserver=U.Key;V.HomeObservedAt=Elapsed;V.HomeReportFrom=P;}
   if(const auto* Contacts=Perception?Perception->GetContacts(U.Key):nullptr)
-   for(const auto& C:*Contacts)if(C.Value.bVisible&&!IsScoutLongContact(U.Key,C.Value))Seen.Add(C.Key,C.Value.LastKnownPosition);
+   for(const auto& C:*Contacts)if(C.Value.bVisible&&!IsScoutLongContact(U.Key,C.Value)){Seen.Add(C.Key,C.Value.LastKnownPosition);if(BattleTactics::GroupStrengthEnabled()&&C.Value.ObservedSquadType<BattleSquadType::Count)V.EnemyTypes.Add(C.Key,C.Value.ObservedSquadType);}
  }
  AddScoutReportSightings(Team,Seen);
  for(const auto& P:ScoutReports)
