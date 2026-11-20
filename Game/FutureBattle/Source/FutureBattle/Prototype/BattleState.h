@@ -625,7 +625,7 @@ public:
 	UPROPERTY(Config, EditAnywhere) float SupplyAwayRatio = 1.f;
 	UPROPERTY(Config, EditAnywhere) float SupplyHealPerSecond = 0.f;
 	UPROPERTY(Config, EditAnywhere) float SupplyResumeHealthRatio = 0.f;
-	// Area new-squad hiring (adopted 2026-11-14; -BattleAreaHire=0 disables): a team with fewer than 25 active squads may buy
+	// Area new-squad hiring (adopted 2026-11-14; -BattleAreaHire=0 disables): a team with fewer than AreaMaxActiveSquads (25) active squads may buy
 	// a fresh RifleMembers-soldier regular squad at home for AreaSquadCost resources. AI buys only when resources minus pending
 	// replenishments >= AreaSquadCost + AreaHireReserve.
 	// Rifle squad size (2026-11-19 user decision: 10 -> 8, cost 15 -> 12; area matches only, other modes keep 10). -BattleRifleMembers= overrides per run (2..10).
@@ -633,6 +633,9 @@ public:
 	UPROPERTY(Config, EditAnywhere) bool bAreaHire = true;
 	UPROPERTY(Config, EditAnywhere) int32 AreaSquadCost = 12;
 	UPROPERTY(Config, EditAnywhere) int32 AreaHireReserve = 0;
+	// Active squad limit per team for hiring (player and AI, all squad types). Default 25 = the starting squad count.
+	// Trial -BattleAreaMaxSquads=N (1..100) overrides per run (2026-11-19: preparing a 40-squad trial after the 8-soldier rifle squad).
+	UPROPERTY(Config, EditAnywhere) int32 AreaMaxActiveSquads = 25;
 	// AI purchase pacing (0 = off, the first implementation): at least AreaHireIntervalSeconds between a team's AI purchases,
 	// and no AI purchase in the last AreaHireStopSeconds of the time limit. Trials: -BattleAreaHireReserve= / -Interval= / -Stop=.
 	UPROPERTY(Config, EditAnywhere) float AreaHireIntervalSeconds = 0.f;

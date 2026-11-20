@@ -108,7 +108,8 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    if(Fresh)for(int32 ID:NewSquad->Members)Fresh&=ID>MaxID&&Store->Find(ID)->IsAlive()&&Store->Find(ID)->bActorRepresentation==(ID==NewSquad->LeaderUnitID);
    const int32 NewLeader=NewSquad?NewSquad->LeaderUnitID:0;
    Check(Fresh&&NewSID==51&&FVector::Dist2D(Position(NewSquad->LeaderUnitID),M->AreaHome(0))<=2500,TEXT("hired squad gets a new number, new IDs, an Actor leader and home placement"));
-   Check(!M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==Before-HireCost,TEXT("no free slot rejects hiring at 25 active squads"));
+   // The fixture starts with 25 squads per team, so the full-slot rejection is only reachable at the default limit.
+   if(BattleTactics::AreaHire().MaxActive==25)Check(!M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==Before-HireCost,TEXT("no free slot rejects hiring at 25 active squads"));
    if (Fresh)
    {
     auto* Leader = Actor(NewLeader);
@@ -428,8 +429,8 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    // Armoured car (squad type 5, stage 1 2026-11-18): one vehicle for 20 resources, at most 3 per team, health 150, small arms do a tenth,
    // two anti-tank hits destroy it, 10 m/s in the open, a 120 degree view, the vehicle navigation data, no main gun; survives save and restore.
    {
-    // Free squad slots: stop team 0 rifle squads (leader killed) until three cars fit under the 25 active squads.
-    for(int32 Pass=0;Pass<6&&M->ActiveSquads(0)>22;++Pass)
+    // Free squad slots: stop team 0 rifle squads (leader killed) until three cars fit under the active squad limit.
+    for(int32 Pass=0;Pass<6&&M->ActiveSquads(0)>BattleTactics::AreaHire().MaxActive-3;++Pass)
     {
      for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Value.SquadType==BattleSquadType::Rifle&&P.Value.CommandStatus==EBattleCommandStatus::Active)
       if(const auto* L=Store->Find(P.Value.LeaderUnitID);L&&L->IsAlive()){Store->ApplyDamage(L->UnitID,1,10000);break;}
@@ -486,10 +487,10 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     for(int32 A=0;A<16;++A){const FVector D(FMath::Cos(A*PI/8),FMath::Sin(A*PI/8),0);if(!AllyNear(0,Position(ID)+D*Distance,ArtilleryBlastRadius(bSPG)+ArtillerySpread(bSPG,Distance)+500.))return D;}
     return FVector(FVector::ZeroVector);
    };
-   // Free team 0 squad slots: stop rifle squads (leader killed) until Keep slots are free under the 25 active squads.
+   // Free team 0 squad slots: stop rifle squads (leader killed) until Keep slots are free under the active squad limit.
    auto FreeSlots=[&](int32 Keep)
    {
-    for(int32 Pass=0;Pass<10&&M->ActiveSquads(0)>25-Keep;++Pass)
+    for(int32 Pass=0;Pass<10&&M->ActiveSquads(0)>BattleTactics::AreaHire().MaxActive-Keep;++Pass)
     {
      for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Value.SquadType==BattleSquadType::Rifle&&P.Value.CommandStatus==EBattleCommandStatus::Active)
       if(const auto* L=Store->Find(P.Value.LeaderUnitID);L&&L->IsAlive()){Store->ApplyDamage(L->UnitID,1,10000);break;}

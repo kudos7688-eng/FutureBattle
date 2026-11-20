@@ -107,7 +107,7 @@ public:
  void RecordWarLoss(int32 LostTeam);
  void UpdateWarScore(float Dt);
  FString WarScoreBreakdown(int32 Team) const;
- // Area new squad (regular only) into a free slot (<25 active squads) for BattleTactics::AreaHire().Cost resources.
+ // Area new squad (regular only) into a free slot (< BattleTactics::AreaHire().MaxActive active squads, default 25) for BattleTactics::AreaHire().Cost resources.
  // bAuto: AI purchase (no selection change; a team-0 squad is delegated). Cancels pending replenishments the spend can no longer cover.
  bool HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,uint8 SquadType=0);
  int32 LastHiredSquadID=INDEX_NONE;

@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 260 種類。
+計 261 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -12,50 +12,51 @@
 | `-BattleAimAssist` | Value | 1 | BattleController.cpp:1107 |  |
 | `-BattleAllyPass` | Value | 0 | BattleStableMovement.cpp:31 |  |
 | `-BattleArea` | Param/other | off | BattleLeaderRuntime.cpp:75, BattleState.cpp:555 |  |
-| `-BattleAreaACKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:96 |  |
-| `-BattleAreaATKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:94 |  |
-| `-BattleAreaAttackWeight` | Value | T->AreaAttackWeight | BattleTactics.cpp:74 |  |
-| `-BattleAreaBaseFlank` | Value | 1.3f | BattleTactics.cpp:87 |  |
-| `-BattleAreaBaseFlankSide` | Value | S.bFlankSameSide?1:0（bFlankSameSide=true） | BattleTactics.cpp:89 |  |
-| `-BattleAreaBaseInfiltrate` | Value | 0 | BattleTactics.cpp:83 |  |
-| `-BattleAreaBaseLowHP` | Value | 500.f | BattleTactics.cpp:79 |  |
-| `-BattleAreaBaseReturnLiving` | Value | 5 | BattleTactics.cpp:90 |  |
-| `-BattleAreaBaseRule` | Value | 0 | BattleTactics.cpp:76 |  |
-| `-BattleAreaBaseShare` | Value | T->AreaBaseShare | BattleTactics.cpp:75 |  |
-| `-BattleAreaBaseShareHigh` | Value | 0.3f | BattleTactics.cpp:78 |  |
-| `-BattleAreaBaseShareLow` | Value | 0.f | BattleTactics.cpp:77 |  |
+| `-BattleAreaACKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:97 |  |
+| `-BattleAreaATKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:95 |  |
+| `-BattleAreaAttackWeight` | Value | T->AreaAttackWeight | BattleTactics.cpp:75 |  |
+| `-BattleAreaBaseFlank` | Value | 1.3f | BattleTactics.cpp:88 |  |
+| `-BattleAreaBaseFlankSide` | Value | S.bFlankSameSide?1:0（bFlankSameSide=true） | BattleTactics.cpp:90 |  |
+| `-BattleAreaBaseInfiltrate` | Value | 0 | BattleTactics.cpp:84 |  |
+| `-BattleAreaBaseLowHP` | Value | 500.f | BattleTactics.cpp:80 |  |
+| `-BattleAreaBaseReturnLiving` | Value | 5 | BattleTactics.cpp:91 |  |
+| `-BattleAreaBaseRule` | Value | 0 | BattleTactics.cpp:77 |  |
+| `-BattleAreaBaseShare` | Value | T->AreaBaseShare | BattleTactics.cpp:76 |  |
+| `-BattleAreaBaseShareHigh` | Value | 0.3f | BattleTactics.cpp:79 |  |
+| `-BattleAreaBaseShareLow` | Value | 0.f | BattleTactics.cpp:78 |  |
 | `-BattleAreaComposition` | Value | GetDefault<UBattleTuning>()->bAreaComposition?1:0 | BattleArmourAI.cpp:38 |  |
 | `-BattleAreaDepot` | Value | 0 | BattleAreaDepot.cpp:22 |  |
 | `-BattleAreaDepotRaid` | Value | DepotRaid | BattleAreaDepot.cpp:23 |  |
-| `-BattleAreaExoKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:100 |  |
-| `-BattleAreaFocus` | Value | 0.f | BattleTactics.cpp:85 |  |
-| `-BattleAreaFrontBalance` | Value | S.bFrontBalance?1:0（bFrontBalance=false） | BattleTactics.cpp:80 |  |
-| `-BattleAreaFrontGain` | Value | 1.f | BattleTactics.cpp:81 |  |
-| `-BattleAreaGroups` | Value | GetDefault<UBattleTuning>()->bAreaGroups?1:0 | BattleGroups.cpp:68 |  |
-| `-BattleAreaHeavyShare` | Value | 0.f / -1.f（同名のメンバーが複数） | BattleTactics.cpp:92 |  |
+| `-BattleAreaExoKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:101 |  |
+| `-BattleAreaFocus` | Value | 0.f | BattleTactics.cpp:86 |  |
+| `-BattleAreaFrontBalance` | Value | S.bFrontBalance?1:0（bFrontBalance=false） | BattleTactics.cpp:81 |  |
+| `-BattleAreaFrontGain` | Value | 1.f | BattleTactics.cpp:82 |  |
+| `-BattleAreaGroups` | Value | -1 | BattleGroups.cpp:74 |  |
+| `-BattleAreaHeavyShare` | Value | 0.f / -1.f（同名のメンバーが複数） | BattleTactics.cpp:93 |  |
 | `-BattleAreaHire` | Value | T->bAreaHire?1:0 | BattleTactics.cpp:55 |  |
 | `-BattleAreaHireInterval` | Value | T->AreaHireIntervalSeconds | BattleTactics.cpp:57 |  |
-| `-BattleAreaHirePurpose` | Value | 0 | BattleTactics.cpp:59 |  |
-| `-BattleAreaHirePurposeFront` | Value | 10 | BattleTactics.cpp:60 |  |
+| `-BattleAreaHirePurpose` | Value | 0 | BattleTactics.cpp:60 |  |
+| `-BattleAreaHirePurposeFront` | Value | 10 | BattleTactics.cpp:61 |  |
 | `-BattleAreaHireReserve` | Value | T->AreaHireReserve | BattleTactics.cpp:57 |  |
 | `-BattleAreaHireStop` | Value | T->AreaHireStopSeconds | BattleTactics.cpp:58 |  |
-| `-BattleAreaIncome` | Value | T->bAreaIncome?1:0 | BattleTactics.cpp:118 |  |
-| `-BattleAreaIncomeBase` | Value | FMath::Clamp(T->AreaBaseIncome | BattleTactics.cpp:121 |  |
-| `-BattleAreaIncomePerPoint` | Value | FMath::Clamp(T->AreaPointIncome | BattleTactics.cpp:121 |  |
-| `-BattleAreaIncomeRamp` | Value | 0.f | BattleTactics.cpp:126 |  |
-| `-BattleAreaIncomeUrbanBase` | Value | T->AreaBaseIncomeUrban | BattleTactics.cpp:124 |  |
-| `-BattleAreaIncomeUrbanPerPoint` | Value | T->AreaPointIncomeUrban | BattleTactics.cpp:124 |  |
+| `-BattleAreaIncome` | Value | T->bAreaIncome?1:0 | BattleTactics.cpp:119 |  |
+| `-BattleAreaIncomeBase` | Value | FMath::Clamp(T->AreaBaseIncome | BattleTactics.cpp:122 |  |
+| `-BattleAreaIncomePerPoint` | Value | FMath::Clamp(T->AreaPointIncome | BattleTactics.cpp:122 |  |
+| `-BattleAreaIncomeRamp` | Value | 0.f | BattleTactics.cpp:127 |  |
+| `-BattleAreaIncomeUrbanBase` | Value | T->AreaBaseIncomeUrban | BattleTactics.cpp:125 |  |
+| `-BattleAreaIncomeUrbanPerPoint` | Value | T->AreaPointIncomeUrban | BattleTactics.cpp:125 |  |
 | `-BattleAreaIntel` | Value | GetDefault<UBattleTuning>()->bAreaIntel?1:0 | BattleAreaIntel.cpp:14 |  |
-| `-BattleAreaMortarKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:97 |  |
-| `-BattleAreaPlan` | Value | 0 | BattleTactics.cpp:91 |  |
+| `-BattleAreaMaxSquads` | Value | T->AreaMaxActiveSquads | BattleTactics.cpp:59 |  |
+| `-BattleAreaMortarKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:98 |  |
+| `-BattleAreaPlan` | Value | 0 | BattleTactics.cpp:92 |  |
 | `-BattleAreaPointSupply` | other |  | BattleTactics.cpp:39 |  |
-| `-BattleAreaScoutKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:93 |  |
+| `-BattleAreaScoutKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:94 |  |
 | `-BattleAreaSmoke` | Param | off | BattleArea.cpp:42 |  |
-| `-BattleAreaSPGKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:98 |  |
-| `-BattleAreaStartCredits` | Value | 100 | BattleTactics.cpp:127 |  |
-| `-BattleAreaStrategy` | Value | T->bAreaStrategy?1:0 | BattleTactics.cpp:73 |  |
-| `-BattleAreaTankKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:95 |  |
-| `-BattleAreaTrialTeam` | Value | -1 | BattleTactics.cpp:101 |  |
+| `-BattleAreaSPGKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:99 |  |
+| `-BattleAreaStartCredits` | Value | 100 | BattleTactics.cpp:128 |  |
+| `-BattleAreaStrategy` | Value | T->bAreaStrategy?1:0 | BattleTactics.cpp:74 |  |
+| `-BattleAreaTankKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:96 |  |
+| `-BattleAreaTrialTeam` | Value | -1 | BattleTactics.cpp:102 |  |
 | `-BattleAreaWarPointSeconds` | other |  | BattleWarScore.cpp:11 |  |
 | `-BattleAreaWarResourceValue` | other |  | BattleWarScore.cpp:11 |  |
 | `-BattleAreaWarScore` | other |  | BattleWarScore.cpp:10 |  |
@@ -74,24 +75,24 @@
 | `-BattleBounding` | Value | 0 | BattleLeaderRuntime.cpp:1337 |  |
 | `-BattleConcealment` | other |  | BattleLeaderRuntime.cpp:432, BattleLeaderRuntime.cpp:1077, BattleMapCommandlet.cpp:116 ほか1 |  |
 | `-BattleContactAvoidance` | Value | 1 | BattleLeaderRuntime.cpp:83 |  |
-| `-BattleContactCover` | Value | 0 | BattleTactics.cpp:185 |  |
-| `-BattleContactCoverTeam` | Value | -1 | BattleTactics.cpp:179 |  |
+| `-BattleContactCover` | Value | 0 | BattleTactics.cpp:186 |  |
+| `-BattleContactCoverTeam` | Value | -1 | BattleTactics.cpp:180 |  |
 | `-BattleContactTrial` | Param | off | BattleLeaderRuntime.cpp:84 |  |
 | `-BattleCorpseLifetime` | Value | 20.f | BattleCorpses.cpp:25 |  |
-| `-BattleCoverActions` | Value | 0 | BattleSquadTactics.cpp:19, BattleTactics.cpp:191 |  |
+| `-BattleCoverActions` | Value | 0 | BattleSquadTactics.cpp:19, BattleTactics.cpp:192 |  |
 | `-BattleCoverActionSmoke` | Param | off | BattleLeaderRuntime.cpp:211 |  |
-| `-BattleCoverApproach` | Value | -1 | BattleTactics.cpp:173 |  |
+| `-BattleCoverApproach` | Value | -1 | BattleTactics.cpp:174 |  |
 | `-BattleCoverArrival` | Value | 1 | BattleStableMovement.cpp:122 |  |
-| `-BattleCoverFire` | Value | GetDefault<UBattleTuning>()->bAICoverFire?1:0 | BattleTactics.cpp:149 |  |
+| `-BattleCoverFire` | Value | GetDefault<UBattleTuning>()->bAICoverFire?1:0 | BattleTactics.cpp:150 |  |
 | `-BattleCoverHuddle` | Value | 0 | BattleStableMovement.cpp:157 |  |
-| `-BattleCoverPeekSight` | Value | GetDefault<UBattleTuning>()->bAICoverPeekSight?1:0 | BattleTactics.cpp:161 |  |
-| `-BattleCoverValidation` | Value | GetDefault<UBattleTuning>()->bAICoverValidation?1:0 | BattleTactics.cpp:155 |  |
-| `-BattleDefendEngage` | Value | GetDefault<UBattleTuning>()->bDefendEngage?1:0 | BattleGroups.cpp:46 |  |
+| `-BattleCoverPeekSight` | Value | GetDefault<UBattleTuning>()->bAICoverPeekSight?1:0 | BattleTactics.cpp:162 |  |
+| `-BattleCoverValidation` | Value | GetDefault<UBattleTuning>()->bAICoverValidation?1:0 | BattleTactics.cpp:156 |  |
+| `-BattleDefendEngage` | Value | GetDefault<UBattleTuning>()->bDefendEngage?1:0 | BattleGroups.cpp:47 |  |
 | `-BattleDelegationScreens` | Value |  | BattleDelegationSmoke.cpp:90 |  |
 | `-BattleDiagnosticOmit` | Value |  | BattleBenchmark.cpp:114, BattleBenchmark.cpp:146 |  |
 | `-BattleDisplayLOD` | Value | 1 | BattleLeaderRuntime.cpp:120, BattleWideMixedSmoke.cpp:170 |  |
 | `-BattleEngineMoveSweep` | Value | 0 | BattleStableMovement.cpp:476 |  |
-| `-BattleExoPlaceholder` | Param | off | BattleExo.cpp:105 |  |
+| `-BattleExoPlaceholder` | Param | off | BattleExo.cpp:107 |  |
 | `-BattleExoShot` | Param | off | BattleLeaderRuntime.cpp:221 |  |
 | `-BattleFastMatch` | Param | off | BattleGameMode.cpp:72, BattleLeaderRuntime.cpp:71 |  |
 | `-BattleFieldDiagnostics` | Param | off | BattleSquadTrial.cpp:17 |  |
@@ -170,7 +171,7 @@
 | `-BattleRangeReach` | other |  | BattleRanges.cpp:21 |  |
 | `-BattleRangeReachSupport` | other |  | BattleRanges.cpp:21 |  |
 | `-BattleRangeSight` | other |  | BattleRanges.cpp:18 |  |
-| `-BattleReacquireGrace` | Value | GetDefault<UBattleTuning>()->bReacquireGrace?1:0 | BattleTactics.cpp:142 |  |
+| `-BattleReacquireGrace` | Value | GetDefault<UBattleTuning>()->bReacquireGrace?1:0 | BattleTactics.cpp:143 |  |
 | `-BattleReduceAnimTasks` | Value | 0 | BattleLeaderRuntime.cpp:93 |  |
 | `-BattleReduceHiddenBones` | Value | GetDefault<UBattleTuning>()->bReduceHiddenBones?1:0 | BattleLeaderRuntime.cpp:97 |  |
 | `-BattleReplayArm` | Value |  | BattleFieldReplay.cpp:60 |  |
@@ -178,7 +179,7 @@
 | `-BattleReplayFeature` | Value |  | BattleFieldReplay.cpp:61 |  |
 | `-BattleReplayReference` | Value |  | BattleFieldReplay.cpp:59 |  |
 | `-BattleReport` | Value |  | BattleBenchmark.cpp:50 |  |
-| `-BattleReturnFire` | Value | 0 | BattleTactics.cpp:167 |  |
+| `-BattleReturnFire` | Value | 0 | BattleTactics.cpp:168 |  |
 | `-BattleReuseSightContext` | Value | GetDefault<UBattleTuning>()->bReuseSightContext?1:0 | BattleLeaderRuntime.cpp:101 |  |
 | `-BattleRifleMembers` | other |  | BattleState.cpp:555 |  |
 | `-BattleRoutes` | Value | -1 | BattleRoutes.cpp:17 |  |
@@ -243,19 +244,19 @@
 | `-BattleSuppressionRadius` | other |  | BattleSuppression.cpp:11 |  |
 | `-BattleSuppressionSpread` | other |  | BattleSuppression.cpp:12 |  |
 | `-BattleSuppressionSupport` | other |  | BattleSuppression.cpp:14 |  |
-| `-BattleSymmetricStart` | Value | GetDefault<UBattleTuning>()->bSymmetricStart?1:0 | BattleGroups.cpp:53 |  |
+| `-BattleSymmetricStart` | Value | -1 | BattleGroups.cpp:56 |  |
 | `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:56 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |
 | `-BattleTeamSupport` | Value | 1 | BattleTeamAI.cpp:12 |  |
 | `-BattleTerrain` | other |  | BattleTerrain.h:18 |  |
-| `-BattleTerrainLineBodies` | Value | 1 | BattleTactics.cpp:230 |  |
+| `-BattleTerrainLineBodies` | Value | 1 | BattleTactics.cpp:231 |  |
 | `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:1254 |  |
 | `-BattleTracerShot` | Param | off | BattleStanceShot.cpp:87 |  |
-| `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:206 |  |
+| `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:207 |  |
 | `-BattleTrialSwap` | Param | off | BattleArea.cpp:15, BattleAreaDepot.cpp:32, BattleLeaderRuntime.cpp:79 ほか4 |  |
 | `-BattleUnits` | Value | 1000 / 20 | BattleBenchmark.cpp:36, BattleSquadTrial.cpp:28 |  |
 | `-BattleVATFarLight` | Value | 0 | BattleVATDisplay.cpp:37 |  |
-| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:230, BattleSightExperiment.cpp:40 |  |
+| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:232, BattleSightExperiment.cpp:40 |  |
 | `-BattleWaypointPass` | Value | 0 | BattleStableMovement.cpp:355 |  |
 | `-BattleWeaponLoadouts` | Param | off | BattleSquadTrial.cpp:50 |  |
 | `-BattleWeaponPreview` | Value |  | BattleWeaponPreview.cpp:19 |  |
@@ -264,6 +265,6 @@
 | `-BattleWideMapAudit` | Param | off | BattleLeaderRuntime.cpp:231 |  |
 | `-BattleWideMapGeometryOnly` | Param | off | BattleWideMapAudit.cpp:157 |  |
 | `-BattleWideMixed` | Param | off | BattleGameMode.cpp:55, BattleLeaderRuntime.cpp:73 |  |
-| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:800, BattleContactTrial.cpp:97, BattleExoShot.cpp:72 ほか14 |  |
+| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:801, BattleContactTrial.cpp:97, BattleExoShot.cpp:74 ほか14 |  |
 | `-BattleWideSmoke` | Param | off | BattleLeaderRuntime.cpp:245 |  |
 | `-BattleWideSoak` | Param | off | BattleLeaderRuntime.cpp:247 |  |

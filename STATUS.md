@@ -141,6 +141,25 @@
 - **検証**：main（1ec604d、-BattleAllyPass と -BattleSectorSlotReserve を含む）を取り込んでビルド成功。Test-CoverActions 描画なし `expose-n1` failures=0（角では頭が出ない、角の先の部分・目、そこを通る弾で命中、上越しで頭が見え・当たる、目の高さ、終われば隠れる）、描画あり `expose-r1` failures=0（銃と頭が遮蔽の上）。写真 `cover-blind-top.png`：立って銃と頭が遮蔽の上。`cover-blind.png`：以前の版（遮蔽の脇）より角の先へ乗り出している。Test-Battle failures=0。
 - **制限**：露出が勝敗に与える影響は計測していない。`-BattleBlindFireExpose=0` のIK持ち上げは描画で確認していない（既定は1）。身を乗り出す姿勢は照準クリップのままで、体の傾き自体は無い。
 - **次の一手**：実際の操作での確認（ユーザー）。AIのブラインドファイア `-BattleAIBlindFire` の片側試験。
+## 2026-11-20 2時50分 Claude（小隊数）：上限40の比較（勝敗・性能）と、保存の検証の上限の修正（ブランチ `squadcap`）
+- **条件**：凍結ビルド `squadcap-r1`（HIと、マップAのMS40）／`squadcap-r3`（マップEのMS40と性能。r1との差は保存の検証の上限だけ）。`Run-EconomyMatrix -Conditions HI,MS40 -Maps E,A -Seeds 7,19,43,61,89,101`（60FPS・保存往復・12並列、`-CoverActions 1 -FlankCoordination 1`、入れ替えを含め各12戦）。MS40＝両軍の上限40（`-AreaMaxSquads 40`、`Run-EconomyMatrix` に MS32/MS40 を追加）。マップEは別タグの結果を `*-sq40E` へ写して `Analyze-EconomyMatrix -Tag sq40E` で集計。
+- **見つけた不具合（修正済み、8d7d320）**：上限40ではマップEの全試合が80秒の保存往復で失敗した（兵516人が観測者の上限500を超え、次に生きている兵の上限500）。保存の検証の上限を広げた：兵1000→2000、小隊100→400（`BattleMixedSaveValidation` の小隊も）、観測者500→2000、生きている兵500→1000（エリア）。検証だけで試合は不変。`Test-MixedSave`・`Test-Area`・`Test-Battle` failures=0。
+- **勝敗（1試合あたり、両軍合計）**：
+
+  | | E 25 | E 40 | A 25 | A 40 |
+  |---|---|---|---|---|
+  | 終了時の生存 | 324 | 490 | 317 | 306 |
+  | 購入した小隊 | 17.6 | 48.9 | 28.5 | 42.1 |
+  | 余った資源 | 824 | 410 | 441 | 12 |
+  | 損失 | 393 | 462 | 482 | 597 |
+  | 隊長の戦死 | 17.6 | 20.3 | 29.7 | 44.2 |
+  | 得点の合計／得点差の平均 | 1,233／64 | 987／88 | 830／66 | 378／90 |
+
+  マップEは12組すべてで生存が多い（+166）。マップAは資源を使い切っても生存は−4.5（多いのは12組中3組）で、損失と隊長の戦死が増える。勝ち数はEで6対6。得点の合計はどちらのマップでも下がる。
+- **性能**（マップE・描画あり・30FPS・seed 7・トレースなし、1試合ずつ）：上限25は1フレーム平均 9.65／p95 11.68／最大 79.9ms、上限40は 14.83／17.83／151.5ms（+54%）。ゲームスレッド律速（14.79ms）。認識 1.45→2.40ms。描画スレッドは 4.29→4.70ms。60FPSの枠（16.7ms）を p95 で超える。
+- **読み方**：40はマップEで兵の数がそのまま増えるが、1フレームの時間が約1.5倍になる。マップAでは得が無い。既定は25のまま（決めるのはユーザー）。
+- **未実施**：性能は1試合ずつ（約0.5msぶれる）。収入の見直し（INC）と40の組み合わせ、32（MS32）は未試験。画面の小隊一覧が40隊で使えるかは未確認。main には未取り込み。
+
 ## 2026-11-20 1時05分 Claude（カバーアクション）：ブラインドファイアと体のアニメをビルド・試験（ブランチ `blindfire`、作業ツリー `FutureBattle-blindfire`）
 - **変更範囲**：
   - ブラインドファイア（`BattleBlindFire.*`）。隠れている間（CoverPhase 2）に構えずに撃つと、遮蔽の上（低い遮蔽）または角の先（覗き位置の方向、最大250cm）から撃ち、体は隠れ位置に残る。散らばりは4倍（`-BattleBlindFireSpread=`）。`-BattleBlindFire=0` で従来の覗き。AIは試験切替 `-BattleAIBlindFire=1`（既定0、制圧されている間だけ）。
@@ -258,6 +277,13 @@
 - 実行は新規 `Setup/Refresh-AC01Body.ps1`（エディターで `Refresh-AC01Body.py` を走らせ、`AC01_BODY_REFRESH_OK` を確かめる）。`Refresh-AC01Body.py` は UE 5.8 で `update_skeleton_reference_pose` を属性で書けず失敗したため、`set_editor_property` に直した（1回目は取り込み前に止まり、資産は変わっていない）。FBX の bind pose 作り直しの警告は従来の取り込みと同じ。
 - **検証**：`Test-Area.ps1 -OutputName ac01-body-20261120 -CoverActions 1 -FlankCoordination 1` は failures=0（`EXO_SUIT assets=1`）。
 - **未実施**：画面での見た目の確認（ユーザー待ち）。負荷の計測。
+
+## 2026-11-19 22時20分 Claude（小隊数）：稼働小隊の上限25を設定値に（`AreaMaxActiveSquads`、試験切替 `-BattleAreaMaxSquads=N`。既定25で試合は不変）
+- **依頼**：ユーザーが、小隊を8人にしたのに合わせて小隊数を40まで増やしたい。懸念点の確認のあと「設定値化を進める」とした。
+- **コード**（ブランチ `squadcap`、ワークツリー `FutureBattle-squadcap`）：上限の判定がコードに直接 25 と書かれていたのを、`UBattleTuning::AreaMaxActiveSquads`（DefaultGame.ini、既定25）と `-BattleAreaMaxSquads=N`（1〜100）にした。値は `BattleTactics::AreaHire().MaxActive`。プレイヤーの購入（`HireSquad`）、AIの購入、HUDの「n/上限」、保存の照合（稼働数が上限以下）がこの値を見る。断るときの文言は「部隊の空きがありません（稼働部隊の上限）」。**開始時の小隊数（1チーム25）は変えていない**。上限40なら、25小隊で始めて40まで買える。保存の照合の「雇用数＝小隊数−25」は開始時の数なので25のまま。
+- **試験の器具**：空き枠を作る処理は上限に合わせる。「満員なら断る」の確認は、器具が25小隊で始まるので上限25のときだけ行う。
+- **検証**：`Build-Editor` 成功。`Test-Battle` failures=0、`Test-Area -CoverActions 1 -FlankCoordination 1` failures=0、`Test-MixedSave -CoverActions 1 -FlankCoordination 1` failures=0（既定の上限25）。
+- **未実施**：`-BattleAreaMaxSquads=40` で実際に25を超えて買えること、40小隊での性能（マップE、1フレームの時間）と勝敗の比較。収入 INC4 は上限25で釣り合わせた値なので、40では見直しが要る見込み。懸念点（負荷・経済・市街地の混雑・画面の一覧）は、この会話でユーザーに伝えた。main には未取り込み。
 
 ## 2026-11-19 22時30分 Claude（AC01）：外骨格兵の武器切替（ライフル⇔バズーカ）と関節の内装を main へ
 - **依頼**：ユーザーが本番の外（`../AC01_Review_20261119/`）に作った AC01 改善版を確認し、問題がなければ実装する。

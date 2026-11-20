@@ -28,9 +28,11 @@ bool UBattleSave::Validate(FString& Error) const
 	if ((Version != 1 && Version != 2 && Version!=3) || (Version==3)!=(Ruleset==TEXT("Area")) || !MatchID.IsValid() || Phase < 1 || Phase > 3 || !ValidTeam(Winner, true) || Result.Len() > 200 || ViewRotation.ContainsNaN()) return Fail(TEXT("Unsupported or invalid match header"));
 	if (!InRange(AllyCredits, 0, 1000000) || !InRange(EnemyCredits, 0, 1000000) || !InRange(AllyScore, 0, 1000) || !InRange(EnemyScore, 0, 1000) || !InRange(Elapsed, 0, 1000) || !InRange(DirectorClock, 0, 5) || !InRange(SupplyClock, 0, Mixed?1000:1)) return Fail(TEXT("Invalid economy or match timers"));
 	// Pending sighting reports: cap raised 100000 -> 1000000 on 2026-11-16 (a heavy Area fight reached 100822 at 80 s).
+	// Area units 1000 -> 2000, squads 100 -> 400, mixed observers 500 -> 2000 on 2026-11-20: with -BattleAreaMaxSquads=40 map E had 516 soldiers
+	// at the 80 s save, and records keep retired soldiers (start 400 + about 340 hired + 200 replaced is estimated at about 930 by the end).
 	const int32 ExpectedObjectives=Mixed?BattleFieldLayout::ObjectiveCountForMap(MapName):3;
-	if (Objectives.Num() != ExpectedObjectives || Units.Num() > (Version==3?1000:500) || Squads.Num() > 100 || Observers.Num() > (Mixed?500:100) || Reports.Num() > 1000000) UE_LOG(LogFutureBattle,Warning,TEXT("BATTLE_SAVE_SIZE objectives=%d units=%d squads=%d observers=%d reports=%d"),Objectives.Num(),Units.Num(),Squads.Num(),Observers.Num(),Reports.Num());
-	if (Objectives.Num() != ExpectedObjectives || Units.Num() > (Version==3?1000:500) || Squads.Num() > 100 || Observers.Num() > (Mixed?500:100) || Reports.Num() > 1000000) return Fail(TEXT("Invalid snapshot size"));
+	if (Objectives.Num() != ExpectedObjectives || Units.Num() > (Version==3?2000:500) || Squads.Num() > (Version==3?400:100) || Observers.Num() > (Mixed?2000:100) || Reports.Num() > 1000000) UE_LOG(LogFutureBattle,Warning,TEXT("BATTLE_SAVE_SIZE objectives=%d units=%d squads=%d observers=%d reports=%d"),Objectives.Num(),Units.Num(),Squads.Num(),Observers.Num(),Reports.Num());
+	if (Objectives.Num() != ExpectedObjectives || Units.Num() > (Version==3?2000:500) || Squads.Num() > (Version==3?400:100) || Observers.Num() > (Mixed?2000:100) || Reports.Num() > 1000000) return Fail(TEXT("Invalid snapshot size"));
 	if (Strikes.Num() > 2 || !InRange(AllySupportCooldown, 0, 20) || !InRange(EnemySupportCooldown, 0, 20) || !InRange(AllySupportUsed, 0, 3) || !InRange(EnemySupportUsed, 0, 3)) return Fail(TEXT("Invalid support resources"));
 	TSet<int32> StrikeTeams;
 	for (const auto& Strike : Strikes)
@@ -57,7 +59,7 @@ bool UBattleSave::Validate(FString& Error) const
 		if (!InRange(P.SightRange, 100, 20000) || !InRange(P.FieldOfView, 1, 360) || !InRange(P.DetectionSeconds, 0, 30) || !InRange(P.MemorySeconds, 0, 120) || !InRange(P.ShareRange, 0, 20000) || !InRange(P.ShareDelay, 0, 30) || !InRange(D.ThinkSeconds, .01, 10) || !InRange(D.CoverThinkSeconds, .01, 30) || !InRange(D.CoverCandidates, 1, 100)) return Fail(TEXT("Invalid unit capabilities"));
 		if (S.IsAlive()) ++Alive; ByID.Add(S.UnitID, &S);
 	}
-	if (Alive > (Mixed?500:100)) return Fail(TEXT("Too many living units"));
+	if (Alive > (Mixed?(Version==3?1000:500):100)) return Fail(TEXT("Too many living units")); // area 500 -> 1000 on 2026-11-20 (40-squad limit)
 	TSet<int32> Assigned;
 	for (const auto& Squad : Squads)
 	{
