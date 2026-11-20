@@ -654,7 +654,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    for(const auto& B:Bodies)if(const auto* O=Store->Find(B.Key);O && O->IsAlive() && O->Team==S->Team && O->SquadID!=SID &&
       FVector::DistSquared2D(Position(B.Key),P.Center)<FMath::Square(3000.))++Own;
    const bool bEven=Own>=Seen.Num();
-   FVector HideFrom=TargetAt;if(ShotDirectionEnabled())SquadShotFrom(SID,Now,HideFrom);
+   FVector HideFrom=TargetAt;if(FVector From;ShotDirectionEnabled() && SquadShotFrom(SID,Now,From) && ShotFromOther(P.Center,TargetAt,From))HideFrom=From;
    const bool bWas=P.bCoverStop;P.bCoverStop=bEven && SquadCanHide(SID,HideFrom,Now);
    SightExperiment.Cover(P.bCoverStop?TEXT("squad_cover_stop"):bEven?TEXT("squad_cover_move_on"):TEXT("squad_cover_outnumbered"));
    if(P.bCoverStop!=bWas)P.bReplan=true;
@@ -901,9 +901,10 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   CoverProbeAfter.Add(ID,Now+FMath::Max(0.f,LeaderFirst?CoverTuning->LeaderGuardCoverRetrySeconds:bContactCover?2.f:CoverTuning->AICoverRetrySeconds));
   // Map E: cover is plentiful but small, so AI looks a little further for it (6.5m instead of 3.5m; AI cognition only).
   const float LocalRadius=(ProbeBudget||LeaderFirst)?CoverTuning->AICoverSearchRadius:BattleFieldLayout::IsUrban(GetWorld())?650.f:CoverTuning->CoverActionSearchRadius;
-  // -BattleShotDirection: take cover from where this soldier (or, failing that, his squad) was just hit from.
+  // -BattleShotDirection: take cover from where this soldier was just hit from, when that is not his target.
   FVector CoverThreat=Contact->LastKnownPosition;
-  if(ShotDirectionEnabled() && (UnitShotFrom(ID,Now,CoverThreat) || SquadShotFrom(U->SquadID,Now,CoverThreat)))SightExperiment.Cover(TEXT("cover_from_shot_direction"));
+  if(FVector From;ShotDirectionEnabled() && UnitShotFrom(ID,Now,From))
+  {if(ShotFromOther(Pos,CoverThreat,From)){CoverThreat=From;SightExperiment.Cover(TEXT("cover_from_shot_direction"));}else SightExperiment.Cover(TEXT("cover_shot_by_target"));}
   if(RequestCoverAction(ID,CoverThreat,TargetID,LocalRadius)){CoverApproaches.Remove(ID);if(bOutsideContact)SightExperiment.Cover(TEXT("sector_contact_cover_here"));return;}
   // Trial -BattleCoverApproach=1: no usable cover here, so walk to a hidden slot beyond the local search radius.
   const bool bStrictSector=CoverStrictEnabled() && S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission;

@@ -455,12 +455,17 @@ public:
  // less of him is in view (the -BattleContactCover fire position).
  static bool CoverStrictEnabled();
  // Trial -BattleShotDirection=1 (2026-11-20, default 0): where a soldier was last hit from (the shooter's position, kept 5 s).
- // His cover search faces it instead of his squad's target, and a sector squad faces the newest such source of its members
- // for its arrival places, the strict cover test and the squad's cover count. Without a recent hit: the enemy in view, as before.
+ // Narrowed after the first comparison (more hits in the open, fewer shots from cover): it is used only when the shooter is
+ // someone other than the soldier's target (more than 10 m from it and more than 30 degrees off its direction) - then his
+ // cover search faces the shooter, and the squad's cover count faces the newest such shooter of its members. A soldier is
+ // never moved by a squad-mate's hit, and the arrival places of a sector squad are not re-planned on a hit (a soldier already
+ // in cover keeps it; a soldier in cover never searches again anyway). Otherwise: the enemy in view, as before.
  static bool ShotDirectionEnabled();
  TMap<int32,TPair<FVector,double>> ShotFrom;
  bool UnitShotFrom(int32 ID,double Now,FVector& Out) const {const auto* F=ShotFrom.Find(ID);if(!F||Now-F->Value>5.)return false;Out=F->Key;return true;}
  bool SquadShotFrom(int32 SquadID,double Now,FVector& Out) const;
+ static bool ShotFromOther(const FVector& Me,const FVector& Target,const FVector& From)
+ {return FVector::DistSquared2D(From,Target)>FMath::Square(1000.) && FVector::DotProduct((From-Me).GetSafeNormal2D(),(Target-Me).GetSafeNormal2D())<0.866f;}
  static float CoverExposureLimit(){return CoverStrictEnabled()?.41f:.6f;}
  // Several squads of a team in one place share the places: slots reserved by anyone and places that soldiers are already
  // walking to do not count, and the soldiers of other stopping squads near by who still look for cover are counted against it.

@@ -93,8 +93,6 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    double Best=FMath::Square(20000.);bool bNear=false;FVector Near=FVector::ZeroVector;
    for(const FVector& E:GetWorld()->GetSubsystem<UBattleMatch>()->RouteKnownEnemies(S->Team))
     if(const double D=FVector::DistSquared2D(E,S->Destination);D<Best){Best=D;Near=E;bNear=true;}
-   // -BattleShotDirection: where the squad was just hit from comes first.
-   if(FVector From;ShotDirectionEnabled() && SquadShotFrom(SID,GetWorld()->GetTimeSeconds(),From)){Near=From;bNear=true;}
    if(bNear && FVector::Dist2D(Near,S->Destination)>100.){Forward=(Near-S->Destination).GetSafeNormal2D();SightExperiment.Cover(TEXT("arrival_threat_facing"));}
    P.ArrivalFacing=bNear?Forward:FVector::ZeroVector;
   }
@@ -105,7 +103,6 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    double Best=FMath::Square(20000.);
    for(const FVector& E:GetWorld()->GetSubsystem<UBattleMatch>()->RouteKnownEnemies(S->Team))
     if(const double D=FVector::DistSquared2D(E,S->Destination);D<Best){Best=D;StrictEye=E+FVector(0,0,60);bStrictThreat=true;}
-   if(FVector From;ShotDirectionEnabled() && SquadShotFrom(SID,GetWorld()->GetTimeSeconds(),From)){StrictEye=From+FVector(0,0,60);bStrictThreat=true;}
   }
   auto HidesFromThreat=[&](const FVector& Ground){return !bStrictThreat || BattleTactics::ExposureAt(GetWorld(),Ground+FVector(0,0,90),Forward,StrictEye).VisibleSamples<=2;};
   const FVector Right(-Forward.Y,Forward.X,0);
