@@ -95,7 +95,9 @@ struct FExoCarryPose
    const FString Asset=FString::Printf(TEXT("A_AC01T2_%s_%s"),Family,Name);
    return LoadObject<UAnimSequence>(nullptr,*FString::Printf(TEXT("/Game/Art/AC01T2/Anims/%s.%s"),*Asset,*Asset),nullptr,LOAD_NoWarn);
   };
-  Idle.Reset(Clip(TEXT("Idle")));Move.Reset(Clip(TEXT("Jog_Fwd")));
+  // Moving on foot is a glide (2026-11-20, user request): the stance with the chest tipped forward, feet still
+  // (Setup/Import-AC01Glide.ps1). Without the glide clip the jog is shown.
+  Idle.Reset(Clip(TEXT("Idle")));Move.Reset(Clip(TEXT("Glide")));if(!Move.IsValid())Move.Reset(Clip(TEXT("Jog_Fwd")));
   CrouchIdle.Reset(Clip(TEXT("Crouch_Idle")));CrouchMove.Reset(Clip(TEXT("Crouch_Walk_Fwd")));
  }
 };
