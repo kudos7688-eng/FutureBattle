@@ -270,14 +270,15 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
  }
  // Rendered run: the player strafes right and fires, aiming 8 degrees down. The rifle sits in hand_r, so the strafe clip's hand
  // turned it away from the shot; the chest turns it back along the aim (FBattleBodyAnimProxy::AlignMuzzle). Input every frame;
- // the barrel's 3D angle to the aim is measured every frame from 0.4 s (after the 0.2 s cross-fade) to 1.2 s.
+ // the barrel's 3D angle to the aim is measured every frame from 0.4 s (after the 0.2 s cross-fade) to 2.0 s (two shots or more
+ // at the rifle's fire interval).
  if(SmokeStage==14)
  {
   ABattleUnit* A=Actor(1);
   if(Now-BayStart<.01){PC->ControlUnit(A);SmokeMuzzleMax=0.f;SmokeMuzzleFrames=0;SmokeShots=0;}
   PC->SetControlRotation(FRotator(-8.f,A->GetActorRotation().Yaw,0.f));
   const FVector Aim=PC->GetControlRotation().Vector();
-  if(Now-BayStart<1.2)
+  if(Now-BayStart<2.0)
   {
    A->AddMovementInput(A->GetActorRightVector(),1.f);
    Store->Units.FindChecked(1).Ammo=FMath::Max(Store->Find(1)->Ammo,5);
@@ -333,21 +334,22 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
   Check(A->LastHitReact>-SmokeHit,TEXT("a hit after HitReactSeconds plays a new reaction"));
   U.HP+=3.f;
   // The follower's mesh starts turned 30 degrees off: the turn must bring the rifle back along his facing.
-  CancelCoverAction(2);LastFireTimes.Add(2,Now);
+  // No new cover search for him until the check ends (he took cover again the same frame and showed a cover clip).
+  CancelCoverAction(2);CoverProbeAfter.Add(2,Now+30.);LastFireTimes.Add(2,Now);
   // His last shot went 12 degrees down along his facing: the tilt must bring the barrel to that pitch.
-  if(auto* B2=Bodies.Find(2);B2 && B2->Mesh.IsValid())
-  {
-   B2->MuzzleYaw=30.f;B2->MuzzlePitch=0.f;B2->Mesh->SetRelativeRotation(FRotator(0,-60,0));
-   const FVector Facing=B2->Capsule->GetForwardVector().GetSafeNormal2D();
-   FollowerAims.Add(2,(Facing*FMath::Cos(FMath::DegreesToRadians(12.f))-FVector::UpVector*FMath::Sin(FMath::DegreesToRadians(12.f))).GetSafeNormal());
-  }
-  SmokeStage=20;Later(.6f);return;
+  if(auto* B2=Bodies.Find(2);B2 && B2->Mesh.IsValid()){B2->MuzzleYaw=30.f;B2->MuzzlePitch=0.f;B2->Mesh->SetRelativeRotation(FRotator(0,-60,0));}
+  SmokeMuzzleFrames=0;SmokeStage=20;Later(.001f);return;
  }
  // Rendered run: a near follower (one whole-body clip, no upper layer) that has just fired turns his mesh so the rifle points
  // along his facing, the shot's direction (UBattleLeaderRuntime::AimFollowerRifles).
  if(SmokeStage==20)
  {
   const auto& B=Bodies.FindChecked(2);
+  // His own shots during the check (level, at a real enemy) replaced the planted aim: it is set again every 0.05 s for 0.6 s.
+  const FVector Facing=B.Capsule->GetForwardVector().GetSafeNormal2D();
+  const FVector Down=(Facing*FMath::Cos(FMath::DegreesToRadians(12.f))-FVector::UpVector*FMath::Sin(FMath::DegreesToRadians(12.f))).GetSafeNormal();
+  if(SmokeMuzzleFrames<12){FollowerAims.Add(2,Down);LastFireTimes.Add(2,Now);++SmokeMuzzleFrames;Later(.05f);return;}
+  const bool bPlanted=FollowerAims.FindRef(2).Equals(Down,.001);
   const bool bNear=B.Mesh.IsValid() && B.Weapon.IsValid() && B.Mesh->IsComponentTickEnabled() && !(VAT&&VAT->IsFar(2));
   float Off=180.f,Pitch=0.f;
   if(bNear)
@@ -356,7 +358,7 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    Off=FMath::Abs(FMath::FindDeltaAngleDegrees(Barrel.Rotation().Yaw,B.Capsule->GetForwardVector().Rotation().Yaw));
    Pitch=FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Barrel.Z,-1.,1.)));
   }
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_FOLLOWER_MUZZLE near=%d clip=%s mesh_turn=%.1f mesh_tilt=%.1f barrel_yaw_off=%.1f barrel_pitch=%.1f want_pitch=-12"),bNear?1:0,bNear&&B.Mesh->GetSingleNodeInstance()&&B.Mesh->GetSingleNodeInstance()->GetAnimationAsset()?*B.Mesh->GetSingleNodeInstance()->GetAnimationAsset()->GetName():TEXT("none"),B.MuzzleYaw,B.MuzzlePitch,Off,Pitch);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_FOLLOWER_MUZZLE near=%d clip=%s mesh_turn=%.1f mesh_tilt=%.1f barrel_yaw_off=%.1f barrel_pitch=%.1f want_pitch=-12 aim_planted=%d"),bNear?1:0,bNear&&B.Mesh->GetSingleNodeInstance()&&B.Mesh->GetSingleNodeInstance()->GetAnimationAsset()?*B.Mesh->GetSingleNodeInstance()->GetAnimationAsset()->GetName():TEXT("none"),B.MuzzleYaw,B.MuzzlePitch,Off,Pitch,bPlanted?1:0);
   Check(bNear && Off<6.f,TEXT("a near follower that fires points his rifle along his facing (mesh turned back from 30 degrees off)"));
   Check(bNear && FMath::Abs(Pitch+12.f)<4.f,TEXT("a near follower that fires tilts so the rifle meets the shot's pitch (12 degrees down)"));
   // He stops firing: the turn eases back to none after ReadySeconds.
