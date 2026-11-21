@@ -33,7 +33,7 @@
 - `BattleCornerTrial.cpp`: ABattleGameMode::RunCornerTrial:74
 - `BattleCorpses.cpp`: UBattleLeaderRuntime::CorpseLifetime:23, UBattleLeaderRuntime::AddCorpse:29, UBattleLeaderRuntime::StepCorpses:36, UBattleLeaderRuntime::HideCorpse:63, UBattleLeaderRuntime::DeathClip:74
 - `BattleCover.h`: UBattleCover::IsBuilt:27, UBattleCover::ResetReservations:33
-- `BattleCover.cpp`: UBattleCover::BuildSlots:14, UBattleCover::AuditSymmetry:59, UBattleCover::PrebuildSlots:147, UBattleCover::NearbySlots:159, UBattleCover::Owner:168, UBattleCover::IsAvailable:176, UBattleCover::Reserve:187, UBattleCover::Release:197
+- `BattleCover.cpp`: UBattleCover::BuildSlots:27, UBattleCover::BuildSlotIndex:73, UBattleCover::AuditSymmetry:95, UBattleCover::PrebuildSlots:183, UBattleCover::NearbySlots:195, UBattleCover::Owner:218, UBattleCover::IsAvailable:226, UBattleCover::Reserve:246, UBattleCover::Release:261
 - `BattleCoverAction.cpp`: UBattleLeaderRuntime::CancelCoverAction:29, UBattleLeaderRuntime::EndPeekDiag:45, UBattleLeaderRuntime::CoverLineClear:52, UBattleLeaderRuntime::RevalidatePeek:60, UBattleLeaderRuntime::RequestCoverAction:79, UBattleLeaderRuntime::ContactFirePoint:148, UBattleLeaderRuntime::SquadCanHide:173, UBattleLeaderRuntime::StartHuddle:202, UBattleLeaderRuntime::StartCoverApproach:233, UBattleLeaderRuntime::StartFirePosition:271, UBattleLeaderRuntime::StepCoverApproach:320, UBattleLeaderRuntime::StepCoverAction:375
 - `BattleCoverActionSmoke.cpp`: UBattleLeaderRuntime::RunCoverActionSmoke:22
 - `BattleDelegationSmoke.cpp`: ABattleGameMode::RunDelegationSmokeTest:16
