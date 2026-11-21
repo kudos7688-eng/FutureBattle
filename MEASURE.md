@@ -4,7 +4,7 @@
 
 ## 0. 始める前に（毎回）
 
-1. **ロック**：ビルド・UEの起動（試験・計測・試合）・Source/Config/DLL/マップの変更の前に、`ListAgents` でロックを持っているセッションを探し、`SendMessage` でロックを受け取る（どちらも Claude のセッション間の連絡の道具で、PowerShell のコマンドではない。人が作業するときは、ほかのセッションに直接声をかける）。終わったら手放したことを伝える。ワークツリーが別でもCPUは共有なので、実行を重ねない。
+1. **ロック**（2026-11-22 から、ユーザー決定）：ビルド・UEの起動（試験・計測・試合）・Source/Config/DLL/マップの変更の前に、ファイルの順番待ちの列に並ぶ。`Setup\Lock-Queue.ps1 -Join -Who <セッション名> -Purpose <用途> -Minutes <見込み>` → `Setup\Lock-Queue.ps1 -Wait -Who <セッション名>`（Claude は `run_in_background` で呼ぶ。自分の番で終わる）→ 作業 → `Setup\Lock-Queue.ps1 -Release -Who <セッション名>`（次の人が自動で持ち主になる）。今の持ち主と列は `Setup\Lock-Queue.ps1 -Status`（列のファイルは作業ツリーの外の `FPS\.lock\queue.json` で、どの作業ツリーからも同じ）。チャットでの受け渡しは要らない（急ぎの相談だけ `SendMessage`）。持ち主が見込み＋30分を過ぎ、UE・ビルドのプロセスが無ければ、次の人に渡る。ユーザーのプレイの確認は `-Urgent` で列の先頭に入る。設計は `Docs/design-lock-queue.md`。ワークツリーが別でもCPUは共有なので、実行を重ねない。
 2. `git status --short -uno` と、実行中の `UnrealEditor` を確認する。ほかのセッションのプロセスは止めない。
 3. **凍結ビルドは写しから起動する**（11-18 から）。`New-BattleBuildSnapshot.ps1` は `<凍結ビルド>/Project` に DLL・Config・Content などの写しを作り（約200MB・約5秒）、試合はその写しから起動する。計測中にビルドや Config・マップを編集しても、計測は止まらず、不合格にもならない。ただし、写しを持たない古い凍結ビルド（または `-NoProjectCopy` で作ったもの）は従来どおりで、計測中に Config を変えると起動拒否か不合格になる。
 4. 所要時間を見積もってユーザーに伝える（目安は下の表）。
