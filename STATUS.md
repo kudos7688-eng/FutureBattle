@@ -97,7 +97,17 @@
 - **組み込んだもの**（main cd1384d）：保存の上限 64 MiB→1 GiB と `BATTLE_SAVE_BYTES` のログ（b4beef6）。`-BattleArtilleryRaidChase`（391042d、目標の取り直しを 27f866a で絞った）と `-BattleArtilleryRaidSneak`（a938078＋27f866a）。どちらも既定0。
 - **検証**：Build 成功（codex・main）。`Test-Battle`・`Test-MixedSave`・`Test-Area` failures=0（上限を超える配列を断る検査は小さい上限で確認）。マップE seed7 30FPS（`-Experiment -Area -CoverActions 1 -FlankCoordination 1 -RoundTripSave`）を組み込み前の main f07cbbf と codex で回し **IDENTICAL**（749/460、12652発、78項目）。マップA seed7 30FPS 保存往復は、視界50m で保存 7.8 MB、**報告と同じ条件（視界100m `-SightRange 10000 -WeaponRange 5000 -ObserveTactics`）で保存 68.9 MB（65.7 MiB、旧上限をわずかに超える）**、どちらも `BATTLE_MIXED_SAVE_SOAK_RESULT failures=0`。出力は `FutureBattle-codex/Setup/Benchmarks/SightTrial-20261111/codex-a52e7d8-{E7-30,A7-30,A7-30-s100}`、`main-f07cbbf-E7-30`。
 - **制限**：視界100m のマップA の保存は 69 MB あり、保存往復のたびに書き読みする。小さくするなら観測の記録の保存形式を見直す（別件）。襲撃の2つの切替は、ビルドと回帰は通ったが評価の試合はまだ。
-- **次の一手**：`-ArtilleryRaidChase 1 -ArtilleryRaidSneak 0/80`（マップI、30FPS、2 seed）で外骨格が自走砲に届くかを確かめる。
+- **襲撃の評価（5時30分、main cd1384d、マップI 30FPS、両軍に自走砲1・外骨格1、`-ArtilleryFlash 1 -ArtilleryPosts 1 -SPGRange 55000 -AreaSPGCost 45 -ArtilleryRaidChase 1`、`-ArtilleryRaidSneak 0/80`）**：
+
+  | 試合 | 得点 軍0/軍1 | 自走砲の発射 | 自走砲の撃破 | 目標の取り直し | 自走砲への命中（撃った兵種） |
+  |---|---|---|---|---|---|
+  | s7 Sneak 0 | 616/493 | 133 | 148 | 9 | 6（小銃3・重1・外骨格2） |
+  | s7 Sneak 80 | 602/703 | 62 | 60 | 10 | 4（小銃4） |
+  | s19 Sneak 0 | 553/615 | 140 | 146 | 6 | 13（小銃1・重12） |
+  | s19 Sneak 80 | 588/615 | 65 | 62 | 8 | 17（小銃9・重8） |
+
+  目標の取り直しは、絞る前の110回前後から6〜10回に減った。**Sneak 80 で自走砲の発射と撃破が2 seed とも半分以下になった**が、**自走砲は撃破されず**（体力はほぼ満タンのまま）、外骨格の命中もほぼない。発射が減った理由は未確認（外骨格が近づくと自走砲が対戦車の届く範囲から下がるためとみている）。出力は `Setup/Benchmarks/SightTrial-20261111/sneak-I30-s{7,19}-k{0,80}`。
+- **次の一手**：Sneak 80 の試合で、外骨格の小隊がどこまで近づき、なぜ撃たないのか（自走砲が見えないのか、射程の外か、下がられているのか）を位置の記録で見る。
 
 ## 2026-11-22 4時40分 Claude（Codex委任）：**不具合** マップA の保存往復が保存の上限（64 MiB）で毎回止まる。直しは codex b4beef6（未ビルド）
 
