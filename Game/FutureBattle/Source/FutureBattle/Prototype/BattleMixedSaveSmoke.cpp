@@ -138,8 +138,9 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
     ~FRouteSmokeScope(){BattleTactics::OverrideSaveRoutesForSmoke(Previous);}
    } RouteSmokeScope;
    const int32 RouteSID=4;
-   const FVector RouteStep=Position(3*N+1);
-   Check(IssueOrder(RouteSID,EBattleOrder::AttackMove,RouteStep),TEXT("player route current step fixture"));
+   // The same reachable mission point the setup gives this squad (line 46); a goal at the leader itself can be refused.
+   const FVector RouteStep=FVector(-6000,-7000-(RouteSID-1)*650,0);
+   Check(IssueOrder(RouteSID,EBattleOrder::AttackMove,RouteStep,true),TEXT("player route current step fixture"));
    Store->SetSquadDelegated(RouteSID,false);
    auto* RouteBaseline=Match->CaptureSnapshot();TArray<uint8> RouteBaselineBytes;
    Check(RouteBaseline&&UGameplayStatics::SaveGameToMemory(RouteBaseline,RouteBaselineBytes),TEXT("route-free OFF baseline encoded"));
