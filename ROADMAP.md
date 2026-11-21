@@ -49,6 +49,8 @@
 
 ### 段階3：引き算の評価（詳細）
 
+- **詳細設計（11-22、Claude）**：[Docs/design-subtraction-eval.md](Docs/design-subtraction-eval.md)。今の保有数の引数は試験側だけに効くため「全兵種 − X 対 全兵種」が作れない → 両軍に効く `-BattleAreaAllTypes=1` と、試験側だけの `-BattleAreaWithout=<兵種>` を足す（作業ツリー `FutureBattle-strategy`、未ビルド）。条件 `ALL`（基準）・`W1`〜`W9`、`Run-StrategyScreen -Baseline ALL` でマップE・I、兵種ごとの効率は `type_activity` から。
+
 - 構成：AIに全兵種を買わせる（`-BattleAreaComposition=1`）側と、そこから1種類だけ抜いた側。抜く兵種は、重装歩兵・偵察組・対戦車班・戦車・装甲車・迫撃砲班・自走砲・外骨格兵・補給班の9通り。
 - 偵察組は戦略層が無いと価値が出ない（11-17）。段階3では参考値として測り、段階4の後で測り直す。
 - 先に直すと分かっているもの：外骨格兵が強すぎる見込み、自走砲が強すぎる、自走砲を狙う手段が無い（撃った位置が相手に伝わる仕組みは情報の規則を増やすのでユーザー相談）、戦車と歩兵の同行。
