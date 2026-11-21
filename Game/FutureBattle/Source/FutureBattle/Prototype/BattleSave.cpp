@@ -53,6 +53,7 @@ bool UBattleSave::Validate(FString& Error) const
   if(S.WeaponAimDirection.ContainsNaN() || (S.bWeaponAimInitialized && !FMath::IsNearlyEqual(S.WeaponAimDirection.SizeSquared(),1.,.01)) || S.CoverPhase>4 || !InRange(S.CoverSeconds,0,3.01) || S.CoverOrderRevision<0 || !ValidPosition(S.CoverAnchor) || !ValidPosition(S.CoverPeek) || (S.CoverPhase && (!Mixed || !(TacticalFeatures&128) || !S.IsAlive())))return Fail(TEXT("Invalid cover or weapon aim state"));
   // A soldier behind low cover stands up to fire where he is: the peek point is the anchor itself (distance 0).
   if(S.bSoldierOrder && (!ValidPosition(S.SoldierGoal) || !Mixed || !S.IsAlive()))return Fail(TEXT("Invalid soldier order"));
+  if(Entry.BrokenCoverSlot<INDEX_NONE || !InRange(Entry.BrokenCoverLeft,0,10.01) || !ValidPosition(Entry.BrokenCoverAt) || (Entry.BrokenCoverSlot==INDEX_NONE)!=(Entry.BrokenCoverLeft==0) || (Entry.BrokenCoverSlot!=INDEX_NONE && !Mixed))return Fail(TEXT("Invalid broken cover place"));
   if(S.SoldierRepaths<0 || S.SoldierRepaths>3 || !InRange(S.SoldierStalledSince,0,3) || !InRange(S.SoldierMoveUntil,0,30) || !InRange(S.SoldierMoveAfter,0,10) || !InRange(S.CoverFirstBreak,0,2.51))return Fail(TEXT("Invalid individual AI timers"));
   if(S.CoverPhase && FVector::Dist2D(S.CoverAnchor,S.CoverPeek)>1. && !InRange(FVector::Dist2D(S.CoverAnchor,S.CoverPeek),100,450))return Fail(TEXT("Invalid cover peek distance"));
 		if (S.UnitID <= 0 || S.UnitID > 1000000 || ByID.Contains(S.UnitID) || !ValidTeam(S.Team) || !ValidPosition(Entry.Position) || Entry.Rotation.ContainsNaN() || !ValidPosition(S.Destination)) return Fail(TEXT("Invalid or duplicate unit identity/transform"));
@@ -148,7 +149,11 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
   auto& T=E.State;T.SoldierMoveUntil=FMath::Max(0.,T.SoldierMoveUntil-Now);T.SoldierMoveAfter=FMath::Max(0.,T.SoldierMoveAfter-Now);
   T.CoverFirstBreak=T.CoverFirstBreak>0?FMath::Max(0.,2.5-(Now-T.CoverFirstBreak)):0;
   T.SoldierStalledSince=T.SoldierStalledSince>0?FMath::Clamp(Now-T.SoldierStalledSince,.001,3.):0;
-  if(const auto* B=Runtime->BrokenCover.Find(Pair.Key);B && B->Value>Now){E.BrokenCoverSlot=B->Key;E.BrokenCoverLeft=float(FMath::Min(10.,B->Value-Now));}
+  if(const auto* B=Runtime->BrokenCover.Find(Pair.Key);B && B->Value>Now)
+  {
+   const auto& Slots=GetWorld()->GetSubsystem<UBattleCover>()->GetSlots();
+   if(Slots.IsValidIndex(B->Key)){E.BrokenCoverSlot=B->Key;E.BrokenCoverLeft=float(FMath::Min(10.,B->Value-Now));E.BrokenCoverAt=Slots[B->Key];}
+  }
   Save->Units.Add(E);SquadIDs.Add(E.State.SquadID);
  }
 	if(!Mixed) for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->GetState())
