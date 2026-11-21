@@ -53,9 +53,10 @@ bool UBattleMatch::CloseInStage(int32 SID,const FVector& Leader,FVector& Stage)
 	const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);if(!S)return false;
 	const FIntPoint Here=BattleSectors::Cell(Leader);const double Base=FVector::Dist2D(Leader,Threat);
 	double Best=-DBL_MAX;FIntPoint Pick(-1,-1);
+	const int32 Turn=Runtime->SectorTurn(S->Team); // -BattleSectorSymmetric: the east team scans in its own frame
 	for(int32 DY=-1;DY<=1;++DY)for(int32 DX=-1;DX<=1;++DX)
 	{
-		const FIntPoint C(Here.X+DX,Here.Y+DY);
+		const FIntPoint C(Here.X+Turn*DX,Here.Y+Turn*DY);
 		if((!DX&&!DY) || !BattleSectors::Valid(C))continue;
 		const char K=BattleFieldLayout::SectorKind(GetWorld(),C);if(K=='R'||K=='M'||K=='L'||K=='F')continue;
 		if(SectorFrontOn() && (S->Team==0||S->Team==1) && SectorState[S->Team].FindRef(C)==2)continue;
@@ -84,9 +85,11 @@ bool UBattleMatch::PinnedFlankStage(int32 SID,const FVector& Leader,FVector& Sta
 	const FIntPoint Here=BattleSectors::Cell(Leader);
 	const FVector Front=(Leader-Threat).GetSafeNormal2D();const double Base=FVector::Dist2D(Leader,Threat);
 	double Best=-DBL_MAX;FIntPoint Pick(-1,-1);
+	const auto* PinnedSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
+	const int32 Turn=Runtime->SectorTurn(PinnedSquad?PinnedSquad->Team:-1); // -BattleSectorSymmetric
 	for(int32 DY=-1;DY<=1;++DY)for(int32 DX=-1;DX<=1;++DX)
 	{
-		const FIntPoint C(Here.X+DX,Here.Y+DY);
+		const FIntPoint C(Here.X+Turn*DX,Here.Y+Turn*DY);
 		if((!DX&&!DY) || !BattleSectors::Valid(C) || BattleSectors::Impassable(BattleFieldLayout::SectorKind(GetWorld(),C)))continue;
 		const FVector P=BattleSectors::Center(C),V=P-Threat;const double D=FVector::Dist2D(P,Threat);
 		if(D<Base-BattleSectors::Size || D>Base+BattleSectors::Size*.5)continue; // not much closer, not falling back
@@ -183,9 +186,13 @@ bool UBattleMatch::SectorStage(const FBattleSquadState& S,const FVector& Leader,
 		{Stage=BattleSectors::Center(Current);return true;}
 	}
 	double Best=-DBL_MAX;bool bFound=false;
+	// -BattleSectorSymmetric: the east team scans in its own frame (turned 180 degrees), so ties between the two sectors beside
+	// the line to a goal at a sector centre fall the same way for both teams.
+	const auto* SymRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+	const int32 Turn=SymRuntime?SymRuntime->SectorTurn(S.Team):1;
 	for(int32 DY=-1;DY<=1;++DY)for(int32 DX=-1;DX<=1;++DX)
 	{
-		const FIntPoint C(StepCell.X+DX,StepCell.Y+DY);
+		const FIntPoint C(StepCell.X+Turn*DX,StepCell.Y+Turn*DY);
 		if(!BattleSectors::Valid(C) || C==Here || BattleSectors::Impassable(BattleFieldLayout::SectorKind(GetWorld(),C)))continue; // no stop in the river (the kind of the map's own sector table)
 		if(bFinal && C==GoalCell)continue; // the flank stop comes first
 		// -BattleSectorFront: no stop inside an enemy sector short of the goal; the last stop before one is a front sector.

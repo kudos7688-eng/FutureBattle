@@ -3,6 +3,7 @@
 #include "BattleTactics.h"
 #include "BattleFieldLayout.h"
 #include "BattleCover.h"
+#include "BattleStance.h"
 #include "BattleMatch.h"
 #include "BattlePerception.h"
 #include "NavigationPath.h"
@@ -97,6 +98,15 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    if(bNear && FVector::Dist2D(Near,S->Destination)>100.){Forward=(Near-S->Destination).GetSafeNormal2D();SightExperiment.Cover(TEXT("arrival_threat_facing"));}
    P.ArrivalFacing=bNear?Forward:FVector::ZeroVector;
   }
+  // Trial -BattleAttackFocus=1: a sector squad with a focus chooses its arrival places against it (instead of the way in or the
+  // -BattleArrivalThreat direction); the direction is kept for the squad's re-planning check.
+  bool bFocusArrival=false;
+  if(Sector && AttackFocusEnabled())
+  {
+   const FVector Dir=P.bFocus?(P.Focus-S->Destination).GetSafeNormal2D():FVector::ZeroVector;
+   P.FocusPlanDir=Dir;
+   if(!Dir.IsNearlyZero()){Forward=Dir;P.ArrivalFacing=Dir;bFocusArrival=true;SightExperiment.Cover(TEXT("arrival_focus_facing"));}
+  }
   // Trial -BattleCoverStrict=1: arrival places must hide from the known enemy nearest to the sector (at most 2 of 5 samples).
   bool bStrictThreat=false;FVector StrictEye=FVector::ZeroVector;
   if(Sector && CoverStrictEnabled())
@@ -123,7 +133,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   }
   // Fill from the approach side, so converging squads don't seek slots beyond each other.
   auto Score=[&](FVector V){return FMath::FloorToDouble(FVector::Dist2D(V,S->Destination)/450.)*100000.+FVector::Dist2D(V,P.Center);};
-  Candidates.Sort([&](const FVector& A,const FVector& B){const double SA=Score(A),SB=Score(B);return SA!=SB?SA<SB:A.X!=B.X?A.X<B.X:A.Y<B.Y;});
+  const double Turn=SectorTurn(S->Team); // -BattleSectorSymmetric: ties in the team's own frame
+  Candidates.Sort([&](const FVector& A,const FVector& B){const double SA=Score(A),SB=Score(B);return SA!=SB?SA<SB:A.X!=B.X?Turn*A.X<Turn*B.X:Turn*A.Y<Turn*B.Y;});
   // Map E: arrive behind cover. The grid below only accepts spots the destination reaches in a straight line, which is
   // exactly what excludes the far side of a car or a wall. So most members first try cover slots near the destination that
   // are shielded from the direction of advance, and walk there along a short route of their own. The first three (never
@@ -134,7 +145,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   TArray<FVector> CoverCandidates; TSet<int32> CoverAssigned;
   // -BattleCoverOutward: the outward directions this sector is defended toward (rear and friendly-held sides left out).
   TArray<FVector> Outward;
-  if(CoverArrival && Sector && CoverOutwardEnabled())
+  if(CoverArrival && Sector && CoverOutwardEnabled() && !bFocusArrival)
   {
    const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
    const FVector Mid=BattleSectors::Center(Cell);
@@ -154,6 +165,14 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   auto WallAhead=[&](const FVector& At)
   {
    const FCollisionObjectQueryParams Static(ECC_WorldStatic);
+   // -BattleAttackFocus: an obstacle toward the focus from this slot, or 30 degrees either side.
+   if(bFocusArrival)
+    if(const FVector ToFocus=(P.Focus-At).GetSafeNormal2D();!ToFocus.IsNearlyZero())
+    {
+     for(const float Deg:{0.f,-30.f,30.f})
+      if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+ToFocus.RotateAngleAxis(Deg,FVector::UpVector)*250+FVector(0,0,100),Static))return true;
+     return false;
+    }
    if(Outward.IsEmpty())return GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),Static);
    for(const FVector& Dir:Outward)if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Dir*250+FVector(0,0,100),Static))return true;
    return false;
@@ -556,17 +575,20 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  const float TypeSpeed=S?BattleSquadType::SpeedAt(S->SquadType,GetWorld(),Pos):1.f;
  const float Speed=GetDefault<UBattleTuning>()->MoveSpeed*TypeSpeed;
  if(TypeSpeed!=1.f&&B.Actor.IsValid())B.Actor->GetCharacterMovement()->MaxWalkSpeed=Speed;
+ // -BattleStanceMove=2: walking crouched or crawling, at that stance's share of the speed.
+ const float StanceScale=BattleStance::MoveMode()>=2?BattleStance::MoveScale(StanceOf(ID)):1.f;
+ if(StanceScale<1.f)SightExperiment.Cover(StanceOf(ID)==BattleStance::Prone?TEXT("stance_move_prone_frames"):TEXT("stance_move_crouch_frames"));
  if(B.Actor.IsValid())
  {
   // Vehicles turn at their own rate and drive along the hull.
   if(IsVehicle(ID)&&Scale>.01f)SteerVehicle(ID,Direction,Scale);
-  if(Scale<=.01f) Stop(); else B.Actor->AddMovementInput(Direction,Scale);
+  if(Scale<=.01f) Stop(); else B.Actor->AddMovementInput(Direction,Scale*StanceScale);
   B.Velocity=B.Actor->GetVelocity();
  }
  else
  {
   FHitResult Hit; const FVector Before=B.Capsule->GetComponentLocation();
-  FVector Step=Direction*FMath::Min(Speed*Dt*Scale,float(FVector::Dist2D(Way,Pos)));
+  FVector Step=Direction*FMath::Min(Speed*Dt*Scale*StanceScale,float(FVector::Dist2D(Way,Pos)));
   // Map with heights: the step follows the ground; a place that cannot be stepped onto stops it.
   if(!TerrainStep(Before,Step))Step=FVector::ZeroVector;
   // MoveComponent ignores its owner. Mass capsules share DisplayHost, so explicitly

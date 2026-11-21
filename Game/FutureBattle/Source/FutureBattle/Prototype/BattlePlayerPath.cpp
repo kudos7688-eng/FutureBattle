@@ -10,6 +10,7 @@
 //  - Vault: the jump key in front of a low obstacle (up to 1.6m, free ground behind) carries the directly controlled leader over.
 //  - PanSpeed: the tactical camera moves faster the higher it is, and faster again with Shift.
 #include "BattleController.h"
+#include "Framework/Application/SlateApplication.h"
 #include "BattleMatch.h"
 #include "BattleFieldLayout.h"
 #include "BattleLeaderRuntime.h"
@@ -46,7 +47,9 @@ void ABattleController::BeginPathDraw()
 {
  bPathDraw=false;bFrontDraw=false;DrawnPath.Reset();DrawnLength=0;
  // Ctrl + right drag draws the own front line (user request 2026-11-21 after test play); no selection needed.
- if(bTactical&&(IsInputKeyDown(EKeys::LeftControl)||IsInputKeyDown(EKeys::RightControl)))
+ // Slate's modifier state as well: it holds even when the key's press went to another handler first.
+ const bool bCtrl=IsInputKeyDown(EKeys::LeftControl)||IsInputKeyDown(EKeys::RightControl)||(FSlateApplication::IsInitialized()&&FSlateApplication::Get().GetModifierKeys().IsControlDown());
+ if(bTactical&&bCtrl)
  {
   FVector2D Pointer;FVector At;
   if(GetPointerPosition(Pointer)&&PickOrderPoint(Pointer,At)){bPathDraw=bFrontDraw=true;DrawnPath.Add(At);PathScreenStart=Pointer;}
@@ -80,8 +83,11 @@ void ABattleController::EndPathDraw()
   // A Ctrl + right click (no drag) hands the line back to the front army.
   if(FVector2D::Distance(Pointer,PathScreenStart)<=12.)Drawn.Reset();
   const int32 Rows=GetWorld()->GetSubsystem<UBattleMatch>()->SetDrawnFrontLine(0,Drawn);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_INPUT FrontDraw points=%d result=%d"),Drawn.Num(),Rows);
+  // The tactical camera looks toward +X, so rows run up and down the screen and a front line is drawn left to right
+  // (test play 2026-11-22: the old hint said "vertically", which crosses no row).
   ShowNotice(Rows>0?FString::Printf(TEXT("前線を引きました（%d行）。Ctrl+右クリックで前線軍に任せます"),Rows)
-   :Rows==0?FString(TEXT("前線を前線軍に任せました")):Rows==-2?FString(TEXT("前線は区画の行をまたぐように（縦に）引いてください"))
+   :Rows==0?FString(TEXT("前線を前線軍に任せました")):Rows==-2?FString(TEXT("前線は敵陣に向かって横切るように（左右に）引いてください"))
    :FString(TEXT("前線軍がありません（部隊を前線軍タブへ入れてください）")));
   return;
  }

@@ -2,6 +2,7 @@
 #include "BattleSquadTactics.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
+#include "BattleMatch.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "FutureBattle.h"
@@ -19,9 +20,12 @@ void UBattleTeamAI::Step()
  const auto* Mode=World->GetAuthGameMode<ABattleGameMode>();
  if((!bEnabled && !T->IsFlankEnabled()) || !T->IsST2Enabled() || !R->IsWideField() || !Mode || Mode->bCombatPaused || Mode->bBattleEnded) return;
  const double Now=T->Clock();
+ const auto* RaidMatch=World->GetSubsystem<UBattleMatch>();
  auto Managed=[&](const FBattleSquadState* S)
  {
   if(!S || S->CommandStatus!=EBattleCommandStatus::Active || (S->Team==0 && !S->bPlayerDelegated)) return false;
+  // Trial -BattleArtilleryRaidSneak: a raid squad on its way is not taken for flank/support (an active flank is handed off).
+  if(RaidMatch && RaidMatch->RaidSneaking(S->SquadID)) return false;
   const auto* Leader=Store->Find(S->LeaderUnitID);
   return Leader && Leader->IsAlive() && Leader->Action!=EBattleAction::DirectControl;
  };
