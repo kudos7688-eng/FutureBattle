@@ -21,6 +21,8 @@ namespace BattleTactics
  int32 ArtilleryTrialFlags();
  bool ArtilleryObservedEnabled();
  bool SPGAmmoEnabled();
+ // Trial -BattleArtilleryNavFallback=1 (default 0): an artillery vehicle whose post has no vehicle route tries reachable points between the post and itself.
+ bool ArtilleryNavFallback();
  bool BlastOcclusionEnabled();
  bool ArtilleryClustersEnabled();
  bool WeaponOrderGateEnabled(); // trial, default 0: apply mission permissions to launchers and artillery

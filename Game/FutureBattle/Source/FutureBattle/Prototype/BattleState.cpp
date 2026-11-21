@@ -5,6 +5,7 @@
 #include "BattleTactics.h"
 #include "BattleRanges.h"
 #include "BattleFieldLayout.h"
+#include "BattleUnit.h"
 #include "FutureBattle.h"
 
 namespace
@@ -446,6 +447,17 @@ bool UBattleState::ApplyDamage(int32 ID, int32 AttackingTeam, float Damage)
   GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordDamage(State->SquadID, FMath::Min(State->HP, Damage));
  if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>())Runtime->NoteUnderFire(ID);
 	State->HP = FMath::Max(0.f, State->HP - Damage);
+ // Diagnostics only (2026-11-21 tank-loss study): who hits and kills vehicles, with which weapon and from how far. Reads state, changes nothing.
+ if(const auto* VictimSquad=FindSquad(State->SquadID);VictimSquad&&BattleSquadType::IsVehicle(VictimSquad->SquadType))
+ {
+  const auto* Killer=Find(PendingKiller);const auto* KillerSquad=Killer?FindSquad(Killer->SquadID):nullptr;
+  const auto* VehicleRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();const ABattleUnit* VictimActor=VehicleRuntime?VehicleRuntime->Actor(ID):nullptr;
+  const FVector VictimAt=VictimActor?VictimActor->GetActorLocation():FVector::ZeroVector;
+  const float HitRange=bPendingHitFrom&&VictimActor?FVector::Dist2D(PendingHitFrom,VictimAt):-1.f;
+  UE_LOG(LogFutureBattle,Display,TEXT("%s t=%.2f victim=%d team=%d squad=%d type=%d hp=%.0f damage=%.1f killer=%d killer_squad=%d killer_type=%d killer_weapon=%d kind=%d range=%.0f at=%s"),
+   State->IsAlive()?TEXT("BATTLE_VEHICLE_HIT"):TEXT("BATTLE_VEHICLE_DEATH"),GetWorld()->GetTimeSeconds(),ID,State->Team,State->SquadID,VictimSquad->SquadType,State->HP,Damage,
+   PendingKiller,Killer?Killer->SquadID:-1,KillerSquad?KillerSquad->SquadType:-1,Killer?int32(Killer->Weapon):-1,int32(PendingKind),HitRange,*VictimAt.ToCompactString());
+ }
 	if (!State->IsAlive())
 	{
 		State->Action = EBattleAction::Dead; State->Shield = 0.f;

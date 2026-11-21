@@ -24,6 +24,12 @@ bool BattleTactics::ArtilleryObservedEnabled()
  return On;
 }
 
+bool BattleTactics::ArtilleryNavFallback()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryNavFallback="),V);return V!=0;}();
+ return On;
+}
+
 bool BattleTactics::SPGAmmoEnabled()
 {
  static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSPGAmmo="),V);return V!=0;}();
