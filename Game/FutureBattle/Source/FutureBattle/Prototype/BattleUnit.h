@@ -55,7 +55,7 @@ public:
 	void SetRevealed(bool bVisible);
 	void ApplyDeath();
 	// Corpse removal (display only): hides the body for good; SetRevealed no longer shows it.
-	void HideCorpse();
+	void HideCorpse(bool bHideActor=true,bool bStopMeshTick=true);
 	FVector EyePosition() const;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> FirstPersonCamera;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Rifle;

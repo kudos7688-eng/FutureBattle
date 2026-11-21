@@ -57,7 +57,7 @@ bool UBattleMatch::CloseInStage(int32 SID,const FVector& Leader,FVector& Stage)
 	{
 		const FIntPoint C(Here.X+DX,Here.Y+DY);
 		if((!DX&&!DY) || !BattleSectors::Valid(C))continue;
-		const char K=BattleFieldLayout::SectorKind(GetWorld(),C);if(K=='R'||K=='F')continue;
+		const char K=BattleFieldLayout::SectorKind(GetWorld(),C);if(K=='R'||K=='M'||K=='L'||K=='F')continue;
 		if(SectorFrontOn() && (S->Team==0||S->Team==1) && SectorState[S->Team].FindRef(C)==2)continue;
 		const double D=FVector::Dist2D(BattleSectors::Center(C),Threat);
 		if(D>Base-BattleSectors::Size*.5 || D<3000.)continue; // closer by half a sector; not onto the enemy
@@ -87,7 +87,7 @@ bool UBattleMatch::PinnedFlankStage(int32 SID,const FVector& Leader,FVector& Sta
 	for(int32 DY=-1;DY<=1;++DY)for(int32 DX=-1;DX<=1;++DX)
 	{
 		const FIntPoint C(Here.X+DX,Here.Y+DY);
-		if((!DX&&!DY) || !BattleSectors::Valid(C) || BattleFieldLayout::SectorKind(GetWorld(),C)=='R')continue;
+		if((!DX&&!DY) || !BattleSectors::Valid(C) || BattleSectors::Impassable(BattleFieldLayout::SectorKind(GetWorld(),C)))continue;
 		const FVector P=BattleSectors::Center(C),V=P-Threat;const double D=FVector::Dist2D(P,Threat);
 		if(D<Base-BattleSectors::Size || D>Base+BattleSectors::Size*.5)continue; // not much closer, not falling back
 		const double Side=FMath::Abs(Front.X*V.Y-Front.Y*V.X)/BattleSectors::Size;
@@ -186,7 +186,7 @@ bool UBattleMatch::SectorStage(const FBattleSquadState& S,const FVector& Leader,
 	for(int32 DY=-1;DY<=1;++DY)for(int32 DX=-1;DX<=1;++DX)
 	{
 		const FIntPoint C(StepCell.X+DX,StepCell.Y+DY);
-		if(!BattleSectors::Valid(C) || C==Here || BattleFieldLayout::SectorKind(GetWorld(),C)=='R')continue; // no stop in the river (the kind of the map's own sector table)
+		if(!BattleSectors::Valid(C) || C==Here || BattleSectors::Impassable(BattleFieldLayout::SectorKind(GetWorld(),C)))continue; // no stop in the river (the kind of the map's own sector table)
 		if(bFinal && C==GoalCell)continue; // the flank stop comes first
 		// -BattleSectorFront: no stop inside an enemy sector short of the goal; the last stop before one is a front sector.
 		const uint8 Held=bFrontOn?SectorState[S.Team].FindRef(C):0;

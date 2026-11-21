@@ -168,7 +168,7 @@ const TCHAR* BattleSectorView::KindName(char Kind)
 	switch (Kind)
 	{
 	case 'H': return TEXT("住宅"); case 'J': return TEXT("交差点・広場"); case 'W': return TEXT("倉庫・集積所"); case 'F': return TEXT("畑");
-	case 'T': return TEXT("林"); case '^': return TEXT("丘"); case 'R': return TEXT("川"); case 'B': return TEXT("橋"); case 'S': return TEXT("浅瀬");
+	case 'T': return TEXT("林"); case '^': return TEXT("丘"); case 'R': return TEXT("川"); case 'M': return TEXT("山"); case 'L': return TEXT("湖"); case 'B': return TEXT("橋"); case 'S': return TEXT("浅瀬");
 	default: return TEXT("―");
 	}
 }

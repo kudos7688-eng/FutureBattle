@@ -347,6 +347,8 @@ void UBattleMatch::UpdateGroups(int32 Team)
   FGroupStrength Power,FullPower;
   if(Weighted){Power=GroupPower(*G);FullPower=GroupPower(*G,true);if(G->StartStrength<0)G->StartStrength=Power.Total();}
   auto ThreatPoint=[&](){
+   // Strategy layer S3 (BattleStrategy.cpp): a held point (own, "enemy ahead" for 20 s by the situation map) comes first.
+   if(const int32 Held=StrategyHoldPoint(Team);Held!=INDEX_NONE)return Held;
    if(!Weighted)return AreaIntelThreat(Team);
    int32 Best=INDEX_NONE;double BestRisk=-1;
    for(int32 I=0;I<Objectives.Num();++I)if(GroupPointThreat(Team,I))
@@ -365,6 +367,8 @@ void UBattleMatch::UpdateGroups(int32 Team)
   auto AttackPoint=[&]()->int32
   {
    const bool bAvoid=Elapsed<G->AvoidUntil&&Objectives.IsValidIndex(G->Avoid);
+   // Strategy layer S2 (BattleStrategy.cpp): the team's focus first, while it is not own and the group is not avoiding it.
+   if(!G->bPlayer)if(const int32 F=StrategyFocusPoint(Team);F!=INDEX_NONE&&ObservedOwner(Team,F)!=Team&&!(bAvoid&&F==G->Avoid))return F;
    const double Limit=bAvoid?FVector::Dist2D(Objectives[G->Avoid].Position,Home)*BattleGroupValues::DeepRatio:DBL_MAX;
    int32 Best=INDEX_NONE;double BestD=DBL_MAX;
    for(int32 I=0;I<Objectives.Num();++I)
@@ -418,6 +422,9 @@ void UBattleMatch::UpdateGroups(int32 Team)
   if(G->Phase==0)
   {
    if(bOwn){Enter(2,TEXT("already_own"));continue;}
+   // Strategy layer S2: a group still gathering turns to a new team focus (an advance under way finishes first).
+   // Not more often than every 30 s (group lane 2026-11-22: switching a gathering group's goal makes it go back and forth).
+   if(!G->bPlayer&&Elapsed-G->PhaseAt>=30.f)if(const int32 F=StrategyFocusPoint(Team);F!=INDEX_NONE&&F!=G->Objective&&ObservedOwner(Team,F)!=Team&&!(Elapsed<G->AvoidUntil&&F==G->Avoid)){Attack(F,TEXT("strategy_focus"));continue;}
    const bool bAssembled=Present>=2&&Ready>=FMath::CeilToInt(Present*FMath::Clamp(T->GroupReadyShare,.1f,1.f));
    const float Waited=Elapsed-G->PhaseAt;
    if(!bAssembled&&Waited<FMath::Max(0.f,T->GroupAssembleMax))continue;
@@ -593,6 +600,7 @@ UBattleMatch::FGroupStrength UBattleMatch::GroupPointPower(int32 Team,int32 Poin
 }
 bool UBattleMatch::GroupPointThreat(int32 Team,int32 Point) const
 {
+ if(StrategyHolds(Team,Point))return true; // strategy layer S3: a held point counts as threatened (-BattleStrategy=3 only)
  if(!BattleTactics::GroupStrengthEnabled())return AreaIntelThreatAt(Team,Point);
  if(ObservedOwner(Team,Point)!=Team)return false;
  const auto Own=GroupPointPower(Team,Point,false),Enemy=GroupPointPower(Team,Point,true);

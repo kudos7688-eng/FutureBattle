@@ -1411,6 +1411,7 @@ void UBattleLeaderRuntime::Step(float Dt)
   if(bWideField) GetWorld()->GetSubsystem<UBattleMatch>()->Finish(Living[0]?0:1,Living[0]?TEXT("VICTORY / ENEMY ELIMINATED"):TEXT("DEFEAT / FORCE ELIMINATED"));
   else { Mode->bBattleEnded=true; Mode->Result=Living[0]?TEXT("VICTORY"):TEXT("DEFEAT"); }
  }
+ StepStateTrace(); // stage 2 diagnosis, -BattleStateTrace only: the state after this frame's logic, before the display
  { TRACE_CPUPROFILER_EVENT_SCOPE(BattleRefreshDisplay); RefreshDisplay(); }
 }
 
