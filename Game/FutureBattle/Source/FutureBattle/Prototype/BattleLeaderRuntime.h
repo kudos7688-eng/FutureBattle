@@ -93,6 +93,7 @@ struct FBattleLeaderBody
  // Display: the near follower mesh shows the blind fire clip (BattleBlindFire.cpp).
  bool bBlindPose=false;
  bool bRunPose=false;
+ float MuzzleYaw=0.f; // AimFollowerRifles: the mesh turn that points the rifle along the facing
  // Display: cover phase whose clip the near follower mesh shows (2 hidden, 4 firing; 0 none) and the table picked for it.
  uint8 CoverClipPhase=0;
  BattleCoverClips::FSet CoverClipSet{};
@@ -393,6 +394,12 @@ public:
  // frame) is put back on his loop and logged (BATTLE_BODY_POSE_RESET).
  double NextPoseAudit=0;
  void AuditFollowerPoses(double Now);
+ // Every frame: a near follower that fired within BattleBodyAnim::ReadySeconds turns his mesh (whole-body clip, no upper layer)
+ // so the rifle in his hand points along his facing, the shot's direction (the walk clip's hand held it off to one side);
+ // B.MuzzleYaw is the turn shown, at most MaxFollowerMuzzleYaw, easing back to 0 when he stops firing. Not in cover (the cover
+ // clips turn the mesh themselves) and not prone. Yaw only: the clip keeps its own rifle pitch.
+ void AimFollowerRifles(double Now);
+ static constexpr float MaxFollowerMuzzleYaw=45.f;
  // Corpse removal (BattleCorpses.cpp; display only, runtime only). -BattleCorpseLifetime=S (default 20; 0 = bodies stay):
  // S seconds after death a body sinks into the ground for 1.5 s and is then hidden. The unit record, its position and
  // its collision (already off) are unchanged; the match still differs slightly (see BattleCorpses.cpp).

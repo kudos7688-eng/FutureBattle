@@ -11,6 +11,8 @@
 #include "Animation/AnimSingleNodeInstance.h"
 #include "FutureBattle.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "UObject/StrongObjectPtr.h"
 
@@ -113,6 +115,7 @@ void UBattleLeaderRuntime::StepBodyTimers()
 {
  const double Now=GetWorld()->GetTimeSeconds();
  if(BattleStance::AnimEnabled() && Now>=NextPoseAudit){NextPoseAudit=Now+1.;AuditFollowerPoses(Now);}
+ if(BattleBodyAnim::Enabled())AimFollowerRifles(Now);
  if(BodyTimers.IsEmpty())return;
  for(auto It=BodyTimers.CreateIterator();It;++It)
  {
@@ -138,6 +141,34 @@ void UBattleLeaderRuntime::AuditFollowerPoses(double Now)
   if(!Want||Shown==Want)continue;
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_POSE_RESET unit=%d shown=%s want=%s stance=%d cover=%d"),ID,Shown?*Shown->GetName():TEXT("none"),*Want->GetName(),int32(StanceOf(ID)),int32(U->CoverPhase));
   RefreshFollowerPose(ID);
+ }
+}
+
+void UBattleLeaderRuntime::AimFollowerRifles(double Now)
+{
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ const float Dt=GetWorld()->GetDeltaSeconds();
+ for(auto& Pair:Bodies)
+ {
+  const int32 ID=Pair.Key;auto& B=Pair.Value;
+  if(B.Actor.IsValid()||!B.Mesh.IsValid()||!B.Weapon.IsValid()||!B.Mesh->IsComponentTickEnabled()||(VAT&&VAT->IsFar(ID)))continue;
+  const auto* U=Store->Find(ID);if(!U||!U->IsAlive())continue;
+  // Cover clips and blind fire turn the mesh themselves (BattleCoverAction.cpp); leave it to them.
+  if(U->CoverPhase||B.CoverClipPhase||B.bBlindPose){B.MuzzleYaw=0.f;continue;}
+  float Want=0.f;
+  if(Now-LastFireTimes.FindRef(ID,-100.)<BattleBodyAnim::ReadySeconds && !B.bRunPose && B.Pose!=2 && StanceOf(ID)!=BattleStance::Prone)
+  {
+   // The barrel (the weapon model's local -Y, posed by the last evaluated frame) against the facing, both flat.
+   const FVector Barrel=-B.Weapon->GetComponentTransform().GetUnitAxis(EAxis::Y);
+   const FVector Facing=B.Capsule.IsValid()?B.Capsule->GetForwardVector():Forward(ID);
+   if(Barrel.SizeSquared2D()>.01)
+    Want=FMath::Clamp(B.MuzzleYaw+FMath::FindDeltaAngleDegrees(Barrel.Rotation().Yaw,Facing.Rotation().Yaw),-MaxFollowerMuzzleYaw,MaxFollowerMuzzleYaw);
+   else Want=B.MuzzleYaw;
+  }
+  const float Shown=FMath::FInterpConstantTo(B.MuzzleYaw,Want,Dt,360.f);
+  if(FMath::IsNearlyEqual(Shown,B.MuzzleYaw,.05f))continue;
+  B.MuzzleYaw=Shown;
+  B.Mesh->SetRelativeRotation(FRotator(0,-90+Shown,0));
  }
 }
 
