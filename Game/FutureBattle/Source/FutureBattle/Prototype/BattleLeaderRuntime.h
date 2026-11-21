@@ -387,7 +387,7 @@ public:
  // the rifle low (FollowerClip); B.bRunPose is the run shown, refreshed by the pose updates.
  TMap<int32,double> LastFireTimes;
  bool ShowsRun(int32 ID,int32 Pose,double Now) const {return Pose==1 && Now-LastFireTimes.FindRef(ID,-100.)>=BattleBodyAnim::ReadySeconds && StanceOf(ID)==0;}
- struct FBodyTimer{double At=0;bool bFreeze=false;};
+ struct FBodyTimer{double At=0;bool bFreeze=false;bool bSettle=false;}; // bSettle: a fallen corpse stops its ragdoll (BattleRagdoll)
  TMap<int32,FBodyTimer> BodyTimers;
  void StepBodyTimers();
  // Once a second: a near living follower whose mesh shows another clip than FollowerClip (a one-shot left on its last
@@ -585,6 +585,8 @@ public:
  void RunStanceShot();
  void RunExoShot();
  int32 ExoShotStage=0,ExoShotIDs[2]={0,0};
+ void RunDeathShot(); // BattleDeathShot.cpp
+ int32 DeathShotStage=0,DeathShotIDs[2]={0,0};
  // Aim / scope view check (-BattleScopeShot, BattleScopeShot.cpp): leader 1 under direct control in each view.
  void RunScopeShot();
  int32 StanceShotStage=0,StanceShotFollower=0;

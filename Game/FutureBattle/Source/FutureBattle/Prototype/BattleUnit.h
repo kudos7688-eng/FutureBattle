@@ -123,6 +123,9 @@ private:
 	FTransform LookGrip;
 	UPROPERTY() int32 UnitID = INDEX_NONE;
 	bool bDeathApplied = false;
+	// Corpse fall (BattleRagdoll): 0 until the death clip ends at RagdollAt, 1 falling until RagdollAt, 2 done.
+	uint8 RagdollStage = 2;
+	double RagdollAt = 0.;
 	bool bCorpseHidden = false;
 	bool bThirdPersonView = true;
 	bool bDirectAvoidanceOverride = false;
