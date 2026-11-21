@@ -1195,6 +1195,15 @@ float ABattleController::AimAssistScale() const
 }
 void ABattleController::UpdateGamepad(float DeltaTime)
 {
+ float CursorX=0,CursorY=0;
+ const bool bCursorAvailable=bTactical&&GetMousePosition(CursorX,CursorY);
+ if(bCursorAvailable)
+ {
+  const FVector2f MousePosition(CursorX,CursorY);
+  if(!bVirtualCursorValid||MousePosition!=LastCursorPosition) VirtualCursor=MousePosition;
+  LastCursorPosition=MousePosition;bVirtualCursorValid=true;
+ }
+ else bVirtualCursorValid=false;
  auto Stick=[this](const FKey& Key){const float V=GetInputAnalogKeyState(Key);return FMath::Abs(V)<.2f?0.f:FMath::Sign(V)*(FMath::Abs(V)-.2f)/.8f;};
  const float LX=Stick(EKeys::Gamepad_LeftX),LY=Stick(EKeys::Gamepad_LeftY),RX=Stick(EKeys::Gamepad_RightX),RY=Stick(EKeys::Gamepad_RightY);
  if(LX==0&&LY==0&&RX==0&&RY==0) return;
@@ -1204,11 +1213,15 @@ void ABattleController::UpdateGamepad(float DeltaTime)
  if(bTactical)
  {
   // Virtual cursor: the right stick moves the mouse cursor, so every mouse-driven panel and order works as with a mouse.
-  float X=0,Y=0; int32 W=0,H=0; GetViewportSize(W,H);
-  if((RX!=0||RY!=0)&&GetMousePosition(X,Y)&&W>0)
+  int32 W=0,H=0; GetViewportSize(W,H);
+  if((RX!=0||RY!=0)&&bCursorAvailable&&W>0&&H>0)
   {
-   const float Speed=1200.f*DeltaTime;
-   SetMouseLocation(FMath::Clamp(FMath::RoundToInt(X+RX*FMath::Abs(RX)*Speed),0,W-1),FMath::Clamp(FMath::RoundToInt(Y-RY*FMath::Abs(RY)*Speed),0,H-1));
+   const float Speed=1200.f*GetWorld()->DeltaRealTimeSeconds;
+   VirtualCursor.X=FMath::Clamp(VirtualCursor.X+RX*FMath::Abs(RX)*Speed,0.f,float(W-1));
+   VirtualCursor.Y=FMath::Clamp(VirtualCursor.Y-RY*FMath::Abs(RY)*Speed,0.f,float(H-1));
+   const int32 MousePixelX=FMath::RoundToInt(VirtualCursor.X),MousePixelY=FMath::RoundToInt(VirtualCursor.Y);
+   SetMouseLocation(MousePixelX,MousePixelY);
+   LastCursorPosition=FVector2f(float(MousePixelX),float(MousePixelY));
   }
  }
  else if(RX!=0||RY!=0)

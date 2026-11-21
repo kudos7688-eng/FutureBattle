@@ -89,6 +89,8 @@ public:
 	float SupportCooldown[2] = { 0, 0 };
 	int32 SupportUsed[2] = { 0, 0 };
 	FString LastMessage;
+ // HUD invalidation only; not part of the saved match state.
+ uint64 RestoreGeneration=0;
  bool bArea=false;
  UPROPERTY() FBattleAreaState Area;
  UPROPERTY() TArray<TObjectPtr<AActor>> BaseActors;

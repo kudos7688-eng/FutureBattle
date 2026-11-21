@@ -38,6 +38,7 @@ private:
  bool HoveredSector(class ABattleController* PC, FIntPoint& Out) const;
  void DrawMinimapOverlay(class ABattleController* PC, const struct FBattleMinimapLayout& Map);
  FBattleFogGrid Fog;
+ uint64 FogRestoreGeneration=0;
  TArray<FBattleSectorInfo> Sectors;
 	double NextLabelCheck = 0;
 	TSet<int32> ClearLabels;

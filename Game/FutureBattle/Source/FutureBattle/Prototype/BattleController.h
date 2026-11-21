@@ -181,6 +181,9 @@ public:
 	int32 AimLevel = 1;
 	UFUNCTION(Exec) void BattleVerify();
 private:
+ // Preserve subpixel motion; a different mouse position resynchronizes the virtual cursor.
+ FVector2f VirtualCursor=FVector2f::ZeroVector, LastCursorPosition=FVector2f::ZeroVector;
+ bool bVirtualCursorValid=false;
  // Physical key -> logical key chosen on press. Invalid values wait for physical release after cancellation.
  TMap<FKey,FInputKeyEventArgs> HeldPlayerKeys;
  bool HandlePlayerInput(const FInputKeyEventArgs& Params);

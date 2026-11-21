@@ -315,6 +315,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 	if(Mixed){T->RestoreSave(*Save,Now);Team->RestoreSave(*Save);DelegationClock=Save->DelegationClock;GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now);Runtime->RefreshDisplay();}
 	Mode->RefreshVisibility();
 	for (auto* Unit : Spawned) if (Unit->GetUnitID() == Save->ControlledID) { PC->ControlUnit(Unit); PC->SetControlRotation(Save->ViewRotation); break; }
+ ++RestoreGeneration;
 	LastMessage = TEXT("Match restored"); return true;
 }
 

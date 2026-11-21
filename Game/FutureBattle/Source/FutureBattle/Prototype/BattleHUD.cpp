@@ -32,6 +32,9 @@ void ABattleHUD::DrawHUD()
 	ABattleController* PC = Cast<ABattleController>(PlayerOwner);
 	ABattleGameMode* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>();
 	if (!Canvas || !PC || !Mode) return;
+ const auto* HUDMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+ if(FogRestoreGeneration!=HUDMatch->RestoreGeneration)
+ {Fog.Reset(GetWorld());Sectors.Reset();FogRestoreGeneration=HUDMatch->RestoreGeneration;}
 	const float W = Canvas->SizeX, H = Canvas->SizeY;
 	const FLinearColor Ink(.025f, .04f, .065f, .92f), Mint(.28f, .95f, .8f), Muted(.62f, .7f, .77f), White(.94f, .97f, 1.f);
 	auto Label = [&](const FString& Text, float X, float Y, FLinearColor Color, float Scale = 1.f)
@@ -74,7 +77,7 @@ void ABattleHUD::DrawHUD()
  {
   Allies=Enemies=Spotted=0; TSet<int32> Known;
   for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetUnits()) if(P.Value.Team==0 && P.Value.IsAlive())
-  { ++Allies; if(const auto* C=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(P.Key)) for(const auto& Contact:*C) if(Contact.Value.bVisible) Known.Add(Contact.Key); }
+  { ++Allies; if(const auto* C=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(P.Key)) for(const auto& Contact:*C) if(Contact.Value.bVisible&&!(HUDMatch->bArea&&HUDMatch->IsScoutLongContact(P.Key,Contact.Value))) Known.Add(Contact.Key); }
   Enemies=Spotted=Known.Num();
  }
 	const auto* Controlled=Cast<ABattleUnit>(PC->GetPawn());
