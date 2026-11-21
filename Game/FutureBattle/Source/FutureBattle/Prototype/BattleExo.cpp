@@ -5,6 +5,8 @@
 // This file holds the second weapon (the shoulder anti-tank launcher) and the look.
 // AI cognition: the launcher fires only at what the soldier sees itself (its own visible contacts).
 #include "BattleLeaderRuntime.h"
+#include "BattleAudio.h"
+#include "BattleEffects.h"
 #include "BattleTactics.h"
 #include "BattleState.h"
 #include "BattleMatch.h"
@@ -333,6 +335,8 @@ bool UBattleLeaderRuntime::FireExoLauncher(int32 ID,const FVector& Aim,double No
  GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_Visibility,Q);
  const FVector Impact=Hit.bBlockingHit?FVector(Hit.ImpactPoint):End;
  ++ExoLauncherShots;
+ // Sound only (2026-11-22); the explosion is sounded and shown by Explode.
+ BattleAudio::Cue(GetWorld(),BattleAudio::ECue::RocketLaunch,&Start);
  const bool bTyped=SS&&SS->SquadType<BattleSquadType::Count&&Team>=0&&Team<2;
  if(SightExperiment.Started){++SightExperiment.Shots;if(bTyped)++SightExperiment.TypeShots[Team][SS->SquadType];}
  SuppressNear(Team,Start,Impact,Now,BattleSuppression::Tuning().SupportScale);
@@ -359,7 +363,7 @@ bool UBattleLeaderRuntime::FireExoLauncher(int32 ID,const FVector& Aim,double No
  if(Team==0||(Actor(ID)&&Actor(ID)->bRevealed))
  {
   DrawDebugLine(GetWorld(),Start,Impact,Team?FColor::Red:FColor::Yellow,false,.25f,0,4);
-  DrawDebugSphere(GetWorld(),Impact,FMath::Max(50.f,T->ATSplashRadius),10,Team?FColor::Red:FColor::Yellow,false,.4f,0,2);
+  if(!BattleEffects::Active(GetWorld()))DrawDebugSphere(GetWorld(),Impact,FMath::Max(50.f,T->ATSplashRadius),10,Team?FColor::Red:FColor::Yellow,false,.4f,0,2);
  }
  return true;
 }

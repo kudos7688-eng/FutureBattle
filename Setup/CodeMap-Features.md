@@ -26,6 +26,7 @@
 | 移動・経路・混雑 | @UBattleLeaderRuntime::StableMove 、 @UBattleLeaderRuntime::BuildMovementPlan | 到着地点の重なりは @UBattleLeaderRuntime::ReassignOccupiedArrival 。目的地の補正は @BattleNavigation::ResolveGoal |
 | 遮蔽（場所の予約） | @UBattleCover::BuildSlots 、 @UBattleCover::Reserve | 露出の計算は @BattleTactics::ExposureAt |
 | 体のアニメーション | @ABattleUnit::UpdateBodyAnim 、 @FBattleBodyAnimProxy::Evaluate | 部下は @UBattleLeaderRuntime::FollowerClip 、 @UBattleLeaderRuntime::StepBodyTimers |
+| 効果音・エフェクト（表示と音だけ） | @BattleAudio::Shot 、 @BattleAudio::Explosion 、 @BattleAudio::TickPlayer 、 @BattleEffects::Explosion 、 @BattleEffects::BulletImpact | 呼び出しは @UBattleLeaderRuntime::Fire （射撃・着弾・かすめる弾）、 @UBattleLeaderRuntime::Explode （対戦車弾・戦車砲弾・外骨格兵の発射筒の爆発）、 @UBattleLeaderRuntime::FireArtillery ・ @UBattleLeaderRuntime::StepArtilleryShells ・ @UBattleLeaderRuntime::ArtilleryImpact （砲撃）、 @ABattleController::PlayerTick （作戦画面の聞く位置・装填/構え/スコープ・拠点と勝敗の合図）。`-BattleSFX=0`／`-BattleFX=0` で止まる。素材と出典は `Docs/ASSET_SOURCES_AUDIO_FX.md` |
 | 死体の消滅（表示だけ） | @UBattleLeaderRuntime::StepCorpses 、 @UBattleLeaderRuntime::HideCorpse | 登録は OnDeath の @UBattleLeaderRuntime::AddCorpse |
 | 死体の姿勢（死亡アニメ・遠景VATとの切替） | @UBattleLeaderRuntime::DeathClip 、 @ABattleVATDisplay::ShowNear 、 @ABattleVATDisplay::Select | 死ぬと遠景表示から外れて死亡クリップを流し、隠れるまで遠景に戻らない。クリップの後は物理で倒れて止まる（ @BattleRagdoll::Start 、 @BattleRagdoll::Settle 。部下は @UBattleLeaderRuntime::StepBodyTimers 、隊長は @ABattleUnit::Tick ）。見た目の確認は @UBattleLeaderRuntime::RunDeathShot（Setup/Test-DeathShot.ps1） |
 | ブラインドファイア | @UBattleLeaderRuntime::BlindFireOrigin 、 @UBattleLeaderRuntime::Fire | AIの試験は @UBattleLeaderRuntime::TryAIBlindFire |
@@ -116,6 +117,8 @@ BattleStance | 姿勢（立ち・しゃがみ）の数値と切替
 BattleStanceAnimImport | 姿勢アニメーションの取り込み（エディタ用。宣言は BattleVATBake.h）
 BattleStanceShot | 姿勢の撮影試験（UBattleLeaderRuntime の一部）
 BattleScopeShot | 構え・スコープの撮影試験（UBattleLeaderRuntime の一部）
+BattleAudio | 効果音（音だけ。銃声・着弾・かすめる弾・爆発・発射・砲弾の飛来・装填/構え・拠点と勝敗の合図。素材は Docs/ASSET_SOURCES_AUDIO_FX.md。`-BattleSFX=0` で止まる）
+BattleEffects | 着弾の土煙と爆発の効果（表示だけ。Lyra の Niagara・TPS の Cascade。`-BattleFX=0` で止まる）
 BattleMuzzleFlash | 銃口の閃光（表示だけ。発光する楕円体の使い回し）
 BattleState | 正規状態：兵・部隊の記録、命令、弾薬、被害、調整値 UBattleTuning、兵科の差
 BattleSupport | 旧アリーナの支援砲撃（UBattleMatch の一部）

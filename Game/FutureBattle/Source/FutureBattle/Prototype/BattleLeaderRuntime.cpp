@@ -1,5 +1,7 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleMuzzleFlash.h"
+#include "BattleAudio.h"
+#include "BattleEffects.h"
 #include "BattleFollowerBones.h"
 #include "BattleVATDisplay.h"
 #include "BattlePhase3.h"
@@ -1284,6 +1286,20 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  }
  // Anti-tank round: the explosion at the impact hurts enemies around it (not the soldier already hit; never own soldiers).
  if(bAT)Explode(ID,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End,Victim);
+ // Sound and effects only (BattleAudio / BattleEffects, 2026-11-22): heard from every shooter, seen near the camera;
+ // nothing here reads back into the battle.
+ if(const auto* Shooter=Store->Find(ID))
+ {
+  const FVector HitAt=Hit.bBlockingHit?FVector(Hit.ImpactPoint):End;
+  if(bAT)BattleAudio::Cue(GetWorld(),BattleAudio::ECue::RocketLaunch,&Start);
+  else BattleAudio::Shot(GetWorld(),Start,Shooter->Weapon==EBattleWeapon::SupportGun?BattleAudio::EShot::Heavy:BattleAudio::EShot::Rifle,bPlayerShot);
+  if(!bAT&&Hit.bBlockingHit)
+  {
+   BattleAudio::Impact(GetWorld(),HitAt,Victim>0);
+   if(Victim<=0)BattleEffects::BulletImpact(GetWorld(),HitAt,Hit.ImpactNormal);
+  }
+  BattleAudio::ShotPassing(GetWorld(),Start,HitAt,Shooter->Team,Victim);
+ }
  if(Damaged)
   if(bPlayerShot) if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())) PC->HitMarkerUntil=Now+.18;
  if(U->Team==0 || (Actor(ID) && Actor(ID)->bRevealed))
