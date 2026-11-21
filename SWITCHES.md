@@ -70,7 +70,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleArmourAITeam` | Value | -1 | BattleArmourAI.cpp:63 |  |
 | `-BattleArmourSectorGate` | Value | 0 | BattleWeaponOrders.cpp:16 |  |
 | `-BattleArrivalThreat` | Value | 0 | BattleLeaderRuntime.cpp:1587 |  |
-| `-BattleArrivalWalk` | Value | 0 | BattleLeaderRuntime.cpp:1448 |  |
+| `-BattleArrivalWalk` | Value | 1 | BattleLeaderRuntime.cpp:1448 |  |
 | `-BattleArtilleryClusters` | Value | 0 | BattleArtillery.cpp:107 |  |
 | `-BattleArtilleryFlash` | Strifind/Value | 0 | BattleAreaSmoke.cpp:470, BattleArtillery.cpp:54 |  |
 | `-BattleArtilleryObserved` | Value | 0 | BattleArtillery.cpp:30 |  |
