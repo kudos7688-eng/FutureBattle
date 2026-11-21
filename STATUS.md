@@ -257,6 +257,24 @@
 - **観測の規則 ON の確認**：マップE seed7 60FPS `-RoundTripSave -ObservedArmour 1 -ObservedTactics 1` は完走（`SIGHT_EXPERIMENT_RESULT failures=0`、`BATTLE_MIXED_SAVE_SOAK_RESULT failures=0`、571/643）。
 - **次の一手**：ロックの列の番で codex をビルドし、`-ArtilleryRaidSneak 0/80`（30FPS、2 seed）を比べる。外骨格が自走砲に届けば main へ取り込む。迫撃砲を使わせるなら `-AreaMortarKeep 1` も評価する。
 
+## 2026-11-22 7時40分 Claude（ロードマップに従う改善活動）：戦略層 ST2 の片側試験（マップE・2シード・30FPS）。週間使用量91%のため、ここで止める
+- **条件**：main 6a8f45a の凍結ビルド `main-6a8f45a-st`、試験側だけ `-BattleStrategy 2`（`Run-EconomyMatrix -Conditions ST2 -TrialTeam 0/1`）と基準 `HI`、seed 7・19、西東入れ替え、30FPS・保存往復あり、12本（`econ-{ST2,HI}-E-s{7,19}*-st1*`）。ロックは7時25分〜7時40分（列で受け取り、列で個人AIへ渡した）。
+- **結果**（試験側の得点差 − 同じ seed・同じ側の基準での得点差）：
+  ```
+  s7 trial t0: 794/513 (07:35)  base 749/460 (04:02)  gain -8
+  s7 trial t1: 560/558 (07:35)  base 749/460 (04:02)  gain +287
+  s7-swap trial t0: 627/582 (07:35)  base 562/598 (04:02)  gain +81
+  s7-swap trial t1: 562/598 (07:35)  base 562/598 (04:02)  gain +0
+  s19 trial t0: 657/549 (07:35)  base 657/549 (04:21)  gain +0
+  s19 trial t1: 702/556 (07:35)  base 657/549 (04:21)  gain -38
+  s19-swap trial t0: 563/536 (07:35)  base 582/564 (04:21)  gain +9
+  s19-swap trial t1: 582/564 (07:35)  base 582/564 (04:21)  gain +0
+  ST2 map E: per-seed gains s7 +90.0, s19 -7.2; mean +41.4 +- 48.6 (2 seeds)
+  ```
+- **読み**：2シードだけ。向きがそろい差が揺れより大きければ結論、そうでなければシードを足す（次の機会）。既定にするかはユーザー判断。
+- **注意**：出力の名前 `st1` は `Rescore-Matches.py` では「試験側 t1」と読まれてしまう（名前の付け方の誤り）。次からはタグを `stg1` などにする。
+- **未実施（次の機会）**：マップJ での ST2、描画ありで死体の消去 0／20 の分岐点（`-BattleStateTrace 6`、単独2本）、西東の同点の直し `-BattleRouteTieSymmetric`（strategy c583ca8、未ビルド）のマップI 2シード、マップJ の F2 の到着の不合格。
+
 ## 2026-11-22 3時10分 Claude（ロードマップに従う改善活動）：戦略層 S1〜S4・マップJ・段階2〜5の試験切替をビルドして確かめ、main へ取り込み（b58f391）
 - **ロック**：2時48分〜3時10分（列で区画AIの後に受け取り、列で群制御へ渡した。新しい列の初めての受け渡し）。
 - **ビルド**：作業ツリー `strategy`（main 90a2dc5 を取り込んだ上で）は約3分で成功、変更したファイルに警告なし。`Test-Battle` failures=0。main へ早送りで取り込み、main もビルド成功（約100秒）・`Test-Battle` failures=0（`Setup/Battle-Smoke-20261122-030830.log`）。
