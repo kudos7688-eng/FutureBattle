@@ -22,6 +22,18 @@ public:
  virtual void TickComponent(float Dt,ELevelTick TickType,FActorComponentTickFunction* TickFunction) override;
  virtual bool ShouldCreateRenderState() const override;
  void EndAnimSkip();
+ // A near follower's rifle pitch (UBattleLeaderRuntime::AimFollowerRifles, display only): after each evaluated pose the upper
+ // body (spine_01 and every bone under it: chest, arms, head, the rifle on the hand) bends up or down by SpinePitch degrees
+ // about spine_01. The legs and feet keep the clip's pose (the whole body tilted before, a toe or heel sank or lifted up to 8 cm).
+ float SpinePitch=0.f;
+ // The bend the newest evaluated pose was made with (SpinePitch then; 0 when it was not bent). The shown rifle is posed with
+ // it, so the aim correction adds to this angle (a skipped evaluation does not show a newer SpinePitch yet).
+ float AppliedSpinePitch=0.f;
+ virtual void FinalizeBoneTransform() override;
+private:
+ TBitArray<> BendBones;
+ const void* BendMesh=nullptr;
+ int32 BendRoot=INDEX_NONE;
 };
 struct FBattleVATEntry
 {

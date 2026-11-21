@@ -396,11 +396,12 @@ public:
  void AuditFollowerPoses(double Now);
  // Every frame: a near follower that fired within BattleBodyAnim::ReadySeconds turns his mesh (whole-body clip, no upper layer)
  // so the rifle in his hand points along his last shot: across (B.MuzzleYaw, at most MaxFollowerMuzzleYaw) to his facing, and
- // up or down (B.MuzzlePitch, at most MaxFollowerMuzzlePitch) to the shot's pitch, the body tilting about the capsule centre
- // (the hips) with its feet kept at their height (at 15 degrees a toe or heel 30 cm off the centre moves about 8 cm). Both ease back to 0 when he stops firing. Not in cover (the cover clips turn the mesh themselves), not prone,
+ // up or down (B.MuzzlePitch, at most MaxFollowerMuzzlePitch) to the shot's pitch, the upper body bending about spine_01
+ // (UBattleVATSkeletalMeshComponent::SpinePitch; the legs and feet keep the clip's pose). Both ease back to 0 when he stops
+ // firing. Not in cover (the cover clips turn the mesh themselves), not prone,
  // not reloading or running. Followers keep their single-node clip (the far display and bone reductions rely on it).
  void AimFollowerRifles(double Now);
- static constexpr float MaxFollowerMuzzleYaw=45.f,MaxFollowerMuzzlePitch=15.f;
+ static constexpr float MaxFollowerMuzzleYaw=45.f,MaxFollowerMuzzlePitch=20.f;
  TMap<int32,FVector> FollowerAims; // a follower's last shot direction (Fire), for AimFollowerRifles
  // Corpse removal (BattleCorpses.cpp; display only, runtime only). -BattleCorpseLifetime=S (default 20; 0 = bodies stay):
  // S seconds after death a body sinks into the ground for 1.5 s and is then hidden. The unit record, its position and
@@ -442,14 +443,24 @@ public:
  TMap<int32,uint8> Stances;
  TMap<int32,double> StanceLockedUntil;
  uint8 StanceOf(int32 ID) const {const uint8* Found=Stances.Find(ID);return Found?*Found:0;}
- bool SetStance(int32 ID,uint8 Stance,double Now,bool bForce=false);
+ // bOnTheMove: he walks off as the stance changes; a near follower's transition clip is then played within
+ // BattleBodyAnim::MovingTransitionSeconds (a leader's body hurries its own from its velocity, ABattleUnit::UpdateBodyAnim).
+ bool SetStance(int32 ID,uint8 Stance,double Now,bool bForce=false,bool bOnTheMove=false);
  // Follower clip for pose 0 idle / 1 walk / 2 reload; with -BattleStanceAnim=1 a crouched follower gets the crouch clip.
  class UAnimSequence* FollowerClip(int32 ID,int32 Pose) const;
  // Drops a follower's rifle turn and tilt (AimFollowerRifles) and puts his mesh back in its plain place: at death and when
  // the far display takes the body (it keeps the mesh's transform for the far body and a returning corpse).
  void ClearFollowerRifleTurn(int32 ID);
  void RefreshFollowerPose(int32 ID);
- void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight);
+ // Plays FollowerClip on a near follower's mesh (a crouched or prone walk at the rate its steps match his walking speed).
+ void PlayFollowerClip(int32 ID,int32 Pose);
+ // A stance transition still playing on a near follower ends now (his pose's loop at its own rate): the far display keeps the
+ // clip's rate and time when it takes the body, and the transition's hurried rate carried into the far walk and back.
+ void EndFollowerTransition(int32 ID);
+ // He sees an enemy himself now (his own visible contacts, not ones shared by others).
+ bool SeesEnemy(int32 ID) const;
+ // bThreat: he is under fire or sees an enemy now (his own state and sight), for -BattleStanceMove=2.
+ void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight,bool bThreat=false);
  // Concealment (hedges tagged BattleConcealment in the map): blocks sight but shots ignore it. Collected once per world.
  TArray<AActor*> ConcealmentActors;
  bool bConcealmentBuilt=false;
@@ -651,7 +662,7 @@ private:
  UPROPERTY() TObjectPtr<class ABattleVATDisplay> VAT;
  int32 SmokeFailures=0, SmokeStage=0, QAStage=0; FVector SmokeSavedPeek=FVector::ZeroVector;
  // Body display checks of the cover smoke (muzzle along the aim while strafing; hit reaction recovery).
- float SmokeMuzzleMax=0.f, SmokeHead=0.f; int32 SmokeMuzzleFrames=0, SmokeShots=0; FQuat SmokeChest=FQuat::Identity; double SmokeHit=0.; const class UAnimSequence* SmokeHitClip=nullptr;
+ float SmokeMuzzleMax=0.f, SmokeHead=0.f; FVector SmokeDir=FVector::ZeroVector; int32 SmokeMuzzleFrames=0, SmokeShots=0; FQuat SmokeChest=FQuat::Identity; double SmokeHit=0.; const class UAnimSequence* SmokeHitClip=nullptr;
  FString QAPrefix;
  FVector SmokePosition=FVector::ZeroVector;
  TSharedPtr<FMassEntityManager> Manager;

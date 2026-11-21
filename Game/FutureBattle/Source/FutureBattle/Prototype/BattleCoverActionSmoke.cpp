@@ -14,6 +14,7 @@
 #include "BattleSuppression.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Animation/AnimSingleNodeInstance.h"
 #include "BattleVATDisplay.h"
 #include "Camera/CameraComponent.h"
@@ -21,6 +22,25 @@
 #include "TimerManager.h"
 #include "UnrealClient.h"
 #include "FutureBattle.h"
+
+// Heights of a body's feet above its mesh origin (the ground under the capsule): foot_l, foot_r, ball_l, ball_r.
+static void FootHeights(const USkeletalMeshComponent* Mesh,float Out[4])
+{
+ static const FName Names[4]={TEXT("foot_l"),TEXT("foot_r"),TEXT("ball_l"),TEXT("ball_r")};
+ for(int32 I=0;I<4;++I)Out[I]=Mesh->GetSocketLocation(Names[I]).Z-Mesh->GetComponentLocation().Z;
+}
+
+// A direction along which the body can walk 6 m without running into anything (back, left, right, then forward), for the
+// walking checks; back when none is open (a walk into a wall slid sideways at 0.7 m/s).
+static FVector OpenWay(const ABattleUnit* A)
+{
+ const FVector Start=A->GetActorLocation()+FVector(0,0,5);
+ const FCollisionQueryParams Params(NAME_None,false,A);
+ const FVector Ways[4]={-A->GetActorForwardVector(),-A->GetActorRightVector(),A->GetActorRightVector(),A->GetActorForwardVector()};
+ for(const FVector& Way:Ways)
+  if(!A->GetWorld()->SweepTestByChannel(Start,Start+Way.GetSafeNormal2D()*600.,FQuat::Identity,ECC_Pawn,FCollisionShape::MakeCapsule(40.f,85.f),Params))return Way.GetSafeNormal2D();
+ return -A->GetActorForwardVector().GetSafeNormal2D();
+}
 
 void UBattleLeaderRuntime::RunCoverActionSmoke()
 {
@@ -368,7 +388,111 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
  {
   const auto& B=Bodies.FindChecked(2);
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_FOLLOWER_MUZZLE stopped mesh_turn=%.1f mesh_tilt=%.1f mesh_z=%.1f"),B.MuzzleYaw,B.MuzzlePitch,B.Mesh->GetRelativeLocation().Z);
-  Check(FMath::Abs(B.MuzzleYaw)<.1f && FMath::Abs(B.MuzzlePitch)<.1f && FMath::Abs(B.Mesh->GetRelativeLocation().Z+90.f)<.5f,TEXT("a follower that stopped firing turns and stands his mesh back"));
+  auto* V=Cast<UBattleVATSkeletalMeshComponent>(B.Mesh.Get());
+  Check(FMath::Abs(B.MuzzleYaw)<.1f && FMath::Abs(B.MuzzlePitch)<.1f && FMath::Abs(B.Mesh->GetRelativeLocation().Z+90.f)<.5f && V && FMath::Abs(V->AppliedSpinePitch)<.01f,
+   TEXT("a follower that stopped firing turns and stands his mesh back"));
+  // Only the upper body bends for the pitch: with his clip held at one moment, his pose is made bent 12 degrees down and then
+  // unbent. The feet stand at the same heights both times (the whole body tilted before, a toe or heel up to 8 cm) and the
+  // barrel turns by the bend.
+  UAnimSingleNodeInstance* Node=V?V->GetSingleNodeInstance():nullptr;
+  if(V && Node && B.Weapon.IsValid())
+  {
+   // Frame skipping (-BattleFollowerAnimSkip) would skip these evaluations: the body's own tick sets it again next frame.
+   V->EndAnimSkip();
+   const bool bWasPlaying=Node->IsPlaying();Node->SetPlaying(false);
+   auto Make=[V,&B](float Bend,float Out[4])
+   {
+    V->SpinePitch=Bend;V->HandleExistingParallelEvaluationTask(true,true);V->TickAnimation(0.f,false);V->RefreshBoneTransforms(nullptr);
+    FootHeights(V,Out);
+    const FVector Barrel=-B.Weapon->GetComponentTransform().GetUnitAxis(EAxis::Y);
+    return float(FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Barrel.Z,-1.,1.))));
+   };
+   float Bent[4],Plain[4];
+   const float BentPitch=Make(-12.f,Bent),Applied=V->AppliedSpinePitch,PlainPitch=Make(0.f,Plain);
+   Node->SetPlaying(bWasPlaying);
+   float FeetMove=0.f;for(int32 I=0;I<4;++I)FeetMove=FMath::Max(FeetMove,FMath::Abs(Bent[I]-Plain[I]));
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_FOLLOWER_FEET bent=%.1f/%.1f/%.1f/%.1f plain=%.1f/%.1f/%.1f/%.1f max_move=%.2f barrel_bent=%.1f barrel_plain=%.1f applied=%.1f"),
+    Bent[0],Bent[1],Bent[2],Bent[3],Plain[0],Plain[1],Plain[2],Plain[3],FeetMove,BentPitch,PlainPitch,Applied);
+   Check(FeetMove<.5f && FMath::Abs(PlainPitch-BentPitch-12.f)<1.5f && FMath::Abs(Applied+12.f)<.01f && FMath::Abs(V->AppliedSpinePitch)<.01f,
+    TEXT("a follower's pitch bends his upper body and leaves his feet where they stand"));
+  }
+  else Check(false,TEXT("a follower's pitch bends his upper body and leaves his feet where they stand"));
+  SmokeStage=22;Later(.001f);return;
+ }
+ // Rendered run: the player's leader lies prone, then walks off and stands up as he moves (the AI's rule, and the player's with
+ // -BattleStanceMove=0): the rest of the stand-up clip must play within MovingTransitionSeconds (at its own speed the body slid
+ // along the ground while getting up). The display stance is set directly, as that rule sets it (stances may be off here).
+ if(SmokeStage==22)
+ {
+  Actor(1)->VisualStance=BattleStance::Prone;SmokeDir=OpenWay(Actor(1));
+  const auto* Down=BattleBodyAnim::Get(BattleBodyAnim::EClip::StandToProne);
+  SmokeStage=23;SmokeMuzzleFrames=0;SmokeShots=0;SmokeHit=0.;BayStart=-1.;Later(Down?Down->GetPlayLength()+.3f:.5f);return;
+ }
+ if(SmokeStage==23)
+ {
+  ABattleUnit* A=Actor(1);
+  const auto* Body=Cast<UBattleBodyAnimInstance>(A->GetMesh()->GetAnimInstance());
+  const auto* Up=BattleBodyAnim::Get(BattleBodyAnim::EClip::ProneToStand);
+  // Before he walks off he lies in the prone idle (the stand-to-prone clip has ended).
+  if(SmokeHit==0.){SmokeShots=Body && Body->GetBase()==BattleBodyAnim::Get(BattleBodyAnim::EClip::ProneIdle)?1:0;SmokeHit=Now;}
+  A->AddMovementInput(SmokeDir,1.f);
+  // He stands up once he moves faster than 0.5 m/s; he must start within 2 s.
+  if(BayStart<0.)
+  {
+   if(A->GetVelocity().SizeSquared2D()>2500.){A->VisualStance=BattleStance::Stand;BayStart=Now;}
+   else if(Now-SmokeHit<2.){Later(.001f);return;}
+   else
+   {
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_STAND_ON_MOVE no_move speed=%.0f controlled=%d position=%s"),A->GetVelocity().Size2D(),A->IsPlayerControlled()?1:0,*A->GetActorLocation().ToCompactString());
+    BayStart=Now-10.;SmokeMuzzleFrames=-1;
+   }
+  }
+  const double Hurry=BattleBodyAnim::MovingTransitionSeconds(Up);
+  if(SmokeMuzzleFrames>=0 && Up && A->TransitionClip.Get()==Up && (A->TransitionRate>1.f || Up->GetPlayLength()<=Hurry))SmokeMuzzleFrames=1;
+  if(Now-BayStart<Hurry+.3){Later(.001f);return;}
+  const FVector Local=A->GetActorRotation().UnrotateVector(A->GetVelocity());
+  const UAnimSequence* Base=Body?Body->GetBase():nullptr;
+  const bool bWalking=Base && (Base==BattleBodyAnim::Locomotion(0,Local,true) || Base==BattleBodyAnim::Locomotion(0,Local,false));
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_STAND_ON_MOVE clip=%s length=%.2f rate=%.2f hurried=%d prone_first=%d base=%s speed=%.0f way=%s"),Up?*Up->GetName():TEXT("none"),Up?Up->GetPlayLength():0.f,A->TransitionRate,SmokeMuzzleFrames,SmokeShots,Base?*Base->GetName():TEXT("none"),Local.Size2D(),*SmokeDir.ToCompactString());
+  Check(Up && SmokeShots==1 && SmokeMuzzleFrames==1 && bWalking && Local.Size2D()>100.,TEXT("getting up on the move ends within MovingTransitionSeconds (no slide along the ground)"));
+  SmokeStage=24;BayStart=-1.;Later(.001f);return;
+ }
+ // Rendered run: the player's leader walks crouched, then prone (-BattleStanceMove default 1). He keeps the stance, his walking
+ // speed is MoveScale of it, and his body shows that stance's walk at the rate of the clip's own ground speed. The stance is put
+ // in the runtime directly (the X key calls SetStance, which needs stances on; they may be off on this map).
+ if(SmokeStage==24 || SmokeStage==25)
+ {
+  ABattleUnit* A=Actor(1);
+  const uint8 Want=SmokeStage==24?BattleStance::Crouch:BattleStance::Prone;
+  if(BayStart<0.){Stances.Add(1,Want);A->VisualStance=Want;BayStart=Now;SmokeMuzzleMax=0.f;SmokeMuzzleFrames=0;SmokeShots=0;SmokeHead=-1.f;SmokeDir=OpenWay(A);}
+  A->AddMovementInput(SmokeDir,1.f);
+  const auto* Body=Cast<UBattleBodyAnimInstance>(A->GetMesh()->GetAnimInstance());
+  const FVector Local=A->GetActorRotation().UnrotateVector(A->GetVelocity());
+  const UAnimSequence* Base=Body?Body->GetBase():nullptr;
+  const float Walk=GetDefault<UBattleTuning>()->MoveSpeed,Expected=Walk*BattleStance::MoveScale(Want);
+  const float Rate=Body?Body->GetBaseRate():0.f;
+  // Every frame from 0.9 s (after the transition, 0.6 s into prone, its 0.2 s cross-fade and the start): while he walks at
+  // speed, the body shows that stance's walk
+  // (not its idle) at the rate of the clip's own ground speed.
+  if(Now-BayStart>.9)
+  {
+   SmokeMuzzleMax=FMath::Max(SmokeMuzzleMax,float(Local.Size2D()));
+   if(Local.Size2D()>Expected*.8f)
+   {
+    const bool bWalkClip=Base && Local.SizeSquared2D()>400. && Base==BattleBodyAnim::Locomotion(Want,Local,false) && Base!=BattleBodyAnim::Locomotion(Want,FVector::ZeroVector,false);
+    if(bWalkClip && FMath::Abs(Rate-BattleBodyAnim::MatchRate(Base,float(Local.Size2D())))<.15f)++SmokeMuzzleFrames;else{if(!SmokeShots){SmokeHead=float(Now-BayStart);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_STANCE_MOVE wrong_frame at=%.2f base=%s speed=%.0f rate=%.2f"),SmokeHead,Base?*Base->GetName():TEXT("none"),Local.Size2D(),Rate);}++SmokeShots;}
+   }
+  }
+  if(Now-BayStart<1.5){Later(.001f);return;}
+  const float Cap=A->GetCharacterMovement()->MaxWalkSpeed,Ground=BattleBodyAnim::GroundSpeed(Base);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_STANCE_MOVE stance=%d kept=%d cap=%.0f expected=%.0f top_speed=%.0f walking_frames=%d wrong_frames=%d base=%s ground_speed=%.0f rate=%.2f"),
+   int32(Want),StanceOf(1)==Want && A->VisualStance==Want?1:0,Cap,Expected,SmokeMuzzleMax,SmokeMuzzleFrames,SmokeShots,Base?*Base->GetName():TEXT("none"),Ground,Rate);
+  Check(StanceOf(1)==Want && A->VisualStance==Want && FMath::Abs(Cap-Expected)<1.f && SmokeMuzzleMax>Expected*.8f && SmokeMuzzleMax<Expected*1.05f && SmokeMuzzleFrames>=10 && SmokeShots==0,
+   Want==BattleStance::Crouch?TEXT("the player walks crouched at the crouched speed with the crouched walk"):TEXT("the player crawls prone at the prone speed with the prone crawl"));
+  if(SmokeStage==24){SmokeStage=25;BayStart=-1.;Later(.001f);return;}
+  // Standing again: the full walking speed comes back.
+  Stances.Remove(1);A->VisualStance=BattleStance::Stand;A->SetSprinting(false);
+  Check(FMath::Abs(A->GetCharacterMovement()->MaxWalkSpeed-Walk)<1.f,TEXT("standing up restores the player's walking speed"));
  }
  if(BodyShotPrefix().IsEmpty())CancelCoverAction(1);
  Check(Store->Find(1)->CoverPhase==0,TEXT("explicit release clears cover action"));
