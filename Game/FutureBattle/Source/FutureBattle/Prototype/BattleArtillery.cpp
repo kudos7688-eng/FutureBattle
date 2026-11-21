@@ -24,9 +24,9 @@ bool BattleTactics::ArtilleryObservedEnabled()
  return On;
 }
 
-bool BattleTactics::ArtilleryNavFallback()
+bool BattleTactics::VehicleOrderHere()
 {
- static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryNavFallback="),V);return V!=0;}();
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleVehicleOrderHere="),V);return V!=0;}();
  return On;
 }
 

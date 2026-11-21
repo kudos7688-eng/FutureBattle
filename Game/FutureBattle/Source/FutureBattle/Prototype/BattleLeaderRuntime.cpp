@@ -552,23 +552,14 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
   auto* Route=Nav->FindPathToLocationSynchronously(GetWorld(),Position(S->LeaderUnitID),Projected.Location,VehicleContext);
   // A tank whose goal lies where it cannot fit (the narrow streets of map E) drives to the end of the partial route instead.
   const bool VehiclePartial=VehicleNav&&Route&&Route->IsValid()&&Route->IsPartial()&&Route->PathPoints.Num()>1;
-  // Trial -BattleArtilleryNavFallback=1: AreaArtilleryPost picks the post from known enemies without asking the vehicle navigation, so on
-  // hilly maps (map I) it can land on an island the wide agent cannot reach. Try up to six points from the post back towards the gun.
-  bool bArtilleryFallback=false;
-  if(!VehiclePartial&&(!Route || !Route->IsValid() || Route->IsPartial())&&bVehicleOrder&&VehicleNav&&IsArtillery(S->LeaderUnitID)&&BattleTactics::ArtilleryNavFallback())
-  {
-   const FVector From=Position(S->LeaderUnitID);
-   for(int32 Step=1;Step<=6&&!bArtilleryFallback;++Step)
-   {
-    FVector Candidate=FMath::Lerp(Goal,From,Step/7.0);Candidate.Z=0;BattleFieldLayout::Of(GetWorld()).Heights.Lift(Candidate);
-    FNavLocation Near;
-    if(!Nav->ProjectPointToNavigation(Candidate,Near,FVector(600,600,400),VehicleNav))continue;
-    auto* Alternative=Nav->FindPathToLocationSynchronously(GetWorld(),From,Near.Location,VehicleContext);
-    if(Alternative&&Alternative->IsValid()&&!Alternative->IsPartial()){Route=Alternative;Projected=Near;bArtilleryFallback=true;
-     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_NAV_FALLBACK squad=%d step=%d goal=%s post=%s"),SID,Step,*Goal.ToCompactString(),*Near.Location.ToCompactString());}
-   }
-  }
-  if(!bArtilleryFallback&&!VehiclePartial&&(!Route || !Route->IsValid() || Route->IsPartial())){if(IsVehicle(S->LeaderUnitID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_ORDER_FAIL squad=%d reason=route valid=%d from=%s goal=%s projected=%s"),SID,Route&&Route->IsValid()?1:0,*Position(S->LeaderUnitID).ToCompactString(),*Goal.ToCompactString(),*Projected.Location.ToCompactString());Refuse();return false;}
+  // Trial -BattleVehicleOrderHere=1: a vehicle whose goal is where it already stands (an artillery post that equals its position,
+  // map I measurement 2026-11-21) gets no route from the navigation (zero length). Accept the order as arrived instead of refusing it
+  // and retrying the same goal every 5 s.
+  bool bVehicleHere=false;
+  if(!VehiclePartial&&(!Route || !Route->IsValid() || Route->IsPartial())&&bVehicleOrder&&VehicleNav&&BattleTactics::VehicleOrderHere()&&
+     FVector::Dist2D(Position(S->LeaderUnitID),Projected.Location)<=BattleSquadType::VehicleRadius(VehicleType(S->LeaderUnitID))+200.f)
+  {bVehicleHere=true;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_VEHICLE_ORDER_HERE squad=%d goal=%s"),SID,*Projected.Location.ToCompactString());}
+  if(!bVehicleHere&&!VehiclePartial&&(!Route || !Route->IsValid() || Route->IsPartial())){if(IsVehicle(S->LeaderUnitID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_ORDER_FAIL squad=%d reason=route valid=%d from=%s goal=%s projected=%s"),SID,Route&&Route->IsValid()?1:0,*Position(S->LeaderUnitID).ToCompactString(),*Goal.ToCompactString(),*Projected.Location.ToCompactString());Refuse();return false;}
   Goal=VehiclePartial?FVector(Route->PathPoints.Last()):Projected.Location;
  }
  TMap<int32,FVector> Goals;

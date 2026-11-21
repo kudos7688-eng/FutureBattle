@@ -21,8 +21,8 @@ namespace BattleTactics
  int32 ArtilleryTrialFlags();
  bool ArtilleryObservedEnabled();
  bool SPGAmmoEnabled();
- // Trial -BattleArtilleryNavFallback=1 (default 0): an artillery vehicle whose post has no vehicle route tries reachable points between the post and itself.
- bool ArtilleryNavFallback();
+ // Trial -BattleVehicleOrderHere=1 (default 0): a vehicle order to where the vehicle already stands is accepted as arrived (no route needed).
+ bool VehicleOrderHere();
  bool VehicleHitCover(); // Trial -BattleVehicleHitCover=1 (default 0): hide from own hits before starting home repair.
  bool SaveRoutes(); // Trial -BattleSaveRoutes=1 (default 0): persist player route orders and lane choices.
  int32 OverrideSaveRoutesForSmoke(int32 Value); // -1 restores command-line policy; returns previous override. Smoke only.
