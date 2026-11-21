@@ -520,7 +520,22 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
    }
    if(Params.Event==IE_Pressed && Over) { bSquadListPress=true; bTriggerHeld=false; FVector2D P; PressedSquadID=GetPointerPosition(P)?SquadListIDAt(P):INDEX_NONE; return true; }
    if(Params.Event==IE_Released && (bSquadListPress || Over))
-   { if(bSquadListPress && Over) { FVector2D P; if(GetPointerPosition(P) && PressedSquadID!=INDEX_NONE && SquadListIDAt(P)==PressedSquadID) SelectSquadListRow(P); } bSquadListPress=false; bTriggerHeld=false; return true; }
+   {
+    if(bSquadListPress && Over)
+    {
+     FVector2D P; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH); const auto Layout=FBattleSquadListLayout::Make(FVector2D(ViewW,ViewH));
+     // A squad dropped on an army tab (front army, attack army, unassigned) moves there (command UI armies 2026-11-21).
+     const int32 Tab=GetPointerPosition(P)?Layout.FilterTabAt(P):INDEX_NONE;
+     if(Tab>=0 && Tab<=2 && PressedSquadID>=0)
+     {
+      static const TCHAR* const ArmyNames[]={TEXT("前線軍"),TEXT("攻撃軍"),TEXT("未所属")};
+      const int32 Army=Tab==0?1:Tab==1?2:0;
+      if(GetWorld()->GetSubsystem<UBattleMatch>()->AssignArmy(PressedSquadID,Army)) ShowNotice(FString::Printf(TEXT("部隊%d を%sへ移しました"),PressedSquadID,ArmyNames[Tab]));
+     }
+     else if(PressedSquadID!=INDEX_NONE && SquadListIDAt(P)==PressedSquadID) SelectSquadListRow(P);
+    }
+    bSquadListPress=false; bTriggerHeld=false; return true;
+   }
   }
   if(Over && Params.Key==EKeys::RightMouseButton) return true;
  }
@@ -1011,8 +1026,10 @@ void ABattleController::UpdateNoticeLog(bool bForce)
 // ---- Squad list view (command UI): tabs by group, sort, double-click. Own squads' state and own groups only.
 uint8 ABattleController::SquadCategory(const FBattleSquadSummary& Row) const
 {
- if(!Row.bActive) return 2;
- return GetWorld()->GetSubsystem<UBattleMatch>()->GroupOf(Row.SquadID)!=INDEX_NONE?0:1;
+ // Armies (2026-11-21, user request): stopped squads (leader lost, not commandable) are no longer listed.
+ if(!Row.bActive) return 3;
+ const int32 Army=GetWorld()->GetSubsystem<UBattleMatch>()->ArmyOf(Row.SquadID);
+ return Army==1?0:Army==2?1:2;
 }
 TArray<int32> ABattleController::OwnGroupIDs() const
 {
@@ -1048,11 +1065,12 @@ TArray<FBattleSquadListRow> ABattleController::SquadListRows() const
 {
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); TArray<FBattleSquadListRow> Out;
  auto Append=[&Out](const TArray<FBattleSquadSummary>& Rows,int32 Group){for(const auto& R:Rows){FBattleSquadListRow E;E.Squad=R;E.GroupID=Group;Out.Add(E);}};
- if(SquadFilter==0)
+ if(SquadFilter<=1)
  {
-  // Each own group: a header row, then its active squads.
+  // Front army tab: the front-holding group; attack army tab: every other own group. Each: a header row, then its active squads.
   for(int32 GID:OwnGroupIDs())
   {
+   if((Match->Groups[GID].Kind==1)!=(SquadFilter==0)) continue;
    FBattleSquadListRow H; H.GroupID=GID; H.bGroupHeader=true; Out.Add(H);
    TArray<FBattleSquadSummary> Rows; for(const auto& Row:L->Summaries()) if(Row.bActive && Match->GroupOf(Row.SquadID)==GID) Rows.Add(Row);
    SortSquadRows(Rows); Append(Rows,GID);
@@ -1060,7 +1078,7 @@ TArray<FBattleSquadListRow> ABattleController::SquadListRows() const
   return Out;
  }
  TArray<FBattleSquadSummary> Rows;
- for(const auto& Row:L->Summaries()) if(SquadFilter==3 || SquadCategory(Row)==SquadFilter) Rows.Add(Row);
+ for(const auto& Row:L->Summaries()) if(Row.bActive && (SquadFilter==3 || SquadCategory(Row)==SquadFilter)) Rows.Add(Row);
  SortSquadRows(Rows); Append(Rows,INDEX_NONE);
  return Out;
 }

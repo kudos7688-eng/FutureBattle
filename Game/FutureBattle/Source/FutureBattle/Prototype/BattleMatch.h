@@ -227,6 +227,11 @@ public:
 	// A new group of active squads of one team (they leave their old groups). bPlayer: formed by the player (may hold one squad).
 	int32 FormGroup(int32 Team, const TArray<int32>& Squads, bool bPlayer);
 	void DissolveGroup(int32 GroupID, const TCHAR* Why);
+	// Command UI armies (2026-11-21): 0 unassigned, 1 front army (the team's front-holding group), 2 attack army (its other groups).
+	// AssignArmy moves an own squad there and pins it, so automatic filling (front army, attack and surprise groups) leaves it. Not saved.
+	bool AssignArmy(int32 SquadID, int32 Army);
+	int32 ArmyOf(int32 SquadID) const;
+	TSet<int32> ArmyPinned;
 	bool GroupAIRun(const FBattleGroup& Group) const;
 	int32 GroupLiving(const FBattleGroup& Group, int32* Full = nullptr) const;
 	int32 GroupFocus(int32 Team, const FVector& From, int32 Avoid = INDEX_NONE) const;

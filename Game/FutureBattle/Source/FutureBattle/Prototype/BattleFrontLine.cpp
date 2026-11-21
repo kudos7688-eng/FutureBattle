@@ -29,14 +29,15 @@ namespace BattleFrontValues
  constexpr int32 ClearAhead=3; // columns ahead of a band without known enemies before its squad steps forward
  int32 Arg(const TCHAR* Name,int32 Default){int32 V=Default;FParse::Value(FCommandLine::Get(),Name,V);return V;}
  constexpr int32 FrontArmyKeep=4; // squads the front army keeps when the surprise group takes from it
- bool Army(){static const int32 On=Arg(TEXT("BattleFrontArmy="),0);return On!=0;}
+ bool Army(){static const int32 On=Arg(TEXT("BattleFrontArmy="),1);return On!=0;} // default on since 2026-11-21 (user decision)
  // Sector kinds by the cover they give a squad that waits there (river sectors are not held).
  double Cover(char Kind){switch(Kind){case 'H':case 'W':return 3.;case 'T':case '^':return 2.;case 'J':case 'B':case 'S':return 1.;case 'R':return -100.;default:return 0.;}}
 }
 
 bool UBattleMatch::FrontLineOn(int32 Team) const
 {
- static const int32 On=BattleFrontValues::Arg(TEXT("BattleFrontLine="),0);
+ // Default on since 2026-11-21 (user decision after test play).
+ static const int32 On=BattleFrontValues::Arg(TEXT("BattleFrontLine="),1);
  if(On==0||!bArea||Team<0||Team>1||!BattleFieldLayout::Of(GetWorld()).bSectors)return false;
  const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;
  return Trial<0||Trial==Team;
@@ -134,7 +135,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    const auto& S=P.Value;
    if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(P.Key)!=INDEX_NONE)continue;
    if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Heavy)continue;
-   if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key))continue;
+   if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key)||ArmyPinned.Contains(P.Key))continue;
    // The real orders never send heavy squads on the home assault (UpdateTeamOrders), so their base slot does not hold them (Codex 2026-11-21).
    bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase&&S.SquadType!=BattleSquadType::Heavy)continue;
    Free.Add({P.Key,FVector::DistSquared2D(R->Position(S.LeaderUnitID),LineMid)});
@@ -384,7 +385,7 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
    const bool bArmour=S.SquadType==BattleSquadType::Tank||S.SquadType==BattleSquadType::ArmoredCar||S.SquadType==BattleSquadType::Exo;
    if(!bArmour&&S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Heavy)continue;
    if(const int32 Old=GroupOf(P.Key);Old!=INDEX_NONE&&!(Old==FrontID&&FrontSpare>0)){Skip[0]+=bArmour;continue;}
-   if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key)){Skip[1]+=bArmour;continue;}
+   if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key)||ArmyPinned.Contains(P.Key)){Skip[1]+=bArmour;continue;}
    // The base slot holds only the types the real orders send on the home assault (UpdateTeamOrders: never heavy squads, armoured cars or
    // exoskeleton soldiers; Codex review 2026-11-21: exoskeletons 72 and 77 of groupui-surprise2-I-s7 were kept out for nothing).
    bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);

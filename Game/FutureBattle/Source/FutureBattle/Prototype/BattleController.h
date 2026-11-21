@@ -75,7 +75,9 @@ public:
  // followed by its active squads), 1 ungrouped active squads, 2 stopped squads, 3 all squads. Sort (inside each group) 0 squad number,
  // 1 heaviest losses first, 2 by nearest objective. The HUD and clicks both use SquadListRows(). Clicking a group header selects the group.
  uint8 SquadFilter=0, SquadSort=0;
- uint8 SquadCategory(const FBattleSquadSummary& Row) const; // 0 active in a group, 1 active without a group, 2 stopped
+ uint8 SquadCategory(const FBattleSquadSummary& Row) const; // 0 front army, 1 attack army (other own groups), 2 unassigned, 3 stopped (never listed)
+ // The squad being dragged from the list toward an army tab (2026-11-21), or INDEX_NONE.
+ int32 DraggedSquadID() const { return bSquadListPress&&PressedSquadID>=0?PressedSquadID:INDEX_NONE; }
  TArray<FBattleSquadListRow> SquadListRows() const;
  void SortSquadRows(TArray<FBattleSquadSummary>& Rows) const;
  // Own groups shown in the group tab, by group number.

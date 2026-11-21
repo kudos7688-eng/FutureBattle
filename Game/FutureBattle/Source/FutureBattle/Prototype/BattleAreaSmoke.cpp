@@ -791,22 +791,39 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   }
   // Notification log (command UI): the stopped squads and observed points of this fixture appear before the screenshot.
   PC->UpdateNoticeLog(true);Check(PC->VisibleNotices().Num()>0,TEXT("notification log records observed events"));
-  // Squad list view (tabs by group, 2026-11-20): the stopped tab shows exactly the stopped squads; the loss sort keeps every row;
-  // the group tab lists each own group once, followed only by its own active squads; groups + ungrouped + stopped = all squads.
+  // Squad list view (army tabs, 2026-11-21): no tab lists a stopped squad; the loss sort keeps every row; the front and attack army
+  // tabs list each own group once (the front-holding group in the first), followed only by its own active squads; front + attack +
+  // unassigned = all active squads. Dropping a squad on the front army pins it there; dropping it on "unassigned" takes it out.
   {
-   PC->SquadFilter=2;const auto Stopped=PC->SquadListRows();bool AllStopped=Stopped.Num()>0;for(const auto& R:Stopped)AllStopped&=!R.Squad.bActive&&!R.bGroupHeader;
    PC->SquadFilter=3;PC->SquadSort=1;const int32 Sorted=PC->SquadListRows().Num();PC->SquadSort=0;
-   const int32 AllRows=PC->SquadListRows().Num();
+   const auto AllList=PC->SquadListRows();const int32 AllRows=AllList.Num();bool NoStopped=true;for(const auto& R:AllList)NoStopped&=R.Squad.bActive;
+   int32 Stopped=0;for(const auto& P:Store->GetSquads())Stopped+=P.Value.Team==0&&P.Value.CommandStatus!=EBattleCommandStatus::Active;
    // A player group of two active own squads for this check (groups are not saved; it is disbanded below).
    TArray<int32> Pair;for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Value.CommandStatus==EBattleCommandStatus::Active&&M->GroupOf(P.Key)==INDEX_NONE&&Pair.Num()<2)Pair.Add(P.Key);
    const int32 TestGroup=Pair.Num()==2?M->FormGroup(0,Pair,true):INDEX_NONE;
-   PC->SquadFilter=0;const auto Grouped=PC->SquadListRows();int32 Headers=0,Members=0,Current=INDEX_NONE;bool GroupsOk=true;
-   for(const auto& R:Grouped){if(R.bGroupHeader){++Headers;Current=R.GroupID;GroupsOk&=M->Groups.Contains(R.GroupID)&&M->Groups[R.GroupID].Team==0;}else{++Members;GroupsOk&=R.Squad.bActive&&R.GroupID==Current&&M->GroupOf(R.Squad.SquadID)==Current;}}
-   PC->SquadFilter=1;int32 Ungrouped=0;for(const auto& R:PC->SquadListRows()){++Ungrouped;GroupsOk&=R.Squad.bActive&&M->GroupOf(R.Squad.SquadID)==INDEX_NONE;}
-   GroupsOk&=Headers==PC->OwnGroupIDs().Num()&&Members+Ungrouped+Stopped.Num()==AllRows;
-   GroupsOk&=TestGroup!=INDEX_NONE&&Headers>=1&&Members>=2;if(TestGroup!=INDEX_NONE)M->DissolveGroup(TestGroup,TEXT("test"));
+   int32 Headers=0,Members=0;bool GroupsOk=true;
+   for(uint8 Filter=0;Filter<2;++Filter)
+   {
+    PC->SquadFilter=Filter;int32 Current=INDEX_NONE;
+    for(const auto& R:PC->SquadListRows())
+    {
+     if(R.bGroupHeader){++Headers;Current=R.GroupID;GroupsOk&=M->Groups.Contains(R.GroupID)&&M->Groups[R.GroupID].Team==0&&(M->Groups[R.GroupID].Kind==1)==(Filter==0);}
+     else{++Members;GroupsOk&=R.Squad.bActive&&R.GroupID==Current&&M->GroupOf(R.Squad.SquadID)==Current;}
+    }
+   }
+   PC->SquadFilter=2;int32 Ungrouped=0;for(const auto& R:PC->SquadListRows()){++Ungrouped;GroupsOk&=R.Squad.bActive&&M->GroupOf(R.Squad.SquadID)==INDEX_NONE;}
+   GroupsOk&=Headers==PC->OwnGroupIDs().Num()&&Members+Ungrouped==AllRows&&NoStopped;
+   GroupsOk&=TestGroup!=INDEX_NONE&&Headers>=1&&Members>=2;
+   bool DropOk=false;
+   if(TestGroup!=INDEX_NONE)
+   {
+    DropOk=M->AssignArmy(Pair[0],1)&&M->ArmyOf(Pair[0])==1&&M->ArmyPinned.Contains(Pair[0]);
+    DropOk&=M->AssignArmy(Pair[0],0)&&M->ArmyOf(Pair[0])==0;
+    M->ArmyPinned.Remove(Pair[0]);
+    if(M->Groups.Contains(TestGroup))M->DissolveGroup(TestGroup,TEXT("test"));
+   }
    PC->SquadFilter=0;
-   Check(AllStopped&&Sorted==AllRows&&GroupsOk,*FString::Printf(TEXT("squad list tabs and sort (groups %d, grouped %d, ungrouped %d, stopped %d, all %d)"),Headers,Members,Ungrouped,Stopped.Num(),AllRows));
+   Check(Sorted==AllRows&&GroupsOk&&DropOk,*FString::Printf(TEXT("squad list army tabs and sort (groups %d, grouped %d, ungrouped %d, stopped hidden %d, all %d, drop %d)"),Headers,Members,Ungrouped,Stopped,AllRows,DropOk?1:0));
   }
   // Command bar: the attack-move button arms the same pending order as the T key; the move button clears it.
   { PC->PressCommandButton(1);const bool Armed=PC->PendingOrder==EBattleOrder::AttackMove;PC->PressCommandButton(0);

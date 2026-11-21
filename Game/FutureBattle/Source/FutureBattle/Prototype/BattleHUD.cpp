@@ -544,16 +544,20 @@ void ABattleHUD::DrawSquadList()
  const auto& All=L->Summaries(); int32 Active=0; for(const auto& S:All) if(S.bActive) ++Active;
  auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  // Rows of the chosen tab (groups / ungrouped / stopped / all; command UI 2026-11-20) and the counts for the tab labels.
- const auto Rows=PC->SquadListRows(); int32 Counts[FBattleSquadListLayout::FilterCount]={PC->OwnGroupIDs().Num(),0,0,All.Num()};
- for(const auto& S:All) if(const uint8 C=PC->SquadCategory(S);C>0) ++Counts[C];
+ // Army tabs (2026-11-21): squads in the front army, the attack army, unassigned, and every active squad. Stopped squads are not listed.
+ const auto Rows=PC->SquadListRows(); int32 Counts[FBattleSquadListLayout::FilterCount]={0,0,0,Active};
+ for(const auto& S:All) if(const uint8 C=PC->SquadCategory(S);C<3) ++Counts[C];
+ const int32 Dragged=PC->DraggedSquadID();
  DrawRect(FLinearColor(.025f,.04f,.065f,.96f),Layout.Origin.X,Layout.Origin.Y,Layout.Width,Layout.Height);
- DrawText(FString::Printf(TEXT("自軍部隊　稼働 %d / 停止 %d"),Active,All.Num()-Active),FLinearColor::White,Layout.Origin.X+8,Layout.Origin.Y+5,GEngine->GetSmallFont(),1);
- DrawText(PC->SquadFilter==0?TEXT("群の行で群を選択・F で編成/解散・Eで操作"):TEXT("クリックで選択・ダブルクリックで移動・Eで操作"),FLinearColor(.6f,.65f,.7f),Layout.Origin.X+8,Layout.Origin.Y+Layout.Height-18,GEngine->GetSmallFont(),.7f);
- static const TCHAR* const FilterNames[]={TEXT("群"),TEXT("未所属"),TEXT("停止"),TEXT("全部")};
+ DrawText(FString::Printf(TEXT("自軍部隊　稼働 %d"),Active),FLinearColor::White,Layout.Origin.X+8,Layout.Origin.Y+5,GEngine->GetSmallFont(),1);
+ DrawText(TEXT("部隊を軍のタブへドラッグで編入・クリックで選択・Eで操作"),FLinearColor(.6f,.65f,.7f),Layout.Origin.X+8,Layout.Origin.Y+Layout.Height-18,GEngine->GetSmallFont(),.7f);
+ static const TCHAR* const FilterNames[]={TEXT("前線軍"),TEXT("攻撃軍"),TEXT("未所属"),TEXT("全部")};
  for(int32 T=0;T<FBattleSquadListLayout::FilterCount;++T)
  {
   const float X=Layout.Origin.X+6+T*FBattleSquadListLayout::TabWidth,Y=Layout.Origin.Y+FBattleSquadListLayout::TabTop; const bool On=PC->SquadFilter==T;
   DrawRect(On?FLinearColor(.12f,.38f,.36f):FLinearColor(.08f,.11f,.15f),X,Y,FBattleSquadListLayout::TabWidth-4,FBattleSquadListLayout::TabHeight);
+  // While a squad is dragged, the three army tabs are drop targets.
+  if(Dragged!=INDEX_NONE && T<3) DrawRect(FLinearColor(1.f,.85f,.35f,.35f),X,Y+FBattleSquadListLayout::TabHeight-3,FBattleSquadListLayout::TabWidth-4,3);
   DrawText(FString::Printf(TEXT("%s %d"),FilterNames[T],Counts[T]),On?FLinearColor::White:FLinearColor(.7f,.75f,.8f),X+4,Y+2,GEngine->GetSmallFont(),.75f);
  }
  static const TCHAR* const SortNames[]={TEXT("並び：番号順"),TEXT("並び：損耗順"),TEXT("並び：拠点別")};
@@ -562,8 +566,9 @@ void ABattleHUD::DrawSquadList()
   DrawRect(FLinearColor(.08f,.11f,.15f),X,Y,FBattleSquadListLayout::SortWidth,FBattleSquadListLayout::TabHeight);
   DrawText(SortNames[FMath::Min<int32>(PC->SquadSort,2)],FLinearColor(.7f,.75f,.8f),X+4,Y+2,GEngine->GetSmallFont(),.75f);
  }
+ static const TCHAR* const EmptyText[]={TEXT("前線軍はありません（部隊をこのタブへドラッグ）"),TEXT("攻撃軍はありません（部隊をこのタブへドラッグ）"),TEXT("未所属の部隊はありません"),TEXT("稼働中の部隊はありません")};
  if(Rows.IsEmpty())
-  DrawText(PC->SquadFilter==0?TEXT("群はありません（部隊を選んで F で編成）"):TEXT("該当する部隊はありません"),FLinearColor(.6f,.65f,.7f),Layout.Origin.X+12,Layout.Origin.Y+Layout.Header+8,GEngine->GetSmallFont(),.85f);
+  DrawText(EmptyText[FMath::Min<int32>(PC->SquadFilter,3)],FLinearColor(.6f,.65f,.7f),Layout.Origin.X+12,Layout.Origin.Y+Layout.Header+8,GEngine->GetSmallFont(),.85f);
  for(int32 I=0;I<Layout.VisibleRows && I+PC->SquadListScroll<Rows.Num();++I)
  {
   const auto& Entry=Rows[I+PC->SquadListScroll]; const float Y=Layout.Origin.Y+Layout.Header+I*Layout.RowHeight;
@@ -598,12 +603,13 @@ void ABattleHUD::DrawSquadList()
   const FLinearColor Color=!S.bActive?FLinearColor(.55f,.55f,.55f):!S.bSelectable?FLinearColor(.95f,.7f,.3f):FLinearColor(.28f,.95f,.8f);
   if(auto* A=L->Actor(S.LeaderUnitID); A && PC->IsSelected(A)) DrawRect(FLinearColor(.08f,.22f,.22f),Layout.Origin.X+3+Indent,Y,Layout.Width-12-Indent,Layout.RowHeight-2);
   if(Indent>0) DrawRect(FLinearColor(1.f,.85f,.35f,.5f),Layout.Origin.X+8,Y,2,Layout.RowHeight-2);
-  const TCHAR* State=!S.bActive?TEXT("× 停止"):!S.bSelectable?TEXT("鍵 操作不可"):TEXT("○ 稼働");
+  const TCHAR* State=!S.bSelectable?TEXT("鍵 操作不可"):TEXT("○ 稼働");
   FString Name=S.Name.Len()>12?S.Name.Left(11)+TEXT("…"):S.Name;
   DrawText(Name,Color,Layout.Origin.X+9+Indent,Y+4,GEngine->GetSmallFont(),1);
   DrawText(State,Color,Layout.Origin.X+Layout.Width-110,Y+4,GEngine->GetSmallFont(),1);
   // Squad group number (BattleGroups.cpp), left of the state; not repeated inside the group tab.
-  if(const int32 Group=Match->GroupOf(S.SquadID);Group!=INDEX_NONE && Indent==0)DrawText(FString::Printf(TEXT("群%d"),Group),FLinearColor(1.f,.85f,.35f),Layout.Origin.X+Layout.Width-152,Y+4,GEngine->GetSmallFont(),1);
+  if(const int32 Army=Match->ArmyOf(S.SquadID);Army!=0 && Indent==0)DrawText(Army==1?TEXT("前線"):TEXT("攻撃"),FLinearColor(1.f,.85f,.35f),Layout.Origin.X+Layout.Width-152,Y+4,GEngine->GetSmallFont(),1);
+  if(S.SquadID==Dragged) DrawRect(FLinearColor(1.f,.85f,.35f,.18f),Layout.Origin.X+3,Y,Layout.Width-12,Layout.RowHeight-2);
   if(const auto* Squad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(S.SquadID))
   {
    const auto& Plan=Squad->TacticalPlan;
@@ -623,6 +629,12 @@ void ABattleHUD::DrawSquadList()
    if(Reason.Len()>44)Reason=Reason.Left(43)+TEXT("...");
    DrawText(Reason,FLinearColor(.72f,.78f,.8f),Layout.Origin.X+9+Indent,Y+40,GEngine->GetSmallFont(),.7f);
   }
+ }
+ // The dragged squad's label follows the pointer.
+ if(FVector2D P;Dragged!=INDEX_NONE && PC->GetPointerPosition(P))
+ {
+  DrawRect(FLinearColor(.1f,.09f,.03f,.9f),P.X+12,P.Y+6,120,20);
+  DrawText(FString::Printf(TEXT("部隊%d → 軍へ"),Dragged),FLinearColor(1.f,.85f,.35f),P.X+16,P.Y+8,GEngine->GetSmallFont(),.8f);
  }
  if(Rows.Num()>Layout.VisibleRows)
  {
