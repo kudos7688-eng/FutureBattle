@@ -21,6 +21,7 @@
 
 | 射程の円（表示） | **11-21**：作戦画面で選んだ自軍部隊の射程と、見えている敵部隊の射程を円で表示（ミニマップにも）。**19時40分**：ユーザーの「少し邪魔」を受けて薄く・細くし、L キーで「選んだ自軍のみ（既定）→ 自軍＋ポインタの敵 → 自軍＋見えている敵すべて → 表示しない」を切り替える形にした。表示のみで試合は不変。main へ取り込み済み | 実際の操作での確認はユーザー待ち |
 | 兵種アイコン・敵の最終確認地点（表示） | **11-21 23時50分**：作戦画面でカメラを引くと部隊ごとに兵種アイコン（地図記号風の枠と記号＋「歩 重 偵 対 戦 装 迫 砲 外 補」）が出て、兵ごとの名札は点に変わる。重なるアイコンは1つにまとめて「+N」。見えなくなった敵部隊は最後に見た位置に点線のアイコンと「N秒前」。表示のみ。main へ取り込み済み | 実際の操作での確認はユーザー待ち |
+| 戦略層・マップJ（ロードマップに従う改善活動） | **11-22 main へ取り込み（b58f391）**：戦略層 S1〜S4（`-BattleSituationLog`・`-BattleStrategy=2/3/4`、既定0）、上部の帯、引き算の評価の切替（`-BattleAreaAllTypes`・`-BattleAreaWithout`）、`-BattleFrontShare`、分岐点の記録 `-BattleStateTrace`、往復保存の時刻 `-BattleVerifySaveAt`、**マップJ**（通れない山・湖で3本の道、ビルなど多様な建物、`Play-Area.ps1 -Map J`）。既定の試合は不変（IDENTICAL）。設計は `Docs/design-*.md`（段階2〜7、地形のAI、画面、部隊一覧、負荷、ロックの列）。計測ロックはファイルの列（`Setup/Lock-Queue.ps1`、ユーザー決定）。得点の規則は今のまま（ユーザー決定） | 戦略層の片側試験（未実施）、マップJ の画面確認（ユーザー）、F2 の到着の不合格、段階2の描画ありの切り分け |
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
@@ -64,6 +65,18 @@
 - **`-BattleArtilleryRaidSneak=<m>`（codex a938078＋27f866a、既定0、未ビルド）**：襲撃の隊長が目標からこの距離より遠い間は、命令を移動にし、小隊の戦術（ST2）は敵が見えても「その場で撃ち合う」に切り替えず（奇襲の群の移動と同じ扱い）、部隊間の連携は回り込み・援護に使わない。近づいたら攻撃前進。**訂正（3時10分、自己レビュー）**：最初の a938078 は命令を移動にするだけだったが、ST2 は命令の種類を見ずに Hold へ切り替えるので効かなかった。27f866a で ST2 と連携の例外を足し、追う襲撃の目標の取り直しも絞った（新しい発砲が50m以内で、まだ着いていなければ目標を変えない）。設計は `Docs/design-vehicle-survival.md`。
 - **観測の規則 ON の確認**：マップE seed7 60FPS `-RoundTripSave -ObservedArmour 1 -ObservedTactics 1` は完走（`SIGHT_EXPERIMENT_RESULT failures=0`、`BATTLE_MIXED_SAVE_SOAK_RESULT failures=0`、571/643）。
 - **次の一手**：ロックの列の番で codex をビルドし、`-ArtilleryRaidSneak 0/80`（30FPS、2 seed）を比べる。外骨格が自走砲に届けば main へ取り込む。迫撃砲を使わせるなら `-AreaMortarKeep 1` も評価する。
+
+## 2026-11-22 3時10分 Claude（ロードマップに従う改善活動）：戦略層 S1〜S4・マップJ・段階2〜5の試験切替をビルドして確かめ、main へ取り込み（b58f391）
+- **ロック**：2時48分〜3時10分（列で区画AIの後に受け取り、列で群制御へ渡した。新しい列の初めての受け渡し）。
+- **ビルド**：作業ツリー `strategy`（main 90a2dc5 を取り込んだ上で）は約3分で成功、変更したファイルに警告なし。`Test-Battle` failures=0。main へ早送りで取り込み、main もビルド成功（約100秒）・`Test-Battle` failures=0（`Setup/Battle-Smoke-20261122-030830.log`）。
+- **マップJの生成**（`Setup/Initialize-MapJ.ps1`）：`URBAN_MAP_RESULT failures=0`、`TERRAIN_MAP_RESULT failures=0`（2階・丘の上42か所に到達）、`TERRAIN_J_RESULT failures=0`（山・湖34区画に地面なし、北の道から谷へは峠を回る448m）。遮蔽が片側4〜5か所の区画が6つ（広場4・林2、報告のみ）。区画の監査（`sa-J-c1`）：命令が通らないのは山26・湖8だけ。8部隊の到着は7合格、F2（南西の道の拠点）だけ240秒で8人中3人しか着かず不合格（要調査）。
+- **確認の試合**（30FPS・描画なし・7本、`Setup/Benchmarks/SightTrial-20261111/chk-*-c1`、凍結ビルド `strat-r1` と基準 `main-90a2dc5-strat`）：
+  - 既定：main 90a2dc5 と strategy の既定が **IDENTICAL**（マップE seed7、78項目、749/460、射撃12652）。状況図の記録＋分岐点の記録を付けても **IDENTICAL**（記録は読むだけ）。
+  - **死体の消去（段階2）**：消去なし（`-BattleCorpseLifetime 0`）とありで、描画なしでは記録した4551フレームすべてで状態が一致（`Find-Divergence.py`）、集計も IDENTICAL。**11-20 の不一致は描画ありでだけ起きる** → 原因は描画の有無で変わる処理にある（次は描画ありで `-BattleStateTrace` を付けて1組）。
+  - 戦略層 S2〜S4（`-BattleStrategy 4`）：マップE で300秒の往復保存が合格（`BATTLE_MIXED_SAVE_SOAK_RESULT failures=0`、局面が保存される）。最初の集中は227秒、見直し9〜10回・集中先の切り替え4〜5回（揺れの目安の10回以下）。マップE では保持が0回・集中先への購入5回、マップJ では保持7回・購入12回・反撃1回。状況図の「不明」はマップE 6〜20%、マップJ 18〜34%（山で見えない）。
+  - マップJ：既定・戦略層あり とも900秒完走。
+- **制限**：戦略層の勝ち負けの効果は未測定（両軍が同じ規則の試合のみ）。マップJ は画面で未確認（ユーザーの `Setup\Play-Area.ps1 -Map J`、戦略層つきは `-Strategy 2`）。F2 の到着の不合格は未調査。
+- **次の一手**：(1) 戦略層 ST2 の片側試験（マップE・J、2シードから、`-NoConfirm -Fps 30`）。(2) 段階2：描画ありで死体の消去 0／20 を `-BattleStateTrace` 付きで1組。(3) マップJ の F2 の詰まりと、遮蔽の少ない6区画。
 
 ## 2026-11-22 2時10分 Claude（ロードマップに従う改善活動）：計測ロックをファイルの順番待ちの列に切り替え（ユーザー決定「入れてよい」）
 - **変更**：`Setup/Lock-Queue.ps1`（main 7b50fa2）。`-Join -Who <セッション名> -Purpose <用途> -Minutes <見込み>` → `-Wait -Who <名>`（Claude は `run_in_background`、自分の番で終わる）→ 作業 → `-Release -Who <名>`（次の人が自動で持ち主になる）。`-Status` で持ち主と列、`-Leave` で列を抜ける、`-Urgent` はユーザーのプレイの確認で列の先頭へ。列は作業ツリーの外の `FPS/.lock/queue.json`、履歴は `queue-log.jsonl`。持ち主が見込み＋30分を過ぎ、UE・ビルドのプロセスが無ければ次の人に渡る。設計は [Docs/design-lock-queue.md](Docs/design-lock-queue.md)。
