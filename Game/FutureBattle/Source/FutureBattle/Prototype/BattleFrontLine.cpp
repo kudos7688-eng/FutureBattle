@@ -267,15 +267,15 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
   struct FOut{int32 SID;double S;};TArray<FOut> Out;
   for(int32 SID:G->Squads)if(const auto* S=Store->FindSquad(SID))
   {
-   double Score=0.;
-   if(S->TacticalPlan.Action==EBattleSquadTactic::Recover&&S->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY")))Score=1000.;
+   double Rank=0.;
+   if(S->TacticalPlan.Action==EBattleSquadTactic::Recover&&S->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY")))Rank=1000.;
    else if(const FVector* Post=FrontPosts.Find(SID))
    {
     const FIntPoint C=BattleSectors::Cell(*Post);
-    Score=G->FrontHold.IsValidIndex(C.Y)?double(G->FrontHold[C.Y]-ColOf(C)):0.;
+    Rank=G->FrontHold.IsValidIndex(C.Y)?double(G->FrontHold[C.Y]-ColOf(C)):0.;
    }
-   else Score=500.;
-   Out.Add({SID,Score});
+   else Rank=500.;
+   Out.Add({SID,Rank});
   }
   Out.Sort([](const FOut& A,const FOut& B){return A.S!=B.S?A.S>B.S:A.SID>B.SID;});
   // The first release (right after the group forms) takes every squad above the need at once, and the rest then take their first
@@ -399,7 +399,11 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
   //    known right in front of it, while leaving a row needs a wider clear zone, so a sighting coming and going does not move squads to and fro.
   //  - The other squads: support places one to three columns behind the line, best cover first, rows facing known enemies first, at most
   //    two per row. All places move with the line, so the squads keep their rows and none runs past another.
-  TArray<int32> SlotRow;FString Gaps;
+  TArray<int32> SlotRow;FString Gaps;int32 FrontCount=0;
+  // Where each squad's last place went with the line (its last place shifted by the row's step).
+  TSet<FIntPoint> Kept;
+  if(Hold())for(int32 SID:G->Squads)if(const FIntPoint* Last=Previous.Find(SID);Last&&OldHold.IsValidIndex(Last->Y)&&Line.IsValidIndex(Last->Y))
+   Kept.Add(FrontCell(Team,FMath::Clamp(ColOf(*Last)+Line[Last->Y]-OldHold[Last->Y],0,Cols-1),Last->Y));
   if(Hold())
   {
    auto Known=[&](int32 Y,int32 C0,int32 C1)
@@ -438,10 +442,12 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    TArray<int32> FrontRows;for(int32 Y=0;Y<Rows;++Y)if(!Empty[Y])FrontRows.Add(Y);
    if(NB<FrontRows.Num()){TArray<int32> Spread;for(int32 I=0;I<NB;++I)Spread.Add(FrontRows[(2*I+1)*FrontRows.Num()/(2*NB)]);FrontRows=Spread;}
    for(int32 Y:FrontRows){const FIntPoint Cell=FrontCell(Team,FrontCol[Y],Y);Used.Add(Cell);Cells.Add(Cell);Pushes.Add(false);SlotRow.Add(Y);}
+   FrontCount=Cells.Num();
    // Support places.
    struct FSpot{double S;int32 C,Y;};TArray<FSpot> Spots;
    for(int32 Y=0;Y<Rows;++Y)for(int32 D=1;D<=3;++D)if(const int32 C=Line[Y]-D;C>=HomeCol&&!Used.Contains(FrontCell(Team,C,Y))&&CoverAt(C,Y)>-1000.)
-    Spots.Add({CoverAt(C,Y)+(D==1?.5:D==3?-1.:0.)+.5*FMath::Min(Known(Y,Line[Y],Line[Y]+3),4)+(Empty[Y]?.5:0.),C,Y});
+    Spots.Add({CoverAt(C,Y)+(D==1?.5:D==3?-1.:0.)+.5*FMath::Min(Known(Y,Line[Y],Line[Y]+3),4)+(Empty[Y]?.5:0.)
+     +(Kept.Contains(FrontCell(Team,C,Y))?1.5:0.),C,Y}); // a support place a squad already holds stays (map I 2026-11-22: supports hopped rows with each sighting)
    Spots.Sort([](const FSpot& A,const FSpot& B){return A.S!=B.S?A.S>B.S:A.Y!=B.Y?A.Y<B.Y:A.C>B.C;});
    // Support squads per row: one each first (rows facing enemies first by the score), then a second, then any (Codex review: the cap
    // of two let one row take three squads before the others had one).
@@ -509,11 +515,11 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    struct FPair{double D;int32 I,J;};TArray<FPair> Pairs;
    for(int32 I=0;I<K;++I)if(const auto* S=Store->FindSquad(Present[I].SID))
    {
-    const FIntPoint* Last=Previous.Find(Present[I].SID);
+    const FIntPoint* Last=Previous.Find(Present[I].SID);const bool bLead=FrontLeads.Contains(Present[I].SID);
     const int32 Shift=Last&&OldHold.IsValidIndex(Last->Y)&&Line.IsValidIndex(Last->Y)?Line[Last->Y]-OldHold[Last->Y]:0;
     const FVector Expected=Last?BattleSectors::Center(FrontCell(Team,FMath::Clamp(ColOf(*Last)+Shift,0,Cols-1),Last->Y)):FVector::ZeroVector;
     for(int32 J=0;J<NB;++J)
-     Pairs.Add({Last?1.e13*FMath::Abs(SlotRow[J]-Last->Y)+FVector::DistSquared2D(Expected,BattleSectors::Center(Cells[J]))
+     Pairs.Add({Last?1.e13*FMath::Abs(SlotRow[J]-Last->Y)+(bLead!=(J<FrontCount)?1.e11:0.)+FVector::DistSquared2D(Expected,BattleSectors::Center(Cells[J]))
       :1.e15+FVector::DistSquared2D(R->Position(S->LeaderUnitID),BattleSectors::Center(Cells[J])),I,J});
    }
    Pairs.Sort([](const FPair& A,const FPair& B){return A.D!=B.D?A.D<B.D:A.I!=B.I?A.I<B.I:A.J<B.J;});
@@ -537,6 +543,9 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    for(const auto& Pair:Pairs)if(!Placed[Pair.I]&&Owner[Pair.J]==INDEX_NONE){Owner[Pair.J]=Pair.I;Placed[Pair.I]=true;}
   }
   else for(int32 J=0;J<K;++J)Owner[J]=J;
+  // Front or support: a squad keeps its role across steps (map I 2026-11-22: where a row's front place went back a column into cover,
+  // the support squad behind took it and the front squad moved to another row).
+  if(Hold()){for(int32 SID:G->Squads)FrontLeads.Remove(SID);for(int32 J=0;J<FrontCount&&J<NB;++J)if(Owner[J]!=INDEX_NONE)FrontLeads.Add(Present[Owner[J]].SID);}
   for(int32 J=0;J<NB;++J)if(Owner[J]!=INDEX_NONE)
   {
    const int32 SID=Present[Owner[J]].SID;
