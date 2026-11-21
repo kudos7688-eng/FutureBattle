@@ -61,7 +61,7 @@
   射程55000で自走砲の撃破は3〜4割減る（2 seed で同じ向き）。射程が既定だと自走砲は陣地から遠い後方で撃つので、疑いも襲撃も起きない。**どの試合でも迫撃砲は買われず（発射0）、自走砲は1両も撃破されなかった。襲撃10件はすべて `reason=expired`。** 原因：襲撃は公開陣地へ向かうが、公開陣地を使うのは迫撃砲だけで、自走砲は `AreaArtilleryPost` の別の位置にいる。陣地の証拠は陣地から30m以内の発砲でしか更新されず、60秒で切れる。
 - **`-BattleArtilleryRaidChase`（codex 391042d、既定0、Codex が実装・点検済み）**：襲撃は気付いた最新の砲兵の発砲位置へ向かい、新しい発砲を追う。証拠から120秒で `expired`、目標の25m以内に20秒いて新しい発砲がなければ `cleared`。OFF では従来と同じ（目標・判定・ログ・乱数）。Build 成功、`Test-Battle`・`Test-Area` failures=0（codex のビルド）。
 - **追う襲撃の評価（codex 391042d、マップI、30FPS、「すべて」と同じ条件に `-ArtilleryRaidChase 0/1`）**：s7 は 462/668→607/614、s19 は 431/693→637/610。目標の取り直しは113回・110回だが、**自走砲の撃破は0のまま**。外骨格の小隊は x≈-7000（中央の手前）で `ENGAGE / FLANK / SUPPORT` を繰り返し、盾が落ちると下がって補給に戻っていた（攻撃前進は途中の敵すべてと撃ち合う）。得点が軍0 に振れたのは、外骨格が戦線から抜けた影響か偶然か不明。出力は `FutureBattle-codex/Setup/Benchmarks/SightTrial-20261111/chase-I30-s{7,19}-c{0,1}`。
-- **`-BattleArtilleryRaidSneak=<m>`（codex a938078、既定0、未ビルド）**：襲撃の隊長が目標からこの距離より遠い間は移動の命令にする（敵を狙っても止まらず、遮蔽の行動もしない）。近づいたら攻撃前進。本拠地攻めの S5 と同じ考え方。設計は `Docs/design-vehicle-survival.md`。
+- **`-BattleArtilleryRaidSneak=<m>`（codex a938078＋27f866a、既定0、未ビルド）**：襲撃の隊長が目標からこの距離より遠い間は、命令を移動にし、小隊の戦術（ST2）は敵が見えても「その場で撃ち合う」に切り替えず（奇襲の群の移動と同じ扱い）、部隊間の連携は回り込み・援護に使わない。近づいたら攻撃前進。**訂正（3時10分、自己レビュー）**：最初の a938078 は命令を移動にするだけだったが、ST2 は命令の種類を見ずに Hold へ切り替えるので効かなかった。27f866a で ST2 と連携の例外を足し、追う襲撃の目標の取り直しも絞った（新しい発砲が50m以内で、まだ着いていなければ目標を変えない）。設計は `Docs/design-vehicle-survival.md`。
 - **観測の規則 ON の確認**：マップE seed7 60FPS `-RoundTripSave -ObservedArmour 1 -ObservedTactics 1` は完走（`SIGHT_EXPERIMENT_RESULT failures=0`、`BATTLE_MIXED_SAVE_SOAK_RESULT failures=0`、571/643）。
 - **次の一手**：ロックの列の番で codex をビルドし、`-ArtilleryRaidSneak 0/80`（30FPS、2 seed）を比べる。外骨格が自走砲に届けば main へ取り込む。迫撃砲を使わせるなら `-AreaMortarKeep 1` も評価する。
 
