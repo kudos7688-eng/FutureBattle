@@ -17,6 +17,10 @@
 #include "Particles/ParticleSystem.h"
 #include "Particles/ParticleSystemComponent.h"
 
+// Helpers live in an unnamed namespace inside BattleEffects so that, in a unity build, they never meet the unnamed-namespace
+// helpers of other files (lookup from the BattleEffects functions finds these first).
+namespace BattleEffects
+{
 namespace
 {
  struct FFxState
@@ -77,6 +81,7 @@ namespace
   if(D>MaxDistance)return false;
   return D<Around||FVector::DotProduct(To/D,S.Forward)>.25;
  }
+}
 }
 
 bool BattleEffects::Active(UWorld* World)

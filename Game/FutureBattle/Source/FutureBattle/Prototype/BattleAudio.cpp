@@ -20,6 +20,10 @@
 #include "Sound/SoundConcurrency.h"
 #include "UObject/Package.h"
 
+// Helpers live in an unnamed namespace inside BattleAudio so that, in a unity build, they never meet the unnamed-namespace
+// helpers of other files (lookup from the BattleAudio functions finds these first).
+namespace BattleAudio
+{
 namespace
 {
  enum EBank : uint8 { RifleNear, RifleFar, HeavyNear, HeavyFar, BlastNear, BlastTailNear, BlastFar, BlastTailFar, Thump,
@@ -169,6 +173,7 @@ namespace
  {
   if(Sound)UGameplayStatics::PlaySound2D(World,Sound,Volume,1.f,0.f,S.Conc[C],nullptr,bUI);
  }
+}
 }
 
 bool BattleAudio::Enabled(UWorld* World)
