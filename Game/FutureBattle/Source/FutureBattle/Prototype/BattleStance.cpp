@@ -177,9 +177,19 @@ void UBattleLeaderRuntime::AimFollowerRifles(double Now)
   if(FMath::IsNearlyEqual(Yaw,B.MuzzleYaw,.05f) && FMath::IsNearlyEqual(Pitch,B.MuzzlePitch,.05f))continue;
   B.MuzzleYaw=Yaw;B.MuzzlePitch=Pitch;
   // Turn and tilt in the capsule's frame about its centre (the mesh hangs 90 cm below it, its own forward turned by -90).
+  // The feet stay at their height (only the slide forward or back of the hip pivot is kept).
   const FQuat Turn=FRotator(Pitch,Yaw,0.f).Quaternion();
-  B.Mesh->SetRelativeLocationAndRotation(Turn.RotateVector(FVector(0,0,-90)),Turn*FRotator(0,-90,0).Quaternion());
+  FVector Place=Turn.RotateVector(FVector(0,0,-90));Place.Z=-90.;
+  B.Mesh->SetRelativeLocationAndRotation(Place,Turn*FRotator(0,-90,0).Quaternion());
  }
+}
+
+void UBattleLeaderRuntime::ClearFollowerRifleTurn(int32 ID)
+{
+ auto* B=Bodies.Find(ID);
+ if(!B||B->Actor.IsValid()||!B->Mesh.IsValid()||(B->MuzzleYaw==0.f&&B->MuzzlePitch==0.f))return;
+ B->MuzzleYaw=B->MuzzlePitch=0.f;
+ B->Mesh->SetRelativeLocationAndRotation(FVector(0,0,-90),FRotator(0,-90,0));
 }
 
 void UBattleLeaderRuntime::RefreshFollowerPose(int32 ID)

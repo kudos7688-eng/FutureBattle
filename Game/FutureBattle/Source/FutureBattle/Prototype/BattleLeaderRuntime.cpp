@@ -509,12 +509,11 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
   if(B->Actor.IsValid()) B->Actor->ApplyDeath();
   else
   {
+   ClearFollowerRifleTurn(ID);
    B->Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision); if(VAT)VAT->Freeze(ID);
    if(!VAT || !VAT->IsFar(ID))
    {
     B->Weapon->SetVisibility(false);
-    // The rifle turn (AimFollowerRifles) ends with the shooting: the body falls from its plain place.
-    if(B->Mesh.IsValid() && (B->MuzzleYaw!=0.f || B->MuzzlePitch!=0.f)){B->MuzzleYaw=B->MuzzlePitch=0.f;B->Mesh->SetRelativeLocationAndRotation(FVector(0,0,-90),FRotator(0,-90,0));}
     // Body animation: a near follower plays a death clip and freezes on its last frame (StepBodyTimers); otherwise it tips over.
     UAnimSequence* Death=B->Mesh.IsValid()?DeathClip(ID):nullptr;
     if(Death){B->Mesh->SetRelativeScale3D(FVector(1.));B->Mesh->PlayAnimation(Death,false);BodyTimers.Add(ID,{GetWorld()->GetTimeSeconds()+Death->GetPlayLength(),true});}

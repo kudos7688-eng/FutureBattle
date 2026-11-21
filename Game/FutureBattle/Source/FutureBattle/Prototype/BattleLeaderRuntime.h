@@ -397,10 +397,10 @@ public:
  // Every frame: a near follower that fired within BattleBodyAnim::ReadySeconds turns his mesh (whole-body clip, no upper layer)
  // so the rifle in his hand points along his last shot: across (B.MuzzleYaw, at most MaxFollowerMuzzleYaw) to his facing, and
  // up or down (B.MuzzlePitch, at most MaxFollowerMuzzlePitch) to the shot's pitch, the body tilting about the capsule centre
- // (the hips). Both ease back to 0 when he stops firing. Not in cover (the cover clips turn the mesh themselves), not prone,
+ // (the hips) with its feet kept at their height (at 15 degrees a toe or heel 30 cm off the centre moves about 8 cm). Both ease back to 0 when he stops firing. Not in cover (the cover clips turn the mesh themselves), not prone,
  // not reloading or running. Followers keep their single-node clip (the far display and bone reductions rely on it).
  void AimFollowerRifles(double Now);
- static constexpr float MaxFollowerMuzzleYaw=45.f,MaxFollowerMuzzlePitch=25.f;
+ static constexpr float MaxFollowerMuzzleYaw=45.f,MaxFollowerMuzzlePitch=15.f;
  TMap<int32,FVector> FollowerAims; // a follower's last shot direction (Fire), for AimFollowerRifles
  // Corpse removal (BattleCorpses.cpp; display only, runtime only). -BattleCorpseLifetime=S (default 20; 0 = bodies stay):
  // S seconds after death a body sinks into the ground for 1.5 s and is then hidden. The unit record, its position and
@@ -441,6 +441,9 @@ public:
  bool SetStance(int32 ID,uint8 Stance,double Now,bool bForce=false);
  // Follower clip for pose 0 idle / 1 walk / 2 reload; with -BattleStanceAnim=1 a crouched follower gets the crouch clip.
  class UAnimSequence* FollowerClip(int32 ID,int32 Pose) const;
+ // Drops a follower's rifle turn and tilt (AimFollowerRifles) and puts his mesh back in its plain place: at death and when
+ // the far display takes the body (it keeps the mesh's transform for the far body and a returning corpse).
+ void ClearFollowerRifleTurn(int32 ID);
  void RefreshFollowerPose(int32 ID);
  void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight);
  // Concealment (hedges tagged BattleConcealment in the map): blocks sight but shots ignore it. Collected once per world.
