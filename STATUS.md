@@ -23,6 +23,16 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-21 21時20分 Claude（Codex委任）：観測の規則の残りと保存の点検の残りを main へ組み込み（既定の試合は不変）
+
+- **組み込んだもの**（codex e61842a、すべて既定 OFF または結果を変えない変更）：
+  - `-BattleObservedTactics`（既定0）：点検03 O04/O05/O07/O08/O09/O11。遠距離観測・共有の可否を接触ごとに持ち、回避の判断を観測した情報だけで組む。設計は `Docs/design-observation.md`。
+  - 保存の点検 D（点検05 S05/S10/S11）：兵種ごとの武器・体力・弾数の妥当性をゲーム自身の関数で検査、64 MiB を超えるファイルは読む前に拒否、上限値を共通の定数に。S06/S07（規則の照合方法の変更）は安全に直せる見込みがなく見送り。経緯は `Docs/review-2026-11-21/save-batch-D.md`。
+  - main（群制御の前線軍・死体のラグドール）との合流。食い違いは試合スクリプトの引数一覧と自動生成の表だけ。
+- **検証**：Build 成功（codex と main の両方）。`Test-Battle` `BATTLE_SMOKE_RESULT failures=0`、`Test-MixedSave` failures=0、`Test-Area` failures=0。マップE seed7（`-Experiment -CoverActions 1 -FlankCoordination 1 -RoundTripSave -Area`、60FPS）を組み込み前の main 684b5f6 と codex で1試合ずつ回し、`Compare-MatchResults.py` で **IDENTICAL**（576/601、9861発、78項目）。出力は `Setup/Benchmarks/SightTrial-20261111/{main-684b5f6,codex-e61842a}-E7b`。
+- **制限**：`-BattleObservedTactics` を ON にした試合はまだ回していない。戦車の直し A/B・砲兵の直し（陣地・射程・費用・外骨格の襲撃）の評価試合（複数 seed、自走砲を両軍に強制）も未実施。
+- **次の一手**：次のロックの番で評価試合。画面確認（U06 の3解像度、U12 のパッドのメニュー）はユーザー待ち。
+
 ## 2026-11-21 20時55分 Claude（死体の自動消滅）：死体が地面に横たわるようにした（死亡アニメの後に物理で倒す。main へ組み込み済み。表示のみ）
 
 - 依頼：「死亡アニメがまだおかしいし再生されていなくない？」。
