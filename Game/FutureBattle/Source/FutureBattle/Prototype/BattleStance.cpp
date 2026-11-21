@@ -71,6 +71,8 @@ bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForc
  if(Current==Stance||Stance>BattleStance::Prone)return false;
  if(!bForce&&Now<StanceLockedUntil.FindRef(ID))return false;
  Stances.Add(ID,Stance);
+ // Evaluation: stance changes as he walks off or on the move (the AI stands up to move; the trial keeps him low under threat).
+ if(bOnTheMove)SightExperiment.Cover(TEXT("stance_change_on_move"));
  // Changing takes time; getting down to or up from prone takes longer.
  StanceLockedUntil.Add(ID,Now+((Current==BattleStance::Prone||Stance==BattleStance::Prone)?1.2:.5));
  // Placeholder visual: squash the body mesh vertically (feet stay on the ground). Far VAT instances are not changed.
@@ -272,8 +274,13 @@ void UBattleLeaderRuntime::UpdateAIStance(int32 ID,double Now,bool bMoving,bool 
  // Pinned by suppression: get as low as possible, whatever the order says (own state only). With -BattleStanceMove=2 he
  // crawls on along his way (Follow lets him walk prone); before, he waited until he could stand up.
  if(IsPinned(ID,Now)){SetStance(ID,BattleStance::Prone,Now,false,bMoving&&BattleStance::MoveMode()>=2);return;}
- // Trial -BattleStanceMove=2: on the move under fire or with an enemy in sight he stays crouched (own state and own sight).
- if(bMoving && bThreat && BattleStance::MoveMode()>=2){NoCoverProneUntil.Remove(ID);SetStance(ID,BattleStance::Crouch,Now,false,true);return;}
+ // Trial -BattleStanceMove=2: on the move under fire or with an enemy in sight he stays crouched (own state and own sight),
+ // and until LowMoveHoldSeconds after the last threat (his lower eye may lose the enemy he crouched for).
+ if(bMoving && BattleStance::MoveMode()>=2)
+ {
+  if(bThreat)LowMoveUntil.Add(ID,Now+LowMoveHoldSeconds);
+  if(Now<LowMoveUntil.FindRef(ID)){NoCoverProneUntil.Remove(ID);SetStance(ID,BattleStance::Crouch,Now,false,true);return;}
+ }
  if(bMoving||!bCombat){NoCoverProneUntil.Remove(ID);SetStance(ID,BattleStance::Stand,Now,false,bMoving);return;}
  if(bLostSight)
  {

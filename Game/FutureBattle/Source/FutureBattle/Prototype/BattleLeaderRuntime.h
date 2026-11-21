@@ -448,6 +448,11 @@ public:
  // Stances (BattleStance.h; map E default). Runtime only: 0 stand, 1 crouch, 2 prone, and the earliest time each may change again.
  TMap<int32,uint8> Stances;
  TMap<int32,double> StanceLockedUntil;
+ // Trial -BattleStanceMove=2: until when a soldier on the move stays crouched after his last threat (LowMoveHoldSeconds).
+ // Crouching lowers his eye: behind a low wall he lost the enemy, stood up, saw him again and crouched again (in a map E match
+ // about 25,000 changes each way); the hold keeps him low through that.
+ TMap<int32,double> LowMoveUntil;
+ static constexpr double LowMoveHoldSeconds=3.;
  uint8 StanceOf(int32 ID) const {const uint8* Found=Stances.Find(ID);return Found?*Found:0;}
  // bOnTheMove: he walks off as the stance changes; a near follower's transition clip is then played within
  // BattleBodyAnim::MovingTransitionSeconds (a leader's body hurries its own from its velocity, ABattleUnit::UpdateBodyAnim).

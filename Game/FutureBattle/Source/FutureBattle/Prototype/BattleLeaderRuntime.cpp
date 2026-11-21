@@ -490,7 +490,7 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
  CancelCoverAction(ID);
  VehicleIDs.Remove(ID); // a destroyed vehicle is a wreck: no armour or spotting rules
  // Stances are for the living: restore the normal body shape before the death pose is applied.
- SetStance(ID,BattleStance::Stand,GetWorld()->GetTimeSeconds(),true);Stances.Remove(ID);StanceLockedUntil.Remove(ID);NoCoverProneUntil.Remove(ID);CoverProbeFailedAt.Remove(ID);
+ SetStance(ID,BattleStance::Stand,GetWorld()->GetTimeSeconds(),true);Stances.Remove(ID);StanceLockedUntil.Remove(ID);LowMoveUntil.Remove(ID);NoCoverProneUntil.Remove(ID);CoverProbeFailedAt.Remove(ID);
  if(Phase3 && Phase3->bEnabled) Phase3->OnDeath(ID);
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U) return;
  // War score trial: every loss (shot or stopped by the leader's death) scores for the other team.
