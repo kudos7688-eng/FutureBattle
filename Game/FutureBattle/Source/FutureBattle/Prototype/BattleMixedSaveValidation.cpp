@@ -136,6 +136,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   }
   if(Reserved[0]>AllyCredits||Reserved[1]>EnemyCredits)return Fail(TEXT("Overbooked replenishment resources"));
   for(const auto& Q:Area.AmmoTimers)if(!BySquad.Contains(Q.Key)||!Finite(Q.Value,0,10))return Fail(TEXT("Invalid home ammunition timer"));
+  for(const auto& Q:Area.SupplyStock){const auto* S=BySquad.FindRef(Q.Key);if(!S||S->SquadType!=BattleSquadType::Supply||Q.Value<0||Q.Value>100000)return Fail(TEXT("Invalid supply vehicle stock"));}
  }
  if(Squads.Num()>(Ruleset==TEXT("Area")?400:50)||SavedPlans.Num()!=Squads.Num()||TacticalSamples.Num()>Squads.Num()||NextSamples.Num()>Squads.Num()||TeamRetryAfter.Num()>Squads.Num()||DamageBuckets.Num()>Squads.Num()*7)return Fail(TEXT("Invalid mixed collection sizes"));
  for(const auto& S:Squads)

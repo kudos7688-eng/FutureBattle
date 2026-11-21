@@ -99,6 +99,8 @@ const BattleTactics::FAreaStrategyTuning& BattleTactics::AreaStrategy()
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaSPGKeep="),S.SPGKeep);S.SPGKeep=FMath::Clamp(S.SPGKeep,-1,10);
   // Trial -BattleAreaExoKeep=n (default -1 = UBattleTuning::AreaExoKeep, 0): armoured exoskeleton soldiers the AI keeps (the trial team with -BattleAreaTrialTeam).
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaExoKeep="),S.ExoKeep);S.ExoKeep=FMath::Clamp(S.ExoKeep,-1,10);
+  // Trial -BattleAreaSupplyKeep=n (default -1 = UBattleTuning::AreaSupplyKeep, 0): supply vehicles the AI keeps (the trial team with -BattleAreaTrialTeam).
+  FParse::Value(FCommandLine::Get(),TEXT("BattleAreaSupplyKeep="),S.SupplyKeep);S.SupplyKeep=FMath::Clamp(S.SupplyKeep,-1,10);
   FParse::Value(FCommandLine::Get(),TEXT("BattleAreaTrialTeam="),S.TrialTeam);S.TrialTeam=S.TrialTeam==0||S.TrialTeam==1?S.TrialTeam:-1;
   S.BaseShareLow=FMath::IsFinite(S.BaseShareLow)?FMath::Clamp(S.BaseShareLow,0.f,0.5f):0.f;
   S.BaseShareHigh=FMath::IsFinite(S.BaseShareHigh)?FMath::Clamp(S.BaseShareHigh,0.f,0.5f):0.3f;

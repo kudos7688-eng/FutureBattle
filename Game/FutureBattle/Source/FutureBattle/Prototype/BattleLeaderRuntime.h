@@ -37,6 +37,17 @@ struct FBattleSquadSummary
  EBattleSquadIntent Intent=EBattleSquadIntent::Unspecified;
  uint32 ProblemFlags=0;
 };
+// One row of the command UI squad list (2026-11-20): a group header (GroupID set, bGroupHeader) or a squad (GroupID = its group in the group view).
+struct FBattleSquadListRow
+{
+ FBattleSquadSummary Squad;
+ int32 GroupID=INDEX_NONE;
+ bool bGroupHeader=false;
+ bool bNewGroup=false; // the "+ new attack group" drop row at the end of the attack army tab (2026-11-21)
+ // Click identity: the squad ID, -(GroupID+1) for a group header, NewGroupKey for the new group row (never INDEX_NONE).
+ static constexpr int32 NewGroupKey=-1000000;
+ int32 Key() const { return bNewGroup?NewGroupKey:bGroupHeader?-(GroupID+1):Squad.SquadID; }
+};
 
 // Shared by Canvas and pointer input; no stale hit rectangles from the previous draw.
 struct FBattleSquadListLayout
@@ -45,8 +56,8 @@ struct FBattleSquadListLayout
  float Width=360, Height=0, RowHeight=56, Header=44;
  int32 VisibleRows=0;
  static FBattleSquadListLayout Make(FVector2D View,const UWorld* World);
- // Header controls (command UI 2026-11-16): five filter tabs and a sort button on the second header line.
- static constexpr int32 FilterCount=5; static constexpr float TabWidth=50, TabTop=23, TabHeight=18, SortWidth=86;
+ // Header controls (command UI 2026-11-16; tabs 2026-11-20): four tabs (front army, attack army, unassigned, all) and a sort button on the second header line.
+ static constexpr int32 FilterCount=4; static constexpr float TabWidth=64, TabTop=23, TabHeight=18, SortWidth=86;
  int32 FilterTabAt(FVector2D P) const {if(P.Y<Origin.Y+TabTop||P.Y>=Origin.Y+TabTop+TabHeight||P.X<Origin.X+6)return INDEX_NONE;const int32 I=FMath::FloorToInt((P.X-Origin.X-6)/TabWidth);return I<FilterCount?I:INDEX_NONE;}
  bool SortButtonAt(FVector2D P) const {return P.Y>=Origin.Y+TabTop&&P.Y<Origin.Y+TabTop+TabHeight&&P.X>=Origin.X+Width-SortWidth-8&&P.X<Origin.X+Width-8;}
  bool Contains(FVector2D P) const;
@@ -257,7 +268,9 @@ public:
  bool StepArtillery(int32 ID,double Now,bool bMoving,FVector& Direction);
  // Picks an aim point from Known (unit key -> known position): a cluster of at least ArtilleryMinCluster soldiers within range and no
  // own unit within the blast radius plus spread (bFriendlyHeld: a candidate was refused for that). Then the enemy home if seen.
- bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey=nullptr,bool bTeamClusters=false,const TMap<int32,uint8>* KnownTypes=nullptr);
+ bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey=nullptr,bool bTeamClusters=false,double Now=0.,const TMap<int32,uint8>* KnownTypes=nullptr);
+ TMap<int32,int32> ArtillerySupportSquad; // group fire support: the own squad each gun last fired for (log on change; not saved)
+ int64 ArtilleryGroupAims=0;
  bool AllyNear(int32 Team,const FVector& At,double Radius) const;
  // Launches one shell at Aim (spread applied, flight time Distance / shell speed). Consumes mortar ammunition or loads the gun.
  bool FireArtillery(int32 ID,const FVector& Aim,double Now);
@@ -478,6 +491,16 @@ public:
  // last 5 s does not wait for the shared 2-per-frame cover-search slot (own cap of 4 per frame), and searches again 2 s (not 5 s)
  // after a failed search - also when he was already waiting after one.
  static bool CoverPriorityEnabled();
+ // Trial -BattleHitReveal=1 (default 0, 2026-11-21): a hit soldier who does not see the shooter checks the line toward him at once.
+ // Clear line: detection completes on the next scan. Blocked or out of sight: a remembered hint near the shot origin, its error
+ // 10% of the distance (never the exact position). Counts hit_reveal_* in the sight diagnostics.
+ static bool HitRevealEnabled();
+ void RevealShooter(int32 VictimID,int32 ShooterID,const FVector& From);
+ // Evaluation only (sight diagnostics on, behaviour unchanged, 2026-11-21): a hit soldier who does not see his shooter. Why each of the
+ // two lines (victim->shooter, shooter->victim) fails, using the same checks as CanSee (range, field of view, first blocking hit).
+ // Counts hitlos_* (direct trace, not added to the -BattleSightHitStats counters).
+ void DiagnoseHitSight(int32 VictimID,int32 ShooterID);
+ const TCHAR* SightBlockReason(int32 ObserverID,int32 TargetID,double& EyeZ,double& EndZ) const;
  bool CloseInThreat(int32 SquadID,FVector& Threat) const {const auto* P=Plans.Find(SquadID);if(!P||!P->bCloseIn)return false;Threat=P->CloseInAt;return true;}
  void ClearCloseIn(int32 SquadID){if(auto* P=Plans.Find(SquadID)){P->bCloseIn=false;P->FarSince=0;}}
  // Trial -BattleArrivalThreat=1 (default 0): a sector squad picks its arrival cover places against the known enemy nearest

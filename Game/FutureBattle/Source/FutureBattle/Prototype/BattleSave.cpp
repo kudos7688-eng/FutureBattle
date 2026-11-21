@@ -236,6 +236,11 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
    E.Avoid=G.Avoid;E.AvoidRemaining=double(G.AvoidUntil)-double(Elapsed);E.StartLiving=G.StartLiving;E.StartStrength=G.StartStrength;
    E.StallPoint=G.StallPoint;E.Stalls=G.Stalls;E.bOpened=G.bOpened;E.bArrived=G.bArrived;
    E.ArrivalAge=double(Elapsed)-double(G.ArrivedAt);E.Extensions=G.Extensions;
+   E.Kind=G.Kind;E.SurpriseRow=G.SurpriseRow;E.SurpriseBridgeStage=G.SurpriseBridgeStage;E.SurpriseBridgeLeader=G.SurpriseBridgeLeader;
+   E.SurpriseBridgeAge=double(Elapsed)-double(G.SurpriseBridgeAt);E.SurpriseNextCol=G.SurpriseNextCol;
+   E.SurpriseBridgeEntry=G.SurpriseBridgeEntry;E.SurpriseBridgeExit=G.SurpriseBridgeExit;E.SurpriseBridgeGoal=G.SurpriseBridgeGoal;
+   E.bSurpriseWaiting=G.SurpriseWaitAt>=0.f;E.SurpriseWaitAge=E.bSurpriseWaiting?double(Elapsed)-double(G.SurpriseWaitAt):0.;
+   E.SurpriseLogRemaining=double(G.SurpriseLogAt)-double(Elapsed);E.SurpriseEndRemaining=double(G.SurpriseEndAt)-double(Elapsed);
    Save->SavedGroups.Add(Pair.Key,E);
   }
   for(const auto& Pair:CarChoices)
@@ -407,7 +412,13 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
    G.PhaseAt=float(double(Elapsed)-E.PhaseAge);G.Rally=E.Rally;G.bPlayer=E.bPlayer;G.Roles=E.Roles;
    G.Avoid=E.Avoid;G.AvoidUntil=float(double(Elapsed)+E.AvoidRemaining);G.StartLiving=E.StartLiving;G.StartStrength=E.StartStrength;
    G.StallPoint=E.StallPoint;G.Stalls=E.Stalls;G.bOpened=E.bOpened;G.bArrived=E.bArrived;
-   G.ArrivedAt=float(double(Elapsed)-E.ArrivalAge);G.Extensions=E.Extensions;RestoredGroups.Add(Pair.Key,MoveTemp(G));
+   G.ArrivedAt=float(double(Elapsed)-E.ArrivalAge);G.Extensions=E.Extensions;
+   G.Kind=E.Kind;G.SurpriseRow=E.SurpriseRow;G.SurpriseBridgeStage=E.SurpriseBridgeStage;G.SurpriseBridgeLeader=E.SurpriseBridgeLeader;
+   G.SurpriseBridgeAt=float(double(Elapsed)-E.SurpriseBridgeAge);G.SurpriseNextCol=E.SurpriseNextCol;
+   G.SurpriseBridgeEntry=E.SurpriseBridgeEntry;G.SurpriseBridgeExit=E.SurpriseBridgeExit;G.SurpriseBridgeGoal=E.SurpriseBridgeGoal;
+   G.SurpriseWaitAt=E.bSurpriseWaiting?float(double(Elapsed)-E.SurpriseWaitAge):-1.f;
+   G.SurpriseLogAt=float(double(Elapsed)+E.SurpriseLogRemaining);G.SurpriseEndAt=float(double(Elapsed)+E.SurpriseEndRemaining);
+   RestoredGroups.Add(Pair.Key,MoveTemp(G));
   }
   for(const auto& Pair:Save->SavedCarChoices)
   {
@@ -421,6 +432,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
  IntelViews[0]=IntelViews[1]=FAreaIntelView();
  FireReveals[0].Reset();FireReveals[1].Reset();
  if(BattleTactics::ArtilleryPosts())GenerateArtilleryPosts();
+ ClampFrontTimers();
 	Strikes = Save->Strikes; SupportCooldown[0] = Save->AllySupportCooldown; SupportCooldown[1] = Save->EnemySupportCooldown; SupportUsed[0] = Save->AllySupportUsed; SupportUsed[1] = Save->EnemySupportUsed;
 	Mode->bCombatPaused = Save->bPaused; Mode->bBattleEnded = Phase == EBattleMatchPhase::Finished; Mode->Result = Save->Result; Mode->CombatStartsAt = Now;
 	for (int32 Index = 0; Index < Spawned.Num(); ++Index)

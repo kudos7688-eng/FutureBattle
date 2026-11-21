@@ -87,6 +87,20 @@ struct FBattleSavedGroup
  UPROPERTY() bool bArrived=false;
  UPROPERTY() double ArrivalAge=0;
  UPROPERTY() int32 Extensions=0;
+ // Front-holding and surprise groups (groupui 2026-11-21; additive, older snapshots load as attack groups). Times as offsets from Elapsed.
+ UPROPERTY() uint8 Kind=0;
+ UPROPERTY() int32 SurpriseRow=0;
+ UPROPERTY() uint8 SurpriseBridgeStage=0;
+ UPROPERTY() int32 SurpriseBridgeLeader=INDEX_NONE;
+ UPROPERTY() double SurpriseBridgeAge=0;
+ UPROPERTY() int32 SurpriseNextCol=-1;
+ UPROPERTY() FVector SurpriseBridgeEntry=FVector::ZeroVector;
+ UPROPERTY() FVector SurpriseBridgeExit=FVector::ZeroVector;
+ UPROPERTY() FVector SurpriseBridgeGoal=FVector::ZeroVector;
+ UPROPERTY() bool bSurpriseWaiting=false;
+ UPROPERTY() double SurpriseWaitAge=0;
+ UPROPERTY() double SurpriseLogRemaining=0;
+ UPROPERTY() double SurpriseEndRemaining=0;
 };
 
 USTRUCT()

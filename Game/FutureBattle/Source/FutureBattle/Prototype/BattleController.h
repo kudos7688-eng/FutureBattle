@@ -11,6 +11,7 @@ class UInputAction;
 class UInputMappingContext;
 class ABattleUnit;
 struct FBattleSquadSummary;
+struct FBattleSquadListRow;
 struct FInputActionValue;
 
 UCLASS()
@@ -21,6 +22,9 @@ public:
 	ABattleCameraPawn();
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> Camera;
 	void Zoom(float Delta);
+	// Wheel zoom: scales the height by a factor (>1 out, <1 in), so the step grows with height and
+	// the whole range (1000 .. CameraMaxHeight, up to 160000) takes about 20 ticks instead of ~260.
+	void ZoomScale(float Factor);
 };
 
 // Command UI notification log (ROADMAP 2026-11-15 command UI design): events the player's side has observed, newest first,
@@ -71,11 +75,20 @@ public:
  int32 SquadListScroll=0;
  bool SquadPanelAtPointer() const;
  void ScrollSquadList(int32 Delta);
- // Squad list view (command UI 2026-11-16): filter 0 all, 1 engaged, 2 home supply, 3 other active, 4 stopped;
- // sort 0 squad number, 1 heaviest losses first, 2 by nearest objective. The HUD and clicks both use SquadListRows().
+ // Squad list view (command UI 2026-11-16; tabs by group 2026-11-20, user proposal): filter 0 groups (each own group as a header row
+ // followed by its active squads), 1 ungrouped active squads, 2 stopped squads, 3 all squads. Sort (inside each group) 0 squad number,
+ // 1 heaviest losses first, 2 by nearest objective. The HUD and clicks both use SquadListRows(). Clicking a group header selects the group.
  uint8 SquadFilter=0, SquadSort=0;
- uint8 SquadCategory(const FBattleSquadSummary& Row) const;
- TArray<FBattleSquadSummary> SquadListRows() const;
+ uint8 SquadCategory(const FBattleSquadSummary& Row) const; // 0 front army, 1 attack army (other own groups), 2 unassigned, 3 stopped (never listed)
+ // The squad being dragged from the list toward an army tab (2026-11-21), or INDEX_NONE.
+ int32 DraggedSquadID() const { return bSquadListPress&&PressedSquadID>=0?PressedSquadID:INDEX_NONE; }
+ // The squads a drag carries: every selected own squad when the dragged one is selected, else that squad alone.
+ TArray<int32> DraggedSquads() const;
+ TArray<FBattleSquadListRow> SquadListRows() const;
+ void SortSquadRows(TArray<FBattleSquadSummary>& Rows) const;
+ // Own groups shown in the group tab, by group number.
+ TArray<int32> OwnGroupIDs() const;
+ void SelectGroup(int32 GroupID);
  double LastRowClickTime=-10; int32 LastRowClickID=INDEX_NONE;
  void SelectSquadListRow(FVector2D Position);
  int32 SquadListIDAt(FVector2D Position) const;

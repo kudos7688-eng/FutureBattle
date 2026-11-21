@@ -34,8 +34,8 @@
 
 FBattleCommandBarLayout FBattleCommandBarLayout::Make(FVector2D View,const UWorld* World,bool bPad)
 {
- static const TCHAR* const KeyNames[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("小隊を購入 [2]"), TEXT("重装歩兵 [3]"), TEXT("偵察組 [4]"), TEXT("対戦車班 [5]"), TEXT("戦車 [6]"), TEXT("装甲車 [7]"), TEXT("迫撃砲班 [8]"), TEXT("自走砲 [9]"), TEXT("外骨格 [0]"), TEXT("補給班 [-]") };
- static const TCHAR* const PadNames[] = { TEXT("移動 [X]"), TEXT("攻撃移動 [Y]"), TEXT("防衛 [RB]"), TEXT("停止 [B]"), TEXT("手動指揮 [十字↑]"), TEXT("AIに委任 [十字↓]"), TEXT("小隊を購入 [十字←]"), TEXT("重装歩兵 [Aでクリック]"), TEXT("偵察組 [Aでクリック]"), TEXT("対戦車班 [Aでクリック]"), TEXT("戦車 [Aでクリック]"), TEXT("装甲車 [Aでクリック]"), TEXT("迫撃砲班 [Aでクリック]"), TEXT("自走砲 [Aでクリック]"), TEXT("外骨格 [Aでクリック]"), TEXT("補給班 [Aでクリック]") };
+ static const TCHAR* const KeyNames[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("小隊を購入 [2]"), TEXT("重装歩兵 [3]"), TEXT("偵察組 [4]"), TEXT("対戦車班 [5]"), TEXT("戦車 [6]"), TEXT("装甲車 [7]"), TEXT("迫撃砲班 [8]"), TEXT("自走砲 [9]"), TEXT("外骨格 [0]"), TEXT("補給車 [-]") };
+ static const TCHAR* const PadNames[] = { TEXT("移動 [X]"), TEXT("攻撃移動 [Y]"), TEXT("防衛 [RB]"), TEXT("停止 [B]"), TEXT("手動指揮 [十字↑]"), TEXT("AIに委任 [十字↓]"), TEXT("小隊を購入 [十字←]"), TEXT("重装歩兵 [Aでクリック]"), TEXT("偵察組 [Aでクリック]"), TEXT("対戦車班 [Aでクリック]"), TEXT("戦車 [Aでクリック]"), TEXT("装甲車 [Aでクリック]"), TEXT("迫撃砲班 [Aでクリック]"), TEXT("自走砲 [Aでクリック]"), TEXT("外骨格 [Aでクリック]"), TEXT("補給車 [Aでクリック]") };
  static_assert(UE_ARRAY_COUNT(KeyNames) == FBattleCommandBarLayout::Count && UE_ARRAY_COUNT(PadNames) == FBattleCommandBarLayout::Count, "one label per command button");
  FBattleCommandBarLayout Layout;
  const float Left=34.f, Right=FMath::Max(Left+1.f,float(View.X)-34.f), Available=Right-Left;
@@ -85,6 +85,12 @@ void ABattleCameraPawn::Zoom(float Delta)
 	const FVector Current = Camera->GetRelativeLocation();
 	const float Height = FMath::Clamp(Current.Z + Delta, 1000.f, BattleFieldLayout::Of(GetWorld()).CameraMaxHeight);
 	Camera->SetRelativeLocation(FVector(-Height * .65f, 0, Height));
+}
+
+void ABattleCameraPawn::ZoomScale(float Factor)
+{
+	const float Current = Camera->GetRelativeLocation().Z;
+	Zoom(Current * Factor - Current);
 }
 
 void ABattleController::BeginPlay()
@@ -637,7 +643,32 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
    }
    if(Params.Event==IE_Pressed && Over) { bSquadListPress=true; bTriggerHeld=false; FVector2D P; PressedSquadID=GetPointerPosition(P)?SquadListIDAt(P):INDEX_NONE; return true; }
    if(Params.Event==IE_Released && (bSquadListPress || Over))
-   { if(bSquadListPress && Over) { FVector2D P; if(GetPointerPosition(P) && PressedSquadID!=INDEX_NONE && SquadListIDAt(P)==PressedSquadID) SelectSquadListRow(P); } bSquadListPress=false; bTriggerHeld=false; return true; }
+   {
+    if(bSquadListPress && Over)
+    {
+     FVector2D P; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH); const auto Layout=FBattleSquadListLayout::Make(FVector2D(ViewW,ViewH),GetWorld());
+     // Squads dropped on an army tab (front army, attack army, unassigned), a group header or the "+ new attack group" row move there
+     // (command UI armies 2026-11-21). A drag carries every selected squad when the dragged one is selected.
+     const bool bPointer=GetPointerPosition(P);
+     const int32 Tab=bPointer?Layout.FilterTabAt(P):INDEX_NONE;
+     const int32 Under=bPointer?SquadListIDAt(P):INDEX_NONE;
+     auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+     int32 Army=-1,Target=INDEX_NONE;FString Where;
+     if(Tab>=0 && Tab<=2){static const TCHAR* const ArmyNames[]={TEXT("前線軍"),TEXT("攻撃軍"),TEXT("未所属")};Army=Tab==0?1:Tab==1?2:0;Where=ArmyNames[Tab];}
+     else if(Under==FBattleSquadListRow::NewGroupKey){Army=2;Target=UBattleMatch::NewAttackGroup;Where=TEXT("新しい攻撃群");}
+     else if(Under!=INDEX_NONE && Under<0 && Under!=PressedSquadID)
+      if(const auto* G=Match->Groups.Find(-Under-1)){Army=G->Kind==1?1:2;Target=G->Kind==1?INDEX_NONE:G->ID;Where=G->Kind==1?TEXT("前線軍"):FString::Printf(TEXT("群%d"),G->ID);}
+     if(Army>=0 && PressedSquadID>=0)
+     {
+      int32 Moved=0;
+      for(int32 SID:DraggedSquads())
+       if(Match->AssignArmy(SID,Army,Target)){++Moved;if(Target==UBattleMatch::NewAttackGroup)Target=Match->GroupOf(SID);}
+      if(Moved) ShowNotice(FString::Printf(TEXT("%d部隊を%sへ移しました"),Moved,*Where));
+     }
+     else if(PressedSquadID!=INDEX_NONE && Under==PressedSquadID) SelectSquadListRow(P);
+    }
+    bSquadListPress=false; bTriggerHeld=false; return true;
+   }
   }
   if(Over && Params.Key==EKeys::RightMouseButton) return true;
  }
@@ -875,8 +906,8 @@ void ABattleController::UpdatePlayerAmmo(ABattleUnit* Unit)
 }
 void ABattleController::JumpPressed() { if (ABattleUnit* U = Cast<ABattleUnit>(GetPawn())) if (U->IsAlive() && !TryVault(U)) U->Jump(); }
 void ABattleController::JumpReleased() { if (ABattleUnit* U = Cast<ABattleUnit>(GetPawn())) U->StopJumping(); }
-void ABattleController::ZoomIn() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->Zoom(BattleFieldLayout::IsLarge(GetWorld()) ? -600 : -220); }
-void ABattleController::ZoomOut() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->Zoom(BattleFieldLayout::IsLarge(GetWorld()) ? 600 : 220); }
+void ABattleController::ZoomIn() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->ZoomScale(1.f / 1.25f); }
+void ABattleController::ZoomOut() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->ZoomScale(1.25f); }
 void ABattleController::RestartBattle() { UGameplayStatics::OpenLevel(this, FName(*GetWorld()->GetName()), true); }
 void ABattleController::ToggleCombat()
 {
@@ -900,6 +931,15 @@ void ABattleController::PlayerTick(float DeltaTime)
 	UpdateGamepad(DeltaTime);
 	UpdatePathDraw();
 	UpdateVault(DeltaTime);
+	// Shift + moving the pointer over the squad list adds every squad passed over to the selection (user request 2026-11-21).
+	if (bTactical && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift)) && SquadPanelAtPointer())
+	{
+		FVector2D P;
+		if (GetPointerPosition(P)) if (const int32 ID = SquadListIDAt(P); ID >= 0)
+			if (const auto* S = GetWorld()->GetSubsystem<UBattleState>()->FindSquad(ID))
+				if (auto* L = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->CanSelectLeader(S->LeaderUnitID))
+					if (ABattleUnit* A = L->Actor(S->LeaderUnitID)) Selected.AddUnique(A);
+	}
 	Selected.RemoveAll([](const TObjectPtr<ABattleUnit>& Unit) { return !Unit || !Unit->IsAlive(); });
 	if (bTactical) bAimHeld = false;
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
@@ -950,20 +990,39 @@ void ABattleController::SelectSquadListRow(FVector2D P)
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); int32 W,H; GetViewportSize(W,H);
  const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H),GetWorld()).RowAt(P); ScrollSquadList(0);
  const auto Rows=SquadListRows(); if(R==INDEX_NONE || !Rows.IsValidIndex(R+SquadListScroll)) return;
- const auto& Row=Rows[R+SquadListScroll];
- // Double-click (two clicks on the same row within 0.4 s): move the tactical camera to the squad leader.
+ const auto& Entry=Rows[R+SquadListScroll]; const auto& Row=Entry.Squad;
+ // Double-click (two clicks on the same row within 0.4 s): move the tactical camera to the squad leader (a group: its leaders' centre).
  { const double Now=GetWorld()->GetRealTimeSeconds();
-   if(LastRowClickID==Row.SquadID && Now-LastRowClickTime<.4 && TacticalPawn){const FVector Where=L->Position(Row.LeaderUnitID);TacticalPawn->SetActorLocation(FVector(Where.X,Where.Y,TacticalPawn->GetActorLocation().Z));}
-   LastRowClickID=Row.SquadID; LastRowClickTime=Now; }
- if(L->CanSelectLeader(Row.LeaderUnitID)) SetSelection(L->Actor(Row.LeaderUnitID));
+   if(LastRowClickID==Entry.Key() && Now-LastRowClickTime<.4 && TacticalPawn)
+   {
+    FVector Where=FVector::ZeroVector; int32 N=0;
+    if(Entry.bGroupHeader){ for(const auto& S:L->Summaries()) if(S.bActive && GetWorld()->GetSubsystem<UBattleMatch>()->GroupOf(S.SquadID)==Entry.GroupID){Where+=L->Position(S.LeaderUnitID);++N;} if(N) Where/=N; }
+    else { Where=L->Position(Row.LeaderUnitID); N=1; }
+    if(N) TacticalPawn->SetActorLocation(FVector(Where.X,Where.Y,TacticalPawn->GetActorLocation().Z));
+   }
+   LastRowClickID=Entry.Key(); LastRowClickTime=Now; }
+ if(Entry.bNewGroup) { ShowNotice(TEXT("部隊をこの行へドラッグすると、新しい攻撃群を作ります")); return; }
+ if(Entry.bGroupHeader) { SelectGroup(Entry.GroupID); return; }
+ // Shift + click adds the squad to the selection (2026-11-21).
+ if(L->CanSelectLeader(Row.LeaderUnitID) && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift))) { if(ABattleUnit* A=L->Actor(Row.LeaderUnitID)) Selected.AddUnique(A); }
+ else if(L->CanSelectLeader(Row.LeaderUnitID)) SetSelection(L->Actor(Row.LeaderUnitID));
  else ShowNotice(Row.bActive?TEXT("この隊長は操作不可です"):TEXT("この部隊は機能停止しています"));
+}
+
+TArray<int32> ABattleController::DraggedSquads() const
+{
+ TArray<int32> Out; const int32 ID=DraggedSquadID(); if(ID==INDEX_NONE) return Out;
+ bool bInSelection=false; for(const ABattleUnit* U:Selected) if(U && U->IsAlive() && U->GetState()->Team==0) bInSelection|=U->GetState()->SquadID==ID;
+ if(bInSelection) { for(const ABattleUnit* U:Selected) if(U && U->IsAlive() && U->GetState()->Team==0) Out.AddUnique(U->GetState()->SquadID); }
+ else Out.Add(ID);
+ return Out;
 }
 
 int32 ABattleController::SquadListIDAt(FVector2D P) const
 {
  int32 W,H; GetViewportSize(W,H);
  const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H),GetWorld()).RowAt(P); const auto Rows=SquadListRows();
- return R!=INDEX_NONE && Rows.IsValidIndex(R+SquadListScroll)?Rows[R+SquadListScroll].SquadID:INDEX_NONE;
+ return R!=INDEX_NONE && Rows.IsValidIndex(R+SquadListScroll)?Rows[R+SquadListScroll].Key():INDEX_NONE;
 }
 
 int32 ABattleController::SelectedRouteLane() const
@@ -1118,21 +1177,23 @@ void ABattleController::UpdateNoticeLog(bool bForce)
  {bEnemyHomeWeakNoted=true;PushNotice(5,FString::Printf(TEXT("敵本拠地の耐久が低い（%.0f）"),Match->Area.KnownEnemyBaseHP[0]),Match->AreaHome(1));}
 }
 
-// ---- Squad list view (command UI): filters, sort, double-click. Own squads' state only.
+// ---- Squad list view (command UI): tabs by group, sort, double-click. Own squads' state and own groups only.
 uint8 ABattleController::SquadCategory(const FBattleSquadSummary& Row) const
 {
- if(!Row.bActive) return 4;
- auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(Row.SquadID);
- if(S && S->TacticalPlan.Action==EBattleSquadTactic::Recover && S->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY"))) return 2;
- if(L->SquadTargetID(Row.SquadID)!=INDEX_NONE || (S && (S->TacticalPlan.Action==EBattleSquadTactic::Engage || S->TacticalPlan.Action==EBattleSquadTactic::Support || S->TacticalPlan.Action==EBattleSquadTactic::Flank || S->TacticalPlan.Action==EBattleSquadTactic::Retreat))) return 1;
- return 3;
+ // Armies (2026-11-21, user request): stopped squads (leader lost, not commandable) are no longer listed.
+ if(!Row.bActive) return 3;
+ const int32 Army=GetWorld()->GetSubsystem<UBattleMatch>()->ArmyOf(Row.SquadID);
+ return Army==1?0:Army==2?1:2;
 }
-TArray<FBattleSquadSummary> ABattleController::SquadListRows() const
+TArray<int32> ABattleController::OwnGroupIDs() const
 {
- auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); TArray<FBattleSquadSummary> Rows;
- for(const auto& Row:L->Summaries()) if(SquadFilter==0 || SquadCategory(Row)==SquadFilter) Rows.Add(Row);
- if(SquadSort==0) return Rows;
- const auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ TArray<int32> IDs; for(const auto& G:GetWorld()->GetSubsystem<UBattleMatch>()->Groups) if(G.Value.Team==0) IDs.Add(G.Key);
+ IDs.Sort(); return IDs;
+}
+void ABattleController::SortSquadRows(TArray<FBattleSquadSummary>& Rows) const
+{
+ if(SquadSort==0) return;
+ auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); const auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  TMap<int32,float> Key;
  for(const auto& Row:Rows)
  {
@@ -1153,7 +1214,36 @@ TArray<FBattleSquadSummary> ABattleController::SquadListRows() const
   Key.Add(Row.SquadID,K);
  }
  Rows.StableSort([&Key](const FBattleSquadSummary& A,const FBattleSquadSummary& B){return Key[A.SquadID]<Key[B.SquadID];});
- return Rows;
+}
+TArray<FBattleSquadListRow> ABattleController::SquadListRows() const
+{
+ auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); TArray<FBattleSquadListRow> Out;
+ auto Append=[&Out](const TArray<FBattleSquadSummary>& Rows,int32 Group){for(const auto& R:Rows){FBattleSquadListRow E;E.Squad=R;E.GroupID=Group;Out.Add(E);}};
+ if(SquadFilter<=1)
+ {
+  // Front army tab: the front-holding group; attack army tab: every other own group. Each: a header row, then its active squads.
+  for(int32 GID:OwnGroupIDs())
+  {
+   if((Match->Groups[GID].Kind==1)!=(SquadFilter==0)) continue;
+   FBattleSquadListRow H; H.GroupID=GID; H.bGroupHeader=true; Out.Add(H);
+   TArray<FBattleSquadSummary> Rows; for(const auto& Row:L->Summaries()) if(Row.bActive && Match->GroupOf(Row.SquadID)==GID) Rows.Add(Row);
+   SortSquadRows(Rows); Append(Rows,GID);
+  }
+  if(SquadFilter==1){ FBattleSquadListRow N; N.bNewGroup=true; Out.Add(N); } // the "+ new attack group" drop row
+  return Out;
+ }
+ TArray<FBattleSquadSummary> Rows;
+ for(const auto& Row:L->Summaries()) if(Row.bActive && (SquadFilter==3 || SquadCategory(Row)==SquadFilter)) Rows.Add(Row);
+ SortSquadRows(Rows); Append(Rows,INDEX_NONE);
+ return Out;
+}
+void ABattleController::SelectGroup(int32 GroupID)
+{
+ auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>();
+ if(!Match || !Mode || !Match->Groups.Contains(GroupID)) return;
+ Selected.Reset();
+ for(ABattleUnit* Unit:Mode->Units) if(Unit && Unit->IsAlive() && Unit->GetState()->Team==0 && LeaderSelectable(Unit) && Match->GroupOf(Unit->GetState()->SquadID)==GroupID) Selected.AddUnique(Unit);
+ ShowNotice(Selected.Num()>0?FString::Printf(TEXT("群%d を選択：%d 部隊"),GroupID,Selected.Num()):FString::Printf(TEXT("群%d に操作できる隊長がいません"),GroupID));
 }
 
 // ---- Command bar (command UI): each button calls the same action as its key.
@@ -1176,7 +1266,7 @@ void ABattleController::PressCommandButton(int32 Index)
  case 12: HireMortar(); break; // area battle: mortar team
  case 13: HireSPGun(); break; // area battle: self-propelled gun
  case 14: HireExo(); break; // area battle: armoured exoskeleton soldier
- case 15: HireSupply(); break; // area battle: supply team
+ case 15: HireSupply(); break; // area battle: supply vehicle
  default: break;
  }
 }
@@ -1348,7 +1438,7 @@ void ABattleController::HireMortar()
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
 	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Mortar); ShowNotice(Match->LastMessage);
 }
-// Area battle: the - key buys a supply team (squad type 9, at most AreaSupplyLimit per team).
+// Area battle: the - key buys a supply vehicle (squad type 9, at most AreaSupplyLimit per team; BattleSupplyCar.cpp).
 void ABattleController::HireSupply()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();

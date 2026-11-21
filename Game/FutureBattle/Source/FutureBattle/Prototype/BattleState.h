@@ -51,9 +51,11 @@ namespace BattleSquadType
  int32 LauncherRounds(uint8 Type); // anti-tank rounds of the second weapon (0 = none)
  int32 ScoreCount(uint8 Type);     // how many soldiers one living member counts for in the final score (1 for all but the exoskeleton)
  float SpeedAt(uint8 Type,const UWorld* World,const FVector& Position); // scale of UBattleTuning::MoveSpeed
- // Supply team (2026-11-19, user request): 3 riflemen. Squads of its team whose leader stays within UBattleTuning::SupplyTeamRadius of
- // its living leader get the home ammunition refill (UBattleMatch::UpdateArea). Cost AreaSupplyCost, at most AreaSupplyLimit per team.
- // The AI does not buy it.
+ // Supply vehicle (type 9; 2026-11-19 a 3-soldier supply team, 2026-11-20 replaced by one vehicle, user decision: a vehicle limits where
+ // it can go and makes it a target). The armoured car's vehicle values and machine gun (self-defence). It carries SupplyCarStock
+ // rounds: squads of its team whose leader stays within UBattleTuning::SupplyTeamRadius of it get the home ammunition refill
+ // (UBattleMatch::UpdateArea) while it has stock left; it refills at home (BattleSupplyCar.cpp). Cost AreaSupplyCost, at most
+ // AreaSupplyLimit per team. The AI keeps AreaSupplyKeep of them (trial -BattleAreaSupplyKeep=n; default 0 until measured).
 }
 
 UENUM(BlueprintType)
@@ -365,10 +367,19 @@ public:
 	// goes home to be repaired like a vehicle. The AI keeps AreaExoKeep of them (trial -BattleAreaExoKeep=n; default 0 until measured).
 	UPROPERTY(Config, EditAnywhere) int32 AreaExoCost = 30;
 	UPROPERTY(Config, EditAnywhere) int32 AreaExoLimit = 3;
-	// Supply team (squad type 9): see BattleSquadType.
+	// Supply vehicle (squad type 9): see BattleSquadType and BattleSupplyCar.cpp.
 	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyCost = 10;
 	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyLimit = 2;
 	UPROPERTY(Config, EditAnywhere) float SupplyTeamRadius = 3000.f;
+	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyKeep = 0;
+	// Rounds the vehicle carries (an empty 8-soldier rifle squad takes 720 of reserve ammunition); below SupplyCarRestockRatio of it the
+	// vehicle drives home and waits there until full again.
+	UPROPERTY(Config, EditAnywhere) int32 SupplyCarStock = 2400;
+	UPROPERTY(Config, EditAnywhere) float SupplyCarRestockRatio = .15f;
+	// How far short of its post (on the own side) the vehicle stops; further back in 20 m steps while a known anti-tank soldier reaches it.
+	UPROPERTY(Config, EditAnywhere) float SupplyCarBack = 4000.f;
+	// A squad short of ammunition drives to a supply vehicle of its team with stock within this distance instead of going home.
+	UPROPERTY(Config, EditAnywhere) float FieldSupplyRange = 20000.f;
 	UPROPERTY(Config, EditAnywhere) int32 AreaExoKeep = 0;
 	UPROPERTY(Config, EditAnywhere) float ExoHealthScale = 2.f;
 	UPROPERTY(Config, EditAnywhere) float ExoArmorSmallArms = .3f;
@@ -641,7 +652,7 @@ public:
 	UPROPERTY(Config, EditAnywhere) float SupplyAwayRatio = 1.f;
 	UPROPERTY(Config, EditAnywhere) float SupplyHealPerSecond = 0.f;
 	UPROPERTY(Config, EditAnywhere) float SupplyResumeHealthRatio = 0.f;
-	// Area new-squad hiring (adopted 2026-11-14; -BattleAreaHire=0 disables): a team with fewer than AreaMaxActiveSquads (25) active squads may buy
+	// Area new-squad hiring (adopted 2026-11-14; -BattleAreaHire=0 disables): a team with fewer than AreaMaxActiveSquads (30 since 2026-11-20; was 25) active squads may buy
 	// a fresh RifleMembers-soldier regular squad at home for AreaSquadCost resources. AI buys only when resources minus pending
 	// replenishments >= AreaSquadCost + AreaHireReserve.
 	// Rifle squad size (2026-11-19 user decision: 10 -> 8, cost 15 -> 12; area matches only, other modes keep 10). -BattleRifleMembers= overrides per run (2..10).
@@ -651,7 +662,7 @@ public:
 	UPROPERTY(Config, EditAnywhere) int32 AreaHireReserve = 0;
 	// Active squad limit per team for hiring (player and AI, all squad types). Default 25 = the starting squad count.
 	// Trial -BattleAreaMaxSquads=N (1..100) overrides per run (2026-11-19: preparing a 40-squad trial after the 8-soldier rifle squad).
-	UPROPERTY(Config, EditAnywhere) int32 AreaMaxActiveSquads = 25;
+	UPROPERTY(Config, EditAnywhere) int32 AreaMaxActiveSquads = 30;
 	// AI purchase pacing (0 = off, the first implementation): at least AreaHireIntervalSeconds between a team's AI purchases,
 	// and no AI purchase in the last AreaHireStopSeconds of the time limit. Trials: -BattleAreaHireReserve= / -Interval= / -Stop=.
 	UPROPERTY(Config, EditAnywhere) float AreaHireIntervalSeconds = 0.f;
@@ -785,6 +796,8 @@ public:
 	bool ApplyDamageFrom(int32 ID, int32 AttackingTeam, float Damage, const FVector& From, int32 KillerID = INDEX_NONE, EBattleKillKind Kind = EBattleKillKind::Unknown);
 	// Where the hit being applied right now came from (only inside ApplyDamageFrom; the sector AI's -BattleShotDirection).
 	bool PendingHitSource(FVector& Out) const { if (!bPendingHitFrom) return false; Out = PendingHitFrom; return true; }
+	// Who fired the hit being applied right now (only inside ApplyDamageFrom; INDEX_NONE when unknown). -BattleHitReveal.
+	int32 PendingHitShooter() const { return PendingKiller; }
 	// Hit direction (2026-11-19, display only): the HUD sets HitWatchID to the unit the player controls every frame; hits on
 	// that unit are kept here (newest last, at most 6). Hits through ApplyDamage alone have no known source.
 	int32 HitWatchID = INDEX_NONE;

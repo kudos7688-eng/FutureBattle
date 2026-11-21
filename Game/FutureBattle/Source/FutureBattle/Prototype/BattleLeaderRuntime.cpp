@@ -1425,6 +1425,75 @@ bool UBattleLeaderRuntime::NoCoverFallbackEnabled()
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleNoCoverFallback="),V);return V!=0;}();
  return bOn;
 }
+bool UBattleLeaderRuntime::HitRevealEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleHitReveal="),V);return V!=0;}();
+ return bOn;
+}
+void UBattleLeaderRuntime::RevealShooter(int32 ID,int32 Shooter,const FVector& From)
+{
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* V=Store->Find(ID);const auto* S=Store->Find(Shooter);
+ if(!V||!S||!V->IsAlive()||!S->IsAlive()||V->Team==S->Team)return;
+ auto* Perc=GetWorld()->GetSubsystem<UBattlePerception>();const double Now=GetWorld()->GetTimeSeconds();
+ if(const auto* C=Perc->FindContact(ID,Shooter);C && C->bVisible){SightExperiment.Cover(TEXT("hit_reveal_already_seen"));return;}
+ if(CanSee(ID,Shooter)){Perc->RevealShooter(ID,Shooter,Now,V->Perception.DetectionSeconds);SightExperiment.Cover(TEXT("hit_reveal_los"));return;}
+ // Deterministic error (no random stream consumed): direction from the pair and the frame, length 10% of the distance.
+ const FVector Me=Position(ID);const double Dist=FVector::Dist2D(Me,From);
+ const uint32 H=HashCombine(HashCombine(GetTypeHash(ID),GetTypeHash(Shooter)),GetTypeHash(uint32(GFrameCounter)));
+ const double Angle=double(H%3600u)*(PI/1800.);
+ const FVector Guess=From+FVector(FMath::Cos(Angle),FMath::Sin(Angle),0.)*(.1*Dist);
+ Perc->AddHint(ID,Shooter,Guess,Now,.4f);SightExperiment.Cover(TEXT("hit_reveal_hint"));
+}
+const TCHAR* UBattleLeaderRuntime::SightBlockReason(int32 Obs,int32 Tgt,double& EyeZ,double& EndZ) const
+{
+ const auto C=Sight(Obs);const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* T=Store->Find(Tgt);EyeZ=C.Eye.Z;EndZ=EyeZ;
+ if(!C.bAlive||!T||!T->IsAlive()||!Bodies.Contains(Tgt))return TEXT("gone");
+ const FVector P=Position(Tgt),D=(P-C.Position).GetSafeNormal2D();
+ if(FVector::DistSquared(P,C.Position)>(IsVehicle(Tgt)?FMath::Max(C.RangeSquared,FMath::Square(VehicleSpotRange())):C.RangeSquared))return TEXT("range");
+ if(!C.bOmnidirectional && !D.IsNearlyZero() && FVector::DotProduct(C.Forward,D)+1.e-6<C.HalfAngleCos)return TEXT("fov");
+ FVector End;if(!PrepareSightTrace(C,Tgt,End))return TEXT("other_check");EndZ=End.Z;
+ FHitResult Hit;GetWorld()->LineTraceSingleByChannel(Hit,C.Eye,End,ECC_Visibility,C.Query);
+ if(SightHitVisible(Hit,Tgt))return TEXT("clear");
+ if(const int32* ID=HitIDs.Find(Hit.GetComponent()))
+ {
+  if(IsVehicle(*ID))return TEXT("vehicle");
+  const auto* B=Store->Find(*ID);const auto* O=Store->Find(Obs);
+  return B&&O&&B->Team==O->Team?TEXT("own_side_body"):TEXT("target_side_body");
+ }
+ const UPrimitiveComponent* HC=Hit.GetComponent();const AActor* A=Hit.GetActor();
+ if(!HC)return TEXT("other");
+ if(A&&A->ActorHasTag(TEXT("BattleConcealment")))return TEXT("concealment");
+ if(HC->GetClass()->GetName().Contains(TEXT("Landscape"))||SightHitActorGroup(A).Contains(TEXT("Floor")))return TEXT("floor");
+ if(A&&(Cast<ABattleUnit>(A)||A==DisplayHost.Get()))return TEXT("unit_part");
+ if(HC->IsA<UInstancedStaticMeshComponent>())return TEXT("instanced_mesh");
+ if(HC->IsA<UStaticMeshComponent>())return TEXT("static_mesh");
+ return TEXT("other");
+}
+void UBattleLeaderRuntime::DiagnoseHitSight(int32 ID,int32 Shooter)
+{
+ auto& E=SightExperiment;const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* V=Store->Find(ID);const auto* S=Store->Find(Shooter);
+ if(!V||!S||!V->IsAlive()||!S->IsAlive()||V->Team==S->Team)return;
+ const auto* Perc=GetWorld()->GetSubsystem<UBattlePerception>();
+ if(const auto* K=Perc->FindContact(ID,Shooter);K && K->bVisible){E.Cover(TEXT("hitlos_victim_sees"));return;}
+ double VEye,VEnd,SEye,SEnd;
+ const TCHAR* VS=SightBlockReason(ID,Shooter,VEye,VEnd);const TCHAR* SV=SightBlockReason(Shooter,ID,SEye,SEnd);
+ E.Cover(*FString::Printf(TEXT("hitlos_v2s_%s"),VS));E.Cover(*FString::Printf(TEXT("hitlos_s2v_%s"),SV));
+ const bool bOneWay=FCString::Strcmp(VS,TEXT("clear"))!=0 && FCString::Strcmp(SV,TEXT("clear"))==0;
+ if(!bOneWay)return;
+ E.Cover(*FString::Printf(TEXT("hitlos_oneway_%s"),VS));
+ auto StName=[](uint8 St){return St==BattleStance::Prone?TEXT("prone"):St==BattleStance::Crouch?TEXT("crouch"):TEXT("stand");};
+ E.Cover(*FString::Printf(TEXT("hitlos_oneway_victim_%s"),StName(StanceOf(ID))));E.Cover(*FString::Printf(TEXT("hitlos_oneway_shooter_%s"),StName(StanceOf(Shooter))));
+ const double Now=GetWorld()->GetTimeSeconds();FVector Dummy;
+ if(IsHeadExposed(Shooter,Now)||SideExposure(Shooter,Now,Dummy))E.Cover(TEXT("hitlos_oneway_shooter_exposed"));
+ // The trace that failed (victim eye -> shooter aim point) against the clear one (shooter eye -> victim aim point), in metres.
+ if(FCString::Strcmp(VS,TEXT("range"))!=0 && FCString::Strcmp(VS,TEXT("fov"))!=0)
+ {
+  const double Rise=(VEnd-VEye)/100.;
+  E.Cover(Rise<-1.?TEXT("hitlos_oneway_blocked_look_down"):Rise>1.?TEXT("hitlos_oneway_blocked_look_up"):TEXT("hitlos_oneway_blocked_level"));
+  E.Cover(VEye+50.<SEye?TEXT("hitlos_oneway_blocked_victim_eye_lower"):VEye>SEye+50.?TEXT("hitlos_oneway_blocked_victim_eye_higher"):TEXT("hitlos_oneway_blocked_eye_same"));
+  E.Cover(VEnd+30.<SEye?TEXT("hitlos_oneway_blocked_aim_below_shooter_eye"):TEXT("hitlos_oneway_blocked_aim_at_eye"));
+ }
+}
 bool UBattleLeaderRuntime::CoverPriorityEnabled()
 {
  static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverPriority="),V);return V!=0;}();
@@ -1483,6 +1552,9 @@ void UBattleLeaderRuntime::NoteUnderFire(int32 ID)
  if(UBattleMatch::DangerRouteOn())if(const auto* V=GetWorld()->GetSubsystem<UBattleState>()->Find(ID))GetWorld()->GetSubsystem<UBattleMatch>()->NoteSectorDanger(V->Team,Position(ID));
  if(ShotDirectionEnabled() || UnderFireCoverEnabled() || CoverPriorityEnabled() || (BattleTactics::VehicleHitCover()&&IsVehicle(ID))){FVector From;if(GetWorld()->GetSubsystem<UBattleState>()->PendingHitSource(From))ShotFrom.Add(ID,TPair<FVector,double>(From,GetWorld()->GetTimeSeconds()));}
  if(SectorContactEnabled() || SectorMoveFireEnabled() || !SectorFireBack.IsEmpty())SectorHitUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);
+ if(SightExperiment.Enabled)if(const int32 Shooter=GetWorld()->GetSubsystem<UBattleState>()->PendingHitShooter();Shooter!=INDEX_NONE)DiagnoseHitSight(ID,Shooter);
+ if(HitRevealEnabled()){const auto* Store=GetWorld()->GetSubsystem<UBattleState>();FVector From;const int32 Shooter=Store->PendingHitShooter();
+  if(Shooter!=INDEX_NONE && Store->PendingHitSource(From))RevealShooter(ID,Shooter,From);}
  if(!BattleTactics::ReturnFireEnabled())return;
  const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;
  if(Trial>=0){const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);if(!U||U->Team!=Trial)return;}

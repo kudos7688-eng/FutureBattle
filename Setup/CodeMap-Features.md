@@ -106,6 +106,8 @@ BattleSightVisual | 視界の目視確認用の表示（UBattleLeaderRuntime の
 BattleSquadAI | 旧全Actor経路の部隊 AI
 BattleSquadFlank | 迂回の判断（UBattleSquadTactics の一部）
 BattleSquadRetreat | 撤退の判断と適用（UBattleSquadTactics の一部。Evaluate と Apply はここ）
+BattleSupplyCar | 補給車（兵種9）：積んだ弾・本拠地での積み直し・AIの命令（群の役割5、拠点の後ろ）・弾の少ない部隊の行き先（UBattleMatch の一部）
+BattleFrontLine | 前線・前線維持群 `-BattleFrontLine`・奇襲群 `-BattleSurpriseGroup`（区画のあるマップ）：区画の行ごとの前線の列（自軍の兵・観測した拠点・知っている敵、隣の行と1列以内）、維持群の帯と維持する区画、押し上げ、奇襲群（装甲優先・端の行を進んで敵本拠地へ）（UBattleMatch の一部。表示は ABattleHUD::DrawFieldOverlay）
 BattleSquadSupport | 援護の受け渡し（UBattleSquadTactics の一部）
 BattleSquadTactics | 部隊の戦術の土台：観測、毎フレームの更新、記録
 BattleStableMovement | 混成の移動計画と実行（UBattleLeaderRuntime の一部）
@@ -147,6 +149,7 @@ BattleRoutes | 通り道：道路網のあるマップ（F）で、遠い目的�
 BattleSectorView | 作戦画面の表示だけ（規則・AIは読まない）：自軍の視界の格子 `FBattleFogGrid`（12.5m、自軍の兵から静的な物体への光線）と区画ごとの状態 `BattleSectorView::Gather`（自軍の人数・観測した敵・視界の割合・拠点・命令中の部隊・遮蔽位置の数）
 BattleSectorRoute | 区画経由の移動 `-BattleSectorRoute`・側面 `-BattleSectorFlank`・前線 `-BattleSectorFront`（区画のあるマップ、AIの歩兵）：道路網の次の交差点の代わりに、その周りで遮蔽の多い区画を制圧・維持しながら進む。側面は観測した敵の正面を避けた区画、前線は自軍の区画のうち敵に接する区画（UBattleMatch の一部）
 BattleSectors | マップHの50m区画の格子（20×14）：区画の番号と中心、区画の種類の表、川・橋・浅瀬の位置
+BattleFrontLine | Surprise bridge waypoints: UpdateSurpriseBridge, BattleSurpriseRoute::Bridge / Intersects; fixed H/I map geometry, entrance / exit / edge goal, retained on same-time restore
 
 BattleWeaponOrders | 命令・防衛範囲・支援対象・区画任務の交戦許可と武器/装甲AIの試験切替
 BattleComposition | 編成AIの兵種定義・解決済み入力・診断

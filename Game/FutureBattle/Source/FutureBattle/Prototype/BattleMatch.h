@@ -24,6 +24,7 @@ struct FAreaIntent
  int32 MortarKeep=0;                  // mortar teams the AI keeps active (same pacing as scouts; 0 = none)
  int32 SPGKeep=0;                     // self-propelled guns the AI keeps active (same pacing as scouts; 0 = none)
  int32 ExoKeep=0;                     // armoured exoskeleton soldiers the AI keeps active (same pacing as scouts; 0 = none)
+ int32 SupplyKeep=0;                  // supply vehicles the AI keeps active (same pacing as scouts; 0 = none; BattleSupplyCar.cpp)
  int32 ATKeep=0;                      // anti-tank teams the AI keeps active (same pacing as scouts; 0 = none)
  int32 ScoutKeep=0;                   // scout pairs the AI keeps active (one more per ScoutAfterHires purchases, up to this; 0 = none)
 };
@@ -131,8 +132,39 @@ public:
  // Active scout pairs of a team (at most UBattleTuning::AreaScoutLimit).
  int32 ActiveScouts(int32 Team) const;
  int32 ActiveOfType(int32 Team,uint8 SquadType) const;
- // A commanded supply team of this team has its living leader within UBattleTuning::SupplyTeamRadius of the position.
- bool SupplyTeamNear(int32 Team,const FVector& Position) const;
+ // Supply vehicles (squad type 9, BattleSupplyCar.cpp). SupplyCarNear: the nearest commanded vehicle of the team with stock left within
+ // Radius (default UBattleTuning::SupplyTeamRadius) of the position (INDEX_NONE: none); SupplyTeamNear says whether there is one.
+ int32 SupplyCarNear(int32 Team,const FVector& Position,float Radius=-1.f) const;
+ bool SupplyTeamNear(int32 Team,const FVector& Position) const { return SupplyCarNear(Team,Position)!=INDEX_NONE; }
+ int32 SupplyStockMax() const;
+ int32 SupplyStockOf(int32 SquadID) const;
+ void SpendSupply(int32 SquadID,int32 Rounds);
+ void RestockSupplyCar(int32 SquadID);
+ // The order of an AI-run supply vehicle: home to load while low; with its group (role 5) behind the group's post; otherwise behind the
+ // own point nearest the enemy home. False: not a supply vehicle.
+ bool SupplyCarOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ // Where a squad short of ammunition gets it in the field: the position of a supply vehicle of its team with stock within
+ // UBattleTuning::FieldSupplyRange (its own group's first). False: none (the squad goes home as before).
+ bool FieldSupplyPoint(int32 SquadID,FVector& Where,int32* CarID=nullptr) const;
+ // Front line and front-holding group (2026-11-20, user proposal; group stage 4, BattleFrontLine.cpp). Trial -BattleFrontLine=1 (default
+ // 0; with -BattleAreaTrialTeam for that team only), maps with sectors only. FrontLine[Team][Row]: the line's sector column in that
+ // sector row, counted from the team's own home edge (0); empty while off. Built from own positions and known enemies only.
+ bool FrontLineOn(int32 Team) const;
+ void UpdateFrontLine(int32 Team);
+ bool FrontGroupOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ FIntPoint FrontCell(int32 Team,int32 Column,int32 Row) const; // a line column/row of the team -> grid cell
+ TArray<int32> FrontLine[2];
+ // Surprise group (trial -BattleSurpriseGroup=1, needs the front line): along an edge row to the enemy home, then strikes it.
+ bool SurpriseOn(int32 Team) const;
+ void UpdateSurpriseGroup(int32 Team,int32 FrontID);
+ bool SurpriseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ // True while the squad's surprise group is moving along its row (phase 1): its tactics do not stop to hold at a seen enemy.
+ bool SurpriseMoving(int32 SquadID) const;
+ // After a save restore: no front/surprise timer further ahead than its own interval (an earlier save would stall them).
+ void ClampFrontTimers();
+ float SurpriseNextAt[2]={0.f,0.f},SurpriseSkipLogAt[2]={0.f,0.f};
+ TMap<int32,FVector> FrontPosts; // squad of a front-holding group -> the sector centre it holds (transient)
+ float FrontLineAt[2]={-1.f,-1.f},FrontLineLogAt[2]={-1.f,-1.f};
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;
@@ -187,7 +219,8 @@ public:
 	FVector AreaTankPost(int32 Team, int32 Point, float Overwatch = -1.f) const; // Overwatch below zero: UBattleTuning::TankOverwatch
 	// Squad groups, stage 1 (BattleGroups.cpp): members, one objective, a phase (0 assemble at Rally, 1 advance, 2 hold). Saved with all decision history by combat extension 2 (older saves start empty).
 	// Stage 2: roles while advancing (0 assault: to the point; 1 support: fires from a post short of it; 2 armour: the tank's post behind
-	// the infantry; 3 fire: mortar or gun at its firing post; 4 guard: the anti-tank team beside the support post; 255 none: the squad
+	// the infantry; 3 fire: mortar or gun at its firing post; 4 guard: the anti-tank team beside the support post; 5 supply: the supply vehicle behind
+	// the group's post (BattleSupplyCar.cpp); 255 none: the squad
 	// keeps its own type's rules). A point the group could not take is avoided until AvoidUntil.
 	struct FBattleGroup { int32 ID = 0, Team = 0; TArray<int32> Squads; int32 Objective = INDEX_NONE; uint8 Phase = 0; float PhaseAt = 0.f; FVector Rally = FVector::ZeroVector; bool bPlayer = false; TMap<int32, uint8> Roles; int32 Avoid = INDEX_NONE; float AvoidUntil = 0.f;
 		// Stage 3b: the living soldiers when the advance began (losses end it early) and how often in a row the group failed at StallPoint.
@@ -195,7 +228,16 @@ public:
   int32 StartLiving = 0, StallPoint = INDEX_NONE, Stalls = 0;
 		bool bOpened = false; /* the opening rush was decided (once per group) */
 		bool bArrived = false; /* this advance has reached its point: the stall clock (PhaseAt) runs from then */
-		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */ };
+		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */
+		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp) */
+		int32 SurpriseRow = 0; /* surprise group: the edge sector row it moves along */
+		uint8 SurpriseBridgeStage = 0; /* 0 none, 1 entrance, 2 exit, 3 original edge goal; retained during same-time restore */
+		int32 SurpriseBridgeLeader = INDEX_NONE;
+		float SurpriseBridgeAt = 0.f; /* when the current bridge leg began */
+		int32 SurpriseNextCol = -1; /* surprise group: the furthest stop column given in phase 1; a temporary pull-back does not move it back */
+		FVector SurpriseBridgeEntry = FVector::ZeroVector, SurpriseBridgeExit = FVector::ZeroVector, SurpriseBridgeGoal = FVector::ZeroVector;
+		float SurpriseWaitAt = -1.f, SurpriseLogAt = 0.f, SurpriseEndAt = 0.f; /* surprise group: since when its lead waits for the others; next progress log; when it ends whatever its phase */ };
+	bool UpdateSurpriseBridge(FBattleGroup& Group,const FVector& Lead);
 	uint8 GroupRole(const FBattleGroup& Group, int32 SquadID) const;
 	void AssignGroupRoles(FBattleGroup& Group) const;
 	FVector GroupSupportPost(int32 Team, int32 Point) const;
@@ -206,6 +248,13 @@ public:
 	// A new group of active squads of one team (they leave their old groups). bPlayer: formed by the player (may hold one squad).
 	int32 FormGroup(int32 Team, const TArray<int32>& Squads, bool bPlayer);
 	void DissolveGroup(int32 GroupID, const TCHAR* Why);
+	// Command UI armies (2026-11-21): 0 unassigned, 1 front army (the team's front-holding group), 2 attack army (its other groups).
+	// AssignArmy moves an own squad there and pins it, so automatic filling (front army, attack and surprise groups) leaves it. Not saved.
+	// TargetGroup: an own attack group to join, NewAttackGroup for a new one (the "+ new group" row), INDEX_NONE for the army's default.
+	static constexpr int32 NewAttackGroup = -2;
+	bool AssignArmy(int32 SquadID, int32 Army, int32 TargetGroup = INDEX_NONE);
+	int32 ArmyOf(int32 SquadID) const;
+	TSet<int32> ArmyPinned;
 	bool GroupAIRun(const FBattleGroup& Group) const;
 	int32 GroupLiving(const FBattleGroup& Group, int32* Full = nullptr) const;
  struct FGroupStrength {
