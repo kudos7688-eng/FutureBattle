@@ -31,6 +31,7 @@
   - main（群制御の前線軍・死体のラグドール）との合流。食い違いは試合スクリプトの引数一覧と自動生成の表だけ。
 - **検証**：Build 成功（codex と main の両方）。`Test-Battle` `BATTLE_SMOKE_RESULT failures=0`、`Test-MixedSave` failures=0、`Test-Area` failures=0。マップE seed7（`-Experiment -CoverActions 1 -FlankCoordination 1 -RoundTripSave -Area`、60FPS）を組み込み前の main 684b5f6 と codex で1試合ずつ回し、`Compare-MatchResults.py` で **IDENTICAL**（576/601、9861発、78項目）。出力は `Setup/Benchmarks/SightTrial-20261111/{main-684b5f6,codex-e61842a}-E7b`。
 - **制限**：`-BattleObservedTactics` を ON にした試合はまだ回していない。戦車の直し A/B・砲兵の直し（陣地・射程・費用・外骨格の襲撃）の評価試合（複数 seed、自走砲を両軍に強制）も未実施。
+- **戦車の直し A/B の予備評価（21時55分）**：マップI seed7・19、`-Experiment -Area -CoverActions 1 -FlankCoordination 1 -AreaCompositionPlanner 1 -AreaMaxSquads 35 -AreaTankKeep 2 -AreaATKeep 2`、`-VehicleHitCover`/`-TankGunFlash` を両方 0 と両方 1。戦車の喪失（両軍計）は s7 が 5→4、s19 が 6→6。戦車主砲の命中・撃破は 20→17、22→29。主砲の発砲が気付かれた回数は 130・229。勝敗は s7 が 537/466→463/518、s19 が 459/459→399/530 で、どちらも ON で軍1 が有利に振れた（両軍同じ規則なので、マップの左右差か偶然か不明）。**2試合では戦車の生存が改善したとは言えない。** 出力は `Setup/Benchmarks/SightTrial-20261111/tankab-I-s{7,19}-v{0,1}`。
 - **次の一手**：次のロックの番で評価試合。画面確認（U06 の3解像度、U12 のパッドのメニュー）はユーザー待ち。
 
 ## 2026-11-21 20時55分 Claude（死体の自動消滅）：死体が地面に横たわるようにした（死亡アニメの後に物理で倒す。main へ組み込み済み。表示のみ）
