@@ -363,6 +363,8 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
   const bool bHoldPhase=(S.Plan==1&&I.Phase>=2)||(S.Plan==2&&I.Phase==2);
   I.HeavyShare=FMath::Clamp(I.HeavyShare*(bHoldPhase?1.5f:.5f),0.f,.8f);
  }
+ // Strategy layer S2 (BattleStrategy.cpp): the team's focus objective, chosen once per order update (-1 without -BattleStrategy>=2).
+ I.FocusPoint=StrategyFocusPoint(Team);
  ApplyDepotWeights(Team,bTrial,I);
  return I;
 }

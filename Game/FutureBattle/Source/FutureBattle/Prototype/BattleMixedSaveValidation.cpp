@@ -130,6 +130,11 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   // P1 trial (2026-11-16): bought-squad missions point at existing squads with a known mission; home hit times are past clocks.
   for(const auto& P:Area.HirePurpose)if(!((P.Value>=0&&P.Value<Objectives.Num())||P.Value==100||P.Value==101)||!BySquad.FindRef(P.Key))return Fail(TEXT("Invalid area hire purpose"));
   if(Area.HomeHitAt.Num()!=2||!Finite(Area.HomeHitAt[0],-1000,Elapsed+.01)||!Finite(Area.HomeHitAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area home hit clock"));
+  // Strategy layer S2 (BattleStrategy.cpp): focus objectives in range, clocks finite (focus/avoid-begin in the past; review/avoid-end within a match).
+  if(Area.StrategyPhase.Num()!=2||Area.StrategyFocus.Num()!=2||Area.StrategyFocusAt.Num()!=2||Area.StrategyReviewAt.Num()!=2||Area.StrategyAvoid.Num()!=2||Area.StrategyAvoidUntil.Num()!=2)return Fail(TEXT("Invalid strategy state"));
+  for(int32 Team=0;Team<2;++Team)
+   if(Area.StrategyPhase[Team]<0||Area.StrategyPhase[Team]>4||Area.StrategyFocus[Team]<-1||Area.StrategyFocus[Team]>=Objectives.Num()||Area.StrategyAvoid[Team]<-1||Area.StrategyAvoid[Team]>=Objectives.Num()||
+      !Finite(Area.StrategyFocusAt[Team],-1,Elapsed+.01)||!Finite(Area.StrategyReviewAt[Team],-1,Elapsed+3600)||!Finite(Area.StrategyAvoidUntil[Team],-1,Elapsed+3600))return Fail(TEXT("Invalid strategy state"));
   if(Retired[0]+Area.HireSpent[0]+AllyCredits!=100+Area.Income[0]||Retired[1]+Area.HireSpent[1]+EnemyCredits!=100+Area.Income[1])return Fail(TEXT("Area resource conservation mismatch"));
   if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=ExpectedRoster||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=2*Objectives.Num()||Area.SeenAt.Num()!=2*Objectives.Num()||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>Current||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
   for(int32 Team=0;Team<2;++Team)if(!Finite(Area.BaseHP[Team],0,1000)||!Finite(Area.KnownEnemyBaseHP[Team],-1,1000))return Fail(TEXT("Invalid base state"));

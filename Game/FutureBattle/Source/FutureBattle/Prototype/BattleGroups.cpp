@@ -365,6 +365,8 @@ void UBattleMatch::UpdateGroups(int32 Team)
   auto AttackPoint=[&]()->int32
   {
    const bool bAvoid=Elapsed<G->AvoidUntil&&Objectives.IsValidIndex(G->Avoid);
+   // Strategy layer S2 (BattleStrategy.cpp): the team's focus first, while it is not own and the group is not avoiding it.
+   if(!G->bPlayer)if(const int32 F=StrategyFocusPoint(Team);F!=INDEX_NONE&&ObservedOwner(Team,F)!=Team&&!(bAvoid&&F==G->Avoid))return F;
    const double Limit=bAvoid?FVector::Dist2D(Objectives[G->Avoid].Position,Home)*BattleGroupValues::DeepRatio:DBL_MAX;
    int32 Best=INDEX_NONE;double BestD=DBL_MAX;
    for(int32 I=0;I<Objectives.Num();++I)
@@ -418,6 +420,8 @@ void UBattleMatch::UpdateGroups(int32 Team)
   if(G->Phase==0)
   {
    if(bOwn){Enter(2,TEXT("already_own"));continue;}
+   // Strategy layer S2: a group still gathering turns to a new team focus (an advance under way finishes first).
+   if(!G->bPlayer)if(const int32 F=StrategyFocusPoint(Team);F!=INDEX_NONE&&F!=G->Objective&&ObservedOwner(Team,F)!=Team&&!(Elapsed<G->AvoidUntil&&F==G->Avoid)){Attack(F,TEXT("strategy_focus"));continue;}
    const bool bAssembled=Present>=2&&Ready>=FMath::CeilToInt(Present*FMath::Clamp(T->GroupReadyShare,.1f,1.f));
    const float Waited=Elapsed-G->PhaseAt;
    if(!bAssembled&&Waited<FMath::Max(0.f,T->GroupAssembleMax))continue;

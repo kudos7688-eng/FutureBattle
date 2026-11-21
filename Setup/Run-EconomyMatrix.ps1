@@ -146,6 +146,10 @@ $supply=@{
  'FLD'=@('-FrontLine','1','-FrontAuto','0')
  'GF1'=@('-FrontLine','0','-GroupFireSupport','1')
  'SG1'=@('-FrontLine','1','-FrontAuto','1','-SurpriseGroup','1')
+ # Strategy layer (2026-11-22, Docs/design-strategy-layer.md): SL1 = situation map log only (must equal the baseline);
+ # ST2 = stage S2, recon -> focus attack (with -TrialTeam only that team, through -AreaTrialTeam).
+ 'SL1'=@('-SituationLog','1')
+ 'ST2'=@('-Strategy','2')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

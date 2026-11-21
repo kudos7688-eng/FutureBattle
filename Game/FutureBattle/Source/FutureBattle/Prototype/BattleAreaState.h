@@ -34,4 +34,13 @@ struct FBattleAreaState
  UPROPERTY() float WarClock=0;
  // Rounds left on each supply vehicle (squad type 9; BattleSupplyCar.cpp). A vehicle without an entry is full (UBattleTuning::SupplyCarStock).
  UPROPERTY() TMap<int32,int32> SupplyStock;
+ // Strategy layer stage S2 (BattleStrategy.cpp, -BattleStrategy>=2; absent in older saves = no focus). Per team: phase (0 deploy, 1 focus),
+ // the focus objective (-1 none), when the focus began, the next review, and a focus the AI attack group failed at with its end time.
+ // Match times (Elapsed), as HomeHitAt.
+ UPROPERTY() TArray<int32> StrategyPhase={0,0};
+ UPROPERTY() TArray<int32> StrategyFocus={-1,-1};
+ UPROPERTY() TArray<float> StrategyFocusAt={-1,-1};
+ UPROPERTY() TArray<float> StrategyReviewAt={-1,-1};
+ UPROPERTY() TArray<int32> StrategyAvoid={-1,-1};
+ UPROPERTY() TArray<float> StrategyAvoidUntil={-1,-1};
 };
