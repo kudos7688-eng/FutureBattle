@@ -69,11 +69,14 @@ bool UBattleLeaderRuntime::ExposedToThreats(int32 ID,FVector Anchor,const TArray
 
 bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now,float Dt)
 {
+ // A soldier whose search found the frame's budget full checks again on the next frame (not at his next phase), so soldiers
+ // sharing a phase do not leave the same ones waiting every second.
+ const bool bWaited=RelocateWaiting.Remove(ID)>0;
  auto* U=GetWorld()->GetSubsystem<UBattleState>()->Units.Find(ID);
  if(!U || U->CoverPhase!=2 || U->CoverSlot==FreeCoverSlot || !ThreatCoverEnabled(U->Team) || !SoldierAIFocus(ID))return false;
  // Once a second per soldier, at a phase fixed by the unit ID (no state, so a saved and loaded match checks at the same times).
  const double Phase=double(ID%16)/16.;
- if(FMath::FloorToDouble(Now+Phase)==FMath::FloorToDouble(Now-Dt+Phase))return false;
+ if(!bWaited && FMath::FloorToDouble(Now+Phase)==FMath::FloorToDouble(Now-Dt+Phase))return false;
  auto& Diag=SightExperiment;Diag.Cover(TEXT("threat_cover_check"));
  TArray<FVector,TInlineAllocator<3>> Threats;GatherThreats(ID,Primary,Now,Threats);
  const FVector Anchor=U->CoverAnchor;
@@ -127,9 +130,9 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
   }
   else
   {
-   // No search this frame: not a failed search. He keeps his place and decides at the next check, which counts as a
+   // No search this frame: not a failed search. He keeps his place and checks again on the next frame, which counts as a
    // confirmed break again (the first break is kept), so a full frame never makes him leave without having looked.
-   BrokenCover.Remove(ID);U->CoverFirstBreak=Now;Diag.Cover(TEXT("threat_relocate_frame_full"));return false;
+   BrokenCover.Remove(ID);U->CoverFirstBreak=Now;RelocateWaiting.Add(ID);Diag.Cover(TEXT("threat_relocate_frame_full"));return false;
   }
   if(bFound)
   {

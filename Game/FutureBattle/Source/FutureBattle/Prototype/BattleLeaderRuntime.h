@@ -499,6 +499,9 @@ public:
  // each confirmed break. Searches: 2 soldiers a frame (B1 has its own 4).
  static int32 ThreatCoverRelocate();
  uint64 RelocateFrame=0;int32 RelocatesThisFrame=0;
+ // Soldiers who found the search budget full: they check again on the next frame (not saved: after a load they wait for
+ // their own phase, as before).
+ TSet<int32> RelocateWaiting;
  bool BrokenCoverSlot(int32 ID,int32 Slot,double Now) const {const auto* B=BrokenCover.Find(ID);return B&&B->Key==Slot&&Now<B->Value;}
  TMap<int32,TPair<int32,double>> BrokenCover;
  // Trial -BattleSoldierMove=1 (2026-11-20, default 0; individual AI stage B1, BattleSoldierMove.cpp; -BattleSoldierMoveTeam=0/1
