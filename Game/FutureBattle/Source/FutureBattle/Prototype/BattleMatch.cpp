@@ -167,7 +167,7 @@ void UBattleMatch::Update(float DeltaSeconds)
 	}
 	if (!BattleFieldLayout::IsLarge(GetWorld())) UpdateSupport(DeltaSeconds);
 	UpdateObjectives(DeltaSeconds);
- if(bArea){UpdateArea(DeltaSeconds);DirectorClock+=DeltaSeconds;if(DirectorClock>=5){DirectorClock=0;UpdateAreaHiring();UpdateEnemyOrders();}CheckTimeLimit();return;}
+ if(bArea){UpdateArea(DeltaSeconds);UpdateSituationLog();DirectorClock+=DeltaSeconds;if(DirectorClock>=5){DirectorClock=0;UpdateAreaHiring();UpdateEnemyOrders();}CheckTimeLimit();return;}
 	if (Phase != EBattleMatchPhase::Combat) return;
 	DirectorClock += DeltaSeconds; SupplyClock += DeltaSeconds;
 	if (DirectorClock >= 5.f)
@@ -325,6 +325,9 @@ int32 UBattleMatch::AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) c
  if(Intent.FocusGain>0&&Sum>0)
  {
   int32 Best=INDEX_NONE;double BestD=DBL_MAX;const FVector Home=AreaHome(Team);
+  // Strategy layer S2: the focus the team chose from its situation map comes first (while it is not observed as own).
+  if(Objectives.IsValidIndex(Intent.FocusPoint)&&ObservedOwner(Team,Intent.FocusPoint)!=Team)Best=Rotate?Objectives.Num()-1-Intent.FocusPoint:Intent.FocusPoint;
+  else
   for(int32 I=0;I<Objectives.Num();++I){const int32 P=Rotate?Objectives.Num()-1-I:I;if(ObservedOwner(Team,P)==Team)continue;const double D=FVector::DistSquared2D(Objectives[P].Position,Home);if(D<BestD){BestD=D;Best=I;}}
   if(Best!=INDEX_NONE){Sum+=Weight[Best]*Intent.FocusGain;Weight[Best]*=1.0+Intent.FocusGain;}
  }
@@ -353,6 +356,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
 	int32 Group = 0;
  // S1 (default ON, -BattleAreaStrategy=0 = old round-robin): weighted point spread from observed ownership only.
  const bool bStrategy=bArea&&BattleTactics::AreaStrategy().bEnabled;
+ // Strategy layer S2 (BattleStrategy.cpp, -BattleStrategy>=2): the team's plan is reviewed once here, before any intent is read.
+ if(bStrategy)UpdateStrategy(Team);
  const FAreaIntent TeamIntent=AreaIntent(Team);
  // Squad groups (BattleGroups.cpp): members, AI formation (trial) and phases, before the orders that read them.
  if((CompositionTeams&(1<<Team))!=0)UpdateCompositionPurposes(Team);

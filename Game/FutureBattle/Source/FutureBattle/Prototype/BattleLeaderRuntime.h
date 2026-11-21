@@ -396,11 +396,12 @@ public:
  void AuditFollowerPoses(double Now);
  // Every frame: a near follower that fired within BattleBodyAnim::ReadySeconds turns his mesh (whole-body clip, no upper layer)
  // so the rifle in his hand points along his last shot: across (B.MuzzleYaw, at most MaxFollowerMuzzleYaw) to his facing, and
- // up or down (B.MuzzlePitch, at most MaxFollowerMuzzlePitch) to the shot's pitch, the body tilting about the capsule centre
- // (the hips) with its feet kept at their height (at 15 degrees a toe or heel 30 cm off the centre moves about 8 cm). Both ease back to 0 when he stops firing. Not in cover (the cover clips turn the mesh themselves), not prone,
+ // up or down (B.MuzzlePitch, at most MaxFollowerMuzzlePitch) to the shot's pitch, the upper body bending about spine_01
+ // (UBattleVATSkeletalMeshComponent::SpinePitch; the legs and feet keep the clip's pose). Both ease back to 0 when he stops
+ // firing. Not in cover (the cover clips turn the mesh themselves), not prone,
  // not reloading or running. Followers keep their single-node clip (the far display and bone reductions rely on it).
  void AimFollowerRifles(double Now);
- static constexpr float MaxFollowerMuzzleYaw=45.f,MaxFollowerMuzzlePitch=15.f;
+ static constexpr float MaxFollowerMuzzleYaw=45.f,MaxFollowerMuzzlePitch=20.f;
  TMap<int32,FVector> FollowerAims; // a follower's last shot direction (Fire), for AimFollowerRifles
  // Corpse removal (BattleCorpses.cpp; display only, runtime only). -BattleCorpseLifetime=S (default 20; 0 = bodies stay):
  // S seconds after death a body sinks into the ground for 1.5 s and is then hidden. The unit record, its position and
@@ -413,6 +414,10 @@ public:
  void StepCorpses();
  void HideCorpse(int32 ID);
  bool IsCorpseHidden(int32 ID) const {return HiddenCorpses.Contains(ID);}
+ // Stage 2 diagnosis (BattleStateTrace.cpp, Docs/design-divergence-trace.md): -BattleStateTrace=<N> writes BATTLE_STATE_TRACE every N
+ // frames with one hash per block of the match state (positions, health, cover, perception, plans, match, shots); reads only.
+ void StepStateTrace();
+ int32 StateTraceFrame=0;
  bool IsBlindFiring(int32 ID,double Now) const {const double* T=BlindFireUntil.Find(ID);return T&&*T>Now;}
  // Where a blind shot leaves: above the top of a low cover, or just past the edge of a wide one, with a clear first stretch
  // toward AimPoint. False when neither works (the caller falls back to the old peek).
@@ -438,14 +443,24 @@ public:
  TMap<int32,uint8> Stances;
  TMap<int32,double> StanceLockedUntil;
  uint8 StanceOf(int32 ID) const {const uint8* Found=Stances.Find(ID);return Found?*Found:0;}
- bool SetStance(int32 ID,uint8 Stance,double Now,bool bForce=false);
+ // bOnTheMove: he walks off as the stance changes; a near follower's transition clip is then played within
+ // BattleBodyAnim::MovingTransitionSeconds (a leader's body hurries its own from its velocity, ABattleUnit::UpdateBodyAnim).
+ bool SetStance(int32 ID,uint8 Stance,double Now,bool bForce=false,bool bOnTheMove=false);
  // Follower clip for pose 0 idle / 1 walk / 2 reload; with -BattleStanceAnim=1 a crouched follower gets the crouch clip.
  class UAnimSequence* FollowerClip(int32 ID,int32 Pose) const;
  // Drops a follower's rifle turn and tilt (AimFollowerRifles) and puts his mesh back in its plain place: at death and when
  // the far display takes the body (it keeps the mesh's transform for the far body and a returning corpse).
  void ClearFollowerRifleTurn(int32 ID);
  void RefreshFollowerPose(int32 ID);
- void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight);
+ // Plays FollowerClip on a near follower's mesh (a crouched or prone walk at the rate its steps match his walking speed).
+ void PlayFollowerClip(int32 ID,int32 Pose);
+ // A stance transition still playing on a near follower ends now (his pose's loop at its own rate): the far display keeps the
+ // clip's rate and time when it takes the body, and the transition's hurried rate carried into the far walk and back.
+ void EndFollowerTransition(int32 ID);
+ // He sees an enemy himself now (his own visible contacts, not ones shared by others).
+ bool SeesEnemy(int32 ID) const;
+ // bThreat: he is under fire or sees an enemy now (his own state and sight), for -BattleStanceMove=2.
+ void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight,bool bThreat=false);
  // Concealment (hedges tagged BattleConcealment in the map): blocks sight but shots ignore it. Collected once per world.
  TArray<AActor*> ConcealmentActors;
  bool bConcealmentBuilt=false;
@@ -472,6 +487,11 @@ public:
  // attack/hold orders) fights as the player's sector move does - until a member is inside the sector it fires on the move and
  // fights back at enemies outside the sector that shoot at it, without stopping or walking to cover on the way.
  static bool SectorMoveFireEnabled();
+ // -BattleArrivalWalk (2026-11-21, default 1 by user decision after s23: open hits -23%, cover shots +18%; =0 for the old rule; user 11-21: soldiers stopped short of their planned cover and fought in the
+ // open): in his own sector, a soldier whose arrival place (with its own tail route) is more than 1.5 m away keeps walking to it
+ // and fires on the move, instead of stopping for combat where the squad first sees an enemy. He also walks the tail of his
+ // route past the end of the shared path (otherwise the route gate stops him at the shared end point). Counts arrival_walk_*.
+ static bool ArrivalWalkEnabled();
  // Trial -BattleSquadCoverCheck=1 (2026-11-20, default 0; with fire on the move): the squad leader counts how many of his
  // living members could hide from the threat near the squad - free cover slots within 20 m that show at most 2 of 5 body
  // samples to the threat, and up to two places right behind each such slot that hide as well. 80% of the squad or more (user, 11-20; half before):
@@ -523,6 +543,22 @@ public:
  // to the sector (the team's current sightings) instead of the direction it came from, and picks again when its target lies
  // more than 45 degrees away from that direction.
  static bool ArrivalThreatEnabled();
+ // Trial -BattleCoverOutward=1 (2026-11-21, default 0; user idea 11-21, steps 1+2): a sector squad picks arrival cover slots with
+ // an obstacle within 2.5 m toward any of the neighbouring sectors (8 directions from the sector centre) that can hold enemies,
+ // instead of only straight ahead along the way in - so soldiers stand on the centre side of walls facing outward. Ignored:
+ // off-map neighbours, neighbours where only the team's own soldiers are (-BattleSectorFront state 1), and neighbours toward
+ // the team's home (rear, more than 45 degrees toward it) unless enemies are known there. With no direction left, the old rule.
+ // Counts arrival_outward_*.
+ static bool CoverOutwardEnabled();
+ // Trial -BattleCoverDense=1 (2026-11-21, default 0; user idea 11-21, step 3): on maps with city cover (IsUrban), every side of an
+ // obstacle longer than 3 m also gets cover slots every 1.4 m (BattleCover.cpp BuildSlots; the usual 5 samples per side stay),
+ // so several soldiers can use one long wall. Sector arrival then treats a slot as taken only within 1.3 m of another
+ // reservation (190 cm before) and looks at up to 512 nearby slots (256 before). The slots are shared with the cover actions.
+ static bool CoverDenseEnabled();
+ // Trial -BattleCoverIndoor=1 (2026-11-21, default 0; user idea 11-21, step 4): a sector squad tries its arrival cover slots under a
+ // roof or upper floor (a static obstacle 1.2-8 m above the slot: inside houses and sheds, by windows) before the ones outside.
+ // Counts arrival_indoor_*.
+ static bool CoverIndoorEnabled();
  // Trial -BattleCoverStrict=1 (2026-11-20, default 0; user: "cover that does not hide from the enemy, standing in the open"):
  // a cover place counts only when the threat sees at most 2 of the 5 body samples (was 3) - for the cover actions, for the
  // arrival places of a sector squad and its places along the wall (checked against the known enemy nearest to the sector), and
@@ -626,7 +662,7 @@ private:
  UPROPERTY() TObjectPtr<class ABattleVATDisplay> VAT;
  int32 SmokeFailures=0, SmokeStage=0, QAStage=0; FVector SmokeSavedPeek=FVector::ZeroVector;
  // Body display checks of the cover smoke (muzzle along the aim while strafing; hit reaction recovery).
- float SmokeMuzzleMax=0.f, SmokeHead=0.f; int32 SmokeMuzzleFrames=0, SmokeShots=0; FQuat SmokeChest=FQuat::Identity; double SmokeHit=0.; const class UAnimSequence* SmokeHitClip=nullptr;
+ float SmokeMuzzleMax=0.f, SmokeHead=0.f; FVector SmokeDir=FVector::ZeroVector; int32 SmokeMuzzleFrames=0, SmokeShots=0; FQuat SmokeChest=FQuat::Identity; double SmokeHit=0.; const class UAnimSequence* SmokeHitClip=nullptr;
  FString QAPrefix;
  FVector SmokePosition=FVector::ZeroVector;
  TSharedPtr<FMassEntityManager> Manager;

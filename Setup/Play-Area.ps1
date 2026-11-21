@@ -1,13 +1,19 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
+# Strategy layer (Docs/design-strategy-layer.md; trial, default 0): both AI teams, and the squads the player delegates (J), plan by
+# the situation map; the top bar shows the own plan. 2 = recon -> focus attack, 3 = + hold and counter, 4 = + purchases for the focus.
+if ($Strategy -gt 0) { $extra += "-BattleStrategy=$Strategy" }
 if ($Map -eq 'H') {
     & (Join-Path $PSScriptRoot 'Initialize-MapH.ps1') -Project $project
 }
+if ($Map -eq 'J') {
+    & (Join-Path $PSScriptRoot 'Initialize-MapJ.ps1') -Project $project
+}
 # Maps with sectors (H, I): the same play condition.
-if ($Map -eq 'H' -or $Map -eq 'I') {
+if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J') {
     $extra += '-BattleLeaderGuard=1'
     # Player's move click = sector move that fires on the move; a drawn line = point move (BattlePlayerPath.cpp).
     $extra += '-BattleSectorMove=1'

@@ -55,7 +55,7 @@ public:
 	void SetRevealed(bool bVisible);
 	void ApplyDeath();
 	// Corpse removal (display only): hides the body for good; SetRevealed no longer shows it.
-	void HideCorpse();
+	void HideCorpse(bool bHideActor=true,bool bStopMeshTick=true);
 	FVector EyePosition() const;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> FirstPersonCamera;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Rifle;
@@ -97,6 +97,7 @@ private:
 	uint8 BodyStance = 0;
 	UPROPERTY() TObjectPtr<UAnimSequence> TransitionClip;
 	double TransitionUntil = 0., ShownShot = -10.;
+	float TransitionRate = 1.f; // above 1 once a stance transition is hurried on the move (BattleBodyAnim::MovingTransitionSeconds)
 	float ShownHP = -1.f;
 	// Cover clips (BattleCoverClips.h): the set picked when the cover action starts, the one-shot between phases, mesh yaw.
 	uint8 ShownCoverPhase = 0;

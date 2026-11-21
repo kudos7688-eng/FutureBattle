@@ -56,7 +56,9 @@ void BattleSectorAudit(UBattleMatch& Match,float DeltaSeconds)
   FString Kinds;for(const auto& K:RefusedByKind)Kinds+=FString::Printf(TEXT("%c:%d "),K.Key,K.Value);
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SECTOR_AUDIT cells=%d accepted=%d refused=%d middle_blocked=%d no_ground=%d refused_by_kind=%s"),BattleSectors::Columns*BattleSectors::Rows,Accepted,Refused,MiddleBlocked,NoGround,*Kinds);
   // 2. One sector each for up to eight squads, on the west side (team 0's own): houses, a junction, fields, woods.
-  const FIntPoint Cells[8]={FIntPoint(5,6),FIntPoint(6,7),FIntPoint(4,5),FIntPoint(8,7),FIntPoint(3,9),FIntPoint(7,3),FIntPoint(5,1),FIntPoint(2,6)};
+  // Map J (2026-11-22): (7,3) is a mountain there; the pass (6,3) instead.
+  const bool bMapJ=FCString::Strcmp(BattleFieldLayout::Of(World).Name,TEXT("Lvl_BattleWide_J"))==0;
+  const FIntPoint Cells[8]={FIntPoint(5,6),FIntPoint(6,7),FIntPoint(4,5),FIntPoint(8,7),FIntPoint(3,9),bMapJ?FIntPoint(6,3):FIntPoint(7,3),FIntPoint(5,1),FIntPoint(2,6)};
   SectorAuditRows.Reset();
   for(int32 I=0;I<8&&I+1<IDs.Num();++I)
   {

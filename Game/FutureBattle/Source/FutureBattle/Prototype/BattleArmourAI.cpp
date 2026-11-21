@@ -71,6 +71,20 @@ bool BattleTactics::AreaComposition(int32 Team)
  return bOn&&(Trial<0||Trial==Team);
 }
 
+// Subtraction evaluation (Docs/design-subtraction-eval.md). -BattleAreaAllTypes=1: both teams buy the all-types mix, whatever the trial team.
+bool BattleTactics::AreaAllTypes()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaAllTypes="),V);return V!=0;}();
+ return bOn;
+}
+// -BattleAreaWithout=<type 1-9>: the type the team does not buy (the trial team only with -BattleAreaTrialTeam); -1 = none.
+int32 BattleTactics::AreaWithout(int32 Team)
+{
+ static const int32 Type=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaWithout="),V);return V>=1&&V<BattleSquadType::Count?V:-1;}();
+ const int32 Trial=AreaStrategy().TrialTeam;
+ return Type>=0&&(Trial<0||Trial==Team)?Type:-1;
+}
+
 // ---------------------------------------------------------------- individual
 
 void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P,const TSet<int32>* AllowedTargets,FVector* SelectedPosition)
