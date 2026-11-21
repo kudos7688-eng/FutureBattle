@@ -98,7 +98,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
   if(Accept && !Accept(Slot,Anchor))continue; // the caller's own rules (stage A relocation: the squad's area)
   Stage=FMath::Max(Stage,2);if(!Clear(Pos,Anchor))continue;
   Stage=FMath::Max(Stage,3);
-  const float Hidden=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Eye).Fraction();
+  const float Hidden=ThreatSeen(ID,Anchor,Threat); // ExposureAt toward Eye unless -BattleThreatCoverCrouch=1
   if(Hidden>CoverExposureLimit())continue;
   if(Pass==0 && Threats.Num()>1 && ExposedToThreats(ID,Anchor,Threats)){Deferred.Add(Slot);Diag.Cover(TEXT("threat_request_exposed_other"));continue;}
   Stage=FMath::Max(Stage,4);
@@ -149,7 +149,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
 bool UBattleLeaderRuntime::ContactFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& Peek)
 {
  const FVector Eye=Threat+FVector(0,0,60);
- const float Hidden=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Eye).Fraction();
+ const float Hidden=ThreatSeen(ID,Anchor,Threat); // ExposureAt toward Eye unless -BattleThreatCoverCrouch=1
  if(Hidden>CoverExposureLimit())return false;
  // Fire from the slot itself: standing up from behind low cover, or from a place that covers most of the body.
  if(BattleTactics::HasTerrainLine(GetWorld(),Anchor+FVector(0,0,60),Eye))
@@ -262,7 +262,7 @@ bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Targ
   if(Squad->bSectorMission && Squad->TacticalPlan.Action==EBattleSquadTactic::Mission ? (!OutsideContact && BattleSectors::Cell(Anchor)!=BattleSectors::Cell(Squad->Destination)) : Squad->Order==EBattleOrder::Defend && FVector::Dist2D(Anchor,Squad->Destination)>Squad->DefenseRadius)continue;
   if(!Clear(Pos,Anchor))continue;
   FVector FirePoint;
-  if(bWide?!ContactFirePoint(ID,Anchor,Threat,FirePoint):BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Eye).Fraction()>CoverExposureLimit())continue;
+  if(bWide?!ContactFirePoint(ID,Anchor,Threat,FirePoint):ThreatSeen(ID,Anchor,Threat)>CoverExposureLimit())continue;
   // -BattleThreatCover: walk only to a place that also hides the soldier from his other threats, and not back to one he left.
   if(bThreats && (BrokenCoverSlot(ID,Slot,Now) || ExposedToThreats(ID,Anchor,Threats))){Diag.Cover(TEXT("threat_approach_exposed_other"));continue;}
   FCoverApproach A;A.Goal=Anchor;A.Slot=Slot;A.Target=Target;A.Revision=U->OrderRevision;A.Until=Now+(bWide?8.f:FMath::Max(0.f,T->AICoverApproachSeconds));

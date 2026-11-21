@@ -9,6 +9,7 @@
 #include "BattleSquadTactics.h"
 #include "FutureBattle.h"
 #include "BattleStance.h"
+#include "BattleUnit.h"
 
 bool UBattleLeaderRuntime::ThreatCoverEnabled(int32 Team)
 {
@@ -60,11 +61,37 @@ int32 UBattleLeaderRuntime::GatherThreats(int32 ID,FVector Primary,double Now,TA
  return Out.Num();
 }
 
+bool UBattleLeaderRuntime::ThreatCoverCrouch()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleThreatCoverCrouch="),V);return V==1;}();
+ return bOn;
+}
+
+float UBattleLeaderRuntime::ThreatSeen(int32 ID,FVector Anchor,FVector Threat) const
+{
+ // How much of the soldier at a cover place a threat sees (the fraction compared with CoverExposureLimit). By default the
+ // standing body's five points (150/120/115/115/55 cm above the ground). -BattleThreatCoverCrouch=1 (2026-11-21, trial):
+ // with stances on, a stage A soldier is judged with the crouched body's points (110/80/55 cm and 90 cm to either side),
+ // the body that sight traces and shots meet while he is hidden there (a hidden soldier crouches). Judged from the place,
+ // not from his stance now: the stance is not saved, and a place he searches for is judged as he will be there. Used for
+ // the target and the other threats alike, in breaks and in choosing places (RequestCoverAction, ContactFirePoint,
+ // StartCoverApproach).
+ const FVector From=Threat+FVector(0,0,60);
+ const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
+ const auto* Body=Bodies.Find(ID);const bool bPlayer=Body && Body->Actor.IsValid() && Body->Actor->IsPlayerControlled(); // not the player's own cover (C key)
+ if(!ThreatCoverCrouch() || !U || bPlayer || !BattleStance::Enabled(GetWorld()) || !ThreatCoverEnabled(U->Team) || !SoldierAIFocus(ID))
+  return BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),From).Fraction();
+ const FVector Right=FVector::CrossProduct(FVector::UpVector,(From-Anchor).GetSafeNormal2D());
+ int32 Seen=0;
+ for(const FVector& O:{FVector(0,0,20),FVector(0,0,-10),FVector(0,0,-35),Right*25.f,-Right*25.f})Seen+=BattleTactics::HasTerrainLine(GetWorld(),Anchor+O,From);
+ return Seen/5.f;
+}
+
 bool UBattleLeaderRuntime::ExposedToThreats(int32 ID,FVector Anchor,const TArray<FVector,TInlineAllocator<3>>& Threats) const
 {
  // Index 0 is the target, already checked by the caller; a place is flanked when a threat sees more than the limit.
  for(int32 I=1;I<Threats.Num();++I)
-  if(BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Threats[I]+FVector(0,0,60)).Fraction()>CoverExposureLimit())return true;
+  if(ThreatSeen(ID,Anchor,Threats[I])>CoverExposureLimit())return true;
  return false;
 }
 
@@ -82,7 +109,7 @@ int32 UBattleLeaderRuntime::ExposingEnemy(int32 ID,FVector Anchor,double Now) co
   const auto& K=C.Value;if(K.bShared || !K.bVisible || Now-K.LastSeenTime>.5)continue;
   const auto* T=Store->Find(C.Key);if(!T || !T->IsAlive() || T->Team==U->Team)continue;
   const double D=FVector::DistSquared2D(Anchor,K.LastKnownPosition);if(D>FMath::Square(double(Range)) || D>=BestD)continue;
-  if(BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),K.LastKnownPosition+FVector(0,0,60)).Fraction()<=CoverExposureLimit())continue;
+  if(ThreatSeen(ID,Anchor,K.LastKnownPosition)<=CoverExposureLimit())continue;
   if(!CoverLineClear(ID,Anchor,K.LastKnownPosition))continue;
   Best=C.Key;BestD=D;
  }
@@ -125,10 +152,10 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
   TArray<FVector,TInlineAllocator<3>> Threats;GatherThreats(ID,Primary,Now,Threats);
   const FVector Anchor=U->CoverAnchor;
   // The target too: it may have moved round the place since the soldier chose it.
-  const bool ByTarget=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Primary+FVector(0,0,60)).Fraction()>CoverExposureLimit();
+  const bool ByTarget=ThreatSeen(ID,Anchor,Primary)>CoverExposureLimit();
   int32 Breaker=INDEX_NONE;
   if(!ByTarget)for(int32 I=1;I<Threats.Num();++I)
-   if(BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Threats[I]+FVector(0,0,60)).Fraction()>CoverExposureLimit()){Breaker=I;break;}
+   if(ThreatSeen(ID,Anchor,Threats[I])>CoverExposureLimit()){Breaker=I;break;}
   const bool ByOther=Breaker!=INDEX_NONE;
   if(!ByTarget && !ByOther){U->CoverFirstBreak=0;return false;}
   // -BattleThreatCoverRelocate=2: while another threat sees into the place he keeps down (no peek toward the target), at every
@@ -147,7 +174,7 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
   // Evaluation only: the break is judged with the standing body's five points (150/120/115/115/55 cm), but a hidden soldier
   // is crouched (top 110 cm, seen and aimed at 80 cm). Counted: breaks where the crouched body's points (110/80/55 and 90 cm
   // to either side) would still be hidden within the same limit.
-  if(Diag.Enabled && StanceOf(ID)==BattleStance::Crouch)
+  if(Diag.Enabled && !ThreatCoverCrouch() && StanceOf(ID)==BattleStance::Crouch) // with the crouch trial this is the judgment itself
   {
    const FVector From=(ByTarget?Primary:Threats[Breaker])+FVector(0,0,60);
    const FVector Right=FVector::CrossProduct(FVector::UpVector,(From-Anchor).GetSafeNormal2D());

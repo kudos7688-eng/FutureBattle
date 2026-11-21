@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 273 種類。
+計 274 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -259,9 +259,10 @@
 | `-BattleTerrain` | other |  | BattleTerrain.h:18 |  |
 | `-BattleTerrainLineBodies` | Value | 1 | BattleTactics.cpp:231 |  |
 | `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:1267 |  |
-| `-BattleThreatCover` | Value | 0 | BattleThreatCover.cpp:21 |  |
-| `-BattleThreatCoverRelocate` | Value | 0 | BattleThreatCover.cpp:28 |  |
-| `-BattleThreatCoverTeam` | Value | -1 | BattleThreatCover.cpp:22 |  |
+| `-BattleThreatCover` | Value | 0 | BattleThreatCover.cpp:22 |  |
+| `-BattleThreatCoverCrouch` | Value | 0 | BattleThreatCover.cpp:65 |  |
+| `-BattleThreatCoverRelocate` | Value | 0 | BattleThreatCover.cpp:29 |  |
+| `-BattleThreatCoverTeam` | Value | -1 | BattleThreatCover.cpp:23 |  |
 | `-BattleTracerShot` | Param | off | BattleStanceShot.cpp:87 |  |
 | `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:207 |  |
 | `-BattleTrialSwap` | Param | off | BattleArea.cpp:15, BattleAreaDepot.cpp:32, BattleLeaderRuntime.cpp:79 ほか4 |  |
