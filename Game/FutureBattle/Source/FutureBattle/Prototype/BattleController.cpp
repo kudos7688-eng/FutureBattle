@@ -409,6 +409,7 @@ void ABattleController::SelectGroupSelected()
 	for (ABattleUnit* Unit : Selected) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0)
 		if (const int32 Group = Match->GroupOf(Unit->GetState()->SquadID); Group != INDEX_NONE) Wanted.Add(Group);
 	if (Wanted.IsEmpty()) { ShowNotice(TEXT("群に入っている部隊を選択してから V")); return; }
+	SoldierSelection = INDEX_NONE; // a squad selection again (orders go to squads, not to a picked soldier)
 	for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0 && LeaderSelectable(Unit) && Wanted.Contains(Match->GroupOf(Unit->GetState()->SquadID))) Selected.AddUnique(Unit);
 	ShowNotice(FString::Printf(TEXT("群を選択：%d 部隊"), Selected.Num()));
 }
@@ -960,7 +961,7 @@ void ABattleController::PlayerTick(float DeltaTime)
 		if (GetPointerPosition(P)) if (const int32 ID = SquadListIDAt(P); ID >= 0)
 			if (const auto* S = GetWorld()->GetSubsystem<UBattleState>()->FindSquad(ID))
 				if (auto* L = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->CanSelectLeader(S->LeaderUnitID))
-					if (ABattleUnit* A = L->Actor(S->LeaderUnitID)) Selected.AddUnique(A);
+					if (ABattleUnit* A = L->Actor(S->LeaderUnitID)) { SoldierSelection = INDEX_NONE; Selected.AddUnique(A); }
 	}
 	Selected.RemoveAll([](const TObjectPtr<ABattleUnit>& Unit) { return !Unit || !Unit->IsAlive(); });
 	if (bTactical) bAimHeld = false;
@@ -1026,7 +1027,7 @@ void ABattleController::SelectSquadListRow(FVector2D P)
  if(Entry.bNewGroup) { ShowNotice(TEXT("部隊をこの行へドラッグすると、新しい攻撃群を作ります")); return; }
  if(Entry.bGroupHeader) { SelectGroup(Entry.GroupID); return; }
  // Shift + click adds the squad to the selection (2026-11-21).
- if(L->CanSelectLeader(Row.LeaderUnitID) && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift))) { if(ABattleUnit* A=L->Actor(Row.LeaderUnitID)) Selected.AddUnique(A); }
+ if(L->CanSelectLeader(Row.LeaderUnitID) && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift))) { if(ABattleUnit* A=L->Actor(Row.LeaderUnitID)) { SoldierSelection=INDEX_NONE; Selected.AddUnique(A); } }
  else if(L->CanSelectLeader(Row.LeaderUnitID)) SetSelection(L->Actor(Row.LeaderUnitID));
  else ShowNotice(Row.bActive?TEXT("この隊長は操作不可です"):TEXT("この部隊は機能停止しています"));
 }
@@ -1263,7 +1264,7 @@ void ABattleController::SelectGroup(int32 GroupID)
 {
  auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>();
  if(!Match || !Mode || !Match->Groups.Contains(GroupID)) return;
- Selected.Reset();
+ SoldierSelection=INDEX_NONE; Selected.Reset();
  for(ABattleUnit* Unit:Mode->Units) if(Unit && Unit->IsAlive() && Unit->GetState()->Team==0 && LeaderSelectable(Unit) && Match->GroupOf(Unit->GetState()->SquadID)==GroupID) Selected.AddUnique(Unit);
  ShowNotice(Selected.Num()>0?FString::Printf(TEXT("群%d を選択：%d 部隊"),GroupID,Selected.Num()):FString::Printf(TEXT("群%d に操作できる隊長がいません"),GroupID));
 }

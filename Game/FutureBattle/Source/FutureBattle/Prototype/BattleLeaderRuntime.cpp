@@ -906,7 +906,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   U->Weapon==EBattleWeapon::Mortar?6:Now<RetryAt?5:!ProbeSlot?4:7);
  // -BattleUnderFireCover: just hit and standing (not walking his path): look for cover from a target he knows of, even unseen.
  FVector HitFrom;
- const bool bHitCover=UnderFireCoverEnabled() && !bSeenCover && !bMoveFire && !bVehicleBody && S->Order!=EBattleOrder::Move && !U->CoverPhase &&
+ const bool bHitCover=!bOwnOrder && UnderFireCoverEnabled() && !bSeenCover && !bMoveFire && !bVehicleBody && S->Order!=EBattleOrder::Move && !U->CoverPhase &&
   !CoverApproaches.Contains(ID) && UnitShotFrom(ID,Now,HitFrom) && Contact && Now-Contact->LastSeenTime<=FMath::Min(5.f,U->Perception.MemorySeconds) &&
   FVector::DistSquared2D(Pos,Contact->LastKnownPosition)<=FMath::Square(TargetRange(ID)) && !(S->Order!=EBattleOrder::Hold && !StopForCombat && P->Path.IsValidIndex(B.Waypoint));
  if(BattleTactics::CoverActionsEnabled() && (bSeenCover || bHitCover) && !bMoveFire && ProbeSlot && Now>=RetryAt && U->Weapon!=EBattleWeapon::Mortar && !bVehicleBody)
@@ -938,7 +938,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
    if(bOutsideContact)SightExperiment.Cover(bFound?TEXT("sector_contact_cover_walk"):TEXT("sector_contact_keep_moving"));
   }
   // -BattleNoCoverFallback: no cover found and nothing else started - a less exposed place nearby, else lie down.
-  if(NoCoverFallbackEnabled() && bSeenCover && !CoverApproaches.Contains(ID) && !FirePositions.Contains(ID))
+  if(!bOwnOrder && NoCoverFallbackEnabled() && bSeenCover && !CoverApproaches.Contains(ID) && !FirePositions.Contains(ID))
   {
    if(!bFireTried && StartFirePosition(ID,CoverThreat,TargetID,Now)){CoverApproaches.FindChecked(ID).bFallback=true;SightExperiment.Cover(TEXT("no_cover_fire_position"));}
    else if(bFirePositionHereGood)SightExperiment.Cover(TEXT("no_cover_here_is_good"));
