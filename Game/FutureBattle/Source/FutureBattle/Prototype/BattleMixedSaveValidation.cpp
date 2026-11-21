@@ -83,7 +83,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   const auto& A=Pair.Value;
   if((!ArtilleryType(Pair.Key,false)&&!ArtilleryType(Pair.Key,true))||!Finite(A.SetupElapsed,0,1000000)||
      (!A.bSettingUp&&A.SetupElapsed!=0)||!Finite(A.ReloadRemaining,0,1000000)||!Finite(A.PickRemaining,0,1000000)||
-     A.Shots<0||A.Shots==MAX_int32||!ArtilleryPoint(A.Aim))return Fail(TEXT("Invalid saved artillery"));
+     !BattleSaveValidation::Counter(A.Shots)||!ArtilleryPoint(A.Aim))return Fail(TEXT("Invalid saved artillery"));
   if(A.TargetKey>0)
   {
    const auto* Target=ByID.FindRef(A.TargetKey);const auto* Shooter=ByID.FindRef(Pair.Key);
@@ -142,7 +142,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
  {
   const auto* Leader=ByID.FindRef(S.LeaderUnitID);
   if(!Leader||!S.Members.Contains(S.LeaderUnitID)||S.SquadType>=BattleSquadType::Count||S.Members.Num()!=BattleSquadType::Members(S.SquadType)||
-    (S.CommandStatus!=EBattleCommandStatus::Active&&S.CommandStatus!=EBattleCommandStatus::Disabled)||S.DisplayName.Len()>80||S.CommandRevision<0||
+    (S.CommandStatus!=EBattleCommandStatus::Active&&S.CommandStatus!=EBattleCommandStatus::Disabled)||S.DisplayName.Len()>80||!BattleSaveValidation::Counter(S.CommandRevision)||
     !Finite(S.FlankCooldown,0,15.1))return Fail(TEXT("Invalid leader squad"));
   for(int32 ID:S.Members)
   {
@@ -157,7 +157,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
      (S.CommandStatus==EBattleCommandStatus::Disabled&&S.bPlayerDelegated))return Fail(TEXT("Invalid dead leader state"));
   const auto* P=SavedPlans.Find(S.SquadID);
   if(!P||static_cast<uint8>(P->Action)>static_cast<uint8>(EBattleSquadTactic::Recover)||!Point(P->Destination)||!Point(P->FlankContact)||
-    !Finite(P->Remaining,0,60)||P->Revision<0||P->Reason.Len()>160||!Finite(P->Age,0,1000)||!Finite(P->SafeSeconds,0,1000)||
+    !Finite(P->Remaining,0,60)||!BattleSaveValidation::Counter(P->Revision)||P->Reason.Len()>160||!Finite(P->Age,0,1000)||!Finite(P->SafeSeconds,0,1000)||
     !Finite(P->FlankSupportChanges,0,1)||!Finite(P->RetrySeconds,0,600)||!Finite(P->FlankExposure,0,1)||!Finite(P->SupportUntil,0,TacticalClock+20.1)||!Finite(P->LastSupportShot,-1,TacticalClock+.01))return Fail(TEXT("Invalid saved tactical plan"));
   auto Ally=[&](int32 ID){const auto* Other=BySquad.FindRef(ID);return Other&&ID!=S.SquadID&&Other->Team==S.Team;};
   auto Enemy=[&](int32 ID){const auto* Other=ByID.FindRef(ID);return Other&&Other->State.Team!=S.Team;};
@@ -180,13 +180,25 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   for(const auto& Contact:O.Contacts)
   {
    const auto& C=Contact.Value;const auto* Source=ByID.FindRef(C.SourceUnitID);const auto* Target=ByID.FindRef(C.TargetID);
-   if(C.TargetID!=Contact.Key||!Source||!Target||Source->State.Team!=S->Team||Target->State.Team==S->Team||!Point(C.LastKnownPosition)||
-     !Finite(C.LastSeenTime,-1000000,.01)||!Finite(C.Confidence,0,1))return Fail(TEXT("Invalid observed contact"));
+   if(C.TargetID!=Contact.Key||!BattleSaveValidation::Contact(C,S->Team,Source?&Source->State:nullptr,Target?&Target->State:nullptr,
+     BattleFieldLayout::ByName(MapName).SaveLimit))return Fail(TEXT("Invalid observed contact"));
   }
  }
  for(const auto& P:NextSamples)if(!BySquad.Contains(P.Key)||!Finite(P.Value,0,TacticalClock+1.1))return Fail(TEXT("Invalid tactical scheduling"));
  for(const auto& P:TeamRetryAfter)if(!BySquad.Contains(P.Key)||!Finite(P.Value,0,TacticalClock+60))return Fail(TEXT("Invalid team scheduling"));
- for(const auto& D:DamageBuckets)if(!BySquad.Contains(D.SquadID)||!Finite(D.Bucket,0,TacticalClock)||!Finite(D.Damage,0,100000))return Fail(TEXT("Invalid damage history"));
+ // RecordDamage prunes ages >5 before appending: at most six distinct integer seconds.
+ // Capture preserves each squad's array order (the order between squads is immaterial).
+ TMap<int32,double> LastDamageBucket;
+ TMap<int32,int32> DamageBucketCounts;
+ for(const auto& D:DamageBuckets)
+ {
+  if(!BySquad.Contains(D.SquadID)||!Finite(D.Bucket,0,TacticalClock)||
+     D.Bucket!=FMath::FloorToDouble(D.Bucket)||!Finite(D.Damage,0,100000))return Fail(TEXT("Invalid damage history"));
+  const double* PreviousBucket=LastDamageBucket.Find(D.SquadID);
+  if((PreviousBucket&&D.Bucket<=*PreviousBucket)||++DamageBucketCounts.FindOrAdd(D.SquadID)>6)
+   return Fail(TEXT("Invalid damage history"));
+  LastDamageBucket.Add(D.SquadID,D.Bucket);
+ }
  return true;
 }
 

@@ -42,6 +42,19 @@ bool BattleTactics::TankGunFlash()
  return On;
 }
 
+namespace { int32 SaveReloadBoundarySmokeOverride=-1; }
+bool BattleTactics::SaveReloadBoundary()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSaveReloadBoundary="),V);return V==1;}();
+ return SaveReloadBoundarySmokeOverride>=0?SaveReloadBoundarySmokeOverride==1:On;
+}
+int32 BattleTactics::OverrideSaveReloadBoundaryForSmoke(int32 Value)
+{
+ const int32 Previous=SaveReloadBoundarySmokeOverride;
+ if(FParse::Param(FCommandLine::Get(),TEXT("BattleMixedSaveSmoke")))SaveReloadBoundarySmokeOverride=FMath::Clamp(Value,-1,1);
+ return Previous;
+}
+
 bool BattleTactics::SPGAmmoEnabled()
 {
  static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSPGAmmo="),V);return V!=0;}();

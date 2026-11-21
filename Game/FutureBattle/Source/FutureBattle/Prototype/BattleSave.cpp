@@ -20,6 +20,17 @@
 namespace
 {
  int32 SaveRoutesSmokeOverride=-1;
+ void CompleteDueReloadOnSave(FBattleUnitState& Copy,double Now)
+ {
+  if(!BattleTactics::SaveReloadBoundary()||!(Copy.ReloadEndTime>0.&&Copy.ReloadEndTime<=Now))return;
+  // Same completion as AdvanceReloads, on the copy only; no extra frame of delay.
+  if(Copy.IsAlive())
+  {
+   const int32 Transfer=FMath::Min(Copy.Reserve,FMath::Max(0,GetDefault<UBattleTuning>()->Capacity(Copy.Weapon)-Copy.Ammo));
+   Copy.Ammo+=Transfer;Copy.Reserve-=Transfer;
+  }
+  Copy.ReloadEndTime=0.;
+ }
  // Default-valued UPROPERTYs still produce tags in SaveGameToMemory. Filter only the absent extension,
  // without changing global property flags, the existing tags, or object duplication/reference collection.
  class FSaveWithoutRoutesArchive : public FArchiveProxy
@@ -38,6 +49,15 @@ namespace
 	// Limit: FMapDef::SaveLimit of the map for mixed saves, 100m for the old all-actor saves.
 	bool ValidSnapshotPosition(const FVector& P, FVector2D Limit) { return !P.ContainsNaN() && FMath::Abs(P.X) <= Limit.X && FMath::Abs(P.Y) <= Limit.Y && InRange(P.Z, -1000, 10000); }
 	bool ValidTeam(int32 Team, bool bNeutral = false) { return Team == 0 || Team == 1 || (bNeutral && Team == INDEX_NONE); }
+}
+
+bool BattleSaveValidation::Contact(const FBattleContact& Value,int32 ObserverTeam,const FBattleUnitState* Source,
+ const FBattleUnitState* Target,FVector2D Limit)
+{
+ // Observed type is historical knowledge, not necessarily the target's current type.
+ return (Value.ObservedSquadType==255||Value.ObservedSquadType<BattleSquadType::Count)&&Source&&Target&&
+  Source->Team==ObserverTeam&&Target->Team!=ObserverTeam&&ValidSnapshotPosition(Value.LastKnownPosition,Limit)&&
+  InRange(Value.LastSeenTime,-1000000,.01)&&InRange(Value.Confidence,0,1);
 }
 
 bool BattleTactics::SaveRoutes()
@@ -99,11 +119,11 @@ bool UBattleSave::Validate(FString& Error) const
 	for (const auto& Entry : Units)
 	{
 		const auto& S = Entry.State; const auto& P = S.Perception; const auto& D = S.Decision;
-  if(S.WeaponAimDirection.ContainsNaN() || (S.bWeaponAimInitialized && !FMath::IsNearlyEqual(S.WeaponAimDirection.SizeSquared(),1.,.01)) || S.CoverPhase>4 || !InRange(S.CoverSeconds,0,3.01) || S.CoverOrderRevision<0 || !ValidPosition(S.CoverAnchor) || !ValidPosition(S.CoverPeek) || (S.CoverPhase && (!Mixed || !(TacticalFeatures&128) || !S.IsAlive())))return Fail(TEXT("Invalid cover or weapon aim state"));
+  if(S.WeaponAimDirection.ContainsNaN() || (S.bWeaponAimInitialized && !FMath::IsNearlyEqual(S.WeaponAimDirection.SizeSquared(),1.,.01)) || S.CoverPhase>4 || !InRange(S.CoverSeconds,0,3.01) || !BattleSaveValidation::Counter(S.CoverOrderRevision) || !ValidPosition(S.CoverAnchor) || !ValidPosition(S.CoverPeek) || (S.CoverPhase && (!Mixed || !(TacticalFeatures&128) || !S.IsAlive())))return Fail(TEXT("Invalid cover or weapon aim state"));
   // A soldier behind low cover stands up to fire where he is: the peek point is the anchor itself (distance 0).
   if(S.CoverPhase && FVector::Dist2D(S.CoverAnchor,S.CoverPeek)>1. && !InRange(FVector::Dist2D(S.CoverAnchor,S.CoverPeek),100,450))return Fail(TEXT("Invalid cover peek distance"));
 		if (S.UnitID <= 0 || S.UnitID > 1000000 || ByID.Contains(S.UnitID) || !ValidTeam(S.Team) || !ValidPosition(Entry.Position) || Entry.Rotation.ContainsNaN() || !ValidPosition(S.Destination)) return Fail(TEXT("Invalid or duplicate unit identity/transform"));
-		if (!InRange(S.HP, 0, 10000) || !InRange(S.Ammo, 0, 10000) || !InRange(S.Reserve, 0, 100000) || !InRange(S.ReloadEndTime, 0, 120) || !InRange(S.NextShotTime, 0, 120) || S.ShotSequence < 0 || S.OrderRevision < 0 || S.PerceptionRevision < 0 || S.DecisionRevision < 0) return Fail(TEXT("Invalid unit resources or timers"));
+		if (!InRange(S.HP, 0, 10000) || !InRange(S.Ammo, 0, 10000) || !InRange(S.Reserve, 0, 100000) || !InRange(S.ReloadEndTime, 0, 120) || !InRange(S.NextShotTime, 0, 120) || !BattleSaveValidation::Counter(S.ShotSequence) || !BattleSaveValidation::Counter(S.OrderRevision) || !BattleSaveValidation::Counter(S.PerceptionRevision) || !BattleSaveValidation::Counter(S.DecisionRevision) || !BattleSaveValidation::Counter(S.CoordinationRevision) || !BattleSaveValidation::Counter(S.MoveRetries)) return Fail(TEXT("Invalid unit resources or timers"));
 		if (static_cast<uint8>(S.Weapon) > static_cast<uint8>(EBattleWeapon::Mortar) || static_cast<uint8>(S.Order) > static_cast<uint8>(EBattleOrder::Defend) || static_cast<uint8>(S.Training) > 2 || !InRange(S.SpreadSkillScale, .25, 3) || !InRange(S.HireCost, 1, 1000000)) return Fail(TEXT("Invalid unit order or training"));
 		if (!InRange(P.SightRange, 100, 20000) || !InRange(P.FieldOfView, 1, 360) || !InRange(P.DetectionSeconds, 0, 30) || !InRange(P.MemorySeconds, 0, 120) || !InRange(P.ShareRange, 0, 20000) || !InRange(P.ShareDelay, 0, 30) || !InRange(D.ThinkSeconds, .01, 10) || !InRange(D.CoverThinkSeconds, .01, 30) || !InRange(D.CoverCandidates, 1, 100)) return Fail(TEXT("Invalid unit capabilities"));
   if(!InRange(S.Shield,0,1000)||!InRange(S.ShieldWait,0,BattleTactics::ExoShieldHitDelay())||
@@ -115,12 +135,12 @@ bool UBattleSave::Validate(FString& Error) const
 	TSet<int32> Assigned;
 	for (const auto& Squad : Squads)
 	{
-		if (Squad.SquadID <= 0 || Squad.SquadID > 1000000 || SquadIDs.Contains(Squad.SquadID) || !ValidTeam(Squad.Team) || Squad.Members.IsEmpty() || Squad.Members.Num() > (Mixed?10:5) || !ValidPosition(Squad.Destination) || !InRange(Squad.DefenseRadius, 250, 10000) || Squad.OrderRevision < 0 || static_cast<uint8>(Squad.Order) > static_cast<uint8>(EBattleOrder::Defend)) return Fail(TEXT("Invalid squad"));
+		if (Squad.SquadID <= 0 || Squad.SquadID > 1000000 || SquadIDs.Contains(Squad.SquadID) || !ValidTeam(Squad.Team) || Squad.Members.IsEmpty() || Squad.Members.Num() > (Mixed?10:5) || !ValidPosition(Squad.Destination) || !InRange(Squad.DefenseRadius, 250, 10000) || !BattleSaveValidation::Counter(Squad.OrderRevision) || !BattleSaveValidation::Counter(Squad.MissionRevision) || !BattleSaveValidation::Counter(Squad.CommandRevision) || !BattleSaveValidation::Counter(Squad.TacticalPlan.Revision) || static_cast<uint8>(Squad.Order) > static_cast<uint8>(EBattleOrder::Defend)) return Fail(TEXT("Invalid squad"));
 		SquadIDs.Add(Squad.SquadID);
   if (Squad.bHasMission)
   {
    if (static_cast<uint8>(Squad.MissionOrder) > static_cast<uint8>(EBattleOrder::Defend) ||
-       !ValidPosition(Squad.MissionDestination) || Squad.MissionRevision < 0 || Squad.MissionGoals.Num() > (Mixed?10:5))
+       !ValidPosition(Squad.MissionDestination) || Squad.MissionGoals.Num() > (Mixed?10:5))
     return Fail(TEXT("Invalid squad mission"));
    for (const auto& Goal : Squad.MissionGoals)
     if (!Squad.Members.Contains(Goal.Key) || !ValidPosition(Goal.Value)) return Fail(TEXT("Invalid mission member goal"));
@@ -170,7 +190,8 @@ bool UBattleSave::Validate(FString& Error) const
 	auto ValidContact = [&](int32 Receiver, const FBattleContact& C)
 	{
 		const auto* const* Source = ByID.Find(C.SourceUnitID); const auto* const* Target = ByID.Find(C.TargetID); const auto* const* Observer = ByID.Find(Receiver);
-		return (C.ObservedSquadType==255||C.ObservedSquadType<BattleSquadType::Count) && Observer && Source && Target && (*Source)->Team == (*Observer)->Team && (*Target)->Team != (*Observer)->Team && ValidPosition(C.LastKnownPosition) && InRange(C.LastSeenTime, -1000000, 0.01) && InRange(C.Confidence, 0, 1);
+		return Observer && BattleSaveValidation::Contact(C,(*Observer)->Team,Source?*Source:nullptr,Target?*Target:nullptr,
+   Mixed?BattleFieldLayout::ByName(MapName).SaveLimit:FVector2D(10000,10000));
 	};
 	for (const auto& Observer : Observers)
 	{
@@ -181,7 +202,7 @@ bool UBattleSave::Validate(FString& Error) const
 			if (!ByID.Contains(Detection.Key) || ByID[Detection.Key]->Team == (*S)->Team || !InRange(Detection.Value, -1000000, .01)) return Fail(TEXT("Invalid detection timer"));
 	}
 	for (const auto& Report : Reports)
-		if (!ValidContact(Report.ReceiverID, Report.Contact) || !InRange(Report.DeliveryTime, -120, 30) || Report.SourceRevision < 0 || Report.ReceiverRevision < 0) return Fail(TEXT("Invalid pending report"));
+		if (!ValidContact(Report.ReceiverID, Report.Contact) || !InRange(Report.DeliveryTime, -120, 30) || !BattleSaveValidation::Counter(Report.SourceRevision) || !BattleSaveValidation::Counter(Report.ReceiverRevision)) return Fail(TEXT("Invalid pending report"));
 	if(Mixed && !ValidateMixed(Error))return false;
 	Error.Reset(); return true;
 }
@@ -253,12 +274,14 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
  if(Mixed) for(const auto& Pair:Store->GetUnits())
  {
   FBattleSavedUnit E;E.State=Pair.Value;E.Position=Runtime->Position(Pair.Key);E.Rotation=Runtime->Forward(Pair.Key).Rotation();
+  CompleteDueReloadOnSave(E.State,Now);
   E.State.NextShotTime=FMath::Max(0.,E.State.NextShotTime-Now);E.State.ReloadEndTime=FMath::Max(0.,E.State.ReloadEndTime-Now);
   Save->Units.Add(E);SquadIDs.Add(E.State.SquadID);
  }
 	if(!Mixed) for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->GetState())
 	{
 		FBattleSavedUnit Entry; Entry.State = *Unit->GetState(); Entry.Position = Unit->GetActorLocation(); Entry.Rotation = Unit->GetActorRotation();
+		CompleteDueReloadOnSave(Entry.State,Now);
 		Entry.State.NextShotTime = FMath::Max(0., Entry.State.NextShotTime - Now);
 		Entry.State.ReloadEndTime = FMath::Max(0., Entry.State.ReloadEndTime - Now);
 		Save->Units.Add(Entry); SquadIDs.Add(Entry.State.SquadID);

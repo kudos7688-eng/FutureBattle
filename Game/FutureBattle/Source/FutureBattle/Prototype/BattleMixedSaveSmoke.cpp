@@ -109,6 +109,15 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
    CoverApproaches=OriginalApproaches;FirePositions=OriginalFire;SuppressionZeroAt=OriginalSuppression;
    Stances=OriginalStances;StanceLockedUntil=OriginalLocks;
   };
+  Reject([](UBattleSave& S){S.Units[0].State.ShotSequence=MAX_int32;},TEXT("overflow shot counter rejected atomically"));
+  Reject([](UBattleSave& S){S.Squads[0].MissionRevision=MAX_int32;S.Squads[0].bHasMission=false;},TEXT("inactive mission counter overflow rejected atomically"));
+  Reject([](UBattleSave& S){const auto DuplicateDamage=S.DamageBuckets[0];S.DamageBuckets.Add(DuplicateDamage);},TEXT("duplicate damage bucket rejected atomically"));
+  Reject([](UBattleSave& S){S.DamageBuckets[0].Bucket-=.5;},TEXT("fractional damage bucket rejected atomically"));
+  Reject([](UBattleSave& S){const auto LaterDamage=S.DamageBuckets[0];S.DamageBuckets[0].Bucket-=1;S.DamageBuckets.Insert(LaterDamage,0);},TEXT("descending damage buckets rejected atomically"));
+  Reject([](UBattleSave& S){const auto DamageFixture=S.DamageBuckets[0];S.DamageBuckets.Reset();for(int32 BucketIndex=0;BucketIndex<7;++BucketIndex){auto ExcessDamage=DamageFixture;ExcessDamage.Bucket=BucketIndex;S.DamageBuckets.Add(ExcessDamage);}},TEXT("excessive per-squad damage buckets rejected atomically"));
+  Reject([&](UBattleSave& S){FBattleContact InvalidTypeContact;InvalidTypeContact.TargetID=Enemy;InvalidTypeContact.SourceUnitID=1;
+   InvalidTypeContact.LastKnownPosition=Position(Enemy);InvalidTypeContact.LastSeenTime=0;InvalidTypeContact.Confidence=1;
+   InvalidTypeContact.ObservedSquadType=254;S.TacticalSamples.FindChecked(1).Contacts.Add(Enemy,InvalidTypeContact);},TEXT("invalid tactical sample observed type rejected atomically"));
   Reject([](UBattleSave& S){S.Units[1].State.UnitID=S.Units[0].State.UnitID;},TEXT("duplicate identity rejected atomically"));
   Reject([](UBattleSave& S){S.SavedPlans[2].SupportSquad=26;},TEXT("enemy support reference rejected atomically"));
   Reject([](UBattleSave& S){S.Units[1].State.bActorRepresentation=true;},TEXT("follower Actor type corruption rejected atomically"));
@@ -126,6 +135,46 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
   Check(Match->LastMessage==TEXT("Could not stage representations; restore aborted"),TEXT("restore failure reaches Actor/Mass staging"));
   RestoreStageFailureAfter=INDEX_NONE;
   Check(!Match->SaveMatch(TEXT("UnexpectedSlot")),TEXT("unapproved slot does not write"));
+  {
+   struct FReloadBoundarySmokeScope
+   {
+    int32 Previous=BattleTactics::OverrideSaveReloadBoundaryForSmoke(0);
+    ~FReloadBoundarySmokeScope(){BattleTactics::OverrideSaveReloadBoundaryForSmoke(Previous);}
+   } ReloadBoundarySmokeScope;
+   const FBattleUnitState ReloadOriginal=Resource(Follower);
+   // Include exactly due, overdue, future and inactive states without advancing world time.
+   for(const double ReloadDeadline:{Now,Now-.25,Now+2.,0.})
+   {
+    Resource(Follower)=ReloadOriginal;Resource(Follower).ReloadEndTime=ReloadDeadline;
+    BattleTactics::OverrideSaveReloadBoundaryForSmoke(0);
+    auto* ReloadOff=Match->CaptureSnapshot();
+    BattleTactics::OverrideSaveReloadBoundaryForSmoke(1);
+    auto* ReloadOn=Match->CaptureSnapshot();
+    const auto* OffUnit=ReloadOff?ReloadOff->Units.FindByPredicate([&](const FBattleSavedUnit& Candidate){return Candidate.State.UnitID==Follower;}):nullptr;
+    const auto* OnUnit=ReloadOn?ReloadOn->Units.FindByPredicate([&](const FBattleSavedUnit& Candidate){return Candidate.State.UnitID==Follower;}):nullptr;
+    const bool Due=ReloadDeadline>0.&&ReloadDeadline<=Now;
+    const int32 ReloadTransfer=Due?FMath::Min(ReloadOriginal.Reserve,FMath::Max(0,GetDefault<UBattleTuning>()->Capacity(ReloadOriginal.Weapon)-ReloadOriginal.Ammo)):0;
+    Check(OffUnit&&OnUnit&&OffUnit->State.Ammo==ReloadOriginal.Ammo&&OffUnit->State.Reserve==ReloadOriginal.Reserve&&
+     OnUnit->State.Ammo==ReloadOriginal.Ammo+ReloadTransfer&&OnUnit->State.Reserve==ReloadOriginal.Reserve-ReloadTransfer&&
+     OnUnit->State.ReloadEndTime==FMath::Max(0.,ReloadDeadline-Now),TEXT("reload boundary transfers only due ammunition with switch ON"));
+    Check(Resource(Follower).Ammo==ReloadOriginal.Ammo&&Resource(Follower).Reserve==ReloadOriginal.Reserve&&Resource(Follower).ReloadEndTime==ReloadDeadline,
+     TEXT("reload capture leaves live resources and deadline untouched"));
+    if(!Due&&ReloadOff&&ReloadOn)
+    {
+     TArray<uint8> ReloadOffBytes,ReloadOnBytes;
+     Check(UGameplayStatics::SaveGameToMemory(ReloadOff,ReloadOffBytes)&&UGameplayStatics::SaveGameToMemory(ReloadOn,ReloadOnBytes)&&ReloadOffBytes==ReloadOnBytes,
+      TEXT("nonboundary save bytes identical with reload switch ON and OFF"));
+    }
+    if(Due&&OnUnit&&Match->RestoreSnapshot(ReloadOn))
+    {
+     Store->AdvanceReloads(Now+1.);
+     Check(Resource(Follower).Ammo==ReloadOriginal.Ammo+ReloadTransfer&&Resource(Follower).Reserve==ReloadOriginal.Reserve-ReloadTransfer,
+      TEXT("restored due reload transfers ammunition exactly once"));
+    }
+    else if(Due)Check(false,TEXT("due reload snapshot restores"));
+    Check(Match->RestoreSnapshot(Saved),TEXT("restore fixture after reload boundary check"));
+   }
+  }
   // Capture and restore actual direct control through the same public APIs used by F8/F9.
   PC->ControlUnit(Actor(1));auto* Direct=Match->CaptureSnapshot();
   Check(Direct&&Direct->ControlledID==1&&Match->RestoreSnapshot(Direct)&&PC->GetPawn()==Actor(1),TEXT("TPS control restored to recreated leader"));

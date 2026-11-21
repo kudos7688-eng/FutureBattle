@@ -6,6 +6,14 @@
 #include "BattleSquadTactics.h"
 #include "BattleSave.generated.h"
 
+namespace BattleSaveValidation
+{
+ // Far beyond a real match, with ample headroom for subsequent increments.
+ inline bool Counter(int32 Value){return Value>=0&&Value<=100000000;}
+ bool Contact(const FBattleContact& Value,int32 ObserverTeam,const FBattleUnitState* Source,
+  const FBattleUnitState* Target,FVector2D Limit);
+}
+
 USTRUCT()
 struct FBattleSavedUnit
 {
