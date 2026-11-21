@@ -17,11 +17,13 @@ param(
 )
 $ErrorActionPreference='Stop'
 Set-Location $PSScriptRoot
+# With powershell -File the comma list arrives as one string: split it (case strings themselves hold no comma).
+$Cases=@($Cases|ForEach-Object{$_ -split ','}|Where-Object{$_})
 $builds=@{S=(Resolve-Path $StrategyBuild).Path}
 if($BaseBuild){$builds['B']=(Resolve-Path $BaseBuild).Path}
 $jobs=@();$names=@()
 foreach($c in $Cases){
- if($c -notmatch '^([A-Za-z0-9]+)=([A-I]):(\d+):([SB])(?::(.*))?$'){throw "Bad case: $c"}
+ if($c -notmatch '^([A-Za-z0-9]+)=([A-J]):(\d+):([SB])(?::(.*))?$'){throw "Bad case: $c"}
  $label,$map,$seed,$b,$extra=$Matches[1],$Matches[2],$Matches[3],$Matches[4],$Matches[5]
  if(!$builds.ContainsKey($b)){throw "No build for $b in $c"}
  $name="chk-$label-$map$seed-$Tag"
