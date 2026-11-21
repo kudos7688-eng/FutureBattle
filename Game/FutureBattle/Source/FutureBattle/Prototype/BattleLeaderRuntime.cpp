@@ -1461,6 +1461,25 @@ bool UBattleLeaderRuntime::NoCoverFallbackEnabled()
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleNoCoverFallback="),V);return V!=0;}();
  return bOn;
 }
+bool UBattleLeaderRuntime::HitRevealEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleHitReveal="),V);return V!=0;}();
+ return bOn;
+}
+void UBattleLeaderRuntime::RevealShooter(int32 ID,int32 Shooter,const FVector& From)
+{
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* V=Store->Find(ID);const auto* S=Store->Find(Shooter);
+ if(!V||!S||!V->IsAlive()||!S->IsAlive()||V->Team==S->Team)return;
+ auto* Perc=GetWorld()->GetSubsystem<UBattlePerception>();const double Now=GetWorld()->GetTimeSeconds();
+ if(const auto* C=Perc->FindContact(ID,Shooter);C && C->bVisible){SightExperiment.Cover(TEXT("hit_reveal_already_seen"));return;}
+ if(CanSee(ID,Shooter)){Perc->RevealShooter(ID,Shooter,Now,V->Perception.DetectionSeconds);SightExperiment.Cover(TEXT("hit_reveal_los"));return;}
+ // Deterministic error (no random stream consumed): direction from the pair and the frame, length 10% of the distance.
+ const FVector Me=Position(ID);const double Dist=FVector::Dist2D(Me,From);
+ const uint32 H=HashCombine(HashCombine(GetTypeHash(ID),GetTypeHash(Shooter)),GetTypeHash(uint32(GFrameCounter)));
+ const double Angle=double(H%3600u)*(PI/1800.);
+ const FVector Guess=From+FVector(FMath::Cos(Angle),FMath::Sin(Angle),0.)*(.1*Dist);
+ Perc->AddHint(ID,Shooter,Guess,Now,.4f);SightExperiment.Cover(TEXT("hit_reveal_hint"));
+}
 bool UBattleLeaderRuntime::CoverPriorityEnabled()
 {
  static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverPriority="),V);return V!=0;}();
@@ -1519,6 +1538,8 @@ void UBattleLeaderRuntime::NoteUnderFire(int32 ID)
  if(UBattleMatch::DangerRouteOn())if(const auto* V=GetWorld()->GetSubsystem<UBattleState>()->Find(ID))GetWorld()->GetSubsystem<UBattleMatch>()->NoteSectorDanger(V->Team,Position(ID));
  if(ShotDirectionEnabled() || UnderFireCoverEnabled() || CoverPriorityEnabled()){FVector From;if(GetWorld()->GetSubsystem<UBattleState>()->PendingHitSource(From))ShotFrom.Add(ID,TPair<FVector,double>(From,GetWorld()->GetTimeSeconds()));}
  if(SectorContactEnabled() || SectorMoveFireEnabled() || !SectorFireBack.IsEmpty())SectorHitUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);
+ if(HitRevealEnabled()){const auto* Store=GetWorld()->GetSubsystem<UBattleState>();FVector From;const int32 Shooter=Store->PendingHitShooter();
+  if(Shooter!=INDEX_NONE && Store->PendingHitSource(From))RevealShooter(ID,Shooter,From);}
  if(!BattleTactics::ReturnFireEnabled())return;
  const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;
  if(Trial>=0){const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);if(!U||U->Team!=Trial)return;}

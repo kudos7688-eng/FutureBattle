@@ -479,6 +479,11 @@ public:
  // last 5 s does not wait for the shared 2-per-frame cover-search slot (own cap of 4 per frame), and searches again 2 s (not 5 s)
  // after a failed search - also when he was already waiting after one.
  static bool CoverPriorityEnabled();
+ // Trial -BattleHitReveal=1 (default 0, 2026-11-21): a hit soldier who does not see the shooter checks the line toward him at once.
+ // Clear line: detection completes on the next scan. Blocked or out of sight: a remembered hint near the shot origin, its error
+ // 10% of the distance (never the exact position). Counts hit_reveal_* in the sight diagnostics.
+ static bool HitRevealEnabled();
+ void RevealShooter(int32 VictimID,int32 ShooterID,const FVector& From);
  bool CloseInThreat(int32 SquadID,FVector& Threat) const {const auto* P=Plans.Find(SquadID);if(!P||!P->bCloseIn)return false;Threat=P->CloseInAt;return true;}
  void ClearCloseIn(int32 SquadID){if(auto* P=Plans.Find(SquadID)){P->bCloseIn=false;P->FarSince=0;}}
  // Trial -BattleArrivalThreat=1 (default 0): a sector squad picks its arrival cover places against the known enemy nearest

@@ -395,6 +395,15 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	if (Metrics->bRecording) Metrics->PendingReportsPeak = FMath::Max(Metrics->PendingReportsPeak, static_cast<int64>(PendingReports.Num()));
 }
 
+void UBattlePerception::RevealShooter(int32 ObserverID, int32 TargetID, double Now, float DetectionSeconds)
+{
+	auto* Observer = Observers.Find(ObserverID); if (!Observer) return;
+	if (const auto* Known = Observer->Contacts.Find(TargetID); Known && Known->bVisible) return;
+	double& Started = Observer->DetectionStarted.FindOrAdd(TargetID, Now);
+	Started = FMath::Min(Started, Now - FMath::Max(0.f, DetectionSeconds));
+	if (double* Due = NextScanTimes.Find(ObserverID)) *Due = FMath::Min(*Due, Now);
+}
+
 void UBattlePerception::AddHint(int32 ObserverID, int32 TargetID, const FVector& Position, double Now, float Confidence)
 {
 	auto* Observer = Observers.Find(ObserverID); if (!Observer) return;
