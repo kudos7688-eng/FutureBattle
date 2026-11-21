@@ -427,7 +427,12 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   if(bMortarPost){Center=ChooseMortarPost(Team,Pair.Key);Order=EBattleOrder::Defend;}
   else if(bArtillery&&bArea)Center=AreaArtilleryPost(Team,Pair.Key,Center);
   const int32* RaidPost=bArea&&BattleTactics::ArtilleryPosts()?ArtilleryRaids.Find(Pair.Key):nullptr;
-  if(RaidPost){Center=BattleTactics::ArtilleryRaidChase()?ArtilleryRaidChases.FindChecked(Pair.Key).Target:ArtilleryPostPositions[1-Team][*RaidPost];Order=EBattleOrder::AttackMove;}
+  if(RaidPost){Center=BattleTactics::ArtilleryRaidChase()?ArtilleryRaidChases.FindChecked(Pair.Key).Target:ArtilleryPostPositions[1-Team][*RaidPost];Order=EBattleOrder::AttackMove;
+   // Trial -BattleArtilleryRaidSneak: measured raids stalled in the mid-field fights (attack-move engages every contact on the way);
+   // a plain move keeps going through contacts until the leader is near the target, then attack-move takes over.
+   if(const float RaidSneak=BattleTactics::ArtilleryRaidSneak();RaidSneak>0.f)
+    if(const auto* SneakRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();SneakRuntime&&Store->Find(Pair.Value.LeaderUnitID)&&
+       FVector::Dist2D(SneakRuntime->Position(Pair.Value.LeaderUnitID),Center)>RaidSneak)Order=EBattleOrder::Move;}
   // The tank's overwatch post; a post near its current mission is kept (no new order for every small change in what the team knows).
   if(bTankPost){Center=AreaTankPost(Team,Target);if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2500.)Center=Pair.Value.MissionDestination;}
   // A squad in a group the AI runs follows its group: the rally point while gathering, then the group's objective together.

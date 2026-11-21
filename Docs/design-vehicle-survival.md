@@ -102,3 +102,11 @@ OFFでは従来の分類・残弾／生存照会・VehicleIDs条件・照準式�
 ## 観測に基づく戦術判断（-BattleObservedTactics）
 
 既定OFFの共通試験切替でO04・O05・O07・O08・O09・O11を修正する。仕様、OFF互換性、保存と負荷の制限は [観測に基づく戦術判断](design-observation.md) を参照。
+
+## 襲撃が前線を抜ける（-BattleArtilleryRaidSneak）
+
+追う襲撃（`-BattleArtilleryRaidChase=1`）の最初の評価（2026-11-22 2時30分、マップI 30FPS、seed7・19、両軍に自走砲1・外骨格1、陣地・発砲・射程55000・費用45）では、襲撃の外骨格は発砲を追って目標を110回ほど取り直したが、自走砲の撃破は0のままだった。外骨格の小隊は x≈-7000（中央の手前）で `ENGAGE / FLANK / SUPPORT` を繰り返し、盾が落ちると `RETREAT` して本拠地の補給へ戻っていた。攻撃前進（AttackMove）は途中の敵すべてと撃ち合うため、前線を抜けられない。
+
+`-BattleArtilleryRaidSneak=<m>`（既定0＝今のまま、0〜500）は、襲撃の小隊の隊長が目標からこの距離より遠い間、命令を移動（Move）にする。移動の命令では、敵を狙っていても止まらずに進み（`BattleContactMovement.cpp`）、遮蔽の行動もしない（`BattleCoverAction.cpp`）。近づいたら攻撃前進に戻る。本拠地攻めの S5（`-BattleAreaBaseInfiltrate`）と同じ考え方。`-BattleArtilleryPosts=1` のときだけ働く。
+
+評価：上の条件に `-ArtilleryRaidChase 1` を足し、`-ArtilleryRaidSneak 0` と `80` を30FPSで比べる。見る値は、自走砲の撃破、襲撃の終わり方（`cleared`/`expired`/`losses`）、外骨格の損失、両軍の得点。

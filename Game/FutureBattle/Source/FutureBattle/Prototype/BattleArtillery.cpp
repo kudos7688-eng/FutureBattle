@@ -67,6 +67,12 @@ bool BattleTactics::ArtilleryRaidChase()
  return On&&ArtilleryPosts();
 }
 
+float BattleTactics::ArtilleryRaidSneak()
+{
+ static const float Metres=[]{float V=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryRaidSneak="),V);return FMath::IsFinite(V)?FMath::Clamp(V,0.f,500.f):0.f;}();
+ return ArtilleryPosts()?Metres*100.f:0.f;
+}
+
 int32 BattleTactics::AreaSPGCost()
 {
  static int32 OverrideCost=35;
