@@ -148,6 +148,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("ContactDebug"), EKeys::F6, &ABattleController::ToggleContactDebug);
 	Button(TEXT("SectorGrid"), EKeys::M, &ABattleController::ToggleSectorGrid);
 	Button(TEXT("FogView"), EKeys::N, &ABattleController::ToggleFogView);
+	Button(TEXT("EnemyRanges"), EKeys::L, &ABattleController::ToggleEnemyRanges);
 	Button(TEXT("TrainingPreset"), EKeys::F7, &ABattleController::CycleTrainingSelected);
 	Button(TEXT("HireRecruit"), EKeys::One, &ABattleController::HireRecruit);
 	Button(TEXT("HireRegular"), EKeys::Two, &ABattleController::HireRegular);
@@ -736,6 +737,13 @@ void ABattleController::ToggleFogView()
 	if (!bTactical) return;
 	bShowFog = !bShowFog;
 	ShowNotice(bShowFog ? TEXT("戦場の霧：表示") : TEXT("戦場の霧：非表示"));
+}
+
+void ABattleController::ToggleEnemyRanges()
+{
+	if (!bTactical) return;
+	bShowEnemyRanges = !bShowEnemyRanges;
+	ShowNotice(bShowEnemyRanges ? TEXT("敵の射程：見えている敵をすべて表示") : TEXT("敵の射程：ポインタを重ねた敵だけ表示"));
 }
 
 bool ABattleController::GetPointerPosition(FVector2D& Position) const

@@ -118,6 +118,9 @@ public:
 	bool bShowSectorGrid = true, bShowFog = true;
 	void ToggleSectorGrid();
 	void ToggleFogView();
+	// Range rings of seen enemy squads (L, display only, ABattleHUD::DrawRangeRings): off = only the enemy under the pointer.
+	bool bShowEnemyRanges = false;
+	void ToggleEnemyRanges();
 	void CycleTrainingSelected();
 	void HireRecruit();
 	void HireRegular();

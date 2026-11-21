@@ -20,6 +20,13 @@ private:
  void DrawNoticeLog();
  // Ground marks for the selected squads: line to the order destination, destination mark, defence radius, arrival slots.
  void DrawOrderMarks();
+ // Range rings (2026-11-21, display only, tactical view): around the leader of each selected squad, a ring at the distance its
+ // weapons open fire (BattleRanges::Engage; anti-tank, tank gun and artillery min/max get their own ring), labelled in metres.
+ // Seen enemy squads get rings for their identified type (the one under the pointer, or all with L), observed information only.
+ // -BattleRangeRings=0 hides them (also on the minimap).
+ void DrawRangeRings();
+ // The same rings on the tactical minimap (no labels; enemies only with L).
+ void DrawMinimapRangeRings(class ABattleController* PC, const struct FBattleMinimapLayout& Map);
  // The predicted way of the selected squads and the way being drawn (BattlePlayerPath.cpp).
  void DrawOrderWays();
  // Hit direction (2026-11-19, display only): while the player controls a soldier, a red arc around the crosshair points to
