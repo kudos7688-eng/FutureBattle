@@ -150,6 +150,18 @@ $supply=@{
  # ST2 = stage S2, recon -> focus attack (with -TrialTeam only that team, through -AreaTrialTeam).
  'SL1'=@('-SituationLog','1')
  'ST2'=@('-Strategy','2')
+ # Subtraction evaluation (2026-11-22, Docs/design-subtraction-eval.md): ALL = both teams buy every type (use as -Baseline);
+ # W1..W9 = the same without one type (heavy, scout, AT, tank, armoured car, mortar, SPG, exo, supply; with -TrialTeam that team only).
+ 'ALL'=@('-AreaAllTypes','1')
+ 'W1'=@('-AreaAllTypes','1','-AreaWithout','1')
+ 'W2'=@('-AreaAllTypes','1','-AreaWithout','2')
+ 'W3'=@('-AreaAllTypes','1','-AreaWithout','3')
+ 'W4'=@('-AreaAllTypes','1','-AreaWithout','4')
+ 'W5'=@('-AreaAllTypes','1','-AreaWithout','5')
+ 'W6'=@('-AreaAllTypes','1','-AreaWithout','6')
+ 'W7'=@('-AreaAllTypes','1','-AreaWithout','7')
+ 'W8'=@('-AreaAllTypes','1','-AreaWithout','8')
+ 'W9'=@('-AreaAllTypes','1','-AreaWithout','9')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

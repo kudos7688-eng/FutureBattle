@@ -136,10 +136,26 @@ void UBattleMatch::UpdateAreaHiring()
   // Squad type by the intent's heavy share: heavy infantry while the team's bought heavy squads are below that share of its purchases.
   FAreaIntent HireIntent=AreaIntent(Team); uint8 Type=BattleSquadType::Rifle;
   int32 Bought=0,Heavy=0;for(const auto& P:Store->GetSquads())if(P.Value.Team==Team){Bought+=P.Key>50;Heavy+=P.Value.SquadType==BattleSquadType::Heavy;}
+  // Subtraction evaluation (Docs/design-subtraction-eval.md, trials default 0): -BattleAreaAllTypes=1 gives BOTH teams the all-types mix
+  // (the composition schedule below plus heavy share 0.2, two scout pairs, one exoskeleton soldier, one supply vehicle; command-line
+  // keep values are not mixed in); -BattleAreaWithout=<type> then removes one type (the trial team only with -BattleAreaTrialTeam).
+  const bool bAllTypes=BattleTactics::AreaAllTypes();const int32 Without=BattleTactics::AreaWithout(Team);
+  if(bAllTypes)
+  {
+   const auto* TT=GetDefault<UBattleTuning>();auto Cap=[](int32 Value,int32 Limit){return FMath::Clamp(Value,0,FMath::Max(0,Limit));};
+   HireIntent.HeavyShare=FMath::Max(HireIntent.HeavyShare,.2f);HireIntent.ScoutKeep=Cap(2,TT->AreaScoutLimit);HireIntent.ExoKeep=Cap(1,TT->AreaExoLimit);HireIntent.SupplyKeep=Cap(1,TT->AreaSupplyLimit);
+  }
+  if(Without==BattleSquadType::Heavy)HireIntent.HeavyShare=0.f;
   if(HireIntent.HeavyShare>0&&Heavy<HireIntent.HeavyShare*(Bought+1))Type=BattleSquadType::Heavy;
   // Strategic layer trial -BattleAreaComposition=1: the AI sets the numbers of special squad types it keeps (BattleArmourAI.cpp).
-  const bool bComposition=BattleTactics::AreaComposition(Team);const uint8 PlainType=Type;
+  const bool bComposition=BattleTactics::AreaComposition(Team)||bAllTypes;const uint8 PlainType=Type;
   if(bComposition)AreaComposition(Team,HireIntent,Bought);
+  switch(Without)
+  {
+   case BattleSquadType::Scout:HireIntent.ScoutKeep=0;break;case BattleSquadType::AntiTank:HireIntent.ATKeep=0;break;case BattleSquadType::Tank:HireIntent.TankKeep=0;break;
+   case BattleSquadType::ArmoredCar:HireIntent.ACKeep=0;break;case BattleSquadType::Mortar:HireIntent.MortarKeep=0;break;case BattleSquadType::SPGun:HireIntent.SPGKeep=0;break;
+   case BattleSquadType::Exo:HireIntent.ExoKeep=0;break;case BattleSquadType::Supply:HireIntent.SupplyKeep=0;break;default:break;
+  }
   // Scout pairs first when the team has fewer active pairs than it wants: none during the first purchases (taking points),
   // then one more per AreaScoutAfterHires purchases up to the intent's ScoutKeep; a lost pair is bought again.
   {

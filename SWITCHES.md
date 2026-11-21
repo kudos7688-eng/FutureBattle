@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 362 種類。
+計 364 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -14,6 +14,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleAllyPass` | Value | 0 | BattleStableMovement.cpp:32 |  |
 | `-BattleArea` | Param | off | BattleLeaderRuntime.cpp:76, BattleState.cpp:580 |  |
 | `-BattleAreaACKeep` | Value | -1（= 設定値 0） | BattleTactics.cpp:97 |  |
+| `-BattleAreaAllTypes` | Value | 0 | BattleArmourAI.cpp:77 |  |
 | `-BattleAreaATKeep` | Value | -1（= 設定値 0） | BattleTactics.cpp:95 |  |
 | `-BattleAreaAttackWeight` | Value | 2.0 | BattleTactics.cpp:75 |  |
 | `-BattleAreaBaseFlank` | Value | 1.3f | BattleTactics.cpp:88 |  |
@@ -66,6 +67,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleAreaWarResourceValue` | Value | 1 | BattleWarScore.cpp:11 |  |
 | `-BattleAreaWarScore` | Value | 0 | BattleWarScore.cpp:10 |  |
 | `-BattleAreaWarTarget` | Value | 0 | BattleWarScore.cpp:12 |  |
+| `-BattleAreaWithout` | Value | -1 | BattleArmourAI.cpp:83 |  |
 | `-BattleArmourAI` | Value | true | BattleArmourAI.cpp:62 |  |
 | `-BattleArmourAITeam` | Value | -1 | BattleArmourAI.cpp:63 |  |
 | `-BattleArmourSectorGate` | Value | 0 | BattleWeaponOrders.cpp:16 |  |
