@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 289 種類。
+計 290 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -124,9 +124,10 @@
 | `-BattleFollowSightParallel` | Value | 0 | BattleLeaderRuntime.cpp:807 |  |
 | `-BattleFollowSightTraces` | other |  | BattleLeaderRuntime.cpp:841 |  |
 | `-BattleFrontArmy` | other |  | BattleFrontLine.cpp:32 | default on since 2026-11-21 (user decision) |
-| `-BattleFrontGap` | other |  | BattleFrontLine.cpp:34 |  |
-| `-BattleFrontLine` | other |  | BattleFrontLine.cpp:42 |  |
-| `-BattleFrontSquads` | other |  | BattleFrontLine.cpp:141 |  |
+| `-BattleFrontAuto` | other |  | BattleFrontLine.cpp:37 |  |
+| `-BattleFrontGap` | other |  | BattleFrontLine.cpp:38 |  |
+| `-BattleFrontLine` | other |  | BattleFrontLine.cpp:46 |  |
+| `-BattleFrontSquads` | other |  | BattleFrontLine.cpp:145 |  |
 | `-BattleGroupFireSupport` | Value | 0 | BattleArtillery.cpp:138, BattleGroups.cpp:290 |  |
 | `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:534 |  |
 | `-BattleHeavyCost` | other |  | BattleState.cpp:552 |  |
@@ -268,8 +269,8 @@
 | `-BattleSuppressionRadius` | other |  | BattleSuppression.cpp:14 |  |
 | `-BattleSuppressionSpread` | other |  | BattleSuppression.cpp:15 |  |
 | `-BattleSuppressionSupport` | other |  | BattleSuppression.cpp:17 |  |
-| `-BattleSurpriseGroup` | other |  | BattleFrontLine.cpp:383 |  |
-| `-BattleSurpriseSquads` | other |  | BattleFrontLine.cpp:404 | an AI group needs two squads |
+| `-BattleSurpriseGroup` | other |  | BattleFrontLine.cpp:387 |  |
+| `-BattleSurpriseSquads` | other |  | BattleFrontLine.cpp:408 | an AI group needs two squads |
 | `-BattleSymmetricStart` | Value | -1 | BattleGroups.cpp:58 |  |
 | `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:56 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |

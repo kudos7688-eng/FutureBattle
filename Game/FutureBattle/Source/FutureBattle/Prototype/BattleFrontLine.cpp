@@ -31,6 +31,10 @@ namespace BattleFrontValues
  constexpr int32 FrontArmyKeep=4; // squads the front army keeps when the surprise group takes from it
  bool Army(){static const int32 On=Arg(TEXT("BattleFrontArmy="),1);return On!=0;} // default on since 2026-11-21 (user decision)
  // One-sector gaps count as held (user proposal 2026-11-21 after test play; -BattleFrontGap=0 turns it off).
+ // The AI fills the front-holding group by itself (trial -BattleFrontAuto=1, default 0 since 2026-11-21: in the one-sided screen ga1 on
+ // map I the auto-filled front army lost 180-320 points of lead against the earlier allocation). Off, only squads the player drops on
+ // the front army tab hold the line; the AI teams keep the earlier allocation.
+ bool AutoFill(){static const int32 On=Arg(TEXT("BattleFrontAuto="),0);return On!=0;}
  bool Gap(){static const int32 On=Arg(TEXT("BattleFrontGap="),1);return On!=0;}
  // Sector kinds by the cover they give a squad that waits there (river sectors are not held).
  double Cover(char Kind){switch(Kind){case 'H':case 'W':return 3.;case 'T':case '^':return 2.;case 'J':case 'B':case 'S':return 1.;case 'R':return -100.;default:return 0.;}}
@@ -141,7 +145,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  const int32 Want=Army()?2*Rows:FMath::Clamp(Arg(TEXT("BattleFrontSquads="),4),2,12);
  int32 FrontID=INDEX_NONE;for(const auto& P:Groups)if(P.Value.Team==Team&&P.Value.Kind==1&&!P.Value.bPlayer)FrontID=P.Key;
  const int32 Have=FrontID!=INDEX_NONE?Groups[FrontID].Squads.Num():0;
- if(Have<Want)
+ if(Have<Want&&AutoFill())
  {
   const FVector LineMid=BattleSectors::Center(FrontCell(Team,Line[Rows/2],Rows/2));
   struct FFree{int32 SID;double D;};TArray<FFree> Free;

@@ -141,9 +141,11 @@ $supply=@{
  # Group lane (2026-11-21, maps H/I): FL0 = front line off (the earlier default), FL1 = front line + front army + gaps (the new default),
  # GF1 = group fire support without the front line, SG1 = front line + surprise group.
  'FL0'=@('-FrontLine','0')
- 'FL1'=@('-FrontLine','1')
+ 'FL1'=@('-FrontLine','1','-FrontAuto','1')
+ # FLD = the default after ga1 (front line on, AI auto-fill off): should equal FL0 for AI teams.
+ 'FLD'=@('-FrontLine','1','-FrontAuto','0')
  'GF1'=@('-FrontLine','0','-GroupFireSupport','1')
- 'SG1'=@('-FrontLine','1','-SurpriseGroup','1')
+ 'SG1'=@('-FrontLine','1','-FrontAuto','1','-SurpriseGroup','1')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}
