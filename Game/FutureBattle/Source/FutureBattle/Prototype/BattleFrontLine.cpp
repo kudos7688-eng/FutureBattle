@@ -298,10 +298,17 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    for(int32 Y=Y0;Y<Y1;++Y)for(int32 C=FMath::Max(HomeCol,Army()?Target-2:bPush?Target:Target-1);C<=Target;++C)
    {
     const FIntPoint Cell=FrontCell(Team,C,Y);if(!BattleSectors::Valid(Cell)||Used.Contains(Cell))continue;
+    // Map J (2026-11-22): never a post in a mountain or a lake (an order there is refused); rivers already score -100.
+    if(BattleSectors::Impassable(BattleFieldLayout::SectorKind(GetWorld(),Cell))&&BattleFieldLayout::SectorKind(GetWorld(),Cell)!='R')continue;
     double CellScore=Cover(BattleFieldLayout::SectorKind(GetWorld(),Cell))+(C==Target?1.5:0.)-.3*FMath::Abs(Y-Mid);
     if(Army())CellScore+=(Points.Contains(Cell)?2.:0.)-(C<Target-1?1.:0.)-(bPush&&C<Target?3.:0.);
     if(CellScore>BestScore){BestScore=CellScore;Best=Cell;}
    }
+   // No candidate (a band of mountain rows on map J): the nearest passable sector of the band towards the own home.
+   // Only when the default would be a mountain or a lake, so maps without them keep the earlier choice exactly.
+   if(BestScore<=-1e9+1&&(BattleFieldLayout::SectorKind(GetWorld(),Best)=='M'||BattleFieldLayout::SectorKind(GetWorld(),Best)=='L'))
+    for(int32 C=Target-1;C>=0&&BestScore<=-1e9+1;--C)for(int32 Y=Y0;Y<Y1;++Y)
+    {const FIntPoint Cell=FrontCell(Team,C,Y);if(BattleSectors::Valid(Cell)&&!Used.Contains(Cell)&&!BattleSectors::Impassable(BattleFieldLayout::SectorKind(GetWorld(),Cell))){BestScore=0;Best=Cell;break;}}
    Used.Add(Best);Cells.Add(Best);Pushes.Add(bPush);
   }
   // Squads to posts. The front army: a squad keeps its last post when that sector is still one of them, the rest go to the nearest free

@@ -306,9 +306,9 @@ void UBattleMatch::UpdateStrategy(int32 Team)
   const auto& X=S.Theatres[I];
   // An unknown theatre is not guessed at: it is not a focus candidate (user decision 2026-11-17).
   if(X.State==0){++Unknown;continue;}
-  const double Score=-KnownWeight*X.KnownPower+OwnWeight*OwnNear(I)-DistanceWeight*FrontDistance(I)/10000.-(I==Avoid?AvoidPenalty:0.)+(I==Focus?KeepBonus:0.)+(I==Counter?CounterBonus:0.);
-  if(Best==INDEX_NONE||Score>BestScore){Next=Best;NextScore=BestScore;Best=I;BestScore=Score;}
-  else if(Next==INDEX_NONE||Score>NextScore){Next=I;NextScore=Score;}
+  const double CandidateScore=-KnownWeight*X.KnownPower+OwnWeight*OwnNear(I)-DistanceWeight*FrontDistance(I)/10000.-(I==Avoid?AvoidPenalty:0.)+(I==Focus?KeepBonus:0.)+(I==Counter?CounterBonus:0.);
+  if(Best==INDEX_NONE||CandidateScore>BestScore){Next=Best;NextScore=BestScore;Best=I;BestScore=CandidateScore;}
+  else if(Next==INDEX_NONE||CandidateScore>NextScore){Next=I;NextScore=CandidateScore;}
  }
  const int32 Old=Focus;
  if(Best!=Focus){Focus=Best;FocusAt=Elapsed;}
