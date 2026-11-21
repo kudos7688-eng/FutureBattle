@@ -686,12 +686,13 @@ void ABattleUnit::SetRevealed(bool bVisible)
 	SetActorHiddenInGame(bCorpseHidden || !(bVisible || (PC && PC->ShowsUnspottedBodies())));
 }
 
-void ABattleUnit::HideCorpse()
+void ABattleUnit::HideCorpse(bool bHideActor,bool bStopMeshTick)
 {
 	if (!bDeathApplied) return;
 	bCorpseHidden = true;
-	SetActorHiddenInGame(true);
-	GetMesh()->SetComponentTickEnabled(false);
+	// Both parts default on; -BattleCorpseSteps (BattleCorpses.cpp) leaves one out to find the display->match coupling.
+	if (bHideActor) SetActorHiddenInGame(true);
+	if (bStopMeshTick) GetMesh()->SetComponentTickEnabled(false);
 }
 
 void ABattleUnit::ApplyDeath()
