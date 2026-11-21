@@ -21,8 +21,8 @@ if ($Map -eq 'H' -or $Map -eq 'I') {
     if ($SectorTrials) { $extra += @('-BattleSectorContact=1','-BattleSectorRoute=1','-BattleSectorFlank=1','-BattleSectorFront=1','-BattleWaypointPass=1','-BattleSectorMoveFire=1','-BattleCoverHuddle=1','-BattlePinnedFlank=1','-BattleArrivalThreat=1','-BattleSectorCoverRoute=1','-BattleCoverStrict=1','-BattleSightTeamMask=1','-BattleShotDirection=1','-BattleDangerRoute=1','-BattleCloseIn=1','-BattleSectorCoverWalk=1','-BattleUnderFireCover=1','-BattleNoCoverFallback=1','-BattleCoverPriority=1') }
 }
 # Infantry arms trial (Docs/design-infantry-arms.md, default off): pistols, 2 hand grenades and melee for every foot soldier,
-# elite platoons for the player (= key) and one kept by the AI (G grenade, V strike, F pistol in direct control).
-if ($Arms) { $extra += @('-BattleSidearms=1','-BattleGrenades=2','-BattleMelee=1','-BattleElite=1','-BattleAreaEliteKeep=1') }
+# elite platoons (= key) and sniper teams (] key) for the player, one of each kept by the AI (G grenade, V strike, F pistol in direct control).
+if ($Arms) { $extra += @('-BattleSidearms=1','-BattleGrenades=2','-BattleMelee=1','-BattleElite=1','-BattleAreaEliteKeep=1','-BattleSniperTeam=1','-BattleAreaSniperKeep=1') }
 $editor = 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe'
 $playArgs = @("/Game/Prototype/Lvl_BattleWide_$Map", '-game', '-windowed', '-ResX=1920', '-ResY=1080', '-ForceRes', '-BattleWideMixed', '-BattleArea', '-BattleCoverActions=1', '-BattleFlankCoordination=1', '-BattleAreaPointSupply=1', '-BattleFollowerAnimSkip=1') + $extra
 if ($TestAfterPlay -and $Map -eq 'H') {

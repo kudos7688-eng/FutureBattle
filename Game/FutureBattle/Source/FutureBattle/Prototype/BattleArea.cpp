@@ -77,10 +77,20 @@ int32 UBattleMatch::ActiveSquads(int32 Team)const
  int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active;
  return Count;
 }
-int32 UBattleMatch::ActiveScouts(int32 Team)const{return ActiveOfType(Team,BattleSquadType::Scout);}
+// Ordinary scout pairs only: sniper teams (scout pairs of grade 2, BattleArms.cpp) have their own count and limit.
+int32 UBattleMatch::ActiveScouts(int32 Team)const
+{
+ int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==BattleSquadType::Scout&&P.Value.Grade==0;
+ return Count;
+}
+int32 UBattleMatch::ActiveSnipers(int32 Team)const
+{
+ int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==BattleSquadType::Scout&&P.Value.Grade==2;
+ return Count;
+}
 int32 UBattleMatch::ActiveElite(int32 Team)const
 {
- int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.Grade>0;
+ int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.Grade==1;
  return Count;
 }
 int32 UBattleMatch::ActiveOfType(int32 Team,uint8 SquadType)const
@@ -99,11 +109,14 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(ActiveSquads(Team)>=BattleTactics::AreaHire().MaxActive)return Fail(TEXT("No free squad slot (active squad limit)"));
  // Squad type: rifle squad (AreaSquadCost) or heavy infantry (AreaHeavyCost).
  if(SquadType>=BattleSquadType::Count)return Fail(TEXT("Recruitment unavailable"));
- if(SquadType!=BattleSquadType::Rifle)Grade=0;
- // Elite platoon (BattleArms.cpp): the player only with -BattleElite=1, the AI only with -BattleAreaEliteKeep=n.
- if(Grade&&!(bAuto?BattleArms::AreaEliteKeep()>0:BattleArms::EliteEnabled()))return Fail(TEXT("Elite platoons disabled (-BattleElite=1)"));
- const int32 Cost=Grade?BattleArms::EliteCost():SquadType==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(SquadType);
- if(SquadType==BattleSquadType::Scout&&ActiveScouts(Team)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaScoutLimit))return Fail(TEXT("Scout pair limit reached"));
+ if(!BattleArms::ValidGrade(SquadType,Grade))Grade=0;
+ // Elite platoon / sniper team (BattleArms.cpp): the player only with -BattleElite=1 / -BattleSniperTeam=1, the AI only with
+ // -BattleAreaEliteKeep=n / -BattleAreaSniperKeep=n. Sniper teams do not count against the scout pair limit; they have their own.
+ if(Grade==1&&!(bAuto?BattleArms::AreaEliteKeep()>0:BattleArms::EliteEnabled()))return Fail(TEXT("Elite platoons disabled (-BattleElite=1)"));
+ if(Grade==2&&!(bAuto?BattleArms::AreaSniperKeep()>0:BattleArms::SniperEnabled()))return Fail(TEXT("Sniper teams disabled (-BattleSniperTeam=1)"));
+ if(Grade==2&&ActiveSnipers(Team)>=BattleArms::SniperLimit)return Fail(TEXT("Sniper team limit reached"));
+ const int32 Cost=Grade==1?BattleArms::EliteCost():Grade==2?BattleArms::SniperCost():SquadType==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(SquadType);
+ if(SquadType==BattleSquadType::Scout&&Grade==0&&ActiveScouts(Team)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaScoutLimit))return Fail(TEXT("Scout pair limit reached"));
  if(SquadType==BattleSquadType::AntiTank&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaATLimit))return Fail(TEXT("Anti-tank team limit reached"));
  if(SquadType==BattleSquadType::Tank&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaTankLimit))return Fail(TEXT("Tank limit reached"));
  if(SquadType==BattleSquadType::ArmoredCar&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaACLimit))return Fail(TEXT("Armoured car limit reached"));
@@ -128,7 +141,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(R->SightExperiment.Enabled)R->SightExperiment.HireTimes[Team].Add(Elapsed);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE team=%d squad=%d auto=%d cost=%d credits=%d cancelled_replacements=%d active=%d time=%.1f leader=%s home=%s"),
   Team,SID,bAuto?1:0,Cost,Credits[Team],Cancelled,ActiveSquads(Team),Elapsed,*R->Position(Store->FindSquad(SID)->LeaderUnitID).ToCompactString(),*AreaHome(Team).ToCompactString());
- LastMessage=Grade?FString::Printf(TEXT("Elite platoon deployed / -%d resources"),Cost):SquadType==BattleSquadType::Supply?FString::Printf(TEXT("Supply vehicle deployed / -%d resources"),Cost):SquadType==BattleSquadType::Exo?FString::Printf(TEXT("Exoskeleton soldier deployed / -%d resources"),Cost):SquadType==BattleSquadType::SPGun?FString::Printf(TEXT("Self-propelled gun deployed / -%d resources"),Cost):SquadType==BattleSquadType::Mortar?FString::Printf(TEXT("Mortar team deployed / -%d resources"),Cost):SquadType==BattleSquadType::ArmoredCar?FString::Printf(TEXT("Armoured car deployed / -%d resources"),Cost):SquadType==BattleSquadType::Tank?FString::Printf(TEXT("Tank deployed / -%d resources"),Cost):SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
+ LastMessage=Grade==2?FString::Printf(TEXT("Sniper team deployed / -%d resources"),Cost):Grade==1?FString::Printf(TEXT("Elite platoon deployed / -%d resources"),Cost):SquadType==BattleSquadType::Supply?FString::Printf(TEXT("Supply vehicle deployed / -%d resources"),Cost):SquadType==BattleSquadType::Exo?FString::Printf(TEXT("Exoskeleton soldier deployed / -%d resources"),Cost):SquadType==BattleSquadType::SPGun?FString::Printf(TEXT("Self-propelled gun deployed / -%d resources"),Cost):SquadType==BattleSquadType::Mortar?FString::Printf(TEXT("Mortar team deployed / -%d resources"),Cost):SquadType==BattleSquadType::ArmoredCar?FString::Printf(TEXT("Armoured car deployed / -%d resources"),Cost):SquadType==BattleSquadType::Tank?FString::Printf(TEXT("Tank deployed / -%d resources"),Cost):SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
  return true;
 }
 void UBattleMatch::UpdateAreaHiring()
@@ -179,11 +192,14 @@ void UBattleMatch::UpdateAreaHiring()
    // Elite platoons (trial -BattleAreaEliteKeep=n, default 0; BattleArms.cpp): the same pacing, in place of a rifle squad.
    const int32 EliteWant=FMath::Min(BattleArms::AreaEliteKeep(),Bought/After);
    if(Type==BattleSquadType::Rifle&&EliteWant>0&&ActiveElite(Team)<EliteWant)HireGrade=1;
+   // Sniper teams (trial -BattleAreaSniperKeep=n, default 0): the same pacing, a scout pair of grade 2 in place of a rifle squad.
+   const int32 SniperWant=FMath::Min(BattleArms::AreaSniperKeep(),Bought/After);
+   if(Type==BattleSquadType::Rifle&&HireGrade==0&&SniperWant>0&&ActiveSnipers(Team)<SniperWant){Type=BattleSquadType::Scout;HireGrade=2;}
   }
   // Composition trial: an expensive type the team is far from affording (below 60% of its cost) does not hold up the plain purchases.
   if(bComposition&&Type!=PlainType&&BattleSquadType::AreaCost(Type)>=20&&Credits[Team]-Pending<FMath::CeilToInt(BattleSquadType::AreaCost(Type)*.6f)+HireIntent.HireReserve)Type=PlainType;
-  if(Type!=BattleSquadType::Rifle)HireGrade=0;
-  const int32 TypeCost=HireGrade?BattleArms::EliteCost():Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
+  if(!BattleArms::ValidGrade(Type,HireGrade))HireGrade=0;
+  const int32 TypeCost=HireGrade==1?BattleArms::EliteCost():HireGrade==2?BattleArms::SniperCost():Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
   if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=BattleTactics::AreaHire().MaxActive)continue;
   // Pacing (own clock and own purchase history only): spacing between purchases and no purchases near the time limit,
   // where a squad costs score (15 resources for 10 living) and has little time to take a point.

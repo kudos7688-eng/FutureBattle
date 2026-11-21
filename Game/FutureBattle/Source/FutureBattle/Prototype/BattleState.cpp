@@ -1,4 +1,5 @@
 #include "BattleState.h"
+#include "BattleArms.h"
 #include "BattleMetrics.h"
 #include "BattleSquadTactics.h"
 #include "BattleLeaderRuntime.h"
@@ -640,8 +641,10 @@ void UBattleState::SetSquadType(int32 SquadID,uint8 Type)
 
 void UBattleState::SetSquadGrade(int32 SquadID,uint8 Grade)
 {
- auto* S=Squads.Find(SquadID);if(!S||S->SquadType!=BattleSquadType::Rifle)return;
- S->Grade=Grade;if(Grade)S->DisplayName=FString::Printf(TEXT("第%d精鋭小隊"),SquadID);
+ auto* S=Squads.Find(SquadID);if(!S||!BattleArms::ValidGrade(S->SquadType,Grade))return;
+ S->Grade=Grade;
+ if(Grade==1)S->DisplayName=FString::Printf(TEXT("第%d精鋭小隊"),SquadID);
+ if(Grade==2)S->DisplayName=FString::Printf(TEXT("第%d狙撃班"),SquadID);
 }
 
 // Main-gun rounds use the normal area supply sites/timer, independently of machine-gun ammunition.

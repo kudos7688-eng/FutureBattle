@@ -66,8 +66,8 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   for(int32 EquipmentSlot=0;EquipmentSlot<BattleSquadType::Members(S->SquadType);++EquipmentSlot)
    TypeAllowsWeapon|=U.Weapon==BattleSquadType::Weapon(S->SquadType,EquipmentSlot);
   // Elite platoon (BattleArms.cpp): the roles' weapons; an ordinary squad has no roles.
-  TypeAllowsWeapon|=S->Grade>0&&S->SquadType==BattleSquadType::Rifle&&BattleArms::EliteWeapon(U.Weapon);
-  if((U.Kit!=0&&S->Grade==0)||S->Grade>1)return Fail(TEXT("Elite role outside an elite platoon"));
+  TypeAllowsWeapon|=S->Grade>0&&BattleArms::ValidGrade(S->SquadType,S->Grade)&&BattleArms::GradeWeapon(S->Grade,U.Weapon);
+  if((U.Kit!=0&&S->Grade==0)||!BattleArms::ValidGrade(S->SquadType,S->Grade))return Fail(TEXT("Graded role outside its squad"));
   if(!TypeAllowsWeapon||!Finite(U.HP,0,FMath::Min(1.e9,double(BattleSquadType::MaxHealth(S->SquadType,S->LeaderUnitID==U.UnitID)))))
    return Fail(TEXT("Weapon or health inconsistent with squad type"));
   const bool Exo=S->SquadType==BattleSquadType::Exo;

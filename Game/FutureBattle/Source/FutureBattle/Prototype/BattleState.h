@@ -11,8 +11,9 @@ UENUM(BlueprintType)
 // Infantry arms (2026-11-22, Docs/design-infantry-arms.md): Pistol (the sidearm, also a primary for no one yet), SMG, Shotgun,
 // Marksman (designated marksman rifle) and GrenadeLauncher (lobbed explosive rounds, no direct fire like the mortar; BattleArms.cpp).
 // Appended only: saved records keep their values. Values of the new weapons: BattleWeaponDef (BattleArms.cpp).
-enum class EBattleWeapon : uint8 { Carbine, SupportGun, AntiTank, Mortar, Pistol, SMG, Shotgun, Marksman, GrenadeLauncher };
-constexpr uint8 BattleLastWeapon=uint8(EBattleWeapon::GrenadeLauncher);
+// Sniper (2026-11-22, the sniper team): a bolt-action rifle for very long shots.
+enum class EBattleWeapon : uint8 { Carbine, SupportGun, AntiTank, Mortar, Pistol, SMG, Shotgun, Marksman, GrenadeLauncher, Sniper };
+constexpr uint8 BattleLastWeapon=uint8(EBattleWeapon::Sniper);
 
 // Values of the weapons added on 2026-11-22 (nullptr for the four older ones, which read UBattleTuning). Ranges are scales of the
 // carbine's engage/reach distance with an optional cap (cm, 0 = none). DamageNear applies within NearRange and falls to DamageScale
@@ -212,7 +213,8 @@ struct FBattleSquadState
  // ST1 does not generate autonomous plans. ST2 will add selection and versioned plan saves.
  UPROPERTY(Transient) FBattleSquadTacticalPlan TacticalPlan;
  UPROPERTY() float FlankCooldown = 0;
- // Infantry arms (2026-11-22): 1 = elite platoon (a rifle squad with roles per slot, BattleArms.cpp); absent in older saves = 0.
+ // Infantry arms (2026-11-22): 1 = elite platoon (a rifle squad with roles per slot), 2 = sniper team (a scout pair: sniper and
+ // spotter); BattleArms.cpp. Absent in older saves = 0.
  UPROPERTY() uint8 Grade = 0;
  // Seconds until any member may throw the next hand grenade (one per squad per BattleArms grenade gap; relative, saved).
  UPROPERTY() float GrenadeGap = 0;
@@ -793,7 +795,7 @@ public:
 	// Maximum HP of a unit: Health, times the trial -BattleLeaderHealth multiplier for a squad leader.
 	float MaxHealthOf(int32 UnitID) const;
 	void SetSquadType(int32 SquadID,uint8 Type);
-	void SetSquadGrade(int32 SquadID,uint8 Grade); // 1 = elite platoon (BattleArms.cpp): name only; the members get their roles at purchase
+	void SetSquadGrade(int32 SquadID,uint8 Grade); // 1 elite platoon (rifle squad), 2 sniper team (scout pair); BattleArms.cpp. Name only; roles come at purchase
 	bool DisableLeaderSquad(int32 SquadID);
 	// Scout pairs: the surviving member takes command (becomes the Actor-represented, player-selectable leader).
 	bool HandOverLeader(int32 SquadID, int32 NewLeaderID);

@@ -116,6 +116,7 @@ public:
  // bAuto: AI purchase (no selection change; a team-0 squad is delegated). Cancels pending replenishments the spend can no longer cover.
  bool HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,uint8 SquadType=0,uint8 Grade=0); // Grade 1: elite platoon (BattleArms.cpp)
  int32 ActiveElite(int32 Team) const;
+ int32 ActiveSnipers(int32 Team) const; // sniper teams (scout pairs of grade 2); ActiveScouts counts only ordinary pairs
  int32 LastHiredSquadID=INDEX_NONE;
  // P1 trial: the observed need a new AI squad would serve (see FAreaHireTuning), or -1 for none.
  int32 AreaHireNeed(int32 Team) const;

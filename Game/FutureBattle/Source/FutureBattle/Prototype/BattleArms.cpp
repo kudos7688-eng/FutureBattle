@@ -38,14 +38,20 @@ bool BattleArms::MeleeEnabled(){static const bool b=IntSwitch(TEXT("BattleMelee=
 bool BattleArms::EliteEnabled(){static const bool b=IntSwitch(TEXT("BattleElite="))!=0;return b;}
 int32 BattleArms::AreaEliteKeep(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleAreaEliteKeep=")),0,20);return N;}
 int32 BattleArms::EliteCost(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleEliteCost="),26),1,200);return N;}
+bool BattleArms::SniperEnabled(){static const bool b=IntSwitch(TEXT("BattleSniperTeam="))!=0;return b;}
+int32 BattleArms::AreaSniperKeep(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleAreaSniperKeep=")),0,SniperLimit);return N;}
+int32 BattleArms::SniperCost(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleSniperCost="),14),1,200);return N;}
 bool BattleArms::SmokeEnabled(){static const bool b=FParse::Param(FCommandLine::Get(),TEXT("BattleArmsSmoke"));return b;}
-bool BattleArms::AnyTrial(){return SidearmsEnabled()||GrenadeCount()>0||MeleeEnabled()||EliteEnabled()||AreaEliteKeep()>0||SmokeEnabled();}
+bool BattleArms::AnyTrial(){return SidearmsEnabled()||GrenadeCount()>0||MeleeEnabled()||EliteEnabled()||AreaEliteKeep()>0||SniperEnabled()||AreaSniperKeep()>0||SmokeEnabled();}
 
 uint8 BattleArms::EliteKit(int32 Slot)
 {
  static const uint8 Table[]={KitLeader,KitGunner,KitGrenadier,KitMarksman,KitBreacher,KitAssault,KitMedic,KitRifleman};
  return Slot>=0&&Slot<int32(UE_ARRAY_COUNT(Table))?Table[Slot]:uint8(KitRifleman);
 }
+uint8 BattleArms::GradeKit(uint8 Grade,int32 Slot){return Grade==2?uint8(Slot==0?KitSniper:KitSpotter):Grade==1?EliteKit(Slot):uint8(KitNone);}
+bool BattleArms::ValidGrade(uint8 SquadType,uint8 Grade){return Grade==0||(Grade==1&&SquadType==BattleSquadType::Rifle)||(Grade==2&&SquadType==BattleSquadType::Scout);}
+bool BattleArms::GradeWeapon(uint8 Grade,EBattleWeapon W){for(int32 Slot=0;Slot<10;++Slot)if(GradeKit(Grade,Slot)!=KitNone&&KitWeapon(GradeKit(Grade,Slot))==W)return true;return false;}
 EBattleWeapon BattleArms::KitWeapon(uint8 Kit)
 {
  switch(Kit)
@@ -55,6 +61,7 @@ EBattleWeapon BattleArms::KitWeapon(uint8 Kit)
   case KitMarksman:return EBattleWeapon::Marksman;
   case KitBreacher:return EBattleWeapon::Shotgun;
   case KitAssault:return EBattleWeapon::SMG;
+  case KitSniper:return EBattleWeapon::Sniper;
   default:return EBattleWeapon::Carbine;
  }
 }
@@ -62,7 +69,7 @@ int32 BattleArms::KitGrenades(uint8 Kit)
 {
  switch(Kit)
  {
-  case KitNone:case KitGrenadier:return 0;
+  case KitNone:case KitGrenadier:case KitSniper:return 0;
   case KitLeader:return 2;
   case KitBreacher:case KitAssault:case KitRifleman:return 3;
   default:return 1;
@@ -76,7 +83,7 @@ const TCHAR* BattleArms::KitName(uint8 Kit)
  {
   case KitLeader:return TEXT("隊長");case KitGunner:return TEXT("機関銃手");case KitGrenadier:return TEXT("擲弾手");
   case KitMarksman:return TEXT("選抜射手");case KitBreacher:return TEXT("突撃手（散弾）");case KitAssault:return TEXT("突撃手（短機関銃）");
-  case KitMedic:return TEXT("衛生兵");case KitRifleman:return TEXT("小銃手");default:return TEXT("");
+  case KitMedic:return TEXT("衛生兵");case KitRifleman:return TEXT("小銃手");case KitSniper:return TEXT("狙撃手");case KitSpotter:return TEXT("観測手");default:return TEXT("");
  }
 }
 const TCHAR* BattleArms::WeaponName(EBattleWeapon W)
@@ -85,14 +92,14 @@ const TCHAR* BattleArms::WeaponName(EBattleWeapon W)
  {
   case EBattleWeapon::SupportGun:return TEXT("支援火器");case EBattleWeapon::AntiTank:return TEXT("対戦車火器");case EBattleWeapon::Mortar:return TEXT("迫撃砲");
   case EBattleWeapon::Pistol:return TEXT("拳銃");case EBattleWeapon::SMG:return TEXT("短機関銃");case EBattleWeapon::Shotgun:return TEXT("散弾銃");
-  case EBattleWeapon::Marksman:return TEXT("選抜射手銃");case EBattleWeapon::GrenadeLauncher:return TEXT("擲弾銃");default:return TEXT("小銃");
+  case EBattleWeapon::Marksman:return TEXT("選抜射手銃");case EBattleWeapon::GrenadeLauncher:return TEXT("擲弾銃");case EBattleWeapon::Sniper:return TEXT("狙撃銃");default:return TEXT("小銃");
  }
 }
 
 // First values (Docs/design-infantry-arms.md). Ranges are scales of the carbine's engage/reach distance (BattleRanges) with caps.
 const FBattleWeaponDef* BattleWeaponDef(EBattleWeapon W)
 {
- struct FTable{FBattleWeaponDef Pistol,SMG,Shotgun,Marksman,Launcher;};
+ struct FTable{FBattleWeaponDef Pistol,SMG,Shotgun,Marksman,Launcher,Sniper;};
  static const FTable T=[]{
   FTable X;
   auto& P=X.Pistol;P.Magazine=12;P.Reserve=24;P.AmmoKind=3;P.Reload=1.5f;P.AIInterval=.8f;P.PlayerInterval=.22f;P.DamageScale=P.DamageNear=.8f;
@@ -104,11 +111,14 @@ const FBattleWeaponDef* BattleWeaponDef(EBattleWeapon W)
   auto& M=X.Marksman;M.Magazine=10;M.Reserve=40;M.AmmoKind=5;M.Reload=2.5f;M.AIInterval=2.4f;M.PlayerInterval=.45f;M.DamageScale=M.DamageNear=3.f;
   M.SpreadScale=.35f;M.EngageScale=1.6f;M.ReachScale=1.3f;M.SuppressionScale=.8f;
   auto& L=X.Launcher;L.Magazine=1;L.Reserve=10;L.AmmoKind=6;L.Reload=2.6f;L.AIInterval=3.f;L.PlayerInterval=.8f;L.EngageCap=15000.f;L.ReachCap=15000.f;
+  // Sniper rifle: one aimed shot kills an ordinary soldier (10 x ShotDamage = 100); its distance is limited by what the shooter sees.
+  auto& N=X.Sniper;N.Magazine=5;N.Reserve=25;N.AmmoKind=7;N.Reload=3.5f;N.AIInterval=4.f;N.PlayerInterval=1.4f;N.DamageScale=N.DamageNear=10.f;
+  N.SpreadScale=.15f;N.EngageScale=2.5f;N.ReachScale=2.f;N.SuppressionScale=1.5f;
   return X;}();
  switch(W)
  {
   case EBattleWeapon::Pistol:return &T.Pistol;case EBattleWeapon::SMG:return &T.SMG;case EBattleWeapon::Shotgun:return &T.Shotgun;
-  case EBattleWeapon::Marksman:return &T.Marksman;case EBattleWeapon::GrenadeLauncher:return &T.Launcher;default:return nullptr;
+  case EBattleWeapon::Marksman:return &T.Marksman;case EBattleWeapon::GrenadeLauncher:return &T.Launcher;case EBattleWeapon::Sniper:return &T.Sniper;default:return nullptr;
  }
 }
 
@@ -168,10 +178,10 @@ void UBattleLeaderRuntime::IssueArms(int32 ID)
  U->Grenades=FMath::Max(U->Grenades,BattleArms::GrenadeCount());
 }
 
-void UBattleLeaderRuntime::IssueEliteKit(int32 ID,int32 Slot)
+void UBattleLeaderRuntime::IssueEliteKit(int32 ID,int32 Slot,uint8 Grade)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);if(!U)return;
- const uint8 Kit=BattleArms::EliteKit(Slot);const auto* T=GetDefault<UBattleTuning>();const auto* P=BattleWeaponDef(EBattleWeapon::Pistol);
+ const uint8 Kit=BattleArms::GradeKit(Grade,Slot);if(Kit==BattleArms::KitNone)return;const auto* T=GetDefault<UBattleTuning>();const auto* P=BattleWeaponDef(EBattleWeapon::Pistol);
  U->Kit=Kit;U->bArmsIssued=true;U->Weapon=BattleArms::KitWeapon(Kit);U->Ammo=FMath::Max(1,T->Capacity(U->Weapon));U->Reserve=FMath::Max(0,T->ReserveFor(U->Weapon));
  U->Grenades=BattleArms::KitGrenades(Kit);U->SideAmmo=P->Magazine;U->SideReserve=P->Reserve;U->bSidearmSelected=false;
  // Veteran perception and decisions; the sight stays within the saved range (the range profile's 200 m x 1.25 would exceed it), and
@@ -499,27 +509,29 @@ bool UBattleLeaderRuntime::UseSidearm(int32 ID,int32 TargetID,double Now)
 int32 UBattleLeaderRuntime::ArmsRoleTarget(int32 ID,int32 SquadTarget) const
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
- if(!U||(U->Kit!=BattleArms::KitMarksman&&U->Kit!=BattleArms::KitBreacher&&U->Kit!=BattleArms::KitAssault))return SquadTarget;
+ if(!U||(U->Kit!=BattleArms::KitMarksman&&U->Kit!=BattleArms::KitSniper&&U->Kit!=BattleArms::KitBreacher&&U->Kit!=BattleArms::KitAssault))return SquadTarget;
  const auto* Contacts=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(ID);if(!Contacts)return SquadTarget;
  const FVector Pos=Position(ID);const double Engage2=FMath::Square(double(BattleRanges::Engage(U->Weapon)));
  auto Usable=[&](int32 Key,const FBattleContact& C)
  {return C.bVisible&&!C.bShared&&FVector::DistSquared(Pos,C.LastKnownPosition)<=Engage2&&!(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(C.ObservedSquadType):IsVehicle(Key));};
  const auto* Squad=SquadTarget!=INDEX_NONE?Contacts->Find(SquadTarget):nullptr;const bool bSquadUsable=Squad&&Usable(SquadTarget,*Squad);
  // Close weapons (shotgun, SMG): the squad's target while it is within their distance, else the nearest enemy they see within it.
- // Marksman: an enemy he sees carrying a machine gun, anti-tank weapon, marksman rifle or launcher first (nearest), else the squad's.
+ // Marksman: an enemy he sees carrying a machine gun, anti-tank weapon, marksman rifle, launcher or sniper rifle first (nearest), else
+ // the squad's. Sniper: the same, and before them a squad leader he sees (told apart by look: radio, hand signals).
  int32 Best=INDEX_NONE;double BestScore=-1.e18;
  for(const auto& C:*Contacts)if(Usable(C.Key,C.Value))
  {
   double Score=-FVector::Dist(Pos,C.Value.LastKnownPosition);
-  if(U->Kit==BattleArms::KitMarksman)
+  if(U->Kit==BattleArms::KitMarksman||U->Kit==BattleArms::KitSniper)
   {
    const auto* O=Store->Find(C.Key);const EBattleWeapon W=O?O->ActiveWeapon():EBattleWeapon::Carbine;
-   if(W==EBattleWeapon::SupportGun||W==EBattleWeapon::AntiTank||W==EBattleWeapon::Marksman||W==EBattleWeapon::GrenadeLauncher)Score+=1.e7;
+   if(W==EBattleWeapon::SupportGun||W==EBattleWeapon::AntiTank||W==EBattleWeapon::Marksman||W==EBattleWeapon::GrenadeLauncher||W==EBattleWeapon::Sniper)Score+=1.e7;
+   if(U->Kit==BattleArms::KitSniper&&O)if(const auto* OS=Store->FindSquad(O->SquadID);OS&&OS->LeaderUnitID==C.Key)Score+=2.e7;
   }
   if(Score>BestScore||(Score==BestScore&&C.Key<Best)){BestScore=Score;Best=C.Key;}
  }
  if(Best==INDEX_NONE)return SquadTarget;
- if(U->Kit==BattleArms::KitMarksman)return BestScore>0.||!bSquadUsable?Best:SquadTarget;
+ if(U->Kit==BattleArms::KitMarksman||U->Kit==BattleArms::KitSniper)return BestScore>0.||!bSquadUsable?Best:SquadTarget;
  return bSquadUsable?SquadTarget:Best;
 }
 
@@ -631,5 +643,16 @@ void UBattleLeaderRuntime::RunArmsSmoke(double Now)
  const int32 G0=Store->Find(Leader)->Grenades;bool bThrown=false;
  for(int32 Dir=0;Dir<8&&!bThrown;++Dir)bThrown=ThrowGrenade(Leader,Position(Leader)+FVector(FMath::Cos(Dir*PI/4),FMath::Sin(Dir*PI/4),0)*1000.,Now,true);
  Check(bThrown&&Store->Find(Leader)->Grenades==G0-1&&ArmsShells.Num()>=1&&ArmsShells.Last().ShooterID==Leader,TEXT("grenade thrown"));
- UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_SMOKE_RESULT failures=%d squad=%d leader=%d"),Failures,SID,Leader);
+ // Sniper team: a scout pair of grade 2, the sniper leads (sniper rifle), the spotter follows (rifle).
+ int32 Sniper=INDEX_NONE;
+ if(M){M->Credits[0]+=BattleArms::SniperCost();if(M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Scout,2))Sniper=M->LastHiredSquadID;}
+ const auto* SS=Sniper!=INDEX_NONE?Store->FindSquad(Sniper):nullptr;
+ Check(SS&&SS->Grade==2&&SS->SquadType==BattleSquadType::Scout&&SS->Members.Num()==2&&M->ActiveScouts(0)==M->ActiveOfType(0,BattleSquadType::Scout)-M->ActiveSnipers(0),TEXT("sniper team purchase"));
+ if(SS)
+ {
+  const auto* A=Store->Find(SS->Members[0]);const auto* B=Store->Find(SS->Members[1]);
+  Check(A&&B&&SS->LeaderUnitID==SS->Members[0]&&A->Kit==BattleArms::KitSniper&&A->Weapon==EBattleWeapon::Sniper&&B->Kit==BattleArms::KitSpotter&&B->Weapon==EBattleWeapon::Carbine&&
+   BattleRanges::Engage(EBattleWeapon::Sniper)>BattleRanges::Engage(EBattleWeapon::Marksman),TEXT("sniper team kit"));
+ }
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_SMOKE_RESULT failures=%d squad=%d leader=%d sniper_team=%d"),Failures,SID,Leader,Sniper);
 }

@@ -47,8 +47,8 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  // Squad type (rifle squad or heavy infantry) sets the number of members, their weapons and health.
  if(SquadType>=BattleSquadType::Count) SquadType=BattleSquadType::Rifle;
  // Elite platoon (BattleArms.cpp): a rifle squad whose slots carry the roles' weapons.
- if(SquadType!=BattleSquadType::Rifle) Grade=0;
- auto SlotWeapon=[&](int32 Slot){return Grade?BattleArms::KitWeapon(BattleArms::EliteKit(Slot)):BattleSquadType::Weapon(SquadType,Slot);};
+ if(!BattleArms::ValidGrade(SquadType,Grade)) Grade=0; // 1 elite platoon (rifle squad), 2 sniper team (scout pair)
+ auto SlotWeapon=[&](int32 Slot){return Grade?BattleArms::KitWeapon(BattleArms::GradeKit(Grade,Slot)):BattleSquadType::Weapon(SquadType,Slot);};
  const int32 N=BattleSquadType::Members(SquadType);
  auto Fail=[&](const TCHAR* Why){Error=Why;return false;};
  if((!bMixedFastMatch&&!bArea) || !Mode || Team<0||Team>1||static_cast<uint8>(Training)>2)return Fail(TEXT("Mixed recruitment unavailable"));
@@ -90,7 +90,7 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  for(int32 Slot=0;Slot<N;++Slot)
  {
   const int32 ID=Store->RegisterUnit(Team,0,SlotWeapon(Slot));Store->SetTrainingPreset(ID,Training);Members.Add(ID);
-  if(Grade)IssueEliteKit(ID,Slot);
+  if(Grade)IssueEliteKit(ID,Slot,Grade);
   auto& B=Staged[Slot];Bodies.Add(ID,B);
   if(B.Actor.IsValid()){B.Actor->InitializeUnit(ID);Mode->Units.Add(B.Actor.Get());HitIDs.Add(B.Actor->GetCapsuleComponent(),ID);}
   else {Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity).UnitID=ID;HitIDs.Add(B.Capsule.Get(),ID);}

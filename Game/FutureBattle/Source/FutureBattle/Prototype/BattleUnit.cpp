@@ -353,19 +353,20 @@ void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Pare
 	// Weapons added 2026-11-22 (BattleArms.cpp) use existing models: the exoskeleton's rifle for the marksman rifle and its launcher,
 	// smaller, for the grenade launcher; the carbine model shortened for the pistol and SMG, the support model shortened for the shotgun.
 	static TStrongObjectPtr<UStaticMesh> AC01Rifle, AC01Launcher; static bool bAC01Loaded = false;
-	if (!bAC01Loaded && (Weapon == EBattleWeapon::Marksman || Weapon == EBattleWeapon::GrenadeLauncher))
+	if (!bAC01Loaded && (Weapon == EBattleWeapon::Marksman || Weapon == EBattleWeapon::Sniper || Weapon == EBattleWeapon::GrenadeLauncher))
 	{
 		bAC01Loaded = true;
 		AC01Rifle.Reset(LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Rifle.SM_AC01_Rifle"), nullptr, LOAD_NoWarn));
 		AC01Launcher.Reset(LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Launcher.SM_AC01_Launcher"), nullptr, LOAD_NoWarn));
 	}
-	UStaticMesh* Own = Weapon == EBattleWeapon::Marksman ? AC01Rifle.Get() : Weapon == EBattleWeapon::GrenadeLauncher ? AC01Launcher.Get() : nullptr;
+	UStaticMesh* Own = Weapon == EBattleWeapon::Marksman || Weapon == EBattleWeapon::Sniper ? AC01Rifle.Get() : Weapon == EBattleWeapon::GrenadeLauncher ? AC01Launcher.Get() : nullptr;
 	Model->SetStaticMesh(Own ? Own : Support ? SupportModel : CarbineModel);
 	Model->AttachToComponent(Parent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, bFirstPerson ? NAME_None : FName(TEXT("hand_r")));
 	const double Scale = Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar ? 1.35 : Weapon == EBattleWeapon::Shotgun ? .7 :
 		Weapon == EBattleWeapon::Pistol ? .3 : Weapon == EBattleWeapon::SMG ? .45 : Weapon == EBattleWeapon::Marksman ? (Own ? .85 : .8) :
-		Weapon == EBattleWeapon::GrenadeLauncher ? (Own ? .55 : .8) : Support ? 1.0 : .62;
-	Model->SetRelativeScale3D(FVector(Scale));
+		Weapon == EBattleWeapon::GrenadeLauncher ? (Own ? .55 : .8) : Weapon == EBattleWeapon::Sniper ? (Own ? 1.0 : .7) : Support ? 1.0 : .62;
+	// The sniper rifle: the same rifle model with a longer barrel (the models point along their local -Y).
+	Model->SetRelativeScale3D(Weapon == EBattleWeapon::Sniper ? FVector(Scale, Scale * 1.3, Scale) : FVector(Scale));
 	Model->SetRelativeRotation(FRotator(0,90,0));
 	Model->SetRelativeLocation(FVector(47,15,-16));
 	if (!bFirstPerson)

@@ -223,7 +223,7 @@ public:
  bool ArmsActive() const;
  void StepArms(float Dt,double Now);
  void IssueArms(int32 ID);                    // trial equipment for an ordinary soldier, once
- void IssueEliteKit(int32 ID,int32 Slot);     // role, weapon, grenades, pistol and training of an elite platoon member
+ void IssueEliteKit(int32 ID,int32 Slot,uint8 Grade=1); // role, weapon, grenades, pistol and training of a graded squad's member (1 elite, 2 sniper team)
  bool ThrowGrenade(int32 ID,const FVector& Target,double Now,bool bPlayer);
  bool FireLauncherRound(int32 ID,const FVector& Target,double Now,bool bPlayer);
  bool MeleeStrike(int32 ID,double Now,bool bPlayer,int32 Hint=INDEX_NONE);

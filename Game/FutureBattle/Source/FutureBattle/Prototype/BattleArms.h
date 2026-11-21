@@ -9,16 +9,24 @@
 namespace BattleArms
 {
  // Roles in an elite platoon (FBattleUnitState::Kit). 0 = an ordinary soldier.
- enum EKit : uint8 { KitNone=0, KitLeader, KitGunner, KitGrenadier, KitMarksman, KitBreacher, KitAssault, KitMedic, KitRifleman, KitCount };
+ // Kits 1-8: elite platoon (Grade 1). Kits 9-10: sniper team (Grade 2: the sniper leads, the spotter follows).
+ enum EKit : uint8 { KitNone=0, KitLeader, KitGunner, KitGrenadier, KitMarksman, KitBreacher, KitAssault, KitMedic, KitRifleman, KitSniper, KitSpotter, KitCount };
  bool SidearmsEnabled();  // -BattleSidearms=1: every foot soldier carries a pistol
  int32 GrenadeCount();    // -BattleGrenades=n: hand grenades per foot soldier (0 = none)
  bool MeleeEnabled();     // -BattleMelee=1: every foot soldier strikes an enemy within reach
  bool EliteEnabled();     // -BattleElite=1: the player may buy elite platoons (= key)
  int32 AreaEliteKeep();   // -BattleAreaEliteKeep=n: elite platoons the area AI keeps (0 = none)
  int32 EliteCost();       // -BattleEliteCost=n: area purchase cost (default 26; a rifle squad costs AreaSquadCost)
+ bool SniperEnabled();    // -BattleSniperTeam=1: the player may buy sniper teams (] key)
+ int32 AreaSniperKeep();  // -BattleAreaSniperKeep=n: sniper teams the area AI keeps (0 = none)
+ int32 SniperCost();      // -BattleSniperCost=n: area purchase cost (default 14; a scout pair costs AreaScoutCost)
+ constexpr int32 SniperLimit=3; // sniper teams per team (they do not count against the scout pair limit)
  bool SmokeEnabled();     // -BattleArmsSmoke: the self-test (UBattleLeaderRuntime::RunArmsSmoke)
  bool AnyTrial();         // any of the switches above
  uint8 EliteKit(int32 Slot);            // role of a slot (slots past the table are riflemen)
+ uint8 GradeKit(uint8 Grade,int32 Slot); // the role of a slot in a squad of that grade (1 elite platoon, 2 sniper team)
+ bool ValidGrade(uint8 SquadType,uint8 Grade); // 0 any; 1 rifle squads; 2 scout pairs
+ bool GradeWeapon(uint8 Grade,EBattleWeapon W); // a weapon some role of that grade carries (save validation)
  EBattleWeapon KitWeapon(uint8 Kit);    // primary weapon of a role
  int32 KitGrenades(uint8 Kit);
  bool ValidKit(uint8 Kit);

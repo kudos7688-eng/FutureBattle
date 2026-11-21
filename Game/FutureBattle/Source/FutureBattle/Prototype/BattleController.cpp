@@ -163,6 +163,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("HireExo"), EKeys::Zero, &ABattleController::HireExo);
 	Button(TEXT("HireSupply"), EKeys::Hyphen, &ABattleController::HireSupply);
 	Button(TEXT("HireElite"), EKeys::Equals, &ABattleController::HireElite);
+	Button(TEXT("HireSniper"), EKeys::RightBracket, &ABattleController::HireSniper);
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
 	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
 	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
@@ -1490,6 +1491,14 @@ void ABattleController::HireElite()
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
 	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Rifle, 1);
 	ShowNotice(Match->LastMessage.StartsWith(TEXT("Elite platoon deployed")) ? FString::Printf(TEXT("精鋭小隊を雇った（-%d 資源）"), BattleArms::EliteCost()) : Match->LastMessage);
+}
+// Area battle: the ] key buys a sniper team (a scout pair: sniper and spotter; -BattleSniperTeam=1, cost BattleArms::SniperCost).
+void ABattleController::HireSniper()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Scout, 2);
+	ShowNotice(Match->LastMessage.StartsWith(TEXT("Sniper team deployed")) ? FString::Printf(TEXT("狙撃班を雇った（-%d 資源）"), BattleArms::SniperCost()) : Match->LastMessage);
 }
 // Area battle: the - key buys a supply vehicle (squad type 9, at most AreaSupplyLimit per team; BattleSupplyCar.cpp).
 void ABattleController::HireSupply()

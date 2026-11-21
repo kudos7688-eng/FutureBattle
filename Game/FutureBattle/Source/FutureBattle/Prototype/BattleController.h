@@ -139,6 +139,7 @@ public:
 	void HireExo();
 	void HireSupply();
 	void HireElite(); // = key: an elite platoon (-BattleElite=1; BattleArms.cpp)
+	void HireSniper(); // ] key: a sniper team (-BattleSniperTeam=1; BattleArms.cpp)
 	void StartMatch();
 	void SaveMatch();
 	void LoadMatch();
