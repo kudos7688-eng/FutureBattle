@@ -77,6 +77,7 @@ private:
  bool AssetsReady=false;
  uint64 AssetCheckFrame=MAX_uint64;
  TMap<int32,FBattleVATEntry> Entries;
+ TArray<TArray<FTransform>> Transforms;
  void Enter(FBattleVATEntry& E);
  void Leave(FBattleVATEntry& E);
  void AdvanceFar(FBattleVATEntry& E,float Dt);

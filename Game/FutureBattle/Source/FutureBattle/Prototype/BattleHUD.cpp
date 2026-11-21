@@ -23,6 +23,7 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/ScopeExit.h"
 
 void ABattleHUD::DrawHUD()
 {
@@ -65,6 +66,9 @@ void ABattleHUD::DrawHUD()
 		DrawText(FString::Printf(TEXT("×%.0f"), ScopeUnit->AimMagnification()), FLinearColor(.94f, .97f, 1.f), Cx + R * .62f, Cy + R * .62f, GEngine->GetSmallFont(), 1.2f);
 	}
 	// Fog of war and sector grid on the field (tactical view), under every panel.
+ // Build both HUD projections in one enumeration; retain no contact pointers after this draw.
+ BattleSectorView::KnownEnemies(GetWorld(),FrameContacts,FrameVisibleContacts);
+ ON_SCOPE_EXIT { FrameContacts.Reset(); FrameVisibleContacts.Reset(); };
 	DrawFieldOverlay(PC);
 	DrawRect(Ink, 16, 16, W - 32, 66);
 	DrawRect(Mint, 16, 16, 4, 66);
@@ -78,10 +82,9 @@ void ABattleHUD::DrawHUD()
 	}
 	if(Mode->bLeaderCommand)
  {
-  Allies=Enemies=Spotted=0; TSet<int32> Known;
-  for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetUnits()) if(P.Value.Team==0 && P.Value.IsAlive())
-  { ++Allies; if(const auto* C=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(P.Key)) for(const auto& Contact:*C) if(Contact.Value.bVisible&&!(HUDMatch->bArea&&HUDMatch->IsScoutLongContact(P.Key,Contact.Value))) Known.Add(Contact.Key); }
-  Enemies=Spotted=Known.Num();
+  Allies=Enemies=Spotted=0;
+  for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetUnits()) if(P.Value.Team==0 && P.Value.IsAlive()) ++Allies;
+  Enemies=Spotted=FrameVisibleContacts.Num();
  }
 	const auto* Controlled=Cast<ABattleUnit>(PC->GetPawn());
 	Label(PC->IsTactical() ? TEXT("作戦指揮") : Controlled && !Controlled->UsesThirdPersonView() ? TEXT("直接操作（一人称）") : TEXT("直接操作（三人称）"), W * .4f, 30, Mint, 1.2f);
@@ -502,16 +505,7 @@ void ABattleHUD::DrawMinimap()
  for(const FVector& Look:BattleFieldLayout::Lookouts(GetWorld()))
  {const FVector2D P=Map.ToScreen(Look);DrawLine(P.X,P.Y-6,P.X+6,P.Y,White,1);DrawLine(P.X+6,P.Y,P.X,P.Y+6,White,1);DrawLine(P.X,P.Y+6,P.X-6,P.Y,White,1);DrawLine(P.X-6,P.Y,P.X,P.Y-6,White,1);}
  // Enemies: only contacts held by the player's side. Seen now = solid; remembered = dim, at the last known position.
- TMap<int32,const FBattleContact*> Known;
- auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();
- for(const auto& Pair:Store->GetUnits()) if(Pair.Value.Team==0 && Pair.Value.IsAlive())
-  if(const auto* Contacts=Sense->GetContacts(Pair.Key)) for(const auto& C:*Contacts)
-  {
-   // A scout's long-range sightings appear only through its reports (drawn below).
-   if(Match->bArea&&Match->IsScoutLongContact(Pair.Key,C.Value)) continue;
-   const FBattleContact*& Best=Known.FindOrAdd(C.Key);
-   if(!Best || (C.Value.bVisible && !Best->bVisible) || (C.Value.bVisible==Best->bVisible && C.Value.LastSeenTime>Best->LastSeenTime)) Best=&C.Value;
-  }
+ const auto& Known=FrameContacts;
  for(const auto& Pair:Known) if(!Pair.Value->bVisible && Pair.Value->Confidence>.35f) Dot(Pair.Value->LastKnownPosition,3,Stale);
  for(const auto& Pair:Known) if(Pair.Value->bVisible) Dot(Pair.Value->LastKnownPosition,4,Enemy);
  // Scout reports: own pairs' direction alerts (a line from the pair) and reported positions; enemy observers reporting near own
@@ -851,7 +845,7 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
  // The fog is kept up to date whenever the tactical view is open, so the minimap shows it even with the field overlay hidden.
  Fog.Update(GetWorld(),Now,400);
  const bool bSectors=BattleFieldLayout::Of(GetWorld()).bSectors;
- BattleSectorView::Gather(GetWorld(),Fog,Now,Sectors);
+ BattleSectorView::Gather(GetWorld(),Fog,Now,FrameContacts,Sectors);
  // Display check -BattleSectorViewShot=<prefix> (rendered game only): screenshots of the tactical view at 40 s and 90 s of game time
  // with the pointer held at the screen centre, a BATTLE_SECTOR_VIEW line with the fog and sector counts, then quit.
  if(const FString& Shot=SectorViewShotPrefix();!Shot.IsEmpty())
@@ -867,11 +861,11 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
   }
   if(Stage==2&&T>93.)FPlatformMisc::RequestExit(false,TEXT("BattleSectorViewShot"));
  }
- if(!Fog.IsValid()) return;
+ if(!Fog.IsValid()||(!PC->bShowFog&&(!bSectors||!PC->bShowSectorGrid))) return;
  const float W=Canvas->SizeX,H=Canvas->SizeY;
  // Corners of the fog cells on the screen (false where the corner is behind the camera).
  const int32 VC=Fog.Columns+1,VR=Fog.Rows+1;
- TArray<FVector2D> Screen;Screen.SetNumUninitialized(VC*VR);TBitArray<> On(false,VC*VR);
+ auto& Screen=OverlayScreen;Screen.SetNumUninitialized(VC*VR,EAllowShrinking::No);auto& On=OverlayOn;On.Init(false,VC*VR);
  for(int32 Y=0;Y<VR;++Y)for(int32 X=0;X<VC;++X)
  {
   const FVector2D M=Fog.CellMin(X,Y);FVector2D S;
@@ -887,7 +881,7 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
  // Sector status tint (under the fog): seen now in a stronger tint, only remembered in a fainter one.
  if(bSectors&&PC->bShowSectorGrid&&!Sectors.IsEmpty())
  {
-  TArray<FCanvasUVTri> Tris;
+  auto& Tris=OverlayTris;Tris.Reset();
   for(int32 Y=0;Y<Fog.Rows;++Y)for(int32 X=0;X<Fog.Columns;++X)
   {
    const FVector2D Mid=Fog.CellMin(X,Y)+FVector2D(FBattleFogGrid::Cell*.5);const FIntPoint C=BattleSectors::Cell(FVector(Mid.X,Mid.Y,0));
@@ -902,14 +896,14 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
  // Fog: each corner takes the mean darkness of the cells around it, so the edge of sight is soft.
  if(PC->bShowFog)
  {
-  TArray<float> Dark;Dark.SetNumZeroed(VC*VR);TArray<uint8> Count;Count.SetNumZeroed(VC*VR);
+  auto& Dark=OverlayDark;Dark.Reset(VC*VR);Dark.AddZeroed(VC*VR);auto& Count=OverlayCount;Count.Reset(VC*VR);Count.AddZeroed(VC*VR);
   for(int32 Y=0;Y<Fog.Rows;++Y)for(int32 X=0;X<Fog.Columns;++X)
   {
    const float A=FogAlpha[Fog.State(Y*Fog.Columns+X,Now)];
    for(const int32 K:{Y*VC+X,Y*VC+X+1,(Y+1)*VC+X+1,(Y+1)*VC+X}){Dark[K]+=A;++Count[K];}
   }
   for(int32 K=0;K<Dark.Num();++K)if(Count[K])Dark[K]/=Count[K];
-  TArray<FCanvasUVTri> Tris;
+  auto& Tris=OverlayTris;Tris.Reset();
   for(int32 Y=0;Y<Fog.Rows;++Y)for(int32 X=0;X<Fog.Columns;++X)
   {
    const int32 I[4]={Y*VC+X,Y*VC+X+1,(Y+1)*VC+X+1,(Y+1)*VC+X};
@@ -1031,7 +1025,7 @@ void ABattleHUD::DrawMinimapOverlay(ABattleController* PC,const FBattleMinimapLa
  const double Size=BattleSectors::Size,HX=BattleSectors::Columns*Size*.5,HY=BattleSectors::Rows*Size*.5;
  if(bSectors)
  {
-  TArray<FCanvasUVTri> Tris;
+  auto& Tris=OverlayTris;Tris.Reset();
   for(int32 R=0;R<BattleSectors::Rows;++R)for(int32 C=0;C<BattleSectors::Columns;++C)
   {
    const int32 Status=BattleSectorView::StatusOf(Sectors[R*BattleSectors::Columns+C]);if(Status<1||Status>4)continue;
@@ -1042,7 +1036,7 @@ void ABattleHUD::DrawMinimapOverlay(ABattleController* PC,const FBattleMinimapLa
  }
  if(PC->bShowFog&&Fog.IsValid())
  {
-  TArray<FCanvasUVTri> Tris;
+  auto& Tris=OverlayTris;Tris.Reset();
   for(int32 Y=0;Y<Fog.Rows;++Y)for(int32 X=0;X<Fog.Columns;++X)
   {
    const uint8 State=Fog.State(Y*Fog.Columns+X,Now);if(!State)continue;

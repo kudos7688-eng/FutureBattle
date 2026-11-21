@@ -589,7 +589,9 @@ private:
  TSharedPtr<FMassEntityManager> Manager;
  TMap<int32,FBattleLeaderBody> Bodies;
  TMap<int32,FBattleLeaderPlan> Plans;
- TMap<FIntPoint,TArray<int32>> AvoidanceGrid;
+ TMap<FIntPoint,int32> AvoidanceGrid;
+ TArray<TArray<int32>> AvoidanceBuckets;
+ TArray<int32> AvoidanceUsed;
  TMap<TWeakObjectPtr<UPrimitiveComponent>,int32> HitIDs;
  TArray<FBattleSquadSummary> CachedSummaries;
  UPROPERTY() TObjectPtr<AActor> DisplayHost;

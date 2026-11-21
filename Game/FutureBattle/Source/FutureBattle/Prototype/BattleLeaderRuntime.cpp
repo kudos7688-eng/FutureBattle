@@ -955,7 +955,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   const FIntPoint Cell(FMath::FloorToInt(Pos.X/150.),FMath::FloorToInt(Pos.Y/150.));
   int32 Checked=0;
   for(int32 X=-1;X<=1 && Checked<32;++X) for(int32 Y=-1;Y<=1 && Checked<32;++Y)
-   if(const auto* Nearby=AvoidanceGrid.Find(Cell+FIntPoint(X,Y))) for(int32 Other:*Nearby)
+   if(const int32* NearbyBucket=AvoidanceGrid.Find(Cell+FIntPoint(X,Y))) for(int32 Other:AvoidanceBuckets[*NearbyBucket])
    {
     if(Other==ID || !Store->Find(Other)->IsAlive()) continue;
     if(++Checked>32) break;
@@ -1331,8 +1331,21 @@ void UBattleLeaderRuntime::Step(float Dt)
    }
   }
   if(bWideField)GuardFalls(Now);
-  AvoidanceGrid.Reset();
-  for(const auto& B:Bodies) if(Store->Find(B.Key)->IsAlive()) { const FVector P=Position(B.Key); AvoidanceGrid.FindOrAdd(FIntPoint(FMath::FloorToInt(P.X/150.),FMath::FloorToInt(P.Y/150.))).Add(B.Key); }
+  // Drop old cell keys, but retain bucket storage and append in the original Bodies order.
+  for(int32 UsedBucket:AvoidanceUsed)AvoidanceBuckets[UsedBucket].Reset();
+  AvoidanceUsed.Reset();AvoidanceGrid.Reset();
+  for(const auto& B:Bodies) if(Store->Find(B.Key)->IsAlive())
+  {
+   const FVector P=Position(B.Key);const FIntPoint BodyCell(FMath::FloorToInt(P.X/150.),FMath::FloorToInt(P.Y/150.));
+   int32* FoundBucket=AvoidanceGrid.Find(BodyCell);
+   if(!FoundBucket)
+   {
+    const int32 NewBucket=AvoidanceUsed.Num();
+    if(NewBucket==AvoidanceBuckets.Num())AvoidanceBuckets.AddDefaulted();
+    AvoidanceUsed.Add(NewBucket);FoundBucket=&AvoidanceGrid.Add(BodyCell,NewBucket);
+   }
+   AvoidanceBuckets[*FoundBucket].Add(B.Key);
+  }
   // Death may invalidate a plan during firing; iterate stable UnitIDs, never a plan iterator.
   { TRACE_CPUPROFILER_EVENT_SCOPE(BattleFollow); for(const auto& B:Bodies) Follow(B.Key,FMath::Min(Dt,.05f),Now); }
   // Indirect-fire shells in flight land after their flight time (paused with the combat).

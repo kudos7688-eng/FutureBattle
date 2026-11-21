@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
 #include "BattleSectorView.h"
+#include "CanvasItem.h"
 #include "BattleHUD.generated.h"
 
 UCLASS()
@@ -40,6 +41,14 @@ private:
  FBattleFogGrid Fog;
  uint64 FogRestoreGeneration=0;
  TArray<FBattleSectorInfo> Sectors;
+ // Contact pointers exist only during DrawHUD; every frame rebuilds the snapshot in source order.
+ TMap<int32,const FBattleContact*> FrameContacts;
+ TSet<int32> FrameVisibleContacts;
+ TArray<FVector2D> OverlayScreen;
+ TBitArray<> OverlayOn;
+ TArray<float> OverlayDark;
+ TArray<uint8> OverlayCount;
+ TArray<FCanvasUVTri> OverlayTris;
 	double NextLabelCheck = 0;
 	TSet<int32> ClearLabels;
 	TWeakObjectPtr<APawn> LabelViewPawn;

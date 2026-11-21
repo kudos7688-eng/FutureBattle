@@ -74,11 +74,22 @@ void FBattleFogGrid::Update(const UWorld* InWorld, double Now, int32 TraceBudget
 		const FCaster& C = Casters[NextCaster];
 		// Enough rays that neighbouring rays are less than a cell apart at the end of the range.
 		const int32 Rays = FMath::Clamp(FMath::CeilToInt(2 * PI * C.Range / (Cell * .8)), 24, 160);
+		TArray<FVector>& Directions = RayDirections.FindOrAdd(Rays);
+		if (Directions.IsEmpty())
+		{
+			Directions.Reserve(Rays);
+			for (int32 RayIndex = 0; RayIndex < Rays; ++RayIndex)
+			{
+				// Keep the original double expression and separate sin/cos calls.
+				const double Angle = 2 * PI * RayIndex / Rays;
+				Directions.Add(FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0));
+			}
+		}
 		if (NextRay == 0) Mark(C.Eye.X, C.Eye.Y, Now);
 		for (; NextRay < Rays && TraceBudget > 0; ++NextRay, --TraceBudget)
 		{
-			const double A = 2 * PI * NextRay / Rays;
-			const FVector Dir(FMath::Cos(A), FMath::Sin(A), 0);
+			const FVector& Dir = Directions[NextRay];
+			// Each caster/ray runs once per round, so there is no repeated endpoint to cache here.
 			FVector End = C.Eye + Dir * C.Range; End.Z = BattleSectorView::GroundZ(InWorld, End.X, End.Y) + 100.;
 			FHitResult Hit;
 			const double Reach = InWorld->LineTraceSingleByObjectType(Hit, C.Eye, End, Static, Query) ? Hit.Distance + Cell * .6 : C.Range;
@@ -89,15 +100,16 @@ void FBattleFogGrid::Update(const UWorld* InWorld, double Now, int32 TraceBudget
 	if (NextCaster >= Casters.Num() && Casters.IsEmpty()) CycleSeconds = .3;
 }
 
-void BattleSectorView::KnownEnemies(const UWorld* World, TMap<int32, const FBattleContact*>& Out)
+void BattleSectorView::KnownEnemies(const UWorld* World, TMap<int32, const FBattleContact*>& Out, TSet<int32>& Visible)
 {
-	Out.Reset();
+	Out.Reset(); Visible.Reset();
 	const auto* Store = World->GetSubsystem<UBattleState>(); auto* Sense = World->GetSubsystem<UBattlePerception>(); const auto* Match = World->GetSubsystem<UBattleMatch>();
 	if (!Store || !Sense || !Match) return;
 	for (const auto& Pair : Store->GetUnits()) if (Pair.Value.Team == 0 && Pair.Value.IsAlive())
 		if (const auto* Contacts = Sense->GetContacts(Pair.Key)) for (const auto& C : *Contacts)
 		{
 			if (Match->bArea && Match->IsScoutLongContact(Pair.Key, C.Value)) continue;
+			if (C.Value.bVisible) Visible.Add(C.Key);
 			const FBattleContact*& Best = Out.FindOrAdd(C.Key);
 			if (!Best || (C.Value.bVisible && !Best->bVisible) || (C.Value.bVisible == Best->bVisible && C.Value.LastSeenTime > Best->LastSeenTime)) Best = &C.Value;
 		}
@@ -116,18 +128,21 @@ const TArray<int32>& BattleSectorView::CoverCounts(const UWorld* World)
 	return Counts;
 }
 
-void BattleSectorView::Gather(const UWorld* World, const FBattleFogGrid& Fog, double Now, TArray<FBattleSectorInfo>& Out)
+void BattleSectorView::Gather(const UWorld* World, const FBattleFogGrid& Fog, double Now, const TMap<int32, const FBattleContact*>& Known, TArray<FBattleSectorInfo>& Out)
 {
-	Out.Reset();
-	if (!BattleFieldLayout::Of(World).bSectors) return;
+	if (!BattleFieldLayout::Of(World).bSectors) { Out.Reset(); return; }
 	constexpr int32 N = BattleSectors::Columns * BattleSectors::Rows;
 	Out.SetNum(N);
+	for (auto& Sector : Out)
+	{
+		Sector.Own = Sector.Seen = Sector.Remembered = Sector.InSightCells = Sector.Cells = Sector.Cover = 0;
+		Sector.Objective = INDEX_NONE; Sector.Squads.Reset();
+	}
 	auto Slot = [&](FVector P)->FBattleSectorInfo* { const FIntPoint C = BattleSectors::Cell(P); return BattleSectors::Valid(C) ? &Out[C.Y * BattleSectors::Columns + C.X] : nullptr; };
 	const auto* Store = World->GetSubsystem<UBattleState>(); const auto* Leaders = World->GetSubsystem<UBattleLeaderRuntime>(); const auto* Match = World->GetSubsystem<UBattleMatch>();
 	if (!Store || !Leaders || !Match) return;
 	for (const auto& Pair : Store->GetUnits()) if (Pair.Value.Team == 0 && Pair.Value.IsAlive())
 	{ const FVector P = Leaders->Position(Pair.Key); if (!P.IsZero()) if (auto* S = Slot(P)) ++S->Own; }
-	TMap<int32, const FBattleContact*> Known; KnownEnemies(World, Known);
 	for (const auto& Pair : Known) if (auto* S = Slot(Pair.Value->LastKnownPosition))
 	{ if (Pair.Value->bVisible) ++S->Seen; else if (Pair.Value->Confidence > .35f) ++S->Remembered; }
 	for (int32 I = 0; I < Match->Objectives.Num(); ++I) if (auto* S = Slot(Match->Objectives[I].Position)) S->Objective = I;

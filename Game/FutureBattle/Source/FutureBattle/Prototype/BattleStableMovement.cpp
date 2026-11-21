@@ -385,7 +385,7 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  int32 Blocker=INDEX_NONE; double BlockerDistance=DBL_MAX;
  const FIntPoint Cell(FMath::FloorToInt(Pos.X/150.),FMath::FloorToInt(Pos.Y/150.)); int32 Checked=0;
  for(int32 X=-1;X<=1 && Checked<32;++X) for(int32 Y=-1;Y<=1 && Checked<32;++Y)
-  if(const auto* Nearby=AvoidanceGrid.Find(Cell+FIntPoint(X,Y))) for(int32 Other:*Nearby)
+  if(const int32* NearbyBucket=AvoidanceGrid.Find(Cell+FIntPoint(X,Y))) for(int32 Other:AvoidanceBuckets[*NearbyBucket])
   {
    if(Other==ID || !Store->Find(Other)->IsAlive()) continue;
    if(bAllyPass&&IsStationaryAlly(ID,Other)) continue;
