@@ -140,6 +140,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   for(int32 Team=0;Team<2;++Team)
    if(Area.StrategyHoldMask[Team]<0||(Objectives.Num()<31&&(Area.StrategyHoldMask[Team]>>Objectives.Num())!=0)||Area.StrategyCounter[Team]<-1||Area.StrategyCounter[Team]>=Objectives.Num()||!Finite(Area.StrategyCounterUntil[Team],-1,Elapsed+3600))return Fail(TEXT("Invalid strategy hold state"));
   for(float Since:Area.StrategyThreatSince)if(!Finite(Since,-1,Elapsed+.01))return Fail(TEXT("Invalid strategy hold state"));
+  for(int32 SID:Area.StrategyHired)if(!BySquad.FindRef(SID))return Fail(TEXT("Invalid strategy hire"));
 
   if(Retired[0]+Area.HireSpent[0]+AllyCredits!=100+Area.Income[0]||Retired[1]+Area.HireSpent[1]+EnemyCredits!=100+Area.Income[1])return Fail(TEXT("Area resource conservation mismatch"));
   if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=ExpectedRoster||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=2*Objectives.Num()||Area.SeenAt.Num()!=2*Objectives.Num()||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>Current||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));

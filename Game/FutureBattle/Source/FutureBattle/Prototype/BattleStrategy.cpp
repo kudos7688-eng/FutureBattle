@@ -312,6 +312,19 @@ void UBattleMatch::UpdateStrategy(int32 Team)
  }
  const int32 Old=Focus;
  if(Best!=Focus){Focus=Best;FocusAt=Elapsed;}
+ // Stage S4: the squads bought for the focus follow it (no focus: they go back to the normal spread).
+ if(StrategyOn(Team,4)&&Best!=Old)
+ {
+  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+  for(int32 K=Area.StrategyHired.Num()-1;K>=0;--K)
+  {
+   const int32 SID=Area.StrategyHired[K];const auto* Sq=Store?Store->FindSquad(SID):nullptr;
+   if(!Sq){Area.StrategyHired.RemoveAt(K);continue;}
+   if(Sq->Team!=Team)continue;
+   if(Best!=INDEX_NONE&&Sq->CommandStatus==EBattleCommandStatus::Active)Area.HirePurpose.Add(SID,Best);
+   else{Area.HirePurpose.Remove(SID);Area.StrategyHired.RemoveAt(K);}
+  }
+ }
  SPhase=Best!=INDEX_NONE?1:0;ReviewAt=Elapsed+Review;
  const auto* F=Objectives.IsValidIndex(Best)?&S.Theatres[Best]:nullptr;
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STRATEGY team=%d t=%.1f phase=%d focus=%d old=%d reason=%s score=%.1f known=%.1f own=%.1f next=%d nextScore=%.1f unknown=%d avoid=%d"),

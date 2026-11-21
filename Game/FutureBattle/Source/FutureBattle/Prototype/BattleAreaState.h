@@ -49,4 +49,6 @@ struct FBattleAreaState
  UPROPERTY() TArray<float> StrategyThreatSince;
  UPROPERTY() TArray<int32> StrategyCounter={-1,-1};
  UPROPERTY() TArray<float> StrategyCounterUntil={-1,-1};
+ // Stage S4 (-BattleStrategy=4): rifle squads the AI bought for its focus (their Area.HirePurpose follows the focus when it changes).
+ UPROPERTY() TArray<int32> StrategyHired;
 };

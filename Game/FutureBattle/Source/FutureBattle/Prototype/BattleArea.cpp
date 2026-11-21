@@ -201,6 +201,11 @@ void UBattleMatch::UpdateAreaHiring()
   const FString Message=LastMessage;LastHiredSquadID=INDEX_NONE;
   if(HireAreaSquad(Team,EBattleTraining::Regular,true,Type)&&bPurpose&&LastHiredSquadID!=INDEX_NONE){Area.HirePurpose.Add(LastHiredSquadID,Need);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE_PURPOSE team=%d squad=%d purpose=%d time=%.1f"),Team,LastHiredSquadID,Need,Elapsed);}
   else if(IntelNeed>=0&&LastHiredSquadID!=INDEX_NONE&&Store->FindSquad(LastHiredSquadID)){IntelPurpose.Add(LastHiredSquadID,IntelNeed);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_INTEL_HIRE team=%d squad=%d point=%d time=%.1f"),Team,LastHiredSquadID,IntelNeed,Elapsed);}
+  // Strategy layer S4 (BattleStrategy.cpp, -BattleStrategy=4): a rifle squad bought while the team has a focus reinforces it; its mission
+  // follows the focus when the plan changes (UpdateStrategy).
+  else if(LastHiredSquadID!=INDEX_NONE&&Type==BattleSquadType::Rifle&&StrategyOn(Team,4)&&Store->FindSquad(LastHiredSquadID))
+   if(const int32 Focus=StrategyFocusPoint(Team);Focus!=INDEX_NONE&&ObservedOwner(Team,Focus)!=Team)
+   {Area.HirePurpose.Add(LastHiredSquadID,Focus);Area.StrategyHired.Add(LastHiredSquadID);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STRATEGY_HIRE team=%d squad=%d focus=%d time=%.1f"),Team,LastHiredSquadID,Focus,Elapsed);}
   LastMessage=Message;
  }
 }
