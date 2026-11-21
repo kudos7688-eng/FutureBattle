@@ -13,6 +13,10 @@ struct FBattleSavedUnit
 	UPROPERTY() FBattleUnitState State;
 	UPROPERTY() FVector Position = FVector::ZeroVector;
 	UPROPERTY() FRotator Rotation = FRotator::ZeroRotator;
+	// Stage A (-BattleThreatCover): the cover place he left because it was seen into, and the seconds left (at most 10) before
+	// he may take it again. INDEX_NONE (also in saves made before 2026-11-21) = none.
+	UPROPERTY() int32 BrokenCoverSlot = INDEX_NONE;
+	UPROPERTY() float BrokenCoverLeft = 0;
 };
 
 // Versioned, single-map match snapshot. Timers are relative to the save instant.

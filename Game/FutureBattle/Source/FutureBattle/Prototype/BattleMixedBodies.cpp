@@ -129,6 +129,11 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  DisplayHost=NewHost;Bodies=MoveTemp(Staged);HitIDs.Reset();Plans.Reset();AvoidanceGrid.Reset();Mode->Units.Reset();Corpses.Reset();HiddenCorpses.Reset();SoldierPaths.Reset();
  GetWorld()->GetSubsystem<UBattleSquadAI>()->Reset();GetWorld()->GetSubsystem<UBattleCover>()->ResetReservations();
  const double Now=GetWorld()->GetTimeSeconds();TArray<FBattleUnitState> Records;
+ // Places left because they were seen into (stage A): kept for the time left. A slot that does not exist on this map is dropped.
+ BrokenCover.Reset();
+ const int32 SlotCount=GetWorld()->GetSubsystem<UBattleCover>()->GetSlots().Num();
+ for(const auto& E:Save->Units)if(E.BrokenCoverSlot>=0 && E.BrokenCoverSlot<SlotCount && E.BrokenCoverLeft>0)
+  BrokenCover.Add(E.State.UnitID,TPair<int32,double>(E.BrokenCoverSlot,Now+FMath::Min(10.f,E.BrokenCoverLeft)));
  for(const auto& E:Save->Units)
  {
   auto U=E.State;U.ReloadEndTime=U.ReloadEndTime>0?Now+U.ReloadEndTime:0;U.NextShotTime+=Now;
