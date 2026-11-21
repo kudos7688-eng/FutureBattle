@@ -46,6 +46,12 @@ void ABattleCameraPawn::Zoom(float Delta)
 	Camera->SetRelativeLocation(FVector(-Height * .65f, 0, Height));
 }
 
+void ABattleCameraPawn::ZoomScale(float Factor)
+{
+	const float Current = Camera->GetRelativeLocation().Z;
+	Zoom(Current * Factor - Current);
+}
+
 void ABattleController::BeginPlay()
 {
 	Super::BeginPlay();
@@ -860,8 +866,8 @@ void ABattleController::UpdatePlayerAmmo(ABattleUnit* Unit)
 }
 void ABattleController::JumpPressed() { if (ABattleUnit* U = Cast<ABattleUnit>(GetPawn())) if (U->IsAlive() && !TryVault(U)) U->Jump(); }
 void ABattleController::JumpReleased() { if (ABattleUnit* U = Cast<ABattleUnit>(GetPawn())) U->StopJumping(); }
-void ABattleController::ZoomIn() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->Zoom(BattleFieldLayout::IsLarge(GetWorld()) ? -600 : -220); }
-void ABattleController::ZoomOut() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->Zoom(BattleFieldLayout::IsLarge(GetWorld()) ? 600 : 220); }
+void ABattleController::ZoomIn() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->ZoomScale(1.f / 1.25f); }
+void ABattleController::ZoomOut() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->ZoomScale(1.25f); }
 void ABattleController::RestartBattle() { UGameplayStatics::OpenLevel(this, FName(*GetWorld()->GetName()), true); }
 void ABattleController::ToggleCombat()
 {
