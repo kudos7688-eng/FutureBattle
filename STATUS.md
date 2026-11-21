@@ -25,8 +25,24 @@
 | 戦略層・マップJ（ロードマップに従う改善活動） | **11-22 main へ取り込み（b58f391）**：戦略層 S1〜S4（`-BattleSituationLog`・`-BattleStrategy=2/3/4`、既定0）、上部の帯、引き算の評価の切替（`-BattleAreaAllTypes`・`-BattleAreaWithout`）、`-BattleFrontShare`、分岐点の記録 `-BattleStateTrace`、往復保存の時刻 `-BattleVerifySaveAt`、**マップJ**（通れない山・湖で3本の道、ビルなど多様な建物、`Play-Area.ps1 -Map J`）。既定の試合は不変（IDENTICAL）。設計は `Docs/design-*.md`（段階2〜7、地形のAI、画面、部隊一覧、負荷、ロックの列）。計測ロックはファイルの列（`Setup/Lock-Queue.ps1`、ユーザー決定）。得点の規則は今のまま（ユーザー決定） | 戦略層の片側試験（未実施）、マップJ の画面確認（ユーザー）、F2 の到着の不合格、段階2の描画ありの切り分け |
 | 前線軍（群制御、`groupui`） | **11-22 3時30分 main へ**：テストプレイの指摘で作り直し。持ち場は行ごとの固定位置（遮蔽で前後を選び、畑の行は空ける）、最初の割り当ては歩く距離、前進は群が20秒ごとに行ごと、最初の前線は40%（`-BattleFrontOpen`）、要る数だけ前線軍に残し余りは未所属へ。Ctrl+右ドラッグは左右に引く | 試遊（Ctrl+右ドラッグ・通知の実画面確認）。数値は仮 |
 | 車両・砲兵・点検の直し（Codex委任、`FutureBattle-codex`） | **11-21〜22 main へ（すべて既定0、既定の試合は不変）**：自走砲が動かない直し `-BattleVehicleOrderHere`、戦車の被弾後の隠れ `-BattleVehicleHitCover`・主砲の発砲で位置が知られる `-BattleTankGunFlash`、砲兵の発砲で位置が知られる `-BattleArtilleryFlash`、自走砲の射程 `-BattleSPGRange`・費用 `-BattleAreaSPGCost`、公開の砲撃陣地と襲撃 `-BattleArtilleryPosts`（襲撃は外骨格→装甲車、ユーザー決定）、発砲を追う襲撃 `-BattleArtilleryRaidChase`、前線を抜ける襲撃 `-BattleArtilleryRaidSneak`、観測した情報だけで判断 `-BattleObservedArmour`／`-BattleObservedTactics`、点検05 の保存の検査（上限は 1 GiB）、点検07 の結果を変えない高速化、点検09 の画面の直し。評価：射程55000で自走砲の撃破が3〜4割減る。前線を抜ける襲撃で自走砲の発射が半分以下、ただし自走砲は撃破されない（外骨格は数を見て後退を繰り返す→ codex bc01833 で直し、未ビルド）。設計は `Docs/design-vehicle-survival.md`・`Docs/design-observation.md` | 戦車の直し A/B（2試合では効果が見えない）と砲兵の各切替を既定にするか。点検09 U06（3解像度）・U12（パッドのメニュー）の画面確認。AI が迫撃砲を買わない（陣地が使われない）。視界100m のマップA の保存は 69 MB |
+| 歩兵の装備・精鋭小隊・狙撃班（`arms` ブランチ、`FutureBattle-arms`） | **11-22 6時30分**：副武装の拳銃 `-BattleSidearms`、手りゅう弾 `-BattleGrenades=n`、近接攻撃 `-BattleMelee`、新しい武器5種（拳銃・短機関銃・散弾銃・選抜射手銃・擲弾銃）と狙撃銃、**精鋭小隊**（8人の役割分担、`-BattleElite`＝ `=` キー／AI `-BattleAreaEliteKeep=n`）、**狙撃班**（狙撃手＋観測手、`-BattleSniperTeam`＝ `]` キー／AI `-BattleAreaSniperKeep=n`）。すべて既定0。直接操作は G 投てき・V 近接・F 拳銃。ビルド・Test-Battle・Test-Area・自己試験 `-BattleArmsSmoke` 合格、既定の試合は main と IDENTICAL。試遊は `Setup\Play-Area.ps1 -Map I -Arms`（`FutureBattle-arms` から）。設計 `Docs/design-infantry-arms.md`。main へは未取り込み | **AIどうしでは手りゅう弾・近接・拳銃がほぼ使われない**（交戦距離が100〜150mで30m以内に近づかない。近接戦の動きは未実装）。強さの片側試験は未実施、数値は仮。画面での確認（模型・投てきの球・アニメ）は未実施。main への取り込み |
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
+
+## 2026-11-22 6時35分 Claude（武器と高級小隊）：副武装・手りゅう弾・近接攻撃・新しい武器種・精鋭小隊・狙撃班（ブランチ `arms`、すべて既定0の試験切替）
+
+- **依頼**：「一般の兵士にも副武装を用意し、手りゅう弾や近接攻撃などを実装して、それらを行うことができるAIや小隊内で役割分担がある高級小隊や他の武器種も実装して」「アセットなどは活用できそうなら活用して」「狙撃銃やその小隊も」。
+- **設計**：`Docs/design-infantry-arms.md`（ブランチ `arms`。main にも同じ写し）。コードは `BattleArms.h/.cpp`（値・切替・投てき・擲弾・近接・衛生兵・拳銃・役割の目標・自己試験）と、射撃 `Fire`（手に持っている武器＝拳銃を抜いていれば拳銃）、兵の実行 `Follow`（役割の目標・拳銃）、保存（兵の装備の項目と飛んでいる手りゅう弾 `SavedArmsShells`、検査）、雇用（`HireAreaSquad` の等級 `Grade`：1 精鋭小隊＝小銃小隊、2 狙撃班＝偵察組）、HUD・入力。
+- **中身**：
+  - 拳銃 `-BattleSidearms=1`：主武器の弾切れ・装填中に25m以内の見えている敵を撃つ。手りゅう弾 `-BattleGrenades=n`：6〜30m の、遮蔽の陰に入った敵か2人以上まとまった敵へ。放物線で飛び、壁で爆風が止まる。近接 `-BattleMelee=1`：2m 以内の見えている敵を殴る（60）。
+  - 新しい武器（`EBattleWeapon` に追加）：拳銃・短機関銃・散弾銃（近いほど強い）・選抜射手銃・擲弾銃（山なりの爆発弾）・狙撃銃（1発100、交戦距離は小銃の2.5倍）。
+  - 精鋭小隊（費用26、全員熟練兵）：隊長・機関銃手・擲弾手・選抜射手（重火器の持ち手を先に狙う）・突撃手2（散弾銃・短機関銃、射程内の敵を自分で選ぶ）・衛生兵（近くの仲間を回復）・小銃手。
+  - 狙撃班（費用14、偵察組の上位版）：隊長＝狙撃手（見えている敵の隊長を最優先）、観測手。止まると遠くまで見える。偵察組の上限には数えない（各チーム3班まで）。
+  - 既存アセット：選抜射手銃・狙撃銃に外骨格兵の小銃 `SM_AC01_Rifle`、擲弾銃に肩撃ち火器 `SM_AC01_Launcher`、殴る・投げる動きに素手の攻撃アニメ `MM_Attack_01/02`。
+- **検証**（arms のビルド、30FPS・描画なし）：Build 成功（1回目はコンパイルエラー1件を直した）。Test-Battle 合格（`FutureBattle-arms/Setup/Battle-Smoke-20261122-061419.log`、failures=0）。Test-Area 合格（`BATTLE_AREA_RESULT failures=0`）。自己試験 `-BattleArmsSmoke` 合格（武器の表、精鋭小隊と狙撃班の購入と装備、爆風の被害、拳銃の発射、手りゅう弾の投てきと着弾）。**既定の試合**：マップI s7（区画AIの組み合わせ）が main の `s24-I-def-s7` と IDENTICAL（78項目、701:824）。**全部ON＋往復保存**：マップI s7・マップE s19 とも合格。擲弾は1試合55〜65発・爆風の撃破6、衛生兵の回復1000〜1650回、AIは精鋭小隊・狙撃班を買った。出力は `FutureBattle-arms/Setup/Benchmarks/SightTrial-20261111/arms-*`。
+- **分かったこと**：交戦距離はほぼ100〜150m で、30m未満の射撃は0〜18発。**AIどうしの試合では手りゅう弾・近接・拳銃はほぼ使われない**（`-BattleCloseIn=1` でも30m未満にはならない）。直接操作では使える。擲弾の弾道の判定が厳しすぎた（直線2本の近似で94%が遮られる）ので放物線に直した（撃てた数 45→58）。
+- **未実施・制限**：強さの片側試験（全部ONの得点は両軍装備ありで比較にならない）。画面での確認（模型の位置・投てきの球・アニメ）。投げるアニメは無く素手の攻撃で代用、拳銃の構えのアニメへの切替は無い。遠景のVAT表示の兵は武器の替えが見えない。main への取り込み。
+- **次の一手**：近接戦の動き（突撃手・小銃手が見えている敵の遮蔽まで30m以内に詰めて投げる、建物の掃討）を入れると、AIの手りゅう弾・近接が使われる。精鋭小隊・狙撃班の片側試験（費用の妥当さ）。ユーザーの試遊 `Setup\Play-Area.ps1 -Map I -Arms`（`FutureBattle-arms` から起動）。
 
 ## 2026-11-22 6時10分 Claude（区画AI）：攻撃の対象（`-BattleAttackFocus`）は効く。西と東の偏りは「区画経由＋角を抜ける」の組み合わせで起きる（試験切替3つを main に、すべて既定0）
 
