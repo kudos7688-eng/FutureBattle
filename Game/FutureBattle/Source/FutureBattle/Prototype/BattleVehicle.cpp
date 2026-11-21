@@ -39,14 +39,6 @@ uint8 UBattleLeaderRuntime::VehicleType(int32 ID) const
  return S?S->SquadType:BattleSquadType::Rifle;
 }
 
-void UBattleLeaderRuntime::RefreshVehicles()
-{
- VehicleIDs.Reset();
- const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
- for(const auto& P:Store->GetSquads())
-  if(BattleSquadType::IsVehicle(P.Value.SquadType))if(const auto* U=Store->Find(P.Value.LeaderUnitID);U&&U->IsAlive())VehicleIDs.Add(P.Value.LeaderUnitID);
-}
-
 void UBattleLeaderRuntime::ConfigureVehicle(int32 ID)
 {
  ABattleUnit* A=Actor(ID);auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);

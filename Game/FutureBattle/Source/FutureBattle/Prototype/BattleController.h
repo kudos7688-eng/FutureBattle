@@ -215,7 +215,6 @@ private:
 	void LookPitch(const FInputActionValue& Value);
 	void PrimaryPressed();
 	void PrimaryReleased();
-	void MoveSelected();
 	void Reload();
 	// Direct control: empty reserve -> one magazine from the squad mate who carries the most (UBattleTuning::PlayerAmmoShareRange).
 	void UpdatePlayerAmmo(class ABattleUnit* Unit);

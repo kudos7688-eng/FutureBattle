@@ -631,18 +631,6 @@ void ABattleController::PrimaryReleased()
 	UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_INPUT Selection=%d"), Selected.Num());
 }
 
-void ABattleController::MoveSelected()
-{
-	if (!bTactical || Selected.IsEmpty()) return;
-	FVector Target;
-	FVector2D Position;
-	if (GetPointerPosition(Position) && PickOrderPoint(Position, Target))
-	{
-		IssueOrderAt(Target, PendingOrder);
-		PendingOrder = EBattleOrder::Move;
-	}
-}
-
 void ABattleController::ChooseAttackMove()
 {
 	if (bTactical) { PendingOrder = EBattleOrder::AttackMove; ShowNotice(BattleFieldLayout::Of(GetWorld()).bSectors?TEXT("区画制圧：対象区画を右クリック"):TEXT("ATTACK MOVE: right-click destination")); }
