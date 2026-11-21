@@ -56,8 +56,14 @@ UAnimSequence* BattleStance::CrouchClip(bool bWalk)
 }
 // With a clip for the stance (crouch: Lyra; prone: the cover shooter sample, BattleBodyAnim) the body keeps its full size.
 float BattleStance::BodyScale(uint8 Stance){return (Stance==Crouch&&CrouchClip(false))||(Stance==Prone&&BattleBodyAnim::Get(BattleBodyAnim::EClip::ProneIdle))?1.f:VisualScale(Stance);}
+int32 BattleStance::MoveMode()
+{
+ static const int32 Mode=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleStanceMove="),V);return FMath::Clamp(V,0,2);}();
+ return Mode;
+}
+float BattleStance::MoveScale(uint8 Stance){return Stance==Prone?.25f:Stance==Crouch?.55f:1.f;}
 
-bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForce)
+bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForce,bool bOnTheMove)
 {
  if(!BattleStance::Enabled(GetWorld()))return false;
  const uint8 Current=StanceOf(ID);
@@ -77,7 +83,14 @@ bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForc
    B->Mesh->SetRelativeScale3D(Scale);
    // Body animation: a near follower plays the stance transition once (StepBodyTimers returns him to his loop).
    UAnimSequence* Change=B->Mesh->IsComponentTickEnabled()&&!(VAT&&VAT->IsFar(ID))?BattleBodyAnim::Transition(Current,Stance):nullptr;
-   if(Change){B->Mesh->PlayAnimation(Change,false);BodyTimers.Add(ID,{Now+Change->GetPlayLength(),false});}
+   if(Change)
+   {
+    // On the move (he walks off as the stance changes) the transition ends within MovingTransitionSeconds: at its own speed it
+    // slid along the ground. Until it ends his walk does not replace it (the pose change in Follow waits for this timer).
+    const float Rate=bOnTheMove?FMath::Max(1.f,float(Change->GetPlayLength()/BattleBodyAnim::MovingTransitionSeconds)):1.f;
+    B->Mesh->PlayAnimation(Change,false);if(Rate>1.f)B->Mesh->SetPlayRate(Rate);
+    BodyTimers.Add(ID,{Now+Change->GetPlayLength()/Rate,false});
+   }
    else if(BattleStance::AnimEnabled())RefreshFollowerPose(ID);
   }
  }
@@ -186,11 +199,13 @@ void UBattleLeaderRuntime::AimFollowerRifles(double Now)
    const FVector Barrel=-B.Weapon->GetComponentTransform().GetUnitAxis(EAxis::Y);
    const FVector Facing=B.Capsule.IsValid()?B.Capsule->GetForwardVector():Forward(ID);
    const FVector* Shot=FollowerAims.Find(ID);
+   // The bend the shown pose was made with (the barrel above is from that pose; evaluation may skip frames, so the angle
+   // asked for since then is not on the screen yet and adding to it would overshoot).
+   const auto* Bend=Cast<UBattleVATSkeletalMeshComponent>(B.Mesh.Get());
    const float ShotPitch=Shot?FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Shot->Z,-1.,1.))):0.f;
    const float BarrelPitch=FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Barrel.Z,-1.,1.)));
    WantYaw=Barrel.SizeSquared2D()>.01?FMath::Clamp(B.MuzzleYaw+FMath::FindDeltaAngleDegrees(Barrel.Rotation().Yaw,Facing.Rotation().Yaw),-MaxFollowerMuzzleYaw,MaxFollowerMuzzleYaw):B.MuzzleYaw;
-   if(Cast<UBattleVATSkeletalMeshComponent>(B.Mesh.Get()))
-    WantPitch=FMath::Clamp(B.MuzzlePitch+(ShotPitch-BarrelPitch),-MaxFollowerMuzzlePitch,MaxFollowerMuzzlePitch);
+   if(Bend)WantPitch=FMath::Clamp(Bend->AppliedSpinePitch+(ShotPitch-BarrelPitch),-MaxFollowerMuzzlePitch,MaxFollowerMuzzlePitch);
   }
   const float Yaw=FMath::FInterpConstantTo(B.MuzzleYaw,WantYaw,Dt,360.f),Pitch=FMath::FInterpConstantTo(B.MuzzlePitch,WantPitch,Dt,180.f);
   if(FMath::IsNearlyEqual(Yaw,B.MuzzleYaw,.05f) && FMath::IsNearlyEqual(Pitch,B.MuzzlePitch,.05f))continue;
@@ -215,16 +230,35 @@ void UBattleLeaderRuntime::RefreshFollowerPose(int32 ID)
  const auto* B=Bodies.Find(ID);
  if(!B||B->Actor.IsValid()||!B->Mesh.IsValid()||(VAT&&VAT->IsFar(ID))||!B->Mesh->IsComponentTickEnabled())return;
  B->Mesh->HandleExistingParallelEvaluationTask(true,true);
- B->Mesh->PlayAnimation(FollowerClip(ID,B->Pose),true);
+ PlayFollowerClip(ID,B->Pose);
 }
 
-void UBattleLeaderRuntime::UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight)
+void UBattleLeaderRuntime::PlayFollowerClip(int32 ID,int32 Pose)
+{
+ const auto* B=Bodies.Find(ID);
+ if(!B||!B->Mesh.IsValid())return;
+ UAnimSequence* Clip=FollowerClip(ID,Pose);
+ B->Mesh->PlayAnimation(Clip,true);
+ // Walking crouched or prone (-BattleStanceMove, or a crouched move of the cover action): the steps keep pace with his speed
+ // (his velocity; the stance's share of the walking speed before he has one).
+ const uint8 Stance=StanceOf(ID);
+ if(Pose==1 && Stance!=BattleStance::Stand && Clip && !B->CoverClipPhase && !B->bBlindPose)
+ {
+  const float Speed=B->Velocity.SizeSquared2D()>400.?float(B->Velocity.Size2D()):GetDefault<UBattleTuning>()->MoveSpeed*BattleStance::MoveScale(Stance);
+  B->Mesh->SetPlayRate(BattleBodyAnim::MatchRate(Clip,Speed));
+ }
+}
+
+void UBattleLeaderRuntime::UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight,bool bThreat)
 {
  if(!BattleStance::Enabled(GetWorld()))return;
  const uint8 Current=StanceOf(ID);
- // Pinned by suppression: get as low as possible, whatever the order says (own state only).
- if(IsPinned(ID,Now)){SetStance(ID,BattleStance::Prone,Now);return;}
- if(bMoving||!bCombat){NoCoverProneUntil.Remove(ID);SetStance(ID,BattleStance::Stand,Now);return;}
+ // Pinned by suppression: get as low as possible, whatever the order says (own state only). With -BattleStanceMove=2 he
+ // crawls on along his way (Follow lets him walk prone); before, he waited until he could stand up.
+ if(IsPinned(ID,Now)){SetStance(ID,BattleStance::Prone,Now,false,bMoving&&BattleStance::MoveMode()>=2);return;}
+ // Trial -BattleStanceMove=2: on the move under fire or with an enemy in sight he stays crouched (own state and own sight).
+ if(bMoving && bThreat && BattleStance::MoveMode()>=2){NoCoverProneUntil.Remove(ID);SetStance(ID,BattleStance::Crouch,Now,false,true);return;}
+ if(bMoving||!bCombat){NoCoverProneUntil.Remove(ID);SetStance(ID,BattleStance::Stand,Now,false,bMoving);return;}
  if(bLostSight)
  {
   // The remembered target is no longer visible from down here: stand up and look for a few seconds.

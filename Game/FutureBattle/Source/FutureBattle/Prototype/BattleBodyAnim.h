@@ -36,6 +36,11 @@ namespace BattleBodyAnim
  // Idle or moving clip for a stance (0 stand, 1 crouch, 2 prone); LocalVelocity is in the body's frame (X forward, Y right).
  // bRun: standing, the rifle held low in a jog in the direction of travel (moving without firing); else the aimed walk.
  UAnimSequence* Locomotion(uint8 Stance,const FVector& LocalVelocity,bool bRun);
+ // The ground speed (cm/s) a locomotion clip's steps were made for: its root track's travel over the clip divided by its length
+ // (the clips carry root motion and play in place). 0 when the root does not travel. Cached per clip; logged once.
+ float GroundSpeed(const UAnimSequence* Clip);
+ // The play rate at which Clip's steps keep pace with walking at Speed (cm/s): Speed / GroundSpeed within 0.5 to 2; 1 when unknown.
+ float MatchRate(const UAnimSequence* Clip,float Speed);
  // How long a soldier keeps his rifle up after his last shot before he runs with it lowered again (display only).
  constexpr double ReadySeconds=3.;
  UAnimSequence* Transition(uint8 From,uint8 To);
@@ -104,6 +109,7 @@ public:
  // they are long: the body itself does not rise. Used by the over-the-top blind fire (the rifle held above the cover).
  void SetHandRaise(const FVector& Target,float Weight){RaiseTarget=Target;RaiseWeight=FMath::Clamp(Weight,0.f,1.f);}
  UAnimSequence* GetBase() const {return BaseClip;}
+ float GetBaseRate() const {return BaseRate;}
  UAnimSequence* GetOverlay() const {return OverlayClip;}
 protected:
  virtual void NativeUpdateAnimation(float DeltaSeconds) override;

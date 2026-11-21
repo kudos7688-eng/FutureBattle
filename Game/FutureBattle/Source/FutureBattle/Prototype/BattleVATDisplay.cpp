@@ -108,11 +108,13 @@ void ABattleVATDisplay::AdvanceFar(FBattleVATEntry& E,float Dt)
 }
 bool UBattleVATSkeletalMeshComponent::ShouldCreateRenderState()const{return !VATFar && Super::ShouldCreateRenderState();}
 // Runs after the pose is evaluated and before the engine flips it to the shown buffer; the rifle and other socket children
-// follow afterwards (UpdateChildTransforms). Only a newly evaluated pose is bent (bNeedToFlipSpaceBaseBuffers): a held pose
-// (skipped frame) was bent when it was made, and bending it again would add up.
+// follow afterwards (UpdateChildTransforms). Only a newly made pose is bent (bNeedToFlipSpaceBaseBuffers): a held pose
+// (skipped frame) was bent when it was made, and bending it again would add up. Single-buffered bones are not bent: on a
+// skipped frame the engine copies the unbent cached pose straight into the shown buffer (the bend would flicker).
 void UBattleVATSkeletalMeshComponent::FinalizeBoneTransform()
 {
- if(bNeedToFlipSpaceBaseBuffers && FMath::Abs(SpinePitch)>.01f && !VATFar && GetSkeletalMeshAsset())
+ if(bNeedToFlipSpaceBaseBuffers)AppliedSpinePitch=0.f;
+ if(bNeedToFlipSpaceBaseBuffers && bDoubleBufferedComponentSpaceTransforms && FMath::Abs(SpinePitch)>.01f && !VATFar && GetSkeletalMeshAsset())
  {
   if(BendMesh!=GetSkeletalMeshAsset())
   {
@@ -140,6 +142,7 @@ void UBattleVATSkeletalMeshComponent::FinalizeBoneTransform()
      T.SetLocation(Pivot+Bend.RotateVector(T.GetLocation()-Pivot));
      T.SetRotation((Bend*T.GetRotation()).GetNormalized());
     }
+   AppliedSpinePitch=SpinePitch;
   }
  }
  Super::FinalizeBoneTransform();

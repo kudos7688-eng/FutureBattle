@@ -528,7 +528,10 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	// Firing on the move, or aiming, brings the rifle up: the aimed walk and the aim pose.
 	const bool bReady = Now - LastVisualShot < ReadySeconds || (IsPlayerControlled() && AimLevel > 0);
 	const bool bRun = !bReady && VisualStance == BattleStance::Stand && Local.SizeSquared2D() > 400.;
-	Body.SetBase(bTransition ? TransitionClip.Get() : Locomotion(VisualStance, Local, bRun), !bTransition, bTransition ? TransitionRate : 1.f);
+	UAnimSequence* Walk = Locomotion(VisualStance, Local, bRun);
+	// Walking crouched or prone (-BattleStanceMove): the steps keep pace with the body (rate from the clip's own ground speed).
+	const float WalkRate = VisualStance != BattleStance::Stand && Local.SizeSquared2D() > 400. ? MatchRate(Walk, float(Local.Size2D())) : 1.f;
+	Body.SetBase(bTransition ? TransitionClip.Get() : Walk, !bTransition, bTransition ? TransitionRate : WalkRate);
 	// Upper body: reload (synced to the reload timer), blind fire, otherwise the aim pose at the weapon's pitch.
 	const float Duration = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
 	const bool bProne = VisualStance == BattleStance::Prone;
@@ -620,12 +623,16 @@ void ABattleUnit::SetSprinting(bool bRequested)
  auto* Movement = GetCharacterMovement();
  const bool bSprint = bRequested && bDirectAvoidanceOverride && IsAlive() && VisualStance == BattleStance::Stand
   && !GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsVehicle(UnitID);
- if (bSprint && WalkSpeedBeforeSprint == 0.f && Movement->MaxWalkSpeed > 0.f)
+ // -BattleStanceMove (default 1): crouched or prone, the directly controlled soldier walks at that stance's share of his speed
+ // (called every frame of direct control, so a stance change takes effect at once).
+ const float Low = bDirectAvoidanceOverride && IsAlive() && BattleStance::MoveMode() >= 1 ? BattleStance::MoveScale(VisualStance) : 1.f;
+ const float Scale = bSprint ? 1.6f : Low;
+ if (Scale != 1.f && (WalkSpeedBeforeSprint > 0.f || Movement->MaxWalkSpeed > 0.f))
  {
-  WalkSpeedBeforeSprint = Movement->MaxWalkSpeed;
-  Movement->MaxWalkSpeed = WalkSpeedBeforeSprint * 1.6f;
+  if (WalkSpeedBeforeSprint == 0.f) WalkSpeedBeforeSprint = Movement->MaxWalkSpeed;
+  if (Movement->MaxWalkSpeed != WalkSpeedBeforeSprint * Scale) Movement->MaxWalkSpeed = WalkSpeedBeforeSprint * Scale;
  }
- else if (!bSprint && WalkSpeedBeforeSprint > 0.f)
+ else if (Scale == 1.f && WalkSpeedBeforeSprint > 0.f)
  {
   Movement->MaxWalkSpeed = WalkSpeedBeforeSprint;
   WalkSpeedBeforeSprint = 0.f;
@@ -641,7 +648,12 @@ void ABattleUnit::ReloadIfEmpty()
 
 void ABattleUnit::SetDirectControl(bool bDirect)
 {
- if (!bDirect) SetSprinting(false);
+ if (!bDirect)
+ {
+  SetSprinting(false);
+  // Back to the AI: the full walking speed again (a crouched or prone walk keeps it lowered above).
+  if (WalkSpeedBeforeSprint > 0.f) { GetCharacterMovement()->MaxWalkSpeed = WalkSpeedBeforeSprint; WalkSpeedBeforeSprint = 0.f; }
+ }
 	auto* Movement = GetCharacterMovement();
 	if (bDirect && !bDirectAvoidanceOverride)
 	{

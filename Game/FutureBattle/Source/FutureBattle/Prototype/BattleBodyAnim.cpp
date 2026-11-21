@@ -85,6 +85,31 @@ UAnimSequence* BattleBodyAnim::Locomotion(uint8 Stance,const FVector& LocalVeloc
  return Clip?Clip:Get(EClip(First+1));
 }
 
+float BattleBodyAnim::GroundSpeed(const UAnimSequence* Clip)
+{
+ if(!Clip)return 0.f;
+ // The locomotion clips are held for the whole run (Get's table, BattleStance::CrouchClip), so the address names one clip.
+ static TMap<const void*,float> Cache;
+ if(const float* Found=Cache.Find(Clip))return *Found;
+ const double Length=Clip->GetPlayLength();
+ float Speed=0.f;
+ if(Length>.05)
+ {
+  const FVector From=Clip->ExtractRootTrackTransform(FAnimExtractContext(0.),nullptr).GetTranslation();
+  const FVector To=Clip->ExtractRootTrackTransform(FAnimExtractContext(Length),nullptr).GetTranslation();
+  Speed=float(FVector::Dist2D(From,To)/Length);
+ }
+ Cache.Add(Clip,Speed);
+ UE_LOG(LogTemp,Display,TEXT("BATTLE_BODY_GROUND_SPEED clip=%s speed=%.0f length=%.2f"),*Clip->GetName(),Speed,Length);
+ return Speed;
+}
+
+float BattleBodyAnim::MatchRate(const UAnimSequence* Clip,float Speed)
+{
+ const float Ground=GroundSpeed(Clip);
+ return Ground>10.f && Speed>1.f?FMath::Clamp(Speed/Ground,.5f,2.f):1.f;
+}
+
 UAnimSequence* BattleBodyAnim::Transition(uint8 From,uint8 To)
 {
  if(From==0&&To==1)return Get(EClip::StandToCrouch);

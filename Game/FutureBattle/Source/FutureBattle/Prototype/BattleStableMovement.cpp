@@ -3,6 +3,7 @@
 #include "BattleTactics.h"
 #include "BattleFieldLayout.h"
 #include "BattleCover.h"
+#include "BattleStance.h"
 #include "BattleMatch.h"
 #include "BattlePerception.h"
 #include "NavigationPath.h"
@@ -556,17 +557,20 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  const float TypeSpeed=S?BattleSquadType::SpeedAt(S->SquadType,GetWorld(),Pos):1.f;
  const float Speed=GetDefault<UBattleTuning>()->MoveSpeed*TypeSpeed;
  if(TypeSpeed!=1.f&&B.Actor.IsValid())B.Actor->GetCharacterMovement()->MaxWalkSpeed=Speed;
+ // -BattleStanceMove=2: walking crouched or crawling, at that stance's share of the speed.
+ const float StanceScale=BattleStance::MoveMode()>=2?BattleStance::MoveScale(StanceOf(ID)):1.f;
+ if(StanceScale<1.f)SightExperiment.Cover(StanceOf(ID)==BattleStance::Prone?TEXT("stance_move_prone_frames"):TEXT("stance_move_crouch_frames"));
  if(B.Actor.IsValid())
  {
   // Vehicles turn at their own rate and drive along the hull.
   if(IsVehicle(ID)&&Scale>.01f)SteerVehicle(ID,Direction,Scale);
-  if(Scale<=.01f) Stop(); else B.Actor->AddMovementInput(Direction,Scale);
+  if(Scale<=.01f) Stop(); else B.Actor->AddMovementInput(Direction,Scale*StanceScale);
   B.Velocity=B.Actor->GetVelocity();
  }
  else
  {
   FHitResult Hit; const FVector Before=B.Capsule->GetComponentLocation();
-  FVector Step=Direction*FMath::Min(Speed*Dt*Scale,float(FVector::Dist2D(Way,Pos)));
+  FVector Step=Direction*FMath::Min(Speed*Dt*Scale*StanceScale,float(FVector::Dist2D(Way,Pos)));
   // Map with heights: the step follows the ground; a place that cannot be stepped onto stops it.
   if(!TerrainStep(Before,Step))Step=FVector::ZeroVector;
   // MoveComponent ignores its owner. Mass capsules share DisplayHost, so explicitly
