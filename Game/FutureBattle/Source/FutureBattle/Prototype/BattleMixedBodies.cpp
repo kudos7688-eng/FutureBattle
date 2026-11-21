@@ -129,22 +129,11 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  DisplayHost=NewHost;Bodies=MoveTemp(Staged);HitIDs.Reset();Plans.Reset();AvoidanceGrid.Reset();Mode->Units.Reset();Corpses.Reset();HiddenCorpses.Reset();SoldierPaths.Reset();
  GetWorld()->GetSubsystem<UBattleSquadAI>()->Reset();GetWorld()->GetSubsystem<UBattleCover>()->ResetReservations();
  const double Now=GetWorld()->GetTimeSeconds();TArray<FBattleUnitState> Records;
- // Places left because they were seen into (stage A): kept for the time left. Found by position (the saved number is tried
- // first), so a map whose places were built in another order still marks the right one; a place that is not there is dropped.
- // The places are built first when the load comes before the prebuild (navigation was checked above).
+ // Places left because they were seen into (stage A): kept by position for the time left. The position decides which place
+ // it is (BrokenCoverSlot), so nothing here depends on how or whether the places are built yet.
  BrokenCover.Reset();RelocateWaiting.Reset();
- {
-  auto* Cover=GetWorld()->GetSubsystem<UBattleCover>();
-  if(!Cover->IsBuilt())for(const auto& E:Save->Units)if(E.BrokenCoverSlot!=INDEX_NONE){Cover->BuildSlots();break;}
-  const auto& Slots=Cover->GetSlots();
-  for(const auto& E:Save->Units)if(E.BrokenCoverSlot!=INDEX_NONE && E.BrokenCoverLeft>0)
-  {
-   int32 Slot=Slots.IsValidIndex(E.BrokenCoverSlot) && FVector::DistSquared(Slots[E.BrokenCoverSlot],E.BrokenCoverAt)<1.?E.BrokenCoverSlot:INDEX_NONE;
-   for(int32 I=0;Slot==INDEX_NONE && I<Slots.Num();++I)if(FVector::DistSquared(Slots[I],E.BrokenCoverAt)<1.)Slot=I;
-   if(Slot!=INDEX_NONE)BrokenCover.Add(E.State.UnitID,TPair<int32,double>(Slot,Now+FMath::Min(10.f,E.BrokenCoverLeft)));
-   else UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MIXED_RESTORE_BROKEN_COVER_DROPPED unit=%d slot=%d at=%s"),E.State.UnitID,E.BrokenCoverSlot,*E.BrokenCoverAt.ToCompactString());
-  }
- }
+ for(const auto& E:Save->Units)if(E.BrokenCoverSlot!=INDEX_NONE && E.BrokenCoverLeft>0)
+  BrokenCover.Add(E.State.UnitID,FBattleBrokenCover{E.BrokenCoverSlot,E.BrokenCoverAt,Now+FMath::Min(10.f,E.BrokenCoverLeft)});
  for(const auto& E:Save->Units)
  {
   auto U=E.State;U.ReloadEndTime=U.ReloadEndTime>0?Now+U.ReloadEndTime:0;U.NextShotTime+=Now;

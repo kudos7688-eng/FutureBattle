@@ -67,37 +67,60 @@ bool UBattleLeaderRuntime::ExposedToThreats(int32 ID,FVector Anchor,const TArray
  return false;
 }
 
+bool UBattleLeaderRuntime::BrokenCoverSlot(int32 ID,int32 Slot,double Now) const
+{
+ const auto* B=BrokenCover.Find(ID);if(!B || Now>=B->Until)return false;
+ const auto& Slots=GetWorld()->GetSubsystem<UBattleCover>()->GetSlots();
+ return Slots.IsValidIndex(Slot) && FVector::DistSquared(Slots[Slot],B->At)<1.;
+}
+
+void UBattleLeaderRuntime::MarkBrokenCover(int32 ID,int32 Slot,double Until)
+{
+ const auto& Slots=GetWorld()->GetSubsystem<UBattleCover>()->GetSlots();
+ if(Slots.IsValidIndex(Slot))BrokenCover.Add(ID,FBattleBrokenCover{Slot,Slots[Slot],Until});
+}
+
 bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now,float Dt)
 {
- // A soldier whose search found the frame's budget full checks again on the next frame (not at his next phase), so soldiers
- // sharing a phase do not leave the same ones waiting every second.
- const bool bWaited=RelocateWaiting.Remove(ID)>0;
+ // A soldier whose search found the frame's budget full searches again on the next frame (not at his next phase), so soldiers
+ // sharing a phase do not leave the same ones waiting every second. The break is already confirmed: no new threat check, so
+ // the retry costs only the search and is not counted as another break.
+ const bool* Waiting=RelocateWaiting.Find(ID);const bool bWaited=Waiting!=nullptr;const bool bWaitedOthersSee=bWaited && *Waiting;
+ RelocateWaiting.Remove(ID);
  auto* U=GetWorld()->GetSubsystem<UBattleState>()->Units.Find(ID);
  if(!U || U->CoverPhase!=2 || U->CoverSlot==FreeCoverSlot || !ThreatCoverEnabled(U->Team) || !SoldierAIFocus(ID))return false;
  // Once a second per soldier, at a phase fixed by the unit ID (no state, so a saved and loaded match checks at the same times).
  const double Phase=double(ID%16)/16.;
  if(!bWaited && FMath::FloorToDouble(Now+Phase)==FMath::FloorToDouble(Now-Dt+Phase))return false;
- auto& Diag=SightExperiment;Diag.Cover(TEXT("threat_cover_check"));
- TArray<FVector,TInlineAllocator<3>> Threats;GatherThreats(ID,Primary,Now,Threats);
- const FVector Anchor=U->CoverAnchor;
- // The target too: it may have moved round the place since the soldier chose it.
- const bool ByTarget=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Primary+FVector(0,0,60)).Fraction()>CoverExposureLimit();
- const bool ByOther=!ByTarget && ExposedToThreats(ID,Anchor,Threats);
- if(!ByTarget && !ByOther){U->CoverFirstBreak=0;return false;}
- // -BattleThreatCoverRelocate=2: while another threat sees into the place he keeps down (no peek toward the target), at every
- // check, also before a break is confirmed.
+ auto& Diag=SightExperiment;Diag.Cover(bWaited?TEXT("threat_relocate_retry"):TEXT("threat_cover_check"));
+ // Cost of the check (the individual AI is not in custom_ai_ms_per_second): timed only in evaluation runs.
+ const double CheckStart=Diag.Enabled?FPlatformTime::Seconds():0.;
+ ON_SCOPE_EXIT{if(Diag.Enabled)Diag.ThreatCheckMS.Add((FPlatformTime::Seconds()-CheckStart)*1000.);};
  const int32 Relocate=ThreatCoverRelocate();
- const bool bOthersSee=Relocate>0 && (ByOther || ExposedToThreats(ID,Anchor,Threats));
- if(Relocate==2 && bOthersSee && !U->bSoldierOrder)U->CoverSeconds=FMath::Max(U->CoverSeconds,1.1f); // not under the player's order to him
- // Narrowed: one break may be a glimpse; he leaves when the next check (1 s later) finds the place broken again.
- if(ThreatCoverMode(U->Team)==2)
+ bool bOthersSee=bWaitedOthersSee;
+ if(!bWaited)
  {
-  if(U->CoverFirstBreak<=0 || Now-U->CoverFirstBreak>2.5){U->CoverFirstBreak=Now;Diag.Cover(TEXT("threat_cover_first_break"));return false;}
-  U->CoverFirstBreak=0;
+  TArray<FVector,TInlineAllocator<3>> Threats;GatherThreats(ID,Primary,Now,Threats);
+  const FVector Anchor=U->CoverAnchor;
+  // The target too: it may have moved round the place since the soldier chose it.
+  const bool ByTarget=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Primary+FVector(0,0,60)).Fraction()>CoverExposureLimit();
+  const bool ByOther=!ByTarget && ExposedToThreats(ID,Anchor,Threats);
+  if(!ByTarget && !ByOther){U->CoverFirstBreak=0;return false;}
+  // -BattleThreatCoverRelocate=2: while another threat sees into the place he keeps down (no peek toward the target), at every
+  // check, also before a break is confirmed.
+  bOthersSee=Relocate>0 && (ByOther || ExposedToThreats(ID,Anchor,Threats));
+  if(Relocate==2 && bOthersSee && !U->bSoldierOrder)U->CoverSeconds=FMath::Max(U->CoverSeconds,1.1f); // not under the player's order to him
+  // Narrowed: one break may be a glimpse; he leaves when the next check (1 s later) finds the place broken again.
+  if(ThreatCoverMode(U->Team)==2)
+  {
+   if(U->CoverFirstBreak<=0 || Now-U->CoverFirstBreak>2.5){U->CoverFirstBreak=Now;Diag.Cover(TEXT("threat_cover_first_break"));return false;}
+   U->CoverFirstBreak=0;
+  }
+  Diag.Cover(ByTarget?TEXT("threat_cover_broken_by_target"):TEXT("threat_cover_broken_by_other"));
+  UE_LOG(LogFutureBattle,Verbose,TEXT("BATTLE_THREAT_COVER_BROKEN unit=%d slot=%d threats=%d by=%s"),ID,U->CoverSlot,Threats.Num(),ByTarget?TEXT("target"):TEXT("other"));
  }
- Diag.Cover(ByTarget?TEXT("threat_cover_broken_by_target"):TEXT("threat_cover_broken_by_other"));
- UE_LOG(LogFutureBattle,Verbose,TEXT("BATTLE_THREAT_COVER_BROKEN unit=%d slot=%d threats=%d by=%s"),ID,U->CoverSlot,Threats.Num(),ByTarget?TEXT("target"):TEXT("other"));
- if(U->CoverSlot!=INDEX_NONE)BrokenCover.Add(ID,TPair<int32,double>(U->CoverSlot,Now+10.));
+ else if(U->bSoldierOrder)return false; // ordered while he waited: he holds; his next check decides
+ MarkBrokenCover(ID,U->CoverSlot,Now+10.);
  // -BattleThreatCoverRelocate: the next place first (the broken one is excluded above). Not under the player's order to him
  // (he holds where he was sent). The search changes nothing when it fails, so the state before it is put back as it was.
  if(Relocate>0 && !U->bSoldierOrder)
@@ -126,13 +149,17 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
     return true;
    };
    const float Radius=FMath::Max(1200.f,GetDefault<UBattleTuning>()->AICoverSearchRadius);
+   const double SearchStart=Diag.Enabled?FPlatformTime::Seconds():0.;
    bFound=RequestCoverAction(ID,Primary,Before.CoverTargetID,Radius,bOthersSee,Accept);
+   if(Diag.Enabled)Diag.RelocateSearchMS.Add((FPlatformTime::Seconds()-SearchStart)*1000.);
   }
   else
   {
-   // No search this frame: not a failed search. He keeps his place and checks again on the next frame, which counts as a
-   // confirmed break again (the first break is kept), so a full frame never makes him leave without having looked.
-   BrokenCover.Remove(ID);U->CoverFirstBreak=Now;RelocateWaiting.Add(ID);Diag.Cover(TEXT("threat_relocate_frame_full"));return false;
+   // No search this frame: not a failed search. He keeps his place and searches on the next frame with the break already
+   // confirmed, so a full frame never makes him leave without having looked. He keeps down until then (no peek starts in
+   // this frame). The first break is kept for the case the retry is lost (a load): his next check then confirms it.
+   BrokenCover.Remove(ID);U->CoverFirstBreak=Now;RelocateWaiting.Add(ID,bOthersSee);U->CoverSeconds=FMath::Max(U->CoverSeconds,.25f);
+   Diag.Cover(TEXT("threat_relocate_frame_full"));return false;
   }
   if(bFound)
   {

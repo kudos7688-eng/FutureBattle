@@ -149,11 +149,7 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
   auto& T=E.State;T.SoldierMoveUntil=FMath::Max(0.,T.SoldierMoveUntil-Now);T.SoldierMoveAfter=FMath::Max(0.,T.SoldierMoveAfter-Now);
   T.CoverFirstBreak=T.CoverFirstBreak>0?FMath::Max(0.,2.5-(Now-T.CoverFirstBreak)):0;
   T.SoldierStalledSince=T.SoldierStalledSince>0?FMath::Clamp(Now-T.SoldierStalledSince,.001,3.):0;
-  if(const auto* B=Runtime->BrokenCover.Find(Pair.Key);B && B->Value>Now)
-  {
-   const auto& Slots=GetWorld()->GetSubsystem<UBattleCover>()->GetSlots();
-   if(Slots.IsValidIndex(B->Key)){E.BrokenCoverSlot=B->Key;E.BrokenCoverLeft=float(FMath::Min(10.,B->Value-Now));E.BrokenCoverAt=Slots[B->Key];}
-  }
+  if(const auto* B=Runtime->BrokenCover.Find(Pair.Key);B && B->Until>Now){E.BrokenCoverSlot=B->Slot;E.BrokenCoverLeft=float(FMath::Min(10.,B->Until-Now));E.BrokenCoverAt=B->At;}
   Save->Units.Add(E);SquadIDs.Add(E.State.SquadID);
  }
 	if(!Mixed) for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->GetState())

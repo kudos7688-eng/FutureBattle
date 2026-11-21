@@ -247,6 +247,7 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
  Root->SetStringField(TEXT("observation_scope"),TEXT("5Hz sampling; person-seconds, memory/shared separated; headless frame timing is not rendered performance"));
  auto Array=[&](const TCHAR* Name,const TArray<double>& Values){TArray<TSharedPtr<FJsonValue>> A;for(double V:Values)A.Add(MakeShared<FJsonValueNumber>(V));Root->SetArrayField(Name,A);};
  Array(TEXT("shot_distances_cm"),E.ShotDistances);Array(TEXT("engagement_distances_cm"),E.EngagementDistances);Array(TEXT("path_query_ms"),E.PathMS);
+ Array(TEXT("threat_check_ms"),E.ThreatCheckMS);Array(TEXT("threat_relocate_search_ms"),E.RelocateSearchMS);
  Root->SetNumberField(TEXT("max_path_cm"),E.MaxPathLength);
  {
   auto Survival=MakeShared<FJsonObject>();

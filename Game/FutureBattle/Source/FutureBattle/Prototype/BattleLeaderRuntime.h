@@ -19,6 +19,15 @@ class UCapsuleComponent;
 class USkeletalMeshComponent;
 class UStaticMeshComponent;
 
+// Stage A: a cover place a soldier left because it was seen into. The place is kept by position (slot numbers follow the
+// order the places were built in), so it means the same place after a load, also before the places are built again.
+struct FBattleBrokenCover
+{
+ int32 Slot=INDEX_NONE; // as numbered when he left it (for saves and logs)
+ FVector At=FVector::ZeroVector;
+ double Until=0;
+};
+
 USTRUCT()
 struct FBattleFollowerFragment : public FMassFragment
 {
@@ -499,11 +508,12 @@ public:
  // each confirmed break. Searches: 2 soldiers a frame (B1 has its own 4).
  static int32 ThreatCoverRelocate();
  uint64 RelocateFrame=0;int32 RelocatesThisFrame=0;
- // Soldiers who found the search budget full: they check again on the next frame (not saved: after a load they wait for
- // their own phase, as before).
- TSet<int32> RelocateWaiting;
- bool BrokenCoverSlot(int32 ID,int32 Slot,double Now) const {const auto* B=BrokenCover.Find(ID);return B&&B->Key==Slot&&Now<B->Value;}
- TMap<int32,TPair<int32,double>> BrokenCover;
+ // Soldiers who found the search budget full, with whether other threats saw in: on the next frame they search again with
+ // the break already confirmed (no new check). Not saved: after a load they wait for their own phase, as before.
+ TMap<int32,bool> RelocateWaiting;
+ bool BrokenCoverSlot(int32 ID,int32 Slot,double Now) const; // BattleThreatCover.cpp
+ void MarkBrokenCover(int32 ID,int32 Slot,double Until);
+ TMap<int32,FBattleBrokenCover> BrokenCover;
  // Trial -BattleSoldierMove=1 (2026-11-20, default 0; individual AI stage B1, BattleSoldierMove.cpp; -BattleSoldierMoveTeam=0/1
  // limits it to one team): an AI infantryman hidden in cover during a sector mission rates his place once a second (staggered
  // by unit, at most 4 soldiers a frame) against up to 8 free cover places within 25 m in the squad's sector and 30 m of its
