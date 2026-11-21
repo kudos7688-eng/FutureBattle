@@ -44,7 +44,14 @@ bool ABattleController::PickOrderPoint(FVector2D Screen,FVector& Out,int32* Leve
 
 void ABattleController::BeginPathDraw()
 {
- bPathDraw=false;DrawnPath.Reset();DrawnLength=0;
+ bPathDraw=false;bFrontDraw=false;DrawnPath.Reset();DrawnLength=0;
+ // Ctrl + right drag draws the own front line (user request 2026-11-21 after test play); no selection needed.
+ if(bTactical&&(IsInputKeyDown(EKeys::LeftControl)||IsInputKeyDown(EKeys::RightControl)))
+ {
+  FVector2D Pointer;FVector At;
+  if(GetPointerPosition(Pointer)&&PickOrderPoint(Pointer,At)){bPathDraw=bFrontDraw=true;DrawnPath.Add(At);PathScreenStart=Pointer;}
+  return;
+ }
  if(!bTactical||Selected.IsEmpty())return;
  FVector2D Pointer;FVector At;
  if(GetPointerPosition(Pointer)&&PickOrderPoint(Pointer,At)){bPathDraw=true;DrawnPath.Add(At);PathScreenStart=Pointer;}
@@ -53,7 +60,7 @@ void ABattleController::BeginPathDraw()
 void ABattleController::UpdatePathDraw()
 {
  if(!bPathDraw)return;
- if(!bTactical||Selected.IsEmpty()){bPathDraw=false;DrawnPath.Reset();return;}
+ if(!bTactical||(!bFrontDraw&&Selected.IsEmpty())){bPathDraw=false;DrawnPath.Reset();return;}
  FVector2D Pointer;FVector At;
  if(!GetPointerPosition(Pointer)||!PickOrderPoint(Pointer,At)||DrawnPath.Num()>=96)return;
  const double Step=FVector::Dist2D(At,DrawnPath.Last());
@@ -65,6 +72,19 @@ void ABattleController::EndPathDraw()
  if(!bPathDraw)return;
  bPathDraw=false;
  TArray<FVector> Drawn=MoveTemp(DrawnPath);DrawnPath.Reset();
+ if(bFrontDraw)
+ {
+  bFrontDraw=false;if(!bTactical)return;
+  FVector2D Pointer=PathScreenStart;FVector End;
+  if(GetPointerPosition(Pointer)&&PickOrderPoint(Pointer,End))Drawn.Add(End);
+  // A Ctrl + right click (no drag) hands the line back to the front army.
+  if(FVector2D::Distance(Pointer,PathScreenStart)<=12.)Drawn.Reset();
+  const int32 Rows=GetWorld()->GetSubsystem<UBattleMatch>()->SetDrawnFrontLine(0,Drawn);
+  ShowNotice(Rows>0?FString::Printf(TEXT("前線を引きました（%d行）。Ctrl+右クリックで前線軍に任せます"),Rows)
+   :Rows==0?FString(TEXT("前線を前線軍に任せました")):Rows==-2?FString(TEXT("前線は区画の行をまたぐように（縦に）引いてください"))
+   :FString(TEXT("前線軍がありません（部隊を前線軍タブへ入れてください）")));
+  return;
+ }
  if(!bTactical||Selected.IsEmpty())return;
  FVector2D Pointer=PathScreenStart;FVector End;int32 Level=0;
  if(!GetPointerPosition(Pointer)||!PickOrderPoint(Pointer,End,&Level)){if(Drawn.IsEmpty())return;End=Drawn.Last();}
@@ -293,6 +313,6 @@ void ABattleHUD::DrawOrderWays()
  {
   TArray<FVector> Draft=PC->GetDrawnPath();FVector2D Pointer;FVector At;
   if(PC->GetPointerPosition(Pointer)&&PC->PickOrderPoint(Pointer,At))Draft.Add(At);
-  Line(Draft,FLinearColor(1.f,.85f,.2f,.95f),2.5f);
+  Line(Draft,PC->IsDrawingFrontLine()?FLinearColor(1.f,.55f,.15f,.95f):FLinearColor(1.f,.85f,.2f,.95f),PC->IsDrawingFrontLine()?4.f:2.5f);
  }
 }

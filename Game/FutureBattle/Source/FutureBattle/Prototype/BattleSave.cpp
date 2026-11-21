@@ -238,7 +238,7 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
    E.ArrivalAge=double(Elapsed)-double(G.ArrivedAt);E.Extensions=G.Extensions;
    E.Kind=G.Kind;E.SurpriseRow=G.SurpriseRow;E.SurpriseBridgeStage=G.SurpriseBridgeStage;E.SurpriseBridgeLeader=G.SurpriseBridgeLeader;
    E.SurpriseBridgeAge=double(Elapsed)-double(G.SurpriseBridgeAt);E.SurpriseNextCol=G.SurpriseNextCol;
-   E.FrontHold=G.FrontHold;E.FrontStepAge=double(Elapsed)-double(G.FrontStepAt);
+   E.FrontHold=G.FrontHold;E.bFrontDrawn=G.bFrontDrawn;E.FrontBackAge=double(Elapsed)-double(G.FrontBackAt);E.FrontStepAge=double(Elapsed)-double(G.FrontStepAt);
    E.SurpriseBridgeEntry=G.SurpriseBridgeEntry;E.SurpriseBridgeExit=G.SurpriseBridgeExit;E.SurpriseBridgeGoal=G.SurpriseBridgeGoal;
    E.bSurpriseWaiting=G.SurpriseWaitAt>=0.f;E.SurpriseWaitAge=E.bSurpriseWaiting?double(Elapsed)-double(G.SurpriseWaitAt):0.;
    E.SurpriseLogRemaining=double(G.SurpriseLogAt)-double(Elapsed);E.SurpriseEndRemaining=double(G.SurpriseEndAt)-double(Elapsed);
@@ -416,7 +416,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
    G.ArrivedAt=float(double(Elapsed)-E.ArrivalAge);G.Extensions=E.Extensions;
    G.Kind=E.Kind;G.SurpriseRow=E.SurpriseRow;G.SurpriseBridgeStage=E.SurpriseBridgeStage;G.SurpriseBridgeLeader=E.SurpriseBridgeLeader;
    G.SurpriseBridgeAt=float(double(Elapsed)-E.SurpriseBridgeAge);G.SurpriseNextCol=E.SurpriseNextCol;
-   G.FrontHold=E.FrontHold;G.FrontStepAt=float(double(Elapsed)-E.FrontStepAge);
+   G.FrontHold=E.FrontHold;G.bFrontDrawn=E.bFrontDrawn;G.FrontBackAt=float(double(Elapsed)-E.FrontBackAge);G.FrontStepAt=float(double(Elapsed)-E.FrontStepAge);
    G.SurpriseBridgeEntry=E.SurpriseBridgeEntry;G.SurpriseBridgeExit=E.SurpriseBridgeExit;G.SurpriseBridgeGoal=E.SurpriseBridgeGoal;
    G.SurpriseWaitAt=E.bSurpriseWaiting?float(double(Elapsed)-E.SurpriseWaitAge):-1.f;
    G.SurpriseLogAt=float(double(Elapsed)+E.SurpriseLogRemaining);G.SurpriseEndAt=float(double(Elapsed)+E.SurpriseEndRemaining);

@@ -596,7 +596,7 @@ void ABattleHUD::DrawSquadList()
  const int32 Dragged=PC->DraggedSquadID();
  DrawRect(FLinearColor(.025f,.04f,.065f,.96f),Layout.Origin.X,Layout.Origin.Y,Layout.Width,Layout.Height);
  DrawText(FString::Printf(TEXT("自軍部隊　稼働 %d"),Active),FLinearColor::White,Layout.Origin.X+8,Layout.Origin.Y+5,GEngine->GetSmallFont(),1);
- DrawText(TEXT("タブ・群へドラッグで編入・Shift+なぞりで複数選択・Eで操作"),FLinearColor(.6f,.65f,.7f),Layout.Origin.X+8,Layout.Origin.Y+Layout.Height-18,GEngine->GetSmallFont(),.7f);
+ DrawText(TEXT("タブ・群へドラッグで編入・Shift+なぞりで複数選択・Ctrl+右ドラッグで前線を引く"),FLinearColor(.6f,.65f,.7f),Layout.Origin.X+8,Layout.Origin.Y+Layout.Height-18,GEngine->GetSmallFont(),.7f);
  static const TCHAR* const FilterNames[]={TEXT("前線軍"),TEXT("攻撃軍"),TEXT("未所属"),TEXT("全部")};
  for(int32 T=0;T<FBattleSquadListLayout::FilterCount;++T)
  {
