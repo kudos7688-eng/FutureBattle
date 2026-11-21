@@ -30,6 +30,8 @@
   - 段階2：[Docs/design-divergence-trace.md](Docs/design-divergence-trace.md)。`-BattleStateTrace=<N>`（状態のかたまりごとの要約を N フレームごとに記録、試合は変えない）と `Setup/Find-Divergence.py`（2試合の最初の分岐点のフレーム・かたまり・兵）。死体の消去 0／20 の分岐点を、描画なしの並列で数分で出す段取り。
   - 戦略層の画面：[Docs/design-strategy-ui.md](Docs/design-strategy-ui.md)。自軍の方針の帯・戦線の状態の輪・集中先の矢印・通知と、委任した部隊への「集中先にする／保持する／AIに任せる」。戦略層 S2 の評価の後。
   - 部隊一覧：[Docs/design-squad-panel.md](Docs/design-squad-panel.md)。30〜40部隊向けの1行表示、状態の絞り込み、問題の印、選んだ部隊の詳細パネル、購入ボタンの得点の減り。群制御・射程円の担当と触る所が重なるので、実装の前に声をかける。
+  - 追加（1時15分）：負荷 [Docs/design-performance-baseline.md](Docs/design-performance-baseline.md)（今の既定の負荷は未計測。マップE・I の60FPS 描画ありの基準の取り直し、小隊上限40・戦車ありの内訳）、遠景の姿勢 [Docs/design-vat-stances.md](Docs/design-vat-stances.md)（VAT にしゃがみ・伏せを焼き足す。段階2の後）。
+- **実装（ブランチ `strategy`、未ビルド）**：段階2の `-BattleStateTrace=<N>`（状態の要約を N フレームごとに記録、読むだけ）・`-BattleStateTraceDetail`、比較の `Setup/Find-Divergence.py`。戦略層 S4（買った小銃小隊を集中先へ、`-BattleStrategy=4`）。
 - **次の一手**：ロックの番（2時30分ごろの見込み）で、ブランチ `strategy` のビルドと確認の試合。
 
 ## 2026-11-22 0時45分 Claude（ロードマップに従う改善活動）：段階6の採点し直し（過去の片側試験を3通りの点で）。規則で判断が入れ替わったものは無し
