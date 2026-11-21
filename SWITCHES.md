@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 368 種類。
+計 369 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -149,10 +149,10 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleHeavySpeed` | Value | 未解決 | BattleState.cpp:568 |  |
 | `-BattleHeightTest` | Param | off | BattleTerrainTest.cpp:27 |  |
 | `-BattleHireSightRefresh` | Value | 0 | BattleMixedRecruitment.cpp:112 |  |
-| `-BattleHitDirection` | Value | 1 | BattleHUD.cpp:1071 |  |
+| `-BattleHitDirection` | Value | 1 | BattleHUD.cpp:1080 |  |
 | `-BattleHitFace` | Value | 0 | BattleLeaderRuntime.cpp:1474 |  |
 | `-BattleHitReveal` | Value | 0 | BattleLeaderRuntime.cpp:1479 |  |
-| `-BattleKillLog` | Value | 1 | BattleHUD.cpp:1176 |  |
+| `-BattleKillLog` | Value | 1 | BattleHUD.cpp:1185 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
 | `-BattleLeaderCommand` | Value | 0 | BattleGameMode.cpp:54 |  |
 | `-BattleLeaderGuard` | Value | 0 | BattleTactics.cpp:16 |  |
@@ -191,7 +191,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleNoStagger` | Param | off | BattleBenchmark.cpp:54 |  |
 | `-BattleObservedArmour` | Strifind/Value | 0 | BattleAreaSmoke.cpp:466, BattleArmourAI.cpp:34 |  |
 | `-BattleObservedTactics` | Strifind/Value | 0 | BattleAreaSmoke.cpp:465, BattleArmourAI.cpp:40 |  |
-| `-BattleOffscreenMarkers` | Value | 1 | BattleHUD.cpp:1109 |  |
+| `-BattleOffscreenMarkers` | Value | 1 | BattleHUD.cpp:1118 |  |
 | `-BattleOpponentPreset` | Value | 空文字列 | BattleBenchmark.cpp:48 | ReadTier → BattleBenchmark.cpp:45（ヘルパー経由） |
 | `-BattlePeekRangeCheck` | Value | 0 | BattleCoverAction.cpp:24 | trial: projected peeks must be 100..450 cm from their anchor |
 | `-BattlePerceptionGrid` | Value | True | BattleLeaderRuntime.cpp:105 |  |
@@ -208,8 +208,8 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleRangeProfile` | Value | -1 | BattleRanges.cpp:14 |  |
 | `-BattleRangeReach` | Value | 50000.f | BattleRanges.cpp:21 |  |
 | `-BattleRangeReachSupport` | Value | 60000.f | BattleRanges.cpp:21 |  |
-| `-BattleRangeRings` | Value | 1 | BattleHUD.cpp:731 |  |
-| `-BattleRangeRingShot` | Value | 空文字列 | BattleHUD.cpp:806 |  |
+| `-BattleRangeRings` | Value | 1 | BattleHUD.cpp:740 |  |
+| `-BattleRangeRingShot` | Value | 空文字列 | BattleHUD.cpp:815 |  |
 | `-BattleRangeSight` | Value | 20000.f | BattleRanges.cpp:18 |  |
 | `-BattleReacquireGrace` | Value | True | BattleTactics.cpp:145 |  |
 | `-BattleReduceAnimTasks` | Value | 0 | BattleLeaderRuntime.cpp:94 |  |
@@ -243,7 +243,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSectorRoute` | Value | 0 | BattleSectorRoute.cpp:16 |  |
 | `-BattleSectorSlotReserve` | Value | 1 | BattleStableMovement.cpp:80 |  |
 | `-BattleSectorSmoke` | Param | off | BattleLeaderRuntime.cpp:210 |  |
-| `-BattleSectorViewShot` | Value | 空文字列 | BattleHUD.cpp:1222 |  |
+| `-BattleSectorViewShot` | Value | 空文字列 | BattleHUD.cpp:1231 |  |
 | `-BattleSeed` | Value | 7 | BattleBenchmark.cpp:42 |  |
 | `-BattleSenseMode` | Value | 空文字列 | BattleBenchmark.cpp:29 |  |
 | `-BattleShotDirection` | Value | 0 | BattleLeaderRuntime.cpp:1598 |  |
@@ -258,7 +258,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSightTeamMask` | Value | 0 | BattleLeaderRuntime.cpp:390 |  |
 | `-BattleSightTrial` | Param | off | BattleLeaderRuntime.cpp:236 |  |
 | `-BattleSightVisual` | Param | off | BattleLeaderRuntime.cpp:230 |  |
-| `-BattleSituationLog` | Value | 0 | BattleStrategy.cpp:29 |  |
+| `-BattleSituationLog` | Value | 0 | BattleStrategy.cpp:31 |  |
 | `-BattleSmokeSuite` | Value | 空文字列 | BattleAbilitySmoke.cpp:121, BattleGameMode.cpp:156, BattleSquadSmoke.cpp:209, BattleTacticalSmoke.cpp:175 |  |
 | `-BattleSmokeTest` | Param | off | BattleGameMode.cpp:142 |  |
 | `-BattleSPGAmmo` | Value | 0 | BattleArtillery.cpp:95 |  |
@@ -266,7 +266,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSplitDecisions` | Param | off | BattleBenchmark.cpp:35 |  |
 | `-BattleSquadCoverCheck` | Value | 0 | BattleLeaderRuntime.cpp:1459 |  |
 | `-BattleSquadFlank` | Value | 1 | BattleSquadTactics.cpp:22 |  |
-| `-BattleSquadIcons` | Value | 1 | BattleHUD.cpp:214, BattleHUD.cpp:921 |  |
+| `-BattleSquadIcons` | Value | 1 | BattleHUD.cpp:214, BattleHUD.cpp:930 |  |
 | `-BattleSquadST2` | Value | 1 | BattleSquadTactics.cpp:21 |  |
 | `-BattleSquadTactics` | Value | 1 | BattleSquadTactics.cpp:17 |  |
 | `-BattleSquadTrial` | Value | 空文字列 | BattleGameMode.cpp:64, BattleUnit.cpp:102 |  |
@@ -279,11 +279,11 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleStateTrace` | Value | 0 | BattleStateTrace.cpp:24 |  |
 | `-BattleStateTraceDetail` | Value | 空文字列 | BattleStateTrace.cpp:26 |  |
 | `-BattleSTObserveSeconds` | Value | 8 | BattleSquadTacticsSmoke.cpp:126 |  |
-| `-BattleStrategy` | Value | 0 | BattleStrategy.cpp:179 |  |
-| `-BattleStrategyFocusHold` | Value | 90.f | BattleStrategy.cpp:221 | Seconds → BattleStrategy.cpp:160（ヘルパー経由） |
-| `-BattleStrategyOpen` | Value | 150.f | BattleStrategy.cpp:220 | Seconds → BattleStrategy.cpp:160（ヘルパー経由） |
-| `-BattleStrategyReview` | Value | 60.f | BattleStrategy.cpp:222 | Seconds → BattleStrategy.cpp:160（ヘルパー経由） |
-| `-BattleStrategyTeam` | Value | -1 | BattleStrategy.cpp:186 |  |
+| `-BattleStrategy` | Value | 0 | BattleStrategy.cpp:232 |  |
+| `-BattleStrategyFocusHold` | Value | 90.f | BattleStrategy.cpp:274 | Seconds → BattleStrategy.cpp:213（ヘルパー経由） |
+| `-BattleStrategyOpen` | Value | 150.f | BattleStrategy.cpp:273 | Seconds → BattleStrategy.cpp:213（ヘルパー経由） |
+| `-BattleStrategyReview` | Value | 60.f | BattleStrategy.cpp:275 | Seconds → BattleStrategy.cpp:213（ヘルパー経由） |
+| `-BattleStrategyTeam` | Value | -1 | BattleStrategy.cpp:239 |  |
 | `-BattleSTScreens` | Value | 空文字列 | BattleSquadTacticsSmoke.cpp:127 |  |
 | `-BattleSupplyAwayRatio` | Value | 1.0 | BattleTactics.cpp:36 |  |
 | `-BattleSupplyHeal` | Value | 10.0 | BattleTactics.cpp:36 |  |
@@ -298,8 +298,8 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSuppressionRadius` | Value | 200.f | BattleSuppression.cpp:14 |  |
 | `-BattleSuppressionSpread` | Value | 1.5f | BattleSuppression.cpp:15 |  |
 | `-BattleSuppressionSupport` | Value | 1.f | BattleSuppression.cpp:17 |  |
-| `-BattleSurpriseGroup` | Value | 0 | BattleFrontLine.cpp:523 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
-| `-BattleSurpriseSquads` | Value | 2 | BattleFrontLine.cpp:544 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
+| `-BattleSurpriseGroup` | Value | 0 | BattleFrontLine.cpp:530 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
+| `-BattleSurpriseSquads` | Value | 2 | BattleFrontLine.cpp:551 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleSymmetricStart` | Value | -1 | BattleGroups.cpp:58 |  |
 | `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:77 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |
@@ -315,7 +315,8 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleVATFarLight` | Value | 0 | BattleVATDisplay.cpp:37 |  |
 | `-BattleVehicleHitCover` | Strifind/Value | 0 | BattleAreaSmoke.cpp:467, BattleArtillery.cpp:42 |  |
 | `-BattleVehicleOrderHere` | Value | 0 | BattleArtillery.cpp:36 |  |
-| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:487, BattleSightExperiment.cpp:40 |  |
+| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:487, BattleSightExperiment.cpp:42 |  |
+| `-BattleVerifySaveAt` | Value | 80.f | BattleSightExperiment.cpp:41 |  |
 | `-BattleWaypointPass` | Value | 0 | BattleStableMovement.cpp:453 |  |
 | `-BattleWeaponLoadouts` | Param | off | BattleSquadTrial.cpp:50 |  |
 | `-BattleWeaponOrderGate` | Value | 0 | BattleWeaponOrders.cpp:10 |  |
