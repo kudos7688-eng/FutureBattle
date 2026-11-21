@@ -1318,6 +1318,9 @@ FVector UBattleLeaderRuntime::TracerStart(int32 ID,const FVector& Start,const FV
  if(const auto* Turret=Turrets.Find(ID);Turret&&Turret->IsValid())return (*Turret)->GetComponentTransform().TransformPosition(FVector(200,0,0));
  const ABattleUnit* A=Actor(ID);const auto* B=Bodies.Find(ID);
  const UStaticMeshComponent* Model=A?A->Rifle.Get():B&&!(VAT&&VAT->IsFar(ID))?B->Weapon.Get():nullptr;
+ // An exoskeleton soldier's launcher recoil and reload clips (PlayExoLauncherAction): the hand holds the launcher, not the rifle
+ // the shot comes from, so the tracer leaves about where a shouldered rifle would end.
+ if(A&&A->IsPlayingLookSequence(GetWorld()->GetTimeSeconds()))Model=nullptr;
  return ABattleUnit::TracerStart(Model,Start,Direction);
 }
 void UBattleLeaderRuntime::RefreshDisplay()

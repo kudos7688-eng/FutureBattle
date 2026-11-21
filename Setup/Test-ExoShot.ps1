@@ -1,6 +1,8 @@
 [CmdletBinding()]
 # Exoskeleton look check (2026-11-18): close-up screenshots of one exoskeleton soldier per team (front, side, back, bazooka in hand front and back, shield gone, the moving clip (glide) from the side tilted forward and from the front tilted to its right,
-# crouched, prone three times (the first may still show the get-down clip), the other team's). Rendered off screen; look at the PNG files afterwards (a generated file is not a visual check).
+# close-ups from 1.9 m, the action clips (launcher recoil and reload, rifle recoil and reload; the log line EXO_SHOT_CAPTURE names the clip
+# showing), crouched, prone three times (the first may still show the get-down clip) and close up from 1.8 m, the other team's).
+# Rendered off screen; look at the PNG files afterwards (a generated file is not a visual check).
 param([string]$Name='exo-r1',[ValidateSet('A','D','E')][string]$Map='E')
 $ErrorActionPreference='Stop'
 if($Name -notmatch '^[a-zA-Z0-9_-]+$'){throw 'Simple name required'}

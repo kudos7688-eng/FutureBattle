@@ -208,6 +208,9 @@ public:
  // Exoskeleton second weapon (BattleExo.cpp): picks a target among what the soldier sees itself and fires an anti-tank round.
  void StepExoLaunchers(double Now);
  bool FireExoLauncher(int32 ID,const FVector& Aim,double Now);
+ // Display only: the launcher in hand through its recoil and reload clips (BattleExo.cpp); returns their length (0 without them:
+ // the launcher shows half a second as before).
+ float PlayExoLauncherAction(int32 ID,double Now);
  double ExoNextPick=0;int64 ExoLauncherShots=0,ExoLauncherHits=0;
  // Look: armour parts on a rig that follows the chest and keeps the body's heading, the launcher tube, and a shield bubble shown while shield points are left.
  // bSuit: the AC01 suit (ApplyExoSuit: own body, clips and weapon models) instead of the placeholder plates.

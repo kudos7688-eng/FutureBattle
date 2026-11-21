@@ -305,6 +305,7 @@ void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequenc
 	CurrentPose = nullptr;
 	if (!Idle)
 	{
+		LookFire = LookReload = LookSequenceFirst = LookSequenceThen = nullptr;
 		// The look is gone and UpdateLookTilt no longer runs: drop its lean so the plain body stands upright.
 		LookVelShown = LookShotVelocity = FVector::ZeroVector;
 		if (!MeshTiltShown.Equals(FQuat::Identity, 1.e-4f))
@@ -315,6 +316,20 @@ void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequenc
 	}
 	const bool bFirstPerson = IsPlayerControlled() && !bThirdPersonView;
 	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
+}
+
+float ABattleUnit::PlayLookSequence(UAnimSequence* First, UAnimSequence* Then, double Time)
+{
+	LookSequenceFirst = First; LookSequenceThen = First ? Then : nullptr; LookSequenceStart = Time;
+	CurrentPose = nullptr;  // starts over even when the same clip is showing
+	return (First ? First->GetPlayLength() : 0.f) + (LookSequenceThen ? LookSequenceThen->GetPlayLength() : 0.f);
+}
+
+bool ABattleUnit::IsPlayingLookSequence(double Time) const
+{
+	if (!LookSequenceFirst) return false;
+	const double Length = LookSequenceFirst->GetPlayLength() + (LookSequenceThen ? LookSequenceThen->GetPlayLength() : 0.f);
+	return Time >= LookSequenceStart && Time < LookSequenceStart + Length;
 }
 
 bool ABattleUnit::LookHasProneClip() const
@@ -572,6 +587,8 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 	// Stance visuals trial: a crouched soldier plays the crouch clip (reloading included: there is no crouched reload clip).
 	if (auto* Crouch = VisualStance == BattleStance::Crouch ? BattleStance::CrouchClip(Moving) : nullptr) Pose = Crouch;
 	bool bLookTransition = false;
+	bool bAction = false, bRestart = false;
+	float ActionRate = 1.f; double ActionAt = 0.;
 	if (LookIdle)
 	{
 		const bool Crouched = VisualStance == BattleStance::Crouch && LookCrouchIdle && BattleStance::AnimEnabled();
@@ -592,6 +609,27 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 			else if (VisualStance == BattleStance::Prone)
 				if (auto* Prone = BattleBodyAnim::Locomotion(BattleStance::Prone, GetActorRotation().UnrotateVector(GetVelocity()), false)) Pose = Prone;
 		}
+		// Action clips (SetLookActions, PlayLookSequence), standing only, moving or not (the glide keeps the feet still too):
+		// a running sequence (the launcher's recoil, then its reload), else the reload paced by the reload timer, else the recoil
+		// of the last shot, from its start at every shot. Each starts and ends on the idle's first frame.
+		if (VisualStance == BattleStance::Stand && !bLookTransition)
+		{
+			const double Since = Now - LookSequenceStart;
+			const float First = LookSequenceFirst ? LookSequenceFirst->GetPlayLength() : 0.f;
+			const float Then = LookSequenceThen ? LookSequenceThen->GetPlayLength() : 0.f;
+			if (LookSequenceFirst && Since >= 0. && Since < First) { Pose = LookSequenceFirst; ActionAt = Since; bAction = true; }
+			else if (LookSequenceThen && Since >= First && Since < First + Then) { Pose = LookSequenceThen; ActionAt = Since - First; bAction = true; }
+			else if (Reloading && LookReload)
+			{
+				Pose = LookReload; bAction = true; ActionRate = LookReload->GetPlayLength() / FMath::Max(.1f, Duration);
+				ActionAt = LookReload->GetPlayLength() * FMath::Clamp(1. - (S.ReloadEndTime - Now) / FMath::Max(.1f, Duration), 0., 1.);
+			}
+			else if (LookFire && Now - LastVisualShot < LookFire->GetPlayLength())
+			{
+				Pose = LookFire; bAction = true; ActionAt = Now - LastVisualShot;
+				bRestart = LastVisualShot > LookShotShown; LookShotShown = LastVisualShot;
+			}
+		}
 		UpdateLookTilt(VisualStance == BattleStance::Stand && !bLookTransition);
 	}
 	// Blind fire (BattleBlindFire.cpp): the clip that raises the rifle over or around the cover while it lasts.
@@ -601,13 +639,14 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 	if (!Reloading && !LookIdle && (!bOverTop || BattleBlindFire::ExposeEnabled())) if (const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leaders && Leaders->IsBlindFiring(UnitID, Now))
 		if (auto* Blind = BattleBlindFire::Clip(bOverTop)) Pose = Blind;
 	const bool ReloadPose = Reloading && Pose == RifleReload.Get();
-	const bool Looping = !ReloadPose && !bLookTransition;
-	if (Pose && CurrentPose != Pose)
+	const bool Looping = !ReloadPose && !bLookTransition && !bAction;
+	if (Pose && (CurrentPose != Pose || bRestart))
 	{
 		CurrentPose = Pose;
 		GetMesh()->PlayAnimation(Pose,Looping);
-		GetMesh()->SetPlayRate(ReloadPose ? Pose->GetPlayLength()/Duration : 1.f);
+		GetMesh()->SetPlayRate(ReloadPose ? Pose->GetPlayLength()/Duration : bAction ? ActionRate : 1.f);
 		if (ReloadPose) GetMesh()->SetPosition(Pose->GetPlayLength()*FMath::Clamp(1.-(S.ReloadEndTime-Now)/Duration,0.,1.), false);
+		else if (bAction) GetMesh()->SetPosition(ActionAt, false);
 	}
 	}
 	if (IsPlayerControlled() && Rifle->GetAttachParent()==FirstPersonCamera)

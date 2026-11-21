@@ -89,8 +89,9 @@ static void FitExoInnerFrame(ABattleUnit* Unit)
 // Load each carry pose with its matching right-hand mount; the other prop follows the upper spine.
 struct FExoCarryPose
 {
- TStrongObjectPtr<UAnimSequence> Idle,Move,CrouchIdle,CrouchMove;
- void Load(const TCHAR* Family)
+ TStrongObjectPtr<UAnimSequence> Idle,Move,CrouchIdle,CrouchMove,Fire,Reload;
+ // Fire/Reload: the recoil of each shot and the reload of the weapon in the right hand (ABattleUnit::SetLookActions), if any.
+ void Load(const TCHAR* Family,const TCHAR* FireName=nullptr,const TCHAR* ReloadName=nullptr)
  {
   auto Clip=[Family](const TCHAR* Name){
    const FString Asset=FString::Printf(TEXT("A_AC01T2_%s_%s"),Family,Name);
@@ -100,15 +101,17 @@ struct FExoCarryPose
   // (Setup/Import-AC01Glide.ps1). Without the glide clip the jog is shown.
   Idle.Reset(Clip(TEXT("Idle")));Move.Reset(Clip(TEXT("Glide")));if(!Move.IsValid())Move.Reset(Clip(TEXT("Jog_Fwd")));
   CrouchIdle.Reset(Clip(TEXT("Crouch_Idle")));CrouchMove.Reset(Clip(TEXT("Crouch_Walk_Fwd")));
+  if(FireName)Fire.Reset(Clip(FireName));
+  if(ReloadName)Reload.Reset(Clip(ReloadName));
  }
 };
 
-bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
+namespace
 {
- static const bool bOff=FParse::Param(FCommandLine::Get(),TEXT("BattleExoPlaceholder"));
- if(bOff)return false;
- struct FAssets{TStrongObjectPtr<USkeletalMesh> Suit;FExoCarryPose Primary,Secondary;TStrongObjectPtr<UStaticMesh> Rifle,Launcher;bool bLoaded=false,bOk=false;};
- static FAssets X;
+struct FExoAssets{TStrongObjectPtr<USkeletalMesh> Suit;FExoCarryPose Primary,Secondary;TStrongObjectPtr<UAnimSequence> LauncherFire,LauncherReload;TStrongObjectPtr<UStaticMesh> Rifle,Launcher;bool bLoaded=false,bOk=false;};
+FExoAssets& ExoAssets()
+{
+ static FExoAssets X;
  if(!X.bLoaded)
  {
   X.bLoaded=true;
@@ -116,12 +119,27 @@ bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
   int32 BodyVersion=3;FParse::Value(FCommandLine::Get(),TEXT("BattleExoBody="),BodyVersion);
   if(BodyVersion==3)X.Suit.Reset(LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Art/AC01T2/SK_AC01T3.SK_AC01T3"),nullptr,LOAD_NoWarn));
   if(!X.Suit.IsValid())X.Suit.Reset(LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Art/AC01T2/SK_AC01T2.SK_AC01T2"),nullptr,LOAD_NoWarn));
-  X.Primary.Load(TEXT("OneHand"));X.Secondary.Load(TEXT("Dual"));
+  // Action clips (Setup/Import-AC01Actions.ps1; Art/AC01_Tripo_v2/Scripts/17_exo_action_clips.py): the rifle's recoil and its reload
+  // with the legs held still; the launcher's recoil and reload, played after a launcher shot (PlayExoLauncherAction). The launcher
+  // in hand has no clip for the rifle's shots. Missing clips just leave the pose as it is.
+  X.Primary.Load(TEXT("OneHand"),TEXT("Fire"),TEXT("ReloadStill"));X.Secondary.Load(TEXT("Dual"));
+  auto Clip=[](const TCHAR* Asset){return LoadObject<UAnimSequence>(nullptr,*FString::Printf(TEXT("/Game/Art/AC01T2/Anims/%s.%s"),Asset,Asset),nullptr,LOAD_NoWarn);};
+  X.LauncherFire.Reset(Clip(TEXT("A_AC01T2_Dual_Fire")));X.LauncherReload.Reset(Clip(TEXT("A_AC01T2_Dual_Reload")));
   X.Rifle.Reset(LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Rifle.SM_AC01_Rifle"),nullptr,LOAD_NoWarn));
   X.Launcher.Reset(LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Launcher.SM_AC01_Launcher"),nullptr,LOAD_NoWarn));
   X.bOk=X.Suit.IsValid()&&X.Primary.Idle.IsValid()&&X.Primary.Move.IsValid()&&X.Secondary.Idle.IsValid()&&X.Secondary.Move.IsValid()&&X.Rifle.IsValid()&&X.Launcher.IsValid();
-  UE_LOG(LogFutureBattle,Display,TEXT("EXO_SUIT assets=%d body=%s move=%s,%s"),X.bOk,X.Suit.IsValid()?*X.Suit->GetName():TEXT("none"),X.Primary.Move.IsValid()?*X.Primary.Move->GetName():TEXT("none"),X.Secondary.Move.IsValid()?*X.Secondary.Move->GetName():TEXT("none"));
+  UE_LOG(LogFutureBattle,Display,TEXT("EXO_SUIT assets=%d body=%s move=%s,%s actions=rifle%d%d,launcher%d%d"),X.bOk,X.Suit.IsValid()?*X.Suit->GetName():TEXT("none"),X.Primary.Move.IsValid()?*X.Primary.Move->GetName():TEXT("none"),X.Secondary.Move.IsValid()?*X.Secondary.Move->GetName():TEXT("none"),
+   X.Primary.Fire.IsValid(),X.Primary.Reload.IsValid(),X.LauncherFire.IsValid(),X.LauncherReload.IsValid());
  }
+ return X;
+}
+}
+
+bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
+{
+ static const bool bOff=FParse::Param(FCommandLine::Get(),TEXT("BattleExoPlaceholder"));
+ if(bOff)return false;
+ const auto& X=ExoAssets();
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();ABattleUnit* A=Actor(ID);const auto* U=Store->Find(ID);
  if(!X.bOk||!A||!U)return false;
  auto* Body=A->GetMesh();
@@ -143,6 +161,7 @@ bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
  const FVector Barrel=FRotator(Launcher?-6.f:0.f,90.f,0.f).Vector();
  const FTransform Grip(FRotationMatrix::MakeFromYZ(-Barrel,FVector::UpVector).ToQuat(),Palm);
  A->SetLook(Pose.Idle.Get(),Pose.Move.Get(),Pose.CrouchIdle.Get(),Pose.CrouchMove.Get(),Launcher?X.Launcher.Get():X.Rifle.Get(),TEXT("hand_r"),Grip.GetRelativeTransform(Hand));
+ A->SetLookActions(Pose.Fire.Get(),Pose.Reload.Get());
  const FTransform Spine=ExoClipBone(Pose.Idle.Get(),TEXT("spine_05"));
  // The carried weapon lies against the back plate (component space: +X is the suit's left, -Y its back), not floating behind it.
  // Launcher: nearly upright along the back, muzzle up past the left shoulder, 15 degrees from upright and 10 cm to the left, leaning
@@ -316,13 +335,28 @@ void UBattleLeaderRuntime::StepExoLaunchers(double Now)
  }
 }
 
+float UBattleLeaderRuntime::PlayExoLauncherAction(int32 ID,double Now)
+{
+ // The launcher shows in hand (AILauncherUntil; the player's selection keeps it anyway) through its recoil and reload clips, then
+ // goes back on the back. Display only: the reload of the rules (LauncherWait) is separate and longer.
+ auto* Look=ExoLooks.Find(ID);
+ if(!Look)return 0.f;
+ Look->AILauncherUntil=FMath::Max(Look->AILauncherUntil,Now+.5);
+ if(!Look->bSuit)return 0.f;  // the placeholder plates have no clips
+ ApplyExoSuit(ID);  // the launcher in hand now, so its clips play on the launcher's arrangement
+ ABattleUnit* A=Actor(ID);const auto& X=ExoAssets();
+ const float Seconds=A&&A->HasLook()&&X.LauncherFire.IsValid()?A->PlayLookSequence(X.LauncherFire.Get(),X.LauncherReload.Get(),Now):0.f;
+ if(auto* After=ExoLooks.Find(ID))After->AILauncherUntil=FMath::Max(After->AILauncherUntil,Now+Seconds);
+ return Seconds;
+}
+
 bool UBattleLeaderRuntime::FireExoLauncher(int32 ID,const FVector& Aim,double Now)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* M=GetWorld()->GetSubsystem<UBattleMatch>();const auto* U=Store->Find(ID);
  if(!U||!U->IsAlive()||!Bodies.Contains(ID))return false;
  const int32 Sequence=U->Launcher;
  if(!Store->UseLauncher(ID))return false;
- if(auto* Look=ExoLooks.Find(ID))Look->AILauncherUntil=Now+.5;
+ PlayExoLauncherAction(ID,Now);
  const auto* T=GetDefault<UBattleTuning>();const int32 Team=U->Team;const auto* SS=Store->FindSquad(U->SquadID);
  const FVector Start=Position(ID)+FVector(0,0,BattleStance::EyeOffset(StanceOf(ID)));
  // Deterministic spread per soldier and round (half a degree).
