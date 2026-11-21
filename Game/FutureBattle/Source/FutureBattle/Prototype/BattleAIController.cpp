@@ -5,6 +5,7 @@
 #include "BattleController.h"
 #include "BattleNavigation.h"
 #include "BattlePerception.h"
+#include "BattleTactics.h"
 #include "BattleCover.h"
 #include "BattleSquadAI.h"
 #include "BattleMetrics.h"
@@ -192,6 +193,7 @@ void ABattleAIController::Tick(float DeltaTime)
 	// Perception gates every enemy-dependent decision; there is no unseen pursuit.
 	ABattleUnit* Target = nullptr;
 	const FBattleContact* TacticalThreat = nullptr;
+	bool bObservedEngagement=false;
 	FVector KnownTargetPosition = FVector::ZeroVector;
 	float Best = FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange());
 	const auto* Contacts = GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(Unit->GetUnitID());
@@ -201,13 +203,13 @@ void ABattleAIController::Tick(float DeltaTime)
 		const auto& Contact = Pair.Value;
 		if (!Contact.bVisible) continue;
 		ABattleUnit* Candidate = Mode->FindUnitByID(Contact.TargetID);
-		if (!Candidate || !Unit->CanSeeSnapshot(Sight, Candidate, Candidate->GetActorLocation(), Candidate->IsAlive())) continue;
+		if (!BattleTactics::ObservedTactics()&&(!Candidate || !Unit->CanSeeSnapshot(Sight, Candidate, Candidate->GetActorLocation(), Candidate->IsAlive()))) continue;
 		if (S->Order == EBattleOrder::Defend && Squad &&
 			FVector::DistSquared2D(Contact.LastKnownPosition, Squad->Destination) > FMath::Square(Squad->DefenseRadius)) continue;
 		float Distance = FVector::DistSquared(Unit->GetActorLocation(), Contact.LastKnownPosition);
 		if (Distance > FMath::Square(GetDefault<UBattleTuning>()->EffectiveWeaponRange())) continue;
 		if (Contact.TargetID == S->CoordinatedTarget) Distance *= .25f;
-		if (Distance < Best) { Best = Distance; Target = Candidate; KnownTargetPosition = Contact.LastKnownPosition; TacticalThreat = &Contact; }
+		if (Distance < Best) { Best = Distance; Target = Candidate;if(BattleTactics::ObservedTactics())bObservedEngagement=true; KnownTargetPosition = Contact.LastKnownPosition; TacticalThreat = &Contact; }
 	}
 	if (!TacticalThreat && Contacts)
 		for (const auto& Pair : *Contacts) if (Pair.Value.Confidence > .35f && (!TacticalThreat || Pair.Value.LastSeenTime > TacticalThreat->LastSeenTime)) TacticalThreat = &Pair.Value;
@@ -225,7 +227,7 @@ void ABattleAIController::Tick(float DeltaTime)
 		}
 	}
 	const bool bTacticalAction = bSquadMovement || TryTacticalAction(Unit, TacticalThreat, Now, bOutsideDefense);
-	const bool bEngage = Target && (S->Order == EBattleOrder::AttackMove || S->Order == EBattleOrder::Defend) && !bOutsideDefense;
+	const bool bEngage = (BattleTactics::ObservedTactics()?bObservedEngagement:Target!=nullptr) && (S->Order == EBattleOrder::AttackMove || S->Order == EBattleOrder::Defend) && !bOutsideDefense;
 	if (!bTacticalAction && (S->Order == EBattleOrder::Hold || bEngage))
 	{
 		StopMovement(); bTrackingMove = false;
@@ -239,7 +241,8 @@ void ABattleAIController::Tick(float DeltaTime)
 		const FVector TowardKnown = TacticalThreat->LastKnownPosition - Unit->GetActorLocation();
 		if (!TowardKnown.IsNearlyZero()) Unit->SetActorRotation(FRotator(0, FMath::FixedTurn(Unit->GetActorRotation().Yaw, TowardKnown.Rotation().Yaw, 90.f), 0));
 	}
-	if (Target && !bOutsideDefense && !bSquadMovement && S->Action != EBattleAction::TakingCover && S->Action != EBattleAction::Reloading)
+	if (Target && !bOutsideDefense && !bSquadMovement && S->Action != EBattleAction::TakingCover && S->Action != EBattleAction::Reloading &&
+  (!BattleTactics::ObservedTactics()||Unit->CanSeeSnapshot(Sight,Target,Target->GetActorLocation(),Target->IsAlive())))
 	{
 		SetFocalPoint(KnownTargetPosition);
 		if (S->Ammo == 0) Store->StartReload(Unit->GetUnitID(), Now);

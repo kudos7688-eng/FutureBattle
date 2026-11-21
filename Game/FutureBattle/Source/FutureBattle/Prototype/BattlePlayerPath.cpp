@@ -29,7 +29,7 @@ bool ABattleController::PickOrderPoint(FVector2D Screen,FVector& Out,int32* Leve
  const auto& Heights=BattleFieldLayout::Of(GetWorld()).Heights;
  FVector Origin,Dir;
  if(Heights.IsEmpty()||!UGameplayStatics::DeprojectScreenToWorld(this,Screen,Origin,Dir)||Dir.Z>-.05)return bHit;
- const bool bLower=IsInputKeyDown(EKeys::LeftAlt)||IsInputKeyDown(EKeys::RightAlt);
+ const bool bLower=bGroundFloorPending||IsInputKeyDown(EKeys::LeftAlt)||IsInputKeyDown(EKeys::RightAlt);
  double BestT=DBL_MAX;
  for(const auto& P:Heights.Patches)
  {
@@ -44,7 +44,14 @@ bool ABattleController::PickOrderPoint(FVector2D Screen,FVector& Out,int32* Leve
 
 void ABattleController::BeginPathDraw()
 {
- bPathDraw=false;DrawnPath.Reset();DrawnLength=0;
+ bPathDraw=false;bFrontDraw=false;DrawnPath.Reset();DrawnLength=0;
+ // Ctrl + right drag draws the own front line (user request 2026-11-21 after test play); no selection needed.
+ if(bTactical&&(IsInputKeyDown(EKeys::LeftControl)||IsInputKeyDown(EKeys::RightControl)))
+ {
+  FVector2D Pointer;FVector At;
+  if(GetPointerPosition(Pointer)&&PickOrderPoint(Pointer,At)){bPathDraw=bFrontDraw=true;DrawnPath.Add(At);PathScreenStart=Pointer;}
+  return;
+ }
  if(!bTactical||Selected.IsEmpty())return;
  FVector2D Pointer;FVector At;
  if(GetPointerPosition(Pointer)&&PickOrderPoint(Pointer,At)){bPathDraw=true;DrawnPath.Add(At);PathScreenStart=Pointer;}
@@ -53,7 +60,7 @@ void ABattleController::BeginPathDraw()
 void ABattleController::UpdatePathDraw()
 {
  if(!bPathDraw)return;
- if(!bTactical||Selected.IsEmpty()){bPathDraw=false;DrawnPath.Reset();return;}
+ if(!bTactical||(!bFrontDraw&&Selected.IsEmpty())){bPathDraw=false;DrawnPath.Reset();return;}
  FVector2D Pointer;FVector At;
  if(!GetPointerPosition(Pointer)||!PickOrderPoint(Pointer,At)||DrawnPath.Num()>=96)return;
  const double Step=FVector::Dist2D(At,DrawnPath.Last());
@@ -65,9 +72,23 @@ void ABattleController::EndPathDraw()
  if(!bPathDraw)return;
  bPathDraw=false;
  TArray<FVector> Drawn=MoveTemp(DrawnPath);DrawnPath.Reset();
+ if(bFrontDraw)
+ {
+  bFrontDraw=false;if(!bTactical)return;
+  FVector2D Pointer=PathScreenStart;FVector End;
+  if(GetPointerPosition(Pointer)&&PickOrderPoint(Pointer,End))Drawn.Add(End);
+  // A Ctrl + right click (no drag) hands the line back to the front army.
+  if(FVector2D::Distance(Pointer,PathScreenStart)<=12.)Drawn.Reset();
+  const int32 Rows=GetWorld()->GetSubsystem<UBattleMatch>()->SetDrawnFrontLine(0,Drawn);
+  ShowNotice(Rows>0?FString::Printf(TEXT("前線を引きました（%d行）。Ctrl+右クリックで前線軍に任せます"),Rows)
+   :Rows==0?FString(TEXT("前線を前線軍に任せました")):Rows==-2?FString(TEXT("前線は区画の行をまたぐように（縦に）引いてください"))
+   :FString(TEXT("前線軍がありません（部隊を前線軍タブへ入れてください）")));
+  return;
+ }
  if(!bTactical||Selected.IsEmpty())return;
  FVector2D Pointer=PathScreenStart;FVector End;int32 Level=0;
  if(!GetPointerPosition(Pointer)||!PickOrderPoint(Pointer,End,&Level)){if(Drawn.IsEmpty())return;End=Drawn.Last();}
+ bGroundFloorPending=false; // Consume once, after all points of this order have used the same floor selection.
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const double Length=DrawnLength+(Drawn.Num()?FVector::Dist2D(End,Drawn.Last()):0.);
  const bool bSectorMove=UBattleLeaderRuntime::SectorMoveEnabled() && BattleFieldLayout::Of(GetWorld()).bSectors && PendingOrder==EBattleOrder::Move;
@@ -89,7 +110,8 @@ void ABattleController::EndPathDraw()
  for(ABattleUnit* U:Selected)if(LeaderSelectable(U))
  {
   const int32 SID=U->GetState()->SquadID;if(Done.Contains(SID))continue;Done.Add(SID);
-  if(Points.Num()>1?Match->PlayerPathOrder(SID,PendingOrder,Points)>0:L->IssueOrder(SID,PendingOrder,End))++Accepted;else ++Rejected;
+  if(Points.Num()>1?Match->PlayerPathOrder(SID,PendingOrder,Points)>0:L->IssueOrder(SID,PendingOrder,End))
+  {if(Points.Num()==1)Match->ClearPlayerRouteMission(SID);++Accepted;}else ++Rejected;
  }
  ShowNotice(Points.Num()>1||!bSectorMove?FString::Printf(TEXT("道筋の命令：%d部隊（中継点 %d／不可 %d）"),Accepted,FMath::Max(0,Points.Num()-1),Rejected)
   :FString::Printf(TEXT("地点へ移動：%d部隊（不可 %d）"),Accepted,Rejected));
@@ -180,7 +202,6 @@ int32 UBattleMatch::PlayerPathOrder(int32 SquadID,EBattleOrder Order,const TArra
 {
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  const auto* S=Store->FindSquad(SquadID);
- if(FPlayerRoute* Old=PlayerRoutes.Find(SquadID)){Old->bMission=false;Old->bPath=false;Old->Waypoints.Reset();}
  if(Points.Num()<2||Order==EBattleOrder::Hold||!Runtime||!Runtime->IsWideField()||!S||!Store->Find(S->LeaderUnitID))return 0;
  const EBattleOrder OnWay=Order==EBattleOrder::Move?EBattleOrder::Move:EBattleOrder::AttackMove;
  // The first point that takes an order (a point drawn on a roof or in a wall is skipped).
@@ -243,9 +264,9 @@ void ABattleHUD::DrawOrderWays()
 {
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(!L->IsEnabled())return;
  auto* PC=Cast<ABattleController>(PlayerOwner);if(!PC||!Canvas||!PC->IsTactical())return;
- const float H=Canvas->SizeY;const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ const float WaysBottom=FBattleCommandBarLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld()).PanelTop-2.f;const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  const auto Map=FBattleMinimapLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld());
- auto Screen=[&](FVector World,FVector2D& Out){return PC->ProjectWorldLocationToScreen(World,Out)&&Out.Y>110&&Out.Y<H-130&&!Map.Contains(Out);};
+ auto Screen=[&](FVector World,FVector2D& Out){return PC->ProjectWorldLocationToScreen(World,Out)&&Out.Y>110&&Out.Y<WaysBottom&&!Map.Contains(Out);};
  auto Line=[&](const TArray<FVector>& Points,FLinearColor Color,float Thickness)
  {
   for(int32 I=0;I+1<Points.Num();++I)
@@ -292,6 +313,6 @@ void ABattleHUD::DrawOrderWays()
  {
   TArray<FVector> Draft=PC->GetDrawnPath();FVector2D Pointer;FVector At;
   if(PC->GetPointerPosition(Pointer)&&PC->PickOrderPoint(Pointer,At))Draft.Add(At);
-  Line(Draft,FLinearColor(1.f,.85f,.2f,.95f),2.5f);
+  Line(Draft,PC->IsDrawingFrontLine()?FLinearColor(1.f,.55f,.15f,.95f):FLinearColor(1.f,.85f,.2f,.95f),PC->IsDrawingFrontLine()?4.f:2.5f);
  }
 }

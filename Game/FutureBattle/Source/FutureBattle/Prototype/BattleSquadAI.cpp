@@ -4,6 +4,7 @@
 #include "BattleState.h"
 #include "BattleUnit.h"
 #include "BattlePerception.h"
+#include "BattleTactics.h"
 #include "BattleNavigation.h"
 #include "FutureBattle.h"
 #include "BattleMetrics.h"
@@ -105,7 +106,7 @@ void UBattleSquadAI::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double
 		{
 			const auto* S = Unit->GetState(); const auto* Contact = Perception->FindContact(S->UnitID, Target);
 			ABattleUnit* Enemy = ByID.FindRef(Target);
-			return S->Role != EBattleRole::Flank && Contact && Contact->bVisible && Enemy && Unit->CanSee(Enemy) &&
+			return S->Role != EBattleRole::Flank && Contact && Contact->bVisible && (BattleTactics::ObservedTactics()||(Enemy && Unit->CanSee(Enemy))) &&
 				S->Ammo > 0 && S->ReloadEndTime == 0. && S->Action == EBattleAction::Engaging && Unit->GetVelocity().Size2D() < 20.f &&
 				S->ShotSequence > 0 && S->NextShotTime > Now - FMath::Max(.5f, Tuning->ShotInterval(S->Weapon, false));
 		};

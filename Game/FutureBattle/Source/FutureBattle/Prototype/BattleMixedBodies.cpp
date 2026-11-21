@@ -1,3 +1,4 @@
+#include "BattleTactics.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleSave.h"
 #include "BattleVATDisplay.h"
@@ -68,12 +69,9 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
 {
  if(!IsWideField() || !Save || Save->Version<2) {Error=TEXT("Mixed snapshot required");return false;}
  auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
- if(!PC || !Mode) {Error=TEXT("Player or game mode unavailable; battle retained");return false;}
+ if(!PC || !Mode) {Error=TEXT("Player or game mode unavailable; restore aborted");return false;}
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
- if(!Nav) {Error=TEXT("Navigation unavailable; battle retained");return false;}
- CoverApproaches.Reset();FirePositions.Reset();
- SuppressionZeroAt.Reset();
- Stances.Reset();StanceLockedUntil.Reset();
+ if(!Nav) {Error=TEXT("Navigation unavailable; restore aborted");return false;}
  TMap<int32,FVector> Positions;
  TMap<int32,TArray<FVector>> ValidatedPaths;
  for(const auto& E:Save->Units) Positions.Add(E.State.UnitID,E.Position);
@@ -97,14 +95,14 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
      ValidatedPaths.Add(S.SquadID,{LeaderAt,S.Destination});continue;
     }
     UE_LOG(LogFutureBattle,Warning,TEXT("BATTLE_MIXED_RESTORE_ROUTE_FAIL squad=%d leader=%d order=%d at=%s destination=%s"),S.SquadID,S.LeaderUnitID,int32(S.Order),*LeaderAt.ToCompactString(),*S.Destination.ToCompactString());
-    Error=TEXT("Saved route unreachable; battle retained");return false;
+    Error=TEXT("Saved route unreachable; restore aborted");return false;
    }
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MIXED_RESTORE_ROUTE_PROJECTED squad=%d leader=%d at=%s projected=%s"),S.SquadID,S.LeaderUnitID,*LeaderAt.ToCompactString(),*From.Location.ToCompactString());
   }
   ValidatedPaths.Add(S.SquadID,Path->PathPoints);
  }
  auto* NewHost=GetWorld()->SpawnActor<AActor>();
- if(!NewHost) {Error=TEXT("Could not stage body host; battle retained");return false;}
+ if(!NewHost) {Error=TEXT("Could not stage body host; restore aborted");return false;}
  auto* Root=NewObject<USceneComponent>(NewHost);NewHost->SetRootComponent(Root);
  NewHost->AddInstanceComponent(Root);Root->RegisterComponent();
  TMap<int32,FBattleLeaderBody> Staged;
@@ -112,15 +110,19 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  {
   if(E.State.bRetired)continue;
   FBattleLeaderBody B;
-  const bool InjectedFailure=Staged.Num()==RestoreStageFailureAfter && FParse::Param(FCommandLine::Get(),TEXT("BattleMixedSaveSmoke"));
+  const bool InjectedFailure=Staged.Num()==RestoreStageFailureAfter &&
+   (FParse::Param(FCommandLine::Get(),TEXT("BattleMixedSaveSmoke")) || FParse::Param(FCommandLine::Get(),TEXT("BattleAreaSmoke")));
   if(InjectedFailure || !CreateBody(E,NewHost,B))
   {
    DestroyBody(B);for(auto& Pair:Staged) DestroyBody(Pair.Value);NewHost->Destroy();
-   Error=TEXT("Could not stage representations; battle retained");return false;
+   Error=TEXT("Could not stage representations; restore aborted");return false;
   }
   Staged.Add(E.State.UnitID,B);
  }
  // No further fallible validation after this transaction boundary.
+ CoverApproaches.Reset();FirePositions.Reset();
+ SuppressionZeroAt.Reset();
+ Stances.Reset();StanceLockedUntil.Reset();
  PC->ResetMatchControl();
  const bool UseVAT=bDisplayLODEnabled;
  if(VAT)VAT->ResetBodies();
@@ -142,6 +144,9 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
   U.CoverFirstBreak=U.CoverFirstBreak>0?FMath::Max(.001,Now+U.CoverFirstBreak-2.5):0;U.SoldierStalledSince=U.SoldierStalledSince>0?FMath::Max(.001,Now-U.SoldierStalledSince):0;
   U.CoverSlot=INDEX_NONE;U.AimStableSince=-1;U.MoveRetries=0;U.Role=EBattleRole::Independent;U.CoordinatedTarget=INDEX_NONE;
   U.Action=U.IsAlive()?EBattleAction::Idle:EBattleAction::Dead;U.DecisionReason=TEXT("RESTORED / REVALIDATE PATH");
+  if(Save->CombatStateVersion<3&&BattleTactics::SPGAmmoEnabled())
+   for(const auto& Squad:Save->Squads)if(Squad.SquadID==U.SquadID&&Squad.SquadType==BattleSquadType::SPGun)
+    U.SPGAmmo=FMath::Clamp(GetDefault<UBattleTuning>()->SPGInitialAmmo,0,FMath::Max(0,GetDefault<UBattleTuning>()->SPGAmmoCapacity));
   Records.Add(U);
  }
  TArray<FBattleSquadState> Squads=Save->Squads;
@@ -169,8 +174,20 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  }
  // Vehicles: rebuild their bodies (wide capsule, placeholder shapes) before any path is planned.
  VehicleIDs.Reset();Turrets.Reset();ExoLooks.Reset();VehicleSightCache.Reset();VehicleOrders.Reset();
- // Indirect fire is not saved: restored units start unset and loaded (the gun), shells in flight are dropped.
+ // Revision 0 saves have no artillery state. Revision 1 restores relative clocks and launch order.
  Artillery.Reset();ArtilleryShells.Reset();
+ for(const auto& Pair:Save->SavedArtillery)
+ {
+  const auto& E=Pair.Value;FArtillery A;
+  A.StillSince=E.bSettingUp?Now:-1.;A.SetupCredit=E.SetupElapsed;
+  A.ReadyAt=Now+E.ReloadRemaining;A.NextPick=Now+E.PickRemaining;
+  A.Shots=E.Shots;A.TargetKey=E.TargetKey;A.Aim=E.Aim;A.bHasTarget=E.bHasTarget;A.bBase=E.bBase;Artillery.Add(Pair.Key,A);
+ }
+ for(const auto& E:Save->SavedArtilleryShells)
+ {
+  FArtilleryShell Shell;Shell.ShooterID=E.ShooterID;Shell.Team=E.Team;Shell.ShooterType=E.ShooterType;
+  Shell.bSPG=E.bSPG;Shell.At=E.At;Shell.Remaining=E.Remaining;ArtilleryShells.Add(Shell);
+ }
  for(const auto& S:Squads)if(S.CommandStatus==EBattleCommandStatus::Active&&BattleSquadType::IsVehicle(S.SquadType))ConfigureVehicle(S.LeaderUnitID);
  for(const auto& S:Squads)ApplySquadLook(S.SquadID);
  for(const auto& U:Records) if(!U.IsAlive()) OnDeath(U.UnitID);

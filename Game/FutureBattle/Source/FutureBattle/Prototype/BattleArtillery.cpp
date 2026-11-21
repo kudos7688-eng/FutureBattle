@@ -6,14 +6,107 @@
 // after their flight time, so a target may have moved away. The old support strike (BattleSupport.cpp, the old all-Actor FastMatch) is
 // not reused: it works on Actors and a team-wide credit budget; only its idea (a delayed impact at an observed position) is kept.
 #include "BattleLeaderRuntime.h"
+#include "BattleTactics.h"
 #include "BattleState.h"
 #include "BattleMatch.h"
 #include "BattlePerception.h"
 #include "BattleRanges.h"
+#include "BattleSquadTactics.h"
+#include "BattleTactics.h"
 #include "BattleSuppression.h"
 #include "BattleUnit.h"
 #include "DrawDebugHelpers.h"
 #include "FutureBattle.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "Math/RandomStream.h"
+#include "BattleFieldLayout.h"
+#include "BattleVehicleNavMesh.h"
+#include "NavigationSystem.h"
+#include "EngineUtils.h"
+
+bool BattleTactics::ArtilleryObservedEnabled()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryObserved="),V);return V!=0;}();
+ return On;
+}
+
+bool BattleTactics::VehicleOrderHere()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleVehicleOrderHere="),V);return V!=0;}();
+ return On;
+}
+
+bool BattleTactics::VehicleHitCover()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleVehicleHitCover="),V);return V==1;}();
+ return On;
+}
+
+bool BattleTactics::TankGunFlash()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleTankGunFlash="),V);return V==1;}();
+ return On;
+}
+
+bool BattleTactics::ArtilleryFlash()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryFlash="),V);return V==1;}();
+ return On;
+}
+
+bool BattleTactics::ArtilleryPosts()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryPosts="),V);return V==1;}();
+ return On;
+}
+
+int32 BattleTactics::AreaSPGCost()
+{
+ static int32 OverrideCost=35;
+ static const bool HasOverride=FParse::Value(FCommandLine::Get(),TEXT("BattleAreaSPGCost="),OverrideCost);
+ return FMath::Clamp(HasOverride?OverrideCost:GetDefault<UBattleTuning>()->AreaSPGCost,1,200);
+}
+
+float BattleTactics::SPGRange()
+{
+ static float OverrideRange=GetDefault<UBattleTuning>()->SPGRange;
+ static const bool HasOverride=FParse::Value(FCommandLine::Get(),TEXT("BattleSPGRange="),OverrideRange);
+ const auto* RangeTuning=GetDefault<UBattleTuning>();
+ // Preserve the raw config without an override, including the original spread reference.
+ return HasOverride?FMath::Clamp(OverrideRange,FMath::Max(0.f,RangeTuning->SPGMinRange)+100.f,200000.f):RangeTuning->SPGRange;
+}
+
+namespace { int32 SaveReloadBoundarySmokeOverride=-1; }
+bool BattleTactics::SaveReloadBoundary()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSaveReloadBoundary="),V);return V==1;}();
+ return SaveReloadBoundarySmokeOverride>=0?SaveReloadBoundarySmokeOverride==1:On;
+}
+int32 BattleTactics::OverrideSaveReloadBoundaryForSmoke(int32 Value)
+{
+ const int32 Previous=SaveReloadBoundarySmokeOverride;
+ if(FParse::Param(FCommandLine::Get(),TEXT("BattleMixedSaveSmoke")))SaveReloadBoundarySmokeOverride=FMath::Clamp(Value,-1,1);
+ return Previous;
+}
+
+bool BattleTactics::SPGAmmoEnabled()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSPGAmmo="),V);return V!=0;}();
+ return On;
+}
+
+bool BattleTactics::BlastOcclusionEnabled()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleBlastOcclusion="),V);return V!=0;}();
+ return On;
+}
+
+bool BattleTactics::ArtilleryClustersEnabled()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryClusters="),V);return V!=0;}();
+ return On;
+}
 
 bool UBattleLeaderRuntime::IsArtillery(int32 ID) const
 {
@@ -30,9 +123,9 @@ float UBattleLeaderRuntime::ArtilleryMinRange(bool bSPG) const
 
 float UBattleLeaderRuntime::ArtilleryMaxRange(bool bSPG) const
 {
- // Mortar: 300 m, 400 m with the range profile (map E). Gun: 1000 m on every map.
+ // Mortar: 300 m, 400 m with the range profile (map E). Gun: configured 1000 m unless overridden for the trial.
  const auto* T=GetDefault<UBattleTuning>();
- const float Range=bSPG?T->SPGRange:(BattleRanges::Get().bActive?T->MortarRangeProfile:T->MortarRange);
+ const float Range=bSPG?BattleTactics::SPGRange():(BattleRanges::Get().bActive?T->MortarRangeProfile:T->MortarRange);
  return FMath::Max(ArtilleryMinRange(bSPG)+100.f,Range);
 }
 
@@ -46,7 +139,7 @@ float UBattleLeaderRuntime::ArtillerySpread(bool bSPG,double Distance) const
 {
  // The landing circle grows with distance: MortarSpread at MortarRange (8 m at 300 m), SPGSpread at SPGRange (15 m at 1000 m).
  const auto* T=GetDefault<UBattleTuning>();
- const float At=FMath::Max(0.f,bSPG?T->SPGSpread:T->MortarSpread),Reference=FMath::Max(100.f,bSPG?T->SPGRange:T->MortarRange);
+ const float At=FMath::Max(0.f,bSPG?T->SPGSpread:T->MortarSpread),Reference=FMath::Max(100.f,bSPG?BattleTactics::SPGRange():T->MortarRange);
  return At*float(FMath::Max(0.0,Distance))/Reference;
 }
 
@@ -102,44 +195,169 @@ bool UBattleLeaderRuntime::AllyNear(int32 Team,const FVector& At,double Radius) 
  return false;
 }
 
-bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld)
+namespace BattleGroupFire
 {
- bBase=false;bFriendlyHeld=false;
+ // Group fire support (trial -BattleGroupFireSupport=1, user approval 2026-11-21; ROADMAP "群に入れた自走砲・迫撃砲の支援").
+ // Default 1 by user decision 2026-11-21 (unmeasured: the standard matches have no artillery). The trial team only with -BattleAreaTrialTeam.
+ bool On(int32 Team){static const int32 V=[]{int32 X=1;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupFireSupport="),X);return X;}();const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;return V!=0&&(Trial<0||Trial==Team);}
+ constexpr double TroubleNear=4000., HelpRadius=6000., RallyRadius=8000.;
+ constexpr double TroubleBonus=100., RallyBonus=50.;
+}
+
+namespace {
+template<typename Candidate,typename Safety>
+int32 FirstSafeArtillery(const TArray<Candidate>& Candidates,bool Unlimited,Safety IsSafe)
+{
+ for(int32 I=0;I<Candidates.Num()&&(Unlimited||I<8);++I)if(IsSafe(Candidates[I]))return I;
+ return INDEX_NONE;
+}
+
+TArray<UBattleMatch::FArtilleryCluster> BuildArtilleryClusters(TArray<TPair<int32,FVector>> Soldiers,double Radius,int32 Minimum)
+{
+ // Stable accumulation order, independent of TMap insertion order and CPU timing.
+ Soldiers.Sort([](const auto& A,const auto& B){return A.Key<B.Key;});
+ TArray<UBattleMatch::FArtilleryCluster> Result;
+ TMap<FString,int32> ByMembers;
+ for(const auto& Seed:Soldiers)
+ {
+  FVector Sum=FVector::ZeroVector;int32 Count=0;FString Members;
+  for(const auto& Other:Soldiers)if(FVector::DistSquared2D(Seed.Value,Other.Value)<=Radius*Radius)
+  {Sum+=Other.Value;++Count;Members+=FString::FromInt(Other.Key)+TEXT(",");}
+  if(Count<Minimum)continue;
+  if(const int32* Existing=ByMembers.Find(Members)){Result[*Existing].Anchors.Add(Seed.Key);continue;}
+  UBattleMatch::FArtilleryCluster C;C.At=Sum/double(Count);C.Count=Count;C.Anchors.Add(Seed.Key);
+  ByMembers.Add(Members,Result.Num());Result.Add(MoveTemp(C));
+ }
+ return Result;
+}
+}
+
+const TArray<UBattleMatch::FArtilleryCluster>& UBattleMatch::AreaArtilleryClusters(int32 Team,bool bSPG) const
+{
+ const auto& V=AreaIntelView(Team);const int32 Kind=bSPG?1:0;
+ if(!V.bClustersBuilt[Kind])
+ {
+  const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+  TArray<TPair<int32,FVector>> Soldiers;
+  for(int32 I=0;I<V.Enemies.Num();++I)if(!(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(V.ObservedType(V.EnemyKeys[I])):V.EnemyKeys[I]>0&&R->IsVehicle(V.EnemyKeys[I])))
+   Soldiers.Emplace(V.EnemyKeys[I],V.Enemies[I]);
+  V.Clusters[Kind]=BuildArtilleryClusters(MoveTemp(Soldiers),R->ArtilleryBlastRadius(bSPG),FMath::Max(1,GetDefault<UBattleTuning>()->ArtilleryMinCluster));
+  V.bClustersBuilt[Kind]=true;
+ }
+ return V.Clusters[Kind];
+}
+
+bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey,bool bTeamClusters,double Now,const TMap<int32,uint8>* KnownTypes)
+{
+ bBase=false;bFriendlyHeld=false;if(TargetKey)*TargetKey=INDEX_NONE;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);if(!U||!U->IsAlive())return false;
  const auto* T=GetDefault<UBattleTuning>();const bool bSPG=IsSPG(ID);
  const FVector Pos=Position(ID);
+ if(BattleTactics::ArtilleryPosts()&&!bSPG&&!GetWorld()->GetSubsystem<UBattleMatch>()->AtArtilleryPost(U->Team,Pos))return false;
  const double Min2=FMath::Square(double(ArtilleryMinRange(bSPG))),Max2=FMath::Square(double(ArtilleryMaxRange(bSPG)));
  const double Blast=ArtilleryBlastRadius(bSPG),Blast2=Blast*Blast;
  // Soldiers only: the explosion does not hurt vehicles (a gun's direct hit on one is luck, not a plan).
  TArray<TPair<int32,FVector>> Soldiers;
- for(const auto& K:Known)if(!(K.Key>0&&IsVehicle(K.Key)))Soldiers.Add(TPair<int32,FVector>(K.Key,K.Value));
+ if(!BattleTactics::ArtilleryClustersEnabled()||!bTeamClusters)
+ for(const auto& K:Known)
+ {
+  const uint8* KnownType=BattleTactics::ObservedArmour()&&KnownTypes?KnownTypes->Find(K.Key):nullptr;
+  if(!(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(KnownType?*KnownType:uint8(255)):K.Key>0&&IsVehicle(K.Key)))Soldiers.Add(TPair<int32,FVector>(K.Key,K.Value));
+ }
  // A candidate per known soldier: the centre of the known soldiers within the blast radius of him, worth a shell when it holds
  // ArtilleryMinCluster or more and lies within range. More soldiers first, then nearer.
- struct FCandidate{int32 Key;FVector At;double Score;};
+ struct FCandidate{int32 Key;FVector At;double Score;int32 Helped=INDEX_NONE;};
  TArray<FCandidate> Candidates;
+ if(BattleTactics::ArtilleryClustersEnabled())
+ {
+  const auto* M=GetWorld()->GetSubsystem<UBattleMatch>();
+  TArray<UBattleMatch::FArtilleryCluster> Local;
+  if(!bTeamClusters)Local=BuildArtilleryClusters(Soldiers,Blast,FMath::Max(1,T->ArtilleryMinCluster));
+  const auto& Shared=bTeamClusters?M->AreaArtilleryClusters(U->Team,bSPG):Local;
+  const auto* Squad=Store->FindSquad(U->SquadID);
+  const bool SupportAim=BattleTactics::WeaponOrderGateEnabled()&&Squad&&Squad->TacticalPlan.Action==EBattleSquadTactic::Support;
+  for(const auto& C:Shared)
+  {
+   for(int32 Key:C.Anchors)
+   {
+    const FVector* Anchor=Known.Find(Key);if(!Anchor)continue;
+    const FVector Center=SupportAim?*Anchor:C.At;const double D2=FVector::DistSquared2D(Pos,Center);
+    if(D2<Min2||D2>Max2)continue;
+    if(BattleTactics::WeaponOrderGateEnabled()&&(!WeaponOrderAllows(ID,Key,*Anchor)||!WeaponOrderAllows(ID,Key,Center)))continue;
+    Candidates.Add({Key,Center,double(C.Count)-FMath::Sqrt(D2)/1.e6});
+    // Identical member sets have one centroid; support must keep its specifically permitted anchor.
+    break;
+   }
+  }
+ }
+ else
+ {
  for(const auto& K:Soldiers)
  {
+  if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,K.Key,K.Value))continue;
   int32 Around=0;FVector Sum=FVector::ZeroVector;
   for(const auto& O:Soldiers)if(FVector::DistSquared2D(O.Value,K.Value)<=Blast2){++Around;Sum+=O.Value;}
   if(Around<FMath::Max(1,T->ArtilleryMinCluster))continue;
-  const FVector Center=Sum/double(Around);const double D2=FVector::DistSquared2D(Pos,Center);
+  const auto* Squad=Store->FindSquad(U->SquadID);
+  const bool SupportAim=BattleTactics::WeaponOrderGateEnabled()&&Squad&&Squad->TacticalPlan.Action==EBattleSquadTactic::Support;
+  const FVector Center=SupportAim?K.Value:Sum/double(Around);const double D2=FVector::DistSquared2D(Pos,Center);
   if(D2<Min2||D2>Max2)continue;
+  if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,K.Key,Center))continue;
   Candidates.Add({K.Key,Center,double(Around)-FMath::Sqrt(D2)/1.e6});
+ }
+ }
+ // Group fire support: a mortar or gun in a group shoots first at known soldiers near the group's squads in trouble (damage in the last
+ // 5 s, a suppressed leader, or a known soldier within TroubleNear of the leader); with none in trouble, near the rally point of an attack
+ // or surprise group. Own squads' state and known enemies only.
+ if(BattleGroupFire::On(U->Team))if(const auto* GM=GetWorld()->GetSubsystem<UBattleMatch>();GM&&GM->bArea)if(const auto* G=GM->Groups.Find(GM->GroupOf(U->SquadID)))
+ {
+  using namespace BattleGroupFire;
+  TArray<TPair<int32,FVector>> Trouble;const auto* Tactics=GetWorld()->GetSubsystem<UBattleSquadTactics>();
+  for(int32 SID:G->Squads)if(SID!=U->SquadID)if(const auto* S=Store->FindSquad(SID))if(const auto* Lead=Store->Find(S->LeaderUnitID);Lead&&Lead->IsAlive())
+  {
+   const FVector P=Position(S->LeaderUnitID);
+   bool bTrouble=Suppression(S->LeaderUnitID,Now)>=.5f;
+   if(const auto* O=Tactics?Tactics->Find(SID):nullptr)bTrouble|=O->RecentDamage>0.f;
+   for(const auto& K:Known)if(!bTrouble)
+   {
+    const uint8* TroubleKnownType=BattleTactics::ObservedArmour()&&KnownTypes?KnownTypes->Find(K.Key):nullptr;
+    const bool bKnownVehicle=BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(TroubleKnownType?*TroubleKnownType:uint8(255)):K.Key>0&&IsVehicle(K.Key);
+    if(!bKnownVehicle)bTrouble=FVector::DistSquared2D(K.Value,P)<=FMath::Square(TroubleNear);
+   }
+   if(bTrouble)Trouble.Add(TPair<int32,FVector>(SID,P));
+  }
+  for(auto& C:Candidates)
+  {
+   if(Trouble.Num()){for(const auto& H:Trouble)if(FVector::DistSquared2D(C.At,H.Value)<=FMath::Square(HelpRadius)){C.Score+=TroubleBonus;C.Helped=H.Key;break;}}
+   else if(G->Kind!=1&&FVector::DistSquared2D(C.At,G->Rally)<=FMath::Square(RallyRadius))C.Score+=RallyBonus;
+  }
  }
  Candidates.Sort([](const FCandidate& A,const FCandidate& B){return A.Score!=B.Score?A.Score>B.Score:A.Key<B.Key;});
  // Never where the blast plus the landing spread may reach an own unit.
- for(int32 I=0;I<Candidates.Num()&&I<8;++I)
+ const int32 Selected=FirstSafeArtillery(Candidates,BattleTactics::ArtilleryClustersEnabled(),[&](const FCandidate& C)
  {
-  const auto& C=Candidates[I];
-  if(AllyNear(U->Team,C.At,Blast+ArtillerySpread(bSPG,FVector::Dist2D(Pos,C.At)))){bFriendlyHeld=true;continue;}
-  Aim=C.At;return true;
+  if(AllyNear(U->Team,C.At,Blast+ArtillerySpread(bSPG,FVector::Dist2D(Pos,C.At)))){bFriendlyHeld=true;return false;}
+  return true;
+ });
+ if(Selected!=INDEX_NONE)
+ {
+  const auto& C=Candidates[Selected];Aim=C.At;if(TargetKey)*TargetKey=C.Key;
+  if(C.Helped!=INDEX_NONE)
+  {
+   ++ArtilleryGroupAims;
+   if(const int32* Last=ArtillerySupportSquad.Find(ID);!Last||*Last!=C.Helped)
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_FIRE unit=%d squad=%d helps=%d aim=(%.0f,%.0f) spg=%d"),ID,U->SquadID,C.Helped,Aim.X,Aim.Y,bSPG?1:0);
+   ArtillerySupportSquad.Add(ID,C.Helped);
+  }
+  else ArtillerySupportSquad.Remove(ID);
+  return true;
  }
  // The enemy home: in range and seen by the unit itself or by its team (bHomeCovered), like the tank gun.
  const auto* M=GetWorld()->GetSubsystem<UBattleMatch>();const int32 Enemy=1-U->Team;
  if(M&&M->bArea&&M->BaseActors.IsValidIndex(Enemy)&&M->BaseActors[Enemy]&&M->Area.BaseHP.IsValidIndex(Enemy)&&M->Area.BaseHP[Enemy]>0)
  {
   const FVector Home=M->BaseActors[Enemy]->GetActorLocation();const double D2=FVector::DistSquared2D(Pos,Home);
-  if(D2>=Min2&&D2<=Max2&&(M->AreaIntelView(U->Team).bHomeCovered||M->AreaVisible(ID,Home,M->BaseActors[Enemy])))
+  if((!BattleTactics::WeaponOrderGateEnabled()||WeaponOrderAllows(ID,INDEX_NONE,Home))&&D2>=Min2&&D2<=Max2&&(BattleTactics::ArtilleryObservedEnabled()?M->ArtilleryHomeObserved(U->Team):(M->AreaIntelView(U->Team).bHomeCovered||M->AreaVisible(ID,Home,M->BaseActors[Enemy]))))
   {
    if(AllyNear(U->Team,Home,Blast+ArtillerySpread(bSPG,FMath::Sqrt(D2))))bFriendlyHeld=true;
    else{Aim=Home;bBase=true;return true;}
@@ -154,11 +372,13 @@ bool UBattleLeaderRuntime::StepArtillery(int32 ID,double Now,bool bMoving,FVecto
  if(!U||!U->IsAlive()){Artillery.Remove(ID);return false;}
  const auto* T=GetDefault<UBattleTuning>();const bool bSPG=IsSPG(ID);
  auto& A=Artillery.FindOrAdd(ID);
- // Times from a later clock (a restore clears this state, so these only guard against stale entries).
+ if(BattleTactics::ArtilleryPosts()&&!bSPG&&!GetWorld()->GetSubsystem<UBattleMatch>()->AtArtilleryPost(U->Team,Position(ID)))
+ {A.StillSince=-1;A.SetupCredit=0;A.bHasTarget=false;return false;}
+ // Guard stale entries; restore rebases the clocks and carries elapsed setup separately.
  if(A.ReadyAt>Now+FMath::Max(0.f,T->SPGReload)+1.)A.ReadyAt=Now;
  if(A.StillSince>Now)A.StillSince=-1;
  // Moving undoes the set-up (the target is kept until the next pick).
- if(bMoving){A.StillSince=-1;return false;}
+ if(bMoving){A.StillSince=-1;A.SetupCredit=0;return false;}
  if(A.StillSince<0)A.StillSince=Now;
  auto* M=GetWorld()->GetSubsystem<UBattleMatch>();
  if(Now>=A.NextPick&&M&&M->bArea&&M->Phase==EBattleMatchPhase::Combat)
@@ -166,21 +386,25 @@ bool UBattleLeaderRuntime::StepArtillery(int32 ID,double Now,bool bMoving,FVecto
   const double PickStart=FPlatformTime::Seconds();
   A.NextPick=Now+FMath::Max(.1f,T->ArtilleryPickInterval);++ArtilleryPicks;
   // Known enemies: the unit's own visible contacts, then its team's knowledge (one entry per key).
-  TMap<int32,FVector> Known;
+  TMap<int32,FVector> Known;TMap<int32,uint8> KnownTypes;
+  if(!BattleTactics::ArtilleryClustersEnabled())
   if(const auto* Contacts=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(ID))
-   for(const auto& C:*Contacts)if(C.Value.bVisible&&!C.Value.bShared)Known.Add(C.Key,C.Value.LastKnownPosition);
+   for(const auto& C:*Contacts)if(C.Value.bVisible&&!C.Value.bShared)
+   {Known.Add(C.Key,C.Value.LastKnownPosition);if(BattleTactics::ObservedArmour())KnownTypes.Add(C.Key,C.Value.ObservedSquadType);}
   const auto& V=M->AreaIntelView(U->Team);
-  for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)if(!Known.Contains(V.EnemyKeys[I]))Known.Add(V.EnemyKeys[I],V.Enemies[I]);
+  for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)if(!Known.Contains(V.EnemyKeys[I]))
+  {Known.Add(V.EnemyKeys[I],V.Enemies[I]);if(BattleTactics::ObservedArmour())KnownTypes.Add(V.EnemyKeys[I],V.ObservedType(V.EnemyKeys[I]));}
   bool bHeld=false;
-  A.bHasTarget=PickArtilleryAim(ID,Known,A.Aim,A.bBase,bHeld);
+  A.bHasTarget=PickArtilleryAim(ID,Known,A.Aim,A.bBase,bHeld,&A.TargetKey,BattleTactics::ArtilleryClustersEnabled(),Now,BattleTactics::ObservedArmour()?&KnownTypes:nullptr);
   if(bHeld)++ArtilleryFriendlyHolds;
   ArtilleryMs+=(FPlatformTime::Seconds()-PickStart)*1000.;
  }
  if(!A.bHasTarget)return false;
+ if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,A.TargetKey,A.Aim)){A.bHasTarget=false;A.NextPick=Now;return false;}
  Direction=(A.Aim-Position(ID)).GetSafeNormal2D();
  if(Direction.IsNearlyZero())return false;
  const float Setup=FMath::Max(0.f,bSPG?T->SPGSetupSeconds:T->MortarSetupSeconds);
- if(Now-A.StillSince>=Setup)
+ if(Now-A.StillSince+A.SetupCredit>=Setup)
  {
   bool bReady=false;
   if(bSPG)
@@ -201,10 +425,20 @@ bool UBattleLeaderRuntime::FireArtillery(int32 ID,const FVector& Aim,double Now)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
  if(!U||!U->IsAlive())return false;
+ const auto* Cached=Artillery.Find(ID);
+ if(BattleTactics::ArtilleryObservedEnabled())
+ {
+  const auto* M=GetWorld()->GetSubsystem<UBattleMatch>();const int32 Enemy=1-U->Team;
+  const bool AtHome=M&&M->BaseActors.IsValidIndex(Enemy)&&M->BaseActors[Enemy]&&FVector::DistSquared(Aim,M->BaseActors[Enemy]->GetActorLocation())<1.;
+  if(((Cached&&Cached->bBase)||AtHome)&&(!M||!M->ArtilleryHomeObserved(U->Team)))return false;
+ }
+ if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,Cached?Cached->TargetKey:INDEX_NONE,Aim))return false;
  const auto* T=GetDefault<UBattleTuning>();const bool bSPG=IsSPG(ID);
  if(!bSPG&&U->Weapon!=EBattleWeapon::Mortar)return false;
+ if(BattleTactics::ArtilleryPosts()&&!bSPG&&!GetWorld()->GetSubsystem<UBattleMatch>()->AtArtilleryPost(U->Team,Position(ID)))return false;
+ if(BattleTactics::ArtilleryClustersEnabled()&&AllyNear(U->Team,Aim,ArtilleryBlastRadius(bSPG)+ArtillerySpread(bSPG,FVector::Dist2D(Position(ID),Aim))))return false;
  auto& A=Artillery.FindOrAdd(ID);
- if(bSPG){if(Now<A.ReadyAt)return false;A.ReadyAt=Now+FMath::Max(.5f,T->SPGReload);}
+ if(bSPG){if(Now<A.ReadyAt||!Store->UseSPGAmmo(ID))return false;A.ReadyAt=Now+FMath::Max(.5f,T->SPGReload);}
  else if(!Store->ConsumeShot(ID,Now,T->ShotInterval(EBattleWeapon::Mortar,false)))return false;
  U=Store->Find(ID);
  const FVector Start=Position(ID);const double Distance=FVector::Dist2D(Start,Aim);
@@ -216,6 +450,37 @@ bool UBattleLeaderRuntime::FireArtillery(int32 ID,const FVector& Aim,double Now)
  const auto* SS=Store->FindSquad(U->SquadID);Shell.ShooterType=SS?SS->SquadType:0;
  Shell.Remaining=float(Distance/FMath::Max(100.f,bSPG?T->SPGShellSpeed:T->MortarShellSpeed));
  ArtilleryShells.Add(Shell);
+ if(BattleTactics::ArtilleryFlash()&&U->Team>=0&&U->Team<2)
+ {
+  if(auto* RevealMatch=GetWorld()->GetSubsystem<UBattleMatch>())
+  {
+   const int32 RevealTeam=1-U->Team;
+   TArray<int32> RevealSquads;
+   for(const auto& RevealSquad:Store->GetSquads())
+    if(RevealSquad.Value.Team==RevealTeam&&RevealSquad.Value.CommandStatus==EBattleCommandStatus::Active)RevealSquads.Add(RevealSquad.Key);
+   RevealSquads.Sort();
+   for(int32 RevealSquadID:RevealSquads)
+   {
+    const auto* RevealSquadState=Store->FindSquad(RevealSquadID);
+    const int32 RevealLeader=RevealSquadState->LeaderUnitID;
+    const auto* RevealUnit=Store->Find(RevealLeader);
+    if(!RevealUnit||!RevealUnit->IsAlive()||RevealUnit->Team!=RevealTeam)continue;
+    const double RevealDistanceSquared=FVector::DistSquared(Position(RevealLeader),Start);
+    if(RevealDistanceSquared>FMath::Square(150000.))continue;
+    // Sound and smoke: no LOS trace. Independent stream, uniform disc area.
+    FRandomStream RevealRandom(int32(uint32(ID)*2654435761u+uint32(A.Shots)*40503u+15401u));
+    auto& RevealReport=RevealMatch->FireReveals[RevealTeam].FindOrAdd(ID);
+    if(BattleTactics::ObservedArmour())RevealReport.ObservedSquadType=bSPG?BattleSquadType::SPGun:BattleSquadType::Mortar;
+    RevealReport.bArtillery=true;RevealReport.At=RevealMatch->Elapsed;RevealReport.Memory=30.;RevealReport.ErrorRadius=3000.f;
+    const float RevealAngle=RevealRandom.FRand()*2.f*PI;
+    const float RevealRadius=FMath::Sqrt(RevealRandom.FRand())*RevealReport.ErrorRadius;
+    RevealReport.Position=Start+FVector(FMath::Cos(RevealAngle)*RevealRadius,FMath::Sin(RevealAngle)*RevealRadius,0);
+    RevealMatch->IntelViews[RevealTeam].At=-1;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_FLASH team=%d shooter=%d type=%s observer=%d range=%.0f at=%s"),RevealTeam,ID,bSPG?TEXT("spg"):TEXT("mortar"),RevealLeader,FMath::Sqrt(RevealDistanceSquared),*RevealReport.Position.ToCompactString());
+    break;
+   }
+  }
+ }
  if(bSPG)++ArtilleryShotsSPG;else ++ArtilleryShotsMortar;
  if(SightExperiment.Started){++SightExperiment.Shots;if(SS&&SS->SquadType<BattleSquadType::Count&&U->Team>=0&&U->Team<2)++SightExperiment.TypeShots[U->Team][SS->SquadType];}
  if(U->Team==0||(Actor(ID)&&Actor(ID)->bRevealed))DrawDebugLine(GetWorld(),Start+FVector(0,0,60),Start+FVector(0,0,600),U->Team?FColor::Red:FColor::Yellow,false,.3f,0,4);
@@ -235,6 +500,16 @@ void UBattleLeaderRuntime::StepArtilleryShells(float Dt)
  for(const auto& Shell:Landed)ArtilleryImpact(Shell);
 }
 
+float UBattleLeaderRuntime::ArtilleryBlastTransmission(const FVector& From,const FVector& To) const
+{
+ if(!BattleTactics::BlastOcclusionEnabled())return 1.f;
+ // Body positions are capsule centres. Do not lift the blast above walls or roofs.
+ const FVector Offsets[]={FVector(0,0,-30),FVector::ZeroVector,FVector(0,0,30)};
+ int32 Clear=0;
+ for(const FVector& Offset:Offsets)Clear+=BattleTactics::HasTerrainLine(GetWorld(),From,To+Offset);
+ return float(Clear)/3.f;
+}
+
 int32 UBattleLeaderRuntime::ArtilleryImpact(const FArtilleryShell& Shell)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* M=GetWorld()->GetSubsystem<UBattleMatch>();const auto* T=GetDefault<UBattleTuning>();
@@ -248,17 +523,17 @@ int32 UBattleLeaderRuntime::ArtilleryImpact(const FArtilleryShell& Shell)
   const FVector P=Position(B.Key);
   if(IsVehicle(B.Key))
   {
-   if(Shell.bSPG&&FVector::Dist2D(P,Shell.At)<=BattleSquadType::VehicleRadius(VehicleType(B.Key))&&FMath::Abs(P.Z-Shell.At.Z)<=400.)Hits.Add(TPair<int32,float>(B.Key,MaxDamage));
+   if(Shell.bSPG&&FVector::Dist2D(P,Shell.At)<=BattleSquadType::VehicleRadius(VehicleType(B.Key))&&FMath::Abs(P.Z-Shell.At.Z)<=400.)Hits.Add(TPair<int32,float>(B.Key,MaxDamage*ArtilleryBlastTransmission(Shell.At,P)));
    continue;
   }
   const double D=FVector::Dist(P,Shell.At);if(D>Radius)continue;
-  const float Damage=float(MaxDamage*(1.0-D/Radius));if(Damage>0.f)Hits.Add(TPair<int32,float>(B.Key,Damage));
+  const float Damage=float(MaxDamage*(1.0-D/Radius))*ArtilleryBlastTransmission(Shell.At,P);if(Damage>0.f)Hits.Add(TPair<int32,float>(B.Key,Damage));
  }
  Hits.Sort([](const TPair<int32,float>& A,const TPair<int32,float>& B){return A.Key<B.Key;});
  int32 Damaged=0;
  for(const auto& H:Hits)
  {
-  const auto* Before=Store->Find(H.Key);if(!Before||!Before->IsAlive())continue;
+  const auto* Before=Store->Find(H.Key);if(!Before||!Before->IsAlive()||H.Value<=0.f)continue;
   const float BeforeHP=Before->HP;const int32 VictimTeam=Before->Team;const auto* VictimSquad=Store->FindSquad(Before->SquadID);const uint8 VictimType=VictimSquad?VictimSquad->SquadType:0;
   if(!Store->ApplyDamageFrom(H.Key,Team,H.Value,Shell.At,Shell.ShooterID,EBattleKillKind::Artillery))continue;
   ++Damaged;++ArtilleryHits;const bool Killed=!Store->Find(H.Key)->IsAlive();ArtilleryKills+=Killed;
@@ -275,10 +550,191 @@ int32 UBattleLeaderRuntime::ArtilleryImpact(const FArtilleryShell& Shell)
  if(M&&M->BaseActors.IsValidIndex(Enemy)&&M->BaseActors[Enemy])
  {
   const FBox Box=M->BaseActors[Enemy]->GetComponentsBoundingBox(true);
-  if(Box.IsValid&&Box.ComputeSquaredDistanceToPoint(Shell.At)<=FMath::Square(double(Radius))&&M->DamageBase(M->BaseActors[Enemy],Team,Shell.bSPG?T->SPGBaseDamage:T->MortarBaseDamage))++ArtilleryBaseHits;
+  if(Box.IsValid&&Box.ComputeSquaredDistanceToPoint(Shell.At)<=FMath::Square(double(Radius)))
+  {
+   const FVector Surface=Box.GetClosestPointTo(Shell.At);
+   const float Transmission=!BattleTactics::BlastOcclusionEnabled()?1.f:
+    (BattleTactics::HasTerrainLine(GetWorld(),Shell.At,Surface+(Shell.At-Surface).GetSafeNormal()*2.)?1.f:0.f);
+   if(Transmission>0.f&&M->DamageBase(M->BaseActors[Enemy],Team,(Shell.bSPG?T->SPGBaseDamage:T->MortarBaseDamage)*Transmission))++ArtilleryBaseHits;
+  }
  }
  const double Now=GetWorld()->GetTimeSeconds();
  SuppressNear(Team,Shell.At+FVector(0,0,300),Shell.At,Now,BattleSuppression::Tuning().SupportScale);
  if(Team==0||(Actor(Shell.ShooterID)&&Actor(Shell.ShooterID)->bRevealed))DrawDebugSphere(GetWorld(),Shell.At,Radius,10,Team?FColor::Red:FColor::Yellow,false,.5f,0,3);
  return Damaged;
+}
+
+int32 BattleTactics::ArtilleryTrialFlags()
+{
+ return (ArtilleryObservedEnabled()?1:0)|(SPGAmmoEnabled()?2:0)|(BlastOcclusionEnabled()?4:0)|(ArtilleryClustersEnabled()?8:0);
+}
+
+bool UBattleLeaderRuntime::ArtilleryClusterSmoke() const
+{
+ TArray<TPair<int32,FVector>> Input;
+ // Ten disjoint groups, deliberately more than the old eight-entry cutoff.
+ for(int32 I=0;I<10;++I){Input.Emplace(-100-I*2,FVector(I*1000,0,0));Input.Emplace(-101-I*2,FVector(I*1000+10,0,0));}
+ const auto A=BuildArtilleryClusters(Input,100.,2);
+ Input.Sort([](const auto& L,const auto& R){return L.Key>R.Key;});
+ const auto B=BuildArtilleryClusters(Input,100.,2);
+ if(A.Num()!=10||B.Num()!=10)return false;
+ // The first nine ranked candidates are unsafe; an unlimited search must still find the tenth.
+ auto Safe=[&](const UBattleMatch::FArtilleryCluster& C){return C.At==A.Last().At;};
+ if(FirstSafeArtillery(A,true,Safe)!=9||FirstSafeArtillery(A,false,Safe)!=INDEX_NONE)return false;
+ for(int32 I=0;I<A.Num();++I)if(A[I].At!=B[I].At||A[I].Anchors!=B[I].Anchors||A[I].Count!=2||A[I].Anchors.Num()!=2)return false;
+ return true;
+}
+
+// Public candidate posts: no random draws or navigation work outside initialization/restore.
+void UBattleMatch::GenerateArtilleryPosts()
+{
+ if(!BattleTactics::ArtilleryPosts())return;
+ ArtilleryRaids.Reset();MortarPostChoices.Reset();
+ for(int32 PostTeam=0;PostTeam<2;++PostTeam){ArtilleryPostPositions[PostTeam].Reset();ArtilleryPostEvidence[PostTeam].Init(-1.,3);}
+ auto* PostNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+ const ANavigationData* PostData=nullptr;
+ for(TActorIterator<ABattleVehicleNavMesh> PostNavIt(GetWorld());PostNavIt;++PostNavIt){PostData=*PostNavIt;break;}
+ const auto& PostHeights=BattleFieldLayout::Of(GetWorld()).Heights;
+ const FVector FieldCentre=(AreaHome(0)+AreaHome(1))*.5;
+ const bool MirrorPosts=BattleTactics::SymmetricStart(GetWorld());
+ const double PostFractions[3]={.3,.4,.5};
+ for(int32 PostTeam=0;PostTeam<(MirrorPosts?1:2);++PostTeam)
+ {
+  const FVector PostHome=AreaHome(PostTeam),PostAxis=FieldCentre-PostHome;
+  const double PostLength=PostAxis.Size2D();const FVector PostSide(-PostAxis.Y,PostAxis.X,0);
+  for(int32 PostIndex=0;PostIndex<3;++PostIndex)
+  {
+   const FVector RawPost=PostHome+PostAxis*PostFractions[PostIndex]+PostSide.GetSafeNormal2D()*((PostIndex-1)*.15*PostLength);
+   FVector GroundPost=RawPost,MirrorPost=FVector::ZeroVector;bool ProjectedPost=false;
+   for(int32 PostStep=0;PostStep<=10;++PostStep)
+   {
+    GroundPost=RawPost+(PostHome-RawPost).GetSafeNormal2D()*FMath::Min(double(PostStep)*1000.,FVector::Dist2D(RawPost,PostHome));
+    PostHeights.Lift(GroundPost);FNavLocation NavPost;
+    if(!PostNav||!PostData||!PostNav->ProjectPointToNavigation(GroundPost,NavPost,FVector(1500,1500,400),PostData))continue;
+    if(FVector::DotProduct(NavPost.Location-FieldCentre,PostHome-FieldCentre)<=0)continue;
+    if(MirrorPosts)
+    {
+     MirrorPost=FieldCentre*2.-NavPost.Location;MirrorPost.Z=0;PostHeights.Lift(MirrorPost);FNavLocation MirrorNav;
+     if(!PostNav->ProjectPointToNavigation(MirrorPost,MirrorNav,FVector(1500,1500,400),PostData)||FVector::DistSquared2D(MirrorNav.Location,MirrorPost)>1.)continue;
+     MirrorPost.Z=MirrorNav.Location.Z;
+    }
+    GroundPost=NavPost.Location;ProjectedPost=true;break;
+   }
+   // If no nav exists or all attempts fail, retain the last deterministic ground candidate and report it.
+   ArtilleryPostPositions[PostTeam].Add(GroundPost);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_POST team=%d index=%d at=%s projected=%d"),PostTeam,PostIndex,*GroundPost.ToCompactString(),ProjectedPost);
+   if(MirrorPosts)
+   {
+    if(!ProjectedPost){MirrorPost=FieldCentre*2.-GroundPost;MirrorPost.Z=0;PostHeights.Lift(MirrorPost);}
+    ArtilleryPostPositions[1].Add(MirrorPost);
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_POST team=1 index=%d at=%s projected=%d"),PostIndex,*MirrorPost.ToCompactString(),ProjectedPost);
+   }
+  }
+ }
+}
+
+bool UBattleMatch::AtArtilleryPost(int32 Team,const FVector& Position) const
+{
+ if(Team<0||Team>1)return false;
+ for(const FVector& GunPost:ArtilleryPostPositions[Team])if(FVector::DistSquared2D(Position,GunPost)<=FMath::Square(1500.))return true;
+ return false;
+}
+
+FVector UBattleMatch::ChooseMortarPost(int32 Team,int32 SquadID) const
+{
+ const auto* PostRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ const auto* PostSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SquadID);
+ const auto& OwnPosts=ArtilleryPostPositions[Team];if(!PostSquad||OwnPosts.IsEmpty())return AreaHome(Team);
+ const FVector MortarPosition=PostRuntime->Position(PostSquad->LeaderUnitID);
+ const double MortarMax=PostRuntime->ArtilleryMaxRange(false),MortarMin=PostRuntime->ArtilleryMinRange(false);
+ const auto& PostIntel=AreaIntelView(Team);TArray<double> PostScores;
+ int32 BestPost=0;
+ for(int32 CandidatePost=0;CandidatePost<OwnPosts.Num();++CandidatePost)
+ {
+  double PostScore=-FVector::Dist2D(MortarPosition,OwnPosts[CandidatePost])/100.;
+  for(const FVector& KnownEnemy:PostIntel.Enemies)
+  {
+   const double PostDistance=FVector::Dist2D(KnownEnemy,OwnPosts[CandidatePost]);
+   if(PostDistance>MortarMin&&PostDistance<=MortarMax)PostScore+=1000.;
+   if(PostDistance<=.6*MortarMax)PostScore-=1500.;
+  }
+  PostScores.Add(PostScore);if(PostScore>PostScores[BestPost])BestPost=CandidatePost;
+ }
+ if(const int32* PreviousPost=MortarPostChoices.Find(SquadID);PreviousPost&&PostScores.IsValidIndex(*PreviousPost)&&PostScores[*PreviousPost]>=PostScores[BestPost]-500.)BestPost=*PreviousPost;
+ MortarPostChoices.Add(SquadID,BestPost);return OwnPosts[BestPost];
+}
+
+void UBattleMatch::UpdateArtilleryRaids(int32 Team)
+{
+ if(!bArea||!BattleTactics::ArtilleryPosts())return;
+ const auto* RaidStore=GetWorld()->GetSubsystem<UBattleState>();const auto* RaidRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ const auto& EnemyPosts=ArtilleryPostPositions[1-Team];auto& EvidenceTimes=ArtilleryPostEvidence[Team];
+ const auto& RaidIntel=AreaIntelView(Team);
+ for(int32 EvidencePost=0;EvidencePost<EnemyPosts.Num();++EvidencePost)
+ {
+  double EvidenceAt=EvidenceTimes[EvidencePost];const TCHAR* EvidenceKind=TEXT("seen");
+  if(BattleTactics::ArtilleryFlash())
+  {
+   for(const auto& RaidFlash:FireReveals[Team])
+    if(RaidFlash.Value.bArtillery&&RaidFlash.Value.At<=Elapsed&&Elapsed-RaidFlash.Value.At<RaidFlash.Value.Memory&&
+       RaidFlash.Value.At>EvidenceAt&&FVector::DistSquared2D(RaidFlash.Value.Position,EnemyPosts[EvidencePost])<=FMath::Square(3000.))
+     {EvidenceAt=RaidFlash.Value.At;EvidenceKind=TEXT("flash");}
+  }
+  else for(const auto& DirectContact:RaidIntel.DirectEnemies)
+  {
+   const uint8* ObservedType=RaidIntel.EnemyTypes.Find(DirectContact.Key);
+   const double EvidenceRadius=ObservedType&&(*ObservedType==BattleSquadType::Mortar||*ObservedType==BattleSquadType::SPGun)?3000.:2000.;
+   if(FVector::DistSquared2D(DirectContact.Value,EnemyPosts[EvidencePost])<=FMath::Square(EvidenceRadius))EvidenceAt=FMath::Max(EvidenceAt,RaidIntel.At);
+  }
+  if(EvidenceAt>EvidenceTimes[EvidencePost])
+  {
+   EvidenceTimes[EvidencePost]=EvidenceAt;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_SUSPECT team=%d post=%d evidence=%s at=%.1f"),Team,EvidencePost,EvidenceKind,EvidenceAt);
+  }
+ }
+ bool HasRaid=false;
+ TArray<int32> RaidKeys;ArtilleryRaids.GetKeys(RaidKeys);RaidKeys.Sort();
+ for(int32 RaidSquadID:RaidKeys)
+ {
+  const auto* RaidSquad=RaidStore->FindSquad(RaidSquadID);if(RaidSquad&&RaidSquad->Team!=Team)continue;
+  const int32 RaidPostIndex=ArtilleryRaids[RaidSquadID];const TCHAR* RaidEnd=nullptr;
+  int32 RaidLiving=0;if(RaidSquad)for(int32 RaidMember:RaidSquad->Members)if(const auto* RaidUnit=RaidStore->Find(RaidMember);RaidUnit&&RaidUnit->IsAlive())++RaidLiving;
+  if(!RaidSquad||RaidSquad->CommandStatus!=EBattleCommandStatus::Active)RaidEnd=TEXT("inactive");
+  else if(RaidLiving*2<RaidSquad->Members.Num())RaidEnd=TEXT("losses");
+  else if(Team==0&&!RaidSquad->bPlayerDelegated)RaidEnd=TEXT("manual");
+  else if(!EvidenceTimes.IsValidIndex(RaidPostIndex)||EvidenceTimes[RaidPostIndex]<0||Elapsed-EvidenceTimes[RaidPostIndex]>=60.)RaidEnd=TEXT("expired");
+  else if(Area.HirePurpose.Contains(RaidSquadID)||IntelPurpose.Contains(RaidSquadID))RaidEnd=TEXT("purpose");
+  if(RaidEnd){UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID_END team=%d squad=%d reason=%s"),Team,RaidSquadID,RaidEnd);ArtilleryRaids.Remove(RaidSquadID);}
+  else HasRaid=true;
+ }
+ if(HasRaid)return;
+ int32 SuspectedPost=INDEX_NONE;
+ for(int32 SuspectIndex=0;SuspectIndex<EvidenceTimes.Num();++SuspectIndex)
+  if(EvidenceTimes[SuspectIndex]>=0&&Elapsed-EvidenceTimes[SuspectIndex]<60.&&(SuspectedPost==INDEX_NONE||EvidenceTimes[SuspectIndex]>EvidenceTimes[SuspectedPost]))SuspectedPost=SuspectIndex;
+ if(SuspectedPost==INDEX_NONE)return;
+ // User decision 2026-11-21: a raid on artillery is dangerous; send exoskeleton soldiers first (fast, shielded, launcher kills
+ // guns), armoured cars only when no exo is free; never rifle squads or heavy infantry.
+ int32 NearestRaider=INDEX_NONE,NearestRaidRank=MAX_int32;double NearestRaidDistance=DBL_MAX;int32 RaidSlot=0;
+ for(const auto& RaidPair:RaidStore->GetSquads())if(RaidPair.Value.Team==Team)
+ {
+  ++RaidSlot;const auto& CandidateSquad=RaidPair.Value;const uint8 RaidType=CandidateSquad.SquadType;
+  if(CandidateSquad.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!CandidateSquad.bPlayerDelegated)||
+     (RaidType!=BattleSquadType::Exo&&RaidType!=BattleSquadType::ArmoredCar)||
+     Area.HirePurpose.Contains(RaidPair.Key)||IntelPurpose.Contains(RaidPair.Key))continue;
+  if(const FPlayerRoute* RaidRoute=PlayerRoutes.Find(RaidPair.Key);RaidRoute&&RaidRoute->bMission)continue;
+  if(const auto* RaidGroup=Groups.Find(GroupOf(RaidPair.Key));RaidGroup&&GroupAIRun(*RaidGroup))continue;
+  bool RaidBase=false;if(BattleTactics::AreaStrategy().bEnabled)AreaStrategyTarget(RaidPair.Key,Team,RaidBase);else RaidBase=RaidSlot%5==0;
+  if(RaidBase)continue;
+  int32 CandidateLiving=0;for(int32 CandidateMember:CandidateSquad.Members)if(const auto* CandidateUnit=RaidStore->Find(CandidateMember);CandidateUnit&&CandidateUnit->IsAlive())++CandidateLiving;
+  if(CandidateLiving==0||CandidateLiving*2<CandidateSquad.Members.Num())continue;
+  const double RaidDistance=FVector::DistSquared2D(RaidRuntime->Position(CandidateSquad.LeaderUnitID),EnemyPosts[SuspectedPost]);
+  const int32 RaidRank=RaidType==BattleSquadType::Exo?0:1;
+  if(RaidRank<NearestRaidRank||(RaidRank==NearestRaidRank&&(RaidDistance<NearestRaidDistance||(RaidDistance==NearestRaidDistance&&(NearestRaider==INDEX_NONE||RaidPair.Key<NearestRaider)))))
+   {NearestRaider=RaidPair.Key;NearestRaidRank=RaidRank;NearestRaidDistance=RaidDistance;}
+ }
+ if(NearestRaider!=INDEX_NONE)
+ {
+  ArtilleryRaids.Add(NearestRaider,SuspectedPost);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID team=%d squad=%d post=%d"),Team,NearestRaider,SuspectedPost);
+ }
 }

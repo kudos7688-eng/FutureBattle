@@ -19,6 +19,7 @@
 #include "Camera/CameraTypes.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "BattleRagdoll.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
@@ -210,6 +211,12 @@ void ABattleUnit::Tick(float DeltaTime)
 		else ApplyDeath();
 		if (State->IsAlive() && bWeaponVisuals && !bTrialPose) UpdateWeaponPose(*State);
 	}
+	if (RagdollStage < 2 && GetWorld()->GetTimeSeconds() >= RagdollAt)
+	{
+		// The death clip ends bent over, still standing: the body falls the rest of the way under physics, then holds.
+		if (RagdollStage == 0 && !bCorpseHidden && BattleRagdoll::Start(GetMesh())) { RagdollStage = 1; RagdollAt = GetWorld()->GetTimeSeconds() + BattleRagdoll::SettleSeconds; }
+		else { BattleRagdoll::Settle(GetMesh()); RagdollStage = 2; }
+	}
 	if (TeamLabel->IsVisible()) if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
 		if (PC->PlayerCameraManager) TeamLabel->SetWorldRotation((PC->PlayerCameraManager->GetCameraLocation() - TeamLabel->GetComponentLocation()).Rotation());
@@ -296,6 +303,16 @@ void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequenc
 	LookIdle = Idle; LookMove = Move; LookCrouchIdle = CrouchIdle; LookCrouchMove = CrouchMove;
 	LookWeapon = Weapon; LookBone = Bone; LookGrip = Grip;
 	CurrentPose = nullptr;
+	if (!Idle)
+	{
+		// The look is gone and UpdateLookTilt no longer runs: drop its lean so the plain body stands upright.
+		LookVelShown = LookShotVelocity = FVector::ZeroVector;
+		if (!MeshTiltShown.Equals(FQuat::Identity, 1.e-4f))
+		{
+			MeshTiltShown = FQuat::Identity;
+			GetMesh()->SetRelativeRotation(FRotator(0, -90 + MeshYawShown, 0));
+		}
+	}
 	const bool bFirstPerson = IsPlayerControlled() && !bThirdPersonView;
 	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
 }
@@ -330,9 +347,7 @@ void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Pare
 	{
 		// Grip calibration against the bundled rifle idle pose. The simplified
 		// Quinn mesh has hand_r but omits the animation skeleton weapon_r bone.
-		const FTransform Hand(FRotator(-11.885756,-81.776576,16.174298),FVector(-16.823813,7.097377,139.904362));
-		const FTransform Gun(FRotator(0,180,0),FVector(-14.9,29.,143.5));
-		const FTransform Grip = Gun.GetRelativeTransform(Hand);
+		const FTransform Grip = BattleBodyAnim::RifleGrip();
 		Model->SetRelativeLocationAndRotation(Grip.GetLocation(),Grip.GetRotation());
 	}
 }
@@ -396,14 +411,24 @@ void ABattleUnit::UpdateLookTilt(bool bUpright)
 	const float Dt = GetWorld()->GetDeltaSeconds();
 	FVector Velocity = LookShotVelocity.IsNearlyZero() ? GetActorRotation().UnrotateVector(GetVelocity()) : LookShotVelocity;
 	Velocity.Z = 0.;
-	if (!bUpright) Velocity = FVector::ZeroVector;
-	LookVelShown = FMath::VInterpTo(LookVelShown, Velocity, Dt, 4.f);
-	// Degrees per full walking speed: 5 while cruising; starting adds up to 7 more, braking takes 7 back (about 2 back at a stop).
-	const float Speed = FMath::Max(GetCharacterMovement()->MaxWalkSpeed, 100.f);
-	const FVector Lean = ((LookVelShown * 5.f + (Velocity - LookVelShown) * 7.f) / Speed).GetClampedToMaxSize(10.f);
-	const FVector Up(0, 0, 1);
-	const FQuat Tilt = Lean.IsNearlyZero(.05) ? FQuat::Identity
-		: FQuat::FindBetweenNormals(Up, (Up + Lean.GetSafeNormal() * FMath::Tan(FMath::DegreesToRadians(Lean.Size()))).GetSafeNormal());
+	if (LookVelShown.ContainsNaN() || Velocity.ContainsNaN()) LookVelShown = Velocity = FVector::ZeroVector;
+	FQuat Tilt = FQuat::Identity;
+	if (!bUpright)
+	{
+		// Crouching, prone or in a stance change: no braking lean (that tipped the body backwards); ease straight back upright.
+		LookVelShown = FVector::ZeroVector;
+		Tilt = MeshTiltShown.Equals(FQuat::Identity, 1.e-3f) ? FQuat::Identity : FQuat::Slerp(MeshTiltShown, FQuat::Identity, FMath::Clamp(Dt * 8.f, 0.f, 1.f));
+	}
+	else
+	{
+		LookVelShown = FMath::VInterpTo(LookVelShown, Velocity, Dt, 4.f);
+		// Degrees per full walking speed: 5 while cruising; starting adds up to 7 more, braking takes 7 back (about 2 back at a stop).
+		const float Speed = FMath::Max(GetCharacterMovement()->MaxWalkSpeed, 100.f);
+		const FVector Lean = ((LookVelShown * 5.f + (Velocity - LookVelShown) * 7.f) / Speed).GetClampedToMaxSize(10.f);
+		const FVector Up(0, 0, 1);
+		if (!Lean.IsNearlyZero(.05))
+			Tilt = FQuat::FindBetweenNormals(Up, (Up + Lean.GetSafeNormal() * FMath::Tan(FMath::DegreesToRadians(Lean.Size()))).GetSafeNormal());
+	}
 	if (Tilt.Equals(MeshTiltShown, 1.e-4f)) return;
 	MeshTiltShown = Tilt;
 	GetMesh()->SetRelativeRotation(MeshTiltShown * FRotator(0, -90 + MeshYawShown, 0).Quaternion());
@@ -505,17 +530,21 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	else if (UAnimSequence* Blind = Leaders && Leaders->IsBlindFiring(UnitID, Now) ? BattleBlindFire::Clip(BattleBlindFire::IsOverTop(S)) : nullptr)
 		Body.SetUpper(Blind, 1.f);
 	else Body.SetUpper(nullptr, 0.f);
-	const FVector AimDir = IsPlayerControlled() ? GetControlRotation().Vector() : S.WeaponAimDirection;
+	const FVector AimDir = IsPlayerControlled() ? GetControlRotation().Vector() : Now - DisplayAimTime < .5 && !DisplayAim.IsNearlyZero() ? DisplayAim : S.WeaponAimDirection;
 	// An AI soldier's weapon direction keeps its last pitch until the aim turns far (UBattleState::UpdateAim): shown only while
 	// he fires (BattleBodyAnim::ReadySeconds after his last shot), else the body eases back level instead of staying bent over a stale aim.
 	const bool bShowPitch = IsPlayerControlled() || Now - LastVisualShot < ReadySeconds;
 	const float WantPitch = bShowPitch ? FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(AimDir.GetSafeNormal().Z, -1., 1.))) : 0.f;
-	ShownAimPitch = IsPlayerControlled() ? WantPitch : FMath::FInterpConstantTo(ShownAimPitch, WantPitch, GetWorld()->GetDeltaSeconds(), 60.f);
+	ShownAimPitch = IsPlayerControlled() ? WantPitch : FMath::FInterpConstantTo(ShownAimPitch, WantPitch, GetWorld()->GetDeltaSeconds(), bShowPitch ? 240.f : 60.f);
 	Body.SetAim(ShownAimPitch, bProne || bTransition || bRun ? 0.f : 1.f);
 	// One-shot overlays: recoil for each shot, a flinch when hit (from the side the shot came from).
 	if (LastVisualShot > ShownShot) { ShownShot = LastVisualShot; if (!bProne) Body.PlayOverlay(Get(EClip::Fire), .55f); }
-	if (ShownHP >= 0.f && S.HP < ShownHP - .01f && !bProne)
+	// A hit reaction at most every HitReactSeconds: under steady fire each hit restarted the flinch and the body stayed bent over.
+	if (ShownHP >= 0.f && S.HP < ShownHP - .01f && !bProne && Now - LastHitReact >= HitReactSeconds)
+	{
+		LastHitReact = Now;
 		Body.PlayOverlay(Hit(GetActorForwardVector(), Leaders ? Leaders->LastShotDirection(UnitID) : FVector::ZeroVector, UnitID + int32(Now * 10.)), 1.f);
+	}
 	ShownHP = S.HP;
 }
 
@@ -683,6 +712,7 @@ void ABattleUnit::ApplyDeath()
 	{
 		GetMesh()->SetRelativeScale3D(FVector(1.)); SetMeshYaw(0.f);
 		Body->SetUpper(nullptr, 0.f); Body->SetAim(0.f, 0.f); Body->SetBase(Death, false);
+		RagdollStage = 0; RagdollAt = GetWorld()->GetTimeSeconds() + Death->GetPlayLength();
 	}
 	else
 	{

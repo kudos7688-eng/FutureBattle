@@ -3,6 +3,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "BattleState.h"
+#include "InputKeyEventArgs.h"
 #include "BattleController.generated.h"
 
 class UCameraComponent;
@@ -10,6 +11,7 @@ class UInputAction;
 class UInputMappingContext;
 class ABattleUnit;
 struct FBattleSquadSummary;
+struct FBattleSquadListRow;
 struct FInputActionValue;
 
 UCLASS()
@@ -20,6 +22,9 @@ public:
 	ABattleCameraPawn();
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> Camera;
 	void Zoom(float Delta);
+	// Wheel zoom: scales the height by a factor (>1 out, <1 in), so the step grows with height and
+	// the whole range (1000 .. CameraMaxHeight, up to 160000) takes about 20 ticks instead of ~260.
+	void ZoomScale(float Factor);
 };
 
 // Command UI notification log (ROADMAP 2026-11-15 command UI design): events the player's side has observed, newest first,
@@ -39,18 +44,18 @@ struct FBattleNoticeLayout
 // Command bar (command UI 2026-11-16): buttons on the bottom panel that call the same actions as the keys.
 struct FBattleCommandBarLayout
 {
- FVector2D Origin=FVector2D::ZeroVector; float ButtonWidth=108, ButtonHeight=26, Gap=6; // 16 buttons: 1818 px wide (x 34..1852, inside the 1904 px panel at 1920)
- static constexpr int32 Count=16; // the 16th buys a supply team; // move, attack move, defend, hold, manual command, delegate to AI, buy a rifle squad, heavy infantry, a scout pair, an anti-tank team, a tank, an armoured car, a mortar team, a self-propelled gun
- // Route choice of the selected squads (BattlePlayerRoutes.cpp): a button of its own at the right end of the panel's top row, so
- // the bar's indices stay the orders and the purchases (more purchase buttons are added on other branches).
+ static constexpr int32 Count=16;
+ struct FButton { FVector2D Origin=FVector2D::ZeroVector; float Width=0, Scale=.85f; FString Caption; };
+ FButton Buttons[Count];
+ float ButtonHeight=26, PanelTop=0, SummaryY=0;
  FVector2D RouteOrigin=FVector2D::ZeroVector; float RouteWidth=176;
- static FBattleCommandBarLayout Make(FVector2D View){FBattleCommandBarLayout L;L.Origin=FVector2D(34,View.Y-90);L.RouteOrigin=FVector2D(View.X-34-L.RouteWidth,View.Y-122);return L;}
+ // Reserve the larger keyboard/pad label so changing input devices never moves a button.
+ static FBattleCommandBarLayout Make(FVector2D View,const UWorld* World,bool bPad=false);
  bool RouteAt(FVector2D P) const {return P.X>=RouteOrigin.X&&P.X<RouteOrigin.X+RouteWidth&&P.Y>=RouteOrigin.Y&&P.Y<RouteOrigin.Y+ButtonHeight;}
  int32 ButtonAt(FVector2D P) const
  {
-  if(P.Y<Origin.Y||P.Y>=Origin.Y+ButtonHeight||P.X<Origin.X) return INDEX_NONE;
-  const int32 I=FMath::FloorToInt((P.X-Origin.X)/(ButtonWidth+Gap));
-  return I<Count&&P.X<Origin.X+I*(ButtonWidth+Gap)+ButtonWidth?I:INDEX_NONE;
+  for(int32 I=0;I<Count;++I){const auto& B=Buttons[I];if(P.X>=B.Origin.X&&P.X<B.Origin.X+B.Width&&P.Y>=B.Origin.Y&&P.Y<B.Origin.Y+ButtonHeight)return I;}
+  return INDEX_NONE;
  }
 };
 
@@ -70,11 +75,20 @@ public:
  int32 SquadListScroll=0;
  bool SquadPanelAtPointer() const;
  void ScrollSquadList(int32 Delta);
- // Squad list view (command UI 2026-11-16): filter 0 all, 1 engaged, 2 home supply, 3 other active, 4 stopped;
- // sort 0 squad number, 1 heaviest losses first, 2 by nearest objective. The HUD and clicks both use SquadListRows().
+ // Squad list view (command UI 2026-11-16; tabs by group 2026-11-20, user proposal): filter 0 groups (each own group as a header row
+ // followed by its active squads), 1 ungrouped active squads, 2 stopped squads, 3 all squads. Sort (inside each group) 0 squad number,
+ // 1 heaviest losses first, 2 by nearest objective. The HUD and clicks both use SquadListRows(). Clicking a group header selects the group.
  uint8 SquadFilter=0, SquadSort=0;
- uint8 SquadCategory(const FBattleSquadSummary& Row) const;
- TArray<FBattleSquadSummary> SquadListRows() const;
+ uint8 SquadCategory(const FBattleSquadSummary& Row) const; // 0 front army, 1 attack army (other own groups), 2 unassigned, 3 stopped (never listed)
+ // The squad being dragged from the list toward an army tab (2026-11-21), or INDEX_NONE.
+ int32 DraggedSquadID() const { return bSquadListPress&&PressedSquadID>=0?PressedSquadID:INDEX_NONE; }
+ // The squads a drag carries: every selected own squad when the dragged one is selected, else that squad alone.
+ TArray<int32> DraggedSquads() const;
+ TArray<FBattleSquadListRow> SquadListRows() const;
+ void SortSquadRows(TArray<FBattleSquadSummary>& Rows) const;
+ // Own groups shown in the group tab, by group number.
+ TArray<int32> OwnGroupIDs() const;
+ void SelectGroup(int32 GroupID);
  double LastRowClickTime=-10; int32 LastRowClickID=INDEX_NONE;
  void SelectSquadListRow(FVector2D Position);
  int32 SquadListIDAt(FVector2D Position) const;
@@ -104,6 +118,14 @@ public:
 	bool bShowSectorGrid = true, bShowFog = true;
 	void ToggleSectorGrid();
 	void ToggleFogView();
+	// Range rings (L cycles, display only, ABattleHUD::DrawRangeRings): 1 selected own squads only (default),
+	// 2 + the enemy squad under the pointer, 3 + every seen enemy squad, 0 none.
+	int32 RangeRingMode = 1;
+	bool ShowsOwnRanges() const { return RangeRingMode != 0; }
+	bool ShowsHoveredEnemyRanges() const { return RangeRingMode == 2; }
+	bool ShowsAllEnemyRanges() const { return RangeRingMode == 3; }
+	static const TCHAR* RangeRingModeName(int32 Mode);
+	void ToggleEnemyRanges();
 	void CycleTrainingSelected();
 	void HireRecruit();
 	void HireRegular();
@@ -136,6 +158,7 @@ public:
 	void UpdatePathDraw();
 	void EndPathDraw();
 	bool IsDrawingPath() const { return bPathDraw; }
+	bool IsDrawingFrontLine() const { return bPathDraw && bFrontDraw; } // Ctrl + right drag: the front line (UBattleMatch::SetDrawnFrontLine)
 	const TArray<FVector>& GetDrawnPath() const { return DrawnPath; }
 	float PanSpeed() const;
 	bool TryVault(ABattleUnit* Unit);
@@ -180,6 +203,9 @@ public:
 	// the left stick pans; direct: left stick moves, right stick looks with a light aim assist. X held in direct control is
 	// reserved for a future interact action. bGamepadActive switches the HUD hints to pad buttons.
 	bool bGamepadActive=false;
+ bool IsGamepadMenuOpen() const {return bTactical&&bGamepadMenuOpen;}
+ int32 GetGamepadMenuRow() const {return GamepadMenuRow;}
+ bool IsGroundFloorPending() const {return bGroundFloorPending;}
 	FKey GamepadToKey(const FKey& Key) const;
 	void UpdateGamepad(float DeltaTime);
 	float AimAssistScale() const;
@@ -189,6 +215,18 @@ public:
 	int32 AimLevel = 1;
 	UFUNCTION(Exec) void BattleVerify();
 private:
+ bool bGamepadMenuOpen=false, bGroundFloorPending=false;
+ int32 GamepadMenuRow=0;
+ TSet<FKey> GamepadMenuKeys;
+ bool HandleGamepadMenu(const FInputKeyEventArgs& Params);
+ void ConfirmGamepadMenu();
+ // Preserve subpixel motion; a different mouse position resynchronizes the virtual cursor.
+ FVector2f VirtualCursor=FVector2f::ZeroVector, LastCursorPosition=FVector2f::ZeroVector;
+ bool bVirtualCursorValid=false;
+ // Physical key -> logical key chosen on press. Invalid values wait for physical release after cancellation.
+ TMap<FKey,FInputKeyEventArgs> HeldPlayerKeys;
+ bool HandlePlayerInput(const FInputKeyEventArgs& Params);
+ void CancelPlayerInput(bool bGamepadOnly=false);
 	UPROPERTY() TObjectPtr<ABattleCameraPawn> TacticalPawn;
 	UPROPERTY() TObjectPtr<ABattleUnit> LastControlled;
 	UPROPERTY() TArray<TObjectPtr<ABattleUnit>> Selected;
@@ -197,7 +235,7 @@ private:
 	bool bTactical = true;
 	int32 GameSpeed = 1;
 	bool bTriggerHeld = false;
-	bool bPathDraw = false; TArray<FVector> DrawnPath; double DrawnLength = 0; FVector2D PathScreenStart = FVector2D::ZeroVector;
+	bool bPathDraw = false, bFrontDraw = false; TArray<FVector> DrawnPath; double DrawnLength = 0; FVector2D PathScreenStart = FVector2D::ZeroVector;
 	UPROPERTY() TObjectPtr<ABattleUnit> VaultUnit;
 	FVector VaultFrom = FVector::ZeroVector, VaultTo = FVector::ZeroVector; double VaultPeak = 0; float VaultTime = 0, VaultDuration = .4f;
 	int32 DelegationPress = INDEX_NONE;
@@ -217,7 +255,6 @@ private:
 	void LookPitch(const FInputActionValue& Value);
 	void PrimaryPressed();
 	void PrimaryReleased();
-	void MoveSelected();
 	void Reload();
 	// Direct control: empty reserve -> one magazine from the squad mate who carries the most (UBattleTuning::PlayerAmmoShareRange).
 	void UpdatePlayerAmmo(class ABattleUnit* Unit);

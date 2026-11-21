@@ -13,7 +13,7 @@ bool UBattleLeaderRuntime::ReplaceFollower(int32 DeadID)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Old=Store->Find(DeadID);
  const auto* S=Old?Store->FindSquad(Old->SquadID):nullptr;
- if(!bArea||!Old||Old->IsAlive()||Old->bRetired||Old->bActorRepresentation||!S||!BattleSquadType::Replenished(S->SquadType)||S->CommandStatus!=EBattleCommandStatus::Active||Store->GetUnits().Num()>=1000)return false;
+ if(!bArea||!Old||Old->IsAlive()||Old->bRetired||Old->bActorRepresentation||!S||!BattleSquadType::Replenished(S->SquadType)||S->CommandStatus!=EBattleCommandStatus::Active||Store->GetUnits().Num()>=BattleRosterLimits::Area)return false;
  const auto Weapon=Old->Weapon;const auto Training=Old->Training;const int32 Team=Old->Team,SID=S->SquadID;
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!Nav)return false;
  FVector PositionToUse;bool Found=false;
@@ -48,7 +48,7 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  if((!bMixedFastMatch&&!bArea) || !Mode || Team<0||Team>1||static_cast<uint8>(Training)>2)return Fail(TEXT("Mixed recruitment unavailable"));
  // Bound retained corpses and persistence size as well as living population.
  // Area: 500 starting soldiers + replenishments + 10 x hires (resources incl. income; capped at 1000 records, the save limit).
- if(Store->GetUnits().Num()+N>(bArea?1000:500))return Fail(bArea?TEXT("Match roster capacity reached (1000 including losses)"):TEXT("Match roster capacity reached (500 including losses)"));
+ if(Store->GetUnits().Num()+N>(bArea?BattleRosterLimits::Area:BattleRosterLimits::Mixed))return Fail(bArea?TEXT("Match roster capacity reached (1000 including losses)"):TEXT("Match roster capacity reached (500 including losses)"));
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!Nav)return Fail(TEXT("Navigation unavailable"));
  TArray<FVector> Positions;
  // Area homes follow -BattleTrialSwap; MixedFast keeps its fixed sides. Side points from the centre to the home.

@@ -204,6 +204,7 @@ void ABattleVATDisplay::ChangePose(int32 ID,int32 Pose)
  if(auto* E=Entries.Find(ID)){if(!E->Far){E->Body->HandleExistingParallelEvaluationTask(true,true);CastChecked<UBattleVATSkeletalMeshComponent>(E->Body.Get())->PendingDt=0;}E->Pose=Pose;if(E->Far){E->Time=0;E->Rate=1;}}
  if(const auto* I=AuditIndices.Find(ID)){AuditBodies[*I]->HandleExistingParallelEvaluationTask(true,true);AuditBodies[*I]->PlayAnimation(Data->Clips[Pose].Clip,true);}
 }
+void ABattleVATDisplay::ShowNear(int32 ID){if(auto* E=Entries.Find(ID);E && E->Far && !Audit)Leave(*E);}
 void ABattleVATDisplay::Freeze(int32 ID)
 {
  if(auto* E=Entries.Find(ID))
@@ -240,6 +241,7 @@ void ABattleVATDisplay::Enter(FBattleVATEntry& E)
   if(Skip->PendingDt>0 && M->IsComponentTickEnabled())FAnimationRuntime::AdvanceTime(true,(E.Rate*Data->Clips[E.Pose].Clip->RateScale)*Skip->PendingDt,E.Time,Data->Clips[E.Pose].Length);
   Skip->EndAnimSkip();
  }
+ if(!Audit)Runtime->ClearFollowerRifleTurn(E.ID); // a near follower's rifle turn and tilt are not carried into the far body
  E.BodyRelative=M->GetRelativeTransform();E.WeaponRelative=W->GetRelativeTransform();E.NearRotation=E.BodyRelative.GetRotation();
  // A body still playing its death clip ticks: death comes from Freeze, not from the tick. The far display has no death
  // clips, so a corpse lies tipped over there (as one that died far away).
@@ -292,7 +294,8 @@ void ABattleVATDisplay::Select(int32 ID,int32 LOD,double Distance,double Scale,c
  const double Threshold=Scale/(View==TEXT("RTS")?48.:View==TEXT("TPS")?32.:24.);
  const bool Far=LOD==2 && (E->Initialized?(E->Far?Distance>=Threshold*.8:Distance>=Threshold*1.2):Distance>=Threshold);
  E->Initialized=true;
- if(Far && !E->Far)Enter(*E);else if(!Far && E->Far)Leave(*E);
+ // Corpses stay near (their death clip on its last frame, the body's tick off) until they are hidden.
+ if(Far && !E->Far && !(E->Dead && !Audit))Enter(*E);else if(!Far && E->Far)Leave(*E);
 }
 FVector3f ABattleVATDisplay::Frames(const FBattleVATEntry& E)const
 {
@@ -328,17 +331,28 @@ void ABattleVATDisplay::Tick(float Dt)
    }
   }
  }
- TArray<TArray<FTransform>> Transforms;Transforms.SetNum(Groups.Num());for(int32 I=0;I<Groups.Num();++I)Transforms[I].Init(FTransform(FQuat::Identity,FVector::ZeroVector,FVector::ZeroVector),Groups[I]->GetInstanceCount());
+ if(Transforms.Num()!=Groups.Num())Transforms.SetNum(Groups.Num());
+ for(int32 I=0;I<Groups.Num();++I)
+ {
+  Transforms[I].SetNum(Groups[I]->GetInstanceCount(),EAllowShrinking::No);
+  for(FTransform& InstanceTransform:Transforms[I])InstanceTransform=FTransform(FQuat::Identity,FVector::ZeroVector,FVector::ZeroVector);
+ }
  for(auto& Pair:Entries)
  {
   auto& E=Pair.Value;if(!E.Far)continue;
   ++FarCount;ShownCount+=E.Visible;
   const FVector3f F=Frames(E);
+  FTransform CapsuleTransform;
+  bool bHaveCapsuleTransform=false;
   for(int32 G:{E.BodyGroup,E.WeaponGroup})
   {
    const int32 Slot=G==E.BodyGroup?E.Slot:E.WeaponSlot;const float Values[]={F.X,F.Y,F.Z,E.PreviousFrames.X,E.PreviousFrames.Y,E.PreviousFrames.Z};
    Groups[G]->SetCustomData(Slot,MakeArrayView(Values),false);
-   if(E.Visible && (G==E.BodyGroup || !E.Dead))Transforms[G][Slot]=E.BodyRelative*Runtime->GetBodies().FindChecked(E.ID).Capsule->GetComponentTransform();
+   if(E.Visible && (G==E.BodyGroup || !E.Dead))
+   {
+    if(!bHaveCapsuleTransform){CapsuleTransform=Runtime->GetBodies().FindChecked(E.ID).Capsule->GetComponentTransform();bHaveCapsuleTransform=true;}
+    Transforms[G][Slot]=E.BodyRelative*CapsuleTransform;
+   }
   }
   E.PreviousFrames=F;
  }

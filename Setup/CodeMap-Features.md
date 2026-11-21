@@ -13,18 +13,21 @@
 
 | 機能 | 入口（ここから読む） | 関連 |
 |---|---|---|
+| 編成AI・候補選択と貯蓄購入 | @UBattleMatch::UpdateCompositionHiring 、 @BattleComposition::Decide 、 @BattleComposition::ValidateSave | Planner/PlannerTeams は既定0。ONは不足・緊急性で選択し貯蓄／購入。CombatStateVersion=4、旧保存はPlanner無効。検査は @UBattleLeaderRuntime::RunCompositionSmoke |
+| 盾被弾制圧・群の兵種別戦力（試験） | @UBattleLeaderRuntime::NoteUnderFire 、 @UBattleState::AdvanceShields 、 @UBattleMatch::GroupPower 、 @UBattleMatch::GroupPointPower | `BattleExoShieldSuppression` / `BattleGroupStrength` は既定0。観測兵種は @UBattlePerception::Update で取得、重みはUBattleTuning |
+| 間接射撃の試験切替 | @UBattleMatch::ArtilleryHomeObserved 、 @UBattleMatch::AreaArtilleryClusters 、 @UBattleLeaderRuntime::FireArtillery 、 @UBattleLeaderRuntime::ArtilleryBlastTransmission | 自走砲弾は @UBattleState::UseSPGAmmo / @UBattleState::RefillSPGAmmo 。4切替は既定0、CombatStateVersion=3で弾数と切替を保存 |
 | 正規状態・UnitID・部隊 | @UBattleState::RegisterUnit 、 @UBattleState::CreateSquad 、 @UBattleState::ApplyDamage | 構造体は `BattleState.h`（FBattleUnitState、FBattleSquadState）。調整値は同じ .h の `UBattleTuning`（ini で上書き） |
 | 兵科（歩兵・重火器・偵察・対戦車・戦車）の差 | @BattleSquadType::Members から @BattleSquadType::Weapon までの一群、 @UBattleState::SetSquadType | 射程は @BattleRanges::Get |
 | 命令（移動・攻撃移動・防御・待機） | 入力 @ABattleController::IssueOrderAt → 状態 @UBattleState::SetSquadOrder → 混成 @UBattleLeaderRuntime::IssueOrder | 委任は @UBattleState::SetSquadDelegated 、 @UBattleMatch::SetAllyDelegated |
 | 入力・RTS/TPS 切替・ゲームパッド | @ABattleController::SetupInputComponent 、 @ABattleController::InputKey 、 @ABattleController::ToggleMode 、 @ABattleController::ControlUnit | ゲームパッドは @ABattleController::UpdateGamepad 。隊長交代は @UBattleState::HandOverLeader |
-| HUD・ミニマップ・部隊一覧・通知 | @ABattleHUD::DrawHUD 、 @ABattleHUD::DrawMinimap 、 @ABattleHUD::DrawSquadList 、 @ABattleHUD::DrawNoticeLog | 通知の中身は @ABattleController::UpdateNoticeLog 、 @ABattleController::PushNotice 。日本語化は @BattleUIText::Ja 。被弾方向は @ABattleHUD::DrawHitDirection （記録は @UBattleState::ApplyDamageFrom ）、画面外マーカーは @ABattleHUD::DrawOffscreenMarkers 、撃破ログは @ABattleHUD::DrawKillLog （記録は @UBattleState::NoteKill ）。作戦画面の戦場の霧・区画の格子と区画の状態は @ABattleHUD::DrawFieldOverlay 、 @ABattleHUD::DrawSectorPanel （計算は `BattleSectorView`） |
+| HUD・ミニマップ・部隊一覧・通知 | @ABattleHUD::DrawHUD 、 @ABattleHUD::DrawMinimap 、 @ABattleHUD::DrawSquadList 、 @ABattleHUD::DrawNoticeLog | 通知の中身は @ABattleController::UpdateNoticeLog 、 @ABattleController::PushNotice 。日本語化は @BattleUIText::Ja 。射程の円は @ABattleHUD::DrawRangeRings ・ミニマップは @ABattleHUD::DrawMinimapRangeRings 、敵の円は L キー（ @ABattleController::ToggleEnemyRanges ）（射程は @BattleRanges::Engage ）。被弾方向は @ABattleHUD::DrawHitDirection （記録は @UBattleState::ApplyDamageFrom ）、画面外マーカーは @ABattleHUD::DrawOffscreenMarkers 、撃破ログは @ABattleHUD::DrawKillLog （記録は @UBattleState::NoteKill ）。作戦画面の戦場の霧・区画の格子と区画の状態は @ABattleHUD::DrawFieldOverlay 、 @ABattleHUD::DrawSectorPanel （計算は `BattleSectorView`） |
 | 認識（見えた敵の記憶） | @UBattlePerception::Update 、 @UBattlePerception::GetContacts | 視線は @UBattleLeaderRuntime::CanSee 、 @UBattleLeaderRuntime::TraceSight 。試験用の視界切替は @BattleSightExperiment |
 | 隊長の判断と兵の実行（混成） | @UBattleLeaderRuntime::Think 、 @UBattleLeaderRuntime::Follow 、 @UBattleLeaderRuntime::Fire | 兵単位の実行は @FBattleMixedDriver::Tick 、 @FBattleMixedDriver::TryTacticalAction |
 | 移動・経路・混雑 | @UBattleLeaderRuntime::StableMove 、 @UBattleLeaderRuntime::BuildMovementPlan | 到着地点の重なりは @UBattleLeaderRuntime::ReassignOccupiedArrival 。目的地の補正は @BattleNavigation::ResolveGoal |
 | 遮蔽（場所の予約） | @UBattleCover::BuildSlots 、 @UBattleCover::Reserve | 露出の計算は @BattleTactics::ExposureAt |
 | 体のアニメーション | @ABattleUnit::UpdateBodyAnim 、 @FBattleBodyAnimProxy::Evaluate | 部下は @UBattleLeaderRuntime::FollowerClip 、 @UBattleLeaderRuntime::StepBodyTimers |
 | 死体の消滅（表示だけ） | @UBattleLeaderRuntime::StepCorpses 、 @UBattleLeaderRuntime::HideCorpse | 登録は OnDeath の @UBattleLeaderRuntime::AddCorpse |
-| 死体の姿勢（死亡アニメ・遠景VATとの切替） | @UBattleLeaderRuntime::DeathClip 、 @ABattleVATDisplay::Enter 、 @ABattleVATDisplay::Leave | 遠景では横倒し、近景へ戻ると死亡クリップの最終コマ |
+| 死体の姿勢（死亡アニメ・遠景VATとの切替） | @UBattleLeaderRuntime::DeathClip 、 @ABattleVATDisplay::ShowNear 、 @ABattleVATDisplay::Select | 死ぬと遠景表示から外れて死亡クリップを流し、隠れるまで遠景に戻らない。クリップの後は物理で倒れて止まる（ @BattleRagdoll::Start 、 @BattleRagdoll::Settle 。部下は @UBattleLeaderRuntime::StepBodyTimers 、隊長は @ABattleUnit::Tick ）。見た目の確認は @UBattleLeaderRuntime::RunDeathShot（Setup/Test-DeathShot.ps1） |
 | ブラインドファイア | @UBattleLeaderRuntime::BlindFireOrigin 、 @UBattleLeaderRuntime::Fire | AIの試験は @UBattleLeaderRuntime::TryAIBlindFire |
 | 遮蔽の動作（接近・のぞき撃ち） | @UBattleLeaderRuntime::RequestCoverAction 、 @UBattleLeaderRuntime::StepCoverAction | 切替は @BattleTactics::CoverActionsEnabled ほか |
 | 姿勢（立ち・しゃがみ） | @UBattleLeaderRuntime::SetStance 、 @UBattleLeaderRuntime::UpdateAIStance | 数値は @BattleStance::EyeOffset ほか |
@@ -47,7 +50,9 @@
 | 戦果点 | @UBattleMatch::UpdateWarScore 、 @UBattleMatch::WarScoreBreakdown | 調整値は @BattleWarScore::Tuning |
 | 支援砲撃（旧アリーナ） | @UBattleMatch::RequestSupport 、 @UBattleMatch::UpdateSupport | 混成には未接続 |
 | 車両・戦車砲・対戦車 | @UBattleLeaderRuntime::ConfigureVehicle 、 @UBattleLeaderRuntime::SteerVehicle 、 @UBattleLeaderRuntime::FireTankGun | 爆発は @UBattleLeaderRuntime::Explode |
+| 武器の命令・任務による交戦許可 | @BattleTactics::OrderAllowsTarget 、 @UBattleLeaderRuntime::WeaponOrderAllows | 副武器・間接射撃の試験は BattleWeaponOrderGate、装甲AIの候補制限は BattleArmourSectorGate（いずれも既定0） |
 | 保存・復元 | @UBattleMatch::SaveMatch 、 @UBattleMatch::LoadMatch 、 @UBattleMatch::CaptureSnapshot 、 @UBattleMatch::RestoreSnapshot | 検証は @UBattleSave::Validate 、 @UBattleSave::ValidateMixed 。戦術状態は @UBattleSquadTactics::CaptureSave |
+| プレイヤー経路の任意保存（S02） | @BattleTactics::SaveRoutes 、 @UBattleSave::Serialize 、 @UBattleSave::Validate | `-BattleSaveRoutes=1`（既定0）。PlayerRoutesVersion=1で最終命令・目的地・残り中継点・レーン・進行・相対期限を保存。OFF／経路なしは新規タグなし。検査は @UBattleLeaderRuntime::RunMixedSaveSmoke 内で一時切替 |
 | 表示（混成の体・遠距離 VAT） | @UBattleLeaderRuntime::CreateBody 、 @UBattleLeaderRuntime::RefreshDisplay 、 @ABattleVATDisplay::Tick | 復元時は @UBattleLeaderRuntime::RestoreMixedBodies |
 | マップの定義・配置 | `BattleFieldLayout.h`（マップごとの表 `Maps()`） | 生成は @UBattleMapCommandlet::Main （既存の手編集を `-Force` で上書きしない） |
 | 通り道（道路網に沿った移動の指示） | @UBattleMatch::RouteStep 、 @UBattleMatch::RouteFlankSide | 呼び出しは @UBattleMatch::UpdateTeamOrders 。道路網は `FMapDef::RouteNodes/RouteEdges` |
@@ -77,6 +82,7 @@ BattleBodyAnimImport | 体のアニメーション（遮蔽・伏せ・しゃが
 BattleCoverClips | 遮蔽の状態 → 遮蔽アニメの対応表（データだけ。「アセット参考資料の検討」セッション作）
 BattleBodyAnim | 体のアニメーション：隊長の下半身と上半身の重ね・反動・被弾・死亡、部下の伏せと死亡のクリップ
 BattleCorpses | 死体の消滅（表示だけ。`-BattleCorpseLifetime=秒`、既定20、0で残す。UBattleLeaderRuntime の一部）
+BattleRagdoll | 死体が死亡クリップの後に物理で倒れて止まる（表示だけ。`-BattleRagdoll=0` でクリップの最終フレームのまま）
 BattleFieldLayout | マップごとの定義（広さ、拠点、試合時間）を1つの表にまとめたもの
 BattleGroups | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部）
 BattleFieldReplay | 広域試験の記録と再生（UBattleSquadTrial の一部）
@@ -105,6 +111,8 @@ BattleSightVisual | 視界の目視確認用の表示（UBattleLeaderRuntime の
 BattleSquadAI | 旧全Actor経路の部隊 AI
 BattleSquadFlank | 迂回の判断（UBattleSquadTactics の一部）
 BattleSquadRetreat | 撤退の判断と適用（UBattleSquadTactics の一部。Evaluate と Apply はここ）
+BattleSupplyCar | 補給車（兵種9）：積んだ弾・本拠地での積み直し・AIの命令（群の役割5、拠点の後ろ）・弾の少ない部隊の行き先（UBattleMatch の一部）
+BattleFrontLine | 前線・前線維持群 `-BattleFrontLine`・奇襲群 `-BattleSurpriseGroup`（区画のあるマップ）：区画の行ごとの前線の列（自軍の兵・観測した拠点・知っている敵、隣の行と1列以内）、維持群の帯と維持する区画、押し上げ、奇襲群（装甲優先・端の行を進んで敵本拠地へ）（UBattleMatch の一部。表示は ABattleHUD::DrawFieldOverlay）
 BattleSquadSupport | 援護の受け渡し（UBattleSquadTactics の一部）
 BattleSquadTactics | 部隊の戦術の土台：観測、毎フレームの更新、記録
 BattleStableMovement | 混成の移動計画と実行（UBattleLeaderRuntime の一部）
@@ -149,3 +157,12 @@ BattleRoutes | 通り道：道路網のあるマップ（F）で、遠い目的�
 BattleSectorView | 作戦画面の表示だけ（規則・AIは読まない）：自軍の視界の格子 `FBattleFogGrid`（12.5m、自軍の兵から静的な物体への光線）と区画ごとの状態 `BattleSectorView::Gather`（自軍の人数・観測した敵・視界の割合・拠点・命令中の部隊・遮蔽位置の数）
 BattleSectorRoute | 区画経由の移動 `-BattleSectorRoute`・側面 `-BattleSectorFlank`・前線 `-BattleSectorFront`（区画のあるマップ、AIの歩兵）：道路網の次の交差点の代わりに、その周りで遮蔽の多い区画を制圧・維持しながら進む。側面は観測した敵の正面を避けた区画、前線は自軍の区画のうち敵に接する区画（UBattleMatch の一部）
 BattleSectors | マップHの50m区画の格子（20×14）：区画の番号と中心、区画の種類の表、川・橋・浅瀬の位置
+BattleFrontLine | Surprise bridge waypoints: UpdateSurpriseBridge, BattleSurpriseRoute::Bridge / Intersects; fixed H/I map geometry, entrance / exit / edge goal, retained on same-time restore
+
+BattleWeaponOrders | 命令・防衛範囲・支援対象・区画任務の交戦許可と武器/装甲AIの試験切替
+BattleComposition | 編成AIの兵種定義・解決済み入力・診断
+BattleCompositionPlanner | 編成AIの純粋な候補選択・貯蓄遷移・状態検証。整数比較、乱数なし
+BattleCompositionRuntime | 編成AIと観測・収入窓・既存購入実行の接続、設定キー
+BattleCompositionState | CombatStateVersion=4で保存する編成AIの陣営状態
+BattleCompositionSave | 編成AI保存の版・陣営・時刻・参照先検証
+BattleCompositionSmoke | 編成AIの選択・貯蓄・保存往復のスモーク検査（UBattleLeaderRuntimeの一部）

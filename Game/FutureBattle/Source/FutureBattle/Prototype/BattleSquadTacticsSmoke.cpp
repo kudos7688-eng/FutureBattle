@@ -98,7 +98,7 @@ void ABattleGameMode::RunSquadTacticsSmokeTest()
  {
   auto* Save = Match->CaptureSnapshot(); FString Error; TArray<uint8> Bytes;
   CheckSmoke(Save && Save->Validate(Error), *FString::Printf(TEXT("Mission snapshot validates: %s"), *Error));
-  auto* Decoded = Save && UGameplayStatics::SaveGameToMemory(Save, Bytes) ? Cast<UBattleSave>(UGameplayStatics::LoadGameFromMemory(Bytes)) : nullptr;
+  auto* Decoded = Save && UGameplayStatics::SaveGameToMemory(Save, Bytes) ? Cast<UBattleSave>(BattleSaveValidation::Decode(Bytes)) : nullptr;
   CheckSmoke(Decoded && Decoded->Validate(Error) && Match->RestoreSnapshot(Decoded) && Store->FindSquad(SID)->bHasMission, TEXT("Mission survives real binary save and world restore"));
   A = FindUnitByID(AID); PC->SetSelection(A);
   auto* Old = Match->CaptureSnapshot();

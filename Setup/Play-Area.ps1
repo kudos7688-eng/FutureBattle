@@ -11,12 +11,14 @@ if ($Map -eq 'H' -or $Map -eq 'I') {
     $extra += '-BattleLeaderGuard=1'
     # Player's move click = sector move that fires on the move; a drawn line = point move (BattlePlayerPath.cpp).
     $extra += '-BattleSectorMove=1'
+    # Grouped mortars and guns support the group's squads in trouble (trial, groupui play 2026-11-21).
+    $extra += '-BattleGroupFireSupport=1'
     if ($SectorAI) { $extra += '-BattleSectorAI=1' }
     # Sector AI trials (default off in matches): fire back when shot, sector route, flank and front stages, pass a crowded corner,
     # fire on the move until inside the sector (no stop: -BattleSquadCoverCheck and -BattleBounding left out, user 11-20), line up
     # along cover walls, flank when pinned, face the known enemy on arrival, march through cover, cover must hide 3 of 5 body
     # samples and no standing in the open, soldiers do not block each other's sight, cover faces where shots came from (user 11-20).
-    if ($SectorTrials) { $extra += @('-BattleSectorContact=1','-BattleSectorRoute=1','-BattleSectorFlank=1','-BattleSectorFront=1','-BattleWaypointPass=1','-BattleSectorMoveFire=1','-BattleCoverHuddle=1','-BattlePinnedFlank=1','-BattleArrivalThreat=1','-BattleSectorCoverRoute=1','-BattleCoverStrict=1','-BattleSightTeamMask=1','-BattleShotDirection=1') }
+    if ($SectorTrials) { $extra += @('-BattleSectorContact=1','-BattleSectorRoute=1','-BattleSectorFlank=1','-BattleSectorFront=1','-BattleWaypointPass=1','-BattleSectorMoveFire=1','-BattleCoverHuddle=1','-BattlePinnedFlank=1','-BattleArrivalThreat=1','-BattleSectorCoverRoute=1','-BattleCoverStrict=1','-BattleSightTeamMask=1','-BattleShotDirection=1','-BattleDangerRoute=1','-BattleCloseIn=1','-BattleSectorCoverWalk=1','-BattleUnderFireCover=1','-BattleNoCoverFallback=1','-BattleCoverPriority=1') }
 }
 $editor = 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe'
 $playArgs = @("/Game/Prototype/Lvl_BattleWide_$Map", '-game', '-windowed', '-ResX=1920', '-ResY=1080', '-ForceRes', '-BattleWideMixed', '-BattleArea', '-BattleCoverActions=1', '-BattleFlankCoordination=1', '-BattleAreaPointSupply=1', '-BattleFollowerAnimSkip=1') + $extra

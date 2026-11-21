@@ -5,6 +5,7 @@
 #include "BattleUnit.h"
 #include "BattleMetrics.h"
 #include "BattleTactics.h"
+#include "BattleMatch.h"
 
 void UBattlePerception::Capture(TMap<int32, FBattleObserver>& OutObservers, TArray<FBattleReport>& OutReports, double Now) const
 {
@@ -60,6 +61,10 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	FBattleScopedMetric Timing(Metrics, EBattleMetricPhase::Perception);
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattlePerception);
 	if (Metrics->bRecording) ++Metrics->PerceptionUpdates;
+	// -BattleAreaCompositionPlanner reads the identified squad type too (review 2026-11-21 F01): record it when either consumer is on.
+	const bool bGroupRecordsType = BattleTactics::GroupStrengthEnabled();
+ const auto* CompositionMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+ const int32 ObserverCompositionTeams=CompositionMatch?CompositionMatch->CompositionTeams:0;
 	// Cache immutable values for this synchronous update, not between sensor ticks.
 	struct FLiveUnit { ABattleUnit* Unit; const FBattleUnitState* State; FVector Position; int32 Ordinal; };
 	TMap<int32, FLiveUnit> Alive;
@@ -129,6 +134,17 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			}
 		auto& Contact = Observer.Contacts.FindOrAdd(TargetID);
 		Contact.TargetID = TargetID;
+  if(BattleTactics::ObservedTactics())
+  {
+   Contact.bLongRangeObservation=Mixed&&Leader->HasLongSight(Pair.Key)&&
+    FVector::DistSquared2D(Pair.Value.Position,Candidate.Position)>FMath::Square(Profile.SightRange);
+   Contact.bLocalShareEligible=!Contact.bLongRangeObservation&&FVector::DistSquared(Pair.Value.Position,Candidate.Position)<=FMath::Square(Profile.SightRange*1.1);
+  }
+  if(BattleTactics::ObservedArmour()||bGroupRecordsType||(State->Team>=0&&State->Team<2&&(ObserverCompositionTeams&(1<<State->Team))!=0))
+  {
+   const auto* SeenSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(Candidate.State->SquadID);
+   Contact.ObservedSquadType=SeenSquad?SeenSquad->SquadType:255;
+  }
 		Contact.LastKnownPosition = Candidate.Position;
 		Contact.LastSeenTime = Now; Contact.Confidence = 1.f; Contact.bVisible = true;
 		Contact.SourceUnitID = Pair.Key; Contact.bShared = false;
@@ -344,7 +360,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			TArray<const FBattleContact*, TInlineAllocator<32>> VisibleContacts;
 			// Contacts beyond the source's own profile range (a still scout's long sight) are not passed on by word of mouth; they travel in scout reports.
 			const double LocalRange2 = FMath::Square(SourceState->Perception.SightRange * 1.1);
-			for (const auto& Contact : Observers.FindChecked(Source.Key).Contacts) if (Contact.Value.bVisible) if (FVector::DistSquared(Source.Value.Position, Contact.Value.LastKnownPosition) <= LocalRange2) VisibleContacts.Add(&Contact.Value);
+			for (const auto& Contact : Observers.FindChecked(Source.Key).Contacts) if (Contact.Value.bVisible) if (BattleTactics::ObservedTactics()?Contact.Value.bLocalShareEligible:FVector::DistSquared(Source.Value.Position, Contact.Value.LastKnownPosition) <= LocalRange2) VisibleContacts.Add(&Contact.Value);
 			if (VisibleContacts.IsEmpty()) continue;
 			// Performance (2026-11-17): receivers come from the sight grid cells around the source instead of every living unit,
 			// in the same (ordinal) order, so the reports and their order are unchanged.
@@ -383,6 +399,15 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 		}
 	}
 	if (Metrics->bRecording) Metrics->PendingReportsPeak = FMath::Max(Metrics->PendingReportsPeak, static_cast<int64>(PendingReports.Num()));
+}
+
+void UBattlePerception::RevealShooter(int32 ObserverID, int32 TargetID, double Now, float DetectionSeconds)
+{
+	auto* Observer = Observers.Find(ObserverID); if (!Observer) return;
+	if (const auto* Known = Observer->Contacts.Find(TargetID); Known && Known->bVisible) return;
+	double& Started = Observer->DetectionStarted.FindOrAdd(TargetID, Now);
+	Started = FMath::Min(Started, Now - FMath::Max(0.f, DetectionSeconds));
+	if (double* Due = NextScanTimes.Find(ObserverID)) *Due = FMath::Min(*Due, Now);
 }
 
 void UBattlePerception::AddHint(int32 ObserverID, int32 TargetID, const FVector& Position, double Now, float Confidence)

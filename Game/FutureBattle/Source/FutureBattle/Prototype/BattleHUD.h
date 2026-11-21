@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
 #include "BattleSectorView.h"
+#include "CanvasItem.h"
 #include "BattleHUD.generated.h"
 
 UCLASS()
@@ -11,6 +12,7 @@ class ABattleHUD : public AHUD
 public:
 	virtual void DrawHUD() override;
 private:
+ void DrawGamepadMenu(class ABattleController* PC);
  void DrawSquadList();
  // Tactical minimap: own squads and only what the player's side has observed (never unseen enemies).
  void DrawMinimap();
@@ -18,6 +20,13 @@ private:
  void DrawNoticeLog();
  // Ground marks for the selected squads: line to the order destination, destination mark, defence radius, arrival slots.
  void DrawOrderMarks();
+ // Range rings (2026-11-21, display only, tactical view): around the leader of each selected squad, a ring at the distance its
+ // weapons open fire (BattleRanges::Engage; anti-tank, tank gun and artillery min/max get their own ring), labelled in metres.
+ // Seen enemy squads get rings for their identified type (the one under the pointer, or all with L), observed information only.
+ // -BattleRangeRings=0 hides them (also on the minimap).
+ void DrawRangeRings();
+ // The same rings on the tactical minimap (no labels; enemies only with L).
+ void DrawMinimapRangeRings(class ABattleController* PC, const struct FBattleMinimapLayout& Map);
  // The predicted way of the selected squads and the way being drawn (BattlePlayerPath.cpp).
  void DrawOrderWays();
  // The player's orders to single soldiers and the soldier picked with Ctrl+click (BattleSoldierOrder.cpp).
@@ -40,7 +49,16 @@ private:
  bool HoveredSector(class ABattleController* PC, FIntPoint& Out) const;
  void DrawMinimapOverlay(class ABattleController* PC, const struct FBattleMinimapLayout& Map);
  FBattleFogGrid Fog;
+ uint64 FogRestoreGeneration=0;
  TArray<FBattleSectorInfo> Sectors;
+ // Contact pointers exist only during DrawHUD; every frame rebuilds the snapshot in source order.
+ TMap<int32,const FBattleContact*> FrameContacts;
+ TSet<int32> FrameVisibleContacts;
+ TArray<FVector2D> OverlayScreen;
+ TBitArray<> OverlayOn;
+ TArray<float> OverlayDark;
+ TArray<uint8> OverlayCount;
+ TArray<FCanvasUVTri> OverlayTris;
 	double NextLabelCheck = 0;
 	TSet<int32> ClearLabels;
 	TWeakObjectPtr<APawn> LabelViewPawn;

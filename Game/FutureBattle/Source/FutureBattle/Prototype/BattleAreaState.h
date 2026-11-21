@@ -32,4 +32,6 @@ struct FBattleAreaState
  UPROPERTY() TArray<int32> WarLoss={0,0};
  UPROPERTY() TArray<int32> WarPointEstimate={0,0};
  UPROPERTY() float WarClock=0;
+ // Rounds left on each supply vehicle (squad type 9; BattleSupplyCar.cpp). A vehicle without an entry is full (UBattleTuning::SupplyCarStock).
+ UPROPERTY() TMap<int32,int32> SupplyStock;
 };

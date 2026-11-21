@@ -201,6 +201,37 @@ bool FBattleBodyAnimProxy::Evaluate(FPoseContext& Output)
  return true;
 }
 
+FTransform BattleBodyAnim::RifleGrip()
+{
+ const FTransform Hand(FRotator(-11.885756,-81.776576,16.174298),FVector(-16.823813,7.097377,139.904362));
+ const FTransform Gun(FRotator(0,180,0),FVector(-14.9,29.,143.5));
+ return Gun.GetRelativeTransform(Hand);
+}
+
+void FBattleBodyAnimProxy::AlignMuzzle(FCompactPose& Pose) const
+{
+ const FBoneContainer& Bones=Pose.GetBoneContainer();
+ auto Find=[&](const TCHAR* Name){const int32 I=Bones.GetPoseBoneIndexForBoneName(Name);return I==INDEX_NONE?FCompactPoseBoneIndex(INDEX_NONE):Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(I));};
+ const FCompactPoseBoneIndex Spine=Find(TEXT("spine_03")),Hand=Find(TEXT("hand_r"));
+ if(!Spine.IsValid()||!Hand.IsValid())return;
+ FCSPose<FCompactPose> CS;CS.InitPose(Pose);
+ // Mesh component space: the body faces +Y, up is +Z (the mesh is turned -90 degrees under the capsule).
+ static const FTransform Grip=BattleBodyAnim::RifleGrip();
+ const FVector Barrel=(Grip*CS.GetComponentSpaceTransform(Hand)).GetUnitAxis(EAxis::Y)*-1.;
+ const float Pitch=FMath::DegreesToRadians(AimPitch);
+ const FVector Want(0.,FMath::Cos(Pitch),FMath::Sin(Pitch));
+ FQuat Turn=FQuat::FindBetweenNormals(Barrel.GetSafeNormal(),Want);
+ const float Angle=FMath::RadiansToDegrees(Turn.GetAngle());
+ if(Angle<.5f)return;
+ if(Angle>MaxMuzzleCorrection)Turn=FQuat::Slerp(FQuat::Identity,Turn,MaxMuzzleCorrection/Angle);
+ Turn=FQuat::Slerp(FQuat::Identity,Turn,AimWeight);
+ FTransform Chest=CS.GetComponentSpaceTransform(Spine);
+ Chest.SetRotation((Turn*Chest.GetRotation()).GetNormalized());
+ TArray<FBoneTransform,TInlineAllocator<1>> Solved;Solved.Add(FBoneTransform(Spine,Chest));
+ CS.SafeSetCSBoneTransforms(Solved);
+ FCSPose<FCompactPose>::ConvertComponentPosesToLocalPoses(MoveTemp(CS),Pose);
+}
+
 void FBattleBodyAnimProxy::RaiseHands(FCompactPose& Pose) const
 {
  const FBoneContainer& Bones=Pose.GetBoneContainer();
@@ -276,21 +307,33 @@ void FBattleBodyAnimProxy::EvaluateLayers(FPoseContext& Output)
    BlendInto(Top.Pose,Center.Pose,AimWeight);
   }
  }
- Apply(Top,Upper,UpperWeight);
- Apply(Top,Overlay,OverlayWeight);
  // Above spine_01 only: spine_01 takes half, everything below it in the hierarchy takes all.
  const FBoneContainer& Bones=Output.Pose.GetBoneContainer();
  const int32 SpinePose=Bones.GetPoseBoneIndexForBoneName(TEXT("spine_01"));
- if(SpinePose==INDEX_NONE){Output.Pose.CopyBonesFrom(Top.Pose);return;}
- const FCompactPoseBoneIndex Spine=Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(SpinePose));
  TArray<float,TInlineAllocator<128>> Mask;Mask.SetNumZeroed(Output.Pose.GetNumBones());
- for(const FCompactPoseBoneIndex Index:Output.Pose.ForEachBoneIndex())
+ if(SpinePose!=INDEX_NONE)
  {
-  if(Index==Spine){Mask[Index.GetInt()]=.5f;continue;}
-  const FCompactPoseBoneIndex Parent=Bones.GetParentBoneIndex(Index);
-  if(Parent.IsValid() && Mask[Parent.GetInt()]>0.f)Mask[Index.GetInt()]=1.f;
+  const FCompactPoseBoneIndex Spine=Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(SpinePose));
+  for(const FCompactPoseBoneIndex Index:Output.Pose.ForEachBoneIndex())
+  {
+   if(Index==Spine){Mask[Index.GetInt()]=.5f;continue;}
+   const FCompactPoseBoneIndex Parent=Bones.GetParentBoneIndex(Index);
+   if(Parent.IsValid() && Mask[Parent.GetInt()]>0.f)Mask[Index.GetInt()]=1.f;
+  }
  }
- for(const FCompactPoseBoneIndex Index:Output.Pose.ForEachBoneIndex())
-  if(const float W=Mask[Index.GetInt()];W>0.f){FTransform Mixed;Mixed.Blend(Output.Pose[Index],Top.Pose[Index],W);Output.Pose[Index]=Mixed;}
+ auto MaskInto=[&](const FCompactPose& Layered)
+ {
+  if(SpinePose==INDEX_NONE){Output.Pose.CopyBonesFrom(Layered);return;}
+  for(const FCompactPoseBoneIndex Index:Output.Pose.ForEachBoneIndex())
+   if(const float W=Mask[Index.GetInt()];W>0.f){FTransform Mixed;Mixed.Blend(Output.Pose[Index],Layered[Index],W);Output.Pose[Index]=Mixed;}
+ };
+ // The aim pose first, then the rifle turned along the aim on the final masked pose (a mask after it would turn it away again),
+ // then reload, recoil and hit over that (a reload clip replaces the turn; recoil and hit motion stay on top of it).
+ if(bAim){MaskInto(Top.Pose);AlignMuzzle(Output.Pose);}
+ if(UpperWeight<=0.f && OverlayWeight<=0.f)return;
+ FPoseContext Over(Output);Over.Pose.CopyBonesFrom(Output.Pose);Over.Curve.CopyFrom(Output.Curve);
+ Apply(Over,Upper,UpperWeight);
+ Apply(Over,Overlay,OverlayWeight);
+ MaskInto(Over.Pose);
  return;
 }

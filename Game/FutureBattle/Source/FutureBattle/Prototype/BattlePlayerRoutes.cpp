@@ -4,8 +4,8 @@
 //    then to the goal. The match hands the squad one junction at a time (UpdatePlayerRoutes) and the player's order last.
 //  - A squad delegated to the AI keeps the choice: its AI goals are reached over the chosen route (UBattleMatch::UpdateTeamOrders).
 //  - Automatic is the behaviour without a choice: a manual order goes straight to the goal, the AI picks its own way.
-// The choice is the player's own decision about static map roads; it reads no enemy information. Not saved: after a load every
-// squad is back on automatic and a routed manual order ends at the junction it was walking to.
+// The choice reads no enemy information. Trial -BattleSaveRoutes=1 persists choices and orders; default/legacy saves
+// still return squads to automatic and end routed manual orders at the current junction after loading.
 // -BattlePlayerRouteTest (map F, headless): three squads of team 0 are ordered to the central objective over the three routes
 // and BATTLE_PLAYER_ROUTE_RESULT reports whether each kept to its route.
 #include "BattleMatch.h"
@@ -45,10 +45,10 @@ void UBattleMatch::ClearPlayerRouteMission(int32 SquadID)
  if(FPlayerRoute* R=PlayerRoutes.Find(SquadID)){R->bMission=false;R->bPath=false;R->Waypoints.Reset();}
 }
 
-FVector UBattleMatch::PlayerRouteStep(int32 SquadID,const FVector& From,const FVector& Goal)
+FVector UBattleMatch::PlayerRouteStep(int32 SquadID,const FVector& From,const FVector& Goal,FPlayerRoute* Candidate)
 {
  static const TArray<FVector> None;
- FPlayerRoute* R=PlayerRoutes.Find(SquadID);
+ FPlayerRoute* R=Candidate?Candidate:PlayerRoutes.Find(SquadID);
  if(!R||R->Lane<1||R->Lane>3)return RouteStep(From,Goal,0,None);
  const auto& Def=BattleFieldLayout::Of(GetWorld());const auto& Nodes=Def.RouteNodes;
  if(FVector::Dist2D(From,Goal)<15000)return Goal;
@@ -107,18 +107,19 @@ FVector UBattleMatch::PlayerRouteStep(int32 SquadID,const FVector& From,const FV
 int32 UBattleMatch::PlayerRouteOrder(int32 SquadID,EBattleOrder Order,const FVector& Goal)
 {
  FPlayerRoute* R=PlayerRoutes.Find(SquadID);
- if(R){R->bMission=false;R->bPath=false;R->Waypoints.Reset();}
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  const auto* S=Store->FindSquad(SquadID);
  if(!R||R->Lane==0||Order==EBattleOrder::Hold||!RoutesOn()||!Runtime||!Runtime->IsWideField()||!S||!Store->Find(S->LeaderUnitID))return -1;
- R->Phase=0;R->PhaseGoal=Goal;
- const FVector Step=PlayerRouteStep(SquadID,Runtime->Position(S->LeaderUnitID),Goal);
+ FPlayerRoute Candidate=*R;
+ Candidate.bMission=false;Candidate.bPath=false;Candidate.Waypoints.Reset();Candidate.Phase=0;Candidate.PhaseGoal=Goal;
+ const FVector Step=PlayerRouteStep(SquadID,Runtime->Position(S->LeaderUnitID),Goal,&Candidate);
  if(Step.Equals(Goal,1))return -1; // near: an ordinary order
  // A goal off the walkable ground is refused now, not at the last junction.
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());FNavLocation Projected;
  if(!Nav||!Nav->ProjectPointToNavigation(Goal,Projected,Runtime->IsVehicle(S->LeaderUnitID)?FVector(600,600,400):FVector(100,100,400)))return 0;
  if(!Runtime->IssueOrder(SquadID,Order==EBattleOrder::Move?EBattleOrder::Move:EBattleOrder::AttackMove,Step))return 0;
- R=PlayerRoutes.Find(SquadID);R->bMission=true;R->Order=Order;R->Goal=Goal;R->Step=Step;
+ Candidate.bMission=true;Candidate.Order=Order;Candidate.Goal=Goal;Candidate.Step=Step;
+ PlayerRoutes.Add(SquadID,MoveTemp(Candidate));
  return 1;
 }
 

@@ -86,7 +86,11 @@ public:
 	bool LookHasProneClip() const;
 	// Recoil display of the body (BattleBodyAnim): set by the shared fire path for every shot of this soldier.
 	void NoteVisualShot(double Time) { LastVisualShot = Time; }
+	// The AI's current aim (BattleLeaderRuntime, every step) for the body display: WeaponAimDirection changes only on a large
+	// turn (UBattleState::UpdateAim, the aim-switch delay), so the body would point the rifle at a stale pitch.
+	void NoteDisplayAim(const FVector& Direction, double Time) { DisplayAim = Direction; DisplayAimTime = Time; }
 private:
+	friend class UBattleLeaderRuntime; // the cover smoke drives the body display (BattleCoverActionSmoke.cpp)
 	// Body animation (BattleBodyAnim.h): lower body by stance, direction and transition, upper-body layers and overlays.
 	void UpdateBodyAnim(class UBattleBodyAnimInstance& Body, const FBattleUnitState& S);
 	class UBattleBodyAnimInstance* BodyAnim() const;
@@ -119,6 +123,9 @@ private:
 	FTransform LookGrip;
 	UPROPERTY() int32 UnitID = INDEX_NONE;
 	bool bDeathApplied = false;
+	// Corpse fall (BattleRagdoll): 0 until the death clip ends at RagdollAt, 1 falling until RagdollAt, 2 done.
+	uint8 RagdollStage = 2;
+	double RagdollAt = 0.;
 	bool bCorpseHidden = false;
 	bool bThirdPersonView = true;
 	bool bDirectAvoidanceOverride = false;
@@ -133,6 +140,9 @@ private:
 	UPROPERTY() TObjectPtr<UAnimSequence> CurrentPose;
 	double LastVisualShot = -10.;
 	float ShownAimPitch = 0.f;
+	double LastHitReact = -10.;
+	FVector DisplayAim = FVector::ZeroVector;
+	double DisplayAimTime = -10.;
 	int32 AimLevel = 0;
 	float AimZoom = 1.f, ScopeAlpha = 0.f;
 	bool bScopeHidden = false;

@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 struct FBattleUnitState;
+struct FBattleSquadState;
 class ABattleUnit;
 
 struct FBattleExposure
@@ -14,6 +15,31 @@ struct FBattleExposure
 
 namespace BattleTactics
 {
+ bool ExoShieldSuppressionEnabled();
+ float ExoShieldHitDelay();
+ bool GroupStrengthEnabled();
+ int32 ArtilleryTrialFlags();
+ bool ArtilleryObservedEnabled();
+ bool SPGAmmoEnabled();
+ // Trial -BattleVehicleOrderHere=1 (default 0): a vehicle order to where the vehicle already stands is accepted as arrived (no route needed).
+ bool VehicleOrderHere();
+ bool ArtilleryPosts(); // Trial -BattleArtilleryPosts=1 (default 0): public mortar posts and raids.
+ int32 AreaSPGCost(); // Optional -BattleAreaSPGCost override.
+ bool ArtilleryFlash(); // Trial -BattleArtilleryFlash=1 (default 0): heard indirect fire reveals a rough position.
+ float SPGRange(); // Optional -BattleSPGRange override; absent keeps the configured range.
+ bool TankGunFlash(); // Trial -BattleTankGunFlash=1 (default 0): observed main-gun shots reveal a rough position.
+ bool ObservedTactics(); // Trial -BattleObservedTactics=1 (default 0): tactical decisions use observations.
+ bool ObservedArmour(); // Trial -BattleObservedArmour=1 (default 0): classify enemies from observations.
+ bool VehicleHitCover(); // Trial -BattleVehicleHitCover=1 (default 0): hide from own hits before starting home repair.
+ bool SaveReloadBoundary(); // Trial -BattleSaveReloadBoundary=1 (default 0): finish due reloads on the save copy.
+ int32 OverrideSaveReloadBoundaryForSmoke(int32 Value); // Smoke only; -1 restores command-line policy.
+ bool SaveRoutes(); // Trial -BattleSaveRoutes=1 (default 0): persist player route orders and lane choices.
+ int32 OverrideSaveRoutesForSmoke(int32 Value); // -1 restores command-line policy; returns previous override. Smoke only.
+ bool BlastOcclusionEnabled();
+ bool ArtilleryClustersEnabled();
+ bool WeaponOrderGateEnabled(); // trial, default 0: apply mission permissions to launchers and artillery
+ bool ArmourSectorGateEnabled(); // trial, default 0: armour priority within Think's accepted candidate set
+ bool OrderAllowsTarget(const FBattleSquadState& Squad,int32 TargetID,const FVector& KnownPosition);
  bool CoverActionsEnabled();
  // Trial switch -BattleAICoverProbe=1: per-frame AI cover probe budget and wider AI search instead of one shared probe per interval.
  bool AICoverProbeBudgetEnabled();
@@ -50,7 +76,7 @@ namespace BattleTactics
  struct FSupplyTuning { int32 ReturnLiving=8, ResumeLiving=10; float AwayRatio=1.f, HealPerSecond=0.f, ResumeHealthRatio=0.f; bool bPointAmmo=false; float PointRadius=2500.f; };
  const FSupplyTuning& Supply();
  // Area new-squad hiring: UBattleTuning::bAreaHire/AreaSquadCost/AreaHireReserve; -BattleAreaHire=0/1 overrides.
- // MaxActive = UBattleTuning::AreaMaxActiveSquads (default 25), -BattleAreaMaxSquads=N (1..100) overrides; the save check uses it.
+ // MaxActive = UBattleTuning::AreaMaxActiveSquads (default 30 since 2026-11-20, was 25), -BattleAreaMaxSquads=N (1..100) overrides; the save check uses it.
  // AI pacing: Interval between a team's AI purchases and Stop = no AI purchase in the last N seconds
  // (-BattleAreaHireReserve= / -BattleAreaHireInterval= / -BattleAreaHireStop= override; not part of the save check).
  // P1 trial -BattleAreaHirePurpose=1 (default OFF; -BattleAreaHirePurposeFront=N, default 10): the AI buys only for an observed need
@@ -84,7 +110,7 @@ namespace BattleTactics
  // Strategy layer stage 2 (ROADMAP 2026-11-16) -BattleAreaPlan=N (default 0 = no plan, the fixed intent): 1 = EH expand then hold,
  // 2 = ESA expand, save, then mass on the enemy home. Phases switch by match time only; see UBattleMatch::AreaIntent.
  // Heavy infantry share of AI purchases: -BattleAreaHeavyShare=f overrides UBattleTuning::AreaHeavyShare (default 0.33 since 2026-11-16) for the trial team(s); -1 = not passed.
- struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; float InfiltrateRadius=0.f, FocusGain=0.f, FlankOffset=1.3f; bool bFlankSameSide=true; int32 BaseReturnLiving=5; int32 TrialTeam=-1; int32 Plan=0; float HeavyShare=-1.f; int32 ScoutKeep=-1; int32 ATKeep=-1; int32 TankKeep=-1; int32 ACKeep=-1; int32 MortarKeep=-1; int32 SPGKeep=-1; int32 ExoKeep=-1; };
+ struct FAreaStrategyTuning { bool bEnabled=true; float AttackWeight=2.f, BaseShare=0.2f; bool bBaseRule=false; float BaseShareLow=0.f, BaseShareHigh=0.3f, BaseLowHP=500.f; bool bFrontBalance=false; float FrontGain=1.f; float InfiltrateRadius=0.f, FocusGain=0.f, FlankOffset=1.3f; bool bFlankSameSide=true; int32 BaseReturnLiving=5; int32 TrialTeam=-1; int32 Plan=0; float HeavyShare=-1.f; int32 ScoutKeep=-1; int32 ATKeep=-1; int32 TankKeep=-1; int32 ACKeep=-1; int32 MortarKeep=-1; int32 SPGKeep=-1; int32 ExoKeep=-1; int32 SupplyKeep=-1; };
  const FAreaStrategyTuning& AreaStrategy();
  // Armour AI, stage 3 (BattleArmourAI.cpp): -BattleArmourAI=0/1 (UBattleTuning::bArmourAI, default 1), -BattleArmourAITeam=0/1 for one team only.
  bool ArmourAI(int32 Team);

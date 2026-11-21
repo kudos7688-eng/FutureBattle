@@ -3,6 +3,7 @@
 #include "BattleState.h"
 #include "BattleBodyAnim.h"
 #include "BattleFollowerBones.h"
+#include "BattleRagdoll.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleFieldLayout.h"
 #include "BattleUnit.h"
@@ -11,6 +12,8 @@
 #include "Animation/AnimSingleNodeInstance.h"
 #include "FutureBattle.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "UObject/StrongObjectPtr.h"
 
@@ -114,15 +117,29 @@ void UBattleLeaderRuntime::StepBodyTimers()
  const double Now=GetWorld()->GetTimeSeconds();
  if(BattleStance::AnimEnabled() && Now>=NextPoseAudit){NextPoseAudit=Now+1.;AuditFollowerPoses(Now);}
  if(BodyTimers.IsEmpty())return;
+ TArray<int32> Falling;
  for(auto It=BodyTimers.CreateIterator();It;++It)
  {
   if(Now<It.Value().At)continue;
-  const int32 ID=It.Key();const bool bFreeze=It.Value().bFreeze;It.RemoveCurrent();
+  const int32 ID=It.Key();const bool bFreeze=It.Value().bFreeze,bSettle=It.Value().bSettle;It.RemoveCurrent();
   const auto* B=Bodies.Find(ID);
   if(!B||B->Actor.IsValid()||!B->Mesh.IsValid())continue;
-  if(bFreeze){BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones);B->Mesh->SetComponentTickEnabled(false);}
+  if(bSettle)BattleRagdoll::Settle(B->Mesh.Get());
+  else if(bFreeze)
+  {
+   // Frame skipping (-BattleFollowerAnimSkip/-BattleFollowerAnimBudget) may still owe the clip some time: put the death clip on
+   // its last frame before the tick stops, or the body would hold a pose halfway down.
+   USkeletalMeshComponent* M=B->Mesh.Get();M->HandleExistingParallelEvaluationTask(true,true);
+   if(auto* V=Cast<UBattleVATSkeletalMeshComponent>(M))V->EndAnimSkip();
+   if(auto* Node=M->GetSingleNodeInstance())if(const auto* Clip=Cast<UAnimSequenceBase>(Node->GetAnimationAsset()))
+   {Node->SetPosition(Clip->GetPlayLength(),false);M->TickAnimation(0,false);M->RefreshBoneTransforms(nullptr);}
+   // The clip ends bent over, still standing: the body falls the rest of the way under physics, then holds.
+   if(BattleRagdoll::Start(M))Falling.Add(ID);
+   else{BattleFollowerBones::PrepareFreeze(M,bReduceHiddenBones);M->SetComponentTickEnabled(false);}
+  }
   else RefreshFollowerPose(ID);
  }
+ for(int32 ID:Falling)BodyTimers.Add(ID,{Now+BattleRagdoll::SettleSeconds,false,true});
 }
 
 void UBattleLeaderRuntime::AuditFollowerPoses(double Now)
@@ -141,6 +158,55 @@ void UBattleLeaderRuntime::AuditFollowerPoses(double Now)
  }
 }
 
+void UBattleLeaderRuntime::AimFollowerRifles(double Now)
+{
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ const float Dt=GetWorld()->GetDeltaSeconds();
+ for(auto& Pair:Bodies)
+ {
+  const int32 ID=Pair.Key;auto& B=Pair.Value;
+  if(B.Actor.IsValid()||!B.Mesh.IsValid()||!B.Weapon.IsValid()||!B.Mesh->IsComponentTickEnabled()||(VAT&&VAT->IsFar(ID)))continue;
+  const auto* U=Store->Find(ID);if(!U||!U->IsAlive())continue;
+  // Cover clips and blind fire turn the mesh themselves (BattleCoverAction.cpp); leave it to them.
+  if(B.CoverClipPhase||B.bBlindPose){B.MuzzleYaw=B.MuzzlePitch=0.f;continue;}
+  // Moving into or out of cover without a cover clip yet, the turn is dropped here (the cover code may not set the rotation).
+  if(U->CoverPhase)
+  {
+   if(B.MuzzleYaw!=0.f||B.MuzzlePitch!=0.f){B.MuzzleYaw=B.MuzzlePitch=0.f;B.Mesh->SetRelativeLocationAndRotation(FVector(0,0,-90),FRotator(0,-90,0));}
+   continue;
+  }
+  float WantYaw=0.f,WantPitch=0.f;
+  if(Now-LastFireTimes.FindRef(ID,-100.)<BattleBodyAnim::ReadySeconds && !B.bRunPose && B.Pose!=2 && StanceOf(ID)!=BattleStance::Prone)
+  {
+   // The barrel (the weapon model's local -Y, posed by the last evaluated frame under the current mesh turn) against the
+   // facing across and the last shot's pitch up and down.
+   const FVector Barrel=-B.Weapon->GetComponentTransform().GetUnitAxis(EAxis::Y);
+   const FVector Facing=B.Capsule.IsValid()?B.Capsule->GetForwardVector():Forward(ID);
+   const FVector* Shot=FollowerAims.Find(ID);
+   const float ShotPitch=Shot?FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Shot->Z,-1.,1.))):0.f;
+   const float BarrelPitch=FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Barrel.Z,-1.,1.)));
+   WantYaw=Barrel.SizeSquared2D()>.01?FMath::Clamp(B.MuzzleYaw+FMath::FindDeltaAngleDegrees(Barrel.Rotation().Yaw,Facing.Rotation().Yaw),-MaxFollowerMuzzleYaw,MaxFollowerMuzzleYaw):B.MuzzleYaw;
+   WantPitch=FMath::Clamp(B.MuzzlePitch+(ShotPitch-BarrelPitch),-MaxFollowerMuzzlePitch,MaxFollowerMuzzlePitch);
+  }
+  const float Yaw=FMath::FInterpConstantTo(B.MuzzleYaw,WantYaw,Dt,360.f),Pitch=FMath::FInterpConstantTo(B.MuzzlePitch,WantPitch,Dt,180.f);
+  if(FMath::IsNearlyEqual(Yaw,B.MuzzleYaw,.05f) && FMath::IsNearlyEqual(Pitch,B.MuzzlePitch,.05f))continue;
+  B.MuzzleYaw=Yaw;B.MuzzlePitch=Pitch;
+  // Turn and tilt in the capsule's frame about its centre (the mesh hangs 90 cm below it, its own forward turned by -90).
+  // The feet stay at their height (only the slide forward or back of the hip pivot is kept).
+  const FQuat Turn=FRotator(Pitch,Yaw,0.f).Quaternion();
+  FVector Place=Turn.RotateVector(FVector(0,0,-90));Place.Z=-90.;
+  B.Mesh->SetRelativeLocationAndRotation(Place,Turn*FRotator(0,-90,0).Quaternion());
+ }
+}
+
+void UBattleLeaderRuntime::ClearFollowerRifleTurn(int32 ID)
+{
+ auto* B=Bodies.Find(ID);
+ if(!B||B->Actor.IsValid()||!B->Mesh.IsValid()||(B->MuzzleYaw==0.f&&B->MuzzlePitch==0.f))return;
+ B->MuzzleYaw=B->MuzzlePitch=0.f;
+ B->Mesh->SetRelativeLocationAndRotation(FVector(0,0,-90),FRotator(0,-90,0));
+}
+
 void UBattleLeaderRuntime::RefreshFollowerPose(int32 ID)
 {
  const auto* B=Bodies.Find(ID);
@@ -155,12 +221,14 @@ void UBattleLeaderRuntime::UpdateAIStance(int32 ID,double Now,bool bMoving,bool 
  const uint8 Current=StanceOf(ID);
  // Pinned by suppression: get as low as possible, whatever the order says (own state only).
  if(IsPinned(ID,Now)){SetStance(ID,BattleStance::Prone,Now);return;}
- if(bMoving||!bCombat){SetStance(ID,BattleStance::Stand,Now);return;}
+ if(bMoving||!bCombat){NoCoverProneUntil.Remove(ID);SetStance(ID,BattleStance::Stand,Now);return;}
  if(bLostSight)
  {
   // The remembered target is no longer visible from down here: stand up and look for a few seconds.
   if(Current!=BattleStance::Stand&&SetStance(ID,BattleStance::Stand,Now)){StanceLockedUntil.Add(ID,Now+3.);SightExperiment.Cover(TEXT("stance_stood_to_look"));}
   return;
  }
+ // -BattleNoCoverFallback: no cover and no better place found - lie down while he still sees his target.
+ if(const double* T=NoCoverProneUntil.Find(ID)){if(*T>Now){SetStance(ID,BattleStance::Prone,Now);return;}NoCoverProneUntil.Remove(ID);}
  SetStance(ID,BattleStance::Crouch,Now);
 }

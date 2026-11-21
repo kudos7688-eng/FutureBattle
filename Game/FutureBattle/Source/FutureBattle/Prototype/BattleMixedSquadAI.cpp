@@ -1,6 +1,7 @@
 #include "BattleSquadAI.h"
 #include "BattleMixedDriver.h"
 #include "BattlePerception.h"
+#include "BattleTactics.h"
 #include "BattleMetrics.h"
 
 // Existing normal-play coordination rules, with value adapters for Mass.
@@ -80,7 +81,7 @@ void UBattleSquadAI::UpdateMixed(UBattlePhase3* Phase3,double Now)
 		{
 			const auto* S = Unit->GetState(); const auto* Contact = Perception->FindContact(S->UnitID, Target);
 			FBattleMixedUnit* Enemy = ByID.FindRef(Target);
-			return S->Role != EBattleRole::Flank && Contact && Contact->bVisible && Enemy && Unit->CanSee(Enemy) &&
+			return S->Role != EBattleRole::Flank && Contact && Contact->bVisible && (BattleTactics::ObservedTactics()||(Enemy && Unit->CanSee(Enemy))) &&
 				S->Ammo > 0 && S->ReloadEndTime == 0. && S->Action == EBattleAction::Engaging && Unit->GetVelocity().Size2D() < 20.f &&
 				S->ShotSequence > 0 && S->NextShotTime > Now - FMath::Max(.5f, Tuning->ShotInterval(S->Weapon, false));
 		};

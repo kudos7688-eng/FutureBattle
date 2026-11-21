@@ -24,6 +24,7 @@ namespace BattleSquadType
  int32 Members(uint8 Type);
  int32 RifleMembers(); // rifle squad size (UBattleTuning::RifleMembers, 8; -BattleRifleMembers= overrides)
  float HealthScale(uint8 Type);
+ float MaxHealth(uint8 Type,bool bLeader);
  float SpeedScale(uint8 Type);
  float DamageScale(uint8 Type);
  int32 AreaCost(uint8 Type);
@@ -51,9 +52,18 @@ namespace BattleSquadType
  int32 LauncherRounds(uint8 Type); // anti-tank rounds of the second weapon (0 = none)
  int32 ScoreCount(uint8 Type);     // how many soldiers one living member counts for in the final score (1 for all but the exoskeleton)
  float SpeedAt(uint8 Type,const UWorld* World,const FVector& Position); // scale of UBattleTuning::MoveSpeed
- // Supply team (2026-11-19, user request): 3 riflemen. Squads of its team whose leader stays within UBattleTuning::SupplyTeamRadius of
- // its living leader get the home ammunition refill (UBattleMatch::UpdateArea). Cost AreaSupplyCost, at most AreaSupplyLimit per team.
- // The AI does not buy it.
+ // Supply vehicle (type 9; 2026-11-19 a 3-soldier supply team, 2026-11-20 replaced by one vehicle, user decision: a vehicle limits where
+ // it can go and makes it a target). The armoured car's vehicle values and machine gun (self-defence). It carries SupplyCarStock
+ // rounds: squads of its team whose leader stays within UBattleTuning::SupplyTeamRadius of it get the home ammunition refill
+ // (UBattleMatch::UpdateArea) while it has stock left; it refills at home (BattleSupplyCar.cpp). Cost AreaSupplyCost, at most
+ // AreaSupplyLimit per team. The AI keeps AreaSupplyKeep of them (trial -BattleAreaSupplyKeep=n; default 0 until measured).
+}
+
+namespace BattleRosterLimits
+{
+ // Shared by recruitment, replenishment and persistence; includes dead/retired records.
+ constexpr int32 Area=1000;
+ constexpr int32 Mixed=500;
 }
 
 UENUM(BlueprintType)
@@ -272,6 +282,8 @@ struct FBattleUnitState
 	UPROPERTY() float ShieldWait = 0.f;
 	// Exoskeleton second weapon: anti-tank rounds left and seconds until the next one is loaded (relative). 0 for other types.
 	UPROPERTY() int32 Launcher = 0;
+ // Separate from the SPG machine gun. Revision 3 saves retain depleted main-gun ammunition.
+ UPROPERTY() int32 SPGAmmo = 0;
 	UPROPERTY() bool bLauncherSelected = false;
 	UPROPERTY() float LauncherWait = 0.f;
 	// Carries a weapon that hurts armour: an anti-tank soldier or an exoskeleton with launcher rounds left.
@@ -375,10 +387,19 @@ public:
 	// goes home to be repaired like a vehicle. The AI keeps AreaExoKeep of them (trial -BattleAreaExoKeep=n; default 0 until measured).
 	UPROPERTY(Config, EditAnywhere) int32 AreaExoCost = 30;
 	UPROPERTY(Config, EditAnywhere) int32 AreaExoLimit = 3;
-	// Supply team (squad type 9): see BattleSquadType.
+	// Supply vehicle (squad type 9): see BattleSquadType and BattleSupplyCar.cpp.
 	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyCost = 10;
 	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyLimit = 2;
 	UPROPERTY(Config, EditAnywhere) float SupplyTeamRadius = 3000.f;
+	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyKeep = 0;
+	// Rounds the vehicle carries (an empty 8-soldier rifle squad takes 720 of reserve ammunition); below SupplyCarRestockRatio of it the
+	// vehicle drives home and waits there until full again.
+	UPROPERTY(Config, EditAnywhere) int32 SupplyCarStock = 2400;
+	UPROPERTY(Config, EditAnywhere) float SupplyCarRestockRatio = .15f;
+	// How far short of its post (on the own side) the vehicle stops; further back in 20 m steps while a known anti-tank soldier reaches it.
+	UPROPERTY(Config, EditAnywhere) float SupplyCarBack = 4000.f;
+	// A squad short of ammunition drives to a supply vehicle of its team with stock within this distance instead of going home.
+	UPROPERTY(Config, EditAnywhere) float FieldSupplyRange = 20000.f;
 	UPROPERTY(Config, EditAnywhere) int32 AreaExoKeep = 0;
 	UPROPERTY(Config, EditAnywhere) float ExoHealthScale = 2.f;
 	UPROPERTY(Config, EditAnywhere) float ExoArmorSmallArms = .3f;
@@ -386,6 +407,8 @@ public:
 	UPROPERTY(Config, EditAnywhere) float ExoDamageScale = 2.f;
 	UPROPERTY(Config, EditAnywhere) float ExoShield = 100.f;
 	UPROPERTY(Config, EditAnywhere) float ExoShieldDelay = 5.f;
+ // Trial: an 8 s quiet window after each hit, including hits wholly absorbed by the shield.
+ UPROPERTY(Config, EditAnywhere) float ExoShieldSuppressionDelay = 8.f;
 	UPROPERTY(Config, EditAnywhere) float ExoShieldRegen = 20.f;
 	UPROPERTY(Config, EditAnywhere) int32 ExoLauncherRounds = 4;
 	UPROPERTY(Config, EditAnywhere) float ExoLauncherReload = 8.f;
@@ -459,6 +482,11 @@ public:
 	UPROPERTY(Config, EditAnywhere) float SPGMinRange = 10000.f;
 	UPROPERTY(Config, EditAnywhere) float SPGRange = 100000.f;
 	UPROPERTY(Config, EditAnywhere) float SPGReload = 10.f;
+ // Trial: 12 rounds = about two minutes at the 10 s cyclic rate; a supply cycle restores six
+ // (one minute of fire). Deliberately provisional, separate from machine-gun reserve.
+ UPROPERTY(Config, EditAnywhere) int32 SPGAmmoCapacity = 12;
+ UPROPERTY(Config, EditAnywhere) int32 SPGInitialAmmo = 12;
+ UPROPERTY(Config, EditAnywhere) int32 SPGSupplyRounds = 6;
 	UPROPERTY(Config, EditAnywhere) float SPGShellSpeed = 25000.f;
 	UPROPERTY(Config, EditAnywhere) float SPGSpread = 1500.f;
 	UPROPERTY(Config, EditAnywhere) float SPGBlastRadius = 1000.f;
@@ -498,6 +526,13 @@ public:
 	// Default on for every map since 2026-11-20 (user decision after the 9-seed trial with cover actions: map A +41, map E +-0).
 	UPROPERTY(Config, EditAnywhere) bool bAreaGroups = true;
 	UPROPERTY(Config, EditAnywhere) int32 GroupRifleSquads = 3;
+ // Trial strength per living member (not per squad), indexed by BattleSquadType.
+ // Rifle=1 against infantry; heavy sustained fire=1.5, vehicles/Exo count as multiple rifles.
+ // Anti-armour values represent dedicated weapons, not price or AI shooting skill.
+ UPROPERTY(Config, EditAnywhere) TArray<float> GroupAntiInfantry = {1.f,1.5f,.5f,.6f,6.f,5.f,2.f,8.f,5.f,.3f};
+ UPROPERTY(Config, EditAnywhere) TArray<float> GroupAntiArmour = {0.f,0.f,0.f,3.f,8.f,1.f,0.f,2.f,4.f,0.f};
+ // Unknown reports stay separate: each adds this many rifle-equivalent risk points.
+ UPROPERTY(Config, EditAnywhere) float GroupUnknownRisk = 1.5f;
 	UPROPERTY(Config, EditAnywhere) float GroupRallyBack = 12000.f;
 	UPROPERTY(Config, EditAnywhere) float GroupRallyBackProfile = 20000.f;
 	UPROPERTY(Config, EditAnywhere) float GroupRallyRadius = 4000.f;
@@ -637,7 +672,7 @@ public:
 	UPROPERTY(Config, EditAnywhere) float SupplyAwayRatio = 1.f;
 	UPROPERTY(Config, EditAnywhere) float SupplyHealPerSecond = 0.f;
 	UPROPERTY(Config, EditAnywhere) float SupplyResumeHealthRatio = 0.f;
-	// Area new-squad hiring (adopted 2026-11-14; -BattleAreaHire=0 disables): a team with fewer than AreaMaxActiveSquads (25) active squads may buy
+	// Area new-squad hiring (adopted 2026-11-14; -BattleAreaHire=0 disables): a team with fewer than AreaMaxActiveSquads (30 since 2026-11-20; was 25) active squads may buy
 	// a fresh RifleMembers-soldier regular squad at home for AreaSquadCost resources. AI buys only when resources minus pending
 	// replenishments >= AreaSquadCost + AreaHireReserve.
 	// Rifle squad size (2026-11-19 user decision: 10 -> 8, cost 15 -> 12; area matches only, other modes keep 10). -BattleRifleMembers= overrides per run (2..10).
@@ -647,7 +682,7 @@ public:
 	UPROPERTY(Config, EditAnywhere) int32 AreaHireReserve = 0;
 	// Active squad limit per team for hiring (player and AI, all squad types). Default 25 = the starting squad count.
 	// Trial -BattleAreaMaxSquads=N (1..100) overrides per run (2026-11-19: preparing a 40-squad trial after the 8-soldier rifle squad).
-	UPROPERTY(Config, EditAnywhere) int32 AreaMaxActiveSquads = 25;
+	UPROPERTY(Config, EditAnywhere) int32 AreaMaxActiveSquads = 30;
 	// AI purchase pacing (0 = off, the first implementation): at least AreaHireIntervalSeconds between a team's AI purchases,
 	// and no AI purchase in the last AreaHireStopSeconds of the time limit. Trials: -BattleAreaHireReserve= / -Interval= / -Stop=.
 	UPROPERTY(Config, EditAnywhere) float AreaHireIntervalSeconds = 0.f;
@@ -769,14 +804,20 @@ public:
 	bool ToggleExoWeapon(int32 UnitID);
 	bool UseLauncher(int32 UnitID); // one round out, the load time starts; false when empty or still loading
 	void RefillLauncher(int32 UnitID);
+ bool UseSPGAmmo(int32 UnitID);
+ int32 RefillSPGAmmo(int32 UnitID);
 	float MaxShieldOf(int32 UnitID) const;
 	bool HasShields() const { return bShields; }
+ bool HasExoskeletons() const { return bExoskeletons; }
+ void AdvanceLaunchers(float DeltaSeconds);
 	bool ApplyDamage(int32 ID, int32 AttackingTeam, float Damage);
 	// ApplyDamage plus where the shot or blast came from, for the HUD's hit direction (display only, same result as ApplyDamage).
 	// KillerID and Kind (optional) feed the kill log when the hit kills.
 	bool ApplyDamageFrom(int32 ID, int32 AttackingTeam, float Damage, const FVector& From, int32 KillerID = INDEX_NONE, EBattleKillKind Kind = EBattleKillKind::Unknown);
 	// Where the hit being applied right now came from (only inside ApplyDamageFrom; the sector AI's -BattleShotDirection).
 	bool PendingHitSource(FVector& Out) const { if (!bPendingHitFrom) return false; Out = PendingHitFrom; return true; }
+	// Who fired the hit being applied right now (only inside ApplyDamageFrom; INDEX_NONE when unknown). -BattleHitReveal.
+	int32 PendingHitShooter() const { return PendingKiller; }
 	// Hit direction (2026-11-19, display only): the HUD sets HitWatchID to the unit the player controls every frame; hits on
 	// that unit are kept here (newest last, at most 6). Hits through ApplyDamage alone have no known source.
 	int32 HitWatchID = INDEX_NONE;
@@ -794,7 +835,8 @@ private:
 	UPROPERTY() TMap<int32, FBattleUnitState> Units;
 	UPROPERTY() TMap<int32, FBattleSquadState> Squads;
 	int32 NextSquadID = 1;
-	bool bShields = false; // a squad type with a shield exists (purchase or restore)
+	bool bExoskeletons = false; // body capability, independent of configured shield capacity
+ bool bShields = false; // a squad type with a shield exists (purchase or restore)
 	int32 NextID = 1;
 	FVector PendingHitFrom = FVector::ZeroVector; bool bPendingHitFrom = false; // set only inside ApplyDamageFrom
 	int32 PendingKiller = INDEX_NONE; EBattleKillKind PendingKind = EBattleKillKind::Unknown;

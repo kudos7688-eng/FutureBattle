@@ -11,13 +11,99 @@ bool UBattleSave::ValidateMixed(FString& Error) const
  auto Fail=[&](const TCHAR* Why){Error=Why;return false;};
  if(!BattleFieldLayout::IsMixedSaveMap(MapName)) return Fail(TEXT("Unknown mixed map"));
  if((Ruleset!=TEXT("Wide")&&Ruleset!=TEXT("MixedFast")&&Ruleset!=TEXT("Area")) || !Finite(BaseSightRange,100,50000)||!Finite(WeaponRange,100,100000)||TacticalFeatures<0||TacticalFeatures>((90<<9)|511) ||
-    !Finite(TacticalClock,0,1000)||!Finite(TeamNextAssignment,0,TacticalClock+1.1)||!Finite(DelegationClock,0,5.1))return Fail(TEXT("Invalid mixed rules/clocks"));
+    !Finite(TacticalClock,0,BattleSaveValidation::ClockLimit(MapName))||!Finite(TeamNextAssignment,0,TacticalClock+1.1)||!Finite(DelegationClock,0,5.1))return Fail(TEXT("Invalid mixed rules/clocks"));
  if(Ruleset==TEXT("Wide")&&(Units.Num()!=50*BattleSquadType::RifleMembers() || Squads.Num()!=50))return Fail(TEXT("Fixed wide roster must contain 500 soldiers and 50 squads"));
  if(Ruleset==TEXT("MixedFast")&&(Units.Num()<20||Units.Num()>500||Units.Num()!=Squads.Num()*BattleSquadType::RifleMembers()))return Fail(TEXT("Invalid purchased roster"));
  TMap<int32,const FBattleSavedUnit*> ByID;
  TMap<int32,const FBattleSquadState*> BySquad;
  for(const auto& U:Units)ByID.Add(U.State.UnitID,&U);
  for(const auto& S:Squads)BySquad.Add(S.SquadID,&S);
+ // Groups may still contain disabled squads until the next director update. Historical Roles may
+ // also name squads that left the group. Preserve both; only current membership must be reciprocal.
+ if(SavedGroups.Num()>Squads.Num()||SavedSquadGroup.Num()>Squads.Num()||SavedCarChoices.Num()>Squads.Num()||
+    SavedNextGroupID<1||SavedNextGroupID>1000001)return Fail(TEXT("Invalid strategic collection sizes or next group ID"));
+ auto Objective=[&](int32 ID){return ID==INDEX_NONE||Objectives.IsValidIndex(ID);};
+ TSet<int32> GroupMembers;
+ for(const auto& Pair:SavedGroups)
+ {
+  const auto& G=Pair.Value;
+  if(Pair.Key!=G.ID||G.ID<1||G.ID>=SavedNextGroupID||G.Team<0||G.Team>1||G.Phase>3||
+     G.Squads.Num()<(G.bPlayer?1:2)||G.Squads.Num()>Squads.Num()||G.Roles.Num()>Squads.Num()||
+     !Objective(G.Objective)||!Objective(G.Avoid)||!Objective(G.StallPoint)||!Point(G.Rally)||
+     !(G.StartStrength==-1||Finite(G.StartStrength,0,1.e9))||G.StartLiving<0||G.StartLiving>Units.Num()||G.Stalls<0||G.Stalls>1000000||G.Extensions<0||G.Extensions>1000000)
+   return Fail(TEXT("Invalid saved group identity, phase or history"));
+  // PushExtend can put PhaseAt up to 30 seconds ahead. Expired AvoidUntil must retain its signed offset.
+  if(!Finite(G.PhaseAge,-30.01,double(Elapsed))||!Finite(G.ArrivalAge,0,double(Elapsed))||
+     !Finite(G.AvoidRemaining,-double(Elapsed),3600.01))return Fail(TEXT("Invalid saved group relative clocks"));
+  for(int32 SID:G.Squads)
+  {
+   const auto* S=BySquad.FindRef(SID);const int32* Of=SavedSquadGroup.Find(SID);
+   if(!S||S->Team!=G.Team||GroupMembers.Contains(SID)||!Of||*Of!=G.ID)return Fail(TEXT("Broken saved group membership"));
+   GroupMembers.Add(SID);
+  }
+  for(const auto& Role:G.Roles)
+  {
+   const auto* S=BySquad.FindRef(Role.Key);
+   if(!S||S->Team!=G.Team||(Role.Value>4&&Role.Value!=255))return Fail(TEXT("Invalid saved group role"));
+  }
+ }
+ if(GroupMembers.Num()!=SavedSquadGroup.Num())return Fail(TEXT("Extra saved squad-to-group reference"));
+ for(const auto& Pair:SavedCarChoices)
+ {
+  if(!BySquad.Contains(Pair.Key)||!Objective(Pair.Value.Target)||
+     !Finite(Pair.Value.Age,0,double(Elapsed))||(!Pair.Value.bHasTime&&(Pair.Value.Age!=0||Pair.Value.Target!=INDEX_NONE)))
+   return Fail(TEXT("Invalid saved armour choice or relative clock"));
+ }
+ // Check every record, including retired soldiers which are no longer in Members.
+ for(const auto& E:Units)
+ {
+  const auto* S=BySquad.FindRef(E.State.SquadID);const auto& U=E.State;
+  if(!S||S->SquadType>=BattleSquadType::Count)return Fail(TEXT("Invalid equipment squad"));
+  // Replacements retain the fallen member's weapon, and retired records have no slot.
+  // Validate the type's possible weapons rather than assuming current Members order is a slot ID.
+  bool TypeAllowsWeapon=false;
+  for(int32 EquipmentSlot=0;EquipmentSlot<BattleSquadType::Members(S->SquadType);++EquipmentSlot)
+   TypeAllowsWeapon|=U.Weapon==BattleSquadType::Weapon(S->SquadType,EquipmentSlot);
+  if(!TypeAllowsWeapon||!Finite(U.HP,0,FMath::Min(1.e9,double(BattleSquadType::MaxHealth(S->SquadType,S->LeaderUnitID==U.UnitID)))))
+   return Fail(TEXT("Weapon or health inconsistent with squad type"));
+  const bool Exo=S->SquadType==BattleSquadType::Exo;
+  const bool SPG=S->SquadType==BattleSquadType::SPGun;
+  if(U.SPGAmmo<0||U.SPGAmmo>FMath::Max(0,GetDefault<UBattleTuning>()->SPGAmmoCapacity)||
+     ((!SPG||CombatStateVersion<3||(ArtilleryTrialFlags&2)==0)&&U.SPGAmmo!=0))
+   return Fail(TEXT("Invalid SPG ammunition or extension version"));
+  if(!Finite(U.Shield,0,BattleSquadType::ShieldMax(S->SquadType))||!Finite(U.Launcher,0,BattleSquadType::LauncherRounds(S->SquadType))||
+     !Finite(U.ShieldWait,0,Exo?BattleTactics::ExoShieldHitDelay():0.f)||
+     !Finite(U.LauncherWait,0,Exo?FMath::Max(.5f,GetDefault<UBattleTuning>()->ExoLauncherReload):0.f)||(!Exo&&U.bLauncherSelected))
+   return Fail(TEXT("Shield or launcher inconsistent with squad type"));
+ }
+ if(SavedArtillery.Num()>Units.Num()||SavedArtilleryShells.Num()>100000)return Fail(TEXT("Invalid artillery collection size"));
+ auto ArtilleryType=[&](int32 ID,bool bSPG)
+ {
+  const auto* U=ByID.FindRef(ID);const auto* S=U?BySquad.FindRef(U->State.SquadID):nullptr;
+  return S&&(bSPG?(S->SquadType==BattleSquadType::SPGun&&S->LeaderUnitID==ID):
+   (S->SquadType==BattleSquadType::Mortar&&U->State.Weapon==EBattleWeapon::Mortar));
+ };
+ // Landing spread and observed targets may lie beyond the playable map's save bounds.
+ auto ArtilleryPoint=[&](const FVector& P){return Finite(P.X,-1.e9,1.e9)&&Finite(P.Y,-1.e9,1.e9)&&Finite(P.Z,-1.e9,1.e9);};
+ for(const auto& Pair:SavedArtillery)
+ {
+  const auto& A=Pair.Value;
+  if((!ArtilleryType(Pair.Key,false)&&!ArtilleryType(Pair.Key,true))||!Finite(A.SetupElapsed,0,1000000)||
+     (!A.bSettingUp&&A.SetupElapsed!=0)||!Finite(A.ReloadRemaining,0,1000000)||!Finite(A.PickRemaining,0,1000000)||
+     !BattleSaveValidation::Counter(A.Shots)||!ArtilleryPoint(A.Aim))return Fail(TEXT("Invalid saved artillery"));
+  if(A.TargetKey>0)
+  {
+   const auto* Target=ByID.FindRef(A.TargetKey);const auto* Shooter=ByID.FindRef(Pair.Key);
+   if(!Target||!Shooter||Target->State.Team==Shooter->State.Team)return Fail(TEXT("Invalid artillery observed target"));
+  }
+ }
+ for(const auto& Shell:SavedArtilleryShells)
+ {
+  const auto* U=ByID.FindRef(Shell.ShooterID);
+  if(!U||!ArtilleryType(Shell.ShooterID,Shell.bSPG)||Shell.Team!=U->State.Team||
+     Shell.ShooterType!=(Shell.bSPG?BattleSquadType::SPGun:BattleSquadType::Mortar)||
+     !ArtilleryPoint(Shell.At)||!Finite(Shell.Remaining,0,1000000))return Fail(TEXT("Invalid saved artillery shell"));
+ }
  if(Ruleset==TEXT("Area"))
  {
   int32 Current=0;for(const auto& U:Units)Current+=!U.State.bRetired;
@@ -45,7 +131,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   for(const auto& P:Area.HirePurpose)if(!((P.Value>=0&&P.Value<Objectives.Num())||P.Value==100||P.Value==101)||!BySquad.FindRef(P.Key))return Fail(TEXT("Invalid area hire purpose"));
   if(Area.HomeHitAt.Num()!=2||!Finite(Area.HomeHitAt[0],-1000,Elapsed+.01)||!Finite(Area.HomeHitAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area home hit clock"));
   if(Retired[0]+Area.HireSpent[0]+AllyCredits!=100+Area.Income[0]||Retired[1]+Area.HireSpent[1]+EnemyCredits!=100+Area.Income[1])return Fail(TEXT("Area resource conservation mismatch"));
-  if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=ExpectedRoster||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=2*Objectives.Num()||Area.SeenAt.Num()!=2*Objectives.Num()||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>200||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
+  if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=ExpectedRoster||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=2*Objectives.Num()||Area.SeenAt.Num()!=2*Objectives.Num()||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>Current||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
   for(int32 Team=0;Team<2;++Team)if(!Finite(Area.BaseHP[Team],0,1000)||!Finite(Area.KnownEnemyBaseHP[Team],-1,1000))return Fail(TEXT("Invalid base state"));
   for(int32 I=0;I<Area.KnownOwners.Num();++I)if(Area.KnownOwners[I]<-2||Area.KnownOwners[I]>1||!Finite(Area.SeenAt[I],-1,Elapsed+.01))return Fail(TEXT("Invalid observed objective"));
   int32 Reserved[2]={0,0};
@@ -57,13 +143,14 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   }
   if(Reserved[0]>AllyCredits||Reserved[1]>EnemyCredits)return Fail(TEXT("Overbooked replenishment resources"));
   for(const auto& Q:Area.AmmoTimers)if(!BySquad.Contains(Q.Key)||!Finite(Q.Value,0,10))return Fail(TEXT("Invalid home ammunition timer"));
+  for(const auto& Q:Area.SupplyStock){const auto* S=BySquad.FindRef(Q.Key);if(!S||S->SquadType!=BattleSquadType::Supply||Q.Value<0||Q.Value>100000)return Fail(TEXT("Invalid supply vehicle stock"));}
  }
- if(Squads.Num()>(Ruleset==TEXT("Area")?400:50)||SavedPlans.Num()!=Squads.Num()||TacticalSamples.Num()>Squads.Num()||NextSamples.Num()>Squads.Num()||TeamRetryAfter.Num()>Squads.Num()||DamageBuckets.Num()>Squads.Num()*7)return Fail(TEXT("Invalid mixed collection sizes"));
+ if(Squads.Num()>(Ruleset==TEXT("Area")?BattleRosterLimits::Area:50)||SavedPlans.Num()!=Squads.Num()||TacticalSamples.Num()>Squads.Num()||NextSamples.Num()>Squads.Num()||TeamRetryAfter.Num()>Squads.Num()||DamageBuckets.Num()>Squads.Num()*7)return Fail(TEXT("Invalid mixed collection sizes"));
  for(const auto& S:Squads)
  {
   const auto* Leader=ByID.FindRef(S.LeaderUnitID);
   if(!Leader||!S.Members.Contains(S.LeaderUnitID)||S.SquadType>=BattleSquadType::Count||S.Members.Num()!=BattleSquadType::Members(S.SquadType)||
-    (S.CommandStatus!=EBattleCommandStatus::Active&&S.CommandStatus!=EBattleCommandStatus::Disabled)||S.DisplayName.Len()>80||S.CommandRevision<0||
+    (S.CommandStatus!=EBattleCommandStatus::Active&&S.CommandStatus!=EBattleCommandStatus::Disabled)||S.DisplayName.Len()>80||!BattleSaveValidation::Counter(S.CommandRevision)||
     !Finite(S.FlankCooldown,0,15.1))return Fail(TEXT("Invalid leader squad"));
   for(int32 ID:S.Members)
   {
@@ -78,7 +165,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
      (S.CommandStatus==EBattleCommandStatus::Disabled&&S.bPlayerDelegated))return Fail(TEXT("Invalid dead leader state"));
   const auto* P=SavedPlans.Find(S.SquadID);
   if(!P||static_cast<uint8>(P->Action)>static_cast<uint8>(EBattleSquadTactic::Recover)||!Point(P->Destination)||!Point(P->FlankContact)||
-    !Finite(P->Remaining,0,60)||P->Revision<0||P->Reason.Len()>160||!Finite(P->Age,0,1000)||!Finite(P->SafeSeconds,0,1000)||
+    !Finite(P->Remaining,0,60)||!BattleSaveValidation::Counter(P->Revision)||P->Reason.Len()>160||!Finite(P->Age,0,BattleSaveValidation::ClockLimit(MapName))||!Finite(P->SafeSeconds,0,BattleSaveValidation::ClockLimit(MapName))||
     !Finite(P->FlankSupportChanges,0,1)||!Finite(P->RetrySeconds,0,600)||!Finite(P->FlankExposure,0,1)||!Finite(P->SupportUntil,0,TacticalClock+20.1)||!Finite(P->LastSupportShot,-1,TacticalClock+.01))return Fail(TEXT("Invalid saved tactical plan"));
   auto Ally=[&](int32 ID){const auto* Other=BySquad.FindRef(ID);return Other&&ID!=S.SquadID&&Other->Team==S.Team;};
   auto Enemy=[&](int32 ID){const auto* Other=ByID.FindRef(ID);return Other&&Other->State.Team!=S.Team;};
@@ -101,13 +188,25 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   for(const auto& Contact:O.Contacts)
   {
    const auto& C=Contact.Value;const auto* Source=ByID.FindRef(C.SourceUnitID);const auto* Target=ByID.FindRef(C.TargetID);
-   if(C.TargetID!=Contact.Key||!Source||!Target||Source->State.Team!=S->Team||Target->State.Team==S->Team||!Point(C.LastKnownPosition)||
-     !Finite(C.LastSeenTime,-1000000,.01)||!Finite(C.Confidence,0,1))return Fail(TEXT("Invalid observed contact"));
+   if(C.TargetID!=Contact.Key||!BattleSaveValidation::Contact(C,S->Team,Source?&Source->State:nullptr,Target?&Target->State:nullptr,
+     BattleFieldLayout::ByName(MapName).SaveLimit))return Fail(TEXT("Invalid observed contact"));
   }
  }
  for(const auto& P:NextSamples)if(!BySquad.Contains(P.Key)||!Finite(P.Value,0,TacticalClock+1.1))return Fail(TEXT("Invalid tactical scheduling"));
  for(const auto& P:TeamRetryAfter)if(!BySquad.Contains(P.Key)||!Finite(P.Value,0,TacticalClock+60))return Fail(TEXT("Invalid team scheduling"));
- for(const auto& D:DamageBuckets)if(!BySquad.Contains(D.SquadID)||!Finite(D.Bucket,0,TacticalClock)||!Finite(D.Damage,0,100000))return Fail(TEXT("Invalid damage history"));
+ // RecordDamage prunes ages >5 before appending: at most six distinct integer seconds.
+ // Capture preserves each squad's array order (the order between squads is immaterial).
+ TMap<int32,double> LastDamageBucket;
+ TMap<int32,int32> DamageBucketCounts;
+ for(const auto& D:DamageBuckets)
+ {
+  if(!BySquad.Contains(D.SquadID)||!Finite(D.Bucket,0,TacticalClock)||
+     D.Bucket!=FMath::FloorToDouble(D.Bucket)||!Finite(D.Damage,0,100000))return Fail(TEXT("Invalid damage history"));
+  const double* PreviousBucket=LastDamageBucket.Find(D.SquadID);
+  if((PreviousBucket&&D.Bucket<=*PreviousBucket)||++DamageBucketCounts.FindOrAdd(D.SquadID)>6)
+   return Fail(TEXT("Invalid damage history"));
+  LastDamageBucket.Add(D.SquadID,D.Bucket);
+ }
  return true;
 }
 
