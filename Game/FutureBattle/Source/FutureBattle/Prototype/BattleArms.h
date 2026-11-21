@@ -21,6 +21,8 @@ namespace BattleArms
  int32 AreaSniperKeep();  // -BattleAreaSniperKeep=n: sniper teams the area AI keeps (0 = none)
  int32 SniperCost();      // -BattleSniperCost=n: area purchase cost (default 14; a scout pair costs AreaScoutCost)
  constexpr int32 SniperLimit=3; // sniper teams per team (they do not count against the scout pair limit)
+ int32 AssaultMode();     // -BattleArmsAssault: 0 off, 1 elite assault roles dash close (UBattleLeaderRuntime::StartAssault), 2 also one
+                          // grenade carrier per ordinary rifle squad
  bool SmokeEnabled();     // -BattleArmsSmoke: the self-test (UBattleLeaderRuntime::RunArmsSmoke)
  bool AnyTrial();         // any of the switches above
  uint8 EliteKit(int32 Slot);            // role of a slot (slots past the table are riflemen)

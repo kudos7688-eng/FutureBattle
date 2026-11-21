@@ -330,7 +330,8 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
  // -BattleContactCover: the squad's target flickers; the walk goes on while this soldier's own sighting is fresh (the stale check below).
  else if(Target==INDEX_NONE && !bContactCover)End=TEXT("approach_cancel_disengaged");
  // The squad re-picks its target every think; keep walking while this soldier still sees its own threat.
- else if(Target!=A->Target && !(Contact && Contact->bVisible) && !bContactCover)End=TEXT("approach_cancel_target_changed");
+ // An assault dash (BattleArms.cpp) goes on toward an enemy hidden behind his cover while the sighting is fresh (the stale check below).
+ else if(Target!=A->Target && !(Contact && Contact->bVisible) && !bContactCover && !A->bAssault)End=TEXT("approach_cancel_target_changed");
  else if(!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds))End=TEXT("approach_cancel_contact_stale");
  else if(!A->bFree && !GetWorld()->GetSubsystem<UBattleCover>()->IsAvailable(A->Slot,ID,Now))End=TEXT("approach_cancel_slot_taken");
  else if(FVector::Dist2D(Pos,A->Goal)<120)
@@ -351,9 +352,10 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
    else{FirePositions.Add(ID,Done.Goal);CoverProbeAfter.Add(ID,Now+8.);Diag.Cover(TEXT("fire_position_settled"));}
    return false;
   }
-  if(bContactCover && Contact)
+  if((bContactCover || A->bAssault) && Contact)
   {
    const int32 Goal=A->Target;const FVector Threat=Contact->LastKnownPosition;
+   if(A->bAssault)Diag.Cover(TEXT("arms_assault_arrived"));
    Diag.Cover(End);CoverApproaches.Remove(ID);
    if(RequestCoverAction(ID,Threat,Goal,250.f))Diag.Cover(TEXT("approach_arrived_took_cover"));
    return false;

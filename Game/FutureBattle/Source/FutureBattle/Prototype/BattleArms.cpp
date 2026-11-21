@@ -15,6 +15,7 @@
 #include "BattleTactics.h"
 #include "BattleUnit.h"
 #include "BattleMuzzleFlash.h"
+#include "BattleCover.h"
 #include "BattleVATDisplay.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -41,8 +42,9 @@ int32 BattleArms::EliteCost(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("
 bool BattleArms::SniperEnabled(){static const bool b=IntSwitch(TEXT("BattleSniperTeam="))!=0;return b;}
 int32 BattleArms::AreaSniperKeep(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleAreaSniperKeep=")),0,SniperLimit);return N;}
 int32 BattleArms::SniperCost(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleSniperCost="),14),1,200);return N;}
+int32 BattleArms::AssaultMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleArmsAssault=")),0,2);return N;}
 bool BattleArms::SmokeEnabled(){static const bool b=FParse::Param(FCommandLine::Get(),TEXT("BattleArmsSmoke"));return b;}
-bool BattleArms::AnyTrial(){return SidearmsEnabled()||GrenadeCount()>0||MeleeEnabled()||EliteEnabled()||AreaEliteKeep()>0||SniperEnabled()||AreaSniperKeep()>0||SmokeEnabled();}
+bool BattleArms::AnyTrial(){return SidearmsEnabled()||GrenadeCount()>0||MeleeEnabled()||EliteEnabled()||AreaEliteKeep()>0||SniperEnabled()||AreaSniperKeep()>0||AssaultMode()>0||SmokeEnabled();}
 
 uint8 BattleArms::EliteKit(int32 Slot)
 {
@@ -267,7 +269,8 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
  const auto& G=BattleArms::Grenade();const auto& L=BattleArms::LauncherRound();const auto& Med=BattleArms::Medic();
  TArray<int32> IDs;
  for(const auto& B:Bodies)if(const auto* U=Store->Find(B.Key);U&&U->IsAlive()&&U->Action!=EBattleAction::DirectControl&&!IsVehicle(B.Key)&&
-  (U->Grenades>0||U->Weapon==EBattleWeapon::GrenadeLauncher||U->Kit==BattleArms::KitMedic))IDs.Add(B.Key);
+  (U->Grenades>0||U->Weapon==EBattleWeapon::GrenadeLauncher||U->Kit==BattleArms::KitMedic||
+   (BattleArms::AssaultMode()>0&&(U->Kit==BattleArms::KitBreacher||U->Kit==BattleArms::KitAssault||U->Kit==BattleArms::KitRifleman))))IDs.Add(B.Key);
  IDs.Sort();
  for(int32 ID:IDs)
  {
@@ -284,6 +287,31 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
    }
    if(Patient!=INDEX_NONE&&Store->Heal(Patient,Med.Rate*.5f)>0.f)SightExperiment.Cover(TEXT("arms_heal_ticks"));
    U=Store->Find(ID);
+  }
+  // Close-quarters assault (-BattleArmsAssault): the elite platoon's breacher, assault man and rifleman (mode 2: also one grenade
+  // carrier of an ordinary rifle squad) dash to hidden cover near a known enemy 30-80 m away, while no more than two of the squad are
+  // dashing and the enemies around the target are not more than half the squad. Known: seen by him, or seen / reported within 3 s.
+  if(const int32 DashMode=BattleArms::AssaultMode();DashMode>0&&S->Order!=EBattleOrder::Move&&!CoverApproaches.Contains(ID)&&Now>=ArmsAssaultNext.FindRef(ID))
+  {
+   const bool bRole=U->Kit==BattleArms::KitBreacher||U->Kit==BattleArms::KitAssault||U->Kit==BattleArms::KitRifleman;
+   const bool bPlain=DashMode>=2&&S->Grade==0&&S->SquadType==BattleSquadType::Rifle&&U->Grenades>0&&S->LeaderUnitID!=ID;
+   if(bRole||bPlain)
+   {
+    int32 Living=0,Dashing=0;
+    for(int32 Member:S->Members)if(const auto* M=Store->Find(Member);M&&M->IsAlive()){++Living;if(const auto* A=CoverApproaches.Find(Member);A&&A->bAssault)++Dashing;}
+    const auto* Contacts=Sense->GetContacts(ID);const FVector Pos=Position(ID);
+    int32 Best=INDEX_NONE;double BestD=8000.;FVector BestAt=FVector::ZeroVector;
+    if(Contacts&&Dashing<(bRole?2:1))for(const auto& C:*Contacts)
+    {
+     if(Now-C.Value.LastSeenTime>3.||(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(C.Value.ObservedSquadType):IsVehicle(C.Key)))continue;
+     const double D=FVector::Dist2D(Pos,C.Value.LastKnownPosition);if(D<=BattleArms::Grenade().MaxRange||D>=BestD)continue;
+     int32 Around=0;for(const auto& O:*Contacts)Around+=Now-O.Value.LastSeenTime<=3.&&FVector::DistSquared2D(O.Value.LastKnownPosition,C.Value.LastKnownPosition)<=FMath::Square(1500.);
+     if(Around*2>Living)continue;
+     Best=C.Key;BestD=D;BestAt=C.Value.LastKnownPosition;
+    }
+    if(Best!=INDEX_NONE)ArmsAssaultNext.Add(ID,Now+(StartAssault(ID,Best,BestAt,Now)?12.:4.));
+    U=Store->Find(ID);
+   }
   }
   const bool bLauncher=U->Weapon==EBattleWeapon::GrenadeLauncher&&!U->bSidearmSelected&&U->Ammo>0&&U->ReloadEndTime<=0.&&Now>=U->NextShotTime;
   const bool bGrenade=U->Grenades>0&&U->GrenadeWait<=0.f&&S->GrenadeGap<=0.f;
@@ -321,6 +349,38 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
  }
 }
 
+bool UBattleLeaderRuntime::StartAssault(int32 ID,int32 Target,const FVector& TargetAt,double Now)
+{
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
+ if(!U||!U->IsAlive()||!Bodies.Contains(ID)||IsVehicle(ID)||TargetAt.ContainsNaN())return false;
+ auto* Cover=GetWorld()->GetSubsystem<UBattleCover>();Cover->BuildSlots();
+ const FVector Pos=Position(ID),Eye=TargetAt+FVector(0,0,60);const double Base=FVector::Dist2D(Pos,TargetAt);
+ // A cover slot 8-25 m from the enemy, at least 10 m closer than now, that hides from him, with a straight walkable line to it
+ // (the same test as the cover approach); the nearest such slot. No dash across the open without cover at the end.
+ int32 BestSlot=INDEX_NONE;double BestWalk=DBL_MAX;FVector BestAnchor=FVector::ZeroVector;
+ for(int32 Slot:Cover->NearbySlots(TargetAt,2500.f,96))
+ {
+  const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
+  const double ToEnemy=FVector::Dist2D(Anchor,TargetAt),Walk=FVector::Dist2D(Pos,Anchor);
+  if(ToEnemy<800.||ToEnemy>2500.||FVector::Dist2D(Pos,Anchor)>Base||ToEnemy>Base-1000.||Walk>=BestWalk)continue;
+  if(!Cover->IsAvailable(Slot,ID,Now))continue;
+  bool bTaken=false;for(const auto& Other:CoverApproaches)if(Other.Key!=ID&&Other.Value.Slot==Slot){bTaken=true;break;}
+  if(bTaken)continue;
+  if(BattleTactics::ExposureAt(GetWorld(),Anchor,(TargetAt-Anchor).GetSafeNormal2D(),Eye).Fraction()>CoverExposureLimit())continue;
+  if(GetWorld()->SweepTestByObjectType(Pos,Anchor,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))continue;
+  BestSlot=Slot;BestWalk=Walk;BestAnchor=Anchor;
+ }
+ if(BestSlot==INDEX_NONE){SightExperiment.Cover(TEXT("arms_assault_no_cover"));return false;}
+ // The dash starts from where he is: out of his cover first.
+ if(U->CoverPhase)CancelCoverAction(ID);
+ U=Store->Find(ID);
+ FCoverApproach A;A.Goal=BestAnchor;A.Slot=BestSlot;A.Target=Target;A.Revision=U->OrderRevision;A.Until=Now+15.;A.bAssault=true;
+ CoverApproaches.Add(ID,A);FirePositions.Remove(ID);
+ SightExperiment.Cover(TEXT("arms_assault_started"));
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_ASSAULT unit=%d team=%d target=%d from=%.0f to=%.0f"),ID,U->Team,Target,Base,FVector::Dist2D(BestAnchor,TargetAt));
+ return true;
+}
+
 bool UBattleLeaderRuntime::LobClear(const FVector& From,FVector& To,float Arc) const
 {
  // A lobbed round flies a parabola (8 straight pieces) over low walls but not through buildings or roofs. Something in the last fifth
@@ -344,7 +404,8 @@ bool UBattleLeaderRuntime::ThrowGrenade(int32 ID,const FVector& TargetIn,double 
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);
  if(!U||!U->IsAlive()||U->Grenades<=0||U->GrenadeWait>0.f||!Bodies.Contains(ID)||IsVehicle(ID)||!Mode||Mode->bBattleEnded)return false;
  const auto* S=Store->FindSquad(U->SquadID);if(!S||S->CommandStatus!=EBattleCommandStatus::Active||(!bPlayer&&S->GrenadeGap>0.f))return false;
- const auto& G=BattleArms::Grenade();const FVector Pos=Position(ID);const FVector Hand=Pos+FVector(0,0,BattleStance::EyeOffset(StanceOf(ID)));
+ // The throw rises to standing height whatever the stance (a soldier behind cover throws over it).
+ const auto& G=BattleArms::Grenade();const FVector Pos=Position(ID);const FVector Hand=Pos+FVector(0,0,BattleStance::EyeOffset(BattleStance::Stand));
  FVector Target=TargetIn;FVector Flat=Target-Pos;Flat.Z=0;double Dist=Flat.Size();
  if(Dist>G.MaxRange){Target=Pos+Flat/Dist*G.MaxRange;Target.Z=TargetIn.Z;Dist=G.MaxRange;}
  if(!bPlayer&&Dist<G.MinRange)return false;

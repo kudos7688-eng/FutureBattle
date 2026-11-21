@@ -238,6 +238,10 @@ public:
  void ArmsImpact(const FArmsShell& Shell);
  void ShowArmsAction(int32 ID,uint8 Clip,double Now); // display: 1 strike, 2 throw
  void DrawArmsShells(double Now);
+ // Close-quarters assault (-BattleArmsAssault=1/2, BattleArms.cpp): a dash to hidden cover 8-25 m from a known enemy 30-80 m away,
+ // so grenades, close weapons and strikes come within reach. Runtime only, like the other cover approaches.
+ bool StartAssault(int32 ID,int32 Target,const FVector& TargetAt,double Now);
+ TMap<int32,double> ArmsAssaultNext;
  void RunArmsSmoke(double Now); // -BattleArmsSmoke (with -BattleElite=1): BATTLE_ARMS_SMOKE_RESULT failures=N, once after the start
  bool bArmsSmokeDone=false;
  double ArmsNextPick=0,ArmsNextMelee=0,ArmsNextHeal=0;int32 ArmsIssuedUnits=-1;bool bArmsElite=false;
@@ -378,7 +382,8 @@ public:
  // Set by every StartFirePosition call: false only because the soldier is already out of sight crouched where he is.
  bool bFirePositionHereGood=false;
  // Trial -BattleCoverApproach: runtime-only walk toward a hidden cover slot (not saved; cleared on restore).
- struct FCoverApproach{FVector Goal=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false,bFree=false,bStandUp=false,bFallback=false;};
+ // bAssault (BattleArms.cpp, -BattleArmsAssault): a dash to cover close to the enemy; on arrival the soldier takes that cover.
+ struct FCoverApproach{FVector Goal=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false,bFree=false,bStandUp=false,bFallback=false,bAssault=false;};
  // -BattleContactCover: where a soldier settled after walking to a firing position that is not a cover slot (runtime only, evaluation).
  TMap<int32,FVector> FirePositions;
  TMap<int32,FCoverApproach> CoverApproaches;
