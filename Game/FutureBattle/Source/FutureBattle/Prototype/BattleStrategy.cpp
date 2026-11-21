@@ -198,11 +198,11 @@ int32 UBattleMatch::StrategyHoldPoint(int32 Team) const
 {
  // Stage S3: the held point threatened longest (its theatre turned "enemy ahead" first); INDEX_NONE without holds.
  if(!bArea||Team<0||Team>1||!StrategyOn(Team,3)||!Area.StrategyHoldMask.IsValidIndex(Team)||Area.StrategyHoldMask[Team]==0)return INDEX_NONE;
- const int32 N=Objectives.Num();int32 Best=INDEX_NONE;float BestSince=FLT_MAX;
+ const int32 N=Objectives.Num();int32 Best=INDEX_NONE;float BestSince=MAX_flt;
  for(int32 I=0;I<N&&I<31;++I)if((Area.StrategyHoldMask[Team]>>I)&1)
  {
   const float Since=Area.StrategyThreatSince.IsValidIndex(Team*N+I)?Area.StrategyThreatSince[Team*N+I]:-1.f;
-  const float Key=Since>=0?Since:FLT_MAX/2;
+  const float Key=Since>=0?Since:MAX_flt/2;
   if(Best==INDEX_NONE||Key<BestSince){Best=I;BestSince=Key;}
  }
  return Best;
