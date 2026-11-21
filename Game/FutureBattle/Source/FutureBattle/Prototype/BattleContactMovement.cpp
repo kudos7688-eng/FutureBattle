@@ -40,7 +40,8 @@ void UBattleLeaderRuntime::ReassignOccupiedArrival(int32 ID,double Now)
   Candidates.Add(S->Destination+Offset);
  }
  const FVector Reference=AccessBlocked?Position(ID):*Old;
- Candidates.Sort([&](const FVector& A,const FVector& C){const double DA=FVector::DistSquared2D(A,Reference),DC=FVector::DistSquared2D(C,Reference);return DA!=DC?DA<DC:A.X!=C.X?A.X<C.X:A.Y<C.Y;});
+ const double Turn=SectorTurn(S->Team); // -BattleSectorSymmetric: ties in the team's own frame
+ Candidates.Sort([&](const FVector& A,const FVector& C){const double DA=FVector::DistSquared2D(A,Reference),DC=FVector::DistSquared2D(C,Reference);return DA!=DC?DA<DC:A.X!=C.X?Turn*A.X<Turn*C.X:Turn*A.Y<Turn*C.Y;});
  auto Reserved=[&](FVector Goal)
  {
   for(const auto& Pair:Plans)

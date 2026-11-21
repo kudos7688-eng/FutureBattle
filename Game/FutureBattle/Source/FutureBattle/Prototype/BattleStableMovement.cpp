@@ -98,6 +98,15 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    if(bNear && FVector::Dist2D(Near,S->Destination)>100.){Forward=(Near-S->Destination).GetSafeNormal2D();SightExperiment.Cover(TEXT("arrival_threat_facing"));}
    P.ArrivalFacing=bNear?Forward:FVector::ZeroVector;
   }
+  // Trial -BattleAttackFocus=1: a sector squad with a focus chooses its arrival places against it (instead of the way in or the
+  // -BattleArrivalThreat direction); the direction is kept for the squad's re-planning check.
+  bool bFocusArrival=false;
+  if(Sector && AttackFocusEnabled())
+  {
+   const FVector Dir=P.bFocus?(P.Focus-S->Destination).GetSafeNormal2D():FVector::ZeroVector;
+   P.FocusPlanDir=Dir;
+   if(!Dir.IsNearlyZero()){Forward=Dir;P.ArrivalFacing=Dir;bFocusArrival=true;SightExperiment.Cover(TEXT("arrival_focus_facing"));}
+  }
   // Trial -BattleCoverStrict=1: arrival places must hide from the known enemy nearest to the sector (at most 2 of 5 samples).
   bool bStrictThreat=false;FVector StrictEye=FVector::ZeroVector;
   if(Sector && CoverStrictEnabled())
@@ -124,7 +133,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   }
   // Fill from the approach side, so converging squads don't seek slots beyond each other.
   auto Score=[&](FVector V){return FMath::FloorToDouble(FVector::Dist2D(V,S->Destination)/450.)*100000.+FVector::Dist2D(V,P.Center);};
-  Candidates.Sort([&](const FVector& A,const FVector& B){const double SA=Score(A),SB=Score(B);return SA!=SB?SA<SB:A.X!=B.X?A.X<B.X:A.Y<B.Y;});
+  const double Turn=SectorTurn(S->Team); // -BattleSectorSymmetric: ties in the team's own frame
+  Candidates.Sort([&](const FVector& A,const FVector& B){const double SA=Score(A),SB=Score(B);return SA!=SB?SA<SB:A.X!=B.X?Turn*A.X<Turn*B.X:Turn*A.Y<Turn*B.Y;});
   // Map E: arrive behind cover. The grid below only accepts spots the destination reaches in a straight line, which is
   // exactly what excludes the far side of a car or a wall. So most members first try cover slots near the destination that
   // are shielded from the direction of advance, and walk there along a short route of their own. The first three (never
@@ -135,7 +145,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   TArray<FVector> CoverCandidates; TSet<int32> CoverAssigned;
   // -BattleCoverOutward: the outward directions this sector is defended toward (rear and friendly-held sides left out).
   TArray<FVector> Outward;
-  if(CoverArrival && Sector && CoverOutwardEnabled())
+  if(CoverArrival && Sector && CoverOutwardEnabled() && !bFocusArrival)
   {
    const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
    const FVector Mid=BattleSectors::Center(Cell);
@@ -155,6 +165,14 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   auto WallAhead=[&](const FVector& At)
   {
    const FCollisionObjectQueryParams Static(ECC_WorldStatic);
+   // -BattleAttackFocus: an obstacle toward the focus from this slot, or 30 degrees either side.
+   if(bFocusArrival)
+    if(const FVector ToFocus=(P.Focus-At).GetSafeNormal2D();!ToFocus.IsNearlyZero())
+    {
+     for(const float Deg:{0.f,-30.f,30.f})
+      if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+ToFocus.RotateAngleAxis(Deg,FVector::UpVector)*250+FVector(0,0,100),Static))return true;
+     return false;
+    }
    if(Outward.IsEmpty())return GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),Static);
    for(const FVector& Dir:Outward)if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Dir*250+FVector(0,0,100),Static))return true;
    return false;
@@ -216,7 +234,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    // the open, user 11-20.)
    if(CoverArrival && !Found && (Sector || bCoverTried))
     SightExperiment.Cover(CoverCandidates.Num()==0?TEXT("arrival_open_no_candidates"):bCapHit?TEXT("arrival_open_query_cap"):ArrNoPath+ArrLong==0?TEXT("arrival_open_all_taken"):ArrLong>=ArrNoPath?TEXT("arrival_open_path_too_long"):TEXT("arrival_open_no_path"));
-   static const bool CoverHuddle=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverHuddle="),V);return V!=0;}();
+   static const int32 CoverHuddleArg=[](){int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverHuddle="),V);return V;}(); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
+   const bool CoverHuddle=BattleFieldLayout::SectorComboSwitch(CoverHuddleArg);
    if(!Found && CoverHuddle && Sector && CoverArrival)
     for(const FVector& At:CoverCandidates)
     {
@@ -447,11 +466,11 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
     ClearMovementSegment(Pos,Way)?1:0,Own,Team,Enemy,Still,U->CoverPhase?1:0);
   }
  }
- // Trial -BattleWaypointPass=1 (2026-11-20, default 0): a soldier pushed past a corner of his route by the crowd (within 4m of
+ // -BattleWaypointPass (2026-11-20; default 1 on every map since 2026-11-22, user decision after roadmap stage 1; =0 for the old rule): a soldier pushed past a corner of his route by the crowd (within 4m of
  // the corner point, already on the far side towards the next point, and the next point reachable in a straight swept line)
  // goes on to the next point instead of turning back to touch the corner. On map I with sector routes the whole west army
  // queued at one shed corner in G8 (850 stalls a match), a fifth of them past the corner and walking back into the queue.
- static const bool WaypointPass=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleWaypointPass="),V);return V!=0;}();
+ static const bool WaypointPass=[](){int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleWaypointPass="),V);return V!=0;}();
  if(WaypointPass && !Final && B.Waypoint+1<Route->Num())
  {
   const FVector& Next=(*Route)[B.Waypoint+1];

@@ -6,6 +6,9 @@
 // after their flight time, so a target may have moved away. The old support strike (BattleSupport.cpp, the old all-Actor FastMatch) is
 // not reused: it works on Actors and a team-wide credit budget; only its idea (a delayed impact at an observed position) is kept.
 #include "BattleLeaderRuntime.h"
+#include "BattleAudio.h"
+#include "BattleEffects.h"
+#include "BattleMuzzleFlash.h"
 #include "BattleTactics.h"
 #include "BattleState.h"
 #include "BattleMatch.h"
@@ -502,7 +505,15 @@ bool UBattleLeaderRuntime::FireArtillery(int32 ID,const FVector& Aim,double Now)
  }
  if(bSPG)++ArtilleryShotsSPG;else ++ArtilleryShotsMortar;
  if(SightExperiment.Started){++SightExperiment.Shots;if(SS&&SS->SquadType<BattleSquadType::Count&&U->Team>=0&&U->Team<2)++SightExperiment.TypeShots[U->Team][SS->SquadType];}
- if(U->Team==0||(Actor(ID)&&Actor(ID)->bRevealed))DrawDebugLine(GetWorld(),Start+FVector(0,0,60),Start+FVector(0,0,600),U->Team?FColor::Red:FColor::Yellow,false,.3f,0,4);
+ if(U->Team==0||(Actor(ID)&&Actor(ID)->bRevealed))
+ {
+  DrawDebugLine(GetWorld(),Start+FVector(0,0,60),Start+FVector(0,0,600),U->Team?FColor::Red:FColor::Yellow,false,.3f,0,4);
+  // Display only (2026-11-22): the flash of the gun or the tube, shown like the tracer.
+  BattleMuzzleFlash::Show(GetWorld(),Start+FVector(0,0,bSPG?220:90),FVector(0,0,1),bSPG?5.f:2.5f,.1f);
+ }
+ // Sound only (2026-11-22): the launch is heard whether or not the gun is seen; a shell with a short flight whistles at once.
+ BattleAudio::Cue(GetWorld(),bSPG?BattleAudio::ECue::CannonFire:BattleAudio::ECue::MortarLaunch,&Start);
+ if(Shell.Remaining<=BattleAudio::IncomingLead)BattleAudio::Incoming(GetWorld(),Shell.At,Shell.Remaining);
  return true;
 }
 
@@ -512,7 +523,10 @@ void UBattleLeaderRuntime::StepArtilleryShells(float Dt)
  TArray<FArtilleryShell> Landed;
  for(int32 I=0;I<ArtilleryShells.Num();)
  {
+  const float Before=ArtilleryShells[I].Remaining;
   ArtilleryShells[I].Remaining-=Dt;
+  // Sound only (2026-11-22): the incoming whistle starts BattleAudio::IncomingLead seconds before the shell lands.
+  if(Before>BattleAudio::IncomingLead&&ArtilleryShells[I].Remaining<=BattleAudio::IncomingLead)BattleAudio::Incoming(GetWorld(),ArtilleryShells[I].At,FMath::Max(0.f,ArtilleryShells[I].Remaining));
   if(ArtilleryShells[I].Remaining<=0.f){Landed.Add(ArtilleryShells[I]);ArtilleryShells.RemoveAt(I);}
   else ++I;
  }
@@ -579,7 +593,14 @@ int32 UBattleLeaderRuntime::ArtilleryImpact(const FArtilleryShell& Shell)
  }
  const double Now=GetWorld()->GetTimeSeconds();
  SuppressNear(Team,Shell.At+FVector(0,0,300),Shell.At,Now,BattleSuppression::Tuning().SupportScale);
- if(Team==0||(Actor(Shell.ShooterID)&&Actor(Shell.ShooterID)->bRevealed))DrawDebugSphere(GetWorld(),Shell.At,Radius,10,Team?FColor::Red:FColor::Yellow,false,.5f,0,3);
+ // Sound and effect only (2026-11-22): every shell landing is heard and seen (the place of an impact gives the gun away
+ // no more than before). Size by blast radius: mortar 2, self-propelled gun 2.5.
+ {
+  const float Size=FMath::Clamp(Radius/FMath::Max(1.f,T->ATSplashRadius),1.f,3.f);
+  BattleAudio::Explosion(GetWorld(),Shell.At,Size);
+  BattleEffects::Explosion(GetWorld(),Shell.At,Size);
+ }
+ if(!BattleEffects::Active(GetWorld())&&(Team==0||(Actor(Shell.ShooterID)&&Actor(Shell.ShooterID)->bRevealed)))DrawDebugSphere(GetWorld(),Shell.At,Radius,10,Team?FColor::Red:FColor::Yellow,false,.5f,0,3);
  return Damaged;
 }
 

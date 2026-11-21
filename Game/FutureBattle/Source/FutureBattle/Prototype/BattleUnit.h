@@ -75,8 +75,17 @@ public:
 	// Stance shown by the body (set by UBattleLeaderRuntime::SetStance); with -BattleStanceAnim=1 a crouch plays Lyra's clip.
 	uint8 VisualStance = 0;
 	// A squad type's own look (the exoskeleton soldier's AC01 suit): its own clips and its own weapon model held at a bone
-	// (Grip = the model relative to that bone). There is no reload clip: the pose stays. Set by UBattleLeaderRuntime::ApplySquadLook.
+	// (Grip = the model relative to that bone). Set by UBattleLeaderRuntime::ApplySquadLook.
 	void SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequence* CrouchIdle, UAnimSequence* CrouchMove, UStaticMesh* Weapon, FName Bone, const FTransform& Grip);
+	// The look's action clips (UBattleLeaderRuntime::ApplyExoSuit, with each SetLook; either may be null): Fire from its start at
+	// every shot, Reload while the weapon reloads (paced by the reload timer). Shown standing only: the clips stand on the spot.
+	void SetLookActions(UAnimSequence* Fire, UAnimSequence* Reload) { LookFire = Fire; LookReload = Reload; }
+	// Plays First and then Then (may be null) from Time over the look's other clips, standing only (the launcher's recoil and
+	// reload); returns how long the two last. A null First stops the sequence. IsPlayingLookSequence: one is still running.
+	float PlayLookSequence(UAnimSequence* First, UAnimSequence* Then, double Time);
+	bool IsPlayingLookSequence(double Time) const;
+	// The clip the body is playing (look check shots).
+	UAnimSequence* GetShownPose() const { return CurrentPose; }
 	bool HasLook() const { return LookIdle != nullptr; }
 	UAnimSequence* GetLookMove() const { return LookMove; }
 	// Look check shots (BattleExoShot.cpp): the body tilt drawn as if moving at this local velocity (zero = the real one).
@@ -122,6 +131,11 @@ private:
 	UPROPERTY() TObjectPtr<UStaticMesh> LookWeapon;
 	FName LookBone;
 	FTransform LookGrip;
+	UPROPERTY() TObjectPtr<UAnimSequence> LookFire;
+	UPROPERTY() TObjectPtr<UAnimSequence> LookReload;
+	UPROPERTY() TObjectPtr<UAnimSequence> LookSequenceFirst;
+	UPROPERTY() TObjectPtr<UAnimSequence> LookSequenceThen;
+	double LookSequenceStart = -10., LookShotShown = -10.;
 	UPROPERTY() int32 UnitID = INDEX_NONE;
 	bool bDeathApplied = false;
 	// Corpse fall (BattleRagdoll): 0 until the death clip ends at RagdollAt, 1 falling until RagdollAt, 2 done.

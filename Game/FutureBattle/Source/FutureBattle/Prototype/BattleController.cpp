@@ -1,4 +1,7 @@
 #include "BattleController.h"
+#include "BattleAudio.h"
+#include "BattleEffects.h"
+#include "BattleFXCheck.h"
 #include "BattleUIText.h"
 #include "BattleTactics.h"
 #include "Engine/Canvas.h"
@@ -102,6 +105,9 @@ void ABattleController::BeginPlay()
 	{ TacticalPawn->SetActorLocation(FVector::ZeroVector); TacticalPawn->Zoom(1900); }
 	EnterTactical();
 	if (BattleFieldLayout::IsLarge(GetWorld())) { TacticalPawn->SetActorLocation(FVector(BattleFieldLayout::IsSightField(GetWorld())?-BattleFieldLayout::HomeDistance(GetWorld())+2000:-8500,0,0)); TacticalPawn->Zoom(3500); }
+	// Sounds and effects are loaded before the first shot (nothing is loaded with -nosound / -nullrhi).
+	BattleAudio::Preload(GetWorld());
+	BattleEffects::Preload(GetWorld());
 }
 
 void ABattleController::SetupInputComponent()
@@ -969,6 +975,10 @@ void ABattleController::PlayerTick(float DeltaTime)
 		}
 		if (Unit->IsAlive()) Unit->ReloadIfEmpty();
 	}
+	// Sound only (BattleAudio, 2026-11-22): the command view's listener, the controlled soldier's weapon handling, match cues.
+	BattleAudio::TickPlayer(this, bTriggerHeld);
+	// Test only (-BattleFXCheck, Setup/Test-SoundFX.ps1).
+	BattleFXCheck::Tick(this);
 }
 
 void ABattleController::BindLeaderDeaths()
