@@ -46,7 +46,11 @@
   - `-BattleArrivalWalk=1`（既定0）：区画内で、自分の到着地点まで1.5m以上ある兵は、止まらずに撃ちながら歩く。経路ゲートは自分の道（続きの道を含む）で判定する。診断 `arrival_walk_stopped_short_frames / tail_cut_frames / fire_on_move_frames / at_place_frames`（切替オフでも数える）。
   - `-BattleCoverOutward=1`（既定0、ユーザー案の1+2）：遮蔽地点の条件「2.5m先に壁」を、移動の向きではなく、区画の中心から隣の8区画への向きのどれかで判定する。外す方向は、地図の外、味方だけがいる区画（SectorState 1）、本拠地側（45度以内、敵がいる場合を除く）。方向が残らなければ従来の判定。診断 `arrival_outward_*`。
   - Test-WideSight に `-ArrivalWalk`・`-CoverOutward` を追加（029079b・21a4dd6）。
-- 予定：凍結 r18、マップI 12 seeds×3（既定 / walk / walk+outward）。到着時の向きは変えていない（敵が見えれば向く）。案3（長い壁へ複数人）・案4（建物内）はこの結果の後。
+  - 18時40分追記（edit_sm26.py、ユーザー案の3と4。これもコピーでの試し当てのみ）：
+    - `-BattleCoverDense=1`（既定0、案3）：市街地のマップ（IsUrban）で、長さ3mを超える障害物の各辺に1.4m間隔の遮蔽地点を足す（BattleCover.cpp BuildSlots。従来の1辺5点は残す）。区画の到着では、予約済みとみなす距離を190cmから130cmに、調べる地点数を256から512にする。地点は遮蔽行動と共通なので、戦闘中の遮蔽行動にも効く。
+    - `-BattleCoverIndoor=1`（既定0、案4）：区画の到着で、1.2〜8m上に固定物（屋根・2階の床）がある地点（家・倉庫の中、窓際）を先に試す。診断 `arrival_indoor_*`。
+    - Test-WideSight に `-CoverDense`・`-CoverIndoor` を追加（06f1945）。
+- 予定：凍結 r18、マップI 12 seeds×4（既定 / walk / walk+outward / walk+outward+dense+indoor）。約2時間。到着時の向きは変えていない（敵が見えれば向く）。
 
 ## 2026-11-21 18時25分 Claude（射程円の表示）：部隊の射程を円で表示（自軍・敵・ミニマップ。表示のみ）
 - **変更**（ユーザー指示「部隊の射程範囲を円で表示」「ミニマップにも」「敵部隊の射程も」。ブランチ `rangerings` → main）：
