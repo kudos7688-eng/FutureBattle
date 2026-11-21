@@ -37,7 +37,10 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
   E.FlankTrial=FParse::Param(FCommandLine::Get(),TEXT("BattleFlankTrial"));
   UE_LOG(LogFutureBattle,Display,TEXT("SIGHT_EXPERIMENT_START output=%s"),*E.Output);
  }
- if(!E.SaveCheckDone && Match->Elapsed>=80 && FParse::Param(FCommandLine::Get(),TEXT("BattleVerifyMixedSave")))
+ // The round trip runs at 80 s unless -BattleVerifyMixedSaveAt=<seconds> asks for a later time (state that only exists in
+ // mid-battle, such as broken cover places, is not there yet at 80 s). Verification only: no effect on the match.
+ double SaveCheckAt=80.;FParse::Value(FCommandLine::Get(),TEXT("BattleVerifyMixedSaveAt="),SaveCheckAt);
+ if(!E.SaveCheckDone && Match->Elapsed>=SaveCheckAt && FParse::Param(FCommandLine::Get(),TEXT("BattleVerifyMixedSave")))
  {
   E.SaveCheckDone=true;auto* Before=Match->CaptureSnapshot();FString Error;int32 BrokenCarried=0;
   bool OK=Before&&Before->Validate(Error)&&Match->SaveMatch(TEXT("FutureBattleSmokeOnly"))&&Match->LoadMatch(TEXT("FutureBattleSmokeOnly"));
