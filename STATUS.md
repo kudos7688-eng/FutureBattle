@@ -24,6 +24,23 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-22 0時35分 Claude（ロードマップに従う改善活動）：段階3〜6の詳細設計と、戦略層 S1〜S3・引き算の評価・前線軍の割合の試験切替（作業ツリー `FutureBattle-strategy`、未ビルド）
+- **依頼**：「容量に余裕があるので95%までロードマップに従って改善活動を繰り返して、設計だけでも先行して進めて」。ROADMAP 11-20 の段階のうち手付かずだった段階3（引き算の評価）・段階4（戦略層）と、その先の段階5・6を進めた。
+- **設計（main にコミット・push 済み）**：
+  - 段階4：[Docs/design-strategy-layer.md](Docs/design-strategy-layer.md)（戦線＝拠点のボロノイ＋両本拠地、状況図、「偵察→集中攻撃」、保持と守り→反撃、購入、保存、確かめ方）。
+  - 段階3：[Docs/design-subtraction-eval.md](Docs/design-subtraction-eval.md)。**今の保有数の引数は試験側だけに効くので「全兵種−X 対 全兵種」が作れない**ことが分かり、その直し方を含めた。
+  - 段階5：[Docs/design-groups-strategy-link.md](Docs/design-groups-strategy-link.md)（戦略層→群の受け渡し。群制御の担当と相談済み：`-BattleFrontShare` はこちらで入れる、前線軍の FrontHold には触らない、集結中の目標の差し替えは間隔を空ける）。
+  - 段階6：[Docs/design-score-economy.md](Docs/design-score-economy.md)（得点の規則の選択肢 A/B/C と、試合を変えずに3通りで採点する提案。**規則の選択はユーザー判断**）。
+- **実装（ブランチ `strategy`、すべて既定0／既定の動きは不変のはず。未ビルド・未試験）**：
+  - `-BattleSituationLog=1`：状況図を30秒ごとに `BATTLE_SITUATION` で記録（本当の敵の数は記録の中だけで数える）。集計 `Setup/Analyze-Situation.py`。
+  - `-BattleStrategy=2`：偵察→集中攻撃（集中先を S6 と AI の攻撃群へ）。`=3`：＋保持と守り→反撃。局面は `FBattleAreaState::Strategy*` に保存。片側試験の条件 `ST2`・`ST3`。
+  - `-BattleAreaAllTypes=1`（両軍が全兵種を買う）・`-BattleAreaWithout=<兵種>`（試験側だけ1種類抜く）。条件 `ALL`・`W1`〜`W9`、集計 `Setup/Analyze-Subtraction.py`。`BATTLE_AREA_HIRE` に兵種（`type=`）を足した。
+  - `-BattleFrontShare=<0〜1>`（既定1）：AI の前線軍の自動補充を自由な歩兵のこの割合までに。条件 `FS50`・`FS30`。
+  - `-BattleCorpseSteps=<mask>`（既定63）：段階2の切り分け用。死体の消去の表示の操作を1つずつ止める。
+  - `Setup/Run-StrategyCheck.ps1`：確認用の試合を1回の並列でまとめて回す。
+- **未実施**：ビルド・試験・試合（ロック待ち。順番は 個人AI → Codex委任 → 区画AI → この作業）。比較の基準として main 0ca01af の凍結ビルド `main-0ca01af-strat` を取った（区画AIの `-BattleArrivalWalk` 既定化の前）。
+- **次の一手**：ロックの番で Build → Test-Battle → 凍結 → `Run-StrategyCheck`（既定の一致：main と strategy、記録の有無／S2・S3・FS50 の完走と記録の確認／死体の消去が描画なしでも試合を変えるか）。その後、別の番で `Run-StrategyScreen` の片側試験（ST2 をマップE・I）。
+
 ## 2026-11-21 23時50分 Claude（射程円の表示）：兵種アイコンと、見えなくなった敵部隊の最終確認地点（表示のみ）
 - **変更**（ユーザー指示「相手の部隊の最終スポット場所にアイコンを表示」「RTS視点で望遠にしたときにわかりやすいよう兵種アイコンを」）：`ABattleHUD::DrawSquadIcons`。
   - 兵種アイコン：地図記号風の枠（28×18ピクセル）に兵種の記号（小銃＝✕、重装＝✕＋横棒、偵察＝斜線、対戦車＝Λ、戦車＝楕円、装甲車＝楕円＋斜線、迫撃砲＝筒と矢印、自走砲＝楕円＋点、外骨格＝✕＋丸、補給＝下の横棒）と、下に1文字（歩 重 偵 対 戦 装 迫 砲 外 補）。自軍は水色で右に生き残りの人数、選んだ部隊は枠が太い。見えている敵は赤で、右に見えている人数。兵種は自軍が識別した `ObservedSquadType` だけを使い、未識別は「?」。カメラが部隊から50m以内では出ず、100mで不透明になる。
