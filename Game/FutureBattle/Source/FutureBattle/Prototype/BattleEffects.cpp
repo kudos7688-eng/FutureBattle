@@ -1,21 +1,17 @@
 // Battle effects (2026-11-22). Display only: no collision, no navigation, no battle state; the only query is a short
 // downward trace that sets an explosion on the ground.
-// Explosion: Lyra Starter Game NS_Grenade_Explosion (Niagara). Bullet impact: TPS Multiplayer Shooter
-// P_Wep_BulletImpact_Rifle (Cascade). Both copied with their materials and textures by Setup/Import-AudioFXAssets.py;
-// sources and terms in Docs/ASSET_SOURCES_AUDIO_FX.md.
+// Explosion: Lyra Starter Game NS_Grenade_Explosion (Niagara), copied with its materials and textures by
+// Setup/Import-AudioFXAssets.py; sources and terms in Docs/ASSET_SOURCES_AUDIO_FX.md.
 #include "BattleEffects.h"
 #include "FutureBattle.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
-#include "Kismet/GameplayStatics.h"
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
-#include "Particles/ParticleSystem.h"
-#include "Particles/ParticleSystemComponent.h"
 
 // Helpers live in an unnamed namespace inside BattleEffects so that, in a unity build, they never meet the unnamed-namespace
 // helpers of other files (lookup from the BattleEffects functions finds these first).
@@ -27,9 +23,8 @@ namespace
  {
   bool bLoaded=false;
   UNiagaraSystem* Blast=nullptr;
-  UParticleSystem* Impact=nullptr;
   uint64 Frame=MAX_uint64;
-  int32 Impacts=0, Blasts=0;
+  int32 Blasts=0;
   bool bCamera=false;
   FVector Camera=FVector::ZeroVector, Forward=FVector::ForwardVector;
  };
@@ -51,10 +46,8 @@ namespace
   if(S.bLoaded)return;
   S.bLoaded=true;
   S.Blast=LoadObject<UNiagaraSystem>(nullptr,TEXT("/Game/Effects/Particles/Explosion/NS_Grenade_Explosion.NS_Grenade_Explosion"));
-  S.Impact=LoadObject<UParticleSystem>(nullptr,TEXT("/Game/Multiplayercovershooter/ParticleSystem/Particles/Effects/Weapons/P_Wep_BulletImpact_Rifle.P_Wep_BulletImpact_Rifle"));
   if(S.Blast)S.Blast->AddToRoot();
-  if(S.Impact)S.Impact->AddToRoot();
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FX loaded explosion=%d impact=%d"),S.Blast?1:0,S.Impact?1:0);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FX loaded explosion=%d"),S.Blast?1:0);
  }
 
  FFxState* Ready(UWorld* World)
@@ -64,7 +57,7 @@ namespace
   Load(S);
   if(S.Frame!=GFrameCounter)
   {
-   S.Frame=GFrameCounter;S.Impacts=S.Blasts=0;S.bCamera=false;
+   S.Frame=GFrameCounter;S.Blasts=0;S.bCamera=false;
    if(const APlayerController* PC=World->GetFirstPlayerController();PC&&PC->PlayerCameraManager)
    {
     S.Camera=PC->PlayerCameraManager->GetCameraLocation();S.Forward=PC->PlayerCameraManager->GetCameraRotation().Vector();S.bCamera=true;
@@ -94,17 +87,6 @@ bool BattleEffects::Active(UWorld* World)
 void BattleEffects::Preload(UWorld* World)
 {
  if(Renders(World))Load(Get());
-}
-
-bool BattleEffects::BulletImpact(UWorld* World,const FVector& At,const FVector& Normal)
-{
- FFxState* S=Ready(World);
- if(!S||!S->Impact||At.ContainsNaN())return false;
- // A puff of a few centimetres: only near the camera, and a few per frame when a whole line fires at once.
- if(!InView(*S,At,7000.,600.)||S->Impacts>=4)return false;
- ++S->Impacts;
- const FVector N=Normal.IsNearlyZero()?FVector::UpVector:Normal.GetSafeNormal();
- return UGameplayStatics::SpawnEmitterAtLocation(World,S->Impact,At+N*2.,N.Rotation(),FVector(1.),true,EPSCPoolMethod::AutoRelease,true)!=nullptr;
 }
 
 bool BattleEffects::Explosion(UWorld* World,const FVector& At,float Size)

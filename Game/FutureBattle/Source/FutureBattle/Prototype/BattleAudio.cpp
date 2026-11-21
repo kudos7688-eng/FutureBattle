@@ -207,7 +207,7 @@ void BattleAudio::Shot(UWorld* World,const FVector& At,EShot Kind,bool bPlayer)
  if(!bPlayer&&D>4000.&&S->FarShots++>=4)return;
  const bool bHeavy=Kind==EShot::Heavy,bNear=D<6000.;
  const EBank Bank=bHeavy?(bNear?HeavyNear:HeavyFar):(bNear?RifleNear:RifleFar);
- const float Volume=bPlayer?.9f:bHeavy?.75f:.6f;
+ const float Volume=bPlayer?.8f:bHeavy?.32f:.6f;
  const float Pitch=S->Random.FRandRange(.95f,1.05f)*(bHeavy?1.06f:1.f);
  PlayAt(World,*S,Pick(*S,Bank),At,Volume,Pitch,AttGun,bPlayer?ConcPlayer:ConcGun);
 }
@@ -219,7 +219,7 @@ void BattleAudio::Impact(UWorld* World,const FVector& At,bool bBody)
  if(FVector::Dist(At,S->Listener)>(bBody?2500.:3500.))return;
  int32& Used=bBody?S->BodyImpacts:S->Impacts;
  if(Used++>=(bBody?2:3))return;
- PlayAt(World,*S,Pick(*S,bBody?ImpactBody:ImpactSurface),At,bBody?.7f:.5f,S->Random.FRandRange(.92f,1.08f),AttImpact,ConcImpact);
+ PlayAt(World,*S,Pick(*S,bBody?ImpactBody:ImpactSurface),At,bBody?1.2f:1.4f,S->Random.FRandRange(.92f,1.08f),AttImpact,ConcImpact);
 }
 
 void BattleAudio::ShotPassing(UWorld* World,const FVector& Start,const FVector& End,int32 ShooterTeam,int32 VictimID)
@@ -239,7 +239,7 @@ void BattleAudio::ShotPassing(UWorld* World,const FVector& Start,const FVector& 
  const double Now=World->GetTimeSeconds();
  if(Now-S->LastWhiz<.07)return;
  S->LastWhiz=Now;
- PlayAt(World,*S,Pick(*S,Miss<120.?WhizNear:WhizMid),Closest,.85f,S->Random.FRandRange(.94f,1.06f),AttWhiz,ConcWhiz);
+ PlayAt(World,*S,Pick(*S,Miss<120.?WhizNear:WhizMid),Closest,1.f,S->Random.FRandRange(.94f,1.06f),AttWhiz,ConcWhiz);
 }
 
 void BattleAudio::Explosion(UWorld* World,const FVector& At,float Size)
@@ -249,9 +249,10 @@ void BattleAudio::Explosion(UWorld* World,const FVector& At,float Size)
  const double D=FVector::Dist(At,S->Listener);
  if(D>120000.||S->Blasts++>=4)return;
  const bool bNear=D<10000.;
- // Bigger blasts sound deeper and louder.
+ // Bigger blasts sound deeper and louder. Gains from Setup/Test-SoundFX.ps1 (2026-11-22): at 15-25 m a blast peaks near
+ // -6 dBFS, a rifle shot near -9, a launch near -9, a cue near -11, leaving room for several at once.
  const float Pitch=FMath::Clamp(1.12f-.16f*Size,.62f,1.1f)*S->Random.FRandRange(.95f,1.05f);
- const float Volume=FMath::Clamp(.75f+.15f*Size,.8f,1.25f);
+ const float Volume=FMath::Clamp(.35f+.1f*Size,.4f,.65f);
  PlayAt(World,*S,Pick(*S,bNear?BlastNear:BlastFar),At,Volume,Pitch,AttBlast,ConcBlast);
  PlayAt(World,*S,Pick(*S,bNear?BlastTailNear:BlastTailFar),At,Volume*.8f,Pitch,AttBlast,ConcBlast);
  if(bNear&&Size>1.5f)PlayAt(World,*S,Pick(*S,Thump),At,Volume*.7f,Pitch*.9f,AttBlast,ConcBlast);
@@ -263,7 +264,7 @@ void BattleAudio::Incoming(UWorld* World,const FVector& At,float SecondsToImpact
  if(!S||!S->bListener||FVector::Dist(At,S->Listener)>9000.)return;
  // A shell with less flight time left starts its whistle part-way through, so it still ends at the impact.
  const float Skip=FMath::Clamp(IncomingLead-SecondsToImpact,0.f,IncomingLead-.2f);
- PlayAt(World,*S,S->Singles[SIncoming],At+FVector(0,0,800),.7f,1.f,AttIncoming,ConcLaunch,Skip);
+ PlayAt(World,*S,S->Singles[SIncoming],At+FVector(0,0,800),.6f,1.f,AttIncoming,ConcLaunch,Skip);
 }
 
 void BattleAudio::Cue(UWorld* World,ECue Which,const FVector* At)
@@ -277,12 +278,12 @@ void BattleAudio::Cue(UWorld* World,ECue Which,const FVector* At)
   if(D>60000.)return;
   switch(Which)
   {
-  case ECue::RocketLaunch:PlayAt(World,*S,S->Singles[SRocket],*At,.9f,S->Random.FRandRange(.95f,1.05f),AttLaunch,ConcLaunch);break;
-  case ECue::MortarLaunch:PlayAt(World,*S,S->Singles[SMortar],*At,.9f,S->Random.FRandRange(.95f,1.05f),AttLaunch,ConcLaunch);break;
+  case ECue::RocketLaunch:PlayAt(World,*S,S->Singles[SRocket],*At,.8f,S->Random.FRandRange(.95f,1.05f),AttLaunch,ConcLaunch);break;
+  case ECue::MortarLaunch:PlayAt(World,*S,S->Singles[SMortar],*At,.65f,S->Random.FRandRange(.95f,1.05f),AttLaunch,ConcLaunch);break;
   case ECue::CannonFire:
    // A gun's report: the explosion punch slowed down, with the thump underneath when near.
-   PlayAt(World,*S,Pick(*S,D<10000.?BlastNear:BlastFar),*At,1.1f,S->Random.FRandRange(.6f,.66f),AttBlast,ConcBlast);
-   if(D<10000.)PlayAt(World,*S,Pick(*S,Thump),*At,.8f,.8f,AttBlast,ConcBlast);
+   PlayAt(World,*S,Pick(*S,D<10000.?BlastNear:BlastFar),*At,.64f,S->Random.FRandRange(.6f,.66f),AttBlast,ConcBlast);
+   if(D<10000.)PlayAt(World,*S,Pick(*S,Thump),*At,.46f,.8f,AttBlast,ConcBlast);
    break;
   default:break;
   }
@@ -290,10 +291,10 @@ void BattleAudio::Cue(UWorld* World,ECue Which,const FVector* At)
  }
  switch(Which)
  {
- case ECue::CaptureFriendly:Play2D(World,*S,S->Singles[SCaptureFriendly],.55f,ConcUI,true);break;
- case ECue::CaptureEnemy:Play2D(World,*S,S->Singles[SCaptureEnemy],.55f,ConcUI,true);break;
- case ECue::Victory:Play2D(World,*S,S->Singles[SVictory],.6f,ConcUI,true);break;
- case ECue::Defeat:Play2D(World,*S,S->Singles[SDefeat],.6f,ConcUI,true);break;
+ case ECue::CaptureFriendly:Play2D(World,*S,S->Singles[SCaptureFriendly],.7f,ConcUI,true);break;
+ case ECue::CaptureEnemy:Play2D(World,*S,S->Singles[SCaptureEnemy],.7f,ConcUI,true);break;
+ case ECue::Victory:Play2D(World,*S,S->Singles[SVictory],.8f,ConcUI,true);break;
+ case ECue::Defeat:Play2D(World,*S,S->Singles[SDefeat],.8f,ConcUI,true);break;
  default:break;
  }
 }

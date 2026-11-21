@@ -1,13 +1,13 @@
 # 効果音・エフェクトの素材と出典（2026-11-22）
 
-ゲームの効果音と見た目の効果（`BattleAudio` / `BattleEffects`）に使う素材の一覧です。**CC0 などネットから新しく取ってきた素材はありません。** すべて (1) ユーザーの手元の素材フォルダ `C:\Users\nanek\Documents\FPS\アセット` にある2つのUEプロジェクトからの写し、または (2) このために合成した自作の音です。
+ゲームの効果音と見た目の効果（`BattleAudio` / `BattleEffects`）に使う素材の一覧です。確認の手順は `Setup/Test-SoundFX.ps1`（画面の撮影と、スピーカーを鳴らさずに音の混ざりを録音して測る）。**CC0 などネットから新しく取ってきた素材はありません。** すべて (1) ユーザーの手元の素材フォルダ `C:\Users\nanek\Documents\FPS\アセット` にある2つのUEプロジェクトからの写し、または (2) このために合成した自作の音です。
 
 ## 出典ごとのまとめ
 
 | 出典 | 手元の場所 | 使ったもの | 数・大きさ | 利用条件（要確認の点） |
 |---|---|---|---|---|
 | **Lyra Starter Game**（Epic Games） | `アセット\LyraStarterGame`（UE 5.8 版） | 爆発音・着弾音・弾のかすめる音（SoundWave 39個）、爆発の効果 `NS_Grenade_Explosion`（Niagara）とその材質・テクスチャ・曲線・破片の形（34個） | 73個・約51MB | Epic Games が Fab（旧 Unreal マーケットプレイス）で無料配布しているサンプル。Epic のコンテンツは Unreal Engine の利用規約（EULA）に従い、**UE で作る作品の中で使える**（UE 以外の製品へ持ち出すのは不可）とされている。**正確な条件は Fab の Lyra のページ／UE の EULA でご確認ください。** |
-| **TPS Multiplayer Shooter with cover**（Fab の素材） | `アセット\TPSMultiplayershooterwith`（UE 5.8 版、中のフォルダ名は `Multiplayercovershooter`） | 銃声（M4・AX50 の近い音／遠い音、各4本）、構え・スコープ・装填・空撃ちの音（SoundWave 22個）、着弾の効果 `P_Wep_BulletImpact_Rifle`（Cascade）とその材質・テクスチャ（11個） | 33個・約11MB | Fab の素材の標準ライセンス（Standard License）であれば、入手した人が作る作品の中で使える。**手元のファイルには販売者名・ライセンス文が入っていないので、Fab の入手履歴（掲載ページ）で販売者とライセンスの種類をご確認ください。** この素材の遮蔽アニメはすでにゲームで使っている（`Docs/ASSET_REVIEW_20261119.md`）。 |
+| **TPS Multiplayer Shooter with cover**（Fab の素材） | `アセット\TPSMultiplayershooterwith`（UE 5.8 版、中のフォルダ名は `Multiplayercovershooter`） | 銃声（M4・AX50 の近い音／遠い音、各4本）、構え・スコープ・装填・空撃ちの音（SoundWave 22個）。着弾の効果 `P_Wep_BulletImpact_Rifle` も試したが、ゲームの画面に出なかったので外した | 22個・約5MB | Fab の素材の標準ライセンス（Standard License）であれば、入手した人が作る作品の中で使える。**手元のファイルには販売者名・ライセンス文が入っていないので、Fab の入手履歴（掲載ページ）で販売者とライセンスの種類をご確認ください。** この素材の遮蔽アニメはすでにゲームで使っている（`Docs/ASSET_REVIEW_20261119.md`）。 |
 | **自作**（Claude が合成、外部素材なし） | `Setup/Make-SynthSounds.py` → `Setup/SynthAudio/*.wav` → `/Game/Audio/Battle/` | 対戦車ロケットの発射音、迫撃砲の発射音、砲弾が飛んでくる音、拠点を取った／取られた合図、勝ち／負けの音（7個） | 7個・約1MB | 雑音と正弦波から数式で作った音。外部の録音・サンプルは使っていない。 |
 | CC0 素材 | — | 使っていない | — | — |
 
@@ -17,7 +17,7 @@
 |---|---|---|
 | 小銃・カービンの射撃 | TPS `M4_Designed_Oneshot_1〜4`（60m未満）、`M4_Designed_Dist_Oneshot_1〜4`（60m以上） | 既存の銃口の閃光・曳光線（変更なし） |
 | 支援火器（機関銃）の射撃 | TPS `AX50_Designed_Oneshot_1〜4`／`AX50_Designed_Dist_Oneshot_1〜4`（少し速め） | 同上 |
-| 弾が地面・壁に当たる | Lyra `SFX_BulletImpact_01〜08`（35m以内） | TPS `P_Wep_BulletImpact_Rifle`（土煙と火花。カメラから70m以内、前方） |
+| 弾が地面・壁に当たる | Lyra `SFX_BulletImpact_01〜08`（35m以内） | なし（TPS の着弾の効果は画面に出なかったので外した。作り直しは今後） |
 | 弾が兵・車両に当たる | Lyra `Lyra_Plyr_BulletImpact_01〜06`（25m以内） | なし |
 | 自分（直接操作中の兵）のそばを敵弾がかすめる | Lyra `sfx_AR_Whizbys_Oncoming_Close_01〜04`（1.2m以内）、`…_Mid_01〜02`（3mまで） | なし |
 | 対戦車兵・外骨格兵のロケット発射 | 自作 `SW_Synth_RocketLaunch` | なし（着弾は下の爆発） |
@@ -32,12 +32,12 @@
 
 ## 取り込み先と個別の一覧
 
-同じ `/Game` のパスのまま写した（効果は材質・テクスチャを名前で参照しているため）。`/Game/Audio/Sounds`・`/Game/Audio/SoundWaves`・`/Game/Effects` が Lyra 由来、`/Game/Multiplayercovershooter` が TPS 由来、`/Game/Audio/Battle` が自作。
+同じ `/Game` のパスのまま写した（効果は材質・テクスチャを名前で参照しているため）。`/Game/Audio/Sounds`・`/Game/Audio/SoundWaves`・`/Game/Effects` が Lyra 由来、`/Game/Multiplayercovershooter/sounds` が TPS 由来、`/Game/Audio/Battle` が自作。
 
 - Lyra の音のうち、Lyra 独自の音の分類・音量調整（`/Game/Audio/Classes/SFX` など。音響の追加プラグインを要する）を参照しているもの（装填の音・拠点の合図など）は**写していない**。参照のない音だけを選んだ。
 - `NS_Grenade_Explosion` の中には、Lyra 自身にも無い資産の名前（`/Game/VHE/...`、`/Game/Developer/Fandorra/...` など、作者の制作時の履歴）が文字として残っている。参照ではなく、写す必要はない。
 
-### 写した素材（106個、61.4MB。`python Setup/Import-AudioFXAssets.py --list-md` で再出力できる）
+### 写した素材（95個、55.8MB。`python Setup/Import-AudioFXAssets.py --list-md` で再出力できる）
 
 | 取り込み先（/Game） | 出典 | 種類 | 大きさ |
 |---|---|---|---|
@@ -136,17 +136,6 @@
 | `/Game/Effects/Textures/Decals/T_ExplsionDigital` | Lyra | effect | 248 KB |
 | `/Game/Effects/Textures/Flipbooks/T_Explosion_Areal_E64` | Lyra | effect | 32293 KB |
 | `/Game/Effects/Textures/Rocks/Debris_Chunk1_BaseColor` | Lyra | effect | 94 KB |
-| `/Game/Multiplayercovershooter/ParticleSystem/Particles/Effects/Weapons/P_Wep_BulletImpact_Rifle` | TPS | effect | 225 KB |
-| `/Game/Multiplayercovershooter/ParticleSystem/Particles/Materials/LensFlare/M_LensFlare_02` | TPS | effect | 79 KB |
-| `/Game/Multiplayercovershooter/ParticleSystem/Particles/Materials/Ramp/M_radial_ramp_soft` | TPS | effect | 70 KB |
-| `/Game/Multiplayercovershooter/ParticleSystem/Particles/Materials/Smoke/M_ImpactSmoke` | TPS | effect | 94 KB |
-| `/Game/Multiplayercovershooter/ParticleSystem/Particles/Materials/Smoke/M_MuzzleSmokeDetail_GPU` | TPS | effect | 81 KB |
-| `/Game/Multiplayercovershooter/ParticleSystem/Particles/Materials/Spark/M_spark_subUV` | TPS | effect | 75 KB |
-| `/Game/Multiplayercovershooter/ParticleSystem/Particles/Textures/LensFlare/T_Flare_02` | TPS | effect | 593 KB |
-| `/Game/Multiplayercovershooter/ParticleSystem/Particles/Textures/Smoke/T_Clouds_01` | TPS | effect | 534 KB |
-| `/Game/Multiplayercovershooter/ParticleSystem/Particles/Textures/Smoke/T_SmokeBall_01_8_8` | TPS | effect | 652 KB |
-| `/Game/Multiplayercovershooter/ParticleSystem/Particles/Textures/Spark/T_SparkCore_2X2` | TPS | effect | 930 KB |
-| `/Game/Multiplayercovershooter/ParticleSystem/Particles/Textures/Water/T_Steam_02_Packed` | TPS | effect | 2370 KB |
 
 ### 自作の音（7個。`Setup/SynthAudio/`、48kHz・16bit・モノラル）
 

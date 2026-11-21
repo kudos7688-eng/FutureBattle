@@ -20,7 +20,11 @@ $arguments = @("`"$project`"", '-run=ImportAssets', "-importsettings=`"$settings
 $process = Start-Process -FilePath $editor -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
 $content = Join-Path $root 'Game\FutureBattle\Content\Audio\Battle'
 $missing = @($waves | Where-Object { !(Test-Path -LiteralPath (Join-Path $content ($_.BaseName + '.uasset'))) })
-if ($process.ExitCode -ne 0 -or $missing.Count -gt 0) {
+# The commandlet always reports one error with a settings file ("Invalid Destination Path ()": its unused command-line
+# group is empty) and exits 1; any other error, or a missing asset, is a real failure.
+$errors = @(Select-String -LiteralPath $log -Pattern 'Error:' | Where-Object { $_.Line -notmatch 'Invalid Destination Path \(\)' -and $_.Line -notmatch 'Warning/Error Summary|Failure - ' })
+if ($missing.Count -gt 0 -or $errors.Count -gt 0 -or !(Select-String -LiteralPath $log -SimpleMatch 'Importing group BattleSynth' -Quiet)) {
+    $errors | Select-Object -First 5 | ForEach-Object { $_.Line }
     throw "Import-SynthSounds failed (exit $($process.ExitCode), missing $($missing.BaseName -join ', ')). Log: $log"
 }
 Write-Output "SYNTH_IMPORT_OK sounds=$($waves.Count) dest=/Game/Audio/Battle"

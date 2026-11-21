@@ -1,4 +1,4 @@
-# Copies the sounds and effects used by BattleAudio / BattleEffects (2026-11-22) from the user's asset projects
+# Copies the sounds and the explosion effect used by BattleAudio / BattleEffects (2026-11-22) from the user's asset projects
 # (C:\Users\nanek\Documents\FPS\アセット, both UE 5.8 projects like this one) into Game/FutureBattle/Content, keeping the
 # same /Game paths so the effects' own references (materials, textures, curves) still resolve.
 # Sources and terms are listed in Docs/ASSET_SOURCES_AUDIO_FX.md. Only plain SoundWaves without references to other
@@ -32,9 +32,9 @@ SOUNDS = [
         [f'/Game/Audio/Sounds/Impacts/{n}' for n in numbered('Lyra_Plyr_BulletImpact_', 1, 6)] +
         [f'/Game/Audio/Sounds/WhizBys/{n}' for n in numbered('sfx_AR_Whizbys_Oncoming_Close_', 1, 4) + numbered('sfx_AR_Whizbys_Oncoming_Mid_', 1, 2)]),
 ]
+# The TPS bullet impact effect (P_Wep_BulletImpact_Rifle) was tried and dropped on 2026-11-22: it did not show in the game.
 EFFECTS = [
     (LYRA, 'Lyra', ['/Game/Effects/Particles/Explosion/NS_Grenade_Explosion']),
-    (TPS, 'TPS', ['/Game/Multiplayercovershooter/ParticleSystem/Particles/Effects/Weapons/P_Wep_BulletImpact_Rifle']),
 ]
 
 REF = re.compile(rb'(/Game/[A-Za-z0-9_/\-]+)')

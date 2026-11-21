@@ -2,7 +2,6 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleMuzzleFlash.h"
 #include "BattleAudio.h"
-#include "BattleEffects.h"
 #include "Animation/AnimSequence.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 #include "BattleGameMode.h"
@@ -289,16 +288,11 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 			if (!Victim->IsAlive()) Victim->ApplyDeath();
 		}
 	}
-	// Sound and effects only (2026-11-22), as in UBattleLeaderRuntime::Fire.
+	// Sound only (2026-11-22), as in UBattleLeaderRuntime::Fire.
 	{
 		const FVector HitAt = Hit.bBlockingHit ? FVector(Hit.ImpactPoint) : End;
 		BattleAudio::Shot(GetWorld(), Start, GetState()->Weapon == EBattleWeapon::SupportGun ? BattleAudio::EShot::Heavy : BattleAudio::EShot::Rifle, bPlayerShot);
-		if (Hit.bBlockingHit)
-		{
-			const ABattleUnit* HitUnit = Cast<ABattleUnit>(Hit.GetActor());
-			BattleAudio::Impact(GetWorld(), HitAt, HitUnit != nullptr);
-			if (!HitUnit) BattleEffects::BulletImpact(GetWorld(), HitAt, Hit.ImpactNormal);
-		}
+		if (Hit.bBlockingHit) BattleAudio::Impact(GetWorld(), HitAt, Cast<ABattleUnit>(Hit.GetActor()) != nullptr);
 		BattleAudio::ShotPassing(GetWorld(), Start, HitAt, GetState()->Team, Cast<ABattleUnit>(Hit.GetActor()) ? Cast<ABattleUnit>(Hit.GetActor())->GetUnitID() : INDEX_NONE);
 	}
 	if (bRevealed)
