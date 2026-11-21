@@ -38,19 +38,23 @@ bool UBattleLeaderRuntime::SoldierWatchDirection(int32 ID,int32 TargetID,const F
     Out=(K->LastKnownPosition-Pos).GetSafeNormal2D();
     if(!Out.IsNearlyZero()){Diag.Cover(TEXT("watch_target_frames"));return true;}
    }
-  // 2. Else the nearest enemy he knows of (his own sightings and his comrades' reports, still held), within his weapon's reach:
-  // he looks where it was last known.
-  const double Reach=FMath::Square(double(BattleRanges::Reach(U->Weapon)));double Best=Reach;FVector At=FVector::ZeroVector;
+  // 2. Else the nearest enemy he sees himself now, and 3. else the nearest he knows of (his memory and his comrades' reports,
+  // still held), within his weapon's reach: he looks where it is or was last known. One he sees comes first, so he does not
+  // turn away from it toward one he only heard of (also in the moments after a load, before his squad picks its target again).
+  const double Reach=FMath::Square(double(BattleRanges::Reach(U->Weapon)));
+  double BestSeen=Reach,BestHeld=Reach;FVector AtSeen=FVector::ZeroVector,AtHeld=FVector::ZeroVector;
   for(const auto& C:*Contacts)
   {
    if(!Held(C.Value))continue;
    const auto* T=Store->Find(C.Key);if(!T || !T->IsAlive() || T->Team==U->Team)continue;
-   const double D=FVector::DistSquared2D(Pos,C.Value.LastKnownPosition);
-   if(D<Best && D>1.){Best=D;At=C.Value.LastKnownPosition;}
+   const double D=FVector::DistSquared2D(Pos,C.Value.LastKnownPosition);if(D<=1.)continue;
+   if(C.Value.bVisible && !C.Value.bShared && D<BestSeen){BestSeen=D;AtSeen=C.Value.LastKnownPosition;}
+   if(D<BestHeld){BestHeld=D;AtHeld=C.Value.LastKnownPosition;}
   }
-  if(Best<Reach){Out=(At-Pos).GetSafeNormal2D();if(!Out.IsNearlyZero()){Diag.Cover(TEXT("watch_contact_frames"));return true;}}
+  if(BestSeen<Reach){Out=(AtSeen-Pos).GetSafeNormal2D();if(!Out.IsNearlyZero()){Diag.Cover(TEXT("watch_seen_frames"));return true;}}
+  if(BestHeld<Reach){Out=(AtHeld-Pos).GetSafeNormal2D();if(!Out.IsNearlyZero()){Diag.Cover(TEXT("watch_contact_frames"));return true;}}
  }
- // 3. Nothing known: the squad shares the ground ahead between its members - toward the enemy's home, and 70 degrees to either
+ // 4. Nothing known: the squad shares the ground ahead between its members - toward the enemy's home, and 70 degrees to either
  // side (with 120 degrees each, the squad watches 260 degrees). Fixed by the member's place in the squad, so it does not sweep.
  const auto* S=Store->FindSquad(U->SquadID);const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  if(!S || !Match || !Match->IsEnabled() || (U->Team!=0 && U->Team!=1))return false;
