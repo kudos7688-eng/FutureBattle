@@ -263,6 +263,72 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_OVERLAY_POSE overlay=%s head=%.0f spine_scale=%.2f"),bHit?TEXT("hit"):TEXT("recoil"),Head,Size);
   Check(Head>120.f&&Size>.9f,bHit?TEXT("a hit reaction keeps the upper body whole (additive clip)"):TEXT("a shot's recoil keeps the upper body whole (additive clip)"));
   if(bHit){Actor(1)->NoteVisualShot(Now);SmokeStage=13;Later(.15);return;}
+  BayStart=Now;SmokeStage=14;
+ }
+ // Rendered run: the player strafes right and fires, aiming 8 degrees down. The rifle sits in hand_r, so the strafe clip's hand
+ // turned it away from the shot; the chest turns it back along the aim (FBattleBodyAnimProxy::AlignMuzzle). Input every frame;
+ // the barrel's 3D angle to the aim is measured every frame from 0.4 s (after the 0.2 s cross-fade) to 1.2 s.
+ if(SmokeStage==14)
+ {
+  ABattleUnit* A=Actor(1);
+  if(Now-BayStart<.01){PC->ControlUnit(A);SmokeMuzzleMax=0.f;SmokeMuzzleFrames=0;SmokeShots=0;}
+  PC->SetControlRotation(FRotator(-8.f,A->GetActorRotation().Yaw,0.f));
+  const FVector Aim=PC->GetControlRotation().Vector();
+  if(Now-BayStart<1.2)
+  {
+   A->AddMovementInput(A->GetActorRightVector(),1.f);
+   Store->Units.FindChecked(1).Ammo=FMath::Max(Store->Find(1)->Ammo,5);
+   SmokeShots+=Fire(1,A->EyePosition(),Aim,true)?1:0;
+   if(Now-BayStart>.4)
+   {
+    const FVector Barrel=-A->Rifle->GetComponentTransform().GetUnitAxis(EAxis::Y);
+    SmokeMuzzleMax=FMath::Max(SmokeMuzzleMax,FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Barrel.GetSafeNormal(),Aim),-1.,1.))));
+    ++SmokeMuzzleFrames;
+   }
+   Later(.001f);return;
+  }
+  const auto* Body=Cast<UBattleBodyAnimInstance>(A->GetMesh()->GetAnimInstance());
+  const FVector Local=A->GetActorRotation().UnrotateVector(A->GetVelocity());
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_MUZZLE_ALIGN base=%s local_velocity=%s frames=%d shots=%d barrel_to_aim_max=%.1f"),Body&&Body->GetBase()?*Body->GetBase()->GetName():TEXT("none"),*Local.ToCompactString(),SmokeMuzzleFrames,SmokeShots,SmokeMuzzleMax);
+  Check(Local.Y>100.f && SmokeMuzzleFrames>5 && SmokeShots>=2 && SmokeMuzzleMax<8.f,TEXT("firing while strafing points the barrel along the aim (chest turns the rifle)"));
+  SmokeStage=15;BayStart=Now;Later(.8);return;
+ }
+ // Rendered run: a hit through the normal path (HP drops, the body's tick plays the reaction); a second hit 0.3 s later does
+ // not restart it; the reaction ends and the body stands back up (head height and chest angle as before); a hit after
+ // HitReactSeconds plays again.
+ if(SmokeStage>=15 && SmokeStage<=19)
+ {
+  ABattleUnit* A=Actor(1);auto* Body=Cast<UBattleBodyAnimInstance>(A->GetMesh()->GetAnimInstance());auto* Mesh=A->GetMesh();
+  auto& U=Store->Units.FindChecked(1);
+  const float Head=Mesh->GetSocketLocation(TEXT("head")).Z-Mesh->GetComponentLocation().Z;
+  const FQuat Chest=Mesh->GetSocketTransform(TEXT("spine_03"),RTS_Component).GetRotation();
+  const UAnimSequence* HitClip=Body?Body->GetOverlay():nullptr;
+  if(SmokeStage==15){SmokeHead=Head;SmokeChest=Chest;U.HP-=1.f;SmokeStage=16;Later(.3f);return;}
+  if(SmokeStage==16)
+  {
+   SmokeHit=A->LastHitReact;SmokeHitClip=HitClip;
+   Check(Now-SmokeHit<.5 && HitClip!=nullptr,TEXT("a hit plays a hit reaction"));
+   U.HP-=1.f;SmokeStage=17;Later(.1f);return;
+  }
+  if(SmokeStage==17)
+  {
+   Check(A->LastHitReact==SmokeHit,TEXT("a second hit 0.3 s later does not restart the reaction"));
+   const float Length=SmokeHitClip?SmokeHitClip->GetPlayLength():1.f;
+   SmokeStage=18;Later(FMath::Max(.1f,float(SmokeHit+Length+.3-Now)));return;
+  }
+  if(SmokeStage==18)
+  {
+   const float ChestTurn=FMath::RadiansToDegrees(Chest.AngularDistance(SmokeChest));
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_HIT_RECOVER clip=%s length=%.2f head_before=%.0f head_after=%.0f chest_turn=%.1f overlay_left=%d"),SmokeHitClip?*SmokeHitClip->GetName():TEXT("none"),SmokeHitClip?SmokeHitClip->GetPlayLength():0.f,SmokeHead,Head,ChestTurn,HitClip?1:0);
+   Check(!HitClip && FMath::Abs(Head-SmokeHead)<4.f && ChestTurn<8.f,TEXT("a hit reaction ends and the body stands back up"));
+   SmokeStage=19;Later(FMath::Max(.1f,float(SmokeHit+BattleBodyAnim::HitReactSeconds+.1-Now)));return;
+  }
+  if(SmokeStage==19 && SmokeHit>0.)
+  {
+   U.HP-=1.f;SmokeHit=-SmokeHit;Later(.2f);return;
+  }
+  Check(A->LastHitReact>-SmokeHit,TEXT("a hit after HitReactSeconds plays a new reaction"));
+  U.HP+=3.f;
  }
  if(BodyShotPrefix().IsEmpty())CancelCoverAction(1);
  Check(Store->Find(1)->CoverPhase==0,TEXT("explicit release clears cover action"));

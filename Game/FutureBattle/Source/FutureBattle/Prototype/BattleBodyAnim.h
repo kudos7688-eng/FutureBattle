@@ -42,6 +42,11 @@ namespace BattleBodyAnim
  // Death and hit clips by where the shot came from (ShotDirection = travel direction of the bullet; zero when unknown).
  UAnimSequence* Death(const FVector& BodyForward,const FVector& ShotDirection,int32 Seed);
  UAnimSequence* Hit(const FVector& BodyForward,const FVector& ShotDirection,int32 Seed);
+ // The shortest time between two hit reactions on one body: under steady fire a new flinch every hit kept the body bent over
+ // (it never stood back up); a hit inside this time shows no new reaction (display only, the damage is unchanged).
+ constexpr double HitReactSeconds=1.2;
+ // The rifle model's grip relative to hand_r (calibrated against the rifle idle pose; the barrel along the model's local -Y).
+ FTransform RifleGrip();
  // Cover clips (BattleCoverClips.h, the table by the asset review session): a clip of /Game/.../Rifle/Cover/ by name (cached),
  // and the set for a cover action from its anchor, peek point and the body's facing toward the threat. Height costs one
  // terrain line, so callers pick the set once per cover action.
@@ -68,6 +73,12 @@ struct FBattleBodyAnimProxy : public FAnimInstanceProxy
  virtual bool Evaluate(FPoseContext& Output) override;
  void EvaluateLayers(FPoseContext& Output);
  void RaiseHands(FCompactPose& Pose) const;
+ // While aiming: the rifle sits in hand_r, so each locomotion clip's hand points it its own way (a strafe or a jog-to-walk
+ // blend turned it away from the shot). spine_03 turns the whole upper body so the barrel points along the aim (the body's
+ // forward at AimPitch), at most MaxMuzzleCorrection degrees, scaled by AimWeight. Applied after the aim pose and before the
+ // upper clip and overlays (a reload clip replaces it; recoil and hit motion stay on top of it).
+ void AlignMuzzle(FCompactPose& Pose) const;
+ static constexpr float MaxMuzzleCorrection=50.f;
 };
 
 UCLASS(Transient)
@@ -89,6 +100,7 @@ public:
  // they are long: the body itself does not rise. Used by the over-the-top blind fire (the rifle held above the cover).
  void SetHandRaise(const FVector& Target,float Weight){RaiseTarget=Target;RaiseWeight=FMath::Clamp(Weight,0.f,1.f);}
  UAnimSequence* GetBase() const {return BaseClip;}
+ UAnimSequence* GetOverlay() const {return OverlayClip;}
 protected:
  virtual void NativeUpdateAnimation(float DeltaSeconds) override;
  virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override {return new FBattleBodyAnimProxy(this);}
