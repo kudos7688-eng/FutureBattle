@@ -663,12 +663,14 @@ void UBattleMatch::UpdateArtilleryRaids(int32 Team)
  for(int32 SuspectIndex=0;SuspectIndex<EvidenceTimes.Num();++SuspectIndex)
   if(EvidenceTimes[SuspectIndex]>=0&&Elapsed-EvidenceTimes[SuspectIndex]<60.&&(SuspectedPost==INDEX_NONE||EvidenceTimes[SuspectIndex]>EvidenceTimes[SuspectedPost]))SuspectedPost=SuspectIndex;
  if(SuspectedPost==INDEX_NONE)return;
- int32 NearestRaider=INDEX_NONE;double NearestRaidDistance=DBL_MAX;int32 RaidSlot=0;
+ // User decision 2026-11-21: a raid on artillery is dangerous; send exoskeleton soldiers first (fast, shielded, launcher kills
+ // guns), armoured cars only when no exo is free; never rifle squads or heavy infantry.
+ int32 NearestRaider=INDEX_NONE,NearestRaidRank=MAX_int32;double NearestRaidDistance=DBL_MAX;int32 RaidSlot=0;
  for(const auto& RaidPair:RaidStore->GetSquads())if(RaidPair.Value.Team==Team)
  {
   ++RaidSlot;const auto& CandidateSquad=RaidPair.Value;const uint8 RaidType=CandidateSquad.SquadType;
   if(CandidateSquad.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!CandidateSquad.bPlayerDelegated)||
-     (RaidType!=BattleSquadType::Rifle&&RaidType!=BattleSquadType::Heavy&&RaidType!=BattleSquadType::Exo&&RaidType!=BattleSquadType::ArmoredCar)||
+     (RaidType!=BattleSquadType::Exo&&RaidType!=BattleSquadType::ArmoredCar)||
      Area.HirePurpose.Contains(RaidPair.Key)||IntelPurpose.Contains(RaidPair.Key))continue;
   if(const FPlayerRoute* RaidRoute=PlayerRoutes.Find(RaidPair.Key);RaidRoute&&RaidRoute->bMission)continue;
   if(const auto* RaidGroup=Groups.Find(GroupOf(RaidPair.Key));RaidGroup&&GroupAIRun(*RaidGroup))continue;
@@ -677,8 +679,9 @@ void UBattleMatch::UpdateArtilleryRaids(int32 Team)
   int32 CandidateLiving=0;for(int32 CandidateMember:CandidateSquad.Members)if(const auto* CandidateUnit=RaidStore->Find(CandidateMember);CandidateUnit&&CandidateUnit->IsAlive())++CandidateLiving;
   if(CandidateLiving==0||CandidateLiving*2<CandidateSquad.Members.Num())continue;
   const double RaidDistance=FVector::DistSquared2D(RaidRuntime->Position(CandidateSquad.LeaderUnitID),EnemyPosts[SuspectedPost]);
-  if(RaidDistance<NearestRaidDistance||(RaidDistance==NearestRaidDistance&&(NearestRaider==INDEX_NONE||RaidPair.Key<NearestRaider)))
-   {NearestRaider=RaidPair.Key;NearestRaidDistance=RaidDistance;}
+  const int32 RaidRank=RaidType==BattleSquadType::Exo?0:1;
+  if(RaidRank<NearestRaidRank||(RaidRank==NearestRaidRank&&(RaidDistance<NearestRaidDistance||(RaidDistance==NearestRaidDistance&&(NearestRaider==INDEX_NONE||RaidPair.Key<NearestRaider)))))
+   {NearestRaider=RaidPair.Key;NearestRaidRank=RaidRank;NearestRaidDistance=RaidDistance;}
  }
  if(NearestRaider!=INDEX_NONE)
  {
