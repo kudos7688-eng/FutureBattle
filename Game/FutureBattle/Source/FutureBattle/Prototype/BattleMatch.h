@@ -359,6 +359,8 @@ public:
  // StrategyFocusHold seconds, reviews every StrategyReview seconds and at once when the focus is taken. State in Area.Strategy*.
  static int32 StrategyLevel();
  static bool StrategyOn(int32 Team, int32 Level);
+ static float StrategyOpenSeconds();      // before the first review (x match length / 600)
+ static float StrategyFocusHoldSeconds(); // least time a focus is kept
  int32 StrategyFocusPoint(int32 Team) const; // INDEX_NONE without a valid focus
  void UpdateStrategy(int32 Team);
  // Stage S3 (-BattleStrategy=3): own points held against a known superior enemy (Area.StrategyHoldMask).

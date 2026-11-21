@@ -240,6 +240,18 @@ bool UBattleMatch::StrategyOn(int32 Team,int32 Level)
  return StrategyLevel()>=Level&&(Only<0||Only==Team);
 }
 
+float UBattleMatch::StrategyOpenSeconds()
+{
+ static const float V=BattleStrategyValues::Seconds(TEXT("BattleStrategyOpen="),150.f,0.f);
+ return V;
+}
+
+float UBattleMatch::StrategyFocusHoldSeconds()
+{
+ static const float V=BattleStrategyValues::Seconds(TEXT("BattleStrategyFocusHold="),90.f,0.f);
+ return V;
+}
+
 int32 UBattleMatch::StrategyFocusPoint(int32 Team) const
 {
  if(!bArea||Team<0||Team>1||!StrategyOn(Team,2)||!Area.StrategyFocus.IsValidIndex(Team))return INDEX_NONE;
@@ -270,8 +282,8 @@ void UBattleMatch::UpdateStrategy(int32 Team)
 {
  if(!bArea||Team<0||Team>1||!StrategyOn(Team,2)||Objectives.IsEmpty()||Phase!=EBattleMatchPhase::Combat)return;
  using namespace BattleStrategyValues;
- static const float OpenBase=Seconds(TEXT("BattleStrategyOpen="),150.f,0.f);
- static const float Hold=Seconds(TEXT("BattleStrategyFocusHold="),90.f,0.f);
+ const float OpenBase=StrategyOpenSeconds();
+ const float Hold=StrategyFocusHoldSeconds();
  static const float Review=Seconds(TEXT("BattleStrategyReview="),60.f,10.f);
  auto Fix=[](auto& A,auto V){if(A.Num()!=2)A.Init(V,2);};
  Fix(Area.StrategyPhase,0);Fix(Area.StrategyFocus,-1);Fix(Area.StrategyFocusAt,-1.f);Fix(Area.StrategyReviewAt,-1.f);Fix(Area.StrategyAvoid,-1);Fix(Area.StrategyAvoidUntil,-1.f);
