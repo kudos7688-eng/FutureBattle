@@ -32,4 +32,6 @@ namespace BattleAudio
  // Every frame from the player controller: the listener of the command view, the controlled soldier's weapon handling
  // (aim, scope, reload, empty trigger) and the match cues (objectives taken or lost, victory, defeat).
  void TickPlayer(ABattleController* Controller,bool bTriggerHeld);
+ // How many sounds have been started in this process (for Setup/Test-SoundFX.ps1).
+ int32 Started();
 }

@@ -12,7 +12,9 @@ namespace BattleEffects
  bool Active(UWorld* World);
  // Loads the effects at the start of a battle (otherwise the first use loads them).
  void Preload(UWorld* World);
- void BulletImpact(UWorld* World,const FVector& At,const FVector& Normal);
+ // Both return true when an effect was started (false: not rendering, switched off, far, behind the camera, or over the
+ // per-frame budget).
+ bool BulletImpact(UWorld* World,const FVector& At,const FVector& Normal);
  // Size 1 = an anti-tank round; about 2.5 = a self-propelled gun shell.
- void Explosion(UWorld* World,const FVector& At,float Size);
+ bool Explosion(UWorld* World,const FVector& At,float Size);
 }

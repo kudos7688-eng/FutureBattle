@@ -96,26 +96,26 @@ void BattleEffects::Preload(UWorld* World)
  if(Renders(World))Load(Get());
 }
 
-void BattleEffects::BulletImpact(UWorld* World,const FVector& At,const FVector& Normal)
+bool BattleEffects::BulletImpact(UWorld* World,const FVector& At,const FVector& Normal)
 {
  FFxState* S=Ready(World);
- if(!S||!S->Impact||At.ContainsNaN())return;
+ if(!S||!S->Impact||At.ContainsNaN())return false;
  // A puff of a few centimetres: only near the camera, and a few per frame when a whole line fires at once.
- if(!InView(*S,At,7000.,600.)||S->Impacts>=4)return;
+ if(!InView(*S,At,7000.,600.)||S->Impacts>=4)return false;
  ++S->Impacts;
  const FVector N=Normal.IsNearlyZero()?FVector::UpVector:Normal.GetSafeNormal();
- UGameplayStatics::SpawnEmitterAtLocation(World,S->Impact,At+N*2.,N.Rotation(),FVector(1.),true,EPSCPoolMethod::AutoRelease,true);
+ return UGameplayStatics::SpawnEmitterAtLocation(World,S->Impact,At+N*2.,N.Rotation(),FVector(1.),true,EPSCPoolMethod::AutoRelease,true)!=nullptr;
 }
 
-void BattleEffects::Explosion(UWorld* World,const FVector& At,float Size)
+bool BattleEffects::Explosion(UWorld* World,const FVector& At,float Size)
 {
  FFxState* S=Ready(World);
- if(!S||!S->Blast||At.ContainsNaN())return;
- if(!InView(*S,At,150000.,5000.)||S->Blasts>=4)return;
+ if(!S||!S->Blast||At.ContainsNaN())return false;
+ if(!InView(*S,At,150000.,5000.)||S->Blasts>=4)return false;
  ++S->Blasts;
  // Sit on the ground when the burst is just above it (shells aim at soldiers' centres); a hit high on a wall stays there.
  FVector Where=At;
  FHitResult Ground;
  if(World->LineTraceSingleByObjectType(Ground,At+FVector(0,0,50),At-FVector(0,0,300),FCollisionObjectQueryParams(ECC_WorldStatic)))Where=Ground.ImpactPoint;
- UNiagaraFunctionLibrary::SpawnSystemAtLocation(World,S->Blast,Where,FRotator::ZeroRotator,FVector(FMath::Clamp(Size,.5f,3.f)),true,true,ENCPoolMethod::AutoRelease,true);
+ return UNiagaraFunctionLibrary::SpawnSystemAtLocation(World,S->Blast,Where,FRotator::ZeroRotator,FVector(FMath::Clamp(Size,.5f,3.f)),true,true,ENCPoolMethod::AutoRelease,true)!=nullptr;
 }

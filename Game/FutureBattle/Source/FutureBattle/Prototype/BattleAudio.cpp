@@ -83,7 +83,7 @@ namespace
   double LastWhiz=-1.;
   bool bOverride=false;
   // The controlled soldier's weapon handling, and the match as last seen.
-  int32 PlayerUnit=INDEX_NONE, LastAim=0;
+  int32 PlayerUnit=INDEX_NONE, LastAim=0, Started=0;
   bool bLastScope=false, bReloadPending=false, bLastTrigger=false;
   double ReloadEnd=0.;
   TArray<int32> Owners;
@@ -166,12 +166,16 @@ namespace
 
  void PlayAt(UWorld* World,const FState& S,USoundBase* Sound,const FVector& At,float Volume,float Pitch,EAtt A,EConc C,float StartTime=0.f)
  {
-  if(Sound)UGameplayStatics::PlaySoundAtLocation(World,Sound,At,FRotator::ZeroRotator,Volume,Pitch,StartTime,S.Att[A],S.Conc[C]);
+  if(!Sound)return;
+  UGameplayStatics::PlaySoundAtLocation(World,Sound,At,FRotator::ZeroRotator,Volume,Pitch,StartTime,S.Att[A],S.Conc[C]);
+  ++Get().Started;
  }
 
  void Play2D(UWorld* World,const FState& S,USoundBase* Sound,float Volume,EConc C,bool bUI)
  {
-  if(Sound)UGameplayStatics::PlaySound2D(World,Sound,Volume,1.f,0.f,S.Conc[C],nullptr,bUI);
+  if(!Sound)return;
+  UGameplayStatics::PlaySound2D(World,Sound,Volume,1.f,0.f,S.Conc[C],nullptr,bUI);
+  ++Get().Started;
  }
 }
 }
@@ -185,6 +189,11 @@ bool BattleAudio::Enabled(UWorld* World)
 void BattleAudio::Preload(UWorld* World)
 {
  Ready(World);
+}
+
+int32 BattleAudio::Started()
+{
+ return Get().Started;
 }
 
 void BattleAudio::Shot(UWorld* World,const FVector& At,EShot Kind,bool bPlayer)

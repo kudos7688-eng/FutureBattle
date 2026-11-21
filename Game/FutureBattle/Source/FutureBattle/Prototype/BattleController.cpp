@@ -1,6 +1,7 @@
 #include "BattleController.h"
 #include "BattleAudio.h"
 #include "BattleEffects.h"
+#include "BattleFXCheck.h"
 #include "BattleUIText.h"
 #include "BattleTactics.h"
 #include "Engine/Canvas.h"
@@ -976,6 +977,8 @@ void ABattleController::PlayerTick(float DeltaTime)
 	}
 	// Sound only (BattleAudio, 2026-11-22): the command view's listener, the controlled soldier's weapon handling, match cues.
 	BattleAudio::TickPlayer(this, bTriggerHeld);
+	// Test only (-BattleFXCheck, Setup/Test-SoundFX.ps1).
+	BattleFXCheck::Tick(this);
 }
 
 void ABattleController::BindLeaderDeaths()

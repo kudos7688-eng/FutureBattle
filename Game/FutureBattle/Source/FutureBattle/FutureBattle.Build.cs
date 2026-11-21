@@ -27,6 +27,8 @@ public class FutureBattle : ModuleRules
 		PrivateDependencyModuleNames.Add("AnimationCore");
 		// Battle effects (BattleEffects.cpp, 2026-11-22): explosions are Niagara systems.
 		PrivateDependencyModuleNames.Add("Niagara");
+		// Sound check (BattleFXCheck.cpp): records the game's audio mix to a WAV file.
+		PrivateDependencyModuleNames.Add("AudioMixer");
 		// T5 test-only view visibility observer; no renderer behavior changes.
 		PrivateDependencyModuleNames.Add("Renderer");
 		PrivateIncludePaths.Add(System.IO.Path.Combine(EngineDirectory, "Source/Runtime/Renderer/Private"));
