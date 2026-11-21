@@ -507,6 +507,15 @@ void ABattleHUD::DrawMinimap()
  DrawRect(Ink,Map.Origin.X-5,Map.Origin.Y-24,Map.Size.X+10,Map.Size.Y+29);
  DrawText(TEXT("地図（観測情報のみ）"),Muted,Map.Origin.X,Map.Origin.Y-20,GEngine->GetSmallFont(),.8f);
  DrawRect(Ground,Map.Origin.X,Map.Origin.Y,Map.Size.X,Map.Size.Y);
+ // Sector maps: impassable mountains (brown) and lakes (blue) - public map knowledge (map J, 2026-11-22).
+ if(BattleFieldLayout::Of(GetWorld()).bSectors)
+  for(int32 SX=0;SX<BattleSectors::Columns;++SX)for(int32 SY=0;SY<BattleSectors::Rows;++SY)
+  {
+   const char Terrain=BattleFieldLayout::SectorKind(GetWorld(),FIntPoint(SX,SY));if(Terrain!='M'&&Terrain!='L')continue;
+   const FVector Mid=BattleSectors::Center(FIntPoint(SX,SY));const double HalfCell=BattleSectors::Size*.5;
+   const FVector2D A=Map.ToScreen(Mid+FVector(HalfCell,-HalfCell,0)),B=Map.ToScreen(Mid+FVector(-HalfCell,HalfCell,0));
+   DrawRect(Terrain=='M'?FLinearColor(.24f,.2f,.15f,.95f):FLinearColor(.08f,.2f,.38f,.95f),FMath::Min(A.X,B.X),FMath::Min(A.Y,B.Y),FMath::Abs(B.X-A.X),FMath::Abs(B.Y-A.Y));
+  }
  // Map E: the city block outline (public map knowledge).
  if(const FVector2D City=BattleFieldLayout::Of(GetWorld()).CityHalf;City.X>0) Frame(Map.ToScreen(FVector(City.X,-City.Y,0)),Map.ToScreen(FVector(-City.X,City.Y,0)),Muted);
  // Roads of the map (public map knowledge): the routes squads follow. The three main routes are brighter than the connectors.
