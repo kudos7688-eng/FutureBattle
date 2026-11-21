@@ -457,6 +457,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_TANK_GUN_SMOKE tank=%d enemy=%d own=%d after2=%.0f"),TankID,EnemyTank,OwnTank,After2);
     }
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleVehicleHitCover=")))Check(!BattleTactics::VehicleHitCover(),TEXT("vehicle hit cover defaults OFF"));
+    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleTankGunFlash=")))Check(!BattleTactics::TankGunFlash(),TEXT("tank gun flash defaults OFF"));
     // Armour AI, stage 3 (BattleArmourAI.cpp): the tank's objective is kept on the next pick and its overwatch post lies short of the
     // point on the own side; a stopped hull turns no faster than its turn rate; no reaction without a threat or a hit; an enemy vehicle
     // the team knows of sends the anti-tank teams to the nearest point and changes the AI's own mix (anti-tank team, second tank).

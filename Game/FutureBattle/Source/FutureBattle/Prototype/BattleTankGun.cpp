@@ -12,8 +12,20 @@
 #include "BattleStance.h"
 #include "BattleController.h"
 #include "BattleSuppression.h"
+#include "BattleTactics.h"
+#include "BattleUnit.h"
+#include "Math/RandomStream.h"
+#include "Components/CapsuleComponent.h"
 #include "DrawDebugHelpers.h"
 #include "FutureBattle.h"
+
+namespace
+{
+ constexpr double TankGunFlashRange=100000.; // Initial trial range, independent of tuning profiles.
+ constexpr double TankGunFlashEyeHeight=150.;
+ constexpr float TankGunFlashErrorRadius=500.f;
+ constexpr int32 TankGunFlashMaxTraces=40;
+}
 
 float UBattleLeaderRuntime::TankGunEngage() const
 {
@@ -121,6 +133,45 @@ bool UBattleLeaderRuntime::FireTankGun(int32 ID,const FVector& Aim,double Now)
  // Deterministic spread per tank and round (like the infantry shot sequence).
  FRandomStream Random(int32(uint32(ID)*2654435761u+uint32(G.Shots++)*40503u+977u));
  const FVector Direction=Random.VRandCone((Aim-Start).GetSafeNormal(),FMath::DegreesToRadians(FMath::Max(0.f,T->TankGunSpread)));
+ if(BattleTactics::TankGunFlash()&&Team>=0&&Team<2)
+ {
+  const int32 FlashTeam=1-Team;
+  TArray<int32> FlashSquads;
+  for(const auto& FlashSquad:Store->GetSquads())
+   if(FlashSquad.Value.Team==FlashTeam&&FlashSquad.Value.CommandStatus==EBattleCommandStatus::Active)FlashSquads.Add(FlashSquad.Key);
+  FlashSquads.Sort();
+  FCollisionQueryParams FlashQuery(SCENE_QUERY_STAT(TankGunFlash),false);
+  // Bodies do not hide a main-gun flash; no enemy positions are read here.
+  for(const auto& FlashBody:GetBodies())
+  {
+   if(const auto* FlashActor=Actor(FlashBody.Key))FlashQuery.AddIgnoredActor(FlashActor);
+   FlashQuery.AddIgnoredComponent(FlashBody.Value.Capsule.Get());
+  }
+  int32 FlashTraces=0;
+  for(int32 FlashSquadID:FlashSquads)
+  {
+   const auto* FlashSquadState=Store->FindSquad(FlashSquadID);
+   const int32 FlashLeader=FlashSquadState->LeaderUnitID;
+   const auto* FlashUnit=Store->Find(FlashLeader);
+   if(!FlashUnit||!FlashUnit->IsAlive()||FlashUnit->Team!=FlashTeam)continue;
+   const FVector FlashPosition=Position(FlashLeader);
+   const double FlashRangeSquared=FVector::DistSquared(FlashPosition,Start);
+   if(FlashRangeSquared>FMath::Square(TankGunFlashRange))continue;
+   if(FlashTraces>=TankGunFlashMaxTraces)break;
+   ++FlashTraces;FHitResult FlashHit;
+   GetWorld()->LineTraceSingleByChannel(FlashHit,FlashPosition+FVector(0,0,TankGunFlashEyeHeight),Start,ECC_Visibility,FlashQuery);
+   if(FlashHit.bBlockingHit)continue;
+   // Independent stream: uniform disc area, without advancing the ballistic random sequence.
+   FRandomStream FlashRandom(int32(uint32(ID)*2654435761u+uint32(G.Shots)*40503u+7919u));
+   const float FlashAngle=FlashRandom.FRand()*2.f*PI;
+   const float FlashRadius=FMath::Sqrt(FlashRandom.FRand())*TankGunFlashErrorRadius;
+   auto& FlashReport=M->TankGunFlashes[FlashTeam].FindOrAdd(ID);
+   FlashReport.At=M->Elapsed;FlashReport.Position=Start+FVector(FMath::Cos(FlashAngle)*FlashRadius,FMath::Sin(FlashAngle)*FlashRadius,0);
+   M->IntelViews[FlashTeam].At=-1;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_FLASH team=%d shooter=%d observer=%d range=%.0f at=%s"),FlashTeam,ID,FlashLeader,FMath::Sqrt(FlashRangeSquared),*FlashReport.Position.ToCompactString());
+   break;
+  }
+ }
  auto Q=Sight(ID).Query;if(ConcealmentActors.Num())Q.AddIgnoredActors(ConcealmentActors);
  FHitResult Hit;const FVector End=Start+Direction*TankGunReach();
  GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_Visibility,Q);

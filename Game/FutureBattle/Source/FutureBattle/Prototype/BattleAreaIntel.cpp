@@ -19,7 +19,7 @@ bool UBattleMatch::AreaIntelOn(int32 Team) const
 const UBattleMatch::FAreaIntelView& UBattleMatch::AreaIntelView(int32 Team) const
 {
  FAreaIntelView& V=IntelViews[FMath::Clamp(Team,0,1)];
- if(V.At>=0&&V.At<=Elapsed&&Elapsed-V.At<1.)return V; // refreshed once per match second
+ if(V.At>=0&&V.At<=Elapsed&&Elapsed-V.At<1.&&(!BattleTactics::TankGunFlash()||Elapsed<V.FlashExpiresAt))return V; // refreshed once per match second or at flash expiry
  V=FAreaIntelView();V.At=Elapsed;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const auto* Perception=GetWorld()->GetSubsystem<UBattlePerception>();const auto* T=GetDefault<UBattleTuning>();
@@ -39,6 +39,19 @@ const UBattleMatch::FAreaIntelView& UBattleMatch::AreaIntelView(int32 Team) cons
    for(const auto& C:*Contacts)if(C.Value.bVisible&&!IsScoutLongContact(U.Key,C.Value)){Seen.Add(C.Key,C.Value.LastKnownPosition);if(BattleTactics::GroupStrengthEnabled()&&C.Value.ObservedSquadType<BattleSquadType::Count)V.EnemyTypes.Add(C.Key,C.Value.ObservedSquadType);}
  }
  AddScoutReportSightings(Team,Seen);
+ if(BattleTactics::TankGunFlash())
+ {
+  auto& Flashes=TankGunFlashes[FMath::Clamp(Team,0,1)];
+  for(auto FlashIt=Flashes.CreateIterator();FlashIt;++FlashIt)
+   if(FlashIt.Value().At>Elapsed||Elapsed-FlashIt.Value().At>=TankGunFlashMemory)FlashIt.RemoveCurrent();
+  TArray<int32> FlashKeys;Flashes.GetKeys(FlashKeys);FlashKeys.Sort();
+  for(int32 FlashKey:FlashKeys)
+  {
+   const auto& Flash=Flashes[FlashKey];
+   V.FlashExpiresAt=FMath::Min(V.FlashExpiresAt,Flash.At+TankGunFlashMemory);
+   if(!Seen.Contains(FlashKey))Seen.Add(FlashKey,Flash.Position);
+  }
+ }
  for(const auto& P:ScoutReports)
   if(const auto* S=Store->FindSquad(P.Key);S&&S->Team==Team&&P.Value.ReportedAt>=0&&Elapsed-P.Value.ReportedAt<=T->ScoutReportMemory&&
      FVector::DistSquared2D(P.Value.ReportFrom,EnemyHome)<=FMath::Square(BattleSquadType::StillSightRange(BattleSquadType::Scout)))V.bHomeCovered=true;

@@ -1,5 +1,6 @@
 #pragma once
 #include "CoreMinimal.h"
+#include <cfloat>
 #include "Subsystems/WorldSubsystem.h"
 #include "BattleState.h"
 #include "BattleAreaState.h"
@@ -240,6 +241,7 @@ public:
   // Fresh direct LOS report, distinct from knowing the base position. Match-clock timestamp.
   int32 HomeObserver=INDEX_NONE; double HomeObservedAt=-1; FVector HomeReportFrom=FVector::ZeroVector;
   TMap<int32,uint8> EnemyTypes; // observed contact metadata only; report dots without identity remain unknown
+  double FlashExpiresAt=DBL_MAX;
   mutable bool bClustersBuilt[2]={false,false};
   mutable TArray<FArtilleryCluster> Clusters[2];
  };
@@ -252,6 +254,9 @@ public:
 	void UpdateIntelPurposes();
 	TMap<int32, int32> IntelPurpose;           // squad -> point it was bought to defend (transient)
 	mutable FAreaIntelView IntelViews[2];
+ struct FTankGunFlash { double At=0; FVector Position=FVector::ZeroVector; };
+ static constexpr double TankGunFlashMemory=10.; // Match seconds; transient, never saved.
+ mutable TMap<int32,FTankGunFlash> TankGunFlashes[2];
 	TMap<int32, FScoutReport> ScoutReports;
 	void UpdateScoutReports();
 	// True when a scout sees this contact only because of its long still-sight (team displays and plans use the reports instead).

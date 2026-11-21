@@ -36,6 +36,12 @@ bool BattleTactics::VehicleHitCover()
  return On;
 }
 
+bool BattleTactics::TankGunFlash()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleTankGunFlash="),V);return V==1;}();
+ return On;
+}
+
 bool BattleTactics::SPGAmmoEnabled()
 {
  static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSPGAmmo="),V);return V!=0;}();
