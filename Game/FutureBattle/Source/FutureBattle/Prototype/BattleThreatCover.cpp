@@ -8,6 +8,7 @@
 #include "BattleSectors.h"
 #include "BattleSquadTactics.h"
 #include "FutureBattle.h"
+#include "BattleStance.h"
 
 bool UBattleLeaderRuntime::ThreatCoverEnabled(int32 Team)
 {
@@ -143,6 +144,17 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
   Diag.Cover(ByTarget?TEXT("threat_cover_broken_by_target"):TEXT("threat_cover_broken_by_other"));
   // Evaluation only: the angle between the target and the threat that broke the place, seen from the place (is it really a
   // flank, or another enemy of the same front?), and how far that threat was.
+  // Evaluation only: the break is judged with the standing body's five points (150/120/115/115/55 cm), but a hidden soldier
+  // is crouched (top 110 cm, seen and aimed at 80 cm). Counted: breaks where the crouched body's points (110/80/55 and 90 cm
+  // to either side) would still be hidden within the same limit.
+  if(Diag.Enabled && StanceOf(ID)==BattleStance::Crouch)
+  {
+   const FVector From=(ByTarget?Primary:Threats[Breaker])+FVector(0,0,60);
+   const FVector Right=FVector::CrossProduct(FVector::UpVector,(From-Anchor).GetSafeNormal2D());
+   int32 Seen=0;
+   for(const FVector& O:{FVector(0,0,20),FVector(0,0,-10),FVector(0,0,-35),Right*25.f,-Right*25.f})Seen+=BattleTactics::HasTerrainLine(GetWorld(),Anchor+O,From);
+   Diag.Cover(Seen/5.f>CoverExposureLimit()?TEXT("threat_break_crouch_seen"):TEXT("threat_break_crouch_hidden"));
+  }
   if(ByOther && Diag.Enabled)
   {
    const double Cos=FVector::DotProduct((Primary-Anchor).GetSafeNormal2D(),(Threats[Breaker]-Anchor).GetSafeNormal2D());
