@@ -600,7 +600,7 @@ public:
  // Trial -BattleThreatCoverCrouch=1 (2026-11-21, default 0; with stances and -BattleThreatCover): a stage A soldier's cover
  // places are judged with the crouched body's points (breaks, threats that see in, choosing places). Map I runs: 33-52% of
  // confirmed breaks were hidden when crouched.
- static bool ThreatCoverCrouch();
+ static bool ThreatCoverCrouch(int32 Team); // -BattleThreatCoverCrouchTeam=0/1: one team only
  float ThreatSeen(int32 ID,FVector Anchor,FVector Threat) const; // fraction of the body a threat sees at the place
  bool CheckCoverThreats(int32 ID,FVector Primary,double Now,float Dt);
  // Trial -BattleThreatCoverRelocate (2026-11-21, default 0; with -BattleThreatCover): before leaving a broken place he looks for

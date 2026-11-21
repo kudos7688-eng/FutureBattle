@@ -61,10 +61,12 @@ int32 UBattleLeaderRuntime::GatherThreats(int32 ID,FVector Primary,double Now,TA
  return Out.Num();
 }
 
-bool UBattleLeaderRuntime::ThreatCoverCrouch()
+bool UBattleLeaderRuntime::ThreatCoverCrouch(int32 Team)
 {
+ // -BattleThreatCoverCrouchTeam=0/1 limits it to one team (one-sided trials); -1 = both.
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleThreatCoverCrouch="),V);return V==1;}();
- return bOn;
+ static const int32 Only=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleThreatCoverCrouchTeam="),V);return V==0||V==1?V:-1;}();
+ return bOn && (Only<0 || Only==Team);
 }
 
 float UBattleLeaderRuntime::ThreatSeen(int32 ID,FVector Anchor,FVector Threat) const
@@ -79,7 +81,7 @@ float UBattleLeaderRuntime::ThreatSeen(int32 ID,FVector Anchor,FVector Threat) c
  const FVector From=Threat+FVector(0,0,60);
  const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
  const auto* Body=Bodies.Find(ID);const bool bPlayer=Body && Body->Actor.IsValid() && Body->Actor->IsPlayerControlled(); // not the player's own cover (C key)
- if(!ThreatCoverCrouch() || !U || bPlayer || !BattleStance::Enabled(GetWorld()) || !ThreatCoverEnabled(U->Team) || !SoldierAIFocus(ID))
+ if(!U || !ThreatCoverCrouch(U->Team) || bPlayer || !BattleStance::Enabled(GetWorld()) || !ThreatCoverEnabled(U->Team) || !SoldierAIFocus(ID))
   return BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),From).Fraction();
  const FVector Right=FVector::CrossProduct(FVector::UpVector,(From-Anchor).GetSafeNormal2D());
  int32 Seen=0;
@@ -174,7 +176,7 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
   // Evaluation only: the break is judged with the standing body's five points (150/120/115/115/55 cm), but a hidden soldier
   // is crouched (top 110 cm, seen and aimed at 80 cm). Counted: breaks where the crouched body's points (110/80/55 and 90 cm
   // to either side) would still be hidden within the same limit.
-  if(Diag.Enabled && !ThreatCoverCrouch() && StanceOf(ID)==BattleStance::Crouch) // with the crouch trial this is the judgment itself
+  if(Diag.Enabled && !ThreatCoverCrouch(U->Team) && StanceOf(ID)==BattleStance::Crouch) // with the crouch trial this is the judgment itself
   {
    const FVector From=(ByTarget?Primary:Threats[Breaker])+FVector(0,0,60);
    const FVector Right=FVector::CrossProduct(FVector::UpVector,(From-Anchor).GetSafeNormal2D());

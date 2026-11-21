@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 366 種類。
+計 367 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -301,7 +301,8 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleTerrainLineBodies` | Value | 1 | BattleTactics.cpp:233 |  |
 | `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:1370 |  |
 | `-BattleThreatCover` | Value | 0 | BattleThreatCover.cpp:23 |  |
-| `-BattleThreatCoverCrouch` | Value | 0 | BattleThreatCover.cpp:66 |  |
+| `-BattleThreatCoverCrouch` | Value | 0 | BattleThreatCover.cpp:67 |  |
+| `-BattleThreatCoverCrouchTeam` | Value | -1 | BattleThreatCover.cpp:68 |  |
 | `-BattleThreatCoverRelocate` | Value | 0 | BattleThreatCover.cpp:30 |  |
 | `-BattleThreatCoverTeam` | Value | -1 | BattleThreatCover.cpp:24 |  |
 | `-BattleTracerShot` | Param | off | BattleStanceShot.cpp:87 |  |
