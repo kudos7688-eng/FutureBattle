@@ -167,6 +167,10 @@ $supply=@{
  # Front army share (2026-11-22, ROADMAP stage 5; maps H/I): FS50 / FS30 = the AI fills its front army up to half / 30% of its free infantry.
  'FS50'=@('-FrontShare','0.5')
  'FS30'=@('-FrontShare','0.3')
+ # Stage 1 (2026-11-22): WP = corner waypoint pass (-BattleWaypointPass=1) on top of the default (HI).
+ 'WP'=@('-WaypointPass','1')
+ # SC = the sector AI combination the sector lane uses as its base (s22/s23) plus arrival walk (maps H/I).
+ 'SC'=@('-SectorContact','1','-SectorRoute','1','-SectorFlank','1','-SectorFront','1','-WaypointPass','1','-SectorMoveFire','1','-CoverHuddle','1','-PinnedFlank','1','-ArrivalThreat','1','-SectorCoverRoute','1','-ArrivalWalk','1')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

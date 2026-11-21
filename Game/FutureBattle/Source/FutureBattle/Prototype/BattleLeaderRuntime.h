@@ -476,7 +476,7 @@ public:
  // attack/hold orders) fights as the player's sector move does - until a member is inside the sector it fires on the move and
  // fights back at enemies outside the sector that shoot at it, without stopping or walking to cover on the way.
  static bool SectorMoveFireEnabled();
- // Trial -BattleArrivalWalk=1 (2026-11-21, default 0; user 11-21: soldiers stopped short of their planned cover and fought in the
+ // -BattleArrivalWalk (2026-11-21, default 1 by user decision after s23: open hits -23%, cover shots +18%; =0 for the old rule; user 11-21: soldiers stopped short of their planned cover and fought in the
  // open): in his own sector, a soldier whose arrival place (with its own tail route) is more than 1.5 m away keeps walking to it
  // and fires on the move, instead of stopping for combat where the squad first sees an enemy. He also walks the tail of his
  // route past the end of the shared path (otherwise the route gate stops him at the shared end point). Counts arrival_walk_*.
