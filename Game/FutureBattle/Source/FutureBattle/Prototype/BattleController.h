@@ -21,6 +21,9 @@ public:
 	ABattleCameraPawn();
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> Camera;
 	void Zoom(float Delta);
+	// Wheel zoom: scales the height by a factor (>1 out, <1 in), so the step grows with height and
+	// the whole range (1000 .. CameraMaxHeight, up to 160000) takes about 20 ticks instead of ~260.
+	void ZoomScale(float Factor);
 };
 
 // Command UI notification log (ROADMAP 2026-11-15 command UI design): events the player's side has observed, newest first,
