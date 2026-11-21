@@ -11,7 +11,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
  auto Fail=[&](const TCHAR* Why){Error=Why;return false;};
  if(!BattleFieldLayout::IsMixedSaveMap(MapName)) return Fail(TEXT("Unknown mixed map"));
  if((Ruleset!=TEXT("Wide")&&Ruleset!=TEXT("MixedFast")&&Ruleset!=TEXT("Area")) || !Finite(BaseSightRange,100,50000)||!Finite(WeaponRange,100,100000)||TacticalFeatures<0||TacticalFeatures>((90<<9)|511) ||
-    !Finite(TacticalClock,0,1000)||!Finite(TeamNextAssignment,0,TacticalClock+1.1)||!Finite(DelegationClock,0,5.1))return Fail(TEXT("Invalid mixed rules/clocks"));
+    !Finite(TacticalClock,0,BattleSaveValidation::ClockLimit(MapName))||!Finite(TeamNextAssignment,0,TacticalClock+1.1)||!Finite(DelegationClock,0,5.1))return Fail(TEXT("Invalid mixed rules/clocks"));
  if(Ruleset==TEXT("Wide")&&(Units.Num()!=50*BattleSquadType::RifleMembers() || Squads.Num()!=50))return Fail(TEXT("Fixed wide roster must contain 500 soldiers and 50 squads"));
  if(Ruleset==TEXT("MixedFast")&&(Units.Num()<20||Units.Num()>500||Units.Num()!=Squads.Num()*BattleSquadType::RifleMembers()))return Fail(TEXT("Invalid purchased roster"));
  TMap<int32,const FBattleSavedUnit*> ByID;
@@ -59,6 +59,13 @@ bool UBattleSave::ValidateMixed(FString& Error) const
  {
   const auto* S=BySquad.FindRef(E.State.SquadID);const auto& U=E.State;
   if(!S||S->SquadType>=BattleSquadType::Count)return Fail(TEXT("Invalid equipment squad"));
+  // Replacements retain the fallen member's weapon, and retired records have no slot.
+  // Validate the type's possible weapons rather than assuming current Members order is a slot ID.
+  bool TypeAllowsWeapon=false;
+  for(int32 EquipmentSlot=0;EquipmentSlot<BattleSquadType::Members(S->SquadType);++EquipmentSlot)
+   TypeAllowsWeapon|=U.Weapon==BattleSquadType::Weapon(S->SquadType,EquipmentSlot);
+  if(!TypeAllowsWeapon||!Finite(U.HP,0,FMath::Min(1.e9,double(BattleSquadType::MaxHealth(S->SquadType,S->LeaderUnitID==U.UnitID)))))
+   return Fail(TEXT("Weapon or health inconsistent with squad type"));
   const bool Exo=S->SquadType==BattleSquadType::Exo;
   const bool SPG=S->SquadType==BattleSquadType::SPGun;
   if(U.SPGAmmo<0||U.SPGAmmo>FMath::Max(0,GetDefault<UBattleTuning>()->SPGAmmoCapacity)||
@@ -124,7 +131,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   for(const auto& P:Area.HirePurpose)if(!((P.Value>=0&&P.Value<Objectives.Num())||P.Value==100||P.Value==101)||!BySquad.FindRef(P.Key))return Fail(TEXT("Invalid area hire purpose"));
   if(Area.HomeHitAt.Num()!=2||!Finite(Area.HomeHitAt[0],-1000,Elapsed+.01)||!Finite(Area.HomeHitAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area home hit clock"));
   if(Retired[0]+Area.HireSpent[0]+AllyCredits!=100+Area.Income[0]||Retired[1]+Area.HireSpent[1]+EnemyCredits!=100+Area.Income[1])return Fail(TEXT("Area resource conservation mismatch"));
-  if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=ExpectedRoster||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=2*Objectives.Num()||Area.SeenAt.Num()!=2*Objectives.Num()||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>200||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
+  if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=ExpectedRoster||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=2*Objectives.Num()||Area.SeenAt.Num()!=2*Objectives.Num()||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>Current||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
   for(int32 Team=0;Team<2;++Team)if(!Finite(Area.BaseHP[Team],0,1000)||!Finite(Area.KnownEnemyBaseHP[Team],-1,1000))return Fail(TEXT("Invalid base state"));
   for(int32 I=0;I<Area.KnownOwners.Num();++I)if(Area.KnownOwners[I]<-2||Area.KnownOwners[I]>1||!Finite(Area.SeenAt[I],-1,Elapsed+.01))return Fail(TEXT("Invalid observed objective"));
   int32 Reserved[2]={0,0};
@@ -138,7 +145,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   for(const auto& Q:Area.AmmoTimers)if(!BySquad.Contains(Q.Key)||!Finite(Q.Value,0,10))return Fail(TEXT("Invalid home ammunition timer"));
   for(const auto& Q:Area.SupplyStock){const auto* S=BySquad.FindRef(Q.Key);if(!S||S->SquadType!=BattleSquadType::Supply||Q.Value<0||Q.Value>100000)return Fail(TEXT("Invalid supply vehicle stock"));}
  }
- if(Squads.Num()>(Ruleset==TEXT("Area")?400:50)||SavedPlans.Num()!=Squads.Num()||TacticalSamples.Num()>Squads.Num()||NextSamples.Num()>Squads.Num()||TeamRetryAfter.Num()>Squads.Num()||DamageBuckets.Num()>Squads.Num()*7)return Fail(TEXT("Invalid mixed collection sizes"));
+ if(Squads.Num()>(Ruleset==TEXT("Area")?BattleRosterLimits::Area:50)||SavedPlans.Num()!=Squads.Num()||TacticalSamples.Num()>Squads.Num()||NextSamples.Num()>Squads.Num()||TeamRetryAfter.Num()>Squads.Num()||DamageBuckets.Num()>Squads.Num()*7)return Fail(TEXT("Invalid mixed collection sizes"));
  for(const auto& S:Squads)
  {
   const auto* Leader=ByID.FindRef(S.LeaderUnitID);
@@ -158,7 +165,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
      (S.CommandStatus==EBattleCommandStatus::Disabled&&S.bPlayerDelegated))return Fail(TEXT("Invalid dead leader state"));
   const auto* P=SavedPlans.Find(S.SquadID);
   if(!P||static_cast<uint8>(P->Action)>static_cast<uint8>(EBattleSquadTactic::Recover)||!Point(P->Destination)||!Point(P->FlankContact)||
-    !Finite(P->Remaining,0,60)||!BattleSaveValidation::Counter(P->Revision)||P->Reason.Len()>160||!Finite(P->Age,0,1000)||!Finite(P->SafeSeconds,0,1000)||
+    !Finite(P->Remaining,0,60)||!BattleSaveValidation::Counter(P->Revision)||P->Reason.Len()>160||!Finite(P->Age,0,BattleSaveValidation::ClockLimit(MapName))||!Finite(P->SafeSeconds,0,BattleSaveValidation::ClockLimit(MapName))||
     !Finite(P->FlankSupportChanges,0,1)||!Finite(P->RetrySeconds,0,600)||!Finite(P->FlankExposure,0,1)||!Finite(P->SupportUntil,0,TacticalClock+20.1)||!Finite(P->LastSupportShot,-1,TacticalClock+.01))return Fail(TEXT("Invalid saved tactical plan"));
   auto Ally=[&](int32 ID){const auto* Other=BySquad.FindRef(ID);return Other&&ID!=S.SquadID&&Other->Team==S.Team;};
   auto Enemy=[&](int32 ID){const auto* Other=ByID.FindRef(ID);return Other&&Other->State.Team!=S.Team;};

@@ -47,7 +47,7 @@ BattleComposition::FInput BattleComposition::Capture(const UBattleMatch& Match,c
  Result.HeavyShare=ResolvedIntent.HeavyShare;Result.bAutoTargets=bAutoTargets;Result.bAutoAllowed=bAutoAllowed;
  const auto& H=BattleTactics::AreaHire();Result.bHireEnabled=H.bEnabled;Result.Interval=H.Interval;Result.Stop=H.Stop;
  if(Match.Area.LastAIHireAt.IsValidIndex(Team))Result.LastHireAt=Match.Area.LastAIHireAt[Team];
- Result.UnitSlots=FMath::Max(0,1000-Store.GetUnits().Num());
+ Result.UnitSlots=FMath::Max(0,BattleRosterLimits::Area-Store.GetUnits().Num());
  Result.Records=Store.GetSquads().Num(); // shared record capacity, not an enemy combat input
  for(const auto& Replacement:Match.Area.Replacements)if(const auto* Unit=Store.Find(Replacement.Key);Unit&&Unit->Team==Team)++Result.Pending;
  Result.Free=FMath::Max(0,Result.Credits-Result.Pending-Result.Reserve);

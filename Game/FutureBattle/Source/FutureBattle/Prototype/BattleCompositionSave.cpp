@@ -14,7 +14,7 @@ bool BattleComposition::ValidateSave(const UBattleSave& Save,FString& Error)
  if(Save.Version!=3||Save.CompositionTeams<1||Save.CompositionTeams>3||Save.CompositionPolicy!=PolicyVersion||Save.CompositionState.Num()!=2||Save.CompositionRules.Len()!=32)
   return Fail(TEXT("Invalid composition header"));
  for(TCHAR Character:Save.CompositionRules)if(!FChar::IsHexDigit(Character))return Fail(TEXT("Invalid composition rules key"));
- if(!FMath::IsFinite(Save.Elapsed)||Save.Elapsed<0||Save.Elapsed>1000)return Fail(TEXT("Invalid composition clock"));
+ if(!FMath::IsFinite(Save.Elapsed)||Save.Elapsed<0||Save.Elapsed>BattleSaveValidation::ClockLimit(Save.MapName))return Fail(TEXT("Invalid composition clock"));
  const int32 NowMS=FMath::FloorToInt(Save.Elapsed*1000.f);
  TMap<int32,int32> UnitTeams;for(const auto& Unit:Save.Units)UnitTeams.Add(Unit.State.UnitID,Unit.State.Team);
  for(int32 Team=0;Team<2;++Team)

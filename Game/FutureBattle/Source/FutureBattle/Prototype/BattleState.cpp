@@ -516,12 +516,16 @@ int32 UBattleState::CreateLeaderSquad(int32 Team, const TArray<int32>& Members, 
 }
 float UBattleState::MaxHealthOf(int32 UnitID) const
 {
- const float Base=GetDefault<UBattleTuning>()->Health;
  const auto* U=Find(UnitID); const auto* S=U?FindSquad(U->SquadID):nullptr;
+ return BattleSquadType::MaxHealth(S?S->SquadType:BattleSquadType::Rifle,S&&S->LeaderUnitID==UnitID);
+}
+float BattleSquadType::MaxHealth(uint8 Type,bool bLeader)
+{
+ const float Base=GetDefault<UBattleTuning>()->Health;
  // Squad type scale (heavy infantry); a leader keeps the larger of that and the leader multiplier.
- const float TypeScale=S?BattleSquadType::HealthScale(S->SquadType):1.f;
+ const float TypeScale=HealthScale(Type);
  // A vehicle's health is its type's alone (the leader multiplier is for soldiers); so is the exoskeleton soldier's.
- return S && S->LeaderUnitID==UnitID && !BattleSquadType::IsVehicle(S->SquadType) && S->SquadType!=BattleSquadType::Exo ? Base*FMath::Max(TypeScale,BattleTactics::LeaderHealthMultiplier()) : Base*TypeScale;
+ return bLeader && !IsVehicle(Type) && Type!=Exo ? Base*FMath::Max(TypeScale,BattleTactics::LeaderHealthMultiplier()) : Base*TypeScale;
 }
 bool UBattleState::CanSelectLeader(int32 ID,int32 PlayerTeam) const
 {

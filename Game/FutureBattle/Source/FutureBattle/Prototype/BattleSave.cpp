@@ -60,6 +60,26 @@ bool BattleSaveValidation::Contact(const FBattleContact& Value,int32 ObserverTea
   InRange(Value.LastSeenTime,-1000000,.01)&&InRange(Value.Confidence,0,1);
 }
 
+USaveGame* BattleSaveValidation::Decode(const TArray<uint8>& Bytes,FString& Error)
+{
+ if(Bytes.Num()>MaxBytes){Error=TEXT("Save file exceeds size limit");return nullptr;}
+ USaveGame* Decoded=Bytes.IsEmpty()?nullptr:UGameplayStatics::LoadGameFromMemory(Bytes);
+ Error=Decoded?FString():TEXT("No compatible save found");
+ return Decoded;
+}
+
+double BattleSaveValidation::ClockLimit(const FString& MapName)
+{
+ // Keep historical fixture headroom, allow a final frame past the map's match limit.
+ return FMath::Clamp(double(BattleFieldLayout::ByName(MapName).MatchSeconds)+1.,1000.,86400.);
+}
+
+USaveGame* BattleSaveValidation::Decode(const TArray<uint8>& Bytes)
+{
+ FString DecodeError;
+ return Decode(Bytes,DecodeError);
+}
+
 bool BattleTactics::SaveRoutes()
 {
  static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSaveRoutes="),V);return V==1;}();
@@ -83,6 +103,11 @@ void UBattleSave::Serialize(FArchive& Ar)
 bool UBattleSave::Validate(FString& Error) const
 {
 	const bool Mixed=Version==2||Version==3;
+ const auto* ResourceTuning=GetDefault<UBattleTuning>();
+ const int32 UnitLimit=Version==3?BattleRosterLimits::Area:BattleRosterLimits::Mixed;
+ const int32 LivingLimit=Mixed?UnitLimit:100;
+ const int32 SquadLimit=Version==3?UnitLimit:100;
+ const double MatchClockLimit=BattleSaveValidation::ClockLimit(MapName);
  if(CombatStateVersion<0||CombatStateVersion>4||(!Mixed&&CombatStateVersion!=0)||
     (CombatStateVersion==0&&(!SavedArtillery.IsEmpty()||!SavedArtilleryShells.IsEmpty())))
  {Error=TEXT("Unsupported combat state extension");return false;}
@@ -95,13 +120,12 @@ bool UBattleSave::Validate(FString& Error) const
  auto ValidPosition=[&](const FVector& P){return ValidSnapshotPosition(P,Mixed?BattleFieldLayout::ByName(MapName).SaveLimit:FVector2D(10000,10000));};
 	auto Fail = [&Error](const TCHAR* Message) { Error = Message; return false; };
 	if ((Version != 1 && Version != 2 && Version!=3) || (Version==3)!=(Ruleset==TEXT("Area")) || !MatchID.IsValid() || Phase < 1 || Phase > 3 || !ValidTeam(Winner, true) || Result.Len() > 200 || ViewRotation.ContainsNaN()) return Fail(TEXT("Unsupported or invalid match header"));
-	if (!InRange(AllyCredits, 0, 1000000) || !InRange(EnemyCredits, 0, 1000000) || !InRange(AllyScore, 0, 1000) || !InRange(EnemyScore, 0, 1000) || !InRange(Elapsed, 0, 1000) || !InRange(DirectorClock, 0, 5) || !InRange(SupplyClock, 0, Mixed?1000:1)) return Fail(TEXT("Invalid economy or match timers"));
+	if (!InRange(AllyCredits, 0, 1000000) || !InRange(EnemyCredits, 0, 1000000) || !InRange(AllyScore, 0, 1000) || !InRange(EnemyScore, 0, 1000) || !InRange(Elapsed, 0, MatchClockLimit) || !InRange(DirectorClock, 0, 5) || !InRange(SupplyClock, 0, Mixed?MatchClockLimit:1)) return Fail(TEXT("Invalid economy or match timers"));
 	// Pending sighting reports: cap raised 100000 -> 1000000 on 2026-11-16 (a heavy Area fight reached 100822 at 80 s).
-	// Area units 1000 -> 2000, squads 100 -> 400, mixed observers 500 -> 2000 on 2026-11-20: with -BattleAreaMaxSquads=40 map E had 516 soldiers
-	// at the 80 s save, and records keep retired soldiers (start 400 + about 340 hired + 200 replaced is estimated at about 930 by the end).
+ // Records (including losses) share the actual recruitment/replenishment ceiling. Squads may have only one member.
 	const int32 ExpectedObjectives=Mixed?BattleFieldLayout::ObjectiveCountForMap(MapName):3;
-	if (Objectives.Num() != ExpectedObjectives || Units.Num() > (Version==3?2000:500) || Squads.Num() > (Version==3?400:100) || Observers.Num() > (Mixed?2000:100) || Reports.Num() > 1000000) UE_LOG(LogFutureBattle,Warning,TEXT("BATTLE_SAVE_SIZE objectives=%d units=%d squads=%d observers=%d reports=%d"),Objectives.Num(),Units.Num(),Squads.Num(),Observers.Num(),Reports.Num());
-	if (Objectives.Num() != ExpectedObjectives || Units.Num() > (Version==3?2000:500) || Squads.Num() > (Version==3?400:100) || Observers.Num() > (Mixed?2000:100) || Reports.Num() > 1000000) return Fail(TEXT("Invalid snapshot size"));
+	if (Objectives.Num() != ExpectedObjectives || Units.Num() > UnitLimit || Squads.Num() > SquadLimit || Observers.Num() > LivingLimit || Reports.Num() > 1000000) UE_LOG(LogFutureBattle,Warning,TEXT("BATTLE_SAVE_SIZE objectives=%d units=%d squads=%d observers=%d reports=%d"),Objectives.Num(),Units.Num(),Squads.Num(),Observers.Num(),Reports.Num());
+	if (Objectives.Num() != ExpectedObjectives || Units.Num() > UnitLimit || Squads.Num() > SquadLimit || Observers.Num() > LivingLimit || Reports.Num() > 1000000) return Fail(TEXT("Invalid snapshot size"));
 	if (Strikes.Num() > 2 || !InRange(AllySupportCooldown, 0, 20) || !InRange(EnemySupportCooldown, 0, 20) || !InRange(AllySupportUsed, 0, 3) || !InRange(EnemySupportUsed, 0, 3)) return Fail(TEXT("Invalid support resources"));
 	TSet<int32> StrikeTeams;
 	for (const auto& Strike : Strikes)
@@ -123,7 +147,11 @@ bool UBattleSave::Validate(FString& Error) const
   // A soldier behind low cover stands up to fire where he is: the peek point is the anchor itself (distance 0).
   if(S.CoverPhase && FVector::Dist2D(S.CoverAnchor,S.CoverPeek)>1. && !InRange(FVector::Dist2D(S.CoverAnchor,S.CoverPeek),100,450))return Fail(TEXT("Invalid cover peek distance"));
 		if (S.UnitID <= 0 || S.UnitID > 1000000 || ByID.Contains(S.UnitID) || !ValidTeam(S.Team) || !ValidPosition(Entry.Position) || Entry.Rotation.ContainsNaN() || !ValidPosition(S.Destination)) return Fail(TEXT("Invalid or duplicate unit identity/transform"));
-		if (!InRange(S.HP, 0, 10000) || !InRange(S.Ammo, 0, 10000) || !InRange(S.Reserve, 0, 100000) || !InRange(S.ReloadEndTime, 0, 120) || !InRange(S.NextShotTime, 0, 120) || !BattleSaveValidation::Counter(S.ShotSequence) || !BattleSaveValidation::Counter(S.OrderRevision) || !BattleSaveValidation::Counter(S.PerceptionRevision) || !BattleSaveValidation::Counter(S.DecisionRevision) || !BattleSaveValidation::Counter(S.CoordinationRevision) || !BattleSaveValidation::Counter(S.MoveRetries)) return Fail(TEXT("Invalid unit resources or timers"));
+  // Absolute caps bound pathological configuration too; ordinary limits come from the producer.
+  const double ReloadLimit=FMath::Clamp(double(ResourceTuning->ReloadTime(S.Weapon))+.01,.11,86400.);
+  const double ShotIntervalLimit=FMath::Max(double(ResourceTuning->ShotInterval(S.Weapon,true)),double(ResourceTuning->ShotInterval(S.Weapon,false)));
+  const double ShotLimit=FMath::Clamp(FMath::Max(ShotIntervalLimit,double(ResourceTuning->AimSwitchDelay(180.f)))+.01,120.,86400.);
+  if (!InRange(S.HP, 0, Mixed?1.e9:FMath::Clamp(double(ResourceTuning->Health),10000.,1.e9)) || !InRange(S.Ammo, 0, FMath::Clamp(ResourceTuning->Capacity(S.Weapon),1,1000000)) || !InRange(S.Reserve, 0, FMath::Clamp(ResourceTuning->ReserveFor(S.Weapon),0,1000000)) || !InRange(S.ReloadEndTime, 0, ReloadLimit) || !InRange(S.NextShotTime, 0, ShotLimit) || !BattleSaveValidation::Counter(S.ShotSequence) || !BattleSaveValidation::Counter(S.OrderRevision) || !BattleSaveValidation::Counter(S.PerceptionRevision) || !BattleSaveValidation::Counter(S.DecisionRevision) || !BattleSaveValidation::Counter(S.CoordinationRevision) || !BattleSaveValidation::Counter(S.MoveRetries)) return Fail(TEXT("Invalid unit resources or timers"));
 		if (static_cast<uint8>(S.Weapon) > static_cast<uint8>(EBattleWeapon::Mortar) || static_cast<uint8>(S.Order) > static_cast<uint8>(EBattleOrder::Defend) || static_cast<uint8>(S.Training) > 2 || !InRange(S.SpreadSkillScale, .25, 3) || !InRange(S.HireCost, 1, 1000000)) return Fail(TEXT("Invalid unit order or training"));
 		if (!InRange(P.SightRange, 100, 20000) || !InRange(P.FieldOfView, 1, 360) || !InRange(P.DetectionSeconds, 0, 30) || !InRange(P.MemorySeconds, 0, 120) || !InRange(P.ShareRange, 0, 20000) || !InRange(P.ShareDelay, 0, 30) || !InRange(D.ThinkSeconds, .01, 10) || !InRange(D.CoverThinkSeconds, .01, 30) || !InRange(D.CoverCandidates, 1, 100)) return Fail(TEXT("Invalid unit capabilities"));
   if(!InRange(S.Shield,0,1000)||!InRange(S.ShieldWait,0,BattleTactics::ExoShieldHitDelay())||
@@ -131,7 +159,7 @@ bool UBattleSave::Validate(FString& Error) const
   if(!Mixed&&(S.Shield!=0||S.ShieldWait!=0||S.Launcher!=0||S.LauncherWait!=0||S.bLauncherSelected))return Fail(TEXT("Exoskeleton resources outside mixed mode"));
 		if (S.IsAlive()) ++Alive; ByID.Add(S.UnitID, &S);
 	}
-	if (Alive > (Mixed?(Version==3?1000:500):100)) return Fail(TEXT("Too many living units")); // area 500 -> 1000 on 2026-11-20 (40-squad limit)
+	if (Alive > LivingLimit) return Fail(TEXT("Too many living units"));
 	TSet<int32> Assigned;
 	for (const auto& Squad : Squads)
 	{
@@ -165,7 +193,7 @@ bool UBattleSave::Validate(FString& Error) const
     (PlayerRoutesVersion==1&&(!Mixed||SavedPlayerRoutes.IsEmpty())))return Fail(TEXT("Invalid player route extension"));
  if(PlayerRoutesVersion==1)
  {
-  if(SavedPlayerRoutes.Num()>Squads.Num()||SavedPlayerRoutes.Num()>400||!InRange(SavedPlayerRouteClock,0,1))return Fail(TEXT("Invalid player route extension"));
+  if(SavedPlayerRoutes.Num()>Squads.Num()||SavedPlayerRoutes.Num()>SquadLimit||!InRange(SavedPlayerRouteClock,0,1))return Fail(TEXT("Invalid player route extension"));
   TSet<int32> RouteSquads;
   const double MaxRouteWait=20.+2.*BattleFieldLayout::ByName(MapName).SaveLimit.Size()/250.+.1;
   for(const auto& Route:SavedPlayerRoutes)
@@ -196,7 +224,7 @@ bool UBattleSave::Validate(FString& Error) const
 	for (const auto& Observer : Observers)
 	{
 		const auto* const* S = ByID.Find(Observer.Key);
-		if (!S || !(*S)->IsAlive() || Observer.Value.ProfileRevision != (*S)->PerceptionRevision || Observer.Value.Contacts.Num() > (Version==3?1000:Mixed?500:100) || Observer.Value.DetectionStarted.Num() > (Version==3?1000:Mixed?500:100)) return Fail(TEXT("Invalid observer"));
+		if (!S || !(*S)->IsAlive() || Observer.Value.ProfileRevision != (*S)->PerceptionRevision || Observer.Value.Contacts.Num() > LivingLimit || Observer.Value.DetectionStarted.Num() > LivingLimit) return Fail(TEXT("Invalid observer"));
 		for (const auto& Contact : Observer.Value.Contacts) if (Contact.Key != Contact.Value.TargetID || !ValidContact(Observer.Key, Contact.Value)) return Fail(TEXT("Invalid known contact"));
 		for (const auto& Detection : Observer.Value.DetectionStarted)
 			if (!ByID.Contains(Detection.Key) || ByID[Detection.Key]->Team == (*S)->Team || !InRange(Detection.Value, -1000000, .01)) return Fail(TEXT("Invalid detection timer"));
@@ -474,14 +502,20 @@ bool UBattleMatch::SaveMatch(const FString& Slot)
  const FString Actual=CompatibleSlot(GetWorld()->GetSubsystem<UBattleLeaderRuntime>(),Slot);
  if(Actual.IsEmpty()){LastMessage=TEXT("Unsupported save mode or slot");return false;}
  auto* Save=CaptureSnapshot();if(!Save||!Save->Validate(LastMessage))return false;
- const bool Saved=UGameplayStatics::SaveGameToSlot(Save,Actual,0);
+ TArray<uint8> SaveBytes;
+ if(!UGameplayStatics::SaveGameToMemory(Save,SaveBytes)){LastMessage=TEXT("Could not write save file");return false;}
+ if(SaveBytes.Num()>BattleSaveValidation::MaxBytes){LastMessage=TEXT("Save file exceeds size limit");return false;}
+ const bool Saved=UGameplayStatics::SaveDataToSlot(SaveBytes,Actual,0);
  LastMessage=Saved?TEXT("Match saved [F9 to load]"):TEXT("Could not write save file");return Saved;
 }
 bool UBattleMatch::LoadMatch(const FString& Slot)
 {
  const FString Actual=CompatibleSlot(GetWorld()->GetSubsystem<UBattleLeaderRuntime>(),Slot);
  if(!IsEnabled()||Actual.IsEmpty()){LastMessage=TEXT("Unsupported save mode or slot");return false;}
- auto* Loaded=Cast<UBattleSave>(UGameplayStatics::LoadGameFromSlot(Actual,0));
+ TArray<uint8> SaveBytes;
+ if(!UGameplayStatics::LoadDataFromSlot(SaveBytes,Actual,0)){LastMessage=TEXT("No compatible save found");return false;}
+ auto* Loaded=Cast<UBattleSave>(BattleSaveValidation::Decode(SaveBytes,LastMessage));
+ if(!Loaded){if(LastMessage.IsEmpty())LastMessage=TEXT("No compatible save found");return false;}
  if(PerProcessSmokeSlot(Slot))UGameplayStatics::DeleteGameInSlot(Actual,0);
  return RestoreSnapshot(Loaded);
 }

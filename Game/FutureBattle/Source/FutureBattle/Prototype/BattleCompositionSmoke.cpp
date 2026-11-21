@@ -157,7 +157,7 @@ void UBattleLeaderRuntime::RunCompositionSmoke()
   CompositionSnapshot->CompositionState[1]=CompositionPersisted;
   FString CompositionSaveError;TArray<uint8> CompositionBytes;
   const bool CompositionEncoded=CompositionSnapshot->Validate(CompositionSaveError)&&UGameplayStatics::SaveGameToMemory(CompositionSnapshot,CompositionBytes);
-  auto* CompositionDecoded=CompositionEncoded?Cast<UBattleSave>(UGameplayStatics::LoadGameFromMemory(CompositionBytes)):nullptr;
+  auto* CompositionDecoded=CompositionEncoded?Cast<UBattleSave>(BattleSaveValidation::Decode(CompositionBytes)):nullptr;
   CompositionCheck(CompositionDecoded&&CompositionDecoded->Validate(CompositionSaveError)&&FCompositionTeamState::StaticStruct()->CompareScriptStruct(&CompositionDecoded->CompositionState[1],&CompositionPersisted,0),TEXT("planner revision four serializes full saving and income state"));
   if(CompositionDecoded)
   {

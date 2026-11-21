@@ -76,7 +76,7 @@ void ABattleGameMode::RunDelegationSmokeTest()
 	{
 		auto* Save = Match->CaptureSnapshot(); TArray<uint8> Bytes;
 		const bool bSaved = Save && UGameplayStatics::SaveGameToMemory(Save, Bytes);
-		auto* Decoded = bSaved ? Cast<UBattleSave>(UGameplayStatics::LoadGameFromMemory(Bytes)) : nullptr;
+		auto* Decoded = bSaved ? Cast<UBattleSave>(BattleSaveValidation::Decode(Bytes)) : nullptr;
 		FString Error;
 		CheckSmoke(Decoded && Decoded->Validate(Error), *FString::Printf(TEXT("Delegation snapshot serializes and validates (%s)"), *Error));
 		const bool bRestored = Decoded && Match->RestoreSnapshot(Decoded);
