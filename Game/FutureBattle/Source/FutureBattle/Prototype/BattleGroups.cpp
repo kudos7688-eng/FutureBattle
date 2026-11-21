@@ -239,7 +239,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
    {
     const auto& S=P.Value;
     if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(P.Key)!=INDEX_NONE)continue;
-    if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key))continue;
+    if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key)||(BattleTactics::ArtilleryPosts()&&ArtilleryRaids.Contains(P.Key)))continue;
     if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Tank&&S.SquadType!=BattleSquadType::Mortar&&S.SquadType!=BattleSquadType::AntiTank)continue;
     bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase)continue;
     Free.Add({P.Key,S.SquadType,FVector::DistSquared2D(R->Position(S.LeaderUnitID),Rally)});

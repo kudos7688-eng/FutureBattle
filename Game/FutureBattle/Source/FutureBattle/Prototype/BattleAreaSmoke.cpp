@@ -458,6 +458,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     }
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleVehicleHitCover=")))Check(!BattleTactics::VehicleHitCover(),TEXT("vehicle hit cover defaults OFF"));
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleTankGunFlash=")))Check(!BattleTactics::TankGunFlash(),TEXT("tank gun flash defaults OFF"));
+    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleArtilleryPosts=")))Check(!BattleTactics::ArtilleryPosts(),TEXT("artillery posts default OFF"));
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleArtilleryFlash=")))Check(!BattleTactics::ArtilleryFlash(),TEXT("artillery flash defaults OFF"));
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleSPGRange=")))Check(ArtilleryMaxRange(true)==GetDefault<UBattleTuning>()->SPGRange,TEXT("SPG range defaults to config"));
     // Armour AI, stage 3 (BattleArmourAI.cpp): the tank's objective is kept on the next pick and its overwatch post lies short of the

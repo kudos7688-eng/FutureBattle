@@ -23,6 +23,8 @@ namespace BattleTactics
  bool SPGAmmoEnabled();
  // Trial -BattleVehicleOrderHere=1 (default 0): a vehicle order to where the vehicle already stands is accepted as arrived (no route needed).
  bool VehicleOrderHere();
+ bool ArtilleryPosts(); // Trial -BattleArtilleryPosts=1 (default 0): public mortar posts and raids.
+ int32 AreaSPGCost(); // Optional -BattleAreaSPGCost override.
  bool ArtilleryFlash(); // Trial -BattleArtilleryFlash=1 (default 0): heard indirect fire reveals a rough position.
  float SPGRange(); // Optional -BattleSPGRange override; absent keeps the configured range.
  bool TankGunFlash(); // Trial -BattleTankGunFlash=1 (default 0): observed main-gun shots reveal a rough position.

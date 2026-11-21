@@ -157,6 +157,15 @@ public:
 	FVector AreaScoutPost(int32 Team, int32 SquadID) const;
 	// Indirect-fire squads (mortar team, self-propelled gun; BattleArtillery.cpp): their assigned goal, pulled back towards the own home
 	// until it is ArtilleryStandoff x their range from every enemy the team knows of (known positions only).
+ // Public map geometry and AI purposes: transient, rebuilt/reset after a successful restore.
+ TArray<FVector> ArtilleryPostPositions[2];
+ TArray<double> ArtilleryPostEvidence[2]; // observer team -> enemy post's last evidence timestamp
+ TMap<int32,int32> ArtilleryRaids;
+ mutable TMap<int32,int32> MortarPostChoices;
+ void GenerateArtilleryPosts();
+ void UpdateArtilleryRaids(int32 Team);
+ bool AtArtilleryPost(int32 Team,const FVector& Position) const;
+ FVector ChooseMortarPost(int32 Team,int32 SquadID) const;
 	FVector AreaArtilleryPost(int32 Team, int32 SquadID, const FVector& Goal) const;
 	// Armoured car objective (stage 2, BattleVehicleTactics.cpp): outside the city of map E, away from known enemy anti-tank soldiers and
 	// tanks, preferring points the team does not hold, points with known enemies and near ones; kept ACChoiceHold s unless it turns unsafe.
@@ -240,6 +249,7 @@ public:
  struct FAreaIntelView { double At=-1; TArray<FVector> Enemies; TArray<int32> EnemyKeys /* unit IDs, below zero for scout report positions */; TArray<int32> OwnAt, EnemyAt; int32 HomeEnemies=0; bool bHomeCovered=false;
   // Fresh direct LOS report, distinct from knowing the base position. Match-clock timestamp.
   int32 HomeObserver=INDEX_NONE; double HomeObservedAt=-1; FVector HomeReportFrom=FVector::ZeroVector;
+  TMap<int32,FVector> DirectEnemies; // direct sightings only, for the post trial
   TMap<int32,uint8> EnemyTypes; // observed contact metadata only; report dots without identity remain unknown
   double FlashExpiresAt=DBL_MAX;
   mutable bool bClustersBuilt[2]={false,false};
@@ -254,7 +264,7 @@ public:
 	void UpdateIntelPurposes();
 	TMap<int32, int32> IntelPurpose;           // squad -> point it was bought to defend (transient)
 	mutable FAreaIntelView IntelViews[2];
- struct FFireReveal { double At=0,Memory=10.; float ErrorRadius=500.f; FVector Position=FVector::ZeroVector; };
+ struct FFireReveal { bool bArtillery=false; double At=0,Memory=10.; float ErrorRadius=500.f; FVector Position=FVector::ZeroVector; };
  // Shared gun reports, keyed by shooter unit ID; match seconds, transient, never saved.
  mutable TMap<int32,FFireReveal> FireReveals[2];
 	TMap<int32, FScoutReport> ScoutReports;

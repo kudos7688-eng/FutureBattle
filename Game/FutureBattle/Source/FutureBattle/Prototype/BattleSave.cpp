@@ -420,6 +420,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
  // Rebuilt on demand from restored observations; never persist a cached view of the future.
  IntelViews[0]=IntelViews[1]=FAreaIntelView();
  FireReveals[0].Reset();FireReveals[1].Reset();
+ if(BattleTactics::ArtilleryPosts())GenerateArtilleryPosts();
 	Strikes = Save->Strikes; SupportCooldown[0] = Save->AllySupportCooldown; SupportCooldown[1] = Save->EnemySupportCooldown; SupportUsed[0] = Save->AllySupportUsed; SupportUsed[1] = Save->EnemySupportUsed;
 	Mode->bCombatPaused = Save->bPaused; Mode->bBattleEnded = Phase == EBattleMatchPhase::Finished; Mode->Result = Save->Result; Mode->CombatStartsAt = Now;
 	for (int32 Index = 0; Index < Spawned.Num(); ++Index)

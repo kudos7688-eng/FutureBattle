@@ -41,6 +41,7 @@ void UBattleMatch::InitializeArea()
   Base->SetActorScale3D(FVector(4,4,4));Base->GetStaticMeshComponent()->SetCanEverAffectNavigation(false);
   Base->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));BaseActors.Add(Base);
  }
+ if(BattleTactics::ArtilleryPosts())GenerateArtilleryPosts();
  InitializeComposition();
  if(FParse::Param(FCommandLine::Get(),TEXT("BattleAreaSmoke")))
  {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,GetWorld()->GetSubsystem<UBattleLeaderRuntime>(),&UBattleLeaderRuntime::RunAreaSmoke,5.f,false);}

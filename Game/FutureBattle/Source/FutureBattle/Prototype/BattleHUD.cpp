@@ -384,6 +384,10 @@ void ABattleHUD::DrawHUD()
 				const TCHAR* Caption=Names[I];
                 if(BattleFieldLayout::Of(GetWorld()).bSectors && (I==1 || I==2))
                     Caption=I==1?(PC->bGamepadActive?TEXT("区画制圧 [Y]"):TEXT("区画制圧 [T]")):(PC->bGamepadActive?TEXT("区画維持 [RB]"):TEXT("区画維持 [G]"));
+                FString GunCaption;
+                static const bool HasGunCost=FCString::Strifind(FCommandLine::Get(),TEXT("BattleAreaSPGCost="))!=nullptr;
+                if(I==13&&(BattleTactics::ArtilleryPosts()||HasGunCost))
+                {GunCaption=FString::Printf(TEXT("自走砲 %d %s"),BattleSquadType::AreaCost(BattleSquadType::SPGun),PC->bGamepadActive?TEXT("[A]"):TEXT("[9]"));Caption=*GunCaption;}
                 Label(Caption, X + 8, Bar.Origin.Y + 5, bPending ? FLinearColor::Yellow : bUsable ? Mint : Muted, .85f);
 			}
 			// Route of the selected squads (maps with a road network only): its own button at the right end of the panel's top row,
@@ -476,6 +480,13 @@ void ABattleHUD::DrawMinimap()
  }
  DrawMinimapOverlay(PC,Map);
  const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ if(Match->bArea&&BattleTactics::ArtilleryPosts())
+ {
+  for(int32 MarkerTeam=0;MarkerTeam<2;++MarkerTeam)for(const FVector& MarkerPost:Match->ArtilleryPostPositions[MarkerTeam])Dot(MarkerPost,4,Muted);
+  DrawText(TEXT("砲撃陣地：灰点"),Muted,Map.Origin.X+150,Map.Origin.Y-20,GEngine->GetSmallFont(),.7f);
+  // Public posts and fresh team reports; never look up the shooter's current state.
+  for(const auto& MarkerFlash:Match->FireReveals[0])if(MarkerFlash.Value.At<=Match->Elapsed&&Match->Elapsed-MarkerFlash.Value.At<MarkerFlash.Value.Memory)Dot(MarkerFlash.Value.Position,4,Stale);
+ }
  // Homes are public; objective ownership is what the player's side last observed.
  if(Match->bArea) for(int32 Team=0;Team<2;++Team)
  {const FVector2D P=Map.ToScreen(Match->AreaHome(Team));Frame(P-FVector2D(7,7),P+FVector2D(7,7),Team?Enemy:Mint);}
