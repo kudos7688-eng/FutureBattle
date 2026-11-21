@@ -204,6 +204,7 @@ void ABattleVATDisplay::ChangePose(int32 ID,int32 Pose)
  if(auto* E=Entries.Find(ID)){if(!E->Far){E->Body->HandleExistingParallelEvaluationTask(true,true);CastChecked<UBattleVATSkeletalMeshComponent>(E->Body.Get())->PendingDt=0;}E->Pose=Pose;if(E->Far){E->Time=0;E->Rate=1;}}
  if(const auto* I=AuditIndices.Find(ID)){AuditBodies[*I]->HandleExistingParallelEvaluationTask(true,true);AuditBodies[*I]->PlayAnimation(Data->Clips[Pose].Clip,true);}
 }
+void ABattleVATDisplay::ShowNear(int32 ID){if(auto* E=Entries.Find(ID);E && E->Far && !Audit)Leave(*E);}
 void ABattleVATDisplay::Freeze(int32 ID)
 {
  if(auto* E=Entries.Find(ID))
@@ -292,7 +293,8 @@ void ABattleVATDisplay::Select(int32 ID,int32 LOD,double Distance,double Scale,c
  const double Threshold=Scale/(View==TEXT("RTS")?48.:View==TEXT("TPS")?32.:24.);
  const bool Far=LOD==2 && (E->Initialized?(E->Far?Distance>=Threshold*.8:Distance>=Threshold*1.2):Distance>=Threshold);
  E->Initialized=true;
- if(Far && !E->Far)Enter(*E);else if(!Far && E->Far)Leave(*E);
+ // Corpses stay near (their death clip on its last frame, the body's tick off) until they are hidden.
+ if(Far && !E->Far && !(E->Dead && !Audit))Enter(*E);else if(!Far && E->Far)Leave(*E);
 }
 FVector3f ABattleVATDisplay::Frames(const FBattleVATEntry& E)const
 {

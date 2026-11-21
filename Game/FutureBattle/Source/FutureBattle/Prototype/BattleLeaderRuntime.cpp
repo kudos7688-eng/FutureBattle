@@ -221,6 +221,8 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWeaponRangeTrial,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleExoShot")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunExoShot,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleDeathShot")))
+  { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunDeathShot,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleStanceShot")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunStanceShot,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleScopeShot")))
@@ -509,7 +511,7 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
   if(B->Actor.IsValid()) B->Actor->ApplyDeath();
   else
   {
-   B->Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision); if(VAT)VAT->Freeze(ID);
+   B->Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision); if(VAT){VAT->ShowNear(ID);VAT->Freeze(ID);}
    if(!VAT || !VAT->IsFar(ID))
    {
     B->Weapon->SetVisibility(false);

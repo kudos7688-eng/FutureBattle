@@ -557,6 +557,8 @@ public:
  void RunStanceShot();
  void RunExoShot();
  int32 ExoShotStage=0,ExoShotIDs[2]={0,0};
+ void RunDeathShot(); // BattleDeathShot.cpp
+ int32 DeathShotStage=0,DeathShotIDs[2]={0,0};
  // Aim / scope view check (-BattleScopeShot, BattleScopeShot.cpp): leader 1 under direct control in each view.
  void RunScopeShot();
  int32 StanceShotStage=0,StanceShotFollower=0;

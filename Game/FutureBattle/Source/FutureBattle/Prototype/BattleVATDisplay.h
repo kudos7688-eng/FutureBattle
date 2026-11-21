@@ -49,6 +49,8 @@ public:
  void SetVisible(int32 ID,bool Visible);
  void ChangePose(int32 ID,int32 Pose);
  void Freeze(int32 ID);
+ // A dying follower leaves the far display for good: the far display has no death clips (call before Freeze).
+ void ShowNear(int32 ID);
  void RemoveUnit(int32 ID);
  void ResetBodies();
  void Advance(int32 ID,float Dt);

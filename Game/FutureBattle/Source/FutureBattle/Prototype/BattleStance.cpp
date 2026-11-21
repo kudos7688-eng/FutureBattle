@@ -120,7 +120,16 @@ void UBattleLeaderRuntime::StepBodyTimers()
   const int32 ID=It.Key();const bool bFreeze=It.Value().bFreeze;It.RemoveCurrent();
   const auto* B=Bodies.Find(ID);
   if(!B||B->Actor.IsValid()||!B->Mesh.IsValid())continue;
-  if(bFreeze){BattleFollowerBones::PrepareFreeze(B->Mesh.Get(),bReduceHiddenBones);B->Mesh->SetComponentTickEnabled(false);}
+  if(bFreeze)
+  {
+   // Frame skipping (-BattleFollowerAnimSkip/-BattleFollowerAnimBudget) may still owe the clip some time: put the death clip on
+   // its last frame before the tick stops, or the body would hold a pose halfway down.
+   USkeletalMeshComponent* M=B->Mesh.Get();M->HandleExistingParallelEvaluationTask(true,true);
+   if(auto* V=Cast<UBattleVATSkeletalMeshComponent>(M))V->EndAnimSkip();
+   if(auto* Node=M->GetSingleNodeInstance())if(const auto* Clip=Cast<UAnimSequenceBase>(Node->GetAnimationAsset()))
+   {Node->SetPosition(Clip->GetPlayLength(),false);M->TickAnimation(0,false);M->RefreshBoneTransforms(nullptr);}
+   BattleFollowerBones::PrepareFreeze(M,bReduceHiddenBones);M->SetComponentTickEnabled(false);
+  }
   else RefreshFollowerPose(ID);
  }
 }
