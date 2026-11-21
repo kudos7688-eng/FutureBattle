@@ -1,4 +1,5 @@
 #include "BattleSave.h"
+#include "BattleArms.h"
 #include "BattleComposition.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleFieldLayout.h"
@@ -152,7 +153,10 @@ bool UBattleSave::Validate(FString& Error) const
   const double ShotIntervalLimit=FMath::Max(double(ResourceTuning->ShotInterval(S.Weapon,true)),double(ResourceTuning->ShotInterval(S.Weapon,false)));
   const double ShotLimit=FMath::Clamp(FMath::Max(ShotIntervalLimit,double(ResourceTuning->AimSwitchDelay(180.f)))+.01,120.,86400.);
   if (!InRange(S.HP, 0, Mixed?1.e9:FMath::Clamp(double(ResourceTuning->Health),10000.,1.e9)) || !InRange(S.Ammo, 0, FMath::Clamp(ResourceTuning->Capacity(S.Weapon),1,1000000)) || !InRange(S.Reserve, 0, FMath::Clamp(ResourceTuning->ReserveFor(S.Weapon),0,1000000)) || !InRange(S.ReloadEndTime, 0, ReloadLimit) || !InRange(S.NextShotTime, 0, ShotLimit) || !BattleSaveValidation::Counter(S.ShotSequence) || !BattleSaveValidation::Counter(S.OrderRevision) || !BattleSaveValidation::Counter(S.PerceptionRevision) || !BattleSaveValidation::Counter(S.DecisionRevision) || !BattleSaveValidation::Counter(S.CoordinationRevision) || !BattleSaveValidation::Counter(S.MoveRetries)) return Fail(TEXT("Invalid unit resources or timers"));
-		if (static_cast<uint8>(S.Weapon) > static_cast<uint8>(EBattleWeapon::Mortar) || static_cast<uint8>(S.Order) > static_cast<uint8>(EBattleOrder::Defend) || static_cast<uint8>(S.Training) > 2 || !InRange(S.SpreadSkillScale, .25, 3) || !InRange(S.HireCost, 1, 1000000)) return Fail(TEXT("Invalid unit order or training"));
+		// Infantry arms (BattleArms.cpp): role, grenades, pistol rounds and relative waits.
+		if (!BattleArms::ValidKit(S.Kit) || !InRange(S.Grenades, 0, 20) || !InRange(S.SideAmmo, 0, ResourceTuning->Capacity(EBattleWeapon::Pistol)) || !InRange(S.SideReserve, 0, ResourceTuning->ReserveFor(EBattleWeapon::Pistol)) ||
+			!InRange(S.SideWait, 0, 60) || !InRange(S.GrenadeWait, 0, 60) || !InRange(S.MeleeWait, 0, 60)) return Fail(TEXT("Invalid infantry arms state"));
+		if (static_cast<uint8>(S.Weapon) > BattleLastWeapon || static_cast<uint8>(S.Order) > static_cast<uint8>(EBattleOrder::Defend) || static_cast<uint8>(S.Training) > 2 || !InRange(S.SpreadSkillScale, .25, 3) || !InRange(S.HireCost, 1, 1000000)) return Fail(TEXT("Invalid unit order or training"));
 		if (!InRange(P.SightRange, 100, 20000) || !InRange(P.FieldOfView, 1, 360) || !InRange(P.DetectionSeconds, 0, 30) || !InRange(P.MemorySeconds, 0, 120) || !InRange(P.ShareRange, 0, 20000) || !InRange(P.ShareDelay, 0, 30) || !InRange(D.ThinkSeconds, .01, 10) || !InRange(D.CoverThinkSeconds, .01, 30) || !InRange(D.CoverCandidates, 1, 100)) return Fail(TEXT("Invalid unit capabilities"));
   if(!InRange(S.Shield,0,1000)||!InRange(S.ShieldWait,0,BattleTactics::ExoShieldHitDelay())||
      !InRange(S.Launcher,0,20)||!InRange(S.LauncherWait,0,FMath::Max(.5f,GetDefault<UBattleTuning>()->ExoLauncherReload)))return Fail(TEXT("Invalid shield or launcher resources"));
@@ -289,6 +293,11 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
   {
    FBattleSavedArtilleryShell E;E.ShooterID=Shell.ShooterID;E.Team=Shell.Team;E.ShooterType=Shell.ShooterType;
    E.bSPG=Shell.bSPG;E.At=Shell.At;E.Remaining=Shell.Remaining;Save->SavedArtilleryShells.Add(E);
+  }
+  for(const auto& Shell:Runtime->ArmsShells)
+  {
+   FBattleSavedArmsShell E;E.ShooterID=Shell.ShooterID;E.Team=Shell.Team;E.Kind=Shell.Kind;E.From=Shell.From;E.At=Shell.At;
+   E.Remaining=Shell.Remaining;E.Flight=Shell.Flight;Save->SavedArmsShells.Add(E);
   }
   Save->Version=bArea?3:2;Save->Area=Area;Save->MapName=UGameplayStatics::GetCurrentLevelName(GetWorld(),true);Save->Ruleset=Runtime->SnapshotMode();
   Save->BaseSightRange=GetDefault<UBattleTuning>()->EffectiveSightRange();Save->WeaponRange=GetDefault<UBattleTuning>()->EffectiveWeaponRange();Save->bRangeAware=Runtime->RangeAwareEnabled();

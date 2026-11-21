@@ -1,4 +1,5 @@
 #include "BattleHUD.h"
+#include "BattleArms.h"
 #include "BattleSquadTactics.h"
 #include "BattleLeaderRuntime.h"
 #include "ProfilingDebugging/CsvProfiler.h"
@@ -298,7 +299,11 @@ void ABattleHUD::DrawHUD()
 	if (Focus && Focus->GetState())
 	{
 		const FBattleUnitState* S = Focus->GetState();
-		Label(FString::Printf(TEXT("%s %02d ／ 部隊%02d   HP %.0f%s   弾 %02d / %02d   %s ／ %s   再試行 %d%s"), S->bLauncherSelected && !PC->IsTactical() ? TEXT("バズーカ") : S->Weapon == EBattleWeapon::Mortar ? TEXT("迫撃砲") : S->Weapon == EBattleWeapon::AntiTank ? TEXT("対戦車火器") : S->Weapon == EBattleWeapon::SupportGun ? TEXT("支援火器") : TEXT("小銃"), S->UnitID, S->SquadID, S->HP, GetWorld()->GetSubsystem<UBattleState>()->MaxShieldOf(S->UnitID) > 0.f ? *FString::Printf(TEXT(" ＋盾 %.0f   対戦車弾 %d%s%s"), S->Shield, S->Launcher, S->LauncherWait > 0.f ? TEXT("（装填中）") : TEXT(""), PC->IsTactical() ? TEXT("") : PC->bGamepadActive ? TEXT(" [LBで切替]") : TEXT(" [Fで切替]")) : TEXT(""), S->Ammo, S->Reserve,
+		// Infantry arms (BattleArms.cpp): the elite role, the weapon in the hands (the pistol while drawn) and the grenades left.
+		FString WeaponLabel = S->bLauncherSelected && !PC->IsTactical() ? FString(TEXT("バズーカ")) : FString(BattleArms::WeaponName(S->ActiveWeapon()));
+		if (S->Kit) WeaponLabel = FString(BattleArms::KitName(S->Kit)) + TEXT("・") + WeaponLabel;
+		if (S->Grenades > 0 || S->SideAmmo + S->SideReserve > 0) WeaponLabel += FString::Printf(TEXT("（手りゅう弾 %d%s）"), S->Grenades, S->bSidearmSelected || S->SideAmmo + S->SideReserve <= 0 ? TEXT("") : PC->IsTactical() ? TEXT("・拳銃あり") : PC->bGamepadActive ? TEXT("・LBで拳銃") : TEXT("・Fで拳銃"));
+		Label(FString::Printf(TEXT("%s %02d ／ 部隊%02d   HP %.0f%s   弾 %02d / %02d   %s ／ %s   再試行 %d%s"), *WeaponLabel, S->UnitID, S->SquadID, S->HP, GetWorld()->GetSubsystem<UBattleState>()->MaxShieldOf(S->UnitID) > 0.f ? *FString::Printf(TEXT(" ＋盾 %.0f   対戦車弾 %d%s%s"), S->Shield, S->Launcher, S->LauncherWait > 0.f ? TEXT("（装填中）") : TEXT(""), PC->IsTactical() ? TEXT("") : PC->bGamepadActive ? TEXT(" [LBで切替]") : TEXT(" [Fで切替]")) : TEXT(""), S->bSidearmSelected ? S->SideAmmo : S->Ammo, S->bSidearmSelected ? S->SideReserve : S->Reserve,
 			*BattleUIText::Ja(BattleOrderName(S->Order)), *BattleUIText::Ja(BattleActionName(S->Action)), S->MoveRetries, S->ReloadEndTime > 0 ? TEXT("   装填中…") : TEXT("")), 34, PC->IsTactical()?BottomBar.SummaryY:H-112, S->Action == EBattleAction::MoveFailed ? FLinearColor::Yellow : White, 1.05f);
 		if(!Mode->bLeaderCommand)
         {
@@ -1190,8 +1195,11 @@ void ABattleHUD::DrawKillLog(ABattleController* PC)
    case EBattleKillKind::Artillery:return TEXT("砲撃");
    case EBattleKillKind::TankGun:return TEXT("戦車砲");
    case EBattleKillKind::Launcher:return TEXT("バズーカ");
+   case EBattleKillKind::Grenade:return N.KillerWeapon==EBattleWeapon::GrenadeLauncher?TEXT("擲弾"):TEXT("手りゅう弾");
+   case EBattleKillKind::Melee:return TEXT("近接");
    case EBattleKillKind::Shot:
     if(N.bKillerVehicle)return TEXT("車載機関銃");
+    if(N.KillerWeapon>=EBattleWeapon::Pistol)return BattleArms::WeaponName(N.KillerWeapon);
     return N.KillerWeapon==EBattleWeapon::SupportGun?TEXT("機関銃"):N.KillerWeapon==EBattleWeapon::AntiTank?TEXT("対戦車兵"):N.KillerWeapon==EBattleWeapon::Mortar?TEXT("砲"):TEXT("小銃");
    default:return TEXT("");
   }

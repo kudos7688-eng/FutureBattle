@@ -1,4 +1,5 @@
 #include "BattleUnit.h"
+#include "UObject/StrongObjectPtr.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleMuzzleFlash.h"
 #include "Animation/AnimSequence.h"
@@ -100,7 +101,7 @@ void ABattleUnit::InitializeUnit(int32 ID)
 	FString TrialVariant;
 	bWeaponVisuals = !FParse::Param(FCommandLine::Get(), TEXT("BattleLegacyWeaponVisuals"));
 	bTrialPose = FParse::Value(FCommandLine::Get(), TEXT("BattleSquadTrial="), TrialVariant);
-	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, GetMesh(), GetState()->Weapon, false);
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, GetMesh(), GetState()->ActiveWeapon(), false);
 	// Body animation (BattleBodyAnim.h; -BattleBodyAnim=0 keeps the single whole-body clip).
 	if (bWeaponVisuals && !bTrialPose && BattleBodyAnim::Enabled() && BattleBodyAnim::Get(BattleBodyAnim::EClip::StandIdle))
 	{
@@ -314,7 +315,18 @@ void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequenc
 		}
 	}
 	const bool bFirstPerson = IsPlayerControlled() && !bThirdPersonView;
-	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->ActiveWeapon(), bFirstPerson);
+}
+
+void ABattleUnit::RemountWeapon()
+{
+	const bool bFirstPerson = IsPlayerControlled() && !bThirdPersonView;
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->ActiveWeapon(), bFirstPerson);
+}
+
+void ABattleUnit::PlayArmsClip(UAnimSequence* Clip)
+{
+	if (auto* Body = Cast<UBattleBodyAnimInstance>(GetMesh()->GetAnimInstance()); Body && Clip) Body->PlayOverlay(Clip, 1.f);
 }
 
 bool ABattleUnit::LookHasProneClip() const
@@ -337,10 +349,23 @@ void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Pare
 		return;
 	}
 	// No anti-tank or mortar model yet: the support gun model, larger.
-	const bool Support = Weapon == EBattleWeapon::SupportGun || Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar;
-	Model->SetStaticMesh(Support ? SupportModel : CarbineModel);
+	const bool Support = Weapon == EBattleWeapon::SupportGun || Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar || Weapon == EBattleWeapon::Shotgun;
+	// Weapons added 2026-11-22 (BattleArms.cpp) use existing models: the exoskeleton's rifle for the marksman rifle and its launcher,
+	// smaller, for the grenade launcher; the carbine model shortened for the pistol and SMG, the support model shortened for the shotgun.
+	static TStrongObjectPtr<UStaticMesh> AC01Rifle, AC01Launcher; static bool bAC01Loaded = false;
+	if (!bAC01Loaded && (Weapon == EBattleWeapon::Marksman || Weapon == EBattleWeapon::GrenadeLauncher))
+	{
+		bAC01Loaded = true;
+		AC01Rifle.Reset(LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Rifle.SM_AC01_Rifle"), nullptr, LOAD_NoWarn));
+		AC01Launcher.Reset(LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Launcher.SM_AC01_Launcher"), nullptr, LOAD_NoWarn));
+	}
+	UStaticMesh* Own = Weapon == EBattleWeapon::Marksman ? AC01Rifle.Get() : Weapon == EBattleWeapon::GrenadeLauncher ? AC01Launcher.Get() : nullptr;
+	Model->SetStaticMesh(Own ? Own : Support ? SupportModel : CarbineModel);
 	Model->AttachToComponent(Parent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, bFirstPerson ? NAME_None : FName(TEXT("hand_r")));
-	Model->SetRelativeScale3D(FVector(Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar ? 1.35 : Support ? 1.0 : .62));
+	const double Scale = Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar ? 1.35 : Weapon == EBattleWeapon::Shotgun ? .7 :
+		Weapon == EBattleWeapon::Pistol ? .3 : Weapon == EBattleWeapon::SMG ? .45 : Weapon == EBattleWeapon::Marksman ? (Own ? .85 : .8) :
+		Weapon == EBattleWeapon::GrenadeLauncher ? (Own ? .55 : .8) : Support ? 1.0 : .62;
+	Model->SetRelativeScale3D(FVector(Scale));
 	Model->SetRelativeRotation(FRotator(0,90,0));
 	Model->SetRelativeLocation(FVector(47,15,-16));
 	if (!bFirstPerson)
@@ -655,7 +680,7 @@ void ABattleUnit::SetDirectControl(bool bDirect)
 	const bool bFirstPerson = bDirect && !bThirdPersonView;
 	AimLevel = 0; AimZoom = 1.f; ScopeAlpha = 0.f; bScopeHidden = false; Rifle->SetOwnerNoSee(false);
 	GetMesh()->SetOwnerNoSee(bFirstPerson);
-	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->ActiveWeapon(), bFirstPerson);
 	TeamLabel->SetVisibility(false);
 }
 

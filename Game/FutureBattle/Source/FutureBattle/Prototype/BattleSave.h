@@ -65,6 +65,21 @@ struct FBattleSavedArtilleryShell
  UPROPERTY() float Remaining=0;
 };
 
+// Infantry arms (BattleArms.cpp, 2026-11-22): a hand grenade (Kind 0) or launcher round (1) in flight. Remaining and Flight are
+// relative seconds. Absent in older saves (none in flight).
+USTRUCT()
+struct FBattleSavedArmsShell
+{
+ GENERATED_BODY()
+ UPROPERTY() int32 ShooterID=INDEX_NONE;
+ UPROPERTY() int32 Team=0;
+ UPROPERTY() uint8 Kind=0;
+ UPROPERTY() FVector From=FVector::ZeroVector;
+ UPROPERTY() FVector At=FVector::ZeroVector;
+ UPROPERTY() float Remaining=0;
+ UPROPERTY() float Flight=0;
+};
+
 // Revision 2: group decision state, including historical roles for squads that have since left.
 // All three time fields are signed offsets from match Elapsed, NOT UWorld::TimeSeconds.
 // Keep doubles for exact round trips of float clocks; do not clamp expired deadlines or future phase starts.
@@ -159,6 +174,7 @@ public:
  UPROPERTY() TMap<int32,FBattleSavedCarChoice> SavedCarChoices;
  UPROPERTY() TMap<int32,FBattleSavedArtillery> SavedArtillery;
  UPROPERTY() TArray<FBattleSavedArtilleryShell> SavedArtilleryShells;
+ UPROPERTY() TArray<FBattleSavedArmsShell> SavedArmsShells;
  UPROPERTY() FBattleAreaState Area;
  UPROPERTY() FString MapName;
  UPROPERTY() FName Ruleset;

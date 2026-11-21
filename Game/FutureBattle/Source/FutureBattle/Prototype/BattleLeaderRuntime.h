@@ -215,6 +215,33 @@ public:
  bool ApplyExoSuit(int32 ID);
  TMap<int32,FExoLook> ExoLooks;
  void UpdateExoLooks();
+ // Infantry arms (BattleArms.cpp, 2026-11-22; Docs/design-infantry-arms.md): hand grenades and launcher rounds in flight (saved),
+ // the per-frame step (equipment, timers, landings, AI throws/strikes/healing), the shared actions of the player and the AI,
+ // and the elite platoon's role targets. Runs only while a trial switch is on, an elite platoon exists or a round is in flight.
+ struct FArmsShell{int32 ShooterID=INDEX_NONE,Team=0;uint8 Kind=0;FVector From=FVector::ZeroVector,At=FVector::ZeroVector;float Remaining=0,Flight=0;}; // Kind 0 hand grenade, 1 launcher round
+ TArray<FArmsShell> ArmsShells;
+ bool ArmsActive() const;
+ void StepArms(float Dt,double Now);
+ void IssueArms(int32 ID);                    // trial equipment for an ordinary soldier, once
+ void IssueEliteKit(int32 ID,int32 Slot);     // role, weapon, grenades, pistol and training of an elite platoon member
+ bool ThrowGrenade(int32 ID,const FVector& Target,double Now,bool bPlayer);
+ bool FireLauncherRound(int32 ID,const FVector& Target,double Now,bool bPlayer);
+ bool MeleeStrike(int32 ID,double Now,bool bPlayer,int32 Hint=INDEX_NONE);
+ bool ToggleSidearm(int32 ID);                // the player's F: primary <-> pistol
+ bool UseSidearm(int32 ID,int32 TargetID,double Now); // AI: true while the pistol should fire at TargetID instead of the primary
+ int32 ArmsRoleTarget(int32 ID,int32 SquadTarget) const; // marksman / close-weapon roles may pick their own visible target
+ void RefreshArmsLook(int32 ID);              // the model in the hands follows the drawn weapon
+ class UAnimSequence* ArmsClip(int32 ID,double Now) const; // follower: strike / throw clip while it lasts
+ int32 ArmsBlast(int32 ShooterID,int32 Team,const FVector& At,float Radius,float Damage,bool& bKilled);
+ bool LobClear(const FVector& From,const FVector& To,float Arc) const;
+ void ArmsImpact(const FArmsShell& Shell);
+ void ShowArmsAction(int32 ID,uint8 Clip,double Now); // display: 1 strike, 2 throw
+ void DrawArmsShells(double Now);
+ void RunArmsSmoke(double Now); // -BattleArmsSmoke (with -BattleElite=1): BATTLE_ARMS_SMOKE_RESULT failures=N, once after the start
+ bool bArmsSmokeDone=false;
+ double ArmsNextPick=0,ArmsNextMelee=0,ArmsNextHeal=0;int32 ArmsIssuedUnits=-1;bool bArmsElite=false;
+ TMap<int32,double> ArmsActionUntil;TMap<int32,uint8> ArmsActionKind;
+ TArray<TWeakObjectPtr<class UStaticMeshComponent>> ArmsShellMeshes;
  float VehicleSpotRange() const;
  // Damage scale of a weapon on a unit: anti-tank hits fully; small arms by the vehicle type (tank none, armoured car ACArmorSmallArms).
  float ArmorScale(int32 VictimID,EBattleWeapon Weapon) const;
@@ -283,7 +310,7 @@ public:
  // Evaluation counters for BATTLE_TANK_COST (not AI input).
  mutable int64 TankSightTraces=0,TankSightReused=0,TankOrderSkips=0;mutable double TankSightMs=0;int32 TankOrders=0;double TankOrderMs=0;
  // MixedFast or Area. bSelect selects a new team-0 leader (player purchase); OutSquadID receives the new squad.
- bool SpawnPurchasedSquad(int32 Team,EBattleTraining Training,FString& Error,bool bSelect=true,int32* OutSquadID=nullptr,uint8 SquadType=0);
+ bool SpawnPurchasedSquad(int32 Team,EBattleTraining Training,FString& Error,bool bSelect=true,int32* OutSquadID=nullptr,uint8 SquadType=0,uint8 Grade=0); // Grade 1: elite platoon (rifle squads only, BattleArms.cpp)
  bool CreateBody(const FBattleSavedUnit& Entry,AActor* Host,FBattleLeaderBody& Body);
  void DestroyBody(FBattleLeaderBody& Body);
  bool RestoreMixedBodies(const UBattleSave* Save,FString& Error);

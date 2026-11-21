@@ -1,4 +1,5 @@
 #include "BattleController.h"
+#include "BattleArms.h"
 #include "BattleUIText.h"
 #include "BattleTactics.h"
 #include "Engine/Canvas.h"
@@ -161,6 +162,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("HireSPGun"), EKeys::Nine, &ABattleController::HireSPGun);
 	Button(TEXT("HireExo"), EKeys::Zero, &ABattleController::HireExo);
 	Button(TEXT("HireSupply"), EKeys::Hyphen, &ABattleController::HireSupply);
+	Button(TEXT("HireElite"), EKeys::Equals, &ABattleController::HireElite);
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
 	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
 	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
@@ -549,6 +551,33 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
   {
    GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->UpdateExoLooks();
    ShowNotice(U->GetState()->bLauncherSelected ? TEXT("LAUNCHER EQUIPPED") : TEXT("RIFLE EQUIPPED"));
+   return true;
+  }
+ // Infantry arms (BattleArms.cpp). F / LB also draws or puts away the pistol of a soldier who carries one.
+ if(!bTactical && Params.Key==EKeys::F && Params.Event==IE_Pressed)
+  if(auto* U=Cast<ABattleUnit>(GetPawn());U && GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->ToggleSidearm(U->GetUnitID()))
+  { ShowNotice(U->GetState()->bSidearmSelected?TEXT("拳銃を構えた（F で主武器）"):TEXT("主武器に戻した（F で拳銃）")); return true; }
+ // G / RB: throw a hand grenade at the point under the crosshair (at most the throw distance).
+ if(!bTactical && Params.Key==EKeys::G && Params.Event==IE_Pressed)
+  if(auto* U=Cast<ABattleUnit>(GetPawn()))
+  {
+   const auto* S=U->GetState();
+   if(!S||S->Grenades<=0){ShowNotice(TEXT("手りゅう弾がない"));return true;}
+   FVector Eye;FRotator View;GetPlayerViewPoint(Eye,View);
+   const FVector Far=Eye+View.Vector()*BattleArms::Grenade().MaxRange*1.2f;
+   FHitResult Hit;FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleGrenadeAim),false,U);
+   const FVector Point=GetWorld()->LineTraceSingleByChannel(Hit,Eye,Far,ECC_Visibility,Query)?FVector(Hit.ImpactPoint):Far;
+   const bool bThrown=GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->ThrowGrenade(U->GetUnitID(),Point,GetWorld()->GetTimeSeconds(),true);
+   ShowNotice(bThrown?FString::Printf(TEXT("手りゅう弾を投げた（残り %d）"),U->GetState()->Grenades):FString(TEXT("投げられない（障害物か待ち時間）")));
+   return true;
+  }
+ // V / right stick: strike the enemy in front within reach (-BattleMelee=1, or a soldier of an elite platoon).
+ if(!bTactical && Params.Key==EKeys::V && Params.Event==IE_Pressed)
+  if(auto* U=Cast<ABattleUnit>(GetPawn()))
+  {
+   const auto* S=U->GetState();
+   if(!S||!(BattleArms::MeleeEnabled()||S->Kit!=0)){ShowNotice(TEXT("近接攻撃は -BattleMelee=1 で使える"));return true;}
+   if(!GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->MeleeStrike(U->GetUnitID(),GetWorld()->GetTimeSeconds(),true))ShowNotice(TEXT("届く所に敵がいない"));
    return true;
   }
  if(!bTactical && Params.Key==EKeys::C && Params.Event==IE_Pressed)
@@ -1353,7 +1382,9 @@ FKey ABattleController::GamepadToKey(const FKey& Key) const
  else
  {
   if(Key==EKeys::Gamepad_RightTrigger) return EKeys::LeftMouseButton;        // RT: fire
-  if(Key==EKeys::Gamepad_LeftShoulder) return EKeys::F;                      // LB: exoskeleton weapon swap
+  if(Key==EKeys::Gamepad_LeftShoulder) return EKeys::F;                      // LB: exoskeleton weapon swap / pistol
+  if(Key==EKeys::Gamepad_RightShoulder) return EKeys::G;                     // RB: hand grenade (BattleArms.cpp)
+  if(Key==EKeys::Gamepad_RightThumbstick) return EKeys::V;                   // right stick: melee strike
   if(Key==EKeys::Gamepad_LeftTrigger) return EKeys::RightMouseButton;        // LT: aim (held)
   if(Key==EKeys::Gamepad_DPad_Up) return EKeys::MouseScrollUp;               // while aiming: more magnification
   if(Key==EKeys::Gamepad_DPad_Down) return EKeys::MouseScrollDown;           // while aiming: less
@@ -1451,6 +1482,14 @@ void ABattleController::HireMortar()
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
 	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Mortar); ShowNotice(Match->LastMessage);
+}
+// Area battle: the = key buys an elite platoon (a rifle squad with roles; -BattleElite=1, cost BattleArms::EliteCost; BattleArms.cpp).
+void ABattleController::HireElite()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Rifle, 1);
+	ShowNotice(Match->LastMessage.StartsWith(TEXT("Elite platoon deployed")) ? FString::Printf(TEXT("精鋭小隊を雇った（-%d 資源）"), BattleArms::EliteCost()) : Match->LastMessage);
 }
 // Area battle: the - key buys a supply vehicle (squad type 9, at most AreaSupplyLimit per team; BattleSupplyCar.cpp).
 void ABattleController::HireSupply()
