@@ -114,9 +114,10 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
   Reject([](UBattleSave& S){S.Units[0].State.Reserve=GetDefault<UBattleTuning>()->ReserveFor(S.Units[0].State.Weapon)+1;},TEXT("reserve above capacity rejected atomically"));
   Reject([](UBattleSave& S){S.Units[0].State.HP=BattleSquadType::MaxHealth(BattleSquadType::Rifle,true)+1.f;},TEXT("health above squad limit rejected atomically"));
   {
-   TArray<uint8> OversizeBytes;OversizeBytes.SetNumUninitialized(BattleSaveValidation::MaxBytes+1);
+   // The real limit (1 GiB) is not allocated here; the same check runs with a small limit.
+   TArray<uint8> OversizeBytes;OversizeBytes.SetNumZeroed(4097);
    FString OversizeError;
-   Check(BattleSaveValidation::Decode(OversizeBytes,OversizeError)==nullptr&&OversizeError==TEXT("Save file exceeds size limit"),TEXT("oversize bytes rejected before codec"));
+   Check(BattleSaveValidation::Decode(OversizeBytes,OversizeError,4096)==nullptr&&OversizeError==TEXT("Save file exceeds size limit"),TEXT("oversize bytes rejected before codec"));
   }
   {
    auto* ResourceBoundary=DuplicateObject<UBattleSave>(Saved,this);

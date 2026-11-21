@@ -117,8 +117,8 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  int32 Cancelled=0;for(int32 I=0;I<Queued.Num()-Credits[Team];++I){Area.Replacements.Remove(Queued[I]);++Cancelled;}
  if(bAuto){if(Area.LastAIHireAt.Num()!=2)Area.LastAIHireAt={-1000,-1000};Area.LastAIHireAt[Team]=Elapsed;}
  if(R->SightExperiment.Enabled)R->SightExperiment.HireTimes[Team].Add(Elapsed);
- UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE team=%d squad=%d auto=%d cost=%d credits=%d cancelled_replacements=%d active=%d time=%.1f leader=%s home=%s"),
-  Team,SID,bAuto?1:0,Cost,Credits[Team],Cancelled,ActiveSquads(Team),Elapsed,*R->Position(Store->FindSquad(SID)->LeaderUnitID).ToCompactString(),*AreaHome(Team).ToCompactString());
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE team=%d squad=%d auto=%d cost=%d credits=%d cancelled_replacements=%d active=%d time=%.1f leader=%s home=%s type=%d"),
+  Team,SID,bAuto?1:0,Cost,Credits[Team],Cancelled,ActiveSquads(Team),Elapsed,*R->Position(Store->FindSquad(SID)->LeaderUnitID).ToCompactString(),*AreaHome(Team).ToCompactString(),int32(SquadType));
  LastMessage=SquadType==BattleSquadType::Supply?FString::Printf(TEXT("Supply vehicle deployed / -%d resources"),Cost):SquadType==BattleSquadType::Exo?FString::Printf(TEXT("Exoskeleton soldier deployed / -%d resources"),Cost):SquadType==BattleSquadType::SPGun?FString::Printf(TEXT("Self-propelled gun deployed / -%d resources"),Cost):SquadType==BattleSquadType::Mortar?FString::Printf(TEXT("Mortar team deployed / -%d resources"),Cost):SquadType==BattleSquadType::ArmoredCar?FString::Printf(TEXT("Armoured car deployed / -%d resources"),Cost):SquadType==BattleSquadType::Tank?FString::Printf(TEXT("Tank deployed / -%d resources"),Cost):SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
  return true;
 }
@@ -136,10 +136,26 @@ void UBattleMatch::UpdateAreaHiring()
   // Squad type by the intent's heavy share: heavy infantry while the team's bought heavy squads are below that share of its purchases.
   FAreaIntent HireIntent=AreaIntent(Team); uint8 Type=BattleSquadType::Rifle;
   int32 Bought=0,Heavy=0;for(const auto& P:Store->GetSquads())if(P.Value.Team==Team){Bought+=P.Key>50;Heavy+=P.Value.SquadType==BattleSquadType::Heavy;}
+  // Subtraction evaluation (Docs/design-subtraction-eval.md, trials default 0): -BattleAreaAllTypes=1 gives BOTH teams the all-types mix
+  // (the composition schedule below plus heavy share 0.2, two scout pairs, one exoskeleton soldier, one supply vehicle; command-line
+  // keep values are not mixed in); -BattleAreaWithout=<type> then removes one type (the trial team only with -BattleAreaTrialTeam).
+  const bool bAllTypes=BattleTactics::AreaAllTypes();const int32 Without=BattleTactics::AreaWithout(Team);
+  if(bAllTypes)
+  {
+   const auto* TT=GetDefault<UBattleTuning>();auto Cap=[](int32 Value,int32 Limit){return FMath::Clamp(Value,0,FMath::Max(0,Limit));};
+   HireIntent.HeavyShare=FMath::Max(HireIntent.HeavyShare,.2f);HireIntent.ScoutKeep=Cap(2,TT->AreaScoutLimit);HireIntent.ExoKeep=Cap(1,TT->AreaExoLimit);HireIntent.SupplyKeep=Cap(1,TT->AreaSupplyLimit);
+  }
+  if(Without==BattleSquadType::Heavy)HireIntent.HeavyShare=0.f;
   if(HireIntent.HeavyShare>0&&Heavy<HireIntent.HeavyShare*(Bought+1))Type=BattleSquadType::Heavy;
   // Strategic layer trial -BattleAreaComposition=1: the AI sets the numbers of special squad types it keeps (BattleArmourAI.cpp).
-  const bool bComposition=BattleTactics::AreaComposition(Team);const uint8 PlainType=Type;
+  const bool bComposition=BattleTactics::AreaComposition(Team)||bAllTypes;const uint8 PlainType=Type;
   if(bComposition)AreaComposition(Team,HireIntent,Bought);
+  switch(Without)
+  {
+   case BattleSquadType::Scout:HireIntent.ScoutKeep=0;break;case BattleSquadType::AntiTank:HireIntent.ATKeep=0;break;case BattleSquadType::Tank:HireIntent.TankKeep=0;break;
+   case BattleSquadType::ArmoredCar:HireIntent.ACKeep=0;break;case BattleSquadType::Mortar:HireIntent.MortarKeep=0;break;case BattleSquadType::SPGun:HireIntent.SPGKeep=0;break;
+   case BattleSquadType::Exo:HireIntent.ExoKeep=0;break;case BattleSquadType::Supply:HireIntent.SupplyKeep=0;break;default:break;
+  }
   // Scout pairs first when the team has fewer active pairs than it wants: none during the first purchases (taking points),
   // then one more per AreaScoutAfterHires purchases up to the intent's ScoutKeep; a lost pair is bought again.
   {
@@ -185,6 +201,11 @@ void UBattleMatch::UpdateAreaHiring()
   const FString Message=LastMessage;LastHiredSquadID=INDEX_NONE;
   if(HireAreaSquad(Team,EBattleTraining::Regular,true,Type)&&bPurpose&&LastHiredSquadID!=INDEX_NONE){Area.HirePurpose.Add(LastHiredSquadID,Need);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE_PURPOSE team=%d squad=%d purpose=%d time=%.1f"),Team,LastHiredSquadID,Need,Elapsed);}
   else if(IntelNeed>=0&&LastHiredSquadID!=INDEX_NONE&&Store->FindSquad(LastHiredSquadID)){IntelPurpose.Add(LastHiredSquadID,IntelNeed);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_INTEL_HIRE team=%d squad=%d point=%d time=%.1f"),Team,LastHiredSquadID,IntelNeed,Elapsed);}
+  // Strategy layer S4 (BattleStrategy.cpp, -BattleStrategy=4): a rifle squad bought while the team has a focus reinforces it; its mission
+  // follows the focus when the plan changes (UpdateStrategy).
+  else if(LastHiredSquadID!=INDEX_NONE&&Type==BattleSquadType::Rifle&&StrategyOn(Team,4)&&Store->FindSquad(LastHiredSquadID))
+   if(const int32 Focus=StrategyFocusPoint(Team);Focus!=INDEX_NONE&&ObservedOwner(Team,Focus)!=Team)
+   {Area.HirePurpose.Add(LastHiredSquadID,Focus);Area.StrategyHired.Add(LastHiredSquadID);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STRATEGY_HIRE team=%d squad=%d focus=%d time=%.1f"),Team,LastHiredSquadID,Focus,Elapsed);}
   LastMessage=Message;
  }
 }
@@ -363,6 +384,10 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
   const bool bHoldPhase=(S.Plan==1&&I.Phase>=2)||(S.Plan==2&&I.Phase==2);
   I.HeavyShare=FMath::Clamp(I.HeavyShare*(bHoldPhase?1.5f:.5f),0.f,.8f);
  }
+ // Strategy layer S2 (BattleStrategy.cpp): the team's focus objective, chosen once per order update (-1 without -BattleStrategy>=2).
+ I.FocusPoint=StrategyFocusPoint(Team);
+ // Stage S3: a held point weighs twice in the S1 spread (BattleStrategyValues::HoldWeight).
+ for(int32 Pt=0;Pt<Objectives.Num()&&Pt<FAreaIntent::MaxObjectives;++Pt)if(StrategyHolds(Team,Pt))I.PointWeight[Pt]*=2.f;
  ApplyDepotWeights(Team,bTrial,I);
  return I;
 }

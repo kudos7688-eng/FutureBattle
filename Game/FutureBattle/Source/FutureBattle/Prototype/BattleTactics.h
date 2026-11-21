@@ -24,6 +24,8 @@ namespace BattleTactics
  // Trial -BattleVehicleOrderHere=1 (default 0): a vehicle order to where the vehicle already stands is accepted as arrived (no route needed).
  bool VehicleOrderHere();
  bool ArtilleryPosts(); // Trial -BattleArtilleryPosts=1 (default 0): public mortar posts and raids.
+ bool ArtilleryRaidChase(); // Trial -BattleArtilleryRaidChase=1 (default 0), requires ArtilleryPosts.
+ float ArtilleryRaidSneak(); // Trial -BattleArtilleryRaidSneak=<m> (default 0 = off, cm returned): a raid moves without stopping to fight until its leader is this close to the target; requires ArtilleryPosts.
  int32 AreaSPGCost(); // Optional -BattleAreaSPGCost override.
  bool ArtilleryFlash(); // Trial -BattleArtilleryFlash=1 (default 0): heard indirect fire reveals a rough position.
  float SPGRange(); // Optional -BattleSPGRange override; absent keeps the configured range.
@@ -116,6 +118,10 @@ namespace BattleTactics
  bool ArmourAI(int32 Team);
  // Strategic layer trial -BattleAreaComposition=0/1 (UBattleTuning::bAreaComposition, default 0; the trial team with -BattleAreaTrialTeam).
  bool AreaComposition(int32 Team);
+ // Subtraction evaluation trials (default 0 / -1; Docs/design-subtraction-eval.md): -BattleAreaAllTypes=1 both teams buy every type;
+ // -BattleAreaWithout=<type> removes one type from the trial team (both teams without -BattleAreaTrialTeam).
+ bool AreaAllTypes();
+ int32 AreaWithout(int32 Team);
  // Squad groups -BattleAreaGroups=0/1 (UBattleTuning::bAreaGroups, default 1 since 2026-11-20 by user decision; the trial team with -BattleAreaTrialTeam): the AI forms one attack group per team (BattleGroups.cpp).
  bool AreaGroups(int32 Team);
  // -BattleSymmetricStart=0/1 (default on for the maps with the urban rule set, E to I, since 2026-11-20 by user decision; off on

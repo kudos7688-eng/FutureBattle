@@ -36,17 +36,34 @@ namespace BattleFrontValues
  // although the one-sided screen ga1 on map I lost 180-320 points of lead against the earlier allocation). 0: only squads the player
  // drops on the front army tab hold the line; the AI teams keep the earlier allocation.
  bool AutoFill(){static const int32 On=Arg(TEXT("BattleFrontAuto="),1);return On!=0;}
+ // Trial -BattleFrontShare=<0..1> (default 1 = as before; ROADMAP stage 5, Docs/design-groups-strategy-link.md, the next step after ga1):
+ // the AI fills its front army only up to this share of the squads it could put there (its members + the free ones). Squads already
+ // in the group (including those the player dropped there) are never taken out for the share. One team with -BattleAreaTrialTeam.
+ double Share(int32 Team)
+ {
+  static const double V=[]{float X=1.f;FParse::Value(FCommandLine::Get(),TEXT("BattleFrontShare="),X);return FMath::IsFinite(X)?double(FMath::Clamp(X,0.f,1.f)):1.;}();
+  const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;
+  return Trial<0||Trial==Team?V:1.;
+ }
  bool Gap(){static const int32 On=Arg(TEXT("BattleFrontGap="),1);return On!=0;}
  // The front army holds one line as a group (user report 2026-11-21 after test play: its squads moved each on their own and went back
  // and forth, because the line followed where own soldiers stood and each band stepped forward by itself). The group keeps its line
- // (FBattleGroup::FrontHold): a row falls back only before two or more known enemies; the whole line steps one column forward at once
- // when most squads stand on their posts and no enemy is known ahead. Posts stay laid out for the whole group, also while squads are
+ // (FBattleGroup::FrontHold): rows push and fall back by the damage the group takes; the group steps the rows on its own pace (StepEvery),
+ // each row waiting only for its own squads. Posts are fixed places on the line (row and depth), also while squads are
  // away for supply. -BattleFrontHold=0: the earlier line from own positions. Needs the front army.
  bool Hold(){static const int32 On=Arg(TEXT("BattleFrontHold="),1);return On!=0&&Army();}
+ // Opening line (user proposal 2026-11-22: the first line sat next to the home, so the opening was slow): with Hold() the group's first
+ // line lies this percentage of the way from the own home column to the enemy home column, short of known enemies, and the group moves
+ // it by the situation from there. -BattleFrontOpen=0: the first line is where the own soldiers stand (the earlier start).
+ constexpr int32 ReleaseMargin=1, ReleaseMax=4; constexpr float ReleaseHold=20.f, ExcessHold=15.f; // squads above the need released (5b)
+ int32 OpenPercent(){static const int32 V=FMath::Clamp(Arg(TEXT("BattleFrontOpen="),40),0,80);return V;}
  // Second test play 2026-11-21 19:10 "too slow": half of the squads counted as off their posts (35 m from the sector centre), so the line
  // stepped only every 60 s. Now on the post sector or within one sector of its centre, and shorter waits.
- constexpr float StepHold=10.f, StepLate=30.f; // least time between steps; after StepLate half of the squads on their posts suffice
- constexpr double StepReady=.6, StepReadyLate=.5, OnPost=5000.; // share of squads on their posts; within this of the post (cm)
+ // The group sets the pace (user proposal 2026-11-22: squads were swayed too much by the others): every StepEvery seconds each row
+ // that may go steps, whether or not the other rows' squads have arrived. A row waits only for its own squads: it does not step while
+ // its foremost squad is more than RowLag columns behind the row's line, so the line never runs away from the squads holding it.
+ constexpr float StepEvery=20.f; constexpr int32 RowLag=1;
+ constexpr double OnPost=5000.; // within this of the post (cm) counts as on post (log only)
  // The group's aim is to raise its line (user 2026-11-21 19:15 "push the line forward on purpose, as a group"), judged by its own losses
  // rather than by known enemy numbers (user 19:20 "weigh the damage over the enemy count"; seen enemies depend on sight, own damage is
  // sure). Per row, over its front squads posted in rows +-1: the damage of the last 5 s against their health (UBattleSquadTactics).
@@ -55,7 +72,43 @@ namespace BattleFrontValues
  //  - Heavy damage (BackDamage or more): the row falls back one column, at most once per BackHold seconds.
  constexpr double LightDamage=.03, BackDamage=.10, PushRatio=1.5, Swamp=2.; constexpr int32 SwampMin=4; constexpr float BackHold=10.f;
  // Sector kinds by the cover they give a squad that waits there (river sectors are not held).
- double Cover(char Kind){switch(Kind){case 'H':case 'W':return 3.;case 'T':case '^':return 2.;case 'J':case 'B':case 'S':return 1.;case 'R':return -100.;default:return 0.;}}
+ double Cover(char Kind){switch(Kind){case 'H':case 'W':return 3.;case 'T':case '^':return 2.;case 'J':case 'B':case 'S':return 1.;case 'R':case 'M':case 'L':return -100.;default:return 0.;}}
+ // Squads to places by walking distance D[squad][place] (square): the matching whose longest walk is the least, and among those the one
+ // with the least total walk. Returns the place of each squad. Used once when the front army first takes its places (25 squads: fast).
+ TArray<int32> AssignMinTime(const TArray<TArray<double>>& D)
+ {
+  const int32 N=D.Num();TArray<int32> Out;Out.Init(INDEX_NONE,N);if(!N)return Out;
+  // 1. The least limit under which every squad still gets a place of its own (augmenting paths).
+  TArray<double> All;for(const auto& Row:D)All.Append(Row);All.Sort();
+  auto Fits=[&](double T)
+  {
+   TArray<int32> Of;Of.Init(INDEX_NONE,N);TArray<bool> Seen;
+   TFunction<bool(int32)> Try=[&](int32 I)->bool
+   {for(int32 J=0;J<N;++J)if(D[I][J]<=T&&!Seen[J]){Seen[J]=true;if(Of[J]==INDEX_NONE||Try(Of[J])){Of[J]=I;return true;}}return false;};
+   for(int32 I=0;I<N;++I){Seen.Init(false,N);if(!Try(I))return false;}
+   return true;
+  };
+  int32 Lo=0,Hi=All.Num()-1;while(Lo<Hi){const int32 Mid=(Lo+Hi)/2;if(Fits(All[Mid]))Hi=Mid;else Lo=Mid+1;}
+  const double Limit=All[Lo]+1.;
+  // 2. The least total walk under that limit (Hungarian method, 1-based).
+  constexpr double Inf=1.e30;
+  TArray<double> U,V,MinV;TArray<int32> P,Way;U.Init(0.,N+1);V.Init(0.,N+1);P.Init(0,N+1);Way.Init(0,N+1);
+  auto Cost=[&](int32 I,int32 J){const double X=D[I-1][J-1];return X<=Limit?X:X+1.e9;};
+  for(int32 I=1;I<=N;++I)
+  {
+   P[0]=I;int32 J0=0;MinV.Init(Inf,N+1);TArray<bool> Used;Used.Init(false,N+1);
+   do
+   {
+    Used[J0]=true;const int32 I0=P[J0];double Delta=Inf;int32 J1=0;
+    for(int32 J=1;J<=N;++J)if(!Used[J]){const double Cur=Cost(I0,J)-U[I0]-V[J];if(Cur<MinV[J]){MinV[J]=Cur;Way[J]=J0;}if(MinV[J]<Delta){Delta=MinV[J];J1=J;}}
+    for(int32 J=0;J<=N;++J)if(Used[J]){U[P[J]]+=Delta;V[J]-=Delta;}else MinV[J]-=Delta;
+    J0=J1;
+   }while(P[J0]!=0);
+   do{const int32 J1=Way[J0];P[J0]=P[J1];J0=J1;}while(J0);
+  }
+  for(int32 J=1;J<=N;++J)if(P[J]>0)Out[P[J]-1]=J-1;
+  return Out;
+ }
 }
 
 bool UBattleMatch::FrontLineOn(int32 Team) const
@@ -160,10 +213,14 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  FrontLine[Team]=Line;
 
  // 5. The front-holding group: formed from free AI-led rifle and heavy squads, filled up to its number.
- const int32 Want=Army()?2*Rows:FMath::Clamp(Arg(TEXT("BattleFrontSquads="),4),2,12);
  int32 FrontID=INDEX_NONE;for(const auto& P:Groups)if(P.Value.Team==Team&&P.Value.Kind==1&&!P.Value.bPlayer)FrontID=P.Key;
+ // Hold(): the group takes the squads its line needs (FBattleGroup::FrontNeed, counted with the places in 6) and no more
+ // (user proposal 2026-11-22); before the first count, two per row.
+ const int32 Need=Hold()&&FrontID!=INDEX_NONE?Groups[FrontID].FrontNeed:0;
+ const int32 Want=Need>0?Need:Army()?2*Rows:FMath::Clamp(Arg(TEXT("BattleFrontSquads="),4),2,12);
  const int32 Have=FrontID!=INDEX_NONE?Groups[FrontID].Squads.Num():0;
- if(Have<Want&&AutoFill())
+ // After a release the fill waits ReleaseHold seconds (Codex review: a need going 16 -> 18 right after a release took the same squads back).
+ if(Have<Want&&AutoFill()&&(FrontID==INDEX_NONE||Elapsed-Groups[FrontID].FrontReleaseAt>=ReleaseHold))
  {
   const FVector LineMid=BattleSectors::Center(FrontCell(Team,Line[Rows/2],Rows/2));
   struct FFree{int32 SID;double D;};TArray<FFree> Free;
@@ -178,7 +235,8 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    Free.Add({P.Key,FVector::DistSquared2D(R->Position(S.LeaderUnitID),LineMid)});
   }
   Free.Sort([](const FFree& A,const FFree& B){return A.D!=B.D?A.D<B.D:A.SID<B.SID;});
-  TArray<int32> Pick;for(const auto& F:Free)if(Have+Pick.Num()<Want)Pick.Add(F.SID);
+  const int32 ShareCap=FMath::CeilToInt(Share(Team)*double(Have+Free.Num())-1e-9);
+  TArray<int32> Pick;for(const auto& F:Free)if(Have+Pick.Num()<FMath::Min(Want,ShareCap))Pick.Add(F.SID);
   if(FrontID==INDEX_NONE)
   {
    if(Pick.Num()>=2)
@@ -195,18 +253,72 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_JOIN group=%d team=%d joined=%d squads=%d time=%.1f"),FrontID,Team,Pick.Num(),G.Squads.Num(),Elapsed);
   }
  }
+ // 5b. Squads above the line's need go back unassigned as a reserve (user proposal 2026-11-22: count the squads the line needs, keep
+ //  those in the front army and leave the rest free to be used where needed). Unassigned, they serve the team's other orders and the
+ //  player, and the fill above takes free squads back when the need grows. Released first: squads away for supply, then those furthest
+ //  behind the line; the front places go last. Only above the need by more than ReleaseMargin, at most every ReleaseHold seconds,
+ //  so a need that moves by one does not send squads to and fro. Also squads the player dropped on the front army tab.
+ // The excess has to last ExcessHold seconds (FBattleGroup::FrontExcessSince), so a need that dips for a moment releases nobody.
+ if(auto* G=FrontID!=INDEX_NONE?Groups.Find(FrontID):nullptr;G&&!(Need>0&&AutoFill()&&Have>Need+ReleaseMargin))G->FrontExcessSince=-1.f;
+ else if(G&&G->FrontExcessSince<0.f)G->FrontExcessSince=Elapsed;
+ if(Need>0&&AutoFill()&&Have>Need+ReleaseMargin)if(auto* G=Groups.Find(FrontID);G&&Elapsed-G->FrontReleaseAt>=ReleaseHold
+  &&((G->FrontReleaseAt<0.f&&Elapsed<30.f)||Elapsed-G->FrontExcessSince>=ExcessHold))
+ {
+  struct FOut{int32 SID;double S;};TArray<FOut> Out;
+  for(int32 SID:G->Squads)if(const auto* S=Store->FindSquad(SID))
+  {
+   double Rank=0.;
+   if(S->TacticalPlan.Action==EBattleSquadTactic::Recover&&S->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY")))Rank=1000.;
+   else if(const FVector* Post=FrontPosts.Find(SID))
+   {
+    const FIntPoint C=BattleSectors::Cell(*Post);
+    Rank=G->FrontHold.IsValidIndex(C.Y)?double(G->FrontHold[C.Y]-ColOf(C)):0.;
+   }
+   else Rank=500.;
+   Out.Add({SID,Rank});
+  }
+  Out.Sort([](const FOut& A,const FOut& B){return A.S!=B.S?A.S>B.S:A.SID>B.SID;});
+  // The first release (right after the group forms) takes every squad above the need at once, and the rest then take their first
+  // places afresh by walking time (their posts of the first two seconds are dropped).
+  const bool bFirst=G->FrontReleaseAt<0.f&&Elapsed<30.f;
+  int32 Released=0;FString List;
+  for(const FOut& O:Out)if(G->Squads.Num()>FMath::Max(1,Need)&&(bFirst||Released<ReleaseMax))
+  {
+   G->Squads.Remove(O.SID);SquadGroup.Remove(O.SID);ArmyPinned.Remove(O.SID);FrontPosts.Remove(O.SID);
+   ++Released;List+=FString::Printf(TEXT("%s%d"),List.IsEmpty()?TEXT(""):TEXT(","),O.SID);
+  }
+  if(Released)
+  {
+   G->FrontReleaseAt=Elapsed;FrontReleased[Team]+=Released;
+   if(bFirst)for(int32 SID:G->Squads)FrontPosts.Remove(SID);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_RELEASE team=%d group=%d need=%d released=%d squads=%s left=%d time=%.1f"),Team,FrontID,Need,Released,*List,G->Squads.Num(),Elapsed);
+  }
+ }
 
  // 6. Bands and posts. Squads away at home for supply leave their band to the others.
  TMap<int32,FIntPoint> Previous; // the front army keeps a squad on its last post when that sector is still wanted
  for(auto It=FrontPosts.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||S->Team==Team){if(S)Previous.Add(It.Key(),BattleSectors::Cell(It.Value()));It.RemoveCurrent();}
  FString Posts;
+ TArray<int32> OldHold; // the group's line before this update's step: a squad's place behind it is kept across the step
  if(auto* G=FrontID!=INDEX_NONE?Groups.Find(FrontID):nullptr)
  {
   // 6a. The group's own line (Hold()).
   if(Hold())
   {
    auto& H=G->FrontHold;
-   if(H.Num()!=Rows){H=Line;G->bFrontDrawn=false;G->FrontStepAt=Elapsed;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_HOLD team=%d group=%d start time=%.1f"),Team,FrontID,Elapsed);}
+   if(H.Num()!=Rows)
+   {
+    H=Line;
+    // The opening raises rows up to Open, short of known enemies by two columns; a row the own soldiers already hold further on keeps
+    // it (the reach line itself stops a column short of known enemies).
+    const int32 Open=HomeCol+FMath::FloorToInt((EnemyHomeCol-HomeCol)*OpenPercent()/100.);
+    for(int32 Y=0;Y<Rows;++Y)H[Y]=FMath::Clamp(FMath::Max(H[Y],FMath::Min(Open,EnemyCol[Y]-2)),HomeCol,FMath::Max(HomeCol,EnemyHomeCol-2));
+    for(int32 Pass=0;Pass<Rows;++Pass)for(int32 Y=0;Y<Rows;++Y){if(Y>0)H[Y]=FMath::Min(H[Y],H[Y-1]+1);if(Y+1<Rows)H[Y]=FMath::Min(H[Y],H[Y+1]+1);}
+    G->bFrontDrawn=false;G->FrontStepAt=Elapsed;
+    FString L;for(int32 Y=0;Y<Rows;++Y)L+=FString::Printf(TEXT("%s%d"),Y?TEXT(","):TEXT(""),H[Y]);
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_HOLD team=%d group=%d start open=%d line=%s time=%.1f"),Team,FrontID,Open,*L,Elapsed);
+   }
+   OldHold=H;
    TMap<FIntPoint,int32> EnemyAll;for(const FVector& E:AreaIntelView(Team).Enemies)if(const FIntPoint C=BattleSectors::Cell(E);BattleSectors::Valid(C))++EnemyAll.FindOrAdd(C);
    auto Near=[&](const TMap<FIntPoint,int32>& M,int32 Y,int32 C0,int32 C1)
    {int32 N=0;for(int32 Z=FMath::Max(0,Y-1);Z<FMath::Min(Rows,Y+2);++Z)for(int32 C=FMath::Max(0,C0);C<=FMath::Min(Cols-1,C1);++C)if(const int32* V=M.Find(FrontCell(Team,C,Z)))N+=*V;return N;};
@@ -235,11 +347,16 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
     if(S->TacticalPlan.Action==EBattleSquadTactic::Recover&&S->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY")))continue;
     ++Posted;if(FVector::DistSquared2D(R->Position(S->LeaderUnitID),BattleSectors::Center(*Last))<=FMath::Square(OnPost))++OnPosts;
    }
-   const float Since=Elapsed-G->FrontStepAt;const double Ready=Posted?double(OnPosts)/Posted:0.;
-   if(!G->bFrontDrawn&&Posted&&Since>=StepHold&&(Ready>=StepReady||(Since>=StepLate&&Ready>=StepReadyLate)))
+   // The foremost column reached by each row's squads posted on the line or one column behind it (-1: none there; support places
+   // further back and empty rows do not hold the row's step).
+   TArray<int32> Reached;Reached.Init(-1,Rows);
+   for(int32 SID:G->Squads)if(const FIntPoint* Last=Previous.Find(SID))if(const auto* S=Store->FindSquad(SID))
+    if(Reached.IsValidIndex(Last->Y)&&ColOf(*Last)>=OldHold[Last->Y]-1&&!(S->TacticalPlan.Action==EBattleSquadTactic::Recover&&S->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY"))))Reached[Last->Y]=FMath::Max(Reached[Last->Y],ColOf(BattleSectors::Cell(R->Position(S->LeaderUnitID))));
+   const float Since=Elapsed-G->FrontStepAt;
+   if(!G->bFrontDrawn&&Posted&&Since>=StepEvery)
    {
     TArray<int32> Next=H;int32 Moved=0,Pushed=0;
-    for(int32 Y=0;Y<Rows;++Y)if(H[Y]+1<EnemyHomeCol-1)
+    for(int32 Y=0;Y<Rows;++Y)if(H[Y]+1<EnemyHomeCol-1&&(Reached[Y]<0||Reached[Y]>=H[Y]-RowLag))
     {
      const int32 Own=Near(OwnCount,Y,H[Y]-1,H[Y]+1),Enemy=Near(EnemyAll,Y,H[Y],H[Y]+2);
      const bool bQuiet=Hurt[Y]==0&&!(Enemy>=SwampMin&&Enemy>=Swamp*Own);
@@ -273,7 +390,79 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
   // Front army: sectors with a point not observed as own (it takes the point as it holds the line), and one post per sector.
   TSet<FIntPoint> Used,Points;TArray<FIntPoint> Cells;TArray<bool> Pushes;
   if(Army())for(int32 I=0;I<Objectives.Num();++I)if(ObservedOwner(Team,I)!=Team)if(const FIntPoint C=BattleSectors::Cell(Objectives[I].Position);BattleSectors::Valid(C))Points.Add(C);
-  for(int32 I=0;I<NB;++I)
+  // Hold(): places on the group's line chosen from cover (user proposals 2026-11-22: "decide from cover what shape the line should take;
+  // when one-sector gaps still hold the line, the fields need no soldiers"; earlier the second squad of a row kept its old sector until it
+  // fell three columns behind, then ran past the first one, so squads 8 and 14 went back and forth).
+  //  - Each row's front place: its line column, or the column right behind it when that one gives more cover (houses, woods, hills).
+  //  - A row whose front place is open ground (fields) stays empty when the rows on both sides (the one row beside an edge row) hold
+  //    covered places and no enemy is known near it; never two empty rows side by side. An empty row is taken again only when an enemy is
+  //    known right in front of it, while leaving a row needs a wider clear zone, so a sighting coming and going does not move squads to and fro.
+  //  - The other squads: support places one to three columns behind the line, best cover first, rows facing known enemies first, at most
+  //    two per row. All places move with the line, so the squads keep their rows and none runs past another.
+  TArray<int32> SlotRow;FString Gaps;int32 FrontCount=0;
+  // Where each squad's last place went with the line (its last place shifted by the row's step).
+  TSet<FIntPoint> Kept;
+  if(Hold())for(int32 SID:G->Squads)if(const FIntPoint* Last=Previous.Find(SID);Last&&OldHold.IsValidIndex(Last->Y)&&Line.IsValidIndex(Last->Y))
+   Kept.Add(FrontCell(Team,FMath::Clamp(ColOf(*Last)+Line[Last->Y]-OldHold[Last->Y],0,Cols-1),Last->Y));
+  if(Hold())
+  {
+   auto Known=[&](int32 Y,int32 C0,int32 C1)
+   {int32 N=0;for(int32 Z=FMath::Max(0,Y-1);Z<FMath::Min(Rows,Y+2);++Z)for(int32 C=FMath::Max(0,C0);C<=FMath::Min(Cols-1,C1);++C)if(const int32* V=EnemyCount.Find(FrontCell(Team,C,Z)))N+=*V;return N;};
+   // Impassable sectors (mountain M, lake L on map J; strategy branch 2026-11-22) are never places: -1000.
+   auto CoverAt=[&](int32 C,int32 Y)
+   {
+    const FIntPoint Cell=FrontCell(Team,C,Y);if(!BattleSectors::Valid(Cell))return -100.;
+    const char Kind=BattleFieldLayout::SectorKind(GetWorld(),Cell);return BattleSectors::Impassable(Kind)&&Kind!='R'?-1000.:Cover(Kind);
+   };
+   TArray<int32> FrontCol;TArray<double> FrontCover;FrontCol.Init(0,Rows);FrontCover.Init(0.,Rows);
+   for(int32 Y=0;Y<Rows;++Y)
+   {
+    FrontCol[Y]=FMath::Max(HomeCol,Line[Y]);
+    if(Line[Y]-1>=HomeCol&&CoverAt(Line[Y]-1,Y)>CoverAt(FrontCol[Y],Y)+.6)FrontCol[Y]=Line[Y]-1;
+    FrontCover[Y]=CoverAt(FrontCol[Y],Y);
+   }
+   TArray<uint8> Empty;Empty.Init(0,Rows);
+   const bool bOldGaps=G->FrontGap.Num()==Rows;
+   for(int32 Y=0;Y<Rows&&Rows>1;++Y)if(FrontCover[Y]<=0.)
+   {
+    const bool bA=Y==0||(FrontCover[Y-1]>0.&&!Empty[Y-1]),bB=Y==Rows-1||FrontCover[Y+1]>0.;
+    const bool bClear=bOldGaps&&G->FrontGap[Y]?Known(Y,Line[Y],Line[Y]+2)==0:Known(Y,Line[Y]-1,Line[Y]+4)==0;
+    // A row with no passable front place is left whatever its neighbours.
+    if((bA&&bB&&bClear)||FrontCover[Y]<=-1000.){Empty[Y]=1;Gaps+=FString::Printf(TEXT("%s%d"),Gaps.IsEmpty()?TEXT(""):TEXT(","),Y+1);}
+   }
+   G->FrontGap=Empty;
+   // The line's need: a front place per held row, a support place per row with a known enemy in front of it, and two more.
+   {
+    int32 Contact=0;
+    for(int32 Y=0;Y<Rows;++Y){int32 N=0;for(int32 C=Line[Y];C<=FMath::Min(Cols-1,Line[Y]+3);++C)if(const int32* V=EnemyCount.Find(FrontCell(Team,C,Y)))N+=*V;Contact+=N>0?1:0;}
+    int32 Held=0;for(int32 Y=0;Y<Rows;++Y)Held+=Empty[Y]?0:1;
+    G->FrontNeed=FMath::Clamp(Held+Contact+2,2,2*Rows);
+   }
+   // Front places (with fewer squads than rows, the rows spread evenly among the squads).
+   TArray<int32> FrontRows;for(int32 Y=0;Y<Rows;++Y)if(!Empty[Y])FrontRows.Add(Y);
+   if(NB<FrontRows.Num()){TArray<int32> Spread;for(int32 I=0;I<NB;++I)Spread.Add(FrontRows[(2*I+1)*FrontRows.Num()/(2*NB)]);FrontRows=Spread;}
+   for(int32 Y:FrontRows){const FIntPoint Cell=FrontCell(Team,FrontCol[Y],Y);Used.Add(Cell);Cells.Add(Cell);Pushes.Add(false);SlotRow.Add(Y);}
+   FrontCount=Cells.Num();
+   // Support places.
+   struct FSpot{double S;int32 C,Y;};TArray<FSpot> Spots;
+   for(int32 Y=0;Y<Rows;++Y)for(int32 D=1;D<=3;++D)if(const int32 C=Line[Y]-D;C>=HomeCol&&!Used.Contains(FrontCell(Team,C,Y))&&CoverAt(C,Y)>-1000.)
+    Spots.Add({CoverAt(C,Y)+(D==1?.5:D==3?-1.:0.)+.5*FMath::Min(Known(Y,Line[Y],Line[Y]+3),4)+(Empty[Y]?.5:0.)
+     +(Kept.Contains(FrontCell(Team,C,Y))?1.5:0.),C,Y}); // a support place a squad already holds stays (map I 2026-11-22: supports hopped rows with each sighting)
+   Spots.Sort([](const FSpot& A,const FSpot& B){return A.S!=B.S?A.S>B.S:A.Y!=B.Y?A.Y<B.Y:A.C>B.C;});
+   // Support squads per row: one each first (rows facing enemies first by the score), then a second, then any (Codex review: the cap
+   // of two let one row take three squads before the others had one).
+   TArray<int32> PerRow;PerRow.Init(0,Rows);
+   for(int32 Pass=0;Pass<3&&Cells.Num()<NB;++Pass)for(const FSpot& P:Spots)if(Cells.Num()<NB)
+   {
+    const FIntPoint Cell=FrontCell(Team,P.C,P.Y);if(Used.Contains(Cell)||(Pass<2&&PerRow[P.Y]>Pass))continue;
+    Used.Add(Cell);Cells.Add(Cell);Pushes.Add(false);SlotRow.Add(P.Y);++PerRow[P.Y];
+   }
+   // Still short (a line next to the home): any free sector further behind, then shared places.
+   for(int32 Y=0;Y<Rows&&Cells.Num()<NB;++Y)for(int32 C=Line[Y]-4;C>=0&&Cells.Num()<NB;--C)
+    if(const FIntPoint Cell=FrontCell(Team,C,Y);BattleSectors::Valid(Cell)&&!Used.Contains(Cell)&&CoverAt(C,Y)>-1000.){Used.Add(Cell);Cells.Add(Cell);Pushes.Add(false);SlotRow.Add(Y);}
+   for(int32 I=0;Cells.Num()<NB&&Cells.Num()>0;++I){const FIntPoint Copy=Cells[I];const int32 CopyRow=SlotRow[I];Cells.Add(Copy);Pushes.Add(false);SlotRow.Add(CopyRow);} // copies: TArray::Add rejects its own elements (Codex review)
+  }
+  else for(int32 I=0;I<NB;++I)
   {
    const int32 Y0=I*Rows/NB,Y1=FMath::Max(Y0+1,(I+1)*Rows/NB);
    // The band's line: its rearmost row. Step forward when no enemy is known within ClearAhead columns ahead of the band (rows +-1).
@@ -288,16 +477,55 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    for(int32 Y=Y0;Y<Y1;++Y)for(int32 C=FMath::Max(HomeCol,Army()?Target-2:bPush?Target:Target-1);C<=Target;++C)
    {
     const FIntPoint Cell=FrontCell(Team,C,Y);if(!BattleSectors::Valid(Cell)||Used.Contains(Cell))continue;
+    // Map J (2026-11-22): never a post in a mountain or a lake (an order there is refused); rivers already score -100.
+    if(BattleSectors::Impassable(BattleFieldLayout::SectorKind(GetWorld(),Cell))&&BattleFieldLayout::SectorKind(GetWorld(),Cell)!='R')continue;
     double CellScore=Cover(BattleFieldLayout::SectorKind(GetWorld(),Cell))+(C==Target?1.5:0.)-.3*FMath::Abs(Y-Mid);
     if(Army())CellScore+=(Points.Contains(Cell)?2.:0.)-(C<Target-1?1.:0.)-(bPush&&C<Target?3.:0.);
     if(CellScore>BestScore){BestScore=CellScore;Best=Cell;}
    }
+   // No candidate (a band of mountain rows on map J): the nearest passable sector of the band towards the own home.
+   // Only when the default would be a mountain or a lake, so maps without them keep the earlier choice exactly.
+   if(BestScore<=-1e9+1&&(BattleFieldLayout::SectorKind(GetWorld(),Best)=='M'||BattleFieldLayout::SectorKind(GetWorld(),Best)=='L'))
+    for(int32 C=Target-1;C>=0&&BestScore<=-1e9+1;--C)for(int32 Y=Y0;Y<Y1;++Y)
+    {const FIntPoint Cell=FrontCell(Team,C,Y);if(BattleSectors::Valid(Cell)&&!Used.Contains(Cell)&&!BattleSectors::Impassable(BattleFieldLayout::SectorKind(GetWorld(),Cell))){BestScore=0;Best=Cell;break;}}
    Used.Add(Best);Cells.Add(Best);Pushes.Add(bPush);
   }
   // Squads to posts. The front army: a squad keeps its last post when that sector is still one of them, the rest go to the nearest free
   // post (user report 2026-11-21: squads went back and forth because bands followed the squads' row order, which changes as they move).
   TArray<int32> Owner;Owner.Init(INDEX_NONE,NB);
-  if(Army())
+  bool bAnyLast=false;for(const auto& M:Present)bAnyLast|=Previous.Contains(M.SID);
+  if(Hold()&&!bAnyLast&&K>0)
+  {
+   // First posting by walking time (user proposal 2026-11-22: which squad should go where to be in place soonest). The front places
+   // come first in Cells. Squads and places are matched so that the last squad arrives as early as possible (the longest walk is the
+   // least), and under that limit so that the walks are the shortest in sum (such matchings also keep the paths from crossing).
+   TArray<TArray<double>> D;D.SetNum(K);
+   for(int32 I=0;I<K;++I)if(const auto* S=Store->FindSquad(Present[I].SID))
+   {const FVector P=R->Position(S->LeaderUnitID);for(int32 J=0;J<K;++J)D[I].Add(FVector::Dist2D(P,BattleSectors::Center(Cells[J])));}
+    else D[I].Init(0.,K);
+   const TArray<int32> Slot=AssignMinTime(D);
+   for(int32 I=0;I<K;++I)if(Slot.IsValidIndex(I)&&Slot[I]!=INDEX_NONE)Owner[Slot[I]]=I;
+  }
+  else if(Hold())
+  {
+   // A squad keeps its row (cost: rows apart first), then the place nearest to where its last place went with the line: the last place
+   // shifted by the row's step (Codex review: by the last place itself, the front squad took the support place it was standing next to
+   // after a step, and the support squad ran past it to the front).
+   TArray<bool> Placed;Placed.Init(false,K);
+   struct FPair{double D;int32 I,J;};TArray<FPair> Pairs;
+   for(int32 I=0;I<K;++I)if(const auto* S=Store->FindSquad(Present[I].SID))
+   {
+    const FIntPoint* Last=Previous.Find(Present[I].SID);const bool bLead=FrontLeads.Contains(Present[I].SID);
+    const int32 Shift=Last&&OldHold.IsValidIndex(Last->Y)&&Line.IsValidIndex(Last->Y)?Line[Last->Y]-OldHold[Last->Y]:0;
+    const FVector Expected=Last?BattleSectors::Center(FrontCell(Team,FMath::Clamp(ColOf(*Last)+Shift,0,Cols-1),Last->Y)):FVector::ZeroVector;
+    for(int32 J=0;J<NB;++J)
+     Pairs.Add({Last?1.e13*FMath::Abs(SlotRow[J]-Last->Y)+(bLead!=(J<FrontCount)?1.e11:0.)+FVector::DistSquared2D(Expected,BattleSectors::Center(Cells[J]))
+      :1.e15+FVector::DistSquared2D(R->Position(S->LeaderUnitID),BattleSectors::Center(Cells[J])),I,J});
+   }
+   Pairs.Sort([](const FPair& A,const FPair& B){return A.D!=B.D?A.D<B.D:A.I!=B.I?A.I<B.I:A.J<B.J;});
+   for(const auto& Pair:Pairs)if(!Placed[Pair.I]&&Owner[Pair.J]==INDEX_NONE){Owner[Pair.J]=Pair.I;Placed[Pair.I]=true;}
+  }
+  else if(Army())
   {
    TArray<bool> Placed;Placed.Init(false,K);
    for(int32 I=0;I<K;++I)if(const FIntPoint* Last=Previous.Find(Present[I].SID))
@@ -315,12 +543,16 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    for(const auto& Pair:Pairs)if(!Placed[Pair.I]&&Owner[Pair.J]==INDEX_NONE){Owner[Pair.J]=Pair.I;Placed[Pair.I]=true;}
   }
   else for(int32 J=0;J<K;++J)Owner[J]=J;
+  // Front or support: a squad keeps its role across steps (map I 2026-11-22: where a row's front place went back a column into cover,
+  // the support squad behind took it and the front squad moved to another row).
+  if(Hold()){for(int32 SID:G->Squads)FrontLeads.Remove(SID);for(int32 J=0;J<FrontCount&&J<NB;++J)if(Owner[J]!=INDEX_NONE)FrontLeads.Add(Present[Owner[J]].SID);}
   for(int32 J=0;J<NB;++J)if(Owner[J]!=INDEX_NONE)
   {
    const int32 SID=Present[Owner[J]].SID;
    FrontPosts.Add(SID,BattleSectors::Center(Cells[J]));
    Posts+=FString::Printf(TEXT(" %d:%c%d%s"),SID,TCHAR('A'+Cells[J].X),1+Cells[J].Y,Pushes[J]?TEXT("+"):TEXT(""));
   }
+  if(!Gaps.IsEmpty())Posts+=FString::Printf(TEXT(" gaps=%s"),*Gaps); // rows left empty (1-based)
  }
  // 7. The surprise group (trial -BattleSurpriseGroup=1).
  UpdateSurpriseGroup(Team,FrontID);
@@ -687,7 +919,7 @@ void UBattleMatch::ClampFrontTimers()
   FrontLineLogAt[T]=FMath::Min(FrontLineLogAt[T],Elapsed+BattleFrontValues::LogInterval);
   SurpriseNextAt[T]=FMath::Min(SurpriseNextAt[T],Elapsed+BattleSurpriseValues::Interval);
  }
- for(auto& P:Groups)if(P.Value.Kind==1){P.Value.FrontStepAt=FMath::Min(P.Value.FrontStepAt,Elapsed);P.Value.FrontBackAt=FMath::Min(P.Value.FrontBackAt,Elapsed);}
+ for(auto& P:Groups)if(P.Value.Kind==1){P.Value.FrontStepAt=FMath::Min(P.Value.FrontStepAt,Elapsed);P.Value.FrontBackAt=FMath::Min(P.Value.FrontBackAt,Elapsed);P.Value.FrontReleaseAt=FMath::Min(P.Value.FrontReleaseAt,Elapsed);P.Value.FrontExcessSince=FMath::Min(P.Value.FrontExcessSince,Elapsed);}
  for(auto& P:Groups)if(P.Value.Kind==2)
  {
   auto& G=P.Value;

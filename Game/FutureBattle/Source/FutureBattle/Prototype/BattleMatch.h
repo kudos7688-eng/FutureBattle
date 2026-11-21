@@ -27,6 +27,7 @@ struct FAreaIntent
  int32 SupplyKeep=0;                  // supply vehicles the AI keeps active (same pacing as scouts; 0 = none; BattleSupplyCar.cpp)
  int32 ATKeep=0;                      // anti-tank teams the AI keeps active (same pacing as scouts; 0 = none)
  int32 ScoutKeep=0;                   // scout pairs the AI keeps active (one more per ScoutAfterHires purchases, up to this; 0 = none)
+ int32 FocusPoint=-1;                 // strategy layer S2 (-BattleStrategy>=2): the objective the team concentrates on (replaces S6's static pick; -1 = none)
 };
 // One sector (the part of the field nearest one objective; a lane on maps A-D) as seen by one team: own soldiers and own front (furthest progress
 // from own home, 0..1 along the home-to-home line, 90th percentile), and enemies currently visible to the team (count and the
@@ -160,11 +161,14 @@ public:
  bool SurpriseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
  // True while the squad's surprise group is moving along its row (phase 1): its tactics do not stop to hold at a seen enemy.
  bool SurpriseMoving(int32 SquadID) const;
+ bool RaidSneaking(int32 SquadID) const; // Trial -BattleArtilleryRaidSneak: an artillery raid squad still farther than the sneak radius from its target.
  // After a save restore: no front/surprise timer further ahead than its own interval (an earlier save would stall them).
  void ClampFrontTimers();
  float SurpriseNextAt[2]={0.f,0.f},SurpriseSkipLogAt[2]={0.f,0.f};
  TMap<int32,FVector> FrontPosts; // squad of a front-holding group -> the sector centre it holds (transient)
+ TSet<int32> FrontLeads; // squads of a front-holding group on a row's front place, not a support place (transient, like FrontPosts)
  float FrontLineAt[2]={-1.f,-1.f},FrontLineLogAt[2]={-1.f,-1.f};
+ int32 FrontReleased[2]={0,0}; // squads the front army has released to the reserve so far (display: the player's notice)
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;
@@ -193,6 +197,11 @@ public:
  TArray<FVector> ArtilleryPostPositions[2];
  TArray<double> ArtilleryPostEvidence[2]; // observer team -> enemy post's last evidence timestamp
  TMap<int32,int32> ArtilleryRaids;
+ struct FArtilleryRaidFlash { FVector Target=FVector::ZeroVector; double At=-1.; int32 Shooter=INDEX_NONE; };
+ struct FArtilleryRaidChase { FVector Target=FVector::ZeroVector; double EvidenceAt=-1.,FlashAt=-1.,ArrivedAt=-1.; bool bFlash=false; };
+ FArtilleryRaidFlash ArtilleryRaidFlashes[2];
+ TMap<int32,FArtilleryRaidChase> ArtilleryRaidChases;
+ double ArtilleryRaidClearedAt[2]={-1.,-1.}; // Do not restart a cleared search on the same evidence.
  mutable TMap<int32,int32> MortarPostChoices;
  void GenerateArtilleryPosts();
  void UpdateArtilleryRaids(int32 Team);
@@ -239,6 +248,10 @@ public:
 		float FrontStepAt = 0.f; /* front-holding group: when its line last stepped forward */
 		float FrontBackAt = -100.f; /* front-holding group: when rows last fell back for damage */
 		bool bFrontDrawn = false; /* front-holding group: FrontHold is a line the player drew (SetDrawnFrontLine); it does not step or fall back */
+		TArray<uint8> FrontGap; /* front-holding group: 1 for each row left empty (open ground between covered rows); kept for the hysteresis */
+		int32 FrontNeed = 0; /* front-holding group: squads its line needs (0: not counted yet); the rest go back unassigned */
+		float FrontReleaseAt = -100.f; /* front-holding group: when squads above the need were last released */
+		float FrontExcessSince = -1.f; /* front-holding group: since when it has had more squads than its need (-1: not now) */
 		FVector SurpriseBridgeEntry = FVector::ZeroVector, SurpriseBridgeExit = FVector::ZeroVector, SurpriseBridgeGoal = FVector::ZeroVector;
 		float SurpriseWaitAt = -1.f, SurpriseLogAt = 0.f, SurpriseEndAt = 0.f; /* surprise group: since when its lead waits for the others; next progress log; when it ends whatever its phase */ };
 	bool UpdateSurpriseBridge(FBattleGroup& Group,const FVector& Lead);
@@ -334,6 +347,37 @@ public:
 	// Positions from the team's scout reports of the last ScoutReportMemory seconds (keys below zero, never unit IDs).
 	void AddScoutReportSightings(int32 Team, TMap<int32, FVector>& Seen) const;
 	void AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObjectives]) const;
+ // Strategy layer, stage S1 (BattleStrategy.cpp, Docs/design-strategy-layer.md): the team's situation map. Theatres are the objectives'
+ // Voronoi cells (by Y on three-objective maps, as AreaFronts), plus the enemy home zone (index N) and the own home zone (N+1), each
+ // within 150 m of that home. Own soldiers and known enemies (sightings now, scout reports, and remembered contacts weighted by
+ // age) only; never the enemy's true positions. Built on demand without touching any cache (AreaIntelView is not called).
+ struct FSituationTheatre { int32 Own=0; double OwnPower=0; int32 Fresh=0; double Memory=0; double KnownPower=0; double EnemySeenAge=-1, PointSeenAge=-1; int32 Owner=-2; uint8 State=0; /* 0 unknown, 1 enemy ahead, 2 even, 3 own ahead */ };
+ struct FBattleSituation { double At=-1; TArray<FSituationTheatre> Theatres; };
+ int32 TheatreOf(int32 Team, const FVector& P) const;
+ // Sector maps (H, I, J): theatres by path over passable sectors (Docs/design-terrain-ai.md 3-1), built once per map from the sector
+ // kinds only: the sector -> theatre table and, per theatre, a bit for each theatre whose sectors touch it (3-2). Empty elsewhere.
+ void BuildSectorTheatres() const;
+ mutable TArray<int8> SectorTheatres;
+ mutable TArray<uint16> TheatreNeighbours;
+ mutable FString SectorTheatresMap;
+ void BuildSituation(int32 Team, FBattleSituation& Out) const;
+ // -BattleSituationLog=1 (default 0): BATTLE_SITUATION every 30 match seconds per team and theatre, with the true enemy count of the
+ // theatre after '|' for evaluation only (counted inside the log function; no decision reads it). Does not change the match.
+ static bool SituationLogOn();
+ void UpdateSituationLog();
+ int32 SituationLogBucket = -1;
+ // Stage S2 (-BattleStrategy=2, -BattleStrategyTeam=0/1 for one team): recon -> focus attack. UpdateStrategy runs once per team order
+ // update (before AreaIntent is read): after the opening it picks the focus objective from the situation map, keeps it at least
+ // StrategyFocusHold seconds, reviews every StrategyReview seconds and at once when the focus is taken. State in Area.Strategy*.
+ static int32 StrategyLevel();
+ static bool StrategyOn(int32 Team, int32 Level);
+ static float StrategyOpenSeconds();      // before the first review (x match length / 600)
+ static float StrategyFocusHoldSeconds(); // least time a focus is kept
+ int32 StrategyFocusPoint(int32 Team) const; // INDEX_NONE without a valid focus
+ void UpdateStrategy(int32 Team);
+ // Stage S3 (-BattleStrategy=3): own points held against a known superior enemy (Area.StrategyHoldMask).
+ int32 StrategyHoldPoint(int32 Team) const; // the one threatened longest; INDEX_NONE without holds
+ bool StrategyHolds(int32 Team, int32 Point) const;
 	// Objective worth (FMapDef::ObjectiveValues; 1 where the map sets none): multiplies its income and its end score.
 	float ObjectiveValue(int32 Point) const;
 	// Resources a team gains per income tick from the objectives it truly owns now (before the time ramp): base + per point x value x map scale.

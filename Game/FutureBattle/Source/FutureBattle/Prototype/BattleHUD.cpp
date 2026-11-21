@@ -142,6 +142,38 @@ void ABattleHUD::DrawHUD()
   else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch)Label(TEXT("本拠地・保有拠点で補給：1発につき資源1 ／ F8 保存 ／ F9 読込 ／ 支援攻撃なし"),28,172,Mint,.85f);
   else if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("固定戦力 ／ 増援・補給・支援攻撃なし"),28,172,Mint,.85f);
 		else Label(FString::Printf(TEXT("[B] 支援攻撃 400 ／ 残り%d ／ 再装填 %.0f秒 ／ 選択部隊が知る位置へ"), 3 - Match->SupportUsed[0], Match->SupportCooldown[0]), 28, 172, Mint, .85f);
+  // Strategy band (Docs/design-strategy-ui.md 2.1, display only): the own AI's plan, for the squads the player delegated. Shown only
+  // while the strategy layer runs for team 0 (-BattleStrategy>=2); the opponent's plan is never shown.
+  if(Match->bArea&&UBattleMatch::StrategyOn(0,2))
+  {
+   const int32 Focus=Match->StrategyFocusPoint(0);
+   const float Open=UBattleMatch::StrategyOpenSeconds()*Match->MatchTimeLimit()/600.f;
+   FString Plan;
+   if(Match->Elapsed<Open)Plan=FString::Printf(TEXT("AIの方針：展開中（集中先は %.0f秒後に決める）"),Open-Match->Elapsed);
+   else if(Focus==INDEX_NONE)Plan=TEXT("AIの方針：展開（集中先の候補なし。見えている戦線が無い）");
+   else
+   {
+    const float Left=Match->Area.StrategyFocusAt.IsValidIndex(0)?Match->Area.StrategyFocusAt[0]+UBattleMatch::StrategyFocusHoldSeconds()-Match->Elapsed:0.f;
+    Plan=Left>0?FString::Printf(TEXT("AIの方針：集中 → 拠点%c（あと%.0f秒は変えない）"),TCHAR('A'+Focus),Left):FString::Printf(TEXT("AIの方針：集中 → 拠点%c（見直し待ち）"),TCHAR('A'+Focus));
+   }
+   FString Holds;int32 HoldBits=0;
+   for(int32 I=0;I<Match->Objectives.Num()&&I<31;++I)if(Match->StrategyHolds(0,I)){HoldBits|=1<<I;Holds+=FString::Printf(TEXT("%s拠点%c"),Holds.IsEmpty()?TEXT(""):TEXT("・"),TCHAR('A'+I));}
+   if(!Holds.IsEmpty())Plan+=FString::Printf(TEXT(" ／ 保持：%s"),*Holds);
+   DrawRect(Ink,16,193,560,22);Label(Plan+TEXT("（委任した部隊）"),28,196,FLinearColor(1.f,.85f,.35f),.8f);
+   // Notices when the plan changes (2.3): the reason is not stored, so the text says what changed.
+   if(auto* NoticePC=Cast<ABattleController>(PlayerOwner))
+   {
+    if(ShownStrategyFocus!=-2&&Focus!=ShownStrategyFocus)
+     NoticePC->PushNotice(6,Focus==INDEX_NONE?FString(TEXT("方針の変更：集中をやめた")):ShownStrategyFocus>=0?FString::Printf(TEXT("方針の変更：集中 拠点%c → 拠点%c"),TCHAR('A'+ShownStrategyFocus),TCHAR('A'+Focus)):FString::Printf(TEXT("方針：拠点%c に集中"),TCHAR('A'+Focus)),
+      Focus!=INDEX_NONE?Match->Objectives[Focus].Position:Match->AreaHome(0));
+    if(ShownStrategyHolds>=0)for(int32 I=0;I<Match->Objectives.Num()&&I<31;++I)
+    {
+     const bool bNow=(HoldBits>>I)&1,bBefore=(ShownStrategyHolds>>I)&1;
+     if(bNow!=bBefore)NoticePC->PushNotice(6,bNow?FString::Printf(TEXT("拠点%c を保持（敵が優勢）"),TCHAR('A'+I)):FString::Printf(TEXT("拠点%c の保持を解除"),TCHAR('A'+I)),Match->Objectives[I].Position);
+    }
+   }
+   ShownStrategyFocus=Focus;ShownStrategyHolds=HoldBits;
+  }
 		for (const auto& Strike : Match->Strikes)
 		{
 			FVector2D Point;
@@ -508,6 +540,15 @@ void ABattleHUD::DrawMinimap()
  DrawRect(Ink,Map.Origin.X-5,Map.Origin.Y-24,Map.Size.X+10,Map.Size.Y+29);
  DrawText(TEXT("地図（観測情報のみ）"),Muted,Map.Origin.X,Map.Origin.Y-20,GEngine->GetSmallFont(),.8f);
  DrawRect(Ground,Map.Origin.X,Map.Origin.Y,Map.Size.X,Map.Size.Y);
+ // Sector maps: impassable mountains (brown) and lakes (blue) - public map knowledge (map J, 2026-11-22).
+ if(BattleFieldLayout::Of(GetWorld()).bSectors)
+  for(int32 SX=0;SX<BattleSectors::Columns;++SX)for(int32 SY=0;SY<BattleSectors::Rows;++SY)
+  {
+   const char Terrain=BattleFieldLayout::SectorKind(GetWorld(),FIntPoint(SX,SY));if(Terrain!='M'&&Terrain!='L')continue;
+   const FVector Mid=BattleSectors::Center(FIntPoint(SX,SY));const double HalfCell=BattleSectors::Size*.5;
+   const FVector2D A=Map.ToScreen(Mid+FVector(HalfCell,-HalfCell,0)),B=Map.ToScreen(Mid+FVector(-HalfCell,HalfCell,0));
+   DrawRect(Terrain=='M'?FLinearColor(.24f,.2f,.15f,.95f):FLinearColor(.08f,.2f,.38f,.95f),FMath::Min(A.X,B.X),FMath::Min(A.Y,B.Y),FMath::Abs(B.X-A.X),FMath::Abs(B.Y-A.Y));
+  }
  // Map E: the city block outline (public map knowledge).
  if(const FVector2D City=BattleFieldLayout::Of(GetWorld()).CityHalf;City.X>0) Frame(Map.ToScreen(FVector(City.X,-City.Y,0)),Map.ToScreen(FVector(-City.X,City.Y,0)),Muted);
  // Roads of the map (public map knowledge): the routes squads follow. The three main routes are brighter than the connectors.

@@ -163,7 +163,7 @@ static FString JaUncached(const FString& Text)
 
 FString BattleUIText::SaveResult(bool bSuccess,bool bLoading,const FString& Detail)
 {
- if(Detail==TEXT("Save file exceeds size limit"))return TEXT("保存ファイルがサイズ上限（64 MiB）を超えています");
+ if(Detail==TEXT("Save file exceeds size limit"))return TEXT("保存ファイルがサイズ上限（1 GiB）を超えています");
  if(Detail==TEXT("Weapon or health inconsistent with squad type"))return TEXT("保存された武器または耐久値が兵種と一致しません");
  if(bSuccess)return bLoading?TEXT("試合を読み込みました（道筋の最終命令・複数選択・作戦カメラは復元対象外）"):
   TEXT("試合を保存しました [F9で読込]（道筋の最終命令・複数選択・作戦カメラは保存対象外）");

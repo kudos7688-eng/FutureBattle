@@ -32,6 +32,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "Niagara",
+			"Enabled": true
+		},
+		{
 			"Name": "AnimToTexture",
 			"Enabled": true,
 			"TargetAllowList": [

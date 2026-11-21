@@ -62,7 +62,12 @@ bool BattleSaveValidation::Contact(const FBattleContact& Value,int32 ObserverTea
 
 USaveGame* BattleSaveValidation::Decode(const TArray<uint8>& Bytes,FString& Error)
 {
- if(Bytes.Num()>MaxBytes){Error=TEXT("Save file exceeds size limit");return nullptr;}
+ return Decode(Bytes,Error,MaxBytes);
+}
+
+USaveGame* BattleSaveValidation::Decode(const TArray<uint8>& Bytes,FString& Error,int32 Limit)
+{
+ if(Bytes.Num()>Limit){Error=TEXT("Save file exceeds size limit");return nullptr;}
  USaveGame* Decoded=Bytes.IsEmpty()?nullptr:UGameplayStatics::LoadGameFromMemory(Bytes);
  Error=Decoded?FString():TEXT("No compatible save found");
  return Decoded;
@@ -269,7 +274,7 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
    E.ArrivalAge=double(Elapsed)-double(G.ArrivedAt);E.Extensions=G.Extensions;
    E.Kind=G.Kind;E.SurpriseRow=G.SurpriseRow;E.SurpriseBridgeStage=G.SurpriseBridgeStage;E.SurpriseBridgeLeader=G.SurpriseBridgeLeader;
    E.SurpriseBridgeAge=double(Elapsed)-double(G.SurpriseBridgeAt);E.SurpriseNextCol=G.SurpriseNextCol;
-   E.FrontHold=G.FrontHold;E.bFrontDrawn=G.bFrontDrawn;E.FrontBackAge=double(Elapsed)-double(G.FrontBackAt);E.FrontStepAge=double(Elapsed)-double(G.FrontStepAt);
+   E.FrontHold=G.FrontHold;E.FrontGap=G.FrontGap;E.FrontNeed=G.FrontNeed;E.FrontReleaseAge=double(Elapsed)-double(G.FrontReleaseAt);E.FrontExcessAge=G.FrontExcessSince<0.f?-1.:double(Elapsed)-double(G.FrontExcessSince);E.bFrontDrawn=G.bFrontDrawn;E.FrontBackAge=double(Elapsed)-double(G.FrontBackAt);E.FrontStepAge=double(Elapsed)-double(G.FrontStepAt);
    E.SurpriseBridgeEntry=G.SurpriseBridgeEntry;E.SurpriseBridgeExit=G.SurpriseBridgeExit;E.SurpriseBridgeGoal=G.SurpriseBridgeGoal;
    E.bSurpriseWaiting=G.SurpriseWaitAt>=0.f;E.SurpriseWaitAge=E.bSurpriseWaiting?double(Elapsed)-double(G.SurpriseWaitAt):0.;
    E.SurpriseLogRemaining=double(G.SurpriseLogAt)-double(Elapsed);E.SurpriseEndRemaining=double(G.SurpriseEndAt)-double(Elapsed);
@@ -453,7 +458,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
    G.ArrivedAt=float(double(Elapsed)-E.ArrivalAge);G.Extensions=E.Extensions;
    G.Kind=E.Kind;G.SurpriseRow=E.SurpriseRow;G.SurpriseBridgeStage=E.SurpriseBridgeStage;G.SurpriseBridgeLeader=E.SurpriseBridgeLeader;
    G.SurpriseBridgeAt=float(double(Elapsed)-E.SurpriseBridgeAge);G.SurpriseNextCol=E.SurpriseNextCol;
-   G.FrontHold=E.FrontHold;G.bFrontDrawn=E.bFrontDrawn;G.FrontBackAt=float(double(Elapsed)-E.FrontBackAge);G.FrontStepAt=float(double(Elapsed)-E.FrontStepAge);
+   G.FrontHold=E.FrontHold;G.FrontGap=E.FrontGap;G.FrontNeed=E.FrontNeed;G.FrontReleaseAt=float(double(Elapsed)-E.FrontReleaseAge);G.FrontExcessSince=E.FrontExcessAge<0.?-1.f:float(double(Elapsed)-E.FrontExcessAge);G.bFrontDrawn=E.bFrontDrawn;G.FrontBackAt=float(double(Elapsed)-E.FrontBackAge);G.FrontStepAt=float(double(Elapsed)-E.FrontStepAge);
    G.SurpriseBridgeEntry=E.SurpriseBridgeEntry;G.SurpriseBridgeExit=E.SurpriseBridgeExit;G.SurpriseBridgeGoal=E.SurpriseBridgeGoal;
    G.SurpriseWaitAt=E.bSurpriseWaiting?float(double(Elapsed)-E.SurpriseWaitAge):-1.f;
    G.SurpriseLogAt=float(double(Elapsed)+E.SurpriseLogRemaining);G.SurpriseEndAt=float(double(Elapsed)+E.SurpriseEndRemaining);
@@ -515,6 +520,7 @@ bool UBattleMatch::SaveMatch(const FString& Slot)
  auto* Save=CaptureSnapshot();if(!Save||!Save->Validate(LastMessage))return false;
  TArray<uint8> SaveBytes;
  if(!UGameplayStatics::SaveGameToMemory(Save,SaveBytes)){LastMessage=TEXT("Could not write save file");return false;}
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SAVE_BYTES slot=%s bytes=%d limit=%d"),*Actual,SaveBytes.Num(),BattleSaveValidation::MaxBytes);
  if(SaveBytes.Num()>BattleSaveValidation::MaxBytes){LastMessage=TEXT("Save file exceeds size limit");return false;}
  const bool Saved=UGameplayStatics::SaveDataToSlot(SaveBytes,Actual,0);
  LastMessage=Saved?TEXT("Match saved [F9 to load]"):TEXT("Could not write save file");return Saved;

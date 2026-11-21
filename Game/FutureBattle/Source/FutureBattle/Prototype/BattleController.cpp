@@ -1,4 +1,7 @@
 #include "BattleController.h"
+#include "BattleAudio.h"
+#include "BattleEffects.h"
+#include "BattleFXCheck.h"
 #include "BattleUIText.h"
 #include "BattleTactics.h"
 #include "Engine/Canvas.h"
@@ -102,6 +105,9 @@ void ABattleController::BeginPlay()
 	{ TacticalPawn->SetActorLocation(FVector::ZeroVector); TacticalPawn->Zoom(1900); }
 	EnterTactical();
 	if (BattleFieldLayout::IsLarge(GetWorld())) { TacticalPawn->SetActorLocation(FVector(BattleFieldLayout::IsSightField(GetWorld())?-BattleFieldLayout::HomeDistance(GetWorld())+2000:-8500,0,0)); TacticalPawn->Zoom(3500); }
+	// Sounds and effects are loaded before the first shot (nothing is loaded with -nosound / -nullrhi).
+	BattleAudio::Preload(GetWorld());
+	BattleEffects::Preload(GetWorld());
 }
 
 void ABattleController::SetupInputComponent()
@@ -978,6 +984,10 @@ void ABattleController::PlayerTick(float DeltaTime)
 		}
 		if (Unit->IsAlive()) Unit->ReloadIfEmpty();
 	}
+	// Sound only (BattleAudio, 2026-11-22): the command view's listener, the controlled soldier's weapon handling, match cues.
+	BattleAudio::TickPlayer(this, bTriggerHeld);
+	// Test only (-BattleFXCheck, Setup/Test-SoundFX.ps1).
+	BattleFXCheck::Tick(this);
 }
 
 void ABattleController::BindLeaderDeaths()
@@ -1128,7 +1138,7 @@ void ABattleController::UpdateNoticeLog(bool bForce)
  if(!Match||!Match->bArea||!L||!L->IsEnabled()||!BattleFieldLayout::IsSightField(GetWorld())) return;
  const double Now=GetWorld()->GetTimeSeconds(); if(!bForce&&Now<NextNoticePoll) return; NextNoticePoll=Now+.25;
  // A new match (F5 or a load to an earlier time) starts a fresh log.
- if(Match->Elapsed+1.f<NoticeElapsed){NoticeLog.Reset();LastHomeHP=-1;LastObservedOwner.Reset();LastSquadActive.Reset();AmmoWarned.Reset();ReasonHistory.Reset();bEnemyHomeWeakNoted=false;ScoutAlertsSeen.Reset();ScoutReportsSeen.Reset();EnemyObserversNoted.Reset();}
+ if(Match->Elapsed+1.f<NoticeElapsed){NoticeLog.Reset();LastHomeHP=-1;LastFrontReleased=-1;LastObservedOwner.Reset();LastSquadActive.Reset();AmmoWarned.Reset();ReasonHistory.Reset();bEnemyHomeWeakNoted=false;ScoutAlertsSeen.Reset();ScoutReportsSeen.Reset();EnemyObserversNoted.Reset();}
  NoticeElapsed=Match->Elapsed;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Own home.
@@ -1138,6 +1148,10 @@ void ABattleController::UpdateNoticeLog(bool bForce)
   if(LastHomeHP>=0 && HP<LastHomeHP) PushNotice(0,FString::Printf(TEXT("本拠地が攻撃を受けている（耐久 %.0f）"),HP),Match->AreaHome(0));
   LastHomeHP=HP;
  }
+ // The front army released squads above its line's need to the reserve (unassigned).
+ if(LastFrontReleased>=0 && Match->FrontReleased[0]>LastFrontReleased)
+  PushNotice(1,FString::Printf(TEXT("前線軍：前線に要らない%d部隊を予備（未所属）に回しました"),Match->FrontReleased[0]-LastFrontReleased),Match->AreaHome(0));
+ LastFrontReleased=Match->FrontReleased[0];
  // Points as the player's side last observed them.
  const int32 N=Match->Objectives.Num();
  if(LastObservedOwner.Num()!=N){LastObservedOwner.Init(-3,N);}

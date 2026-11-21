@@ -381,10 +381,13 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
  if(End){Diag.Cover(A->bFree?TEXT("fire_position_cancelled"):End);CoverApproaches.Remove(ID);return false;}
  if(Target!=A->Target && !A->bKeptTargetChange){A->bKeptTargetChange=true;Diag.Cover(TEXT("approach_kept_after_target_change"));}
  auto& B=Bodies.FindChecked(ID);const FVector D=(A->Goal-Pos).GetSafeNormal2D();
- if(B.Actor.IsValid()){B.Actor->AddMovementInput(D);B.Velocity=B.Actor->GetVelocity();}
+ // -BattleStanceMove=2: crouched or crawling on the way to cover, at that stance's share of the speed.
+ const float StanceScale=BattleStance::MoveMode()>=2?BattleStance::MoveScale(StanceOf(ID)):1.f;
+ if(StanceScale<1.f)SightExperiment.Cover(StanceOf(ID)==BattleStance::Prone?TEXT("stance_move_prone_frames"):TEXT("stance_move_crouch_frames"));
+ if(B.Actor.IsValid()){B.Actor->AddMovementInput(D,StanceScale);B.Velocity=B.Actor->GetVelocity();}
  else
  {
-  FHitResult Hit;B.Capsule->MoveComponent(D*FMath::Min(GetDefault<UBattleTuning>()->MoveSpeed*Dt,float(FVector::Dist2D(Pos,A->Goal))),B.Capsule->GetComponentQuat(),true,&Hit);
+  FHitResult Hit;B.Capsule->MoveComponent(D*FMath::Min(GetDefault<UBattleTuning>()->MoveSpeed*StanceScale*Dt,float(FVector::Dist2D(Pos,A->Goal))),B.Capsule->GetComponentQuat(),true,&Hit);
   auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=B.Capsule->GetComponentLocation();B.Velocity=(F.Position-Pos)/FMath::Max(.001f,Dt);
  }
  return true;

@@ -21,3 +21,9 @@
 `BattleMixedSaveSmoke.cpp` に不適合武器、弾倉・予備弾・HP超過、64 MiB超バッファの拒否と、最大HP・予備弾を持つ装填中状態の受理を追加。HP=10000のfixtureは通常の最大HPへ変更した。
 
 ユーザー指示によりビルド・Editor起動・テスト・PowerShell試験スクリプトは実行していない。STATUS.md / Docs/journalは変更していない。CODEMAP / SWITCHES は指定Python生成器で再生成し、差分の空白検査のみを行う。
+
+## 訂正：S10 の上限を 1 GiB に（2026-11-22）
+
+64 MiB の上限は、マップA の正常な保存を断っていた。マップA・30FPS・`-RoundTripSave` の試合が、80秒目の保存で毎回 `BATTLE_MIXED_SAVE_SOAK_RESULT failures=1 message=Save file exceeds size limit` になった（実装計画ロードマップの報告。main 216dd58・90a2dc5 の凍結ビルド。E・F・H・I は合格）。取り込みの確認をマップE だけで行ったため、見落とした。マップA は兵が最も多く、観測の記録（観測者×相手）がタグ付きの形式で保存されるので、正常でも大きい。
+
+直し：`BattleSaveValidation::MaxBytes` を 1 GiB にした（ありえない大きさのファイルを読む前に断る役目は残す）。保存のたびに `BATTLE_SAVE_BYTES slot=… bytes=… limit=…` を出す。スモーク試験は上限ちょうどの配列を作らず、小さい上限（4096）を渡す `Decode(Bytes,Error,Limit)` で同じ検査を確かめる。画面の文言も「1 GiB」に。保存の中身は変えないので、試合の結果は変わらない。
