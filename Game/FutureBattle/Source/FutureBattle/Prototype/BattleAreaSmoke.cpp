@@ -193,8 +193,9 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    if(Fresh)for(int32 ID:NewSquad->Members)Fresh&=ID>MaxID&&Store->Find(ID)->IsAlive()&&Store->Find(ID)->bActorRepresentation==(ID==NewSquad->LeaderUnitID);
    const int32 NewLeader=NewSquad?NewSquad->LeaderUnitID:0;
    Check(Fresh&&NewSID==51&&FVector::Dist2D(Position(NewSquad->LeaderUnitID),M->AreaHome(0))<=2500,TEXT("hired squad gets a new number, new IDs, an Actor leader and home placement"));
-   // The fixture starts with 25 squads per team, so the full-slot rejection is only reachable at the default limit.
-   if(BattleTactics::AreaHire().MaxActive==25)Check(!M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==Before-HireCost,TEXT("no free slot rejects hiring at 25 active squads"));
+   // The fixture starts with 25 squads per team, so the full-slot rejection is only reachable when the limit is 25 (-BattleAreaMaxSquads=25;
+   // the default is 30 since 2026-11-20). Buying more squads here would break the resource conservation the later save checks verify.
+   if(M->ActiveSquads(0)>=BattleTactics::AreaHire().MaxActive)Check(!M->HireSquad(0,EBattleTraining::Regular)&&M->Credits[0]==Before-HireCost,*FString::Printf(TEXT("no free slot rejects hiring at %d active squads"),BattleTactics::AreaHire().MaxActive));
    if (Fresh)
    {
     auto* Leader = Actor(NewLeader);
@@ -340,9 +341,14 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      if(M->Credits[0]<SCost){const int32 Add=SCost-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
      const int32 C1=M->Credits[0];const bool SHired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Supply);
      int32 SupplyID=0;for(const auto& P:Store->GetSquads())SupplyID=FMath::Max(SupplyID,P.Key);const auto* SS=Store->FindSquad(SupplyID);
-     bool SGood=SHired&&SS&&SCost==10&&M->Credits[0]==C1-SCost&&SS->SquadType==BattleSquadType::Supply&&SS->Members.Num()==3&&SS->DisplayName.Contains(TEXT("補給班"));
-     if(SGood){const FVector At=Position(SS->LeaderUnitID);SGood=M->SupplyTeamNear(0,At+FVector(2000,0,0))&&!M->SupplyTeamNear(0,At+FVector(4000,0,0))&&!M->SupplyTeamNear(1,At);}
-     Check(SGood,TEXT("supply team: 3 soldiers, 10 resources, own squads within 30 m of its leader are supplied"));
+     // Supply vehicle (2026-11-20, replaces the 3-soldier supply team): one vehicle, full stock when bought, supplies within 30 m while
+     // it has stock, none when empty; it then drives home to load; loading at home fills it again (BattleSupplyCar.cpp).
+     bool SGood=SHired&&SS&&SCost==10&&M->Credits[0]==C1-SCost&&SS->SquadType==BattleSquadType::Supply&&SS->Members.Num()==1&&IsVehicle(SS->LeaderUnitID)&&SS->DisplayName.Contains(TEXT("補給車"));
+     if(SGood){const FVector At=Position(SS->LeaderUnitID);SGood=M->SupplyStockOf(SupplyID)==M->SupplyStockMax()&&M->SupplyTeamNear(0,At+FVector(2000,0,0))&&!M->SupplyTeamNear(0,At+FVector(4000,0,0))&&!M->SupplyTeamNear(1,At)&&M->SupplyCarNear(0,At+FVector(15000,0,0),20000.f)==SupplyID;
+      M->SpendSupply(SupplyID,M->SupplyStockMax());FVector Goal;EBattleOrder Order=EBattleOrder::Hold;
+      SGood&=M->SupplyStockOf(SupplyID)==0&&!M->SupplyTeamNear(0,At+FVector(2000,0,0))&&M->SupplyCarOrder(SupplyID,0,Goal,Order)&&Order==EBattleOrder::Move&&FVector::Dist2D(Goal,M->AreaHome(0))<1500.;
+      M->RestockSupplyCar(SupplyID);SGood&=M->SupplyStockOf(SupplyID)==M->SupplyStockMax()&&M->SupplyTeamNear(0,At+FVector(2000,0,0));}
+     Check(SGood,TEXT("supply vehicle: one vehicle, 10 resources, supplies own squads within 30 m while it has stock, goes home to load when empty"));
     }
     const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::AntiTank);
     if(M->Credits[0]<Cost){const int32 Add=Cost-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
@@ -456,6 +462,12 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      TankGuns=SavedGuns;
      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_TANK_GUN_SMOKE tank=%d enemy=%d own=%d after2=%.0f"),TankID,EnemyTank,OwnTank,After2);
     }
+    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleObservedArmour=")))Check(!BattleTactics::ObservedArmour(),TEXT("observed armour defaults OFF"));
+    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleVehicleHitCover=")))Check(!BattleTactics::VehicleHitCover(),TEXT("vehicle hit cover defaults OFF"));
+    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleTankGunFlash=")))Check(!BattleTactics::TankGunFlash(),TEXT("tank gun flash defaults OFF"));
+    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleArtilleryPosts=")))Check(!BattleTactics::ArtilleryPosts(),TEXT("artillery posts default OFF"));
+    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleArtilleryFlash=")))Check(!BattleTactics::ArtilleryFlash(),TEXT("artillery flash defaults OFF"));
+    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleSPGRange=")))Check(ArtilleryMaxRange(true)==GetDefault<UBattleTuning>()->SPGRange,TEXT("SPG range defaults to config"));
     // Armour AI, stage 3 (BattleArmourAI.cpp): the tank's objective is kept on the next pick and its overwatch post lies short of the
     // point on the own side; a stopped hull turns no faster than its turn rate; no reaction without a threat or a hit; an enemy vehicle
     // the team knows of sends the anti-tank teams to the nearest point and changes the AI's own mix (anti-tank team, second tank).
@@ -1159,11 +1171,40 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   }
   // Notification log (command UI): the stopped squads and observed points of this fixture appear before the screenshot.
   PC->UpdateNoticeLog(true);Check(PC->VisibleNotices().Num()>0,TEXT("notification log records observed events"));
-  // Squad list view: the stopped filter shows exactly the stopped squads; the loss sort keeps every row.
+  // Squad list view (army tabs, 2026-11-21): no tab lists a stopped squad; the loss sort keeps every row; the front and attack army
+  // tabs list each own group once (the front-holding group in the first), followed only by its own active squads; front + attack +
+  // unassigned = all active squads. Dropping a squad on the front army pins it there; dropping it on "unassigned" takes it out.
   {
-   PC->SquadFilter=4;const auto Stopped=PC->SquadListRows();bool AllStopped=Stopped.Num()>0;for(const auto& R:Stopped)AllStopped&=!R.bActive;
-   PC->SquadFilter=0;PC->SquadSort=1;const int32 Sorted=PC->SquadListRows().Num();PC->SquadSort=0;
-   Check(AllStopped&&Sorted==PC->SquadListRows().Num(),TEXT("squad list filter and sort"));
+   PC->SquadFilter=3;PC->SquadSort=1;const int32 Sorted=PC->SquadListRows().Num();PC->SquadSort=0;
+   const auto AllList=PC->SquadListRows();const int32 AllRows=AllList.Num();bool NoStopped=true;for(const auto& R:AllList)NoStopped&=R.Squad.bActive;
+   int32 Stopped=0;for(const auto& P:Store->GetSquads())Stopped+=P.Value.Team==0&&P.Value.CommandStatus!=EBattleCommandStatus::Active;
+   // A player group of two active own squads for this check (groups are not saved; it is disbanded below).
+   TArray<int32> Pair;for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Value.CommandStatus==EBattleCommandStatus::Active&&M->GroupOf(P.Key)==INDEX_NONE&&Pair.Num()<2)Pair.Add(P.Key);
+   const int32 TestGroup=Pair.Num()==2?M->FormGroup(0,Pair,true):INDEX_NONE;
+   int32 Headers=0,Members=0;bool GroupsOk=true;
+   for(uint8 Filter=0;Filter<2;++Filter)
+   {
+    PC->SquadFilter=Filter;int32 Current=INDEX_NONE;
+    for(const auto& R:PC->SquadListRows())
+    {
+     if(R.bNewGroup){GroupsOk&=Filter==1;continue;}
+     if(R.bGroupHeader){++Headers;Current=R.GroupID;GroupsOk&=M->Groups.Contains(R.GroupID)&&M->Groups[R.GroupID].Team==0&&(M->Groups[R.GroupID].Kind==1)==(Filter==0);}
+     else{++Members;GroupsOk&=R.Squad.bActive&&R.GroupID==Current&&M->GroupOf(R.Squad.SquadID)==Current;}
+    }
+   }
+   PC->SquadFilter=2;int32 Ungrouped=0;for(const auto& R:PC->SquadListRows()){++Ungrouped;GroupsOk&=R.Squad.bActive&&M->GroupOf(R.Squad.SquadID)==INDEX_NONE;}
+   GroupsOk&=Headers==PC->OwnGroupIDs().Num()&&Members+Ungrouped==AllRows&&NoStopped;
+   GroupsOk&=TestGroup!=INDEX_NONE&&Headers>=1&&Members>=2;
+   bool DropOk=false;
+   if(TestGroup!=INDEX_NONE)
+   {
+    DropOk=M->AssignArmy(Pair[0],1)&&M->ArmyOf(Pair[0])==1&&M->ArmyPinned.Contains(Pair[0]);
+    DropOk&=M->AssignArmy(Pair[0],0)&&M->ArmyOf(Pair[0])==0;
+    M->ArmyPinned.Remove(Pair[0]);
+    if(M->Groups.Contains(TestGroup))M->DissolveGroup(TestGroup,TEXT("test"));
+   }
+   PC->SquadFilter=0;
+   Check(Sorted==AllRows&&GroupsOk&&DropOk,*FString::Printf(TEXT("squad list army tabs and sort (groups %d, grouped %d, ungrouped %d, stopped hidden %d, all %d, drop %d)"),Headers,Members,Ungrouped,Stopped,AllRows,DropOk?1:0));
   }
   // Command bar: the attack-move button arms the same pending order as the T key; the move button clears it.
   { PC->PressCommandButton(1);const bool Armed=PC->PendingOrder==EBattleOrder::AttackMove;PC->PressCommandButton(0);

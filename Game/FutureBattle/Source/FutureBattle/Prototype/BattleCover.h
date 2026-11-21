@@ -30,10 +30,16 @@ public:
 	bool IsAvailable(int32 Slot, int32 UnitID, double Now) const;
 	bool Reserve(int32 Slot, int32 UnitID, double Now);
 	void Release(int32 UnitID);
-	void ResetReservations() { Reservations.Reset(); }
+	void ResetReservations() { Reservations.Reset(); UnitToSlot.Reset(); }
 	int32 Owner(int32 Slot, double Now) const;
 private:
 	bool bBuilt = false;
 	UPROPERTY() TArray<FVector> Slots;
 	UPROPERTY() TMap<int32, FBattleCoverReservation> Reservations;
+	// Derived only; restore rebuilds reservations through Reserve in the original caller order.
+	TMap<int32, int32> UnitToSlot;
+	TMap<FIntPoint, TArray<int32>> SlotCells;
+	TArray<TArray<int32>> ConflictSlots;
+	bool bSlotIndexValid = false;
+	void BuildSlotIndex();
 };

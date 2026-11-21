@@ -28,7 +28,7 @@ int32 UBattleMatch::AreaScore(int32 Team)const
 void UBattleMatch::InitializeArea()
 {
  BattleComposition::LogStart(); // stage 1: returns before constructing definitions when OFF
- Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;Score[0]=Score[1]=0;
+ Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();FireReveals[0].Reset();FireReveals[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
  // A team knows the objectives it holds from the start (the depots of map F).
@@ -41,6 +41,7 @@ void UBattleMatch::InitializeArea()
   Base->SetActorScale3D(FVector(4,4,4));Base->GetStaticMeshComponent()->SetCanEverAffectNavigation(false);
   Base->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));BaseActors.Add(Base);
  }
+ if(BattleTactics::ArtilleryPosts())GenerateArtilleryPosts();
  InitializeComposition();
  if(FParse::Param(FCommandLine::Get(),TEXT("BattleAreaSmoke")))
  {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,GetWorld()->GetSubsystem<UBattleLeaderRuntime>(),&UBattleLeaderRuntime::RunAreaSmoke,5.f,false);}
@@ -76,18 +77,6 @@ int32 UBattleMatch::ActiveSquads(int32 Team)const
  return Count;
 }
 int32 UBattleMatch::ActiveScouts(int32 Team)const{return ActiveOfType(Team,BattleSquadType::Scout);}
-bool UBattleMatch::SupplyTeamNear(int32 Team,const FVector& Position)const
-{
- const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
- const float Radius=FMath::Clamp(GetDefault<UBattleTuning>()->SupplyTeamRadius,100.f,20000.f);
- for(const auto& Pair:Store->GetSquads())
- {
-  const auto& S=Pair.Value;if(S.Team!=Team||S.SquadType!=BattleSquadType::Supply||S.CommandStatus!=EBattleCommandStatus::Active)continue;
-  const auto* Leader=Store->Find(S.LeaderUnitID);
-  if(Leader&&Leader->IsAlive()&&FVector::Dist2D(R->Position(S.LeaderUnitID),Position)<=Radius)return true;
- }
- return false;
-}
 int32 UBattleMatch::ActiveOfType(int32 Team,uint8 SquadType)const
 {
  int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==SquadType;
@@ -112,7 +101,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(SquadType==BattleSquadType::Mortar&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaMortarLimit))return Fail(TEXT("Mortar team limit reached"));
  if(SquadType==BattleSquadType::SPGun&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaSPGLimit))return Fail(TEXT("Self-propelled gun limit reached"));
  if(SquadType==BattleSquadType::Exo&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaExoLimit))return Fail(TEXT("Exoskeleton soldier limit reached"));
- if(SquadType==BattleSquadType::Supply&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaSupplyLimit))return Fail(TEXT("Supply team limit reached"));
+ if(SquadType==BattleSquadType::Supply&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaSupplyLimit))return Fail(TEXT("Supply vehicle limit reached"));
  if(Credits[Team]<Cost)return Fail(TEXT("Insufficient resources"));
  if(GetWorld()->GetSubsystem<UBattleState>()->GetSquads().Num()>=100)return Fail(TEXT("Squad record capacity reached (100 including lost squads)"));
  auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
@@ -130,7 +119,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(R->SightExperiment.Enabled)R->SightExperiment.HireTimes[Team].Add(Elapsed);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE team=%d squad=%d auto=%d cost=%d credits=%d cancelled_replacements=%d active=%d time=%.1f leader=%s home=%s"),
   Team,SID,bAuto?1:0,Cost,Credits[Team],Cancelled,ActiveSquads(Team),Elapsed,*R->Position(Store->FindSquad(SID)->LeaderUnitID).ToCompactString(),*AreaHome(Team).ToCompactString());
- LastMessage=SquadType==BattleSquadType::Supply?FString::Printf(TEXT("Supply team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Exo?FString::Printf(TEXT("Exoskeleton soldier deployed / -%d resources"),Cost):SquadType==BattleSquadType::SPGun?FString::Printf(TEXT("Self-propelled gun deployed / -%d resources"),Cost):SquadType==BattleSquadType::Mortar?FString::Printf(TEXT("Mortar team deployed / -%d resources"),Cost):SquadType==BattleSquadType::ArmoredCar?FString::Printf(TEXT("Armoured car deployed / -%d resources"),Cost):SquadType==BattleSquadType::Tank?FString::Printf(TEXT("Tank deployed / -%d resources"),Cost):SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
+ LastMessage=SquadType==BattleSquadType::Supply?FString::Printf(TEXT("Supply vehicle deployed / -%d resources"),Cost):SquadType==BattleSquadType::Exo?FString::Printf(TEXT("Exoskeleton soldier deployed / -%d resources"),Cost):SquadType==BattleSquadType::SPGun?FString::Printf(TEXT("Self-propelled gun deployed / -%d resources"),Cost):SquadType==BattleSquadType::Mortar?FString::Printf(TEXT("Mortar team deployed / -%d resources"),Cost):SquadType==BattleSquadType::ArmoredCar?FString::Printf(TEXT("Armoured car deployed / -%d resources"),Cost):SquadType==BattleSquadType::Tank?FString::Printf(TEXT("Tank deployed / -%d resources"),Cost):SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
  return true;
 }
 void UBattleMatch::UpdateAreaHiring()
@@ -175,6 +164,9 @@ void UBattleMatch::UpdateAreaHiring()
    // Armoured exoskeleton soldiers (trial -BattleAreaExoKeep, default AreaExoKeep 0): the same pacing, last.
    const int32 ExoWant=FMath::Min(HireIntent.ExoKeep,Bought/After);
    if(Type==BattleSquadType::Rifle&&ExoWant>0&&ActiveOfType(Team,BattleSquadType::Exo)<ExoWant)Type=BattleSquadType::Exo;
+   // Supply vehicles (trial -BattleAreaSupplyKeep, default AreaSupplyKeep 0; BattleSupplyCar.cpp): the same pacing, after everything else.
+   const int32 SupplyWant=FMath::Min(HireIntent.SupplyKeep,Bought/After);
+   if(Type==BattleSquadType::Rifle&&SupplyWant>0&&ActiveOfType(Team,BattleSquadType::Supply)<SupplyWant)Type=BattleSquadType::Supply;
   }
   // Composition trial: an expensive type the team is far from affording (below 60% of its cost) does not hold up the plain purchases.
   if(bComposition&&Type!=PlainType&&BattleSquadType::AreaCost(Type)>=20&&Credits[Team]-Pending<FMath::CeilToInt(BattleSquadType::AreaCost(Type)*.6f)+HireIntent.HireReserve)Type=PlainType;
@@ -266,6 +258,8 @@ void UBattleMatch::UpdateArea(float Dt)
  for(int32 SID:Squads)
  {
   const auto* S=Store->FindSquad(SID);const bool bHome=AtHome.Contains(SID);
+  // A supply vehicle at home loads its stock again (BattleSupplyCar.cpp).
+  if(bHome&&S->SquadType==BattleSquadType::Supply)RestockSupplyCar(SID);
   // Trial -BattleAreaPointSupply=1: the same ammunition refill at a point the squad's team owns (calm: not contested, not being captured).
   bool bPoint=false;
   if(!bHome&&BattleTactics::Supply().bPointAmmo&&S->CommandStatus==EBattleCommandStatus::Active)
@@ -273,15 +267,16 @@ void UBattleMatch::UpdateArea(float Dt)
    const FVector Leader=R->Position(S->LeaderUnitID);const float Radius=BattleTactics::Supply().PointRadius;
    for(const auto& Point:Objectives)if(Point.Owner==S->Team&&!Point.bContested&&Point.CapturingTeam==INDEX_NONE&&FVector::Dist2D(Leader,Point.Position)<=Radius){bPoint=true;break;}
   }
-  // A supply team of the squad's side nearby gives the same refill anywhere (always on; the AI does not buy supply teams).
-  const bool bTeamSupply=!bHome&&!bPoint&&S->CommandStatus==EBattleCommandStatus::Active&&SupplyTeamNear(S->Team,R->Position(S->LeaderUnitID));
+  // A supply vehicle of the squad's side nearby with stock left gives the same refill anywhere and loses the rounds it gave.
+  const int32 Car=!bHome&&!bPoint&&S->CommandStatus==EBattleCommandStatus::Active&&S->SquadType!=BattleSquadType::Supply?SupplyCarNear(S->Team,R->Position(S->LeaderUnitID)):INDEX_NONE;
+  const bool bTeamSupply=Car!=INDEX_NONE;
   if(!bHome&&!bPoint&&!bTeamSupply){Area.AmmoTimers.Remove(SID);continue;}
   float& AmmoTime=Area.AmmoTimers.FindOrAdd(SID);AmmoTime+=Step;
   if(AmmoTime>=10)
   {
    AmmoTime=0;int32 Rounds=0;for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive()){Rounds+=Store->AddReserve(ID,GetDefault<UBattleTuning>()->ReserveAmmo);Store->RefillLauncher(ID);Rounds+=Store->RefillSPGAmmo(ID);}
    if(bPoint&&Rounds>0)UE_LOG(LogFutureBattle,Display,TEXT("AREA_POINT_SUPPLY time=%.0f squad=%d team=%d rounds=%d"),Elapsed,SID,S->Team,Rounds);
-   if(bTeamSupply&&Rounds>0)UE_LOG(LogFutureBattle,Display,TEXT("AREA_TEAM_SUPPLY time=%.0f squad=%d team=%d rounds=%d"),Elapsed,SID,S->Team,Rounds);
+   if(bTeamSupply&&Rounds>0){SpendSupply(Car,Rounds);UE_LOG(LogFutureBattle,Display,TEXT("AREA_TEAM_SUPPLY time=%.0f squad=%d team=%d rounds=%d car=%d stock=%d"),Elapsed,SID,S->Team,Rounds,Car,SupplyStockOf(Car));}
   }
   if(!bHome)continue; // a point gives ammunition only: no healing, no replacements
   // Trial -BattleSupplyHeal>0: living members (leader included) recover HP at home, up to their own maximum.
@@ -340,6 +335,7 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
  I.MortarKeep=FMath::Clamp(bTrial&&S.MortarKeep>=0?S.MortarKeep:GetDefault<UBattleTuning>()->AreaMortarKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaMortarLimit));
  I.SPGKeep=FMath::Clamp(bTrial&&S.SPGKeep>=0?S.SPGKeep:GetDefault<UBattleTuning>()->AreaSPGKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaSPGLimit));
  I.ExoKeep=FMath::Clamp(bTrial&&S.ExoKeep>=0?S.ExoKeep:GetDefault<UBattleTuning>()->AreaExoKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaExoLimit));
+ I.SupplyKeep=FMath::Clamp(bTrial&&S.SupplyKeep>=0?S.SupplyKeep:GetDefault<UBattleTuning>()->AreaSupplyKeep,0,FMath::Max(0,GetDefault<UBattleTuning>()->AreaSupplyLimit));
  // S7/S8 trials (one team only with -BattleAreaTrialTeam).
  if(bTrial){I.FlankOffset=S.FlankOffset;I.bFlankSameSide=S.bFlankSameSide;I.BaseReturnLiving=S.BaseReturnLiving;}
  // Stage 2: time-phased team plans (match time only; no hidden information). Values are first trial values (numbers delegated).

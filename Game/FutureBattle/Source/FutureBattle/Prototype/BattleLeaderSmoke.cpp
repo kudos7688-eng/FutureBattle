@@ -25,9 +25,11 @@ void UBattleLeaderRuntime::RunSmoke()
   Check(CanSelectLeader(1) && !CanSelectLeader(2) && !CanSelectLeader(21),TEXT("only owned eligible leaders selectable"));
   Check(Summaries().Num()==2 && Summaries()[0].Name==TEXT("第1小隊"),TEXT("summary includes own squads only and stable names"));
   Check(Summaries()[0].Intent==EBattleSquadIntent::Unspecified && Summaries()[0].ProblemFlags==0,TEXT("intent and problem slots remain empty"));
-  const auto Layout=FBattleSquadListLayout::Make(FVector2D(1920,1080));
+  const auto Layout=FBattleSquadListLayout::Make(FVector2D(1920,1080),GetWorld());
   Check(Layout.VisibleRows==11 && Layout.RowAt(Layout.Origin+FVector2D(10,45))==0 && Layout.RowAt(Layout.Origin+FVector2D(10,5))==INDEX_NONE,TEXT("list rows and header hit regions"));
-  Check(FBattleSquadListLayout::Make(FVector2D(1280,720)).VisibleRows==7,TEXT("list resize to 720p"));
+  const auto SmallList=FBattleSquadListLayout::Make(FVector2D(1280,720),GetWorld());
+  const auto SmallBar=FBattleCommandBarLayout::Make(FVector2D(1280,720),GetWorld());
+  Check(SmallList.VisibleRows>0 && SmallList.VisibleRows<Layout.VisibleRows && SmallList.Origin.Y+SmallList.Height<=SmallBar.PanelTop && SmallList.Header+SmallList.VisibleRows*SmallList.RowHeight<=SmallList.Height,TEXT("list resize fits above wrapped command bar at 720p"));
   Check(!GetWorld()->GetSubsystem<UBattleMatch>()->SaveMatch(TEXT("LeaderUnsupported")),TEXT("unsupported save is rejected"));
   SmokePosition=Position(2); IssueOrder(1,EBattleOrder::Move,SmokePosition+FVector(650,0,0));
   Mode->bCombatPaused=false; Mode->CombatStartsAt=0;
@@ -96,7 +98,7 @@ void UBattleLeaderRuntime::RunUIQA()
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
  auto Check=[&](bool OK,const TCHAR* Label){ if(!OK) ++SmokeFailures; UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_LEADER_UI %s %s"),OK?TEXT("PASS"):TEXT("FAIL"),Label); };
- int32 W,H; PC->GetViewportSize(W,H); const auto Layout=FBattleSquadListLayout::Make(FVector2D(W,H));
+ int32 W,H; PC->GetViewportSize(W,H); const auto Layout=FBattleSquadListLayout::Make(FVector2D(W,H),GetWorld());
  if(QAStage==0)
  {
   int32 ExpectedW=1920, ExpectedH=1080; FParse::Value(FCommandLine::Get(),TEXT("ResX="),ExpectedW); FParse::Value(FCommandLine::Get(),TEXT("ResY="),ExpectedH);

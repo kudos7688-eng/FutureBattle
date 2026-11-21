@@ -11,6 +11,8 @@ if ($Map -eq 'H' -or $Map -eq 'I') {
     $extra += '-BattleLeaderGuard=1'
     # Player's move click = sector move that fires on the move; a drawn line = point move (BattlePlayerPath.cpp).
     $extra += '-BattleSectorMove=1'
+    # Grouped mortars and guns support the group's squads in trouble (trial, groupui play 2026-11-21).
+    $extra += '-BattleGroupFireSupport=1'
     if ($SectorAI) { $extra += '-BattleSectorAI=1' }
     # Sector AI trials (default off in matches): fire back when shot, sector route, flank and front stages, pass a crowded corner,
     # fire on the move until inside the sector (no stop: -BattleSquadCoverCheck and -BattleBounding left out, user 11-20), line up

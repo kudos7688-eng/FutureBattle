@@ -30,7 +30,7 @@ STATUS/ROADMAP/PROTOTYPEは追記型で、古い「未実装」「既定OFF」�
 
 ## 3. 環境と開始前確認
 
-作業ルートは `C:\Users\nanek\Documents\FPS\FutureBattle`。以下はWindows PowerShell/PowerShellから実行する。Bashの構文と混ぜない。Claude側にはローカルファイルの読み書きとPowerShell実行権限が必要で、通常のチャットへこの文書を渡しただけではゲームを実行できない。
+作業ルートは、既定では main の `C:\Users\nanek\Documents\FPS\FutureBattle`。別の作業ツリー（`FutureBattle-codex`・`FutureBattle-suppression` など）で作業するときは、下の `Set-Location` をその作業ツリーの場所に置き換える。スクリプトは自分の置き場所から対象のプロジェクトを決めるので、別の作業ツリーから main の場所に移ると、別の DLL・Config・STATUS を扱ってしまう。以下はWindows PowerShell/PowerShellから実行する。Bashの構文と混ぜない。Claude側にはローカルファイルの読み書きとPowerShell実行権限が必要で、通常のチャットへこの文書を渡しただけではゲームを実行できない。
 
 ```powershell
 Set-Location 'C:\Users\nanek\Documents\FPS\FutureBattle'

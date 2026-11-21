@@ -1,5 +1,8 @@
 #include "BattleController.h"
 #include "BattleUIText.h"
+#include "BattleTactics.h"
+#include "Engine/Canvas.h"
+#include "Engine/Engine.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleStance.h"
 #include "BattleBlindFire.h"
@@ -29,6 +32,44 @@
 #include "FutureBattle.h"
 #include "Misc/CommandLine.h"
 
+FBattleCommandBarLayout FBattleCommandBarLayout::Make(FVector2D View,const UWorld* World,bool bPad)
+{
+ static const TCHAR* const KeyNames[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("小隊を購入 [2]"), TEXT("重装歩兵 [3]"), TEXT("偵察組 [4]"), TEXT("対戦車班 [5]"), TEXT("戦車 [6]"), TEXT("装甲車 [7]"), TEXT("迫撃砲班 [8]"), TEXT("自走砲 [9]"), TEXT("外骨格 [0]"), TEXT("補給車 [-]") };
+ static const TCHAR* const PadNames[] = { TEXT("移動 [X]"), TEXT("攻撃移動 [Y]"), TEXT("防衛 [RB]"), TEXT("停止 [B]"), TEXT("手動指揮 [十字↑]"), TEXT("AIに委任 [十字↓]"), TEXT("小隊を購入 [十字←]"), TEXT("重装歩兵 [Aでクリック]"), TEXT("偵察組 [Aでクリック]"), TEXT("対戦車班 [Aでクリック]"), TEXT("戦車 [Aでクリック]"), TEXT("装甲車 [Aでクリック]"), TEXT("迫撃砲班 [Aでクリック]"), TEXT("自走砲 [Aでクリック]"), TEXT("外骨格 [Aでクリック]"), TEXT("補給車 [Aでクリック]") };
+ static_assert(UE_ARRAY_COUNT(KeyNames) == FBattleCommandBarLayout::Count && UE_ARRAY_COUNT(PadNames) == FBattleCommandBarLayout::Count, "one label per command button");
+ FBattleCommandBarLayout Layout;
+ const float Left=34.f, Right=FMath::Max(Left+1.f,float(View.X)-34.f), Available=Right-Left;
+ const bool bSectors=World&&BattleFieldLayout::Of(World).bSectors;
+ const bool bGunCost=BattleTactics::ArtilleryPosts()||FCString::Strifind(FCommandLine::Get(),TEXT("BattleAreaSPGCost="))!=nullptr;
+ float CursorX=Left, CursorY=0;
+ for(int32 Index=0;Index<Count;++Index)
+ {
+  FString Captions[2]={KeyNames[Index],PadNames[Index]};
+  if(bSectors&&(Index==1||Index==2))
+  {Captions[0]=Index==1?TEXT("区画制圧 [T]"):TEXT("区画維持 [G]");Captions[1]=Index==1?TEXT("区画制圧 [Y]"):TEXT("区画維持 [RB]");}
+  if(Index==13&&bGunCost)
+  {Captions[0]=FString::Printf(TEXT("自走砲 %d [9]"),BattleSquadType::AreaCost(BattleSquadType::SPGun));Captions[1]=FString::Printf(TEXT("自走砲 %d [A]"),BattleSquadType::AreaCost(BattleSquadType::SPGun));}
+  float MaxWidth=0, MaxHeight=0;
+  for(const FString& Caption:Captions)
+  {float TextWidth=0,TextHeight=0;UCanvas::StrLen(GEngine->GetSmallFont(),Caption,TextWidth,TextHeight,false,nullptr);MaxWidth=FMath::Max(MaxWidth,TextWidth);MaxHeight=FMath::Max(MaxHeight,TextHeight);}
+  auto& Button=Layout.Buttons[Index];Button.Caption=Captions[bPad?1:0];
+  Button.Width=FMath::Min(Available,FMath::Clamp(MaxWidth*.85f+16.f,108.f,240.f));
+  Button.Scale=FMath::Min(.85f,FMath::Max(1.f,Button.Width-16.f)/FMath::Max(1.f,MaxWidth));
+  Layout.ButtonHeight=FMath::Max(Layout.ButtonHeight,FMath::CeilToFloat(MaxHeight*Button.Scale)+10.f);
+ }
+ for(auto& Button:Layout.Buttons)
+ {
+  if(CursorX>Left&&CursorX+Button.Width>Right){CursorX=Left;CursorY+=Layout.ButtonHeight+6.f;}
+  Button.Origin=FVector2D(CursorX,CursorY);CursorX+=Button.Width+6.f;
+ }
+ // Separate summary and route rows leave the full width available for long status text.
+ const float BarTop=float(View.Y)-64.f-Layout.ButtonHeight-CursorY;
+ for(auto& Button:Layout.Buttons)Button.Origin.Y+=BarTop;
+ Layout.RouteOrigin=FVector2D(Right-Layout.RouteWidth,BarTop-32.f);
+ Layout.SummaryY=BarTop-60.f;Layout.PanelTop=BarTop-70.f;
+ return Layout;
+}
+
 ABattleCameraPawn::ABattleCameraPawn()
 {
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
@@ -44,6 +85,12 @@ void ABattleCameraPawn::Zoom(float Delta)
 	const FVector Current = Camera->GetRelativeLocation();
 	const float Height = FMath::Clamp(Current.Z + Delta, 1000.f, BattleFieldLayout::Of(GetWorld()).CameraMaxHeight);
 	Camera->SetRelativeLocation(FVector(-Height * .65f, 0, Height));
+}
+
+void ABattleCameraPawn::ZoomScale(float Factor)
+{
+	const float Current = Camera->GetRelativeLocation().Z;
+	Zoom(Current * Factor - Current);
 }
 
 void ABattleController::BeginPlay()
@@ -101,6 +148,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("ContactDebug"), EKeys::F6, &ABattleController::ToggleContactDebug);
 	Button(TEXT("SectorGrid"), EKeys::M, &ABattleController::ToggleSectorGrid);
 	Button(TEXT("FogView"), EKeys::N, &ABattleController::ToggleFogView);
+	Button(TEXT("EnemyRanges"), EKeys::L, &ABattleController::ToggleEnemyRanges);
 	Button(TEXT("TrainingPreset"), EKeys::F7, &ABattleController::CycleTrainingSelected);
 	Button(TEXT("HireRecruit"), EKeys::One, &ABattleController::HireRecruit);
 	Button(TEXT("HireRegular"), EKeys::Two, &ABattleController::HireRegular);
@@ -254,6 +302,7 @@ void ABattleController::EnterTactical()
 {
 	if (!TacticalPawn) return;
  CancelPlayerInput();
+ bGamepadMenuOpen=false;bGroundFloorPending=false;
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
 	{
 		LastControlled = Unit;
@@ -293,6 +342,7 @@ bool ABattleController::ControlUnit(ABattleUnit* Unit)
  if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled() && !L->CanControlLeader(Unit->GetUnitID())) return false;
 	PendingOrder = EBattleOrder::Move;
  CancelPlayerInput();
+ bGamepadMenuOpen=false;bGroundFloorPending=false;
 	if (!bTactical) EnterTactical();
 	const FBattleUnitState Before = *Unit->GetState();
 	if (AAIController* AI = Cast<AAIController>(Unit->GetController())) { Unit->SavedAI = AI; AI->StopMovement(); AI->UnPossess(); }
@@ -417,6 +467,7 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 {
  if(Params.Key.IsGamepadKey()) bGamepadActive=true;
  else if(Params.Key.IsMouseButton()||!Params.Key.IsAnalog()) bGamepadActive=false;
+ if(HandleGamepadMenu(Params))return true;
  FInputKeyEventArgs Logical=Params;
  if(Params.Key.IsGamepadKey())
  {
@@ -450,12 +501,16 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
  return HandlePlayerInput(Logical);
 }
 
-void ABattleController::CancelPlayerInput()
+void ABattleController::CancelPlayerInput(bool bGamepadOnly)
 {
  TMap<FKey,FInputKeyEventArgs> Released;
  for(auto& Pair:HeldPlayerKeys)
  {
-  if(Pair.Value.Key.IsValid())Released.FindOrAdd(Pair.Value.Key,Pair.Value);
+  if(bGamepadOnly&&!Pair.Key.IsGamepadKey())continue;
+  bool bHeldByKeyboard=false;
+  if(bGamepadOnly)for(const auto& OtherHeld:HeldPlayerKeys)
+   if(!OtherHeld.Key.IsGamepadKey()&&OtherHeld.Value.Key==Pair.Value.Key)bHeldByKeyboard=true;
+  if(Pair.Value.Key.IsValid()&&!bHeldByKeyboard)Released.FindOrAdd(Pair.Value.Key,Pair.Value);
   Pair.Value.Key=FKey(); // Require release and a fresh press in the new mode.
  }
  for(auto& Pair:Released)
@@ -463,9 +518,12 @@ void ABattleController::CancelPlayerInput()
   auto Release=Pair.Value;Release.Event=IE_Released;Release.AmountDepressed=0.f;
   Super::InputKey(Release);
  }
- if(auto* Controlled=Cast<ABattleUnit>(GetPawn()))Controlled->StopJumping();
- bTriggerHeld=false;bAimHeld=false;bPathDraw=false;DrawnPath.Reset();DrawnLength=0;
- DelegationPress=INDEX_NONE;bSquadListPress=false;bMinimapPress=false;PressedSquadID=INDEX_NONE;
+ if(!bGamepadOnly||Released.Contains(EKeys::SpaceBar))
+  if(auto* Controlled=Cast<ABattleUnit>(GetPawn()))Controlled->StopJumping();
+ if(!bGamepadOnly||Released.Contains(EKeys::LeftMouseButton))
+ {bTriggerHeld=false;DelegationPress=INDEX_NONE;bSquadListPress=false;bMinimapPress=false;PressedSquadID=INDEX_NONE;}
+ if(!bGamepadOnly||Released.Contains(EKeys::RightMouseButton))
+ {bAimHeld=false;bPathDraw=false;DrawnPath.Reset();DrawnLength=0;}
 }
 
 bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
@@ -504,7 +562,8 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
   }
  }
 	FVector2D Pointer;
-	const bool OverDelegation = GetPointerPosition(Pointer) && DelegationPanelAt(Pointer);
+ // The squad list is drawn after delegation, so its whole panel owns the overlap.
+	const bool OverDelegation = GetPointerPosition(Pointer) && !SquadPanelAtPointer() && DelegationPanelAt(Pointer);
 	if (Params.Key == EKeys::LeftMouseButton)
 	{
 		if (Params.Event == IE_Pressed && OverDelegation)
@@ -534,7 +593,7 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
    FVector2D BarPointer; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH);
    if(GetPointerPosition(BarPointer))
    {
-    const auto Bar=FBattleCommandBarLayout::Make(FVector2D(ViewW,ViewH));
+    const auto Bar=FBattleCommandBarLayout::Make(FVector2D(ViewW,ViewH),GetWorld(),bGamepadActive);
     if(const int32 Button=Bar.ButtonAt(BarPointer);Button!=INDEX_NONE)
     {bMinimapPress=true;bTriggerHeld=false;PressCommandButton(Button);return true;}
     // The route button stands apart from the bar and exists only on maps with a road network.
@@ -576,7 +635,7 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
    // Header controls: a filter tab or the sort button.
    if(Params.Event==IE_Pressed && Over)
    {
-    FVector2D P; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH); const auto Layout=FBattleSquadListLayout::Make(FVector2D(ViewW,ViewH));
+    FVector2D P; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH); const auto Layout=FBattleSquadListLayout::Make(FVector2D(ViewW,ViewH),GetWorld());
     if(GetPointerPosition(P))
     {
      if(const int32 Tab=Layout.FilterTabAt(P);Tab!=INDEX_NONE){SquadFilter=uint8(Tab);SquadListScroll=0;bSquadListPress=false;bTriggerHeld=false;return true;}
@@ -585,7 +644,32 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
    }
    if(Params.Event==IE_Pressed && Over) { bSquadListPress=true; bTriggerHeld=false; FVector2D P; PressedSquadID=GetPointerPosition(P)?SquadListIDAt(P):INDEX_NONE; return true; }
    if(Params.Event==IE_Released && (bSquadListPress || Over))
-   { if(bSquadListPress && Over) { FVector2D P; if(GetPointerPosition(P) && PressedSquadID!=INDEX_NONE && SquadListIDAt(P)==PressedSquadID) SelectSquadListRow(P); } bSquadListPress=false; bTriggerHeld=false; return true; }
+   {
+    if(bSquadListPress && Over)
+    {
+     FVector2D P; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH); const auto Layout=FBattleSquadListLayout::Make(FVector2D(ViewW,ViewH),GetWorld());
+     // Squads dropped on an army tab (front army, attack army, unassigned), a group header or the "+ new attack group" row move there
+     // (command UI armies 2026-11-21). A drag carries every selected squad when the dragged one is selected.
+     const bool bPointer=GetPointerPosition(P);
+     const int32 Tab=bPointer?Layout.FilterTabAt(P):INDEX_NONE;
+     const int32 Under=bPointer?SquadListIDAt(P):INDEX_NONE;
+     auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+     int32 Army=-1,Target=INDEX_NONE;FString Where;
+     if(Tab>=0 && Tab<=2){static const TCHAR* const ArmyNames[]={TEXT("前線軍"),TEXT("攻撃軍"),TEXT("未所属")};Army=Tab==0?1:Tab==1?2:0;Where=ArmyNames[Tab];}
+     else if(Under==FBattleSquadListRow::NewGroupKey){Army=2;Target=UBattleMatch::NewAttackGroup;Where=TEXT("新しい攻撃群");}
+     else if(Under!=INDEX_NONE && Under<0 && Under!=PressedSquadID)
+      if(const auto* G=Match->Groups.Find(-Under-1)){Army=G->Kind==1?1:2;Target=G->Kind==1?INDEX_NONE:G->ID;Where=G->Kind==1?TEXT("前線軍"):FString::Printf(TEXT("群%d"),G->ID);}
+     if(Army>=0 && PressedSquadID>=0)
+     {
+      int32 Moved=0;
+      for(int32 SID:DraggedSquads())
+       if(Match->AssignArmy(SID,Army,Target)){++Moved;if(Target==UBattleMatch::NewAttackGroup)Target=Match->GroupOf(SID);}
+      if(Moved) ShowNotice(FString::Printf(TEXT("%d部隊を%sへ移しました"),Moved,*Where));
+     }
+     else if(PressedSquadID!=INDEX_NONE && Under==PressedSquadID) SelectSquadListRow(P);
+    }
+    bSquadListPress=false; bTriggerHeld=false; return true;
+   }
   }
   if(Over && Params.Key==EKeys::RightMouseButton) return true;
  }
@@ -631,18 +715,6 @@ void ABattleController::PrimaryReleased()
 	UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_INPUT Selection=%d"), Selected.Num());
 }
 
-void ABattleController::MoveSelected()
-{
-	if (!bTactical || Selected.IsEmpty()) return;
-	FVector Target;
-	FVector2D Position;
-	if (GetPointerPosition(Position) && PickOrderPoint(Position, Target))
-	{
-		IssueOrderAt(Target, PendingOrder);
-		PendingOrder = EBattleOrder::Move;
-	}
-}
-
 void ABattleController::ChooseAttackMove()
 {
 	if (bTactical) { PendingOrder = EBattleOrder::AttackMove; ShowNotice(BattleFieldLayout::Of(GetWorld()).bSectors?TEXT("区画制圧：対象区画を右クリック"):TEXT("ATTACK MOVE: right-click destination")); }
@@ -665,6 +737,19 @@ void ABattleController::ToggleFogView()
 	if (!bTactical) return;
 	bShowFog = !bShowFog;
 	ShowNotice(bShowFog ? TEXT("戦場の霧：表示") : TEXT("戦場の霧：非表示"));
+}
+
+void ABattleController::ToggleEnemyRanges()
+{
+	if (!bTactical) return;
+	// Order: own only -> + enemy under the pointer -> + every seen enemy -> none -> own only.
+	RangeRingMode = RangeRingMode == 0 ? 1 : RangeRingMode == 3 ? 0 : RangeRingMode + 1;
+	ShowNotice(FString::Printf(TEXT("射程の円：%s"), RangeRingModeName(RangeRingMode)));
+}
+
+const TCHAR* ABattleController::RangeRingModeName(int32 Mode)
+{
+	return Mode == 0 ? TEXT("表示しない") : Mode == 2 ? TEXT("自軍＋ポインタの敵") : Mode == 3 ? TEXT("自軍＋見えている敵すべて") : TEXT("選んだ自軍のみ");
 }
 
 bool ABattleController::GetPointerPosition(FVector2D& Position) const
@@ -835,8 +920,8 @@ void ABattleController::UpdatePlayerAmmo(ABattleUnit* Unit)
 }
 void ABattleController::JumpPressed() { if (ABattleUnit* U = Cast<ABattleUnit>(GetPawn())) if (U->IsAlive() && !TryVault(U)) U->Jump(); }
 void ABattleController::JumpReleased() { if (ABattleUnit* U = Cast<ABattleUnit>(GetPawn())) U->StopJumping(); }
-void ABattleController::ZoomIn() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->Zoom(BattleFieldLayout::IsLarge(GetWorld()) ? -600 : -220); }
-void ABattleController::ZoomOut() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->Zoom(BattleFieldLayout::IsLarge(GetWorld()) ? 600 : 220); }
+void ABattleController::ZoomIn() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->ZoomScale(1.f / 1.25f); }
+void ABattleController::ZoomOut() { if (SquadPanelAtPointer()) return; if (bTactical && TacticalPawn) TacticalPawn->ZoomScale(1.25f); }
 void ABattleController::RestartBattle() { UGameplayStatics::OpenLevel(this, FName(*GetWorld()->GetName()), true); }
 void ABattleController::ToggleCombat()
 {
@@ -860,6 +945,15 @@ void ABattleController::PlayerTick(float DeltaTime)
 	UpdateGamepad(DeltaTime);
 	UpdatePathDraw();
 	UpdateVault(DeltaTime);
+	// Shift + moving the pointer over the squad list adds every squad passed over to the selection (user request 2026-11-21).
+	if (bTactical && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift)) && SquadPanelAtPointer())
+	{
+		FVector2D P;
+		if (GetPointerPosition(P)) if (const int32 ID = SquadListIDAt(P); ID >= 0)
+			if (const auto* S = GetWorld()->GetSubsystem<UBattleState>()->FindSquad(ID))
+				if (auto* L = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->CanSelectLeader(S->LeaderUnitID))
+					if (ABattleUnit* A = L->Actor(S->LeaderUnitID)) Selected.AddUnique(A);
+	}
 	Selected.RemoveAll([](const TObjectPtr<ABattleUnit>& Unit) { return !Unit || !Unit->IsAlive(); });
 	if (bTactical) bAimHeld = false;
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
@@ -897,33 +991,52 @@ bool ABattleController::SquadPanelAtPointer() const
 {
  if(!bTactical || !GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled()) return false;
  FVector2D P; int32 W,H; GetViewportSize(W,H);
- return GetPointerPosition(P) && FBattleSquadListLayout::Make(FVector2D(W,H)).Contains(P);
+ return GetPointerPosition(P) && FBattleSquadListLayout::Make(FVector2D(W,H),GetWorld()).Contains(P);
 }
 void ABattleController::ScrollSquadList(int32 Delta)
 {
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); int32 W,H; GetViewportSize(W,H);
- const auto Layout=FBattleSquadListLayout::Make(FVector2D(W,H));
+ const auto Layout=FBattleSquadListLayout::Make(FVector2D(W,H),GetWorld());
  SquadListScroll=FMath::Clamp(SquadListScroll+Delta,0,FMath::Max(0,SquadListRows().Num()-Layout.VisibleRows));
 }
 void ABattleController::SelectSquadListRow(FVector2D P)
 {
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); int32 W,H; GetViewportSize(W,H);
- const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H)).RowAt(P); ScrollSquadList(0);
+ const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H),GetWorld()).RowAt(P); ScrollSquadList(0);
  const auto Rows=SquadListRows(); if(R==INDEX_NONE || !Rows.IsValidIndex(R+SquadListScroll)) return;
- const auto& Row=Rows[R+SquadListScroll];
- // Double-click (two clicks on the same row within 0.4 s): move the tactical camera to the squad leader.
+ const auto& Entry=Rows[R+SquadListScroll]; const auto& Row=Entry.Squad;
+ // Double-click (two clicks on the same row within 0.4 s): move the tactical camera to the squad leader (a group: its leaders' centre).
  { const double Now=GetWorld()->GetRealTimeSeconds();
-   if(LastRowClickID==Row.SquadID && Now-LastRowClickTime<.4 && TacticalPawn){const FVector Where=L->Position(Row.LeaderUnitID);TacticalPawn->SetActorLocation(FVector(Where.X,Where.Y,TacticalPawn->GetActorLocation().Z));}
-   LastRowClickID=Row.SquadID; LastRowClickTime=Now; }
- if(L->CanSelectLeader(Row.LeaderUnitID)) SetSelection(L->Actor(Row.LeaderUnitID));
+   if(LastRowClickID==Entry.Key() && Now-LastRowClickTime<.4 && TacticalPawn)
+   {
+    FVector Where=FVector::ZeroVector; int32 N=0;
+    if(Entry.bGroupHeader){ for(const auto& S:L->Summaries()) if(S.bActive && GetWorld()->GetSubsystem<UBattleMatch>()->GroupOf(S.SquadID)==Entry.GroupID){Where+=L->Position(S.LeaderUnitID);++N;} if(N) Where/=N; }
+    else { Where=L->Position(Row.LeaderUnitID); N=1; }
+    if(N) TacticalPawn->SetActorLocation(FVector(Where.X,Where.Y,TacticalPawn->GetActorLocation().Z));
+   }
+   LastRowClickID=Entry.Key(); LastRowClickTime=Now; }
+ if(Entry.bNewGroup) { ShowNotice(TEXT("部隊をこの行へドラッグすると、新しい攻撃群を作ります")); return; }
+ if(Entry.bGroupHeader) { SelectGroup(Entry.GroupID); return; }
+ // Shift + click adds the squad to the selection (2026-11-21).
+ if(L->CanSelectLeader(Row.LeaderUnitID) && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift))) { if(ABattleUnit* A=L->Actor(Row.LeaderUnitID)) Selected.AddUnique(A); }
+ else if(L->CanSelectLeader(Row.LeaderUnitID)) SetSelection(L->Actor(Row.LeaderUnitID));
  else ShowNotice(Row.bActive?TEXT("この隊長は操作不可です"):TEXT("この部隊は機能停止しています"));
+}
+
+TArray<int32> ABattleController::DraggedSquads() const
+{
+ TArray<int32> Out; const int32 ID=DraggedSquadID(); if(ID==INDEX_NONE) return Out;
+ bool bInSelection=false; for(const ABattleUnit* U:Selected) if(U && U->IsAlive() && U->GetState()->Team==0) bInSelection|=U->GetState()->SquadID==ID;
+ if(bInSelection) { for(const ABattleUnit* U:Selected) if(U && U->IsAlive() && U->GetState()->Team==0) Out.AddUnique(U->GetState()->SquadID); }
+ else Out.Add(ID);
+ return Out;
 }
 
 int32 ABattleController::SquadListIDAt(FVector2D P) const
 {
  int32 W,H; GetViewportSize(W,H);
- const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H)).RowAt(P); const auto Rows=SquadListRows();
- return R!=INDEX_NONE && Rows.IsValidIndex(R+SquadListScroll)?Rows[R+SquadListScroll].SquadID:INDEX_NONE;
+ const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H),GetWorld()).RowAt(P); const auto Rows=SquadListRows();
+ return R!=INDEX_NONE && Rows.IsValidIndex(R+SquadListScroll)?Rows[R+SquadListScroll].Key():INDEX_NONE;
 }
 
 int32 ABattleController::SelectedRouteLane() const
@@ -974,7 +1087,7 @@ FBattleNoticeLayout FBattleNoticeLayout::Make(FVector2D View,const UWorld* World
 {
  FBattleNoticeLayout L; L.Origin.Y=Top; if(Entries<=0) return L;
  const auto Map=FBattleMinimapLayout::Make(View,World);
- const float Bottom=Map.Size.X>0?Map.Origin.Y-32.f:float(View.Y)-170.f;
+ const float Bottom=Map.Size.X>0?Map.Origin.Y-32.f:FBattleCommandBarLayout::Make(View,World).PanelTop-32.f;
  L.Rows=FMath::Clamp(FMath::FloorToInt((Bottom-L.Origin.Y-L.Header)/L.RowHeight),0,FMath::Min(6,Entries));
  return L;
 }
@@ -1078,21 +1191,23 @@ void ABattleController::UpdateNoticeLog(bool bForce)
  {bEnemyHomeWeakNoted=true;PushNotice(5,FString::Printf(TEXT("敵本拠地の耐久が低い（%.0f）"),Match->Area.KnownEnemyBaseHP[0]),Match->AreaHome(1));}
 }
 
-// ---- Squad list view (command UI): filters, sort, double-click. Own squads' state only.
+// ---- Squad list view (command UI): tabs by group, sort, double-click. Own squads' state and own groups only.
 uint8 ABattleController::SquadCategory(const FBattleSquadSummary& Row) const
 {
- if(!Row.bActive) return 4;
- auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(Row.SquadID);
- if(S && S->TacticalPlan.Action==EBattleSquadTactic::Recover && S->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY"))) return 2;
- if(L->SquadTargetID(Row.SquadID)!=INDEX_NONE || (S && (S->TacticalPlan.Action==EBattleSquadTactic::Engage || S->TacticalPlan.Action==EBattleSquadTactic::Support || S->TacticalPlan.Action==EBattleSquadTactic::Flank || S->TacticalPlan.Action==EBattleSquadTactic::Retreat))) return 1;
- return 3;
+ // Armies (2026-11-21, user request): stopped squads (leader lost, not commandable) are no longer listed.
+ if(!Row.bActive) return 3;
+ const int32 Army=GetWorld()->GetSubsystem<UBattleMatch>()->ArmyOf(Row.SquadID);
+ return Army==1?0:Army==2?1:2;
 }
-TArray<FBattleSquadSummary> ABattleController::SquadListRows() const
+TArray<int32> ABattleController::OwnGroupIDs() const
 {
- auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); TArray<FBattleSquadSummary> Rows;
- for(const auto& Row:L->Summaries()) if(SquadFilter==0 || SquadCategory(Row)==SquadFilter) Rows.Add(Row);
- if(SquadSort==0) return Rows;
- const auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ TArray<int32> IDs; for(const auto& G:GetWorld()->GetSubsystem<UBattleMatch>()->Groups) if(G.Value.Team==0) IDs.Add(G.Key);
+ IDs.Sort(); return IDs;
+}
+void ABattleController::SortSquadRows(TArray<FBattleSquadSummary>& Rows) const
+{
+ if(SquadSort==0) return;
+ auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); const auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  TMap<int32,float> Key;
  for(const auto& Row:Rows)
  {
@@ -1113,7 +1228,36 @@ TArray<FBattleSquadSummary> ABattleController::SquadListRows() const
   Key.Add(Row.SquadID,K);
  }
  Rows.StableSort([&Key](const FBattleSquadSummary& A,const FBattleSquadSummary& B){return Key[A.SquadID]<Key[B.SquadID];});
- return Rows;
+}
+TArray<FBattleSquadListRow> ABattleController::SquadListRows() const
+{
+ auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); TArray<FBattleSquadListRow> Out;
+ auto Append=[&Out](const TArray<FBattleSquadSummary>& Rows,int32 Group){for(const auto& R:Rows){FBattleSquadListRow E;E.Squad=R;E.GroupID=Group;Out.Add(E);}};
+ if(SquadFilter<=1)
+ {
+  // Front army tab: the front-holding group; attack army tab: every other own group. Each: a header row, then its active squads.
+  for(int32 GID:OwnGroupIDs())
+  {
+   if((Match->Groups[GID].Kind==1)!=(SquadFilter==0)) continue;
+   FBattleSquadListRow H; H.GroupID=GID; H.bGroupHeader=true; Out.Add(H);
+   TArray<FBattleSquadSummary> Rows; for(const auto& Row:L->Summaries()) if(Row.bActive && Match->GroupOf(Row.SquadID)==GID) Rows.Add(Row);
+   SortSquadRows(Rows); Append(Rows,GID);
+  }
+  if(SquadFilter==1){ FBattleSquadListRow N; N.bNewGroup=true; Out.Add(N); } // the "+ new attack group" drop row
+  return Out;
+ }
+ TArray<FBattleSquadSummary> Rows;
+ for(const auto& Row:L->Summaries()) if(Row.bActive && (SquadFilter==3 || SquadCategory(Row)==SquadFilter)) Rows.Add(Row);
+ SortSquadRows(Rows); Append(Rows,INDEX_NONE);
+ return Out;
+}
+void ABattleController::SelectGroup(int32 GroupID)
+{
+ auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>();
+ if(!Match || !Mode || !Match->Groups.Contains(GroupID)) return;
+ Selected.Reset();
+ for(ABattleUnit* Unit:Mode->Units) if(Unit && Unit->IsAlive() && Unit->GetState()->Team==0 && LeaderSelectable(Unit) && Match->GroupOf(Unit->GetState()->SquadID)==GroupID) Selected.AddUnique(Unit);
+ ShowNotice(Selected.Num()>0?FString::Printf(TEXT("群%d を選択：%d 部隊"),GroupID,Selected.Num()):FString::Printf(TEXT("群%d に操作できる隊長がいません"),GroupID));
 }
 
 // ---- Command bar (command UI): each button calls the same action as its key.
@@ -1136,12 +1280,57 @@ void ABattleController::PressCommandButton(int32 Index)
  case 12: HireMortar(); break; // area battle: mortar team
  case 13: HireSPGun(); break; // area battle: self-propelled gun
  case 14: HireExo(); break; // area battle: armoured exoskeleton soldier
- case 15: HireSupply(); break; // area battle: supply team
+ case 15: HireSupply(); break; // area battle: supply vehicle
  default: break;
  }
 }
 
 // ---- Gamepad (Xbox controller). Buttons become the keyboard/mouse key with the same action; sticks are read every frame.
+bool ABattleController::HandleGamepadMenu(const FInputKeyEventArgs& Params)
+{
+ if(!Params.Key.IsGamepadKey()||Params.Key.IsAnalog())return false;
+ // Keep ownership through release, including after confirmation, load or a keyboard mode switch.
+ if(GamepadMenuKeys.Contains(Params.Key))
+ {if(Params.Event==IE_Released)GamepadMenuKeys.Remove(Params.Key);return true;}
+ if(!bTactical)return false;
+ const bool bMenuToggle=Params.Key==EKeys::Gamepad_LeftThumbstick;
+ if(!bGamepadMenuOpen&&!bMenuToggle)return false;
+ if(Params.Event==IE_Released)return false; // A pre-menu press keeps its existing release path.
+ if(Params.Event!=IE_Pressed)return true;
+ GamepadMenuKeys.Add(Params.Key);
+ if(bMenuToggle)
+ {
+  if(bGamepadMenuOpen)bGamepadMenuOpen=false;
+  else
+  {
+   // Cancel a held selection/order before giving the modal menu ownership of the pad.
+   CancelPlayerInput(true);bGamepadMenuOpen=true;GamepadMenuRow=0;
+  }
+  return true;
+ }
+ if(Params.Key==EKeys::Gamepad_DPad_Up)GamepadMenuRow=(GamepadMenuRow+5)%6;
+ else if(Params.Key==EKeys::Gamepad_DPad_Down)GamepadMenuRow=(GamepadMenuRow+1)%6;
+ else if(Params.Key==EKeys::Gamepad_FaceButton_Right)bGamepadMenuOpen=false;
+ else if(Params.Key==EKeys::Gamepad_FaceButton_Bottom)ConfirmGamepadMenu();
+ return true;
+}
+
+void ABattleController::ConfirmGamepadMenu()
+{
+ bGamepadMenuOpen=false;
+ switch(GamepadMenuRow)
+ {
+ case 0: FormGroupSelected();break;
+ case 1: SelectGroupSelected();break;
+ case 2: SaveMatch();break;
+ case 3: LoadMatch();break;
+ case 4:
+  bGroundFloorPending=!bGroundFloorPending;
+  ShowNotice(bGroundFloorPending?TEXT("次の地点・道筋命令：1階を指定"):TEXT("1階指定を解除"));break;
+ default: break;
+ }
+}
+
 FKey ABattleController::GamepadToKey(const FKey& Key) const
 {
  if(bTactical)
@@ -1195,6 +1384,16 @@ float ABattleController::AimAssistScale() const
 }
 void ABattleController::UpdateGamepad(float DeltaTime)
 {
+ if(IsGamepadMenuOpen())return; // Freeze both sticks; preserve the virtual cursor's subpixel position.
+ float CursorX=0,CursorY=0;
+ const bool bCursorAvailable=bTactical&&GetMousePosition(CursorX,CursorY);
+ if(bCursorAvailable)
+ {
+  const FVector2f MousePosition(CursorX,CursorY);
+  if(!bVirtualCursorValid||MousePosition!=LastCursorPosition) VirtualCursor=MousePosition;
+  LastCursorPosition=MousePosition;bVirtualCursorValid=true;
+ }
+ else bVirtualCursorValid=false;
  auto Stick=[this](const FKey& Key){const float V=GetInputAnalogKeyState(Key);return FMath::Abs(V)<.2f?0.f:FMath::Sign(V)*(FMath::Abs(V)-.2f)/.8f;};
  const float LX=Stick(EKeys::Gamepad_LeftX),LY=Stick(EKeys::Gamepad_LeftY),RX=Stick(EKeys::Gamepad_RightX),RY=Stick(EKeys::Gamepad_RightY);
  if(LX==0&&LY==0&&RX==0&&RY==0) return;
@@ -1204,11 +1403,15 @@ void ABattleController::UpdateGamepad(float DeltaTime)
  if(bTactical)
  {
   // Virtual cursor: the right stick moves the mouse cursor, so every mouse-driven panel and order works as with a mouse.
-  float X=0,Y=0; int32 W=0,H=0; GetViewportSize(W,H);
-  if((RX!=0||RY!=0)&&GetMousePosition(X,Y)&&W>0)
+  int32 W=0,H=0; GetViewportSize(W,H);
+  if((RX!=0||RY!=0)&&bCursorAvailable&&W>0&&H>0)
   {
-   const float Speed=1200.f*DeltaTime;
-   SetMouseLocation(FMath::Clamp(FMath::RoundToInt(X+RX*FMath::Abs(RX)*Speed),0,W-1),FMath::Clamp(FMath::RoundToInt(Y-RY*FMath::Abs(RY)*Speed),0,H-1));
+   const float Speed=1200.f*GetWorld()->DeltaRealTimeSeconds;
+   VirtualCursor.X=FMath::Clamp(VirtualCursor.X+RX*FMath::Abs(RX)*Speed,0.f,float(W-1));
+   VirtualCursor.Y=FMath::Clamp(VirtualCursor.Y-RY*FMath::Abs(RY)*Speed,0.f,float(H-1));
+   const int32 MousePixelX=FMath::RoundToInt(VirtualCursor.X),MousePixelY=FMath::RoundToInt(VirtualCursor.Y);
+   SetMouseLocation(MousePixelX,MousePixelY);
+   LastCursorPosition=FVector2f(float(MousePixelX),float(MousePixelY));
   }
  }
  else if(RX!=0||RY!=0)
@@ -1249,7 +1452,7 @@ void ABattleController::HireMortar()
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
 	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Mortar); ShowNotice(Match->LastMessage);
 }
-// Area battle: the - key buys a supply team (squad type 9, at most AreaSupplyLimit per team).
+// Area battle: the - key buys a supply vehicle (squad type 9, at most AreaSupplyLimit per team; BattleSupplyCar.cpp).
 void ABattleController::HireSupply()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();

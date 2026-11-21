@@ -23,7 +23,7 @@ const TArray<BattleComposition::FTypeDef>& BattleComposition::Definitions()
  {
   const auto* T=GetDefault<UBattleTuning>();const auto& H=BattleTactics::AreaHire();
   const int32 Limits[]={H.MaxActive,H.MaxActive,T->AreaScoutLimit,T->AreaATLimit,T->AreaTankLimit,T->AreaACLimit,T->AreaMortarLimit,T->AreaSPGLimit,T->AreaExoLimit,T->AreaSupplyLimit};
-  const uint8 Roles[]={0,1,255,4,2,255,3,3,255,255};
+  const uint8 Roles[]={0,1,255,4,2,255,3,3,255,5}; // supply 5: the supply vehicle rides with an AI group (groupui, UBattleMatch::GroupRole)
   const uint16 Tags[]={Front|AntiInfantry,AntiInfantry,Observe,AntiArmour,AntiArmour|AntiInfantry,Mobile|AntiInfantry,Indirect,Indirect|Mobile,Front|Shield|AntiArmour,SupplyAmmo};
   TArray<FTypeDef> Result;
   for(uint8 Type=0;Type<BattleSquadType::Count;++Type)

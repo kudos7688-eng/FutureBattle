@@ -38,6 +38,7 @@ struct FBattleFogGrid
 private:
 	struct FCaster { FVector Eye; float Range = 0; };
 	TArray<FCaster> Casters;
+	TMap<int32, TArray<FVector>> RayDirections;
 	int32 NextCaster = 0, NextRay = 0;
 	void StartRound(const UWorld* InWorld, double Now);
 	void Mark(double X, double Y, double Now);
@@ -54,9 +55,9 @@ namespace BattleSectorView
 {
 	// Enemy contacts the player's side holds, best per enemy (seen now over remembered, then newest). Scouts' long-range sightings
 	// are left out (they reach the side through reports), as on the minimap.
-	void KnownEnemies(const UWorld* World, TMap<int32, const FBattleContact*>& Out);
+	void KnownEnemies(const UWorld* World, TMap<int32, const FBattleContact*>& Out, TSet<int32>& Visible);
 	// One entry per sector (BattleSectors::Columns x Rows, index Y*Columns+X). Empty when the map has no sectors.
-	void Gather(const UWorld* World, const FBattleFogGrid& Fog, double Now, TArray<FBattleSectorInfo>& Out);
+	void Gather(const UWorld* World, const FBattleFogGrid& Fog, double Now, const TMap<int32, const FBattleContact*>& Known, TArray<FBattleSectorInfo>& Out);
 	// Cover positions per sector, counted once per world.
 	const TArray<int32>& CoverCounts(const UWorld* World);
 	// Ground height used for drawing (the terrain table; 0 on flat maps).

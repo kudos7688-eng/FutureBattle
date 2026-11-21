@@ -37,6 +37,17 @@ struct FBattleSquadSummary
  EBattleSquadIntent Intent=EBattleSquadIntent::Unspecified;
  uint32 ProblemFlags=0;
 };
+// One row of the command UI squad list (2026-11-20): a group header (GroupID set, bGroupHeader) or a squad (GroupID = its group in the group view).
+struct FBattleSquadListRow
+{
+ FBattleSquadSummary Squad;
+ int32 GroupID=INDEX_NONE;
+ bool bGroupHeader=false;
+ bool bNewGroup=false; // the "+ new attack group" drop row at the end of the attack army tab (2026-11-21)
+ // Click identity: the squad ID, -(GroupID+1) for a group header, NewGroupKey for the new group row (never INDEX_NONE).
+ static constexpr int32 NewGroupKey=-1000000;
+ int32 Key() const { return bNewGroup?NewGroupKey:bGroupHeader?-(GroupID+1):Squad.SquadID; }
+};
 
 // Shared by Canvas and pointer input; no stale hit rectangles from the previous draw.
 struct FBattleSquadListLayout
@@ -44,9 +55,9 @@ struct FBattleSquadListLayout
  FVector2D Origin;
  float Width=360, Height=0, RowHeight=56, Header=44;
  int32 VisibleRows=0;
- static FBattleSquadListLayout Make(FVector2D View);
- // Header controls (command UI 2026-11-16): five filter tabs and a sort button on the second header line.
- static constexpr int32 FilterCount=5; static constexpr float TabWidth=50, TabTop=23, TabHeight=18, SortWidth=86;
+ static FBattleSquadListLayout Make(FVector2D View,const UWorld* World);
+ // Header controls (command UI 2026-11-16; tabs 2026-11-20): four tabs (front army, attack army, unassigned, all) and a sort button on the second header line.
+ static constexpr int32 FilterCount=4; static constexpr float TabWidth=64, TabTop=23, TabHeight=18, SortWidth=86;
  int32 FilterTabAt(FVector2D P) const {if(P.Y<Origin.Y+TabTop||P.Y>=Origin.Y+TabTop+TabHeight||P.X<Origin.X+6)return INDEX_NONE;const int32 I=FMath::FloorToInt((P.X-Origin.X-6)/TabWidth);return I<FilterCount?I:INDEX_NONE;}
  bool SortButtonAt(FVector2D P) const {return P.Y>=Origin.Y+TabTop&&P.Y<Origin.Y+TabTop+TabHeight&&P.X>=Origin.X+Width-SortWidth-8&&P.X<Origin.X+Width-8;}
  bool Contains(FVector2D P) const;
@@ -82,6 +93,7 @@ struct FBattleLeaderBody
  // Display: the near follower mesh shows the blind fire clip (BattleBlindFire.cpp).
  bool bBlindPose=false;
  bool bRunPose=false;
+ float MuzzleYaw=0.f,MuzzlePitch=0.f; // AimFollowerRifles: the mesh turn and tilt that point the rifle along the shot
  // Display: cover phase whose clip the near follower mesh shows (2 hidden, 4 firing; 0 none) and the table picked for it.
  uint8 CoverClipPhase=0;
  BattleCoverClips::FSet CoverClipSet{};
@@ -203,7 +215,6 @@ public:
  bool ApplyExoSuit(int32 ID);
  TMap<int32,FExoLook> ExoLooks;
  void UpdateExoLooks();
- void RefreshVehicles();
  float VehicleSpotRange() const;
  // Damage scale of a weapon on a unit: anti-tank hits fully; small arms by the vehicle type (tank none, armoured car ACArmorSmallArms).
  float ArmorScale(int32 VictimID,EBattleWeapon Weapon) const;
@@ -213,6 +224,7 @@ public:
  // Armour AI, stage 3 (BattleArmourAI.cpp). PickArmourTargets: weapon-aware squad targets while the squad sees a vehicle.
  // FaceVehicle: a stopped vehicle turns its hull (its forward view) at its turn rate. VehicleWatchDirection: towards the nearest
  // enemy its team knows of, else the enemy home.
+ bool HasArmourKnowledge(int32 Team) const;
  void PickArmourTargets(int32 SquadID,struct FBattleLeaderPlan& Plan,const TSet<int32>* AllowedTargets=nullptr);
  void FaceVehicle(int32 ID,const FVector& Direction);
  FVector VehicleWatchDirection(int32 ID) const;
@@ -257,7 +269,9 @@ public:
  bool StepArtillery(int32 ID,double Now,bool bMoving,FVector& Direction);
  // Picks an aim point from Known (unit key -> known position): a cluster of at least ArtilleryMinCluster soldiers within range and no
  // own unit within the blast radius plus spread (bFriendlyHeld: a candidate was refused for that). Then the enemy home if seen.
- bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey=nullptr,bool bTeamClusters=false);
+ bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey=nullptr,bool bTeamClusters=false,double Now=0.,const TMap<int32,uint8>* KnownTypes=nullptr);
+ TMap<int32,int32> ArtillerySupportSquad; // group fire support: the own squad each gun last fired for (log on change; not saved)
+ int64 ArtilleryGroupAims=0;
  bool AllyNear(int32 Team,const FVector& At,double Radius) const;
  // Launches one shell at Aim (spread applied, flight time Distance / shell speed). Consumes mortar ammunition or loads the gun.
  bool FireArtillery(int32 ID,const FVector& Aim,double Now);
@@ -318,7 +332,6 @@ public:
  mutable TMap<FString,int64> SightHitClasses,SightHitTags,SightHitActors;
  mutable bool bSightHitsLogged=false;
  int64 MoveSweeps=0,MoveHitSoldier=0,MoveHitWorld=0,MoveShortened=0; // Mass follower moves (BATTLE_MOVE_SWEEP)
- mutable int64 FollowSightTraced=0,FollowSightUsed=0; // evaluation counters (BATTLE_FOLLOW_SIGHT)
  bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot);
  FVector TracerStart(int32 ID,const FVector& Start,const FVector& Direction) const;
  bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f);
@@ -381,6 +394,14 @@ public:
  // frame) is put back on his loop and logged (BATTLE_BODY_POSE_RESET).
  double NextPoseAudit=0;
  void AuditFollowerPoses(double Now);
+ // Every frame: a near follower that fired within BattleBodyAnim::ReadySeconds turns his mesh (whole-body clip, no upper layer)
+ // so the rifle in his hand points along his last shot: across (B.MuzzleYaw, at most MaxFollowerMuzzleYaw) to his facing, and
+ // up or down (B.MuzzlePitch, at most MaxFollowerMuzzlePitch) to the shot's pitch, the body tilting about the capsule centre
+ // (the hips) with its feet kept at their height (at 15 degrees a toe or heel 30 cm off the centre moves about 8 cm). Both ease back to 0 when he stops firing. Not in cover (the cover clips turn the mesh themselves), not prone,
+ // not reloading or running. Followers keep their single-node clip (the far display and bone reductions rely on it).
+ void AimFollowerRifles(double Now);
+ static constexpr float MaxFollowerMuzzleYaw=45.f,MaxFollowerMuzzlePitch=15.f;
+ TMap<int32,FVector> FollowerAims; // a follower's last shot direction (Fire), for AimFollowerRifles
  // Corpse removal (BattleCorpses.cpp; display only, runtime only). -BattleCorpseLifetime=S (default 20; 0 = bodies stay):
  // S seconds after death a body sinks into the ground for 1.5 s and is then hidden. The unit record, its position and
  // its collision (already off) are unchanged; the match still differs slightly (see BattleCorpses.cpp).
@@ -420,6 +441,9 @@ public:
  bool SetStance(int32 ID,uint8 Stance,double Now,bool bForce=false);
  // Follower clip for pose 0 idle / 1 walk / 2 reload; with -BattleStanceAnim=1 a crouched follower gets the crouch clip.
  class UAnimSequence* FollowerClip(int32 ID,int32 Pose) const;
+ // Drops a follower's rifle turn and tilt (AimFollowerRifles) and puts his mesh back in its plain place: at death and when
+ // the far display takes the body (it keeps the mesh's transform for the far body and a returning corpse).
+ void ClearFollowerRifleTurn(int32 ID);
  void RefreshFollowerPose(int32 ID);
  void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight);
  // Concealment (hedges tagged BattleConcealment in the map): blocks sight but shots ignore it. Collected once per world.
@@ -483,6 +507,10 @@ public:
  // Clear line: detection completes on the next scan. Blocked or out of sight: a remembered hint near the shot origin, its error
  // 10% of the distance (never the exact position). Counts hit_reveal_* in the sight diagnostics.
  static bool HitRevealEnabled();
+ // Trial -BattleHitFace=1 (default 0, 2026-11-21): for 2 s after a hit, a soldier with no target to fire at (and not firing at a base,
+ // flanking or aiming indirect fire) faces where the shot came from, so his forward field of view can find the shooter. Movement keeps
+ // its own steering (only the facing changes). Counts hit_face_turned.
+ static bool HitFaceEnabled();
  void RevealShooter(int32 VictimID,int32 ShooterID,const FVector& From);
  // Evaluation only (sight diagnostics on, behaviour unchanged, 2026-11-21): a hit soldier who does not see his shooter. Why each of the
  // two lines (victim->shooter, shooter->victim) fails, using the same checks as CanSee (range, field of view, first blocking hit).
@@ -510,7 +538,7 @@ public:
  static bool ShotDirectionEnabled();
  TMap<int32,TPair<FVector,double>> ShotFrom;
  bool HitWithin(int32 ID,double Now,double Seconds) const {const auto* F=ShotFrom.Find(ID);return F&&Now-F->Value<=Seconds;}
- bool UnitShotFrom(int32 ID,double Now,FVector& Out) const {const auto* F=ShotFrom.Find(ID);if(!F||Now-F->Value>5.)return false;Out=F->Key;return true;}
+ bool UnitShotFrom(int32 ID,double Now,FVector& Out,double Seconds=5.) const {const auto* F=ShotFrom.Find(ID);if(!F||Now-F->Value>Seconds)return false;Out=F->Key;return true;}
  bool SquadShotFrom(int32 SquadID,double Now,FVector& Out) const;
  static bool ShotFromOther(const FVector& Me,const FVector& Target,const FVector& From)
  {return FVector::DistSquared2D(From,Target)>FMath::Square(1000.) && FVector::DotProduct((From-Me).GetSafeNormal2D(),(Target-Me).GetSafeNormal2D())<0.866f;}
@@ -597,12 +625,16 @@ private:
  UPROPERTY() TObjectPtr<class UBattlePhase3> Phase3;
  UPROPERTY() TObjectPtr<class ABattleVATDisplay> VAT;
  int32 SmokeFailures=0, SmokeStage=0, QAStage=0; FVector SmokeSavedPeek=FVector::ZeroVector;
+ // Body display checks of the cover smoke (muzzle along the aim while strafing; hit reaction recovery).
+ float SmokeMuzzleMax=0.f, SmokeHead=0.f; int32 SmokeMuzzleFrames=0, SmokeShots=0; FQuat SmokeChest=FQuat::Identity; double SmokeHit=0.; const class UAnimSequence* SmokeHitClip=nullptr;
  FString QAPrefix;
  FVector SmokePosition=FVector::ZeroVector;
  TSharedPtr<FMassEntityManager> Manager;
  TMap<int32,FBattleLeaderBody> Bodies;
  TMap<int32,FBattleLeaderPlan> Plans;
- TMap<FIntPoint,TArray<int32>> AvoidanceGrid;
+ TMap<FIntPoint,int32> AvoidanceGrid;
+ TArray<TArray<int32>> AvoidanceBuckets;
+ TArray<int32> AvoidanceUsed;
  TMap<TWeakObjectPtr<UPrimitiveComponent>,int32> HitIDs;
  TArray<FBattleSquadSummary> CachedSummaries;
  UPROPERTY() TObjectPtr<AActor> DisplayHost;
@@ -613,11 +645,7 @@ private:
  FDelegateHandle DeathHandle;
  void Think(int32 SquadID,double Now);
  void Follow(int32 ID,float Dt,double Now);
- // Trial -BattleFollowSightParallel: sight tests of the Follow loop traced in parallel before it (soldier -> target, visible).
- void PrefetchFollowSight();
  static bool FollowerOverlapsOff();
- bool FollowCanSee(int32 ID,int32 Target) const;
- TMap<int32,TPair<int32,bool>> FollowSight;
 
  void BuildMovementPlan(int32 SquadID);
  bool StableMove(int32 ID,float Dt,double Now,FVector& Direction);

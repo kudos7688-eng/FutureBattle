@@ -11,12 +11,25 @@
 #include "NavigationPath.h"
 #include "AI/NavDataGenerator.h"
 
+namespace
+{
+	constexpr double CoverCellSize = 140.;
+	bool CoverCell(const FVector& Position, FIntPoint& OutCell)
+	{
+		// Bound conversions and floating-point error; unusual coordinates use the original scan.
+		if (!FMath::IsFinite(Position.X) || !FMath::IsFinite(Position.Y) ||
+			FMath::Abs(Position.X) > 1.e7 || FMath::Abs(Position.Y) > 1.e7) return false;
+		OutCell = FIntPoint(FMath::FloorToInt(Position.X / CoverCellSize), FMath::FloorToInt(Position.Y / CoverCellSize));
+		return true;
+	}
+}
+
 void UBattleCover::BuildSlots(bool bForce)
 {
 	if (bBuilt && !bForce) return;
 	auto* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
 	if (!Nav) return;
-	Slots.Reset(); Reservations.Reset(); bBuilt = true;
+	Slots.Reset(); ResetReservations(); SlotCells.Reset(); ConflictSlots.Reset(); bSlotIndexValid = false; bBuilt = true;
 	FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleCoverSlots), false);
 	if (const auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>())
 		for (ABattleUnit* Unit : Mode->Units) if (Unit) Query.AddIgnoredActor(Unit);
@@ -53,7 +66,30 @@ void UBattleCover::BuildSlots(bool bForce)
 			if (!bNear) SlotGrid.FindOrAdd(C).Add(Slots.Add(NavPoint.Location));
 		}
 	}
+	BuildSlotIndex();
 	if (FParse::Param(FCommandLine::Get(), TEXT("BattleSymmetryAudit"))) AuditSymmetry();
+}
+
+void UBattleCover::BuildSlotIndex()
+{
+	SlotCells.Reset(); ConflictSlots.Reset(); bSlotIndexValid = false;
+	for (int32 SlotIndex = 0; SlotIndex < Slots.Num(); ++SlotIndex)
+	{
+		FIntPoint SlotCell;
+		if (!CoverCell(Slots[SlotIndex], SlotCell)) { SlotCells.Reset(); return; }
+		SlotCells.FindOrAdd(SlotCell).Add(SlotIndex);
+	}
+	ConflictSlots.SetNum(Slots.Num());
+	for (int32 SlotIndex = 0; SlotIndex < Slots.Num(); ++SlotIndex)
+	{
+		FIntPoint SlotCell; CoverCell(Slots[SlotIndex], SlotCell);
+		// The usual 3x3 neighbourhood plus a guard ring for rounding at cell boundaries; filter exactly below.
+		for (int32 OffsetX = -2; OffsetX <= 2; ++OffsetX) for (int32 OffsetY = -2; OffsetY <= 2; ++OffsetY)
+			if (const auto* CellSlots = SlotCells.Find(SlotCell + FIntPoint(OffsetX, OffsetY)))
+				for (int32 NearSlot : *CellSlots)
+					if (FVector::DistSquared2D(Slots[SlotIndex], Slots[NearSlot]) < FMath::Square(140.f)) ConflictSlots[SlotIndex].Add(NearSlot);
+	}
+	bSlotIndexValid = true;
 }
 
 void UBattleCover::AuditSymmetry() const
@@ -159,7 +195,21 @@ void UBattleCover::PrebuildSlots()
 TArray<int32> UBattleCover::NearbySlots(FVector Origin, float Radius, int32 Limit) const
 {
 	TArray<int32> Result;
-	for (int32 Slot = 0; Slot < Slots.Num(); ++Slot) if (FVector::DistSquared2D(Origin, Slots[Slot]) <= FMath::Square(Radius)) Result.Add(Slot);
+	// Use the original float square (also for negative radii). One cm pads rounding at the rectangle boundary.
+	const double RadiusSquared = FMath::Square(Radius), Extent = FMath::Sqrt(RadiusSquared) + 1.;
+	FIntPoint MinCell, MaxCell;
+	const bool bUseGrid = bSlotIndexValid && FMath::IsFinite(RadiusSquared) &&
+		CoverCell(Origin - FVector(Extent, Extent, 0), MinCell) && CoverCell(Origin + FVector(Extent, Extent, 0), MaxCell) &&
+		(int64(MaxCell.X) - MinCell.X + 1) * (int64(MaxCell.Y) - MinCell.Y + 1) <= Slots.Num();
+	if (bUseGrid)
+	{
+		for (int32 CellX = MinCell.X; CellX <= MaxCell.X; ++CellX) for (int32 CellY = MinCell.Y; CellY <= MaxCell.Y; ++CellY)
+			if (const auto* CellSlots = SlotCells.Find(FIntPoint(CellX, CellY)))
+				for (int32 Slot : *CellSlots) if (FVector::DistSquared2D(Origin, Slots[Slot]) <= FMath::Square(Radius)) Result.Add(Slot);
+		// Feed the same complete sequence to the same unstable distance sort, including all ties.
+		Result.Sort();
+	}
+	else for (int32 Slot = 0; Slot < Slots.Num(); ++Slot) if (FVector::DistSquared2D(Origin, Slots[Slot]) <= FMath::Square(Radius)) Result.Add(Slot);
 	Result.Sort([&](int32 A, int32 B) { return FVector::DistSquared2D(Origin, Slots[A]) < FVector::DistSquared2D(Origin, Slots[B]); });
 	if (Result.Num() > Limit) Result.SetNum(FMath::Max(0, Limit));
 	return Result;
@@ -176,7 +226,16 @@ int32 UBattleCover::Owner(int32 Slot, double Now) const
 bool UBattleCover::IsAvailable(int32 Slot, int32 UnitID, double Now) const
 {
 	if (!Slots.IsValidIndex(Slot)) return false;
-	for (const auto& Pair : Reservations)
+	if (bSlotIndexValid)
+	{
+		// Owner reads expiry and life now, not at index-build time. No traces or state changes occur here.
+		for (int32 ConflictSlot : ConflictSlots[Slot])
+		{
+			const int32 ConflictOwner = Owner(ConflictSlot, Now);
+			if (ConflictOwner != INDEX_NONE && ConflictOwner != UnitID) return false;
+		}
+	}
+	else for (const auto& Pair : Reservations)
 	{
 		const int32 Other = Owner(Pair.Key, Now);
 		if (Other != INDEX_NONE && Other != UnitID && FVector::DistSquared2D(Slots[Slot], Slots[Pair.Key]) < FMath::Square(140.f)) return false;
@@ -188,13 +247,23 @@ bool UBattleCover::Reserve(int32 Slot, int32 UnitID, double Now)
 {
 	const auto* State = GetWorld()->GetSubsystem<UBattleState>()->Find(UnitID);
 	if (!State || !State->IsAlive() || !IsAvailable(Slot, UnitID, Now)) return false;
+	// This is the only insertion path: release first keeps one stored slot per owner, even after expiry/death.
 	Release(UnitID);
+	// An expired/dead owner's record can be overwritten before that owner releases it.
+	if (const auto* Previous = Reservations.Find(Slot))
+		if (const int32* PreviousSlot = UnitToSlot.Find(Previous->UnitID); PreviousSlot && *PreviousSlot == Slot) UnitToSlot.Remove(Previous->UnitID);
 	FBattleCoverReservation Reservation; Reservation.UnitID = UnitID; Reservation.ExpiresAt = Now + 2.5;
 	Reservations.Add(Slot, Reservation);
+	UnitToSlot.Add(UnitID, Slot);
 	return true;
 }
 
 void UBattleCover::Release(int32 UnitID)
 {
-	for (auto It = Reservations.CreateIterator(); It; ++It) if (It.Value().UnitID == UnitID) It.RemoveCurrent();
+	if (const int32* ReservedSlot = UnitToSlot.Find(UnitID))
+	{
+		const auto* OwnedReservation = Reservations.Find(*ReservedSlot);
+		if (OwnedReservation && OwnedReservation->UnitID == UnitID) Reservations.Remove(*ReservedSlot);
+		UnitToSlot.Remove(UnitID);
+	}
 }

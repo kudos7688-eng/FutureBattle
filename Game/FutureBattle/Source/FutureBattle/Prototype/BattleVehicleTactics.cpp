@@ -5,6 +5,7 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleState.h"
 #include "BattleRanges.h"
+#include "BattleTactics.h"
 #include "BattleFieldLayout.h"
 #include "FutureBattle.h"
 
@@ -18,10 +19,20 @@ bool UBattleMatch::AreaArmourThreat(int32 Team,const FVector& P,bool bTankGuns) 
  for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)
  {
   const int32 Key=V.EnemyKeys[I];if(Key<0)continue;
-  const auto* U=Store->Find(Key);if(!U||!U->IsAlive())continue;
   double Reach=0;
-  if(U->CarriesAntiTank())Reach=AT;
-  else if(bTankGuns&&R->HasMainGun(Key))Reach=Gun;
+  if(BattleTactics::ObservedArmour())
+  {
+   if(!V.RecentArmourObservation(Key,Elapsed,FMath::Max(1.f,GetDefault<UBattleTuning>()->VehicleMemory)))continue;
+   const uint8 ThreatType=V.ObservedType(Key);
+   if(ThreatType==BattleSquadType::AntiTank||ThreatType==BattleSquadType::Exo)Reach=AT;
+   else if(bTankGuns&&BattleSquadType::HasMainGun(ThreatType))Reach=Gun;
+  }
+  else
+  {
+   const auto* U=Store->Find(Key);if(!U||!U->IsAlive())continue;
+   if(U->CarriesAntiTank())Reach=AT;
+   else if(bTankGuns&&R->HasMainGun(Key))Reach=Gun;
+  }
   if(Reach>0&&FVector::DistSquared2D(P,V.Enemies[I])<=Reach*Reach)return true;
  }
  return false;

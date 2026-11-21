@@ -4,7 +4,7 @@
 
 ## 0. 始める前に（毎回）
 
-1. **ロック**：ビルド・UEの起動（試験・計測・試合）・Source/Config/DLL/マップの変更の前に、`ListAgents` でロックを持っているセッションを探し、`SendMessage` でロックを受け取る。終わったら手放したことを伝える。ワークツリーが別でもCPUは共有なので、実行を重ねない。
+1. **ロック**：ビルド・UEの起動（試験・計測・試合）・Source/Config/DLL/マップの変更の前に、`ListAgents` でロックを持っているセッションを探し、`SendMessage` でロックを受け取る（どちらも Claude のセッション間の連絡の道具で、PowerShell のコマンドではない。人が作業するときは、ほかのセッションに直接声をかける）。終わったら手放したことを伝える。ワークツリーが別でもCPUは共有なので、実行を重ねない。
 2. `git status --short -uno` と、実行中の `UnrealEditor` を確認する。ほかのセッションのプロセスは止めない。
 3. **凍結ビルドは写しから起動する**（11-18 から）。`New-BattleBuildSnapshot.ps1` は `<凍結ビルド>/Project` に DLL・Config・Content などの写しを作り（約200MB・約5秒）、試合はその写しから起動する。計測中にビルドや Config・マップを編集しても、計測は止まらず、不合格にもならない。ただし、写しを持たない古い凍結ビルド（または `-NoProjectCopy` で作ったもの）は従来どおりで、計測中に Config を変えると起動拒否か不合格になる。
 4. 所要時間を見積もってユーザーに伝える（目安は下の表）。
@@ -18,7 +18,7 @@
 | 変えた箇所ごとの専用試験 | 下の「専用試験」の表 | 各スクリプトの `BATTLE_*_RESULT failures=0` |
 | AI・経済の勝ち負けの比較（並列・描画なし） | `Setup\New-BattleBuildSnapshot.ps1 -Name <未使用名>` で固定ビルドを作る → `Setup\Run-EconomyMatrix.ps1`（総当たり）または `Setup\Run-StrategyScreen.ps1`（片側試験を2段で絞る） → `Setup\Analyze-EconomyMatrix.ps1` | 試合ごとの `result.json` の `passed`、`metrics.json` の得点・勝敗 |
 | 性能（1フレームの時間） | `Setup\Test-WideSight.ps1 -Map E -Area -ObserveTactics -Experiment -Rendered -Fps 30 -OutputName <未使用名>`。内訳が要るときだけ `-Trace 'cpu,frame'` を足す | `metrics.json` の1フレームの平均/p95/最大、認識、描画スレッド |
-| 結果を変えない最適化の確認 | 変更前後で同じ条件の試合を回し、`python.exe -I Setup/Compare-MatchResults.py <変更前> <変更後> ...` で比べる（時間の値を除く全項目。11-18 から） | すべて `IDENTICAL`（終了コード0） |
+| 結果を変えない最適化の確認 | 変更前後で同じ条件の試合を回し、`python.exe -I Setup/Compare-MatchResults.py <変更前> <変更後> ...` で比べる（`metrics.json` のうち時間の値を除く項目だけを比べる。11-18 から。manifest・`result.json` の合否・保存の中身は比べないので、完走と `passed` は別に確かめる） | すべて `IDENTICAL`（終了コード0）。意味は「非時間の metrics が一致」 |
 | マップの形を数字で見る（試合はしない） | `Setup\Test-MapStats.ps1 -Map E -OutputName <未使用名>` | `Setup/Benchmarks/MapStats/<名前>/stats.json`：区域ごとの視線の長さ・空き幅・遮蔽の密度、本拠地からの経路の長さ、戦車の到達、見張り所と拠点から見える割合 |
 
 ### 勝ち負けの比較の決まり
@@ -31,7 +31,7 @@
 - `-NoRoundTripSave` は速くならず結果も変わるので使わない。
 - 片側試験の評価は「試験側の得点差 −（同じseedの既定どうしでのその側の得点差）」。seedの組ごとの側の偏りは±15〜35、12戦の組のぶれは±50ほどある。
 - 片側試験の偏り（`-AreaTrialTeam` で相手側の S4/S6 が切れていた）は 11-18 0時50分に修正した。それより前の勝敗を問う片側試験の結果とは比べない。
-- 保存往復の検証で `Invalid cover peek distance` によって試合が失敗することがある（既存の問題で未調査）。完走数を必ず確かめる。
+- 保存往復の検証で `Invalid cover peek distance` によって試合が失敗した件は、`e1b7885` で直した（距離0の正当な遮蔽を旧検査が拒否していた）。ほかの理由で失敗することはあるので、完走数を必ず確かめる。同じ文言でも、新しい失敗を既知として除外しない。
 - 途中で止まった総当たりは、同じコマンドをもう一度実行すれば、出力が既にある試合を飛ばして再開する。
 - **同じ試合の再利用（11-18 から既定）**：`Run-EconomyMatrix`/`Run-StrategyScreen` は、同じ凍結ビルド・同じ条件で合格済みの試合があれば、試合をせずに結果を写す（`reusedFrom` が付き、`timingComparable=false`）。勝ち負けの比較には使えるが、時間の比較には使わない。毎回試合をするときは `-NoReuse` を付ける。詳しくは STATUS の 11-18 1時05分の項。
 

@@ -12,13 +12,72 @@
 #include "BattleCover.h"
 #include "BattleSquadAI.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "Serialization/ArchiveProxy.h"
+#include "UObject/UnrealType.h"
 
 namespace
 {
+ int32 SaveRoutesSmokeOverride=-1;
+ void CompleteDueReloadOnSave(FBattleUnitState& Copy,double Now)
+ {
+  if(!BattleTactics::SaveReloadBoundary()||!(Copy.ReloadEndTime>0.&&Copy.ReloadEndTime<=Now))return;
+  // Same completion as AdvanceReloads, on the copy only; no extra frame of delay.
+  if(Copy.IsAlive())
+  {
+   const int32 Transfer=FMath::Min(Copy.Reserve,FMath::Max(0,GetDefault<UBattleTuning>()->Capacity(Copy.Weapon)-Copy.Ammo));
+   Copy.Ammo+=Transfer;Copy.Reserve-=Transfer;
+  }
+  Copy.ReloadEndTime=0.;
+ }
+ // Default-valued UPROPERTYs still produce tags in SaveGameToMemory. Filter only the absent extension,
+ // without changing global property flags, the existing tags, or object duplication/reference collection.
+ class FSaveWithoutRoutesArchive : public FArchiveProxy
+ {
+ public:
+  explicit FSaveWithoutRoutesArchive(FArchive& Inner):FArchiveProxy(Inner){}
+  virtual bool ShouldSkipProperty(const FProperty* Property) const override
+  {
+   return (Property->GetOwnerStruct()==UBattleSave::StaticClass()&&
+    (Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,PlayerRoutesVersion)||
+     Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,SavedPlayerRoutes)||
+     Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,SavedPlayerRouteClock)))||FArchiveProxy::ShouldSkipProperty(Property);
+  }
+ };
 	bool InRange(double Value, double Min, double Max) { return FMath::IsFinite(Value) && Value >= Min && Value <= Max; }
 	// Limit: FMapDef::SaveLimit of the map for mixed saves, 100m for the old all-actor saves.
 	bool ValidSnapshotPosition(const FVector& P, FVector2D Limit) { return !P.ContainsNaN() && FMath::Abs(P.X) <= Limit.X && FMath::Abs(P.Y) <= Limit.Y && InRange(P.Z, -1000, 10000); }
 	bool ValidTeam(int32 Team, bool bNeutral = false) { return Team == 0 || Team == 1 || (bNeutral && Team == INDEX_NONE); }
+}
+
+bool BattleSaveValidation::Contact(const FBattleContact& Value,int32 ObserverTeam,const FBattleUnitState* Source,
+ const FBattleUnitState* Target,FVector2D Limit)
+{
+ // Observed type is historical knowledge, not necessarily the target's current type.
+ return (Value.ObservedSquadType==255||Value.ObservedSquadType<BattleSquadType::Count)&&Source&&Target&&
+  Source->Team==ObserverTeam&&Target->Team!=ObserverTeam&&ValidSnapshotPosition(Value.LastKnownPosition,Limit)&&
+  InRange(Value.LastSeenTime,-1000000,.01)&&InRange(Value.Confidence,0,1);
+}
+
+bool BattleTactics::SaveRoutes()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSaveRoutes="),V);return V==1;}();
+ return SaveRoutesSmokeOverride>=0?SaveRoutesSmokeOverride==1:On;
+}
+
+int32 BattleTactics::OverrideSaveRoutesForSmoke(int32 Value)
+{
+ const int32 Previous=SaveRoutesSmokeOverride;
+ if(FParse::Param(FCommandLine::Get(),TEXT("BattleMixedSaveSmoke")))SaveRoutesSmokeOverride=FMath::Clamp(Value,-1,1);
+ return Previous;
+}
+
+void UBattleSave::Serialize(FArchive& Ar)
+{
+ if(Ar.IsSaving()&&Ar.IsPersistent()&&PlayerRoutesVersion==0&&SavedPlayerRoutes.IsEmpty()&&SavedPlayerRouteClock==0)
+ {FSaveWithoutRoutesArchive WithoutRoutes(Ar);Super::Serialize(WithoutRoutes);}
+ else Super::Serialize(Ar);
 }
 
 bool UBattleSave::Validate(FString& Error) const
@@ -60,11 +119,11 @@ bool UBattleSave::Validate(FString& Error) const
 	for (const auto& Entry : Units)
 	{
 		const auto& S = Entry.State; const auto& P = S.Perception; const auto& D = S.Decision;
-  if(S.WeaponAimDirection.ContainsNaN() || (S.bWeaponAimInitialized && !FMath::IsNearlyEqual(S.WeaponAimDirection.SizeSquared(),1.,.01)) || S.CoverPhase>4 || !InRange(S.CoverSeconds,0,3.01) || S.CoverOrderRevision<0 || !ValidPosition(S.CoverAnchor) || !ValidPosition(S.CoverPeek) || (S.CoverPhase && (!Mixed || !(TacticalFeatures&128) || !S.IsAlive())))return Fail(TEXT("Invalid cover or weapon aim state"));
+  if(S.WeaponAimDirection.ContainsNaN() || (S.bWeaponAimInitialized && !FMath::IsNearlyEqual(S.WeaponAimDirection.SizeSquared(),1.,.01)) || S.CoverPhase>4 || !InRange(S.CoverSeconds,0,3.01) || !BattleSaveValidation::Counter(S.CoverOrderRevision) || !ValidPosition(S.CoverAnchor) || !ValidPosition(S.CoverPeek) || (S.CoverPhase && (!Mixed || !(TacticalFeatures&128) || !S.IsAlive())))return Fail(TEXT("Invalid cover or weapon aim state"));
   // A soldier behind low cover stands up to fire where he is: the peek point is the anchor itself (distance 0).
   if(S.CoverPhase && FVector::Dist2D(S.CoverAnchor,S.CoverPeek)>1. && !InRange(FVector::Dist2D(S.CoverAnchor,S.CoverPeek),100,450))return Fail(TEXT("Invalid cover peek distance"));
 		if (S.UnitID <= 0 || S.UnitID > 1000000 || ByID.Contains(S.UnitID) || !ValidTeam(S.Team) || !ValidPosition(Entry.Position) || Entry.Rotation.ContainsNaN() || !ValidPosition(S.Destination)) return Fail(TEXT("Invalid or duplicate unit identity/transform"));
-		if (!InRange(S.HP, 0, 10000) || !InRange(S.Ammo, 0, 10000) || !InRange(S.Reserve, 0, 100000) || !InRange(S.ReloadEndTime, 0, 120) || !InRange(S.NextShotTime, 0, 120) || S.ShotSequence < 0 || S.OrderRevision < 0 || S.PerceptionRevision < 0 || S.DecisionRevision < 0) return Fail(TEXT("Invalid unit resources or timers"));
+		if (!InRange(S.HP, 0, 10000) || !InRange(S.Ammo, 0, 10000) || !InRange(S.Reserve, 0, 100000) || !InRange(S.ReloadEndTime, 0, 120) || !InRange(S.NextShotTime, 0, 120) || !BattleSaveValidation::Counter(S.ShotSequence) || !BattleSaveValidation::Counter(S.OrderRevision) || !BattleSaveValidation::Counter(S.PerceptionRevision) || !BattleSaveValidation::Counter(S.DecisionRevision) || !BattleSaveValidation::Counter(S.CoordinationRevision) || !BattleSaveValidation::Counter(S.MoveRetries)) return Fail(TEXT("Invalid unit resources or timers"));
 		if (static_cast<uint8>(S.Weapon) > static_cast<uint8>(EBattleWeapon::Mortar) || static_cast<uint8>(S.Order) > static_cast<uint8>(EBattleOrder::Defend) || static_cast<uint8>(S.Training) > 2 || !InRange(S.SpreadSkillScale, .25, 3) || !InRange(S.HireCost, 1, 1000000)) return Fail(TEXT("Invalid unit order or training"));
 		if (!InRange(P.SightRange, 100, 20000) || !InRange(P.FieldOfView, 1, 360) || !InRange(P.DetectionSeconds, 0, 30) || !InRange(P.MemorySeconds, 0, 120) || !InRange(P.ShareRange, 0, 20000) || !InRange(P.ShareDelay, 0, 30) || !InRange(D.ThinkSeconds, .01, 10) || !InRange(D.CoverThinkSeconds, .01, 30) || !InRange(D.CoverCandidates, 1, 100)) return Fail(TEXT("Invalid unit capabilities"));
   if(!InRange(S.Shield,0,1000)||!InRange(S.ShieldWait,0,BattleTactics::ExoShieldHitDelay())||
@@ -76,12 +135,12 @@ bool UBattleSave::Validate(FString& Error) const
 	TSet<int32> Assigned;
 	for (const auto& Squad : Squads)
 	{
-		if (Squad.SquadID <= 0 || Squad.SquadID > 1000000 || SquadIDs.Contains(Squad.SquadID) || !ValidTeam(Squad.Team) || Squad.Members.IsEmpty() || Squad.Members.Num() > (Mixed?10:5) || !ValidPosition(Squad.Destination) || !InRange(Squad.DefenseRadius, 250, 10000) || Squad.OrderRevision < 0 || static_cast<uint8>(Squad.Order) > static_cast<uint8>(EBattleOrder::Defend)) return Fail(TEXT("Invalid squad"));
+		if (Squad.SquadID <= 0 || Squad.SquadID > 1000000 || SquadIDs.Contains(Squad.SquadID) || !ValidTeam(Squad.Team) || Squad.Members.IsEmpty() || Squad.Members.Num() > (Mixed?10:5) || !ValidPosition(Squad.Destination) || !InRange(Squad.DefenseRadius, 250, 10000) || !BattleSaveValidation::Counter(Squad.OrderRevision) || !BattleSaveValidation::Counter(Squad.MissionRevision) || !BattleSaveValidation::Counter(Squad.CommandRevision) || !BattleSaveValidation::Counter(Squad.TacticalPlan.Revision) || static_cast<uint8>(Squad.Order) > static_cast<uint8>(EBattleOrder::Defend)) return Fail(TEXT("Invalid squad"));
 		SquadIDs.Add(Squad.SquadID);
   if (Squad.bHasMission)
   {
    if (static_cast<uint8>(Squad.MissionOrder) > static_cast<uint8>(EBattleOrder::Defend) ||
-       !ValidPosition(Squad.MissionDestination) || Squad.MissionRevision < 0 || Squad.MissionGoals.Num() > (Mixed?10:5))
+       !ValidPosition(Squad.MissionDestination) || Squad.MissionGoals.Num() > (Mixed?10:5))
     return Fail(TEXT("Invalid squad mission"));
    for (const auto& Goal : Squad.MissionGoals)
     if (!Squad.Members.Contains(Goal.Key) || !ValidPosition(Goal.Value)) return Fail(TEXT("Invalid mission member goal"));
@@ -101,6 +160,28 @@ bool UBattleSave::Validate(FString& Error) const
   Assigned.Add(U.State.UnitID);
  }
 	if (Assigned.Num() != Units.Num()) return Fail(TEXT("Unit without a squad"));
+ if(PlayerRoutesVersion<0||PlayerRoutesVersion>1||
+    (PlayerRoutesVersion==0&&(!SavedPlayerRoutes.IsEmpty()||SavedPlayerRouteClock!=0))||
+    (PlayerRoutesVersion==1&&(!Mixed||SavedPlayerRoutes.IsEmpty())))return Fail(TEXT("Invalid player route extension"));
+ if(PlayerRoutesVersion==1)
+ {
+  if(SavedPlayerRoutes.Num()>Squads.Num()||SavedPlayerRoutes.Num()>400||!InRange(SavedPlayerRouteClock,0,1))return Fail(TEXT("Invalid player route extension"));
+  TSet<int32> RouteSquads;
+  const double MaxRouteWait=20.+2.*BattleFieldLayout::ByName(MapName).SaveLimit.Size()/250.+.1;
+  for(const auto& Route:SavedPlayerRoutes)
+  {
+   const auto* RouteSquad=Squads.FindByPredicate([&](const FBattleSquadState& Candidate){return Candidate.SquadID==Route.SquadID;});
+   if(!RouteSquad||RouteSquad->Team!=0||RouteSquad->CommandStatus!=EBattleCommandStatus::Active||RouteSquads.Contains(Route.SquadID))
+    return Fail(TEXT("Invalid player route squad"));
+   RouteSquads.Add(Route.SquadID);
+   if(Route.Lane<0||Route.Lane>3||Route.Phase<0||Route.Phase>2||Route.Order>uint8(EBattleOrder::Defend)||
+      (Route.bMission&&Route.Order==uint8(EBattleOrder::Hold))||Route.Waypoints.Num()>96||(!Route.bPath&&!Route.Waypoints.IsEmpty())||
+      !ValidPosition(Route.Goal)||(!ValidPosition(Route.Step)&&Route.Step!=FVector(FLT_MAX))||
+      (!ValidPosition(Route.PhaseGoal)&&Route.PhaseGoal!=FVector(FLT_MAX))||
+      !InRange(Route.DeadlineRemaining,-double(Elapsed),MaxRouteWait))return Fail(TEXT("Invalid player route state"));
+   for(const FVector& Waypoint:Route.Waypoints)if(!ValidPosition(Waypoint))return Fail(TEXT("Invalid player route waypoint"));
+  }
+ }
 	for (int32 ID : { SelectedID, ControlledID }) if (ID != INDEX_NONE)
 	{
 		const auto* const* S = ByID.Find(ID); if (!S || !(*S)->IsAlive() || (*S)->Team != 0) return Fail(TEXT("Invalid player control target"));
@@ -109,7 +190,8 @@ bool UBattleSave::Validate(FString& Error) const
 	auto ValidContact = [&](int32 Receiver, const FBattleContact& C)
 	{
 		const auto* const* Source = ByID.Find(C.SourceUnitID); const auto* const* Target = ByID.Find(C.TargetID); const auto* const* Observer = ByID.Find(Receiver);
-		return (C.ObservedSquadType==255||C.ObservedSquadType<BattleSquadType::Count) && Observer && Source && Target && (*Source)->Team == (*Observer)->Team && (*Target)->Team != (*Observer)->Team && ValidPosition(C.LastKnownPosition) && InRange(C.LastSeenTime, -1000000, 0.01) && InRange(C.Confidence, 0, 1);
+		return Observer && BattleSaveValidation::Contact(C,(*Observer)->Team,Source?*Source:nullptr,Target?*Target:nullptr,
+   Mixed?BattleFieldLayout::ByName(MapName).SaveLimit:FVector2D(10000,10000));
 	};
 	for (const auto& Observer : Observers)
 	{
@@ -120,7 +202,7 @@ bool UBattleSave::Validate(FString& Error) const
 			if (!ByID.Contains(Detection.Key) || ByID[Detection.Key]->Team == (*S)->Team || !InRange(Detection.Value, -1000000, .01)) return Fail(TEXT("Invalid detection timer"));
 	}
 	for (const auto& Report : Reports)
-		if (!ValidContact(Report.ReceiverID, Report.Contact) || !InRange(Report.DeliveryTime, -120, 30) || Report.SourceRevision < 0 || Report.ReceiverRevision < 0) return Fail(TEXT("Invalid pending report"));
+		if (!ValidContact(Report.ReceiverID, Report.Contact) || !InRange(Report.DeliveryTime, -120, 30) || !BattleSaveValidation::Counter(Report.SourceRevision) || !BattleSaveValidation::Counter(Report.ReceiverRevision)) return Fail(TEXT("Invalid pending report"));
 	if(Mixed && !ValidateMixed(Error))return false;
 	Error.Reset(); return true;
 }
@@ -154,6 +236,12 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
    E.Avoid=G.Avoid;E.AvoidRemaining=double(G.AvoidUntil)-double(Elapsed);E.StartLiving=G.StartLiving;E.StartStrength=G.StartStrength;
    E.StallPoint=G.StallPoint;E.Stalls=G.Stalls;E.bOpened=G.bOpened;E.bArrived=G.bArrived;
    E.ArrivalAge=double(Elapsed)-double(G.ArrivedAt);E.Extensions=G.Extensions;
+   E.Kind=G.Kind;E.SurpriseRow=G.SurpriseRow;E.SurpriseBridgeStage=G.SurpriseBridgeStage;E.SurpriseBridgeLeader=G.SurpriseBridgeLeader;
+   E.SurpriseBridgeAge=double(Elapsed)-double(G.SurpriseBridgeAt);E.SurpriseNextCol=G.SurpriseNextCol;
+   E.FrontHold=G.FrontHold;E.bFrontDrawn=G.bFrontDrawn;E.FrontBackAge=double(Elapsed)-double(G.FrontBackAt);E.FrontStepAge=double(Elapsed)-double(G.FrontStepAt);
+   E.SurpriseBridgeEntry=G.SurpriseBridgeEntry;E.SurpriseBridgeExit=G.SurpriseBridgeExit;E.SurpriseBridgeGoal=G.SurpriseBridgeGoal;
+   E.bSurpriseWaiting=G.SurpriseWaitAt>=0.f;E.SurpriseWaitAge=E.bSurpriseWaiting?double(Elapsed)-double(G.SurpriseWaitAt):0.;
+   E.SurpriseLogRemaining=double(G.SurpriseLogAt)-double(Elapsed);E.SurpriseEndRemaining=double(G.SurpriseEndAt)-double(Elapsed);
    Save->SavedGroups.Add(Pair.Key,E);
   }
   for(const auto& Pair:CarChoices)
@@ -192,12 +280,14 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
  if(Mixed) for(const auto& Pair:Store->GetUnits())
  {
   FBattleSavedUnit E;E.State=Pair.Value;E.Position=Runtime->Position(Pair.Key);E.Rotation=Runtime->Forward(Pair.Key).Rotation();
+  CompleteDueReloadOnSave(E.State,Now);
   E.State.NextShotTime=FMath::Max(0.,E.State.NextShotTime-Now);E.State.ReloadEndTime=FMath::Max(0.,E.State.ReloadEndTime-Now);
   Save->Units.Add(E);SquadIDs.Add(E.State.SquadID);
  }
 	if(!Mixed) for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->GetState())
 	{
 		FBattleSavedUnit Entry; Entry.State = *Unit->GetState(); Entry.Position = Unit->GetActorLocation(); Entry.Rotation = Unit->GetActorRotation();
+		CompleteDueReloadOnSave(Entry.State,Now);
 		Entry.State.NextShotTime = FMath::Max(0., Entry.State.NextShotTime - Now);
 		Entry.State.ReloadEndTime = FMath::Max(0., Entry.State.ReloadEndTime - Now);
 		Save->Units.Add(Entry); SquadIDs.Add(Entry.State.SquadID);
@@ -205,6 +295,25 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
 	for (int32 ID : SquadIDs) if (const auto* Squad = Store->FindSquad(ID)) {Save->Squads.Add(*Squad);if(Mixed)Save->SavedPlans.Add(ID,Squad->TacticalPlan);}
  Save->Units.Sort([](const FBattleSavedUnit& A,const FBattleSavedUnit& B){return A.State.UnitID<B.State.UnitID;});
  Save->Squads.Sort([](const FBattleSquadState& A,const FBattleSquadState& B){return A.SquadID<B.SquadID;});
+ if(Mixed&&BattleTactics::SaveRoutes())
+ {
+  // Dead/removed squads can leave lane preferences behind; they cannot resume a player order.
+  for(const auto& RoutePair:PlayerRoutes)
+  {
+   const auto* RouteSquad=Store->FindSquad(RoutePair.Key);
+   if(!RouteSquad||RouteSquad->Team!=0||RouteSquad->CommandStatus!=EBattleCommandStatus::Active)continue;
+   const auto& Route=RoutePair.Value;FBattleSavedPlayerRoute Entry;
+   Entry.SquadID=RoutePair.Key;Entry.Lane=Route.Lane;Entry.Phase=Route.Phase;Entry.PhaseGoal=Route.PhaseGoal;
+   Entry.bMission=Route.bMission;Entry.Order=uint8(Route.Order);Entry.Goal=Route.Goal;Entry.Step=Route.Step;
+   Entry.bPath=Route.bPath;Entry.Waypoints=Route.Waypoints;Entry.DeadlineRemaining=double(Route.StepDeadline)-double(Elapsed);
+   Save->SavedPlayerRoutes.Add(MoveTemp(Entry));
+  }
+  if(!Save->SavedPlayerRoutes.IsEmpty())
+  {
+   Save->PlayerRoutesVersion=1;Save->SavedPlayerRouteClock=PlayerRouteClock;
+   Save->SavedPlayerRoutes.Sort([](const FBattleSavedPlayerRoute& A,const FBattleSavedPlayerRoute& B){return A.SquadID<B.SquadID;});
+  }
+ }
 	GetWorld()->GetSubsystem<UBattlePerception>()->Capture(Save->Observers, Save->Reports, Now);
 	// Dead observers can remain until the next sliced perception update.
 	for (auto It = Save->Observers.CreateIterator(); It; ++It) if (!Store->Find(It.Key()) || !Store->Find(It.Key())->IsAlive() || It.Value().ProfileRevision != Store->Find(It.Key())->PerceptionRevision) It.RemoveCurrent();
@@ -214,6 +323,18 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
 bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 {
 	if (!Save || !Save->Validate(LastMessage)) { if (!Save) LastMessage = TEXT("No compatible save found"); return false; }
+ if(Save->PlayerRoutesVersion!=0&&!BattleTactics::SaveRoutes())
+ {LastMessage=TEXT("Player route save requires BattleSaveRoutes=1");return false;}
+ // Stage the complete extension before any actor or canonical state is replaced.
+ TMap<int32,FPlayerRoute> StagedPlayerRoutes;
+ for(const auto& RouteEntry:Save->SavedPlayerRoutes)
+ {
+  FPlayerRoute Route;
+  Route.Lane=RouteEntry.Lane;Route.Phase=RouteEntry.Phase;Route.PhaseGoal=RouteEntry.PhaseGoal;
+  Route.bMission=RouteEntry.bMission;Route.Order=EBattleOrder(RouteEntry.Order);Route.Goal=RouteEntry.Goal;Route.Step=RouteEntry.Step;
+  Route.bPath=RouteEntry.bPath;Route.Waypoints=RouteEntry.Waypoints;Route.StepDeadline=float(double(Save->Elapsed)+RouteEntry.DeadlineRemaining);
+  StagedPlayerRoutes.Add(RouteEntry.SquadID,MoveTemp(Route));
+ }
 	auto* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>(); auto* PC = Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
 	if (!Mode || !PC) return false;
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
@@ -267,8 +388,9 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 	}
 	GetWorld()->GetSubsystem<UBattleState>()->RestoreRecords(Records, Save->Squads);
  }
- // Route preferences remain deliberately unsaved, and are discarded only on a successful load.
- PlayerRoutes.Reset();
+ // Legacy saves still discard route choices and leave the old update clock unchanged.
+ if(Save->PlayerRoutesVersion==1){PlayerRoutes=MoveTemp(StagedPlayerRoutes);PlayerRouteClock=Save->SavedPlayerRouteClock;}
+ else PlayerRoutes.Reset();
 	MatchID = Save->MatchID; Phase = static_cast<EBattleMatchPhase>(Save->Phase); Credits[0] = Save->AllyCredits; Credits[1] = Save->EnemyCredits;
 	Score[0] = Save->AllyScore; Score[1] = Save->EnemyScore; Elapsed = Save->Elapsed; DirectorClock = Save->DirectorClock; SupplyClock = Save->SupplyClock;
 	Objectives = Save->Objectives; Winner = Save->Winner;
@@ -291,7 +413,14 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
    G.PhaseAt=float(double(Elapsed)-E.PhaseAge);G.Rally=E.Rally;G.bPlayer=E.bPlayer;G.Roles=E.Roles;
    G.Avoid=E.Avoid;G.AvoidUntil=float(double(Elapsed)+E.AvoidRemaining);G.StartLiving=E.StartLiving;G.StartStrength=E.StartStrength;
    G.StallPoint=E.StallPoint;G.Stalls=E.Stalls;G.bOpened=E.bOpened;G.bArrived=E.bArrived;
-   G.ArrivedAt=float(double(Elapsed)-E.ArrivalAge);G.Extensions=E.Extensions;RestoredGroups.Add(Pair.Key,MoveTemp(G));
+   G.ArrivedAt=float(double(Elapsed)-E.ArrivalAge);G.Extensions=E.Extensions;
+   G.Kind=E.Kind;G.SurpriseRow=E.SurpriseRow;G.SurpriseBridgeStage=E.SurpriseBridgeStage;G.SurpriseBridgeLeader=E.SurpriseBridgeLeader;
+   G.SurpriseBridgeAt=float(double(Elapsed)-E.SurpriseBridgeAge);G.SurpriseNextCol=E.SurpriseNextCol;
+   G.FrontHold=E.FrontHold;G.bFrontDrawn=E.bFrontDrawn;G.FrontBackAt=float(double(Elapsed)-E.FrontBackAge);G.FrontStepAt=float(double(Elapsed)-E.FrontStepAge);
+   G.SurpriseBridgeEntry=E.SurpriseBridgeEntry;G.SurpriseBridgeExit=E.SurpriseBridgeExit;G.SurpriseBridgeGoal=E.SurpriseBridgeGoal;
+   G.SurpriseWaitAt=E.bSurpriseWaiting?float(double(Elapsed)-E.SurpriseWaitAge):-1.f;
+   G.SurpriseLogAt=float(double(Elapsed)+E.SurpriseLogRemaining);G.SurpriseEndAt=float(double(Elapsed)+E.SurpriseEndRemaining);
+   RestoredGroups.Add(Pair.Key,MoveTemp(G));
   }
   for(const auto& Pair:Save->SavedCarChoices)
   {
@@ -303,6 +432,9 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
  SquadGroup=Save->SavedSquadGroup;NextGroupID=Save->SavedNextGroupID;
  // Rebuilt on demand from restored observations; never persist a cached view of the future.
  IntelViews[0]=IntelViews[1]=FAreaIntelView();
+ FireReveals[0].Reset();FireReveals[1].Reset();
+ if(BattleTactics::ArtilleryPosts())GenerateArtilleryPosts();
+ ClampFrontTimers();
 	Strikes = Save->Strikes; SupportCooldown[0] = Save->AllySupportCooldown; SupportCooldown[1] = Save->EnemySupportCooldown; SupportUsed[0] = Save->AllySupportUsed; SupportUsed[1] = Save->EnemySupportUsed;
 	Mode->bCombatPaused = Save->bPaused; Mode->bBattleEnded = Phase == EBattleMatchPhase::Finished; Mode->Result = Save->Result; Mode->CombatStartsAt = Now;
 	for (int32 Index = 0; Index < Spawned.Num(); ++Index)
@@ -315,6 +447,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 	if(Mixed){T->RestoreSave(*Save,Now);Team->RestoreSave(*Save);DelegationClock=Save->DelegationClock;GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now);Runtime->RefreshDisplay();}
 	Mode->RefreshVisibility();
 	for (auto* Unit : Spawned) if (Unit->GetUnitID() == Save->ControlledID) { PC->ControlUnit(Unit); PC->SetControlRotation(Save->ViewRotation); break; }
+ ++RestoreGeneration;
 	LastMessage = TEXT("Match restored"); return true;
 }
 

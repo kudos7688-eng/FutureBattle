@@ -112,12 +112,15 @@ bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
  if(!X.bLoaded)
  {
   X.bLoaded=true;
-  X.Suit.Reset(LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Art/AC01T2/SK_AC01T2.SK_AC01T2"),nullptr,LOAD_NoWarn));
+  // Body 3 (default): seamless under-suit with the armour plates over it (Setup/Import-AC01T3.ps1); 2: the v2 shell with joint sleeves.
+  int32 BodyVersion=3;FParse::Value(FCommandLine::Get(),TEXT("BattleExoBody="),BodyVersion);
+  if(BodyVersion==3)X.Suit.Reset(LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Art/AC01T2/SK_AC01T3.SK_AC01T3"),nullptr,LOAD_NoWarn));
+  if(!X.Suit.IsValid())X.Suit.Reset(LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Art/AC01T2/SK_AC01T2.SK_AC01T2"),nullptr,LOAD_NoWarn));
   X.Primary.Load(TEXT("OneHand"));X.Secondary.Load(TEXT("Dual"));
   X.Rifle.Reset(LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Rifle.SM_AC01_Rifle"),nullptr,LOAD_NoWarn));
   X.Launcher.Reset(LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Launcher.SM_AC01_Launcher"),nullptr,LOAD_NoWarn));
   X.bOk=X.Suit.IsValid()&&X.Primary.Idle.IsValid()&&X.Primary.Move.IsValid()&&X.Secondary.Idle.IsValid()&&X.Secondary.Move.IsValid()&&X.Rifle.IsValid()&&X.Launcher.IsValid();
-  UE_LOG(LogFutureBattle,Display,TEXT("EXO_SUIT assets=%d move=%s,%s"),X.bOk,X.Primary.Move.IsValid()?*X.Primary.Move->GetName():TEXT("none"),X.Secondary.Move.IsValid()?*X.Secondary.Move->GetName():TEXT("none"));
+  UE_LOG(LogFutureBattle,Display,TEXT("EXO_SUIT assets=%d body=%s move=%s,%s"),X.bOk,X.Suit.IsValid()?*X.Suit->GetName():TEXT("none"),X.Primary.Move.IsValid()?*X.Primary.Move->GetName():TEXT("none"),X.Secondary.Move.IsValid()?*X.Secondary.Move->GetName():TEXT("none"));
  }
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();ABattleUnit* A=Actor(ID);const auto* U=Store->Find(ID);
  if(!X.bOk||!A||!U)return false;
@@ -299,8 +302,8 @@ void UBattleLeaderRuntime::StepExoLaunchers(double Now)
   {
    // Permission restricts the aim target, not the observed neighbours used to value its splash.
    if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,K.Key,K.Value))continue;
-   const bool Vehicle=IsVehicle(K.Key);int32 Around=0;
-   if(!Vehicle){if(U->Launcher<=FMath::Max(0,T->ExoLauncherKeep))continue;for(const auto& O:Seen)Around+=!IsVehicle(O.Key)&&FVector::DistSquared2D(O.Value,K.Value)<=Splash2;if(Around<FMath::Max(1,T->ExoLauncherCluster))continue;}
+   const bool Vehicle=BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(Contacts->FindChecked(K.Key).ObservedSquadType):IsVehicle(K.Key);int32 Around=0;
+   if(!Vehicle){if(U->Launcher<=FMath::Max(0,T->ExoLauncherKeep))continue;for(const auto& O:Seen)Around+=!(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(Contacts->FindChecked(O.Key).ObservedSquadType):IsVehicle(O.Key))&&FVector::DistSquared2D(O.Value,K.Value)<=Splash2;if(Around<FMath::Max(1,T->ExoLauncherCluster))continue;}
    const double Score=(Vehicle?1000.:double(Around))-FVector::Dist2D(Pos,K.Value)/1.e6;
    if(Score>BestScore||(Score==BestScore&&K.Key<Best)){BestScore=Score;Best=K.Key;BestAt=K.Value;}
   }
@@ -371,7 +374,7 @@ int32 UBattleMatch::AreaExoTarget(int32 Team,int32 SquadID) const
  const FVector Here=R->Position(S->LeaderUnitID);const auto& V=AreaIntelView(Team);
  // The point nearest a known enemy vehicle (the soldier carries the launcher).
  int32 VehiclePoint=INDEX_NONE;double VehicleBest=DBL_MAX;
- for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)if(V.EnemyKeys[I]>0&&R->IsVehicle(V.EnemyKeys[I]))
+ for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)if(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(V.ObservedType(V.EnemyKeys[I])):V.EnemyKeys[I]>0&&R->IsVehicle(V.EnemyKeys[I]))
   for(int32 P=0;P<Objectives.Num();++P){const double D=FVector::DistSquared2D(Objectives[P].Position,V.Enemies[I]);if(D<VehicleBest){VehicleBest=D;VehiclePoint=P;}}
  return AreaVehicleChoice(SquadID,[&](int32 I)->double
  {

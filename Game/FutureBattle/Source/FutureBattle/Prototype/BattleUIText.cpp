@@ -39,6 +39,11 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("COVER / FIRE = BLIND FIRE / AIM + FIRE = PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で壁越しに撃つ ／ 構えて射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("BLIND FIRE"),TEXT("壁越し射撃"));M.Add(TEXT("NO NEARBY COVER WITH SAFE PEEK"),TEXT("近くに安全に撃てる遮蔽がない"));
   M.Add(TEXT("AI PAUSED / practice controls freely"),TEXT("AI停止中 ／ 自由に操作を練習できます"));M.Add(TEXT("AI RESUMED"),TEXT("AI再開"));
   // Match and save messages.
+  M.Add(TEXT("Player route save requires BattleSaveRoutes=1"),TEXT("経路付き保存を読むには -BattleSaveRoutes=1 が必要です"));
+  M.Add(TEXT("Invalid player route extension"),TEXT("保存されたプレイヤー経路の版・件数・時計が不正です"));
+  M.Add(TEXT("Invalid player route squad"),TEXT("保存されたプレイヤー経路の部隊が不正です"));
+  M.Add(TEXT("Invalid player route state"),TEXT("保存されたプレイヤー経路の命令・座標・期限が不正です"));
+  M.Add(TEXT("Invalid player route waypoint"),TEXT("保存されたプレイヤー経路の中継点が不正です"));
   M.Add(TEXT("LAUNCHER EQUIPPED"),TEXT("対戦車火器を装備"));
   M.Add(TEXT("RIFLE EQUIPPED"),TEXT("ライフルを装備"));
   M.Add(TEXT("Invalid training price"),TEXT("練度の購入価格が不正です"));
@@ -73,7 +78,7 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("Self-propelled gun limit reached"),TEXT("自走砲の上限に達しました"));
   M.Add(TEXT("LAUNCHER EMPTY / REFILL AT HOME"),TEXT("対戦車弾なし ／ 本拠地で補充"));M.Add(TEXT("LAUNCHER LOADING"),TEXT("対戦車火器を装填中"));
   M.Add(TEXT("Exoskeleton soldier limit reached"),TEXT("外骨格兵の上限に達しました"));
-  M.Add(TEXT("Supply team limit reached"),TEXT("補給班の上限に達しました"));
+  M.Add(TEXT("Supply vehicle limit reached"),TEXT("補給車の上限に達しました"));
   M.Add(TEXT("Match restored"),TEXT("試合を読み込みました"));M.Add(TEXT("Match saved [F9 to load]"),TEXT("試合を保存しました [F9で読込]"));
   M.Add(TEXT("Mixed recruitment unavailable"),TEXT("購入できません"));M.Add(TEXT("Navigation unavailable"),TEXT("経路がありません"));
   M.Add(TEXT("No compatible save found"),TEXT("使える保存データがありません"));M.Add(TEXT("No free squad slot (active squad limit)"),TEXT("部隊の空きがありません（稼働部隊の上限）"));
@@ -129,7 +134,7 @@ static FString JaUncached(const FString& Text)
   {TEXT("^Self-propelled gun deployed / -(\\d+) resources$"),TEXT("自走砲を配備 ／ 資源 -{0}")},
   {TEXT("^LAUNCHER FIRED / (\\d+) LEFT$"),TEXT("対戦車火器を発射 ／ 残り{0}発")},
   {TEXT("^Exoskeleton soldier deployed / -(\\d+) resources$"),TEXT("外骨格兵を配備 ／ 資源 -{0}")},
-  {TEXT("^Supply team deployed / -(\\d+) resources$"),TEXT("補給班を配備 ／ 資源 -{0}")},
+  {TEXT("^Supply vehicle deployed / -(\\d+) resources$"),TEXT("補給車を配備 ／ 資源 -{0}")},
   {TEXT("^(\\d+) SQUADS / (.*)$"),TEXT("{0}部隊 ／ {1}")},
   {TEXT("^(.*) / (\\d+)m$"),TEXT("{0} ／ {1}m")},
  };
