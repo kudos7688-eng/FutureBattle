@@ -61,6 +61,12 @@ bool BattleTactics::ArtilleryPosts()
  return On;
 }
 
+bool BattleTactics::ArtilleryRaidChase()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryRaidChase="),V);return V==1;}();
+ return On&&ArtilleryPosts();
+}
+
 int32 BattleTactics::AreaSPGCost()
 {
  static int32 OverrideCost=35;
@@ -590,6 +596,7 @@ void UBattleMatch::GenerateArtilleryPosts()
 {
  if(!BattleTactics::ArtilleryPosts())return;
  ArtilleryRaids.Reset();MortarPostChoices.Reset();
+ ArtilleryRaidChases.Reset();ArtilleryRaidFlashes[0]=ArtilleryRaidFlashes[1]=FArtilleryRaidFlash();ArtilleryRaidClearedAt[0]=ArtilleryRaidClearedAt[1]=-1.;
  for(int32 PostTeam=0;PostTeam<2;++PostTeam){ArtilleryPostPositions[PostTeam].Reset();ArtilleryPostEvidence[PostTeam].Init(-1.,3);}
  auto* PostNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
  const ANavigationData* PostData=nullptr;
@@ -670,6 +677,15 @@ void UBattleMatch::UpdateArtilleryRaids(int32 Team)
  const auto* RaidStore=GetWorld()->GetSubsystem<UBattleState>();const auto* RaidRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const auto& EnemyPosts=ArtilleryPostPositions[1-Team];auto& EvidenceTimes=ArtilleryPostEvidence[Team];
  const auto& RaidIntel=AreaIntelView(Team);
+ const bool ChaseRaid=BattleTactics::ArtilleryRaidChase();
+ if(ChaseRaid)
+ {
+  auto& LatestRaidFlash=ArtilleryRaidFlashes[Team];
+  for(const auto& NoticedFlash:FireReveals[Team])
+   if(NoticedFlash.Value.bArtillery&&NoticedFlash.Value.At<=Elapsed&&Elapsed-NoticedFlash.Value.At<NoticedFlash.Value.Memory&&
+      (NoticedFlash.Value.At>LatestRaidFlash.At||(NoticedFlash.Value.At==LatestRaidFlash.At&&NoticedFlash.Key<LatestRaidFlash.Shooter)))
+    {LatestRaidFlash.Target=NoticedFlash.Value.Position;LatestRaidFlash.At=NoticedFlash.Value.At;LatestRaidFlash.Shooter=NoticedFlash.Key;}
+ }
  for(int32 EvidencePost=0;EvidencePost<EnemyPosts.Num();++EvidencePost)
  {
   double EvidenceAt=EvidenceTimes[EvidencePost];const TCHAR* EvidenceKind=TEXT("seen");
@@ -692,26 +708,64 @@ void UBattleMatch::UpdateArtilleryRaids(int32 Team)
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_SUSPECT team=%d post=%d evidence=%s at=%.1f"),Team,EvidencePost,EvidenceKind,EvidenceAt);
   }
  }
+ const double RaidLifetime=ChaseRaid?120.:60.;
+ int32 ChasePost=INDEX_NONE;
+ if(ChaseRaid)for(int32 ChasePostIndex=0;ChasePostIndex<EvidenceTimes.Num();++ChasePostIndex)
+  if(EvidenceTimes[ChasePostIndex]>=0&&Elapsed-EvidenceTimes[ChasePostIndex]<RaidLifetime&&
+     (ChasePost==INDEX_NONE||EvidenceTimes[ChasePostIndex]>EvidenceTimes[ChasePost]))ChasePost=ChasePostIndex;
+ const auto& RememberedFlash=ArtilleryRaidFlashes[Team];
+ const bool HasRaidFlash=ChaseRaid&&RememberedFlash.At>=0&&Elapsed-RememberedFlash.At<RaidLifetime;
  bool HasRaid=false;
  TArray<int32> RaidKeys;ArtilleryRaids.GetKeys(RaidKeys);RaidKeys.Sort();
  for(int32 RaidSquadID:RaidKeys)
  {
   const auto* RaidSquad=RaidStore->FindSquad(RaidSquadID);if(RaidSquad&&RaidSquad->Team!=Team)continue;
   const int32 RaidPostIndex=ArtilleryRaids[RaidSquadID];const TCHAR* RaidEnd=nullptr;
+  FArtilleryRaidChase* RaidChase=nullptr;
+  if(ChaseRaid)
+  {
+   RaidChase=&ArtilleryRaidChases.FindOrAdd(RaidSquadID);
+   if(HasRaidFlash&&RememberedFlash.At>RaidChase->FlashAt)
+   {
+    RaidChase->Target=RememberedFlash.Target;RaidChase->FlashAt=RememberedFlash.At;RaidChase->ArrivedAt=-1.;RaidChase->bFlash=true;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID_RETARGET team=%d squad=%d target=%s"),Team,RaidSquadID,*RaidChase->Target.ToCompactString());
+   }
+   else if(!HasRaidFlash&&ChasePost!=INDEX_NONE)
+   {
+    if(RaidChase->bFlash||RaidChase->Target!=EnemyPosts[ChasePost])RaidChase->ArrivedAt=-1.;
+    RaidChase->Target=EnemyPosts[ChasePost];RaidChase->bFlash=false;ArtilleryRaids[RaidSquadID]=ChasePost;
+   }
+   if(HasRaidFlash)RaidChase->EvidenceAt=FMath::Max(RaidChase->EvidenceAt,RememberedFlash.At);
+   const int32 ChaseEvidencePost=ArtilleryRaids[RaidSquadID];
+   if(EvidenceTimes.IsValidIndex(ChaseEvidencePost))RaidChase->EvidenceAt=FMath::Max(RaidChase->EvidenceAt,EvidenceTimes[ChaseEvidencePost]);
+  }
   int32 RaidLiving=0;if(RaidSquad)for(int32 RaidMember:RaidSquad->Members)if(const auto* RaidUnit=RaidStore->Find(RaidMember);RaidUnit&&RaidUnit->IsAlive())++RaidLiving;
   if(!RaidSquad||RaidSquad->CommandStatus!=EBattleCommandStatus::Active)RaidEnd=TEXT("inactive");
   else if(RaidLiving*2<RaidSquad->Members.Num())RaidEnd=TEXT("losses");
   else if(Team==0&&!RaidSquad->bPlayerDelegated)RaidEnd=TEXT("manual");
-  else if(!EvidenceTimes.IsValidIndex(RaidPostIndex)||EvidenceTimes[RaidPostIndex]<0||Elapsed-EvidenceTimes[RaidPostIndex]>=60.)RaidEnd=TEXT("expired");
+  else if(ChaseRaid?(RaidChase->EvidenceAt<0||Elapsed-RaidChase->EvidenceAt>=RaidLifetime):(!EvidenceTimes.IsValidIndex(RaidPostIndex)||EvidenceTimes[RaidPostIndex]<0||Elapsed-EvidenceTimes[RaidPostIndex]>=60.))RaidEnd=TEXT("expired");
   else if(Area.HirePurpose.Contains(RaidSquadID)||IntelPurpose.Contains(RaidSquadID))RaidEnd=TEXT("purpose");
-  if(RaidEnd){UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID_END team=%d squad=%d reason=%s"),Team,RaidSquadID,RaidEnd);ArtilleryRaids.Remove(RaidSquadID);}
+  if(!RaidEnd&&ChaseRaid)
+  {
+   const auto* RaidLeader=RaidStore->Find(RaidSquad->LeaderUnitID);
+   if(RaidLeader&&RaidLeader->IsAlive()&&FVector::DistSquared2D(RaidRuntime->Position(RaidSquad->LeaderUnitID),RaidChase->Target)<=FMath::Square(2500.))
+   {
+    if(RaidChase->ArrivedAt<0)RaidChase->ArrivedAt=Elapsed;
+    if(Elapsed-RaidChase->ArrivedAt>=20.){RaidEnd=TEXT("cleared");ArtilleryRaidClearedAt[Team]=RaidChase->EvidenceAt;}
+   }
+   else RaidChase->ArrivedAt=-1.;
+  }
+  if(RaidEnd){UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID_END team=%d squad=%d reason=%s"),Team,RaidSquadID,RaidEnd);ArtilleryRaids.Remove(RaidSquadID);if(ChaseRaid)ArtilleryRaidChases.Remove(RaidSquadID);}
   else HasRaid=true;
  }
  if(HasRaid)return;
  int32 SuspectedPost=INDEX_NONE;
  for(int32 SuspectIndex=0;SuspectIndex<EvidenceTimes.Num();++SuspectIndex)
-  if(EvidenceTimes[SuspectIndex]>=0&&Elapsed-EvidenceTimes[SuspectIndex]<60.&&(SuspectedPost==INDEX_NONE||EvidenceTimes[SuspectIndex]>EvidenceTimes[SuspectedPost]))SuspectedPost=SuspectIndex;
- if(SuspectedPost==INDEX_NONE)return;
+  if(EvidenceTimes[SuspectIndex]>=0&&Elapsed-EvidenceTimes[SuspectIndex]<RaidLifetime&&(SuspectedPost==INDEX_NONE||EvidenceTimes[SuspectIndex]>EvidenceTimes[SuspectedPost]))SuspectedPost=SuspectIndex;
+ if(SuspectedPost==INDEX_NONE&&!HasRaidFlash)return;
+ const FVector RaidTarget=HasRaidFlash?RememberedFlash.Target:EnemyPosts[SuspectedPost];
+ const double RaidTargetEvidence=FMath::Max(HasRaidFlash?RememberedFlash.At:-1.,SuspectedPost!=INDEX_NONE?EvidenceTimes[SuspectedPost]:-1.);
+ if(ChaseRaid&&RaidTargetEvidence<=ArtilleryRaidClearedAt[Team])return;
  // User decision 2026-11-21: a raid on artillery is dangerous; send exoskeleton soldiers first (fast, shielded, launcher kills
  // guns), armoured cars only when no exo is free; never rifle squads or heavy infantry.
  int32 NearestRaider=INDEX_NONE,NearestRaidRank=MAX_int32;double NearestRaidDistance=DBL_MAX;int32 RaidSlot=0;
@@ -727,7 +781,7 @@ void UBattleMatch::UpdateArtilleryRaids(int32 Team)
   if(RaidBase)continue;
   int32 CandidateLiving=0;for(int32 CandidateMember:CandidateSquad.Members)if(const auto* CandidateUnit=RaidStore->Find(CandidateMember);CandidateUnit&&CandidateUnit->IsAlive())++CandidateLiving;
   if(CandidateLiving==0||CandidateLiving*2<CandidateSquad.Members.Num())continue;
-  const double RaidDistance=FVector::DistSquared2D(RaidRuntime->Position(CandidateSquad.LeaderUnitID),EnemyPosts[SuspectedPost]);
+  const double RaidDistance=FVector::DistSquared2D(RaidRuntime->Position(CandidateSquad.LeaderUnitID),RaidTarget);
   const int32 RaidRank=RaidType==BattleSquadType::Exo?0:1;
   if(RaidRank<NearestRaidRank||(RaidRank==NearestRaidRank&&(RaidDistance<NearestRaidDistance||(RaidDistance==NearestRaidDistance&&(NearestRaider==INDEX_NONE||RaidPair.Key<NearestRaider)))))
    {NearestRaider=RaidPair.Key;NearestRaidRank=RaidRank;NearestRaidDistance=RaidDistance;}
@@ -735,6 +789,12 @@ void UBattleMatch::UpdateArtilleryRaids(int32 Team)
  if(NearestRaider!=INDEX_NONE)
  {
   ArtilleryRaids.Add(NearestRaider,SuspectedPost);
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID team=%d squad=%d post=%d"),Team,NearestRaider,SuspectedPost);
+  if(ChaseRaid)
+  {
+   auto& NewRaidChase=ArtilleryRaidChases.FindOrAdd(NearestRaider);NewRaidChase=FArtilleryRaidChase();
+   NewRaidChase.Target=RaidTarget;NewRaidChase.EvidenceAt=RaidTargetEvidence;NewRaidChase.bFlash=HasRaidFlash;NewRaidChase.FlashAt=HasRaidFlash?RememberedFlash.At:-1.;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID team=%d squad=%d post=%d target=%s source=%s"),Team,NearestRaider,SuspectedPost,*RaidTarget.ToCompactString(),HasRaidFlash?TEXT("flash"):TEXT("post"));
+  }
+  else UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID team=%d squad=%d post=%d"),Team,NearestRaider,SuspectedPost);
  }
 }

@@ -427,7 +427,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   if(bMortarPost){Center=ChooseMortarPost(Team,Pair.Key);Order=EBattleOrder::Defend;}
   else if(bArtillery&&bArea)Center=AreaArtilleryPost(Team,Pair.Key,Center);
   const int32* RaidPost=bArea&&BattleTactics::ArtilleryPosts()?ArtilleryRaids.Find(Pair.Key):nullptr;
-  if(RaidPost){Center=ArtilleryPostPositions[1-Team][*RaidPost];Order=EBattleOrder::AttackMove;}
+  if(RaidPost){Center=BattleTactics::ArtilleryRaidChase()?ArtilleryRaidChases.FindChecked(Pair.Key).Target:ArtilleryPostPositions[1-Team][*RaidPost];Order=EBattleOrder::AttackMove;}
   // The tank's overwatch post; a post near its current mission is kept (no new order for every small change in what the team knows).
   if(bTankPost){Center=AreaTankPost(Team,Target);if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2500.)Center=Pair.Value.MissionDestination;}
   // A squad in a group the AI runs follows its group: the rally point while gathering, then the group's objective together.

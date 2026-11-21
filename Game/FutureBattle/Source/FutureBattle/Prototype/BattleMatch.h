@@ -193,6 +193,11 @@ public:
  TArray<FVector> ArtilleryPostPositions[2];
  TArray<double> ArtilleryPostEvidence[2]; // observer team -> enemy post's last evidence timestamp
  TMap<int32,int32> ArtilleryRaids;
+ struct FArtilleryRaidFlash { FVector Target=FVector::ZeroVector; double At=-1.; int32 Shooter=INDEX_NONE; };
+ struct FArtilleryRaidChase { FVector Target=FVector::ZeroVector; double EvidenceAt=-1.,FlashAt=-1.,ArrivedAt=-1.; bool bFlash=false; };
+ FArtilleryRaidFlash ArtilleryRaidFlashes[2];
+ TMap<int32,FArtilleryRaidChase> ArtilleryRaidChases;
+ double ArtilleryRaidClearedAt[2]={-1.,-1.}; // Do not restart a cleared search on the same evidence.
  mutable TMap<int32,int32> MortarPostChoices;
  void GenerateArtilleryPosts();
  void UpdateArtilleryRaids(int32 Team);
