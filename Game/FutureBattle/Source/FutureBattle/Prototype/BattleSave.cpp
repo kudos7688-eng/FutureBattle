@@ -62,7 +62,12 @@ bool BattleSaveValidation::Contact(const FBattleContact& Value,int32 ObserverTea
 
 USaveGame* BattleSaveValidation::Decode(const TArray<uint8>& Bytes,FString& Error)
 {
- if(Bytes.Num()>MaxBytes){Error=TEXT("Save file exceeds size limit");return nullptr;}
+ return Decode(Bytes,Error,MaxBytes);
+}
+
+USaveGame* BattleSaveValidation::Decode(const TArray<uint8>& Bytes,FString& Error,int32 Limit)
+{
+ if(Bytes.Num()>Limit){Error=TEXT("Save file exceeds size limit");return nullptr;}
  USaveGame* Decoded=Bytes.IsEmpty()?nullptr:UGameplayStatics::LoadGameFromMemory(Bytes);
  Error=Decoded?FString():TEXT("No compatible save found");
  return Decoded;
@@ -506,6 +511,7 @@ bool UBattleMatch::SaveMatch(const FString& Slot)
  auto* Save=CaptureSnapshot();if(!Save||!Save->Validate(LastMessage))return false;
  TArray<uint8> SaveBytes;
  if(!UGameplayStatics::SaveGameToMemory(Save,SaveBytes)){LastMessage=TEXT("Could not write save file");return false;}
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SAVE_BYTES slot=%s bytes=%d limit=%d"),*Actual,SaveBytes.Num(),BattleSaveValidation::MaxBytes);
  if(SaveBytes.Num()>BattleSaveValidation::MaxBytes){LastMessage=TEXT("Save file exceeds size limit");return false;}
  const bool Saved=UGameplayStatics::SaveDataToSlot(SaveBytes,Actual,0);
  LastMessage=Saved?TEXT("Match saved [F9 to load]"):TEXT("Could not write save file");return Saved;

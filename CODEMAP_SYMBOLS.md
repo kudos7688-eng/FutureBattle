@@ -105,8 +105,8 @@
 - `BattleRanges.cpp`: BattleRanges::Get:6, BattleRanges::Engage:34, BattleRanges::Reach:44
 - `BattleRenderDiagnostic.cpp`: UBattleSquadTrial::ConfigureT5Diagnostic:34, UBattleSquadTrial::SelectT5Diagnostic:94, UBattleSquadTrial::BeginT5Diagnostic:110, UBattleSquadTrial::FilterT5Diagnostic:138, UBattleSquadTrial::EndT5Diagnostic:162
 - `BattleRoutes.cpp`: UBattleMatch::RoutesOn:14, UBattleMatch::RouteKnownEnemies:21, UBattleMatch::RouteFlankSide:33, UBattleMatch::RouteStep:43
-- `BattleSave.h`: BattleSaveValidation::Counter:16
-- `BattleSave.cpp`: BattleSaveValidation::Contact:54, BattleSaveValidation::Decode:63, BattleSaveValidation::ClockLimit:71, BattleSaveValidation::Decode:77, BattleTactics::SaveRoutes:83, BattleTactics::OverrideSaveRoutesForSmoke:89, UBattleSave::Serialize:96, UBattleSave::Validate:103, UBattleMatch::CaptureSnapshot:238, UBattleMatch::RestoreSnapshot:351, UBattleMatch::SaveMatch:502, UBattleMatch::LoadMatch:513
+- `BattleSave.h`: BattleSaveValidation::Counter:19
+- `BattleSave.cpp`: BattleSaveValidation::Contact:54, BattleSaveValidation::Decode:63, BattleSaveValidation::Decode:68, BattleSaveValidation::ClockLimit:76, BattleSaveValidation::Decode:82, BattleTactics::SaveRoutes:88, BattleTactics::OverrideSaveRoutesForSmoke:94, UBattleSave::Serialize:101, UBattleSave::Validate:108, UBattleMatch::CaptureSnapshot:243, UBattleMatch::RestoreSnapshot:356, UBattleMatch::SaveMatch:507, UBattleMatch::LoadMatch:519
 - `BattleSaveSmoke.cpp`: ABattleGameMode::RunSaveSmokeTest:12
 - `BattleScaleSmoke.cpp`: ABattleGameMode::RunScaleSmokeTest:10
 - `BattleScopeShot.cpp`: UBattleLeaderRuntime::RunScopeShot:15

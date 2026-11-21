@@ -8,8 +8,11 @@
 
 namespace BattleSaveValidation
 {
- constexpr int32 MaxBytes=64*1024*1024;
+ // 1 GiB: refuses absurd files before the codec, far above any real save. The first limit (64 MiB, review 05 S10) rejected
+ // legitimate map A saves at the 80 s round trip (2026-11-22; ~1000 soldiers, tagged contact maps).
+ constexpr int32 MaxBytes=1024*1024*1024;
  USaveGame* Decode(const TArray<uint8>& Bytes,FString& Error);
+ USaveGame* Decode(const TArray<uint8>& Bytes,FString& Error,int32 Limit); // Smoke tests pass a small limit (no 1 GiB buffer).
  USaveGame* Decode(const TArray<uint8>& Bytes);
  double ClockLimit(const FString& MapName);
  // Far beyond a real match, with ample headroom for subsequent increments.
