@@ -866,12 +866,31 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const bool bMoveFire=!bOwnOrder && (bBoundMove || ((SectorMoveFireEnabled() || (!SectorFireBack.IsEmpty() && SectorFireBack.Contains(U->SquadID))) && !bVehicleBody &&
   S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission && !P->bCoverStop &&
   BattleSectors::Cell(Pos)!=BattleSectors::Cell(S->Destination) && !U->CoverPhase && !CoverApproaches.Contains(ID)));
- const bool StopForCombat=!bMoveFire && !bOwnWalking && (P->TargetID!=INDEX_NONE || (bArmourAI && P->ArmourTargetID!=INDEX_NONE)) && (S->Order!=EBattleOrder::Move || bOwnOrder) &&
+ // -BattleArrivalWalk (and evaluation): his own arrival place in the sector, still more than 1.5 m away, on a route that goes past
+ // the end of the shared path (the tail to that place).
+ const FVector* ArrivalGoal=(bWideField && bStableMovement && P->ArrivalTails.Contains(ID))?P->ArrivalGoals.Find(ID):nullptr;
+ const TArray<FVector>* OwnRoute=bWideField && bStableMovement?P->Corridors.Find(ID):nullptr;
+ const bool bTailLeft=OwnRoute && !P->Path.IsValidIndex(B.Waypoint) && OwnRoute->IsValidIndex(B.Waypoint);
+ const bool bWalkIn=ArrivalGoal && !bVehicleBody && S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission &&
+  BattleSectors::Cell(Pos)==BattleSectors::Cell(S->Destination) && FVector::DistSquared2D(Pos,*ArrivalGoal)>FMath::Square(150.) &&
+  !U->CoverPhase && !CoverApproaches.Contains(ID);
+ const bool bArrivalWalk=!bOwnOrder && ArrivalWalkEnabled() && bWalkIn && S->Order!=EBattleOrder::Hold && OwnRoute && OwnRoute->IsValidIndex(B.Waypoint);
+ const bool bOnRoute=P->Path.IsValidIndex(B.Waypoint) || (ArrivalWalkEnabled() && bTailLeft);
+ const bool StopForCombat=!bMoveFire && !bOwnWalking && !bArrivalWalk && (P->TargetID!=INDEX_NONE || (bArmourAI && P->ArmourTargetID!=INDEX_NONE)) && (S->Order!=EBattleOrder::Move || bOwnOrder) &&
   !(bOutsideContact && !U->CoverPhase && !CoverApproaches.Contains(ID) && !(P->bCoverStop && FirePositions.Contains(ID)));
  const bool CombatContact=StopForCombat || bOutsideContact;
+ // Evaluation (arrival_walk_*, frames): stopped for combat short of his place / standing at the shared end with his tail left /
+ // walking in under the trial.
+ if(SightExperiment.Enabled)
+ {
+  if(bWalkIn && StopForCombat)SightExperiment.Cover(TEXT("arrival_walk_stopped_short_frames"));
+  if(bTailLeft && !StopForCombat && S->Order!=EBattleOrder::Hold && !ArrivalWalkEnabled())SightExperiment.Cover(TEXT("arrival_walk_tail_cut_frames"));
+  if(bArrivalWalk && (P->TargetID!=INDEX_NONE || (bArmourAI && P->ArmourTargetID!=INDEX_NONE)) && S->Order!=EBattleOrder::Move)SightExperiment.Cover(TEXT("arrival_walk_fire_on_move_frames"));
+  if(ArrivalGoal && FVector::DistSquared2D(Pos,*ArrivalGoal)<=FMath::Square(150.))SightExperiment.Cover(TEXT("arrival_walk_at_place_frames"));
+ }
  if(BattleStance::Enabled(GetWorld()) && !bVehicleBody)
  {
-  const bool WillMove=(!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && P->Path.IsValidIndex(B.Waypoint)) || CoverApproaches.Contains(ID) || bOwnWalking;
+  const bool WillMove=(!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute) || CoverApproaches.Contains(ID) || bOwnWalking;
   const bool LostSight=!CanEngage && Contact && !Contact->bVisible && Now-Contact->LastSeenTime<=4.;
   UpdateAIStance(ID,Now,WillMove,StopForCombat,LostSight);
   // Getting up takes time: no walking until the soldier is standing.
@@ -948,11 +967,11 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  }
  const bool Approaching=CoverApproaches.Contains(ID) && StepCoverApproach(ID,Dt,Now,CombatContact?TargetID:INDEX_NONE);
  if(StopForCombat || S->Order==EBattleOrder::Hold) B.bTrafficWait=false;
- const bool bDriving=!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && P->Path.IsValidIndex(B.Waypoint);
+ const bool bDriving=!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute;
  if(bDriving && !Approaching && FirePositions.Num())FirePositions.Remove(ID); // back on the march: the place is free again
  // -BattleContactCover: a soldier walking to cover finishes that walk before he follows the squad's path again.
  if(bOwnWalking)StepSoldierOrder(ID,Dt,Now,Direction);
- else if(!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && P->Path.IsValidIndex(B.Waypoint) && !(Approaching && (bContactCover || bOutsideContact)))
+ else if(!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !(Approaching && (bContactCover || bOutsideContact)))
  {
   if(bWideField && bStableMovement) StableMove(ID,Dt,Now,Direction);
   else
@@ -1431,6 +1450,11 @@ bool UBattleLeaderRuntime::SectorMoveEnabled()
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorMove="),V);return V!=0;}();
  return bOn;
 }
+bool UBattleLeaderRuntime::ArrivalWalkEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArrivalWalk="),V);return V!=0;}();
+ return bOn;
+}
 bool UBattleLeaderRuntime::SectorMoveFireEnabled()
 {
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorMoveFire="),V);return V!=0;}();
@@ -1548,6 +1572,21 @@ bool UBattleLeaderRuntime::CloseInEnabled()
 bool UBattleLeaderRuntime::PinnedFlankEnabled()
 {
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattlePinnedFlank="),V);return V!=0;}();
+ return bOn;
+}
+bool UBattleLeaderRuntime::CoverDenseEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverDense="),V);return V!=0;}();
+ return bOn;
+}
+bool UBattleLeaderRuntime::CoverIndoorEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverIndoor="),V);return V!=0;}();
+ return bOn;
+}
+bool UBattleLeaderRuntime::CoverOutwardEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverOutward="),V);return V!=0;}();
  return bOn;
 }
 bool UBattleLeaderRuntime::ArrivalThreatEnabled()

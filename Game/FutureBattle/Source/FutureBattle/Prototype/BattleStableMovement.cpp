@@ -132,20 +132,58 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   static const bool CoverArrivalAllowed=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverArrival="),Value);return Value!=0;}();
   const bool CoverArrival=CoverArrivalAllowed && BattleFieldLayout::IsUrban(GetWorld()) && !Rally && Nav;
   TArray<FVector> CoverCandidates; TSet<int32> CoverAssigned;
+  // -BattleCoverOutward: the outward directions this sector is defended toward (rear and friendly-held sides left out).
+  TArray<FVector> Outward;
+  if(CoverArrival && Sector && CoverOutwardEnabled())
+  {
+   const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+   const FVector Mid=BattleSectors::Center(Cell);
+   const FVector ToHome=(Match->AreaHome(S->Team)-Mid).GetSafeNormal2D();
+   for(int32 DX=-1;DX<=1;++DX) for(int32 DY=-1;DY<=1;++DY) if(DX||DY)
+   {
+    const FIntPoint N=Cell+FIntPoint(DX,DY);
+    if(!BattleSectors::Valid(N)){SightExperiment.Cover(TEXT("arrival_outward_skip_edge"));continue;}
+    const uint8 Held=(S->Team==0||S->Team==1)?Match->SectorState[S->Team].FindRef(N):0;
+    if(Held==1){SightExperiment.Cover(TEXT("arrival_outward_skip_friendly"));continue;}
+    const FVector Dir=FVector(DX,DY,0).GetSafeNormal2D();
+    if(!(Held&2) && !ToHome.IsNearlyZero() && FVector::DotProduct(Dir,ToHome)>.707f){SightExperiment.Cover(TEXT("arrival_outward_skip_rear"));continue;}
+    Outward.Add(Dir);
+   }
+   SightExperiment.Cover(Outward.IsEmpty()?TEXT("arrival_outward_none_old_rule"):Outward.Num()<=2?TEXT("arrival_outward_dirs_le2"):Outward.Num()<=4?TEXT("arrival_outward_dirs_le4"):TEXT("arrival_outward_dirs_gt4"));
+  }
+  auto WallAhead=[&](const FVector& At)
+  {
+   const FCollisionObjectQueryParams Static(ECC_WorldStatic);
+   if(Outward.IsEmpty())return GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),Static);
+   for(const FVector& Dir:Outward)if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Dir*250+FVector(0,0,100),Static))return true;
+   return false;
+  };
   if(CoverArrival)
   {
    auto* Cover=GetWorld()->GetSubsystem<UBattleCover>(); Cover->BuildSlots();
-   for(int32 Slot:Cover->NearbySlots(S->Destination,Sector?3600.f:1400.f,Sector?256:48))
+   for(int32 Slot:Cover->NearbySlots(S->Destination,Sector?3600.f:1400.f,Sector?(CoverDenseEnabled()?512:256):48))
    {
     const FVector At=Cover->GetSlots()[Slot];
     if(Sector && BattleSectors::Cell(At)!=Cell)continue;
     // Evaluation (arrival_slot_*): slots in the sector, those without an obstacle 2.5 m ahead, those seen by the nearest threat (-BattleCoverStrict).
     SightExperiment.Cover(TEXT("arrival_slot_in_cell"));
-    if(!GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic))) SightExperiment.Cover(TEXT("arrival_slot_no_wall_ahead"));
+    if(!WallAhead(At)) SightExperiment.Cover(TEXT("arrival_slot_no_wall_ahead"));
     else if(HidesFromThreat(At)) CoverCandidates.Add(At);
     else SightExperiment.Cover(TEXT("arrival_slot_exposed"));
    }
   }
+  // -BattleCoverIndoor: in a sector, slots under a roof or upper floor first (stable order otherwise).
+  int32 IndoorSlots=0;
+  if(CoverIndoorEnabled() && Sector && !CoverCandidates.IsEmpty())
+  {
+   TArray<FVector> Indoor,Outdoor;
+   for(const FVector& At:CoverCandidates)
+    (GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,120),At+FVector(0,0,800),FCollisionObjectQueryParams(ECC_WorldStatic))?Indoor:Outdoor).Add(At);
+   IndoorSlots=Indoor.Num();
+   SightExperiment.Cover(IndoorSlots==0?TEXT("arrival_indoor_none"):IndoorSlots<5?TEXT("arrival_indoor_lt5"):TEXT("arrival_indoor_ge5"));
+   CoverCandidates=MoveTemp(Indoor);CoverCandidates.Append(Outdoor);
+  }
+  const double TakenRadius=Sector && CoverDenseEnabled()?130.:190.;
   int32 Queries=0, OpenMembers=0, TailQueries=0;
   if(CoverArrival) SightExperiment.Cover(CoverCandidates.Num()==0?TEXT("arrival_plan_candidates_0"):CoverCandidates.Num()<5?TEXT("arrival_plan_candidates_lt5"):CoverCandidates.Num()<20?TEXT("arrival_plan_candidates_lt20"):TEXT("arrival_plan_candidates_ge20"));
   for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive())
@@ -156,9 +194,10 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    if(CoverArrival && (Sector || ID==S->LeaderUnitID || OpenMembers++>=3))
     for(const FVector& At:CoverCandidates)
     {
+     const bool bIndoorSlot=int32(&At-CoverCandidates.GetData())<IndoorSlots;
      bCoverTried=true;
      if(TailQueries>=24) {bCapHit=true;break;}
-     bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,At)<FMath::Square(190.)) {Taken=true;break;}
+     bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,At)<FMath::Square(TakenRadius)) {Taken=true;break;}
      if(Taken) {++ArrTaken;continue;}
      ++TailQueries;
      auto* Tail=Nav->FindPathToLocationSynchronously(GetWorld(),P.Path.Num()?P.Path.Last():S->Destination,At);
@@ -166,6 +205,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
      {if(Tail && Tail->IsValid() && !Tail->IsPartial() && Tail->PathPoints.Num()>=2) ++ArrLong; else ++ArrNoPath; continue;}
      P.ArrivalGoals.Add(ID,At); P.ArrivalTails.Add(ID,Tail->PathPoints); Reserved.Add(At); CoverAssigned.Add(ID); Found=true;
      SightExperiment.Cover(TEXT("arrival_cover_slot"));
+     if(bIndoorSlot)SightExperiment.Cover(TEXT("arrival_indoor_slot"));
      break;
     }
    // Trial -BattleCoverHuddle=1 (2026-11-20, default 0; sector missions where arrivals use cover): a member left without a cover

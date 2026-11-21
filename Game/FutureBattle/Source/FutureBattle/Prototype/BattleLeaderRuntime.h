@@ -495,6 +495,11 @@ public:
  // attack/hold orders) fights as the player's sector move does - until a member is inside the sector it fires on the move and
  // fights back at enemies outside the sector that shoot at it, without stopping or walking to cover on the way.
  static bool SectorMoveFireEnabled();
+ // Trial -BattleArrivalWalk=1 (2026-11-21, default 0; user 11-21: soldiers stopped short of their planned cover and fought in the
+ // open): in his own sector, a soldier whose arrival place (with its own tail route) is more than 1.5 m away keeps walking to it
+ // and fires on the move, instead of stopping for combat where the squad first sees an enemy. He also walks the tail of his
+ // route past the end of the shared path (otherwise the route gate stops him at the shared end point). Counts arrival_walk_*.
+ static bool ArrivalWalkEnabled();
  // Trial -BattleSquadCoverCheck=1 (2026-11-20, default 0; with fire on the move): the squad leader counts how many of his
  // living members could hide from the threat near the squad - free cover slots within 20 m that show at most 2 of 5 body
  // samples to the threat, and up to two places right behind each such slot that hide as well. 80% of the squad or more (user, 11-20; half before):
@@ -546,6 +551,22 @@ public:
  // to the sector (the team's current sightings) instead of the direction it came from, and picks again when its target lies
  // more than 45 degrees away from that direction.
  static bool ArrivalThreatEnabled();
+ // Trial -BattleCoverOutward=1 (2026-11-21, default 0; user idea 11-21, steps 1+2): a sector squad picks arrival cover slots with
+ // an obstacle within 2.5 m toward any of the neighbouring sectors (8 directions from the sector centre) that can hold enemies,
+ // instead of only straight ahead along the way in - so soldiers stand on the centre side of walls facing outward. Ignored:
+ // off-map neighbours, neighbours where only the team's own soldiers are (-BattleSectorFront state 1), and neighbours toward
+ // the team's home (rear, more than 45 degrees toward it) unless enemies are known there. With no direction left, the old rule.
+ // Counts arrival_outward_*.
+ static bool CoverOutwardEnabled();
+ // Trial -BattleCoverDense=1 (2026-11-21, default 0; user idea 11-21, step 3): on maps with city cover (IsUrban), every side of an
+ // obstacle longer than 3 m also gets cover slots every 1.4 m (BattleCover.cpp BuildSlots; the usual 5 samples per side stay),
+ // so several soldiers can use one long wall. Sector arrival then treats a slot as taken only within 1.3 m of another
+ // reservation (190 cm before) and looks at up to 512 nearby slots (256 before). The slots are shared with the cover actions.
+ static bool CoverDenseEnabled();
+ // Trial -BattleCoverIndoor=1 (2026-11-21, default 0; user idea 11-21, step 4): a sector squad tries its arrival cover slots under a
+ // roof or upper floor (a static obstacle 1.2-8 m above the slot: inside houses and sheds, by windows) before the ones outside.
+ // Counts arrival_indoor_*.
+ static bool CoverIndoorEnabled();
  // Trial -BattleCoverStrict=1 (2026-11-20, default 0; user: "cover that does not hide from the enemy, standing in the open"):
  // a cover place counts only when the threat sees at most 2 of the 5 body samples (was 3) - for the cover actions, for the
  // arrival places of a sector squad and its places along the wall (checked against the known enemy nearest to the sector), and
