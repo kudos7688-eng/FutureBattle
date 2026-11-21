@@ -72,6 +72,8 @@
 - **段階2**：[Docs/design-divergence-trace.md](Docs/design-divergence-trace.md)。表示の変更で試合が変わる原因を突き止めるため、状態のかたまり（位置・体力・遮蔽・認識・計画・試合・射撃）の要約を0.1秒ごとに記録する `-BattleStateTrace`（記録だけ）と、2試合の最初の分岐点を出す `Find-Divergence.py`。死体の消去の操作を1つずつ止める `-BattleCorpseSteps` と組み合わせる。
 - **戦略層の画面**：[Docs/design-strategy-ui.md](Docs/design-strategy-ui.md)。上部の帯に「AIの方針：集中 → 拠点C（あと45秒）」、拠点ごとの戦線の状態の輪（不明・敵優勢・拮抗・自軍優勢）、集中先の矢印、方針の変更の通知。プレイヤーは委任した部隊に「集中先にする／保持する／AIに任せる」を指示できる。戦略層 S2 の結果を見てから。
 - **部隊一覧（40部隊）**：[Docs/design-squad-panel.md](Docs/design-squad-panel.md)。1行の詰めた表示、状態の絞り込み（交戦中・補給・待機・要注意）、問題の印（弾・隊長・詰まり・釘付け・遠い）、選んだ部隊の詳細パネル（兵ごとの体力・弾・姿勢・遮蔽・制圧、判断の経過）、購入ボタンに得点の減り。
+- **負荷**：[Docs/design-performance-baseline.md](Docs/design-performance-baseline.md)。今の既定の負荷は誰も測っていない（基準は 11-18）→ 区画AIの既定化の後に、マップE・I の60FPS・描画ありで基準を取り直す。小隊上限40・戦車ありの内訳、開始時の止まり（計測の条件の問題）への対策の候補。
+- **遠景の姿勢**：[Docs/design-vat-stances.md](Docs/design-vat-stances.md)。VAT に しゃがみ・伏せのクリップを焼き足し、遠景の番号を「動き×姿勢」に。段階2（表示が試合を変える問題）の後に入れる。
 
 ### 随時（段階に関係なく差し込む）
 
