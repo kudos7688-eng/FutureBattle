@@ -78,6 +78,8 @@ public:
  uint8 SquadCategory(const FBattleSquadSummary& Row) const; // 0 front army, 1 attack army (other own groups), 2 unassigned, 3 stopped (never listed)
  // The squad being dragged from the list toward an army tab (2026-11-21), or INDEX_NONE.
  int32 DraggedSquadID() const { return bSquadListPress&&PressedSquadID>=0?PressedSquadID:INDEX_NONE; }
+ // The squads a drag carries: every selected own squad when the dragged one is selected, else that squad alone.
+ TArray<int32> DraggedSquads() const;
  TArray<FBattleSquadListRow> SquadListRows() const;
  void SortSquadRows(TArray<FBattleSquadSummary>& Rows) const;
  // Own groups shown in the group tab, by group number.

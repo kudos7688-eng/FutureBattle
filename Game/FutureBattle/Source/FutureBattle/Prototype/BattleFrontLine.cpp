@@ -30,6 +30,8 @@ namespace BattleFrontValues
  int32 Arg(const TCHAR* Name,int32 Default){int32 V=Default;FParse::Value(FCommandLine::Get(),Name,V);return V;}
  constexpr int32 FrontArmyKeep=4; // squads the front army keeps when the surprise group takes from it
  bool Army(){static const int32 On=Arg(TEXT("BattleFrontArmy="),1);return On!=0;} // default on since 2026-11-21 (user decision)
+ // One-sector gaps count as held (user proposal 2026-11-21 after test play; -BattleFrontGap=0 turns it off).
+ bool Gap(){static const int32 On=Arg(TEXT("BattleFrontGap="),1);return On!=0;}
  // Sector kinds by the cover they give a squad that waits there (river sectors are not held).
  double Cover(char Kind){switch(Kind){case 'H':case 'W':return 3.;case 'T':case '^':return 2.;case 'J':case 'B':case 'S':return 1.;case 'R':return -100.;default:return 0.;}}
 }
@@ -89,6 +91,19 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  TMap<FIntPoint,int32> EnemyCount;
  for(const FVector& E:AreaIntelView(Team).Enemies)if(const FIntPoint C=BattleSectors::Cell(E);BattleSectors::Valid(C))++EnemyCount.FindOrAdd(C);
  for(const auto& P:EnemyCount)if(P.Value>=2)EnemyCol[P.Key.Y]=FMath::Min(EnemyCol[P.Key.Y],ColOf(P.Key));
+ // 2b. A row held less deep than both neighbours (the one neighbour on an edge row) counts as held up to the shallower neighbour when no
+ //  known enemy stands in it up to there (user proposal 2026-11-21: with the line strictly joined, one empty sector held the advance back).
+ if(Gap())
+ {
+  TArray<int32> Filled=Reach;
+  for(int32 Y=0;Y<Rows;++Y)if(Reach[Y]>=0)
+  {
+   const int32 A=Y>0?Reach[Y-1]:-1,B=Y+1<Rows?Reach[Y+1]:-1;
+   const int32 N=Y==0?B:Y==Rows-1?A:FMath::Min(A,B);
+   if(N>Reach[Y]&&EnemyCol[Y]>N)Filled[Y]=N;
+  }
+  Reach=Filled;
+ }
  // 3. Rows without own soldiers: the nearer known neighbour's column (the lower one on a tie); none at all: just ahead of the home.
  TArray<int32> Line=Reach;
  for(int32 Y=0;Y<Rows;++Y)if(Line[Y]<0)
@@ -160,7 +175,8 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  }
 
  // 6. Bands and posts. Squads away at home for supply leave their band to the others.
- for(auto It=FrontPosts.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||S->Team==Team)It.RemoveCurrent();
+ TMap<int32,FIntPoint> Previous; // the front army keeps a squad on its last post when that sector is still wanted
+ for(auto It=FrontPosts.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||S->Team==Team){if(S)Previous.Add(It.Key(),BattleSectors::Cell(It.Value()));It.RemoveCurrent();}
  FString Posts;
  if(const auto* G=FrontID!=INDEX_NONE?Groups.Find(FrontID):nullptr)
  {
@@ -173,7 +189,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
   Present.Sort([](const FMember& A,const FMember& B){return A.Row!=B.Row?A.Row<B.Row:A.SID<B.SID;});
   const int32 K=Present.Num();
   // Front army: sectors with a point not observed as own (it takes the point as it holds the line), and one post per sector.
-  TSet<FIntPoint> Used,Points;
+  TSet<FIntPoint> Used,Points;TArray<FIntPoint> Cells;TArray<bool> Pushes;
   if(Army())for(int32 I=0;I<Objectives.Num();++I)if(ObservedOwner(Team,I)!=Team)if(const FIntPoint C=BattleSectors::Cell(Objectives[I].Position);BattleSectors::Valid(C))Points.Add(C);
   for(int32 I=0;I<K;++I)
   {
@@ -194,9 +210,28 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
     if(Army())CellScore+=(Points.Contains(Cell)?2.:0.)-(C<Target-1?1.:0.)-(bPush&&C<Target?3.:0.);
     if(CellScore>BestScore){BestScore=CellScore;Best=Cell;}
    }
-   Used.Add(Best);
-   FrontPosts.Add(Present[I].SID,BattleSectors::Center(Best));
-   Posts+=FString::Printf(TEXT(" %d:%c%d%s"),Present[I].SID,TCHAR('A'+Best.X),1+Best.Y,bPush?TEXT("+"):TEXT(""));
+   Used.Add(Best);Cells.Add(Best);Pushes.Add(bPush);
+  }
+  // Squads to posts. The front army: a squad keeps its last post when that sector is still one of them, the rest go to the nearest free
+  // post (user report 2026-11-21: squads went back and forth because bands followed the squads' row order, which changes as they move).
+  TArray<int32> Owner;Owner.Init(INDEX_NONE,K);
+  if(Army())
+  {
+   TArray<bool> Placed;Placed.Init(false,K);
+   for(int32 I=0;I<K;++I)if(const FIntPoint* Last=Previous.Find(Present[I].SID))
+    for(int32 J=0;J<K;++J)if(Owner[J]==INDEX_NONE&&Cells[J]==*Last){Owner[J]=I;Placed[I]=true;break;}
+   struct FPair{double D;int32 I,J;};TArray<FPair> Pairs;
+   for(int32 I=0;I<K;++I)if(!Placed[I])if(const auto* S=Store->FindSquad(Present[I].SID))
+   {const FVector P=R->Position(S->LeaderUnitID);for(int32 J=0;J<K;++J)if(Owner[J]==INDEX_NONE)Pairs.Add({FVector::DistSquared2D(P,BattleSectors::Center(Cells[J])),I,J});}
+   Pairs.Sort([](const FPair& A,const FPair& B){return A.D!=B.D?A.D<B.D:A.I!=B.I?A.I<B.I:A.J<B.J;});
+   for(const auto& Pair:Pairs)if(!Placed[Pair.I]&&Owner[Pair.J]==INDEX_NONE){Owner[Pair.J]=Pair.I;Placed[Pair.I]=true;}
+  }
+  else for(int32 J=0;J<K;++J)Owner[J]=J;
+  for(int32 J=0;J<K;++J)if(Owner[J]!=INDEX_NONE)
+  {
+   const int32 SID=Present[Owner[J]].SID;
+   FrontPosts.Add(SID,BattleSectors::Center(Cells[J]));
+   Posts+=FString::Printf(TEXT(" %d:%c%d%s"),SID,TCHAR('A'+Cells[J].X),1+Cells[J].Y,Pushes[J]?TEXT("+"):TEXT(""));
   }
  }
  // 7. The surprise group (trial -BattleSurpriseGroup=1).

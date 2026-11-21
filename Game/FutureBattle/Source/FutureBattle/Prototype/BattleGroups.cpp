@@ -174,12 +174,12 @@ int32 UBattleMatch::ArmyOf(int32 SquadID) const
  return !G?0:G->Kind==1?1:2;
 }
 
-bool UBattleMatch::AssignArmy(int32 SquadID,int32 Army)
+bool UBattleMatch::AssignArmy(int32 SquadID,int32 Army,int32 TargetGroup)
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* S=Store?Store->FindSquad(SquadID):nullptr;
  if(!S||S->Team!=0||S->CommandStatus!=EBattleCommandStatus::Active||Army<0||Army>2)return false;
  ArmyPinned.Add(SquadID);
- if(Army!=0&&ArmyOf(SquadID)==Army)return true;
+ if(Army!=0&&ArmyOf(SquadID)==Army&&(TargetGroup==INDEX_NONE||TargetGroup==GroupOf(SquadID)))return true;
  if(const int32 Old=GroupOf(SquadID);Old!=INDEX_NONE)
  {
   auto& O=Groups.FindChecked(Old);O.Squads.Remove(SquadID);SquadGroup.Remove(SquadID);
@@ -198,7 +198,8 @@ bool UBattleMatch::AssignArmy(int32 SquadID,int32 Army)
  }
  else if(Army==2)
  {
-  for(const auto& P:Groups)if(P.Value.Team==0&&P.Value.Kind==0&&P.Value.bPlayer&&(To==INDEX_NONE||P.Key<To))To=P.Key;
+  if(const auto* T=Groups.Find(TargetGroup);T&&T->Team==0&&T->Kind!=1)To=TargetGroup;
+  else if(TargetGroup!=NewAttackGroup)for(const auto& P:Groups)if(P.Value.Team==0&&P.Value.Kind==0&&P.Value.bPlayer&&(To==INDEX_NONE||P.Key<To))To=P.Key;
   if(To==INDEX_NONE)To=FormGroup(0,{SquadID},true);
  }
  if(To!=INDEX_NONE&&!Groups[To].Squads.Contains(SquadID))

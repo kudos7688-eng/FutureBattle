@@ -3,13 +3,13 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 269 種類。
+計 270 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
 | `-BattleAIBlindFire` | other |  | BattleBlindFire.cpp:27 |  |
 | `-BattleAICoverProbe` | Value | 0 | BattleTactics.cpp:10 |  |
-| `-BattleAimAssist` | Value | 1 | BattleController.cpp:1159 |  |
+| `-BattleAimAssist` | Value | 1 | BattleController.cpp:1191 |  |
 | `-BattleAllyPass` | Value | 0 | BattleStableMovement.cpp:31 |  |
 | `-BattleArea` | Param/other | off | BattleLeaderRuntime.cpp:75, BattleState.cpp:555 |  |
 | `-BattleAreaACKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:97 |  |
@@ -114,8 +114,9 @@
 | `-BattleFollowSightParallel` | Value | 0 | BattleLeaderRuntime.cpp:772 |  |
 | `-BattleFollowSightTraces` | other |  | BattleLeaderRuntime.cpp:806 |  |
 | `-BattleFrontArmy` | other |  | BattleFrontLine.cpp:32 | default on since 2026-11-21 (user decision) |
-| `-BattleFrontLine` | other |  | BattleFrontLine.cpp:40 |  |
-| `-BattleFrontSquads` | other |  | BattleFrontLine.cpp:126 |  |
+| `-BattleFrontGap` | other |  | BattleFrontLine.cpp:34 |  |
+| `-BattleFrontLine` | other |  | BattleFrontLine.cpp:42 |  |
+| `-BattleFrontSquads` | other |  | BattleFrontLine.cpp:141 |  |
 | `-BattleHeavyCost` | other |  | BattleState.cpp:543 |  |
 | `-BattleHeavyDamage` | other |  | BattleState.cpp:543 |  |
 | `-BattleHeavyHealth` | other |  | BattleState.cpp:542 |  |
@@ -123,8 +124,8 @@
 | `-BattleHeavySpeed` | other |  | BattleState.cpp:543 |  |
 | `-BattleHeightTest` | Param | off | BattleTerrainTest.cpp:27 |  |
 | `-BattleHireSightRefresh` | Value | 0 | BattleMixedRecruitment.cpp:112 |  |
-| `-BattleHitDirection` | Value | 1 | BattleHUD.cpp:702 |  |
-| `-BattleKillLog` | Value | 1 | BattleHUD.cpp:807 |  |
+| `-BattleHitDirection` | Value | 1 | BattleHUD.cpp:711 |  |
+| `-BattleKillLog` | Value | 1 | BattleHUD.cpp:816 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
 | `-BattleLeaderCommand` | Value | 0 | BattleGameMode.cpp:54 |  |
 | `-BattleLeaderGuard` | Value | 0 | BattleTactics.cpp:16 |  |
@@ -160,7 +161,7 @@
 | `-BattleNoAnimationLOD` | Param | off | BattleBenchmark.cpp:157, BattleBenchmark.cpp:158, BattleNetworkBenchmark.cpp:78 ほか1 |  |
 | `-BattleNoMuzzleFlash` | Param | off | BattleMuzzleFlash.cpp:65 |  |
 | `-BattleNoStagger` | Param | off | BattleBenchmark.cpp:54 |  |
-| `-BattleOffscreenMarkers` | Value | 1 | BattleHUD.cpp:740 |  |
+| `-BattleOffscreenMarkers` | Value | 1 | BattleHUD.cpp:749 |  |
 | `-BattleOpponentPreset` | other |  | BattleBenchmark.cpp:48 |  |
 | `-BattlePerceptionGrid` | Value | GetDefault<UBattleTuning>()->bPerceptionGrid?1:0 | BattleLeaderRuntime.cpp:104 |  |
 | `-BattlePerceptionSlices` | Value | 4 | BattleBenchmark.cpp:56 |  |
@@ -205,7 +206,7 @@
 | `-BattleSectorRoute` | Value | 0 | BattleSectorRoute.cpp:16 |  |
 | `-BattleSectorSlotReserve` | Value | 1 | BattleStableMovement.cpp:79 |  |
 | `-BattleSectorSmoke` | Param | off | BattleLeaderRuntime.cpp:209 |  |
-| `-BattleSectorViewShot` | Value/other | Center({X,Y}) | BattleHUD.cpp:853, BattleHUD.cpp:901 |  |
+| `-BattleSectorViewShot` | Value/other | Center({X,Y}) | BattleHUD.cpp:862, BattleHUD.cpp:910 |  |
 | `-BattleSeed` | Value | 7 | BattleBenchmark.cpp:42 |  |
 | `-BattleSenseMode` | Value |  | BattleBenchmark.cpp:29 |  |
 | `-BattleShotDirection` | Value | 0 | BattleLeaderRuntime.cpp:1363 |  |
@@ -250,8 +251,8 @@
 | `-BattleSuppressionRadius` | other |  | BattleSuppression.cpp:11 |  |
 | `-BattleSuppressionSpread` | other |  | BattleSuppression.cpp:12 |  |
 | `-BattleSuppressionSupport` | other |  | BattleSuppression.cpp:14 |  |
-| `-BattleSurpriseGroup` | other |  | BattleFrontLine.cpp:348 |  |
-| `-BattleSurpriseSquads` | other |  | BattleFrontLine.cpp:369 | an AI group needs two squads |
+| `-BattleSurpriseGroup` | other |  | BattleFrontLine.cpp:383 |  |
+| `-BattleSurpriseSquads` | other |  | BattleFrontLine.cpp:404 | an AI group needs two squads |
 | `-BattleSymmetricStart` | Value | -1 | BattleGroups.cpp:56 |  |
 | `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:56 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |
@@ -273,6 +274,6 @@
 | `-BattleWideMapAudit` | Param | off | BattleLeaderRuntime.cpp:231 |  |
 | `-BattleWideMapGeometryOnly` | Param | off | BattleWideMapAudit.cpp:157 |  |
 | `-BattleWideMixed` | Param | off | BattleGameMode.cpp:55, BattleLeaderRuntime.cpp:73 |  |
-| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:835, BattleContactTrial.cpp:97, BattleExoShot.cpp:78 ほか14 |  |
+| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:836, BattleContactTrial.cpp:97, BattleExoShot.cpp:78 ほか14 |  |
 | `-BattleWideSmoke` | Param | off | BattleLeaderRuntime.cpp:245 |  |
 | `-BattleWideSoak` | Param | off | BattleLeaderRuntime.cpp:247 |  |

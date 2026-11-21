@@ -43,8 +43,10 @@ struct FBattleSquadListRow
  FBattleSquadSummary Squad;
  int32 GroupID=INDEX_NONE;
  bool bGroupHeader=false;
- // Click identity: the squad ID, or -(GroupID+1) for a group header (never INDEX_NONE).
- int32 Key() const { return bGroupHeader?-(GroupID+1):Squad.SquadID; }
+ bool bNewGroup=false; // the "+ new attack group" drop row at the end of the attack army tab (2026-11-21)
+ // Click identity: the squad ID, -(GroupID+1) for a group header, NewGroupKey for the new group row (never INDEX_NONE).
+ static constexpr int32 NewGroupKey=-1000000;
+ int32 Key() const { return bNewGroup?NewGroupKey:bGroupHeader?-(GroupID+1):Squad.SquadID; }
 };
 
 // Shared by Canvas and pointer input; no stale hit rectangles from the previous draw.

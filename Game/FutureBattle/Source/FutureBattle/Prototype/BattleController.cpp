@@ -524,15 +524,25 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
     if(bSquadListPress && Over)
     {
      FVector2D P; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH); const auto Layout=FBattleSquadListLayout::Make(FVector2D(ViewW,ViewH));
-     // A squad dropped on an army tab (front army, attack army, unassigned) moves there (command UI armies 2026-11-21).
-     const int32 Tab=GetPointerPosition(P)?Layout.FilterTabAt(P):INDEX_NONE;
-     if(Tab>=0 && Tab<=2 && PressedSquadID>=0)
+     // Squads dropped on an army tab (front army, attack army, unassigned), a group header or the "+ new attack group" row move there
+     // (command UI armies 2026-11-21). A drag carries every selected squad when the dragged one is selected.
+     const bool bPointer=GetPointerPosition(P);
+     const int32 Tab=bPointer?Layout.FilterTabAt(P):INDEX_NONE;
+     const int32 Under=bPointer?SquadListIDAt(P):INDEX_NONE;
+     auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+     int32 Army=-1,Target=INDEX_NONE;FString Where;
+     if(Tab>=0 && Tab<=2){static const TCHAR* const ArmyNames[]={TEXT("前線軍"),TEXT("攻撃軍"),TEXT("未所属")};Army=Tab==0?1:Tab==1?2:0;Where=ArmyNames[Tab];}
+     else if(Under==FBattleSquadListRow::NewGroupKey){Army=2;Target=UBattleMatch::NewAttackGroup;Where=TEXT("新しい攻撃群");}
+     else if(Under!=INDEX_NONE && Under<0 && Under!=PressedSquadID)
+      if(const auto* G=Match->Groups.Find(-Under-1)){Army=G->Kind==1?1:2;Target=G->Kind==1?INDEX_NONE:G->ID;Where=G->Kind==1?TEXT("前線軍"):FString::Printf(TEXT("群%d"),G->ID);}
+     if(Army>=0 && PressedSquadID>=0)
      {
-      static const TCHAR* const ArmyNames[]={TEXT("前線軍"),TEXT("攻撃軍"),TEXT("未所属")};
-      const int32 Army=Tab==0?1:Tab==1?2:0;
-      if(GetWorld()->GetSubsystem<UBattleMatch>()->AssignArmy(PressedSquadID,Army)) ShowNotice(FString::Printf(TEXT("部隊%d を%sへ移しました"),PressedSquadID,ArmyNames[Tab]));
+      int32 Moved=0;
+      for(int32 SID:DraggedSquads())
+       if(Match->AssignArmy(SID,Army,Target)){++Moved;if(Target==UBattleMatch::NewAttackGroup)Target=Match->GroupOf(SID);}
+      if(Moved) ShowNotice(FString::Printf(TEXT("%d部隊を%sへ移しました"),Moved,*Where));
      }
-     else if(PressedSquadID!=INDEX_NONE && SquadListIDAt(P)==PressedSquadID) SelectSquadListRow(P);
+     else if(PressedSquadID!=INDEX_NONE && Under==PressedSquadID) SelectSquadListRow(P);
     }
     bSquadListPress=false; bTriggerHeld=false; return true;
    }
@@ -798,6 +808,15 @@ void ABattleController::PlayerTick(float DeltaTime)
 	UpdateGamepad(DeltaTime);
 	UpdatePathDraw();
 	UpdateVault(DeltaTime);
+	// Shift + moving the pointer over the squad list adds every squad passed over to the selection (user request 2026-11-21).
+	if (bTactical && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift)) && SquadPanelAtPointer())
+	{
+		FVector2D P;
+		if (GetPointerPosition(P)) if (const int32 ID = SquadListIDAt(P); ID >= 0)
+			if (const auto* S = GetWorld()->GetSubsystem<UBattleState>()->FindSquad(ID))
+				if (auto* L = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->CanSelectLeader(S->LeaderUnitID))
+					if (ABattleUnit* A = L->Actor(S->LeaderUnitID)) Selected.AddUnique(A);
+	}
 	Selected.RemoveAll([](const TObjectPtr<ABattleUnit>& Unit) { return !Unit || !Unit->IsAlive(); });
 	if (bTactical) bAimHeld = false;
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
@@ -859,9 +878,21 @@ void ABattleController::SelectSquadListRow(FVector2D P)
     if(N) TacticalPawn->SetActorLocation(FVector(Where.X,Where.Y,TacticalPawn->GetActorLocation().Z));
    }
    LastRowClickID=Entry.Key(); LastRowClickTime=Now; }
+ if(Entry.bNewGroup) { ShowNotice(TEXT("部隊をこの行へドラッグすると、新しい攻撃群を作ります")); return; }
  if(Entry.bGroupHeader) { SelectGroup(Entry.GroupID); return; }
- if(L->CanSelectLeader(Row.LeaderUnitID)) SetSelection(L->Actor(Row.LeaderUnitID));
+ // Shift + click adds the squad to the selection (2026-11-21).
+ if(L->CanSelectLeader(Row.LeaderUnitID) && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift))) { if(ABattleUnit* A=L->Actor(Row.LeaderUnitID)) Selected.AddUnique(A); }
+ else if(L->CanSelectLeader(Row.LeaderUnitID)) SetSelection(L->Actor(Row.LeaderUnitID));
  else ShowNotice(Row.bActive?TEXT("この隊長は操作不可です"):TEXT("この部隊は機能停止しています"));
+}
+
+TArray<int32> ABattleController::DraggedSquads() const
+{
+ TArray<int32> Out; const int32 ID=DraggedSquadID(); if(ID==INDEX_NONE) return Out;
+ bool bInSelection=false; for(const ABattleUnit* U:Selected) if(U && U->IsAlive() && U->GetState()->Team==0) bInSelection|=U->GetState()->SquadID==ID;
+ if(bInSelection) { for(const ABattleUnit* U:Selected) if(U && U->IsAlive() && U->GetState()->Team==0) Out.AddUnique(U->GetState()->SquadID); }
+ else Out.Add(ID);
+ return Out;
 }
 
 int32 ABattleController::SquadListIDAt(FVector2D P) const
@@ -1075,6 +1106,7 @@ TArray<FBattleSquadListRow> ABattleController::SquadListRows() const
    TArray<FBattleSquadSummary> Rows; for(const auto& Row:L->Summaries()) if(Row.bActive && Match->GroupOf(Row.SquadID)==GID) Rows.Add(Row);
    SortSquadRows(Rows); Append(Rows,GID);
   }
+  if(SquadFilter==1){ FBattleSquadListRow N; N.bNewGroup=true; Out.Add(N); } // the "+ new attack group" drop row
   return Out;
  }
  TArray<FBattleSquadSummary> Rows;

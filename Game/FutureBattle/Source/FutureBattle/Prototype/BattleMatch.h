@@ -229,7 +229,9 @@ public:
 	void DissolveGroup(int32 GroupID, const TCHAR* Why);
 	// Command UI armies (2026-11-21): 0 unassigned, 1 front army (the team's front-holding group), 2 attack army (its other groups).
 	// AssignArmy moves an own squad there and pins it, so automatic filling (front army, attack and surprise groups) leaves it. Not saved.
-	bool AssignArmy(int32 SquadID, int32 Army);
+	// TargetGroup: an own attack group to join, NewAttackGroup for a new one (the "+ new group" row), INDEX_NONE for the army's default.
+	static constexpr int32 NewAttackGroup = -2;
+	bool AssignArmy(int32 SquadID, int32 Army, int32 TargetGroup = INDEX_NONE);
 	int32 ArmyOf(int32 SquadID) const;
 	TSet<int32> ArmyPinned;
 	bool GroupAIRun(const FBattleGroup& Group) const;

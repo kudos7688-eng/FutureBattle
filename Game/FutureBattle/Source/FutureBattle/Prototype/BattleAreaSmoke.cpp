@@ -807,6 +807,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     PC->SquadFilter=Filter;int32 Current=INDEX_NONE;
     for(const auto& R:PC->SquadListRows())
     {
+     if(R.bNewGroup){GroupsOk&=Filter==1;continue;}
      if(R.bGroupHeader){++Headers;Current=R.GroupID;GroupsOk&=M->Groups.Contains(R.GroupID)&&M->Groups[R.GroupID].Team==0&&(M->Groups[R.GroupID].Kind==1)==(Filter==0);}
      else{++Members;GroupsOk&=R.Squad.bActive&&R.GroupID==Current&&M->GroupOf(R.Squad.SquadID)==Current;}
     }

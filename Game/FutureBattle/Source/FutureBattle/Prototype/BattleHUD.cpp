@@ -550,7 +550,7 @@ void ABattleHUD::DrawSquadList()
  const int32 Dragged=PC->DraggedSquadID();
  DrawRect(FLinearColor(.025f,.04f,.065f,.96f),Layout.Origin.X,Layout.Origin.Y,Layout.Width,Layout.Height);
  DrawText(FString::Printf(TEXT("自軍部隊　稼働 %d"),Active),FLinearColor::White,Layout.Origin.X+8,Layout.Origin.Y+5,GEngine->GetSmallFont(),1);
- DrawText(TEXT("部隊を軍のタブへドラッグで編入・クリックで選択・Eで操作"),FLinearColor(.6f,.65f,.7f),Layout.Origin.X+8,Layout.Origin.Y+Layout.Height-18,GEngine->GetSmallFont(),.7f);
+ DrawText(TEXT("タブ・群へドラッグで編入・Shift+なぞりで複数選択・Eで操作"),FLinearColor(.6f,.65f,.7f),Layout.Origin.X+8,Layout.Origin.Y+Layout.Height-18,GEngine->GetSmallFont(),.7f);
  static const TCHAR* const FilterNames[]={TEXT("前線軍"),TEXT("攻撃軍"),TEXT("未所属"),TEXT("全部")};
  for(int32 T=0;T<FBattleSquadListLayout::FilterCount;++T)
  {
@@ -572,6 +572,14 @@ void ABattleHUD::DrawSquadList()
  for(int32 I=0;I<Layout.VisibleRows && I+PC->SquadListScroll<Rows.Num();++I)
  {
   const auto& Entry=Rows[I+PC->SquadListScroll]; const float Y=Layout.Origin.Y+Layout.Header+I*Layout.RowHeight;
+  if(Entry.bNewGroup)
+  {
+   // The drop row for a new attack group (2026-11-21: where to make a group was unclear in test play).
+   DrawRect(Dragged!=INDEX_NONE?FLinearColor(.2f,.17f,.05f):FLinearColor(.08f,.08f,.05f),Layout.Origin.X+3,Y,Layout.Width-12,Layout.RowHeight-2);
+   DrawText(TEXT("＋ 新しい攻撃群"),FLinearColor(1.f,.85f,.35f),Layout.Origin.X+9,Y+4,GEngine->GetSmallFont(),1);
+   DrawText(TEXT("部隊をここへドラッグすると群を作ります（群の見出しへドラッグでその群へ）"),FLinearColor(.8f,.75f,.55f),Layout.Origin.X+9,Y+23,GEngine->GetSmallFont(),.7f);
+   continue;
+  }
   if(Entry.bGroupHeader)
   {
    // Group header: number, who runs it, strength; phase and objective; roles of its squads.
@@ -634,7 +642,8 @@ void ABattleHUD::DrawSquadList()
  if(FVector2D P;Dragged!=INDEX_NONE && PC->GetPointerPosition(P))
  {
   DrawRect(FLinearColor(.1f,.09f,.03f,.9f),P.X+12,P.Y+6,120,20);
-  DrawText(FString::Printf(TEXT("部隊%d → 軍へ"),Dragged),FLinearColor(1.f,.85f,.35f),P.X+16,P.Y+8,GEngine->GetSmallFont(),.8f);
+  const int32 Count=PC->DraggedSquads().Num();
+  DrawText(Count>1?FString::Printf(TEXT("%d部隊 → 軍へ"),Count):FString::Printf(TEXT("部隊%d → 軍へ"),Dragged),FLinearColor(1.f,.85f,.35f),P.X+16,P.Y+8,GEngine->GetSmallFont(),.8f);
  }
  if(Rows.Num()>Layout.VisibleRows)
  {
