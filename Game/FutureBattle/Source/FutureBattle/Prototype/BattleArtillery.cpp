@@ -89,6 +89,13 @@ float BattleTactics::SPGRange()
  return HasOverride?FMath::Clamp(OverrideRange,FMath::Max(0.f,RangeTuning->SPGMinRange)+100.f,200000.f):RangeTuning->SPGRange;
 }
 
+float BattleTactics::ArtilleryStandoff()
+{
+ static float OverrideStandoff=GetDefault<UBattleTuning>()->ArtilleryStandoff;
+ static const bool HasOverride=FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryStandoff="),OverrideStandoff)&&FMath::IsFinite(OverrideStandoff);
+ return HasOverride?FMath::Clamp(OverrideStandoff,0.f,1.f):GetDefault<UBattleTuning>()->ArtilleryStandoff;
+}
+
 namespace { int32 SaveReloadBoundarySmokeOverride=-1; }
 bool BattleTactics::SaveReloadBoundary()
 {
@@ -163,7 +170,7 @@ FVector UBattleMatch::AreaArtilleryPost(int32 Team,int32 SquadID,const FVector& 
  const auto* S=Store?Store->FindSquad(SquadID):nullptr;
  if(!S||!R||!BattleSquadType::IsArtillery(S->SquadType))return Goal;
  const double Range=R->ArtilleryMaxRange(S->SquadType==BattleSquadType::SPGun);
- const double Keep=FMath::Clamp(GetDefault<UBattleTuning>()->ArtilleryStandoff,0.f,1.f)*Range;
+ const double Keep=FMath::Clamp(BattleTactics::ArtilleryStandoff(),0.f,1.f)*Range;
  const auto& V=AreaIntelView(Team);
  if(Keep<=0.||V.Enemies.IsEmpty())return Goal;
  auto Clear=[&](const FVector& P){for(const FVector& E:V.Enemies)if(FVector::DistSquared2D(P,E)<Keep*Keep)return false;return true;};

@@ -120,3 +120,9 @@ OFFでは従来の分類・残弾／生存照会・VehicleIDs条件・照準式�
 あわせて `-BattleArtilleryRaidChase` の目標の取り直しを絞った：発砲の報告には最大30mの誤差があり、同じ場所から撃つ砲でも数秒ごとに目標が動いて命令が出し直され、経路を作り直していた（命令は目標が20cm動けば出し直される）。新しい発砲が今の目標から50m以内で、隊長がまだ目標に着いていなければ、目標は変えずに証拠の時刻と到着の待ちだけを更新する。391042d の評価（取り直し110回前後）はこの変更の前のもの。
 
 評価：上の条件に `-ArtilleryRaidChase 1` を足し、`-ArtilleryRaidSneak 0` と `80` を30FPSで比べる。見る値は、自走砲の撃破、襲撃の終わり方（`cleared`/`expired`/`losses`）、外骨格の損失、両軍の得点。
+
+## 自走砲の構える深さ（-BattleArtilleryStandoff）
+
+AI の砲兵は、分かっている敵すべてから「射程×`ArtilleryStandoff`（設定 0.6）」以上離れ、いちばん近い敵が「射程×`ArtilleryAdvance`（0.8）」より遠ければ近づく（`UBattleMatch::AreaArtilleryPost`）。射程55000では330〜440m後ろに構え、マップI（本拠地は x=±42000）では襲撃の目標が x≈-28000〜-48000 と自軍の本拠地のすぐ前だった。射程を少し絞っても、自走砲は本拠地の近くから撃ち続け、襲撃は敵の後方の奥まで行く必要がある。
+
+`-BattleArtilleryStandoff=<0〜1>` は、この割合を起動引数で上書きする（既定は設定の値で、今のまま）。評価：`-SPGRange 55000 -ArtilleryRaidChase 1 -ArtilleryRaidSneak 80` に `-ArtilleryStandoff 0.6/0.35` を比べ、自走砲の位置（襲撃の目標の x）、自走砲の発射・撃破・被撃破、外骨格の損失を見る。
