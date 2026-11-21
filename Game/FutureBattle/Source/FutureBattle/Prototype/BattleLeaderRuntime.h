@@ -225,7 +225,7 @@ public:
  // FaceVehicle: a stopped vehicle turns its hull (its forward view) at its turn rate. VehicleWatchDirection: towards the nearest
  // enemy its team knows of, else the enemy home.
  bool HasArmourKnowledge(int32 Team) const;
- void PickArmourTargets(int32 SquadID,struct FBattleLeaderPlan& Plan,const TSet<int32>* AllowedTargets=nullptr);
+ void PickArmourTargets(int32 SquadID,struct FBattleLeaderPlan& Plan,const TSet<int32>* AllowedTargets=nullptr,FVector* SelectedPosition=nullptr);
  void FaceVehicle(int32 ID,const FVector& Direction);
  FVector VehicleWatchDirection(int32 ID) const;
  // Navigation data for a unit's paths: the vehicle agent for tanks, nullptr (the default infantry data) otherwise.
@@ -387,7 +387,7 @@ public:
  // the rifle low (FollowerClip); B.bRunPose is the run shown, refreshed by the pose updates.
  TMap<int32,double> LastFireTimes;
  bool ShowsRun(int32 ID,int32 Pose,double Now) const {return Pose==1 && Now-LastFireTimes.FindRef(ID,-100.)>=BattleBodyAnim::ReadySeconds && StanceOf(ID)==0;}
- struct FBodyTimer{double At=0;bool bFreeze=false;};
+ struct FBodyTimer{double At=0;bool bFreeze=false;bool bSettle=false;}; // bSettle: a fallen corpse stops its ragdoll (BattleRagdoll)
  TMap<int32,FBodyTimer> BodyTimers;
  void StepBodyTimers();
  // Once a second: a near living follower whose mesh shows another clip than FollowerClip (a one-shot left on its last
@@ -413,6 +413,10 @@ public:
  void StepCorpses();
  void HideCorpse(int32 ID);
  bool IsCorpseHidden(int32 ID) const {return HiddenCorpses.Contains(ID);}
+ // Stage 2 diagnosis (BattleStateTrace.cpp, Docs/design-divergence-trace.md): -BattleStateTrace=<N> writes BATTLE_STATE_TRACE every N
+ // frames with one hash per block of the match state (positions, health, cover, perception, plans, match, shots); reads only.
+ void StepStateTrace();
+ int32 StateTraceFrame=0;
  bool IsBlindFiring(int32 ID,double Now) const {const double* T=BlindFireUntil.Find(ID);return T&&*T>Now;}
  // Where a blind shot leaves: above the top of a low cover, or just past the edge of a wide one, with a clear first stretch
  // toward AimPoint. False when neither works (the caller falls back to the old peek).
@@ -472,6 +476,11 @@ public:
  // attack/hold orders) fights as the player's sector move does - until a member is inside the sector it fires on the move and
  // fights back at enemies outside the sector that shoot at it, without stopping or walking to cover on the way.
  static bool SectorMoveFireEnabled();
+ // -BattleArrivalWalk (2026-11-21, default 1 by user decision after s23: open hits -23%, cover shots +18%; =0 for the old rule; user 11-21: soldiers stopped short of their planned cover and fought in the
+ // open): in his own sector, a soldier whose arrival place (with its own tail route) is more than 1.5 m away keeps walking to it
+ // and fires on the move, instead of stopping for combat where the squad first sees an enemy. He also walks the tail of his
+ // route past the end of the shared path (otherwise the route gate stops him at the shared end point). Counts arrival_walk_*.
+ static bool ArrivalWalkEnabled();
  // Trial -BattleSquadCoverCheck=1 (2026-11-20, default 0; with fire on the move): the squad leader counts how many of his
  // living members could hide from the threat near the squad - free cover slots within 20 m that show at most 2 of 5 body
  // samples to the threat, and up to two places right behind each such slot that hide as well. 80% of the squad or more (user, 11-20; half before):
@@ -523,6 +532,22 @@ public:
  // to the sector (the team's current sightings) instead of the direction it came from, and picks again when its target lies
  // more than 45 degrees away from that direction.
  static bool ArrivalThreatEnabled();
+ // Trial -BattleCoverOutward=1 (2026-11-21, default 0; user idea 11-21, steps 1+2): a sector squad picks arrival cover slots with
+ // an obstacle within 2.5 m toward any of the neighbouring sectors (8 directions from the sector centre) that can hold enemies,
+ // instead of only straight ahead along the way in - so soldiers stand on the centre side of walls facing outward. Ignored:
+ // off-map neighbours, neighbours where only the team's own soldiers are (-BattleSectorFront state 1), and neighbours toward
+ // the team's home (rear, more than 45 degrees toward it) unless enemies are known there. With no direction left, the old rule.
+ // Counts arrival_outward_*.
+ static bool CoverOutwardEnabled();
+ // Trial -BattleCoverDense=1 (2026-11-21, default 0; user idea 11-21, step 3): on maps with city cover (IsUrban), every side of an
+ // obstacle longer than 3 m also gets cover slots every 1.4 m (BattleCover.cpp BuildSlots; the usual 5 samples per side stay),
+ // so several soldiers can use one long wall. Sector arrival then treats a slot as taken only within 1.3 m of another
+ // reservation (190 cm before) and looks at up to 512 nearby slots (256 before). The slots are shared with the cover actions.
+ static bool CoverDenseEnabled();
+ // Trial -BattleCoverIndoor=1 (2026-11-21, default 0; user idea 11-21, step 4): a sector squad tries its arrival cover slots under a
+ // roof or upper floor (a static obstacle 1.2-8 m above the slot: inside houses and sheds, by windows) before the ones outside.
+ // Counts arrival_indoor_*.
+ static bool CoverIndoorEnabled();
  // Trial -BattleCoverStrict=1 (2026-11-20, default 0; user: "cover that does not hide from the enemy, standing in the open"):
  // a cover place counts only when the threat sees at most 2 of the 5 body samples (was 3) - for the cover actions, for the
  // arrival places of a sector squad and its places along the wall (checked against the known enemy nearest to the sector), and
@@ -585,6 +610,8 @@ public:
  void RunStanceShot();
  void RunExoShot();
  int32 ExoShotStage=0,ExoShotIDs[2]={0,0};
+ void RunDeathShot(); // BattleDeathShot.cpp
+ int32 DeathShotStage=0,DeathShotIDs[2]={0,0};
  // Aim / scope view check (-BattleScopeShot, BattleScopeShot.cpp): leader 1 under direct control in each view.
  void RunScopeShot();
  int32 StanceShotStage=0,StanceShotFollower=0;
@@ -630,6 +657,8 @@ private:
  TSharedPtr<FMassEntityManager> Manager;
  TMap<int32,FBattleLeaderBody> Bodies;
  TMap<int32,FBattleLeaderPlan> Plans;
+ bool ObservedAvoidancePosition(int32 ObserverID,int32 OtherID,FVector& OutPosition) const;
+ void BuildObservedAvoidance(int32 ObserverID,TMap<FIntPoint,int32>& OutGrid,TArray<TArray<int32>>& OutBuckets,TMap<int32,FVector>& OutPositions) const;
  TMap<FIntPoint,int32> AvoidanceGrid;
  TArray<TArray<int32>> AvoidanceBuckets;
  TArray<int32> AvoidanceUsed;

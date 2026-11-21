@@ -24,6 +24,7 @@ namespace BattleSquadType
  int32 Members(uint8 Type);
  int32 RifleMembers(); // rifle squad size (UBattleTuning::RifleMembers, 8; -BattleRifleMembers= overrides)
  float HealthScale(uint8 Type);
+ float MaxHealth(uint8 Type,bool bLeader);
  float SpeedScale(uint8 Type);
  float DamageScale(uint8 Type);
  int32 AreaCost(uint8 Type);
@@ -56,6 +57,13 @@ namespace BattleSquadType
  // rounds: squads of its team whose leader stays within UBattleTuning::SupplyTeamRadius of it get the home ammunition refill
  // (UBattleMatch::UpdateArea) while it has stock left; it refills at home (BattleSupplyCar.cpp). Cost AreaSupplyCost, at most
  // AreaSupplyLimit per team. The AI keeps AreaSupplyKeep of them (trial -BattleAreaSupplyKeep=n; default 0 until measured).
+}
+
+namespace BattleRosterLimits
+{
+ // Shared by recruitment, replenishment and persistence; includes dead/retired records.
+ constexpr int32 Area=1000;
+ constexpr int32 Mixed=500;
 }
 
 UENUM(BlueprintType)

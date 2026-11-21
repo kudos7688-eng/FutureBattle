@@ -1,0 +1,143 @@
+﻿# Measurement lock queue (2026-11-22, Docs/design-lock-queue.md; user decision "入れてよい"). Builds, UE runs (tests, matches,
+# benchmarks) and Source/Config/DLL/map changes share one CPU and go one at a time. Instead of handing the lock over in chat, every
+# session uses this file queue. The queue lives outside the work trees, so every worktree sees the same one:
+#   C:\Users\nanek\Documents\FPS\.lock\queue.json  (holder + waiting list)   queue-log.jsonl (history)
+# Usage (PowerShell 5.1; Claude runs -Wait with run_in_background and is notified when it is its turn):
+#   .\Lock-Queue.ps1 -Join -Who <session name> -Purpose <what> -Minutes <estimate> [-Urgent] [-Share]
+#   .\Lock-Queue.ps1 -Wait -Who <session name>          # returns when <session name> holds the lock (exit 0), or times out (exit 3)
+#   .\Lock-Queue.ps1 -Release -Who <session name>       # hands the lock to the next in the queue
+#   .\Lock-Queue.ps1 -Leave -Who <session name>         # leaves the queue without taking the lock
+#   .\Lock-Queue.ps1 -Status
+# Rules kept from MEASURE.md: never stop another session's processes; the file is a marker, not an enforcement. A holder that is
+# more than 30 min past its estimate while no UE / build process runs is treated as gone and the lock passes on (logged as stale).
+# -Urgent (the user's own play test) joins at the front of the queue; it does not interrupt the holder. -Share marks that the
+# holder accepts short headless matches of the next in line running alongside (no timing comparisons then).
+[CmdletBinding(DefaultParameterSetName='Status')]
+param(
+ [Parameter(ParameterSetName='Join',Mandatory)][switch]$Join,
+ [Parameter(ParameterSetName='Wait',Mandatory)][switch]$Wait,
+ [Parameter(ParameterSetName='Release',Mandatory)][switch]$Release,
+ [Parameter(ParameterSetName='Leave',Mandatory)][switch]$Leave,
+ [Parameter(ParameterSetName='Status')][switch]$Status,
+ [Parameter(ParameterSetName='Join',Mandatory)][Parameter(ParameterSetName='Wait',Mandatory)][Parameter(ParameterSetName='Release',Mandatory)][Parameter(ParameterSetName='Leave',Mandatory)][string]$Who,
+ [Parameter(ParameterSetName='Join')][string]$Purpose='',
+ [Parameter(ParameterSetName='Join')][ValidateRange(1,600)][int]$Minutes=30,
+ [Parameter(ParameterSetName='Join')][switch]$Urgent,
+ [Parameter(ParameterSetName='Join')][switch]$Share,
+ [Parameter(ParameterSetName='Wait')][ValidateRange(5,600)][int]$PollSeconds=30,
+ [Parameter(ParameterSetName='Wait')][ValidateRange(1,1440)][int]$TimeoutMinutes=720,
+ [string]$Dir='C:\Users\nanek\Documents\FPS\.lock'
+)
+$ErrorActionPreference='Stop'
+# Session names are Japanese: print UTF-8 so that callers (Claude's Bash, terminals) read them back correctly.
+try{[Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false)}catch{}
+if(!(Test-Path -LiteralPath $Dir)){New-Item -ItemType Directory -Path $Dir -Force | Out-Null}
+$queueFile=Join-Path $Dir 'queue.json'
+$logFile=Join-Path $Dir 'queue-log.jsonl'
+$mutexFile=Join-Path $Dir 'queue.mutex'
+$utf8=New-Object System.Text.UTF8Encoding($false)
+
+function Now-Iso { [DateTimeOffset]::Now.ToString('yyyy-MM-ddTHH:mm:sszzz') }
+
+# Every read-modify-write holds an exclusive handle on queue.mutex (other callers retry for up to 60 s).
+function Invoke-Locked([scriptblock]$Body){
+ $deadline=[DateTime]::Now.AddSeconds(60);$handle=$null
+ while($null -eq $handle){
+  try{$handle=[System.IO.File]::Open($mutexFile,[System.IO.FileMode]::OpenOrCreate,[System.IO.FileAccess]::ReadWrite,[System.IO.FileShare]::None)}
+  catch [System.IO.IOException]{if([DateTime]::Now -gt $deadline){throw 'Lock-Queue: queue file busy for 60 s'};Start-Sleep -Milliseconds 200}
+ }
+ try{& $Body}finally{$handle.Dispose()}
+}
+function Read-Queue {
+ if(!(Test-Path -LiteralPath $queueFile)){return [pscustomobject]@{holder=$null;queue=@()}}
+ $text=[System.IO.File]::ReadAllText($queueFile,$utf8)
+ if([string]::IsNullOrWhiteSpace($text)){return [pscustomobject]@{holder=$null;queue=@()}}
+ $q=$text|ConvertFrom-Json
+ return [pscustomobject]@{holder=$q.holder;queue=@($q.queue|Where-Object{$_})}
+}
+function Write-Queue($Q){
+ $json=[pscustomobject]@{holder=$Q.holder;queue=@($Q.queue)}|ConvertTo-Json -Depth 5
+ [System.IO.File]::WriteAllText($queueFile,$json,$utf8)
+}
+function Write-Log([string]$Event,$Entry,[string]$Note=''){
+ $line=[pscustomobject]@{time=(Now-Iso);event=$Event;who=$Entry.who;purpose=$Entry.purpose;minutes=$Entry.minutes;note=$Note}|ConvertTo-Json -Compress
+ [System.IO.File]::AppendAllText($logFile,$line+"`n",$utf8)
+}
+function Busy-Processes {
+ @(Get-Process -ErrorAction SilentlyContinue|Where-Object{$_.ProcessName -match '^(UnrealEditor|UnrealEditor-Cmd|UnrealBuildTool|ShaderCompileWorker|link|cl)$'})
+}
+# The next in line becomes the holder when nobody holds the lock. Returns the updated queue.
+function Advance($Q){
+ if($null -eq $Q.holder -and @($Q.queue).Count -gt 0){
+  $next=@($Q.queue)[0];$rest=@($Q.queue|Select-Object -Skip 1)
+  $Q.holder=[pscustomobject]@{who=$next.who;purpose=$next.purpose;minutes=$next.minutes;since=(Now-Iso);share=$next.share}
+  $Q.queue=$rest;Write-Log 'acquire' $Q.holder
+ }
+ return $Q
+}
+# A holder 30 min past its estimate with no UE / build process running is treated as gone.
+function Drop-Stale($Q){
+ if($null -ne $Q.holder){
+  $since=[DateTimeOffset]::Parse($Q.holder.since);$limit=$since.AddMinutes([double]$Q.holder.minutes+30)
+  if([DateTimeOffset]::Now -gt $limit -and (Busy-Processes).Count -eq 0){Write-Log 'stale' $Q.holder ("past "+$limit.ToString('HH:mm'));$Q.holder=$null}
+ }
+ return $Q
+}
+function Show($Q){
+ if($null -eq $Q.holder){'holder: (free)'}
+ else{
+  $since=[DateTimeOffset]::Parse($Q.holder.since);$end=$since.AddMinutes([double]$Q.holder.minutes)
+  "holder: {0}  since {1}  until ~{2}  ({3}){4}" -f $Q.holder.who,$since.ToString('HH:mm'),$end.ToString('HH:mm'),$Q.holder.purpose,$(if($Q.holder.share){'  [share: short headless runs of the next may run alongside]'}else{''})
+ }
+ $i=0;foreach($e in @($Q.queue)){$i++;"  {0}. {1}  ~{2} min  ({3})  joined {4}{5}" -f $i,$e.who,$e.minutes,$e.purpose,([DateTimeOffset]::Parse($e.joined)).ToString('HH:mm'),$(if($e.urgent){'  [urgent]'}else{''})}
+ if($i -eq 0){'  (queue empty)'}
+}
+
+switch($PSCmdlet.ParameterSetName){
+ 'Join' {
+  Invoke-Locked {
+   $q=Drop-Stale (Read-Queue)
+   if($q.holder -and $q.holder.who -eq $Who){"ALREADY_HOLDER $Who";return}
+   if(@($q.queue|Where-Object{$_.who -eq $Who}).Count){"ALREADY_QUEUED $Who"}
+   else{
+    $entry=[pscustomobject]@{who=$Who;purpose=$Purpose;minutes=$Minutes;joined=(Now-Iso);urgent=[bool]$Urgent;share=[bool]$Share}
+    $q.queue=if($Urgent){@($entry)+@($q.queue)}else{@($q.queue)+@($entry)}
+    Write-Log 'join' $entry $(if($Urgent){'urgent'}else{''})
+   }
+   $q=Advance $q;Write-Queue $q
+   if($q.holder.who -eq $Who){"ACQUIRED $Who"}else{"QUEUED $Who"}
+   Show $q
+  }
+ }
+ 'Wait' {
+  $deadline=[DateTime]::Now.AddMinutes($TimeoutMinutes)
+  while($true){
+   $state=Invoke-Locked {
+    $q=Advance (Drop-Stale (Read-Queue));Write-Queue $q
+    if($q.holder -and $q.holder.who -eq $Who){'held'}
+    elseif(@($q.queue|Where-Object{$_.who -eq $Who}).Count -eq 0){'absent'}
+    else{'waiting'}
+   }
+   if($state -eq 'held'){"ACQUIRED $Who";Invoke-Locked {Show (Read-Queue)};exit 0}
+   if($state -eq 'absent'){"NOT_IN_QUEUE $Who (run -Join first)";exit 2}
+   if([DateTime]::Now -gt $deadline){"TIMEOUT $Who";exit 3}
+   Start-Sleep -Seconds $PollSeconds
+  }
+ }
+ 'Release' {
+  Invoke-Locked {
+   $q=Read-Queue
+   if($q.holder -and $q.holder.who -eq $Who){Write-Log 'release' $q.holder;$q.holder=$null;$q=Advance $q;Write-Queue $q;"RELEASED $Who"}
+   else{"NOT_HOLDER $Who"}
+   Show $q
+  }
+ }
+ 'Leave' {
+  Invoke-Locked {
+   $q=Read-Queue;$before=@($q.queue).Count;$q.queue=@($q.queue|Where-Object{$_.who -ne $Who})
+   if(@($q.queue).Count -lt $before){Write-Log 'leave' ([pscustomobject]@{who=$Who;purpose='';minutes=0});Write-Queue $q;"LEFT $Who"}else{"NOT_QUEUED $Who"}
+   Show $q
+  }
+ }
+ default { Invoke-Locked {Show (Drop-Stale (Read-Queue))} }
+}

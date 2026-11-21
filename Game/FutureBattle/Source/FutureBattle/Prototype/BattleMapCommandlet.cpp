@@ -4,6 +4,7 @@
 #include "Misc/Parse.h"
 #include "BattleFieldLayout.h"
 #include "BattleMapI.h"
+#include "BattleMapJ.h"
 #include "NavigationPath.h"
 
 #if WITH_EDITOR
@@ -39,7 +40,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 {
 #if WITH_EDITOR
 	FString Wide;FParse::Value(*Params,TEXT("WideField="),Wide);
-	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D") && Wide!=TEXT("E") && Wide!=TEXT("F") && Wide!=TEXT("G") && Wide!=TEXT("H") && Wide!=TEXT("I")) return 6;
+	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D") && Wide!=TEXT("E") && Wide!=TEXT("F") && Wide!=TEXT("G") && Wide!=TEXT("H") && Wide!=TEXT("I") && Wide!=TEXT("J")) return 6;
 	const bool Expanded=Wide==TEXT("D");
 	// Map E (2026-11-14): 1000m x 700m, urban centre with five objectives, open flanks with hedges and low walls.
 	// Map F (2026-11-18): the size, homes and city objectives of E; a city of districts with an avenue tanks can use, two flank
@@ -52,11 +53,13 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 	// bridge and a ford on each side, hills of 5m and 7m. It takes the rules of map E and the height table of map G.
 	const bool UrbanI=Wide==TEXT("I");
 	const bool UrbanH=Wide==TEXT("H");
-	const bool Urban=UrbanH||Wide==TEXT("E")||UrbanF||UrbanI;
+	// Map J (2026-11-22, BattleMapJ.h, BattleMapLayoutJ.inl): the grid of map I with impassable mountains and lakes and varied buildings.
+	const bool UrbanJ=Wide==TEXT("J");
+	const bool Urban=UrbanH||Wide==TEXT("E")||UrbanF||UrbanI||UrbanJ;
 	// Maps with a height table: their houses and hills (east half), for the navigation volumes and the checks below.
-	const bool Terrain=UrbanG||UrbanH||UrbanI;
-	const TArray<BattleTerrain::FHouse> TerrainHouses=UrbanI?BattleMapI::Houses():UrbanH?BattleSectors::Houses():UrbanG?BattleTerrain::HousesG():TArray<BattleTerrain::FHouse>();
-	const TArray<BattleTerrain::FHill> TerrainHills=UrbanI?BattleMapI::Hills():UrbanH?BattleSectors::Hills():UrbanG?BattleTerrain::HillsG():TArray<BattleTerrain::FHill>();
+	const bool Terrain=UrbanG||UrbanH||UrbanI||UrbanJ;
+	const TArray<BattleTerrain::FHouse> TerrainHouses=UrbanJ?BattleMapJ::Houses():UrbanI?BattleMapI::Houses():UrbanH?BattleSectors::Houses():UrbanG?BattleTerrain::HousesG():TArray<BattleTerrain::FHouse>();
+	const TArray<BattleTerrain::FHill> TerrainHills=UrbanJ?BattleMapJ::Hills():UrbanI?BattleMapI::Hills():UrbanH?BattleSectors::Hills():UrbanG?BattleTerrain::HillsG():TArray<BattleTerrain::FHill>();
 	const FString WideName=TEXT("Lvl_BattleWide_")+Wide;
 	const bool Sight=!Wide.IsEmpty();
 	const bool Large = Sight || FParse::Param(*Params,TEXT("LargeField"));
@@ -173,6 +176,10 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 		if(UrbanI)
 		{
 #include "BattleMapLayoutI.inl"
+		}
+		else if(UrbanJ)
+		{
+#include "BattleMapLayoutJ.inl"
 		}
 		else if(UrbanH)
 #include "BattleMapLayoutH.inl"
@@ -437,6 +444,24 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 			Water->SetAreaClass(UNavArea_Null::StaticClass());Water->PostEditChange();
 		}
 	}
+	// Map J: mountains and lakes are holes in the navigation mesh (mountains also stand there as solid rock; lakes have no collision,
+	// so sight and shots cross the water). One volume per sector, with its 180-degree partner.
+	if(UrbanJ)
+	{
+		for(int32 Cx=BattleMapJ::Columns/2;Cx<BattleMapJ::Columns;++Cx)for(int32 Rx=0;Rx<BattleMapJ::Rows;++Rx)
+		{
+			const TCHAR Kx=BattleMapJ::Kind(Cx,Rx);if(!BattleMapJ::Impassable(Kx))continue;
+			const FVector2D Mx=BattleMapJ::Centre(Cx,Rx);
+			for(int32 Sign:{-1,1})
+			{
+				ANavModifierVolume* NoWalk=World->SpawnActor<ANavModifierVolume>(FVector(Sign*Mx.X,Sign*Mx.Y,60),FRotator::ZeroRotator);
+				NoWalk->SetActorLabel(Kx==TEXT('M')?TEXT("MountainNoWalk"):TEXT("LakeNoWalk"));
+				UCubeBuilder* NoWalkCube=NewObject<UCubeBuilder>(NoWalk);NoWalkCube->X=BattleMapJ::Cell;NoWalkCube->Y=BattleMapJ::Cell;NoWalkCube->Z=320;
+				UActorFactory::CreateBrushForVolumeActor(NoWalk,NoWalkCube);NoWalk->GetBrushComponent()->BuildSimpleBrushCollision();
+				NoWalk->SetAreaClass(UNavArea_Null::StaticClass());NoWalk->PostEditChange();
+			}
+		}
+	}
 	if (UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
 	{
 		// Commandlets do not tick the editor loading loop that normally releases this lock.
@@ -496,7 +521,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
                 Failures+=BlockedRoads;
                 UE_LOG(LogTemp,Display,TEXT("SECTOR_ROAD_RESULT blocked=%d segments=%d"),BlockedRoads,Def.RouteEdges.Num());
             }
-			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=%s rotation=180"),Failures,OpenLines,UrbanI?TEXT("sectors-v2"):UrbanH?TEXT("river-town-v2"):UrbanG?TEXT("heights-v1"):UrbanF?TEXT("districts-v1"):TEXT("urban-v2"));
+			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=%s rotation=180"),Failures,OpenLines,UrbanJ?TEXT("terrain-j-v1"):UrbanI?TEXT("sectors-v2"):UrbanH?TEXT("river-town-v2"):UrbanG?TEXT("heights-v1"):UrbanF?TEXT("districts-v1"):TEXT("urban-v2"));
 			if(Terrain)
 			{
 				// The geometry agrees with the height table (a trace down at nine points of every patch; points under a crate or a
@@ -556,6 +581,40 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 				}
 				UE_LOG(LogTemp,Display,TEXT("SECTOR_MAP_COVER sectors=%d checked=%d short=%d least_per_side=%d fields=%d field_mean_per_side=%.1f"),Columns*Rows,Checked,Short,Least,FieldCount,FieldCount?double(FieldSum)/FieldCount:0.);
 				UE_LOG(LogTemp,Display,TEXT("SECTOR_MAP_RESULT failures=%d"),(bRiver?0:1)+Short);
+			}
+			if(UrbanJ)
+			{
+				// Map J: no ground in a mountain or a lake sector (25 samples each); the passes and the lanes connect (homes and objectives
+				// were checked above); cover towards every side in the sectors that are held (as map I; fields, hills, mountains, lakes and
+				// home bases are not counted). A shortage of cover is reported, not a failure (the varied layouts are new, 2026-11-22).
+				int32 Blocked=0,Leaks=0,Checked=0,Short=0,Least=MAX_int32;
+				for(int32 Cx=0;Cx<BattleMapJ::Columns;++Cx)for(int32 Rx=0;Rx<BattleMapJ::Rows;++Rx)
+				{
+					const TCHAR Kx=BattleMapJ::Kind(Cx,Rx);const FVector2D Mx=BattleMapJ::Centre(Cx,Rx);
+					if(BattleMapJ::Impassable(Kx))
+					{
+						++Blocked;int32 Ground=0;FNavLocation At;
+						for(double DX=-2000;DX<=2000;DX+=1000)for(double DY=-2000;DY<=2000;DY+=1000)Ground+=Nav->ProjectPointToNavigation(FVector(Mx.X+DX,Mx.Y+DY,0),At,FVector(40,40,60));
+						if(Ground){++Leaks;UE_LOG(LogTemp,Warning,TEXT("TERRAIN_J_LEAK c=%d r=%d kind=%c ground_samples=%d/25"),Cx,Rx,Kx,Ground);}
+						continue;
+					}
+					if(Kx==TEXT('F')||Kx==TEXT('h')||Kx==TEXT('S'))continue;
+					int32 N[4]={0,0,0,0};
+					for(double DX=-2250;DX<=2250;DX+=250)for(double DY=-2250;DY<=2250;DY+=250)
+					{
+						FNavLocation At;if(!Nav->ProjectPointToNavigation(FVector(Mx.X+DX,Mx.Y+DY,0),At,FVector(40,40,60)))continue;
+						const FVector Eye=At.Location+FVector(0,0,100);const FVector Dirs[4]={FVector(0,1,0),FVector(1,0,0),FVector(0,-1,0),FVector(-1,0,0)};
+						for(int32 D=0;D<4;++D)N[D]+=World->LineTraceTestByObjectType(Eye,Eye+Dirs[D]*250,FCollisionObjectQueryParams(ECC_WorldStatic));
+					}
+					const int32 Min=FMath::Min(FMath::Min(N[0],N[1]),FMath::Min(N[2],N[3]));++Checked;Least=FMath::Min(Least,Min);
+					if(Min<6){++Short;UE_LOG(LogTemp,Warning,TEXT("SECTOR_MAP_COVER_SHORT c=%d r=%d kind=%c n=%d e=%d s=%d w=%d"),Cx,Rx,Kx,N[0],N[1],N[2],N[3]);}
+				}
+				// Across a range: from the north lane to the valley the path must go round by a pass (longer than 1.3 x the straight line).
+				auto* Around=Nav->FindPathToLocationSynchronously(World,FVector(2500,27500,0),FVector(2500,7500,0));
+				const bool bAround=Around&&Around->IsValid()&&!Around->IsPartial()&&Around->GetPathLength()>1.3*20000.;
+				UE_LOG(LogTemp,Display,TEXT("TERRAIN_J_RESULT failures=%d blocked_sectors=%d leaks=%d detour_cm=%.0f detour_ok=%d cover_checked=%d cover_short=%d least_per_side=%d"),
+					Leaks+(bAround?0:1),Blocked,Leaks,Around&&Around->IsValid()?Around->GetPathLength():-1.,bAround?1:0,Checked,Short,Least==MAX_int32?0:Least);
+				if(Leaks||!bAround) return 7;
 			}
 			if(Failures) return 7;
 		}

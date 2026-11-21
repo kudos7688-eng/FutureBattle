@@ -35,7 +35,7 @@ void ABattleGameMode::RunSaveSmokeTest()
 	const FGuid SavedID = Save->MatchID; const FBattleUnitState Before = *A->GetState();
 	CheckSmoke(Save->ControlledID == ID && FMath::IsNearlyEqual(Save->Units[0].State.ReloadEndTime, 1.8, .01) && Save->Units[0].State.NextShotTime <= .11, TEXT("Snapshot stores FPS target and remaining cooldowns rather than absolute world time"));
 	TArray<uint8> Bytes; const bool bSerialized = UGameplayStatics::SaveGameToMemory(Save, Bytes);
-	auto* Decoded = bSerialized ? Cast<UBattleSave>(UGameplayStatics::LoadGameFromMemory(Bytes)) : nullptr;
+	auto* Decoded = bSerialized ? Cast<UBattleSave>(BattleSaveValidation::Decode(Bytes)) : nullptr;
 	CheckSmoke(Decoded && Decoded->Validate(Error) && Decoded->Units.Num() == Units.Num() && Decoded->Reports.Num() == 1 && Decoded->AllyCredits == 1234, TEXT("Binary round trip preserves units economy and pending shared information"));
 	if (!Decoded) { CompleteSmokeTest(); return; }
 	int32 Rejected = 0;

@@ -4,6 +4,7 @@
 #include "BattleFieldLayout.h"
 #include "BattleCover.h"
 #include "BattleMatch.h"
+#include "BattlePerception.h"
 #include "NavigationPath.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -131,20 +132,58 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   static const bool CoverArrivalAllowed=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverArrival="),Value);return Value!=0;}();
   const bool CoverArrival=CoverArrivalAllowed && BattleFieldLayout::IsUrban(GetWorld()) && !Rally && Nav;
   TArray<FVector> CoverCandidates; TSet<int32> CoverAssigned;
+  // -BattleCoverOutward: the outward directions this sector is defended toward (rear and friendly-held sides left out).
+  TArray<FVector> Outward;
+  if(CoverArrival && Sector && CoverOutwardEnabled())
+  {
+   const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+   const FVector Mid=BattleSectors::Center(Cell);
+   const FVector ToHome=(Match->AreaHome(S->Team)-Mid).GetSafeNormal2D();
+   for(int32 DX=-1;DX<=1;++DX) for(int32 DY=-1;DY<=1;++DY) if(DX||DY)
+   {
+    const FIntPoint N=Cell+FIntPoint(DX,DY);
+    if(!BattleSectors::Valid(N)){SightExperiment.Cover(TEXT("arrival_outward_skip_edge"));continue;}
+    const uint8 Held=(S->Team==0||S->Team==1)?Match->SectorState[S->Team].FindRef(N):0;
+    if(Held==1){SightExperiment.Cover(TEXT("arrival_outward_skip_friendly"));continue;}
+    const FVector Dir=FVector(DX,DY,0).GetSafeNormal2D();
+    if(!(Held&2) && !ToHome.IsNearlyZero() && FVector::DotProduct(Dir,ToHome)>.707f){SightExperiment.Cover(TEXT("arrival_outward_skip_rear"));continue;}
+    Outward.Add(Dir);
+   }
+   SightExperiment.Cover(Outward.IsEmpty()?TEXT("arrival_outward_none_old_rule"):Outward.Num()<=2?TEXT("arrival_outward_dirs_le2"):Outward.Num()<=4?TEXT("arrival_outward_dirs_le4"):TEXT("arrival_outward_dirs_gt4"));
+  }
+  auto WallAhead=[&](const FVector& At)
+  {
+   const FCollisionObjectQueryParams Static(ECC_WorldStatic);
+   if(Outward.IsEmpty())return GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),Static);
+   for(const FVector& Dir:Outward)if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Dir*250+FVector(0,0,100),Static))return true;
+   return false;
+  };
   if(CoverArrival)
   {
    auto* Cover=GetWorld()->GetSubsystem<UBattleCover>(); Cover->BuildSlots();
-   for(int32 Slot:Cover->NearbySlots(S->Destination,Sector?3600.f:1400.f,Sector?256:48))
+   for(int32 Slot:Cover->NearbySlots(S->Destination,Sector?3600.f:1400.f,Sector?(CoverDenseEnabled()?512:256):48))
    {
     const FVector At=Cover->GetSlots()[Slot];
     if(Sector && BattleSectors::Cell(At)!=Cell)continue;
     // Evaluation (arrival_slot_*): slots in the sector, those without an obstacle 2.5 m ahead, those seen by the nearest threat (-BattleCoverStrict).
     SightExperiment.Cover(TEXT("arrival_slot_in_cell"));
-    if(!GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic))) SightExperiment.Cover(TEXT("arrival_slot_no_wall_ahead"));
+    if(!WallAhead(At)) SightExperiment.Cover(TEXT("arrival_slot_no_wall_ahead"));
     else if(HidesFromThreat(At)) CoverCandidates.Add(At);
     else SightExperiment.Cover(TEXT("arrival_slot_exposed"));
    }
   }
+  // -BattleCoverIndoor: in a sector, slots under a roof or upper floor first (stable order otherwise).
+  int32 IndoorSlots=0;
+  if(CoverIndoorEnabled() && Sector && !CoverCandidates.IsEmpty())
+  {
+   TArray<FVector> Indoor,Outdoor;
+   for(const FVector& At:CoverCandidates)
+    (GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,120),At+FVector(0,0,800),FCollisionObjectQueryParams(ECC_WorldStatic))?Indoor:Outdoor).Add(At);
+   IndoorSlots=Indoor.Num();
+   SightExperiment.Cover(IndoorSlots==0?TEXT("arrival_indoor_none"):IndoorSlots<5?TEXT("arrival_indoor_lt5"):TEXT("arrival_indoor_ge5"));
+   CoverCandidates=MoveTemp(Indoor);CoverCandidates.Append(Outdoor);
+  }
+  const double TakenRadius=Sector && CoverDenseEnabled()?130.:190.;
   int32 Queries=0, OpenMembers=0, TailQueries=0;
   if(CoverArrival) SightExperiment.Cover(CoverCandidates.Num()==0?TEXT("arrival_plan_candidates_0"):CoverCandidates.Num()<5?TEXT("arrival_plan_candidates_lt5"):CoverCandidates.Num()<20?TEXT("arrival_plan_candidates_lt20"):TEXT("arrival_plan_candidates_ge20"));
   for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive())
@@ -155,9 +194,10 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    if(CoverArrival && (Sector || ID==S->LeaderUnitID || OpenMembers++>=3))
     for(const FVector& At:CoverCandidates)
     {
+     const bool bIndoorSlot=int32(&At-CoverCandidates.GetData())<IndoorSlots;
      bCoverTried=true;
      if(TailQueries>=24) {bCapHit=true;break;}
-     bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,At)<FMath::Square(190.)) {Taken=true;break;}
+     bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,At)<FMath::Square(TakenRadius)) {Taken=true;break;}
      if(Taken) {++ArrTaken;continue;}
      ++TailQueries;
      auto* Tail=Nav->FindPathToLocationSynchronously(GetWorld(),P.Path.Num()?P.Path.Last():S->Destination,At);
@@ -165,6 +205,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
      {if(Tail && Tail->IsValid() && !Tail->IsPartial() && Tail->PathPoints.Num()>=2) ++ArrLong; else ++ArrNoPath; continue;}
      P.ArrivalGoals.Add(ID,At); P.ArrivalTails.Add(ID,Tail->PathPoints); Reserved.Add(At); CoverAssigned.Add(ID); Found=true;
      SightExperiment.Cover(TEXT("arrival_cover_slot"));
+     if(bIndoorSlot)SightExperiment.Cover(TEXT("arrival_indoor_slot"));
      break;
     }
    // Trial -BattleCoverHuddle=1 (2026-11-20, default 0; sector missions where arrivals use cover): a member left without a cover
@@ -307,6 +348,43 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
  }
 }
 
+bool UBattleLeaderRuntime::ObservedAvoidancePosition(int32 ObserverID,int32 OtherID,FVector& OutPosition) const
+{
+ const auto* AvoidStore=GetWorld()->GetSubsystem<UBattleState>();
+ const auto* AvoidObserver=AvoidStore->Find(ObserverID);const auto* AvoidOther=AvoidStore->Find(OtherID);
+ if(!AvoidObserver)return false;
+ if(AvoidOther&&AvoidOther->Team==AvoidObserver->Team)
+ {if(!AvoidOther->IsAlive())return false;OutPosition=Position(OtherID);return true;}
+ const auto* AvoidContact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ObserverID,OtherID);
+ if(!AvoidContact||!AvoidContact->bVisible||AvoidContact->bShared)return false;
+ OutPosition=AvoidContact->LastKnownPosition;return true;
+}
+
+void UBattleLeaderRuntime::BuildObservedAvoidance(int32 ObserverID,TMap<FIntPoint,int32>& OutGrid,TArray<TArray<int32>>& OutBuckets,TMap<int32,FVector>& OutPositions) const
+{
+ const auto* AvoidStore=GetWorld()->GetSubsystem<UBattleState>();const auto* AvoidObserver=AvoidStore->Find(ObserverID);if(!AvoidObserver)return;
+ const FVector AvoidOrigin=Position(ObserverID);const FIntPoint AvoidCell(FMath::FloorToInt(AvoidOrigin.X/150.),FMath::FloorToInt(AvoidOrigin.Y/150.));
+ auto AddObserved=[&](int32 AvoidID,const FVector& AvoidAt)
+ {
+  const FIntPoint ObservedCell(FMath::FloorToInt(AvoidAt.X/150.),FMath::FloorToInt(AvoidAt.Y/150.));
+  if(FMath::Abs(ObservedCell.X-AvoidCell.X)>1||FMath::Abs(ObservedCell.Y-AvoidCell.Y)>1||OutPositions.Contains(AvoidID))return;
+  OutPositions.Add(AvoidID,AvoidAt);int32* ObservedBucket=OutGrid.Find(ObservedCell);
+  if(!ObservedBucket){const int32 ObservedIndex=OutBuckets.AddDefaulted();ObservedBucket=&OutGrid.Add(ObservedCell,ObservedIndex);}
+  OutBuckets[*ObservedBucket].Add(AvoidID);
+ };
+ // The live grid supplies allies only. Enemy candidates come from the observer's own sensor snapshot, even after unseen death.
+ for(int32 AvoidX=-1;AvoidX<=1;++AvoidX)for(int32 AvoidY=-1;AvoidY<=1;++AvoidY)
+  if(const int32* AllyBucket=AvoidanceGrid.Find(AvoidCell+FIntPoint(AvoidX,AvoidY)))for(int32 AllyID:AvoidanceBuckets[*AllyBucket])
+   if(AllyID!=ObserverID)if(const auto* AvoidAlly=AvoidStore->Find(AllyID);AvoidAlly&&AvoidAlly->Team==AvoidObserver->Team&&AvoidAlly->IsAlive())AddObserved(AllyID,Position(AllyID));
+ if(const auto* AvoidContacts=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(ObserverID))
+ {
+  TArray<int32> ObservedKeys;
+  for(const auto& NearbyContact:*AvoidContacts)if(NearbyContact.Value.bVisible&&!NearbyContact.Value.bShared&&FVector::DistSquared2D(AvoidOrigin,NearbyContact.Value.LastKnownPosition)<=FMath::Square(450.))ObservedKeys.Add(NearbyContact.Key);
+  ObservedKeys.Sort();
+  for(int32 ObservedID:ObservedKeys){const auto& ObservedContact=AvoidContacts->FindChecked(ObservedID);if(ObservedContact.bVisible&&!ObservedContact.bShared)AddObserved(ObservedID,ObservedContact.LastKnownPosition);}
+ }
+}
+
 bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Direction)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); const auto* S=Store->FindSquad(U->SquadID);
@@ -383,32 +461,39 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  if(!Final && FVector::Dist2D(Pos,Way)<65) {++B.Waypoint;Way=(*Route)[B.Waypoint];Final=B.Waypoint==Route->Num()-1;}
  FVector D=(Way-Pos).GetSafeNormal2D(); const FVector Right(-D.Y,D.X,0);
  const bool Confined=NarrowHere;
+ const bool bObservedAvoidance=BattleTactics::ObservedTactics();
+ TMap<FIntPoint,int32> ObservedGrid;TArray<TArray<int32>> ObservedBuckets;TMap<int32,FVector> ObservedPositions;
+ if(bObservedAvoidance)BuildObservedAvoidance(ID,ObservedGrid,ObservedBuckets,ObservedPositions);
+ const auto& MovementGrid=bObservedAvoidance?ObservedGrid:AvoidanceGrid;
+ const auto& MovementBuckets=bObservedAvoidance?ObservedBuckets:AvoidanceBuckets;
+ FVector ObservedPassingAt=FVector::ZeroVector;
+ if(bObservedAvoidance&&B.PassingID!=INDEX_NONE&&!ObservedAvoidancePosition(ID,B.PassingID,ObservedPassingAt))B.PassingID=INDEX_NONE;
  if(B.PassingID!=INDEX_NONE)
  {
-  const FVector Delta=Position(B.PassingID)-Pos;
+  const FVector Delta=(bObservedAvoidance?ObservedPassingAt:Position(B.PassingID))-Pos;
   const auto* PassingUnit=Store->Find(B.PassingID);
-  const auto* PassingPlan=Plans.Find(PassingUnit->SquadID);
-  if(Confined && PassingUnit->Team==U->Team && PassingPlan && PassingPlan->Path.Num()>1 && FVector::DotProduct((PassingPlan->Path.Last()-PassingPlan->Path[0]).GetSafeNormal2D(),D)>.5) B.PassingID=INDEX_NONE;
-  if(!PassingUnit->IsAlive() || FVector::DotProduct(Delta,D)<-80 || Delta.Size2D()>350 ||
+  const auto* PassingPlan=PassingUnit&&(!bObservedAvoidance||PassingUnit->Team==U->Team)?Plans.Find(PassingUnit->SquadID):nullptr;
+  if(Confined && PassingUnit && PassingUnit->Team==U->Team && PassingPlan && PassingPlan->Path.Num()>1 && FVector::DotProduct((PassingPlan->Path.Last()-PassingPlan->Path[0]).GetSafeNormal2D(),D)>.5) B.PassingID=INDEX_NONE;
+  if((!bObservedAvoidance&&!PassingUnit->IsAlive()) || FVector::DotProduct(Delta,D)<-80 || Delta.Size2D()>350 ||
      (B.bPassingSecond && FVector::Dist2D(Pos,B.PassingWaypoint)<40)) B.PassingID=INDEX_NONE;
  }
  FVector Separation=FVector::ZeroVector; float Scale=1;
  int32 Blocker=INDEX_NONE; double BlockerDistance=DBL_MAX;
  const FIntPoint Cell(FMath::FloorToInt(Pos.X/150.),FMath::FloorToInt(Pos.Y/150.)); int32 Checked=0;
  for(int32 X=-1;X<=1 && Checked<32;++X) for(int32 Y=-1;Y<=1 && Checked<32;++Y)
-  if(const int32* NearbyBucket=AvoidanceGrid.Find(Cell+FIntPoint(X,Y))) for(int32 Other:AvoidanceBuckets[*NearbyBucket])
+  if(const int32* NearbyBucket=MovementGrid.Find(Cell+FIntPoint(X,Y))) for(int32 Other:MovementBuckets[*NearbyBucket])
   {
-   if(Other==ID || !Store->Find(Other)->IsAlive()) continue;
-   if(bAllyPass&&IsStationaryAlly(ID,Other)) continue;
+   if(Other==ID || (!bObservedAvoidance&&!Store->Find(Other)->IsAlive())) continue;
+   if(bAllyPass&&(!bObservedAvoidance||(Store->Find(Other)&&Store->Find(Other)->Team==U->Team))&&IsStationaryAlly(ID,Other)) continue;
    if(++Checked>32) break;
-   const FVector Delta=Position(Other)-Pos;
+   const FVector Delta=(bObservedAvoidance?ObservedPositions.FindChecked(Other):Position(Other))-Pos;
    const double Along=FVector::DotProduct(Delta,D), Side=FVector::DotProduct(Delta,Right), Dist=Delta.Size2D();
    if(Dist>1 && Dist<110) Separation-=Delta.GetSafeNormal2D()*(110-Dist)/110;
    if(Along>0 && Along<155 && FMath::Abs(Side)<76)
    {
     Scale=FMath::Min(Scale,float(FMath::Clamp((Along-78)/70.,0.,1.)));
-    const auto* OtherUnit=Store->Find(Other); const auto* OtherPlan=OtherUnit->Team==U->Team?Plans.Find(OtherUnit->SquadID):nullptr;
-    const bool SameFlow=FVector::DotProduct(Bodies.FindChecked(Other).Velocity.GetSafeNormal2D(),D)>.5 || (OtherPlan && OtherPlan->Path.Num()>1 && FVector::DotProduct((OtherPlan->Path.Last()-OtherPlan->Path[0]).GetSafeNormal2D(),D)>.5);
+    const auto* OtherUnit=Store->Find(Other); const auto* OtherPlan=OtherUnit&&OtherUnit->Team==U->Team?Plans.Find(OtherUnit->SquadID):nullptr;
+    const bool SameFlow=(!bObservedAvoidance||(OtherUnit&&OtherUnit->Team==U->Team))&&(FVector::DotProduct(Bodies.FindChecked(Other).Velocity.GetSafeNormal2D(),D)>.5 || (OtherPlan && OtherPlan->Path.Num()>1 && FVector::DotProduct((OtherPlan->Path.Last()-OtherPlan->Path[0]).GetSafeNormal2D(),D)>.5));
     // Queue behind a moving ally in a tight corridor instead of overtaking into oncoming traffic.
     if(SameFlow && (Confined || Bodies.FindChecked(Other).Velocity.Size2D()>20)) continue;
     if(Dist<BlockerDistance) {Blocker=Other;BlockerDistance=Dist;}
@@ -416,14 +501,15 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   }
  if(Blocker!=INDEX_NONE && B.PassingID==INDEX_NONE)
  {
-  const float Sign=FVector::DotProduct(Position(Blocker)-Pos,Right)>10?-1.f:1.f;
+  const FVector BlockerAt=bObservedAvoidance?ObservedPositions.FindChecked(Blocker):Position(Blocker);
+  const float Sign=FVector::DotProduct(BlockerAt-Pos,Right)>10?-1.f:1.f;
   for(float SideSign:{Sign,-Sign})
   {
    for(float Distance:{110.f,80.f})
    {
-    const FVector Offset=Right*SideSign*Distance, Bypass=Position(Blocker)+Offset+D*20;
+    const FVector Offset=Right*SideSign*Distance, Bypass=(bObservedAvoidance?BlockerAt:Position(Blocker))+Offset+D*20;
     if(!ClearMovementSegment(Pos,Bypass)) continue;
-    B.PassingID=Blocker;B.PassingWaypoint=Bypass;
+    B.PassingID=Blocker;B.PassingWaypoint=Bypass;if(bObservedAvoidance)ObservedPassingAt=BlockerAt;
     B.PassingForward=D;B.PassingOffset=Offset;B.bPassingSecond=false;break;
    }
    if(B.PassingID!=INDEX_NONE) break;
@@ -434,7 +520,7 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  if(B.PassingID!=INDEX_NONE)
  {
   if(!B.bPassingSecond && FVector::Dist2D(Pos,B.PassingWaypoint)<40)
-  {B.PassingWaypoint=Position(B.PassingID)+B.PassingOffset+B.PassingForward*160;B.bPassingSecond=true;}
+  {B.PassingWaypoint=(bObservedAvoidance?ObservedPassingAt:Position(B.PassingID))+B.PassingOffset+B.PassingForward*160;B.bPassingSecond=true;}
   if(ClearMovementSegment(Pos,B.PassingWaypoint))
   {D=(B.PassingWaypoint-Pos).GetSafeNormal2D();Separation=FVector::ZeroVector;Scale=FMath::Max(Scale,.6f);}
   else B.PassingID=INDEX_NONE;

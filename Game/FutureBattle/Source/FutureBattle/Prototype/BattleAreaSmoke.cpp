@@ -462,6 +462,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      TankGuns=SavedGuns;
      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_TANK_GUN_SMOKE tank=%d enemy=%d own=%d after2=%.0f"),TankID,EnemyTank,OwnTank,After2);
     }
+    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleObservedTactics=")))Check(!BattleTactics::ObservedTactics(),TEXT("observed tactics defaults OFF"));
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleObservedArmour=")))Check(!BattleTactics::ObservedArmour(),TEXT("observed armour defaults OFF"));
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleVehicleHitCover=")))Check(!BattleTactics::VehicleHitCover(),TEXT("vehicle hit cover defaults OFF"));
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleTankGunFlash=")))Check(!BattleTactics::TankGunFlash(),TEXT("tank gun flash defaults OFF"));
@@ -935,7 +936,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
     TArray<uint8> Serialized;
     const bool Encoded=Valid&&UGameplayStatics::SaveGameToMemory(Save,Serialized);
-    auto* Decoded=Encoded?Cast<UBattleSave>(UGameplayStatics::LoadGameFromMemory(Serialized)):nullptr;
+    auto* Decoded=Encoded?Cast<UBattleSave>(BattleSaveValidation::Decode(Serialized)):nullptr;
     Check(Decoded&&Decoded->Validate(Error)&&Decoded->CombatStateVersion>=3&&Decoded->ArtilleryTrialFlags==BattleTactics::ArtilleryTrialFlags(),
      TEXT("artillery revision 3 serializes its trial configuration"));
     if(Decoded)Save=Decoded;
@@ -1066,7 +1067,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      Identified.ObservedSquadType=BattleSquadType::Tank;
      Metadata->Observers.FindOrAdd(1).Contacts.Add(2,Identified);Metadata->Observers[1].Contacts.Add(3,UnknownContact);
      TArray<uint8> Bytes;const bool Written=UGameplayStatics::SaveGameToMemory(Metadata,Bytes);
-     const auto* Read=Written?Cast<UBattleSave>(UGameplayStatics::LoadGameFromMemory(Bytes)):nullptr;
+     const auto* Read=Written?Cast<UBattleSave>(BattleSaveValidation::Decode(Bytes)):nullptr;
      const auto* Observer=Read?Read->Observers.Find(1):nullptr;
      Check(Observer&&Observer->Contacts.Contains(2)&&Observer->Contacts.Contains(3)&&Observer->Contacts[2].ObservedSquadType==BattleSquadType::Tank&&Observer->Contacts[3].ObservedSquadType==255,
       TEXT("identified and unknown contact metadata survive serialization"));

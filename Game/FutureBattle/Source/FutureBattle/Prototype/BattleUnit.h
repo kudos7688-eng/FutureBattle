@@ -55,7 +55,7 @@ public:
 	void SetRevealed(bool bVisible);
 	void ApplyDeath();
 	// Corpse removal (display only): hides the body for good; SetRevealed no longer shows it.
-	void HideCorpse();
+	void HideCorpse(bool bHideActor=true,bool bStopMeshTick=true);
 	FVector EyePosition() const;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UCameraComponent> FirstPersonCamera;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Rifle;
@@ -123,6 +123,9 @@ private:
 	FTransform LookGrip;
 	UPROPERTY() int32 UnitID = INDEX_NONE;
 	bool bDeathApplied = false;
+	// Corpse fall (BattleRagdoll): 0 until the death clip ends at RagdollAt, 1 falling until RagdollAt, 2 done.
+	uint8 RagdollStage = 2;
+	double RagdollAt = 0.;
 	bool bCorpseHidden = false;
 	bool bThirdPersonView = true;
 	bool bDirectAvoidanceOverride = false;

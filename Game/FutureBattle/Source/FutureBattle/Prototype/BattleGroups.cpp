@@ -347,6 +347,8 @@ void UBattleMatch::UpdateGroups(int32 Team)
   FGroupStrength Power,FullPower;
   if(Weighted){Power=GroupPower(*G);FullPower=GroupPower(*G,true);if(G->StartStrength<0)G->StartStrength=Power.Total();}
   auto ThreatPoint=[&](){
+   // Strategy layer S3 (BattleStrategy.cpp): a held point (own, "enemy ahead" for 20 s by the situation map) comes first.
+   if(const int32 Held=StrategyHoldPoint(Team);Held!=INDEX_NONE)return Held;
    if(!Weighted)return AreaIntelThreat(Team);
    int32 Best=INDEX_NONE;double BestRisk=-1;
    for(int32 I=0;I<Objectives.Num();++I)if(GroupPointThreat(Team,I))
@@ -365,6 +367,8 @@ void UBattleMatch::UpdateGroups(int32 Team)
   auto AttackPoint=[&]()->int32
   {
    const bool bAvoid=Elapsed<G->AvoidUntil&&Objectives.IsValidIndex(G->Avoid);
+   // Strategy layer S2 (BattleStrategy.cpp): the team's focus first, while it is not own and the group is not avoiding it.
+   if(!G->bPlayer)if(const int32 F=StrategyFocusPoint(Team);F!=INDEX_NONE&&ObservedOwner(Team,F)!=Team&&!(bAvoid&&F==G->Avoid))return F;
    const double Limit=bAvoid?FVector::Dist2D(Objectives[G->Avoid].Position,Home)*BattleGroupValues::DeepRatio:DBL_MAX;
    int32 Best=INDEX_NONE;double BestD=DBL_MAX;
    for(int32 I=0;I<Objectives.Num();++I)
@@ -418,6 +422,9 @@ void UBattleMatch::UpdateGroups(int32 Team)
   if(G->Phase==0)
   {
    if(bOwn){Enter(2,TEXT("already_own"));continue;}
+   // Strategy layer S2: a group still gathering turns to a new team focus (an advance under way finishes first).
+   // Not more often than every 30 s (group lane 2026-11-22: switching a gathering group's goal makes it go back and forth).
+   if(!G->bPlayer&&Elapsed-G->PhaseAt>=30.f)if(const int32 F=StrategyFocusPoint(Team);F!=INDEX_NONE&&F!=G->Objective&&ObservedOwner(Team,F)!=Team&&!(Elapsed<G->AvoidUntil&&F==G->Avoid)){Attack(F,TEXT("strategy_focus"));continue;}
    const bool bAssembled=Present>=2&&Ready>=FMath::CeilToInt(Present*FMath::Clamp(T->GroupReadyShare,.1f,1.f));
    const float Waited=Elapsed-G->PhaseAt;
    if(!bAssembled&&Waited<FMath::Max(0.f,T->GroupAssembleMax))continue;
@@ -440,22 +447,21 @@ void UBattleMatch::UpdateGroups(int32 Team)
     for(int32 SID:G->Squads)if(const auto* S=Store->FindSquad(SID);S&&(!Weighted||GroupSquadPresent(*S)))bNear|=FVector::Dist2D(R->Position(S->LeaderUnitID),Objectives[G->Objective].Position)<=BattleGroupValues::ArriveRadius;
     if(bNear){G->bArrived=true;G->PhaseAt=Elapsed;G->ArrivedAt=Elapsed;G->Extensions=0;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_ARRIVED group=%d team=%d objective=%d time=%.1f"),ID,Team,G->Objective,Elapsed);}
    }
-   // Pushing (observed only): the point is in the team's sight now and its capture marker shows the team capturing, or the team's
-   // own soldiers around the point outnumber the enemies it knows of there.
+   // The trial substitutes observed ownership for the live capture marker; known local superiority remains a separate reason.
    const int32 Slot=Team*Objectives.Num()+G->Objective;
    const bool bSeen=Area.SeenAt.IsValidIndex(Slot)&&Area.SeenAt[Slot]>=0.f&&Elapsed-Area.SeenAt[Slot]<=1.f;
    const int32 OwnThere=V.OwnAt.IsValidIndex(G->Objective)?V.OwnAt[G->Objective]:0,KnownThere=V.EnemyAt.IsValidIndex(G->Objective)?V.EnemyAt[G->Objective]:0;
    FGroupStrength OwnPower,EnemyPower;
    if(Weighted){OwnPower=GroupPointPower(Team,G->Objective,false);EnemyPower=GroupPointPower(Team,G->Objective,true);}
    const bool bPushing=G->bArrived&&(Weighted?
-    (OwnPower.Total()>0&&((bSeen&&Objectives[G->Objective].CapturingTeam==Team)||(OwnPower.Infantry>=BattleGroupValues::PushMin&&OwnPower.SuperiorTo(EnemyPower,BattleGroupValues::PushRatio)))):
-    ((bSeen&&Objectives[G->Objective].CapturingTeam==Team)||(OwnThere>=BattleGroupValues::PushMin&&OwnThere>=KnownThere*BattleGroupValues::PushRatio)));
+    (OwnPower.Total()>0&&((bSeen&&(BattleTactics::ObservedTactics()?ObservedOwner(Team,G->Objective):Objectives[G->Objective].CapturingTeam)==Team)||(OwnPower.Infantry>=BattleGroupValues::PushMin&&OwnPower.SuperiorTo(EnemyPower,BattleGroupValues::PushRatio)))):
+    ((bSeen&&(BattleTactics::ObservedTactics()?ObservedOwner(Team,G->Objective):Objectives[G->Objective].CapturingTeam)==Team)||(OwnThere>=BattleGroupValues::PushMin&&OwnThere>=KnownThere*BattleGroupValues::PushRatio)));
    const double LossLimit=bPushing?BattleGroupValues::PushLossAbort:BattleGroupValues::LossAbort;
    const bool bLosses=Weighted?(G->StartStrength>0&&Power.Total()<G->StartStrength*LossLimit):(G->StartLiving>0&&Living<G->StartLiving*LossLimit);
    if(bPushing&&!bOwn&&!bLosses&&Elapsed-G->PhaseAt>=FMath::Max(10.f,T->GroupAdvanceMax)&&Elapsed-G->ArrivedAt<BattleGroupValues::PushMax)
    {
     G->PhaseAt+=BattleGroupValues::PushExtend;++G->Extensions;
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_PUSH group=%d team=%d objective=%d own=%d known=%d capturing=%d extensions=%d time=%.1f"),ID,Team,G->Objective,OwnThere,KnownThere,bSeen?Objectives[G->Objective].CapturingTeam:-2,G->Extensions,Elapsed);
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_PUSH group=%d team=%d objective=%d own=%d known=%d capturing=%d extensions=%d time=%.1f"),ID,Team,G->Objective,OwnThere,KnownThere,bSeen?(BattleTactics::ObservedTactics()?ObservedOwner(Team,G->Objective):Objectives[G->Objective].CapturingTeam):-2,G->Extensions,Elapsed);
    }
    if(bOwn){if(G->StallPoint==G->Objective){G->StallPoint=INDEX_NONE;G->Stalls=0;}Enter(2,TEXT("point_taken"));}
    else if(bLosses||Elapsed-G->PhaseAt>=(G->bArrived?FMath::Max(10.f,T->GroupAdvanceMax):BattleGroupValues::TravelMax))
@@ -594,6 +600,7 @@ UBattleMatch::FGroupStrength UBattleMatch::GroupPointPower(int32 Team,int32 Poin
 }
 bool UBattleMatch::GroupPointThreat(int32 Team,int32 Point) const
 {
+ if(StrategyHolds(Team,Point))return true; // strategy layer S3: a held point counts as threatened (-BattleStrategy=3 only)
  if(!BattleTactics::GroupStrengthEnabled())return AreaIntelThreatAt(Team,Point);
  if(ObservedOwner(Team,Point)!=Team)return false;
  const auto Own=GroupPointPower(Team,Point,false),Enemy=GroupPointPower(Team,Point,true);

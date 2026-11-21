@@ -35,6 +35,12 @@ bool BattleTactics::ObservedArmour()
  return bOn;
 }
 
+bool BattleTactics::ObservedTactics()
+{
+ static const bool bOn=[]{int32 ObservedTacticsValue=0;FParse::Value(FCommandLine::Get(),TEXT("BattleObservedTactics="),ObservedTacticsValue);return ObservedTacticsValue!=0;}();
+ return bOn;
+}
+
 bool UBattleLeaderRuntime::HasArmourKnowledge(int32 Team) const
 {
  const auto* ArmourStore=GetWorld()->GetSubsystem<UBattleState>();
@@ -65,14 +71,29 @@ bool BattleTactics::AreaComposition(int32 Team)
  return bOn&&(Trial<0||Trial==Team);
 }
 
+// Subtraction evaluation (Docs/design-subtraction-eval.md). -BattleAreaAllTypes=1: both teams buy the all-types mix, whatever the trial team.
+bool BattleTactics::AreaAllTypes()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaAllTypes="),V);return V!=0;}();
+ return bOn;
+}
+// -BattleAreaWithout=<type 1-9>: the type the team does not buy (the trial team only with -BattleAreaTrialTeam); -1 = none.
+int32 BattleTactics::AreaWithout(int32 Team)
+{
+ static const int32 Type=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaWithout="),V);return V>=1&&V<BattleSquadType::Count?V:-1;}();
+ const int32 Trial=AreaStrategy().TrialTeam;
+ return Type>=0&&(Trial<0||Trial==Team)?Type:-1;
+}
+
 // ---------------------------------------------------------------- individual
 
-void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P,const TSet<int32>* AllowedTargets)
+void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P,const TSet<int32>* AllowedTargets,FVector* SelectedPosition)
 {
  // Runs after Think's nearest-contact pick, with the same filters, and replaces it only while the squad sees a vehicle.
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* S=Store->FindSquad(SID);const auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();
  P.ArmourTargetID=INDEX_NONE;if(!S||!Sense)return;
  const double ATReach2=FMath::Square(double(BattleRanges::Engage(EBattleWeapon::AntiTank)));
+ FVector PickedPosition=FVector::ZeroVector;
  bool bSeesVehicle=false;int32 Target=INDEX_NONE,Armour=INDEX_NONE;double Best=DBL_MAX,BestArmour=DBL_MAX;
  for(int32 ID:S->Members)
  {
@@ -101,11 +122,11 @@ void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P,cons
     if(Scale<=0.f)continue;
     if(Scale<1.f)D*=4.;
    }
-   if(D<Best||(D==Best&&C.Key<Target)){Best=D;Target=C.Key;}
+   if(D<Best||(D==Best&&C.Key<Target)){Best=D;Target=C.Key;if(SelectedPosition)PickedPosition=C.Value.LastKnownPosition;}
   }
  }
  if(!bSeesVehicle)return;
- P.TargetID=Target;P.ArmourTargetID=Armour;
+ P.TargetID=Target;P.ArmourTargetID=Armour;if(SelectedPosition)*SelectedPosition=PickedPosition;
 }
 
 void UBattleLeaderRuntime::FaceVehicle(int32 ID,const FVector& Direction)

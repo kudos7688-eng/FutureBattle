@@ -41,6 +41,8 @@ namespace BattleSectors
   return {static_cast<int32>(FMath::FloorToInt(P.X/Size))+Columns/2,static_cast<int32>(FMath::FloorToInt(P.Y/Size))+Rows/2};
  }
  inline bool Valid(FIntPoint C){return C.X>=0 && C.X<Columns && C.Y>=0 && C.Y<Rows;}
+ // Sector kinds no squad stops in or crosses: river R (maps H, I), mountain M and lake L (map J, 2026-11-22).
+ inline bool Impassable(char Kind){return Kind=='R'||Kind=='M'||Kind=='L';}
  inline FVector Center(FIntPoint C){return FVector((C.X-Columns/2+.5)*Size,(C.Y-Rows/2+.5)*Size,0);}
  inline char Kind(FIntPoint C){return C.X>=10?East[C.Y][C.X-10]:East[Rows-1-C.Y][9-C.X];}
  inline const TArray<BattleTerrain::FHouse>& Houses()

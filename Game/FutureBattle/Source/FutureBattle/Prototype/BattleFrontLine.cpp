@@ -36,6 +36,15 @@ namespace BattleFrontValues
  // although the one-sided screen ga1 on map I lost 180-320 points of lead against the earlier allocation). 0: only squads the player
  // drops on the front army tab hold the line; the AI teams keep the earlier allocation.
  bool AutoFill(){static const int32 On=Arg(TEXT("BattleFrontAuto="),1);return On!=0;}
+ // Trial -BattleFrontShare=<0..1> (default 1 = as before; ROADMAP stage 5, Docs/design-groups-strategy-link.md, the next step after ga1):
+ // the AI fills its front army only up to this share of the squads it could put there (its members + the free ones). Squads already
+ // in the group (including those the player dropped there) are never taken out for the share. One team with -BattleAreaTrialTeam.
+ double Share(int32 Team)
+ {
+  static const double V=[]{float X=1.f;FParse::Value(FCommandLine::Get(),TEXT("BattleFrontShare="),X);return FMath::IsFinite(X)?double(FMath::Clamp(X,0.f,1.f)):1.;}();
+  const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;
+  return Trial<0||Trial==Team?V:1.;
+ }
  bool Gap(){static const int32 On=Arg(TEXT("BattleFrontGap="),1);return On!=0;}
  // The front army holds one line as a group (user report 2026-11-21 after test play: its squads moved each on their own and went back
  // and forth, because the line followed where own soldiers stood and each band stepped forward by itself). The group keeps its line
@@ -63,7 +72,7 @@ namespace BattleFrontValues
  //  - Heavy damage (BackDamage or more): the row falls back one column, at most once per BackHold seconds.
  constexpr double LightDamage=.03, BackDamage=.10, PushRatio=1.5, Swamp=2.; constexpr int32 SwampMin=4; constexpr float BackHold=10.f;
  // Sector kinds by the cover they give a squad that waits there (river sectors are not held).
- double Cover(char Kind){switch(Kind){case 'H':case 'W':return 3.;case 'T':case '^':return 2.;case 'J':case 'B':case 'S':return 1.;case 'R':return -100.;default:return 0.;}}
+ double Cover(char Kind){switch(Kind){case 'H':case 'W':return 3.;case 'T':case '^':return 2.;case 'J':case 'B':case 'S':return 1.;case 'R':case 'M':case 'L':return -100.;default:return 0.;}}
  // Squads to places by walking distance D[squad][place] (square): the matching whose longest walk is the least, and among those the one
  // with the least total walk. Returns the place of each squad. Used once when the front army first takes its places (25 squads: fast).
  TArray<int32> AssignMinTime(const TArray<TArray<double>>& D)
@@ -226,7 +235,8 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    Free.Add({P.Key,FVector::DistSquared2D(R->Position(S.LeaderUnitID),LineMid)});
   }
   Free.Sort([](const FFree& A,const FFree& B){return A.D!=B.D?A.D<B.D:A.SID<B.SID;});
-  TArray<int32> Pick;for(const auto& F:Free)if(Have+Pick.Num()<Want)Pick.Add(F.SID);
+  const int32 ShareCap=FMath::CeilToInt(Share(Team)*double(Have+Free.Num())-1e-9);
+  TArray<int32> Pick;for(const auto& F:Free)if(Have+Pick.Num()<FMath::Min(Want,ShareCap))Pick.Add(F.SID);
   if(FrontID==INDEX_NONE)
   {
    if(Pick.Num()>=2)
@@ -398,7 +408,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    auto CoverAt=[&](int32 C,int32 Y)
    {
     const FIntPoint Cell=FrontCell(Team,C,Y);if(!BattleSectors::Valid(Cell))return -100.;
-    const char Kind=BattleFieldLayout::SectorKind(GetWorld(),Cell);return Kind=='M'||Kind=='L'?-1000.:Cover(Kind);
+    const char Kind=BattleFieldLayout::SectorKind(GetWorld(),Cell);return BattleSectors::Impassable(Kind)&&Kind!='R'?-1000.:Cover(Kind);
    };
    TArray<int32> FrontCol;TArray<double> FrontCover;FrontCol.Init(0,Rows);FrontCover.Init(0.,Rows);
    for(int32 Y=0;Y<Rows;++Y)
@@ -461,10 +471,17 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    for(int32 Y=Y0;Y<Y1;++Y)for(int32 C=FMath::Max(HomeCol,Army()?Target-2:bPush?Target:Target-1);C<=Target;++C)
    {
     const FIntPoint Cell=FrontCell(Team,C,Y);if(!BattleSectors::Valid(Cell)||Used.Contains(Cell))continue;
+    // Map J (2026-11-22): never a post in a mountain or a lake (an order there is refused); rivers already score -100.
+    if(BattleSectors::Impassable(BattleFieldLayout::SectorKind(GetWorld(),Cell))&&BattleFieldLayout::SectorKind(GetWorld(),Cell)!='R')continue;
     double CellScore=Cover(BattleFieldLayout::SectorKind(GetWorld(),Cell))+(C==Target?1.5:0.)-.3*FMath::Abs(Y-Mid);
     if(Army())CellScore+=(Points.Contains(Cell)?2.:0.)-(C<Target-1?1.:0.)-(bPush&&C<Target?3.:0.);
     if(CellScore>BestScore){BestScore=CellScore;Best=Cell;}
    }
+   // No candidate (a band of mountain rows on map J): the nearest passable sector of the band towards the own home.
+   // Only when the default would be a mountain or a lake, so maps without them keep the earlier choice exactly.
+   if(BestScore<=-1e9+1&&(BattleFieldLayout::SectorKind(GetWorld(),Best)=='M'||BattleFieldLayout::SectorKind(GetWorld(),Best)=='L'))
+    for(int32 C=Target-1;C>=0&&BestScore<=-1e9+1;--C)for(int32 Y=Y0;Y<Y1;++Y)
+    {const FIntPoint Cell=FrontCell(Team,C,Y);if(BattleSectors::Valid(Cell)&&!Used.Contains(Cell)&&!BattleSectors::Impassable(BattleFieldLayout::SectorKind(GetWorld(),Cell))){BestScore=0;Best=Cell;break;}}
    Used.Add(Best);Cells.Add(Best);Pushes.Add(bPush);
   }
   // Squads to posts. The front army: a squad keeps its last post when that sector is still one of them, the rest go to the nearest free

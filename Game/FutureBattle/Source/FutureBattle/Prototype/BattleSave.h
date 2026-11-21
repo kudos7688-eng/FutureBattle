@@ -8,6 +8,10 @@
 
 namespace BattleSaveValidation
 {
+ constexpr int32 MaxBytes=64*1024*1024;
+ USaveGame* Decode(const TArray<uint8>& Bytes,FString& Error);
+ USaveGame* Decode(const TArray<uint8>& Bytes);
+ double ClockLimit(const FString& MapName);
  // Far beyond a real match, with ample headroom for subsequent increments.
  inline bool Counter(int32 Value){return Value>=0&&Value<=100000000;}
  bool Contact(const FBattleContact& Value,int32 ObserverTeam,const FBattleUnitState* Source,

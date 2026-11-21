@@ -19,6 +19,7 @@
 #include "Camera/CameraTypes.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "BattleRagdoll.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
@@ -209,6 +210,12 @@ void ABattleUnit::Tick(float DeltaTime)
 		if (State->IsAlive()) GetWorld()->GetSubsystem<UBattleState>()->UpdateAim(UnitID, GetWorld()->GetTimeSeconds(), GetVelocity().Size2D(), GetBaseAimRotation().Vector(), GetCharacterMovement()->IsMovingOnGround());
 		else ApplyDeath();
 		if (State->IsAlive() && bWeaponVisuals && !bTrialPose) UpdateWeaponPose(*State);
+	}
+	if (RagdollStage < 2 && GetWorld()->GetTimeSeconds() >= RagdollAt)
+	{
+		// The death clip ends bent over, still standing: the body falls the rest of the way under physics, then holds.
+		if (RagdollStage == 0 && !bCorpseHidden && BattleRagdoll::Start(GetMesh())) { RagdollStage = 1; RagdollAt = GetWorld()->GetTimeSeconds() + BattleRagdoll::SettleSeconds; }
+		else { BattleRagdoll::Settle(GetMesh()); RagdollStage = 2; }
 	}
 	if (TeamLabel->IsVisible()) if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
@@ -679,12 +686,13 @@ void ABattleUnit::SetRevealed(bool bVisible)
 	SetActorHiddenInGame(bCorpseHidden || !(bVisible || (PC && PC->ShowsUnspottedBodies())));
 }
 
-void ABattleUnit::HideCorpse()
+void ABattleUnit::HideCorpse(bool bHideActor,bool bStopMeshTick)
 {
 	if (!bDeathApplied) return;
 	bCorpseHidden = true;
-	SetActorHiddenInGame(true);
-	GetMesh()->SetComponentTickEnabled(false);
+	// Both parts default on; -BattleCorpseSteps (BattleCorpses.cpp) leaves one out to find the display->match coupling.
+	if (bHideActor) SetActorHiddenInGame(true);
+	if (bStopMeshTick) GetMesh()->SetComponentTickEnabled(false);
 }
 
 void ABattleUnit::ApplyDeath()
@@ -705,6 +713,7 @@ void ABattleUnit::ApplyDeath()
 	{
 		GetMesh()->SetRelativeScale3D(FVector(1.)); SetMeshYaw(0.f);
 		Body->SetUpper(nullptr, 0.f); Body->SetAim(0.f, 0.f); Body->SetBase(Death, false);
+		RagdollStage = 0; RagdollAt = GetWorld()->GetTimeSeconds() + Death->GetPlayLength();
 	}
 	else
 	{

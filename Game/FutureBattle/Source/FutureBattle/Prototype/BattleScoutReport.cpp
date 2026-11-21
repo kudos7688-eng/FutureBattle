@@ -9,6 +9,8 @@
 #include "BattlePerception.h"
 #include "BattleSuppression.h"
 #include "BattleRanges.h"
+#include "BattleTactics.h"
+#include "Engine/StaticMeshActor.h"
 #include "NavigationSystem.h"
 #include "FutureBattle.h"
 
@@ -24,6 +26,7 @@ namespace
 
 bool UBattleMatch::IsScoutLongContact(int32 ObserverID,const FBattleContact& Contact) const
 {
+ if(BattleTactics::ObservedTactics())return Contact.bLongRangeObservation;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ObserverID);
  const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  // Long sight: a scout pair member or a soldier at a lookout (BattleLeaderRuntime::HasLongSight).
@@ -135,6 +138,13 @@ void UBattleMatch::UpdateScoutReports()
   if(Rep.Stage==1&&Now-Rep.Started>=T->ScoutReportSeconds&&!Long.IsEmpty())
   {
    Rep.Positions.Reset();for(const auto& L:Long)Rep.Positions.Add(L.Value);
+   if(BattleTactics::ObservedTactics())
+   {
+    Rep.bHomeObserved=false;
+    if(BaseActors.IsValidIndex(1-S->Team)&&BaseActors[1-S->Team])
+     for(int32 HomeScoutID:S->Members)if(const auto* HomeScout=Store->Find(HomeScoutID);HomeScout&&HomeScout->IsAlive()&&R->HasLongSight(HomeScoutID)&&
+      AreaVisible(HomeScoutID,BaseActors[1-S->Team]->GetActorLocation(),BaseActors[1-S->Team])){Rep.bHomeObserved=true;break;}
+   }
    Rep.ReportedAt=Now;Rep.ReportFrom=Eye;++Rep.Sequence;Rep.Started=Now;Rep.Stage=0; // keep watching: the next report runs from now
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SCOUT_REPORT team=%d squad=%d enemies=%d time=%.1f"),S->Team,SID,Rep.Positions.Num(),Now);
   }

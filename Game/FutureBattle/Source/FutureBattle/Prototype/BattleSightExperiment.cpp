@@ -37,7 +37,9 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
   E.FlankTrial=FParse::Param(FCommandLine::Get(),TEXT("BattleFlankTrial"));
   UE_LOG(LogFutureBattle,Display,TEXT("SIGHT_EXPERIMENT_START output=%s"),*E.Output);
  }
- if(!E.SaveCheckDone && Match->Elapsed>=80 && FParse::Param(FCommandLine::Get(),TEXT("BattleVerifyMixedSave")))
+ // -BattleVerifySaveAt=<s> (default 80): when the round trip is made (2026-11-22: the strategy layer's states form after 225 s).
+ static const float VerifySaveAt=[]{float At=80.f;FParse::Value(FCommandLine::Get(),TEXT("BattleVerifySaveAt="),At);return FMath::IsFinite(At)?FMath::Max(1.f,At):80.f;}();
+ if(!E.SaveCheckDone && Match->Elapsed>=VerifySaveAt && FParse::Param(FCommandLine::Get(),TEXT("BattleVerifyMixedSave")))
  {
   E.SaveCheckDone=true;auto* Before=Match->CaptureSnapshot();FString Error;
   bool OK=Before&&Before->Validate(Error)&&Match->SaveMatch(TEXT("FutureBattleSmokeOnly"))&&Match->LoadMatch(TEXT("FutureBattleSmokeOnly"));

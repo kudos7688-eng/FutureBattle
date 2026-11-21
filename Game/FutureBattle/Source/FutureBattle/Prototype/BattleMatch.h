@@ -27,6 +27,7 @@ struct FAreaIntent
  int32 SupplyKeep=0;                  // supply vehicles the AI keeps active (same pacing as scouts; 0 = none; BattleSupplyCar.cpp)
  int32 ATKeep=0;                      // anti-tank teams the AI keeps active (same pacing as scouts; 0 = none)
  int32 ScoutKeep=0;                   // scout pairs the AI keeps active (one more per ScoutAfterHires purchases, up to this; 0 = none)
+ int32 FocusPoint=-1;                 // strategy layer S2 (-BattleStrategy>=2): the objective the team concentrates on (replaces S6's static pick; -1 = none)
 };
 // One sector (the part of the field nearest one objective; a lane on maps A-D) as seen by one team: own soldiers and own front (furthest progress
 // from own home, 0..1 along the home-to-home line, 90th percentile), and enemies currently visible to the team (count and the
@@ -299,7 +300,7 @@ public:
 	mutable TMap<int32, FCarChoice> CarChoices; // saved, squad -> current objective (At uses match Elapsed)
 	// Scout reports (ROADMAP 2026-11-14, stage 3): what a scout pair sees beyond normal sight reaches its team only through a timed
 	// two-step report (direction after ScoutAlertSeconds, positions and size after ScoutReportSeconds). Transient: a load restarts the timers.
-	struct FScoutReport { double Started=-1, LastLong=-1, AlertAt=-1, ReportedAt=-1, NextHint=0, RetreatUntil=-1, PauseStart=-1, LastDanger=-1; FVector ReportFrom=FVector::ZeroVector; float LastHP=-1; int32 Stage=0, Living=0, Sequence=0, AlertSequence=0, Burns=0; FVector Direction=FVector::ZeroVector, Approx=FVector::ZeroVector, RetreatPoint=FVector::ZeroVector; TArray<FVector> Positions; };
+	struct FScoutReport { bool bHomeObserved=false; double Started=-1, LastLong=-1, AlertAt=-1, ReportedAt=-1, NextHint=0, RetreatUntil=-1, PauseStart=-1, LastDanger=-1; FVector ReportFrom=FVector::ZeroVector; float LastHP=-1; int32 Stage=0, Living=0, Sequence=0, AlertSequence=0, Burns=0; FVector Direction=FVector::ZeroVector, Approx=FVector::ZeroVector, RetreatPoint=FVector::ZeroVector; TArray<FVector> Positions; };
 	// Scout retreat (2026-11-17): an AI-led pair that is hit falls back ScoutRetreatDistance from the nearest seen enemy, watches from
 	// there until ScoutHoldSeconds pass without a hit, then returns to its post shifted sideways (Burns). The report pauses while it moves.
 	bool IsAIScoutLed(int32 SquadID) const;
@@ -339,6 +340,37 @@ public:
 	// Positions from the team's scout reports of the last ScoutReportMemory seconds (keys below zero, never unit IDs).
 	void AddScoutReportSightings(int32 Team, TMap<int32, FVector>& Seen) const;
 	void AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObjectives]) const;
+ // Strategy layer, stage S1 (BattleStrategy.cpp, Docs/design-strategy-layer.md): the team's situation map. Theatres are the objectives'
+ // Voronoi cells (by Y on three-objective maps, as AreaFronts), plus the enemy home zone (index N) and the own home zone (N+1), each
+ // within 150 m of that home. Own soldiers and known enemies (sightings now, scout reports, and remembered contacts weighted by
+ // age) only; never the enemy's true positions. Built on demand without touching any cache (AreaIntelView is not called).
+ struct FSituationTheatre { int32 Own=0; double OwnPower=0; int32 Fresh=0; double Memory=0; double KnownPower=0; double EnemySeenAge=-1, PointSeenAge=-1; int32 Owner=-2; uint8 State=0; /* 0 unknown, 1 enemy ahead, 2 even, 3 own ahead */ };
+ struct FBattleSituation { double At=-1; TArray<FSituationTheatre> Theatres; };
+ int32 TheatreOf(int32 Team, const FVector& P) const;
+ // Sector maps (H, I, J): theatres by path over passable sectors (Docs/design-terrain-ai.md 3-1), built once per map from the sector
+ // kinds only: the sector -> theatre table and, per theatre, a bit for each theatre whose sectors touch it (3-2). Empty elsewhere.
+ void BuildSectorTheatres() const;
+ mutable TArray<int8> SectorTheatres;
+ mutable TArray<uint16> TheatreNeighbours;
+ mutable FString SectorTheatresMap;
+ void BuildSituation(int32 Team, FBattleSituation& Out) const;
+ // -BattleSituationLog=1 (default 0): BATTLE_SITUATION every 30 match seconds per team and theatre, with the true enemy count of the
+ // theatre after '|' for evaluation only (counted inside the log function; no decision reads it). Does not change the match.
+ static bool SituationLogOn();
+ void UpdateSituationLog();
+ int32 SituationLogBucket = -1;
+ // Stage S2 (-BattleStrategy=2, -BattleStrategyTeam=0/1 for one team): recon -> focus attack. UpdateStrategy runs once per team order
+ // update (before AreaIntent is read): after the opening it picks the focus objective from the situation map, keeps it at least
+ // StrategyFocusHold seconds, reviews every StrategyReview seconds and at once when the focus is taken. State in Area.Strategy*.
+ static int32 StrategyLevel();
+ static bool StrategyOn(int32 Team, int32 Level);
+ static float StrategyOpenSeconds();      // before the first review (x match length / 600)
+ static float StrategyFocusHoldSeconds(); // least time a focus is kept
+ int32 StrategyFocusPoint(int32 Team) const; // INDEX_NONE without a valid focus
+ void UpdateStrategy(int32 Team);
+ // Stage S3 (-BattleStrategy=3): own points held against a known superior enemy (Area.StrategyHoldMask).
+ int32 StrategyHoldPoint(int32 Team) const; // the one threatened longest; INDEX_NONE without holds
+ bool StrategyHolds(int32 Team, int32 Point) const;
 	// Objective worth (FMapDef::ObjectiveValues; 1 where the map sets none): multiplies its income and its end score.
 	float ObjectiveValue(int32 Point) const;
 	// Resources a team gains per income tick from the objectives it truly owns now (before the time ramp): base + per point x value x map scale.

@@ -45,7 +45,7 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
    for(int32 I=0;I<N;++I)Place((SID-1)*N+I+1,FVector(-9000-(I/5)*120,-7000-(SID-1)*650-(I%5)*100,100));
    IssueOrder(SID,EBattleOrder::AttackMove,FVector(-6000,-7000-(SID-1)*650,0),true);Store->SetSquadDelegated(SID,true);
   }
-  Place(Enemy,FVector(-6000,-7000,100));Resource(Enemy).HP=10000;
+  Place(Enemy,FVector(-6000,-7000,100));Resource(Enemy).HP=Store->MaxHealthOf(Enemy);
   Sense->Reset();Sense->Update(Mode->Units,Now-1);Sense->Update(Mode->Units,Now);
   for(int32 SID=1;SID<=3;++SID)T->Samples.Add(SID,T->Observe(*Store->FindSquad(SID)));
   Check(Sense->FindContact(1,Enemy)&&Sense->FindContact(1,Enemy)->bVisible,TEXT("fixture has real acquired contact"));
@@ -109,6 +109,25 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
    CoverApproaches=OriginalApproaches;FirePositions=OriginalFire;SuppressionZeroAt=OriginalSuppression;
    Stances=OriginalStances;StanceLockedUntil=OriginalLocks;
   };
+  Reject([](UBattleSave& S){S.Units[0].State.Weapon=EBattleWeapon::Mortar;},TEXT("weapon outside squad type rejected atomically"));
+  Reject([](UBattleSave& S){S.Units[0].State.Ammo=GetDefault<UBattleTuning>()->Capacity(S.Units[0].State.Weapon)+1;},TEXT("ammo above magazine capacity rejected atomically"));
+  Reject([](UBattleSave& S){S.Units[0].State.Reserve=GetDefault<UBattleTuning>()->ReserveFor(S.Units[0].State.Weapon)+1;},TEXT("reserve above capacity rejected atomically"));
+  Reject([](UBattleSave& S){S.Units[0].State.HP=BattleSquadType::MaxHealth(BattleSquadType::Rifle,true)+1.f;},TEXT("health above squad limit rejected atomically"));
+  {
+   TArray<uint8> OversizeBytes;OversizeBytes.SetNumUninitialized(BattleSaveValidation::MaxBytes+1);
+   FString OversizeError;
+   Check(BattleSaveValidation::Decode(OversizeBytes,OversizeError)==nullptr&&OversizeError==TEXT("Save file exceeds size limit"),TEXT("oversize bytes rejected before codec"));
+  }
+  {
+   auto* ResourceBoundary=DuplicateObject<UBattleSave>(Saved,this);
+   auto& BoundaryUnit=ResourceBoundary->Units[0].State;
+   BoundaryUnit.HP=BattleSquadType::MaxHealth(BattleSquadType::Rifle,true);
+   BoundaryUnit.Ammo=FMath::Max(0,GetDefault<UBattleTuning>()->Capacity(BoundaryUnit.Weapon)-1);
+   BoundaryUnit.Reserve=FMath::Max(0,GetDefault<UBattleTuning>()->ReserveFor(BoundaryUnit.Weapon));
+   BoundaryUnit.ReloadEndTime=FMath::Max(.1f,GetDefault<UBattleTuning>()->ReloadTime(BoundaryUnit.Weapon));
+   FString BoundaryError;
+   Check(ResourceBoundary->Validate(BoundaryError),TEXT("full health and reserve with reload in progress remain valid"));
+  }
   Reject([](UBattleSave& S){S.Units[0].State.ShotSequence=MAX_int32;},TEXT("overflow shot counter rejected atomically"));
   Reject([](UBattleSave& S){S.Squads[0].MissionRevision=MAX_int32;S.Squads[0].bHasMission=false;},TEXT("inactive mission counter overflow rejected atomically"));
   Reject([](UBattleSave& S){const auto DuplicateDamage=S.DamageBuckets[0];S.DamageBuckets.Add(DuplicateDamage);},TEXT("duplicate damage bucket rejected atomically"));
@@ -220,7 +239,7 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
    BattleTactics::OverrideSaveRoutesForSmoke(1);
    auto* RoutesOn=Match->CaptureSnapshot();TArray<uint8> RouteBytes;FString RouteError;
    const bool RouteEncoded=RoutesOn&&RoutesOn->Validate(RouteError)&&UGameplayStatics::SaveGameToMemory(RoutesOn,RouteBytes);
-   auto* RouteDecoded=RouteEncoded?Cast<UBattleSave>(UGameplayStatics::LoadGameFromMemory(RouteBytes)):nullptr;
+   auto* RouteDecoded=RouteEncoded?Cast<UBattleSave>(BattleSaveValidation::Decode(RouteBytes)):nullptr;
    Check(RouteDecoded&&RouteDecoded->PlayerRoutesVersion==1&&RouteDecoded->SavedPlayerRoutes.Num()==1&&
     Match->RestoreSnapshot(RouteDecoded),TEXT("player route extension codec and restore"));
    auto RouteKept=[&]()

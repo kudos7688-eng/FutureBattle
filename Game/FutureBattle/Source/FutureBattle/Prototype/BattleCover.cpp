@@ -54,6 +54,13 @@ void UBattleCover::BuildSlots(bool bForce)
 			Candidates.Add(FVector(Center.X + Side * (Extent.X + 95.f), Center.Y + Along * Extent.Y, Center.Z - Extent.Z));
 			Candidates.Add(FVector(Center.X + Along * Extent.X, Center.Y + Side * (Extent.Y + 95.f), Center.Z - Extent.Z));
 		}
+		// Trial -BattleCoverDense=1: a slot every 1.4 m along each side longer than 3 m (duplicates within 1 m are dropped below).
+		if (Urban && UBattleLeaderRuntime::CoverDenseEnabled())
+			for (float Side : {-1.f, 1.f})
+			{
+				if (Extent.Y > 150.f) for (double A = -Extent.Y + 70.; A <= Extent.Y - 69.; A += 140.) Candidates.Add(FVector(Center.X + Side * (Extent.X + 95.f), Center.Y + A, Center.Z - Extent.Z));
+				if (Extent.X > 150.f) for (double A = -Extent.X + 70.; A <= Extent.X - 69.; A += 140.) Candidates.Add(FVector(Center.X + A, Center.Y + Side * (Extent.Y + 95.f), Center.Z - Extent.Z));
+			}
 		for (const FVector& Candidate : Candidates)
 		{
 			FNavLocation NavPoint;
