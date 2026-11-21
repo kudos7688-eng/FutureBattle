@@ -11,6 +11,7 @@
 #include "BattlePerception.h"
 #include "BattleRanges.h"
 #include "BattleSquadTactics.h"
+#include "BattleTactics.h"
 #include "BattleSuppression.h"
 #include "BattleUnit.h"
 #include "DrawDebugHelpers.h"
@@ -106,7 +107,8 @@ bool UBattleLeaderRuntime::AllyNear(int32 Team,const FVector& At,double Radius) 
 namespace BattleGroupFire
 {
  // Group fire support (trial -BattleGroupFireSupport=1, user approval 2026-11-21; ROADMAP "群に入れた自走砲・迫撃砲の支援").
- bool On(){static const int32 V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupFireSupport="),X);return X;}();return V!=0;}
+ // The trial team only with -BattleAreaTrialTeam (one-sided comparison).
+ bool On(int32 Team){static const int32 V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupFireSupport="),X);return X;}();const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;return V!=0&&(Trial<0||Trial==Team);}
  constexpr double TroubleNear=4000., HelpRadius=6000., RallyRadius=8000.;
  constexpr double TroubleBonus=100., RallyBonus=50.;
 }
@@ -138,7 +140,7 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
  // Group fire support: a mortar or gun in a group shoots first at known soldiers near the group's squads in trouble (damage in the last
  // 5 s, a suppressed leader, or a known soldier within TroubleNear of the leader); with none in trouble, near the rally point of an attack
  // or surprise group. Own squads' state and known enemies only.
- if(BattleGroupFire::On())if(const auto* GM=GetWorld()->GetSubsystem<UBattleMatch>();GM&&GM->bArea)if(const auto* G=GM->Groups.Find(GM->GroupOf(U->SquadID)))
+ if(BattleGroupFire::On(U->Team))if(const auto* GM=GetWorld()->GetSubsystem<UBattleMatch>();GM&&GM->bArea)if(const auto* G=GM->Groups.Find(GM->GroupOf(U->SquadID)))
  {
   using namespace BattleGroupFire;
   TArray<TPair<int32,FVector>> Trouble;const auto* Tactics=GetWorld()->GetSubsystem<UBattleSquadTactics>();
