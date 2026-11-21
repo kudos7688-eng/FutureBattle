@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 268 種類。
+計 269 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -113,8 +113,9 @@
 | `-BattleFollowerNoOverlap` | Value | 0 | BattleLeaderRuntime.cpp:779 |  |
 | `-BattleFollowSightParallel` | Value | 0 | BattleLeaderRuntime.cpp:772 |  |
 | `-BattleFollowSightTraces` | other |  | BattleLeaderRuntime.cpp:806 |  |
-| `-BattleFrontLine` | other |  | BattleFrontLine.cpp:33 |  |
-| `-BattleFrontSquads` | other |  | BattleFrontLine.cpp:119 |  |
+| `-BattleFrontArmy` | other |  | BattleFrontLine.cpp:32 |  |
+| `-BattleFrontLine` | other |  | BattleFrontLine.cpp:39 |  |
+| `-BattleFrontSquads` | other |  | BattleFrontLine.cpp:125 |  |
 | `-BattleHeavyCost` | other |  | BattleState.cpp:543 |  |
 | `-BattleHeavyDamage` | other |  | BattleState.cpp:543 |  |
 | `-BattleHeavyHealth` | other |  | BattleState.cpp:542 |  |
@@ -249,8 +250,8 @@
 | `-BattleSuppressionRadius` | other |  | BattleSuppression.cpp:11 |  |
 | `-BattleSuppressionSpread` | other |  | BattleSuppression.cpp:12 |  |
 | `-BattleSuppressionSupport` | other |  | BattleSuppression.cpp:14 |  |
-| `-BattleSurpriseGroup` | other |  | BattleFrontLine.cpp:319 |  |
-| `-BattleSurpriseSquads` | other |  | BattleFrontLine.cpp:340 | an AI group needs two squads |
+| `-BattleSurpriseGroup` | other |  | BattleFrontLine.cpp:331 |  |
+| `-BattleSurpriseSquads` | other |  | BattleFrontLine.cpp:352 | an AI group needs two squads |
 | `-BattleSymmetricStart` | Value | -1 | BattleGroups.cpp:56 |  |
 | `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:56 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |

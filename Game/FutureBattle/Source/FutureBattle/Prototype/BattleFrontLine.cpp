@@ -9,6 +9,10 @@
 //   one band per present squad (in the order of the rows they stand in, so they do not cross). Each squad holds the sector with the
 //   most cover on the line in its band or one column behind it; with no known enemy within three columns ahead of its band it takes
 //   the next column forward, and the line follows (continuity keeps the bands together).
+//  Front army (2026-11-21, user proposal after test play: spread squads used cover better than crowded ones; trial -BattleFrontArmy=1,
+//   needs -BattleFrontLine=1): the front-holding group becomes the front army and takes every free AI-led rifle and heavy squad (the
+//   attack group fills first in UpdateGroups, the surprise group may take front squads while at least FrontArmyKeep stay). More squads
+//   than rows share rows in different sectors (no two posts in one sector); a sector with a point not observed as own scores higher.
 // Inputs: own soldiers' positions, known enemy positions (AreaIntelView), observed ownership, the fixed sector kinds. Not saved.
 #include "BattleMatch.h"
 #include "BattleFieldLayout.h"
@@ -24,6 +28,8 @@ namespace BattleFrontValues
  constexpr float Interval=2.f, LogInterval=30.f;
  constexpr int32 ClearAhead=3; // columns ahead of a band without known enemies before its squad steps forward
  int32 Arg(const TCHAR* Name,int32 Default){int32 V=Default;FParse::Value(FCommandLine::Get(),Name,V);return V;}
+ constexpr int32 FrontArmyKeep=4; // squads the front army keeps when the surprise group takes from it
+ bool Army(){static const int32 On=Arg(TEXT("BattleFrontArmy="),0);return On!=0;}
  // Sector kinds by the cover they give a squad that waits there (river sectors are not held).
  double Cover(char Kind){switch(Kind){case 'H':case 'W':return 3.;case 'T':case '^':return 2.;case 'J':case 'B':case 'S':return 1.;case 'R':return -100.;default:return 0.;}}
 }
@@ -116,7 +122,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  FrontLine[Team]=Line;
 
  // 5. The front-holding group: formed from free AI-led rifle and heavy squads, filled up to its number.
- const int32 Want=FMath::Clamp(Arg(TEXT("BattleFrontSquads="),4),2,12);
+ const int32 Want=Army()?2*Rows:FMath::Clamp(Arg(TEXT("BattleFrontSquads="),4),2,12);
  int32 FrontID=INDEX_NONE;for(const auto& P:Groups)if(P.Value.Team==Team&&P.Value.Kind==1&&!P.Value.bPlayer)FrontID=P.Key;
  const int32 Have=FrontID!=INDEX_NONE?Groups[FrontID].Squads.Num():0;
  if(Have<Want)
@@ -165,6 +171,9 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
   }
   Present.Sort([](const FMember& A,const FMember& B){return A.Row!=B.Row?A.Row<B.Row:A.SID<B.SID;});
   const int32 K=Present.Num();
+  // Front army: sectors with a point not observed as own (it takes the point as it holds the line), and one post per sector.
+  TSet<FIntPoint> Used,Points;
+  if(Army())for(int32 I=0;I<Objectives.Num();++I)if(ObservedOwner(Team,I)!=Team)if(const FIntPoint C=BattleSectors::Cell(Objectives[I].Position);BattleSectors::Valid(C))Points.Add(C);
   for(int32 I=0;I<K;++I)
   {
    const int32 Y0=I*Rows/K,Y1=FMath::Max(Y0+1,(I+1)*Rows/K);
@@ -176,12 +185,15 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    const double Mid=(Y0+Y1-1)*.5;
    double BestScore=-1e9;FIntPoint Best=FrontCell(Team,Target,FMath::RoundToInt(Mid));
    // A pushing band picks among its forward column only (Codex review 2026-11-21: cover behind outscored the step forward, so it never moved).
-   for(int32 Y=Y0;Y<Y1;++Y)for(int32 C=FMath::Max(HomeCol,bPush?Target:Target-1);C<=Target;++C)
+   // The front army may go two columns back when the forward sectors of a shared row are taken (a pushing band pays for each step back).
+   for(int32 Y=Y0;Y<Y1;++Y)for(int32 C=FMath::Max(HomeCol,Army()?Target-2:bPush?Target:Target-1);C<=Target;++C)
    {
-    const FIntPoint Cell=FrontCell(Team,C,Y);if(!BattleSectors::Valid(Cell))continue;
-    const double CellScore=Cover(BattleFieldLayout::SectorKind(GetWorld(),Cell))+(C==Target?1.5:0.)-.3*FMath::Abs(Y-Mid);
+    const FIntPoint Cell=FrontCell(Team,C,Y);if(!BattleSectors::Valid(Cell)||Used.Contains(Cell))continue;
+    double CellScore=Cover(BattleFieldLayout::SectorKind(GetWorld(),Cell))+(C==Target?1.5:0.)-.3*FMath::Abs(Y-Mid);
+    if(Army())CellScore+=(Points.Contains(Cell)?2.:0.)-(C<Target-1?1.:0.)-(bPush&&C<Target?3.:0.);
     if(CellScore>BestScore){BestScore=CellScore;Best=Cell;}
    }
+   Used.Add(Best);
    FrontPosts.Add(Present[I].SID,BattleSectors::Center(Best));
    Posts+=FString::Printf(TEXT(" %d:%c%d%s"),Present[I].SID,TCHAR('A'+Best.X),1+Best.Y,bPush?TEXT("+"):TEXT(""));
   }
@@ -347,13 +359,15 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
   struct FFree{int32 SID;double D;bool bArmour;};TArray<FFree> Free;
   // Why armour was not free (2026-11-21 groupui-surprise2-I-s7: one group in 900 s): in a group, on a hire/intel errand, on a base assault, not full strength.
   int32 Skip[4]={0,0,0,0};
+  // Front army: the surprise group draws on it while it keeps FrontArmyKeep squads.
+  int32 FrontSpare=BattleFrontValues::Army()&&Groups.Contains(FrontID)?Groups[FrontID].Squads.Num()-BattleFrontValues::FrontArmyKeep:0;
   for(const auto& P:Store->GetSquads())
   {
    const auto& S=P.Value;
    if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated))continue;
    const bool bArmour=S.SquadType==BattleSquadType::Tank||S.SquadType==BattleSquadType::ArmoredCar||S.SquadType==BattleSquadType::Exo;
    if(!bArmour&&S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Heavy)continue;
-   if(GroupOf(P.Key)!=INDEX_NONE){Skip[0]+=bArmour;continue;}
+   if(const int32 Old=GroupOf(P.Key);Old!=INDEX_NONE&&!(Old==FrontID&&FrontSpare>0)){Skip[0]+=bArmour;continue;}
    if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key)){Skip[1]+=bArmour;continue;}
    // The base slot holds only the types the real orders send on the home assault (UpdateTeamOrders: never heavy squads, armoured cars or
    // exoskeleton soldiers; Codex review 2026-11-21: exoskeletons 72 and 77 of groupui-surprise2-I-s7 were kept out for nothing).
@@ -363,6 +377,7 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
    // Full-strength squads only: the walk is long. Armour (one crew) also needs ArmourHealth of its health, not to leave half-wrecked.
    int32 Living=0;float HP=0.f,MaxHP=0.f;for(int32 UID:S.Members)if(const auto* U=Store->Find(UID);U&&U->IsAlive()){++Living;HP+=U->HP;MaxHP+=Store->MaxHealthOf(UID);}
    if(Living<S.Members.Num()||(bArmour&&HP<ArmourHealth*MaxHP)){Skip[3]+=bArmour;continue;}
+   if(FrontID!=INDEX_NONE&&GroupOf(P.Key)==FrontID)--FrontSpare;
    Free.Add({P.Key,FVector::DistSquared2D(R->Position(S.LeaderUnitID),Start),bArmour});
   }
   // No free armour: a healthy tank of the team's AI attack group may move over when that group keeps two squads (Codex review
