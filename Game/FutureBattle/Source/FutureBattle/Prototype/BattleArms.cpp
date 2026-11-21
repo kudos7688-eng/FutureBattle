@@ -321,13 +321,22 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
  }
 }
 
-bool UBattleLeaderRuntime::LobClear(const FVector& From,const FVector& To,float Arc) const
+bool UBattleLeaderRuntime::LobClear(const FVector& From,FVector& To,float Arc) const
 {
- // A lobbed round passes over low walls but not through buildings or roofs: the static world between the hand, the top of the
- // arc and the landing point.
- const double Dist=FVector::Dist2D(From,To);const FVector Apex=(From+To)*.5+FVector(0,0,FMath::Min(1200.,Dist*Arc));
- const FCollisionObjectQueryParams Static(ECC_WorldStatic);
- return !GetWorld()->LineTraceTestByObjectType(From,Apex,Static)&&!GetWorld()->LineTraceTestByObjectType(Apex,To+FVector(0,0,40),Static);
+ // A lobbed round flies a parabola (8 straight pieces) over low walls but not through buildings or roofs. Something in the last fifth
+ // of the way (the cover in front of the target, the ground at the end) is where the round lands instead; earlier, it cannot be fired.
+ const double H=LobHeight(FVector::Dist2D(From,To),Arc);const FCollisionObjectQueryParams Static(ECC_WorldStatic);
+ auto At=[&](double T){return FMath::Lerp(From,To,T)+FVector(0,0,4.*H*T*(1.-T));};
+ constexpr int32 Pieces=8;
+ for(int32 I=0;I<Pieces;++I)
+ {
+  const double T0=double(I)/Pieces,T1=double(I+1)/Pieces;FHitResult Hit;
+  if(!GetWorld()->LineTraceSingleByObjectType(Hit,At(T0),At(T1),Static))continue;
+  if(T0+(T1-T0)*Hit.Time<.8)return false;
+  To=Hit.ImpactPoint+Hit.ImpactNormal*20.;
+  return true;
+ }
+ return true;
 }
 
 bool UBattleLeaderRuntime::ThrowGrenade(int32 ID,const FVector& TargetIn,double Now,bool bPlayer)
@@ -590,7 +599,7 @@ void UBattleLeaderRuntime::DrawArmsShells(double Now)
   if(!bShow)continue;
   const float Fuse=(Shell.Kind==1?BattleArms::LauncherRound():BattleArms::Grenade()).Fuse;const float Arc=(Shell.Kind==1?BattleArms::LauncherRound():BattleArms::Grenade()).Arc;
   const float T=Shell.Flight>0.f?FMath::Clamp((Shell.Flight+Fuse-Shell.Remaining)/Shell.Flight,0.f,1.f):1.f;
-  const double H=FMath::Min(1200.,FVector::Dist2D(Shell.From,Shell.At)*Arc);
+  const double H=LobHeight(FVector::Dist2D(Shell.From,Shell.At),Arc);
   const FVector At=FMath::Lerp(Shell.From,Shell.At,double(T))+FVector(0,0,4.*H*T*(1.-T));
   if(!ArmsShellMeshes.IsValidIndex(Used)||!ArmsShellMeshes[Used].IsValid())
   {
@@ -616,9 +625,9 @@ void UBattleLeaderRuntime::RunArmsSmoke(double Now)
   Check(BattleWeaponDef(W)&&T->Capacity(W)>0&&T->ReserveFor(W)>0&&T->ReloadTime(W)>0.f&&BattleRanges::Engage(W)>0.f&&BattleRanges::Reach(W)>=BattleRanges::Engage(W),TEXT("weapon table"));
  Check(BattleWeaponDef(EBattleWeapon::Carbine)==nullptr&&BattleArms::DamageAt(EBattleWeapon::Carbine,1000.)==1.f&&BattleArms::SpreadScale(EBattleWeapon::SupportGun)==1.f,TEXT("old weapons unchanged"));
  Check(FMath::IsNearlyEqual(BattleArms::DamageAt(EBattleWeapon::Shotgun,100.),4.f)&&FMath::IsNearlyEqual(BattleArms::DamageAt(EBattleWeapon::Shotgun,3000.),1.f),TEXT("shotgun falloff"));
- // Purchase.
+ // Purchase from the starting resources (adding resources here would break the resource conservation the save check verifies).
  int32 SID=INDEX_NONE;
- if(M){M->Credits[0]+=BattleArms::EliteCost();if(M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Rifle,1))SID=M->LastHiredSquadID;}
+ if(M&&M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Rifle,1))SID=M->LastHiredSquadID;
  const auto* S=SID!=INDEX_NONE?Store->FindSquad(SID):nullptr;
  Check(S&&S->Grade==1&&S->SquadType==BattleSquadType::Rifle&&S->Members.Num()==BattleSquadType::RifleMembers(),TEXT("elite purchase"));
  if(!S){UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_SMOKE_RESULT failures=%d (no squad: %s)"),Failures,M?*M->LastMessage:TEXT("no match"));return;}
@@ -645,7 +654,7 @@ void UBattleLeaderRuntime::RunArmsSmoke(double Now)
  Check(bThrown&&Store->Find(Leader)->Grenades==G0-1&&ArmsShells.Num()>=1&&ArmsShells.Last().ShooterID==Leader,TEXT("grenade thrown"));
  // Sniper team: a scout pair of grade 2, the sniper leads (sniper rifle), the spotter follows (rifle).
  int32 Sniper=INDEX_NONE;
- if(M){M->Credits[0]+=BattleArms::SniperCost();if(M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Scout,2))Sniper=M->LastHiredSquadID;}
+ if(M&&M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Scout,2))Sniper=M->LastHiredSquadID;
  const auto* SS=Sniper!=INDEX_NONE?Store->FindSquad(Sniper):nullptr;
  Check(SS&&SS->Grade==2&&SS->SquadType==BattleSquadType::Scout&&SS->Members.Num()==2&&M->ActiveScouts(0)==M->ActiveOfType(0,BattleSquadType::Scout)-M->ActiveSnipers(0),TEXT("sniper team purchase"));
  if(SS)

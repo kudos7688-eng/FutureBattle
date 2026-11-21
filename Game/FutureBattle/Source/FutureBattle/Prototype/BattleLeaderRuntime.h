@@ -233,7 +233,8 @@ public:
  void RefreshArmsLook(int32 ID);              // the model in the hands follows the drawn weapon
  class UAnimSequence* ArmsClip(int32 ID,double Now) const; // follower: strike / throw clip while it lasts
  int32 ArmsBlast(int32 ShooterID,int32 Team,const FVector& At,float Radius,float Damage,bool& bKilled);
- bool LobClear(const FVector& From,const FVector& To,float Arc) const;
+ bool LobClear(const FVector& From,FVector& To,float Arc) const; // a block in the last fifth of the arc moves the landing point there
+ static double LobHeight(double Distance,float Arc){return FMath::Clamp(Distance*Arc,150.,1200.);}
  void ArmsImpact(const FArmsShell& Shell);
  void ShowArmsAction(int32 ID,uint8 Clip,double Now); // display: 1 strike, 2 throw
  void DrawArmsShells(double Now);

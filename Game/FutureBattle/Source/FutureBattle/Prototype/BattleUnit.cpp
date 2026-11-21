@@ -360,7 +360,7 @@ void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Pare
 		AC01Launcher.Reset(LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Launcher.SM_AC01_Launcher"), nullptr, LOAD_NoWarn));
 	}
 	UStaticMesh* Own = Weapon == EBattleWeapon::Marksman || Weapon == EBattleWeapon::Sniper ? AC01Rifle.Get() : Weapon == EBattleWeapon::GrenadeLauncher ? AC01Launcher.Get() : nullptr;
-	Model->SetStaticMesh(Own ? Own : Support ? SupportModel : CarbineModel);
+	Model->SetStaticMesh(Own ? Own : Support ? SupportModel.Get() : CarbineModel.Get());
 	Model->AttachToComponent(Parent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, bFirstPerson ? NAME_None : FName(TEXT("hand_r")));
 	const double Scale = Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar ? 1.35 : Weapon == EBattleWeapon::Shotgun ? .7 :
 		Weapon == EBattleWeapon::Pistol ? .3 : Weapon == EBattleWeapon::SMG ? .45 : Weapon == EBattleWeapon::Marksman ? (Own ? .85 : .8) :
