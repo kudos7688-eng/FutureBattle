@@ -291,7 +291,7 @@ bool UBattleMatch::UpdateSurpriseBridge(FBattleGroup& G,const FVector& Lead)
  if(G.SurpriseBridgeStage==0)
  {
   FVector Entry,Exit;if(!BattleSurpriseRoute::Bridge(GetWorld(),Lead,G.Rally,G.SurpriseRow,Entry,Exit))return false;
-  G.SurpriseBridgeGoal=G.Rally;G.SurpriseBridgeEntry=Entry;G.SurpriseBridgeExit=Exit;G.SurpriseBridgeStage=1;G.SurpriseBridgeLeader=PickGuide(Lead);
+  G.SurpriseBridgeGoal=G.Rally;G.SurpriseBridgeEntry=Entry;G.SurpriseBridgeExit=Exit;G.SurpriseBridgeStage=1;G.SurpriseBridgeLeader=PickGuide(Lead);G.SurpriseBridgeAt=Elapsed;
   G.Rally=Entry;
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_BRIDGE group=%d team=%d stage=entry entry=(%.0f,%.0f) exit=(%.0f,%.0f) goal=(%.0f,%.0f) time=%.1f"),G.ID,G.Team,Entry.X,Entry.Y,Exit.X,Exit.Y,G.SurpriseBridgeGoal.X,G.SurpriseBridgeGoal.Y,Elapsed);
   return true;
@@ -310,9 +310,25 @@ bool UBattleMatch::UpdateSurpriseBridge(FBattleGroup& G,const FVector& Lead)
  const FVector P=S&&U&&U->IsAlive()&&G.Squads.Contains(G.SurpriseBridgeLeader)?R->Position(S->LeaderUnitID):Lead;
  // Infantry may finish in cover up to 14 m from a non-sector order. Nearness alone must not count the opposite bank.
  const double Direction=G.SurpriseBridgeExit.X>G.SurpriseBridgeEntry.X?1.:-1.;
- if(FVector::Dist2D(P,G.Rally)>(G.SurpriseBridgeStage==3?2500.:1600.))return true;
- if(G.SurpriseBridgeStage==1&&(P.X-G.Rally.X)*Direction>600.)return true;
- if(G.SurpriseBridgeStage==2&&(P.X-G.Rally.X)*Direction< -600.)return true;
+ auto Passed=[&](const FVector& Q)
+ {
+  if(FVector::Dist2D(Q,G.Rally)>(G.SurpriseBridgeStage==3?2500.:1600.))return false;
+  if(G.SurpriseBridgeStage==1&&(Q.X-G.Rally.X)*Direction>600.)return false;
+  if(G.SurpriseBridgeStage==2&&(Q.X-G.Rally.X)*Direction< -600.)return false;
+  return true;
+ };
+ if(!Passed(P))
+ {
+  // An armoured guide held at the bridge by its own rules (groupui-surprise5-I-s7: both groups stood 300 s in the crossing leg) hands
+  // the leg to another squad not in Recover that reached the waypoint, after LagWait seconds on this leg.
+  if(Elapsed-G.SurpriseBridgeAt<BattleSurpriseValues::LagWait)return true;
+  int32 Alt=INDEX_NONE;
+  for(int32 SID:G.Squads)if(SID!=G.SurpriseBridgeLeader)if(const auto* O=Store->FindSquad(SID))if(const auto* OU=Store->Find(O->LeaderUnitID);OU&&OU->IsAlive()&&O->TacticalPlan.Action!=EBattleSquadTactic::Recover&&Passed(R->Position(O->LeaderUnitID))){Alt=SID;break;}
+  if(Alt==INDEX_NONE)return true;
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_BRIDGE group=%d team=%d stage=guide_stalled old=%d new=%d time=%.1f"),G.ID,G.Team,G.SurpriseBridgeLeader,Alt,Elapsed);
+  G.SurpriseBridgeLeader=Alt;
+ }
+ G.SurpriseBridgeAt=Elapsed;
  if(G.SurpriseBridgeStage==1){G.SurpriseBridgeStage=2;G.Rally=G.SurpriseBridgeExit;}
  else if(G.SurpriseBridgeStage==2)
  {
