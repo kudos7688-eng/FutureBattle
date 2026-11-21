@@ -228,7 +228,7 @@ const TArray<UBattleMatch::FArtilleryCluster>& UBattleMatch::AreaArtilleryCluste
  {
   const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
   TArray<TPair<int32,FVector>> Soldiers;
-  for(int32 I=0;I<V.Enemies.Num();++I)if(!(V.EnemyKeys[I]>0&&R->IsVehicle(V.EnemyKeys[I])))
+  for(int32 I=0;I<V.Enemies.Num();++I)if(!(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(V.ObservedType(V.EnemyKeys[I])):V.EnemyKeys[I]>0&&R->IsVehicle(V.EnemyKeys[I])))
    Soldiers.Emplace(V.EnemyKeys[I],V.Enemies[I]);
   V.Clusters[Kind]=BuildArtilleryClusters(MoveTemp(Soldiers),R->ArtilleryBlastRadius(bSPG),FMath::Max(1,GetDefault<UBattleTuning>()->ArtilleryMinCluster));
   V.bClustersBuilt[Kind]=true;
@@ -236,7 +236,7 @@ const TArray<UBattleMatch::FArtilleryCluster>& UBattleMatch::AreaArtilleryCluste
  return V.Clusters[Kind];
 }
 
-bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey,bool bTeamClusters)
+bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey,bool bTeamClusters,const TMap<int32,uint8>* KnownTypes)
 {
  bBase=false;bFriendlyHeld=false;if(TargetKey)*TargetKey=INDEX_NONE;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);if(!U||!U->IsAlive())return false;
@@ -248,7 +248,11 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
  // Soldiers only: the explosion does not hurt vehicles (a gun's direct hit on one is luck, not a plan).
  TArray<TPair<int32,FVector>> Soldiers;
  if(!BattleTactics::ArtilleryClustersEnabled()||!bTeamClusters)
- for(const auto& K:Known)if(!(K.Key>0&&IsVehicle(K.Key)))Soldiers.Add(TPair<int32,FVector>(K.Key,K.Value));
+ for(const auto& K:Known)
+ {
+  const uint8* KnownType=BattleTactics::ObservedArmour()&&KnownTypes?KnownTypes->Find(K.Key):nullptr;
+  if(!(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(KnownType?*KnownType:uint8(255)):K.Key>0&&IsVehicle(K.Key)))Soldiers.Add(TPair<int32,FVector>(K.Key,K.Value));
+ }
  // A candidate per known soldier: the centre of the known soldiers within the blast radius of him, worth a shell when it holds
  // ArtilleryMinCluster or more and lies within range. More soldiers first, then nearer.
  struct FCandidate{int32 Key;FVector At;double Score;};
@@ -333,14 +337,16 @@ bool UBattleLeaderRuntime::StepArtillery(int32 ID,double Now,bool bMoving,FVecto
   const double PickStart=FPlatformTime::Seconds();
   A.NextPick=Now+FMath::Max(.1f,T->ArtilleryPickInterval);++ArtilleryPicks;
   // Known enemies: the unit's own visible contacts, then its team's knowledge (one entry per key).
-  TMap<int32,FVector> Known;
+  TMap<int32,FVector> Known;TMap<int32,uint8> KnownTypes;
   if(!BattleTactics::ArtilleryClustersEnabled())
   if(const auto* Contacts=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(ID))
-   for(const auto& C:*Contacts)if(C.Value.bVisible&&!C.Value.bShared)Known.Add(C.Key,C.Value.LastKnownPosition);
+   for(const auto& C:*Contacts)if(C.Value.bVisible&&!C.Value.bShared)
+   {Known.Add(C.Key,C.Value.LastKnownPosition);if(BattleTactics::ObservedArmour())KnownTypes.Add(C.Key,C.Value.ObservedSquadType);}
   const auto& V=M->AreaIntelView(U->Team);
-  for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)if(!Known.Contains(V.EnemyKeys[I]))Known.Add(V.EnemyKeys[I],V.Enemies[I]);
+  for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)if(!Known.Contains(V.EnemyKeys[I]))
+  {Known.Add(V.EnemyKeys[I],V.Enemies[I]);if(BattleTactics::ObservedArmour())KnownTypes.Add(V.EnemyKeys[I],V.ObservedType(V.EnemyKeys[I]));}
   bool bHeld=false;
-  A.bHasTarget=PickArtilleryAim(ID,Known,A.Aim,A.bBase,bHeld,&A.TargetKey,BattleTactics::ArtilleryClustersEnabled());
+  A.bHasTarget=PickArtilleryAim(ID,Known,A.Aim,A.bBase,bHeld,&A.TargetKey,BattleTactics::ArtilleryClustersEnabled(),BattleTactics::ObservedArmour()?&KnownTypes:nullptr);
   if(bHeld)++ArtilleryFriendlyHolds;
   ArtilleryMs+=(FPlatformTime::Seconds()-PickStart)*1000.;
  }
@@ -415,6 +421,7 @@ bool UBattleLeaderRuntime::FireArtillery(int32 ID,const FVector& Aim,double Now)
     // Sound and smoke: no LOS trace. Independent stream, uniform disc area.
     FRandomStream RevealRandom(int32(uint32(ID)*2654435761u+uint32(A.Shots)*40503u+15401u));
     auto& RevealReport=RevealMatch->FireReveals[RevealTeam].FindOrAdd(ID);
+    if(BattleTactics::ObservedArmour())RevealReport.ObservedSquadType=bSPG?BattleSquadType::SPGun:BattleSquadType::Mortar;
     RevealReport.bArtillery=true;RevealReport.At=RevealMatch->Elapsed;RevealReport.Memory=30.;RevealReport.ErrorRadius=3000.f;
     const float RevealAngle=RevealRandom.FRand()*2.f*PI;
     const float RevealRadius=FMath::Sqrt(RevealRandom.FRand())*RevealReport.ErrorRadius;

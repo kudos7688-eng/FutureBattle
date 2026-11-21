@@ -456,6 +456,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      TankGuns=SavedGuns;
      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_TANK_GUN_SMOKE tank=%d enemy=%d own=%d after2=%.0f"),TankID,EnemyTank,OwnTank,After2);
     }
+    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleObservedArmour=")))Check(!BattleTactics::ObservedArmour(),TEXT("observed armour defaults OFF"));
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleVehicleHitCover=")))Check(!BattleTactics::VehicleHitCover(),TEXT("vehicle hit cover defaults OFF"));
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleTankGunFlash=")))Check(!BattleTactics::TankGunFlash(),TEXT("tank gun flash defaults OFF"));
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleArtilleryPosts=")))Check(!BattleTactics::ArtilleryPosts(),TEXT("artillery posts default OFF"));

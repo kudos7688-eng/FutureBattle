@@ -2,6 +2,7 @@
 // individual, squad, tactical and strategic layers). One switch, -BattleArmourAI=0/1 (UBattleTuning::bArmourAI, default 1;
 // -BattleArmourAITeam=0/1 limits it to one team for one-team trials), covers the first three layers; every rule works only while a
 // vehicle exists on the field, so matches without vehicles (the default: the AI buys none) are unchanged.
+// -BattleObservedArmour=1 replaces that legacy gate with own vehicles or observed enemy vehicle memory.
 //  Individual: weapon-aware targets (small arms do not pick a target they cannot hurt, anti-tank gunners pick vehicles first and keep
 //   their last rounds for them), a stopped vehicle turns its hull (and so its forward view) to its target or to the nearest known
 //   enemy. Vehicle bodies take no infantry cover actions or stances regardless of this AI switch.
@@ -25,6 +26,29 @@
 #include "NavigationSystem.h"
 #include "Components/CapsuleComponent.h"
 #include "FutureBattle.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+
+bool BattleTactics::ObservedArmour()
+{
+ static const bool bOn=[]{int32 ObservedValue=0;FParse::Value(FCommandLine::Get(),TEXT("BattleObservedArmour="),ObservedValue);return ObservedValue!=0;}();
+ return bOn;
+}
+
+bool UBattleLeaderRuntime::HasArmourKnowledge(int32 Team) const
+{
+ const auto* ArmourStore=GetWorld()->GetSubsystem<UBattleState>();
+ for(const auto& OwnSquad:ArmourStore->GetSquads())if(OwnSquad.Value.Team==Team&&BattleSquadType::IsVehicle(OwnSquad.Value.SquadType))
+  for(int32 OwnID:OwnSquad.Value.Members)if(const auto* OwnUnit=ArmourStore->Find(OwnID);OwnUnit&&OwnUnit->IsAlive())return true;
+ const auto* ArmourMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+ if(ArmourMatch&&ArmourMatch->bArea)return ArmourMatch->KnownEnemyVehicles(Team)>0;
+ const auto* ArmourSense=GetWorld()->GetSubsystem<UBattlePerception>();
+ const double ArmourNow=GetWorld()->GetTimeSeconds(),ArmourMemory=FMath::Max(1.f,GetDefault<UBattleTuning>()->VehicleMemory);
+ if(ArmourSense)for(const auto& OwnUnit:ArmourStore->GetUnits())if(OwnUnit.Value.Team==Team&&OwnUnit.Value.IsAlive())
+  if(const auto* OwnContacts=ArmourSense->GetContacts(OwnUnit.Key))for(const auto& OwnContact:*OwnContacts)
+   if(BattleSquadType::IsVehicle(OwnContact.Value.ObservedSquadType)&&OwnContact.Value.LastSeenTime<=ArmourNow&&ArmourNow-OwnContact.Value.LastSeenTime<=ArmourMemory)return true;
+ return false;
+}
 
 bool BattleTactics::ArmourAI(int32 Team)
 {
@@ -65,7 +89,7 @@ void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P,cons
     if(S->Order==EBattleOrder::Defend&&!BattleTactics::DefendEngage(S->Team)&&FVector::Dist2D(C.Value.LastKnownPosition,S->Destination)>S->DefenseRadius)continue;
     if(S->TacticalPlan.Action==EBattleSquadTactic::Support&&C.Key!=S->TacticalPlan.SupportTarget)continue;
    }
-   const bool bVehicle=IsVehicle(C.Key);bSeesVehicle|=bVehicle;
+   const bool bVehicle=BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(C.Value.ObservedSquadType):IsVehicle(C.Key);bSeesVehicle|=bVehicle;
    const double Range2=FVector::DistSquared(Pos,C.Value.LastKnownPosition);double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
    // An anti-tank gunner's vehicle target: within the anti-tank engagement distance, the nearest to the squad.
    if(bVehicle&&bGunner&&Range2<=ATReach2&&(D<BestArmour||(D==BestArmour&&C.Key<Armour))){BestArmour=D;Armour=C.Key;}
@@ -73,7 +97,7 @@ void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P,cons
    if(bVehicle)
    {
     // Small arms: never a vehicle they cannot hurt; a lightly armoured one only when it is much nearer than the soldiers around it.
-    const float Scale=BattleSquadType::ArmorSmallArms(VehicleType(C.Key));
+    const float Scale=BattleSquadType::ArmorSmallArms(BattleTactics::ObservedArmour()?C.Value.ObservedSquadType:VehicleType(C.Key));
     if(Scale<=0.f)continue;
     if(Scale<1.f)D*=4.;
    }
@@ -108,15 +132,27 @@ FVector UBattleLeaderRuntime::VehicleWatchDirection(int32 ID) const
 void UBattleMatch::NoteKnownVehicles(int32 Team) const
 {
  // Called when the team's knowledge is refreshed (AreaIntelView): seen enemy units that are vehicles, with the time and the place.
- const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(!R||R->VehicleIDs.IsEmpty()||Team<0||Team>1)return;
+ const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(!R||(!BattleTactics::ObservedArmour()&&R->VehicleIDs.IsEmpty())||Team<0||Team>1)return;
  const auto& V=IntelViews[Team];
+ if(BattleTactics::ObservedArmour())
+ {
+  for(int32 ObservedIndex=0;ObservedIndex<V.Enemies.Num()&&ObservedIndex<V.EnemyKeys.Num();++ObservedIndex)
+  {
+   const int32 ObservedKey=V.EnemyKeys[ObservedIndex];const double* ObservedAt=V.EnemyObservedAt.Find(ObservedKey);
+   if(!BattleSquadType::IsVehicle(V.ObservedType(ObservedKey))||!ObservedAt)continue;
+   const float ObservedMatchTime=FMath::Min(Elapsed,float(*ObservedAt));
+   const auto* PreviousVehicle=KnownVehicles[Team].Find(ObservedKey);if(PreviousVehicle&&PreviousVehicle->At>ObservedMatchTime)continue;
+   auto& ObservedVehicle=KnownVehicles[Team].FindOrAdd(ObservedKey);ObservedVehicle.At=ObservedMatchTime;ObservedVehicle.Position=V.Enemies[ObservedIndex];
+  }
+  return;
+ }
  for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)if(V.EnemyKeys[I]>0&&R->IsVehicle(V.EnemyKeys[I]))
  {auto& K=KnownVehicles[Team].FindOrAdd(V.EnemyKeys[I]);K.At=Elapsed;K.Position=V.Enemies[I];}
 }
 
 int32 UBattleMatch::KnownEnemyVehicles(int32 Team,TArray<FVector>* Positions) const
 {
- const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(!bArea||!R||R->VehicleIDs.IsEmpty()||Team<0||Team>1)return 0;
+ const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(!bArea||!R||(!BattleTactics::ObservedArmour()&&R->VehicleIDs.IsEmpty())||Team<0||Team>1)return 0;
  AreaIntelView(Team);
  const float Memory=FMath::Max(1.f,GetDefault<UBattleTuning>()->VehicleMemory);int32 Count=0;
  TArray<int32> Keys;KnownVehicles[Team].GetKeys(Keys);Keys.Sort();
@@ -130,7 +166,7 @@ int32 UBattleMatch::AreaArmourReaction(int32 Team,int32 SquadID,float DamageRati
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const auto* S=Store?Store->FindSquad(SquadID):nullptr;
- if(!bArea||!S||!R||R->VehicleIDs.IsEmpty())return 0;
+ if(!bArea||!S||!R||(BattleTactics::ObservedArmour()?!R->HasArmourKnowledge(Team):R->VehicleIDs.IsEmpty()))return 0;
  const auto* T=GetDefault<UBattleTuning>();const FVector Here=R->Position(S->LeaderUnitID),Home=AreaHome(Team);
  if(BattleSquadType::IsVehicle(S->SquadType))
  {
@@ -141,8 +177,16 @@ int32 UBattleMatch::AreaArmourReaction(int32 Team,int32 SquadID,float DamageRati
   const auto& V=AreaIntelView(Team);const FVector* Threat=nullptr;double Nearest=DBL_MAX;
   for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)
   {
-   const int32 Key=V.EnemyKeys[I];const auto* U=Key>0?Store->Find(Key):nullptr;
-   if(!U||!U->IsAlive()||!U->CarriesAntiTank())continue;
+   const int32 Key=V.EnemyKeys[I];
+   if(BattleTactics::ObservedArmour())
+   {
+    const uint8 ThreatType=V.ObservedType(Key);
+    if((ThreatType!=BattleSquadType::AntiTank&&ThreatType!=BattleSquadType::Exo)||!V.RecentArmourObservation(Key,Elapsed,FMath::Max(1.f,T->VehicleMemory)))continue;
+   }
+   else
+   {
+    const auto* U=Key>0?Store->Find(Key):nullptr;if(!U||!U->IsAlive()||!U->CarriesAntiTank())continue;
+   }
    const double D=FVector::Dist2D(Here,V.Enemies[I]);if(D<=Keep&&D<Nearest){Nearest=D;Threat=&V.Enemies[I];}
   }
   const bool bShock=DamageRatio>=FMath::Max(.01f,T->VehicleShockRatio);
@@ -198,7 +242,7 @@ int32 UBattleMatch::AreaArmourReaction(int32 Team,int32 SquadID,float DamageRati
  const double Fear=FMath::Max(0.f,BattleRanges::Get().bActive?T->ArmourFearRangeProfile:T->ArmourFearRange);
  for(int32 ID:S->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())if(const auto* Contacts=Sense->GetContacts(ID))
   for(const auto& C:*Contacts)
-   if(C.Value.bVisible&&!C.Value.bShared&&R->IsVehicle(C.Key)&&BattleSquadType::ArmorSmallArms(R->VehicleType(C.Key))<=0.f&&FVector::Dist2D(Here,C.Value.LastKnownPosition)<=Fear)
+   if(C.Value.bVisible&&!C.Value.bShared&&(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(C.Value.ObservedSquadType):R->IsVehicle(C.Key))&&BattleSquadType::ArmorSmallArms(BattleTactics::ObservedArmour()?C.Value.ObservedSquadType:R->VehicleType(C.Key))<=0.f&&FVector::Dist2D(Here,C.Value.LastKnownPosition)<=Fear)
    {Why=TEXT("ENEMY ARMOUR / NO ANTI-TANK WEAPON");return 2;}
  return 0;
 }

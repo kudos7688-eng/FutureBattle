@@ -641,7 +641,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  if(bArmourSectorGate)
  {
   P.ArmourTargetID=INDEX_NONE;
-  if(VehicleIDs.Num()&&S->Order!=EBattleOrder::Move&&BattleTactics::ArmourAI(S->Team))PickArmourTargets(SID,P,&AllowedArmourTargets);
+  if((BattleTactics::ObservedArmour()?HasArmourKnowledge(S->Team):VehicleIDs.Num()>0)&&S->Order!=EBattleOrder::Move&&BattleTactics::ArmourAI(S->Team))PickArmourTargets(SID,P,&AllowedArmourTargets);
  }
  P.bSectorContact=false;
  if(bShotAt && P.TargetID!=INDEX_NONE)
@@ -725,7 +725,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  if(!bArmourSectorGate)
  {
   P.ArmourTargetID=INDEX_NONE;
-  if(VehicleIDs.Num() && S->Order!=EBattleOrder::Move && BattleTactics::ArmourAI(S->Team)) PickArmourTargets(SID,P);
+  if((BattleTactics::ObservedArmour()?HasArmourKnowledge(S->Team):VehicleIDs.Num()>0) && S->Order!=EBattleOrder::Move && BattleTactics::ArmourAI(S->Team)) PickArmourTargets(SID,P);
  }
  // Evaluation only: how long a squad goes without a visible target, and whether a member had just seen it.
  if(SightExperiment.Enabled && S->Order!=EBattleOrder::Move)
@@ -826,10 +826,11 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  FVector Pos=Position(ID), Direction=Forward(ID); B.Velocity=FVector::ZeroVector;
  // Armour AI (BattleArmourAI.cpp): an anti-tank gunner fires at the squad's vehicle target; with few rounds left and enemy vehicles
  // known to his team he does not spend them on soldiers. Vehicles take no cover actions and no stances.
- const bool bArmourAI=VehicleIDs.Num()>0 && BattleTactics::ArmourAI(U->Team);
+ const bool bArmourAI=(BattleTactics::ObservedArmour()?HasArmourKnowledge(U->Team):VehicleIDs.Num()>0) && BattleTactics::ArmourAI(U->Team);
  const bool bVehicleBody=IsVehicle(ID);
  const int32 TargetID=bArmourAI && U->Weapon==EBattleWeapon::AntiTank && P->ArmourTargetID!=INDEX_NONE ? P->ArmourTargetID : P->TargetID;
- const bool bSaveRounds=bArmourAI && bArea && U->Weapon==EBattleWeapon::AntiTank && TargetID!=INDEX_NONE && !IsVehicle(TargetID) &&
+ const auto* ArmourContact=BattleTactics::ObservedArmour()?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,TargetID):nullptr;
+ const bool bSaveRounds=bArmourAI && bArea && U->Weapon==EBattleWeapon::AntiTank && TargetID!=INDEX_NONE && !(BattleTactics::ObservedArmour()?(ArmourContact&&BattleSquadType::IsVehicle(ArmourContact->ObservedSquadType)):IsVehicle(TargetID)) &&
   U->Ammo+U->Reserve<=GetDefault<UBattleTuning>()->ATKeepRounds && GetWorld()->GetSubsystem<UBattleMatch>()->KnownEnemyVehicles(U->Team)>0;
  const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,TargetID);
  // Regrouping does not replenish ammunition, but may load existing reserve without an enemy target.

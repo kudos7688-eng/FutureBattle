@@ -36,7 +36,7 @@ const UBattleMatch::FAreaIntelView& UBattleMatch::AreaIntelView(int32 Team) cons
      (V.HomeObserver==INDEX_NONE||U.Key<V.HomeObserver)&&AreaVisible(U.Key,EnemyHome,BaseActors[1-Team]))
   {V.HomeObserver=U.Key;V.HomeObservedAt=Elapsed;V.HomeReportFrom=P;}
   if(const auto* Contacts=Perception?Perception->GetContacts(U.Key):nullptr)
-   for(const auto& C:*Contacts)if(C.Value.bVisible&&!IsScoutLongContact(U.Key,C.Value)){Seen.Add(C.Key,C.Value.LastKnownPosition);if(BattleTactics::ArtilleryPosts()&&!C.Value.bShared)V.DirectEnemies.Add(C.Key,C.Value.LastKnownPosition);if((BattleTactics::GroupStrengthEnabled()||BattleTactics::ArtilleryPosts())&&C.Value.ObservedSquadType<BattleSquadType::Count)V.EnemyTypes.Add(C.Key,C.Value.ObservedSquadType);}
+   for(const auto& C:*Contacts)if(C.Value.bVisible&&!IsScoutLongContact(U.Key,C.Value)){Seen.Add(C.Key,C.Value.LastKnownPosition);if(BattleTactics::ObservedArmour()){V.EnemyTypes.Add(C.Key,C.Value.ObservedSquadType);V.EnemyObservedAt.Add(C.Key,Elapsed-(GetWorld()->GetTimeSeconds()-C.Value.LastSeenTime));}if(BattleTactics::ArtilleryPosts()&&!C.Value.bShared)V.DirectEnemies.Add(C.Key,C.Value.LastKnownPosition);if((BattleTactics::GroupStrengthEnabled()||BattleTactics::ArtilleryPosts())&&C.Value.ObservedSquadType<BattleSquadType::Count)V.EnemyTypes.Add(C.Key,C.Value.ObservedSquadType);}
  }
  AddScoutReportSightings(Team,Seen);
  if(BattleTactics::TankGunFlash()||BattleTactics::ArtilleryFlash())
@@ -49,7 +49,11 @@ const UBattleMatch::FAreaIntelView& UBattleMatch::AreaIntelView(int32 Team) cons
   {
    const auto& Flash=Flashes[FlashKey];
    V.FlashExpiresAt=FMath::Min(V.FlashExpiresAt,Flash.At+Flash.Memory);
-   if(!Seen.Contains(FlashKey))Seen.Add(FlashKey,Flash.Position);
+   if(!Seen.Contains(FlashKey))
+   {
+    Seen.Add(FlashKey,Flash.Position);
+    if(BattleTactics::ObservedArmour()){V.EnemyTypes.Add(FlashKey,Flash.ObservedSquadType);V.EnemyObservedAt.Add(FlashKey,Flash.At);}
+   }
   }
  }
  for(const auto& P:ScoutReports)

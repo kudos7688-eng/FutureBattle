@@ -251,6 +251,9 @@ public:
   int32 HomeObserver=INDEX_NONE; double HomeObservedAt=-1; FVector HomeReportFrom=FVector::ZeroVector;
   TMap<int32,FVector> DirectEnemies; // direct sightings only, for the post trial
   TMap<int32,uint8> EnemyTypes; // observed contact metadata only; report dots without identity remain unknown
+  TMap<int32,double> EnemyObservedAt; // match-clock time of the same observation as position and type; transient
+  uint8 ObservedType(int32 Key) const { const uint8* Type=EnemyTypes.Find(Key);return Type?*Type:uint8(255); }
+  bool RecentArmourObservation(int32 Key,double Now,double Memory) const { const double* SeenAt=EnemyObservedAt.Find(Key);return SeenAt&&*SeenAt<=Now&&Now-*SeenAt<=Memory; }
   double FlashExpiresAt=DBL_MAX;
   mutable bool bClustersBuilt[2]={false,false};
   mutable TArray<FArtilleryCluster> Clusters[2];
@@ -264,7 +267,7 @@ public:
 	void UpdateIntelPurposes();
 	TMap<int32, int32> IntelPurpose;           // squad -> point it was bought to defend (transient)
 	mutable FAreaIntelView IntelViews[2];
- struct FFireReveal { bool bArtillery=false; double At=0,Memory=10.; float ErrorRadius=500.f; FVector Position=FVector::ZeroVector; };
+ struct FFireReveal { uint8 ObservedSquadType=255; bool bArtillery=false; double At=0,Memory=10.; float ErrorRadius=500.f; FVector Position=FVector::ZeroVector; };
  // Shared gun reports, keyed by shooter unit ID; match seconds, transient, never saved.
  mutable TMap<int32,FFireReveal> FireReveals[2];
 	TMap<int32, FScoutReport> ScoutReports;

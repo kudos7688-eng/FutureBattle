@@ -134,7 +134,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			}
 		auto& Contact = Observer.Contacts.FindOrAdd(TargetID);
 		Contact.TargetID = TargetID;
-  if(bGroupRecordsType||(State->Team>=0&&State->Team<2&&(ObserverCompositionTeams&(1<<State->Team))!=0))
+  if(BattleTactics::ObservedArmour()||bGroupRecordsType||(State->Team>=0&&State->Team<2&&(ObserverCompositionTeams&(1<<State->Team))!=0))
   {
    const auto* SeenSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(Candidate.State->SquadID);
    Contact.ObservedSquadType=SeenSquad?SeenSquad->SquadType:255;

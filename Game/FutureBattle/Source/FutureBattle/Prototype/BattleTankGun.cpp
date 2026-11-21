@@ -53,16 +53,18 @@ bool UBattleLeaderRuntime::TankGunTarget(int32 ID,double Now,FVector& Direction)
   const FVector Pos=Position(ID);const double Engage2=FMath::Square(TankGunEngage()),Min2=FMath::Square(FMath::Max(0.f,T->TankGunMinRange));
   const double Splash2=FMath::Square(FMath::Max(1.f,T->TankGunSplashRadius));
   // Known enemies: the tank's own visible contacts, then its team's knowledge (one entry per key).
-  TMap<int32,FVector> Known;
+  TMap<int32,FVector> Known;TMap<int32,uint8> KnownTypes;TSet<int32> DirectKeys;
   if(const auto* Contacts=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(ID))
-   for(const auto& C:*Contacts)if(C.Value.bVisible&&!C.Value.bShared)Known.Add(C.Key,C.Value.LastKnownPosition);
+   for(const auto& C:*Contacts)if(C.Value.bVisible&&!C.Value.bShared)
+   {Known.Add(C.Key,C.Value.LastKnownPosition);if(BattleTactics::ObservedArmour()){KnownTypes.Add(C.Key,C.Value.ObservedSquadType);DirectKeys.Add(C.Key);}}
   const auto& V=M->AreaIntelView(U->Team);
-  for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)if(!Known.Contains(V.EnemyKeys[I]))Known.Add(V.EnemyKeys[I],V.Enemies[I]);
+  for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)if(!Known.Contains(V.EnemyKeys[I]))
+  {Known.Add(V.EnemyKeys[I],V.Enemies[I]);if(BattleTactics::ObservedArmour())KnownTypes.Add(V.EnemyKeys[I],V.ObservedType(V.EnemyKeys[I]));}
   struct FCandidate{int32 Key;FVector At;double Score;};TArray<FCandidate> Candidates;
   for(const auto& K:Known)
   {
    const double D2=FVector::DistSquared2D(Pos,K.Value);if(D2>Engage2||D2<Min2)continue;
-   const bool Vehicle=K.Key>0&&IsVehicle(K.Key);
+   const bool Vehicle=BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(KnownTypes.FindChecked(K.Key)):K.Key>0&&IsVehicle(K.Key);
    int32 Around=0;if(!Vehicle)for(const auto& O:Known)Around+=FVector::DistSquared2D(O.Value,K.Value)<=Splash2;
    if(!Vehicle&&Around<FMath::Max(1,T->TankGunMinCluster))continue;
    Candidates.Add({K.Key,K.Value,(Vehicle?1000.:double(Around))-FMath::Sqrt(D2)/1.e6});
@@ -72,7 +74,11 @@ bool UBattleLeaderRuntime::TankGunTarget(int32 ID,double Now,FVector& Direction)
   auto Q=Sight(ID).Query;const FVector Muzzle=Pos+FVector(0,0,60);
   for(int32 I=0;I<Candidates.Num()&&I<3&&!G.bHasTarget;++I)
   {
-   const auto& C=Candidates[I];const FVector Aim=C.At+FVector(0,0,C.Key>0?TargetAimOffset(C.Key):35.f);
+   const auto& C=Candidates[I];
+   // Team knowledge has no current posture: use the observed vehicle centre or a standing infantry aim height.
+   const float AimHeight=BattleTactics::ObservedArmour()&&!DirectKeys.Contains(C.Key)?
+    (BattleSquadType::IsVehicle(KnownTypes.FindChecked(C.Key))?0.f:35.f):(C.Key>0?TargetAimOffset(C.Key):35.f);
+   const FVector Aim=C.At+FVector(0,0,AimHeight);
    FHitResult Hit;GetWorld()->LineTraceSingleByChannel(Hit,Muzzle,Aim,ECC_Visibility,Q);
    if(!Hit.bBlockingHit||FVector::DistSquared(Hit.ImpactPoint,Aim)<=Splash2||HitIDs.FindRef(Hit.GetComponent())>0){G.bHasTarget=true;G.TargetKey=C.Key;G.Aim=Aim;}
   }
@@ -166,6 +172,7 @@ bool UBattleLeaderRuntime::FireTankGun(int32 ID,const FVector& Aim,double Now)
    const float FlashAngle=FlashRandom.FRand()*2.f*PI;
    const float FlashRadius=FMath::Sqrt(FlashRandom.FRand())*TankGunFlashErrorRadius;
    auto& FlashReport=M->FireReveals[FlashTeam].FindOrAdd(ID);
+   if(BattleTactics::ObservedArmour())FlashReport.ObservedSquadType=BattleSquadType::Tank;
    FlashReport.Memory=10.;FlashReport.ErrorRadius=TankGunFlashErrorRadius;
    FlashReport.bArtillery=false;FlashReport.At=M->Elapsed;FlashReport.Position=Start+FVector(FMath::Cos(FlashAngle)*FlashRadius,FMath::Sin(FlashAngle)*FlashRadius,0);
    M->IntelViews[FlashTeam].At=-1;
