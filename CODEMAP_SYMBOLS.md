@@ -41,7 +41,7 @@
 - `BattleFieldViewTrial.cpp`: UBattleSquadTrial::SelectT5:39, UBattleSquadTrial::StartT5:49, UBattleSquadTrial::InspectT5Assets:85, UBattleSquadTrial::StepT5:110, UBattleSquadTrial::FinishT5:215
 - `BattleFlankBayTrial.cpp`: UBattleLeaderRuntime::RunFlankBayTrial:14
 - `BattleFollowerBones.cpp`: BattleFollowerBones::Eligible:6, BattleFollowerBones::SetVisible:14, BattleFollowerBones::PrepareFreeze:31
-- `BattleFrontLine.cpp`: UBattleMatch::FrontLineOn:31, UBattleMatch::FrontCell:39, UBattleMatch::UpdateFrontLine:45, UBattleMatch::FrontGroupOrder:199, UBattleMatch::UpdateSurpriseBridge:261, UBattleMatch::SurpriseOn:296, UBattleMatch::UpdateSurpriseGroup:302, UBattleMatch::SurpriseGroupOrder:424, UBattleMatch::SurpriseMoving:433, UBattleMatch::ClampFrontTimers:439
+- `BattleFrontLine.cpp`: UBattleMatch::FrontLineOn:31, UBattleMatch::FrontCell:39, UBattleMatch::UpdateFrontLine:45, UBattleMatch::FrontGroupOrder:199, UBattleMatch::UpdateSurpriseBridge:261, UBattleMatch::SurpriseOn:317, UBattleMatch::UpdateSurpriseGroup:323, UBattleMatch::SurpriseGroupOrder:468, UBattleMatch::SurpriseMoving:477, UBattleMatch::ClampFrontTimers:483
 - `BattleGameMode.h`: ABattleGameMode::IsVisibilityFrame:23, ABattleGameMode::InitialUnitCount:38, ABattleGameMode::InitialUnitHealth:39
 - `BattleGameMode.cpp`: ABattleGameMode::FindUnitByID:27, ABattleGameMode::ABattleGameMode:38, ABattleGameMode::HandleStartingNewPlayer_Implementation:46, ABattleGameMode::BeginPlay:51, ABattleGameMode::EndPlay:162, ABattleGameMode::Tick:169, ABattleGameMode::RefreshVisibility:209, ABattleGameMode::CheckSmoke:223, ABattleGameMode::RunSmokeTest:229, ABattleGameMode::FinishSmokeTest:338
 - `BattleGridTrial.cpp`: UBattlePhase3::VerifyGrid:11
@@ -56,7 +56,7 @@
 - `BattleMapI.h`: BattleMapI::Centre:40, BattleMapI::SectorAt:41
 - `BattleMapStats.cpp`: UBattleLeaderRuntime::RunMapStats:38
 - `BattleMassTrial.cpp`: ABattleMassTrialUnit::ABattleMassTrialUnit:6, UBattleTrialMovement::PlanStep:11, UBattleTrialMovement::ApplyStep:21, UBattleMassTrial::Start:38, UBattleMassTrial::Update:52, UBattleMassTrial::Stop:80
-- `BattleMatch.h`: UBattleMatch::SupplyTeamNear:127, UBattleMatch::IsEnabled:334
+- `BattleMatch.h`: UBattleMatch::SupplyTeamNear:127, UBattleMatch::IsEnabled:335
 - `BattleMatch.cpp`: UBattleMatch::InitializeMatch:15, UBattleMatch::SquadPrice:38, UBattleMatch::CurrentSquadPrice:51, UBattleMatch::HireSquad:56, UBattleMatch::StartCombat:124, UBattleMatch::CanDelegateAllies:137, UBattleMatch::SetAllyDelegated:144, UBattleMatch::Update:152, UBattleMatch::ObjectiveValue:191, UBattleMatch::MatchTimeLimit:192, UBattleMatch::CheckTimeLimit:194, UBattleMatch::UpdateObjectives:204, UBattleMatch::InObjective:223, UBattleMatch::AdvanceObjectiveControl:228, UBattleMatch::UpdateEnemyOrders:263, UBattleMatch::ChooseObjective:268, UBattleMatch::AreaStrategyTarget:281, UBattleMatch::UpdateTeamOrders:348, UBattleMatch::Resupply:488, UBattleMatch::Finish:507
 - `BattleMatchSmoke.cpp`: ABattleGameMode::RunMatchSmokeTest:11
 - `BattleMatchSoak.cpp`: ABattleGameMode::UpdateMatchSoak:12

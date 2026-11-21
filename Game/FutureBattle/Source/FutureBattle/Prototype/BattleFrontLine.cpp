@@ -262,17 +262,38 @@ bool UBattleMatch::UpdateSurpriseBridge(FBattleGroup& G,const FVector& Lead)
 {
  // Groups survive RestoreSnapshot in the same match. These fields, like Rally, are untouched by a same-time save round trip.
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ // The guide: the living squad nearest the lead, armour not in Recover first (Codex review 2026-11-21: a guide in Recover drove the
+ // bridge legs from behind the river).
+ auto PickGuide=[&](const FVector& Near)
+ {
+  int32 Best=INDEX_NONE,Rank=INT32_MAX;double BestD=DBL_MAX;
+  for(int32 SID:G.Squads)if(const auto* S=Store->FindSquad(SID))if(const auto* U=Store->Find(S->LeaderUnitID);U&&U->IsAlive())
+  {
+   const bool bArmour=S->SquadType==BattleSquadType::Tank||S->SquadType==BattleSquadType::ArmoredCar||S->SquadType==BattleSquadType::Exo;
+   const int32 K=(S->TacticalPlan.Action==EBattleSquadTactic::Recover?2:0)+(bArmour?0:1);
+   const double D=FVector::DistSquared2D(R->Position(S->LeaderUnitID),Near);
+   if(K<Rank||(K==Rank&&D<BestD)){Rank=K;BestD=D;Best=SID;}
+  }
+  return Best;
+ };
  if(G.SurpriseBridgeStage==0)
  {
   FVector Entry,Exit;if(!BattleSurpriseRoute::Bridge(GetWorld(),Lead,G.Rally,G.SurpriseRow,Entry,Exit))return false;
-  G.SurpriseBridgeGoal=G.Rally;G.SurpriseBridgeEntry=Entry;G.SurpriseBridgeExit=Exit;G.SurpriseBridgeStage=1;G.SurpriseBridgeLeader=INDEX_NONE;
-  double Best=DBL_MAX;for(int32 SID:G.Squads)if(const auto* S=Store->FindSquad(SID))if(const auto* U=Store->Find(S->LeaderUnitID);U&&U->IsAlive())
-  {const double D=FVector::DistSquared2D(R->Position(S->LeaderUnitID),Lead);if(D<Best){Best=D;G.SurpriseBridgeLeader=SID;}}
+  G.SurpriseBridgeGoal=G.Rally;G.SurpriseBridgeEntry=Entry;G.SurpriseBridgeExit=Exit;G.SurpriseBridgeStage=1;G.SurpriseBridgeLeader=PickGuide(Lead);
   G.Rally=Entry;
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_BRIDGE group=%d team=%d stage=entry entry=(%.0f,%.0f) exit=(%.0f,%.0f) goal=(%.0f,%.0f) time=%.1f"),G.ID,G.Team,Entry.X,Entry.Y,Exit.X,Exit.Y,G.SurpriseBridgeGoal.X,G.SurpriseBridgeGoal.Y,Elapsed);
   return true;
  }
  // Keep one guide through the turn; changing to the most forward column on the far bank can skip the entrance.
+ // A guide that died, left or went into Recover is replaced by the best one near the lead.
+ {
+  const auto* S=Store->FindSquad(G.SurpriseBridgeLeader);const auto* U=S?Store->Find(S->LeaderUnitID):nullptr;
+  if(!S||!U||!U->IsAlive()||!G.Squads.Contains(G.SurpriseBridgeLeader)||S->TacticalPlan.Action==EBattleSquadTactic::Recover)
+  {
+   const int32 Old=G.SurpriseBridgeLeader;G.SurpriseBridgeLeader=PickGuide(Lead);
+   if(G.SurpriseBridgeLeader!=Old)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_BRIDGE group=%d team=%d stage=guide old=%d new=%d time=%.1f"),G.ID,G.Team,Old,G.SurpriseBridgeLeader,Elapsed);
+  }
+ }
  const auto* S=Store->FindSquad(G.SurpriseBridgeLeader);const auto* U=S?Store->Find(S->LeaderUnitID):nullptr;
  const FVector P=S&&U&&U->IsAlive()&&G.Squads.Contains(G.SurpriseBridgeLeader)?R->Position(S->LeaderUnitID):Lead;
  // Infantry may finish in cover up to 14 m from a non-sector order. Nearness alone must not count the opposite bank.
@@ -369,8 +390,10 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
   TArray<int32> Pick;for(const auto& F:Free)if(Pick.Num()<Want)Pick.Add(F.SID);
   const int32 ID=FormGroup(Team,Pick,false);auto* G=Groups.Find(ID);if(!G)return;
   G->Kind=2;G->Phase=0;G->PhaseAt=Elapsed;G->Rally=Start;G->SurpriseRow=Row;G->StartLiving=AllLiving(*G);G->SurpriseEndAt=Elapsed+AssembleMax+Max;
+  // The most forward armoured squad leads from the start too (Codex review 2026-11-21: it was the most forward squad of any type).
   FVector Lead=R->Position(Store->FindSquad(Pick[0])->LeaderUnitID);
-  for(int32 SID:Pick)if(const auto* S=Store->FindSquad(SID)){const FVector P=R->Position(S->LeaderUnitID);if((bLow?P.X:-P.X)>(bLow?Lead.X:-Lead.X))Lead=P;}
+  for(int32 I=0;I<Pick.Num();++I)if(const auto* S=Store->FindSquad(Pick[I]);S&&Free[I].bArmour){const FVector P=R->Position(S->LeaderUnitID);if((bLow?P.X:-P.X)>(bLow?Lead.X:-Lead.X))Lead=P;}
+  G->SurpriseNextCol=-1;
   UpdateSurpriseBridge(*G,Lead);
   SurpriseNextAt[Team]=Elapsed+Interval;
   int32 Armour=0;FString Ids;for(int32 I=0;I<Pick.Num();++I){Armour+=Free[I].bArmour;Ids+=FString::Printf(TEXT("%s%d"),I?TEXT(","):TEXT(""),Pick[I]);}
@@ -389,23 +412,29 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
  // The armour sets the pace when it is with the group (2026-11-21 groupui-surprise3-I-*: stepping and the bridge legs followed the
  // fastest squad, a rifle squad, which crossed and struck alone while the tank backed off known anti-tank soldiers behind the river;
  // Codex analysis). An armoured squad driving home for repair does not count, so the others go on without it.
- int32 ALead=-1;FVector ALeadPosition=FVector::ZeroVector;double ALeadX=-DBL_MAX;
+ int32 ALead=-1,ALeadSID=INDEX_NONE,LeadSID=INDEX_NONE,NRecover=0;FVector ALeadPosition=FVector::ZeroVector;double ALeadX=-DBL_MAX;
  for(int32 SID:G.Squads)if(const auto* S=Store->FindSquad(SID))
  {
   const FVector P=R->Position(S->LeaderUnitID);const int32 C=ColOf(BattleSectors::Cell(P));
-  if((bLow?P.X:-P.X)>LeadX){LeadX=bLow?P.X:-P.X;LeadPosition=P;}
+  const bool bRecover=S->TacticalPlan.Action==EBattleSquadTactic::Recover;
+  Where+=FString::Printf(TEXT(" %d:t%d:c%d%s"),SID,int32(S->SquadType),C,bRecover?TEXT("r"):TEXT(""));
+  // Squads in Recover (repair trip, backing off) leave the pace, the waiting and the assembly count (Codex review 2026-11-21).
+  if(bRecover){++NRecover;continue;}
+  if((bLow?P.X:-P.X)>LeadX){LeadX=bLow?P.X:-P.X;LeadPosition=P;LeadSID=SID;}
   Col=FMath::Min(Col,C);Lead=FMath::Max(Lead,C);++N;Ready+=FVector::Dist2D(P,G.Rally)<=2500.;
-  Where+=FString::Printf(TEXT(" %d:t%d:c%d"),SID,int32(S->SquadType),C);
   const bool bArmour=S->SquadType==BattleSquadType::Tank||S->SquadType==BattleSquadType::ArmoredCar||S->SquadType==BattleSquadType::Exo;
   const auto* U=Store->Find(S->LeaderUnitID);
-  if(bArmour&&U&&U->IsAlive()&&S->TacticalPlan.Action!=EBattleSquadTactic::Recover&&(bLow?P.X:-P.X)>ALeadX){ALeadX=bLow?P.X:-P.X;ALeadPosition=P;ALead=C;}
+  if(bArmour&&U&&U->IsAlive()&&(bLow?P.X:-P.X)>ALeadX){ALeadX=bLow?P.X:-P.X;ALeadPosition=P;ALead=C;ALeadSID=SID;}
  }
- if(!N)return;
- if(ALead>=0){Lead=ALead;LeadPosition=ALeadPosition;}
+ if(!N)return; // all in Recover: keep the stop until someone comes back
+ // Armour sets the pace only while it is with the group, not more than three columns behind the stop (it stalled at home after a
+ // repair in groupui-surprise4-I-s7 and pulled the whole group back).
+ const int32 StopCol=G.SurpriseNextCol>=0?G.SurpriseNextCol:Lead;
+ if(ALead>=0&&ALead>=StopCol-3){Lead=ALead;LeadPosition=ALeadPosition;LeadSID=ALeadSID;}
  if(Elapsed>=G.SurpriseLogAt)
  {
   G.SurpriseLogAt=Elapsed+30.f;const FIntPoint RC=BattleSectors::Cell(G.Rally);
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_STATE group=%d team=%d phase=%d rally=%c%d bridge_stage=%d living=%d squads=%s time=%.1f"),SID_,Team,int32(G.Phase),TCHAR('A'+RC.X),1+RC.Y,int32(G.SurpriseBridgeStage),Living,*Where,Elapsed);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_STATE group=%d team=%d phase=%d rally=%c%d bridge_stage=%d living=%d lead_sid=%d lead_col=%d min_col=%d stop_col=%d guide_sid=%d recover=%d squads=%s time=%.1f"),SID_,Team,int32(G.Phase),TCHAR('A'+RC.X),1+RC.Y,int32(G.SurpriseBridgeStage),Living,LeadSID,Lead,Col,G.SurpriseNextCol,G.SurpriseBridgeLeader,NRecover,*Where,Elapsed);
  }
  auto Enter=[&](uint8 To,const TCHAR* Why){G.Phase=To;G.PhaseAt=Elapsed;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SURPRISE_PHASE group=%d team=%d phase=%d column=%d living=%d reason=%s time=%.1f"),SID_,Team,int32(To),Col,Living,Why,Elapsed);};
  // Finish every bridge leg before assembly timeout, lag handling or the strike can replace its waypoint.
@@ -418,12 +447,19 @@ void UBattleMatch::UpdateSurpriseGroup(int32 Team,int32 FrontID)
  }
  if(G.Phase==1)
  {
-  if(Lead>=EnemyHomeCol-2){Enter(2,TEXT("strike"));return;}
-  // Next stop: two columns ahead of the leading squad along the edge row, using a bridge when the segment crosses water.
   // The lead waits for squads more than three columns behind, at most LagWait seconds each time.
-  int32 Next=FMath::Min(Lead+2,EnemyHomeCol-2);
-  if(Lead-Col>3){if(G.SurpriseWaitAt<0)G.SurpriseWaitAt=Elapsed;if(Elapsed-G.SurpriseWaitAt<LagWait)Next=Lead;}
+  bool bWait=false;
+  if(Lead-Col>3){if(G.SurpriseWaitAt<0)G.SurpriseWaitAt=Elapsed;bWait=Elapsed-G.SurpriseWaitAt<LagWait;}
   else G.SurpriseWaitAt=-1.f;
+  // Strike with the escort close, or after the wait (Codex review 2026-11-21: the tank struck 3-6 columns ahead of the infantry).
+  if(Lead>=EnemyHomeCol-2&&!bWait){Enter(2,TEXT("strike"));return;}
+  // Next stop: two columns ahead of the leading squad along the edge row, using a bridge when the segment crosses water. A stop once
+  // given is kept when the lead falls back (groupui-surprise4-I-s7/s3: Lead+2 rebuilt each tick pulled the group back with a retreat);
+  // while waiting it does not move forward.
+  int32 Next=FMath::Min(Lead+2,EnemyHomeCol-2);
+  if(G.SurpriseNextCol>=0)Next=bWait?FMath::Max(Lead,FMath::Min(Next,G.SurpriseNextCol)):FMath::Max(Next,G.SurpriseNextCol);
+  else if(bWait)Next=Lead;
+  G.SurpriseNextCol=Next;
   G.Rally=BattleSectors::Center(FrontCell(Team,Next,G.SurpriseRow));
   UpdateSurpriseBridge(G,LeadPosition);
  }

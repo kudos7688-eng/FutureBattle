@@ -249,8 +249,8 @@
 | `-BattleSuppressionRadius` | other |  | BattleSuppression.cpp:11 |  |
 | `-BattleSuppressionSpread` | other |  | BattleSuppression.cpp:12 |  |
 | `-BattleSuppressionSupport` | other |  | BattleSuppression.cpp:14 |  |
-| `-BattleSurpriseGroup` | other |  | BattleFrontLine.cpp:296 |  |
-| `-BattleSurpriseSquads` | other |  | BattleFrontLine.cpp:317 | an AI group needs two squads |
+| `-BattleSurpriseGroup` | other |  | BattleFrontLine.cpp:319 |  |
+| `-BattleSurpriseSquads` | other |  | BattleFrontLine.cpp:340 | an AI group needs two squads |
 | `-BattleSymmetricStart` | Value | -1 | BattleGroups.cpp:56 |  |
 | `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:56 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |
