@@ -413,6 +413,10 @@ public:
  void StepCorpses();
  void HideCorpse(int32 ID);
  bool IsCorpseHidden(int32 ID) const {return HiddenCorpses.Contains(ID);}
+ // Stage 2 diagnosis (BattleStateTrace.cpp, Docs/design-divergence-trace.md): -BattleStateTrace=<N> writes BATTLE_STATE_TRACE every N
+ // frames with one hash per block of the match state (positions, health, cover, perception, plans, match, shots); reads only.
+ void StepStateTrace();
+ int32 StateTraceFrame=0;
  bool IsBlindFiring(int32 ID,double Now) const {const double* T=BlindFireUntil.Find(ID);return T&&*T>Now;}
  // Where a blind shot leaves: above the top of a low cover, or just past the edge of a wide one, with a clear first stretch
  // toward AimPoint. False when neither works (the caller falls back to the old peek).
