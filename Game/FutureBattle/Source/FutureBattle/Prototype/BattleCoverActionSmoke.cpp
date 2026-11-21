@@ -332,7 +332,10 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
   }
   Check(A->LastHitReact>-SmokeHit,TEXT("a hit after HitReactSeconds plays a new reaction"));
   U.HP+=3.f;
-  CancelCoverAction(2);LastFireTimes.Add(2,Now);SmokeStage=20;Later(.6f);return;
+  // The follower's mesh starts turned 30 degrees off: the turn must bring the rifle back along his facing.
+  CancelCoverAction(2);LastFireTimes.Add(2,Now);
+  if(auto* B2=Bodies.Find(2);B2 && B2->Mesh.IsValid()){B2->MuzzleYaw=30.f;B2->Mesh->SetRelativeRotation(FRotator(0,-60,0));}
+  SmokeStage=20;Later(.6f);return;
  }
  // Rendered run: a near follower (one whole-body clip, no upper layer) that has just fired turns his mesh so the rifle points
  // along his facing, the shot's direction (UBattleLeaderRuntime::AimFollowerRifles).
@@ -347,7 +350,15 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    Off=FMath::Abs(FMath::FindDeltaAngleDegrees(Barrel.Rotation().Yaw,B.Capsule->GetForwardVector().Rotation().Yaw));
   }
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_FOLLOWER_MUZZLE near=%d clip=%s mesh_turn=%.1f barrel_yaw_off=%.1f"),bNear?1:0,bNear&&B.Mesh->GetSingleNodeInstance()&&B.Mesh->GetSingleNodeInstance()->GetAnimationAsset()?*B.Mesh->GetSingleNodeInstance()->GetAnimationAsset()->GetName():TEXT("none"),B.MuzzleYaw,Off);
-  Check(bNear && Off<6.f,TEXT("a near follower that fires points his rifle along his facing (mesh turned)"));
+  Check(bNear && Off<6.f,TEXT("a near follower that fires points his rifle along his facing (mesh turned back from 30 degrees off)"));
+  // He stops firing: the turn eases back to none after ReadySeconds.
+  LastFireTimes.Add(2,Now-BattleBodyAnim::ReadySeconds-1.);SmokeStage=21;Later(.4f);return;
+ }
+ if(SmokeStage==21)
+ {
+  const auto& B=Bodies.FindChecked(2);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_FOLLOWER_MUZZLE stopped mesh_turn=%.1f"),B.MuzzleYaw);
+  Check(FMath::Abs(B.MuzzleYaw)<.1f,TEXT("a follower that stopped firing turns his mesh back"));
  }
  if(BodyShotPrefix().IsEmpty())CancelCoverAction(1);
  Check(Store->Find(1)->CoverPhase==0,TEXT("explicit release clears cover action"));

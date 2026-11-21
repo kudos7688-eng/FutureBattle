@@ -115,7 +115,6 @@ void UBattleLeaderRuntime::StepBodyTimers()
 {
  const double Now=GetWorld()->GetTimeSeconds();
  if(BattleStance::AnimEnabled() && Now>=NextPoseAudit){NextPoseAudit=Now+1.;AuditFollowerPoses(Now);}
- if(BattleBodyAnim::Enabled())AimFollowerRifles(Now);
  if(BodyTimers.IsEmpty())return;
  for(auto It=BodyTimers.CreateIterator();It;++It)
  {
@@ -154,7 +153,9 @@ void UBattleLeaderRuntime::AimFollowerRifles(double Now)
   if(B.Actor.IsValid()||!B.Mesh.IsValid()||!B.Weapon.IsValid()||!B.Mesh->IsComponentTickEnabled()||(VAT&&VAT->IsFar(ID)))continue;
   const auto* U=Store->Find(ID);if(!U||!U->IsAlive())continue;
   // Cover clips and blind fire turn the mesh themselves (BattleCoverAction.cpp); leave it to them.
-  if(U->CoverPhase||B.CoverClipPhase||B.bBlindPose){B.MuzzleYaw=0.f;continue;}
+  // Moving into or out of cover without a cover clip yet, the turn is dropped here (the cover code may not set the rotation).
+  if(B.CoverClipPhase||B.bBlindPose){B.MuzzleYaw=0.f;continue;}
+  if(U->CoverPhase){if(B.MuzzleYaw!=0.f){B.MuzzleYaw=0.f;B.Mesh->SetRelativeRotation(FRotator(0,-90,0));}continue;}
   float Want=0.f;
   if(Now-LastFireTimes.FindRef(ID,-100.)<BattleBodyAnim::ReadySeconds && !B.bRunPose && B.Pose!=2 && StanceOf(ID)!=BattleStance::Prone)
   {

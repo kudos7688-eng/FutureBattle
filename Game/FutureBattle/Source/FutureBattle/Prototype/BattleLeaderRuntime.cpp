@@ -1297,6 +1297,8 @@ void UBattleLeaderRuntime::Step(float Dt)
  // Named CPU trace scopes (Unreal Insights, -trace=cpu): free when no trace is recording.
  TRACE_CPUPROFILER_EVENT_SCOPE(BattleRuntimeStep);
  if(SightExperiment.Enabled) { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightExperiment); StepSightExperiment(Dt); }
+ // After the previous frame's facing and poses; also on the Phase3 path (it returns before the body timers).
+ if(BattleBodyAnim::Enabled())AimFollowerRifles(GetWorld()->GetTimeSeconds());
  if(Phase3 && Phase3->bEnabled) { Phase3->Step(Dt); return; }
  StepBodyTimers();
  StepCorpses();
