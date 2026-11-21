@@ -3,6 +3,7 @@
 #include "BattleState.h"
 #include "BattleBodyAnim.h"
 #include "BattleFollowerBones.h"
+#include "BattleRagdoll.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleFieldLayout.h"
 #include "BattleUnit.h"
@@ -116,13 +117,15 @@ void UBattleLeaderRuntime::StepBodyTimers()
  const double Now=GetWorld()->GetTimeSeconds();
  if(BattleStance::AnimEnabled() && Now>=NextPoseAudit){NextPoseAudit=Now+1.;AuditFollowerPoses(Now);}
  if(BodyTimers.IsEmpty())return;
+ TArray<int32> Falling;
  for(auto It=BodyTimers.CreateIterator();It;++It)
  {
   if(Now<It.Value().At)continue;
-  const int32 ID=It.Key();const bool bFreeze=It.Value().bFreeze;It.RemoveCurrent();
+  const int32 ID=It.Key();const bool bFreeze=It.Value().bFreeze,bSettle=It.Value().bSettle;It.RemoveCurrent();
   const auto* B=Bodies.Find(ID);
   if(!B||B->Actor.IsValid()||!B->Mesh.IsValid())continue;
-  if(bFreeze)
+  if(bSettle)BattleRagdoll::Settle(B->Mesh.Get());
+  else if(bFreeze)
   {
    // Frame skipping (-BattleFollowerAnimSkip/-BattleFollowerAnimBudget) may still owe the clip some time: put the death clip on
    // its last frame before the tick stops, or the body would hold a pose halfway down.
@@ -130,10 +133,13 @@ void UBattleLeaderRuntime::StepBodyTimers()
    if(auto* V=Cast<UBattleVATSkeletalMeshComponent>(M))V->EndAnimSkip();
    if(auto* Node=M->GetSingleNodeInstance())if(const auto* Clip=Cast<UAnimSequenceBase>(Node->GetAnimationAsset()))
    {Node->SetPosition(Clip->GetPlayLength(),false);M->TickAnimation(0,false);M->RefreshBoneTransforms(nullptr);}
-   BattleFollowerBones::PrepareFreeze(M,bReduceHiddenBones);M->SetComponentTickEnabled(false);
+   // The clip ends bent over, still standing: the body falls the rest of the way under physics, then holds.
+   if(BattleRagdoll::Start(M))Falling.Add(ID);
+   else{BattleFollowerBones::PrepareFreeze(M,bReduceHiddenBones);M->SetComponentTickEnabled(false);}
   }
   else RefreshFollowerPose(ID);
  }
+ for(int32 ID:Falling)BodyTimers.Add(ID,{Now+BattleRagdoll::SettleSeconds,false,true});
 }
 
 void UBattleLeaderRuntime::AuditFollowerPoses(double Now)

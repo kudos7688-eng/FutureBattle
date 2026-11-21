@@ -1,13 +1,14 @@
 // Death look check (2026-11-21): -BattleDeathShot -BattleArea -BattleWideScreens=<prefix> on a wide mixed map.
 // Combat is paused. A starting follower of team 0 drawn by the far display (VAT) from a high camera is killed: it must
-// leave the far display and play a death clip (the far display has none), then hold its last frame with the body's tick off and
-// stay out of the far display. The leader (an actor) is killed next. Close-ups while dying and dead. Setup/Test-DeathShot.ps1 runs it.
+// leave the far display and play a death clip (the far display has none), fall the rest of the way under physics (BattleRagdoll)
+// and hold, lying, with the body's tick and physics off, out of the far display. The leader (an actor) is killed next. Close-ups while dying and dead. Setup/Test-DeathShot.ps1 runs it.
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
 #include "BattleController.h"
 #include "BattleState.h"
 #include "BattleUnit.h"
 #include "BattleVATDisplay.h"
+#include "BattleRagdoll.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSingleNodeInstance.h"
 #include "Camera/CameraActor.h"
@@ -47,6 +48,12 @@ void UBattleLeaderRuntime::RunDeathShot()
   if(Time)*Time=Node?Node->GetCurrentTime():-1.f;
   return Node?Node->GetAnimationAsset():nullptr;
  };
+ // How far the pelvis is above the lower foot: about 85 standing or bent over, under 40 lying.
+ auto Lying=[&](USkeletalMeshComponent* M)->float
+ {
+  if(!M)return 999.f;
+  return M->GetBoneLocation(TEXT("pelvis")).Z-FMath::Min(M->GetBoneLocation(TEXT("foot_l")).Z,M->GetBoneLocation(TEXT("foot_r")).Z);
+ };
  auto Close=[&](int32 ID){const FVector P=Position(ID);Look(P+FVector(-260,-260,170),P+FVector(0,0,-40));};
  Mode->bCombatPaused=true;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();
@@ -71,28 +78,39 @@ void UBattleLeaderRuntime::RunDeathShot()
   UE_LOG(LogFutureBattle,Display,TEXT("DEATH_SHOT follower=%d leader=%d far_before=%d"),Follower,Leader,bFar);
   // The check is about the far display: without a far follower it would pass whatever OnDeath does.
   Check(bFar,TEXT("the follower is drawn by the far display before it dies"));
-  Shot(TEXT("high"));
+  Shot(TEXT("high"));Later(.2f);return;
+ }
+ // A screenshot is taken at the end of the frame: the camera moves one stage after it.
+ case 2:
+ {
   Store->ApplyDamage(Follower,1,100000.f);
   Check(!VAT||!VAT->IsFar(Follower),TEXT("a dying follower leaves the far display"));
   Check(Clip(Follower)&&Clip(Follower)==DeathClip(Follower),TEXT("a dying follower plays its death clip"));
   Close(Follower);Later(.3f);return;
  }
- case 2: Shot(TEXT("follower_dying"));Later(.6f);return;
- case 3: Shot(TEXT("follower_falling"));Later(3.f);return;
- case 4:
+ case 3: Shot(TEXT("follower_dying"));Later(.6f);return;
+ case 4: Shot(TEXT("follower_falling"));Later(4.f);return;
+ case 5:
  {
-  float T=0;const auto* A=Clip(Follower,&T);const auto* B=Bodies.Find(Follower);
-  UE_LOG(LogFutureBattle,Display,TEXT("DEATH_SHOT follower clip=%s time=%.3f length=%.3f tick=%d"),A?*A->GetName():TEXT("none"),T,A?CastChecked<UAnimSequence>(A)->GetPlayLength():0.f,B&&B->Mesh.IsValid()&&B->Mesh->IsComponentTickEnabled());
-  Check(A&&FMath::IsNearlyEqual(T,CastChecked<UAnimSequence>(A)->GetPlayLength(),.05f),TEXT("the corpse holds the last frame of its death clip"));
-  Check(B&&B->Mesh.IsValid()&&!B->Mesh->IsComponentTickEnabled(),TEXT("the corpse's body no longer ticks"));
-  Shot(TEXT("follower_dead"));
-  Store->ApplyDamage(Leader,1,100000.f);
-  Close(Leader);Later(.4f);return;
+  float T=0;const auto* A=Clip(Follower,&T);const auto* B=Bodies.Find(Follower);USkeletalMeshComponent* M=B?B->Mesh.Get():nullptr;
+  const float Height=Lying(M);
+  UE_LOG(LogFutureBattle,Display,TEXT("DEATH_SHOT follower clip=%s time=%.3f length=%.3f tick=%d physics=%d pelvis_above_feet=%.0f"),A?*A->GetName():TEXT("none"),T,A?CastChecked<UAnimSequence>(A)->GetPlayLength():0.f,M&&M->IsComponentTickEnabled(),M&&M->IsAnySimulatingPhysics(),Height);
+  Check(A&&FMath::IsNearlyEqual(T,CastChecked<UAnimSequence>(A)->GetPlayLength(),.05f),TEXT("the corpse's death clip has played to its end"));
+  Check(M&&!M->IsComponentTickEnabled()&&!M->IsAnySimulatingPhysics(),TEXT("the corpse's body no longer ticks or simulates"));
+  Check(!BattleRagdoll::Enabled()||Height<40.f,TEXT("the corpse lies on the ground"));
+  Shot(TEXT("follower_dead"));Later(.2f);return;
  }
- case 5: Shot(TEXT("leader_dying"));Later(3.f);return;
- case 6:
+ case 6: Store->ApplyDamage(Leader,1,100000.f);Close(Leader);Later(.4f);return;
+ case 7: Shot(TEXT("leader_dying"));Later(4.f);return;
+ case 8:
  {
-  Shot(TEXT("leader_dead"));
+  const auto* U=Actor(Leader);const float Height=Lying(U?U->GetMesh():nullptr);
+  UE_LOG(LogFutureBattle,Display,TEXT("DEATH_SHOT leader physics=%d pelvis_above_feet=%.0f"),U&&U->GetMesh()->IsAnySimulatingPhysics(),Height);
+  Check(!BattleRagdoll::Enabled()||Height<40.f,TEXT("the leader's corpse lies on the ground"));
+  Shot(TEXT("leader_dead"));Later(.2f);return;
+ }
+ case 9:
+ {
   const FVector P=Position(Follower);Look(P+FVector(-9000,0,9000),P);
   Later(1.f);return;
  }
