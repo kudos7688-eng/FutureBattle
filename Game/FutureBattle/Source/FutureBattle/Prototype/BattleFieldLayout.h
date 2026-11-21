@@ -3,6 +3,7 @@
 #include "Engine/World.h"
 #include "BattleSectors.h"
 #include "BattleMapI.h"
+#include "BattleMapJ.h"
 
 namespace BattleFieldLayout
 {
@@ -156,6 +157,41 @@ namespace BattleFieldLayout
 				for(int32 I=0;I<6;++I){Edge(RoadX[I],20000,RoadX[I+1],20000,ERouteLane::North);Edge(RoadX[I],-20000,RoadX[I+1],-20000,ERouteLane::South);}
 				for(double X:RoadX){Edge(X,20000,X,0,ERouteLane::Connector);Edge(X,0,X,-20000,ERouteLane::Connector);}
 				D.Heights=BattleMapI::MakeHeights(D.HalfExtent);
+				T.Add(D);
+			}
+			// J (2026-11-22, Docs/design-map-j-terrain.md): the grid of I with two mountain ranges (impassable, they block sight) that split
+			// the field into a north lane, a valley with the town and a lake, and a south lane, joined by passes; varied buildings (office
+			// towers, apartment blocks, a church, factories, ruins, car parks, parks, shops). Eight objectives as on I (0 and 7 depots).
+			{
+				FMapDef D=Urban;D.Name=TEXT("Lvl_BattleWide_J");
+				D.bSectors=true;
+				D.SectorKind=[](FIntPoint C)->char
+				{
+					switch(BattleMapJ::Kind(C.X,C.Y))
+					{
+					case TEXT('h'):return '^';case TEXT('P'):case TEXT('O'):case TEXT('Y'):return 'J';
+					case TEXT('D'):case TEXT('W'):case TEXT('K'):return 'W';
+					case TEXT('H'):case TEXT('B'):case TEXT('A'):case TEXT('C'):case TEXT('Q'):case TEXT('U'):return 'H';
+					case TEXT('T'):case TEXT('G'):return 'T';case TEXT('M'):return 'M';case TEXT('L'):return 'L';default:return 'F';
+					}
+				};
+				D.Objectives=BattleMapJ::Objectives();
+				D.ObjectiveOwners={0,-1,-1,-1,-1,-1,-1,1};
+				D.ObjectiveValues={2,1,1,1,1,1,1,2};
+				D.PointIncomeScale=.5f;
+				D.CityHalf=FVector2D(35000,15000);
+				// Lookouts: the knolls in the north lane (east) and the south lane (west).
+				D.Lookouts={FVector(32500,22500,500),FVector(-32500,-22500,500)};
+				auto Node=[&D](double X,double Y){const FVector P(X,Y,0);for(int32 I=0;I<D.RouteNodes.Num();++I)if(D.RouteNodes[I].Equals(P,1))return I;return D.RouteNodes.Add(P);};
+				auto Edge=[&](double X0,double Y0,double X1,double Y1,ERouteLane Lane){FRouteEdge E;E.A=Node(X0,Y0);E.B=Node(X1,Y1);E.Lane=Lane;D.RouteEdges.Add(E);};
+				const double AvenueX[]={-42000,-25000,-17500,0,17500,25000,42000};
+				for(int32 I=0;I<6;++I)Edge(AvenueX[I],0,AvenueX[I+1],0,ERouteLane::Centre);
+				const double LaneX[]={-40000,-25000,-17500,0,17500,25000,40000};
+				for(int32 I=0;I<6;++I){Edge(LaneX[I],25000,LaneX[I+1],25000,ERouteLane::North);Edge(LaneX[I],-25000,LaneX[I+1],-25000,ERouteLane::South);}
+				// Lanes join the valley only through the passes (x = +-17500) and beside the homes (x = +-40000).
+				for(double X:{-40000.,-17500.,17500.,40000.}){Edge(X,25000,X,0,ERouteLane::Connector);Edge(X,0,X,-25000,ERouteLane::Connector);}
+				Edge(-42000,0,-40000,0,ERouteLane::Centre);Edge(40000,0,42000,0,ERouteLane::Centre);
+				D.Heights=BattleMapJ::MakeHeights(D.HalfExtent);
 				T.Add(D);
 			}
             {

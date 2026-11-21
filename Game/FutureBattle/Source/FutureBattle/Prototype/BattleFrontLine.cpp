@@ -64,7 +64,7 @@ namespace BattleFrontValues
  //  - Heavy damage (BackDamage or more): the row falls back one column, at most once per BackHold seconds.
  constexpr double LightDamage=.03, BackDamage=.10, PushRatio=1.5, Swamp=2.; constexpr int32 SwampMin=4; constexpr float BackHold=10.f;
  // Sector kinds by the cover they give a squad that waits there (river sectors are not held).
- double Cover(char Kind){switch(Kind){case 'H':case 'W':return 3.;case 'T':case '^':return 2.;case 'J':case 'B':case 'S':return 1.;case 'R':return -100.;default:return 0.;}}
+ double Cover(char Kind){switch(Kind){case 'H':case 'W':return 3.;case 'T':case '^':return 2.;case 'J':case 'B':case 'S':return 1.;case 'R':case 'M':case 'L':return -100.;default:return 0.;}}
 }
 
 bool UBattleMatch::FrontLineOn(int32 Team) const

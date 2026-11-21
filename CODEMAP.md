@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（156 モジュール、37935 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（157 モジュール、38175 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -58,7 +58,7 @@
 | 保存・復元 | `UBattleMatch::SaveMatch` (BattleSave.cpp:502) 、 `UBattleMatch::LoadMatch` (BattleSave.cpp:513) 、 `UBattleMatch::CaptureSnapshot` (BattleSave.cpp:238) 、 `UBattleMatch::RestoreSnapshot` (BattleSave.cpp:351) | 検証は `UBattleSave::Validate` (BattleSave.cpp:103) 、 `UBattleSave::ValidateMixed` (BattleMixedSaveValidation.cpp:8) 。戦術状態は `UBattleSquadTactics::CaptureSave` (BattleTacticsSave.cpp:4) |
 | プレイヤー経路の任意保存（S02） | `BattleTactics::SaveRoutes` (BattleSave.cpp:83) 、 `UBattleSave::Serialize` (BattleSave.cpp:96) 、 `UBattleSave::Validate` (BattleSave.cpp:103) | `-BattleSaveRoutes=1`（既定0）。PlayerRoutesVersion=1で最終命令・目的地・残り中継点・レーン・進行・相対期限を保存。OFF／経路なしは新規タグなし。検査は `UBattleLeaderRuntime::RunMixedSaveSmoke` (BattleMixedSaveSmoke.cpp:17) 内で一時切替 |
 | 表示（混成の体・遠距離 VAT） | `UBattleLeaderRuntime::CreateBody` (BattleMixedBodies.cpp:18) 、 `UBattleLeaderRuntime::RefreshDisplay` (BattleLeaderRuntime.cpp:1307) 、 `ABattleVATDisplay::Tick` (BattleVATDisplay.cpp:308) | 復元時は `UBattleLeaderRuntime::RestoreMixedBodies` (BattleMixedBodies.cpp:68) |
-| マップの定義・配置 | `BattleFieldLayout.h`（マップごとの表 `Maps()`） | 生成は `UBattleMapCommandlet::Main` (BattleMapCommandlet.cpp:38) （既存の手編集を `-Force` で上書きしない） |
+| マップの定義・配置 | `BattleFieldLayout.h`（マップごとの表 `Maps()`） | 生成は `UBattleMapCommandlet::Main` (BattleMapCommandlet.cpp:39) （既存の手編集を `-Force` で上書きしない） |
 | 通り道（道路網に沿った移動の指示） | `UBattleMatch::RouteStep` (BattleRoutes.cpp:43) 、 `UBattleMatch::RouteFlankSide` (BattleRoutes.cpp:33) | 呼び出しは `UBattleMatch::UpdateTeamOrders` (BattleMatch.cpp:351) 。道路網は `FMapDef::RouteNodes/RouteEdges` |
 | 高低差（丘・階段・2階。マップG） | `UBattleLeaderRuntime::TerrainStep` (BattleStableMovement.cpp:35) 、 `UBattleMatch::UpdateTerrainTest` (BattleTerrainTest.cpp:24) | 高さの表は `BattleTerrain.h`（`FHeights::Ground`、家と丘の位置 `HousesG/HillsG`）と `FMapDef::Heights`。形は `BattleMapLayoutG.inl`。隊長はエンジンの歩行、多数兵は表に沿う。自己試験 `Test-WideSight.ps1 -Map G -HeightTest` |
 | マップの数値監査（試合なし） | `UBattleLeaderRuntime::RunMapStats` (BattleMapStats.cpp:38) | `Setup/Test-MapStats.ps1`。拠点ごとの持ち主・価値は `FMapDef::ObjectiveOwners/ObjectiveValues` |
@@ -97,7 +97,7 @@
 | `BattleCoverAction` | .cpp | 491 |  | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部） |
 | `BattleCoverClips` | .h | 79 | BattleCoverClips, FSet | 遮蔽の状態 → 遮蔽アニメの対応表（データだけ。「アセット参考資料の検討」セッション作） |
 | `BattleExo` | .cpp | 388 |  | 外骨格兵：盾の回復、副武器（肩の対戦車火器）、専用の部隊判断と軍の割り当て、見た目（AC01の体と武器＝ApplyExoSuit） |
-| `BattleFieldLayout` | .h | 246 | BattleFieldLayout, FMapDef | マップごとの定義（広さ、拠点、試合時間）を1つの表にまとめたもの |
+| `BattleFieldLayout` | .h | 282 | BattleFieldLayout, FMapDef | マップごとの定義（広さ、拠点、試合時間）を1つの表にまとめたもの |
 | `BattleFieldReplay` | .cpp | 206 |  | 広域試験の記録と再生（UBattleSquadTrial の一部） |
 | `BattleFieldTurn` | .cpp | 168 |  | 広域試験 T2b（UBattleSquadTrial の一部） |
 | `BattleFollowerBones` | .h/.cpp | 10 + 39 | BattleFollowerBones | 霧で隠れた部下のボーン表示の切替 |
@@ -107,6 +107,7 @@
 | `BattleHUD` | .h/.cpp | 68 + 1485 | ABattleHUD | 画面表示（HUD、ミニマップ、部隊一覧、通知、命令の印） |
 | `BattleLeaderRuntime` | .h/.cpp | 688 + 1626 | FBattleFollowerFragment, FBattleSquadSummary, FBattleSquadListRow, FBattleSquadListLayout, FBattleMinimapLayout, FBattleLeaderBody, FBattleLeaderPlan, UBattleLeaderRuntime ほか1 | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新 |
 | `BattleMapI` | .h | 112 | BattleMapI | マップI（区画を前提にした設計）の表：50mの区画 20×14 の種類 `Kind`、道路 `Roads`、川・橋・浅瀬の位置、家 `Houses`・丘 `Hills`、高さの表 `MakeHeights`、拠点 `Objectives`。配置は `BattleMapLayoutI.inl`（生成と共有） |
+| `BattleMapJ` | .h | 141 | BattleMapJ, FMirror | マップJ（11-22、`Docs/design-map-j-terrain.md`）の区画の表：山 `M`（通れない・見通しを遮る）・湖 `L`（通れない）と、ビル・集合住宅・教会・工場・廃墟・駐車場・公園・商店の区画。区画ごとの配置の候補と8通りの向き（`Variant`／`Mirror`）、入れる家の位置（`HouseOf`）、拠点・丘・道。配置は `BattleMapLayoutJ.inl`、生成は `BattleMapCommandlet`（`-WideField=J`、`Setup/Initialize-MapJ.ps1`） |
 | `BattleMapStats` | .cpp | 186 |  | マップの統計（区域ごとの見通し・遮蔽、経路の長さ）を JSON に書き出す。試合は行わない（UBattleLeaderRuntime の一部） |
 | `BattleMatch` | .h/.cpp | 437 + 532 | FAreaIntent, FBattleObjective, FBattleStrike, FPlayerRoute, UBattleMatch, FGroupStrength | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗 |
 | `BattleMetrics` | .h/.cpp | 65 + 142 | FBattleMetricFrame, UBattleMetrics, FBattleScopedMetric | 計測値の記録（1フレームの時間、判断の回数） |
@@ -131,7 +132,7 @@
 | `BattleScoutReport` | .cpp | 168 |  | 偵察報告（UBattleMatch の一部） |
 | `BattleSectorRoute` | .cpp | 218 |  | 区画経由の移動 `-BattleSectorRoute`・側面 `-BattleSectorFlank`・前線 `-BattleSectorFront`（区画のあるマップ、AIの歩兵）：道路網の次の交差点の代わりに、その周りで遮蔽の多い区画を制圧・維持しながら進む。側面は観測した敵の正面を避けた区画、前線は自軍の区画のうち敵に接する区画（UBattleMatch の一部） |
 | `BattleSectorView` | .h/.cpp | 71 + 191 | FBattleFogGrid, FBattleSectorInfo, BattleSectorView | 作戦画面の表示だけ（規則・AIは読まない）：自軍の視界の格子 `FBattleFogGrid`（12.5m、自軍の兵から静的な物体への光線）と区画ごとの状態 `BattleSectorView::Gather`（自軍の人数・観測した敵・視界の割合・拠点・命令中の部隊・遮蔽位置の数） |
-| `BattleSectors` | .h | 68 | BattleSectors | マップHの50m区画の格子（20×14）：区画の番号と中心、区画の種類の表、川・橋・浅瀬の位置 |
+| `BattleSectors` | .h | 70 | BattleSectors | マップHの50m区画の格子（20×14）：区画の番号と中心、区画の種類の表、川・橋・浅瀬の位置 |
 | `BattleSquadAI` | .h/.cpp | 35 + 198 | FBattleSquadPlan, UBattleSquadAI | 旧全Actor経路の部隊 AI |
 | `BattleSquadFlank` | .cpp | 202 |  | 迂回の判断（UBattleSquadTactics の一部） |
 | `BattleSquadRetreat` | .cpp | 274 |  | 撤退の判断と適用（UBattleSquadTactics の一部。Evaluate と Apply はここ） |
@@ -192,7 +193,7 @@
 | `BattleHiddenBoneTrial` | .h/.cpp | 27 + 74 | ABattleHiddenBoneTrial |  |
 | `BattleLargeFieldTest` | .cpp | 83 |  |  |
 | `BattleLeaderSmoke` | .cpp | 144 |  |  |
-| `BattleMapCommandlet` | .h/.cpp | 14 + 586 | UBattleMapCommandlet | Reproducible editor-only arena authoring; never overwrites a map unless -Force is passed. |
+| `BattleMapCommandlet` | .h/.cpp | 14 + 645 | UBattleMapCommandlet | Reproducible editor-only arena authoring; never overwrites a map unless -Force is passed. |
 | `BattleMassTrial` | .h/.cpp | 49 + 86 | UBattleTrialMovement, ABattleMassTrialUnit, FBattleTrialMotion, UBattleMassTrial | Flat-ground benchmark adapter. Navigation, RVO and swept capsule collisions |
 | `BattleMatchSmoke` | .cpp | 58 |  |  |
 | `BattleMatchSoak` | .cpp | 60 |  |  |
@@ -215,7 +216,7 @@
 | `BattleSaveSmoke` | .cpp | 81 |  |  |
 | `BattleScaleSmoke` | .cpp | 84 |  |  |
 | `BattleScopeShot` | .cpp | 48 |  | 構え・スコープの撮影試験（UBattleLeaderRuntime の一部） |
-| `BattleSectorAudit` | .cpp | 105 |  | 区画命令の検証 `-BattleSectorAudit`（区画のあるマップ、描画なし）：全区画へ制圧命令を出して受け付けを数え、8部隊の到着位置が区画内か、240秒後に維持へ移ったかを報告する。規則は変えない |
+| `BattleSectorAudit` | .cpp | 107 |  | 区画命令の検証 `-BattleSectorAudit`（区画のあるマップ、描画なし）：全区画へ制圧命令を出して受け付けを数え、8部隊の到着位置が区画内か、240秒後に維持へ移ったかを報告する。規則は変えない |
 | `BattleSightExperiment` | .h/.cpp | 56 + 296 | FBattleSightExperiment |  |
 | `BattleSightTrial` | .cpp | 77 |  | Diagnostic fixture: retain 500 bodies, isolate one observer and one target. |
 | `BattleSightVisual` | .cpp | 37 |  | 視界の目視確認用の表示（UBattleLeaderRuntime の一部） |

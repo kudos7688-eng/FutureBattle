@@ -1,13 +1,16 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
 if ($Map -eq 'H') {
     & (Join-Path $PSScriptRoot 'Initialize-MapH.ps1') -Project $project
 }
+if ($Map -eq 'J') {
+    & (Join-Path $PSScriptRoot 'Initialize-MapJ.ps1') -Project $project
+}
 # Maps with sectors (H, I): the same play condition.
-if ($Map -eq 'H' -or $Map -eq 'I') {
+if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J') {
     $extra += '-BattleLeaderGuard=1'
     # Player's move click = sector move that fires on the move; a drawn line = point move (BattlePlayerPath.cpp).
     $extra += '-BattleSectorMove=1'
