@@ -24,6 +24,26 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-22 2時40分 Claude（Codex委任）：砲兵の直しの評価と、襲撃が自走砲に届かない原因・その直し（codex、既定 OFF の試験切替）
+
+- **砲兵の直しの評価（main ff8c3f8 のビルド、マップI、60FPS、各1試合）**：共通 `-Experiment -Area -CoverActions 1 -FlankCoordination 1 -AreaCompositionPlanner 1 -AreaMaxSquads 35 -AreaSPGKeep 1 -AreaExoKeep 1 -VehicleOrderHere 1`。「すべて」は `-ArtilleryFlash 1 -ArtilleryPosts 1 -SPGRange 55000 -AreaSPGCost 45`。
+
+  | 試合 | 得点 軍0/軍1 | 自走砲の発射 | 自走砲の撃破 | 陣地の疑い | 襲撃 |
+  |---|---|---|---|---|---|
+  | s7 既定 | 742/504 | 152 | 192 | 0 | 0 |
+  | s7 すべて | 633/447 | 121 | 131 | 38 | 7 |
+  | s7 すべて・射程は既定（100000） | 584/639 | 149 | 184 | 0 | 0 |
+  | s7 すべて・陣地なし | 689/397 | 107 | 108 | 0 | 0 |
+  | s19 既定 | 663/515 | 151 | 197 | 0 | 0 |
+  | s19 すべて | 561/724 | 118 | 138 | 46 | 3 |
+
+  射程55000で自走砲の撃破は3〜4割減る（2 seed で同じ向き）。射程が既定だと自走砲は陣地から遠い後方で撃つので、疑いも襲撃も起きない。**どの試合でも迫撃砲は買われず（発射0）、自走砲は1両も撃破されなかった。襲撃10件はすべて `reason=expired`。** 原因：襲撃は公開陣地へ向かうが、公開陣地を使うのは迫撃砲だけで、自走砲は `AreaArtilleryPost` の別の位置にいる。陣地の証拠は陣地から30m以内の発砲でしか更新されず、60秒で切れる。
+- **`-BattleArtilleryRaidChase`（codex 391042d、既定0、Codex が実装・点検済み）**：襲撃は気付いた最新の砲兵の発砲位置へ向かい、新しい発砲を追う。証拠から120秒で `expired`、目標の25m以内に20秒いて新しい発砲がなければ `cleared`。OFF では従来と同じ（目標・判定・ログ・乱数）。Build 成功、`Test-Battle`・`Test-Area` failures=0（codex のビルド）。
+- **追う襲撃の評価（codex 391042d、マップI、30FPS、「すべて」と同じ条件に `-ArtilleryRaidChase 0/1`）**：s7 は 462/668→607/614、s19 は 431/693→637/610。目標の取り直しは113回・110回だが、**自走砲の撃破は0のまま**。外骨格の小隊は x≈-7000（中央の手前）で `ENGAGE / FLANK / SUPPORT` を繰り返し、盾が落ちると下がって補給に戻っていた（攻撃前進は途中の敵すべてと撃ち合う）。得点が軍0 に振れたのは、外骨格が戦線から抜けた影響か偶然か不明。出力は `FutureBattle-codex/Setup/Benchmarks/SightTrial-20261111/chase-I30-s{7,19}-c{0,1}`。
+- **`-BattleArtilleryRaidSneak=<m>`（codex a938078、既定0、未ビルド）**：襲撃の隊長が目標からこの距離より遠い間は移動の命令にする（敵を狙っても止まらず、遮蔽の行動もしない）。近づいたら攻撃前進。本拠地攻めの S5 と同じ考え方。設計は `Docs/design-vehicle-survival.md`。
+- **観測の規則 ON の確認**：マップE seed7 60FPS `-RoundTripSave -ObservedArmour 1 -ObservedTactics 1` は完走（`SIGHT_EXPERIMENT_RESULT failures=0`、`BATTLE_MIXED_SAVE_SOAK_RESULT failures=0`、571/643）。
+- **次の一手**：ロックの列の番で codex をビルドし、`-ArtilleryRaidSneak 0/80`（30FPS、2 seed）を比べる。外骨格が自走砲に届けば main へ取り込む。迫撃砲を使わせるなら `-AreaMortarKeep 1` も評価する。
+
 ## 2026-11-22 2時10分 Claude（ロードマップに従う改善活動）：計測ロックをファイルの順番待ちの列に切り替え（ユーザー決定「入れてよい」）
 - **変更**：`Setup/Lock-Queue.ps1`（main 7b50fa2）。`-Join -Who <セッション名> -Purpose <用途> -Minutes <見込み>` → `-Wait -Who <名>`（Claude は `run_in_background`、自分の番で終わる）→ 作業 → `-Release -Who <名>`（次の人が自動で持ち主になる）。`-Status` で持ち主と列、`-Leave` で列を抜ける、`-Urgent` はユーザーのプレイの確認で列の先頭へ。列は作業ツリーの外の `FPS/.lock/queue.json`、履歴は `queue-log.jsonl`。持ち主が見込み＋30分を過ぎ、UE・ビルドのプロセスが無ければ次の人に渡る。設計は [Docs/design-lock-queue.md](Docs/design-lock-queue.md)。
 - **手順書**：`MEASURE.md` の 0-1、`/measure` スキル、メモリを書き換えた。区画AI・個人AI・群制御に周知した（射程円のセッションは閉じていて届かず）。
