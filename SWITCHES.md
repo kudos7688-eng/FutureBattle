@@ -225,7 +225,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleScopeShot` | Param | off | BattleLeaderRuntime.cpp:228 |  |
 | `-BattleScoutRetreat` | Value | true | BattleScoutReport.cpp:22 |  |
 | `-BattleSeconds` | Value | 20.f | BattleBenchmark.cpp:41 |  |
-| `-BattleSectorAI` | Value | 0 | BattleMatch.cpp:456, BattleMatch.cpp:471, BattleMatch.cpp:482 |  |
+| `-BattleSectorAI` | Value | 0 | BattleMatch.cpp:454, BattleMatch.cpp:469, BattleMatch.cpp:480 |  |
 | `-BattleSectorAudit` | Param | off | BattleSectorAudit.cpp:28 |  |
 | `-BattleSectorContact` | Value | 0 | BattleLeaderRuntime.cpp:1419 |  |
 | `-BattleSectorCoverRoute` | Value | 0 | BattleSectorRoute.cpp:22 |  |
@@ -289,7 +289,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:70 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |
 | `-BattleTankGunFlash` | Strifind/Value | 0 | BattleAreaSmoke.cpp:468, BattleArtillery.cpp:48 |  |
-| `-BattleTeamSupport` | Value | 1 | BattleTeamAI.cpp:12 |  |
+| `-BattleTeamSupport` | Value | 1 | BattleTeamAI.cpp:13 |  |
 | `-BattleTerrainLineBodies` | Value | 1 | BattleTactics.cpp:233 |  |
 | `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:1344 |  |
 | `-BattleTracerShot` | Param | off | BattleStanceShot.cpp:87 |  |

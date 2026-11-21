@@ -107,6 +107,12 @@ OFFでは従来の分類・残弾／生存照会・VehicleIDs条件・照準式�
 
 追う襲撃（`-BattleArtilleryRaidChase=1`）の最初の評価（2026-11-22 2時30分、マップI 30FPS、seed7・19、両軍に自走砲1・外骨格1、陣地・発砲・射程55000・費用45）では、襲撃の外骨格は発砲を追って目標を110回ほど取り直したが、自走砲の撃破は0のままだった。外骨格の小隊は x≈-7000（中央の手前）で `ENGAGE / FLANK / SUPPORT` を繰り返し、盾が落ちると `RETREAT` して本拠地の補給へ戻っていた。攻撃前進（AttackMove）は途中の敵すべてと撃ち合うため、前線を抜けられない。
 
-`-BattleArtilleryRaidSneak=<m>`（既定0＝今のまま、0〜500）は、襲撃の小隊の隊長が目標からこの距離より遠い間、命令を移動（Move）にする。移動の命令では、敵を狙っていても止まらずに進み（`BattleContactMovement.cpp`）、遮蔽の行動もしない（`BattleCoverAction.cpp`）。近づいたら攻撃前進に戻る。本拠地攻めの S5（`-BattleAreaBaseInfiltrate`）と同じ考え方。`-BattleArtilleryPosts=1` のときだけ働く。
+`-BattleArtilleryRaidSneak=<m>`（既定0＝今のまま、0〜500）は、襲撃の小隊の隊長が目標からこの距離より遠い間（`UBattleMatch::RaidSneaking`）、次の3つをする。近づいたら攻撃前進に戻る。`-BattleArtilleryPosts=1` のときだけ働く。
+- 命令を移動（Move）にする（遮蔽の行動もしない、`BattleCoverAction.cpp`）。
+- 小隊の戦術（ST2）が、敵が見えても「その場で撃ち合う（Hold）」に切り替えない。交戦中なら3秒で任務に戻る。奇襲の群の移動（`SurpriseMoving`）と同じ扱い（`BattleSquadRetreat.cpp`）。命令を移動にするだけでは、ST2 は命令の種類を見ずに Hold へ切り替えるので効かない（自己レビューで確認）。
+- 部隊間の連携（`BattleTeamAI.cpp` の `Managed`）が、回り込み・援護に使わない。実行中の回り込み・援護は解かれる。
+盾が落ちたときの後退（`SHIELD DOWN / BREAK CONTACT`）と補給への帰還は残す。
+
+あわせて `-BattleArtilleryRaidChase` の目標の取り直しを絞った：発砲の報告には最大30mの誤差があり、同じ場所から撃つ砲でも数秒ごとに目標が動いて命令が出し直され、経路を作り直していた（命令は目標が20cm動けば出し直される）。新しい発砲が今の目標から50m以内で、隊長がまだ目標に着いていなければ、目標は変えずに証拠の時刻と到着の待ちだけを更新する。391042d の評価（取り直し110回前後）はこの変更の前のもの。
 
 評価：上の条件に `-ArtilleryRaidChase 1` を足し、`-ArtilleryRaidSneak 0` と `80` を30FPSで比べる。見る値は、自走砲の撃破、襲撃の終わり方（`cleared`/`expired`/`losses`）、外骨格の損失、両軍の得点。

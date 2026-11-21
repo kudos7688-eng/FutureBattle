@@ -733,8 +733,18 @@ void UBattleMatch::UpdateArtilleryRaids(int32 Team)
    RaidChase=&ArtilleryRaidChases.FindOrAdd(RaidSquadID);
    if(HasRaidFlash&&RememberedFlash.At>RaidChase->FlashAt)
    {
-    RaidChase->Target=RememberedFlash.Target;RaidChase->FlashAt=RememberedFlash.At;RaidChase->ArrivedAt=-1.;RaidChase->bFlash=true;
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID_RETARGET team=%d squad=%d target=%s"),Team,RaidSquadID,*RaidChase->Target.ToCompactString());
+    // A flash report carries up to 30 m of error, so a gun firing from one place moved the target (and re-issued the order, which
+    // rebuilds the route) every few seconds; keep the target unless the new flash is over 50 m away or the raider is already there.
+    bool RaidAtTarget=false;
+    if(RaidSquad)if(const auto* TargetLeader=RaidStore->Find(RaidSquad->LeaderUnitID);TargetLeader&&TargetLeader->IsAlive())
+     RaidAtTarget=FVector::DistSquared2D(RaidRuntime->Position(RaidSquad->LeaderUnitID),RaidChase->Target)<=FMath::Square(2500.);
+    const bool RaidMoveTarget=!RaidChase->bFlash||RaidAtTarget||FVector::DistSquared2D(RememberedFlash.Target,RaidChase->Target)>FMath::Square(5000.);
+    RaidChase->FlashAt=RememberedFlash.At;RaidChase->ArrivedAt=-1.;
+    if(RaidMoveTarget)
+    {
+     RaidChase->Target=RememberedFlash.Target;RaidChase->bFlash=true;
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID_RETARGET team=%d squad=%d target=%s"),Team,RaidSquadID,*RaidChase->Target.ToCompactString());
+    }
    }
    else if(!HasRaidFlash&&ChasePost!=INDEX_NONE)
    {
@@ -803,4 +813,18 @@ void UBattleMatch::UpdateArtilleryRaids(int32 Team)
   }
   else UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID team=%d squad=%d post=%d"),Team,NearestRaider,SuspectedPost);
  }
+}
+
+bool UBattleMatch::RaidSneaking(int32 SquadID) const
+{
+ const float SneakRadius=BattleTactics::ArtilleryRaidSneak();
+ if(SneakRadius<=0.f||!bArea)return false;
+ const int32* SneakPost=ArtilleryRaids.Find(SquadID);if(!SneakPost)return false;
+ const auto* SneakStore=GetWorld()->GetSubsystem<UBattleState>();const auto* SneakSquad=SneakStore->FindSquad(SquadID);
+ if(!SneakSquad||SneakSquad->Team<0||SneakSquad->Team>1||!SneakStore->Find(SneakSquad->LeaderUnitID))return false;
+ FVector SneakTarget=FVector::ZeroVector;
+ if(BattleTactics::ArtilleryRaidChase()){const FArtilleryRaidChase* SneakChase=ArtilleryRaidChases.Find(SquadID);if(!SneakChase)return false;SneakTarget=SneakChase->Target;}
+ else{const auto& SneakPosts=ArtilleryPostPositions[1-SneakSquad->Team];if(!SneakPosts.IsValidIndex(*SneakPost))return false;SneakTarget=SneakPosts[*SneakPost];}
+ const auto* SneakRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ return SneakRuntime&&FVector::Dist2D(SneakRuntime->Position(SneakSquad->LeaderUnitID),SneakTarget)>SneakRadius;
 }
