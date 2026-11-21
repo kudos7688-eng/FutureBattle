@@ -128,7 +128,7 @@
 | `-BattleFrontGap` | other |  | BattleFrontLine.cpp:38 |  |
 | `-BattleFrontLine` | other |  | BattleFrontLine.cpp:46 |  |
 | `-BattleFrontSquads` | other |  | BattleFrontLine.cpp:145 |  |
-| `-BattleGroupFireSupport` | Value | 0 | BattleArtillery.cpp:138, BattleGroups.cpp:290 |  |
+| `-BattleGroupFireSupport` | Value | 1 | BattleArtillery.cpp:138, BattleGroups.cpp:290 | default 1 (user 2026-11-21) |
 | `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:534 |  |
 | `-BattleHeavyCost` | other |  | BattleState.cpp:552 |  |
 | `-BattleHeavyDamage` | other |  | BattleState.cpp:552 |  |

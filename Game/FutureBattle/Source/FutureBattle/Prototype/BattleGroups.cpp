@@ -287,7 +287,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
     if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(P.Key)!=INDEX_NONE)continue;
     if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key)||ArmyPinned.Contains(P.Key))continue;
     // Group fire support (trial -BattleGroupFireSupport=1): the AI attack group also takes one self-propelled gun.
-    static const bool bFire=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupFireSupport="),X);return X!=0;}();
+    static const bool bFire=[]{int32 X=1;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupFireSupport="),X);return X!=0;}(); // default 1 (user 2026-11-21)
     if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Tank&&S.SquadType!=BattleSquadType::Mortar&&S.SquadType!=BattleSquadType::AntiTank&&S.SquadType!=BattleSquadType::Supply&&!(bFire&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==Team)&&S.SquadType==BattleSquadType::SPGun))continue;
     bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase)continue;
     Free.Add({P.Key,S.SquadType,FVector::DistSquared2D(R->Position(S.LeaderUnitID),Rally)});

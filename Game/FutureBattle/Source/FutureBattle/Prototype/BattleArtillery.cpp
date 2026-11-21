@@ -134,8 +134,8 @@ bool UBattleLeaderRuntime::AllyNear(int32 Team,const FVector& At,double Radius) 
 namespace BattleGroupFire
 {
  // Group fire support (trial -BattleGroupFireSupport=1, user approval 2026-11-21; ROADMAP "群に入れた自走砲・迫撃砲の支援").
- // The trial team only with -BattleAreaTrialTeam (one-sided comparison).
- bool On(int32 Team){static const int32 V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupFireSupport="),X);return X;}();const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;return V!=0&&(Trial<0||Trial==Team);}
+ // Default 1 by user decision 2026-11-21 (unmeasured: the standard matches have no artillery). The trial team only with -BattleAreaTrialTeam.
+ bool On(int32 Team){static const int32 V=[]{int32 X=1;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupFireSupport="),X);return X;}();const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;return V!=0&&(Trial<0||Trial==Team);}
  constexpr double TroubleNear=4000., HelpRadius=6000., RallyRadius=8000.;
  constexpr double TroubleBonus=100., RallyBonus=50.;
 }
