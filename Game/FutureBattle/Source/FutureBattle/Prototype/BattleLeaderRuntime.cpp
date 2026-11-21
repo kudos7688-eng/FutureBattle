@@ -23,6 +23,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Animation/AnimSequence.h"
+#include "Animation/AnimSingleNodeInstance.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "NavigationSystem.h"
 #include "BattleCover.h"
@@ -888,7 +889,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  {
   const bool WillMove=(S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute) || CoverApproaches.Contains(ID);
   const bool LostSight=!CanEngage && Contact && !Contact->bVisible && Now-Contact->LastSeenTime<=4.;
-  UpdateAIStance(ID,Now,WillMove,StopForCombat,LostSight,UnderFire(ID)||(Contact&&Contact->bVisible));
+  // Trial -BattleStanceMove=2: a threat is being under fire or seeing any enemy himself (a Move order has no squad target).
+  const bool bThreat=BattleStance::MoveMode()>=2 && WillMove && (UnderFire(ID) || (Contact && Contact->bVisible && !Contact->bShared) || SeesEnemy(ID));
+  UpdateAIStance(ID,Now,WillMove,StopForCombat,LostSight,bThreat);
   // Getting up takes time: no walking until the soldier is standing. With -BattleStanceMove=2 he walks in his stance instead
   // (crouched or crawling, at its speed below).
   if(WillMove && StanceOf(ID)!=BattleStance::Stand && BattleStance::MoveMode()<2){if(SightExperiment.Enabled)CoverGate.Add(ID,8);Store->SetAction(ID,EBattleAction::Idle);return;}
@@ -1078,6 +1081,10 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   const FBodyTimer* Change=BodyTimers.Find(ID);
   const bool bChanging=Change && !Change->bFreeze && !Change->bSettle;
   if(Pose!=B.Pose || Run!=B.bRunPose) { B.Pose=Pose; B.bRunPose=Run; if(VAT)VAT->ChangePose(ID,Pose); if((!VAT || !VAT->IsFar(ID)) && !bChanging)PlayFollowerClip(ID,Pose); }
+  // Walking crouched or prone: the steps keep pace as his speed changes (traffic ahead, the start of the walk).
+  else if(Pose==1 && !bChanging && StanceOf(ID)!=BattleStance::Stand && (!VAT || !VAT->IsFar(ID)) && !B.CoverClipPhase && !B.bBlindPose)
+   if(UAnimSingleNodeInstance* Node=B.Mesh->GetSingleNodeInstance())
+    if(const auto* Clip=Cast<UAnimSequence>(Node->GetAnimationAsset()))Node->SetPlayRate(BattleBodyAnim::MatchRate(Clip,float(B.Velocity.Size2D())));
  }
  Store->UpdateAim(ID,Now,B.Velocity.Size2D(),Direction,true);
  if(B.Actor.IsValid())B.Actor->NoteDisplayAim(Direction,Now);

@@ -454,6 +454,11 @@ public:
  void RefreshFollowerPose(int32 ID);
  // Plays FollowerClip on a near follower's mesh (a crouched or prone walk at the rate its steps match his walking speed).
  void PlayFollowerClip(int32 ID,int32 Pose);
+ // A stance transition still playing on a near follower ends now (his pose's loop at its own rate): the far display keeps the
+ // clip's rate and time when it takes the body, and the transition's hurried rate carried into the far walk and back.
+ void EndFollowerTransition(int32 ID);
+ // He sees an enemy himself now (his own visible contacts, not ones shared by others).
+ bool SeesEnemy(int32 ID) const;
  // bThreat: he is under fire or sees an enemy now (his own state and sight), for -BattleStanceMove=2.
  void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight,bool bThreat=false);
  // Concealment (hedges tagged BattleConcealment in the map): blocks sight but shots ignore it. Collected once per world.

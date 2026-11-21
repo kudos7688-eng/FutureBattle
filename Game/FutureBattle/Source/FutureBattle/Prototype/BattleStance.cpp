@@ -8,6 +8,7 @@
 #include "BattleFieldLayout.h"
 #include "BattleUnit.h"
 #include "BattleVATDisplay.h"
+#include "BattlePerception.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSingleNodeInstance.h"
 #include "FutureBattle.h"
@@ -247,6 +248,21 @@ void UBattleLeaderRuntime::PlayFollowerClip(int32 ID,int32 Pose)
   const float Speed=B->Velocity.SizeSquared2D()>400.?float(B->Velocity.Size2D()):GetDefault<UBattleTuning>()->MoveSpeed*BattleStance::MoveScale(Stance);
   B->Mesh->SetPlayRate(BattleBodyAnim::MatchRate(Clip,Speed));
  }
+}
+
+bool UBattleLeaderRuntime::SeesEnemy(int32 ID) const
+{
+ if(const auto* Contacts=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(ID))
+  for(const auto& Pair:*Contacts)if(Pair.Value.bVisible && !Pair.Value.bShared)return true;
+ return false;
+}
+
+void UBattleLeaderRuntime::EndFollowerTransition(int32 ID)
+{
+ const FBodyTimer* T=BodyTimers.Find(ID);
+ if(!T || T->bFreeze || T->bSettle)return;
+ BodyTimers.Remove(ID);
+ if(const auto* B=Bodies.Find(ID);B && B->Mesh.IsValid() && !B->Actor.IsValid()){B->Mesh->HandleExistingParallelEvaluationTask(true,true);PlayFollowerClip(ID,B->Pose);}
 }
 
 void UBattleLeaderRuntime::UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight,bool bThreat)

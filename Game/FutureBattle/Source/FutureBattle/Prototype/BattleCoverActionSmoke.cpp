@@ -385,6 +385,8 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
   UAnimSingleNodeInstance* Node=V?V->GetSingleNodeInstance():nullptr;
   if(V && Node && B.Weapon.IsValid())
   {
+   // Frame skipping (-BattleFollowerAnimSkip) would skip these evaluations: the body's own tick sets it again next frame.
+   V->EndAnimSkip();
    const bool bWasPlaying=Node->IsPlaying();Node->SetPlaying(false);
    auto Make=[V,&B](float Bend,float Out[4])
    {
@@ -449,20 +451,29 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
  {
   ABattleUnit* A=Actor(1);
   const uint8 Want=SmokeStage==24?BattleStance::Crouch:BattleStance::Prone;
-  if(BayStart<0.){Stances.Add(1,Want);A->VisualStance=Want;BayStart=Now;SmokeMuzzleMax=0.f;}
+  if(BayStart<0.){Stances.Add(1,Want);A->VisualStance=Want;BayStart=Now;SmokeMuzzleMax=0.f;SmokeMuzzleFrames=0;SmokeShots=0;}
   A->AddMovementInput(-A->GetActorForwardVector(),1.f);
-  if(Now-BayStart>.6)SmokeMuzzleMax=FMath::Max(SmokeMuzzleMax,float(A->GetVelocity().Size2D()));
-  if(Now-BayStart<1.5){Later(.001f);return;}
   const auto* Body=Cast<UBattleBodyAnimInstance>(A->GetMesh()->GetAnimInstance());
   const FVector Local=A->GetActorRotation().UnrotateVector(A->GetVelocity());
   const UAnimSequence* Base=Body?Body->GetBase():nullptr;
   const float Walk=GetDefault<UBattleTuning>()->MoveSpeed,Expected=Walk*BattleStance::MoveScale(Want);
-  const float Cap=A->GetCharacterMovement()->MaxWalkSpeed,Rate=Body?Body->GetBaseRate():0.f,Ground=BattleBodyAnim::GroundSpeed(Base);
-  const bool bClip=Base && Base==BattleBodyAnim::Locomotion(Want,Local,false);
-  const bool bRate=Ground<=10.f || FMath::Abs(Rate-BattleBodyAnim::MatchRate(Base,float(Local.Size2D())))<.1f;
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_STANCE_MOVE stance=%d kept=%d cap=%.0f expected=%.0f top_speed=%.0f base=%s ground_speed=%.0f rate=%.2f"),
-   int32(Want),StanceOf(1)==Want && A->VisualStance==Want?1:0,Cap,Expected,SmokeMuzzleMax,Base?*Base->GetName():TEXT("none"),Ground,Rate);
-  Check(StanceOf(1)==Want && A->VisualStance==Want && FMath::Abs(Cap-Expected)<1.f && SmokeMuzzleMax>Expected*.8f && SmokeMuzzleMax<Expected*1.05f && bClip && bRate,
+  const float Rate=Body?Body->GetBaseRate():0.f;
+  // Every frame from 0.6 s (after the transition and the start): while he walks at speed, the body shows that stance's walk
+  // (not its idle) at the rate of the clip's own ground speed.
+  if(Now-BayStart>.6)
+  {
+   SmokeMuzzleMax=FMath::Max(SmokeMuzzleMax,float(Local.Size2D()));
+   if(Local.Size2D()>Expected*.8f)
+   {
+    const bool bWalkClip=Base && Local.SizeSquared2D()>400. && Base==BattleBodyAnim::Locomotion(Want,Local,false) && Base!=BattleBodyAnim::Locomotion(Want,FVector::ZeroVector,false);
+    if(bWalkClip && FMath::Abs(Rate-BattleBodyAnim::MatchRate(Base,float(Local.Size2D())))<.15f)++SmokeMuzzleFrames;else ++SmokeShots;
+   }
+  }
+  if(Now-BayStart<1.5){Later(.001f);return;}
+  const float Cap=A->GetCharacterMovement()->MaxWalkSpeed,Ground=BattleBodyAnim::GroundSpeed(Base);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_STANCE_MOVE stance=%d kept=%d cap=%.0f expected=%.0f top_speed=%.0f walking_frames=%d wrong_frames=%d base=%s ground_speed=%.0f rate=%.2f"),
+   int32(Want),StanceOf(1)==Want && A->VisualStance==Want?1:0,Cap,Expected,SmokeMuzzleMax,SmokeMuzzleFrames,SmokeShots,Base?*Base->GetName():TEXT("none"),Ground,Rate);
+  Check(StanceOf(1)==Want && A->VisualStance==Want && FMath::Abs(Cap-Expected)<1.f && SmokeMuzzleMax>Expected*.8f && SmokeMuzzleMax<Expected*1.05f && SmokeMuzzleFrames>=10 && SmokeShots==0,
    Want==BattleStance::Crouch?TEXT("the player walks crouched at the crouched speed with the crouched walk"):TEXT("the player crawls prone at the prone speed with the prone crawl"));
   if(SmokeStage==24){SmokeStage=25;BayStart=-1.;Later(.001f);return;}
   // Standing again: the full walking speed comes back.

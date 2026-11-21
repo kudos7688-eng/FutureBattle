@@ -273,6 +273,8 @@ void ABattleVATDisplay::Enter(FBattleVATEntry& E)
  if(!AssetsReady)return;
  M->HandleExistingParallelEvaluationTask(true,true);
  auto* Node=M->GetSingleNodeInstance();if(!Node || !BattleFollowerBones::Eligible(M))return;
+ // A stance transition still playing ends first: its (hurried) rate and time are not the pose's loop the far body plays.
+ if(!Audit)Runtime->EndFollowerTransition(E.ID);
  E.Time=Node->GetCurrentTime();E.Rate=Node->GetPlayRate()*M->GlobalAnimRateScale;
  // Frame skipping (trial): the clip time is behind by the frames not yet evaluated. Catch up, then let the far display
  // advance it every frame again.
