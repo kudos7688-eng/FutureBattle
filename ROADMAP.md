@@ -69,6 +69,9 @@
 - **段階6**：[Docs/design-score-economy.md](Docs/design-score-economy.md)。今の得点の問題（よく戦うほど下がる、少人数の兵種が不利、終了時の保有だけ）と選択肢 A（例外を増やす）・B（戦果点）・C（中間）。提案は「試合を変えずに3通りで採点だけ記録し、既定化の判断が入れ替わるかを数える」。**規則の選択はユーザー判断。**
 - **段階6の読み直し（11-22、ユーザー承認）**：過去の片側試験14組を `Setup/Rescore-Matches.py` で今の点・B・C の3通りに採点し直した。**規則で判断が入れ替わったものは無い**。B は差を1.5〜2倍に広げ、重装歩兵・攻める計画を有利に出す（design-score-economy の 4b）。**ユーザー決定（11-22 0時50分）：得点の規則は今のまま**（資源＋生存兵数＋保有拠点×20）。採点し直しは今後も材料として使う。
 - **段階7**：[Docs/design-height-tactics.md](Docs/design-height-tactics.md)。数値の利点より先に AI が高所を使うようにする：ミニマップに丘と家 → 2m を超える高さへの目的地 `-BattleTerrainGoal` → 守る区画で高所を選ぶ `-BattleHeightSector` → 到着位置で2〜3人を高所へ `-BattleHeightSlots` → 必要なら低い遮蔽の効果を上から半分に。
+- **段階2**：[Docs/design-divergence-trace.md](Docs/design-divergence-trace.md)。表示の変更で試合が変わる原因を突き止めるため、状態のかたまり（位置・体力・遮蔽・認識・計画・試合・射撃）の要約を0.1秒ごとに記録する `-BattleStateTrace`（記録だけ）と、2試合の最初の分岐点を出す `Find-Divergence.py`。死体の消去の操作を1つずつ止める `-BattleCorpseSteps` と組み合わせる。
+- **戦略層の画面**：[Docs/design-strategy-ui.md](Docs/design-strategy-ui.md)。上部の帯に「AIの方針：集中 → 拠点C（あと45秒）」、拠点ごとの戦線の状態の輪（不明・敵優勢・拮抗・自軍優勢）、集中先の矢印、方針の変更の通知。プレイヤーは委任した部隊に「集中先にする／保持する／AIに任せる」を指示できる。戦略層 S2 の結果を見てから。
+- **部隊一覧（40部隊）**：[Docs/design-squad-panel.md](Docs/design-squad-panel.md)。1行の詰めた表示、状態の絞り込み（交戦中・補給・待機・要注意）、問題の印（弾・隊長・詰まり・釘付け・遠い）、選んだ部隊の詳細パネル（兵ごとの体力・弾・姿勢・遮蔽・制圧、判断の経過）、購入ボタンに得点の減り。
 
 ### 随時（段階に関係なく差し込む）
 
