@@ -38,7 +38,7 @@
 - `BattleCoverActionSmoke.cpp`: UBattleLeaderRuntime::RunCoverActionSmoke:22
 - `BattleDelegationSmoke.cpp`: ABattleGameMode::RunDelegationSmokeTest:16
 - `BattleDisplayLODTrial.cpp`: UBattleSquadTrial::SelectT5LOD:16, UBattleSquadTrial::ApplyT5LOD:27, UBattleSquadTrial::ApplyT5LODCamera:65, UBattleSquadTrial::FinishT5LODFrame:78
-- `BattleExo.cpp`: ExoClipBone:33, FitExoInnerFrame:44, UBattleLeaderRuntime::ApplyExoSuit:106, UBattleLeaderRuntime::ApplySquadLook:193, UBattleLeaderRuntime::UpdateExoLooks:242, UBattleLeaderRuntime::StepExoLaunchers:277, UBattleLeaderRuntime::FireExoLauncher:316, UBattleMatch::AreaExoTarget:364
+- `BattleExo.cpp`: ExoClipBone:33, FitExoInnerFrame:44, UBattleLeaderRuntime::ApplyExoSuit:106, UBattleLeaderRuntime::ApplySquadLook:196, UBattleLeaderRuntime::UpdateExoLooks:245, UBattleLeaderRuntime::StepExoLaunchers:280, UBattleLeaderRuntime::FireExoLauncher:319, UBattleMatch::AreaExoTarget:367
 - `BattleExoShot.cpp`: UBattleLeaderRuntime::RunExoShot:19
 - `BattleFieldLayout.h`: BattleFieldLayout::Expand:9, BattleFieldLayout::Objective:10, BattleFieldLayout::SectorKind:212, BattleFieldLayout::IsExpanded:213, BattleFieldLayout::IsUrbanMap:214, BattleFieldLayout::IsUrban:215, BattleFieldLayout::IsSightField:216, BattleFieldLayout::IsLarge:217, BattleFieldLayout::ObjectiveCountForMap:219, BattleFieldLayout::ObjectiveOwnerSide:226, BattleFieldLayout::ObjectiveValue:227, BattleFieldLayout::Lookouts:233, BattleFieldLayout::FieldHalfExtent:234, BattleFieldLayout::HomeDistance:235
 - `BattleFieldReplay.cpp`: UBattleSquadTrial::CaptureField:31, UBattleSquadTrial::SaveFieldRecording:48, UBattleSquadTrial::StartReplay:55, UBattleSquadTrial::StepReplay:110, UBattleSquadTrial::FinishReplay:178, UBattleSquadTrial::SelectReplayBatch:197
