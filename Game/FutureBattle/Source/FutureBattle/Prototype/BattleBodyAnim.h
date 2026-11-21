@@ -50,10 +50,10 @@ namespace BattleBodyAnim
  // The shortest time between two hit reactions on one body: under steady fire a new flinch every hit kept the body bent over
  // (it never stood back up); a hit inside this time shows no new reaction (display only, the damage is unchanged).
  constexpr double HitReactSeconds=1.2;
- // Moving always stands a soldier up (there is no crouch-walk or crawl yet): the stand-up clip at its own speed played in place
- // while the body already moved at full speed (it slid along the ground while getting up). On the move the rest of a stance
- // transition plays fast enough to end within this time.
- constexpr double MovingTransitionSeconds=.4;
+ // Moving stands an AI soldier up: the stand-up clip at its own speed played in place while the body already moved at full
+ // speed (it slid along the ground while getting up). On the move the rest of a stance transition plays fast enough to end
+ // within this time: 0.4 s, 0.6 s for one to or from prone (the prone clips are long: 2.7 s from prone to standing).
+ double MovingTransitionSeconds(const UAnimSequence* Transition);
  // The rifle model's grip relative to hand_r (calibrated against the rifle idle pose; the barrel along the model's local -Y).
  FTransform RifleGrip();
  // Cover clips (BattleCoverClips.h, the table by the asset review session): a clip of /Game/.../Rifle/Cover/ by name (cached),

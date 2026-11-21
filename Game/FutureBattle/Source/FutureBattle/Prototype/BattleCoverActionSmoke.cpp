@@ -30,6 +30,18 @@ static void FootHeights(const USkeletalMeshComponent* Mesh,float Out[4])
  for(int32 I=0;I<4;++I)Out[I]=Mesh->GetSocketLocation(Names[I]).Z-Mesh->GetComponentLocation().Z;
 }
 
+// A direction along which the body can walk 6 m without running into anything (back, left, right, then forward), for the
+// walking checks; back when none is open (a walk into a wall slid sideways at 0.7 m/s).
+static FVector OpenWay(const ABattleUnit* A)
+{
+ const FVector Start=A->GetActorLocation()+FVector(0,0,5);
+ const FCollisionQueryParams Params(NAME_None,false,A);
+ const FVector Ways[4]={-A->GetActorForwardVector(),-A->GetActorRightVector(),A->GetActorRightVector(),A->GetActorForwardVector()};
+ for(const FVector& Way:Ways)
+  if(!A->GetWorld()->SweepTestByChannel(Start,Start+Way.GetSafeNormal2D()*600.,FQuat::Identity,ECC_Pawn,FCollisionShape::MakeCapsule(40.f,85.f),Params))return Way.GetSafeNormal2D();
+ return -A->GetActorForwardVector().GetSafeNormal2D();
+}
+
 void UBattleLeaderRuntime::RunCoverActionSmoke()
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
@@ -412,7 +424,7 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
  // along the ground while getting up). The display stance is set directly, as that rule sets it (stances may be off here).
  if(SmokeStage==22)
  {
-  Actor(1)->VisualStance=BattleStance::Prone;
+  Actor(1)->VisualStance=BattleStance::Prone;SmokeDir=OpenWay(Actor(1));
   const auto* Down=BattleBodyAnim::Get(BattleBodyAnim::EClip::StandToProne);
   SmokeStage=23;SmokeMuzzleFrames=0;SmokeShots=0;SmokeHit=0.;BayStart=-1.;Later(Down?Down->GetPlayLength()+.3f:.5f);return;
  }
@@ -423,7 +435,7 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
   const auto* Up=BattleBodyAnim::Get(BattleBodyAnim::EClip::ProneToStand);
   // Before he walks off he lies in the prone idle (the stand-to-prone clip has ended).
   if(SmokeHit==0.){SmokeShots=Body && Body->GetBase()==BattleBodyAnim::Get(BattleBodyAnim::EClip::ProneIdle)?1:0;SmokeHit=Now;}
-  A->AddMovementInput(A->GetActorForwardVector(),1.f);
+  A->AddMovementInput(SmokeDir,1.f);
   // He stands up once he moves faster than 0.5 m/s; he must start within 2 s.
   if(BayStart<0.)
   {
@@ -435,12 +447,13 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
     BayStart=Now-10.;SmokeMuzzleFrames=-1;
    }
   }
-  if(SmokeMuzzleFrames>=0 && Up && A->TransitionClip.Get()==Up && (A->TransitionRate>1.f || Up->GetPlayLength()<=BattleBodyAnim::MovingTransitionSeconds))SmokeMuzzleFrames=1;
-  if(Now-BayStart<BattleBodyAnim::MovingTransitionSeconds+.3){Later(.001f);return;}
+  const double Hurry=BattleBodyAnim::MovingTransitionSeconds(Up);
+  if(SmokeMuzzleFrames>=0 && Up && A->TransitionClip.Get()==Up && (A->TransitionRate>1.f || Up->GetPlayLength()<=Hurry))SmokeMuzzleFrames=1;
+  if(Now-BayStart<Hurry+.3){Later(.001f);return;}
   const FVector Local=A->GetActorRotation().UnrotateVector(A->GetVelocity());
   const UAnimSequence* Base=Body?Body->GetBase():nullptr;
   const bool bWalking=Base && (Base==BattleBodyAnim::Locomotion(0,Local,true) || Base==BattleBodyAnim::Locomotion(0,Local,false));
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_STAND_ON_MOVE clip=%s length=%.2f rate=%.2f hurried=%d prone_first=%d base=%s speed=%.0f"),Up?*Up->GetName():TEXT("none"),Up?Up->GetPlayLength():0.f,A->TransitionRate,SmokeMuzzleFrames,SmokeShots,Base?*Base->GetName():TEXT("none"),Local.Size2D());
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_STAND_ON_MOVE clip=%s length=%.2f rate=%.2f hurried=%d prone_first=%d base=%s speed=%.0f way=%s"),Up?*Up->GetName():TEXT("none"),Up?Up->GetPlayLength():0.f,A->TransitionRate,SmokeMuzzleFrames,SmokeShots,Base?*Base->GetName():TEXT("none"),Local.Size2D(),*SmokeDir.ToCompactString());
   Check(Up && SmokeShots==1 && SmokeMuzzleFrames==1 && bWalking && Local.Size2D()>100.,TEXT("getting up on the move ends within MovingTransitionSeconds (no slide along the ground)"));
   SmokeStage=24;BayStart=-1.;Later(.001f);return;
  }
@@ -451,22 +464,23 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
  {
   ABattleUnit* A=Actor(1);
   const uint8 Want=SmokeStage==24?BattleStance::Crouch:BattleStance::Prone;
-  if(BayStart<0.){Stances.Add(1,Want);A->VisualStance=Want;BayStart=Now;SmokeMuzzleMax=0.f;SmokeMuzzleFrames=0;SmokeShots=0;}
-  A->AddMovementInput(-A->GetActorForwardVector(),1.f);
+  if(BayStart<0.){Stances.Add(1,Want);A->VisualStance=Want;BayStart=Now;SmokeMuzzleMax=0.f;SmokeMuzzleFrames=0;SmokeShots=0;SmokeHead=-1.f;SmokeDir=OpenWay(A);}
+  A->AddMovementInput(SmokeDir,1.f);
   const auto* Body=Cast<UBattleBodyAnimInstance>(A->GetMesh()->GetAnimInstance());
   const FVector Local=A->GetActorRotation().UnrotateVector(A->GetVelocity());
   const UAnimSequence* Base=Body?Body->GetBase():nullptr;
   const float Walk=GetDefault<UBattleTuning>()->MoveSpeed,Expected=Walk*BattleStance::MoveScale(Want);
   const float Rate=Body?Body->GetBaseRate():0.f;
-  // Every frame from 0.6 s (after the transition and the start): while he walks at speed, the body shows that stance's walk
+  // Every frame from 0.9 s (after the transition, 0.6 s into prone, its 0.2 s cross-fade and the start): while he walks at
+  // speed, the body shows that stance's walk
   // (not its idle) at the rate of the clip's own ground speed.
-  if(Now-BayStart>.6)
+  if(Now-BayStart>.9)
   {
    SmokeMuzzleMax=FMath::Max(SmokeMuzzleMax,float(Local.Size2D()));
    if(Local.Size2D()>Expected*.8f)
    {
     const bool bWalkClip=Base && Local.SizeSquared2D()>400. && Base==BattleBodyAnim::Locomotion(Want,Local,false) && Base!=BattleBodyAnim::Locomotion(Want,FVector::ZeroVector,false);
-    if(bWalkClip && FMath::Abs(Rate-BattleBodyAnim::MatchRate(Base,float(Local.Size2D())))<.15f)++SmokeMuzzleFrames;else ++SmokeShots;
+    if(bWalkClip && FMath::Abs(Rate-BattleBodyAnim::MatchRate(Base,float(Local.Size2D())))<.15f)++SmokeMuzzleFrames;else{if(!SmokeShots){SmokeHead=float(Now-BayStart);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_STANCE_MOVE wrong_frame at=%.2f base=%s speed=%.0f rate=%.2f"),SmokeHead,Base?*Base->GetName():TEXT("none"),Local.Size2D(),Rate);}++SmokeShots;}
    }
   }
   if(Now-BayStart<1.5){Later(.001f);return;}

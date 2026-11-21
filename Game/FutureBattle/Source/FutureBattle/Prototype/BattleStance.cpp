@@ -88,7 +88,7 @@ bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForc
    {
     // On the move (he walks off as the stance changes) the transition ends within MovingTransitionSeconds: at its own speed it
     // slid along the ground. Until it ends his walk does not replace it (the pose change in Follow waits for this timer).
-    const float Rate=bOnTheMove?FMath::Max(1.f,float(Change->GetPlayLength()/BattleBodyAnim::MovingTransitionSeconds)):1.f;
+    const float Rate=bOnTheMove?FMath::Max(1.f,float(Change->GetPlayLength()/BattleBodyAnim::MovingTransitionSeconds(Change))):1.f;
     B->Mesh->PlayAnimation(Change,false);if(Rate>1.f)B->Mesh->SetPlayRate(Rate);
     BodyTimers.Add(ID,{Now+Change->GetPlayLength()/Rate,false});
    }

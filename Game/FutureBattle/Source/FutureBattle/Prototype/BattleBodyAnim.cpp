@@ -85,6 +85,12 @@ UAnimSequence* BattleBodyAnim::Locomotion(uint8 Stance,const FVector& LocalVeloc
  return Clip?Clip:Get(EClip(First+1));
 }
 
+double BattleBodyAnim::MovingTransitionSeconds(const UAnimSequence* Transition)
+{
+ const bool bProne=Transition && (Transition==Get(EClip::StandToProne) || Transition==Get(EClip::ProneToStand) || Transition==Get(EClip::CrouchToProne) || Transition==Get(EClip::ProneToCrouch));
+ return bProne?.6:.4;
+}
+
 float BattleBodyAnim::GroundSpeed(const UAnimSequence* Clip)
 {
  if(!Clip)return 0.f;

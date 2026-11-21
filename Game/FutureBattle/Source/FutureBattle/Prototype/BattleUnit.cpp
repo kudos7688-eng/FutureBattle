@@ -518,10 +518,11 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	const FVector Local = GetActorRotation().UnrotateVector(GetVelocity());
 	// Getting up on the move (moving stands the soldier up): the rest of the transition plays fast enough to end within
 	// MovingTransitionSeconds instead of sliding along the ground at its own speed.
-	if (TransitionClip && Now < TransitionUntil && TransitionRate == 1.f && Local.SizeSquared2D() > 400. && TransitionUntil - Now > MovingTransitionSeconds)
+	const double Hurry = MovingTransitionSeconds(TransitionClip.Get());
+	if (TransitionClip && Now < TransitionUntil && TransitionRate == 1.f && Local.SizeSquared2D() > 400. && TransitionUntil - Now > Hurry)
 	{
-		TransitionRate = float((TransitionUntil - Now) / MovingTransitionSeconds);
-		TransitionUntil = Now + MovingTransitionSeconds;
+		TransitionRate = float((TransitionUntil - Now) / Hurry);
+		TransitionUntil = Now + Hurry;
 	}
 	const bool bTransition = TransitionClip && Now < TransitionUntil;
 	// Moving without firing (no shot for ReadySeconds, the player not aiming): a jog with the rifle held low, no aim layer.
