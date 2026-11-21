@@ -1098,7 +1098,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  // -BattleSoldierWatch: standing still with nothing to fire at and not watching a focus (other squads, or no focus yet), he looks
  // toward what he knows of the enemy (BattleSoldierWatch.cpp).
  else if(FVector Watch;SoldierWatchEnabled(U->Team) && !bArtilleryAim && !bVehicleBody &&
-  (B.Actor.IsValid()?B.Actor->GetVelocity().SizeSquared2D():B.Velocity.SizeSquared2D())<=400. && SoldierWatchDirection(ID,Pos,Now,Watch))
+  (B.Actor.IsValid()?B.Actor->GetVelocity().SizeSquared2D():B.Velocity.SizeSquared2D())<=400. && SoldierWatchDirection(ID,TargetID,Pos,Now,Watch))
   Direction=Watch;
  // A vehicle turns its turret to the target; its hull keeps the driving heading (SteerVehicle).
  // The main gun's target (stage 2) takes the turret; the machine gun keeps firing along Direction at its own target.

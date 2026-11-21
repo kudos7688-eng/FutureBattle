@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（164 モジュール、41063 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（164 モジュール、41075 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -144,7 +144,7 @@
 | `BattleSectors` | .h | 70 | BattleSectors | マップHの50m区画の格子（20×14）：区画の番号と中心、区画の種類の表、川・橋・浅瀬の位置 |
 | `BattleSoldierMove` | .cpp | 124 |  | 個人AI段階B1 `-BattleSoldierMove`：区画の中で、隠れている兵が近くのもっと良い遮蔽を採点して自分で移る（UBattleLeaderRuntime の一部） |
 | `BattleSoldierOrder` | .cpp | 351 |  | プレイヤーが兵1人に出す移動の命令：命令と歩き（UBattleLeaderRuntime）、Ctrl＋クリックの選択と右クリックの命令（ABattleController）、印（ABattleHUD）、自動試験 `-BattleSoldierOrderTest` |
-| `BattleSoldierWatch` | .cpp | 46 |  | 個人AI `-BattleSoldierWatch`：止まっていて撃つ相手のいない兵が、知っている最も近い敵へ、無ければ小隊で分けた前方へ向く（視野120度。UBattleLeaderRuntime の一部） |
+| `BattleSoldierWatch` | .cpp | 58 |  | 個人AI `-BattleSoldierWatch`：止まっていて撃つ相手のいない兵が、知っている最も近い敵へ、無ければ小隊で分けた前方へ向く（視野120度。UBattleLeaderRuntime の一部） |
 | `BattleSquadAI` | .h/.cpp | 35 + 198 | FBattleSquadPlan, UBattleSquadAI | 旧全Actor経路の部隊 AI |
 | `BattleSquadFlank` | .cpp | 202 |  | 迂回の判断（UBattleSquadTactics の一部） |
 | `BattleSquadRetreat` | .cpp | 274 |  | 撤退の判断と適用（UBattleSquadTactics の一部。Evaluate と Apply はここ） |

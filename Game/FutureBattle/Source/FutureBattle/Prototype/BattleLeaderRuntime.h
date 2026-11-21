@@ -561,12 +561,12 @@ public:
  // its own steering (only the facing changes). Counts hit_face_turned.
  static bool HitFaceEnabled();
  // Trial -BattleSoldierWatch=1 (default 0, 2026-11-22; -BattleSoldierWatchTeam=0/1 for one team): a soldier standing still with
- // nothing to fire at (not in a cover action, not a vehicle, not under direct control) faces the nearest enemy he knows of (own
- // sightings and reports, within his weapon's reach), else his share of the ground ahead (toward the enemy's home, or 70 degrees
- // to either side by his place in the squad). Sight has a 120-degree forward field of view. BattleSoldierWatch.cpp; counts
- // watch_contact_frames / watch_sector_frames.
+ // nothing to fire at (not in a cover action, not a vehicle, not under direct control) faces the squad's target when he knows
+ // where it is, else the nearest enemy he knows of (own sightings and reports still held, within his weapon's reach), else his
+ // share of the ground ahead (toward the enemy's home, or 70 degrees to either side by his place in the squad). Sight has a
+ // 120-degree forward field of view. BattleSoldierWatch.cpp; counts watch_target_frames / watch_contact_frames / watch_sector_frames.
  static bool SoldierWatchEnabled(int32 Team);
- bool SoldierWatchDirection(int32 ID,const FVector& Pos,double Now,FVector& Out);
+ bool SoldierWatchDirection(int32 ID,int32 TargetID,const FVector& Pos,double Now,FVector& Out);
  void RevealShooter(int32 VictimID,int32 ShooterID,const FVector& From);
  // Evaluation only (sight diagnostics on, behaviour unchanged, 2026-11-21): a hit soldier who does not see his shooter. Why each of the
  // two lines (victim->shooter, shooter->victim) fails, using the same checks as CanSee (range, field of view, first blocking hit).
