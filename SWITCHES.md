@@ -9,7 +9,7 @@
 |---|---|---|---|---|
 | `-BattleAIBlindFire` | other |  | BattleBlindFire.cpp:27 |  |
 | `-BattleAICoverProbe` | Value | 0 | BattleTactics.cpp:10 |  |
-| `-BattleAimAssist` | Value | 1 | BattleController.cpp:1268 |  |
+| `-BattleAimAssist` | Value | 1 | BattleController.cpp:1274 |  |
 | `-BattleAllyPass` | Value | 0 | BattleStableMovement.cpp:31 |  |
 | `-BattleArea` | Param/other | off | BattleLeaderRuntime.cpp:76, BattleState.cpp:564 |  |
 | `-BattleAreaACKeep` | Value | 0 / -1（同名のメンバーが複数） | BattleTactics.cpp:97 |  |
@@ -70,7 +70,7 @@
 | `-BattleArrivalThreat` | Value | 0 | BattleLeaderRuntime.cpp:1560 |  |
 | `-BattleArtilleryClusters` | Value | 0 | BattleArtillery.cpp:43 |  |
 | `-BattleArtilleryObserved` | Value | 0 | BattleArtillery.cpp:25 |  |
-| `-BattleBenchmark` | Param | off | BattleBenchmark.cpp:28, BattleController.cpp:54, BattleLeaderRuntime.cpp:72 |  |
+| `-BattleBenchmark` | Param | off | BattleBenchmark.cpp:28, BattleController.cpp:60, BattleLeaderRuntime.cpp:72 |  |
 | `-BattleBenchmarkFPS` | Param | off | BattleBenchmark.cpp:120, BattleBenchmark.cpp:154 |  |
 | `-BattleBlastOcclusion` | Value | 0 | BattleArtillery.cpp:37 |  |
 | `-BattleBlindFire` | other |  | BattleBlindFire.cpp:26 |  |
@@ -207,7 +207,7 @@
 | `-BattleRoutes` | Value | -1 | BattleRoutes.cpp:17 |  |
 | `-BattleScaleScreenshot` | Value |  | BattleLargeFieldTest.cpp:19, BattleScaleSmoke.cpp:17 |  |
 | `-BattleScaleSmoke` | Param | off | BattleGameMode.cpp:147 |  |
-| `-BattleScaleUnits` | Value | 0 / 20 | BattleController.cpp:53, BattleGameMode.cpp:79 |  |
+| `-BattleScaleUnits` | Value | 0 / 20 | BattleController.cpp:59, BattleGameMode.cpp:79 |  |
 | `-BattleScopeShot` | Param | off | BattleLeaderRuntime.cpp:226 |  |
 | `-BattleScoutRetreat` | Value | GetDefault<UBattleTuning>()->bScoutRetreat?1:0 | BattleScoutReport.cpp:20 |  |
 | `-BattleSeconds` | Value | 20.f | BattleBenchmark.cpp:41 |  |
