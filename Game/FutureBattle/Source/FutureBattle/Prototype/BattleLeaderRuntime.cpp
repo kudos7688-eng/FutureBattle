@@ -68,6 +68,8 @@ int32 FBattleSquadListLayout::RowAt(FVector2D P) const
 bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
 {
  if(bEnabled) return false;
+ // The sector AI combination's default follows the map this runtime starts on (BattleFieldLayout::SectorComboSwitch).
+ BattleFieldLayout::SectorComboDefault()=BattleFieldLayout::Of(GetWorld()).bSectorCombo;
  // Explicit opt-in isolated runtime. Legacy trials, saves and network modes are not silently mixed.
  if(InMode.GetClass()!=ABattleGameMode::StaticClass() || GetWorld()->GetNetMode()!=NM_Standalone || FParse::Param(FCommandLine::Get(),TEXT("BattleBenchmark")) || FParse::Param(FCommandLine::Get(),TEXT("BattleFastMatch")) ||
    FCString::Stristr(FCommandLine::Get(),TEXT("BattleSquadTrial="))) return false;
@@ -1436,7 +1438,7 @@ bool UBattleLeaderRuntime::HasLongSight(int32 ID) const
 
 bool UBattleLeaderRuntime::SectorContactEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorContact="),V);return V!=0;}();
+ static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorContact="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
  return bOn;
 }
 bool UBattleLeaderRuntime::SectorMoveEnabled()
@@ -1451,7 +1453,7 @@ bool UBattleLeaderRuntime::ArrivalWalkEnabled()
 }
 bool UBattleLeaderRuntime::SectorMoveFireEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorMoveFire="),V);return V!=0;}();
+ static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorMoveFire="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
  return bOn;
 }
 bool UBattleLeaderRuntime::SquadCoverCheckEnabled()
@@ -1565,7 +1567,7 @@ bool UBattleLeaderRuntime::CloseInEnabled()
 }
 bool UBattleLeaderRuntime::PinnedFlankEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattlePinnedFlank="),V);return V!=0;}();
+ static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattlePinnedFlank="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
  return bOn;
 }
 bool UBattleLeaderRuntime::CoverDenseEnabled()
@@ -1585,7 +1587,7 @@ bool UBattleLeaderRuntime::CoverOutwardEnabled()
 }
 bool UBattleLeaderRuntime::ArrivalThreatEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArrivalThreat="),V);return V!=0;}();
+ static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleArrivalThreat="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
  return bOn;
 }
 bool UBattleLeaderRuntime::CoverStrictEnabled()

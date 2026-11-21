@@ -13,13 +13,13 @@
 
 bool UBattleMatch::SectorRouteOn()
 {
-	static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorRoute="),V);return V!=0;}();
+	static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorRoute="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
 	return bOn;
 }
 
 bool UBattleMatch::SectorCoverRouteOn()
 {
-	static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorCoverRoute="),V);return V!=0;}();
+	static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorCoverRoute="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
 	return bOn;
 }
 
@@ -117,13 +117,13 @@ int32 UBattleMatch::SectorCoverCount(FIntPoint Cell) const
 
 bool UBattleMatch::SectorFlankOn()
 {
-	static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorFlank="),V);return V!=0;}();
+	static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorFlank="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
 	return bOn;
 }
 
 bool UBattleMatch::SectorFrontOn()
 {
-	static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorFront="),V);return V!=0;}();
+	static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorFront="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
 	return bOn;
 }
 
