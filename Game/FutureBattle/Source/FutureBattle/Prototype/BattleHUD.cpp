@@ -71,6 +71,8 @@ void ABattleHUD::DrawHUD()
  BattleSectorView::KnownEnemies(GetWorld(),FrameContacts,FrameVisibleContacts);
  ON_SCOPE_EXIT { FrameContacts.Reset(); FrameVisibleContacts.Reset(); };
 	DrawFieldOverlay(PC);
+	// Range rings of the selected (and seen enemy) squads, also under the panels.
+	DrawRangeRings();
 	DrawRect(Ink, 16, 16, W - 32, 66);
 	DrawRect(Mint, 16, 16, 4, 66);
 	Label(TEXT("FUTURE BATTLE"), 34, 25, White, 1.55f);
@@ -443,7 +445,6 @@ void ABattleHUD::DrawHUD()
 			Label(FString::Printf(TEXT("敵軍  %s"), *Match->WarScoreBreakdown(1)), W * .25f + 25, H * .35f + 136, White);
 		}
 	}
- DrawRangeRings();
  DrawOrderMarks();
  DrawSquadList();
  DrawMinimap();
@@ -792,6 +793,47 @@ void ABattleHUD::DrawRangeRings()
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); if(!L->IsEnabled()) return;
  auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas || !PC->IsTactical()) return;
  const float H=Canvas->SizeY; const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ // Display check -BattleRangeRingShot=<prefix> (rendered game only): at 40 s the first own squad is selected and the camera moved
+ // over it; from 90 s, once an enemy is seen (240 s at the latest), the own squad nearest a seen enemy is selected, every seen enemy's rings are shown (as with L) and the camera
+ // is moved between them. A screenshot each time (the frame after the move), a BATTLE_RANGE_RING_SHOT line, then quit.
+ static const FString ShotPrefix=[]{FString P;FParse::Value(FCommandLine::Get(),TEXT("BattleRangeRingShot="),P);return P;}();
+ if(!ShotPrefix.IsEmpty())
+ {
+  static int32 Stage=0; static double ShootAt=-1., AimAt=-1.; static FVector AimTarget=FVector::ZeroVector; static bool bResumed=false; static double QuitAt=0.;
+  const double T=GetWorld()->GetTimeSeconds();
+  // The area match starts with the AI paused (practice); resume it once so squads move and meet the enemy.
+  if(auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>(); !bResumed&&T>3.&&Mode&&GetWorld()->GetSubsystem<UBattleMatch>()->Phase==EBattleMatchPhase::Combat)
+  {Mode->bCombatPaused=false;bResumed=true;}
+  // Moves the camera pawn (height kept) so that the view centre lands on Where.
+  auto Aim=[&](const FVector& Where)
+  {
+   APawn* Camera=PC->GetPawn(); if(!Camera||!PC->PlayerCameraManager) return;
+   const FVector Eye=PC->PlayerCameraManager->GetCameraLocation(), Forward=PC->PlayerCameraManager->GetCameraRotation().Vector();
+   const double Down=FMath::Max(.2,-Forward.Z); const FVector Look=Eye+Forward*((Eye.Z-Where.Z)/Down);
+   Camera->SetActorLocation(Camera->GetActorLocation()+FVector(Where.X-Look.X,Where.Y-Look.Y,0.));
+  };
+  if(ShootAt<0.&&Stage<2&&T>(Stage==0?40.:90.)&&(Stage==0||T>240.||!SeenEnemySquads(GetWorld()).IsEmpty()))
+  {
+   ABattleUnit* Pick=nullptr; double BestD=TNumericLimits<double>::Max(); FVector EnemyAt=FVector::ZeroVector;
+   const auto Seen=SeenEnemySquads(GetWorld());
+   for(const auto& S:L->Summaries()) if(S.bActive) if(ABattleUnit* A=L->Actor(S.LeaderUnitID); A&&A->IsAlive()&&A->GetState()->Team==0)
+   {
+    if(Stage==0){Pick=A;break;}
+    for(const auto& E:Seen){const FVector P=E.Value.Sum/E.Value.Count;if(const double D=FVector::DistSquared2D(P,A->GetActorLocation());D<BestD){BestD=D;Pick=A;EnemyAt=P;}}
+   }
+   if(Stage==1&&!Pick) for(const auto& S:L->Summaries()) if(S.bActive) if(ABattleUnit* A=L->Actor(S.LeaderUnitID); A&&A->IsAlive()&&A->GetState()->Team==0){Pick=A;break;}
+   PC->SetSelection(Pick); PC->bShowEnemyRanges=Stage==1;
+   // Zoom out (about x9 height, clamped by the camera) so a 250 m ring fits; aim on a later frame, once the new height is in the camera.
+   if(Stage==0) if(auto* Camera=Cast<ABattleCameraPawn>(PC->GetPawn())) for(int32 I=0;I<10;++I) Camera->ZoomScale(1.25f);
+   AimTarget=Pick?(Stage==1&&BestD<TNumericLimits<double>::Max()?(Pick->GetActorLocation()+EnemyAt)*.5:Pick->GetActorLocation()):FVector::ZeroVector;
+   UE_LOG(LogTemp,Display,TEXT("BATTLE_RANGE_RING_SHOT t=%.0f stage=%d selected=%d seen_enemy_squads=%d enemy_dist_m=%.0f"),T,Stage,Pick?Pick->GetState()->SquadID:-1,Seen.Num(),BestD<TNumericLimits<double>::Max()?FMath::Sqrt(BestD)/100.:-1.);
+   AimAt=Pick?T+.3:-1.; ShootAt=T+.8;
+  }
+  else if(AimAt>=0.&&T>=AimAt){Aim(AimTarget);AimAt=-1.;}
+  else if(ShootAt>=0.&&T>=ShootAt)
+  {FScreenshotRequest::RequestScreenshot(ShotPrefix+(Stage?TEXT("-enemy.png"):TEXT("-40s.png")),true,false);++Stage;ShootAt=-1.;QuitAt=T+3.;}
+  if(Stage==2&&T>QuitAt)FPlatformMisc::RequestExit(false,TEXT("BattleRangeRingShot"));
+ }
  auto Screen=[&](FVector World,FVector2D& Out){return PC->ProjectWorldLocationToScreen(World,Out)&&Out.Y>110&&Out.Y<H-130;};
  TArray<FVector2D> LabelSpots;
  auto DrawRings=[&](const FVector& Center,const FBattleRangeRings& Rings)
@@ -805,9 +847,9 @@ void ABattleHUD::DrawRangeRings()
    {
     const float A=I*2.f*PI/N; FVector2D P; const bool bNow=Screen(Center+FVector(FMath::Cos(A),FMath::Sin(A),0)*R.Radius,P);
     if(bPrev&&bNow&&(!R.bDashed||(I&1))) DrawLine(Prev.X,Prev.Y,P.X,P.Y,R.Color,1.5f);
-    if(bNow&&P.Y>Best.Y) Best=P; Prev=P; bPrev=bNow;
+    if(bNow&&P.Y>Best.Y&&P.Y<H-215) Best=P; Prev=P; bPrev=bNow;
    }
-   // Label at the lowest visible point of the ring (nearest the camera), unless another label is already there.
+   // Label at the lowest visible point of the ring above the bottom panel (nearest the camera), unless another label is already there.
    if(Best.Y<0) continue;
    bool bFree=true; for(const FVector2D& Spot:LabelSpots) if(FMath::Abs(Spot.X-Best.X)<90&&FMath::Abs(Spot.Y-Best.Y)<16){bFree=false;break;}
    if(!bFree) continue; LabelSpots.Add(Best);
