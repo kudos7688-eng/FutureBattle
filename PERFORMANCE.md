@@ -6,6 +6,8 @@
 
 ## マップE・描画あり（2026-11-18 2時50分、現状の負荷問題セッション）
 
+> **注意（2026-11-21）**：下の表の「今の既定」は、測った 11-18 時点の既定を指す。その後、部隊群（Groups）と対称な開始（SymmetricStart）が 11-20 に既定になり、遮蔽優先（CoverPriority）も既定になった。今の HEAD の既定での基準は**まだ測っていない**。下の数字を「今の1フレームの時間」として引用しない。
+
 条件：1920×1080 の画面外描画、30FPS固定、seed 7、戦車なし、単独。FS13BR5 は `-AreaBaseFlank 0 -AreaBaseFlankSide 0 -AreaBaseReturnLiving 0` で外した（11-17 の基準とそろえるため）。
 コマンド：`Setup\Test-WideSight.ps1 -Map E -Area -ObserveTactics -Experiment -Rendered -Fps 30 [-Trace 'cpu,frame']`
 
