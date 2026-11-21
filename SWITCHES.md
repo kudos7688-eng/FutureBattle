@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 281 種類。
+計 282 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -24,7 +24,7 @@
 | `-BattleAreaBaseShare` | Value | T->AreaBaseShare | BattleTactics.cpp:76 |  |
 | `-BattleAreaBaseShareHigh` | Value | 0.3f | BattleTactics.cpp:79 |  |
 | `-BattleAreaBaseShareLow` | Value | 0.f | BattleTactics.cpp:78 |  |
-| `-BattleAreaComposition` | Value | GetDefault<UBattleTuning>()->bAreaComposition?1:0 | BattleArmourAI.cpp:38 |  |
+| `-BattleAreaComposition` | Value | GetDefault<UBattleTuning>()->bAreaComposition?1:0 | BattleArmourAI.cpp:39 |  |
 | `-BattleAreaCompositionPlanner` | Value | 0 | BattleComposition.cpp:12 |  |
 | `-BattleAreaCompositionPlannerTeams` | Value | 0 | BattleComposition.cpp:13 |  |
 | `-BattleAreaDepot` | Value | 0 | BattleAreaDepot.cpp:22 |  |
@@ -63,16 +63,16 @@
 | `-BattleAreaWarResourceValue` | other |  | BattleWarScore.cpp:11 |  |
 | `-BattleAreaWarScore` | other |  | BattleWarScore.cpp:10 |  |
 | `-BattleAreaWarTarget` | other |  | BattleWarScore.cpp:12 |  |
-| `-BattleArmourAI` | Value | GetDefault<UBattleTuning>()->bArmourAI?1:0 | BattleArmourAI.cpp:31 |  |
-| `-BattleArmourAITeam` | Value | -1 | BattleArmourAI.cpp:32 |  |
+| `-BattleArmourAI` | Value | GetDefault<UBattleTuning>()->bArmourAI?1:0 | BattleArmourAI.cpp:32 |  |
+| `-BattleArmourAITeam` | Value | -1 | BattleArmourAI.cpp:33 |  |
 | `-BattleArmourSectorGate` | Value | 0 | BattleWeaponOrders.cpp:16 |  |
 | `-BattleArrivalThreat` | Value | 0 | BattleLeaderRuntime.cpp:1507 |  |
-| `-BattleArtilleryClusters` | Value | 0 | BattleArtillery.cpp:47 |  |
+| `-BattleArtilleryClusters` | Value | 0 | BattleArtillery.cpp:53 |  |
 | `-BattleArtilleryNavFallback` | Value | 0 | BattleArtillery.cpp:29 |  |
 | `-BattleArtilleryObserved` | Value | 0 | BattleArtillery.cpp:23 |  |
 | `-BattleBenchmark` | Param | off | BattleBenchmark.cpp:28, BattleController.cpp:54, BattleLeaderRuntime.cpp:72 |  |
 | `-BattleBenchmarkFPS` | Param | off | BattleBenchmark.cpp:120, BattleBenchmark.cpp:154 |  |
-| `-BattleBlastOcclusion` | Value | 0 | BattleArtillery.cpp:41 |  |
+| `-BattleBlastOcclusion` | Value | 0 | BattleArtillery.cpp:47 |  |
 | `-BattleBlindFire` | other |  | BattleBlindFire.cpp:26 |  |
 | `-BattleBlindFireClipSide` | Value | TEXT("AS_CoverLo_AimR") | BattleBlindFire.cpp:44 |  |
 | `-BattleBlindFireClipTop` | Value | TEXT("AS_CoverLo_AimU_down") | BattleBlindFire.cpp:44 |  |
@@ -234,7 +234,7 @@
 | `-BattleSightVisual` | Param | off | BattleLeaderRuntime.cpp:228 |  |
 | `-BattleSmokeSuite` | Value |  | BattleAbilitySmoke.cpp:121, BattleGameMode.cpp:156, BattleSquadSmoke.cpp:209 ほか1 |  |
 | `-BattleSmokeTest` | Param | off | BattleGameMode.cpp:142 |  |
-| `-BattleSPGAmmo` | Value | 0 | BattleArtillery.cpp:35 |  |
+| `-BattleSPGAmmo` | Value | 0 | BattleArtillery.cpp:41 |  |
 | `-BattleSplitDecisions` | Param | off | BattleBenchmark.cpp:35 |  |
 | `-BattleSquadCoverCheck` | Value | 0 | BattleLeaderRuntime.cpp:1467 |  |
 | `-BattleSquadFlank` | Value | 1 | BattleSquadTactics.cpp:22 |  |
@@ -275,6 +275,7 @@
 | `-BattleUnderFireCover` | Value | 0 | BattleLeaderRuntime.cpp:1487 |  |
 | `-BattleUnits` | Value | 1000 / 20 | BattleBenchmark.cpp:36, BattleSquadTrial.cpp:28 |  |
 | `-BattleVATFarLight` | Value | 0 | BattleVATDisplay.cpp:37 |  |
+| `-BattleVehicleHitCover` | Value/other | 0 | BattleAreaSmoke.cpp:459, BattleArtillery.cpp:35 |  |
 | `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:326, BattleSightExperiment.cpp:40 |  |
 | `-BattleWaypointPass` | Value | 0 | BattleStableMovement.cpp:364 |  |
 | `-BattleWeaponLoadouts` | Param | off | BattleSquadTrial.cpp:50 |  |
@@ -285,6 +286,6 @@
 | `-BattleWideMapAudit` | Param | off | BattleLeaderRuntime.cpp:232 |  |
 | `-BattleWideMapGeometryOnly` | Param | off | BattleWideMapAudit.cpp:157 |  |
 | `-BattleWideMixed` | Param | off | BattleGameMode.cpp:55, BattleLeaderRuntime.cpp:74 |  |
-| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:1175, BattleContactTrial.cpp:97, BattleExoShot.cpp:78 ほか14 |  |
+| `-BattleWideScreens` | Value |  | BattleAreaSmoke.cpp:1176, BattleContactTrial.cpp:97, BattleExoShot.cpp:78 ほか14 |  |
 | `-BattleWideSmoke` | Param | off | BattleLeaderRuntime.cpp:246 |  |
 | `-BattleWideSoak` | Param | off | BattleLeaderRuntime.cpp:248 |  |

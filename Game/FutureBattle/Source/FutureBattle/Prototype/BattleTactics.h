@@ -23,6 +23,7 @@ namespace BattleTactics
  bool SPGAmmoEnabled();
  // Trial -BattleArtilleryNavFallback=1 (default 0): an artillery vehicle whose post has no vehicle route tries reachable points between the post and itself.
  bool ArtilleryNavFallback();
+ bool VehicleHitCover(); // Trial -BattleVehicleHitCover=1 (default 0): hide from own hits before starting home repair.
  bool BlastOcclusionEnabled();
  bool ArtilleryClustersEnabled();
  bool WeaponOrderGateEnabled(); // trial, default 0: apply mission permissions to launchers and artillery

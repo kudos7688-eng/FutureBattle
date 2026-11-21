@@ -126,7 +126,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  const float ShieldRatio=ExoUnit&&ExoShieldMax>0.f?ExoUnit->Shield/ExoShieldMax:1.f;
  const auto* SPGUnit=BattleTactics::SPGAmmoEnabled()&&S->SquadType==BattleSquadType::SPGun?Store->Find(S->LeaderUnitID):nullptr;
  const bool bSPGEmpty=SPGUnit&&SPGUnit->SPGAmmo==0;
- const bool bRepair=Match->bArea&&bMachine&&Supply.HealPerSecond>0.f&&O.Health/FullHP<GetDefault<UBattleTuning>()->VehicleRepairRatio;
+ bool bRepair=Match->bArea&&bMachine&&Supply.HealPerSecond>0.f&&O.Health/FullHP<GetDefault<UBattleTuning>()->VehicleRepairRatio;
  if(Match->bArea && P.Action==EBattleSquadTactic::Recover && P.Reason.StartsWith(TEXT("HOME SUPPLY")))
  {
   if(Emergency&&!bMachine){Event(TEXT("HomeSupplyAbortEmergency"));SupplyTripEnd(SID,false);Retreat();return;}
@@ -139,6 +139,15 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
    if(Runtime->IssueOrder(SID,Order,Goal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("HOME SUPPLY COMPLETE / RESUME"));Runtime->IssueOrder(SID,Order,Goal,true);Event(TEXT("HomeSupplyResume"));SupplyTripEnd(SID,true);}
   }
   return;
+ }
+ if(bRepair&&bVehicle&&BattleTactics::VehicleHitCover())
+ {
+  FVector RepairHitOrigin;const double RepairNow=GetWorld()->GetTimeSeconds();
+  if(Runtime->UnitShotFrom(S->LeaderUnitID,RepairNow,RepairHitOrigin,8.))
+  {
+   bRepair=false;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_VEHICLE_REPAIR_WAIT squad=%d since_hit=%.3f"),SID,RepairNow-Runtime->ShotFrom.FindChecked(S->LeaderUnitID).Value);
+  }
  }
  if(bRepair || (Match->bArea && Threats==0 && O.RecentDamage==0 && ((O.Living<=ReturnLiving&&Match->Credits[S->Team]>0)||O.Armed==0||bSPGEmpty) && P.Action!=EBattleSquadTactic::Retreat && P.Action!=EBattleSquadTactic::Support && P.Action!=EBattleSquadTactic::Flank))
  {

@@ -30,6 +30,12 @@ bool BattleTactics::ArtilleryNavFallback()
  return On;
 }
 
+bool BattleTactics::VehicleHitCover()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleVehicleHitCover="),V);return V==1;}();
+ return On;
+}
+
 bool BattleTactics::SPGAmmoEnabled()
 {
  static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSPGAmmo="),V);return V!=0;}();

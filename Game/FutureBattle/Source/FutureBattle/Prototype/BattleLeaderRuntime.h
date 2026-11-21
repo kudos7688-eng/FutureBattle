@@ -500,7 +500,7 @@ public:
  static bool ShotDirectionEnabled();
  TMap<int32,TPair<FVector,double>> ShotFrom;
  bool HitWithin(int32 ID,double Now,double Seconds) const {const auto* F=ShotFrom.Find(ID);return F&&Now-F->Value<=Seconds;}
- bool UnitShotFrom(int32 ID,double Now,FVector& Out) const {const auto* F=ShotFrom.Find(ID);if(!F||Now-F->Value>5.)return false;Out=F->Key;return true;}
+ bool UnitShotFrom(int32 ID,double Now,FVector& Out,double Seconds=5.) const {const auto* F=ShotFrom.Find(ID);if(!F||Now-F->Value>Seconds)return false;Out=F->Key;return true;}
  bool SquadShotFrom(int32 SquadID,double Now,FVector& Out) const;
  static bool ShotFromOther(const FVector& Me,const FVector& Target,const FVector& From)
  {return FVector::DistSquared2D(From,Target)>FMath::Square(1000.) && FVector::DotProduct((From-Me).GetSafeNormal2D(),(Target-Me).GetSafeNormal2D())<0.866f;}

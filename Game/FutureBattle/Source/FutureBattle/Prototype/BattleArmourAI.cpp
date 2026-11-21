@@ -23,6 +23,7 @@
 #include "BattleFieldLayout.h"
 #include "BattleTactics.h"
 #include "NavigationSystem.h"
+#include "Components/CapsuleComponent.h"
 #include "FutureBattle.h"
 
 bool BattleTactics::ArmourAI(int32 Team)
@@ -151,6 +152,41 @@ int32 UBattleMatch::AreaArmourReaction(int32 Team,int32 SquadID,float DamageRati
   const double Distance=Threat?FMath::Max(2000.,Keep+2000.-Nearest):10000.;
   auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());const ANavigationData* Data=R->NavFor(S->LeaderUnitID);
   if(!Nav||Away.IsNearlyZero())return 0;
+  if(!Threat&&bShock&&BattleTactics::VehicleHitCover())
+  {
+   FVector HitOrigin;
+   if(R->UnitShotFrom(S->LeaderUnitID,GetWorld()->GetTimeSeconds(),HitOrigin,10.))
+   {
+    const FVector TowardHit=(HitOrigin-Here).GetSafeNormal2D();
+    auto HideQuery=R->Sight(S->LeaderUnitID).Query;
+    // Bodies are not lasting cover; ignore all units, including enemy vehicles, without reading their positions.
+    for(const auto& HideBody:R->GetBodies())
+    {
+     if(const auto* HideActor=R->Actor(HideBody.Key))HideQuery.AddIgnoredActor(HideActor);
+     HideQuery.AddIgnoredComponent(HideBody.Value.Capsule.Get());
+    }
+    int32 HideCandidates=0,HideCount=0;double HideBest=DBL_MAX;FVector HideGoal=FVector::ZeroVector;
+    // Ascending index and strict improvement break ties deterministically. Reserve two projections for the old fallback.
+    for(int32 HideIndex=0;HideIndex<16&&HideCandidates<14;++HideIndex)
+    {
+     const FVector HideDirection=FVector::ForwardVector.RotateAngleAxis((HideIndex/2)*45.,FVector::UpVector);
+     if(FVector::DotProduct(HideDirection,TowardHit)>.3)continue;
+     FNavLocation HideLocation;++HideCandidates;
+     if(!Nav->ProjectPointToNavigation(Here+HideDirection*(HideIndex%2==0?2500.:5000.),HideLocation,FVector(1500,1500,400),Data))continue;
+     if(FVector::DotProduct((HideLocation.Location-Here).GetSafeNormal2D(),TowardHit)>.3)continue;
+     if(!GetWorld()->LineTraceTestByChannel(HitOrigin+FVector(0,0,150),HideLocation.Location+FVector(0,0,150),ECC_Visibility,HideQuery))continue;
+     ++HideCount;const double HideHomeDistance=FVector::DistSquared2D(HideLocation.Location,Home);
+     if(HideHomeDistance<HideBest){HideBest=HideHomeDistance;HideGoal=HideLocation.Location;}
+    }
+    if(HideCount>0)
+    {
+     Goal=HideGoal;Why=TEXT("HEAVY HIT / HIDE FROM FIRE");
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_VEHICLE_HIDE squad=%d origin=%s goal=%s candidates=%d hidden=%d"),SquadID,*HitOrigin.ToCompactString(),*Goal.ToCompactString(),HideCandidates,HideCount);
+     return 1;
+    }
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_VEHICLE_HIDE squad=%d origin=%s goal=fallback_home candidates=%d hidden=0"),SquadID,*HitOrigin.ToCompactString(),HideCandidates);
+   }
+  }
   FNavLocation L;
   if(!Nav->ProjectPointToNavigation(Here+Away*Distance,L,FVector(1500,1500,400),Data)&&!Nav->ProjectPointToNavigation(Here+ToHome*Distance,L,FVector(1500,1500,400),Data))return 0;
   Goal=L.Location;Why=Threat?TEXT("ANTI-TANK THREAT / STAND OFF"):TEXT("HEAVY HIT / PULL BACK");
