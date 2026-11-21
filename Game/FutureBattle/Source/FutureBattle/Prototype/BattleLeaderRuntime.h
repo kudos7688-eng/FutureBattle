@@ -484,6 +484,11 @@ public:
  // 10% of the distance (never the exact position). Counts hit_reveal_* in the sight diagnostics.
  static bool HitRevealEnabled();
  void RevealShooter(int32 VictimID,int32 ShooterID,const FVector& From);
+ // Evaluation only (sight diagnostics on, behaviour unchanged, 2026-11-21): a hit soldier who does not see his shooter. Why each of the
+ // two lines (victim->shooter, shooter->victim) fails, using the same checks as CanSee (range, field of view, first blocking hit).
+ // Counts hitlos_* (direct trace, not added to the -BattleSightHitStats counters).
+ void DiagnoseHitSight(int32 VictimID,int32 ShooterID);
+ const TCHAR* SightBlockReason(int32 ObserverID,int32 TargetID,double& EyeZ,double& EndZ) const;
  bool CloseInThreat(int32 SquadID,FVector& Threat) const {const auto* P=Plans.Find(SquadID);if(!P||!P->bCloseIn)return false;Threat=P->CloseInAt;return true;}
  void ClearCloseIn(int32 SquadID){if(auto* P=Plans.Find(SquadID)){P->bCloseIn=false;P->FarSince=0;}}
  // Trial -BattleArrivalThreat=1 (default 0): a sector squad picks its arrival cover places against the known enemy nearest
