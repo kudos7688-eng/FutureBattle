@@ -617,6 +617,10 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  FVector SelectedTargetAt=FVector::ZeroVector;
  P.TargetID=INDEX_NONE; double Best=DBL_MAX;
  P.Center=FVector::ZeroVector; int32 Count=0; for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) { P.Center+=Position(ID); ++Count; } if(Count) P.Center/=Count;
+ // Trial -BattleFocusTarget=1: enemies more than 45 degrees off the focus count as 1.5 times as far.
+ const FVector FocusDir=P.bFocus?(P.Focus-P.Center).GetSafeNormal2D():FVector::ZeroVector;
+ const bool bFocusTarget=FocusTargetEnabled() && AttackFocusEnabled() && Sector && P.bFocus && !FocusDir.IsNearlyZero();
+ bool bBestInCone=true;
  if(S->Order!=EBattleOrder::Move) for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) if(const auto* Contacts=Sense->GetContacts(ID))
   for(const auto& C:*Contacts) if(C.Value.bVisible && !C.Value.bShared)
   {
@@ -624,9 +628,12 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    if(Sector && BattleSectors::Cell(C.Value.LastKnownPosition)!=SectorCell && !OutsideOK(ID,C.Value.LastKnownPosition)) continue;
    if(!BattleTactics::OrderAllowsTarget(*S,C.Key,C.Value.LastKnownPosition))continue;
    if(bArmourSectorGate)AllowedArmourTargets.Add(C.Key);
-   const double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
-   if(D<Best || (D==Best && C.Key<P.TargetID)) { Best=D; P.TargetID=C.Key;if(BattleTactics::ObservedTactics())SelectedTargetAt=C.Value.LastKnownPosition; }
+   double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
+   const bool bInCone=!bFocusTarget || FVector::DotProduct((C.Value.LastKnownPosition-P.Center).GetSafeNormal2D(),FocusDir)>=.707f;
+   if(!bInCone)D*=2.25;
+   if(D<Best || (D==Best && C.Key<P.TargetID)) { Best=D; P.TargetID=C.Key;bBestInCone=bInCone;if(BattleTactics::ObservedTactics())SelectedTargetAt=C.Value.LastKnownPosition; }
   }
+ if(bFocusTarget && P.TargetID!=INDEX_NONE)SightExperiment.Cover(bBestInCone?TEXT("focus_target_in_cone"):TEXT("focus_target_off_cone"));
  // Trial -BattleReacquireGrace=1: keep the previous target briefly while a member's own (non-shared) sighting is
  // fresh. Firing still requires a current line of sight (CanEngage/CanSee); this only avoids dropping the engagement.
  if(P.TargetID==INDEX_NONE && PreviousTarget!=INDEX_NONE && S->Order!=EBattleOrder::Move && BattleTactics::ReacquireGraceEnabled())
@@ -722,8 +729,28 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   else if(P.FarSince==0)P.FarSince=Now;
   else if(Now-P.FarSince>=8.){P.bCloseIn=true;P.CloseInAt=TargetAt;SightExperiment.Cover(TEXT("close_in_wanted"));}
  }
- // Trial -BattleArrivalThreat=1: in the sector, a target far off the direction the arrival places face picks them again.
- if(ArrivalThreatEnabled() && Sector && bTargetKnown && BattleSectors::Cell(P.Center)==SectorCell && Now>=P.FacingCheckAt)
+ // Trial -BattleAttackFocus=1: the squad's focus (every 3 s); in its sector, its arrival places are picked again when the focus
+ // turns more than 45 degrees from the direction they face, or appears after they were picked without one (at most every 10 s).
+ if(AttackFocusEnabled())
+ {
+  if(!Sector)P.bFocus=false;
+  else if(Now>=P.FocusCheckAt)
+  {
+   P.FocusCheckAt=Now+3.;
+   FVector NewFocus=FVector::ZeroVector;const TCHAR* Source=TEXT("attack_focus_none");
+   P.bFocus=PickAttackFocus(*S,Now,NewFocus,Source);
+   if(P.bFocus)P.Focus=NewFocus;
+   SightExperiment.Cover(Source);
+   const FVector Dir=P.bFocus?(P.Focus-S->Destination).GetSafeNormal2D():FVector::ZeroVector;
+   // (A squad on Hold builds no new places, so its reservations are kept.)
+   if(!Dir.IsNearlyZero() && S->Order!=EBattleOrder::Hold && BattleSectors::Cell(P.Center)==SectorCell && Now>=P.FocusReplanAt &&
+      (P.FocusPlanDir.IsNearlyZero() || FVector::DotProduct(Dir,P.FocusPlanDir)<.707f))
+   {P.ArrivalGoals.Reset();P.bReplan=true;P.FocusReplanAt=Now+10.;SightExperiment.Cover(TEXT("attack_focus_replan"));}
+  }
+ }
+ // Trial -BattleArrivalThreat=1: in the sector, a target far off the direction the arrival places face picks them again
+ // (not with -BattleAttackFocus, which re-plans by its focus).
+ if(ArrivalThreatEnabled() && !AttackFocusEnabled() && Sector && bTargetKnown && BattleSectors::Cell(P.Center)==SectorCell && Now>=P.FacingCheckAt)
  {
   P.FacingCheckAt=Now+3.;
   if(!P.ArrivalFacing.IsNearlyZero() && FVector::DotProduct((TargetAt-S->Destination).GetSafeNormal2D(),P.ArrivalFacing)<.707f)
@@ -1050,6 +1077,15 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  }
  else if(FVector From;HitFaceEnabled() && !bArtilleryAim && !IsVehicle(ID) && HitWithin(ID,Now,2.) && UnitShotFrom(ID,Now,From) && FVector::DistSquared2D(From,Pos)>1.e4)
  {Direction=(From-Pos).GetSafeNormal2D();SightExperiment.Cover(TEXT("hit_face_turned"));}
+ // Trial -BattleAttackFocus=1: a still soldier of a sector squad with nothing to fire at watches the squad's focus, the members
+ // fanned 0/-20/+20/-40/+40 degrees (with the 120-degree view, the squad watches about 200 degrees around the focus).
+ else if(AttackFocusEnabled() && P->bFocus && !bArtilleryAim && !bVehicleBody && S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission &&
+         B.Velocity.SizeSquared2D()<900. && FVector::DistSquared2D(P->Focus,Pos)>1.e4)
+ {
+  static const float Fan[]={0.f,-20.f,20.f,-40.f,40.f};
+  Direction=(P->Focus-Pos).GetSafeNormal2D().RotateAngleAxis(Fan[FMath::Max(0,S->Members.IndexOfByKey(ID))%5],FVector::UpVector);
+  SightExperiment.Cover(TEXT("focus_facing_frames"));
+ }
  // A vehicle turns its turret to the target; its hull keeps the driving heading (SteerVehicle).
  // The main gun's target (stage 2) takes the turret; the machine gun keeps firing along Direction at its own target.
  // A mortar gunner without a direct target faces his indirect-fire target; a self-propelled gun turns its gun to it.
@@ -1586,6 +1622,56 @@ bool UBattleLeaderRuntime::PinnedFlankEnabled()
 {
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattlePinnedFlank="),V);return V!=0;}();
  return bOn;
+}
+bool UBattleLeaderRuntime::SectorSymmetricEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSymmetric="),V);return V!=0;}();
+ return bOn;
+}
+int32 UBattleLeaderRuntime::SectorTurn(int32 Team) const
+{
+ if(!SectorSymmetricEnabled() || (Team!=0 && Team!=1))return 1;
+ const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ return Match && Match->AreaHome(Team).X>0?-1:1;
+}
+bool UBattleLeaderRuntime::AttackFocusEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAttackFocus="),V);return V!=0;}();
+ return bOn;
+}
+bool UBattleLeaderRuntime::FocusTargetEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleFocusTarget="),V);return V!=0;}();
+ return bOn;
+}
+bool UBattleLeaderRuntime::PickAttackFocus(const FBattleSquadState& S,double Now,FVector& Out,const TCHAR*& Source)
+{
+ Source=TEXT("attack_focus_none");
+ const int32 Team=S.Team;if(Team!=0 && Team!=1)return false;
+ if(Now-FocusEnemiesAt[Team]>=1.){FocusEnemies[Team]=GetWorld()->GetSubsystem<UBattleMatch>()->RouteKnownEnemies(Team);FocusEnemiesAt[Team]=Now;}
+ // The destination sector and its 8 neighbours: the one where the team sees the most enemies (ties: nearer to the destination).
+ struct FAcc{int32 N=0;FVector Sum=FVector::ZeroVector;};
+ const FIntPoint Dest=BattleSectors::Cell(S.Destination);
+ TMap<FIntPoint,FAcc> Cells;
+ for(const FVector& E:FocusEnemies[Team])
+  if(const FIntPoint C=BattleSectors::Cell(E);FMath::Abs(C.X-Dest.X)<=1 && FMath::Abs(C.Y-Dest.Y)<=1){FAcc& A=Cells.FindOrAdd(C);++A.N;A.Sum+=E;}
+ // Last ties by cell, read in the team's own frame (the east team's turned 180 degrees), so both teams pick alike on the
+ // point-symmetric maps.
+ const int32 Turn=GetWorld()->GetSubsystem<UBattleMatch>()->AreaHome(Team).X>0?-1:1;
+ bool bBest=false;FIntPoint BestCell(0,0);int32 BestN=0;double BestDist=0;
+ for(const auto& Pair:Cells)
+ {
+  const double D=FVector::DistSquared2D(BattleSectors::Center(Pair.Key),S.Destination);
+  const bool bBetter=!bBest || Pair.Value.N>BestN || (Pair.Value.N==BestN && (D<BestDist || (D==BestDist &&
+   (Turn*Pair.Key.X<Turn*BestCell.X || (Pair.Key.X==BestCell.X && Turn*Pair.Key.Y<Turn*BestCell.Y)))));
+  if(bBetter){bBest=true;BestCell=Pair.Key;BestN=Pair.Value.N;BestDist=D;}
+ }
+ if(bBest){Out=Cells.FindChecked(BestCell).Sum/BestN;Source=TEXT("attack_focus_sector");return true;}
+ // Else the known enemy nearest to the destination within 200 m (the -BattleArrivalThreat rule).
+ double Best=FMath::Square(20000.);bool bNear=false;
+ for(const FVector& E:FocusEnemies[Team])if(const double D=FVector::DistSquared2D(E,S.Destination);D<Best){Best=D;Out=E;bNear=true;}
+ if(bNear){Source=TEXT("attack_focus_near");return true;}
+ return false;
 }
 bool UBattleLeaderRuntime::CoverDenseEnabled()
 {

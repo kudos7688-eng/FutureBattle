@@ -135,6 +135,9 @@ struct FBattleLeaderPlan
  double PinnedSince=0,PinnedBestDist=0;bool bPinned=false;FVector PinnedAt=FVector::ZeroVector;
  // Trial -BattleArrivalThreat=1: the direction the arrival places were chosen against (zero = the direction of advance).
  FVector ArrivalFacing=FVector::ZeroVector;double FacingCheckAt=0;
+ // Trial -BattleAttackFocus=1: the point this sector squad defends toward (from its team's sightings, re-picked every 3 s) and
+ // the direction its current arrival places were chosen against (from the destination; zero = not chosen against a focus).
+ FVector Focus=FVector::ZeroVector;bool bFocus=false;FVector FocusPlanDir=FVector::ZeroVector;double FocusCheckAt=0,FocusReplanAt=0;
  // Trial -BattleCloseIn=1: in its sector, fighting a target over 90 m away for 8 s while at least even (the -BattleSquadCoverCheck
  // count) = too far (the AI order loop then moves the squad one sector closer, UBattleMatch::CloseInStage).
  double FarSince=0,FarCheckAt=0;bool bCloseIn=false;FVector CloseInAt=FVector::ZeroVector;
@@ -562,6 +565,32 @@ public:
  // roof or upper floor (a static obstacle 1.2-8 m above the slot: inside houses and sheds, by windows) before the ones outside.
  // Counts arrival_indoor_*.
  static bool CoverIndoorEnabled();
+ // Trial -BattleAttackFocus=1 (2026-11-22, default 0; user idea 11-22: an attack order toward an enemy squad or sector, and cover
+ // against that direction - stage 1+2, the sector AI picks the focus itself): a sector squad keeps a focus point, the enemies its
+ // team sees now (RouteKnownEnemies: own sightings and scout reports, no hidden state) in the destination sector and its 8
+ // neighbours - the sector with the most of them (ties: nearer to the destination), their mean position; else the known enemy
+ // nearest to the destination within 200 m; else none (the old rules). Re-picked every 3 s. Its arrival cover slots need an
+ // obstacle within 2.5 m toward the focus or 30 degrees either side (instead of straight ahead along the way in, or the
+ // -BattleArrivalThreat direction, whose re-facing it replaces), a still soldier with nothing to fire at watches the focus
+ // (members fanned 0/-20/+20/-40/+40 degrees), and in its sector the squad re-plans its arrival places when the focus turns more
+ // than 45 degrees from the direction they were chosen against (or appears after they were chosen without one; at most every
+ // 10 s). Counts attack_focus_*, arrival_focus_facing, focus_facing_frames.
+ static bool AttackFocusEnabled();
+ // Trial -BattleFocusTarget=1 (2026-11-22, default 0; with -BattleAttackFocus): the squad's target choice counts a visible enemy
+ // more than 45 degrees off the focus (seen from the squad centre) as 1.5 times as far, so the squad fires toward its focus first
+ // and still answers a much nearer enemy elsewhere. Counts focus_target_in_cone / focus_target_off_cone.
+ static bool FocusTargetEnabled();
+ // Trial -BattleSectorSymmetric=1 (2026-11-22, default 0; west/east bias of the sector AI on map I, STATUS 11-22 5:00): the sector
+ // AI's choices that scan the 3x3 sectors around a squad in a fixed compass order and keep the first of equal scores (the stop
+ // beside the next junction, the pinned squad's flank stop, the close-in stop - BattleSectorRoute.cpp), and the arrival places
+ // sorted with ties by world X then Y (BuildMovementPlan, ReassignOccupiedArrival), read them in the team's own frame: the
+ // east team (AreaHome.X > 0) turned 180 degrees, so on the point-symmetric maps both teams break ties alike.
+ static bool SectorSymmetricEnabled();
+ // -BattleSectorSymmetric: -1 for the east team (its frame turned 180 degrees), else 1.
+ int32 SectorTurn(int32 Team) const;
+ // -BattleAttackFocus: each team's current sightings (RouteKnownEnemies), refreshed at most once a second.
+ TArray<FVector> FocusEnemies[2];double FocusEnemiesAt[2]={-1.,-1.};
+ bool PickAttackFocus(const struct FBattleSquadState& S,double Now,FVector& Out,const TCHAR*& Source);
  // Trial -BattleCoverStrict=1 (2026-11-20, default 0; user: "cover that does not hide from the enemy, standing in the open"):
  // a cover place counts only when the threat sees at most 2 of the 5 body samples (was 3) - for the cover actions, for the
  // arrival places of a sector squad and its places along the wall (checked against the known enemy nearest to the sector), and
