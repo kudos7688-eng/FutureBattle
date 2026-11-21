@@ -742,8 +742,14 @@ void ABattleController::ToggleFogView()
 void ABattleController::ToggleEnemyRanges()
 {
 	if (!bTactical) return;
-	bShowEnemyRanges = !bShowEnemyRanges;
-	ShowNotice(bShowEnemyRanges ? TEXT("敵の射程：見えている敵をすべて表示") : TEXT("敵の射程：ポインタを重ねた敵だけ表示"));
+	// Order: own only -> + enemy under the pointer -> + every seen enemy -> none -> own only.
+	RangeRingMode = RangeRingMode == 0 ? 1 : RangeRingMode == 3 ? 0 : RangeRingMode + 1;
+	ShowNotice(FString::Printf(TEXT("射程の円：%s"), RangeRingModeName(RangeRingMode)));
+}
+
+const TCHAR* ABattleController::RangeRingModeName(int32 Mode)
+{
+	return Mode == 0 ? TEXT("表示しない") : Mode == 2 ? TEXT("自軍＋ポインタの敵") : Mode == 3 ? TEXT("自軍＋見えている敵すべて") : TEXT("選んだ自軍のみ");
 }
 
 bool ABattleController::GetPointerPosition(FVector2D& Position) const

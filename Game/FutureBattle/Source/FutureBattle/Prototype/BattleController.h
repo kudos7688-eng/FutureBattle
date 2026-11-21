@@ -118,8 +118,13 @@ public:
 	bool bShowSectorGrid = true, bShowFog = true;
 	void ToggleSectorGrid();
 	void ToggleFogView();
-	// Range rings of seen enemy squads (L, display only, ABattleHUD::DrawRangeRings): off = only the enemy under the pointer.
-	bool bShowEnemyRanges = false;
+	// Range rings (L cycles, display only, ABattleHUD::DrawRangeRings): 1 selected own squads only (default),
+	// 2 + the enemy squad under the pointer, 3 + every seen enemy squad, 0 none.
+	int32 RangeRingMode = 1;
+	bool ShowsOwnRanges() const { return RangeRingMode != 0; }
+	bool ShowsHoveredEnemyRanges() const { return RangeRingMode == 2; }
+	bool ShowsAllEnemyRanges() const { return RangeRingMode == 3; }
+	static const TCHAR* RangeRingModeName(int32 Mode);
 	void ToggleEnemyRanges();
 	void CycleTrainingSelected();
 	void HireRecruit();
