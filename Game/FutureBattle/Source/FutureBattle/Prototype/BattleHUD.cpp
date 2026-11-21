@@ -448,6 +448,41 @@ void ABattleHUD::DrawHUD()
  DrawOrderWays();
  DrawNoticeLog();
  DrawSectorPanel(PC);
+ DrawGamepadMenu(PC);
+}
+
+void ABattleHUD::DrawGamepadMenu(ABattleController* PC)
+{
+ if(!PC->IsTactical()||(!PC->bGamepadActive&&!PC->IsGamepadMenuOpen()&&!PC->IsGroundFloorPending()))return;
+ const auto MenuBar=FBattleCommandBarLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld(),true);
+ const float MenuWidth=FMath::Min(360.f,FMath::Max(1.f,float(Canvas->SizeX)-32.f));
+ const float MenuRowHeight=FMath::Max(26.f,MenuBar.ButtonHeight);
+ const float MenuHeight=PC->IsGamepadMenuOpen()?MenuRowHeight*8.f+16.f:MenuRowHeight+12.f;
+ const float MenuX=(float(Canvas->SizeX)-MenuWidth)*.5f, MenuY=FMath::Max(16.f,MenuBar.PanelTop-MenuHeight-8.f);
+ const FLinearColor MenuInk(.025f,.04f,.065f,.98f),MenuMint(.28f,.95f,.8f),MenuWhite(.94f,.97f,1.f);
+ DrawRect(MenuInk,MenuX,MenuY,MenuWidth,MenuHeight);
+ auto MenuLabel=[&](const FString& MenuText,float MenuTextY,FLinearColor MenuColor)
+ {
+  float MenuTextWidth=0,MenuTextHeight=0;
+  Canvas->StrLen(GEngine->GetSmallFont(),MenuText,MenuTextWidth,MenuTextHeight);
+  const float MenuScale=FMath::Min(.85f,(MenuWidth-24.f)/FMath::Max(1.f,MenuTextWidth));
+  DrawText(MenuText,MenuColor,MenuX+12.f,MenuTextY,GEngine->GetSmallFont(),MenuScale);
+ };
+ if(!PC->IsGamepadMenuOpen())
+ {
+  MenuLabel(PC->IsGroundFloorPending()?TEXT("次の命令：1階 ／ 左スティック押込：メニュー"):TEXT("左スティック押込：群・保存メニュー"),MenuY+6.f,MenuMint);return;
+ }
+ MenuLabel(TEXT("作戦メニュー ／ 左スティック押込で閉じる"),MenuY+6.f,MenuMint);
+ const FString MenuEntries[]={TEXT("群を編成／解散 (F)"),TEXT("群を選択 (V)"),TEXT("クイック保存 (F8)"),TEXT("クイック読込 (F9)"),
+  PC->IsGroundFloorPending()?TEXT("1階を指定：入（次の命令／Alt）"):TEXT("1階を指定：切（次の命令／Alt）"),TEXT("閉じる")};
+ for(int32 MenuIndex=0;MenuIndex<UE_ARRAY_COUNT(MenuEntries);++MenuIndex)
+ {
+  const float MenuEntryY=MenuY+8.f+MenuRowHeight*float(MenuIndex+1);
+  const bool bMenuSelected=MenuIndex==PC->GetGamepadMenuRow();
+  if(bMenuSelected)DrawRect(FLinearColor(.10f,.24f,.24f,.98f),MenuX+6.f,MenuEntryY,MenuWidth-12.f,MenuRowHeight-2.f);
+  MenuLabel(MenuEntries[MenuIndex],MenuEntryY+4.f,bMenuSelected?MenuMint:MenuWhite);
+ }
+ MenuLabel(TEXT("十字↑↓：選択  A：決定  B：閉じる"),MenuY+8.f+MenuRowHeight*7.f,MenuWhite);
 }
 
 void ABattleHUD::DrawMinimap()

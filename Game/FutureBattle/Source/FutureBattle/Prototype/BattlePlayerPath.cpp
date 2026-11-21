@@ -29,7 +29,7 @@ bool ABattleController::PickOrderPoint(FVector2D Screen,FVector& Out,int32* Leve
  const auto& Heights=BattleFieldLayout::Of(GetWorld()).Heights;
  FVector Origin,Dir;
  if(Heights.IsEmpty()||!UGameplayStatics::DeprojectScreenToWorld(this,Screen,Origin,Dir)||Dir.Z>-.05)return bHit;
- const bool bLower=IsInputKeyDown(EKeys::LeftAlt)||IsInputKeyDown(EKeys::RightAlt);
+ const bool bLower=bGroundFloorPending||IsInputKeyDown(EKeys::LeftAlt)||IsInputKeyDown(EKeys::RightAlt);
  double BestT=DBL_MAX;
  for(const auto& P:Heights.Patches)
  {
@@ -68,6 +68,7 @@ void ABattleController::EndPathDraw()
  if(!bTactical||Selected.IsEmpty())return;
  FVector2D Pointer=PathScreenStart;FVector End;int32 Level=0;
  if(!GetPointerPosition(Pointer)||!PickOrderPoint(Pointer,End,&Level)){if(Drawn.IsEmpty())return;End=Drawn.Last();}
+ bGroundFloorPending=false; // Consume once, after all points of this order have used the same floor selection.
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const double Length=DrawnLength+(Drawn.Num()?FVector::Dist2D(End,Drawn.Last()):0.);
  const bool bSectorMove=UBattleLeaderRuntime::SectorMoveEnabled() && BattleFieldLayout::Of(GetWorld()).bSectors && PendingOrder==EBattleOrder::Move;

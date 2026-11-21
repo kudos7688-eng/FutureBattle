@@ -172,6 +172,9 @@ public:
 	// the left stick pans; direct: left stick moves, right stick looks with a light aim assist. X held in direct control is
 	// reserved for a future interact action. bGamepadActive switches the HUD hints to pad buttons.
 	bool bGamepadActive=false;
+ bool IsGamepadMenuOpen() const {return bTactical&&bGamepadMenuOpen;}
+ int32 GetGamepadMenuRow() const {return GamepadMenuRow;}
+ bool IsGroundFloorPending() const {return bGroundFloorPending;}
 	FKey GamepadToKey(const FKey& Key) const;
 	void UpdateGamepad(float DeltaTime);
 	float AimAssistScale() const;
@@ -181,13 +184,18 @@ public:
 	int32 AimLevel = 1;
 	UFUNCTION(Exec) void BattleVerify();
 private:
+ bool bGamepadMenuOpen=false, bGroundFloorPending=false;
+ int32 GamepadMenuRow=0;
+ TSet<FKey> GamepadMenuKeys;
+ bool HandleGamepadMenu(const FInputKeyEventArgs& Params);
+ void ConfirmGamepadMenu();
  // Preserve subpixel motion; a different mouse position resynchronizes the virtual cursor.
  FVector2f VirtualCursor=FVector2f::ZeroVector, LastCursorPosition=FVector2f::ZeroVector;
  bool bVirtualCursorValid=false;
  // Physical key -> logical key chosen on press. Invalid values wait for physical release after cancellation.
  TMap<FKey,FInputKeyEventArgs> HeldPlayerKeys;
  bool HandlePlayerInput(const FInputKeyEventArgs& Params);
- void CancelPlayerInput();
+ void CancelPlayerInput(bool bGamepadOnly=false);
 	UPROPERTY() TObjectPtr<ABattleCameraPawn> TacticalPawn;
 	UPROPERTY() TObjectPtr<ABattleUnit> LastControlled;
 	UPROPERTY() TArray<TObjectPtr<ABattleUnit>> Selected;

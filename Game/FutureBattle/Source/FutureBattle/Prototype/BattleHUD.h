@@ -12,6 +12,7 @@ class ABattleHUD : public AHUD
 public:
 	virtual void DrawHUD() override;
 private:
+ void DrawGamepadMenu(class ABattleController* PC);
  void DrawSquadList();
  // Tactical minimap: own squads and only what the player's side has observed (never unseen enemies).
  void DrawMinimap();

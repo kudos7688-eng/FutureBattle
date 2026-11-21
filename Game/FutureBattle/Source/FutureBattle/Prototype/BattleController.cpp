@@ -295,6 +295,7 @@ void ABattleController::EnterTactical()
 {
 	if (!TacticalPawn) return;
  CancelPlayerInput();
+ bGamepadMenuOpen=false;bGroundFloorPending=false;
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
 	{
 		LastControlled = Unit;
@@ -334,6 +335,7 @@ bool ABattleController::ControlUnit(ABattleUnit* Unit)
  if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled() && !L->CanControlLeader(Unit->GetUnitID())) return false;
 	PendingOrder = EBattleOrder::Move;
  CancelPlayerInput();
+ bGamepadMenuOpen=false;bGroundFloorPending=false;
 	if (!bTactical) EnterTactical();
 	const FBattleUnitState Before = *Unit->GetState();
 	if (AAIController* AI = Cast<AAIController>(Unit->GetController())) { Unit->SavedAI = AI; AI->StopMovement(); AI->UnPossess(); }
@@ -458,6 +460,7 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 {
  if(Params.Key.IsGamepadKey()) bGamepadActive=true;
  else if(Params.Key.IsMouseButton()||!Params.Key.IsAnalog()) bGamepadActive=false;
+ if(HandleGamepadMenu(Params))return true;
  FInputKeyEventArgs Logical=Params;
  if(Params.Key.IsGamepadKey())
  {
@@ -491,12 +494,16 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
  return HandlePlayerInput(Logical);
 }
 
-void ABattleController::CancelPlayerInput()
+void ABattleController::CancelPlayerInput(bool bGamepadOnly)
 {
  TMap<FKey,FInputKeyEventArgs> Released;
  for(auto& Pair:HeldPlayerKeys)
  {
-  if(Pair.Value.Key.IsValid())Released.FindOrAdd(Pair.Value.Key,Pair.Value);
+  if(bGamepadOnly&&!Pair.Key.IsGamepadKey())continue;
+  bool bHeldByKeyboard=false;
+  if(bGamepadOnly)for(const auto& OtherHeld:HeldPlayerKeys)
+   if(!OtherHeld.Key.IsGamepadKey()&&OtherHeld.Value.Key==Pair.Value.Key)bHeldByKeyboard=true;
+  if(Pair.Value.Key.IsValid()&&!bHeldByKeyboard)Released.FindOrAdd(Pair.Value.Key,Pair.Value);
   Pair.Value.Key=FKey(); // Require release and a fresh press in the new mode.
  }
  for(auto& Pair:Released)
@@ -504,9 +511,12 @@ void ABattleController::CancelPlayerInput()
   auto Release=Pair.Value;Release.Event=IE_Released;Release.AmountDepressed=0.f;
   Super::InputKey(Release);
  }
- if(auto* Controlled=Cast<ABattleUnit>(GetPawn()))Controlled->StopJumping();
- bTriggerHeld=false;bAimHeld=false;bPathDraw=false;DrawnPath.Reset();DrawnLength=0;
- DelegationPress=INDEX_NONE;bSquadListPress=false;bMinimapPress=false;PressedSquadID=INDEX_NONE;
+ if(!bGamepadOnly||Released.Contains(EKeys::SpaceBar))
+  if(auto* Controlled=Cast<ABattleUnit>(GetPawn()))Controlled->StopJumping();
+ if(!bGamepadOnly||Released.Contains(EKeys::LeftMouseButton))
+ {bTriggerHeld=false;DelegationPress=INDEX_NONE;bSquadListPress=false;bMinimapPress=false;PressedSquadID=INDEX_NONE;}
+ if(!bGamepadOnly||Released.Contains(EKeys::RightMouseButton))
+ {bAimHeld=false;bPathDraw=false;DrawnPath.Reset();DrawnLength=0;}
 }
 
 bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
@@ -1172,6 +1182,51 @@ void ABattleController::PressCommandButton(int32 Index)
 }
 
 // ---- Gamepad (Xbox controller). Buttons become the keyboard/mouse key with the same action; sticks are read every frame.
+bool ABattleController::HandleGamepadMenu(const FInputKeyEventArgs& Params)
+{
+ if(!Params.Key.IsGamepadKey()||Params.Key.IsAnalog())return false;
+ // Keep ownership through release, including after confirmation, load or a keyboard mode switch.
+ if(GamepadMenuKeys.Contains(Params.Key))
+ {if(Params.Event==IE_Released)GamepadMenuKeys.Remove(Params.Key);return true;}
+ if(!bTactical)return false;
+ const bool bMenuToggle=Params.Key==EKeys::Gamepad_LeftThumbstick;
+ if(!bGamepadMenuOpen&&!bMenuToggle)return false;
+ if(Params.Event==IE_Released)return false; // A pre-menu press keeps its existing release path.
+ if(Params.Event!=IE_Pressed)return true;
+ GamepadMenuKeys.Add(Params.Key);
+ if(bMenuToggle)
+ {
+  if(bGamepadMenuOpen)bGamepadMenuOpen=false;
+  else
+  {
+   // Cancel a held selection/order before giving the modal menu ownership of the pad.
+   CancelPlayerInput(true);bGamepadMenuOpen=true;GamepadMenuRow=0;
+  }
+  return true;
+ }
+ if(Params.Key==EKeys::Gamepad_DPad_Up)GamepadMenuRow=(GamepadMenuRow+5)%6;
+ else if(Params.Key==EKeys::Gamepad_DPad_Down)GamepadMenuRow=(GamepadMenuRow+1)%6;
+ else if(Params.Key==EKeys::Gamepad_FaceButton_Right)bGamepadMenuOpen=false;
+ else if(Params.Key==EKeys::Gamepad_FaceButton_Bottom)ConfirmGamepadMenu();
+ return true;
+}
+
+void ABattleController::ConfirmGamepadMenu()
+{
+ bGamepadMenuOpen=false;
+ switch(GamepadMenuRow)
+ {
+ case 0: FormGroupSelected();break;
+ case 1: SelectGroupSelected();break;
+ case 2: SaveMatch();break;
+ case 3: LoadMatch();break;
+ case 4:
+  bGroundFloorPending=!bGroundFloorPending;
+  ShowNotice(bGroundFloorPending?TEXT("次の地点・道筋命令：1階を指定"):TEXT("1階指定を解除"));break;
+ default: break;
+ }
+}
+
 FKey ABattleController::GamepadToKey(const FKey& Key) const
 {
  if(bTactical)
@@ -1225,6 +1280,7 @@ float ABattleController::AimAssistScale() const
 }
 void ABattleController::UpdateGamepad(float DeltaTime)
 {
+ if(IsGamepadMenuOpen())return; // Freeze both sticks; preserve the virtual cursor's subpixel position.
  float CursorX=0,CursorY=0;
  const bool bCursorAvailable=bTactical&&GetMousePosition(CursorX,CursorY);
  if(bCursorAvailable)
