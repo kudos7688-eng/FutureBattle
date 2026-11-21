@@ -140,7 +140,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleFrontShare` | Value | 1.f | BattleFrontLine.cpp:44 |  |
 | `-BattleFrontSquads` | Value | 4 | BattleFrontLine.cpp:172 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleGroupFireSupport` | Value | 1 | BattleArtillery.cpp:202, BattleGroups.cpp:290 | default 1 (user 2026-11-21) |
-| `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:538 |  |
+| `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:540 |  |
 | `-BattleHeavyCost` | Value | 未解決 | BattleState.cpp:568 |  |
 | `-BattleHeavyDamage` | Value | 未解決 | BattleState.cpp:568 |  |
 | `-BattleHeavyHealth` | Value | 未解決 | BattleState.cpp:567 |  |
@@ -276,11 +276,11 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleStances` | Value | -1 | BattleStance.cpp:26 |  |
 | `-BattleStanceShot` | Param | off | BattleLeaderRuntime.cpp:226 |  |
 | `-BattleSTObserveSeconds` | Value | 8 | BattleSquadTacticsSmoke.cpp:126 |  |
-| `-BattleStrategy` | Value | 0 | BattleStrategy.cpp:173 |  |
-| `-BattleStrategyFocusHold` | Value | 90.f | BattleStrategy.cpp:196 | Seconds → BattleStrategy.cpp:160（ヘルパー経由） |
-| `-BattleStrategyOpen` | Value | 150.f | BattleStrategy.cpp:195 | Seconds → BattleStrategy.cpp:160（ヘルパー経由） |
-| `-BattleStrategyReview` | Value | 60.f | BattleStrategy.cpp:197 | Seconds → BattleStrategy.cpp:160（ヘルパー経由） |
-| `-BattleStrategyTeam` | Value | -1 | BattleStrategy.cpp:180 |  |
+| `-BattleStrategy` | Value | 0 | BattleStrategy.cpp:179 |  |
+| `-BattleStrategyFocusHold` | Value | 90.f | BattleStrategy.cpp:221 | Seconds → BattleStrategy.cpp:160（ヘルパー経由） |
+| `-BattleStrategyOpen` | Value | 150.f | BattleStrategy.cpp:220 | Seconds → BattleStrategy.cpp:160（ヘルパー経由） |
+| `-BattleStrategyReview` | Value | 60.f | BattleStrategy.cpp:222 | Seconds → BattleStrategy.cpp:160（ヘルパー経由） |
+| `-BattleStrategyTeam` | Value | -1 | BattleStrategy.cpp:186 |  |
 | `-BattleSTScreens` | Value | 空文字列 | BattleSquadTacticsSmoke.cpp:127 |  |
 | `-BattleSupplyAwayRatio` | Value | 1.0 | BattleTactics.cpp:36 |  |
 | `-BattleSupplyHeal` | Value | 10.0 | BattleTactics.cpp:36 |  |

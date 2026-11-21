@@ -150,6 +150,7 @@ $supply=@{
  # ST2 = stage S2, recon -> focus attack (with -TrialTeam only that team, through -AreaTrialTeam).
  'SL1'=@('-SituationLog','1')
  'ST2'=@('-Strategy','2')
+ 'ST3'=@('-Strategy','3')
  # Subtraction evaluation (2026-11-22, Docs/design-subtraction-eval.md): ALL = both teams buy every type (use as -Baseline);
  # W1..W9 = the same without one type (heavy, scout, AT, tank, armoured car, mortar, SPG, exo, supply; with -TrialTeam that team only).
  'ALL'=@('-AreaAllTypes','1')

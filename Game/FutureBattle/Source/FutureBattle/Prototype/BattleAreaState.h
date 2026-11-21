@@ -43,4 +43,10 @@ struct FBattleAreaState
  UPROPERTY() TArray<float> StrategyReviewAt={-1,-1};
  UPROPERTY() TArray<int32> StrategyAvoid={-1,-1};
  UPROPERTY() TArray<float> StrategyAvoidUntil={-1,-1};
+ // Stage S3 (-BattleStrategy=3): held own points (bit per objective), since when each own point's theatre is "enemy ahead" (2 x objectives,
+ // -1 = not; empty until first used), and the counter candidate with the end of its bonus.
+ UPROPERTY() TArray<int32> StrategyHoldMask={0,0};
+ UPROPERTY() TArray<float> StrategyThreatSince;
+ UPROPERTY() TArray<int32> StrategyCounter={-1,-1};
+ UPROPERTY() TArray<float> StrategyCounterUntil={-1,-1};
 };

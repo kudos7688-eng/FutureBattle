@@ -355,6 +355,9 @@ public:
  static bool StrategyOn(int32 Team, int32 Level);
  int32 StrategyFocusPoint(int32 Team) const; // INDEX_NONE without a valid focus
  void UpdateStrategy(int32 Team);
+ // Stage S3 (-BattleStrategy=3): own points held against a known superior enemy (Area.StrategyHoldMask).
+ int32 StrategyHoldPoint(int32 Team) const; // the one threatened longest; INDEX_NONE without holds
+ bool StrategyHolds(int32 Team, int32 Point) const;
 	// Objective worth (FMapDef::ObjectiveValues; 1 where the map sets none): multiplies its income and its end score.
 	float ObjectiveValue(int32 Point) const;
 	// Resources a team gains per income tick from the objectives it truly owns now (before the time ramp): base + per point x value x map scale.

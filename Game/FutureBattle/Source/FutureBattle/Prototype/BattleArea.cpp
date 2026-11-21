@@ -381,6 +381,8 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
  }
  // Strategy layer S2 (BattleStrategy.cpp): the team's focus objective, chosen once per order update (-1 without -BattleStrategy>=2).
  I.FocusPoint=StrategyFocusPoint(Team);
+ // Stage S3: a held point weighs twice in the S1 spread (BattleStrategyValues::HoldWeight).
+ for(int32 Pt=0;Pt<Objectives.Num()&&Pt<FAreaIntent::MaxObjectives;++Pt)if(StrategyHolds(Team,Pt))I.PointWeight[Pt]*=2.f;
  ApplyDepotWeights(Team,bTrial,I);
  return I;
 }

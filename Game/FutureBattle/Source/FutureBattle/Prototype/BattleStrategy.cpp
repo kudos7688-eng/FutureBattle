@@ -166,6 +166,12 @@ namespace BattleStrategyValues
  constexpr double DistanceWeight=1.;  // per 100 m from the nearest point the team observes as its own (its home when none)
  constexpr double AvoidPenalty=20.;
  constexpr double KeepBonus=3.;       // the current focus: no switch for a small difference
+ // Stage S3 (-BattleStrategy=3): hold and defend -> counter.
+ constexpr double HoldAfter=20.;      // s an own point's theatre stays "enemy ahead" before it is held
+ constexpr double QuietAfter=30.;     // s without seeing an enemy in a held theatre before the hold ends
+ constexpr double CounterSeconds=90.; // the counter candidate (where the attackers came from) keeps its bonus this long
+ constexpr double CounterBonus=5.;
+ constexpr double HoldWeight=2.;      // S1 weight multiplier of a held point
 }
 
 int32 UBattleMatch::StrategyLevel()
@@ -188,6 +194,25 @@ int32 UBattleMatch::StrategyFocusPoint(int32 Team) const
  return Objectives.IsValidIndex(F)?F:INDEX_NONE;
 }
 
+int32 UBattleMatch::StrategyHoldPoint(int32 Team) const
+{
+ // Stage S3: the held point threatened longest (its theatre turned "enemy ahead" first); INDEX_NONE without holds.
+ if(!bArea||Team<0||Team>1||!StrategyOn(Team,3)||!Area.StrategyHoldMask.IsValidIndex(Team)||Area.StrategyHoldMask[Team]==0)return INDEX_NONE;
+ const int32 N=Objectives.Num();int32 Best=INDEX_NONE;float BestSince=FLT_MAX;
+ for(int32 I=0;I<N&&I<31;++I)if((Area.StrategyHoldMask[Team]>>I)&1)
+ {
+  const float Since=Area.StrategyThreatSince.IsValidIndex(Team*N+I)?Area.StrategyThreatSince[Team*N+I]:-1.f;
+  const float Key=Since>=0?Since:FLT_MAX/2;
+  if(Best==INDEX_NONE||Key<BestSince){Best=I;BestSince=Key;}
+ }
+ return Best;
+}
+
+bool UBattleMatch::StrategyHolds(int32 Team,int32 Point) const
+{
+ return bArea&&Team>=0&&Team<2&&Point>=0&&Point<31&&StrategyOn(Team,3)&&Area.StrategyHoldMask.IsValidIndex(Team)&&((Area.StrategyHoldMask[Team]>>Point)&1)!=0;
+}
+
 void UBattleMatch::UpdateStrategy(int32 Team)
 {
  if(!bArea||Team<0||Team>1||!StrategyOn(Team,2)||Objectives.IsEmpty()||Phase!=EBattleMatchPhase::Combat)return;
@@ -201,6 +226,44 @@ void UBattleMatch::UpdateStrategy(int32 Team)
  float& FocusAt=Area.StrategyFocusAt[Team];float& ReviewAt=Area.StrategyReviewAt[Team];float& AvoidUntil=Area.StrategyAvoidUntil[Team];
  const int32 N=Objectives.Num();
  if(Elapsed<OpenBase*MatchTimeLimit()/600.f)return;
+ // The situation map is built at most once per call: for the holds (S3, every order update) and for a review.
+ FBattleSituation S;bool bBuilt=false;
+ auto Situation=[&]()->const FBattleSituation&{if(!bBuilt){BuildSituation(Team,S);bBuilt=true;}return S;};
+ // Stage S3: an own point whose theatre stays "enemy ahead" for HoldAfter s is held (S1 weight, the attack group's reserve and
+ // defence go there); the hold ends when the point is lost, or after QuietAfter s without a sighting there - then the neighbouring
+ // theatre where an enemy was seen most recently (where the attackers came from, by own observations) becomes a counter candidate.
+ bool bCounter=false;
+ if(StrategyOn(Team,3)&&N<=31&&Situation().Theatres.Num()==N+2)
+ {
+  Fix(Area.StrategyHoldMask,0);Fix(Area.StrategyCounter,-1);Fix(Area.StrategyCounterUntil,-1.f);
+  if(Area.StrategyThreatSince.Num()!=2*N)Area.StrategyThreatSince.Init(-1.f,2*N);
+  int32& Mask=Area.StrategyHoldMask[Team];int32& Counter=Area.StrategyCounter[Team];float& CounterUntil=Area.StrategyCounterUntil[Team];
+  if(Counter>=0&&Elapsed>=CounterUntil){Counter=-1;CounterUntil=-1.f;}
+  for(int32 I=0;I<N;++I)
+  {
+   float& Since=Area.StrategyThreatSince[Team*N+I];const auto& X=S.Theatres[I];const bool bHeld=((Mask>>I)&1)!=0;
+   if(ObservedOwner(Team,I)!=Team)
+   {
+    Since=-1.f;
+    if(bHeld){Mask&=~(1<<I);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STRATEGY_HOLD team=%d t=%.1f point=%d hold=0 reason=lost"),Team,Elapsed,I);}
+    continue;
+   }
+   if(X.State==1){if(Since<0)Since=Elapsed;}else Since=-1.f;
+   if(!bHeld&&Since>=0&&Elapsed-Since>=HoldAfter)
+   {Mask|=1<<I;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STRATEGY_HOLD team=%d t=%.1f point=%d hold=1 known=%.1f own=%.1f"),Team,Elapsed,I,X.KnownPower,X.OwnPower);}
+   else if(bHeld&&X.State!=1&&(X.EnemySeenAge<0||X.EnemySeenAge>=QuietAfter))
+   {
+    Mask&=~(1<<I);
+    // The two nearest points not own: the one where an enemy was seen most recently.
+    int32 Best=INDEX_NONE;double BestAge=DBL_MAX;
+    TArray<int32> Near;for(int32 J=0;J<N;++J)if(J!=I&&ObservedOwner(Team,J)!=Team)Near.Add(J);
+    Near.Sort([&](int32 A,int32 B){const double DA=FVector::DistSquared2D(Objectives[A].Position,Objectives[I].Position),DB=FVector::DistSquared2D(Objectives[B].Position,Objectives[I].Position);return DA!=DB?DA<DB:A<B;});
+    for(int32 K=0;K<FMath::Min(2,Near.Num());++K){const double Age=S.Theatres[Near[K]].EnemySeenAge;if(Age>=0&&Age<BestAge){BestAge=Age;Best=Near[K];}}
+    if(Best!=INDEX_NONE){Counter=Best;CounterUntil=Elapsed+CounterSeconds;bCounter=true;}
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STRATEGY_HOLD team=%d t=%.1f point=%d hold=0 reason=quiet counter=%d"),Team,Elapsed,I,Best);
+   }
+  }
+ }
  if(Avoid>=0&&Elapsed>=AvoidUntil){Avoid=-1;AvoidUntil=-1.f;}
  // The AI attack group gave up on the focus (its own avoid clock runs): the team avoids it too; the switch still waits for the hold.
  if(Objectives.IsValidIndex(Focus)&&Avoid!=Focus)
@@ -210,11 +273,13 @@ void UBattleMatch::UpdateStrategy(int32 Team)
  if(SPhase==0&&ReviewAt<0)Why=TEXT("open");
  else if(Objectives.IsValidIndex(Focus)&&ObservedOwner(Team,Focus)==Team)Why=TEXT("taken");
  else if(Elapsed>=ReviewAt)Why=TEXT("review");
+ else if(bCounter)Why=TEXT("counter");
  if(!Why)return;
  // A focus is kept at least Hold seconds; only taking it ends it sooner.
  const bool bTaken=FCString::Strcmp(Why,TEXT("taken"))==0;
  if(SPhase==1&&Objectives.IsValidIndex(Focus)&&!bTaken&&Elapsed-FocusAt<Hold){ReviewAt=FocusAt+Hold;return;}
- FBattleSituation S;BuildSituation(Team,S);if(S.Theatres.Num()!=N+2)return;
+ if(Situation().Theatres.Num()!=N+2)return;
+ const int32 Counter=StrategyOn(Team,3)&&Area.StrategyCounter.IsValidIndex(Team)?Area.StrategyCounter[Team]:INDEX_NONE;
  TArray<int32> OwnPoints;for(int32 I=0;I<N;++I)if(ObservedOwner(Team,I)==Team)OwnPoints.Add(I);
  const FVector Home=AreaHome(Team);
  auto FrontDistance=[&](int32 I)
@@ -241,7 +306,7 @@ void UBattleMatch::UpdateStrategy(int32 Team)
   const auto& X=S.Theatres[I];
   // An unknown theatre is not guessed at: it is not a focus candidate (user decision 2026-11-17).
   if(X.State==0){++Unknown;continue;}
-  const double Score=-KnownWeight*X.KnownPower+OwnWeight*OwnNear(I)-DistanceWeight*FrontDistance(I)/10000.-(I==Avoid?AvoidPenalty:0.)+(I==Focus?KeepBonus:0.);
+  const double Score=-KnownWeight*X.KnownPower+OwnWeight*OwnNear(I)-DistanceWeight*FrontDistance(I)/10000.-(I==Avoid?AvoidPenalty:0.)+(I==Focus?KeepBonus:0.)+(I==Counter?CounterBonus:0.);
   if(Best==INDEX_NONE||Score>BestScore){Next=Best;NextScore=BestScore;Best=I;BestScore=Score;}
   else if(Next==INDEX_NONE||Score>NextScore){Next=I;NextScore=Score;}
  }
