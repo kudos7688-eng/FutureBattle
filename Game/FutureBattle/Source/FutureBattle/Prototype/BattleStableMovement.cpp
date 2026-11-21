@@ -234,7 +234,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    // the open, user 11-20.)
    if(CoverArrival && !Found && (Sector || bCoverTried))
     SightExperiment.Cover(CoverCandidates.Num()==0?TEXT("arrival_open_no_candidates"):bCapHit?TEXT("arrival_open_query_cap"):ArrNoPath+ArrLong==0?TEXT("arrival_open_all_taken"):ArrLong>=ArrNoPath?TEXT("arrival_open_path_too_long"):TEXT("arrival_open_no_path"));
-   static const bool CoverHuddle=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverHuddle="),V);return V!=0;}();
+   static const int32 CoverHuddleArg=[](){int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverHuddle="),V);return V;}(); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
+   const bool CoverHuddle=BattleFieldLayout::SectorComboSwitch(CoverHuddleArg);
    if(!Found && CoverHuddle && Sector && CoverArrival)
     for(const FVector& At:CoverCandidates)
     {
@@ -465,11 +466,11 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
     ClearMovementSegment(Pos,Way)?1:0,Own,Team,Enemy,Still,U->CoverPhase?1:0);
   }
  }
- // Trial -BattleWaypointPass=1 (2026-11-20, default 0): a soldier pushed past a corner of his route by the crowd (within 4m of
+ // -BattleWaypointPass (2026-11-20; default 1 on every map since 2026-11-22, user decision after roadmap stage 1; =0 for the old rule): a soldier pushed past a corner of his route by the crowd (within 4m of
  // the corner point, already on the far side towards the next point, and the next point reachable in a straight swept line)
  // goes on to the next point instead of turning back to touch the corner. On map I with sector routes the whole west army
  // queued at one shed corner in G8 (850 stalls a match), a fifth of them past the corner and walking back into the queue.
- static const bool WaypointPass=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleWaypointPass="),V);return V!=0;}();
+ static const bool WaypointPass=[](){int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleWaypointPass="),V);return V!=0;}();
  if(WaypointPass && !Final && B.Waypoint+1<Route->Num())
  {
   const FVector& Next=(*Route)[B.Waypoint+1];
