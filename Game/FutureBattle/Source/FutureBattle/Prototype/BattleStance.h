@@ -25,4 +25,14 @@ namespace BattleStance
  bool AnimEnabled();
  class UAnimSequence* CrouchClip(bool bWalk); // nullptr when the trial is off or the asset is missing
  float BodyScale(uint8 Stance);               // VisualScale, but 1 for a crouch shown by the clip
+ // Moving in a low stance (2026-11-22, user decision): -BattleStanceMove=N.
+ //  0: moving stands every soldier up (the rule before).
+ //  1 (default): the directly controlled soldier keeps his crouch or prone stance while he walks (X key), at MoveScale of it.
+ //     AI soldiers are unchanged (they stand up to move), so matches without a player are unchanged.
+ //  2 (trial): AI soldiers too: on the move under fire or with an enemy in sight a soldier stays crouched (until 3 s after the
+ //     last threat), and a pinned soldier crawls on along his way (before, he waited prone until he could stand), each at
+ //     MoveScale of his stance.
+ // Heights, sight, hits and spread follow the stance as when standing still (a crouched walker hides behind a 1.2 m wall).
+ int32 MoveMode();
+ float MoveScale(uint8 Stance);    // 1 / 0.55 / 0.25 of the walking speed
 }

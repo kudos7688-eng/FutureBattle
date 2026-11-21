@@ -262,7 +262,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  {
   // A moving surprise group (trial -BattleSurpriseGroup=1) goes back to its move as soon as it may (Codex review 2026-11-21: holding at
   // every seen enemy stopped the whole group, the leading armour too).
-  const bool bSneak=Match->SurpriseMoving(SID);
+  const bool bSneak=Match->SurpriseMoving(SID)||Match->RaidSneaking(SID);
   if((P.SafeSeconds>=4 || bSneak) && P.Age>=3)
   {
    const auto Order=S->MissionOrder; const FVector Goal=S->MissionDestination;
@@ -270,5 +270,5 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   }
   return;
  }
- if(Visible && O.Armed>0 && !Match->SurpriseMoving(SID)) Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("KNOWN ENEMY / HOLD FIRING POSITION"));
+ if(Visible && O.Armed>0 && !Match->SurpriseMoving(SID) && !Match->RaidSneaking(SID)) Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("KNOWN ENEMY / HOLD FIRING POSITION"));
 }

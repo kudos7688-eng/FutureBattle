@@ -25,6 +25,10 @@ public class FutureBattle : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[] { "Json", "NetCore", "RenderCore", "RHI", "MassCore", "MassEntity" });
 		// Two-bone IK of the body animation (BattleBodyAnim.cpp: hands raised over the cover for an over-the-top blind fire).
 		PrivateDependencyModuleNames.Add("AnimationCore");
+		// Battle effects (BattleEffects.cpp, 2026-11-22): explosions are Niagara systems.
+		PrivateDependencyModuleNames.Add("Niagara");
+		// Sound check (BattleFXCheck.cpp): records the game's audio mix to a WAV file.
+		PrivateDependencyModuleNames.Add("AudioMixer");
 		// T5 test-only view visibility observer; no renderer behavior changes.
 		PrivateDependencyModuleNames.Add("Renderer");
 		PrivateIncludePaths.Add(System.IO.Path.Combine(EngineDirectory, "Source/Runtime/Renderer/Private"));

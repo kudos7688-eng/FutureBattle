@@ -1,6 +1,7 @@
 #include "BattleUnit.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleMuzzleFlash.h"
+#include "BattleAudio.h"
 #include "Animation/AnimSequence.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 #include "BattleGameMode.h"
@@ -287,6 +288,13 @@ bool ABattleUnit::FireAt(FVector Start, FVector Direction, bool bPlayerShot)
 			if (!Victim->IsAlive()) Victim->ApplyDeath();
 		}
 	}
+	// Sound only (2026-11-22), as in UBattleLeaderRuntime::Fire.
+	{
+		const FVector HitAt = Hit.bBlockingHit ? FVector(Hit.ImpactPoint) : End;
+		BattleAudio::Shot(GetWorld(), Start, GetState()->Weapon == EBattleWeapon::SupportGun ? BattleAudio::EShot::Heavy : BattleAudio::EShot::Rifle, bPlayerShot);
+		if (Hit.bBlockingHit) BattleAudio::Impact(GetWorld(), HitAt, Cast<ABattleUnit>(Hit.GetActor()) != nullptr);
+		BattleAudio::ShotPassing(GetWorld(), Start, HitAt, GetState()->Team, Cast<ABattleUnit>(Hit.GetActor()) ? Cast<ABattleUnit>(Hit.GetActor())->GetUnitID() : INDEX_NONE);
+	}
 	if (bRevealed)
 	{
 		const FVector From = TracerStart(Rifle, Start, Direction);
@@ -305,6 +313,7 @@ void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequenc
 	CurrentPose = nullptr;
 	if (!Idle)
 	{
+		LookFire = LookReload = LookSequenceFirst = LookSequenceThen = nullptr;
 		// The look is gone and UpdateLookTilt no longer runs: drop its lean so the plain body stands upright.
 		LookVelShown = LookShotVelocity = FVector::ZeroVector;
 		if (!MeshTiltShown.Equals(FQuat::Identity, 1.e-4f))
@@ -315,6 +324,20 @@ void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequenc
 	}
 	const bool bFirstPerson = IsPlayerControlled() && !bThirdPersonView;
 	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
+}
+
+float ABattleUnit::PlayLookSequence(UAnimSequence* First, UAnimSequence* Then, double Time)
+{
+	LookSequenceFirst = First; LookSequenceThen = First ? Then : nullptr; LookSequenceStart = Time;
+	CurrentPose = nullptr;  // starts over even when the same clip is showing
+	return (First ? First->GetPlayLength() : 0.f) + (LookSequenceThen ? LookSequenceThen->GetPlayLength() : 0.f);
+}
+
+bool ABattleUnit::IsPlayingLookSequence(double Time) const
+{
+	if (!LookSequenceFirst) return false;
+	const double Length = LookSequenceFirst->GetPlayLength() + (LookSequenceThen ? LookSequenceThen->GetPlayLength() : 0.f);
+	return Time >= LookSequenceStart && Time < LookSequenceStart + Length;
 }
 
 bool ABattleUnit::LookHasProneClip() const
@@ -455,6 +478,7 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	{
 		TransitionClip = Transition(BodyStance, VisualStance);
 		TransitionUntil = TransitionClip ? Now + TransitionClip->GetPlayLength() : 0.;
+		TransitionRate = 1.f;
 		BodyStance = VisualStance;
 	}
 	// Cover clips (BattleCoverClips.h): hidden and firing poses of the cover action, with a one-shot between phases. The table
@@ -514,13 +538,24 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 		}
 	}
 	SetMeshYaw(0.f);
-	const bool bTransition = TransitionClip && Now < TransitionUntil;
 	const FVector Local = GetActorRotation().UnrotateVector(GetVelocity());
+	// Getting up on the move (moving stands the soldier up): the rest of the transition plays fast enough to end within
+	// MovingTransitionSeconds instead of sliding along the ground at its own speed.
+	const double Hurry = MovingTransitionSeconds(TransitionClip.Get());
+	if (TransitionClip && Now < TransitionUntil && TransitionRate == 1.f && Local.SizeSquared2D() > 400. && TransitionUntil - Now > Hurry)
+	{
+		TransitionRate = float((TransitionUntil - Now) / Hurry);
+		TransitionUntil = Now + Hurry;
+	}
+	const bool bTransition = TransitionClip && Now < TransitionUntil;
 	// Moving without firing (no shot for ReadySeconds, the player not aiming): a jog with the rifle held low, no aim layer.
 	// Firing on the move, or aiming, brings the rifle up: the aimed walk and the aim pose.
 	const bool bReady = Now - LastVisualShot < ReadySeconds || (IsPlayerControlled() && AimLevel > 0);
 	const bool bRun = !bReady && VisualStance == BattleStance::Stand && Local.SizeSquared2D() > 400.;
-	Body.SetBase(bTransition ? TransitionClip.Get() : Locomotion(VisualStance, Local, bRun), !bTransition);
+	UAnimSequence* Walk = Locomotion(VisualStance, Local, bRun);
+	// Walking crouched or prone (-BattleStanceMove): the steps keep pace with the body (rate from the clip's own ground speed).
+	const float WalkRate = VisualStance != BattleStance::Stand && Local.SizeSquared2D() > 400. ? MatchRate(Walk, float(Local.Size2D())) : 1.f;
+	Body.SetBase(bTransition ? TransitionClip.Get() : Walk, !bTransition, bTransition ? TransitionRate : WalkRate);
 	// Upper body: reload (synced to the reload timer), blind fire, otherwise the aim pose at the weapon's pitch.
 	const float Duration = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
 	const bool bProne = VisualStance == BattleStance::Prone;
@@ -560,6 +595,8 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 	// Stance visuals trial: a crouched soldier plays the crouch clip (reloading included: there is no crouched reload clip).
 	if (auto* Crouch = VisualStance == BattleStance::Crouch ? BattleStance::CrouchClip(Moving) : nullptr) Pose = Crouch;
 	bool bLookTransition = false;
+	bool bAction = false, bRestart = false;
+	float ActionRate = 1.f; double ActionAt = 0.;
 	if (LookIdle)
 	{
 		const bool Crouched = VisualStance == BattleStance::Crouch && LookCrouchIdle && BattleStance::AnimEnabled();
@@ -580,6 +617,27 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 			else if (VisualStance == BattleStance::Prone)
 				if (auto* Prone = BattleBodyAnim::Locomotion(BattleStance::Prone, GetActorRotation().UnrotateVector(GetVelocity()), false)) Pose = Prone;
 		}
+		// Action clips (SetLookActions, PlayLookSequence), standing only, moving or not (the glide keeps the feet still too):
+		// a running sequence (the launcher's recoil, then its reload), else the reload paced by the reload timer, else the recoil
+		// of the last shot, from its start at every shot. Each starts and ends on the idle's first frame.
+		if (VisualStance == BattleStance::Stand && !bLookTransition)
+		{
+			const double Since = Now - LookSequenceStart;
+			const float First = LookSequenceFirst ? LookSequenceFirst->GetPlayLength() : 0.f;
+			const float Then = LookSequenceThen ? LookSequenceThen->GetPlayLength() : 0.f;
+			if (LookSequenceFirst && Since >= 0. && Since < First) { Pose = LookSequenceFirst; ActionAt = Since; bAction = true; }
+			else if (LookSequenceThen && Since >= First && Since < First + Then) { Pose = LookSequenceThen; ActionAt = Since - First; bAction = true; }
+			else if (Reloading && LookReload)
+			{
+				Pose = LookReload; bAction = true; ActionRate = LookReload->GetPlayLength() / FMath::Max(.1f, Duration);
+				ActionAt = LookReload->GetPlayLength() * FMath::Clamp(1. - (S.ReloadEndTime - Now) / FMath::Max(.1f, Duration), 0., 1.);
+			}
+			else if (LookFire && Now - LastVisualShot < LookFire->GetPlayLength())
+			{
+				Pose = LookFire; bAction = true; ActionAt = Now - LastVisualShot;
+				bRestart = LastVisualShot > LookShotShown; LookShotShown = LastVisualShot;
+			}
+		}
 		UpdateLookTilt(VisualStance == BattleStance::Stand && !bLookTransition);
 	}
 	// Blind fire (BattleBlindFire.cpp): the clip that raises the rifle over or around the cover while it lasts.
@@ -589,13 +647,14 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 	if (!Reloading && !LookIdle && (!bOverTop || BattleBlindFire::ExposeEnabled())) if (const auto* Leaders = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leaders && Leaders->IsBlindFiring(UnitID, Now))
 		if (auto* Blind = BattleBlindFire::Clip(bOverTop)) Pose = Blind;
 	const bool ReloadPose = Reloading && Pose == RifleReload.Get();
-	const bool Looping = !ReloadPose && !bLookTransition;
-	if (Pose && CurrentPose != Pose)
+	const bool Looping = !ReloadPose && !bLookTransition && !bAction;
+	if (Pose && (CurrentPose != Pose || bRestart))
 	{
 		CurrentPose = Pose;
 		GetMesh()->PlayAnimation(Pose,Looping);
-		GetMesh()->SetPlayRate(ReloadPose ? Pose->GetPlayLength()/Duration : 1.f);
+		GetMesh()->SetPlayRate(ReloadPose ? Pose->GetPlayLength()/Duration : bAction ? ActionRate : 1.f);
 		if (ReloadPose) GetMesh()->SetPosition(Pose->GetPlayLength()*FMath::Clamp(1.-(S.ReloadEndTime-Now)/Duration,0.,1.), false);
+		else if (bAction) GetMesh()->SetPosition(ActionAt, false);
 	}
 	}
 	if (IsPlayerControlled() && Rifle->GetAttachParent()==FirstPersonCamera)
@@ -612,12 +671,16 @@ void ABattleUnit::SetSprinting(bool bRequested)
  auto* Movement = GetCharacterMovement();
  const bool bSprint = bRequested && bDirectAvoidanceOverride && IsAlive() && VisualStance == BattleStance::Stand
   && !GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsVehicle(UnitID);
- if (bSprint && WalkSpeedBeforeSprint == 0.f && Movement->MaxWalkSpeed > 0.f)
+ // -BattleStanceMove (default 1): crouched or prone, the directly controlled soldier walks at that stance's share of his speed
+ // (called every frame of direct control, so a stance change takes effect at once).
+ const float Low = bDirectAvoidanceOverride && IsAlive() && BattleStance::MoveMode() >= 1 ? BattleStance::MoveScale(VisualStance) : 1.f;
+ const float Scale = bSprint ? 1.6f : Low;
+ if (Scale != 1.f && (WalkSpeedBeforeSprint > 0.f || Movement->MaxWalkSpeed > 0.f))
  {
-  WalkSpeedBeforeSprint = Movement->MaxWalkSpeed;
-  Movement->MaxWalkSpeed = WalkSpeedBeforeSprint * 1.6f;
+  if (WalkSpeedBeforeSprint == 0.f) WalkSpeedBeforeSprint = Movement->MaxWalkSpeed;
+  if (Movement->MaxWalkSpeed != WalkSpeedBeforeSprint * Scale) Movement->MaxWalkSpeed = WalkSpeedBeforeSprint * Scale;
  }
- else if (!bSprint && WalkSpeedBeforeSprint > 0.f)
+ else if (Scale == 1.f && WalkSpeedBeforeSprint > 0.f)
  {
   Movement->MaxWalkSpeed = WalkSpeedBeforeSprint;
   WalkSpeedBeforeSprint = 0.f;
@@ -633,7 +696,12 @@ void ABattleUnit::ReloadIfEmpty()
 
 void ABattleUnit::SetDirectControl(bool bDirect)
 {
- if (!bDirect) SetSprinting(false);
+ if (!bDirect)
+ {
+  SetSprinting(false);
+  // Back to the AI: the full walking speed again (a crouched or prone walk keeps it lowered above).
+  if (WalkSpeedBeforeSprint > 0.f) { GetCharacterMovement()->MaxWalkSpeed = WalkSpeedBeforeSprint; WalkSpeedBeforeSprint = 0.f; }
+ }
 	auto* Movement = GetCharacterMovement();
 	if (bDirect && !bDirectAvoidanceOverride)
 	{

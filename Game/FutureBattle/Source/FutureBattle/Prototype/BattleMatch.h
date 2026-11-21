@@ -161,6 +161,7 @@ public:
  bool SurpriseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
  // True while the squad's surprise group is moving along its row (phase 1): its tactics do not stop to hold at a seen enemy.
  bool SurpriseMoving(int32 SquadID) const;
+ bool RaidSneaking(int32 SquadID) const; // Trial -BattleArtilleryRaidSneak: an artillery raid squad still farther than the sneak radius from its target.
  // After a save restore: no front/surprise timer further ahead than its own interval (an earlier save would stall them).
  void ClampFrontTimers();
  float SurpriseNextAt[2]={0.f,0.f},SurpriseSkipLogAt[2]={0.f,0.f};
@@ -196,6 +197,11 @@ public:
  TArray<FVector> ArtilleryPostPositions[2];
  TArray<double> ArtilleryPostEvidence[2]; // observer team -> enemy post's last evidence timestamp
  TMap<int32,int32> ArtilleryRaids;
+ struct FArtilleryRaidFlash { FVector Target=FVector::ZeroVector; double At=-1.; int32 Shooter=INDEX_NONE; };
+ struct FArtilleryRaidChase { FVector Target=FVector::ZeroVector; double EvidenceAt=-1.,FlashAt=-1.,ArrivedAt=-1.; bool bFlash=false; };
+ FArtilleryRaidFlash ArtilleryRaidFlashes[2];
+ TMap<int32,FArtilleryRaidChase> ArtilleryRaidChases;
+ double ArtilleryRaidClearedAt[2]={-1.,-1.}; // Do not restart a cleared search on the same evidence.
  mutable TMap<int32,int32> MortarPostChoices;
  void GenerateArtilleryPosts();
  void UpdateArtilleryRaids(int32 Team);

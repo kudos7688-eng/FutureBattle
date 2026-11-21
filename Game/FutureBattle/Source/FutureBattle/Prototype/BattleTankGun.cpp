@@ -5,6 +5,8 @@
 // scout/lookout reports, UBattleMatch::AreaIntelView). True positions of unseen enemies are never used.
 #include "BattleLeaderRuntime.h"
 #include "BattleMuzzleFlash.h"
+#include "BattleAudio.h"
+#include "BattleEffects.h"
 #include "BattleState.h"
 #include "BattleMatch.h"
 #include "BattlePerception.h"
@@ -191,12 +193,15 @@ bool UBattleLeaderRuntime::FireTankGun(int32 ID,const FVector& Aim,double Now)
  const int32 Victim=HitIDs.FindRef(Hit.GetComponent());
  TankGunHit(ID,Victim);
  Explode(ID,Impact,Victim,T->TankGunSplashRadius,T->TankGunSplashDamage);
+ // Sound only (2026-11-22): the gun's report at the turret, heard whether or not the tank is seen.
+ BattleAudio::Cue(GetWorld(),BattleAudio::ECue::CannonFire,&Start);
  if(Team==0||(Actor(ID)&&Actor(ID)->bRevealed))
  {
   const FVector From=TracerStart(ID,Start,Direction);
   BattleMuzzleFlash::Show(GetWorld(),From,Direction,6.f,.12f);
   DrawDebugLine(GetWorld(),From,Impact,Team?FColor::Red:FColor::Yellow,false,.25f,0,6);
-  DrawDebugSphere(GetWorld(),Impact,FMath::Max(50.f,T->TankGunSplashRadius),10,Team?FColor::Red:FColor::Yellow,false,.4f,0,3);
+  // The blast radius as a wire sphere only while explosions are not shown as effects (BattleEffects).
+  if(!BattleEffects::Active(GetWorld()))DrawDebugSphere(GetWorld(),Impact,FMath::Max(50.f,T->TankGunSplashRadius),10,Team?FColor::Red:FColor::Yellow,false,.4f,0,3);
  }
  return true;
 }
