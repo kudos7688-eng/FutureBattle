@@ -165,6 +165,7 @@ public:
  float SurpriseNextAt[2]={0.f,0.f},SurpriseSkipLogAt[2]={0.f,0.f};
  TMap<int32,FVector> FrontPosts; // squad of a front-holding group -> the sector centre it holds (transient)
  float FrontLineAt[2]={-1.f,-1.f},FrontLineLogAt[2]={-1.f,-1.f};
+ int32 FrontReleased[2]={0,0}; // squads the front army has released to the reserve so far (display: the player's notice)
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;
@@ -239,6 +240,10 @@ public:
 		float FrontStepAt = 0.f; /* front-holding group: when its line last stepped forward */
 		float FrontBackAt = -100.f; /* front-holding group: when rows last fell back for damage */
 		bool bFrontDrawn = false; /* front-holding group: FrontHold is a line the player drew (SetDrawnFrontLine); it does not step or fall back */
+		TArray<uint8> FrontGap; /* front-holding group: 1 for each row left empty (open ground between covered rows); kept for the hysteresis */
+		int32 FrontNeed = 0; /* front-holding group: squads its line needs (0: not counted yet); the rest go back unassigned */
+		float FrontReleaseAt = -100.f; /* front-holding group: when squads above the need were last released */
+		float FrontExcessSince = -1.f; /* front-holding group: since when it has had more squads than its need (-1: not now) */
 		FVector SurpriseBridgeEntry = FVector::ZeroVector, SurpriseBridgeExit = FVector::ZeroVector, SurpriseBridgeGoal = FVector::ZeroVector;
 		float SurpriseWaitAt = -1.f, SurpriseLogAt = 0.f, SurpriseEndAt = 0.f; /* surprise group: since when its lead waits for the others; next progress log; when it ends whatever its phase */ };
 	bool UpdateSurpriseBridge(FBattleGroup& Group,const FVector& Lead);

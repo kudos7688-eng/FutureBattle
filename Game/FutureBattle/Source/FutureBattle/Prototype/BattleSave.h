@@ -98,6 +98,10 @@ struct FBattleSavedGroup
  UPROPERTY() double FrontStepAge=0;
  UPROPERTY() bool bFrontDrawn=false;
  UPROPERTY() double FrontBackAge=100;
+ UPROPERTY() TArray<uint8> FrontGap;
+ UPROPERTY() int32 FrontNeed=0;
+ UPROPERTY() double FrontReleaseAge=100;
+ UPROPERTY() double FrontExcessAge=-1; // -1: no excess
  UPROPERTY() FVector SurpriseBridgeEntry=FVector::ZeroVector;
  UPROPERTY() FVector SurpriseBridgeExit=FVector::ZeroVector;
  UPROPERTY() FVector SurpriseBridgeGoal=FVector::ZeroVector;
