@@ -73,7 +73,7 @@
 - `BattleMixedDriver.cpp`: FBattleMixedUnit::GetActorLocation:11, FBattleMixedUnit::GetActorForwardVector:12, FBattleMixedUnit::CaptureSightContext:13, FBattleMixedUnit::CanSeeSnapshot:14, FBattleMixedUnit::FireAt:15, FBattleMixedDriver::GetMoveStatus:16, FBattleMixedDriver::MoveToLocation:18, FBattleMixedDriver::ResetExecution:26, FBattleMixedDriver::SuspendMovement:43, FBattleMixedDriver::RetryMove:51, FBattleMixedDriver::ExecuteMove:75, FBattleMixedDriver::Tick:126, FBattleMixedDriver::ClearCoverPlan:229, FBattleMixedDriver::TryTacticalAction:239, FBattleMixedUnit::IsAIActive:338, FBattleMixedUnit::CanSee:339
 - `BattleMixedFastSmoke.cpp`: UBattleLeaderRuntime::RunMixedFastSmoke:10
 - `BattleMixedRecruitment.cpp`: UBattleLeaderRuntime::ReplaceFollower:12, UBattleLeaderRuntime::SpawnPurchasedSquad:41, UBattleLeaderRuntime::HireSightRefresh:110, UBattleLeaderRuntime::PromoteScout:116
-- `BattleMixedSaveSmoke.cpp`: UBattleLeaderRuntime::RunMixedSaveSmoke:15
+- `BattleMixedSaveSmoke.cpp`: UBattleLeaderRuntime::RunMixedSaveSmoke:17
 - `BattleMixedSaveValidation.cpp`: UBattleSave::ValidateMixed:8
 - `BattleMixedSquadAI.cpp`: UBattleSquadAI::UpdateMixed:7
 - `BattleMoveCourse.h`: UBattleMoveCourse::Seconds:22, UBattleMoveCourse::HasMoved:23
@@ -102,7 +102,7 @@
 - `BattleRanges.cpp`: BattleRanges::Get:6, BattleRanges::Engage:34, BattleRanges::Reach:44
 - `BattleRenderDiagnostic.cpp`: UBattleSquadTrial::ConfigureT5Diagnostic:34, UBattleSquadTrial::SelectT5Diagnostic:94, UBattleSquadTrial::BeginT5Diagnostic:110, UBattleSquadTrial::FilterT5Diagnostic:138, UBattleSquadTrial::EndT5Diagnostic:162
 - `BattleRoutes.cpp`: UBattleMatch::RoutesOn:14, UBattleMatch::RouteKnownEnemies:21, UBattleMatch::RouteFlankSide:33, UBattleMatch::RouteStep:43
-- `BattleSave.cpp`: UBattleSave::Validate:24, UBattleMatch::CaptureSnapshot:128, UBattleMatch::RestoreSnapshot:214, UBattleMatch::SaveMatch:342, UBattleMatch::LoadMatch:350
+- `BattleSave.cpp`: BattleTactics::SaveRoutes:43, BattleTactics::OverrideSaveRoutesForSmoke:49, UBattleSave::Serialize:56, UBattleSave::Validate:63, UBattleMatch::CaptureSnapshot:189, UBattleMatch::RestoreSnapshot:294, UBattleMatch::SaveMatch:435, UBattleMatch::LoadMatch:443
 - `BattleSaveSmoke.cpp`: ABattleGameMode::RunSaveSmokeTest:12
 - `BattleScaleSmoke.cpp`: ABattleGameMode::RunScaleSmokeTest:10
 - `BattleScopeShot.cpp`: UBattleLeaderRuntime::RunScopeShot:15
@@ -136,7 +136,7 @@
 - `BattleSuppression.cpp`: BattleSuppression::MutableTuning:8, BattleSuppression::Tuning:28, UBattleLeaderRuntime::Suppression:30, UBattleLeaderRuntime::IsPinned:36, UBattleLeaderRuntime::SuppressionSpreadScale:42, UBattleLeaderRuntime::AddSuppression:48, UBattleLeaderRuntime::SuppressNear:61, BattleTactics::ExoShieldSuppressionEnabled:79, BattleTactics::ExoShieldHitDelay:84, UBattleLeaderRuntime::ExoSuppressionApplies:91
 - `BattleTacticalAI.cpp`: ABattleAIController::ClearCoverPlan:11, ABattleAIController::TryTacticalAction:21
 - `BattleTacticalSmoke.cpp`: ABattleGameMode::RunTacticalSmokeTest:15
-- `BattleTactics.h`: FBattleExposure::Fraction:12, FBattleExposure::HasCover:13, BattleTactics::BaseFor:82, BattleTactics::PerPointFor:83
+- `BattleTactics.h`: FBattleExposure::Fraction:12, FBattleExposure::HasCover:13, BattleTactics::BaseFor:84, BattleTactics::PerPointFor:85
 - `BattleTactics.cpp`: BattleTactics::AICoverProbeBudgetEnabled:8, BattleTactics::LeaderGuardEnabled:14, BattleTactics::LeaderHealthMultiplier:20, BattleTactics::Supply:27, BattleTactics::AreaHire:50, BattleTactics::AreaStrategy:68, BattleTactics::AreaIncome:114, BattleTactics::LeaderHealthSaveBits:134, BattleTactics::ReacquireGraceEnabled:140, BattleTactics::CoverFireEnabled:147, BattleTactics::CoverValidationEnabled:153, BattleTactics::CoverPeekSightEnabled:159, BattleTactics::ReturnFireEnabled:166, BattleTactics::CoverApproachEnabled:172, BattleTactics::ContactCover:178, BattleTactics::ContactCoverEnabled:184, BattleTactics::CoverActionsEnabled:190, BattleTactics::SpreadDegrees:196, BattleTactics::ShotDirection:204, BattleTactics::ExposureFrom:213, BattleTactics::HasTerrainLine:219, BattleTactics::ExposureAt:241
 - `BattleTacticsSave.cpp`: UBattleSquadTactics::CaptureSave:4, UBattleSquadTactics::RestoreSave:12, UBattleTeamAI::CaptureSave:19, UBattleTeamAI::RestoreSave:21
 - `BattleTacticsSmoke.cpp`: ABattleGameMode::RunTacticsSmokeTest:10
@@ -148,7 +148,7 @@
 - `BattleTerrainTest.cpp`: UBattleMatch::UpdateTerrainTest:24
 - `BattleThirdPersonSmoke.cpp`: ABattleGameMode::RunThirdPersonSmokeTest:17
 - `BattleUIText.h`: BattleUIText::Ja:12
-- `BattleUIText.cpp`: BattleUIText::Ja:95, JaUncached:109, BattleUIText::SaveResult:159
+- `BattleUIText.cpp`: BattleUIText::Ja:100, JaUncached:114, BattleUIText::SaveResult:164
 - `BattleUnit.h`: ABattleUnit::HasWeaponVisuals:36, ABattleUnit::UsesThirdPersonView:41, ABattleUnit::GetUnitID:44, ABattleUnit::SetAimLevel:66, ABattleUnit::GetAimLevel:67, ABattleUnit::AimMagnification:68, ABattleUnit::ScopeView:69, ABattleUnit::HasLook:80, ABattleUnit::GetLookMove:81, ABattleUnit::SetLookShotVelocity:83, ABattleUnit::NoteVisualShot:88
 - `BattleUnit.cpp`: ABattleUnit::ABattleUnit:33, ABattleUnit::InitializeUnit:90, ABattleUnit::GetState:113, ABattleUnit::IsAlive:118, ABattleUnit::EyePosition:119, ABattleUnit::CalcCamera:124, ABattleUnit::AimSpreadScale:149, ABattleUnit::PlayerSpreadScale:157, ABattleUnit::UpdateAimView:163, ABattleUnit::GetPlayerShot:181, ABattleUnit::FireFromPlayerView:196, ABattleUnit::Tick:202, ABattleUnit::CanSee:219, ABattleUnit::CaptureSightContext:224, ABattleUnit::CanSeeSnapshot:242, ABattleUnit::FireAt:255, ABattleUnit::SetLook:294, ABattleUnit::LookHasProneClip:313, ABattleUnit::MountWeapon:320, ABattleUnit::TracerStart:350, ABattleUnit::BodyAnim:382, ABattleUnit::SetMeshLean:387, ABattleUnit::SetMeshYaw:397, ABattleUnit::UpdateLookTilt:404, ABattleUnit::UpdateBodyAnim:432, ABattleUnit::UpdateWeaponPose:542, ABattleUnit::SetSprinting:601, ABattleUnit::ReloadIfEmpty:618, ABattleUnit::SetDirectControl:625, ABattleUnit::SetAnimationDetail:653, ABattleUnit::SetRevealed:672, ABattleUnit::HideCorpse:680, ABattleUnit::ApplyDeath:688
 - `BattleVATBakeCommandlet.cpp`: UBattleVATBakeCommandlet::UBattleVATBakeCommandlet:13, UBattleVATBakeCommandlet::Main:14

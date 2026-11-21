@@ -4,8 +4,8 @@
 //    then to the goal. The match hands the squad one junction at a time (UpdatePlayerRoutes) and the player's order last.
 //  - A squad delegated to the AI keeps the choice: its AI goals are reached over the chosen route (UBattleMatch::UpdateTeamOrders).
 //  - Automatic is the behaviour without a choice: a manual order goes straight to the goal, the AI picks its own way.
-// The choice is the player's own decision about static map roads; it reads no enemy information. Not saved: after a load every
-// squad is back on automatic and a routed manual order ends at the junction it was walking to.
+// The choice reads no enemy information. Trial -BattleSaveRoutes=1 persists choices and orders; default/legacy saves
+// still return squads to automatic and end routed manual orders at the current junction after loading.
 // -BattlePlayerRouteTest (map F, headless): three squads of team 0 are ordered to the central objective over the three routes
 // and BATTLE_PLAYER_ROUTE_RESULT reports whether each kept to its route.
 #include "BattleMatch.h"

@@ -48,6 +48,7 @@
 | 車両・戦車砲・対戦車 | @UBattleLeaderRuntime::ConfigureVehicle 、 @UBattleLeaderRuntime::SteerVehicle 、 @UBattleLeaderRuntime::FireTankGun | 爆発は @UBattleLeaderRuntime::Explode |
 | 武器の命令・任務による交戦許可 | @BattleTactics::OrderAllowsTarget 、 @UBattleLeaderRuntime::WeaponOrderAllows | 副武器・間接射撃の試験は BattleWeaponOrderGate、装甲AIの候補制限は BattleArmourSectorGate（いずれも既定0） |
 | 保存・復元 | @UBattleMatch::SaveMatch 、 @UBattleMatch::LoadMatch 、 @UBattleMatch::CaptureSnapshot 、 @UBattleMatch::RestoreSnapshot | 検証は @UBattleSave::Validate 、 @UBattleSave::ValidateMixed 。戦術状態は @UBattleSquadTactics::CaptureSave |
+| プレイヤー経路の任意保存（S02） | @BattleTactics::SaveRoutes 、 @UBattleSave::Serialize 、 @UBattleSave::Validate | `-BattleSaveRoutes=1`（既定0）。PlayerRoutesVersion=1で最終命令・目的地・残り中継点・レーン・進行・相対期限を保存。OFF／経路なしは新規タグなし。検査は @UBattleLeaderRuntime::RunMixedSaveSmoke 内で一時切替 |
 | 表示（混成の体・遠距離 VAT） | @UBattleLeaderRuntime::CreateBody 、 @UBattleLeaderRuntime::RefreshDisplay 、 @ABattleVATDisplay::Tick | 復元時は @UBattleLeaderRuntime::RestoreMixedBodies |
 | マップの定義・配置 | `BattleFieldLayout.h`（マップごとの表 `Maps()`） | 生成は @UBattleMapCommandlet::Main （既存の手編集を `-Force` で上書きしない） |
 | 通り道（道路網に沿った移動の指示） | @UBattleMatch::RouteStep 、 @UBattleMatch::RouteFlankSide | 呼び出しは @UBattleMatch::UpdateTeamOrders 。道路網は `FMapDef::RouteNodes/RouteEdges` |

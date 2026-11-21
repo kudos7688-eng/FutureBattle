@@ -39,6 +39,11 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("COVER / FIRE = BLIND FIRE / AIM + FIRE = PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で壁越しに撃つ ／ 構えて射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("BLIND FIRE"),TEXT("壁越し射撃"));M.Add(TEXT("NO NEARBY COVER WITH SAFE PEEK"),TEXT("近くに安全に撃てる遮蔽がない"));
   M.Add(TEXT("AI PAUSED / practice controls freely"),TEXT("AI停止中 ／ 自由に操作を練習できます"));M.Add(TEXT("AI RESUMED"),TEXT("AI再開"));
   // Match and save messages.
+  M.Add(TEXT("Player route save requires BattleSaveRoutes=1"),TEXT("経路付き保存を読むには -BattleSaveRoutes=1 が必要です"));
+  M.Add(TEXT("Invalid player route extension"),TEXT("保存されたプレイヤー経路の版・件数・時計が不正です"));
+  M.Add(TEXT("Invalid player route squad"),TEXT("保存されたプレイヤー経路の部隊が不正です"));
+  M.Add(TEXT("Invalid player route state"),TEXT("保存されたプレイヤー経路の命令・座標・期限が不正です"));
+  M.Add(TEXT("Invalid player route waypoint"),TEXT("保存されたプレイヤー経路の中継点が不正です"));
   M.Add(TEXT("LAUNCHER EQUIPPED"),TEXT("対戦車火器を装備"));
   M.Add(TEXT("RIFLE EQUIPPED"),TEXT("ライフルを装備"));
   M.Add(TEXT("Invalid training price"),TEXT("練度の購入価格が不正です"));

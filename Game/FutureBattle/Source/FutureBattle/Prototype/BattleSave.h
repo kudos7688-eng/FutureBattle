@@ -90,6 +90,24 @@ struct FBattleSavedCarChoice
  UPROPERTY() double Age=0;
 };
 
+// Independent optional extension; signed deadlines use match Elapsed, not world time.
+USTRUCT()
+struct FBattleSavedPlayerRoute
+{
+ GENERATED_BODY()
+ UPROPERTY() int32 SquadID=INDEX_NONE;
+ UPROPERTY() int32 Lane=0;
+ UPROPERTY() int32 Phase=0;
+ UPROPERTY() FVector PhaseGoal=FVector(FLT_MAX);
+ UPROPERTY() bool bMission=false;
+ UPROPERTY() uint8 Order=0;
+ UPROPERTY() FVector Goal=FVector::ZeroVector;
+ UPROPERTY() FVector Step=FVector::ZeroVector;
+ UPROPERTY() bool bPath=false;
+ UPROPERTY() TArray<FVector> Waypoints;
+ UPROPERTY() double DeadlineRemaining=0;
+};
+
 UCLASS()
 class UBattleSave : public USaveGame
 {
@@ -151,6 +169,11 @@ public:
 	UPROPERTY() float EnemySupportCooldown = 0;
 	UPROPERTY() int32 AllySupportUsed = 0;
 	UPROPERTY() int32 EnemySupportUsed = 0;
+ // Omitted from the tagged archive when absent, including the version tag itself.
+ UPROPERTY() int32 PlayerRoutesVersion=0;
+ UPROPERTY() TArray<FBattleSavedPlayerRoute> SavedPlayerRoutes;
+ UPROPERTY() float SavedPlayerRouteClock=0;
+ virtual void Serialize(FArchive& Ar) override;
 	bool Validate(FString& Error) const;
  bool ValidateMixed(FString& Error) const;
 };

@@ -5,6 +5,8 @@
 #include "BattleController.h"
 #include "BattleSquadTactics.h"
 #include "BattleTeamAI.h"
+#include "BattleTactics.h"
+#include <limits>
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -128,6 +130,90 @@ void UBattleLeaderRuntime::RunMixedSaveSmoke()
   PC->ControlUnit(Actor(1));auto* Direct=Match->CaptureSnapshot();
   Check(Direct&&Direct->ControlledID==1&&Match->RestoreSnapshot(Direct)&&PC->GetPawn()==Actor(1),TEXT("TPS control restored to recreated leader"));
   PC->EnterTactical();Check(PC->GetPawn()!=Actor(1),TEXT("restored leader returns to RTS"));
+  {
+   // The override is accepted only by this smoke command and always restored on scope exit.
+   struct FRouteSmokeScope
+   {
+    int32 Previous=BattleTactics::OverrideSaveRoutesForSmoke(0);
+    ~FRouteSmokeScope(){BattleTactics::OverrideSaveRoutesForSmoke(Previous);}
+   } RouteSmokeScope;
+   const int32 RouteSID=4;
+   const FVector RouteStep=Position(3*N+1);
+   Check(IssueOrder(RouteSID,EBattleOrder::AttackMove,RouteStep),TEXT("player route current step fixture"));
+   Store->SetSquadDelegated(RouteSID,false);
+   auto* RouteBaseline=Match->CaptureSnapshot();TArray<uint8> RouteBaselineBytes;
+   Check(RouteBaseline&&UGameplayStatics::SaveGameToMemory(RouteBaseline,RouteBaselineBytes),TEXT("route-free OFF baseline encoded"));
+   BattleTactics::OverrideSaveRoutesForSmoke(1);
+   auto* EmptyRoutesOn=Match->CaptureSnapshot();TArray<uint8> EmptyRoutesOnBytes;
+   Check(EmptyRoutesOn&&EmptyRoutesOn->PlayerRoutesVersion==0&&UGameplayStatics::SaveGameToMemory(EmptyRoutesOn,EmptyRoutesOnBytes)&&
+    EmptyRoutesOnBytes==RouteBaselineBytes,TEXT("route-free ON save bytes identical to OFF (AI round trip)"));
+   FPlayerRoute RouteFixture;
+   RouteFixture.Lane=2;RouteFixture.Phase=1;RouteFixture.bMission=true;RouteFixture.bPath=true;RouteFixture.Order=EBattleOrder::Defend;
+   RouteFixture.Step=RouteStep;RouteFixture.Goal=RouteStep+FVector(1800,0,0);RouteFixture.PhaseGoal=RouteFixture.Goal;
+   RouteFixture.Waypoints={RouteStep+FVector(600,200,0),RouteStep+FVector(1200,-200,0)};
+   RouteFixture.StepDeadline=Match->Elapsed+30.f;
+   Match->PlayerRoutes.Add(RouteSID,RouteFixture);Match->PlayerRouteClock=.375f;
+   BattleTactics::OverrideSaveRoutesForSmoke(0);
+   auto* RoutesOff=Match->CaptureSnapshot();TArray<uint8> RoutesOffBytes;
+   Check(RoutesOff&&RoutesOff->PlayerRoutesVersion==0&&RoutesOff->SavedPlayerRoutes.IsEmpty()&&RoutesOff->SavedPlayerRouteClock==0&&
+    UGameplayStatics::SaveGameToMemory(RoutesOff,RoutesOffBytes)&&RoutesOffBytes==RouteBaselineBytes,
+    TEXT("OFF omits route section and keeps route-free save bytes"));
+   // Look for the actual ANSI property names emitted by the tagged SaveGame archive, not just default field values.
+   auto HasRouteTag=[&](const ANSICHAR* Tag)
+   {
+    const int32 TagLength=FCStringAnsi::Strlen(Tag);
+    for(int32 ByteIndex=0;ByteIndex+TagLength<=RoutesOffBytes.Num();++ByteIndex)
+     if(FMemory::Memcmp(RoutesOffBytes.GetData()+ByteIndex,Tag,TagLength)==0)return true;
+    return false;
+   };
+   Check(!HasRouteTag("PlayerRoutesVersion")&&!HasRouteTag("SavedPlayerRoutes")&&!HasRouteTag("SavedPlayerRouteClock"),TEXT("OFF archive contains no route property tags"));
+   BattleTactics::OverrideSaveRoutesForSmoke(1);
+   auto* RoutesOn=Match->CaptureSnapshot();TArray<uint8> RouteBytes;FString RouteError;
+   const bool RouteEncoded=RoutesOn&&RoutesOn->Validate(RouteError)&&UGameplayStatics::SaveGameToMemory(RoutesOn,RouteBytes);
+   auto* RouteDecoded=RouteEncoded?Cast<UBattleSave>(UGameplayStatics::LoadGameFromMemory(RouteBytes)):nullptr;
+   Check(RouteDecoded&&RouteDecoded->PlayerRoutesVersion==1&&RouteDecoded->SavedPlayerRoutes.Num()==1&&
+    Match->RestoreSnapshot(RouteDecoded),TEXT("player route extension codec and restore"));
+   auto RouteKept=[&]()
+   {
+    const FPlayerRoute* ActualRoute=Match->PlayerRoutes.Find(RouteSID);
+    return ActualRoute&&Match->PlayerRoutes.Num()==1&&ActualRoute->Lane==RouteFixture.Lane&&ActualRoute->Phase==RouteFixture.Phase&&
+     ActualRoute->PhaseGoal==RouteFixture.PhaseGoal&&ActualRoute->bMission==RouteFixture.bMission&&ActualRoute->bPath==RouteFixture.bPath&&
+     ActualRoute->Order==RouteFixture.Order&&ActualRoute->Goal==RouteFixture.Goal&&ActualRoute->Step==RouteFixture.Step&&
+     ActualRoute->Waypoints==RouteFixture.Waypoints&&ActualRoute->StepDeadline==RouteFixture.StepDeadline&&Match->PlayerRouteClock==.375f;
+   };
+   Check(RouteKept(),TEXT("final Defend, goal, two waypoints, step, lane, flags and clocks survive"));
+   if(RouteDecoded&&RouteDecoded->SavedPlayerRoutes.Num()==1&&RouteDecoded->SavedPlayerRoutes[0].Waypoints.Num()==2)
+   {
+    // Reuse the existing failed-restore checks, including nonempty runtime transient maps.
+    auto* PreviousSaved=Saved;Saved=RouteDecoded;
+    auto RejectRoute=[&](TFunctionRef<void(UBattleSave&)> CorruptRoute,const TCHAR* RouteLabel)
+    {Reject(CorruptRoute,RouteLabel);Check(RouteKept(),TEXT("failed restore retains complete player route and clock"));};
+    RejectRoute([](UBattleSave& RouteSave){RouteSave.SavedPlayerRoutes[0].SquadID=999999;},TEXT("bad player route squad rejected atomically"));
+    RejectRoute([](UBattleSave& RouteSave){RouteSave.SavedPlayerRoutes[0].SquadID=26;},TEXT("enemy player route rejected atomically"));
+    RejectRoute([](UBattleSave& RouteSave){RouteSave.SavedPlayerRoutes[0].SquadID=50;},TEXT("disabled player route rejected atomically"));
+    RejectRoute([](UBattleSave& RouteSave){RouteSave.SavedPlayerRoutes[0].Waypoints[0].X=std::numeric_limits<double>::quiet_NaN();},TEXT("NaN player waypoint rejected atomically"));
+    RejectRoute([](UBattleSave& RouteSave){RouteSave.SavedPlayerRoutes[0].Waypoints[0].X=1.e9;},TEXT("out-of-map player waypoint rejected atomically"));
+    RejectRoute([](UBattleSave& RouteSave){RouteSave.SavedPlayerRoutes[0].Waypoints.Init(FVector::ZeroVector,97);},TEXT("excessive player waypoint count rejected atomically"));
+    RejectRoute([](UBattleSave& RouteSave){const auto DuplicateRoute=RouteSave.SavedPlayerRoutes[0];RouteSave.SavedPlayerRoutes.Add(DuplicateRoute);},TEXT("duplicate player route rejected atomically"));
+    RejectRoute([](UBattleSave& RouteSave){RouteSave.SavedPlayerRoutes[0].Order=255;},TEXT("invalid final order rejected atomically"));
+    RejectRoute([](UBattleSave& RouteSave){RouteSave.SavedPlayerRoutes[0].DeadlineRemaining=std::numeric_limits<double>::infinity();},TEXT("nonfinite route deadline rejected atomically"));
+    RejectRoute([](UBattleSave& RouteSave){RouteSave.PlayerRoutesVersion=2;},TEXT("unknown player route version rejected atomically"));
+    RejectRoute([](UBattleSave& RouteSave){RouteSave.PlayerRoutesVersion=0;},TEXT("orphan player route section rejected atomically"));
+    auto* ExpiredRoute=DuplicateObject<UBattleSave>(RouteDecoded,this);
+    ExpiredRoute->Elapsed=10;ExpiredRoute->SavedPlayerRoutes[0].DeadlineRemaining=-2.;
+    ExpiredRoute->SavedPlayerRoutes[0].Step=FVector(FLT_MAX);ExpiredRoute->SavedPlayerRoutes[0].PhaseGoal=FVector(FLT_MAX);
+    Check(ExpiredRoute->Validate(RouteError),TEXT("expired route deadline and lane-reset sentinels remain valid"));
+    BattleTactics::OverrideSaveRoutesForSmoke(0);
+    RejectRoute([](UBattleSave&){},TEXT("route extension rejected atomically when switch OFF"));
+    Check(Match->LastMessage==TEXT("Player route save requires BattleSaveRoutes=1"),TEXT("route policy mismatch is explicit"));
+    BattleTactics::OverrideSaveRoutesForSmoke(1);RestoreStageFailureAfter=2;
+    RejectRoute([](UBattleSave&){},TEXT("route retained after body staging failure"));RestoreStageFailureAfter=INDEX_NONE;
+    Saved=PreviousSaved;
+   }
+   Check(Match->RestoreSnapshot(RouteBaseline)&&Match->PlayerRoutes.IsEmpty(),TEXT("legacy route-free save still clears routes with switch ON"));
+   BattleTactics::OverrideSaveRoutesForSmoke(0);Match->PlayerRoutes.Add(RouteSID,RouteFixture);
+   Check(Match->RestoreSnapshot(RouteBaseline)&&Match->PlayerRoutes.IsEmpty(),TEXT("legacy route-free save still clears routes with switch OFF"));
+  }
   auto* Legacy=DuplicateObject<UBattleSave>(Saved,this);Legacy->CombatStateVersion=0;Legacy->ArtilleryTrialFlags=0;for(auto& E:Legacy->Units)E.State.SPGAmmo=0;Legacy->SavedArtillery.Reset();Legacy->SavedArtilleryShells.Reset();
   Legacy->SavedGroups.Reset();Legacy->SavedSquadGroup.Reset();Legacy->SavedNextGroupID=1;Legacy->SavedCarChoices.Reset();
   Check(Match->RestoreSnapshot(Legacy)&&Artillery.IsEmpty()&&ArtilleryShells.IsEmpty(),TEXT("pre-extension mixed snapshot remains loadable"));

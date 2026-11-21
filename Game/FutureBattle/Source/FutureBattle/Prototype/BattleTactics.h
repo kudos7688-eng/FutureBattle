@@ -24,6 +24,8 @@ namespace BattleTactics
  // Trial -BattleArtilleryNavFallback=1 (default 0): an artillery vehicle whose post has no vehicle route tries reachable points between the post and itself.
  bool ArtilleryNavFallback();
  bool VehicleHitCover(); // Trial -BattleVehicleHitCover=1 (default 0): hide from own hits before starting home repair.
+ bool SaveRoutes(); // Trial -BattleSaveRoutes=1 (default 0): persist player route orders and lane choices.
+ int32 OverrideSaveRoutesForSmoke(int32 Value); // -1 restores command-line policy; returns previous override. Smoke only.
  bool BlastOcclusionEnabled();
  bool ArtilleryClustersEnabled();
  bool WeaponOrderGateEnabled(); // trial, default 0: apply mission permissions to launchers and artillery
