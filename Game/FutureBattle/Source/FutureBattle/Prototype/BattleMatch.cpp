@@ -355,6 +355,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  const bool bStrategy=bArea&&BattleTactics::AreaStrategy().bEnabled;
  const FAreaIntent TeamIntent=AreaIntent(Team);
  // Squad groups (BattleGroups.cpp): members, AI formation (trial) and phases, before the orders that read them.
+ if((CompositionTeams&(1<<Team))!=0)UpdateCompositionPurposes(Team);
  UpdateGroups(Team);
  // Routes (map F): what the team sees now, gathered once for all its squads.
  const bool bRoutes=bStrategy&&RoutesOn();TArray<FVector> RouteEnemies;if(bRoutes)RouteEnemies=RouteKnownEnemies(Team);
@@ -446,6 +447,10 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     FVector PinStage;
     if(UBattleLeaderRuntime::PinnedFlankEnabled()&&SectorRouteOn()&&bSectorAIOn&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&
        !Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&PinnedFlankStage(Pair.Key,P,PinStage))
+    {Center=PinStage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
+    // -BattleCloseIn: a sector squad trading fire at long range moves one sector closer first.
+    else if(UBattleLeaderRuntime::CloseInEnabled()&&SectorRouteOn()&&bSectorAIOn&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&
+       !Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&CloseInStage(Pair.Key,P,PinStage))
     {Center=PinStage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
     // -BattleSectorFlank: the last leg (no junction left) may also stop in a sector beside the enemy's front first.
     else if(!Step.Equals(Center,1) || (SectorFlankOn()&&SectorRouteOn()))

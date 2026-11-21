@@ -1,4 +1,5 @@
 #include "BattleMatch.h"
+#include "BattleComposition.h"
 #include "BattleFieldLayout.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
@@ -20,12 +21,13 @@ int32 UBattleMatch::AreaScore(int32 Team)const
  if(BattleWarScore::Tuning().bEnabled)return WarScore(Team);
  int32 Total=Credits[Team];for(const auto& U:GetWorld()->GetSubsystem<UBattleState>()->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive())++Total;
  // An exoskeleton soldier counts as ScoreCount soldiers (user decision 2026-11-18: one-soldier types are not penalised by the head count).
- if(const auto* Store=GetWorld()->GetSubsystem<UBattleState>();Store->HasShields())for(const auto& S:Store->GetSquads())
+ if(const auto* Store=GetWorld()->GetSubsystem<UBattleState>();Store->HasExoskeletons())for(const auto& S:Store->GetSquads())
   if(S.Value.Team==Team&&BattleSquadType::ScoreCount(S.Value.SquadType)>1)for(int32 ID:S.Value.Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())Total+=BattleSquadType::ScoreCount(S.Value.SquadType)-1;
  for(int32 I=0;I<Objectives.Num();++I)if(Objectives[I].Owner==Team)Total+=FMath::RoundToInt(20*ObjectiveValue(I));return Total;
 }
 void UBattleMatch::InitializeArea()
 {
+ BattleComposition::LogStart(); // stage 1: returns before constructing definitions when OFF
  Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
@@ -39,6 +41,7 @@ void UBattleMatch::InitializeArea()
   Base->SetActorScale3D(FVector(4,4,4));Base->GetStaticMeshComponent()->SetCanEverAffectNavigation(false);
   Base->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));BaseActors.Add(Base);
  }
+ InitializeComposition();
  if(FParse::Param(FCommandLine::Get(),TEXT("BattleAreaSmoke")))
  {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,GetWorld()->GetSubsystem<UBattleLeaderRuntime>(),&UBattleLeaderRuntime::RunAreaSmoke,5.f,false);}
 }
@@ -104,6 +107,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  int32 SID=INDEX_NONE;
  if(!R->SpawnPurchasedSquad(Team,EBattleTraining::Regular,LastMessage,!bAuto,&SID,SquadType))return false;
  Credits[Team]-=Cost;LastHiredSquadID=SID;
+ if((CompositionTeams&(1<<Team))!=0&&CompositionState.IsValidIndex(Team))++CompositionState[Team].Purchased[SquadType];
  if(Area.HireSpent.Num()!=2)Area.HireSpent={0,0};
  Area.HireSpent[Team]+=Cost;
  // Queued replenishments reserve one resource each; drop the least advanced ones the remaining resources cannot cover.
@@ -126,6 +130,7 @@ void UBattleMatch::UpdateAreaHiring()
  for(int32 Team=0;Team<2;++Team)
  {
   if(Team==0&&!R->SightExperiment.Enabled)continue; // The player's resources are spent only by the player.
+  if((CompositionTeams&(1<<Team))!=0){UpdateCompositionHiring(Team);continue;}
   int32 Pending=0;for(const auto& Q:Area.Replacements)Pending+=Store->Find(Q.Key)->Team==Team;
   // Squad type by the intent's heavy share: heavy infantry while the team's bought heavy squads are below that share of its purchases.
   FAreaIntent HireIntent=AreaIntent(Team); uint8 Type=BattleSquadType::Rifle;
@@ -268,7 +273,7 @@ void UBattleMatch::UpdateArea(float Dt)
   float& AmmoTime=Area.AmmoTimers.FindOrAdd(SID);AmmoTime+=Step;
   if(AmmoTime>=10)
   {
-   AmmoTime=0;int32 Rounds=0;for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive()){Rounds+=Store->AddReserve(ID,GetDefault<UBattleTuning>()->ReserveAmmo);Store->RefillLauncher(ID);}
+   AmmoTime=0;int32 Rounds=0;for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive()){Rounds+=Store->AddReserve(ID,GetDefault<UBattleTuning>()->ReserveAmmo);Store->RefillLauncher(ID);Rounds+=Store->RefillSPGAmmo(ID);}
    if(bPoint&&Rounds>0)UE_LOG(LogFutureBattle,Display,TEXT("AREA_POINT_SUPPLY time=%.0f squad=%d team=%d rounds=%d"),Elapsed,SID,S->Team,Rounds);
    if(bTeamSupply&&Rounds>0){SpendSupply(Car,Rounds);UE_LOG(LogFutureBattle,Display,TEXT("AREA_TEAM_SUPPLY time=%.0f squad=%d team=%d rounds=%d car=%d stock=%d"),Elapsed,SID,S->Team,Rounds,Car,SupplyStockOf(Car));}
   }

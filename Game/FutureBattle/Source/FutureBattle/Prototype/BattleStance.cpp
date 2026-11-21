@@ -155,12 +155,14 @@ void UBattleLeaderRuntime::UpdateAIStance(int32 ID,double Now,bool bMoving,bool 
  const uint8 Current=StanceOf(ID);
  // Pinned by suppression: get as low as possible, whatever the order says (own state only).
  if(IsPinned(ID,Now)){SetStance(ID,BattleStance::Prone,Now);return;}
- if(bMoving||!bCombat){SetStance(ID,BattleStance::Stand,Now);return;}
+ if(bMoving||!bCombat){NoCoverProneUntil.Remove(ID);SetStance(ID,BattleStance::Stand,Now);return;}
  if(bLostSight)
  {
   // The remembered target is no longer visible from down here: stand up and look for a few seconds.
   if(Current!=BattleStance::Stand&&SetStance(ID,BattleStance::Stand,Now)){StanceLockedUntil.Add(ID,Now+3.);SightExperiment.Cover(TEXT("stance_stood_to_look"));}
   return;
  }
+ // -BattleNoCoverFallback: no cover and no better place found - lie down while he still sees his target.
+ if(const double* T=NoCoverProneUntil.Find(ID)){if(*T>Now){SetStance(ID,BattleStance::Prone,Now);return;}NoCoverProneUntil.Remove(ID);}
  SetStance(ID,BattleStance::Crouch,Now);
 }

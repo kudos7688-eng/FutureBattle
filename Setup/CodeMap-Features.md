@@ -13,6 +13,9 @@
 
 | 機能 | 入口（ここから読む） | 関連 |
 |---|---|---|
+| 編成AI・候補選択と貯蓄購入 | @UBattleMatch::UpdateCompositionHiring 、 @BattleComposition::Decide 、 @BattleComposition::ValidateSave | Planner/PlannerTeams は既定0。ONは不足・緊急性で選択し貯蓄／購入。CombatStateVersion=4、旧保存はPlanner無効。検査は @UBattleLeaderRuntime::RunCompositionSmoke |
+| 盾被弾制圧・群の兵種別戦力（試験） | @UBattleLeaderRuntime::NoteUnderFire 、 @UBattleState::AdvanceShields 、 @UBattleMatch::GroupPower 、 @UBattleMatch::GroupPointPower | `BattleExoShieldSuppression` / `BattleGroupStrength` は既定0。観測兵種は @UBattlePerception::Update で取得、重みはUBattleTuning |
+| 間接射撃の試験切替 | @UBattleMatch::ArtilleryHomeObserved 、 @UBattleMatch::AreaArtilleryClusters 、 @UBattleLeaderRuntime::FireArtillery 、 @UBattleLeaderRuntime::ArtilleryBlastTransmission | 自走砲弾は @UBattleState::UseSPGAmmo / @UBattleState::RefillSPGAmmo 。4切替は既定0、CombatStateVersion=3で弾数と切替を保存 |
 | 正規状態・UnitID・部隊 | @UBattleState::RegisterUnit 、 @UBattleState::CreateSquad 、 @UBattleState::ApplyDamage | 構造体は `BattleState.h`（FBattleUnitState、FBattleSquadState）。調整値は同じ .h の `UBattleTuning`（ini で上書き） |
 | 兵科（歩兵・重火器・偵察・対戦車・戦車）の差 | @BattleSquadType::Members から @BattleSquadType::Weapon までの一群、 @UBattleState::SetSquadType | 射程は @BattleRanges::Get |
 | 命令（移動・攻撃移動・防御・待機） | 入力 @ABattleController::IssueOrderAt → 状態 @UBattleState::SetSquadOrder → 混成 @UBattleLeaderRuntime::IssueOrder | 委任は @UBattleState::SetSquadDelegated 、 @UBattleMatch::SetAllyDelegated |
@@ -43,6 +46,7 @@
 | 戦果点 | @UBattleMatch::UpdateWarScore 、 @UBattleMatch::WarScoreBreakdown | 調整値は @BattleWarScore::Tuning |
 | 支援砲撃（旧アリーナ） | @UBattleMatch::RequestSupport 、 @UBattleMatch::UpdateSupport | 混成には未接続 |
 | 車両・戦車砲・対戦車 | @UBattleLeaderRuntime::ConfigureVehicle 、 @UBattleLeaderRuntime::SteerVehicle 、 @UBattleLeaderRuntime::FireTankGun | 爆発は @UBattleLeaderRuntime::Explode |
+| 武器の命令・任務による交戦許可 | @BattleTactics::OrderAllowsTarget 、 @UBattleLeaderRuntime::WeaponOrderAllows | 副武器・間接射撃の試験は BattleWeaponOrderGate、装甲AIの候補制限は BattleArmourSectorGate（いずれも既定0） |
 | 保存・復元 | @UBattleMatch::SaveMatch 、 @UBattleMatch::LoadMatch 、 @UBattleMatch::CaptureSnapshot 、 @UBattleMatch::RestoreSnapshot | 検証は @UBattleSave::Validate 、 @UBattleSave::ValidateMixed 。戦術状態は @UBattleSquadTactics::CaptureSave |
 | 表示（混成の体・遠距離 VAT） | @UBattleLeaderRuntime::CreateBody 、 @UBattleLeaderRuntime::RefreshDisplay 、 @ABattleVATDisplay::Tick | 復元時は @UBattleLeaderRuntime::RestoreMixedBodies |
 | マップの定義・配置 | `BattleFieldLayout.h`（マップごとの表 `Maps()`） | 生成は @UBattleMapCommandlet::Main （既存の手編集を `-Force` で上書きしない） |
@@ -145,3 +149,11 @@ BattleSectorView | 作戦画面の表示だけ（規則・AIは読まない）�
 BattleSectorRoute | 区画経由の移動 `-BattleSectorRoute`・側面 `-BattleSectorFlank`・前線 `-BattleSectorFront`（区画のあるマップ、AIの歩兵）：道路網の次の交差点の代わりに、その周りで遮蔽の多い区画を制圧・維持しながら進む。側面は観測した敵の正面を避けた区画、前線は自軍の区画のうち敵に接する区画（UBattleMatch の一部）
 BattleSectors | マップHの50m区画の格子（20×14）：区画の番号と中心、区画の種類の表、川・橋・浅瀬の位置
 BattleFrontLine | Surprise bridge waypoints: UpdateSurpriseBridge, BattleSurpriseRoute::Bridge / Intersects; fixed H/I map geometry, entrance / exit / edge goal, retained on same-time restore
+
+BattleWeaponOrders | 命令・防衛範囲・支援対象・区画任務の交戦許可と武器/装甲AIの試験切替
+BattleComposition | 編成AIの兵種定義・解決済み入力・診断
+BattleCompositionPlanner | 編成AIの純粋な候補選択・貯蓄遷移・状態検証。整数比較、乱数なし
+BattleCompositionRuntime | 編成AIと観測・収入窓・既存購入実行の接続、設定キー
+BattleCompositionState | CombatStateVersion=4で保存する編成AIの陣営状態
+BattleCompositionSave | 編成AI保存の版・陣営・時刻・参照先検証
+BattleCompositionSmoke | 編成AIの選択・貯蓄・保存往復のスモーク検査（UBattleLeaderRuntimeの一部）

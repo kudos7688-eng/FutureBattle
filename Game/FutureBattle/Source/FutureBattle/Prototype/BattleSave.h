@@ -25,12 +25,106 @@ struct FBattleSavedDamage
  UPROPERTY() float Damage=0;
 };
 
+// Extension revision 1: relative artillery clocks. Revision 0 is an older save without this state.
+USTRUCT()
+struct FBattleSavedArtillery
+{
+ GENERATED_BODY()
+ UPROPERTY() bool bSettingUp=false;
+ UPROPERTY() double SetupElapsed=0;
+ UPROPERTY() double ReloadRemaining=0;
+ UPROPERTY() double PickRemaining=0;
+ UPROPERTY() int32 Shots=0;
+ UPROPERTY() int32 TargetKey=INDEX_NONE; // observed aim identity; older saves did not retain it
+ UPROPERTY() FVector Aim=FVector::ZeroVector;
+ UPROPERTY() bool bHasTarget=false;
+ UPROPERTY() bool bBase=false;
+};
+
+USTRUCT()
+struct FBattleSavedArtilleryShell
+{
+ GENERATED_BODY()
+ UPROPERTY() int32 ShooterID=INDEX_NONE;
+ UPROPERTY() int32 Team=0;
+ UPROPERTY() uint8 ShooterType=0;
+ UPROPERTY() bool bSPG=false;
+ UPROPERTY() FVector At=FVector::ZeroVector;
+ UPROPERTY() float Remaining=0;
+};
+
+// Revision 2: group decision state, including historical roles for squads that have since left.
+// All three time fields are signed offsets from match Elapsed, NOT UWorld::TimeSeconds.
+// Keep doubles for exact round trips of float clocks; do not clamp expired deadlines or future phase starts.
+USTRUCT()
+struct FBattleSavedGroup
+{
+ GENERATED_BODY()
+ UPROPERTY() int32 ID=0;
+ UPROPERTY() int32 Team=0;
+ UPROPERTY() TArray<int32> Squads;
+ UPROPERTY() int32 Objective=INDEX_NONE;
+ UPROPERTY() uint8 Phase=0;
+ UPROPERTY() double PhaseAge=0;
+ UPROPERTY() FVector Rally=FVector::ZeroVector;
+ UPROPERTY() bool bPlayer=false;
+ UPROPERTY() TMap<int32,uint8> Roles;
+ UPROPERTY() int32 Avoid=INDEX_NONE;
+ UPROPERTY() double AvoidRemaining=0;
+ UPROPERTY() int32 StartLiving=0;
+ UPROPERTY() double StartStrength=-1; // additive trial field; older snapshots initialize on next group update
+ UPROPERTY() int32 StallPoint=INDEX_NONE;
+ UPROPERTY() int32 Stalls=0;
+ UPROPERTY() bool bOpened=false;
+ UPROPERTY() bool bArrived=false;
+ UPROPERTY() double ArrivalAge=0;
+ UPROPERTY() int32 Extensions=0;
+ // Front-holding and surprise groups (groupui 2026-11-21; additive, older snapshots load as attack groups). Times as offsets from Elapsed.
+ UPROPERTY() uint8 Kind=0;
+ UPROPERTY() int32 SurpriseRow=0;
+ UPROPERTY() uint8 SurpriseBridgeStage=0;
+ UPROPERTY() int32 SurpriseBridgeLeader=INDEX_NONE;
+ UPROPERTY() double SurpriseBridgeAge=0;
+ UPROPERTY() int32 SurpriseNextCol=-1;
+ UPROPERTY() FVector SurpriseBridgeEntry=FVector::ZeroVector;
+ UPROPERTY() FVector SurpriseBridgeExit=FVector::ZeroVector;
+ UPROPERTY() FVector SurpriseBridgeGoal=FVector::ZeroVector;
+ UPROPERTY() bool bSurpriseWaiting=false;
+ UPROPERTY() double SurpriseWaitAge=0;
+ UPROPERTY() double SurpriseLogRemaining=0;
+ UPROPERTY() double SurpriseEndRemaining=0;
+};
+
+USTRUCT()
+struct FBattleSavedCarChoice
+{
+ GENERATED_BODY()
+ UPROPERTY() int32 Target=INDEX_NONE;
+ UPROPERTY() bool bHasTime=false; // runtime At=-1 means no choice has been made
+ UPROPERTY() double Age=0;
+};
+
 UCLASS()
 class UBattleSave : public USaveGame
 {
 	GENERATED_BODY()
 public:
 	UPROPERTY() int32 Version = 1;
+ // Keep the existing mode versions/slot names; absent extension fields default to revision 0.
+ UPROPERTY() int32 CombatStateVersion=0;
+ UPROPERTY() int32 CompositionTeams=0;
+ UPROPERTY() int32 CompositionPolicy=0;
+ UPROPERTY() FString CompositionRules;
+ UPROPERTY() TArray<FCompositionTeamState> CompositionState;
+ // Revision 3: SPG main-gun rounds in State and indirect-fire trial configuration.
+ UPROPERTY() int32 ArtilleryTrialFlags=0;
+ UPROPERTY() int32 StrengthShieldTrialFlags=-1; // absent in older saves; additive to extension 3
+ UPROPERTY() TMap<int32,FBattleSavedGroup> SavedGroups;
+ UPROPERTY() TMap<int32,int32> SavedSquadGroup;
+ UPROPERTY() int32 SavedNextGroupID=1;
+ UPROPERTY() TMap<int32,FBattleSavedCarChoice> SavedCarChoices;
+ UPROPERTY() TMap<int32,FBattleSavedArtillery> SavedArtillery;
+ UPROPERTY() TArray<FBattleSavedArtilleryShell> SavedArtilleryShells;
  UPROPERTY() FBattleAreaState Area;
  UPROPERTY() FString MapName;
  UPROPERTY() FName Ruleset;

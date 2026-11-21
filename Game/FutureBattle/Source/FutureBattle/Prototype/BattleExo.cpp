@@ -5,6 +5,7 @@
 // This file holds the second weapon (the shoulder anti-tank launcher) and the look.
 // AI cognition: the launcher fires only at what the soldier sees itself (its own visible contacts).
 #include "BattleLeaderRuntime.h"
+#include "BattleTactics.h"
 #include "BattleState.h"
 #include "BattleMatch.h"
 #include "BattlePerception.h"
@@ -296,6 +297,8 @@ void UBattleLeaderRuntime::StepExoLaunchers(double Now)
   int32 Best=INDEX_NONE;double BestScore=-1.;FVector BestAt=FVector::ZeroVector;
   for(const auto& K:Seen)
   {
+   // Permission restricts the aim target, not the observed neighbours used to value its splash.
+   if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,K.Key,K.Value))continue;
    const bool Vehicle=IsVehicle(K.Key);int32 Around=0;
    if(!Vehicle){if(U->Launcher<=FMath::Max(0,T->ExoLauncherKeep))continue;for(const auto& O:Seen)Around+=!IsVehicle(O.Key)&&FVector::DistSquared2D(O.Value,K.Value)<=Splash2;if(Around<FMath::Max(1,T->ExoLauncherCluster))continue;}
    const double Score=(Vehicle?1000.:double(Around))-FVector::Dist2D(Pos,K.Value)/1.e6;

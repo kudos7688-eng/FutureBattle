@@ -39,27 +39,46 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("COVER / FIRE = BLIND FIRE / AIM + FIRE = PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で壁越しに撃つ ／ 構えて射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("BLIND FIRE"),TEXT("壁越し射撃"));M.Add(TEXT("NO NEARBY COVER WITH SAFE PEEK"),TEXT("近くに安全に撃てる遮蔽がない"));
   M.Add(TEXT("AI PAUSED / practice controls freely"),TEXT("AI停止中 ／ 自由に操作を練習できます"));M.Add(TEXT("AI RESUMED"),TEXT("AI再開"));
   // Match and save messages.
+  M.Add(TEXT("LAUNCHER EQUIPPED"),TEXT("対戦車火器を装備"));
+  M.Add(TEXT("RIFLE EQUIPPED"),TEXT("ライフルを装備"));
+  M.Add(TEXT("Invalid training price"),TEXT("練度の購入価格が不正です"));
+  M.Add(TEXT("Match roster capacity reached (1000 including losses)"),TEXT("兵の記録数が上限に達しました（損失を含めて1000人）"));
+  M.Add(TEXT("Match roster capacity reached (500 including losses)"),TEXT("兵の記録数が上限に達しました（損失を含めて500人）"));
+  M.Add(TEXT("Could not write save file"),TEXT("保存ファイルを書き込めませんでした"));
+  M.Add(TEXT("Indirect-fire trial configuration does not match"),TEXT("保存時と間接射撃の設定が違います"));
+  M.Add(TEXT("Strength/shield trial configuration does not match"),TEXT("保存時と戦力・盾の設定が違います"));
+  M.Add(TEXT("Composition planner configuration does not match"),TEXT("保存時と編成計画の設定が違います"));
+  M.Add(TEXT("Composition saving price does not match definitions"),TEXT("保存された購入予定額が現在の定義と一致しません"));
+  M.Add(TEXT("Mixed snapshot required"),TEXT("混成モードの保存データが必要です"));
+  M.Add(TEXT("Player or game mode unavailable; restore aborted"),TEXT("操作担当またはゲームモードが利用できず読込を中止しました"));
+  M.Add(TEXT("Navigation unavailable; restore aborted"),TEXT("経路が利用できず読込を中止しました"));
+  M.Add(TEXT("Saved route unreachable; restore aborted"),TEXT("保存された経路を通れず読込を中止しました"));
+  M.Add(TEXT("Could not stage body host; restore aborted"),TEXT("表示の土台を準備できず読込を中止しました"));
+  M.Add(TEXT("Could not stage representations; restore aborted"),TEXT("兵の表示を準備できず読込を中止しました"));
+  M.Add(TEXT("Restore failed while creating units"),TEXT("兵の生成中に読込に失敗しました"));
+  M.Add(TEXT("RECRUIT"),TEXT("新兵"));
+  M.Add(TEXT("REGULAR"),TEXT("正規兵"));
+  M.Add(TEXT("VETERAN"),TEXT("熟練兵"));
   M.Add(TEXT("Area battle: new squads disabled"),TEXT("エリア戦：小隊の購入は無効"));M.Add(TEXT("Area battle: regular squads only [2]"),TEXT("エリア戦：購入できるのは正規兵の小隊だけ [2]"));
   M.Add(TEXT("Battle started"),TEXT("戦闘開始"));M.Add(TEXT("Deploy at least one squad before starting"),TEXT("開始前に1部隊以上を展開してください"));
   M.Add(TEXT("Deployment failed; credits retained"),TEXT("展開に失敗（資源は戻しました）"));M.Add(TEXT("Deployment navigation unavailable"),TEXT("展開先の経路がありません"));
   M.Add(TEXT("Direct control outside combat"),TEXT("戦闘中以外は直接操作できません"));M.Add(TEXT("Field capacity reached (100)"),TEXT("戦場の上限に達しました（100）"));
   M.Add(TEXT("Fixed 500-soldier field / no reinforcements"),TEXT("500人の固定戦場 ／ 増援なし"));M.Add(TEXT("Home deployment area is blocked"),TEXT("本拠地の展開区域がふさがっています"));
   M.Add(TEXT("Insufficient credits"),TEXT("資源が足りません"));M.Add(TEXT("Insufficient resources"),TEXT("資源が足りません"));
-  M.Add(TEXT("Scout pair limit reached"),TEXT("偵察組は1軍3組まで"));
-  M.Add(TEXT("Anti-tank team limit reached"),TEXT("対戦車班は1軍3班まで"));
-  M.Add(TEXT("Tank limit reached"),TEXT("戦車は1軍2両まで"));
-  M.Add(TEXT("Armoured car limit reached"),TEXT("装甲車は1軍3両まで"));
-  M.Add(TEXT("Mortar team limit reached"),TEXT("迫撃砲班は1軍3班まで"));
-  M.Add(TEXT("Self-propelled gun limit reached"),TEXT("自走砲は1軍2両まで"));
+  M.Add(TEXT("Scout pair limit reached"),TEXT("偵察組の上限に達しました"));
+  M.Add(TEXT("Anti-tank team limit reached"),TEXT("対戦車班の上限に達しました"));
+  M.Add(TEXT("Tank limit reached"),TEXT("戦車の上限に達しました"));
+  M.Add(TEXT("Armoured car limit reached"),TEXT("装甲車の上限に達しました"));
+  M.Add(TEXT("Mortar team limit reached"),TEXT("迫撃砲班の上限に達しました"));
+  M.Add(TEXT("Self-propelled gun limit reached"),TEXT("自走砲の上限に達しました"));
   M.Add(TEXT("LAUNCHER EMPTY / REFILL AT HOME"),TEXT("対戦車弾なし ／ 本拠地で補充"));M.Add(TEXT("LAUNCHER LOADING"),TEXT("対戦車火器を装填中"));
-  M.Add(TEXT("Exoskeleton soldier limit reached"),TEXT("外骨格兵は1軍3体まで"));
-  M.Add(TEXT("Supply vehicle limit reached"),TEXT("補給車は1軍2両まで"));
+  M.Add(TEXT("Exoskeleton soldier limit reached"),TEXT("外骨格兵の上限に達しました"));
+  M.Add(TEXT("Supply vehicle limit reached"),TEXT("補給車の上限に達しました"));
   M.Add(TEXT("Match restored"),TEXT("試合を読み込みました"));M.Add(TEXT("Match saved [F9 to load]"),TEXT("試合を保存しました [F9で読込]"));
   M.Add(TEXT("Mixed recruitment unavailable"),TEXT("購入できません"));M.Add(TEXT("Navigation unavailable"),TEXT("経路がありません"));
   M.Add(TEXT("No compatible save found"),TEXT("使える保存データがありません"));M.Add(TEXT("No free squad slot (active squad limit)"),TEXT("部隊の空きがありません（稼働部隊の上限）"));
   M.Add(TEXT("No reliable known enemy position / scout or receive a report"),TEXT("確かな敵の位置がありません ／ 偵察するか報告を待ってください"));
   M.Add(TEXT("Recruitment unavailable"),TEXT("今は購入できません"));M.Add(TEXT("Representation staging failed; purchase retained"),TEXT("表示の準備に失敗（購入は有効）"));
-  M.Add(TEXT("Restore failed; current battle retained"),TEXT("読込に失敗（今の試合を続けます）"));
   M.Add(TEXT("Save mode, map or rule configuration does not match"),TEXT("保存時とモード・マップ・規則が違います"));
   M.Add(TEXT("Squad record capacity reached (100 including lost squads)"),TEXT("部隊記録の上限に達しました（失った部隊を含めて100）"));
   M.Add(TEXT("Support rearming (20s)"),TEXT("支援攻撃の再装填中（20秒）"));M.Add(TEXT("Support requested / impact in 3s / -400 credits"),TEXT("支援攻撃を要請 ／ 3秒後に着弾 ／ 資源 -400"));
@@ -91,6 +110,8 @@ static FString JaUncached(const FString& Text)
 {
  // Notices with numbers. Groups are inserted with {0}, {1}, {2}; a group that is itself English text is translated.
  static const FPattern Patterns[]={
+  {TEXT("^(.*) squad deployed / -(\\d+) credits$"),TEXT("{0}の部隊を配備 ／ 資源 -{1}")},
+  {TEXT("^(\\d+) soldiers deployed / -(\\d+) credits$"),TEXT("{0}人を配備 ／ 資源 -{1}")},
   {TEXT("^GAME SPEED x(\\d+) \\[\\.\\]$"),TEXT("速度 x{0} [.]")},
   {TEXT("^DIRECT CONTROL / UNIT (\\d+)$"),TEXT("直接操作 ／ 兵{0}")},
   {TEXT("^ORDER: (\\d+) SQUADS / (\\d+) REJECTED$"),TEXT("命令：{0}部隊 ／ 拒否 {1}")},
@@ -133,4 +154,14 @@ static FString JaUncached(const FString& Text)
   if(bAny) return FString::Join(Parts,TEXT(" ／ "));
  }
  return Text;
+}
+
+FString BattleUIText::SaveResult(bool bSuccess,bool bLoading,const FString& Detail)
+{
+ if(bSuccess)return bLoading?TEXT("試合を読み込みました（道筋の最終命令・複数選択・作戦カメラは復元対象外）"):
+  TEXT("試合を保存しました [F9で読込]（道筋の最終命令・複数選択・作戦カメラは保存対象外）");
+ const FString Translated=Ja(Detail);
+ if(!Translated.IsEmpty() && Translated!=Detail)return Translated;
+ return bLoading?TEXT("読込に失敗しました。詳しい理由はログを確認してください"):
+  TEXT("保存に失敗しました。詳しい理由はログを確認してください");
 }

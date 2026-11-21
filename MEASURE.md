@@ -62,7 +62,7 @@
 |---|---|
 | 試合ごとの結果 | `Setup/Benchmarks/SightTrial-20261111/<OutputName>/`（`result.json`、`metrics.json`、`manifest.json`） |
 | 固定ビルド | `Setup/Benchmarks/BuildSnapshots/<Name>/manifest.json` |
-| 総当たりの標準出力 | `Setup/<接頭辞>-<条件>.txt`（例 `Econ-econ-...txt`）。**2日より古いものは `Setup\Move-OldRuns.ps1` で `Setup/Runs/<YYYY-MM>/` へ移す**（git の対象外。Setup 内に読み戻すスクリプトはない） |
+| 総当たりの標準出力 | `Setup/<接頭辞>-<条件>.txt`（例 `Econ-econ-...txt`）。**2日より古いものは `Setup\Move-OldRuns.ps1` で `Setup/Runs/<YYYY-MM>/` へ移す**（txt・png・json・log・out が対象。git の対象外。Setup 内に読み戻すスクリプトはない） |
 | ビルドのログ | `Setup/Build-Editor.log`（毎回上書き） |
 
 `OutputName` やタグには、まだ使っていない名前を付ける。既存の証拠を上書きしない。

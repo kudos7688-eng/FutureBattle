@@ -30,7 +30,7 @@ float UBattleLeaderRuntime::ArmorScale(int32 VictimID,EBattleWeapon Weapon) cons
  if(Weapon==EBattleWeapon::AntiTank)return 1.f;
  if(IsVehicle(VictimID))return BattleSquadType::ArmorSmallArms(VehicleType(VictimID));
  // Armoured exoskeleton soldiers (infantry with armour): only looked up once such a squad exists.
- return GetWorld()->GetSubsystem<UBattleState>()->HasShields()?BattleSquadType::ArmorSmallArms(VehicleType(VictimID)):1.f;
+ return GetWorld()->GetSubsystem<UBattleState>()->HasExoskeletons()?BattleSquadType::ArmorSmallArms(VehicleType(VictimID)):1.f;
 }
 
 uint8 UBattleLeaderRuntime::VehicleType(int32 ID) const

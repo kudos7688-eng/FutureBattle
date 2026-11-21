@@ -10,6 +10,7 @@ struct FBattleContact
 {
 	GENERATED_BODY()
 	UPROPERTY() int32 TargetID = INDEX_NONE;
+ UPROPERTY() uint8 ObservedSquadType = 255; // unknown until actually identified; never refreshed from unseen truth
 	UPROPERTY() FVector LastKnownPosition = FVector::ZeroVector;
 	UPROPERTY() double LastSeenTime = 0.;
 	UPROPERTY() float Confidence = 0.f;
@@ -57,11 +58,15 @@ public:
 	void CollectVisibleTargets(const TArray<TObjectPtr<ABattleUnit>>& Units, int32 Team, TSet<int32>& Targets) const;
 	// Scout reports: an enemy near a reporting scout learns its approximate position (a remembered, never visible, contact).
 	void AddHint(int32 ObserverID, int32 TargetID, const FVector& Position, double Now, float Confidence);
+	// Trial -BattleHitReveal: the observer was just shot by TargetID and has a clear line to him. The detection delay counts as
+	// already spent and the observer scans on the next frame; the contact still forms only through the normal scan (line of sight).
+	void RevealShooter(int32 ObserverID, int32 TargetID, double Now, float DetectionSeconds);
 	void Reset() { Observers.Reset(); PendingReports.Reset(); PendingCounts.Reset(); NextScanTimes.Reset(); LastScanTimes.Reset(); }
 	void Capture(TMap<int32, FBattleObserver>& OutObservers, TArray<FBattleReport>& OutReports, double Now) const;
 	void Restore(const TMap<int32, FBattleObserver>& SavedObservers, const TArray<FBattleReport>& SavedReports, double Now);
 private:
 	friend class UBattlePhase3; // Test-only exact state/order audit.
+	friend class UBattleLeaderRuntime; // RunAreaSmoke: scoped visible-contact fixture, without save/load semantics.
 	UPROPERTY() TMap<int32, FBattleObserver> Observers;
 	UPROPERTY() TArray<FBattleReport> PendingReports;
 	TMap<FIntVector, int32> PendingCounts;

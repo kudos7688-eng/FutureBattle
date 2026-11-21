@@ -3,6 +3,7 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "BattleState.h"
 #include "BattleAreaState.h"
+#include "BattleCompositionState.h"
 #include "BattleMatch.generated.h"
 class UBattleSave;
 // Area strategy layer (ROADMAP 2026-11-16). The team intent is all the lower layers read: point allocation (S1 with S4/S6) and
@@ -117,6 +118,13 @@ public:
  // AI purchase rule, every director tick: own resources minus own pending replenishments >= cost + reserve, and a free slot.
  // Team 1 always; team 0 only in the all-AI sight experiment.
  void UpdateAreaHiring();
+ // Initialized only for new ON matches. Loading pre-extension-4 saves explicitly disables the planner.
+ int32 CompositionTeams=0;
+ UPROPERTY() TArray<FCompositionTeamState> CompositionState;
+ void InitializeComposition();
+ void UpdateCompositionHiring(int32 Team);
+ void UpdateCompositionPurposes(int32 Team);
+ bool CompositionHomeThreat(int32 Team) const;
  int32 ActiveSquads(int32 Team) const;
  // Active scout pairs of a team (at most UBattleTuning::AreaScoutLimit).
  int32 ActiveScouts(int32 Team) const;
@@ -197,14 +205,15 @@ public:
 	// Tank objective (the point with the most known enemies, outside the city of map E) and its overwatch post short of that point.
 	int32 AreaTankTarget(int32 Team, int32 SquadID) const;
 	FVector AreaTankPost(int32 Team, int32 Point, float Overwatch = -1.f) const; // Overwatch below zero: UBattleTuning::TankOverwatch
-	// Squad groups, stage 1 (BattleGroups.cpp): members, one objective, a phase (0 assemble at Rally, 1 advance, 2 hold). Not saved.
+	// Squad groups, stage 1 (BattleGroups.cpp): members, one objective, a phase (0 assemble at Rally, 1 advance, 2 hold). Saved with all decision history by combat extension 2 (older saves start empty).
 	// Stage 2: roles while advancing (0 assault: to the point; 1 support: fires from a post short of it; 2 armour: the tank's post behind
 	// the infantry; 3 fire: mortar or gun at its firing post; 4 guard: the anti-tank team beside the support post; 5 supply: the supply vehicle behind
 	// the group's post (BattleSupplyCar.cpp); 255 none: the squad
 	// keeps its own type's rules). A point the group could not take is avoided until AvoidUntil.
 	struct FBattleGroup { int32 ID = 0, Team = 0; TArray<int32> Squads; int32 Objective = INDEX_NONE; uint8 Phase = 0; float PhaseAt = 0.f; FVector Rally = FVector::ZeroVector; bool bPlayer = false; TMap<int32, uint8> Roles; int32 Avoid = INDEX_NONE; float AvoidUntil = 0.f;
 		// Stage 3b: the living soldiers when the advance began (losses end it early) and how often in a row the group failed at StallPoint.
-		int32 StartLiving = 0, StallPoint = INDEX_NONE, Stalls = 0;
+		double StartStrength = -1;
+  int32 StartLiving = 0, StallPoint = INDEX_NONE, Stalls = 0;
 		bool bOpened = false; /* the opening rush was decided (once per group) */
 		bool bArrived = false; /* this advance has reached its point: the stall clock (PhaseAt) runs from then */
 		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */
@@ -236,6 +245,17 @@ public:
 	TSet<int32> ArmyPinned;
 	bool GroupAIRun(const FBattleGroup& Group) const;
 	int32 GroupLiving(const FBattleGroup& Group, int32* Full = nullptr) const;
+ struct FGroupStrength {
+  double Infantry=0,Armour=0,Soft=0,Hard=0,Unknown=0;
+  void Add(uint8 Type);
+  double Total() const { return Infantry+Armour; }
+  double Against(const FGroupStrength& Other) const;
+  bool SuperiorTo(const FGroupStrength& Other,double Ratio) const;
+ };
+ static bool GroupSquadPresent(const FBattleSquadState& Squad);
+ FGroupStrength GroupPower(const FBattleGroup& Group,bool bFull=false) const;
+ FGroupStrength GroupPointPower(int32 Team,int32 Point,bool bEnemy) const;
+ bool GroupPointThreat(int32 Team,int32 Point) const;
 	int32 GroupFocus(int32 Team, const FVector& From, int32 Avoid = INDEX_NONE) const;
 	FVector GroupRally(int32 Team, int32 Point) const;
 	// Every director update, before the team's orders: members, AI formation (trial -BattleAreaGroups=1), phases.
@@ -251,7 +271,7 @@ public:
 	// Strategic layer trial (-BattleAreaComposition=1): the AI's own mix of special squad types, written into the intent's Keep numbers.
 	void AreaComposition(int32 Team, FAreaIntent& Intent, int32 Bought) const;
 	struct FCarChoice { int32 Target = INDEX_NONE; double At = -1; };
-	mutable TMap<int32, FCarChoice> CarChoices; // transient, squad -> current objective
+	mutable TMap<int32, FCarChoice> CarChoices; // saved, squad -> current objective (At uses match Elapsed)
 	// Scout reports (ROADMAP 2026-11-14, stage 3): what a scout pair sees beyond normal sight reaches its team only through a timed
 	// two-step report (direction after ScoutAlertSeconds, positions and size after ScoutReportSeconds). Transient: a load restarts the timers.
 	struct FScoutReport { double Started=-1, LastLong=-1, AlertAt=-1, ReportedAt=-1, NextHint=0, RetreatUntil=-1, PauseStart=-1, LastDanger=-1; FVector ReportFrom=FVector::ZeroVector; float LastHP=-1; int32 Stage=0, Living=0, Sequence=0, AlertSequence=0, Burns=0; FVector Direction=FVector::ZeroVector, Approx=FVector::ZeroVector, RetreatPoint=FVector::ZeroVector; TArray<FVector> Positions; };
@@ -262,8 +282,17 @@ public:
 	// (1) reinforce own points where more enemies are known than own soldiers, (2) attack the points where fewer enemies are known,
 	// (3) raise the home-assault share when the enemy home was observed lightly held, (4) buy squads to defend a threatened point
 	// (released once the threat is gone and the squad is there). Known positions only; never the hidden truth.
-	struct FAreaIntelView { double At=-1; TArray<FVector> Enemies; TArray<int32> EnemyKeys /* unit IDs, below zero for scout report positions */; TArray<int32> OwnAt, EnemyAt; int32 HomeEnemies=0; bool bHomeCovered=false; };
+	struct FArtilleryCluster { TArray<int32> Anchors; FVector At=FVector::ZeroVector; int32 Count=0; };
+ struct FAreaIntelView { double At=-1; TArray<FVector> Enemies; TArray<int32> EnemyKeys /* unit IDs, below zero for scout report positions */; TArray<int32> OwnAt, EnemyAt; int32 HomeEnemies=0; bool bHomeCovered=false;
+  // Fresh direct LOS report, distinct from knowing the base position. Match-clock timestamp.
+  int32 HomeObserver=INDEX_NONE; double HomeObservedAt=-1; FVector HomeReportFrom=FVector::ZeroVector;
+  TMap<int32,uint8> EnemyTypes; // observed contact metadata only; report dots without identity remain unknown
+  mutable bool bClustersBuilt[2]={false,false};
+  mutable TArray<FArtilleryCluster> Clusters[2];
+ };
 	const FAreaIntelView& AreaIntelView(int32 Team) const;
+ bool ArtilleryHomeObserved(int32 Team) const;
+ const TArray<FArtilleryCluster>& AreaArtilleryClusters(int32 Team,bool bSPG) const;
 	bool AreaIntelOn(int32 Team) const;
 	int32 AreaIntelThreat(int32 Team) const;   // own point with the largest known enemy surplus (-1 = none)
 	bool AreaIntelThreatAt(int32 Team, int32 Point) const;
@@ -309,6 +338,18 @@ public:
 	// the side of the threat (not much closer to it, not falling back) and keeps that stop for 40 s or until it is there.
 	bool PinnedFlankStage(int32 SquadID, const FVector& Leader, FVector& Stage);
 	TMap<int32, TPair<FIntPoint, double>> PinnedFlank;
+	// Trial -BattleCloseIn=1: a squad fighting from its sector at long range (UBattleLeaderRuntime::CloseInThreat) is sent to the
+	// neighbouring sector that is at least half a sector closer to the threat - the most cover, the least danger, not open
+	// fields, not an enemy sector - and keeps that stop for 60 s (it then fights from there; the order loop takes over again).
+	bool CloseInStage(int32 SquadID, const FVector& Leader, FVector& Stage);
+	TMap<int32, TPair<FIntPoint, double>> CloseIn;
+	// Trial -BattleDangerRoute=1 (2026-11-20, default 0; user: "tell whether the area ahead is dangerous and do not go through"):
+	// every hit on a soldier marks his sector for his team (1 per hit, halved every 60 s; own losses only, never the enemy's
+	// true positions). Route stops, pinned-flank stops and close-in stops score 3 lower per point (up to 8 points).
+	static bool DangerRouteOn();
+	void NoteSectorDanger(int32 Team, const FVector& At);
+	double SectorDanger(int32 Team, FIntPoint Cell) const;
+	TMap<FIntPoint, TPair<double, double>> SectorDangerMap[2];
 	// Player route choice (BattlePlayerRoutes.cpp), per squad of the player's team. Empty in matches without a player's choice.
 	TMap<int32, FPlayerRoute> PlayerRoutes;
 	float PlayerRouteClock = 0.f;
@@ -318,7 +359,7 @@ public:
 	// A manual order over the squad's chosen route: -1 not routed (give the ordinary order), 0 refused, 1 accepted.
 	int32 PlayerRouteOrder(int32 SquadID, EBattleOrder Order, const FVector& Goal);
 	// The next junction for a squad with a chosen route (RouteStep without one).
-	FVector PlayerRouteStep(int32 SquadID, const FVector& From, const FVector& Goal);
+	FVector PlayerRouteStep(int32 SquadID, const FVector& From, const FVector& Goal, FPlayerRoute* Candidate = nullptr);
 	void UpdatePlayerRoutes(float DeltaSeconds);
 	// Drawn way (BattlePlayerPath.cpp): the squad walks Points in order and takes Order at the last. 1 accepted, 0 refused.
 	int32 PlayerPathOrder(int32 SquadID, EBattleOrder Order, const TArray<FVector>& Points);

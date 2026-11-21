@@ -6,6 +6,8 @@
 // multiplied by 1+SpreadScale*level. AI cognition only: at or above PinLevel an AI soldier in cover stays hidden and an
 // exposed peek ducks back (PinLevel>1 disables pinning). Runtime only: not saved, a loaded battle starts unsuppressed.
 // Overrides: -BattleSuppressionRadius= / -BattleSuppressionPerShot= / -BattleSuppressionDecay= / -BattleSuppressionSpread= / -BattleSuppressionPin=.
+// -BattleExoShieldSuppression=1 independently enables these effects for exoskeletons, removes shield immunity,
+// and adds one PerShot impulse per direct hit. Shield recovery inhibition uses saved State.ShieldWait.
 // Weapon role (2026-11-16 trial): -BattleSuppressionSupport=<scale> multiplies the suppression of support-gun shots (default 1).
 namespace BattleSuppression
 {

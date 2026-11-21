@@ -3,6 +3,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "BattleState.h"
+#include "InputKeyEventArgs.h"
 #include "BattleController.generated.h"
 
 class UCameraComponent;
@@ -190,6 +191,10 @@ public:
 	int32 AimLevel = 1;
 	UFUNCTION(Exec) void BattleVerify();
 private:
+ // Physical key -> logical key chosen on press. Invalid values wait for physical release after cancellation.
+ TMap<FKey,FInputKeyEventArgs> HeldPlayerKeys;
+ bool HandlePlayerInput(const FInputKeyEventArgs& Params);
+ void CancelPlayerInput();
 	UPROPERTY() TObjectPtr<ABattleCameraPawn> TacticalPawn;
 	UPROPERTY() TObjectPtr<ABattleUnit> LastControlled;
 	UPROPERTY() TArray<TObjectPtr<ABattleUnit>> Selected;

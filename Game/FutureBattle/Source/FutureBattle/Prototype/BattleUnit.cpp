@@ -296,6 +296,16 @@ void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequenc
 	LookIdle = Idle; LookMove = Move; LookCrouchIdle = CrouchIdle; LookCrouchMove = CrouchMove;
 	LookWeapon = Weapon; LookBone = Bone; LookGrip = Grip;
 	CurrentPose = nullptr;
+	if (!Idle)
+	{
+		// The look is gone and UpdateLookTilt no longer runs: drop its lean so the plain body stands upright.
+		LookVelShown = LookShotVelocity = FVector::ZeroVector;
+		if (!MeshTiltShown.Equals(FQuat::Identity, 1.e-4f))
+		{
+			MeshTiltShown = FQuat::Identity;
+			GetMesh()->SetRelativeRotation(FRotator(0, -90 + MeshYawShown, 0));
+		}
+	}
 	const bool bFirstPerson = IsPlayerControlled() && !bThirdPersonView;
 	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
 }
@@ -396,14 +406,24 @@ void ABattleUnit::UpdateLookTilt(bool bUpright)
 	const float Dt = GetWorld()->GetDeltaSeconds();
 	FVector Velocity = LookShotVelocity.IsNearlyZero() ? GetActorRotation().UnrotateVector(GetVelocity()) : LookShotVelocity;
 	Velocity.Z = 0.;
-	if (!bUpright) Velocity = FVector::ZeroVector;
-	LookVelShown = FMath::VInterpTo(LookVelShown, Velocity, Dt, 4.f);
-	// Degrees per full walking speed: 5 while cruising; starting adds up to 7 more, braking takes 7 back (about 2 back at a stop).
-	const float Speed = FMath::Max(GetCharacterMovement()->MaxWalkSpeed, 100.f);
-	const FVector Lean = ((LookVelShown * 5.f + (Velocity - LookVelShown) * 7.f) / Speed).GetClampedToMaxSize(10.f);
-	const FVector Up(0, 0, 1);
-	const FQuat Tilt = Lean.IsNearlyZero(.05) ? FQuat::Identity
-		: FQuat::FindBetweenNormals(Up, (Up + Lean.GetSafeNormal() * FMath::Tan(FMath::DegreesToRadians(Lean.Size()))).GetSafeNormal());
+	if (LookVelShown.ContainsNaN() || Velocity.ContainsNaN()) LookVelShown = Velocity = FVector::ZeroVector;
+	FQuat Tilt = FQuat::Identity;
+	if (!bUpright)
+	{
+		// Crouching, prone or in a stance change: no braking lean (that tipped the body backwards); ease straight back upright.
+		LookVelShown = FVector::ZeroVector;
+		Tilt = MeshTiltShown.Equals(FQuat::Identity, 1.e-3f) ? FQuat::Identity : FQuat::Slerp(MeshTiltShown, FQuat::Identity, FMath::Clamp(Dt * 8.f, 0.f, 1.f));
+	}
+	else
+	{
+		LookVelShown = FMath::VInterpTo(LookVelShown, Velocity, Dt, 4.f);
+		// Degrees per full walking speed: 5 while cruising; starting adds up to 7 more, braking takes 7 back (about 2 back at a stop).
+		const float Speed = FMath::Max(GetCharacterMovement()->MaxWalkSpeed, 100.f);
+		const FVector Lean = ((LookVelShown * 5.f + (Velocity - LookVelShown) * 7.f) / Speed).GetClampedToMaxSize(10.f);
+		const FVector Up(0, 0, 1);
+		if (!Lean.IsNearlyZero(.05))
+			Tilt = FQuat::FindBetweenNormals(Up, (Up + Lean.GetSafeNormal() * FMath::Tan(FMath::DegreesToRadians(Lean.Size()))).GetSafeNormal());
+	}
 	if (Tilt.Equals(MeshTiltShown, 1.e-4f)) return;
 	MeshTiltShown = Tilt;
 	GetMesh()->SetRelativeRotation(MeshTiltShown * FRotator(0, -90 + MeshYawShown, 0).Quaternion());

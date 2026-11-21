@@ -262,6 +262,8 @@ struct FBattleUnitState
 	UPROPERTY() float ShieldWait = 0.f;
 	// Exoskeleton second weapon: anti-tank rounds left and seconds until the next one is loaded (relative). 0 for other types.
 	UPROPERTY() int32 Launcher = 0;
+ // Separate from the SPG machine gun. Revision 3 saves retain depleted main-gun ammunition.
+ UPROPERTY() int32 SPGAmmo = 0;
 	UPROPERTY() bool bLauncherSelected = false;
 	UPROPERTY() float LauncherWait = 0.f;
 	// Carries a weapon that hurts armour: an anti-tank soldier or an exoskeleton with launcher rounds left.
@@ -385,6 +387,8 @@ public:
 	UPROPERTY(Config, EditAnywhere) float ExoDamageScale = 2.f;
 	UPROPERTY(Config, EditAnywhere) float ExoShield = 100.f;
 	UPROPERTY(Config, EditAnywhere) float ExoShieldDelay = 5.f;
+ // Trial: an 8 s quiet window after each hit, including hits wholly absorbed by the shield.
+ UPROPERTY(Config, EditAnywhere) float ExoShieldSuppressionDelay = 8.f;
 	UPROPERTY(Config, EditAnywhere) float ExoShieldRegen = 20.f;
 	UPROPERTY(Config, EditAnywhere) int32 ExoLauncherRounds = 4;
 	UPROPERTY(Config, EditAnywhere) float ExoLauncherReload = 8.f;
@@ -458,6 +462,11 @@ public:
 	UPROPERTY(Config, EditAnywhere) float SPGMinRange = 10000.f;
 	UPROPERTY(Config, EditAnywhere) float SPGRange = 100000.f;
 	UPROPERTY(Config, EditAnywhere) float SPGReload = 10.f;
+ // Trial: 12 rounds = about two minutes at the 10 s cyclic rate; a supply cycle restores six
+ // (one minute of fire). Deliberately provisional, separate from machine-gun reserve.
+ UPROPERTY(Config, EditAnywhere) int32 SPGAmmoCapacity = 12;
+ UPROPERTY(Config, EditAnywhere) int32 SPGInitialAmmo = 12;
+ UPROPERTY(Config, EditAnywhere) int32 SPGSupplyRounds = 6;
 	UPROPERTY(Config, EditAnywhere) float SPGShellSpeed = 25000.f;
 	UPROPERTY(Config, EditAnywhere) float SPGSpread = 1500.f;
 	UPROPERTY(Config, EditAnywhere) float SPGBlastRadius = 1000.f;
@@ -497,6 +506,13 @@ public:
 	// Default on for every map since 2026-11-20 (user decision after the 9-seed trial with cover actions: map A +41, map E +-0).
 	UPROPERTY(Config, EditAnywhere) bool bAreaGroups = true;
 	UPROPERTY(Config, EditAnywhere) int32 GroupRifleSquads = 3;
+ // Trial strength per living member (not per squad), indexed by BattleSquadType.
+ // Rifle=1 against infantry; heavy sustained fire=1.5, vehicles/Exo count as multiple rifles.
+ // Anti-armour values represent dedicated weapons, not price or AI shooting skill.
+ UPROPERTY(Config, EditAnywhere) TArray<float> GroupAntiInfantry = {1.f,1.5f,.5f,.6f,6.f,5.f,2.f,8.f,5.f,.3f};
+ UPROPERTY(Config, EditAnywhere) TArray<float> GroupAntiArmour = {0.f,0.f,0.f,3.f,8.f,1.f,0.f,2.f,4.f,0.f};
+ // Unknown reports stay separate: each adds this many rifle-equivalent risk points.
+ UPROPERTY(Config, EditAnywhere) float GroupUnknownRisk = 1.5f;
 	UPROPERTY(Config, EditAnywhere) float GroupRallyBack = 12000.f;
 	UPROPERTY(Config, EditAnywhere) float GroupRallyBackProfile = 20000.f;
 	UPROPERTY(Config, EditAnywhere) float GroupRallyRadius = 4000.f;
@@ -768,14 +784,20 @@ public:
 	bool ToggleExoWeapon(int32 UnitID);
 	bool UseLauncher(int32 UnitID); // one round out, the load time starts; false when empty or still loading
 	void RefillLauncher(int32 UnitID);
+ bool UseSPGAmmo(int32 UnitID);
+ int32 RefillSPGAmmo(int32 UnitID);
 	float MaxShieldOf(int32 UnitID) const;
 	bool HasShields() const { return bShields; }
+ bool HasExoskeletons() const { return bExoskeletons; }
+ void AdvanceLaunchers(float DeltaSeconds);
 	bool ApplyDamage(int32 ID, int32 AttackingTeam, float Damage);
 	// ApplyDamage plus where the shot or blast came from, for the HUD's hit direction (display only, same result as ApplyDamage).
 	// KillerID and Kind (optional) feed the kill log when the hit kills.
 	bool ApplyDamageFrom(int32 ID, int32 AttackingTeam, float Damage, const FVector& From, int32 KillerID = INDEX_NONE, EBattleKillKind Kind = EBattleKillKind::Unknown);
 	// Where the hit being applied right now came from (only inside ApplyDamageFrom; the sector AI's -BattleShotDirection).
 	bool PendingHitSource(FVector& Out) const { if (!bPendingHitFrom) return false; Out = PendingHitFrom; return true; }
+	// Who fired the hit being applied right now (only inside ApplyDamageFrom; INDEX_NONE when unknown). -BattleHitReveal.
+	int32 PendingHitShooter() const { return PendingKiller; }
 	// Hit direction (2026-11-19, display only): the HUD sets HitWatchID to the unit the player controls every frame; hits on
 	// that unit are kept here (newest last, at most 6). Hits through ApplyDamage alone have no known source.
 	int32 HitWatchID = INDEX_NONE;
@@ -793,7 +815,8 @@ private:
 	UPROPERTY() TMap<int32, FBattleUnitState> Units;
 	UPROPERTY() TMap<int32, FBattleSquadState> Squads;
 	int32 NextSquadID = 1;
-	bool bShields = false; // a squad type with a shield exists (purchase or restore)
+	bool bExoskeletons = false; // body capability, independent of configured shield capacity
+ bool bShields = false; // a squad type with a shield exists (purchase or restore)
 	int32 NextID = 1;
 	FVector PendingHitFrom = FVector::ZeroVector; bool bPendingHitFrom = false; // set only inside ApplyDamageFrom
 	int32 PendingKiller = INDEX_NONE; EBattleKillKind PendingKind = EBattleKillKind::Unknown;

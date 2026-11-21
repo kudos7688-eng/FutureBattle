@@ -1,6 +1,9 @@
 #include "BattleSuppression.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleState.h"
+#include "BattleTactics.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 BattleSuppression::FTuning& BattleSuppression::MutableTuning()
 {
@@ -33,20 +36,21 @@ float UBattleLeaderRuntime::Suppression(int32 ID,double Now) const
 bool UBattleLeaderRuntime::IsPinned(int32 ID,double Now) const
 {
  const auto& T=BattleSuppression::Tuning();
- return T.bEnabled && Suppression(ID,Now)>=T.PinLevel;
+ return (T.bEnabled||ExoSuppressionApplies(ID)) && Suppression(ID,Now)>=T.PinLevel;
 }
 
 float UBattleLeaderRuntime::SuppressionSpreadScale(int32 ID,double Now) const
 {
  const auto& T=BattleSuppression::Tuning();
- return T.bEnabled?1.f+T.SpreadScale*Suppression(ID,Now):1.f;
+ return (T.bEnabled||ExoSuppressionApplies(ID))?1.f+T.SpreadScale*Suppression(ID,Now):1.f;
 }
 
 void UBattleLeaderRuntime::AddSuppression(int32 ID,float Amount,double Now)
 {
  const auto& T=BattleSuppression::Tuning();
- if(!T.bEnabled || Amount<=0)return;
- // Exoskeleton: no suppression while any shield is left (user decision 2026-11-18).
+ if((!T.bEnabled&&!ExoSuppressionApplies(ID)) || Amount<=0)return;
+ // Legacy immunity is preserved unless the shield-suppression trial is explicitly enabled.
+ if(!BattleTactics::ExoShieldSuppressionEnabled())
  if(const auto* Store=GetWorld()->GetSubsystem<UBattleState>();Store->HasShields())if(const auto* U=Store->Find(ID);U&&U->Shield>0.f)return;
  double& ZeroAt=SuppressionZeroAt.FindOrAdd(ID);
  // Linear decay is stored as the time the level reaches zero; the level is capped at 1.
@@ -57,7 +61,7 @@ void UBattleLeaderRuntime::AddSuppression(int32 ID,float Amount,double Now)
 void UBattleLeaderRuntime::SuppressNear(int32 ShooterTeam,FVector Start,FVector End,double Now,float Scale)
 {
  const auto& T=BattleSuppression::Tuning();
- if(!T.bEnabled)return;
+ if(!T.bEnabled&&!BattleTactics::ExoShieldSuppressionEnabled())return;
  // Physical effect of the bullet path, like damage: it uses true positions and is not an AI decision input.
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();FBox Bounds(ForceInit);Bounds+=Start;Bounds+=End;
  const FBox Reach=Bounds.ExpandBy(T.Radius+40.f);
@@ -70,4 +74,24 @@ void UBattleLeaderRuntime::SuppressNear(int32 ShooterTeam,FVector Start,FVector 
   const float Distance=FMath::PointDistToSegment(Chest,Start,End);
   if(Distance<T.Radius)AddSuppression(Body.Key,T.PerShot*Scale*(1.f-Distance/T.Radius),Now);
  }
+}
+
+bool BattleTactics::ExoShieldSuppressionEnabled()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleExoShieldSuppression="),V);return V!=0;}();
+ return On;
+}
+float BattleTactics::ExoShieldHitDelay()
+{
+ const auto* T=GetDefault<UBattleTuning>();
+ if(!ExoShieldSuppressionEnabled())return FMath::Max(0.f,T->ExoShieldDelay);
+ const float V=T->ExoShieldSuppressionDelay;
+ return FMath::IsFinite(V)?FMath::Max(0.f,V):5.f;
+}
+bool UBattleLeaderRuntime::ExoSuppressionApplies(int32 ID) const
+{
+ if(!BattleTactics::ExoShieldSuppressionEnabled())return false;
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
+ const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
+ return U&&U->IsAlive()&&S&&S->SquadType==BattleSquadType::Exo;
 }

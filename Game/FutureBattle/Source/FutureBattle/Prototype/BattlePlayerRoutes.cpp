@@ -45,10 +45,10 @@ void UBattleMatch::ClearPlayerRouteMission(int32 SquadID)
  if(FPlayerRoute* R=PlayerRoutes.Find(SquadID)){R->bMission=false;R->bPath=false;R->Waypoints.Reset();}
 }
 
-FVector UBattleMatch::PlayerRouteStep(int32 SquadID,const FVector& From,const FVector& Goal)
+FVector UBattleMatch::PlayerRouteStep(int32 SquadID,const FVector& From,const FVector& Goal,FPlayerRoute* Candidate)
 {
  static const TArray<FVector> None;
- FPlayerRoute* R=PlayerRoutes.Find(SquadID);
+ FPlayerRoute* R=Candidate?Candidate:PlayerRoutes.Find(SquadID);
  if(!R||R->Lane<1||R->Lane>3)return RouteStep(From,Goal,0,None);
  const auto& Def=BattleFieldLayout::Of(GetWorld());const auto& Nodes=Def.RouteNodes;
  if(FVector::Dist2D(From,Goal)<15000)return Goal;
@@ -107,18 +107,19 @@ FVector UBattleMatch::PlayerRouteStep(int32 SquadID,const FVector& From,const FV
 int32 UBattleMatch::PlayerRouteOrder(int32 SquadID,EBattleOrder Order,const FVector& Goal)
 {
  FPlayerRoute* R=PlayerRoutes.Find(SquadID);
- if(R){R->bMission=false;R->bPath=false;R->Waypoints.Reset();}
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  const auto* S=Store->FindSquad(SquadID);
  if(!R||R->Lane==0||Order==EBattleOrder::Hold||!RoutesOn()||!Runtime||!Runtime->IsWideField()||!S||!Store->Find(S->LeaderUnitID))return -1;
- R->Phase=0;R->PhaseGoal=Goal;
- const FVector Step=PlayerRouteStep(SquadID,Runtime->Position(S->LeaderUnitID),Goal);
+ FPlayerRoute Candidate=*R;
+ Candidate.bMission=false;Candidate.bPath=false;Candidate.Waypoints.Reset();Candidate.Phase=0;Candidate.PhaseGoal=Goal;
+ const FVector Step=PlayerRouteStep(SquadID,Runtime->Position(S->LeaderUnitID),Goal,&Candidate);
  if(Step.Equals(Goal,1))return -1; // near: an ordinary order
  // A goal off the walkable ground is refused now, not at the last junction.
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());FNavLocation Projected;
  if(!Nav||!Nav->ProjectPointToNavigation(Goal,Projected,Runtime->IsVehicle(S->LeaderUnitID)?FVector(600,600,400):FVector(100,100,400)))return 0;
  if(!Runtime->IssueOrder(SquadID,Order==EBattleOrder::Move?EBattleOrder::Move:EBattleOrder::AttackMove,Step))return 0;
- R=PlayerRoutes.Find(SquadID);R->bMission=true;R->Order=Order;R->Goal=Goal;R->Step=Step;
+ Candidate.bMission=true;Candidate.Order=Order;Candidate.Goal=Goal;Candidate.Step=Step;
+ PlayerRoutes.Add(SquadID,MoveTemp(Candidate));
  return 1;
 }
 
