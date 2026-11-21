@@ -495,6 +495,10 @@ public:
  // Clear line: detection completes on the next scan. Blocked or out of sight: a remembered hint near the shot origin, its error
  // 10% of the distance (never the exact position). Counts hit_reveal_* in the sight diagnostics.
  static bool HitRevealEnabled();
+ // Trial -BattleHitFace=1 (default 0, 2026-11-21): for 2 s after a hit, a soldier with no target to fire at (and not firing at a base,
+ // flanking or aiming indirect fire) faces where the shot came from, so his forward field of view can find the shooter. Movement keeps
+ // its own steering (only the facing changes). Counts hit_face_turned.
+ static bool HitFaceEnabled();
  void RevealShooter(int32 VictimID,int32 ShooterID,const FVector& From);
  // Evaluation only (sight diagnostics on, behaviour unchanged, 2026-11-21): a hit soldier who does not see his shooter. Why each of the
  // two lines (victim->shooter, shooter->victim) fails, using the same checks as CanSee (range, field of view, first blocking hit).

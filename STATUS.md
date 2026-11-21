@@ -21,6 +21,23 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-21 18時00分 Claude（区画AI）：HitFace（撃たれた方向へ向く、試験切替）と到着時の診断（s22）
+
+- **変更**：
+  - `-BattleHitFace=1`（既定0）：撃たれてから2秒間、撃つ相手のいない兵（拠点への射撃・迂回・間接射撃の照準中は除く）が撃たれた方向を向く。移動の舵取りは変えず、向きだけ変える。数は `hit_face_turned`。`Test-WideSight.ps1 -HitFace 1`。
+  - 到着時の診断（挙動は不変）：`BattleStableMovement.cpp` の BuildMovementPlan で `arrival_slot_in_cell / no_wall_ahead / exposed`、`arrival_plan_candidates_*`、`arrival_open_no_candidates / query_cap / all_taken / path_too_long / no_path` を数える。
+  - SWITCHES・CODEMAP を作り直した。
+- **検証**：Build-Editor 成功、Test-Battle 合格。凍結ビルド sectormove-r17。マップI、12 seeds×2、標準の共通引数。全24本合格。Codex 取り込み後の main（前線軍の自動・群の火力支援が既定オン）なので、s17 以前とは比べられない。
+- **HitFace（s22-I-face と s22-I-play の比較、12本平均）**：
+  - 得点 865:757（既定 874:759）、勝敗 11:1（12:0）、撃破 179±5（187±8）。**勝ち負けには効かない**（撃破はやや減ったが誤差の範囲）。
+  - 狙った効果自体は出た：撃った相手が視野の外にいた片側の視線 834→195、被弾時に撃った相手が見えている 678→890、撃った相手を知らない 528→263。
+  - 振り向いて見えても、撃ち返す前に撃たれ続けるか、振り向いた分ほかの方向が見えなくなると見られる。既定にはしない。
+- **到着時の診断（既定 s22-I-play、1試合平均）**：
+  - 遮蔽の地点を探した兵のうち、割り当てられたのは 8870、見つからなかったのは 1340（87%は割り当て成功）。見つからない理由は「どの地点も予約済み」1106（83%）、照会の上限24 148、候補0 62、経路なし16・遠すぎ9。
+  - 区画内の遮蔽地点 200364 のうち、**72%（145124）は「移動の進む向きの2.5m先に壁がない」として候補から外れている**。`exposed` は0（`-BattleCoverStrict` が切なので脅威判定は常に通る）。
+  - 結論：割り当ては大半成功しているので、「来た兵の8割が開けた場所に立つ」の主因は割り当て漏れではない。遮蔽を**移動の向き基準**で選んでいるため、敵の方向に対して遮蔽になっていない地点に立つこと、長い壁でも地点が足りず予約で埋まることが主因とみる。ユーザーの案（区画の中心から外向きの遮蔽・後ろと味方支配の方向は無視・長い壁に複数人・建物内を優先）とそのまま合う。
+- **次の一手**：ユーザーの案1+2（守る方向基準の遮蔽選び、後ろ・味方支配の方向を無視）を試験切替で入れる → 3（長い壁に1.2〜1.5m間隔で地点を増やす）→ 4（建物内）。
+
 ## 2026-11-21 17時15分 Claude（Codex 委任）：codex ブランチを main へ取り込んだ（新しい切替はすべて既定OFF。既定の試合は不変）
 - **範囲**（Codex が書き、Claude が点検）：戦車の直し A `-BattleVehicleHitCover`・B `-BattleTankGunFlash`、自走砲 `-BattleVehicleOrderHere`（今いる場所への命令を受け付ける。`-BattleArtilleryNavFallback` は廃止）、砲兵1 `-BattleArtilleryFlash`（撃つと位置が知られる。30 m・30秒）、砲兵2 `-BattleSPGRange`、砲兵3 `-BattleArtilleryPosts`（各軍3つの公開陣地、迫撃砲は陣地でのみ射撃、疑わしい敵陣地へ外骨格兵→装甲車の順で1部隊が襲撃）と `-BattleAreaSPGCost`、観測の規則 `-BattleObservedArmour`（点検03 O01/O02/O03/O06）、保存 `-BattleSaveRoutes`（S02）・`-BattleSaveReloadBoundary`（S09）と検査の強化（S03/S04/S08、正しい保存は通る）、UI（U06 ボタン列の折り返し、U08、U11、U12 パッドのメニュー＝左スティック押し込み、U13）、性能（A01/A03、N01/N02/N03/N05、結果は変えない作り）、削除（ユーザー選択：MoveSelected・RefreshVehicles・FollowSightParallel）、切替一覧の生成器の直し（D10）、文書の同期（M03〜M07）。設計は `Docs/design-vehicle-survival.md`。
 - **検証**：群制御の組み込み後の main（e07ede0）と衝突13ファイルを解消してビルド成功。Test-Battle・Test-MixedSave・Test-Area すべて failures=0。マップE seed7 `-CoverActions 1 -FlankCoordination 1 -RoundTripSave` で main（e07ede0）と IDENTICAL（winner=1、583/633、9219発）。マップI seed7 で今日の切替をすべてON（上限35・戦車/対戦車2・迫撃砲/自走砲/外骨格1、SPGRange 55000、SPGCost 45）にした試合は完走し往復保存も合格。陣地は両軍3か所ずつ対称、砲撃で位置が知られた24件、陣地を疑った18回、外骨格兵の襲撃2回（どちらも60秒で失効）。自走砲はどちらの軍も買わず0発（計画器は候補にしたが他を優先、従来側は解放前）。fast-forward 後に main もビルドし直した。
