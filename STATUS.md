@@ -21,6 +21,12 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-21 17時15分 Claude（Codex 委任）：codex ブランチを main へ取り込んだ（新しい切替はすべて既定OFF。既定の試合は不変）
+- **範囲**（Codex が書き、Claude が点検）：戦車の直し A `-BattleVehicleHitCover`・B `-BattleTankGunFlash`、自走砲 `-BattleVehicleOrderHere`（今いる場所への命令を受け付ける。`-BattleArtilleryNavFallback` は廃止）、砲兵1 `-BattleArtilleryFlash`（撃つと位置が知られる。30 m・30秒）、砲兵2 `-BattleSPGRange`、砲兵3 `-BattleArtilleryPosts`（各軍3つの公開陣地、迫撃砲は陣地でのみ射撃、疑わしい敵陣地へ外骨格兵→装甲車の順で1部隊が襲撃）と `-BattleAreaSPGCost`、観測の規則 `-BattleObservedArmour`（点検03 O01/O02/O03/O06）、保存 `-BattleSaveRoutes`（S02）・`-BattleSaveReloadBoundary`（S09）と検査の強化（S03/S04/S08、正しい保存は通る）、UI（U06 ボタン列の折り返し、U08、U11、U12 パッドのメニュー＝左スティック押し込み、U13）、性能（A01/A03、N01/N02/N03/N05、結果は変えない作り）、削除（ユーザー選択：MoveSelected・RefreshVehicles・FollowSightParallel）、切替一覧の生成器の直し（D10）、文書の同期（M03〜M07）。設計は `Docs/design-vehicle-survival.md`。
+- **検証**：群制御の組み込み後の main（e07ede0）と衝突13ファイルを解消してビルド成功。Test-Battle・Test-MixedSave・Test-Area すべて failures=0。マップE seed7 `-CoverActions 1 -FlankCoordination 1 -RoundTripSave` で main（e07ede0）と IDENTICAL（winner=1、583/633、9219発）。マップI seed7 で今日の切替をすべてON（上限35・戦車/対戦車2・迫撃砲/自走砲/外骨格1、SPGRange 55000、SPGCost 45）にした試合は完走し往復保存も合格。陣地は両軍3か所ずつ対称、砲撃で位置が知られた24件、陣地を疑った18回、外骨格兵の襲撃2回（どちらも60秒で失効）。自走砲はどちらの軍も買わず0発（計画器は候補にしたが他を優先、従来側は解放前）。fast-forward 後に main もビルドし直した。
+- **未実施**：各切替の効果の評価（片側試験）。UI の直しは画面で未確認（1920×1080・1280×720・800×600、パッドのメニュー）。ゲームパッドのエイム上下は実機で未確認。
+- **次の一手**：自走砲を最初から持たせる条件で砲兵の切替を評価する。戦車 A・B を複数シードで評価する。
+
 ## 2026-11-21 17時 Claude（群制御）：片側試験 ga1、前線軍の自動補充は既定オフに、main を取り込み、main へ組み込み（ブランチ `groupui`）
 - **依頼（ユーザー、14時）**：「ここまでの内容を確かめ、問題がなければ既定として main に組み込む。問題があれば直して組み込む」。
 - **片側試験 ga1**（凍結ビルド `groupui-armies-r1`＝c7d915f、マップI・H、60FPS・保存往復・12並列、基準 FL0＝前線オフ）：
