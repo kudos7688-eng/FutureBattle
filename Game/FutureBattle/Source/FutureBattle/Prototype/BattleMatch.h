@@ -342,6 +342,12 @@ public:
  struct FSituationTheatre { int32 Own=0; double OwnPower=0; int32 Fresh=0; double Memory=0; double KnownPower=0; double EnemySeenAge=-1, PointSeenAge=-1; int32 Owner=-2; uint8 State=0; /* 0 unknown, 1 enemy ahead, 2 even, 3 own ahead */ };
  struct FBattleSituation { double At=-1; TArray<FSituationTheatre> Theatres; };
  int32 TheatreOf(int32 Team, const FVector& P) const;
+ // Sector maps (H, I, J): theatres by path over passable sectors (Docs/design-terrain-ai.md 3-1), built once per map from the sector
+ // kinds only: the sector -> theatre table and, per theatre, a bit for each theatre whose sectors touch it (3-2). Empty elsewhere.
+ void BuildSectorTheatres() const;
+ mutable TArray<int8> SectorTheatres;
+ mutable TArray<uint16> TheatreNeighbours;
+ mutable FString SectorTheatresMap;
  void BuildSituation(int32 Team, FBattleSituation& Out) const;
  // -BattleSituationLog=1 (default 0): BATTLE_SITUATION every 30 match seconds per team and theatre, with the true enemy count of the
  // theatre after '|' for evaluation only (counted inside the log function; no decision reads it). Does not change the match.

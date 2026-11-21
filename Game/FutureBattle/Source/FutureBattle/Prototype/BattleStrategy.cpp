@@ -8,6 +8,8 @@
 #include "BattlePerception.h"
 #include "BattleState.h"
 #include "BattleTactics.h"
+#include "BattleFieldLayout.h"
+#include "BattleSectors.h"
 #include "FutureBattle.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -35,11 +37,62 @@ int32 UBattleMatch::TheatreOf(int32 Team,const FVector& P) const
  const int32 N=Objectives.Num();if(N<1||Team<0||Team>1)return INDEX_NONE;
  if(FVector::DistSquared2D(P,AreaHome(1-Team))<=FMath::Square(BattleSituationValues::HomeZone))return N;
  if(FVector::DistSquared2D(P,AreaHome(Team))<=FMath::Square(BattleSituationValues::HomeZone))return N+1;
+ // Sector maps: by path over passable sectors (mountains, lakes and rivers are not crossed; BuildSectorTheatres).
+ if(BattleFieldLayout::Of(GetWorld()).bSectors)
+ {
+  BuildSectorTheatres();
+  const FIntPoint Cell=BattleSectors::Cell(P);
+  if(BattleSectors::Valid(Cell))if(const int32 Th=SectorTheatres.IsValidIndex(Cell.Y*BattleSectors::Columns+Cell.X)?SectorTheatres[Cell.Y*BattleSectors::Columns+Cell.X]:-1;Th>=0&&Th<N)return Th;
+ }
  // As AreaFronts: lanes by Y on three-objective maps (A-D), else the nearest objective.
  auto Dist=[&](int32 I){return N==3?FMath::Abs(P.Y-Objectives[I].Position.Y):FVector::DistSquared2D(P,Objectives[I].Position);};
  int32 Best=0;double BestD=Dist(0);
  for(int32 I=1;I<N;++I){const double D=Dist(I);if(D<BestD){BestD=D;Best=I;}}
  return Best;
+}
+
+void UBattleMatch::BuildSectorTheatres() const
+{
+ const auto& Def=BattleFieldLayout::Of(GetWorld());
+ if(!Def.bSectors){SectorTheatres.Reset();TheatreNeighbours.Reset();return;}
+ if(SectorTheatresMap==Def.Name&&SectorTheatres.Num()==BattleSectors::Columns*BattleSectors::Rows)return;
+ using namespace BattleSectors;
+ const int32 N=Objectives.Num();const int32 Cells=Columns*Rows;
+ SectorTheatres.Init(-1,Cells);TheatreNeighbours.Init(0,FMath::Max(0,N));SectorTheatresMap=Def.Name;
+ if(N<1||N>16)return;
+ auto Index=[](FIntPoint C){return C.Y*Columns+C.X;};
+ auto Open=[&](FIntPoint C){return Valid(C)&&!Impassable(BattleFieldLayout::SectorKind(GetWorld(),C));};
+ // Breadth-first distances in sector steps from every objective's sector (4 neighbours, diagonals when both sides are open).
+ TArray<TArray<int32>> Steps;Steps.SetNum(N);
+ for(int32 I=0;I<N;++I)
+ {
+  Steps[I].Init(MAX_int32,Cells);const FIntPoint Start=Cell(Objectives[I].Position);if(!Valid(Start))continue;
+  TArray<FIntPoint> Queue;Queue.Add(Start);Steps[I][Index(Start)]=0;
+  for(int32 Head=0;Head<Queue.Num();++Head)
+  {
+   const FIntPoint Here=Queue[Head];const int32 D=Steps[I][Index(Here)];
+   for(int32 DX=-1;DX<=1;++DX)for(int32 DY=-1;DY<=1;++DY)
+   {
+    if(!DX&&!DY)continue;const FIntPoint To(Here.X+DX,Here.Y+DY);if(!Open(To))continue;
+    if(DX&&DY&&(!Open(FIntPoint(Here.X+DX,Here.Y))||!Open(FIntPoint(Here.X,Here.Y+DY))))continue;
+    if(Steps[I][Index(To)]<=D+1)continue;
+    Steps[I][Index(To)]=D+1;Queue.Add(To);
+   }
+  }
+ }
+ for(int32 C=0;C<Cells;++C)
+ {
+  int32 Best=-1,BestSteps=MAX_int32;
+  for(int32 I=0;I<N;++I)if(Steps[I][C]<BestSteps){BestSteps=Steps[I][C];Best=I;}
+  SectorTheatres[C]=int8(Best); // -1 for mountains, lakes and cut-off sectors: TheatreOf falls back to the nearest objective
+ }
+ // Theatres touch where two open sectors side by side belong to different theatres.
+ for(int32 X=0;X<Columns;++X)for(int32 Y=0;Y<Rows;++Y)
+ {
+  const int32 A=SectorTheatres[Index(FIntPoint(X,Y))];if(A<0)continue;
+  for(const FIntPoint To:{FIntPoint(X+1,Y),FIntPoint(X,Y+1)})
+   if(Valid(To))if(const int32 B=SectorTheatres[Index(To)];B>=0&&B!=A){TheatreNeighbours[A]|=uint16(1u<<B);TheatreNeighbours[B]|=uint16(1u<<A);}
+ }
 }
 
 void UBattleMatch::BuildSituation(int32 Team,FBattleSituation& Out) const
@@ -288,9 +341,18 @@ void UBattleMatch::UpdateStrategy(int32 Team)
   for(int32 J:OwnPoints)D=FMath::Min(D,FVector::Dist2D(Objectives[I].Position,Objectives[J].Position));
   return D;
  };
- // Own power in the theatre and in the two theatres whose points are nearest its point.
+ // Own power in the theatre and in the theatres that touch it (sector maps: by sectors, Docs/design-terrain-ai.md 3-2), else in the
+ // two theatres whose points are nearest its point.
+ if(BattleFieldLayout::Of(GetWorld()).bSectors)BuildSectorTheatres();
+ const bool bTouching=TheatreNeighbours.Num()==N;
  auto OwnNear=[&](int32 I)
  {
+  if(bTouching)
+  {
+   double Sum=S.Theatres[I].OwnPower;
+   for(int32 J=0;J<N;++J)if(J!=I&&(TheatreNeighbours[I]>>J)&1)Sum+=S.Theatres[J].OwnPower;
+   return Sum;
+  }
   int32 A=INDEX_NONE,B=INDEX_NONE;double DA=DBL_MAX,DB=DBL_MAX;
   for(int32 J=0;J<N;++J)if(J!=I)
   {
