@@ -158,6 +158,9 @@ void UBattleLeaderRuntime::AuditFollowerPoses(double Now)
  }
 }
 
+// The follower's upper-body bend for the rifle's pitch (the mesh subclass of the default far display; none without it).
+static void SetSpinePitch(USkeletalMeshComponent* Mesh,float Pitch){if(auto* V=Cast<UBattleVATSkeletalMeshComponent>(Mesh))V->SpinePitch=Pitch;}
+
 void UBattleLeaderRuntime::AimFollowerRifles(double Now)
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
@@ -168,11 +171,11 @@ void UBattleLeaderRuntime::AimFollowerRifles(double Now)
   if(B.Actor.IsValid()||!B.Mesh.IsValid()||!B.Weapon.IsValid()||!B.Mesh->IsComponentTickEnabled()||(VAT&&VAT->IsFar(ID)))continue;
   const auto* U=Store->Find(ID);if(!U||!U->IsAlive())continue;
   // Cover clips and blind fire turn the mesh themselves (BattleCoverAction.cpp); leave it to them.
-  if(B.CoverClipPhase||B.bBlindPose){B.MuzzleYaw=B.MuzzlePitch=0.f;continue;}
+  if(B.CoverClipPhase||B.bBlindPose){if(B.MuzzlePitch!=0.f)SetSpinePitch(B.Mesh.Get(),0.f);B.MuzzleYaw=B.MuzzlePitch=0.f;continue;}
   // Moving into or out of cover without a cover clip yet, the turn is dropped here (the cover code may not set the rotation).
   if(U->CoverPhase)
   {
-   if(B.MuzzleYaw!=0.f||B.MuzzlePitch!=0.f){B.MuzzleYaw=B.MuzzlePitch=0.f;B.Mesh->SetRelativeLocationAndRotation(FVector(0,0,-90),FRotator(0,-90,0));}
+   if(B.MuzzleYaw!=0.f||B.MuzzlePitch!=0.f){B.MuzzleYaw=B.MuzzlePitch=0.f;SetSpinePitch(B.Mesh.Get(),0.f);B.Mesh->SetRelativeLocationAndRotation(FVector(0,0,-90),FRotator(0,-90,0));}
    continue;
   }
   float WantYaw=0.f,WantPitch=0.f;
@@ -186,16 +189,16 @@ void UBattleLeaderRuntime::AimFollowerRifles(double Now)
    const float ShotPitch=Shot?FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Shot->Z,-1.,1.))):0.f;
    const float BarrelPitch=FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Barrel.Z,-1.,1.)));
    WantYaw=Barrel.SizeSquared2D()>.01?FMath::Clamp(B.MuzzleYaw+FMath::FindDeltaAngleDegrees(Barrel.Rotation().Yaw,Facing.Rotation().Yaw),-MaxFollowerMuzzleYaw,MaxFollowerMuzzleYaw):B.MuzzleYaw;
-   WantPitch=FMath::Clamp(B.MuzzlePitch+(ShotPitch-BarrelPitch),-MaxFollowerMuzzlePitch,MaxFollowerMuzzlePitch);
+   if(Cast<UBattleVATSkeletalMeshComponent>(B.Mesh.Get()))
+    WantPitch=FMath::Clamp(B.MuzzlePitch+(ShotPitch-BarrelPitch),-MaxFollowerMuzzlePitch,MaxFollowerMuzzlePitch);
   }
   const float Yaw=FMath::FInterpConstantTo(B.MuzzleYaw,WantYaw,Dt,360.f),Pitch=FMath::FInterpConstantTo(B.MuzzlePitch,WantPitch,Dt,180.f);
   if(FMath::IsNearlyEqual(Yaw,B.MuzzleYaw,.05f) && FMath::IsNearlyEqual(Pitch,B.MuzzlePitch,.05f))continue;
   B.MuzzleYaw=Yaw;B.MuzzlePitch=Pitch;
-  // Turn and tilt in the capsule's frame about its centre (the mesh hangs 90 cm below it, its own forward turned by -90).
-  // The feet stay at their height (only the slide forward or back of the hip pivot is kept).
-  const FQuat Turn=FRotator(Pitch,Yaw,0.f).Quaternion();
-  FVector Place=Turn.RotateVector(FVector(0,0,-90));Place.Z=-90.;
-  B.Mesh->SetRelativeLocationAndRotation(Place,Turn*FRotator(0,-90,0).Quaternion());
+  // Across: the whole mesh turns about the capsule's vertical axis (it hangs 90 cm below the centre, its forward turned by -90).
+  // Up and down: only the upper body bends (UBattleVATSkeletalMeshComponent::SpinePitch); the legs and feet keep the clip's pose.
+  B.Mesh->SetRelativeLocationAndRotation(FVector(0,0,-90),FRotator(0,Yaw-90.f,0));
+  SetSpinePitch(B.Mesh.Get(),Pitch);
  }
 }
 
@@ -203,7 +206,7 @@ void UBattleLeaderRuntime::ClearFollowerRifleTurn(int32 ID)
 {
  auto* B=Bodies.Find(ID);
  if(!B||B->Actor.IsValid()||!B->Mesh.IsValid()||(B->MuzzleYaw==0.f&&B->MuzzlePitch==0.f))return;
- B->MuzzleYaw=B->MuzzlePitch=0.f;
+ B->MuzzleYaw=B->MuzzlePitch=0.f;SetSpinePitch(B->Mesh.Get(),0.f);
  B->Mesh->SetRelativeLocationAndRotation(FVector(0,0,-90),FRotator(0,-90,0));
 }
 

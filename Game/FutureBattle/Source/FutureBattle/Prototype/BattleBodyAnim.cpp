@@ -133,8 +133,9 @@ BattleCoverClips::FSet BattleBodyAnim::CoverSet(UWorld* World,const FBattleUnitS
  return BattleCoverClips::Pick(BattleCoverClips::HeightOf(Side,bBlocked),Side);
 }
 
-void UBattleBodyAnimInstance::SetBase(UAnimSequence* Clip,bool bLoop)
+void UBattleBodyAnimInstance::SetBase(UAnimSequence* Clip,bool bLoop,float Rate)
 {
+ BaseRate=FMath::Max(0.f,Rate);
  if(Clip==BaseClip){bBaseLoop=bLoop;return;}
  if(BaseClip){PreviousClip=BaseClip;PreviousTime=BaseTime;bPreviousLoop=bBaseLoop;PreviousWeight=1.f;}
  BaseClip=Clip;BaseTime=0.f;bBaseLoop=bLoop;
@@ -159,14 +160,14 @@ void UBattleBodyAnimInstance::PlayOverlay(UAnimSequence* Clip,float Weight)
 void UBattleBodyAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
  Super::NativeUpdateAnimation(DeltaSeconds);
- auto Advance=[DeltaSeconds](UAnimSequence* Clip,float& Time,bool bLoop)
+ auto Advance=[DeltaSeconds](UAnimSequence* Clip,float& Time,bool bLoop,float Rate=1.f)
  {
   if(!Clip)return;
   const float Length=FMath::Max(.001f,Clip->GetPlayLength());
-  Time+=DeltaSeconds;
+  Time+=DeltaSeconds*Rate;
   Time=bLoop?FMath::Fmod(Time,Length):FMath::Min(Time,Length);
  };
- Advance(BaseClip,BaseTime,bBaseLoop);
+ Advance(BaseClip,BaseTime,bBaseLoop,BaseRate);
  if(PreviousWeight>0.f){Advance(PreviousClip,PreviousTime,bPreviousLoop);PreviousWeight=FMath::Max(0.f,PreviousWeight-DeltaSeconds/CrossFadeSeconds);}
  if(!bUpperDriven)Advance(UpperClip,UpperTime,true);
  if(OverlayClip)

@@ -22,6 +22,13 @@
 #include "UnrealClient.h"
 #include "FutureBattle.h"
 
+// Heights of a body's feet above its mesh origin (the ground under the capsule): foot_l, foot_r, ball_l, ball_r.
+static void FootHeights(const USkeletalMeshComponent* Mesh,float Out[4])
+{
+ static const FName Names[4]={TEXT("foot_l"),TEXT("foot_r"),TEXT("ball_l"),TEXT("ball_r")};
+ for(int32 I=0;I<4;++I)Out[I]=Mesh->GetSocketLocation(Names[I]).Z-Mesh->GetComponentLocation().Z;
+}
+
 void UBattleLeaderRuntime::RunCoverActionSmoke()
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
@@ -357,6 +364,8 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    const FVector Barrel=-B.Weapon->GetComponentTransform().GetUnitAxis(EAxis::Y);
    Off=FMath::Abs(FMath::FindDeltaAngleDegrees(Barrel.Rotation().Yaw,B.Capsule->GetForwardVector().Rotation().Yaw));
    Pitch=FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Barrel.Z,-1.,1.)));
+   // The feet while the upper body bends 12 degrees down; stage 21 measures them again unbent.
+   FootHeights(B.Mesh.Get(),SmokeFeet);
   }
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_FOLLOWER_MUZZLE near=%d clip=%s mesh_turn=%.1f mesh_tilt=%.1f barrel_yaw_off=%.1f barrel_pitch=%.1f want_pitch=-12 aim_planted=%d"),bNear?1:0,bNear&&B.Mesh->GetSingleNodeInstance()&&B.Mesh->GetSingleNodeInstance()->GetAnimationAsset()?*B.Mesh->GetSingleNodeInstance()->GetAnimationAsset()->GetName():TEXT("none"),B.MuzzleYaw,B.MuzzlePitch,Off,Pitch,bPlanted?1:0);
   Check(bNear && Off<6.f,TEXT("a near follower that fires points his rifle along his facing (mesh turned back from 30 degrees off)"));
@@ -369,6 +378,41 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
   const auto& B=Bodies.FindChecked(2);
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_FOLLOWER_MUZZLE stopped mesh_turn=%.1f mesh_tilt=%.1f mesh_z=%.1f"),B.MuzzleYaw,B.MuzzlePitch,B.Mesh->GetRelativeLocation().Z);
   Check(FMath::Abs(B.MuzzleYaw)<.1f && FMath::Abs(B.MuzzlePitch)<.1f && FMath::Abs(B.Mesh->GetRelativeLocation().Z+90.f)<.5f,TEXT("a follower that stopped firing turns and stands his mesh back"));
+  // Only the upper body bent for the pitch: the feet stood where they stand unbent (the whole body tilted before, up to 8 cm).
+  float Feet[4];FootHeights(B.Mesh.Get(),Feet);float FeetMove=0.f;
+  for(int32 I=0;I<4;++I)FeetMove=FMath::Max(FeetMove,FMath::Abs(Feet[I]-SmokeFeet[I]));
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_FOLLOWER_FEET bent=%.1f/%.1f/%.1f/%.1f unbent=%.1f/%.1f/%.1f/%.1f max_move=%.1f"),SmokeFeet[0],SmokeFeet[1],SmokeFeet[2],SmokeFeet[3],Feet[0],Feet[1],Feet[2],Feet[3],FeetMove);
+  Check(FeetMove<1.5f,TEXT("a follower's pitch bends his upper body and leaves his feet on the ground"));
+  SmokeStage=22;Later(.001f);return;
+ }
+ // Rendered run: the player's leader lies prone, then walks off. Moving stands a soldier up (no crouch-walk or crawl yet):
+ // the rest of the stand-up clip must play within MovingTransitionSeconds (at its own speed the body slid along the ground
+ // while getting up). The display stance is set directly, as the stance rules set it (they may be off on this map).
+ if(SmokeStage==22)
+ {
+  Actor(1)->VisualStance=BattleStance::Prone;
+  const auto* Down=BattleBodyAnim::Get(BattleBodyAnim::EClip::StandToProne);
+  SmokeStage=23;SmokeMuzzleFrames=0;BayStart=-1.;Later(Down?Down->GetPlayLength()+.3f:.5f);return;
+ }
+ if(SmokeStage==23)
+ {
+  ABattleUnit* A=Actor(1);
+  const auto* Body=Cast<UBattleBodyAnimInstance>(A->GetMesh()->GetAnimInstance());
+  const auto* Up=BattleBodyAnim::Get(BattleBodyAnim::EClip::ProneToStand);
+  A->AddMovementInput(A->GetActorForwardVector(),1.f);
+  // He stands up once he moves faster than 0.5 m/s (the rule for direct control, UBattleLeaderRuntime::Follow).
+  if(BayStart<0.)
+  {
+   if(A->GetVelocity().SizeSquared2D()>2500.){A->VisualStance=BattleStance::Stand;BayStart=Now;}
+   Later(.001f);return;
+  }
+  if(Up && A->TransitionClip==Up && (A->TransitionRate>1.f || Up->GetPlayLength()<=BattleBodyAnim::MovingTransitionSeconds))SmokeMuzzleFrames=1;
+  if(Now-BayStart<BattleBodyAnim::MovingTransitionSeconds+.3){Later(.001f);return;}
+  const FVector Local=A->GetActorRotation().UnrotateVector(A->GetVelocity());
+  const UAnimSequence* Base=Body?Body->GetBase():nullptr;
+  const bool bWalking=Base && (Base==BattleBodyAnim::Locomotion(0,Local,true) || Base==BattleBodyAnim::Locomotion(0,Local,false));
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BODY_STAND_ON_MOVE clip=%s length=%.2f rate=%.2f hurried=%d base=%s speed=%.0f"),Up?*Up->GetName():TEXT("none"),Up?Up->GetPlayLength():0.f,A->TransitionRate,SmokeMuzzleFrames,Base?*Base->GetName():TEXT("none"),Local.Size2D());
+  Check(Up && SmokeMuzzleFrames==1 && bWalking && Local.Size2D()>100.,TEXT("getting up on the move ends within MovingTransitionSeconds (no slide along the ground)"));
  }
  if(BodyShotPrefix().IsEmpty())CancelCoverAction(1);
  Check(Store->Find(1)->CoverPhase==0,TEXT("explicit release clears cover action"));

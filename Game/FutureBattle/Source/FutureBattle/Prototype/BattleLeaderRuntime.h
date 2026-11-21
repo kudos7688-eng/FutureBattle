@@ -396,11 +396,12 @@ public:
  void AuditFollowerPoses(double Now);
  // Every frame: a near follower that fired within BattleBodyAnim::ReadySeconds turns his mesh (whole-body clip, no upper layer)
  // so the rifle in his hand points along his last shot: across (B.MuzzleYaw, at most MaxFollowerMuzzleYaw) to his facing, and
- // up or down (B.MuzzlePitch, at most MaxFollowerMuzzlePitch) to the shot's pitch, the body tilting about the capsule centre
- // (the hips) with its feet kept at their height (at 15 degrees a toe or heel 30 cm off the centre moves about 8 cm). Both ease back to 0 when he stops firing. Not in cover (the cover clips turn the mesh themselves), not prone,
+ // up or down (B.MuzzlePitch, at most MaxFollowerMuzzlePitch) to the shot's pitch, the upper body bending about spine_01
+ // (UBattleVATSkeletalMeshComponent::SpinePitch; the legs and feet keep the clip's pose). Both ease back to 0 when he stops
+ // firing. Not in cover (the cover clips turn the mesh themselves), not prone,
  // not reloading or running. Followers keep their single-node clip (the far display and bone reductions rely on it).
  void AimFollowerRifles(double Now);
- static constexpr float MaxFollowerMuzzleYaw=45.f,MaxFollowerMuzzlePitch=15.f;
+ static constexpr float MaxFollowerMuzzleYaw=45.f,MaxFollowerMuzzlePitch=20.f;
  TMap<int32,FVector> FollowerAims; // a follower's last shot direction (Fire), for AimFollowerRifles
  // Corpse removal (BattleCorpses.cpp; display only, runtime only). -BattleCorpseLifetime=S (default 20; 0 = bodies stay):
  // S seconds after death a body sinks into the ground for 1.5 s and is then hidden. The unit record, its position and
@@ -651,7 +652,7 @@ private:
  UPROPERTY() TObjectPtr<class ABattleVATDisplay> VAT;
  int32 SmokeFailures=0, SmokeStage=0, QAStage=0; FVector SmokeSavedPeek=FVector::ZeroVector;
  // Body display checks of the cover smoke (muzzle along the aim while strafing; hit reaction recovery).
- float SmokeMuzzleMax=0.f, SmokeHead=0.f; int32 SmokeMuzzleFrames=0, SmokeShots=0; FQuat SmokeChest=FQuat::Identity; double SmokeHit=0.; const class UAnimSequence* SmokeHitClip=nullptr;
+ float SmokeMuzzleMax=0.f, SmokeHead=0.f, SmokeFeet[4]={0.f,0.f,0.f,0.f}; int32 SmokeMuzzleFrames=0, SmokeShots=0; FQuat SmokeChest=FQuat::Identity; double SmokeHit=0.; const class UAnimSequence* SmokeHitClip=nullptr;
  FString QAPrefix;
  FVector SmokePosition=FVector::ZeroVector;
  TSharedPtr<FMassEntityManager> Manager;

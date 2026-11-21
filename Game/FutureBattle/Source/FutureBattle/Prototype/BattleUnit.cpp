@@ -455,6 +455,7 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	{
 		TransitionClip = Transition(BodyStance, VisualStance);
 		TransitionUntil = TransitionClip ? Now + TransitionClip->GetPlayLength() : 0.;
+		TransitionRate = 1.f;
 		BodyStance = VisualStance;
 	}
 	// Cover clips (BattleCoverClips.h): hidden and firing poses of the cover action, with a one-shot between phases. The table
@@ -514,13 +515,20 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 		}
 	}
 	SetMeshYaw(0.f);
-	const bool bTransition = TransitionClip && Now < TransitionUntil;
 	const FVector Local = GetActorRotation().UnrotateVector(GetVelocity());
+	// Getting up on the move (moving stands the soldier up): the rest of the transition plays fast enough to end within
+	// MovingTransitionSeconds instead of sliding along the ground at its own speed.
+	if (TransitionClip && Now < TransitionUntil && TransitionRate == 1.f && Local.SizeSquared2D() > 400. && TransitionUntil - Now > MovingTransitionSeconds)
+	{
+		TransitionRate = float((TransitionUntil - Now) / MovingTransitionSeconds);
+		TransitionUntil = Now + MovingTransitionSeconds;
+	}
+	const bool bTransition = TransitionClip && Now < TransitionUntil;
 	// Moving without firing (no shot for ReadySeconds, the player not aiming): a jog with the rifle held low, no aim layer.
 	// Firing on the move, or aiming, brings the rifle up: the aimed walk and the aim pose.
 	const bool bReady = Now - LastVisualShot < ReadySeconds || (IsPlayerControlled() && AimLevel > 0);
 	const bool bRun = !bReady && VisualStance == BattleStance::Stand && Local.SizeSquared2D() > 400.;
-	Body.SetBase(bTransition ? TransitionClip.Get() : Locomotion(VisualStance, Local, bRun), !bTransition);
+	Body.SetBase(bTransition ? TransitionClip.Get() : Locomotion(VisualStance, Local, bRun), !bTransition, bTransition ? TransitionRate : 1.f);
 	// Upper body: reload (synced to the reload timer), blind fire, otherwise the aim pose at the weapon's pitch.
 	const float Duration = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
 	const bool bProne = VisualStance == BattleStance::Prone;

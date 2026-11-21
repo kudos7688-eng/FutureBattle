@@ -45,6 +45,10 @@ namespace BattleBodyAnim
  // The shortest time between two hit reactions on one body: under steady fire a new flinch every hit kept the body bent over
  // (it never stood back up); a hit inside this time shows no new reaction (display only, the damage is unchanged).
  constexpr double HitReactSeconds=1.2;
+ // Moving always stands a soldier up (there is no crouch-walk or crawl yet): the stand-up clip at its own speed played in place
+ // while the body already moved at full speed (it slid along the ground while getting up). On the move the rest of a stance
+ // transition plays fast enough to end within this time.
+ constexpr double MovingTransitionSeconds=.4;
  // The rifle model's grip relative to hand_r (calibrated against the rifle idle pose; the barrel along the model's local -Y).
  FTransform RifleGrip();
  // Cover clips (BattleCoverClips.h, the table by the asset review session): a clip of /Game/.../Rifle/Cover/ by name (cached),
@@ -87,8 +91,8 @@ class UBattleBodyAnimInstance : public UAnimInstance
  GENERATED_BODY()
 public:
  // Inputs, set every frame on the game thread (ABattleUnit::UpdateBodyAnim).
- // The lower-body clip; a change cross-fades over 0.2 s. A clip that does not loop holds its last frame.
- void SetBase(UAnimSequence* Clip,bool bLoop=true);
+ // The lower-body clip; a change cross-fades over 0.2 s. A clip that does not loop holds its last frame. Rate scales its clock.
+ void SetBase(UAnimSequence* Clip,bool bLoop=true,float Rate=1.f);
  // The upper-body layer (above spine_01). Time<0 plays it on its own clock; Time>=0 sets the position (reload synced to the timer).
  void SetUpper(UAnimSequence* Clip,float Weight,float Time=-1.f);
  // Aim pose blended by pitch in degrees (up positive) under the upper layer; Weight 0 shows the base clip's own upper body.
@@ -111,7 +115,7 @@ private:
  UPROPERTY(Transient) TObjectPtr<UAnimSequence> PreviousClip;
  UPROPERTY(Transient) TObjectPtr<UAnimSequence> UpperClip;
  UPROPERTY(Transient) TObjectPtr<UAnimSequence> OverlayClip;
- float BaseTime=0.f,PreviousTime=0.f,PreviousWeight=0.f,UpperTime=0.f,UpperWeight=0.f,OverlayTime=0.f,OverlayWeight=0.f,AimPitch=0.f,AimWeight=0.f,RaiseWeight=0.f;
+ float BaseRate=1.f,BaseTime=0.f,PreviousTime=0.f,PreviousWeight=0.f,UpperTime=0.f,UpperWeight=0.f,OverlayTime=0.f,OverlayWeight=0.f,AimPitch=0.f,AimWeight=0.f,RaiseWeight=0.f;
  FVector RaiseTarget=FVector::ZeroVector;
  bool bBaseLoop=true,bPreviousLoop=true,bUpperDriven=false;
 };
