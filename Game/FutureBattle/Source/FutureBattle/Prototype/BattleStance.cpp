@@ -153,23 +153,32 @@ void UBattleLeaderRuntime::AimFollowerRifles(double Now)
   if(B.Actor.IsValid()||!B.Mesh.IsValid()||!B.Weapon.IsValid()||!B.Mesh->IsComponentTickEnabled()||(VAT&&VAT->IsFar(ID)))continue;
   const auto* U=Store->Find(ID);if(!U||!U->IsAlive())continue;
   // Cover clips and blind fire turn the mesh themselves (BattleCoverAction.cpp); leave it to them.
+  if(B.CoverClipPhase||B.bBlindPose){B.MuzzleYaw=B.MuzzlePitch=0.f;continue;}
   // Moving into or out of cover without a cover clip yet, the turn is dropped here (the cover code may not set the rotation).
-  if(B.CoverClipPhase||B.bBlindPose){B.MuzzleYaw=0.f;continue;}
-  if(U->CoverPhase){if(B.MuzzleYaw!=0.f){B.MuzzleYaw=0.f;B.Mesh->SetRelativeRotation(FRotator(0,-90,0));}continue;}
-  float Want=0.f;
+  if(U->CoverPhase)
+  {
+   if(B.MuzzleYaw!=0.f||B.MuzzlePitch!=0.f){B.MuzzleYaw=B.MuzzlePitch=0.f;B.Mesh->SetRelativeLocationAndRotation(FVector(0,0,-90),FRotator(0,-90,0));}
+   continue;
+  }
+  float WantYaw=0.f,WantPitch=0.f;
   if(Now-LastFireTimes.FindRef(ID,-100.)<BattleBodyAnim::ReadySeconds && !B.bRunPose && B.Pose!=2 && StanceOf(ID)!=BattleStance::Prone)
   {
-   // The barrel (the weapon model's local -Y, posed by the last evaluated frame) against the facing, both flat.
+   // The barrel (the weapon model's local -Y, posed by the last evaluated frame under the current mesh turn) against the
+   // facing across and the last shot's pitch up and down.
    const FVector Barrel=-B.Weapon->GetComponentTransform().GetUnitAxis(EAxis::Y);
    const FVector Facing=B.Capsule.IsValid()?B.Capsule->GetForwardVector():Forward(ID);
-   if(Barrel.SizeSquared2D()>.01)
-    Want=FMath::Clamp(B.MuzzleYaw+FMath::FindDeltaAngleDegrees(Barrel.Rotation().Yaw,Facing.Rotation().Yaw),-MaxFollowerMuzzleYaw,MaxFollowerMuzzleYaw);
-   else Want=B.MuzzleYaw;
+   const FVector* Shot=FollowerAims.Find(ID);
+   const float ShotPitch=Shot?FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Shot->Z,-1.,1.))):0.f;
+   const float BarrelPitch=FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(Barrel.Z,-1.,1.)));
+   WantYaw=Barrel.SizeSquared2D()>.01?FMath::Clamp(B.MuzzleYaw+FMath::FindDeltaAngleDegrees(Barrel.Rotation().Yaw,Facing.Rotation().Yaw),-MaxFollowerMuzzleYaw,MaxFollowerMuzzleYaw):B.MuzzleYaw;
+   WantPitch=FMath::Clamp(B.MuzzlePitch+(ShotPitch-BarrelPitch),-MaxFollowerMuzzlePitch,MaxFollowerMuzzlePitch);
   }
-  const float Shown=FMath::FInterpConstantTo(B.MuzzleYaw,Want,Dt,360.f);
-  if(FMath::IsNearlyEqual(Shown,B.MuzzleYaw,.05f))continue;
-  B.MuzzleYaw=Shown;
-  B.Mesh->SetRelativeRotation(FRotator(0,-90+Shown,0));
+  const float Yaw=FMath::FInterpConstantTo(B.MuzzleYaw,WantYaw,Dt,360.f),Pitch=FMath::FInterpConstantTo(B.MuzzlePitch,WantPitch,Dt,180.f);
+  if(FMath::IsNearlyEqual(Yaw,B.MuzzleYaw,.05f) && FMath::IsNearlyEqual(Pitch,B.MuzzlePitch,.05f))continue;
+  B.MuzzleYaw=Yaw;B.MuzzlePitch=Pitch;
+  // Turn and tilt in the capsule's frame about its centre (the mesh hangs 90 cm below it, its own forward turned by -90).
+  const FQuat Turn=FRotator(Pitch,Yaw,0.f).Quaternion();
+  B.Mesh->SetRelativeLocationAndRotation(Turn.RotateVector(FVector(0,0,-90)),Turn*FRotator(0,-90,0).Quaternion());
  }
 }
 

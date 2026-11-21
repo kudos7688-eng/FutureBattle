@@ -513,6 +513,8 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
    if(!VAT || !VAT->IsFar(ID))
    {
     B->Weapon->SetVisibility(false);
+    // The rifle turn (AimFollowerRifles) ends with the shooting: the body falls from its plain place.
+    if(B->Mesh.IsValid() && (B->MuzzleYaw!=0.f || B->MuzzlePitch!=0.f)){B->MuzzleYaw=B->MuzzlePitch=0.f;B->Mesh->SetRelativeLocationAndRotation(FVector(0,0,-90),FRotator(0,-90,0));}
     // Body animation: a near follower plays a death clip and freezes on its last frame (StepBodyTimers); otherwise it tips over.
     UAnimSequence* Death=B->Mesh.IsValid()?DeathClip(ID):nullptr;
     if(Death){B->Mesh->SetRelativeScale3D(FVector(1.));B->Mesh->PlayAnimation(Death,false);BodyTimers.Add(ID,{GetWorld()->GetTimeSeconds()+Death->GetPlayLength(),true});}
@@ -1133,6 +1135,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  // Display only (BattleBodyAnim): the hit and death clips face the side the shot came from.
  if(Victim>0)LastShotDirs.Add(Victim,Direction.GetSafeNormal2D());
  LastFireTimes.Add(ID,Now);
+ if(!Actor(ID))FollowerAims.Add(ID,Direction.GetSafeNormal());
  if(auto* Shooter=Actor(ID))Shooter->NoteVisualShot(Now);
  // Per-shot damage by the shooter's squad type (heavy infantry may hit harder; rifle squads 1x).
  // An anti-tank round hits for ATDamage (and ATBaseDamage on an enemy home); its explosion follows below.
