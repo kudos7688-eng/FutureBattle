@@ -20,6 +20,18 @@
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-21 10時40分 Claude（群制御）：奇襲群の先頭選び・案内役・集結判定を Codex の指摘どおり手直し（ブランチ `groupui`、3263261、未ビルド）
+- **依頼（ユーザー）**：Codex が surprise4 の結果から挙げた問題を「直して」。すべて `-BattleSurpriseGroup=1` のときだけ効く。
+- **変更**（`BattleFrontLine.cpp`、`BattleMatch.h` に `SurpriseNextCol` を追加）：
+  - 群ができたときの先頭を、最も前にいる装甲の分隊にした（以前は種類を問わず最も前の分隊）。
+  - 橋の案内役は、修理や後退（Recover）中でない装甲を優先して選ぶ。案内役が死亡・離脱・Recover になったら選び直し、`BATTLE_SURPRISE_BRIDGE stage=guide` をログに出す。
+  - Recover 中の分隊は、先頭・最後尾・集結の数に入れない。全分隊が Recover 中なら目標を動かさない。
+  - 装甲が先頭になるのは、今の目標列から3列以内にいるときだけにした（surprise4-s7 で本拠地に止まった戦車が群全体を引き戻した対策）。
+  - 一度与えた目標列（`SurpriseNextCol`）は、先頭が下がっても後ろへ戻さない。待っている間は前へも進めない。
+  - 突入の条件に「遅れ待ちが終わっていること」を足した（最後尾が3列より後ろなら、最大 LagWait 秒は突入しない）。
+  - `BATTLE_SURPRISE_STATE` に `lead_sid` `lead_col` `min_col` `stop_col` `guide_sid` `recover` を足し、Recover 中の分隊には `r` を付けた。
+- **未実施**：ビルド・煙試験・試合（ロック待ち。順番は Codex委任 → 区画AI → 群制御）。次は `groupui-surprise5-I-s{7,3,11}` で surprise4 と比べる。外骨格を戦車と同じ扱いにしている点は残した。
+
 ## 2026-11-21 2時10分 Claude（群制御）：Codex のレビューで奇襲群・前線維持群を手直し、橋を経由する経路（Codex 実装）（ブランチ `groupui`、627d52c・bda9220 ほか）
 - **依頼（ユーザー）**：「現状の内容について codex に確認させて」「指摘を確認して直せるものは直して」「橋を通る経路も Codex に作らせて」。
 - **Codex の指摘7件のうち6件をコードで確かめて修正**（いずれも `-BattleSurpriseGroup` / `-BattleFrontLine` が1のときだけ効く）：
