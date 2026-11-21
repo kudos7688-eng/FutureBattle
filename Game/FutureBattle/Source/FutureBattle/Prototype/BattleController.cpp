@@ -1,5 +1,8 @@
 #include "BattleController.h"
 #include "BattleUIText.h"
+#include "BattleTactics.h"
+#include "Engine/Canvas.h"
+#include "Engine/Engine.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleStance.h"
 #include "BattleBlindFire.h"
@@ -28,6 +31,44 @@
 #include "DrawDebugHelpers.h"
 #include "FutureBattle.h"
 #include "Misc/CommandLine.h"
+
+FBattleCommandBarLayout FBattleCommandBarLayout::Make(FVector2D View,const UWorld* World,bool bPad)
+{
+ static const TCHAR* const KeyNames[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("小隊を購入 [2]"), TEXT("重装歩兵 [3]"), TEXT("偵察組 [4]"), TEXT("対戦車班 [5]"), TEXT("戦車 [6]"), TEXT("装甲車 [7]"), TEXT("迫撃砲班 [8]"), TEXT("自走砲 [9]"), TEXT("外骨格 [0]"), TEXT("補給班 [-]") };
+ static const TCHAR* const PadNames[] = { TEXT("移動 [X]"), TEXT("攻撃移動 [Y]"), TEXT("防衛 [RB]"), TEXT("停止 [B]"), TEXT("手動指揮 [十字↑]"), TEXT("AIに委任 [十字↓]"), TEXT("小隊を購入 [十字←]"), TEXT("重装歩兵 [Aでクリック]"), TEXT("偵察組 [Aでクリック]"), TEXT("対戦車班 [Aでクリック]"), TEXT("戦車 [Aでクリック]"), TEXT("装甲車 [Aでクリック]"), TEXT("迫撃砲班 [Aでクリック]"), TEXT("自走砲 [Aでクリック]"), TEXT("外骨格 [Aでクリック]"), TEXT("補給班 [Aでクリック]") };
+ static_assert(UE_ARRAY_COUNT(KeyNames) == FBattleCommandBarLayout::Count && UE_ARRAY_COUNT(PadNames) == FBattleCommandBarLayout::Count, "one label per command button");
+ FBattleCommandBarLayout Layout;
+ const float Left=34.f, Right=FMath::Max(Left+1.f,float(View.X)-34.f), Available=Right-Left;
+ const bool bSectors=World&&BattleFieldLayout::Of(World).bSectors;
+ const bool bGunCost=BattleTactics::ArtilleryPosts()||FCString::Strifind(FCommandLine::Get(),TEXT("BattleAreaSPGCost="))!=nullptr;
+ float CursorX=Left, CursorY=0;
+ for(int32 Index=0;Index<Count;++Index)
+ {
+  FString Captions[2]={KeyNames[Index],PadNames[Index]};
+  if(bSectors&&(Index==1||Index==2))
+  {Captions[0]=Index==1?TEXT("区画制圧 [T]"):TEXT("区画維持 [G]");Captions[1]=Index==1?TEXT("区画制圧 [Y]"):TEXT("区画維持 [RB]");}
+  if(Index==13&&bGunCost)
+  {Captions[0]=FString::Printf(TEXT("自走砲 %d [9]"),BattleSquadType::AreaCost(BattleSquadType::SPGun));Captions[1]=FString::Printf(TEXT("自走砲 %d [A]"),BattleSquadType::AreaCost(BattleSquadType::SPGun));}
+  float MaxWidth=0, MaxHeight=0;
+  for(const FString& Caption:Captions)
+  {float TextWidth=0,TextHeight=0;UCanvas::StrLen(GEngine->GetSmallFont(),Caption,TextWidth,TextHeight,false,nullptr);MaxWidth=FMath::Max(MaxWidth,TextWidth);MaxHeight=FMath::Max(MaxHeight,TextHeight);}
+  auto& Button=Layout.Buttons[Index];Button.Caption=Captions[bPad?1:0];
+  Button.Width=FMath::Min(Available,FMath::Clamp(MaxWidth*.85f+16.f,108.f,240.f));
+  Button.Scale=FMath::Min(.85f,FMath::Max(1.f,Button.Width-16.f)/FMath::Max(1.f,MaxWidth));
+  Layout.ButtonHeight=FMath::Max(Layout.ButtonHeight,FMath::CeilToFloat(MaxHeight*Button.Scale)+10.f);
+ }
+ for(auto& Button:Layout.Buttons)
+ {
+  if(CursorX>Left&&CursorX+Button.Width>Right){CursorX=Left;CursorY+=Layout.ButtonHeight+6.f;}
+  Button.Origin=FVector2D(CursorX,CursorY);CursorX+=Button.Width+6.f;
+ }
+ // Separate summary and route rows leave the full width available for long status text.
+ const float BarTop=float(View.Y)-64.f-Layout.ButtonHeight-CursorY;
+ for(auto& Button:Layout.Buttons)Button.Origin.Y+=BarTop;
+ Layout.RouteOrigin=FVector2D(Right-Layout.RouteWidth,BarTop-32.f);
+ Layout.SummaryY=BarTop-60.f;Layout.PanelTop=BarTop-70.f;
+ return Layout;
+}
 
 ABattleCameraPawn::ABattleCameraPawn()
 {
@@ -504,7 +545,8 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
   }
  }
 	FVector2D Pointer;
-	const bool OverDelegation = GetPointerPosition(Pointer) && DelegationPanelAt(Pointer);
+ // The squad list is drawn after delegation, so its whole panel owns the overlap.
+	const bool OverDelegation = GetPointerPosition(Pointer) && !SquadPanelAtPointer() && DelegationPanelAt(Pointer);
 	if (Params.Key == EKeys::LeftMouseButton)
 	{
 		if (Params.Event == IE_Pressed && OverDelegation)
@@ -534,7 +576,7 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
    FVector2D BarPointer; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH);
    if(GetPointerPosition(BarPointer))
    {
-    const auto Bar=FBattleCommandBarLayout::Make(FVector2D(ViewW,ViewH));
+    const auto Bar=FBattleCommandBarLayout::Make(FVector2D(ViewW,ViewH),GetWorld(),bGamepadActive);
     if(const int32 Button=Bar.ButtonAt(BarPointer);Button!=INDEX_NONE)
     {bMinimapPress=true;bTriggerHeld=false;PressCommandButton(Button);return true;}
     // The route button stands apart from the bar and exists only on maps with a road network.
@@ -576,7 +618,7 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
    // Header controls: a filter tab or the sort button.
    if(Params.Event==IE_Pressed && Over)
    {
-    FVector2D P; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH); const auto Layout=FBattleSquadListLayout::Make(FVector2D(ViewW,ViewH));
+    FVector2D P; int32 ViewW,ViewH; GetViewportSize(ViewW,ViewH); const auto Layout=FBattleSquadListLayout::Make(FVector2D(ViewW,ViewH),GetWorld());
     if(GetPointerPosition(P))
     {
      if(const int32 Tab=Layout.FilterTabAt(P);Tab!=INDEX_NONE){SquadFilter=uint8(Tab);SquadListScroll=0;bSquadListPress=false;bTriggerHeld=false;return true;}
@@ -885,18 +927,18 @@ bool ABattleController::SquadPanelAtPointer() const
 {
  if(!bTactical || !GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled()) return false;
  FVector2D P; int32 W,H; GetViewportSize(W,H);
- return GetPointerPosition(P) && FBattleSquadListLayout::Make(FVector2D(W,H)).Contains(P);
+ return GetPointerPosition(P) && FBattleSquadListLayout::Make(FVector2D(W,H),GetWorld()).Contains(P);
 }
 void ABattleController::ScrollSquadList(int32 Delta)
 {
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); int32 W,H; GetViewportSize(W,H);
- const auto Layout=FBattleSquadListLayout::Make(FVector2D(W,H));
+ const auto Layout=FBattleSquadListLayout::Make(FVector2D(W,H),GetWorld());
  SquadListScroll=FMath::Clamp(SquadListScroll+Delta,0,FMath::Max(0,SquadListRows().Num()-Layout.VisibleRows));
 }
 void ABattleController::SelectSquadListRow(FVector2D P)
 {
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); int32 W,H; GetViewportSize(W,H);
- const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H)).RowAt(P); ScrollSquadList(0);
+ const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H),GetWorld()).RowAt(P); ScrollSquadList(0);
  const auto Rows=SquadListRows(); if(R==INDEX_NONE || !Rows.IsValidIndex(R+SquadListScroll)) return;
  const auto& Row=Rows[R+SquadListScroll];
  // Double-click (two clicks on the same row within 0.4 s): move the tactical camera to the squad leader.
@@ -910,7 +952,7 @@ void ABattleController::SelectSquadListRow(FVector2D P)
 int32 ABattleController::SquadListIDAt(FVector2D P) const
 {
  int32 W,H; GetViewportSize(W,H);
- const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H)).RowAt(P); const auto Rows=SquadListRows();
+ const int32 R=FBattleSquadListLayout::Make(FVector2D(W,H),GetWorld()).RowAt(P); const auto Rows=SquadListRows();
  return R!=INDEX_NONE && Rows.IsValidIndex(R+SquadListScroll)?Rows[R+SquadListScroll].SquadID:INDEX_NONE;
 }
 
@@ -962,7 +1004,7 @@ FBattleNoticeLayout FBattleNoticeLayout::Make(FVector2D View,const UWorld* World
 {
  FBattleNoticeLayout L; L.Origin.Y=Top; if(Entries<=0) return L;
  const auto Map=FBattleMinimapLayout::Make(View,World);
- const float Bottom=Map.Size.X>0?Map.Origin.Y-32.f:float(View.Y)-170.f;
+ const float Bottom=Map.Size.X>0?Map.Origin.Y-32.f:FBattleCommandBarLayout::Make(View,World).PanelTop-32.f;
  L.Rows=FMath::Clamp(FMath::FloorToInt((Bottom-L.Origin.Y-L.Header)/L.RowHeight),0,FMath::Min(6,Entries));
  return L;
 }

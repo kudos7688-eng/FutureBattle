@@ -243,9 +243,9 @@ void ABattleHUD::DrawOrderWays()
 {
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(!L->IsEnabled())return;
  auto* PC=Cast<ABattleController>(PlayerOwner);if(!PC||!Canvas||!PC->IsTactical())return;
- const float H=Canvas->SizeY;const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ const float WaysBottom=FBattleCommandBarLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld()).PanelTop-2.f;const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  const auto Map=FBattleMinimapLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld());
- auto Screen=[&](FVector World,FVector2D& Out){return PC->ProjectWorldLocationToScreen(World,Out)&&Out.Y>110&&Out.Y<H-130&&!Map.Contains(Out);};
+ auto Screen=[&](FVector World,FVector2D& Out){return PC->ProjectWorldLocationToScreen(World,Out)&&Out.Y>110&&Out.Y<WaysBottom&&!Map.Contains(Out);};
  auto Line=[&](const TArray<FVector>& Points,FLinearColor Color,float Thickness)
  {
   for(int32 I=0;I+1<Points.Num();++I)

@@ -40,18 +40,18 @@ struct FBattleNoticeLayout
 // Command bar (command UI 2026-11-16): buttons on the bottom panel that call the same actions as the keys.
 struct FBattleCommandBarLayout
 {
- FVector2D Origin=FVector2D::ZeroVector; float ButtonWidth=108, ButtonHeight=26, Gap=6; // 16 buttons: 1818 px wide (x 34..1852, inside the 1904 px panel at 1920)
- static constexpr int32 Count=16; // the 16th buys a supply team; // move, attack move, defend, hold, manual command, delegate to AI, buy a rifle squad, heavy infantry, a scout pair, an anti-tank team, a tank, an armoured car, a mortar team, a self-propelled gun
- // Route choice of the selected squads (BattlePlayerRoutes.cpp): a button of its own at the right end of the panel's top row, so
- // the bar's indices stay the orders and the purchases (more purchase buttons are added on other branches).
+ static constexpr int32 Count=16;
+ struct FButton { FVector2D Origin=FVector2D::ZeroVector; float Width=0, Scale=.85f; FString Caption; };
+ FButton Buttons[Count];
+ float ButtonHeight=26, PanelTop=0, SummaryY=0;
  FVector2D RouteOrigin=FVector2D::ZeroVector; float RouteWidth=176;
- static FBattleCommandBarLayout Make(FVector2D View){FBattleCommandBarLayout L;L.Origin=FVector2D(34,View.Y-90);L.RouteOrigin=FVector2D(View.X-34-L.RouteWidth,View.Y-122);return L;}
+ // Reserve the larger keyboard/pad label so changing input devices never moves a button.
+ static FBattleCommandBarLayout Make(FVector2D View,const UWorld* World,bool bPad=false);
  bool RouteAt(FVector2D P) const {return P.X>=RouteOrigin.X&&P.X<RouteOrigin.X+RouteWidth&&P.Y>=RouteOrigin.Y&&P.Y<RouteOrigin.Y+ButtonHeight;}
  int32 ButtonAt(FVector2D P) const
  {
-  if(P.Y<Origin.Y||P.Y>=Origin.Y+ButtonHeight||P.X<Origin.X) return INDEX_NONE;
-  const int32 I=FMath::FloorToInt((P.X-Origin.X)/(ButtonWidth+Gap));
-  return I<Count&&P.X<Origin.X+I*(ButtonWidth+Gap)+ButtonWidth?I:INDEX_NONE;
+  for(int32 I=0;I<Count;++I){const auto& B=Buttons[I];if(P.X>=B.Origin.X&&P.X<B.Origin.X+B.Width&&P.Y>=B.Origin.Y&&P.Y<B.Origin.Y+ButtonHeight)return I;}
+  return INDEX_NONE;
  }
 };
 

@@ -48,13 +48,14 @@ FBattleMinimapLayout FBattleMinimapLayout::Make(FVector2D View,const UWorld* Wor
  // Bottom left, above the order bar. Only the wide maps have one; too small a window gets none.
  FBattleMinimapLayout M; if(!BattleFieldLayout::IsSightField(World)) return M;
  M.HalfExtent=BattleFieldLayout::FieldHalfExtent(World);
- const float Height=FMath::Min(300.f,float(View.Y)-440.f); if(Height<140.f) return M;
- M.Size=FVector2D(Height*M.HalfExtent.Y/M.HalfExtent.X,Height); M.Origin=FVector2D(20,View.Y-150-Height); return M;
+ const float MapBottom=FBattleCommandBarLayout::Make(View,World).PanelTop-22.f;
+ const float Height=FMath::Min(300.f,MapBottom-290.f); if(Height<140.f) return M;
+ M.Size=FVector2D(Height*M.HalfExtent.Y/M.HalfExtent.X,Height); M.Origin=FVector2D(20,MapBottom-Height); return M;
 }
-FBattleSquadListLayout FBattleSquadListLayout::Make(FVector2D View)
+FBattleSquadListLayout FBattleSquadListLayout::Make(FVector2D View,const UWorld* World)
 {
  FBattleSquadListLayout L; L.Width=FMath::Min(360.f,float(View.X)-32.f);
- L.Origin=FVector2D(View.X-L.Width-16,104); L.Height=FMath::Max(0.f,FMath::Min(720.f,float(View.Y)-234.f));
+ L.Origin=FVector2D(View.X-L.Width-16,104); L.Height=FMath::Max(0.f,FMath::Min(720.f,FBattleCommandBarLayout::Make(View,World).PanelTop-110.f));
  L.VisibleRows=FMath::Max(0,FMath::FloorToInt((L.Height-52)/L.RowHeight)); return L;
 }
 bool FBattleSquadListLayout::Contains(FVector2D P) const { return Height>0 && P.X>=Origin.X && P.X<Origin.X+Width && P.Y>=Origin.Y && P.Y<Origin.Y+Height; }

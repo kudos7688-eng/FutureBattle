@@ -44,7 +44,7 @@ struct FBattleSquadListLayout
  FVector2D Origin;
  float Width=360, Height=0, RowHeight=56, Header=44;
  int32 VisibleRows=0;
- static FBattleSquadListLayout Make(FVector2D View);
+ static FBattleSquadListLayout Make(FVector2D View,const UWorld* World);
  // Header controls (command UI 2026-11-16): five filter tabs and a sort button on the second header line.
  static constexpr int32 FilterCount=5; static constexpr float TabWidth=50, TabTop=23, TabHeight=18, SortWidth=86;
  int32 FilterTabAt(FVector2D P) const {if(P.Y<Origin.Y+TabTop||P.Y>=Origin.Y+TabTop+TabHeight||P.X<Origin.X+6)return INDEX_NONE;const int32 I=FMath::FloorToInt((P.X-Origin.X-6)/TabWidth);return I<FilterCount?I:INDEX_NONE;}
