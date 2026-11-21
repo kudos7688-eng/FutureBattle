@@ -210,6 +210,10 @@ void ABattleHUD::DrawHUD()
 				if (FMath::Abs(Existing.X - Screen.X) < 70 && FMath::Abs(Existing.Y - Screen.Y) < 32) { bDrawLabel = false; break; }
 			DrawRect(Color, Screen.X - 2, Screen.Y, 4, 4);
 		}
+		// Squad icons (DrawSquadIcons) take over when the camera is far: a small dot per soldier instead of the name and bars.
+		static const bool bSquadIcons = [] { int32 On = 1; FParse::Value(FCommandLine::Get(), TEXT("BattleSquadIcons="), On); return On != 0; }();
+		if (bDrawLabel && PC->IsTactical() && bSquadIcons && PC->PlayerCameraManager && FVector::Dist(PC->PlayerCameraManager->GetCameraLocation(), Unit->GetActorLocation()) > 8000.f)
+		{ bDrawLabel = false; DrawRect(Color, Screen.X - 2, Screen.Y, 4, 4); }
 		if (bDrawLabel)
 		{
 			LabelPositions.Add(Screen);
@@ -951,17 +955,14 @@ void ABattleHUD::DrawSquadIcons()
  const FVector Eye=PC->PlayerCameraManager->GetCameraLocation();
  // Icons fade in as the camera pulls away (50 m -> 100 m from the squad): close up the soldiers themselves are readable.
  auto Fade=[&](const FVector& Where){return FMath::Clamp(float((FVector::Dist(Eye,Where)-5000.)/5000.),0.f,1.f);};
- // One map-symbol style icon: a frame (dashed for a remembered position), the type symbol inside, the type letter under it and
- // an optional note at the right (soldier count, or how long ago it was seen).
- auto Icon=[&](const FVector& World,uint8 Type,FLinearColor Color,bool bDashed,bool bSelected,const FString& Note)
+ // One map-symbol style icon at a screen point: a frame (dashed for a remembered position), the type symbol inside, the type letter
+ // under it and an optional note at the right (soldier count, or how long ago it was seen).
+ auto Icon=[&](FVector2D C,uint8 Type,FLinearColor Color,bool bDashed,bool bSelected,const FString& Note)
  {
-  FVector2D C; if(!PC->ProjectWorldLocationToScreen(World+FVector(0,0,250),C)) return;
-  if(C.X<20||C.X>Canvas->SizeX-20||C.Y<120||C.Y>H-215) return;
-  const float HW=14.f,HH=9.f,T=bSelected?2.f:1.2f; C.Y-=14.f;
+  const float HW=14.f,HH=9.f,T=bSelected?2.f:1.2f;
   const FLinearColor Ink(.025f,.04f,.065f,.55f*Color.A);
   DrawRect(Ink,C.X-HW,C.Y-HH,2*HW,2*HH);
   auto Line=[&](float X0,float Y0,float X1,float Y1,float Th){DrawLine(C.X+X0,C.Y+Y0,C.X+X1,C.Y+Y1,Color,Th);};
-  // Frame.
   const FVector2D Corners[4]={FVector2D(-HW,-HH),FVector2D(HW,-HH),FVector2D(HW,HH),FVector2D(-HW,HH)};
   for(int32 I=0;I<4;++I)
   {
@@ -983,10 +984,18 @@ void ABattleHUD::DrawSquadIcons()
   case SPGun: Oval(HW*.65f,HH*.55f);DrawRect(Color,C.X-1.5f,C.Y-1.5f,3,3);break;                       // oval + dot
   case Exo: Line(-HW,-HH,HW,HH,1.f);Line(-HW,HH,HW,-HH,1.f);Oval(3.f,3.f);break;                       // X + ring
   case Supply: Line(-HW,HH*.35f,HW,HH*.35f,1.f);break;                                                 // supply: lower bar
-  default: DrawText(TEXT("?"),Color,C.X-3,C.Y-8,GEngine->GetSmallFont(),.9f);break;
+  default: DrawText(TEXT("?"),Color,C.X-3,C.Y-8,GEngine->GetSmallFont(),.9f);break;                    // unidentified
   }
-  DrawText(SquadTypeLetter(Type),Color,C.X-6,C.Y+HH+1,GEngine->GetSmallFont(),.75f);
+  if(Type<BattleSquadType::Count) DrawText(SquadTypeLetter(Type),Color,C.X-6,C.Y+HH+1,GEngine->GetSmallFont(),.75f);
   if(!Note.IsEmpty()) DrawText(Note,Color,C.X+HW+3,C.Y-7,GEngine->GetSmallFont(),.72f);
+ };
+ struct FItem{FVector2D C;uint8 Type;FLinearColor Color;bool bDashed,bSelected;FString Note;int32 Kind;int32 Merged=0;};
+ TArray<FItem> Items;
+ auto Add=[&](const FVector& World,uint8 Type,FLinearColor Color,bool bDashed,bool bSelected,FString Note,int32 Kind)
+ {
+  FVector2D C; if(!PC->ProjectWorldLocationToScreen(World+FVector(0,0,250),C)) return;
+  C.Y-=14.f; if(C.X<20||C.X>Canvas->SizeX-20||C.Y<120||C.Y>H-215) return;
+  Items.Add({C,Type,Color,bDashed,bSelected,MoveTemp(Note),Kind});
  };
  // Own squads (every active one), at the leader. Selected ones get a heavier frame.
  for(const auto& S:L->Summaries()) if(S.bActive)
@@ -995,18 +1004,32 @@ void ABattleHUD::DrawSquadIcons()
   const FVector Where=L->Position(S.LeaderUnitID); const float A=Fade(Where); if(A<=0.f) continue;
   int32 Alive=0; for(int32 ID:Squad->Members) if(const auto* M=Store->Find(ID); M&&M->IsAlive()) ++Alive;
   ABattleUnit* Leader=L->Actor(S.LeaderUnitID);
-  Icon(Where,Squad->SquadType,FLinearColor(.45f,.85f,1.f,.9f*A),false,Leader&&PC->IsSelected(Leader),FString::FromInt(Alive));
+  Add(Where,Squad->SquadType,FLinearColor(.45f,.85f,1.f,.9f*A),false,Leader&&PC->IsSelected(Leader),FString::FromInt(Alive),0);
  }
  // Seen enemy squads: identified type only, at the centre of the seen soldiers.
  const auto Seen=SeenEnemySquads(GetWorld());
  for(const auto& E:Seen)
  {
   const FVector Where=E.Value.Sum/E.Value.Count; const float A=Fade(Where); if(A<=0.f) continue;
-  Icon(Where,E.Value.Type,FLinearColor(1.f,.35f,.28f,.95f*A),false,false,FString::FromInt(E.Value.Count));
+  Add(Where,E.Value.Type,FLinearColor(1.f,.35f,.28f,.95f*A),false,false,FString::FromInt(E.Value.Count),1);
  }
  // Last known place of enemy squads no longer seen: always shown (also close up), dashed and dimmer, with the time since.
  for(const auto& R:RememberedEnemySquads(GetWorld(),Seen))
-  Icon(R.Value.Where,R.Value.Type,FLinearColor(1.f,.55f,.35f,.7f),true,false,FString::Printf(TEXT("%.0f秒前"),FMath::Max(0.,Now-R.Value.SeenAt)));
+  Add(R.Value.Where,R.Value.Type,FLinearColor(1.f,.55f,.35f,.7f),true,false,FString::Printf(TEXT("%.0f秒前"),FMath::Max(0.,Now-R.Value.SeenAt)),2);
+ // Icons of the same kind that would overlap are merged into the first (selected first): it shows "+N" for the others.
+ Items.StableSort([](const FItem& X,const FItem& Y){return X.bSelected&&!Y.bSelected;});
+ TArray<int32> Shown;
+ for(int32 I=0;I<Items.Num();++I)
+ {
+  bool bMerged=false;
+  for(int32 J:Shown) if(Items[J].Kind==Items[I].Kind&&FMath::Abs(Items[J].C.X-Items[I].C.X)<34.f&&FMath::Abs(Items[J].C.Y-Items[I].C.Y)<26.f){++Items[J].Merged;bMerged=true;break;}
+  if(!bMerged) Shown.Add(I);
+ }
+ for(int32 I:Shown)
+ {
+  const FItem& It=Items[I];
+  Icon(It.C,It.Type,It.Color,It.bDashed,It.bSelected,It.Merged>0?FString::Printf(TEXT("%s +%d"),*It.Note,It.Merged):It.Note);
+ }
 }
 
 void ABattleHUD::DrawOrderMarks()
