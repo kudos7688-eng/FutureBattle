@@ -30,8 +30,7 @@ bool UBattleLeaderRuntime::SoldierWatchDirection(int32 ID,int32 TargetID,const F
  auto Held=[&](const FBattleContact& K){return K.bVisible || Now-K.LastSeenTime<=Memory;};
  if(const auto* Contacts=Perc->GetContacts(ID))
  {
-  // 1. The squad's target, when he knows where it is (out of sight now): he keeps looking there. This also keeps him on the
-  // target right after a load, when every restored contact is out of sight until his first scan.
+  // 1. The squad's target, when he knows where it is (out of sight now): he keeps looking there.
   if(const FBattleContact* K=Contacts->Find(TargetID); K && Held(*K))
    if(const auto* T=Store->Find(TargetID); T && T->IsAlive() && T->Team!=U->Team)
    {
