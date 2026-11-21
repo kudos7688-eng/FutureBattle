@@ -162,6 +162,9 @@ $supply=@{
  'W7'=@('-AreaAllTypes','1','-AreaWithout','7')
  'W8'=@('-AreaAllTypes','1','-AreaWithout','8')
  'W9'=@('-AreaAllTypes','1','-AreaWithout','9')
+ # Front army share (2026-11-22, ROADMAP stage 5; maps H/I): FS50 / FS30 = the AI fills its front army up to half / 30% of its free infantry.
+ 'FS50'=@('-FrontShare','0.5')
+ 'FS30'=@('-FrontShare','0.3')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

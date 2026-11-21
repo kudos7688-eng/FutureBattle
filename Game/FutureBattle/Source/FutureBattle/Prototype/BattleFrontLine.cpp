@@ -36,6 +36,15 @@ namespace BattleFrontValues
  // although the one-sided screen ga1 on map I lost 180-320 points of lead against the earlier allocation). 0: only squads the player
  // drops on the front army tab hold the line; the AI teams keep the earlier allocation.
  bool AutoFill(){static const int32 On=Arg(TEXT("BattleFrontAuto="),1);return On!=0;}
+ // Trial -BattleFrontShare=<0..1> (default 1 = as before; ROADMAP stage 5, Docs/design-groups-strategy-link.md, the next step after ga1):
+ // the AI fills its front army only up to this share of the squads it could put there (its members + the free ones). Squads already
+ // in the group (including those the player dropped there) are never taken out for the share. One team with -BattleAreaTrialTeam.
+ double Share(int32 Team)
+ {
+  static const double V=[]{float X=1.f;FParse::Value(FCommandLine::Get(),TEXT("BattleFrontShare="),X);return FMath::IsFinite(X)?double(FMath::Clamp(X,0.f,1.f)):1.;}();
+  const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;
+  return Trial<0||Trial==Team?V:1.;
+ }
  bool Gap(){static const int32 On=Arg(TEXT("BattleFrontGap="),1);return On!=0;}
  // The front army holds one line as a group (user report 2026-11-21 after test play: its squads moved each on their own and went back
  // and forth, because the line followed where own soldiers stood and each band stepped forward by itself). The group keeps its line
@@ -178,7 +187,8 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    Free.Add({P.Key,FVector::DistSquared2D(R->Position(S.LeaderUnitID),LineMid)});
   }
   Free.Sort([](const FFree& A,const FFree& B){return A.D!=B.D?A.D<B.D:A.SID<B.SID;});
-  TArray<int32> Pick;for(const auto& F:Free)if(Have+Pick.Num()<Want)Pick.Add(F.SID);
+  const int32 ShareCap=FMath::CeilToInt(Share(Team)*double(Have+Free.Num())-1e-9);
+  TArray<int32> Pick;for(const auto& F:Free)if(Have+Pick.Num()<FMath::Min(Want,ShareCap))Pick.Add(F.SID);
   if(FrontID==INDEX_NONE)
   {
    if(Pick.Num()>=2)

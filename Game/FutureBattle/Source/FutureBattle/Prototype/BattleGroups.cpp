@@ -421,7 +421,8 @@ void UBattleMatch::UpdateGroups(int32 Team)
   {
    if(bOwn){Enter(2,TEXT("already_own"));continue;}
    // Strategy layer S2: a group still gathering turns to a new team focus (an advance under way finishes first).
-   if(!G->bPlayer)if(const int32 F=StrategyFocusPoint(Team);F!=INDEX_NONE&&F!=G->Objective&&ObservedOwner(Team,F)!=Team&&!(Elapsed<G->AvoidUntil&&F==G->Avoid)){Attack(F,TEXT("strategy_focus"));continue;}
+   // Not more often than every 30 s (group lane 2026-11-22: switching a gathering group's goal makes it go back and forth).
+   if(!G->bPlayer&&Elapsed-G->PhaseAt>=30.f)if(const int32 F=StrategyFocusPoint(Team);F!=INDEX_NONE&&F!=G->Objective&&ObservedOwner(Team,F)!=Team&&!(Elapsed<G->AvoidUntil&&F==G->Avoid)){Attack(F,TEXT("strategy_focus"));continue;}
    const bool bAssembled=Present>=2&&Ready>=FMath::CeilToInt(Present*FMath::Clamp(T->GroupReadyShare,.1f,1.f));
    const float Waited=Elapsed-G->PhaseAt;
    if(!bAssembled&&Waited<FMath::Max(0.f,T->GroupAssembleMax))continue;
