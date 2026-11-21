@@ -24,10 +24,28 @@
 | 効果音・エフェクト（`sfx` ブランチ、`FutureBattle-sfx`） | **11-22 7時25分 main へ（b897edb、既定ON）**：銃声（近い音・遠い音）・着弾・敵弾のかすめる音・爆発・ロケット／迫撃砲／砲の発射・砲弾の飛来音・構え／スコープ／装填／空撃ち・拠点を取った／取られた・勝ち負けの音（`BattleAudio`）と、爆発の効果（`BattleEffects`、Lyra の Niagara。爆発半径の線の球の代わり）。表示と音だけで、描画あり・音ありのマップE seed 7 の試合は切替オフと IDENTICAL。素材は手元の Lyra・TPS から95個（56MB）と自作の合成音7個、**CC0 などの外部素材は無し**（出典と利用条件は `Docs/ASSET_SOURCES_AUDIO_FX.md`）。`-BattleSFX=0`／`-BattleFX=0` で止まる。確認は `Setup\Test-SoundFX.ps1`（画面の撮影と、スピーカーを鳴らさない録音で14種の音を測る） | 実際の操作で聞いての確認（音量の釣り合い・好み）はユーザー。Lyra・TPS の利用条件（Fab の掲載ページ）の確認はユーザー。**着弾の見た目の効果は無し**（TPS の効果は画面に出ず外した。作り直しは今後）。描画ありの性能への影響は未計測 |
 | 戦略層・マップJ（ロードマップに従う改善活動） | **11-22 main へ取り込み（b58f391）**：戦略層 S1〜S4（`-BattleSituationLog`・`-BattleStrategy=2/3/4`、既定0）、上部の帯、引き算の評価の切替（`-BattleAreaAllTypes`・`-BattleAreaWithout`）、`-BattleFrontShare`、分岐点の記録 `-BattleStateTrace`、往復保存の時刻 `-BattleVerifySaveAt`、**マップJ**（通れない山・湖で3本の道、ビルなど多様な建物、`Play-Area.ps1 -Map J`）。既定の試合は不変（IDENTICAL）。設計は `Docs/design-*.md`（段階2〜7、地形のAI、画面、部隊一覧、負荷、ロックの列）。計測ロックはファイルの列（`Setup/Lock-Queue.ps1`、ユーザー決定）。得点の規則は今のまま（ユーザー決定） | 戦略層の片側試験（未実施）、マップJ の画面確認（ユーザー）、F2 の到着の不合格、段階2の描画ありの切り分け |
 | 前線軍（群制御、`groupui`） | **11-22 3時30分 main へ**：テストプレイの指摘で作り直し。持ち場は行ごとの固定位置（遮蔽で前後を選び、畑の行は空ける）、最初の割り当ては歩く距離、前進は群が20秒ごとに行ごと、最初の前線は40%（`-BattleFrontOpen`）、要る数だけ前線軍に残し余りは未所属へ。Ctrl+右ドラッグは左右に引く | 試遊（Ctrl+右ドラッグ・通知の実画面確認）。数値は仮 |
-| 車両・砲兵・点検の直し（Codex委任、`FutureBattle-codex`） | **11-21〜22 main へ（すべて既定0、既定の試合は不変）**：自走砲が動かない直し `-BattleVehicleOrderHere`、戦車の被弾後の隠れ `-BattleVehicleHitCover`・主砲の発砲で位置が知られる `-BattleTankGunFlash`、砲兵の発砲で位置が知られる `-BattleArtilleryFlash`、自走砲の射程 `-BattleSPGRange`・費用 `-BattleAreaSPGCost`、公開の砲撃陣地と襲撃 `-BattleArtilleryPosts`（襲撃は外骨格→装甲車、ユーザー決定）、発砲を追う襲撃 `-BattleArtilleryRaidChase`、前線を抜ける襲撃 `-BattleArtilleryRaidSneak`、観測した情報だけで判断 `-BattleObservedArmour`／`-BattleObservedTactics`、点検05 の保存の検査（上限は 1 GiB）、点検07 の結果を変えない高速化、点検09 の画面の直し。評価：射程55000で自走砲の撃破が3〜4割減る。前線を抜ける襲撃で自走砲の発射が半分以下、ただし自走砲は撃破されない（外骨格は数を見て後退を繰り返す→ codex bc01833 で直し、未ビルド）。設計は `Docs/design-vehicle-survival.md`・`Docs/design-observation.md` | 戦車の直し A/B（2試合では効果が見えない）と砲兵の各切替を既定にするか。点検09 U06（3解像度）・U12（パッドのメニュー）の画面確認。AI が迫撃砲を買わない（陣地が使われない）。視界100m のマップA の保存は 69 MB |
+| 車両・砲兵・点検の直し（Codex委任、`FutureBattle-codex`） | **11-21〜22 main へ（すべて既定0、既定の試合は不変）**：自走砲が動かない直し `-BattleVehicleOrderHere`、戦車の被弾後の隠れ `-BattleVehicleHitCover`・主砲の発砲で位置が知られる `-BattleTankGunFlash`、砲兵の発砲で位置が知られる `-BattleArtilleryFlash`、自走砲の射程 `-BattleSPGRange`・費用 `-BattleAreaSPGCost`、公開の砲撃陣地と襲撃 `-BattleArtilleryPosts`（襲撃は外骨格→装甲車、ユーザー決定）、発砲を追う襲撃 `-BattleArtilleryRaidChase`、前線を抜ける襲撃 `-BattleArtilleryRaidSneak`、観測した情報だけで判断 `-BattleObservedArmour`／`-BattleObservedTactics`、点検05 の保存の検査（上限は 1 GiB）、点検07 の結果を変えない高速化、点検09 の画面の直し。評価：射程55000で自走砲の撃破が3〜4割減る。**構える深さ `-BattleArtilleryStandoff 0.35`＋前線を抜ける襲撃で、外骨格が自走砲を撃破できた（2 seed で3両）。発射は7分の1**（11-22 8時50分）。設計は `Docs/design-vehicle-survival.md`・`Docs/design-observation.md` | 戦車の直し A/B（2試合では効果が見えない）と砲兵の各切替を既定にするか。点検09 U06（3解像度）・U12（パッドのメニュー）の画面確認。AI が迫撃砲を買わない（陣地が使われない）。視界100m のマップA の保存は 69 MB |
 | 歩兵の装備・精鋭小隊・狙撃班（`arms` ブランチ、`FutureBattle-arms`） | **11-22 6時30分**：副武装の拳銃 `-BattleSidearms`、手りゅう弾 `-BattleGrenades=n`、近接攻撃 `-BattleMelee`、新しい武器5種（拳銃・短機関銃・散弾銃・選抜射手銃・擲弾銃）と狙撃銃、**精鋭小隊**（8人の役割分担、`-BattleElite`＝ `=` キー／AI `-BattleAreaEliteKeep=n`）、**狙撃班**（狙撃手＋観測手、`-BattleSniperTeam`＝ `]` キー／AI `-BattleAreaSniperKeep=n`）。すべて既定0。直接操作は G 投てき・V 近接・F 拳銃。ビルド・Test-Battle・Test-Area・自己試験 `-BattleArmsSmoke` 合格、既定の試合は main と IDENTICAL。試遊は `Setup\Play-Area.ps1 -Map I -Arms`（`FutureBattle-arms` から）。設計 `Docs/design-infantry-arms.md`。main へは未取り込み | **AIどうしでは手りゅう弾・近接・拳銃がほぼ使われない**（交戦距離が100〜150mで30m以内に近づかない。近接戦の動きは未実装）。強さの片側試験は未実施、数値は仮。画面での確認（模型・投てきの球・アニメ）は未実施。main への取り込み |
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
+
+## 2026-11-22 8時50分 Claude（Codex委任）：自走砲の構える深さ 0.35 で、外骨格の襲撃が自走砲を倒せた（main be98174、すべて既定0）
+
+- **組み込んだもの**：襲撃の途中は敵の数だけでは後退しない・集合中ならすぐ襲撃へ戻る（bc01833、`-BattleArtilleryRaidSneak` の中）、自走砲の構える深さの上書き `-BattleArtilleryStandoff=<0〜1>`（6708edf、既定は設定の 0.6）。
+- **検証**：Build 成功（codex・main）。`Test-Battle`・`Test-MixedSave`・`Test-Area` failures=0。マップE seed7 30FPS（保存往復あり）を組み込み前の main 45dd398 と比べて **IDENTICAL**（585/528、12072発）。
+- **評価**（マップI 30FPS、8時からの新しい既定（区画AIの組み合わせON）、両軍に自走砲1・外骨格1、`-ArtilleryFlash 1 -ArtilleryPosts 1 -SPGRange 55000 -AreaSPGCost 45 -ArtilleryRaidChase 1`）：
+
+  | 試合 | 得点 軍0/軍1 | 自走砲の発射 | 自走砲の撃破 | 自走砲の被撃破 | 襲撃の目標 x（軍1→軍0の砲） |
+  |---|---|---|---|---|---|
+  | s7 Sneak 0 | 691/571 | 118 | 113 | 0 | -27165 |
+  | s7 Sneak 80 | 677/356 | 86 | 74 | 0 | -27165〜-42880 |
+  | s7 Sneak 80・深さ0.35 | 634/473 | 16 | 17 | **2** | -13686 |
+  | s19 Sneak 0 | 662/511 | 122 | 92 | 0 | -27165 |
+  | s19 Sneak 80 | 701/472 | 89 | 59 | 0 | -27165〜-25326 |
+  | s19 Sneak 80・深さ0.35 | 625/567 | 17 | 21 | **1** | -13686〜-41239 |
+
+  **深さ0.35 で、自走砲は前線から約140m に構え、襲撃の外骨格に撃破された（3両とも外骨格のランチャー）。自走砲の発射は7分の1、撃破は5〜6分の1に下がった（2 seed で同じ向き）。** 深さ0.6 のままの Sneak 80 は発射が約3割減るだけで撃破はなく、襲撃の外骨格は途中で全滅する（`reason=inactive`）。出力は `FutureBattle-codex/Setup/Benchmarks/SightTrial-20261111/v2-I30-s{7,19}-*`。
+- **ユーザーの判断待ち**：自走砲を「前に出て撃つ・襲撃で倒せる」ものにする（深さ0.35〜0.4）なら、自走砲は今より弱くなる（発射が激減）。射程・費用・深さの組み合わせをどこに置くか。
 
 ## 2026-11-22 8時35分 Claude（群制御）：東のチームの前線の行の向きを、西と180度回転で対応するように直した（main へ）
 
