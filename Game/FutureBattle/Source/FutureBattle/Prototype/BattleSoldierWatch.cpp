@@ -19,11 +19,16 @@ bool UBattleLeaderRuntime::SoldierWatchEnabled(int32 Team)
 bool UBattleLeaderRuntime::SoldierWatchDirection(int32 ID,int32 TargetID,const FVector& Pos,double Now,FVector& Out)
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);if(!U)return false;
+ const auto* Perc=GetWorld()->GetSubsystem<UBattlePerception>();
+ // Not before his first perception scan (of the match, or after a load): a load rebuilds the squads' plans without targets and
+ // restores every contact out of sight, so a soldier who was firing would turn away from his enemy. Until that scan he keeps the
+ // facing he had (saved with his body), as in the match that was saved.
+ if(!Perc->LastScanTimes.Contains(ID))return false;
  auto& Diag=SightExperiment;
  // A contact he still holds: seen now, or within his memory (expired ones are dropped only at his next perception scan).
  const double Memory=U->Perception.MemorySeconds;
  auto Held=[&](const FBattleContact& K){return K.bVisible || Now-K.LastSeenTime<=Memory;};
- if(const auto* Contacts=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(ID))
+ if(const auto* Contacts=Perc->GetContacts(ID))
  {
   // 1. The squad's target, when he knows where it is (out of sight now): he keeps looking there. This also keeps him on the
   // target right after a load, when every restored contact is out of sight until his first scan.
