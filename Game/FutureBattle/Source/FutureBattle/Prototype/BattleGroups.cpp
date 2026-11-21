@@ -166,7 +166,7 @@ FVector UBattleMatch::GroupRally(int32 Team,int32 Point) const
 }
 
 // The fewest squads a group keeps: a player group and the front army one, other AI groups two.
-static int32 GroupMinimum(const FBattleGroup& G){return G.bPlayer||G.Kind==1?1:2;}
+static int32 GroupMinimum(const UBattleMatch::FBattleGroup& G){return G.bPlayer||G.Kind==1?1:2;}
 
 int32 UBattleMatch::ArmyOf(int32 SquadID) const
 {
