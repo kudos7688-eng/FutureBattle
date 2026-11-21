@@ -19,7 +19,7 @@ bool UBattleMatch::AreaIntelOn(int32 Team) const
 const UBattleMatch::FAreaIntelView& UBattleMatch::AreaIntelView(int32 Team) const
 {
  FAreaIntelView& V=IntelViews[FMath::Clamp(Team,0,1)];
- if(V.At>=0&&V.At<=Elapsed&&Elapsed-V.At<1.&&(!BattleTactics::TankGunFlash()||Elapsed<V.FlashExpiresAt))return V; // refreshed once per match second or at flash expiry
+ if(V.At>=0&&V.At<=Elapsed&&Elapsed-V.At<1.&&(!(BattleTactics::TankGunFlash()||BattleTactics::ArtilleryFlash())||Elapsed<V.FlashExpiresAt))return V; // refreshed once per match second or at flash expiry
  V=FAreaIntelView();V.At=Elapsed;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const auto* Perception=GetWorld()->GetSubsystem<UBattlePerception>();const auto* T=GetDefault<UBattleTuning>();
@@ -39,16 +39,16 @@ const UBattleMatch::FAreaIntelView& UBattleMatch::AreaIntelView(int32 Team) cons
    for(const auto& C:*Contacts)if(C.Value.bVisible&&!IsScoutLongContact(U.Key,C.Value)){Seen.Add(C.Key,C.Value.LastKnownPosition);if(BattleTactics::GroupStrengthEnabled()&&C.Value.ObservedSquadType<BattleSquadType::Count)V.EnemyTypes.Add(C.Key,C.Value.ObservedSquadType);}
  }
  AddScoutReportSightings(Team,Seen);
- if(BattleTactics::TankGunFlash())
+ if(BattleTactics::TankGunFlash()||BattleTactics::ArtilleryFlash())
  {
-  auto& Flashes=TankGunFlashes[FMath::Clamp(Team,0,1)];
+  auto& Flashes=FireReveals[FMath::Clamp(Team,0,1)];
   for(auto FlashIt=Flashes.CreateIterator();FlashIt;++FlashIt)
-   if(FlashIt.Value().At>Elapsed||Elapsed-FlashIt.Value().At>=TankGunFlashMemory)FlashIt.RemoveCurrent();
+   if(FlashIt.Value().At>Elapsed||Elapsed-FlashIt.Value().At>=FlashIt.Value().Memory)FlashIt.RemoveCurrent();
   TArray<int32> FlashKeys;Flashes.GetKeys(FlashKeys);FlashKeys.Sort();
   for(int32 FlashKey:FlashKeys)
   {
    const auto& Flash=Flashes[FlashKey];
-   V.FlashExpiresAt=FMath::Min(V.FlashExpiresAt,Flash.At+TankGunFlashMemory);
+   V.FlashExpiresAt=FMath::Min(V.FlashExpiresAt,Flash.At+Flash.Memory);
    if(!Seen.Contains(FlashKey))Seen.Add(FlashKey,Flash.Position);
   }
  }

@@ -165,7 +165,8 @@ bool UBattleLeaderRuntime::FireTankGun(int32 ID,const FVector& Aim,double Now)
    FRandomStream FlashRandom(int32(uint32(ID)*2654435761u+uint32(G.Shots)*40503u+7919u));
    const float FlashAngle=FlashRandom.FRand()*2.f*PI;
    const float FlashRadius=FMath::Sqrt(FlashRandom.FRand())*TankGunFlashErrorRadius;
-   auto& FlashReport=M->TankGunFlashes[FlashTeam].FindOrAdd(ID);
+   auto& FlashReport=M->FireReveals[FlashTeam].FindOrAdd(ID);
+   FlashReport.Memory=10.;FlashReport.ErrorRadius=TankGunFlashErrorRadius;
    FlashReport.At=M->Elapsed;FlashReport.Position=Start+FVector(FMath::Cos(FlashAngle)*FlashRadius,FMath::Sin(FlashAngle)*FlashRadius,0);
    M->IntelViews[FlashTeam].At=-1;
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_FLASH team=%d shooter=%d observer=%d range=%.0f at=%s"),FlashTeam,ID,FlashLeader,FMath::Sqrt(FlashRangeSquared),*FlashReport.Position.ToCompactString());

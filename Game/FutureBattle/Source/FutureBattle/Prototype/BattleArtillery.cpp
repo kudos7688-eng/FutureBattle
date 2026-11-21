@@ -17,6 +17,7 @@
 #include "FutureBattle.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Math/RandomStream.h"
 
 bool BattleTactics::ArtilleryObservedEnabled()
 {
@@ -40,6 +41,21 @@ bool BattleTactics::TankGunFlash()
 {
  static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleTankGunFlash="),V);return V==1;}();
  return On;
+}
+
+bool BattleTactics::ArtilleryFlash()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryFlash="),V);return V==1;}();
+ return On;
+}
+
+float BattleTactics::SPGRange()
+{
+ static float OverrideRange=GetDefault<UBattleTuning>()->SPGRange;
+ static const bool HasOverride=FParse::Value(FCommandLine::Get(),TEXT("BattleSPGRange="),OverrideRange);
+ const auto* RangeTuning=GetDefault<UBattleTuning>();
+ // Preserve the raw config without an override, including the original spread reference.
+ return HasOverride?FMath::Clamp(OverrideRange,FMath::Max(0.f,RangeTuning->SPGMinRange)+100.f,200000.f):RangeTuning->SPGRange;
 }
 
 namespace { int32 SaveReloadBoundarySmokeOverride=-1; }
@@ -88,9 +104,9 @@ float UBattleLeaderRuntime::ArtilleryMinRange(bool bSPG) const
 
 float UBattleLeaderRuntime::ArtilleryMaxRange(bool bSPG) const
 {
- // Mortar: 300 m, 400 m with the range profile (map E). Gun: 1000 m on every map.
+ // Mortar: 300 m, 400 m with the range profile (map E). Gun: configured 1000 m unless overridden for the trial.
  const auto* T=GetDefault<UBattleTuning>();
- const float Range=bSPG?T->SPGRange:(BattleRanges::Get().bActive?T->MortarRangeProfile:T->MortarRange);
+ const float Range=bSPG?BattleTactics::SPGRange():(BattleRanges::Get().bActive?T->MortarRangeProfile:T->MortarRange);
  return FMath::Max(ArtilleryMinRange(bSPG)+100.f,Range);
 }
 
@@ -104,7 +120,7 @@ float UBattleLeaderRuntime::ArtillerySpread(bool bSPG,double Distance) const
 {
  // The landing circle grows with distance: MortarSpread at MortarRange (8 m at 300 m), SPGSpread at SPGRange (15 m at 1000 m).
  const auto* T=GetDefault<UBattleTuning>();
- const float At=FMath::Max(0.f,bSPG?T->SPGSpread:T->MortarSpread),Reference=FMath::Max(100.f,bSPG?T->SPGRange:T->MortarRange);
+ const float At=FMath::Max(0.f,bSPG?T->SPGSpread:T->MortarSpread),Reference=FMath::Max(100.f,bSPG?BattleTactics::SPGRange():T->MortarRange);
  return At*float(FMath::Max(0.0,Distance))/Reference;
 }
 
@@ -358,6 +374,36 @@ bool UBattleLeaderRuntime::FireArtillery(int32 ID,const FVector& Aim,double Now)
  const auto* SS=Store->FindSquad(U->SquadID);Shell.ShooterType=SS?SS->SquadType:0;
  Shell.Remaining=float(Distance/FMath::Max(100.f,bSPG?T->SPGShellSpeed:T->MortarShellSpeed));
  ArtilleryShells.Add(Shell);
+ if(BattleTactics::ArtilleryFlash()&&U->Team>=0&&U->Team<2)
+ {
+  if(auto* RevealMatch=GetWorld()->GetSubsystem<UBattleMatch>())
+  {
+   const int32 RevealTeam=1-U->Team;
+   TArray<int32> RevealSquads;
+   for(const auto& RevealSquad:Store->GetSquads())
+    if(RevealSquad.Value.Team==RevealTeam&&RevealSquad.Value.CommandStatus==EBattleCommandStatus::Active)RevealSquads.Add(RevealSquad.Key);
+   RevealSquads.Sort();
+   for(int32 RevealSquadID:RevealSquads)
+   {
+    const auto* RevealSquadState=Store->FindSquad(RevealSquadID);
+    const int32 RevealLeader=RevealSquadState->LeaderUnitID;
+    const auto* RevealUnit=Store->Find(RevealLeader);
+    if(!RevealUnit||!RevealUnit->IsAlive()||RevealUnit->Team!=RevealTeam)continue;
+    const double RevealDistanceSquared=FVector::DistSquared(Position(RevealLeader),Start);
+    if(RevealDistanceSquared>FMath::Square(150000.))continue;
+    // Sound and smoke: no LOS trace. Independent stream, uniform disc area.
+    FRandomStream RevealRandom(int32(uint32(ID)*2654435761u+uint32(A.Shots)*40503u+15401u));
+    auto& RevealReport=RevealMatch->FireReveals[RevealTeam].FindOrAdd(ID);
+    RevealReport.At=RevealMatch->Elapsed;RevealReport.Memory=30.;RevealReport.ErrorRadius=3000.f;
+    const float RevealAngle=RevealRandom.FRand()*2.f*PI;
+    const float RevealRadius=FMath::Sqrt(RevealRandom.FRand())*RevealReport.ErrorRadius;
+    RevealReport.Position=Start+FVector(FMath::Cos(RevealAngle)*RevealRadius,FMath::Sin(RevealAngle)*RevealRadius,0);
+    RevealMatch->IntelViews[RevealTeam].At=-1;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_FLASH team=%d shooter=%d type=%s observer=%d range=%.0f at=%s"),RevealTeam,ID,bSPG?TEXT("spg"):TEXT("mortar"),RevealLeader,FMath::Sqrt(RevealDistanceSquared),*RevealReport.Position.ToCompactString());
+    break;
+   }
+  }
+ }
  if(bSPG)++ArtilleryShotsSPG;else ++ArtilleryShotsMortar;
  if(SightExperiment.Started){++SightExperiment.Shots;if(SS&&SS->SquadType<BattleSquadType::Count&&U->Team>=0&&U->Team<2)++SightExperiment.TypeShots[U->Team][SS->SquadType];}
  if(U->Team==0||(Actor(ID)&&Actor(ID)->bRevealed))DrawDebugLine(GetWorld(),Start+FVector(0,0,60),Start+FVector(0,0,600),U->Team?FColor::Red:FColor::Yellow,false,.3f,0,4);

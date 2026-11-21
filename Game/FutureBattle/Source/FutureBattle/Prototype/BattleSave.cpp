@@ -419,7 +419,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
  SquadGroup=Save->SavedSquadGroup;NextGroupID=Save->SavedNextGroupID;
  // Rebuilt on demand from restored observations; never persist a cached view of the future.
  IntelViews[0]=IntelViews[1]=FAreaIntelView();
- TankGunFlashes[0].Reset();TankGunFlashes[1].Reset();
+ FireReveals[0].Reset();FireReveals[1].Reset();
 	Strikes = Save->Strikes; SupportCooldown[0] = Save->AllySupportCooldown; SupportCooldown[1] = Save->EnemySupportCooldown; SupportUsed[0] = Save->AllySupportUsed; SupportUsed[1] = Save->EnemySupportUsed;
 	Mode->bCombatPaused = Save->bPaused; Mode->bBattleEnded = Phase == EBattleMatchPhase::Finished; Mode->Result = Save->Result; Mode->CombatStartsAt = Now;
 	for (int32 Index = 0; Index < Spawned.Num(); ++Index)

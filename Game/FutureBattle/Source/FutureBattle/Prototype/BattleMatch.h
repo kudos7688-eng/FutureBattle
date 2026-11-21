@@ -254,9 +254,9 @@ public:
 	void UpdateIntelPurposes();
 	TMap<int32, int32> IntelPurpose;           // squad -> point it was bought to defend (transient)
 	mutable FAreaIntelView IntelViews[2];
- struct FTankGunFlash { double At=0; FVector Position=FVector::ZeroVector; };
- static constexpr double TankGunFlashMemory=10.; // Match seconds; transient, never saved.
- mutable TMap<int32,FTankGunFlash> TankGunFlashes[2];
+ struct FFireReveal { double At=0,Memory=10.; float ErrorRadius=500.f; FVector Position=FVector::ZeroVector; };
+ // Shared gun reports, keyed by shooter unit ID; match seconds, transient, never saved.
+ mutable TMap<int32,FFireReveal> FireReveals[2];
 	TMap<int32, FScoutReport> ScoutReports;
 	void UpdateScoutReports();
 	// True when a scout sees this contact only because of its long still-sight (team displays and plans use the reports instead).
