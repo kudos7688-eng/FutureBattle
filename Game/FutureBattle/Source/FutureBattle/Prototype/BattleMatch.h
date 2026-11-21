@@ -235,6 +235,8 @@ public:
 		int32 SurpriseBridgeLeader = INDEX_NONE;
 		float SurpriseBridgeAt = 0.f; /* when the current bridge leg began */
 		int32 SurpriseNextCol = -1; /* surprise group: the furthest stop column given in phase 1; a temporary pull-back does not move it back */
+		TArray<int32> FrontHold; /* front-holding group: the line the group holds, one column per row (own-home based); moved by UpdateFrontLine only */
+		float FrontStepAt = 0.f; /* front-holding group: when its line last stepped forward */
 		FVector SurpriseBridgeEntry = FVector::ZeroVector, SurpriseBridgeExit = FVector::ZeroVector, SurpriseBridgeGoal = FVector::ZeroVector;
 		float SurpriseWaitAt = -1.f, SurpriseLogAt = 0.f, SurpriseEndAt = 0.f; /* surprise group: since when its lead waits for the others; next progress log; when it ends whatever its phase */ };
 	bool UpdateSurpriseBridge(FBattleGroup& Group,const FVector& Lead);

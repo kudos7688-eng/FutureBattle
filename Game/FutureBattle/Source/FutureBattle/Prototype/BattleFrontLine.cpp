@@ -36,6 +36,14 @@ namespace BattleFrontValues
  // drops on the front army tab hold the line; the AI teams keep the earlier allocation.
  bool AutoFill(){static const int32 On=Arg(TEXT("BattleFrontAuto="),1);return On!=0;}
  bool Gap(){static const int32 On=Arg(TEXT("BattleFrontGap="),1);return On!=0;}
+ // The front army holds one line as a group (user report 2026-11-21 after test play: its squads moved each on their own and went back
+ // and forth, because the line followed where own soldiers stood and each band stepped forward by itself). The group keeps its line
+ // (FBattleGroup::FrontHold): a row falls back only before two or more known enemies; the whole line steps one column forward at once
+ // when most squads stand on their posts and no enemy is known ahead. Posts stay laid out for the whole group, also while squads are
+ // away for supply. -BattleFrontHold=0: the earlier line from own positions. Needs the front army.
+ bool Hold(){static const int32 On=Arg(TEXT("BattleFrontHold="),1);return On!=0&&Army();}
+ constexpr float StepHold=20.f, StepLate=60.f; // least time between steps; after StepLate half of the squads on their posts suffice
+ constexpr double StepReady=.75, StepReadyLate=.5, OnPost=3500.; // share of squads on their posts; within this of the post (cm)
  // Sector kinds by the cover they give a squad that waits there (river sectors are not held).
  double Cover(char Kind){switch(Kind){case 'H':case 'W':return 3.;case 'T':case '^':return 2.;case 'J':case 'B':case 'S':return 1.;case 'R':return -100.;default:return 0.;}}
 }
@@ -182,8 +190,43 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  TMap<int32,FIntPoint> Previous; // the front army keeps a squad on its last post when that sector is still wanted
  for(auto It=FrontPosts.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||S->Team==Team){if(S)Previous.Add(It.Key(),BattleSectors::Cell(It.Value()));It.RemoveCurrent();}
  FString Posts;
- if(const auto* G=FrontID!=INDEX_NONE?Groups.Find(FrontID):nullptr)
+ if(auto* G=FrontID!=INDEX_NONE?Groups.Find(FrontID):nullptr)
  {
+  // 6a. The group's own line (Hold()).
+  if(Hold())
+  {
+   auto& H=G->FrontHold;
+   if(H.Num()!=Rows){H=Line;G->FrontStepAt=Elapsed;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_HOLD team=%d group=%d start time=%.1f"),Team,FrontID,Elapsed);}
+   for(int32 Y=0;Y<Rows;++Y)H[Y]=FMath::Clamp(FMath::Min(H[Y],EnemyCol[Y]-1),HomeCol,FMath::Max(HomeCol,EnemyHomeCol-2));
+   int32 OnPosts=0,Posted=0;
+   for(int32 SID:G->Squads)if(const FIntPoint* Last=Previous.Find(SID))if(const auto* S=Store->FindSquad(SID))
+   {
+    if(S->TacticalPlan.Action==EBattleSquadTactic::Recover&&S->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY")))continue;
+    ++Posted;if(FVector::DistSquared2D(R->Position(S->LeaderUnitID),BattleSectors::Center(*Last))<=FMath::Square(OnPost))++OnPosts;
+   }
+   const float Since=Elapsed-G->FrontStepAt;const double Ready=Posted?double(OnPosts)/Posted:0.;
+   if(Posted&&Since>=StepHold&&(Ready>=StepReady||(Since>=StepLate&&Ready>=StepReadyLate)))
+   {
+    TArray<int32> Next=H;int32 Moved=0;
+    for(int32 Y=0;Y<Rows;++Y)
+    {
+     int32 Nearest=Cols;for(int32 Z=FMath::Max(0,Y-1);Z<FMath::Min(Rows,Y+2);++Z)Nearest=FMath::Min(Nearest,EnemyCol[Z]);
+     if(Nearest-H[Y]>ClearAhead&&H[Y]+1<EnemyHomeCol-1){++Next[Y];++Moved;}
+    }
+    for(int32 Pass=0;Pass<Rows;++Pass)for(int32 Y=0;Y<Rows;++Y)
+    {
+     if(Y>0)Next[Y]=FMath::Min(Next[Y],Next[Y-1]+1);
+     if(Y+1<Rows)Next[Y]=FMath::Min(Next[Y],Next[Y+1]+1);
+    }
+    if(Next!=H)
+    {
+     H=Next;G->FrontStepAt=Elapsed;
+     FString L;for(int32 Y=0;Y<Rows;++Y)L+=FString::Printf(TEXT("%s%d"),Y?TEXT(","):TEXT(""),H[Y]);
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_STEP team=%d group=%d on_post=%d/%d rows=%d line=%s time=%.1f"),Team,FrontID,OnPosts,Posted,Moved,*L,Elapsed);
+    }
+   }
+   Line=H;FrontLine[Team]=Line;
+  }
   struct FMember{int32 SID;double Row;};TArray<FMember> Present;
   for(int32 SID:G->Squads)if(const auto* S=Store->FindSquad(SID))
   {
@@ -192,16 +235,18 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
   }
   Present.Sort([](const FMember& A,const FMember& B){return A.Row!=B.Row?A.Row<B.Row:A.SID<B.SID;});
   const int32 K=Present.Num();
+  // Bands: one per squad of the group with Hold() (a squad away for supply keeps its band empty, so the others keep their posts).
+  const int32 NB=Hold()?FMath::Max(K,G->Squads.Num()):K;
   // Front army: sectors with a point not observed as own (it takes the point as it holds the line), and one post per sector.
   TSet<FIntPoint> Used,Points;TArray<FIntPoint> Cells;TArray<bool> Pushes;
   if(Army())for(int32 I=0;I<Objectives.Num();++I)if(ObservedOwner(Team,I)!=Team)if(const FIntPoint C=BattleSectors::Cell(Objectives[I].Position);BattleSectors::Valid(C))Points.Add(C);
-  for(int32 I=0;I<K;++I)
+  for(int32 I=0;I<NB;++I)
   {
-   const int32 Y0=I*Rows/K,Y1=FMath::Max(Y0+1,(I+1)*Rows/K);
+   const int32 Y0=I*Rows/NB,Y1=FMath::Max(Y0+1,(I+1)*Rows/NB);
    // The band's line: its rearmost row. Step forward when no enemy is known within ClearAhead columns ahead of the band (rows +-1).
    int32 Col=Cols;for(int32 Y=Y0;Y<Y1;++Y)Col=FMath::Min(Col,Line[Y]);
    int32 Nearest=Cols;for(int32 Y=FMath::Max(0,Y0-1);Y<FMath::Min(Rows,Y1+1);++Y)Nearest=FMath::Min(Nearest,EnemyCol[Y]);
-   const bool bPush=Nearest-Col>ClearAhead&&Col+1<EnemyHomeCol-1;
+   const bool bPush=!Hold()&&Nearest-Col>ClearAhead&&Col+1<EnemyHomeCol-1; // Hold(): the group steps the whole line (6a)
    const int32 Target=bPush?Col+1:Col;
    const double Mid=(Y0+Y1-1)*.5;
    double BestScore=-1e9;FIntPoint Best=FrontCell(Team,Target,FMath::RoundToInt(Mid));
@@ -218,20 +263,20 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
   }
   // Squads to posts. The front army: a squad keeps its last post when that sector is still one of them, the rest go to the nearest free
   // post (user report 2026-11-21: squads went back and forth because bands followed the squads' row order, which changes as they move).
-  TArray<int32> Owner;Owner.Init(INDEX_NONE,K);
+  TArray<int32> Owner;Owner.Init(INDEX_NONE,NB);
   if(Army())
   {
    TArray<bool> Placed;Placed.Init(false,K);
    for(int32 I=0;I<K;++I)if(const FIntPoint* Last=Previous.Find(Present[I].SID))
-    for(int32 J=0;J<K;++J)if(Owner[J]==INDEX_NONE&&Cells[J]==*Last){Owner[J]=I;Placed[I]=true;break;}
+    for(int32 J=0;J<NB;++J)if(Owner[J]==INDEX_NONE&&Cells[J]==*Last){Owner[J]=I;Placed[I]=true;break;}
    struct FPair{double D;int32 I,J;};TArray<FPair> Pairs;
    for(int32 I=0;I<K;++I)if(!Placed[I])if(const auto* S=Store->FindSquad(Present[I].SID))
-   {const FVector P=R->Position(S->LeaderUnitID);for(int32 J=0;J<K;++J)if(Owner[J]==INDEX_NONE)Pairs.Add({FVector::DistSquared2D(P,BattleSectors::Center(Cells[J])),I,J});}
+   {const FVector P=R->Position(S->LeaderUnitID);for(int32 J=0;J<NB;++J)if(Owner[J]==INDEX_NONE)Pairs.Add({FVector::DistSquared2D(P,BattleSectors::Center(Cells[J])),I,J});}
    Pairs.Sort([](const FPair& A,const FPair& B){return A.D!=B.D?A.D<B.D:A.I!=B.I?A.I<B.I:A.J<B.J;});
    for(const auto& Pair:Pairs)if(!Placed[Pair.I]&&Owner[Pair.J]==INDEX_NONE){Owner[Pair.J]=Pair.I;Placed[Pair.I]=true;}
   }
   else for(int32 J=0;J<K;++J)Owner[J]=J;
-  for(int32 J=0;J<K;++J)if(Owner[J]!=INDEX_NONE)
+  for(int32 J=0;J<NB;++J)if(Owner[J]!=INDEX_NONE)
   {
    const int32 SID=Present[Owner[J]].SID;
    FrontPosts.Add(SID,BattleSectors::Center(Cells[J]));
@@ -561,6 +606,7 @@ void UBattleMatch::ClampFrontTimers()
   FrontLineLogAt[T]=FMath::Min(FrontLineLogAt[T],Elapsed+BattleFrontValues::LogInterval);
   SurpriseNextAt[T]=FMath::Min(SurpriseNextAt[T],Elapsed+BattleSurpriseValues::Interval);
  }
+ for(auto& P:Groups)if(P.Value.Kind==1)P.Value.FrontStepAt=FMath::Min(P.Value.FrontStepAt,Elapsed);
  for(auto& P:Groups)if(P.Value.Kind==2)
  {
   auto& G=P.Value;

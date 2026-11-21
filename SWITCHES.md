@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 346 種類。
+計 347 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -127,8 +127,9 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleFrontArmy` | Value | 1 | BattleFrontLine.cpp:32 | Arg → BattleFrontLine.cpp:30（ヘルパー経由） |
 | `-BattleFrontAuto` | Value | 1 | BattleFrontLine.cpp:37 | Arg → BattleFrontLine.cpp:30（ヘルパー経由） |
 | `-BattleFrontGap` | Value | 1 | BattleFrontLine.cpp:38 | Arg → BattleFrontLine.cpp:30（ヘルパー経由） |
-| `-BattleFrontLine` | Value | 1 | BattleFrontLine.cpp:46 | Arg → BattleFrontLine.cpp:30（ヘルパー経由） |
-| `-BattleFrontSquads` | Value | 4 | BattleFrontLine.cpp:145 | Arg → BattleFrontLine.cpp:30（ヘルパー経由） |
+| `-BattleFrontHold` | Value | 1 | BattleFrontLine.cpp:44 | Arg → BattleFrontLine.cpp:30（ヘルパー経由） |
+| `-BattleFrontLine` | Value | 1 | BattleFrontLine.cpp:54 | Arg → BattleFrontLine.cpp:30（ヘルパー経由） |
+| `-BattleFrontSquads` | Value | 4 | BattleFrontLine.cpp:153 | Arg → BattleFrontLine.cpp:30（ヘルパー経由） |
 | `-BattleGroupFireSupport` | Value | 1 | BattleArtillery.cpp:202, BattleGroups.cpp:290 | default 1 (user 2026-11-21) |
 | `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:534 |  |
 | `-BattleHeavyCost` | Value | 未解決 | BattleState.cpp:564 |  |
@@ -276,8 +277,8 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSuppressionRadius` | Value | 200.f | BattleSuppression.cpp:14 |  |
 | `-BattleSuppressionSpread` | Value | 1.5f | BattleSuppression.cpp:15 |  |
 | `-BattleSuppressionSupport` | Value | 1.f | BattleSuppression.cpp:17 |  |
-| `-BattleSurpriseGroup` | Value | 0 | BattleFrontLine.cpp:387 | Arg → BattleFrontLine.cpp:30（ヘルパー経由） |
-| `-BattleSurpriseSquads` | Value | 2 | BattleFrontLine.cpp:408 | Arg → BattleFrontLine.cpp:30（ヘルパー経由） |
+| `-BattleSurpriseGroup` | Value | 0 | BattleFrontLine.cpp:432 | Arg → BattleFrontLine.cpp:30（ヘルパー経由） |
+| `-BattleSurpriseSquads` | Value | 2 | BattleFrontLine.cpp:453 | Arg → BattleFrontLine.cpp:30（ヘルパー経由） |
 | `-BattleSymmetricStart` | Value | -1 | BattleGroups.cpp:58 |  |
 | `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:70 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |
@@ -293,7 +294,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleVATFarLight` | Value | 0 | BattleVATDisplay.cpp:37 |  |
 | `-BattleVehicleHitCover` | Strifind/Value | 0 | BattleAreaSmoke.cpp:466, BattleArtillery.cpp:42 |  |
 | `-BattleVehicleOrderHere` | Value | 0 | BattleArtillery.cpp:36 |  |
-| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:457, BattleSightExperiment.cpp:40 |  |
+| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:459, BattleSightExperiment.cpp:40 |  |
 | `-BattleWaypointPass` | Value | 0 | BattleStableMovement.cpp:375 |  |
 | `-BattleWeaponLoadouts` | Param | off | BattleSquadTrial.cpp:50 |  |
 | `-BattleWeaponOrderGate` | Value | 0 | BattleWeaponOrders.cpp:10 |  |
