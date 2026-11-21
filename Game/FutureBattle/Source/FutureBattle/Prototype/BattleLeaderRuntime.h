@@ -224,7 +224,7 @@ public:
  // FaceVehicle: a stopped vehicle turns its hull (its forward view) at its turn rate. VehicleWatchDirection: towards the nearest
  // enemy its team knows of, else the enemy home.
  bool HasArmourKnowledge(int32 Team) const;
- void PickArmourTargets(int32 SquadID,struct FBattleLeaderPlan& Plan,const TSet<int32>* AllowedTargets=nullptr);
+ void PickArmourTargets(int32 SquadID,struct FBattleLeaderPlan& Plan,const TSet<int32>* AllowedTargets=nullptr,FVector* SelectedPosition=nullptr);
  void FaceVehicle(int32 ID,const FVector& Direction);
  FVector VehicleWatchDirection(int32 ID) const;
  // Navigation data for a unit's paths: the vehicle agent for tanks, nullptr (the default infantry data) otherwise.
@@ -612,6 +612,8 @@ private:
  TSharedPtr<FMassEntityManager> Manager;
  TMap<int32,FBattleLeaderBody> Bodies;
  TMap<int32,FBattleLeaderPlan> Plans;
+ bool ObservedAvoidancePosition(int32 ObserverID,int32 OtherID,FVector& OutPosition) const;
+ void BuildObservedAvoidance(int32 ObserverID,TMap<FIntPoint,int32>& OutGrid,TArray<TArray<int32>>& OutBuckets,TMap<int32,FVector>& OutPositions) const;
  TMap<FIntPoint,int32> AvoidanceGrid;
  TArray<TArray<int32>> AvoidanceBuckets;
  TArray<int32> AvoidanceUsed;

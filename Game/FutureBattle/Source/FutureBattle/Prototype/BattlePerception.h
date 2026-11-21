@@ -17,6 +17,8 @@ struct FBattleContact
 	UPROPERTY() bool bVisible = false;
 	UPROPERTY() int32 SourceUnitID = INDEX_NONE;
 	UPROPERTY() bool bShared = false;
+ bool bLongRangeObservation = true; // Unknown provenance stays restricted until a fresh sensor observation; copied with reports.
+ bool bLocalShareEligible = false; // Measured at acquisition, not from the sender's later position.
 };
 
 USTRUCT()

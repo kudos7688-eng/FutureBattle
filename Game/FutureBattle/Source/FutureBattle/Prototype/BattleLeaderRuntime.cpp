@@ -610,6 +610,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  const bool bShotAt=Sector && (SectorContactEnabled() || SectorMoveFireEnabled() || SectorFireBack.Contains(SID)) && SquadShotAt(*S,Now);
  const FIntPoint SectorCell=Sector?BattleSectors::Cell(S->Destination):FIntPoint(-1,-1);
  auto OutsideOK=[&](int32 ID,const FVector& At){return bShotAt && FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));};
+ FVector SelectedTargetAt=FVector::ZeroVector;
  P.TargetID=INDEX_NONE; double Best=DBL_MAX;
  P.Center=FVector::ZeroVector; int32 Count=0; for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) { P.Center+=Position(ID); ++Count; } if(Count) P.Center/=Count;
  if(S->Order!=EBattleOrder::Move) for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) if(const auto* Contacts=Sense->GetContacts(ID))
@@ -620,7 +621,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    if(!BattleTactics::OrderAllowsTarget(*S,C.Key,C.Value.LastKnownPosition))continue;
    if(bArmourSectorGate)AllowedArmourTargets.Add(C.Key);
    const double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
-   if(D<Best || (D==Best && C.Key<P.TargetID)) { Best=D; P.TargetID=C.Key; }
+   if(D<Best || (D==Best && C.Key<P.TargetID)) { Best=D; P.TargetID=C.Key;if(BattleTactics::ObservedTactics())SelectedTargetAt=C.Value.LastKnownPosition; }
   }
  // Trial -BattleReacquireGrace=1: keep the previous target briefly while a member's own (non-shared) sighting is
  // fresh. Firing still requires a current line of sight (CanEngage/CanSee); this only avoids dropping the engagement.
@@ -635,23 +636,25 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
     if(Sector && BattleSectors::Cell(C->LastKnownPosition)!=SectorCell && !OutsideOK(ID,C->LastKnownPosition)) continue;
     if(!BattleTactics::OrderAllowsTarget(*S,PreviousTarget,C->LastKnownPosition))continue;
     if(bArmourSectorGate)AllowedArmourTargets.Add(PreviousTarget);
-    P.TargetID=PreviousTarget;SightExperiment.Cover(TEXT("squad_target_held"));break;
+    P.TargetID=PreviousTarget;if(BattleTactics::ObservedTactics())SelectedTargetAt=C->LastKnownPosition;SightExperiment.Cover(TEXT("squad_target_held"));break;
    }
  }
  // With the trial on, reprioritize before deriving the sector-contact and cover decisions from the chosen target.
  if(bArmourSectorGate)
  {
   P.ArmourTargetID=INDEX_NONE;
-  if((BattleTactics::ObservedArmour()?HasArmourKnowledge(S->Team):VehicleIDs.Num()>0)&&S->Order!=EBattleOrder::Move&&BattleTactics::ArmourAI(S->Team))PickArmourTargets(SID,P,&AllowedArmourTargets);
+  if((BattleTactics::ObservedArmour()?HasArmourKnowledge(S->Team):VehicleIDs.Num()>0)&&S->Order!=EBattleOrder::Move&&BattleTactics::ArmourAI(S->Team))PickArmourTargets(SID,P,&AllowedArmourTargets,BattleTactics::ObservedTactics()?&SelectedTargetAt:nullptr);
  }
  P.bSectorContact=false;
  if(bShotAt && P.TargetID!=INDEX_NONE)
  {
-  for(int32 ID:S->Members)if(const auto* C=Sense->FindContact(ID,P.TargetID)){P.bSectorContact=BattleSectors::Cell(C->LastKnownPosition)!=SectorCell;break;}
+  if(BattleTactics::ObservedTactics())P.bSectorContact=BattleSectors::Cell(SelectedTargetAt)!=SectorCell;
+  else for(int32 ID:S->Members)if(const auto* C=Sense->FindContact(ID,P.TargetID)){P.bSectorContact=BattleSectors::Cell(C->LastKnownPosition)!=SectorCell;break;}
   if(P.bSectorContact)SightExperiment.Cover(TEXT("sector_contact_target"));
  }
  FVector TargetAt=FVector::ZeroVector;bool bTargetKnown=false;
- if(P.TargetID!=INDEX_NONE)for(int32 ID:S->Members)if(const auto* C=Sense->FindContact(ID,P.TargetID)){TargetAt=C->LastKnownPosition;bTargetKnown=true;break;}
+ if(BattleTactics::ObservedTactics()){TargetAt=SelectedTargetAt;bTargetKnown=P.TargetID!=INDEX_NONE;}
+ else if(P.TargetID!=INDEX_NONE)for(int32 ID:S->Members)if(const auto* C=Sense->FindContact(ID,P.TargetID)){TargetAt=C->LastKnownPosition;bTargetKnown=true;break;}
  // Trial -BattleSquadCoverCheck=1: a squad that fires on the move decides as a whole whether to stop in cover here - only when
  // it can hide and is at least even with the enemies it sees; otherwise it keeps firing on the move.
  if(SquadCoverCheckEnabled() && Sector && (SectorMoveFireEnabled() || SectorFireBack.Contains(SID)) && bTargetKnown &&
@@ -836,9 +839,10 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,TargetID);
  // Regrouping does not replenish ammunition, but may load existing reserve without an enemy target.
  if(bWideField && U->Ammo==0 && U->Reserve>0 && U->ReloadEndTime==0) Store->StartReload(ID,Now);
- const bool CanEngage=Contact && Contact->bVisible && !Contact->bShared && !bSaveRounds &&
+ const bool ObservedEngage=Contact && Contact->bVisible && !Contact->bShared && !bSaveRounds &&
   (!bRangeAwareCombat || FVector::DistSquared(Pos,Contact->LastKnownPosition)<=FMath::Square(UnderFire(ID)?BattleRanges::Reach(U->Weapon):BattleRanges::Engage(U->Weapon))) &&
-  (S->TacticalPlan.Action!=EBattleSquadTactic::Support || TargetID==S->TacticalPlan.SupportTarget) && CanSee(ID,TargetID);
+  (S->TacticalPlan.Action!=EBattleSquadTactic::Support || TargetID==S->TacticalPlan.SupportTarget);
+ const bool CanEngage=ObservedEngage&&CanSee(ID,TargetID);
  // Evaluation only: an engagement that only the return-fire rule allows (beyond the AI engagement distance, within reach).
  if(CanEngage&&SightExperiment.Enabled&&bRangeAwareCombat&&UnderFire(ID)&&FVector::DistSquared(Pos,Contact->LastKnownPosition)>FMath::Square(BattleRanges::Engage(U->Weapon)))SightExperiment.Cover(TEXT("return_fire_engage"));
  // Trial -BattleSectorContact=1: against an enemy outside the sector, a soldier stops only in cover (or on his way to it);
@@ -950,16 +954,21 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   const float Width=B.StalledSince>0?0.f:float(Slot%5-2)*80.f;
   const FVector Way=P->Path[B.Waypoint]+FVector(-Segment.Y,Segment.X,0)*Width;
   FVector D=(Way-Pos).GetSafeNormal2D();
+ const bool bObservedAvoidance=BattleTactics::ObservedTactics();
+ TMap<FIntPoint,int32> ObservedGrid;TArray<TArray<int32>> ObservedBuckets;TMap<int32,FVector> ObservedPositions;
+ if(bObservedAvoidance)BuildObservedAvoidance(ID,ObservedGrid,ObservedBuckets,ObservedPositions);
+ const auto& MovementGrid=bObservedAvoidance?ObservedGrid:AvoidanceGrid;
+ const auto& MovementBuckets=bObservedAvoidance?ObservedBuckets:AvoidanceBuckets;
   // A shared corridor, with local spacing; no per-follower NavMesh query.
   FVector Separation=FVector::ZeroVector;
   const FIntPoint Cell(FMath::FloorToInt(Pos.X/150.),FMath::FloorToInt(Pos.Y/150.));
   int32 Checked=0;
   for(int32 X=-1;X<=1 && Checked<32;++X) for(int32 Y=-1;Y<=1 && Checked<32;++Y)
-   if(const int32* NearbyBucket=AvoidanceGrid.Find(Cell+FIntPoint(X,Y))) for(int32 Other:AvoidanceBuckets[*NearbyBucket])
+   if(const int32* NearbyBucket=MovementGrid.Find(Cell+FIntPoint(X,Y))) for(int32 Other:MovementBuckets[*NearbyBucket])
    {
-    if(Other==ID || !Store->Find(Other)->IsAlive()) continue;
+    if(Other==ID || (!bObservedAvoidance&&!Store->Find(Other)->IsAlive())) continue;
     if(++Checked>32) break;
-    const FVector Away=Pos-Position(Other); const double Dist=Away.Size2D();
+    const FVector Away=Pos-(bObservedAvoidance?ObservedPositions.FindChecked(Other):Position(Other)); const double Dist=Away.Size2D();
     if(Dist>1 && Dist<95) Separation+=Away.GetSafeNormal2D()*(95-Dist)/95;
    }
   Direction=bWideField?LimitedSteering(D,Separation,GetDefault<UBattleTuning>()->WideAvoidanceMaxSide):(D+Separation*.65).GetSafeNormal2D();
@@ -1040,7 +1049,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  Store->UpdateAim(ID,Now,B.Velocity.Size2D(),Direction,true);
  if(BaseEngage)Fire(ID,Pos+Muzzle,Direction,false);
  if(CanEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false) && S->TacticalPlan.Action==EBattleSquadTactic::Support) GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(S->SquadID,TargetID); }
- Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:CanEngage?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
+ Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:(BattleTactics::ObservedTactics()?ObservedEngage:CanEngage)?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
 }
 bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot)
 {

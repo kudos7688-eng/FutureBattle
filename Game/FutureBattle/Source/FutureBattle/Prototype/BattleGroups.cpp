@@ -440,22 +440,21 @@ void UBattleMatch::UpdateGroups(int32 Team)
     for(int32 SID:G->Squads)if(const auto* S=Store->FindSquad(SID);S&&(!Weighted||GroupSquadPresent(*S)))bNear|=FVector::Dist2D(R->Position(S->LeaderUnitID),Objectives[G->Objective].Position)<=BattleGroupValues::ArriveRadius;
     if(bNear){G->bArrived=true;G->PhaseAt=Elapsed;G->ArrivedAt=Elapsed;G->Extensions=0;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_ARRIVED group=%d team=%d objective=%d time=%.1f"),ID,Team,G->Objective,Elapsed);}
    }
-   // Pushing (observed only): the point is in the team's sight now and its capture marker shows the team capturing, or the team's
-   // own soldiers around the point outnumber the enemies it knows of there.
+   // The trial substitutes observed ownership for the live capture marker; known local superiority remains a separate reason.
    const int32 Slot=Team*Objectives.Num()+G->Objective;
    const bool bSeen=Area.SeenAt.IsValidIndex(Slot)&&Area.SeenAt[Slot]>=0.f&&Elapsed-Area.SeenAt[Slot]<=1.f;
    const int32 OwnThere=V.OwnAt.IsValidIndex(G->Objective)?V.OwnAt[G->Objective]:0,KnownThere=V.EnemyAt.IsValidIndex(G->Objective)?V.EnemyAt[G->Objective]:0;
    FGroupStrength OwnPower,EnemyPower;
    if(Weighted){OwnPower=GroupPointPower(Team,G->Objective,false);EnemyPower=GroupPointPower(Team,G->Objective,true);}
    const bool bPushing=G->bArrived&&(Weighted?
-    (OwnPower.Total()>0&&((bSeen&&Objectives[G->Objective].CapturingTeam==Team)||(OwnPower.Infantry>=BattleGroupValues::PushMin&&OwnPower.SuperiorTo(EnemyPower,BattleGroupValues::PushRatio)))):
-    ((bSeen&&Objectives[G->Objective].CapturingTeam==Team)||(OwnThere>=BattleGroupValues::PushMin&&OwnThere>=KnownThere*BattleGroupValues::PushRatio)));
+    (OwnPower.Total()>0&&((bSeen&&(BattleTactics::ObservedTactics()?ObservedOwner(Team,G->Objective):Objectives[G->Objective].CapturingTeam)==Team)||(OwnPower.Infantry>=BattleGroupValues::PushMin&&OwnPower.SuperiorTo(EnemyPower,BattleGroupValues::PushRatio)))):
+    ((bSeen&&(BattleTactics::ObservedTactics()?ObservedOwner(Team,G->Objective):Objectives[G->Objective].CapturingTeam)==Team)||(OwnThere>=BattleGroupValues::PushMin&&OwnThere>=KnownThere*BattleGroupValues::PushRatio)));
    const double LossLimit=bPushing?BattleGroupValues::PushLossAbort:BattleGroupValues::LossAbort;
    const bool bLosses=Weighted?(G->StartStrength>0&&Power.Total()<G->StartStrength*LossLimit):(G->StartLiving>0&&Living<G->StartLiving*LossLimit);
    if(bPushing&&!bOwn&&!bLosses&&Elapsed-G->PhaseAt>=FMath::Max(10.f,T->GroupAdvanceMax)&&Elapsed-G->ArrivedAt<BattleGroupValues::PushMax)
    {
     G->PhaseAt+=BattleGroupValues::PushExtend;++G->Extensions;
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_PUSH group=%d team=%d objective=%d own=%d known=%d capturing=%d extensions=%d time=%.1f"),ID,Team,G->Objective,OwnThere,KnownThere,bSeen?Objectives[G->Objective].CapturingTeam:-2,G->Extensions,Elapsed);
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_PUSH group=%d team=%d objective=%d own=%d known=%d capturing=%d extensions=%d time=%.1f"),ID,Team,G->Objective,OwnThere,KnownThere,bSeen?(BattleTactics::ObservedTactics()?ObservedOwner(Team,G->Objective):Objectives[G->Objective].CapturingTeam):-2,G->Extensions,Elapsed);
    }
    if(bOwn){if(G->StallPoint==G->Objective){G->StallPoint=INDEX_NONE;G->Stalls=0;}Enter(2,TEXT("point_taken"));}
    else if(bLosses||Elapsed-G->PhaseAt>=(G->bArrived?FMath::Max(10.f,T->GroupAdvanceMax):BattleGroupValues::TravelMax))

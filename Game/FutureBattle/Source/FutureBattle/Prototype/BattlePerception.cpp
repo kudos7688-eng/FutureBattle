@@ -134,6 +134,12 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			}
 		auto& Contact = Observer.Contacts.FindOrAdd(TargetID);
 		Contact.TargetID = TargetID;
+  if(BattleTactics::ObservedTactics())
+  {
+   Contact.bLongRangeObservation=Mixed&&Leader->HasLongSight(Pair.Key)&&
+    FVector::DistSquared2D(Pair.Value.Position,Candidate.Position)>FMath::Square(Profile.SightRange);
+   Contact.bLocalShareEligible=!Contact.bLongRangeObservation&&FVector::DistSquared(Pair.Value.Position,Candidate.Position)<=FMath::Square(Profile.SightRange*1.1);
+  }
   if(BattleTactics::ObservedArmour()||bGroupRecordsType||(State->Team>=0&&State->Team<2&&(ObserverCompositionTeams&(1<<State->Team))!=0))
   {
    const auto* SeenSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(Candidate.State->SquadID);
@@ -354,7 +360,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			TArray<const FBattleContact*, TInlineAllocator<32>> VisibleContacts;
 			// Contacts beyond the source's own profile range (a still scout's long sight) are not passed on by word of mouth; they travel in scout reports.
 			const double LocalRange2 = FMath::Square(SourceState->Perception.SightRange * 1.1);
-			for (const auto& Contact : Observers.FindChecked(Source.Key).Contacts) if (Contact.Value.bVisible) if (FVector::DistSquared(Source.Value.Position, Contact.Value.LastKnownPosition) <= LocalRange2) VisibleContacts.Add(&Contact.Value);
+			for (const auto& Contact : Observers.FindChecked(Source.Key).Contacts) if (Contact.Value.bVisible) if (BattleTactics::ObservedTactics()?Contact.Value.bLocalShareEligible:FVector::DistSquared(Source.Value.Position, Contact.Value.LastKnownPosition) <= LocalRange2) VisibleContacts.Add(&Contact.Value);
 			if (VisibleContacts.IsEmpty()) continue;
 			// Performance (2026-11-17): receivers come from the sight grid cells around the source instead of every living unit,
 			// in the same (ordinal) order, so the reports and their order are unchanged.

@@ -35,6 +35,12 @@ bool BattleTactics::ObservedArmour()
  return bOn;
 }
 
+bool BattleTactics::ObservedTactics()
+{
+ static const bool bOn=[]{int32 ObservedTacticsValue=0;FParse::Value(FCommandLine::Get(),TEXT("BattleObservedTactics="),ObservedTacticsValue);return ObservedTacticsValue!=0;}();
+ return bOn;
+}
+
 bool UBattleLeaderRuntime::HasArmourKnowledge(int32 Team) const
 {
  const auto* ArmourStore=GetWorld()->GetSubsystem<UBattleState>();
@@ -67,12 +73,13 @@ bool BattleTactics::AreaComposition(int32 Team)
 
 // ---------------------------------------------------------------- individual
 
-void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P,const TSet<int32>* AllowedTargets)
+void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P,const TSet<int32>* AllowedTargets,FVector* SelectedPosition)
 {
  // Runs after Think's nearest-contact pick, with the same filters, and replaces it only while the squad sees a vehicle.
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* S=Store->FindSquad(SID);const auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();
  P.ArmourTargetID=INDEX_NONE;if(!S||!Sense)return;
  const double ATReach2=FMath::Square(double(BattleRanges::Engage(EBattleWeapon::AntiTank)));
+ FVector PickedPosition=FVector::ZeroVector;
  bool bSeesVehicle=false;int32 Target=INDEX_NONE,Armour=INDEX_NONE;double Best=DBL_MAX,BestArmour=DBL_MAX;
  for(int32 ID:S->Members)
  {
@@ -101,11 +108,11 @@ void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P,cons
     if(Scale<=0.f)continue;
     if(Scale<1.f)D*=4.;
    }
-   if(D<Best||(D==Best&&C.Key<Target)){Best=D;Target=C.Key;}
+   if(D<Best||(D==Best&&C.Key<Target)){Best=D;Target=C.Key;if(SelectedPosition)PickedPosition=C.Value.LastKnownPosition;}
   }
  }
  if(!bSeesVehicle)return;
- P.TargetID=Target;P.ArmourTargetID=Armour;
+ P.TargetID=Target;P.ArmourTargetID=Armour;if(SelectedPosition)*SelectedPosition=PickedPosition;
 }
 
 void UBattleLeaderRuntime::FaceVehicle(int32 ID,const FVector& Direction)
