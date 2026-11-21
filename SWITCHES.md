@@ -3,7 +3,7 @@
 `Setup/Export-Switches.py` が生成する。**手で編集しない**（ソースを変えたら作り直す）。
 既定値はソースから推定したもの（`FParse::Value` に渡す変数の初期値、または構造体のメンバーの初期値）。空欄は推定できなかったもの。`UPROPERTY(Config)` の値は `Config/DefaultGame.ini` で上書きされることがある。大事なときは「場所」の行と ini を確かめる。`Param` は付けるだけでONになる引数。
 
-計 270 種類。
+計 271 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -117,6 +117,7 @@
 | `-BattleFrontGap` | other |  | BattleFrontLine.cpp:34 |  |
 | `-BattleFrontLine` | other |  | BattleFrontLine.cpp:42 |  |
 | `-BattleFrontSquads` | other |  | BattleFrontLine.cpp:141 |  |
+| `-BattleGroupFireSupport` | Value | 0 | BattleArtillery.cpp:109, BattleGroups.cpp:288 |  |
 | `-BattleHeavyCost` | other |  | BattleState.cpp:543 |  |
 | `-BattleHeavyDamage` | other |  | BattleState.cpp:543 |  |
 | `-BattleHeavyHealth` | other |  | BattleState.cpp:542 |  |

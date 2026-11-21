@@ -10,6 +10,7 @@
 #include "BattleMatch.h"
 #include "BattlePerception.h"
 #include "BattleRanges.h"
+#include "BattleSquadTactics.h"
 #include "BattleSuppression.h"
 #include "BattleUnit.h"
 #include "DrawDebugHelpers.h"
@@ -102,7 +103,15 @@ bool UBattleLeaderRuntime::AllyNear(int32 Team,const FVector& At,double Radius) 
  return false;
 }
 
-bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld)
+namespace BattleGroupFire
+{
+ // Group fire support (trial -BattleGroupFireSupport=1, user approval 2026-11-21; ROADMAP "群に入れた自走砲・迫撃砲の支援").
+ bool On(){static const int32 V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupFireSupport="),X);return X;}();return V!=0;}
+ constexpr double TroubleNear=4000., HelpRadius=6000., RallyRadius=8000.;
+ constexpr double TroubleBonus=100., RallyBonus=50.;
+}
+
+bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,double Now)
 {
  bBase=false;bFriendlyHeld=false;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);if(!U||!U->IsAlive())return false;
@@ -115,7 +124,7 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
  for(const auto& K:Known)if(!(K.Key>0&&IsVehicle(K.Key)))Soldiers.Add(TPair<int32,FVector>(K.Key,K.Value));
  // A candidate per known soldier: the centre of the known soldiers within the blast radius of him, worth a shell when it holds
  // ArtilleryMinCluster or more and lies within range. More soldiers first, then nearer.
- struct FCandidate{int32 Key;FVector At;double Score;};
+ struct FCandidate{int32 Key;FVector At;double Score;int32 Helped=INDEX_NONE;};
  TArray<FCandidate> Candidates;
  for(const auto& K:Soldiers)
  {
@@ -126,13 +135,43 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
   if(D2<Min2||D2>Max2)continue;
   Candidates.Add({K.Key,Center,double(Around)-FMath::Sqrt(D2)/1.e6});
  }
+ // Group fire support: a mortar or gun in a group shoots first at known soldiers near the group's squads in trouble (damage in the last
+ // 5 s, a suppressed leader, or a known soldier within TroubleNear of the leader); with none in trouble, near the rally point of an attack
+ // or surprise group. Own squads' state and known enemies only.
+ if(BattleGroupFire::On())if(const auto* GM=GetWorld()->GetSubsystem<UBattleMatch>();GM&&GM->bArea)if(const auto* G=GM->Groups.Find(GM->GroupOf(U->SquadID)))
+ {
+  using namespace BattleGroupFire;
+  TArray<TPair<int32,FVector>> Trouble;const auto* Tactics=GetWorld()->GetSubsystem<UBattleSquadTactics>();
+  for(int32 SID:G->Squads)if(SID!=U->SquadID)if(const auto* S=Store->FindSquad(SID))if(const auto* Lead=Store->Find(S->LeaderUnitID);Lead&&Lead->IsAlive())
+  {
+   const FVector P=Position(S->LeaderUnitID);
+   bool bTrouble=Suppression(S->LeaderUnitID,Now)>=.5f;
+   if(const auto* O=Tactics?Tactics->Find(SID):nullptr)bTrouble|=O->RecentDamage>0.f;
+   for(int32 I=0;I<Soldiers.Num()&&!bTrouble;++I)bTrouble=FVector::DistSquared2D(Soldiers[I].Value,P)<=FMath::Square(TroubleNear);
+   if(bTrouble)Trouble.Add(TPair<int32,FVector>(SID,P));
+  }
+  for(auto& C:Candidates)
+  {
+   if(Trouble.Num()){for(const auto& H:Trouble)if(FVector::DistSquared2D(C.At,H.Value)<=FMath::Square(HelpRadius)){C.Score+=TroubleBonus;C.Helped=H.Key;break;}}
+   else if(G->Kind!=1&&FVector::DistSquared2D(C.At,G->Rally)<=FMath::Square(RallyRadius))C.Score+=RallyBonus;
+  }
+ }
  Candidates.Sort([](const FCandidate& A,const FCandidate& B){return A.Score!=B.Score?A.Score>B.Score:A.Key<B.Key;});
  // Never where the blast plus the landing spread may reach an own unit.
  for(int32 I=0;I<Candidates.Num()&&I<8;++I)
  {
   const auto& C=Candidates[I];
   if(AllyNear(U->Team,C.At,Blast+ArtillerySpread(bSPG,FVector::Dist2D(Pos,C.At)))){bFriendlyHeld=true;continue;}
-  Aim=C.At;return true;
+  Aim=C.At;
+  if(C.Helped!=INDEX_NONE)
+  {
+   ++ArtilleryGroupAims;
+   if(const int32* Last=ArtillerySupportSquad.Find(ID);!Last||*Last!=C.Helped)
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_FIRE unit=%d squad=%d helps=%d aim=(%.0f,%.0f) spg=%d"),ID,U->SquadID,C.Helped,Aim.X,Aim.Y,bSPG?1:0);
+   ArtillerySupportSquad.Add(ID,C.Helped);
+  }
+  else ArtillerySupportSquad.Remove(ID);
+  return true;
  }
  // The enemy home: in range and seen by the unit itself or by its team (bHomeCovered), like the tank gun.
  const auto* M=GetWorld()->GetSubsystem<UBattleMatch>();const int32 Enemy=1-U->Team;
@@ -172,7 +211,7 @@ bool UBattleLeaderRuntime::StepArtillery(int32 ID,double Now,bool bMoving,FVecto
   const auto& V=M->AreaIntelView(U->Team);
   for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)if(!Known.Contains(V.EnemyKeys[I]))Known.Add(V.EnemyKeys[I],V.Enemies[I]);
   bool bHeld=false;
-  A.bHasTarget=PickArtilleryAim(ID,Known,A.Aim,A.bBase,bHeld);
+  A.bHasTarget=PickArtilleryAim(ID,Known,A.Aim,A.bBase,bHeld,Now);
   if(bHeld)++ArtilleryFriendlyHolds;
   ArtilleryMs+=(FPlatformTime::Seconds()-PickStart)*1000.;
  }

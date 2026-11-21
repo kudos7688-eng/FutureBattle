@@ -284,21 +284,24 @@ void UBattleMatch::UpdateGroups(int32 Team)
     const auto& S=P.Value;
     if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(P.Key)!=INDEX_NONE)continue;
     if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key)||ArmyPinned.Contains(P.Key))continue;
-    if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Tank&&S.SquadType!=BattleSquadType::Mortar&&S.SquadType!=BattleSquadType::AntiTank&&S.SquadType!=BattleSquadType::Supply)continue;
+    // Group fire support (trial -BattleGroupFireSupport=1): the AI attack group also takes one self-propelled gun.
+    static const bool bFire=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupFireSupport="),X);return X!=0;}();
+    if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Tank&&S.SquadType!=BattleSquadType::Mortar&&S.SquadType!=BattleSquadType::AntiTank&&S.SquadType!=BattleSquadType::Supply&&!(bFire&&S.SquadType==BattleSquadType::SPGun))continue;
     bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase)continue;
     Free.Add({P.Key,S.SquadType,FVector::DistSquared2D(R->Position(S.LeaderUnitID),Rally)});
    }
    Free.Sort([](const FFree& A,const FFree& B){return A.D!=B.D?A.D<B.D:A.SID<B.SID;});
    // What the group already has (a new group: nothing), then the nearest free squads up to its numbers.
-   TArray<int32> Pick;int32 Rifles=0;bool bTank=false,bMortar=false,bAT=false,bSupply=false;const int32 Want=FMath::Clamp(T->GroupRifleSquads,2,6);
+   TArray<int32> Pick;int32 Rifles=0;bool bTank=false,bMortar=false,bAT=false,bSupply=false,bGun=false;const int32 Want=FMath::Clamp(T->GroupRifleSquads,2,6);
    if(AIGroup!=INDEX_NONE)for(int32 SID:Groups[AIGroup].Squads)if(const auto* S=Store->FindSquad(SID))
-   {Rifles+=S->SquadType==BattleSquadType::Rifle;bTank|=S->SquadType==BattleSquadType::Tank;bMortar|=S->SquadType==BattleSquadType::Mortar;bAT|=S->SquadType==BattleSquadType::AntiTank;bSupply|=S->SquadType==BattleSquadType::Supply;}
+   {Rifles+=S->SquadType==BattleSquadType::Rifle;bTank|=S->SquadType==BattleSquadType::Tank;bMortar|=S->SquadType==BattleSquadType::Mortar;bAT|=S->SquadType==BattleSquadType::AntiTank;bSupply|=S->SquadType==BattleSquadType::Supply;bGun|=S->SquadType==BattleSquadType::SPGun;}
    for(const auto& F:Free)
    {
     if(F.Type==BattleSquadType::Rifle){if(Rifles<Want){Pick.Add(F.SID);++Rifles;}}
     else if(F.Type==BattleSquadType::Tank){if(!bTank){Pick.Add(F.SID);bTank=true;}}
     else if(F.Type==BattleSquadType::Mortar){if(!bMortar){Pick.Add(F.SID);bMortar=true;}}
     else if(F.Type==BattleSquadType::Supply){if(!bSupply){Pick.Add(F.SID);bSupply=true;}}
+    else if(F.Type==BattleSquadType::SPGun){if(!bGun){Pick.Add(F.SID);bGun=true;}}
     else if(!bAT){Pick.Add(F.SID);bAT=true;}
    }
    if(AIGroup==INDEX_NONE){if(Rifles>=2)FormGroup(Team,Pick,false);}

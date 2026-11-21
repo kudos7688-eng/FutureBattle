@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（145 モジュール、32510 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（145 モジュール、32554 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -76,7 +76,7 @@
 | `BattleAreaIntel` | .cpp | 81 |  | エリア戦の情報：観測に基づく区域の見え方と脅威（UBattleMatch の一部） |
 | `BattleAreaState` | .h | 37 | FBattleAreaState | エリア戦の保存される状態（拠点 HP、収入、観測） |
 | `BattleArmourAI` | .cpp | 239 |  | 兵種を扱うAI：効かない車両を狙わない、対戦車兵の弾の温存、知っている敵車両、戦車の待機位置、兵種の構成（UBattleLeaderRuntime と UBattleMatch の一部） |
-| `BattleArtillery` | .cpp | 284 |  | 迫撃砲と自走砲：間接射撃の目標選び、着弾、陣地の位置（UBattleLeaderRuntime と UBattleMatch の一部） |
+| `BattleArtillery` | .cpp | 323 |  | 迫撃砲と自走砲：間接射撃の目標選び、着弾、陣地の位置（UBattleLeaderRuntime と UBattleMatch の一部） |
 | `BattleBlindFire` | .h/.cpp | 47 + 145 | BattleBlindFire | 遮蔽の陰からのブラインドファイア（弾の出る位置・AIの試験・アニメ。UBattleLeaderRuntime の一部） |
 | `BattleBodyAnim` | .h/.cpp | 105 + 296 | BattleBodyAnim, EClip, FBattleBodyLayer, FBattleBodyAnimProxy, UBattleBodyAnimInstance | 体のアニメーション：隊長の下半身と上半身の重ね・反動・被弾・死亡、部下の伏せと死亡のクリップ |
 | `BattleBodyAnimImport` | .cpp | 134 |  | 体のアニメーション（遮蔽・伏せ・しゃがみの向き別）の取り込みと計測（エディタ用。宣言は BattleVATBake.h） |
@@ -93,9 +93,9 @@
 | `BattleFollowerBones` | .h/.cpp | 10 + 39 | BattleFollowerBones | 霧で隠れた部下のボーン表示の切替 |
 | `BattleFrontLine` | .cpp | 568 |  | Surprise bridge waypoints: UpdateSurpriseBridge, BattleSurpriseRoute::Bridge / Intersects; fixed H/I map geometry, entrance / exit / edge goal, retained on same-time restore |
 | `BattleGameMode` | .h/.cpp | 97 + 373 | ABattleGameMode | モードの統合、起動時の組み立て、毎フレームの入口、基本回帰 |
-| `BattleGroups` | .cpp | 509 |  | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部） |
+| `BattleGroups` | .cpp | 512 |  | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部） |
 | `BattleHUD` | .h/.cpp | 45 + 1125 | ABattleHUD | 画面表示（HUD、ミニマップ、部隊一覧、通知、命令の印） |
-| `BattleLeaderRuntime` | .h/.cpp | 594 + 1385 | FBattleFollowerFragment, FBattleSquadSummary, FBattleSquadListRow, FBattleSquadListLayout, FBattleMinimapLayout, FBattleLeaderBody, FBattleLeaderPlan, UBattleLeaderRuntime | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新 |
+| `BattleLeaderRuntime` | .h/.cpp | 596 + 1385 | FBattleFollowerFragment, FBattleSquadSummary, FBattleSquadListRow, FBattleSquadListLayout, FBattleMinimapLayout, FBattleLeaderBody, FBattleLeaderPlan, UBattleLeaderRuntime | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新 |
 | `BattleMapI` | .h | 112 | BattleMapI | マップI（区画を前提にした設計）の表：50mの区画 20×14 の種類 `Kind`、道路 `Roads`、川・橋・浅瀬の位置、家 `Houses`・丘 `Hills`、高さの表 `MakeHeights`、拠点 `Objectives`。配置は `BattleMapLayoutI.inl`（生成と共有） |
 | `BattleMapStats` | .cpp | 186 |  | マップの統計（区域ごとの見通し・遮蔽、経路の長さ）を JSON に書き出す。試合は行わない（UBattleLeaderRuntime の一部） |
 | `BattleMatch` | .h/.cpp | 344 + 517 | FAreaIntent, FBattleObjective, FBattleStrike, FPlayerRoute, UBattleMatch | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗 |

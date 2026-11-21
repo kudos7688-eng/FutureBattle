@@ -263,7 +263,9 @@ public:
  bool StepArtillery(int32 ID,double Now,bool bMoving,FVector& Direction);
  // Picks an aim point from Known (unit key -> known position): a cluster of at least ArtilleryMinCluster soldiers within range and no
  // own unit within the blast radius plus spread (bFriendlyHeld: a candidate was refused for that). Then the enemy home if seen.
- bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld);
+ bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,double Now=0.);
+ TMap<int32,int32> ArtillerySupportSquad; // group fire support: the own squad each gun last fired for (log on change; not saved)
+ int64 ArtilleryGroupAims=0;
  bool AllyNear(int32 Team,const FVector& At,double Radius) const;
  // Launches one shell at Aim (spread applied, flight time Distance / shell speed). Consumes mortar ammunition or loads the gun.
  bool FireArtillery(int32 ID,const FVector& Aim,double Now);
