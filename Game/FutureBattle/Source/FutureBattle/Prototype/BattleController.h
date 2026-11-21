@@ -118,6 +118,9 @@ public:
 	bool bShowSectorGrid = true, bShowFog = true;
 	void ToggleSectorGrid();
 	void ToggleFogView();
+	// Range rings of seen enemy squads (L, display only, ABattleHUD::DrawRangeRings): off = only the enemy under the pointer.
+	bool bShowEnemyRanges = false;
+	void ToggleEnemyRanges();
 	void CycleTrainingSelected();
 	void HireRecruit();
 	void HireRegular();
@@ -150,6 +153,7 @@ public:
 	void UpdatePathDraw();
 	void EndPathDraw();
 	bool IsDrawingPath() const { return bPathDraw; }
+	bool IsDrawingFrontLine() const { return bPathDraw && bFrontDraw; } // Ctrl + right drag: the front line (UBattleMatch::SetDrawnFrontLine)
 	const TArray<FVector>& GetDrawnPath() const { return DrawnPath; }
 	float PanSpeed() const;
 	bool TryVault(ABattleUnit* Unit);
@@ -217,7 +221,7 @@ private:
 	bool bTactical = true;
 	int32 GameSpeed = 1;
 	bool bTriggerHeld = false;
-	bool bPathDraw = false; TArray<FVector> DrawnPath; double DrawnLength = 0; FVector2D PathScreenStart = FVector2D::ZeroVector;
+	bool bPathDraw = false, bFrontDraw = false; TArray<FVector> DrawnPath; double DrawnLength = 0; FVector2D PathScreenStart = FVector2D::ZeroVector;
 	UPROPERTY() TObjectPtr<ABattleUnit> VaultUnit;
 	FVector VaultFrom = FVector::ZeroVector, VaultTo = FVector::ZeroVector; double VaultPeak = 0; float VaultTime = 0, VaultDuration = .4f;
 	int32 DelegationPress = INDEX_NONE;

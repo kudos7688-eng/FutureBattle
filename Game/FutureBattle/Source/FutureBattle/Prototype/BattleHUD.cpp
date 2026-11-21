@@ -12,6 +12,7 @@
 #include "BattleStance.h"
 #include "BattleCover.h"
 #include "BattleMatch.h"
+#include "BattleRanges.h"
 #include "BattleFieldLayout.h"
 #include "Engine/Canvas.h"
 #include "CanvasItem.h"
@@ -70,6 +71,8 @@ void ABattleHUD::DrawHUD()
  BattleSectorView::KnownEnemies(GetWorld(),FrameContacts,FrameVisibleContacts);
  ON_SCOPE_EXIT { FrameContacts.Reset(); FrameVisibleContacts.Reset(); };
 	DrawFieldOverlay(PC);
+	// Range rings of the selected (and seen enemy) squads, also under the panels.
+	DrawRangeRings();
 	DrawRect(Ink, 16, 16, W - 32, 66);
 	DrawRect(Mint, 16, 16, 4, 66);
 	Label(TEXT("FUTURE BATTLE"), 34, 25, White, 1.55f);
@@ -397,7 +400,7 @@ void ABattleHUD::DrawHUD()
 		}
 		if (PC->bGamepadActive) Label(TEXT("右スティック：カーソル   A：選択・決定   左スティック：視点移動   LT/RT：拡大縮小   LB：全選択   ビュー：直接操作   メニュー：AI一時停止   十字→：速度"), 34, H - 53, Muted, .9f);
 		else
-		Label(FString::Printf(TEXT("左ドラッグ：選択   Q：全選択   E/Tab：直接操作   WASD：視点移動   ホイール：拡大縮小   P：AI一時停止   F5：やり直し   F6：記憶表示   %s   %s      選択中 %02d"), Match->IsEnabled() ? TEXT("1〜6：購入") : TEXT("F7：練度の切替"), BattleFieldLayout::Of(GetWorld()).bSectors ? TEXT("M：区画の格子   N：霧") : TEXT("N：霧"), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
+		Label(FString::Printf(TEXT("左ドラッグ：選択   Q：全選択   E/Tab：直接操作   WASD：視点移動   ホイール：拡大縮小   P：AI一時停止   F5：やり直し   F6：記憶表示   %s   %s      選択中 %02d"), Match->IsEnabled() ? TEXT("1〜6：購入") : TEXT("F7：練度の切替"), BattleFieldLayout::Of(GetWorld()).bSectors ? TEXT("M：区画の格子   N：霧   L：敵の射程") : TEXT("N：霧   L：敵の射程"), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
 	}
 	else
 	{
@@ -565,6 +568,8 @@ void ABattleHUD::DrawMinimap()
    }
   }
  }
+ // Range rings of the selected squads, under the squad marks.
+ DrawMinimapRangeRings(PC,Map);
  // Own squads: one mark per leader; selected squads stand out, stopped squads are not drawn.
  for(const auto& S:L->Summaries()) if(S.bActive)
  {
@@ -591,7 +596,7 @@ void ABattleHUD::DrawSquadList()
  const int32 Dragged=PC->DraggedSquadID();
  DrawRect(FLinearColor(.025f,.04f,.065f,.96f),Layout.Origin.X,Layout.Origin.Y,Layout.Width,Layout.Height);
  DrawText(FString::Printf(TEXT("自軍部隊　稼働 %d"),Active),FLinearColor::White,Layout.Origin.X+8,Layout.Origin.Y+5,GEngine->GetSmallFont(),1);
- DrawText(TEXT("タブ・群へドラッグで編入・Shift+なぞりで複数選択・Eで操作"),FLinearColor(.6f,.65f,.7f),Layout.Origin.X+8,Layout.Origin.Y+Layout.Height-18,GEngine->GetSmallFont(),.7f);
+ DrawText(TEXT("タブ・群へドラッグで編入・Shift+なぞりで複数選択・Ctrl+右ドラッグで前線を引く"),FLinearColor(.6f,.65f,.7f),Layout.Origin.X+8,Layout.Origin.Y+Layout.Height-18,GEngine->GetSmallFont(),.7f);
  static const TCHAR* const FilterNames[]={TEXT("前線軍"),TEXT("攻撃軍"),TEXT("未所属"),TEXT("全部")};
  for(int32 T=0;T<FBattleSquadListLayout::FilterCount;++T)
  {
@@ -711,6 +716,195 @@ void ABattleHUD::DrawNoticeLog()
   const FString Text=E.Count>1?FString::Printf(TEXT("%s ×%d"),*E.Text,E.Count):E.Text;
   DrawText(FString::Printf(TEXT("%3.0f秒前  %s"),Now-E.Time,*Text),Color,Layout.Origin.X,Y+3,GEngine->GetSmallFont(),.9f);
  }
+}
+
+namespace
+{
+ struct FBattleRangeRing{float Radius;FLinearColor Color;FString Name;bool bDashed;};
+ using FBattleRangeRings=TArray<FBattleRangeRing,TInlineAllocator<4>>;
+ bool RangeRingsOn(){static const bool bOn=[]{int32 Mode=1;FParse::Value(FCommandLine::Get(),TEXT("BattleRangeRings="),Mode);return Mode!=0;}();return bOn;}
+ // Rings from a set of weapons. Own squads in mint/pink/yellow/orange, enemies in reds with "敵" in front of the name.
+ FBattleRangeRings RangeRingsFor(const UBattleLeaderRuntime* L,float Direct,bool bAT,bool bMortar,bool bSPG,bool bTank,bool bEnemy,bool bGuess)
+ {
+  const FLinearColor Rifle=bEnemy?FLinearColor(1.f,.32f,.25f,.75f):FLinearColor(.28f,.95f,.8f,.75f), AT=bEnemy?FLinearColor(1.f,.35f,.6f,.75f):FLinearColor(1.f,.55f,.85f,.75f),
+   Gun=bEnemy?FLinearColor(1.f,.6f,.15f,.8f):FLinearColor(1.f,.85f,.3f,.75f), Indirect=bEnemy?FLinearColor(.95f,.45f,.1f,.75f):FLinearColor(1.f,.55f,.2f,.75f);
+  const TCHAR* Who=bEnemy?TEXT("敵 "):TEXT("");
+  FBattleRangeRings Rings;
+  if(Direct>0.f) Rings.Add({Direct,Rifle,FString::Printf(TEXT("%s射程%s"),Who,bGuess?TEXT("?"):TEXT("")),false});
+  if(bAT) Rings.Add({BattleRanges::Engage(EBattleWeapon::AntiTank),AT,FString::Printf(TEXT("%s対戦車"),Who),false});
+  if(bTank) Rings.Add({L->TankGunEngage(),Gun,FString::Printf(TEXT("%s主砲"),Who),false});
+  if(bMortar||bSPG)
+  {
+   Rings.Add({L->ArtilleryMaxRange(bSPG),Indirect,FString::Printf(TEXT("%s砲撃"),Who),false});
+   if(const float Min=L->ArtilleryMinRange(bSPG); Min>0.f) Rings.Add({Min,Indirect*FLinearColor(1,1,1,.7f),FString::Printf(TEXT("%s最短"),Who),true});
+  }
+  return Rings;
+ }
+ // Own squad: from the weapons of its living members (a squad that lost its anti-tank gunners loses that ring).
+ FBattleRangeRings RangeRingsOf(const UBattleLeaderRuntime* L,const UBattleState* Store,const FBattleSquadState& S)
+ {
+  float Direct=0.f; bool bAT=false, bMortar=false;
+  for(int32 ID:S.Members) if(const auto* M=Store->Find(ID); M&&M->IsAlive())
+  {
+   if(M->Weapon==EBattleWeapon::AntiTank) bAT=true; else if(M->Weapon==EBattleWeapon::Mortar) bMortar=true; else Direct=FMath::Max(Direct,BattleRanges::Engage(M->Weapon));
+  }
+  const bool bSPG=L->IsSPG(S.LeaderUnitID), bTank=L->IsVehicle(S.LeaderUnitID)&&L->VehicleType(S.LeaderUnitID)==BattleSquadType::Tank;
+  return RangeRingsFor(L,Direct,bAT,bMortar,bSPG,bTank,false,false);
+ }
+ // Enemy squad: only what the player's side has identified (FBattleContact::ObservedSquadType), as a full squad of that type;
+ // an unidentified squad is shown as a rifle squad with "?".
+ FBattleRangeRings EnemyRangeRings(const UBattleLeaderRuntime* L,uint8 ObservedType)
+ {
+  const bool bGuess=ObservedType>=BattleSquadType::Count; const uint8 Type=bGuess?uint8(BattleSquadType::Rifle):ObservedType;
+  float Direct=0.f; bool bAT=false, bMortar=false;
+  const int32 Count=Type==BattleSquadType::Rifle?BattleSquadType::RifleMembers():BattleSquadType::Members(Type);
+  for(int32 Slot=0;Slot<FMath::Max(1,Count);++Slot)
+  {
+   const EBattleWeapon W=BattleSquadType::Weapon(Type,Slot);
+   if(W==EBattleWeapon::AntiTank) bAT=true; else if(W==EBattleWeapon::Mortar) bMortar=true; else Direct=FMath::Max(Direct,BattleRanges::Engage(W));
+  }
+  return RangeRingsFor(L,Direct,bAT,bMortar,Type==BattleSquadType::SPGun,Type==BattleSquadType::Tank,true,bGuess);
+ }
+ // Enemy squads the player's side sees now: centre of their seen soldiers and the identified type. Seen contacts only
+ // (remembered ones and a scout's long-range sightings are left out, as on the minimap).
+ struct FBattleSeenEnemySquad{FVector Sum=FVector::ZeroVector;int32 Count=0;uint8 Type=255;TArray<FVector,TInlineAllocator<8>> Soldiers;};
+ TMap<int32,FBattleSeenEnemySquad> SeenEnemySquads(const UWorld* World)
+ {
+  TMap<int32,FBattleSeenEnemySquad> Out; TSet<int32> Counted;
+  const auto* Store=World->GetSubsystem<UBattleState>(); const auto* Sense=World->GetSubsystem<UBattlePerception>(); const auto* Match=World->GetSubsystem<UBattleMatch>();
+  for(const auto& Pair:Store->GetUnits()) if(Pair.Value.Team==0&&Pair.Value.IsAlive())
+   if(const auto* Contacts=Sense->GetContacts(Pair.Key)) for(const auto& C:*Contacts)
+   {
+    if(!C.Value.bVisible||(Match->bArea&&Match->IsScoutLongContact(Pair.Key,C.Value))) continue;
+    const auto* Target=Store->Find(C.Key); if(!Target||!Target->IsAlive()||Target->Team==0) continue;
+    auto& G=Out.FindOrAdd(Target->SquadID);
+    if(C.Value.ObservedSquadType<BattleSquadType::Count) G.Type=C.Value.ObservedSquadType;
+    if(Counted.Contains(C.Key)) continue; Counted.Add(C.Key);
+    G.Sum+=C.Value.LastKnownPosition; ++G.Count; G.Soldiers.Add(C.Value.LastKnownPosition);
+   }
+  return Out;
+ }
+}
+
+void ABattleHUD::DrawRangeRings()
+{
+ TRACE_CPUPROFILER_EVENT_SCOPE(BattleHUD_DrawRangeRings);
+ if(!RangeRingsOn()) return;
+ auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); if(!L->IsEnabled()) return;
+ auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas || !PC->IsTactical()) return;
+ const float H=Canvas->SizeY; const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ // Display check -BattleRangeRingShot=<prefix> (rendered game only): at 40 s the first own squad is selected and the camera moved
+ // over it; from 90 s, once an enemy is seen (240 s at the latest), the own squad nearest a seen enemy is selected, every seen enemy's rings are shown (as with L) and the camera
+ // is moved between them. A screenshot each time (the frame after the move), a BATTLE_RANGE_RING_SHOT line, then quit.
+ static const FString ShotPrefix=[]{FString P;FParse::Value(FCommandLine::Get(),TEXT("BattleRangeRingShot="),P);return P;}();
+ if(!ShotPrefix.IsEmpty())
+ {
+  static int32 Stage=0; static double ShootAt=-1., AimAt=-1.; static FVector AimTarget=FVector::ZeroVector; static bool bResumed=false; static double QuitAt=0.;
+  const double T=GetWorld()->GetTimeSeconds();
+  // The area match starts with the AI paused (practice); resume it once so squads move and meet the enemy.
+  if(auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>(); !bResumed&&T>3.&&Mode&&GetWorld()->GetSubsystem<UBattleMatch>()->Phase==EBattleMatchPhase::Combat)
+  {Mode->bCombatPaused=false;bResumed=true;}
+  // Moves the camera pawn (height kept) so that the view centre lands on Where.
+  auto Aim=[&](const FVector& Where)
+  {
+   APawn* Camera=PC->GetPawn(); if(!Camera||!PC->PlayerCameraManager) return;
+   const FVector Eye=PC->PlayerCameraManager->GetCameraLocation(), Forward=PC->PlayerCameraManager->GetCameraRotation().Vector();
+   const double Down=FMath::Max(.2,-Forward.Z); const FVector Look=Eye+Forward*((Eye.Z-Where.Z)/Down);
+   Camera->SetActorLocation(Camera->GetActorLocation()+FVector(Where.X-Look.X,Where.Y-Look.Y,0.));
+  };
+  if(ShootAt<0.&&Stage<2&&T>(Stage==0?40.:90.)&&(Stage==0||T>240.||!SeenEnemySquads(GetWorld()).IsEmpty()))
+  {
+   ABattleUnit* Pick=nullptr; double BestD=TNumericLimits<double>::Max(); FVector EnemyAt=FVector::ZeroVector;
+   const auto Seen=SeenEnemySquads(GetWorld());
+   for(const auto& S:L->Summaries()) if(S.bActive) if(ABattleUnit* A=L->Actor(S.LeaderUnitID); A&&A->IsAlive()&&A->GetState()->Team==0)
+   {
+    if(Stage==0){Pick=A;break;}
+    for(const auto& E:Seen){const FVector P=E.Value.Sum/E.Value.Count;if(const double D=FVector::DistSquared2D(P,A->GetActorLocation());D<BestD){BestD=D;Pick=A;EnemyAt=P;}}
+   }
+   if(Stage==1&&!Pick) for(const auto& S:L->Summaries()) if(S.bActive) if(ABattleUnit* A=L->Actor(S.LeaderUnitID); A&&A->IsAlive()&&A->GetState()->Team==0){Pick=A;break;}
+   PC->SetSelection(Pick); PC->bShowEnemyRanges=Stage==1;
+   // Zoom out (about x9 height, clamped by the camera) so a 250 m ring fits; aim on a later frame, once the new height is in the camera.
+   if(Stage==0) if(auto* Camera=Cast<ABattleCameraPawn>(PC->GetPawn())) for(int32 I=0;I<10;++I) Camera->ZoomScale(1.25f);
+   AimTarget=Pick?(Stage==1&&BestD<TNumericLimits<double>::Max()?(Pick->GetActorLocation()+EnemyAt)*.5:Pick->GetActorLocation()):FVector::ZeroVector;
+   UE_LOG(LogTemp,Display,TEXT("BATTLE_RANGE_RING_SHOT t=%.0f stage=%d selected=%d seen_enemy_squads=%d enemy_dist_m=%.0f"),T,Stage,Pick?Pick->GetState()->SquadID:-1,Seen.Num(),BestD<TNumericLimits<double>::Max()?FMath::Sqrt(BestD)/100.:-1.);
+   AimAt=Pick?T+.3:-1.; ShootAt=T+.8;
+  }
+  else if(AimAt>=0.&&T>=AimAt){Aim(AimTarget);AimAt=-1.;}
+  else if(ShootAt>=0.&&T>=ShootAt)
+  {FScreenshotRequest::RequestScreenshot(ShotPrefix+(Stage?TEXT("-enemy.png"):TEXT("-40s.png")),true,false);++Stage;ShootAt=-1.;QuitAt=T+3.;}
+  if(Stage==2&&T>QuitAt)FPlatformMisc::RequestExit(false,TEXT("BattleRangeRingShot"));
+ }
+ auto Screen=[&](FVector World,FVector2D& Out){return PC->ProjectWorldLocationToScreen(World,Out)&&Out.Y>110&&Out.Y<H-130;};
+ TArray<FVector2D> LabelSpots;
+ auto DrawRings=[&](const FVector& Center,const FBattleRangeRings& Rings)
+ {
+  for(const FBattleRangeRing& R:Rings)
+  {
+   // Enough pieces that a 1 km ring stays round; each piece is projected so the visible part is drawn when the ring leaves the screen.
+   const int32 N=FMath::Clamp(FMath::RoundToInt(R.Radius/400.f),48,160);
+   FVector2D Prev; bool bPrev=Screen(Center+FVector(R.Radius,0,0),Prev); FVector2D Best(0,-1);
+   for(int32 I=1;I<=N;++I)
+   {
+    const float A=I*2.f*PI/N; FVector2D P; const bool bNow=Screen(Center+FVector(FMath::Cos(A),FMath::Sin(A),0)*R.Radius,P);
+    if(bPrev&&bNow&&(!R.bDashed||(I&1))) DrawLine(Prev.X,Prev.Y,P.X,P.Y,R.Color,1.5f);
+    if(bNow&&P.Y>Best.Y&&P.Y<H-215) Best=P; Prev=P; bPrev=bNow;
+   }
+   // Label at the lowest visible point of the ring above the bottom panel (nearest the camera), unless another label is already there.
+   if(Best.Y<0) continue;
+   bool bFree=true; for(const FVector2D& Spot:LabelSpots) if(FMath::Abs(Spot.X-Best.X)<90&&FMath::Abs(Spot.Y-Best.Y)<16){bFree=false;break;}
+   if(!bFree) continue; LabelSpots.Add(Best);
+   const FString Text=FString::Printf(TEXT("%s %.0fm"),*R.Name,R.Radius/100.f);
+   DrawRect(FLinearColor(.025f,.04f,.065f,.75f),Best.X-4,Best.Y+3,Text.Len()*9.f+8,16);
+   DrawText(Text,FLinearColor(R.Color.R,R.Color.G,R.Color.B,1.f),Best.X,Best.Y+3,GEngine->GetSmallFont(),.85f);
+  }
+ };
+ // Own selected squads, around the leader.
+ TSet<int32> Done;
+ for(const auto& Unit:PC->GetSelection())
+ {
+  if(!Unit||!Unit->GetState()||!Unit->IsAlive()) continue; const int32 SID=Unit->GetState()->SquadID; if(Done.Contains(SID)) continue; Done.Add(SID);
+  if(const auto* S=Store->FindSquad(SID)) DrawRings(L->Position(S->LeaderUnitID)+FVector(0,0,30),RangeRingsOf(L,Store,*S));
+ }
+ // Seen enemy squads, around the centre of their seen soldiers: all of them with L, otherwise the one under the pointer.
+ const auto Enemies=SeenEnemySquads(GetWorld()); if(Enemies.IsEmpty()) return;
+ int32 Hovered=INDEX_NONE;
+ FVector2D Pointer;
+ if(!PC->bShowEnemyRanges&&PC->GetPointerPosition(Pointer))
+ {
+  float BestD=28.f*28.f;
+  for(const auto& E:Enemies) for(const FVector& Where:E.Value.Soldiers)
+  {FVector2D P; if(PC->ProjectWorldLocationToScreen(Where+FVector(0,0,90),P)) if(const float D=FVector2D::DistSquared(P,Pointer); D<BestD){BestD=D;Hovered=E.Key;}}
+ }
+ for(const auto& E:Enemies) if(PC->bShowEnemyRanges||E.Key==Hovered)
+  DrawRings(E.Value.Sum/E.Value.Count+FVector(0,0,30),EnemyRangeRings(L,E.Value.Type));
+}
+
+void ABattleHUD::DrawMinimapRangeRings(ABattleController* PC,const FBattleMinimapLayout& Map)
+{
+ if(!RangeRingsOn()) return;
+ const auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ auto DrawRings=[&](const FVector& Center,const FBattleRangeRings& Rings)
+ {
+  for(const FBattleRangeRing& R:Rings)
+  {
+   // Through ToScreen point by point (the map may scale X and Y differently); pieces outside the map are left out.
+   constexpr int32 N=48; FVector2D Prev=Map.ToScreen(Center+FVector(R.Radius,0,0));
+   for(int32 I=1;I<=N;++I)
+   {
+    const float A=I*2.f*PI/N; const FVector2D P=Map.ToScreen(Center+FVector(FMath::Cos(A),FMath::Sin(A),0)*R.Radius);
+    if(Map.Contains(Prev)&&Map.Contains(P)&&(!R.bDashed||(I&1))) DrawLine(Prev.X,Prev.Y,P.X,P.Y,R.Color,1.f);
+    Prev=P;
+   }
+  }
+ };
+ TSet<int32> Done;
+ for(const auto& Unit:PC->GetSelection())
+ {
+  if(!Unit||!Unit->GetState()||!Unit->IsAlive()) continue; const int32 SID=Unit->GetState()->SquadID; if(Done.Contains(SID)) continue; Done.Add(SID);
+  if(const auto* S=Store->FindSquad(SID)) DrawRings(L->Position(S->LeaderUnitID),RangeRingsOf(L,Store,*S));
+ }
+ // Enemies on the minimap only with L (the pointer is usually on the field, not the map).
+ if(PC->bShowEnemyRanges) for(const auto& E:SeenEnemySquads(GetWorld())) DrawRings(E.Value.Sum/E.Value.Count,EnemyRangeRings(L,E.Value.Type));
 }
 
 void ABattleHUD::DrawOrderMarks()

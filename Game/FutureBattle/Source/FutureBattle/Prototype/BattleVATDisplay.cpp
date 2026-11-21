@@ -240,6 +240,7 @@ void ABattleVATDisplay::Enter(FBattleVATEntry& E)
   if(Skip->PendingDt>0 && M->IsComponentTickEnabled())FAnimationRuntime::AdvanceTime(true,(E.Rate*Data->Clips[E.Pose].Clip->RateScale)*Skip->PendingDt,E.Time,Data->Clips[E.Pose].Length);
   Skip->EndAnimSkip();
  }
+ if(!Audit)Runtime->ClearFollowerRifleTurn(E.ID); // a near follower's rifle turn and tilt are not carried into the far body
  E.BodyRelative=M->GetRelativeTransform();E.WeaponRelative=W->GetRelativeTransform();E.NearRotation=E.BodyRelative.GetRotation();
  // A body still playing its death clip ticks: death comes from Freeze, not from the tick. The far display has no death
  // clips, so a corpse lies tipped over there (as one that died far away).

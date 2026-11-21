@@ -98,6 +98,10 @@ struct FBattleSavedGroup
  UPROPERTY() int32 SurpriseBridgeLeader=INDEX_NONE;
  UPROPERTY() double SurpriseBridgeAge=0;
  UPROPERTY() int32 SurpriseNextCol=-1;
+ UPROPERTY() TArray<int32> FrontHold;
+ UPROPERTY() double FrontStepAge=0;
+ UPROPERTY() bool bFrontDrawn=false;
+ UPROPERTY() double FrontBackAge=100;
  UPROPERTY() FVector SurpriseBridgeEntry=FVector::ZeroVector;
  UPROPERTY() FVector SurpriseBridgeExit=FVector::ZeroVector;
  UPROPERTY() FVector SurpriseBridgeGoal=FVector::ZeroVector;

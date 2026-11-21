@@ -509,6 +509,7 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
   if(B->Actor.IsValid()) B->Actor->ApplyDeath();
   else
   {
+   ClearFollowerRifleTurn(ID);
    B->Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision); if(VAT)VAT->Freeze(ID);
    if(!VAT || !VAT->IsFar(ID))
    {
@@ -1018,6 +1019,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   const auto* Known=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,S->TacticalPlan.FlankTarget);
   Direction=((Known?Known->LastKnownPosition:S->TacticalPlan.FlankContact)-Position(ID)).GetSafeNormal2D();
  }
+ else if(FVector From;HitFaceEnabled() && !bArtilleryAim && !IsVehicle(ID) && HitWithin(ID,Now,2.) && UnitShotFrom(ID,Now,From) && FVector::DistSquared2D(From,Pos)>1.e4)
+ {Direction=(From-Pos).GetSafeNormal2D();SightExperiment.Cover(TEXT("hit_face_turned"));}
  // A vehicle turns its turret to the target; its hull keeps the driving heading (SteerVehicle).
  // The main gun's target (stage 2) takes the turret; the machine gun keeps firing along Direction at its own target.
  // A mortar gunner without a direct target faces his indirect-fire target; a self-propelled gun turns its gun to it.
@@ -1047,6 +1050,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   if(Pose!=B.Pose || Run!=B.bRunPose) { B.Pose=Pose; B.bRunPose=Run; if(VAT)VAT->ChangePose(ID,Pose); if(!VAT || !VAT->IsFar(ID))B.Mesh->PlayAnimation(FollowerClip(ID,Pose),true); }
  }
  Store->UpdateAim(ID,Now,B.Velocity.Size2D(),Direction,true);
+ if(B.Actor.IsValid())B.Actor->NoteDisplayAim(Direction,Now);
  if(BaseEngage)Fire(ID,Pos+Muzzle,Direction,false);
  if(CanEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false) && S->TacticalPlan.Action==EBattleSquadTactic::Support) GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(S->SquadID,TargetID); }
  Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:(BattleTactics::ObservedTactics()?ObservedEngage:CanEngage)?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
@@ -1084,6 +1088,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  if(bPlayerShot && U->bLauncherSelected)
   return FireExoLauncher(ID,Start+Direction.GetSafeNormal()*BattleRanges::Reach(EBattleWeapon::AntiTank),Now);
  Store->UpdateAim(ID,Now,Actor(ID)?Actor(ID)->GetVelocity().Size2D():Bodies.FindChecked(ID).Velocity.Size2D(),Direction,Actor(ID)?Actor(ID)->GetCharacterMovement()->IsMovingOnGround():true);
+ if(ABattleUnit* Shooter=Actor(ID);Shooter && !bPlayerShot)Shooter->NoteDisplayAim(Direction,Now);
  if(!Store->ConsumeShot(ID,Now,T->ShotInterval(U->Weapon,bPlayerShot))) return false;
  if(SightExperiment.Started)
  {
@@ -1138,6 +1143,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  // Display only (BattleBodyAnim): the hit and death clips face the side the shot came from.
  if(Victim>0)LastShotDirs.Add(Victim,Direction.GetSafeNormal2D());
  LastFireTimes.Add(ID,Now);
+ if(!Actor(ID))FollowerAims.Add(ID,Direction.GetSafeNormal());
  if(auto* Shooter=Actor(ID))Shooter->NoteVisualShot(Now);
  // Per-shot damage by the shooter's squad type (heavy infantry may hit harder; rifle squads 1x).
  // An anti-tank round hits for ATDamage (and ATBaseDamage on an enemy home); its explosion follows below.
@@ -1302,6 +1308,8 @@ void UBattleLeaderRuntime::Step(float Dt)
  // Named CPU trace scopes (Unreal Insights, -trace=cpu): free when no trace is recording.
  TRACE_CPUPROFILER_EVENT_SCOPE(BattleRuntimeStep);
  if(SightExperiment.Enabled) { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightExperiment); StepSightExperiment(Dt); }
+ // After the previous frame's facing and poses; also on the Phase3 path (it returns before the body timers).
+ if(BattleBodyAnim::Enabled())AimFollowerRifles(GetWorld()->GetTimeSeconds());
  if(Phase3 && Phase3->bEnabled) { Phase3->Step(Dt); return; }
  StepBodyTimers();
  StepCorpses();
@@ -1434,6 +1442,11 @@ bool UBattleLeaderRuntime::NoCoverFallbackEnabled()
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleNoCoverFallback="),V);return V!=0;}();
  return bOn;
 }
+bool UBattleLeaderRuntime::HitFaceEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleHitFace="),V);return V!=0;}();
+ return bOn;
+}
 bool UBattleLeaderRuntime::HitRevealEnabled()
 {
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleHitReveal="),V);return V!=0;}();
@@ -1559,7 +1572,7 @@ void UBattleLeaderRuntime::NoteUnderFire(int32 ID)
  // A direct hit adds one impulse even when a shield absorbs all damage (all weapon damage paths).
  if(ExoSuppressionApplies(ID))AddSuppression(ID,BattleSuppression::Tuning().PerShot,GetWorld()->GetTimeSeconds());
  if(UBattleMatch::DangerRouteOn())if(const auto* V=GetWorld()->GetSubsystem<UBattleState>()->Find(ID))GetWorld()->GetSubsystem<UBattleMatch>()->NoteSectorDanger(V->Team,Position(ID));
- if(ShotDirectionEnabled() || UnderFireCoverEnabled() || CoverPriorityEnabled() || (BattleTactics::VehicleHitCover()&&IsVehicle(ID))){FVector From;if(GetWorld()->GetSubsystem<UBattleState>()->PendingHitSource(From))ShotFrom.Add(ID,TPair<FVector,double>(From,GetWorld()->GetTimeSeconds()));}
+ if(ShotDirectionEnabled() || UnderFireCoverEnabled() || CoverPriorityEnabled() || HitFaceEnabled() || (BattleTactics::VehicleHitCover()&&IsVehicle(ID))){FVector From;if(GetWorld()->GetSubsystem<UBattleState>()->PendingHitSource(From))ShotFrom.Add(ID,TPair<FVector,double>(From,GetWorld()->GetTimeSeconds()));}
  if(SectorContactEnabled() || SectorMoveFireEnabled() || !SectorFireBack.IsEmpty())SectorHitUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);
  if(SightExperiment.Enabled)if(const int32 Shooter=GetWorld()->GetSubsystem<UBattleState>()->PendingHitShooter();Shooter!=INDEX_NONE)DiagnoseHitSight(ID,Shooter);
  if(HitRevealEnabled()){const auto* Store=GetWorld()->GetSubsystem<UBattleState>();FVector From;const int32 Shooter=Store->PendingHitShooter();

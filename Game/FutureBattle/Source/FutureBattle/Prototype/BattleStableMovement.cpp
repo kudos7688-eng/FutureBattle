@@ -139,22 +139,31 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    {
     const FVector At=Cover->GetSlots()[Slot];
     if(Sector && BattleSectors::Cell(At)!=Cell)continue;
-    if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic)) && HidesFromThreat(At)) CoverCandidates.Add(At);
+    // Evaluation (arrival_slot_*): slots in the sector, those without an obstacle 2.5 m ahead, those seen by the nearest threat (-BattleCoverStrict).
+    SightExperiment.Cover(TEXT("arrival_slot_in_cell"));
+    if(!GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic))) SightExperiment.Cover(TEXT("arrival_slot_no_wall_ahead"));
+    else if(HidesFromThreat(At)) CoverCandidates.Add(At);
+    else SightExperiment.Cover(TEXT("arrival_slot_exposed"));
    }
   }
   int32 Queries=0, OpenMembers=0, TailQueries=0;
+  if(CoverArrival) SightExperiment.Cover(CoverCandidates.Num()==0?TEXT("arrival_plan_candidates_0"):CoverCandidates.Num()<5?TEXT("arrival_plan_candidates_lt5"):CoverCandidates.Num()<20?TEXT("arrival_plan_candidates_lt20"):TEXT("arrival_plan_candidates_ge20"));
   for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive())
   {
    bool Found=false;
+   // Evaluation (arrival_open_*): why this member found no cover slot.
+   bool bCoverTried=false,bCapHit=false;int32 ArrTaken=0,ArrNoPath=0,ArrLong=0;
    if(CoverArrival && (Sector || ID==S->LeaderUnitID || OpenMembers++>=3))
     for(const FVector& At:CoverCandidates)
     {
-     if(TailQueries>=24) break;
+     bCoverTried=true;
+     if(TailQueries>=24) {bCapHit=true;break;}
      bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,At)<FMath::Square(190.)) {Taken=true;break;}
-     if(Taken) continue;
+     if(Taken) {++ArrTaken;continue;}
      ++TailQueries;
      auto* Tail=Nav->FindPathToLocationSynchronously(GetWorld(),P.Path.Num()?P.Path.Last():S->Destination,At);
-     if(!Tail || !Tail->IsValid() || Tail->IsPartial() || Tail->PathPoints.Num()<2 || Tail->GetPathLength()>(Sector?6500:2500)) continue;
+     if(!Tail || !Tail->IsValid() || Tail->IsPartial() || Tail->PathPoints.Num()<2 || Tail->GetPathLength()>(Sector?6500:2500))
+     {if(Tail && Tail->IsValid() && !Tail->IsPartial() && Tail->PathPoints.Num()>=2) ++ArrLong; else ++ArrNoPath; continue;}
      P.ArrivalGoals.Add(ID,At); P.ArrivalTails.Add(ID,Tail->PathPoints); Reserved.Add(At); CoverAssigned.Add(ID); Found=true;
      SightExperiment.Cover(TEXT("arrival_cover_slot"));
      break;
@@ -164,6 +173,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    // the obstacle face, at the slot's distance from it, where the obstacle still stands in front (within 2.5 m) - so the squad
    // stands shoulder to shoulder in the lee of walls and houses. (The first version stood 1.3 m behind the slot: a queue in
    // the open, user 11-20.)
+   if(CoverArrival && !Found && (Sector || bCoverTried))
+    SightExperiment.Cover(CoverCandidates.Num()==0?TEXT("arrival_open_no_candidates"):bCapHit?TEXT("arrival_open_query_cap"):ArrNoPath+ArrLong==0?TEXT("arrival_open_all_taken"):ArrLong>=ArrNoPath?TEXT("arrival_open_path_too_long"):TEXT("arrival_open_no_path"));
    static const bool CoverHuddle=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverHuddle="),V);return V!=0;}();
    if(!Found && CoverHuddle && Sector && CoverArrival)
     for(const FVector& At:CoverCandidates)

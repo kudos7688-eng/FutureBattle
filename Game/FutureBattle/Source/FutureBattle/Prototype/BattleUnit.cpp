@@ -340,9 +340,7 @@ void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Pare
 	{
 		// Grip calibration against the bundled rifle idle pose. The simplified
 		// Quinn mesh has hand_r but omits the animation skeleton weapon_r bone.
-		const FTransform Hand(FRotator(-11.885756,-81.776576,16.174298),FVector(-16.823813,7.097377,139.904362));
-		const FTransform Gun(FRotator(0,180,0),FVector(-14.9,29.,143.5));
-		const FTransform Grip = Gun.GetRelativeTransform(Hand);
+		const FTransform Grip = BattleBodyAnim::RifleGrip();
 		Model->SetRelativeLocationAndRotation(Grip.GetLocation(),Grip.GetRotation());
 	}
 }
@@ -525,17 +523,21 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	else if (UAnimSequence* Blind = Leaders && Leaders->IsBlindFiring(UnitID, Now) ? BattleBlindFire::Clip(BattleBlindFire::IsOverTop(S)) : nullptr)
 		Body.SetUpper(Blind, 1.f);
 	else Body.SetUpper(nullptr, 0.f);
-	const FVector AimDir = IsPlayerControlled() ? GetControlRotation().Vector() : S.WeaponAimDirection;
+	const FVector AimDir = IsPlayerControlled() ? GetControlRotation().Vector() : Now - DisplayAimTime < .5 && !DisplayAim.IsNearlyZero() ? DisplayAim : S.WeaponAimDirection;
 	// An AI soldier's weapon direction keeps its last pitch until the aim turns far (UBattleState::UpdateAim): shown only while
 	// he fires (BattleBodyAnim::ReadySeconds after his last shot), else the body eases back level instead of staying bent over a stale aim.
 	const bool bShowPitch = IsPlayerControlled() || Now - LastVisualShot < ReadySeconds;
 	const float WantPitch = bShowPitch ? FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(AimDir.GetSafeNormal().Z, -1., 1.))) : 0.f;
-	ShownAimPitch = IsPlayerControlled() ? WantPitch : FMath::FInterpConstantTo(ShownAimPitch, WantPitch, GetWorld()->GetDeltaSeconds(), 60.f);
+	ShownAimPitch = IsPlayerControlled() ? WantPitch : FMath::FInterpConstantTo(ShownAimPitch, WantPitch, GetWorld()->GetDeltaSeconds(), bShowPitch ? 240.f : 60.f);
 	Body.SetAim(ShownAimPitch, bProne || bTransition || bRun ? 0.f : 1.f);
 	// One-shot overlays: recoil for each shot, a flinch when hit (from the side the shot came from).
 	if (LastVisualShot > ShownShot) { ShownShot = LastVisualShot; if (!bProne) Body.PlayOverlay(Get(EClip::Fire), .55f); }
-	if (ShownHP >= 0.f && S.HP < ShownHP - .01f && !bProne)
+	// A hit reaction at most every HitReactSeconds: under steady fire each hit restarted the flinch and the body stayed bent over.
+	if (ShownHP >= 0.f && S.HP < ShownHP - .01f && !bProne && Now - LastHitReact >= HitReactSeconds)
+	{
+		LastHitReact = Now;
 		Body.PlayOverlay(Hit(GetActorForwardVector(), Leaders ? Leaders->LastShotDirection(UnitID) : FVector::ZeroVector, UnitID + int32(Now * 10.)), 1.f);
+	}
 	ShownHP = S.HP;
 }
 

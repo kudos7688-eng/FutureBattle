@@ -235,9 +235,17 @@ public:
 		int32 SurpriseBridgeLeader = INDEX_NONE;
 		float SurpriseBridgeAt = 0.f; /* when the current bridge leg began */
 		int32 SurpriseNextCol = -1; /* surprise group: the furthest stop column given in phase 1; a temporary pull-back does not move it back */
+		TArray<int32> FrontHold; /* front-holding group: the line the group holds, one column per row (own-home based); moved by UpdateFrontLine only */
+		float FrontStepAt = 0.f; /* front-holding group: when its line last stepped forward */
+		float FrontBackAt = -100.f; /* front-holding group: when rows last fell back for damage */
+		bool bFrontDrawn = false; /* front-holding group: FrontHold is a line the player drew (SetDrawnFrontLine); it does not step or fall back */
 		FVector SurpriseBridgeEntry = FVector::ZeroVector, SurpriseBridgeExit = FVector::ZeroVector, SurpriseBridgeGoal = FVector::ZeroVector;
 		float SurpriseWaitAt = -1.f, SurpriseLogAt = 0.f, SurpriseEndAt = 0.f; /* surprise group: since when its lead waits for the others; next progress log; when it ends whatever its phase */ };
 	bool UpdateSurpriseBridge(FBattleGroup& Group,const FVector& Lead);
+	// The player draws the team's front line (Ctrl + right drag, BattleController): each sector row the drawn line crosses takes that
+	// column; rows it does not cross keep theirs. Fewer than two points hand the line back to the group. Returns the rows set, 0 when
+	// handed back, -1 without a front-holding group (or -BattleFrontHold=0), -2 when the line crossed no row.
+	int32 SetDrawnFrontLine(int32 Team,const TArray<FVector>& Points);
 	uint8 GroupRole(const FBattleGroup& Group, int32 SquadID) const;
 	void AssignGroupRoles(FBattleGroup& Group) const;
 	FVector GroupSupportPost(int32 Team, int32 Point) const;
