@@ -146,6 +146,10 @@ $supply=@{
  'FLD'=@('-FrontLine','1','-FrontAuto','0')
  'GF1'=@('-FrontLine','0','-GroupFireSupport','1')
  'SG1'=@('-FrontLine','1','-FrontAuto','1','-SurpriseGroup','1')
+ # Stage 1 (2026-11-22): WP = corner waypoint pass (-BattleWaypointPass=1) on top of the default (HI).
+ 'WP'=@('-WaypointPass','1')
+ # SC = the sector AI combination the sector lane uses as its base (s22/s23) plus arrival walk (maps H/I).
+ 'SC'=@('-SectorContact','1','-SectorRoute','1','-SectorFlank','1','-SectorFront','1','-WaypointPass','1','-SectorMoveFire','1','-CoverHuddle','1','-PinnedFlank','1','-ArrivalThreat','1','-SectorCoverRoute','1','-ArrivalWalk','1')
 }
 $runs=@()
 foreach($c in $Conditions){ if(!$supply.ContainsKey($c)){throw "Unknown condition $c"}

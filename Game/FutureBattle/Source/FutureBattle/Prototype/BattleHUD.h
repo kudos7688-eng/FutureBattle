@@ -25,6 +25,11 @@ private:
  // Seen enemy squads get rings for their identified type (the one under the pointer, or all with L), observed information only.
  // -BattleRangeRings=0 hides them (also on the minimap).
  void DrawRangeRings();
+ // Squad icons (2026-11-21, display only, tactical view): a map-symbol icon per squad with its type letter (歩 重 偵 対 戦 装 迫 砲 外 補)
+ // that fades in as the camera pulls away (own squads with living count, seen enemy squads with the identified type, "?" when
+ // unidentified), and for enemy squads no longer seen a dashed icon at their last known place with the seconds since (always).
+ // Observed information only. -BattleSquadIcons=0 hides them.
+ void DrawSquadIcons();
  // The same rings on the tactical minimap (no labels; enemies only with L).
  void DrawMinimapRangeRings(class ABattleController* PC, const struct FBattleMinimapLayout& Map);
  // The predicted way of the selected squads and the way being drawn (BattlePlayerPath.cpp).

@@ -1452,7 +1452,7 @@ bool UBattleLeaderRuntime::SectorMoveEnabled()
 }
 bool UBattleLeaderRuntime::ArrivalWalkEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArrivalWalk="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleArrivalWalk="),V);return V!=0;}();
  return bOn;
 }
 bool UBattleLeaderRuntime::SectorMoveFireEnabled()
