@@ -25,7 +25,7 @@ int32 UBattleLeaderRuntime::ThreatCoverMode(int32 Team)
 
 int32 UBattleLeaderRuntime::ThreatCoverRelocate()
 {
- static const int32 Mode=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleThreatCoverRelocate="),V);return FMath::Clamp(V,0,2);}();
+ static const int32 Mode=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleThreatCoverRelocate="),V);return FMath::Clamp(V,0,3);}();
  return Mode;
 }
 
@@ -67,6 +67,27 @@ bool UBattleLeaderRuntime::ExposedToThreats(int32 ID,FVector Anchor,const TArray
  return false;
 }
 
+int32 UBattleLeaderRuntime::ExposingEnemy(int32 ID,FVector Anchor,double Now) const
+{
+ // -BattleThreatCoverRelocate=3: the nearest enemy (his target included) that he sees himself now, that sees into the place,
+ // and that he can fire at from the place itself: within the range the cover action keeps (TargetRange) and fires at (Engage,
+ // Reach while under fire), with a clear line from the place. Observed information only (his own sightings, as GatherThreats).
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);if(!U)return INDEX_NONE;
+ const auto* Contacts=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(ID);if(!Contacts)return INDEX_NONE;
+ const float Range=FMath::Min(TargetRange(ID),UnderFire(ID)?BattleRanges::Reach(U->Weapon):BattleRanges::Engage(U->Weapon));
+ int32 Best=INDEX_NONE;double BestD=TNumericLimits<double>::Max();
+ for(const auto& C:*Contacts)
+ {
+  const auto& K=C.Value;if(K.bShared || !K.bVisible || Now-K.LastSeenTime>.5)continue;
+  const auto* T=Store->Find(C.Key);if(!T || !T->IsAlive() || T->Team==U->Team)continue;
+  const double D=FVector::DistSquared2D(Anchor,K.LastKnownPosition);if(D>FMath::Square(double(Range)) || D>=BestD)continue;
+  if(BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),K.LastKnownPosition+FVector(0,0,60)).Fraction()<=CoverExposureLimit())continue;
+  if(!CoverLineClear(ID,Anchor,K.LastKnownPosition))continue;
+  Best=C.Key;BestD=D;
+ }
+ return Best;
+}
+
 bool UBattleLeaderRuntime::BrokenCoverSlot(int32 ID,int32 Slot,double Now) const
 {
  const auto* B=BrokenCover.Find(ID);if(!B || Now>=B->Until)return false;
@@ -104,7 +125,10 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
   const FVector Anchor=U->CoverAnchor;
   // The target too: it may have moved round the place since the soldier chose it.
   const bool ByTarget=BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Primary+FVector(0,0,60)).Fraction()>CoverExposureLimit();
-  const bool ByOther=!ByTarget && ExposedToThreats(ID,Anchor,Threats);
+  int32 Breaker=INDEX_NONE;
+  if(!ByTarget)for(int32 I=1;I<Threats.Num();++I)
+   if(BattleTactics::ExposureAt(GetWorld(),Anchor,Forward(ID),Threats[I]+FVector(0,0,60)).Fraction()>CoverExposureLimit()){Breaker=I;break;}
+  const bool ByOther=Breaker!=INDEX_NONE;
   if(!ByTarget && !ByOther){U->CoverFirstBreak=0;return false;}
   // -BattleThreatCoverRelocate=2: while another threat sees into the place he keeps down (no peek toward the target), at every
   // check, also before a break is confirmed.
@@ -117,6 +141,15 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
    U->CoverFirstBreak=0;
   }
   Diag.Cover(ByTarget?TEXT("threat_cover_broken_by_target"):TEXT("threat_cover_broken_by_other"));
+  // Evaluation only: the angle between the target and the threat that broke the place, seen from the place (is it really a
+  // flank, or another enemy of the same front?), and how far that threat was.
+  if(ByOther && Diag.Enabled)
+  {
+   const double Cos=FVector::DotProduct((Primary-Anchor).GetSafeNormal2D(),(Threats[Breaker]-Anchor).GetSafeNormal2D());
+   Diag.Cover(Cos>.7071?TEXT("threat_break_angle_0_45"):Cos>0.?TEXT("threat_break_angle_45_90"):Cos>-.7071?TEXT("threat_break_angle_90_135"):TEXT("threat_break_angle_135_180"));
+   const double Dist=FVector::Dist2D(Anchor,Threats[Breaker]);
+   Diag.Cover(Dist<1500.?TEXT("threat_break_dist_lt15m"):Dist<3000.?TEXT("threat_break_dist_15_30m"):TEXT("threat_break_dist_gt30m"));
+  }
   UE_LOG(LogFutureBattle,Verbose,TEXT("BATTLE_THREAT_COVER_BROKEN unit=%d slot=%d threats=%d by=%s"),ID,U->CoverSlot,Threats.Num(),ByTarget?TEXT("target"):TEXT("other"));
  }
  else if(U->bSoldierOrder)return false; // ordered while he waited: he holds; his next check decides
@@ -172,6 +205,23 @@ bool UBattleLeaderRuntime::CheckCoverThreats(int32 ID,FVector Primary,double Now
   }
   if(bBudget)*U=Before; // the search changes nothing when it fails
   if(Relocate==2){BrokenCover.Remove(ID);Diag.Cover(TEXT("threat_relocate_none_stay"));return false;} // he stays (kept down above)
+  if(Relocate==3)
+  {
+   // He stays and fights from the place: it is seen into anyway, so he peeks where he is (no step out) at the nearest enemy
+   // that sees in and that he can hit from there (his target when that is the one). With none such (seen into from where he
+   // was hit, or no line from the place) he keeps his usual peek at his target. When the target changes, no peek starts and
+   // no B1 move is chosen in this frame, whose contact is the old target's.
+   BrokenCover.Remove(ID);
+   const int32 Enemy=ExposingEnemy(ID,U->CoverAnchor,Now);
+   if(Enemy==INDEX_NONE)Diag.Cover(TEXT("threat_fire_none"));
+   else
+   {
+    if(Enemy!=U->CoverTargetID){U->CoverTargetID=Enemy;U->SoldierMoveAfter=FMath::Max(U->SoldierMoveAfter,Now+1.);Diag.Cover(TEXT("threat_turn_to_other"));}
+    else Diag.Cover(TEXT("threat_fire_in_place"));
+    U->CoverPeek=U->CoverAnchor;U->CoverSeconds=FMath::Max(U->CoverSeconds,.25f);
+   }
+   Diag.Cover(TEXT("threat_relocate_none_stay"));return false;
+  }
   Diag.Cover(TEXT("threat_relocate_none_leave"));
  }
  CancelCoverAction(ID);CoverProbeAfter.Remove(ID);

@@ -505,8 +505,12 @@ public:
  // the next one from where he is (12 m, inside the squad's sector and 30 m of its centre, not a place someone walks to;
  // hidden from every threat when another one sees in) and walks there; the walk is not ended halfway by a stale contact.
  // 1 = none found: leave as before. 2 = none found: stay (keeping down while another threat sees in) and search again at
- // each confirmed break. Searches: 2 soldiers a frame (B1 has its own 4).
+ // each confirmed break. Searches: 2 soldiers a frame (B1 has its own 4). 3 (2026-11-21) = none found: stay, but instead of
+ // keeping down he fights from where he is: the nearest enemy he sees that sees into the place and that he can fire at from it
+ // becomes his target (or stays it), and he peeks from the place itself (it is seen into anyway); with none such he keeps his
+ // usual peek. He searches again at each confirmed break, as with 2.
  static int32 ThreatCoverRelocate();
+ int32 ExposingEnemy(int32 ID,FVector Anchor,double Now) const; // BattleThreatCover.cpp
  uint64 RelocateFrame=0;int32 RelocatesThisFrame=0;
  // Soldiers who found the search budget full, with whether other threats saw in: on the next frame they search again with
  // the break already confirmed (no new check). Not saved: after a load they wait for their own phase, as before.
