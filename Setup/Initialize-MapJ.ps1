@@ -1,11 +1,11 @@
 # Map J (2026-11-22, Docs/design-map-j-terrain.md): generate Lvl_BattleWide_J when it does not exist (BattleMapCommandlet -WideField=J).
-param([Parameter(Mandatory)][string]$Project)
+param([Parameter(Mandatory)][string]$Project,[switch]$Force) # -Force regenerates an existing map J (the commandlet allows it for urban maps)
 $ErrorActionPreference='Stop'
 $mapFile = Join-Path (Split-Path $Project) 'Content/Prototype/Lvl_BattleWide_J.umap'
-if (!(Test-Path -LiteralPath $mapFile)) {
+if ($Force -or !(Test-Path -LiteralPath $mapFile)) {
     $log = Join-Path $PSScriptRoot ("Create-MapJ-{0}.log" -f [guid]::NewGuid())
     $editor = 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe'
-    $argsForMap = @(('"' + $Project + '"'), '-run=BattleMap', '-WideField=J', '-nullrhi', '-unattended', '-nosound', ('-abslog="' + $log + '"'))
+    $argsForMap = @(('"' + $Project + '"'), '-run=BattleMap', '-WideField=J', $(if($Force){'-Force'}else{'-unattended'}), '-nullrhi', '-unattended', '-nosound', ('-abslog="' + $log + '"'))
     $startupLog = [IO.Path]::ChangeExtension($log, 'startup.txt')
     "Starting Map J generation at $([DateTimeOffset]::Now.ToString('o'))" | Set-Content -LiteralPath $startupLog
     try {

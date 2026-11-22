@@ -58,7 +58,7 @@ void UBattleMatch::BuildSectorTheatres() const
  if(SectorTheatresMap==Def.Name&&SectorTheatres.Num()==BattleSectors::Columns*BattleSectors::Rows)return;
  using namespace BattleSectors;
  const int32 N=Objectives.Num();const int32 Cells=Columns*Rows;
- SectorTheatres.Init(-1,Cells);TheatreNeighbours.Init(0,FMath::Max(0,N));SectorTheatresMap=Def.Name;
+ SectorTheatres.Init(-1,Cells);TheatreNeighbours.Init(0,FMath::Max(0,N));TheatreSteps.Init(MAX_int32,FMath::Max(0,N*N));HomeTheatreSteps.Init(MAX_int32,FMath::Max(0,2*N));SectorTheatresMap=Def.Name;
  if(N<1||N>16)return;
  auto Index=[](FIntPoint C){return C.Y*Columns+C.X;};
  auto Open=[&](FIntPoint C){return Valid(C)&&!Impassable(BattleFieldLayout::SectorKind(GetWorld(),C));};
@@ -79,6 +79,12 @@ void UBattleMatch::BuildSectorTheatres() const
     Steps[I][Index(To)]=D+1;Queue.Add(To);
    }
   }
+ }
+ // Path steps between objectives and from both homes (3-3).
+ for(int32 I=0;I<N;++I)
+ {
+  for(int32 J=0;J<N;++J)if(const FIntPoint To=Cell(Objectives[J].Position);Valid(To))TheatreSteps[I*N+J]=Steps[I][Index(To)];
+  for(int32 T=0;T<2;++T)if(const FIntPoint To=Cell(AreaHome(T));Valid(To))HomeTheatreSteps[T*N+I]=Steps[I][Index(To)];
  }
  for(int32 C=0;C<Cells;++C)
  {
@@ -347,8 +353,17 @@ void UBattleMatch::UpdateStrategy(int32 Team)
  const int32 Counter=StrategyOn(Team,3)&&Area.StrategyCounter.IsValidIndex(Team)?Area.StrategyCounter[Team]:INDEX_NONE;
  TArray<int32> OwnPoints;for(int32 I=0;I<N;++I)if(ObservedOwner(Team,I)==Team)OwnPoints.Add(I);
  const FVector Home=AreaHome(Team);
+ // Sector maps: by path (sector steps x 50m) from the nearest own point or the home, so that a point behind a mountain is far
+ // (Docs/design-terrain-ai.md 3-3); points without a path, and maps without sectors, by the straight line.
+ const bool bPathSteps=TheatreSteps.Num()==N*N&&HomeTheatreSteps.Num()==2*N;
  auto FrontDistance=[&](int32 I)
  {
+  if(bPathSteps)
+  {
+   int32 Steps=HomeTheatreSteps[Team*N+I];
+   for(int32 J:OwnPoints)Steps=FMath::Min(Steps,TheatreSteps[J*N+I]);
+   if(Steps<MAX_int32)return double(Steps)*BattleSectors::Size;
+  }
   double D=FVector::Dist2D(Objectives[I].Position,Home);
   for(int32 J:OwnPoints)D=FMath::Min(D,FVector::Dist2D(Objectives[I].Position,Objectives[J].Position));
   return D;

@@ -250,6 +250,18 @@ struct FBattleUnitState
  UPROPERTY() float CoverSeconds=0;
  UPROPERTY() int32 CoverOrderRevision=0;
  UPROPERTY() int32 CoverTargetID=INDEX_NONE;
+ // The player's order to this one soldier (BattleSoldierOrder.cpp): his own place inside the squad, held until the squad's
+ // next order (MissionRevision) or until he is sent back (bSoldierReturn: walking back to his squad place, then the order ends).
+ UPROPERTY() bool bSoldierOrder=false;
+ UPROPERTY() bool bSoldierReturn=false;
+ UPROPERTY() FVector SoldierGoal=FVector::ZeroVector;
+ UPROPERTY() int32 SoldierOrderMission=0;
+ UPROPERTY() int32 SoldierRepaths=0; // path searched again after being stuck (the third time ends the order)
+ UPROPERTY() double SoldierStalledSince=0; // stuck since (saved as how long)
+ // Individual AI timers (BattleSoldierMove.cpp, BattleThreatCover.cpp), saved relative to the save time like ReloadEndTime.
+ UPROPERTY() double SoldierMoveUntil=0; // a B1 walk keeps its cover timer at 3 s until then
+ UPROPERTY() double SoldierMoveAfter=0; // no B1 decision before this time
+ UPROPERTY() double CoverFirstBreak=0; // -BattleThreatCover=2: first break of the current place (cleared when he leaves it)
 	UPROPERTY(VisibleAnywhere) bool bMovingShot = false;
 	UPROPERTY(VisibleAnywhere) float SpreadSkillScale = 1.f;
 	UPROPERTY(VisibleAnywhere) int32 ShotSequence = 0;

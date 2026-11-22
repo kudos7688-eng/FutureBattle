@@ -41,7 +41,7 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
  static const float VerifySaveAt=[]{float At=80.f;FParse::Value(FCommandLine::Get(),TEXT("BattleVerifySaveAt="),At);return FMath::IsFinite(At)?FMath::Max(1.f,At):80.f;}();
  if(!E.SaveCheckDone && Match->Elapsed>=VerifySaveAt && FParse::Param(FCommandLine::Get(),TEXT("BattleVerifyMixedSave")))
  {
-  E.SaveCheckDone=true;auto* Before=Match->CaptureSnapshot();FString Error;
+  E.SaveCheckDone=true;auto* Before=Match->CaptureSnapshot();FString Error;int32 BrokenCarried=0;
   bool OK=Before&&Before->Validate(Error)&&Match->SaveMatch(TEXT("FutureBattleSmokeOnly"))&&Match->LoadMatch(TEXT("FutureBattleSmokeOnly"));
   if(OK)
   {
@@ -51,6 +51,8 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
    {
     const auto& A=Before->Units[I];const auto& B=After->Units[I];
     OK&=A.State.UnitID==B.State.UnitID&&A.State.HP==B.State.HP&&A.State.Ammo==B.State.Ammo&&A.State.Reserve==B.State.Reserve&&A.State.bActorRepresentation==B.State.bActorRepresentation&&A.Position.Equals(B.Position,.01);
+    OK&=A.BrokenCoverSlot==B.BrokenCoverSlot&&FMath::IsNearlyEqual(A.BrokenCoverLeft,B.BrokenCoverLeft,.05f)&&A.BrokenCoverAt.Equals(B.BrokenCoverAt,.01);
+    BrokenCarried+=A.BrokenCoverSlot!=INDEX_NONE;
    }
    if(OK)for(const auto& P:Before->SavedPlans)
    {
@@ -59,7 +61,7 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
    }
   }
   E.SaveCheckPassed=OK;
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MIXED_SAVE_SOAK_RESULT failures=%d seconds=%.2f validation=%s message=%s"),OK?0:1,Match->Elapsed,*Error,*Match->LastMessage);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MIXED_SAVE_SOAK_RESULT failures=%d seconds=%.2f validation=%s message=%s broken_cover=%d"),OK?0:1,Match->Elapsed,*Error,*Match->LastMessage,BrokenCarried);
   if(!OK){E.Finished=true;FPlatformMisc::RequestExitWithStatus(false,1);return;}
  }
  Metrics->BeginFrame();
@@ -247,6 +249,7 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
  Root->SetStringField(TEXT("observation_scope"),TEXT("5Hz sampling; person-seconds, memory/shared separated; headless frame timing is not rendered performance"));
  auto Array=[&](const TCHAR* Name,const TArray<double>& Values){TArray<TSharedPtr<FJsonValue>> A;for(double V:Values)A.Add(MakeShared<FJsonValueNumber>(V));Root->SetArrayField(Name,A);};
  Array(TEXT("shot_distances_cm"),E.ShotDistances);Array(TEXT("engagement_distances_cm"),E.EngagementDistances);Array(TEXT("path_query_ms"),E.PathMS);
+ Array(TEXT("threat_check_ms"),E.ThreatCheckMS);Array(TEXT("threat_relocate_search_ms"),E.RelocateSearchMS);
  Root->SetNumberField(TEXT("max_path_cm"),E.MaxPathLength);
  {
   auto Survival=MakeShared<FJsonObject>();

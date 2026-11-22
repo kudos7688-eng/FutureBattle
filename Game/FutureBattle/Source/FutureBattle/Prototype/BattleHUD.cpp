@@ -466,6 +466,7 @@ void ABattleHUD::DrawHUD()
 	DrawHitDirection(PC);
 	DrawOffscreenMarkers(PC);
 	DrawKillLog(PC);
+	DrawSoldierOrders();
 	if (PC->NoticeUntil > GetWorld()->GetTimeSeconds())
  {
   const FString NoticeText=BattleUIText::Ja(PC->Notice);float NoticeWidth=0,NoticeHeight=0;
