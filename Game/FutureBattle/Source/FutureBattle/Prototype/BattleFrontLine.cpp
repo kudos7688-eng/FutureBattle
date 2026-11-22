@@ -1142,6 +1142,37 @@ void UBattleMatch::UpdateFrontPlan(int32 Team)
  if(BestPoint!=Focus){Focus=BestPoint;FocusAt=Elapsed;}
  SPhase=Focus!=INDEX_NONE?1:0;
  ReviewAt=Elapsed+60.f;
+ if(FrontPlanFocus2On(Team))
+ {
+  // Stage 5 (3.1): a second focus only while the first pushes (its section moved forward over 60 s and the AI attack group lost under
+  // 30% of its soldiers) and at least three free AI rifle squads remain. The best other section with a point ahead, its point nearest
+  // the own home; kept at least the focus hold time unless taken or the first stops pushing.
+  FFrontPlanTeam& FP=FrontPlanState[Team];
+  const int32 FocusSecNow=Objectives.IsValidIndex(Focus)?SectionOf(Focus):-1;
+  int32 AIGroup=INDEX_NONE;for(const auto& G:Groups)if(G.Value.Team==Team&&!G.Value.bPlayer&&G.Value.Kind==0&&!G.Value.bFocus2)AIGroup=AIGroup==INDEX_NONE?G.Key:FMath::Min(AIGroup,G.Key);
+  double Loss=0.;if(const FBattleGroup* G1=Groups.Find(AIGroup);G1&&G1->StartLiving>0)Loss=1.-double(GroupLiving(*G1))/G1->StartLiving;
+  const bool bPushing=FocusSecNow>=0&&P.Push.IsValidIndex(FocusSecNow)&&P.Push[FocusSecNow]>0.&&Loss<.3;
+  const bool bTaken2=Objectives.IsValidIndex(FP.Focus2)&&ObservedOwner(Team,FP.Focus2)==Team;
+  const int32 Old2=FP.Focus2;const TCHAR* Why2=TEXT("none");
+  if(!bPushing){if(FP.Focus2>=0){FP.Focus2=-1;Why2=TEXT("first_not_pushing");}}
+  else if(FP.Focus2<0||bTaken2||Elapsed-FP.Focus2At>=StrategyFocusHoldSeconds()||SectionOf(FP.Focus2)==FocusSecNow)
+  {
+   int32 Pick=-1;double PickScore=0;int32 PickPoint=INDEX_NONE;
+   for(int32 K=0;K<NS;++K)if(K!=FocusSecNow&&P.AheadMask[K]!=0u)
+   {
+    double Value=0;int32 Point=INDEX_NONE;double PointD=DBL_MAX;
+    for(int32 I=0;I<Objectives.Num()&&I<32;++I)if((P.AheadMask[K]>>I)&1){Value=FMath::Max(Value,double(ObjectiveValue(I)));const double D=FVector::DistSquared2D(Objectives[I].Position,Home);if(D<PointD){PointD=D;Point=I;}}
+    const double S2=P.Push[K]-2.*P.Dmg[K]+.5*Value-P.KnownN[K]/6.+(Objectives.IsValidIndex(FP.Focus2)&&K==SectionOf(FP.Focus2)?1.:0.);
+    if(Pick<0||S2>PickScore){Pick=K;PickScore=S2;PickPoint=Point;}
+   }
+   const bool bTroops=FP.FreeRifles>=3||Old2>=0; // the running second army keeps its squads
+   const int32 New2=Pick>=0&&bTroops?PickPoint:-1;
+   if(New2!=FP.Focus2){FP.Focus2=New2;FP.Focus2At=Elapsed;Why2=bTaken2?TEXT("taken"):New2<0?(bTroops?TEXT("no_candidate"):TEXT("no_troops")):TEXT("pick");if(New2>=0)++FP.Focus2Picks;}
+  }
+  if(FP.Focus2!=Old2)
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_FOCUS2 team=%d t=%.1f focus2=%d old=%d reason=%s first=%d push=%.2f loss=%.2f free_rifles=%d picks=%d"),
+    Team,Elapsed,FP.Focus2,Old2,Why2,Focus,FocusSecNow>=0&&P.Push.IsValidIndex(FocusSecNow)?P.Push[FocusSecNow]:0.,Loss,FP.FreeRifles,FP.Focus2Picks);
+ }
  if(Focus!=Old||bTaken)
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_PLAN team=%d t=%.1f focus=%d sec=%d old=%d reason=%s score=%.2f push=%.2f dmg=%.3f known=%d next=%d nextScore=%.2f"),
    Team,Elapsed,Focus,Best>=0?Best+1:0,Old,Why,Best>=0?BestScore:0.,Best>=0?P.Push[Best]:0.,Best>=0?P.Dmg[Best]:0.,Best>=0?P.KnownN[Best]:0,Next>=0?Next+1:0,Next>=0?NextScore:0.);
@@ -1180,6 +1211,9 @@ void UBattleMatch::UpdateFrontRoles(int32 Team)
  for(int32 K=0;K<NS;++K)
  {
   bool bFocus=false;for(int32 Y=0;Y<InFocus.Num();++Y)bFocus|=InFocus[Y]&&P.SectionOfRow[Y]==K;
+  if(FrontPlanFocus2On(Team)&&Objectives.IsValidIndex(P.Focus2))
+   if(const FIntPoint C2=BattleSectors::Cell(Objectives[P.Focus2].Position);BattleSectors::Valid(C2))
+    bFocus|=P.SectionOfRow[AreaHome(Team).X<0?C2.Y:BattleSectors::Rows-1-C2.Y]==K;
   const TCHAR Was=P.Role[K];TCHAR Now=Was;
   if(bFocus)Now=TEXT('F');
   else if(P.OwnMask[K]!=0u)
@@ -1206,4 +1240,17 @@ void UBattleMatch::UpdateFrontRoles(int32 Team)
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_ROLES team=%d t=%.1f roles=%s behind=%d points=%d/%d changes=%d hold_blocks=%d hold_steps=%d thin_rows=%d"),
    Team,Elapsed,*Roles,P.bBehind?1:0,OwnPts,EnemyPts,P.RoleChanges,P.HoldBlocks,P.HoldSteps,P.ThinNow);
  }
+}
+
+// ---- Front plan, stage 5: the second focus (Docs/design-front-strategy.md 3.1; trial -BattleFrontPlanFocus2=1, default 0) ----
+bool UBattleMatch::FrontPlanFocus2On(int32 Team) const
+{
+ static const int32 On=BattleFrontValues::Arg(TEXT("BattleFrontPlanFocus2="),0);
+ return On!=0&&FrontPlanOn(Team);
+}
+
+int32 UBattleMatch::GroupFocusPoint(const FBattleGroup& G) const
+{
+ if(G.bFocus2&&G.Team>=0&&G.Team<2)return FrontPlanState[G.Team].Focus2>=0?FrontPlanState[G.Team].Focus2:INDEX_NONE;
+ return StrategyFocusPoint(G.Team);
 }

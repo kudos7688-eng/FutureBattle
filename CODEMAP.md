@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（165 モジュール、42139 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（165 モジュール、42239 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -22,7 +22,7 @@
 | 機能 | 入口（ここから読む） | 関連 |
 |---|---|---|
 | 編成AI・候補選択と貯蓄購入 | `UBattleMatch::UpdateCompositionHiring` (BattleCompositionRuntime.cpp:93) 、 `BattleComposition::Decide` (BattleCompositionPlanner.cpp:13) 、 `BattleComposition::ValidateSave` (BattleCompositionSave.cpp:5) | Planner/PlannerTeams は既定0。ONは不足・緊急性で選択し貯蓄／購入。CombatStateVersion=4、旧保存はPlanner無効。検査は `UBattleLeaderRuntime::RunCompositionSmoke` (BattleCompositionSmoke.cpp:11) |
-| 盾被弾制圧・群の兵種別戦力（試験） | `UBattleLeaderRuntime::NoteUnderFire` (BattleLeaderRuntime.cpp:1808) 、 `UBattleState::AdvanceShields` (BattleState.cpp:391) 、 `UBattleMatch::GroupPower` (BattleGroups.cpp:572) 、 `UBattleMatch::GroupPointPower` (BattleGroups.cpp:580) | `BattleExoShieldSuppression` / `BattleGroupStrength` は既定0。観測兵種は `UBattlePerception::Update` (BattlePerception.cpp:58) で取得、重みはUBattleTuning |
+| 盾被弾制圧・群の兵種別戦力（試験） | `UBattleLeaderRuntime::NoteUnderFire` (BattleLeaderRuntime.cpp:1808) 、 `UBattleState::AdvanceShields` (BattleState.cpp:391) 、 `UBattleMatch::GroupPower` (BattleGroups.cpp:615) 、 `UBattleMatch::GroupPointPower` (BattleGroups.cpp:623) | `BattleExoShieldSuppression` / `BattleGroupStrength` は既定0。観測兵種は `UBattlePerception::Update` (BattlePerception.cpp:58) で取得、重みはUBattleTuning |
 | 間接射撃の試験切替 | `UBattleMatch::ArtilleryHomeObserved` (BattleAreaIntel.cpp:105) 、 `UBattleMatch::AreaArtilleryClusters` (BattleArtillery.cpp:269) 、 `UBattleLeaderRuntime::FireArtillery` (BattleArtillery.cpp:458) 、 `UBattleLeaderRuntime::ArtilleryBlastTransmission` (BattleArtillery.cpp:548) | 自走砲弾は `UBattleState::UseSPGAmmo` (BattleState.cpp:642) / `UBattleState::RefillSPGAmmo` (BattleState.cpp:650) 。4切替は既定0、CombatStateVersion=3で弾数と切替を保存 |
 | 正規状態・UnitID・部隊 | `UBattleState::RegisterUnit` (BattleState.cpp:98) 、 `UBattleState::CreateSquad` (BattleState.cpp:167) 、 `UBattleState::ApplyDamage` (BattleState.cpp:436) | 構造体は `BattleState.h`（FBattleUnitState、FBattleSquadState）。調整値は同じ .h の `UBattleTuning`（ini で上書き） |
 | 兵科（歩兵・重火器・偵察・対戦車・戦車）の差 | `BattleSquadType::Members` (BattleState.cpp:581) から `BattleSquadType::Weapon` (BattleState.cpp:619) までの一群、 `UBattleState::SetSquadType` (BattleState.cpp:624) | 射程は `BattleRanges::Get` (BattleRanges.cpp:6) |
@@ -112,15 +112,15 @@
 | `BattleFieldReplay` | .cpp | 206 |  | 広域試験の記録と再生（UBattleSquadTrial の一部） |
 | `BattleFieldTurn` | .cpp | 168 |  | 広域試験 T2b（UBattleSquadTrial の一部） |
 | `BattleFollowerBones` | .h/.cpp | 10 + 39 | BattleFollowerBones | 霧で隠れた部下のボーン表示の切替 |
-| `BattleFrontLine` | .cpp | 1209 |  | Surprise bridge waypoints: UpdateSurpriseBridge, BattleSurpriseRoute::Bridge / Intersects; fixed H/I map geometry, entrance / exit / edge goal, retained on same-time restore |
+| `BattleFrontLine` | .cpp | 1256 |  | Surprise bridge waypoints: UpdateSurpriseBridge, BattleSurpriseRoute::Bridge / Intersects; fixed H/I map geometry, entrance / exit / edge goal, retained on same-time restore |
 | `BattleGameMode` | .h/.cpp | 97 + 373 | ABattleGameMode | モードの統合、起動時の組み立て、毎フレームの入口、基本回帰 |
-| `BattleGroups` | .cpp | 612 |  | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部） |
+| `BattleGroups` | .cpp | 655 |  | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部） |
 | `BattleHUD` | .h/.cpp | 73 + 1550 | ABattleHUD | 画面表示（HUD、ミニマップ、部隊一覧、通知、命令の印） |
 | `BattleLeaderRuntime` | .h/.cpp | 839 + 1822 | FBattleBrokenCover, FBattleFollowerFragment, FBattleSquadSummary, FBattleSquadListRow, FBattleSquadListLayout, FBattleMinimapLayout, FBattleLeaderBody, FBattleLeaderPlan ほか2 | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新 |
 | `BattleMapI` | .h | 112 | BattleMapI | マップI（区画を前提にした設計）の表：50mの区画 20×14 の種類 `Kind`、道路 `Roads`、川・橋・浅瀬の位置、家 `Houses`・丘 `Hills`、高さの表 `MakeHeights`、拠点 `Objectives`。配置は `BattleMapLayoutI.inl`（生成と共有） |
 | `BattleMapJ` | .h | 141 | BattleMapJ, FMirror | マップJ（11-22、`Docs/design-map-j-terrain.md`）の区画の表：山 `M`（通れない・見通しを遮る）・湖 `L`（通れない）と、ビル・集合住宅・教会・工場・廃墟・駐車場・公園・商店の区画。区画ごとの配置の候補と8通りの向き（`Variant`／`Mirror`）、入れる家の位置（`HouseOf`）、拠点・丘・道。配置は `BattleMapLayoutJ.inl`、生成は `BattleMapCommandlet`（`-WideField=J`、`Setup/Initialize-MapJ.ps1`） |
 | `BattleMapStats` | .cpp | 186 |  | マップの統計（区域ごとの見通し・遮蔽、経路の長さ）を JSON に書き出す。試合は行わない（UBattleLeaderRuntime の一部） |
-| `BattleMatch` | .h/.cpp | 534 + 564 | FAreaIntent, FBattleObjective, FBattleStrike, FPlayerRoute, UBattleMatch, FFrontPlanTeam, FGroupStrength | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗 |
+| `BattleMatch` | .h/.cpp | 543 + 564 | FAreaIntent, FBattleObjective, FBattleStrike, FPlayerRoute, UBattleMatch, FFrontPlanTeam, FGroupStrength | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗 |
 | `BattleMetrics` | .h/.cpp | 65 + 142 | FBattleMetricFrame, UBattleMetrics, FBattleScopedMetric | 計測値の記録（1フレームの時間、判断の回数） |
 | `BattleMixedBodies` | .cpp | 197 |  | 混成の兵の体の生成・破棄・復元（UBattleLeaderRuntime の一部） |
 | `BattleMixedDriver` | .h/.cpp | 50 + 341 | FBattleMixedUnit, FBattleMixedDriver, MixedNavigation | 混成の兵1人ぶんの実行（旧 AIController と同じ役を Actor なしで行う） |
@@ -139,7 +139,7 @@
 | `BattleRanges` | .h/.cpp | 19 + 50 | BattleRanges | 認識・交戦の距離（マップごとに決まる） |
 | `BattleReplayData` | .h | 15 | FBattleReplayHeader, FBattleReplayUnit | 再生用データの型（試験専用） |
 | `BattleRoutes` | .cpp | 102 |  | 通り道：道路網のあるマップ（F）で、遠い目的地へ交差点を順に指示する。本拠地へ向かう部隊は観測した敵の少ない側面路を選ぶ（UBattleMatch の一部） |
-| `BattleSave` | .h/.cpp | 222 + 538 | BattleSaveValidation, FBattleSavedUnit, FBattleSavedDamage, FBattleSavedArtillery, FBattleSavedArtilleryShell, FBattleSavedGroup, FBattleSavedCarChoice, FBattleSavedPlayerRoute ほか1 | 保存形式、試合の保存と復元、検証 |
+| `BattleSave` | .h/.cpp | 223 + 538 | BattleSaveValidation, FBattleSavedUnit, FBattleSavedDamage, FBattleSavedArtillery, FBattleSavedArtilleryShell, FBattleSavedGroup, FBattleSavedCarChoice, FBattleSavedPlayerRoute ほか1 | 保存形式、試合の保存と復元、検証 |
 | `BattleScoutReport` | .cpp | 168 |  | 偵察報告（UBattleMatch の一部） |
 | `BattleSectorRoute` | .cpp | 239 |  | 区画経由の移動 `-BattleSectorRoute`・側面 `-BattleSectorFlank`・前線 `-BattleSectorFront`（区画のあるマップ、AIの歩兵）：道路網の次の交差点の代わりに、その周りで遮蔽の多い区画を制圧・維持しながら進む。側面は観測した敵の正面を避けた区画、前線は自軍の区画のうち敵に接する区画（UBattleMatch の一部） |
 | `BattleSectorView` | .h/.cpp | 71 + 191 | FBattleFogGrid, FBattleSectorInfo, BattleSectorView | 作戦画面の表示だけ（規則・AIは読まない）：自軍の視界の格子 `FBattleFogGrid`（12.5m、自軍の兵から静的な物体への光線）と区画ごとの状態 `BattleSectorView::Gather`（自軍の人数・観測した敵・視界の割合・拠点・命令中の部隊・遮蔽位置の数） |

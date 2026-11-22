@@ -211,7 +211,9 @@ public:
   // Stage 4 (-BattleFrontPlanFlex=1): own soldiers per section, each section's role ('F' focus, 'K' keep, 'H' hold, 'R' may fall back)
   // and since when, the "behind" posture and since when its condition holds, and counters of the intended actions (log only).
   TArray<int32> Soldiers; TArray<TCHAR> Role; TArray<float> RoleAt; float BehindSince=-1.f; bool bBehind=false;
-  int32 HoldBlocks=0, HoldSteps=0, ThinNow=0, RoleChanges=0; float RoleLogAt=-1.f; };
+  int32 HoldBlocks=0, HoldSteps=0, ThinNow=0, RoleChanges=0; float RoleLogAt=-1.f;
+  // Stage 5 (-BattleFrontPlanFocus2=1): the second focus point (-1 none) and since when; free AI rifle squads at the last group update.
+  int32 Focus2=-1; float Focus2At=-1.f; int32 FreeRifles=0, Focus2Picks=0; };
  FFrontPlanTeam FrontPlanState[2];
  static bool FrontPlanLogOn();
  void BuildFrontSections(int32 Team);
@@ -224,6 +226,12 @@ public:
  bool FrontPlanFlexOn(int32 Team) const;
  void UpdateFrontRoles(int32 Team);
  TCHAR FrontRoleOfRow(int32 Team,int32 Row) const; // 0 without roles
+ // Stage 5 (Docs/design-front-strategy.md 3.1, 4; trial -BattleFrontPlanFocus2=1, default 0, needs -BattleFrontPlan=1): a second focus
+ // section and attack army while the first one pushes (section push > 0, its attack group below 30% losses) and at least three free AI
+ // rifle squads remain after the front army took its need.
+ bool FrontPlanFocus2On(int32 Team) const;
+ // The point an AI attack group follows: the second focus for the second attack army, else the team focus (StrategyFocusPoint).
+ int32 GroupFocusPoint(const FBattleGroup& G) const;
  // Rows of the focus section (1) and the target point's column, for the line's continuity; empty / -1 without a front plan focus.
  void FrontPlanFocusRows(int32 Team,TArray<uint8>& InFocus,int32& TargetCol) const; // called right after UpdateFrontLine refreshed the team's line (same frame: AreaIntelView is cached)
  int32 FrontReleased[2]={0,0}; // squads the front army has released to the reserve so far (display: the player's notice)
@@ -304,6 +312,7 @@ public:
 		bool bArrived = false; /* this advance has reached its point: the stall clock (PhaseAt) runs from then */
 		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */
 		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp) */
+		bool bFocus2 = false; /* front plan stage 5: the second attack army, aimed at FFrontPlanTeam::Focus2 (Kind 0) */
 		int32 SurpriseRow = 0; /* surprise group: the edge sector row it moves along */
 		uint8 SurpriseBridgeStage = 0; /* 0 none, 1 entrance, 2 exit, 3 original edge goal; retained during same-time restore */
 		int32 SurpriseBridgeLeader = INDEX_NONE;

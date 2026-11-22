@@ -273,7 +273,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
  }
  // 2. AI formation (trial): one attack group per team from its AI-led rifle squads outside the home-assault slots, the nearest to the
  //    rally point first, with one tank, one mortar team, one anti-tank team and one supply vehicle when the team has them.
- int32 AIGroup=INDEX_NONE;for(const auto& P:Groups)if(P.Value.Team==Team&&!P.Value.bPlayer&&P.Value.Kind==0)AIGroup=AIGroup==INDEX_NONE?P.Key:FMath::Min(AIGroup,P.Key);
+ int32 AIGroup=INDEX_NONE;for(const auto& P:Groups)if(P.Value.Team==Team&&!P.Value.bPlayer&&P.Value.Kind==0&&!P.Value.bFocus2)AIGroup=AIGroup==INDEX_NONE?P.Key:FMath::Min(AIGroup,P.Key);
  if(BattleTactics::AreaGroups(Team)&&bStrategy)
  {
   const int32 Focus=AIGroup!=INDEX_NONE?Groups[AIGroup].Objective:GroupFocus(Team,AreaHome(Team));
@@ -313,6 +313,49 @@ void UBattleMatch::UpdateGroups(int32 Team)
     for(int32 SID:Pick){G.Squads.Add(SID);SquadGroup.Add(SID,AIGroup);}
     G.Squads.Sort();
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_JOIN group=%d team=%d joined=%d squads=%d time=%.1f"),AIGroup,Team,Pick.Num(),G.Squads.Num(),Elapsed);
+   }
+  }
+ }
+ // 2b. Front plan stage 5: the second attack army (rifle squads only) for the second focus; ends when the second focus ends.
+ if(FrontPlanFocus2On(Team))
+ {
+  FFrontPlanTeam& FP=FrontPlanState[Team];
+  int32 F2Group=INDEX_NONE;for(const auto& P:Groups)if(P.Value.Team==Team&&!P.Value.bPlayer&&P.Value.Kind==0&&P.Value.bFocus2)F2Group=P.Key;
+  const bool bWant=Objectives.IsValidIndex(FP.Focus2)&&ObservedOwner(Team,FP.Focus2)!=Team;
+  if(F2Group!=INDEX_NONE&&!bWant)DissolveGroup(F2Group,TEXT("focus2_end"));
+  struct FFree2{int32 SID;double D;};TArray<FFree2> Free2;
+  const FVector Rally2=bWant?GroupRally(Team,FP.Focus2):AreaHome(Team);
+  for(const auto& P:Store->GetSquads())
+  {
+   const auto& S=P.Value;
+   if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(P.Key)!=INDEX_NONE||S.SquadType!=BattleSquadType::Rifle)continue;
+   if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key)||ArmyPinned.Contains(P.Key))continue;
+   bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase)continue;
+   Free2.Add({P.Key,FVector::DistSquared2D(R->Position(S.LeaderUnitID),Rally2)});
+  }
+  // Only squads above the front army's open need count as free (the front army fills after this, UpdateFrontLine).
+  int32 FrontShort=0;for(const auto& P:Groups)if(P.Value.Team==Team&&P.Value.Kind==1&&!P.Value.bPlayer)FrontShort=FMath::Max(0,P.Value.FrontNeed-P.Value.Squads.Num());
+  FP.FreeRifles=FMath::Max(0,Free2.Num()-FrontShort);
+  if(bWant)
+  {
+   Free2.Sort([](const FFree2& A,const FFree2& B){return A.D!=B.D?A.D<B.D:A.SID<B.SID;});
+   if(FP.FreeRifles<Free2.Num())Free2.SetNum(FP.FreeRifles);
+   const int32 Want2=FMath::Clamp(T->GroupRifleSquads,3,6);
+   const int32 Have2=F2Group!=INDEX_NONE&&Groups.Contains(F2Group)?Groups[F2Group].Squads.Num():0;
+   TArray<int32> Pick2;for(const auto& F:Free2)if(Have2+Pick2.Num()<Want2)Pick2.Add(F.SID);
+   if(F2Group==INDEX_NONE||!Groups.Contains(F2Group))
+   {
+    if(Pick2.Num()>=3)if(auto* G2=Groups.Find(FormGroup(Team,Pick2,false)))
+    {
+     G2->bFocus2=true;G2->bOpened=true;G2->Objective=FP.Focus2;G2->Rally=Rally2;G2->Phase=0;G2->PhaseAt=Elapsed;
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_FOCUS2_GROUP team=%d group=%d point=%d squads=%d time=%.1f"),Team,G2->ID,FP.Focus2,G2->Squads.Num(),Elapsed);
+    }
+   }
+   else if(Pick2.Num())
+   {
+    auto& G2=Groups[F2Group];
+    for(int32 SID:Pick2){G2.Squads.Add(SID);SquadGroup.Add(SID,F2Group);}
+    G2.Squads.Sort();
    }
   }
  }
@@ -368,7 +411,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
   {
    const bool bAvoid=Elapsed<G->AvoidUntil&&Objectives.IsValidIndex(G->Avoid);
    // Strategy layer S2 (BattleStrategy.cpp): the team's focus first, while it is not own and the group is not avoiding it.
-   if(!G->bPlayer)if(const int32 F=StrategyFocusPoint(Team);F!=INDEX_NONE&&ObservedOwner(Team,F)!=Team&&!(bAvoid&&F==G->Avoid))return F;
+   if(!G->bPlayer)if(const int32 F=GroupFocusPoint(*G);F!=INDEX_NONE&&ObservedOwner(Team,F)!=Team&&!(bAvoid&&F==G->Avoid))return F;
    const double Limit=bAvoid?FVector::Dist2D(Objectives[G->Avoid].Position,Home)*BattleGroupValues::DeepRatio:DBL_MAX;
    int32 Best=INDEX_NONE;double BestD=DBL_MAX;
    for(int32 I=0;I<Objectives.Num();++I)
@@ -424,7 +467,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
    if(bOwn){Enter(2,TEXT("already_own"));continue;}
    // Strategy layer S2: a group still gathering turns to a new team focus (an advance under way finishes first).
    // Not more often than every 30 s (group lane 2026-11-22: switching a gathering group's goal makes it go back and forth).
-   if(!G->bPlayer&&Elapsed-G->PhaseAt>=30.f)if(const int32 F=StrategyFocusPoint(Team);F!=INDEX_NONE&&F!=G->Objective&&ObservedOwner(Team,F)!=Team&&!(Elapsed<G->AvoidUntil&&F==G->Avoid)){Attack(F,TEXT("strategy_focus"));continue;}
+   if(!G->bPlayer&&Elapsed-G->PhaseAt>=30.f)if(const int32 F=GroupFocusPoint(*G);F!=INDEX_NONE&&F!=G->Objective&&ObservedOwner(Team,F)!=Team&&!(Elapsed<G->AvoidUntil&&F==G->Avoid)){Attack(F,TEXT("strategy_focus"));continue;}
    const bool bAssembled=Present>=2&&Ready>=FMath::CeilToInt(Present*FMath::Clamp(T->GroupReadyShare,.1f,1.f));
    const float Waited=Elapsed-G->PhaseAt;
    if(!bAssembled&&Waited<FMath::Max(0.f,T->GroupAssembleMax))continue;

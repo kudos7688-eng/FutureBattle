@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 411 種類。
+計 412 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -148,7 +148,8 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleFrontLine` | Value | 1 | BattleFrontLine.cpp:117 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontOpen` | Value | 40 | BattleFrontLine.cpp:59 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontPlan` | Value | 0 | BattleFrontLine.cpp:1079 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
-| `-BattleFrontPlanFlex` | Value | 0 | BattleFrontLine.cpp:1153 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
+| `-BattleFrontPlanFlex` | Value | 0 | BattleFrontLine.cpp:1184 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
+| `-BattleFrontPlanFocus2` | Value | 0 | BattleFrontLine.cpp:1248 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontPlanLog` | Value | 0 | BattleFrontLine.cpp:965 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontPlanTeam` | Value | -1 | BattleFrontLine.cpp:1080 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontShare` | Value | 1.f | BattleFrontLine.cpp:44 |  |
@@ -156,7 +157,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleFX` | Value | 1 | BattleEffects.cpp:35 |  |
 | `-BattleFXCheck` | Param | off | BattleFXCheck.cpp:186 |  |
 | `-BattleGroupFireSupport` | Value | 1 | BattleArtillery.cpp:236, BattleGroups.cpp:290 | default 1 (user 2026-11-21) |
-| `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:544 |  |
+| `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:587 |  |
 | `-BattleHeavyCost` | Value | 未解決 | BattleState.cpp:568 |  |
 | `-BattleHeavyDamage` | Value | 未解決 | BattleState.cpp:568 |  |
 | `-BattleHeavyHealth` | Value | 未解決 | BattleState.cpp:567 |  |
