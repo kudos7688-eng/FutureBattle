@@ -26,8 +26,21 @@
 | 前線軍（群制御、`groupui`） | **11-22 3時30分 main へ**：テストプレイの指摘で作り直し。持ち場は行ごとの固定位置（遮蔽で前後を選び、畑の行は空ける）、最初の割り当ては歩く距離、前進は群が20秒ごとに行ごと、最初の前線は40%（`-BattleFrontOpen`）、要る数だけ前線軍に残し余りは未所属へ。Ctrl+右ドラッグは左右に引く | 試遊（Ctrl+右ドラッグ・通知の実画面確認）。数値は仮 |
 | 車両・砲兵・点検の直し（Codex委任、`FutureBattle-codex`） | **11-21〜22 main へ（すべて既定0、既定の試合は不変）**：自走砲が動かない直し `-BattleVehicleOrderHere`、戦車の被弾後の隠れ `-BattleVehicleHitCover`・主砲の発砲で位置が知られる `-BattleTankGunFlash`、砲兵の発砲で位置が知られる `-BattleArtilleryFlash`、自走砲の射程 `-BattleSPGRange`・費用 `-BattleAreaSPGCost`、公開の砲撃陣地と襲撃 `-BattleArtilleryPosts`（襲撃は外骨格→装甲車、ユーザー決定）、発砲を追う襲撃 `-BattleArtilleryRaidChase`、前線を抜ける襲撃 `-BattleArtilleryRaidSneak`、観測した情報だけで判断 `-BattleObservedArmour`／`-BattleObservedTactics`、点検05 の保存の検査（上限は 1 GiB）、点検07 の結果を変えない高速化、点検09 の画面の直し。評価：射程55000で自走砲の撃破が3〜4割減る。**構える深さ `-BattleArtilleryStandoff 0.35`＋前線を抜ける襲撃で、外骨格が自走砲を撃破できた（2 seed で3両）。発射は7分の1**（11-22 8時50分）。設計は `Docs/design-vehicle-survival.md`・`Docs/design-observation.md` | 戦車の直し A/B（2試合では効果が見えない）と砲兵の各切替を既定にするか。点検09 U06（3解像度）・U12（パッドのメニュー）の画面確認。AI が迫撃砲を買わない（陣地が使われない）。視界100m のマップA の保存は 69 MB |
 | 歩兵の装備・精鋭小隊・狙撃班（`arms` ブランチ、`FutureBattle-arms`） | **11-22 6時30分**：副武装の拳銃 `-BattleSidearms`、手りゅう弾 `-BattleGrenades=n`、近接攻撃 `-BattleMelee`、新しい武器5種（拳銃・短機関銃・散弾銃・選抜射手銃・擲弾銃）と狙撃銃、**精鋭小隊**（8人の役割分担、`-BattleElite`＝ `=` キー／AI `-BattleAreaEliteKeep=n`）、**狙撃班**（狙撃手＋観測手、`-BattleSniperTeam`＝ `]` キー／AI `-BattleAreaSniperKeep=n`）。すべて既定0。直接操作は G 投てき・V 近接・F 拳銃。ビルド・Test-Battle・Test-Area・自己試験 `-BattleArmsSmoke` 合格、既定の試合は main と IDENTICAL。試遊は `Setup\Play-Area.ps1 -Map I -Arms`（`FutureBattle-arms` から）。設計 `Docs/design-infantry-arms.md`。main へは未取り込み。**9時25分**：詰め寄り `-BattleArmsAssault=1/2`（遮蔽から遮蔽へ40m以内ずつ）。`=2`（普通の小隊も走る）でマップIの AI が手りゅう弾を1試合7〜25個投げ、30m未満の射撃も出た | 精鋭小隊だけの `=1` は近い戦いにならない。**近接攻撃は一度も起きない**（詰め寄りは敵の手前8mで止まる。白兵の突撃は未実装）。強さの片側試験は未実施、数値は仮。画面での確認（模型・投てきの球・アニメ）は未実施。main への取り込み |
+| 個人AI（`soldierai` ブランチ、`FutureBattle-soldierai`） | **11-22 12時20分：止まった兵の見張りの向き `-BattleSoldierWatch` を既定ON にして main へ**（ユーザー決定。止まっていて撃つ相手のいない兵が、知っている敵か、小隊で分けた前方を向く）。main に入れたのは見張りだけで、段階A（兵ごとの脅威で遮蔽を選ぶ）・しゃがみ判定・区画内の移動・兵1人への命令（Ctrl＋クリック、TPS視点の G／H）は soldierai にある（命令以外は既定0） | 見張りの勝ち負けへの効果は未確認（約20シードの片側試験が要る）。兵1人への命令を main に入れるか（操作はまだ試してもらっていない） |
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
+
+## 2026-11-22 12時20分 Claude（個人AI）：止まった兵の見張りの向き `-BattleSoldierWatch` を既定ON にして main へ入れた（ユーザー決定）
+
+- **変更**：止まっていて撃つ相手のいない兵（遮蔽の動作中・車両・直接操作中は除く）が、小隊の目標 → 自分が今見えている敵 → 覚えている敵・味方から報告された敵（記憶の秒数の内、射程の内）→ 小隊で分けた前方（敵の本拠地の方向と左右70度。兵の並び順で固定）の順に向く。`Follow` の向きの分岐で `-BattleAttackFocus` の後ろに置いた（区画任務でない部隊や、焦点がまだ無い部隊の兵を受け持つ）。最初の知覚の走査の前（試合の開始・読み込みの直後）は向きを変えない。`=0` で切る。`-BattleSoldierWatchTeam=0/1` で片方の軍だけ（`Test-WideSight -SoldierWatch/-SoldierWatchTeam`）。新しいファイル `BattleSoldierWatch.cpp`、数え上げ `watch_{target,seen,contact,sector}_frames`。SWITCHES・CODEMAP を作り直した。
+- **main に入れたのは見張りだけ**：`soldierai` ブランチの残りは入れていない。残りは、段階A `-BattleThreatCover`、しゃがみ判定 `-BattleThreatCoverCrouch`、区画内の移動 `-BattleSoldierMove`、プレイヤーの周りだけ `-BattleSoldierAIFocus`（以上は既定0）と、兵1人への命令（`BattleSoldierOrder.cpp`）。コードは soldierai と同じ行で、後で soldierai に main を取り込んでもぶつからない。
+- **根拠**（詳しくは soldierai の STATUS、11-22 8時10分と9時50分の項目）：
+  - 兵の視野は前方120度。止まっていて撃つ相手のいない兵は、歩いてきた向きのままだった。マップI・30FPS では、遮蔽の外で止まっている兵が、視野の外から撃ち手を見ないまま撃たれていた（両軍で1試合に約1000回）。
+  - 片側試験（マップI、30FPS、4シード×左右）では、視野の外から撃たれる回数が3〜4割減り、撃たれた兵が撃ち手を見ていた回数は増えた。
+  - 入れた側の得点差の変化は −16（標準誤差52）で、揺れの範囲だった。撃破と戦死もはっきりは変わらない。勝ち負けへの効果は測れていない。
+- **検証**：`Build-Editor` 成功（main）。`Test-Battle` failures=0（`Setup/Battle-Smoke-20261122-121330.log`）。マップI 種7・30FPS の既定の試合（`so-main-I-watchdef-s7`）は完走し、見張りの数え上げが出た（小隊の目標127万・見えている敵101万・覚えている敵64万・前方112万フレーム）。既定で効いている。
+- **制限・未実施**：勝ち負けへの効果は未確認（片側試験は同じシードでも得点差が100〜250点動くため、約20シードが要る）。描画ありの実画面では見ていない（向きが変わるだけで、表示は変えていない）。
+- **次の一手**：soldierai に main を取り込む。兵1人への命令を main に入れるかは、ユーザーに操作を試してもらってから決める。
 
 ## 2026-11-22 12時15分 Claude（区画AI）：`-BattleSectorSymmetric` を既定ON にした（ユーザー決定）
 
