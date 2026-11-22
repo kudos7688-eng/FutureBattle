@@ -251,7 +251,7 @@ namespace BattleStrategyValues
  constexpr double KnownWeight=1.;     // per unit of known enemy power in the theatre (memory-weighted)
  constexpr double OwnWeight=.5;       // per unit of own power in the theatre and its two nearest neighbours (ease of gathering)
  constexpr double DistanceWeight=1.;  // per 100 m from the nearest point the team observes as its own (its home when none)
- constexpr double AvoidPenalty=20.;
+ constexpr double OwnNearCap=40.;     // own power near a candidate counts up to this (11-22: troops already gathered kept a focus)
  constexpr double KeepBonus=3.;       // the current focus: no switch for a small difference
  // Stage S3 (-BattleStrategy=3): hold and defend -> counter.
  constexpr double HoldAfter=20.;      // s an own point's theatre stays "enemy ahead" before it is held
@@ -374,19 +374,22 @@ void UBattleMatch::UpdateStrategy(int32 Team)
   }
  }
  if(Avoid>=0&&Elapsed>=AvoidUntil){Avoid=-1;AvoidUntil=-1.f;}
- // The AI attack group gave up on the focus (its own avoid clock runs): the team avoids it too; the switch still waits for the hold.
+ // The AI attack group gave up on the focus (its own avoid clock runs): the team avoids it too and reviews at once, without waiting
+ // for the hold; an avoided point is no candidate while avoided (11-22: map J seed 19 kept a given-up focus for 170 s).
+ bool bAvoided=false;
  if(Objectives.IsValidIndex(Focus)&&Avoid!=Focus)
   for(const auto& P:Groups)
-   if(P.Value.Team==Team&&!P.Value.bPlayer&&P.Value.Kind==0&&P.Value.Avoid==Focus&&Elapsed<P.Value.AvoidUntil){Avoid=Focus;AvoidUntil=Elapsed+AvoidSeconds;break;}
+   if(P.Value.Team==Team&&!P.Value.bPlayer&&P.Value.Kind==0&&P.Value.Avoid==Focus&&Elapsed<P.Value.AvoidUntil){Avoid=Focus;AvoidUntil=Elapsed+AvoidSeconds;bAvoided=true;break;}
  const TCHAR* Why=nullptr;
  if(SPhase==0&&ReviewAt<0)Why=TEXT("open");
  else if(Objectives.IsValidIndex(Focus)&&ObservedOwner(Team,Focus)==Team)Why=TEXT("taken");
+ else if(bAvoided)Why=TEXT("avoid");
  else if(Elapsed>=ReviewAt)Why=TEXT("review");
  else if(bCounter)Why=TEXT("counter");
  if(!Why)return;
- // A focus is kept at least Hold seconds; only taking it ends it sooner.
+ // A focus is kept at least Hold seconds; only taking it or giving it up ends it sooner.
  const bool bTaken=FCString::Strcmp(Why,TEXT("taken"))==0;
- if(SPhase==1&&Objectives.IsValidIndex(Focus)&&!bTaken&&Elapsed-FocusAt<Hold){ReviewAt=FocusAt+Hold;return;}
+ if(SPhase==1&&Objectives.IsValidIndex(Focus)&&!bTaken&&!bAvoided&&Elapsed-FocusAt<Hold){ReviewAt=FocusAt+Hold;return;}
  if(Situation().Theatres.Num()!=N+2)return;
  const int32 Counter=StrategyOn(Team,3)&&Area.StrategyCounter.IsValidIndex(Team)?Area.StrategyCounter[Team]:INDEX_NONE;
  TArray<int32> OwnPoints;for(int32 I=0;I<N;++I)if(ObservedOwner(Team,I)==Team)OwnPoints.Add(I);
@@ -454,11 +457,11 @@ void UBattleMatch::UpdateStrategy(int32 Team)
  int32 Best=INDEX_NONE,Next=INDEX_NONE,Unknown=0;double BestScore=0,NextScore=0;
  for(int32 I=0;I<N;++I)
  {
-  if(OwnPoints.Contains(I))continue;
+  if(OwnPoints.Contains(I)||I==Avoid)continue;
   const auto& X=S.Theatres[I];
   // An unknown theatre is not guessed at: it is not a focus candidate (user decision 2026-11-17).
   if(X.State==0){++Unknown;continue;}
-  const double CandidateScore=-KnownWeight*X.KnownPower+OwnWeight*OwnNear(I)-DistanceWeight*FrontDistance(I)/10000.-(I==Avoid?AvoidPenalty:0.)+(I==Focus?KeepBonus:0.)+(I==Counter?CounterBonus:0.)-
+  const double CandidateScore=-KnownWeight*X.KnownPower+OwnWeight*FMath::Min(OwnNear(I),OwnNearCap)-DistanceWeight*FrontDistance(I)/10000.+(I==Focus?KeepBonus:0.)+(I==Counter?CounterBonus:0.)-
    (I<32&&((PassBlocked>>I)&1)?PassPenalty:0.);
   if(Best==INDEX_NONE||CandidateScore>BestScore){Next=Best;NextScore=BestScore;Best=I;BestScore=CandidateScore;}
   else if(Next==INDEX_NONE||CandidateScore>NextScore){Next=I;NextScore=CandidateScore;}
