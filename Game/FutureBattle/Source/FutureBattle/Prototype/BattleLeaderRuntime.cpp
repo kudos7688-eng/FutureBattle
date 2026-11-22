@@ -328,14 +328,17 @@ FBattleSightContext UBattleLeaderRuntime::Sight(int32 ID) const
  const FMaskFilter TeamMask=SightTeamMaskFor(ID);
  // Leaning out past an edge for a blind shot, he looks from there.
  FVector Leaning;const bool bLeaning=SideExposure(ID,GetWorld()->GetTimeSeconds(),Leaning);
- if(auto* A=Actor(ID)) {auto Context=A->CaptureSightContext();Context.Eye.Z+=EyeZ-60.f;if(bLeaning)Context.Eye=Leaning;if(Still>0.f)Context.RangeSquared=FMath::Max(Context.RangeSquared,FMath::Square(Still));Context.Query.IgnoreMask=TeamMask;return Context;}
+ if(auto* A=Actor(ID)) {auto Context=A->CaptureSightContext();Context.Eye.Z+=EyeZ-60.f;if(bLeaning)Context.Eye=Leaning;if(Still>0.f)Context.RangeSquared=FMath::Max(Context.RangeSquared,FMath::Square(Still));Context.Query.IgnoreMask=TeamMask;if(const FVector* Look=WalkLooks.Find(ID))Context.Forward=*Look;return Context;}
  FBattleSightContext C; const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
  C.Position=Position(ID); C.Eye=bLeaning?Leaning:C.Position+FVector(0,0,EyeZ); C.Forward=Forward(ID); C.bAlive=U && U->IsAlive();
  if(U) { C.RangeSquared=FMath::Square(U->Perception.SightRange); C.HalfAngleCos=FMath::Cos(FMath::DegreesToRadians(U->Perception.FieldOfView*.5)); C.bOmnidirectional=U->Perception.FieldOfView>=360; }
  if(Still>0.f) C.RangeSquared=FMath::Max(C.RangeSquared,FMath::Square(Still));
  C.Metrics=GetWorld()->GetSubsystem<UBattleMetrics>(); C.Query=FCollisionQueryParams(SCENE_QUERY_STAT(LeaderSight),false);
  if(const auto* B=Bodies.Find(ID)) C.Query.AddIgnoredComponent(B->Capsule.Get());
- C.Query.IgnoreMask=TeamMask; return C;
+ C.Query.IgnoreMask=TeamMask;
+ // -BattleWalkLook: on the move with nothing to fire at, he looks where his head is turned (WalkLooks), not along his body.
+ if(const FVector* Look=WalkLooks.Find(ID))C.Forward=*Look;
+ return C;
 }
 bool UBattleLeaderRuntime::CanSee(int32 ID,int32 Target) const
 {
@@ -858,6 +861,7 @@ bool UBattleLeaderRuntime::FollowerOverlapsOff()
 }
 void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
 {
+ if(WalkLooks.Num())WalkLooks.Remove(ID); // -BattleWalkLook: his view of the last frame; set again below while it holds
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()) return;
  auto& B=Bodies.FindChecked(ID);
  // The player's order to this soldier ends (squad order, squad stopped, taken over...) before his cover action runs.
@@ -1107,6 +1111,12 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  else if(FVector Watch;SoldierWatchEnabled(U->Team) && !bArtilleryAim && !bVehicleBody &&
   (B.Actor.IsValid()?B.Actor->GetVelocity().SizeSquared2D():B.Velocity.SizeSquared2D())<=400. && SoldierWatchDirection(ID,TargetID,Pos,Now,Watch))
   Direction=Watch;
+ // Trial -BattleWalkLook (default 0, BattleSoldierWatch.cpp): on the move with nothing to fire at, his body keeps to his way and
+ // he turns his head - his view (Sight) looks to his share of the ground around the squad's way, or to the enemy he knows of.
+ else if(FVector Look;WalkLookMode(U->Team) && !bArtilleryAim && !bVehicleBody &&
+  (B.Actor.IsValid()?B.Actor->GetVelocity().SizeSquared2D():B.Velocity.SizeSquared2D())>400. &&
+  WalkLookDirection(ID,TargetID,Pos,B.Actor.IsValid()?B.Actor->GetVelocity():B.Velocity,Now,Look))
+  WalkLooks.Add(ID,Look);
  // A vehicle turns its turret to the target; its hull keeps the driving heading (SteerVehicle).
  // The main gun's target (stage 2) takes the turret; the machine gun keeps firing along Direction at its own target.
  // A mortar gunner without a direct target faces his indirect-fire target; a self-propelled gun turns its gun to it.
@@ -1616,6 +1626,21 @@ void UBattleLeaderRuntime::DiagnoseHitSight(int32 ID,int32 Shooter)
  const bool bOneWay=FCString::Strcmp(VS,TEXT("clear"))!=0 && FCString::Strcmp(SV,TEXT("clear"))==0;
  if(!bOneWay)return;
  E.Cover(*FString::Printf(TEXT("hitlos_oneway_%s"),VS));
+ // Evaluation only (2026-11-22, close fights): a soldier hit from outside his view - what he was doing, from which side, how
+ // far, and what he and his squad knew of the shooter.
+ if(FCString::Strcmp(VS,TEXT("fov"))==0)
+ {
+  const FVector Here=Position(ID),Toward=(Position(Shooter)-Here).GetSafeNormal2D();
+  const bool bWalking=V->Action==EBattleAction::Moving || V->Action==EBattleAction::Flanking || V->Action==EBattleAction::Returning || V->Action==EBattleAction::Regrouping || V->Action==EBattleAction::TakingCover;
+  E.Cover(V->CoverPhase?TEXT("hitfov_in_cover"):bWalking?TEXT("hitfov_walking"):V->Action==EBattleAction::Engaging?TEXT("hitfov_engaging"):TEXT("hitfov_still"));
+  E.Cover(FVector::DotProduct(Sight(ID).Forward.GetSafeNormal2D(),Toward)<-.5?TEXT("hitfov_from_rear"):TEXT("hitfov_from_side"));
+  const double Away=FVector::Dist2D(Here,Position(Shooter));
+  E.Cover(Away<3000.?TEXT("hitfov_lt30m"):Away<5000.?TEXT("hitfov_lt50m"):Away<10000.?TEXT("hitfov_lt100m"):TEXT("hitfov_ge100m"));
+  const auto* Held=Perc->FindContact(ID,Shooter);
+  E.Cover(!Held?TEXT("hitfov_shooter_unknown"):Held->bShared?TEXT("hitfov_shooter_reported"):TEXT("hitfov_shooter_remembered"));
+  if(const auto* Own=Store->FindSquad(V->SquadID))
+   for(int32 Mate:Own->Members) if(Mate!=ID) if(const auto* Sighting=Perc->FindContact(Mate,Shooter);Sighting && Sighting->bVisible && !Sighting->bShared){E.Cover(TEXT("hitfov_mate_sees_shooter"));break;}
+ }
  auto StName=[](uint8 St){return St==BattleStance::Prone?TEXT("prone"):St==BattleStance::Crouch?TEXT("crouch"):TEXT("stand");};
  E.Cover(*FString::Printf(TEXT("hitlos_oneway_victim_%s"),StName(StanceOf(ID))));E.Cover(*FString::Printf(TEXT("hitlos_oneway_shooter_%s"),StName(StanceOf(Shooter))));
  const double Now=GetWorld()->GetTimeSeconds();FVector Dummy;

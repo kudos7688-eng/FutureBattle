@@ -573,6 +573,16 @@ public:
  // BattleSoldierWatch.cpp; counts watch_{target,seen,contact,sector}_frames.
  static bool SoldierWatchEnabled(int32 Team);
  bool SoldierWatchDirection(int32 ID,int32 TargetID,const FVector& Pos,double Now,FVector& Out);
+ int32 KnownEnemyDirection(int32 ID,int32 TargetID,const FVector& Pos,double Now,FVector& Out,double Within) const;
+ // Trial -BattleWalkLook=1/2 (default 0, 2026-11-22; -BattleWalkLookTeam=0/1 for one team): a soldier on the move with nothing to
+ // fire at keeps his body along his way and turns his head - only his view (Sight) changes. He looks at the enemy he knows of
+ // within his sight (KnownEnemyDirection), else to his share of the ground around the squad's way by his place in the squad
+ // (ahead, 50 and 100 degrees to either side). =2: the members who look ahead keep looking ahead. WalkLooks holds his view of
+ // this frame (cleared at the start of each Follow and on a load; not saved: after a load it comes back with his next Follow
+ // after his first scan). BattleSoldierWatch.cpp; counts walk_look_{ahead,side,target,seen,contact}_frames.
+ static int32 WalkLookMode(int32 Team);
+ bool WalkLookDirection(int32 ID,int32 TargetID,const FVector& Pos,const FVector& Way,double Now,FVector& Out);
+ TMap<int32,FVector> WalkLooks;
  void RevealShooter(int32 VictimID,int32 ShooterID,const FVector& From);
  // Evaluation only (sight diagnostics on, behaviour unchanged, 2026-11-21): a hit soldier who does not see his shooter. Why each of the
  // two lines (victim->shooter, shooter->victim) fails, using the same checks as CanSee (range, field of view, first blocking hit).
