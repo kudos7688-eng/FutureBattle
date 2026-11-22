@@ -29,6 +29,13 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-22 18時35分 Claude（実装計画ロードマップ）：`-BattleAreaPointSupply`（味方の拠点での弾の補充）を既定ON にした（ユーザー決定、main b2d2d7b）
+- **決定（ユーザー、17時10分の計測を見て）**：全マップで既定ON（AIどうしの試合は変わらず、プレイの規則と評価の規則がそろう）。
+- **変更**（ブランチ `pointsupply`、main へ b2d2d7b）：`Config/DefaultGame.ini` の `bAreaPointSupply=True`、`UBattleTuning::bAreaPointSupply` の初期値 true。`=0` で切れる。`Run-EconomyMatrix` に条件 `PT0`（`-AreaPointSupply 0`）。SWITCHES を作り直した。`Play-Area.ps1` の `-BattleAreaPointSupply=1` はそのまま（害はない）。
+- **検証**：main で Build-Editor 成功。Test-Battle 合格（`Setup/Battle-Smoke-20261122-182348.log`、failures=0）。Test-Area 合格（`pointsupply-b2d2d7b`、failures=0）。凍結ビルド `pointsupply-b2d2d7b`、30FPS、マップE 種7 の左右2組：既定の試合では補充が起きる（run.log の `AREA_POINT_SUPPLY` 6回・15回）、`-AreaPointSupply 0` では0回。この切替はAIどうしの試合を変えないので（17時10分の項）、既定と `=0` は `Compare-MatchResults` で IDENTICAL（78項目）。
+- **影響**：AIどうしの試合は変わらない。プレイヤーの部隊は、どの起動でも味方の拠点で弾を補充できる。
+- **次の一手**：段階0で決めた「計測してから尋ねる」順の残りは `-BattleAreaComposition`（段階3で測り直してから）。
+
 ## 2026-11-22 18時20分 Claude（個人AI）：撃ち返し `-BattleOwnTarget` と視線 `-BattleWalkLook` を試験切替（既定0）として main へ取り込んだ。通常の距離とマップE でも、撃ち返しを入れたチームが8本すべてで得をした
 
 - **変更**（main 09c34dc）：ブランチ `soldierai` を取り込んだ。入ったのは、試験切替 `-BattleOwnTarget=1/2` と `-BattleWalkLook=1/2`（どちらも既定0。`…Team=0/1` で片方のチームだけ）、診断 `hitfov_*`、`Play-Area.ps1 -OwnTarget N -WalkLook N`、`Test-WideSight.ps1 -OwnTarget -OwnTargetTeam -WalkLook -WalkLookTeam`。既定の試合は変わらない。中身は17時30分の項目。
