@@ -326,13 +326,16 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
  const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,A->Target);
  const FVector Pos=Position(ID);const TCHAR* End=nullptr;
  if(!U || !U->IsAlive())End=TEXT("approach_cancel_died");
- else if(U->OrderRevision!=A->Revision)End=TEXT("approach_cancel_new_order");
+ // An assault dash (BattleArms.cpp) survives a re-issued order while the squad still fights where it is (not a move order).
+ else if(U->OrderRevision!=A->Revision && !(A->bAssault && Store->FindSquad(U->SquadID) && Store->FindSquad(U->SquadID)->Order!=EBattleOrder::Move))End=TEXT("approach_cancel_new_order");
  // -BattleContactCover: the squad's target flickers; the walk goes on while this soldier's own sighting is fresh (the stale check below).
- else if(Target==INDEX_NONE && !bContactCover)End=TEXT("approach_cancel_disengaged");
+ // An assault dash (BattleArms.cpp) goes on while the soldier's own sighting is fresh even when the squad stops trading fire.
+ else if(Target==INDEX_NONE && !bContactCover && !A->bAssault)End=TEXT("approach_cancel_disengaged");
  // The squad re-picks its target every think; keep walking while this soldier still sees its own threat.
  // An assault dash (BattleArms.cpp) goes on toward an enemy hidden behind his cover while the sighting is fresh (the stale check below).
  else if(Target!=A->Target && !(Contact && Contact->bVisible) && !bContactCover && !A->bAssault)End=TEXT("approach_cancel_target_changed");
- else if(!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds))End=TEXT("approach_cancel_contact_stale");
+ // An assault dash keeps going toward an enemy seen or reported within 10 s (he is often behind his cover meanwhile).
+ else if(!Contact || Now-Contact->LastSeenTime>FMath::Min(A->bAssault?10.f:5.f,U->Perception.MemorySeconds))End=TEXT("approach_cancel_contact_stale");
  else if(!A->bFree && !GetWorld()->GetSubsystem<UBattleCover>()->IsAvailable(A->Slot,ID,Now))End=TEXT("approach_cancel_slot_taken");
  else if(FVector::Dist2D(Pos,A->Goal)<120)
  {

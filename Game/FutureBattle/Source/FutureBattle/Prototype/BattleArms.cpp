@@ -289,8 +289,9 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
    U=Store->Find(ID);
   }
   // Close-quarters assault (-BattleArmsAssault): the elite platoon's breacher, assault man and rifleman (mode 2: also one grenade
-  // carrier of an ordinary rifle squad) dash to hidden cover near a known enemy 30-80 m away, while no more than two of the squad are
-  // dashing and the enemies around the target are not more than half the squad. Known: seen by him, or seen / reported within 3 s.
+  // carrier of an ordinary rifle squad) close on a known enemy 30-150 m away in bounds from cover to cover, while no more than two of
+  // the squad are dashing and the enemies around the target are not more than half the squad. Known: seen by him, or seen / reported
+  // within 3 s.
   if(const int32 DashMode=BattleArms::AssaultMode();DashMode>0&&S->Order!=EBattleOrder::Move&&!CoverApproaches.Contains(ID)&&Now>=ArmsAssaultNext.FindRef(ID))
   {
    const bool bRole=U->Kit==BattleArms::KitBreacher||U->Kit==BattleArms::KitAssault||U->Kit==BattleArms::KitRifleman;
@@ -300,7 +301,7 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
     int32 Living=0,Dashing=0;
     for(int32 Member:S->Members)if(const auto* M=Store->Find(Member);M&&M->IsAlive()){++Living;if(const auto* A=CoverApproaches.Find(Member);A&&A->bAssault)++Dashing;}
     const auto* Contacts=Sense->GetContacts(ID);const FVector Pos=Position(ID);
-    int32 Best=INDEX_NONE;double BestD=8000.;FVector BestAt=FVector::ZeroVector;
+    int32 Best=INDEX_NONE;double BestD=15000.;FVector BestAt=FVector::ZeroVector;
     if(Contacts&&Dashing<(bRole?2:1))for(const auto& C:*Contacts)
     {
      if(Now-C.Value.LastSeenTime>3.||(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(C.Value.ObservedSquadType):IsVehicle(C.Key)))continue;
@@ -355,26 +356,28 @@ bool UBattleLeaderRuntime::StartAssault(int32 ID,int32 Target,const FVector& Tar
  if(!U||!U->IsAlive()||!Bodies.Contains(ID)||IsVehicle(ID)||TargetAt.ContainsNaN())return false;
  auto* Cover=GetWorld()->GetSubsystem<UBattleCover>();Cover->BuildSlots();
  const FVector Pos=Position(ID),Eye=TargetAt+FVector(0,0,60);const double Base=FVector::Dist2D(Pos,TargetAt);
- // A cover slot 8-25 m from the enemy, at least 10 m closer than now, that hides from him, with a straight walkable line to it
- // (the same test as the cover approach); the nearest such slot. No dash across the open without cover at the end.
- int32 BestSlot=INDEX_NONE;double BestWalk=DBL_MAX;FVector BestAnchor=FVector::ZeroVector;
- for(int32 Slot:Cover->NearbySlots(TargetAt,2500.f,96))
+ // One bound: a cover slot at most 40 m away that brings him at least 10 m closer to the enemy but not within 8 m of him, hides
+ // from him, and has a straight walkable line to it (the same test as the cover approach). The most progress, then the shorter
+ // walk. No dash across the open without cover at the end; the next bound follows from there (StepArms, every 12 s at most).
+ int32 BestSlot=INDEX_NONE;double BestProgress=-1.,BestWalk=DBL_MAX;FVector BestAnchor=FVector::ZeroVector;
+ const FVector Probe=Pos+(TargetAt-Pos).GetSafeNormal2D()*FMath::Max(0.,FMath::Min(3000.,Base-1500.));
+ for(int32 Slot:Cover->NearbySlots(Probe,2000.f,96))
  {
   const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
-  const double ToEnemy=FVector::Dist2D(Anchor,TargetAt),Walk=FVector::Dist2D(Pos,Anchor);
-  if(ToEnemy<800.||ToEnemy>2500.||FVector::Dist2D(Pos,Anchor)>Base||ToEnemy>Base-1000.||Walk>=BestWalk)continue;
+  const double ToEnemy=FVector::Dist2D(Anchor,TargetAt),Walk=FVector::Dist2D(Pos,Anchor),Progress=Base-ToEnemy;
+  if(ToEnemy<800.||Progress<1000.||Walk>4000.||Progress<BestProgress-1.||(FMath::Abs(Progress-BestProgress)<=1.&&Walk>=BestWalk))continue;
   if(!Cover->IsAvailable(Slot,ID,Now))continue;
   bool bTaken=false;for(const auto& Other:CoverApproaches)if(Other.Key!=ID&&Other.Value.Slot==Slot){bTaken=true;break;}
   if(bTaken)continue;
   if(BattleTactics::ExposureAt(GetWorld(),Anchor,(TargetAt-Anchor).GetSafeNormal2D(),Eye).Fraction()>CoverExposureLimit())continue;
   if(GetWorld()->SweepTestByObjectType(Pos,Anchor,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))continue;
-  BestSlot=Slot;BestWalk=Walk;BestAnchor=Anchor;
+  BestSlot=Slot;BestProgress=Progress;BestWalk=Walk;BestAnchor=Anchor;
  }
  if(BestSlot==INDEX_NONE){SightExperiment.Cover(TEXT("arms_assault_no_cover"));return false;}
  // The dash starts from where he is: out of his cover first.
  if(U->CoverPhase)CancelCoverAction(ID);
  U=Store->Find(ID);
- FCoverApproach A;A.Goal=BestAnchor;A.Slot=BestSlot;A.Target=Target;A.Revision=U->OrderRevision;A.Until=Now+15.;A.bAssault=true;
+ FCoverApproach A;A.Goal=BestAnchor;A.Slot=BestSlot;A.Target=Target;A.Revision=U->OrderRevision;A.Until=Now+20.;A.bAssault=true;
  CoverApproaches.Add(ID,A);FirePositions.Remove(ID);
  SightExperiment.Cover(TEXT("arms_assault_started"));
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_ASSAULT unit=%d team=%d target=%d from=%.0f to=%.0f"),ID,U->Team,Target,Base,FVector::Dist2D(BestAnchor,TargetAt));
