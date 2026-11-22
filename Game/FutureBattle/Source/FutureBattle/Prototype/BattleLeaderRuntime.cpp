@@ -904,6 +904,10 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   U->Weapon!=EBattleWeapon::AntiTank && !IsArtillery(ID) ? OwnTarget(ID,Pos,Now,bOwnAtShooter) : INDEX_NONE;
  const auto* OwnContact=OwnTargetID!=INDEX_NONE?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,OwnTargetID):nullptr;
  const bool bOwnEngage=OwnContact && CanSee(ID,OwnTargetID);
+ // Evaluation: an engagement that begins with his head turned (-BattleWalkLook) at a target outside his body's 120 degrees.
+ if((CanEngage || bOwnEngage) && WalkLooks.Num() && WalkLooks.Contains(ID) &&
+  FVector::DotProduct(Forward(ID).GetSafeNormal2D(),((CanEngage?Contact:OwnContact)->LastKnownPosition-Pos).GetSafeNormal2D())<.5)
+  SightExperiment.Cover(CanEngage?TEXT("walk_look_engage_starts"):TEXT("walk_look_own_engage_starts"));
  if(bOwnEngage)
  {
   SightExperiment.Cover(TEXT("own_target_frames"));
