@@ -182,6 +182,36 @@ bool UBattleMatch::MoveHire(int32 Team,int32 Index,int32 Delta)
  for(int32 I=Index;I!=To;I+=Step)Area.HireQueue.Swap(Mine[I],Mine[I+Step]);
  return true;
 }
+int32 UBattleMatch::HireDelegate(int32 Team) const
+{
+ static const int32 Level=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleHireDelegate="),X);return FMath::Clamp(X,0,2);}();
+ static const int32 Only=[]{int32 X=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleHireDelegateTeam="),X);return X;}();
+ return Only<0||Only==Team?Level:0;
+}
+int32 UBattleMatch::RefillShort(int32 Team) const
+{
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();if(!Store)return 0;
+ const int32 AttackWant=FMath::Clamp(GetDefault<UBattleTuning>()->GroupRifleSquads,2,6);
+ int32 Want=0,Have=0;bool bAttack=false;
+ for(const auto& P:Groups)
+ {
+  const auto& G=P.Value;if(G.Team!=Team||G.bPlayer)continue;
+  if(G.Kind==1){Want+=G.FrontNeed;Have+=G.Squads.Num();}
+  else if(G.Kind==0&&!G.bFocus2&&!bAttack)
+  {
+   bAttack=true;Want+=AttackWant;
+   for(int32 SID:G.Squads)if(const auto* S=Store->FindSquad(SID))Have+=S->SquadType==BattleSquadType::Rifle;
+  }
+ }
+ if(!bAttack)Want+=AttackWant;
+ for(const auto& P:Store->GetSquads())
+ {
+  const auto& S=P.Value;
+  if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||GroupOf(P.Key)!=INDEX_NONE)continue;
+  if(S.SquadType==BattleSquadType::Rifle||S.SquadType==BattleSquadType::Heavy)++Have;
+ }
+ return Want-Have;
+}
 void UBattleMatch::UpdateHireQueue()
 {
  if(!bArea||Area.HireQueue.IsEmpty())return;
@@ -283,7 +313,22 @@ void UBattleMatch::UpdateAreaHiring()
   // Composition trial: an expensive type the team is far from affording (below 60% of its cost) does not hold up the plain purchases.
   if(bComposition&&Type!=PlainType&&BattleSquadType::AreaCost(Type)>=20&&Credits[Team]-Pending<FMath::CeilToInt(BattleSquadType::AreaCost(Type)*.6f)+HireIntent.HireReserve)Type=PlainType;
   const int32 TypeCost=Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
-  if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=BattleTactics::AreaHire().MaxActive)continue;
+  // Stage 6 (-BattleHireDelegate): purchases through the reservation list (see HireDelegate).
+  const int32 Delegate=HireDelegate(Team);
+  if(Delegate==1)Type=PlainType;
+  if(Delegate>0)
+  {
+   const int32 Short=Delegate==1?RefillShort(Team):1;
+   const TArray<int32> MineQ=HireQueueOf(Team);int32 AIAt=-1;
+   for(int32 K=0;K<MineQ.Num()&&AIAt<0;++K)if(Area.HireQueue[MineQ[K]].bByAI)AIAt=K;
+   if(AIAt>=0)
+   {
+    if(Short>0&&Area.HireQueue[MineQ[AIAt]].Type==Type)continue; // still wanted: it waits
+    CancelHire(Team,AIAt);
+   }
+   if(Short<=0||Credits[Team]-Pending<HireIntent.HireReserve)continue;
+  }
+  else if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=BattleTactics::AreaHire().MaxActive)continue;
   // Pacing (own clock and own purchase history only): spacing between purchases and no purchases near the time limit,
   // where a squad costs score (15 resources for 10 living) and has little time to take a point.
   if(H.Stop>0&&Elapsed>=MatchTimeLimit()-H.Stop)continue;
@@ -295,7 +340,7 @@ void UBattleMatch::UpdateAreaHiring()
   const int32 IntelNeed=!bPurpose&&Type!=BattleSquadType::Scout&&AreaIntelOn(Team)?AreaIntelThreat(Team):-1;
   if(bPurpose&&(Need=AreaHireNeed(Team))<0)continue;
   const FString Message=LastMessage;LastHiredSquadID=INDEX_NONE;
-  if(HireAreaSquad(Team,EBattleTraining::Regular,true,Type)&&bPurpose&&LastHiredSquadID!=INDEX_NONE){Area.HirePurpose.Add(LastHiredSquadID,Need);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE_PURPOSE team=%d squad=%d purpose=%d time=%.1f"),Team,LastHiredSquadID,Need,Elapsed);}
+  if((Delegate>0?ReserveHire(Team,Type,true)==1:HireAreaSquad(Team,EBattleTraining::Regular,true,Type))&&bPurpose&&LastHiredSquadID!=INDEX_NONE){Area.HirePurpose.Add(LastHiredSquadID,Need);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE_PURPOSE team=%d squad=%d purpose=%d time=%.1f"),Team,LastHiredSquadID,Need,Elapsed);}
   else if(IntelNeed>=0&&LastHiredSquadID!=INDEX_NONE&&Store->FindSquad(LastHiredSquadID)){IntelPurpose.Add(LastHiredSquadID,IntelNeed);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_INTEL_HIRE team=%d squad=%d point=%d time=%.1f"),Team,LastHiredSquadID,IntelNeed,Elapsed);}
   // Strategy layer S4 (BattleStrategy.cpp, -BattleStrategy=4): a rifle squad bought while the team has a focus reinforces it; its mission
   // follows the focus when the plan changes (UpdateStrategy).

@@ -133,6 +133,13 @@ public:
  TArray<int32> HireQueueOf(int32 Team) const;
  // A reservation of the team waiting for resources for more than 120 s stops the ones behind it (index into Area.HireQueue, or -1).
  int32 HireStarved(int32 Team) const;
+ // Stage 6 (Docs/design-front-strategy.md 5.2; trial -BattleHireDelegate=0/1/2, default 0, -BattleHireDelegateTeam=<team> for one
+ // side): how the AI side buys. 0 = as before (direct purchases); 1 = refill only (rifle/heavy, only while the front army's need plus the
+ // attack army's rifles exceed the squads it has and the free ones); 2 = all (the usual type choice, composition AI included).
+ // With 1 and 2 the purchase goes through the reservation list: one AI reservation at a time, waiting instead of skipping, cancelled
+ // when the AI no longer wants that type. Bought squads go where the groups' own fills take them (attack army first, then front army).
+ int32 HireDelegate(int32 Team) const;
+ int32 RefillShort(int32 Team) const;
  // Once per match second: per team, the first reservation (in order, the first of each type) that can be bought is bought.
  void UpdateHireQueue();
  int32 HireQueueSecond=-1;
