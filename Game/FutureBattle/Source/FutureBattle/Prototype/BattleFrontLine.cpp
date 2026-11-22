@@ -328,6 +328,14 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    {int32 N=0;for(int32 Z=FMath::Max(0,Y-1);Z<FMath::Min(Rows,Y+2);++Z)for(int32 C=FMath::Max(0,C0);C<=FMath::Min(Cols-1,C1);++C)if(const int32* V=M.Find(FrontCell(Team,C,Z)))N+=*V;return N;};
    // Damage per row: the 5 s damage and the health of the front squads posted within one row of it, and how many were damaged.
    TArray<double> Damage,Health;TArray<int32> Hurt;Damage.Init(0.,Rows);Health.Init(0.,Rows);Hurt.Init(0,Rows);
+   // Continuity: neighbouring rows differ by one column at most. Front plan (-BattleFrontPlan=1): a focus-section row may stand up to
+   // three columns ahead of a neighbour outside the section, but not past its target point's column (empty InFocus: the plain rule).
+   TArray<uint8> InFocus;int32 TargetCol=-1;FrontPlanFocusRows(Team,InFocus,TargetCol);
+   auto Smooth=[&](TArray<int32>& A)
+   {
+    auto Cap=[&](int32 Y,int32 Z){int32 V=A[Z]+1;if(InFocus.Num()==Rows&&InFocus[Y]&&!InFocus[Z]&&TargetCol>=0)V=FMath::Max(V,FMath::Min(A[Z]+3,TargetCol));return V;};
+    for(int32 Pass=0;Pass<Rows;++Pass)for(int32 Y=0;Y<Rows;++Y){if(Y>0)A[Y]=FMath::Min(A[Y],Cap(Y,Y-1));if(Y+1<Rows)A[Y]=FMath::Min(A[Y],Cap(Y,Y+1));}
+   };
    if(const auto* Tactics=GetWorld()->GetSubsystem<UBattleSquadTactics>())
     for(int32 SID:G->Squads)if(const FIntPoint* Last=Previous.Find(SID))if(const auto* O=Tactics->Find(SID))
      for(int32 Y=FMath::Max(0,RowOf(*Last)-1);Y<FMath::Min(Rows,RowOf(*Last)+2);++Y){Damage[Y]+=O->RecentDamage;Health[Y]+=O->Health;Hurt[Y]+=O->RecentDamage>0.f?1:0;}
@@ -340,7 +348,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
     if(Back)
     {
      G->FrontBackAt=Elapsed;
-     for(int32 Pass=0;Pass<Rows;++Pass)for(int32 Y=0;Y<Rows;++Y){if(Y>0)H[Y]=FMath::Min(H[Y],H[Y-1]+1);if(Y+1<Rows)H[Y]=FMath::Min(H[Y],H[Y+1]+1);}
+     Smooth(H);
      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_BACK team=%d group=%d rows=%d time=%.1f"),Team,FrontID,Back,Elapsed);
     }
     for(int32 Y=0;Y<Rows;++Y)H[Y]=FMath::Clamp(H[Y],HomeCol,FMath::Max(HomeCol,EnemyHomeCol-2));
@@ -367,11 +375,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
      const bool bLight=Share(Y)<LightDamage&&Own>=PushRatio*Enemy;
      if(bQuiet||bLight){++Next[Y];++Moved;if(Enemy>0)++Pushed;}
     }
-    for(int32 Pass=0;Pass<Rows;++Pass)for(int32 Y=0;Y<Rows;++Y)
-    {
-     if(Y>0)Next[Y]=FMath::Min(Next[Y],Next[Y-1]+1);
-     if(Y+1<Rows)Next[Y]=FMath::Min(Next[Y],Next[Y+1]+1);
-    }
+    Smooth(Next);
     if(Next!=H)
     {
      H=Next;G->FrontStepAt=Elapsed;
@@ -379,6 +383,10 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_STEP team=%d group=%d on_post=%d/%d rows=%d pushed=%d line=%s time=%.1f"),Team,FrontID,OnPosts,Posted,Moved,Pushed,*L,Elapsed);
     }
    }
+   // Front plan: an own point (observed) is the floor of its row - the line passes at or ahead of it and does not fall back behind it.
+   if(!G->bFrontDrawn&&FrontPlanOn(Team))for(int32 I=0;I<Objectives.Num();++I)if(ObservedOwner(Team,I)==Team)
+    if(const FIntPoint C=BattleSectors::Cell(Objectives[I].Position);BattleSectors::Valid(C))
+     H[RowOf(C)]=FMath::Clamp(FMath::Max(H[RowOf(C)],ColOf(C)),HomeCol,FMath::Max(HomeCol,EnemyHomeCol-2));
    Line=H;FrontLine[Team]=Line;
   }
   struct FMember{int32 SID;double Row;};TArray<FMember> Present;
@@ -1000,15 +1008,15 @@ void UBattleMatch::FrontPlanSample(int32 Team)
  const TArray<int32>& Line=FrontLine[Team];
  // Own infantry squads by the section their leader stands in (out of the home column); the damage of the last 5 s is spread over the
  // 2 s between samples (RecentDamage x Interval / 5).
- TArray<double> Dmg,Hp,Col;TArray<int32> Squads,Known,CoverN,Count;
- Dmg.Init(0.,NS);Hp.Init(0.,NS);Col.Init(0.,NS);Squads.Init(0,NS);Known.Init(0,NS);CoverN.Init(0,NS);Count.Init(0,NS);
+ TArray<double> Dmg,Col;TArray<int32> Count;Dmg.Init(0.,NS);Col.Init(0.,NS);Count.Init(0,NS);
+ P.Hp.Init(0.,NS);P.SquadsN.Init(0,NS);P.KnownN.Init(0,NS);P.CoverN.Init(0,NS);P.OwnMask.Init(0u,NS);P.AheadMask.Init(0u,NS);P.Push.Init(0.,NS);P.Dmg.Init(0.,NS);
  for(const auto& Pair:Store->GetSquads())
  {
   const auto& S=Pair.Value;
   if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||BattleSquadType::IsVehicle(S.SquadType)||S.SquadType==BattleSquadType::Scout)continue;
   const FIntPoint C=BattleSectors::Cell(R->Position(S.LeaderUnitID));if(!BattleSectors::Valid(C)||ColOf(C)<=HomeCol)continue;
-  const int32 K=P.SectionOfRow[RowOf(C)];++Squads[K];
-  if(const auto* O=Tactics?Tactics->Find(Pair.Key):nullptr){Dmg[K]+=O->RecentDamage*BattleFrontValues::Interval/5.;Hp[K]+=O->Health;}
+  const int32 K=P.SectionOfRow[RowOf(C)];++P.SquadsN[K];
+  if(const auto* O=Tactics?Tactics->Find(Pair.Key):nullptr){Dmg[K]+=O->RecentDamage*BattleFrontValues::Interval/5.;P.Hp[K]+=O->Health;}
  }
  for(int32 Y=0;Y<Rows;++Y){Col[P.SectionOfRow[Y]]+=Line[Y];++Count[P.SectionOfRow[Y]];}
  for(int32 K=0;K<NS;++K)Col[K]/=FMath::Max(1,Count[K]);
@@ -1016,30 +1024,109 @@ void UBattleMatch::FrontPlanSample(int32 Team)
  // Keep 65 s of samples.
  int32 Drop=0;while(Drop<P.SampleAt.Num()&&P.SampleAt[Drop]<Elapsed-65.f)++Drop;
  if(Drop){P.SampleAt.RemoveAt(0,Drop);P.Damage.RemoveAt(0,Drop*NS);P.MeanCol.RemoveAt(0,Drop*NS);}
- if(Elapsed<P.NextLog)return;
- P.NextLog=Elapsed+BattleFrontValues::LogInterval;
  // Known enemies from the line's column minus one to four ahead (AreaIntelView, cached this frame by UpdateFrontLine); sectors with
  // cover on the line and two columns ahead; points: own ones in the section, and not-own ones up to two columns ahead of the line.
  for(const FVector& E:AreaIntelView(Team).Enemies)if(const FIntPoint C=BattleSectors::Cell(E);BattleSectors::Valid(C))
- {const int32 Y=RowOf(C);if(ColOf(C)>=Line[Y]-1&&ColOf(C)<=Line[Y]+4)++Known[P.SectionOfRow[Y]];}
+ {const int32 Y=RowOf(C);if(ColOf(C)>=Line[Y]-1&&ColOf(C)<=Line[Y]+4)++P.KnownN[P.SectionOfRow[Y]];}
  for(int32 Y=0;Y<Rows;++Y)for(int32 C=Line[Y];C<=FMath::Min(Cols-1,Line[Y]+2);++C)
-  if(const FIntPoint Cell=FrontCell(Team,C,Y);BattleSectors::Valid(Cell)&&BattleFrontValues::Cover(BattleFieldLayout::SectorKind(GetWorld(),Cell))>0.)++CoverN[P.SectionOfRow[Y]];
- TArray<FString> OwnPts,Ahead;OwnPts.Init(FString(),NS);Ahead.Init(FString(),NS);
- for(int32 I=0;I<Objectives.Num();++I)
+  if(const FIntPoint Cell=FrontCell(Team,C,Y);BattleSectors::Valid(Cell)&&BattleFrontValues::Cover(BattleFieldLayout::SectorKind(GetWorld(),Cell))>0.)++P.CoverN[P.SectionOfRow[Y]];
+ for(int32 I=0;I<Objectives.Num()&&I<32;++I)
  {
   const FIntPoint C=BattleSectors::Cell(Objectives[I].Position);if(!BattleSectors::Valid(C))continue;
   const int32 Y=RowOf(C),K=P.SectionOfRow[Y];
-  if(ObservedOwner(Team,I)==Team)OwnPts[K].AppendChar(TCHAR('A'+I));
-  else if(ColOf(C)>Line[Y]-1&&ColOf(C)<=Line[Y]+2)Ahead[K].AppendChar(TCHAR('A'+I));
+  if(ObservedOwner(Team,I)==Team)P.OwnMask[K]|=1u<<I;
+  else if(ColOf(C)>Line[Y]-1&&ColOf(C)<=Line[Y]+2)P.AheadMask[K]|=1u<<I;
  }
  const int32 N=P.SampleAt.Num();int32 Old=0;while(Old+1<N&&P.SampleAt[Old+1]<=Elapsed-60.f)++Old;
  for(int32 K=0;K<NS;++K)
  {
   double D60=0;for(int32 J=0;J<N;++J)D60+=P.Damage[J*NS+K];
-  const double Push=N?P.MeanCol[(N-1)*NS+K]-P.MeanCol[Old*NS+K]:0.;
+  P.Push[K]=N?P.MeanCol[(N-1)*NS+K]-P.MeanCol[Old*NS+K]:0.;
+  P.Dmg[K]=P.Hp[K]>0.?D60/P.Hp[K]:0.;
+ }
+ P.StatAt=Elapsed;
+ if(Elapsed<P.NextLog)return;
+ P.NextLog=Elapsed+BattleFrontValues::LogInterval;
+ auto Letters=[&](uint32 M){FString Out;for(int32 I=0;I<32;++I)if((M>>I)&1)Out.AppendChar(TCHAR('A'+I));return Out.IsEmpty()?FString(TEXT("-")):Out;};
+ for(int32 K=0;K<NS;++K)
+ {
   const int32 A=P.SectionFirst[K],B=K+1<NS?P.SectionFirst[K+1]:Rows;
   FString L;for(int32 Y=A;Y<B;++Y)L+=FString::Printf(TEXT("%s%d"),Y>A?TEXT(","):TEXT(""),Line[Y]);
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_SECTION team=%d t=%.1f sec=%d rows=%d-%d line=%s push=%+.2f over=%.0f dmg=%.3f hp=%.0f squads=%d known=%d cover=%d own=%s ahead=%s"),
-   Team,Elapsed,K+1,A+1,B,*L,Push,N?P.SampleAt[N-1]-P.SampleAt[Old]:0.f,Hp[K]>0.?D60/Hp[K]:0.,Hp[K],Squads[K],Known[K],CoverN[K],OwnPts[K].IsEmpty()?TEXT("-"):*OwnPts[K],Ahead[K].IsEmpty()?TEXT("-"):*Ahead[K]);
+   Team,Elapsed,K+1,A+1,B,*L,P.Push[K],N?P.SampleAt[N-1]-P.SampleAt[Old]:0.f,P.Dmg[K],P.Hp[K],P.SquadsN[K],P.KnownN[K],P.CoverN[K],*Letters(P.OwnMask[K]),*Letters(P.AheadMask[K]));
  }
+}
+
+// ---- Front plan, stage 2: the focus section (Docs/design-front-strategy.md 2.1, 3.1, 4; trial -BattleFrontPlan=1, default 0) ----
+bool UBattleMatch::FrontPlanOn(int32 Team) const
+{
+ static const int32 On=BattleFrontValues::Arg(TEXT("BattleFrontPlan="),0);
+ static const int32 Only=BattleFrontValues::Arg(TEXT("BattleFrontPlanTeam="),-1);
+ // Needs the front army's own line (FrontHold); the older strategy layer S2 keeps the focus for itself when it runs.
+ return On!=0&&(Only<0||Only==Team)&&FrontLineOn(Team)&&BattleFrontValues::Hold()&&!StrategyOn(Team,2);
+}
+
+void UBattleMatch::FrontPlanFocusRows(int32 Team,TArray<uint8>& InFocus,int32& TargetCol) const
+{
+ InFocus.Reset();TargetCol=-1;
+ if(Team<0||Team>1||!FrontPlanOn(Team))return;
+ const FFrontPlanTeam& P=FrontPlanState[Team];
+ const int32 F=StrategyFocusPoint(Team);
+ if(F==INDEX_NONE||ObservedOwner(Team,F)==Team||P.SectionOfRow.Num()!=BattleSectors::Rows)return;
+ constexpr int32 Cols=BattleSectors::Columns,Rows=BattleSectors::Rows;
+ const bool bLow=AreaHome(Team).X<0;
+ const FIntPoint C=BattleSectors::Cell(Objectives[F].Position);if(!BattleSectors::Valid(C))return;
+ const int32 K=P.SectionOfRow[bLow?C.Y:Rows-1-C.Y];
+ InFocus.Init(0,Rows);for(int32 Y=0;Y<Rows;++Y)InFocus[Y]=P.SectionOfRow[Y]==K?1:0;
+ TargetCol=bLow?C.X:Cols-1-C.X;
+}
+
+void UBattleMatch::UpdateFrontPlan(int32 Team)
+{
+ if(!bArea||Team<0||Team>1||!FrontPlanOn(Team)||Objectives.IsEmpty()||Phase!=EBattleMatchPhase::Combat)return;
+ const FFrontPlanTeam& P=FrontPlanState[Team];
+ const int32 NS=P.Sections;
+ if(NS<=0||P.StatAt<0.f||P.Push.Num()!=NS)return;
+ auto Fix=[](auto& A,auto V){if(A.Num()!=2)A.Init(V,2);};
+ Fix(Area.StrategyPhase,0);Fix(Area.StrategyFocus,-1);Fix(Area.StrategyFocusAt,-1.f);Fix(Area.StrategyReviewAt,-1.f);Fix(Area.StrategyAvoid,-1);Fix(Area.StrategyAvoidUntil,-1.f);
+ int32& Focus=Area.StrategyFocus[Team];float& FocusAt=Area.StrategyFocusAt[Team];float& ReviewAt=Area.StrategyReviewAt[Team];int32& SPhase=Area.StrategyPhase[Team];
+ // The opening (no push history yet): no focus, so S6 and the attack group keep their default target (the nearest point not own).
+ if(Elapsed<StrategyOpenSeconds()*MatchTimeLimit()/600.f)return;
+ const bool bValid=Objectives.IsValidIndex(Focus);
+ const bool bTaken=bValid&&ObservedOwner(Team,Focus)==Team;
+ if(Elapsed<ReviewAt&&bValid&&!bTaken)return;
+ constexpr int32 Rows=BattleSectors::Rows;
+ const bool bLow=AreaHome(Team).X<0;
+ auto SectionOf=[&](int32 Point)
+ {const FIntPoint C=BattleSectors::Cell(Objectives[Point].Position);return BattleSectors::Valid(C)&&P.SectionOfRow.Num()==Rows?int32(P.SectionOfRow[bLow?C.Y:Rows-1-C.Y]):-1;};
+ const int32 FocusSec=bValid&&!bTaken?SectionOf(Focus):-1;
+ // Score (Docs/design-front-strategy.md 3.1): push over 60 s - 2 x damage share + 0.5 x the best point value ahead - known enemies
+ // ahead per squad (6) + 1 for the current focus section (no switching on a small difference).
+ const FVector Home=AreaHome(Team);
+ int32 Best=-1,Next=-1,BestPoint=INDEX_NONE;double BestScore=0,NextScore=0;
+ for(int32 K=0;K<NS;++K)
+ {
+  if(P.AheadMask[K]==0u)continue;
+  double Value=0;int32 Point=INDEX_NONE;double PointD=DBL_MAX;
+  for(int32 I=0;I<Objectives.Num()&&I<32;++I)if((P.AheadMask[K]>>I)&1)
+  {
+   Value=FMath::Max(Value,double(ObjectiveValue(I)));
+   const double D=FVector::DistSquared2D(Objectives[I].Position,Home);if(D<PointD){PointD=D;Point=I;}
+  }
+  const double SecScore=P.Push[K]-2.*P.Dmg[K]+.5*Value-P.KnownN[K]/6.+(K==FocusSec?1.:0.);
+  if(Best<0||SecScore>BestScore){Next=Best;NextScore=BestScore;Best=K;BestScore=SecScore;BestPoint=Point;}
+  else if(Next<0||SecScore>NextScore){Next=K;NextScore=SecScore;}
+ }
+ // The focus stays at least the hold time unless its point was taken or it has no candidate left.
+ const TCHAR* Why=bTaken?TEXT("taken"):!bValid?TEXT("first"):TEXT("review");
+ if(bValid&&!bTaken&&Best!=FocusSec&&Elapsed-FocusAt<StrategyFocusHoldSeconds()&&FocusSec>=0&&P.AheadMask[FocusSec]!=0u){Best=FocusSec;BestPoint=Focus;Why=TEXT("hold");}
+ // Within the focus section keep the current target while it is still ahead of the line.
+ if(Best>=0&&Best==FocusSec&&bValid&&!bTaken&&Focus<32&&((P.AheadMask[Best]>>Focus)&1))BestPoint=Focus;
+ const int32 Old=Focus;
+ if(BestPoint!=Focus){Focus=BestPoint;FocusAt=Elapsed;}
+ SPhase=Focus!=INDEX_NONE?1:0;
+ ReviewAt=Elapsed+60.f;
+ if(Focus!=Old||bTaken)
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_PLAN team=%d t=%.1f focus=%d sec=%d old=%d reason=%s score=%.2f push=%.2f dmg=%.3f known=%d next=%d nextScore=%.2f"),
+   Team,Elapsed,Focus,Best>=0?Best+1:0,Old,Why,Best>=0?BestScore:0.,Best>=0?P.Push[Best]:0.,Best>=0?P.Dmg[Best]:0.,Best>=0?P.KnownN[Best]:0,Next>=0?Next+1:0,Next>=0?NextScore:0.);
 }

@@ -298,7 +298,8 @@ float UBattleMatch::StrategyFocusHoldSeconds()
 
 int32 UBattleMatch::StrategyFocusPoint(int32 Team) const
 {
- if(!bArea||Team<0||Team>1||!StrategyOn(Team,2)||!Area.StrategyFocus.IsValidIndex(Team))return INDEX_NONE;
+ // The front plan (BattleFrontLine.cpp, -BattleFrontPlan=1) writes its focus section's target point here too.
+ if(!bArea||Team<0||Team>1||!(StrategyOn(Team,2)||FrontPlanOn(Team))||!Area.StrategyFocus.IsValidIndex(Team))return INDEX_NONE;
  const int32 F=Area.StrategyFocus[Team];
  return Objectives.IsValidIndex(F)?F:INDEX_NONE;
 }

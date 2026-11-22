@@ -1,6 +1,8 @@
 # 前線と戦略層の統合：前線1本・区間の役割・攻撃軍・購入予約（ROADMAP 段階4・5の作り直し）
 
-2026-11-22 20時59分 Claude（ロードマップに従う改善活動）。ユーザーとの議論（11-22 20時40分〜21時）で決まった形をまとめる。`Docs/design-strategy-layer.md`（S1〜S4）と `Docs/design-groups-strategy-link.md`（群の数と向け先）の後継。数値はすべて叩き台（数値の調整は Claude に任されている）。**未実装**。
+2026-11-22 20時59分 Claude（ロードマップに従う改善活動）。ユーザーとの議論（11-22 20時40分〜21時）で決まった形をまとめる。`Docs/design-strategy-layer.md`（S1〜S4）と `Docs/design-groups-strategy-link.md`（群の数と向け先）の後継。数値はすべて叩き台（数値の調整は Claude に任されている）。
+
+> **実装の状況（11-22 21時40分、作業ツリー `FutureBattle-strategy`、未ビルド）**：段階1（区間と記録 `-BattleFrontPlanLog`）と段階2の一部（`-BattleFrontPlan`・`-BattleFrontPlanTeam`：重点の区間と目標の拠点を60秒ごとに選び、`Area.StrategyFocus` に書く。S6 と攻撃群は `StrategyFocusPoint` から読む。線は自軍の拠点の列より下がらず、重点の区間の行は隣の区間より最大3列、目標の拠点の列まで張り出せる）。記録の行は `BATTLE_FRONT_SECTIONS`・`BATTLE_FRONT_SECTION`・`BATTLE_FRONT_PLAN`。重点の点数の「知っている敵」は人数÷6（攻撃軍の戦力で割る代わり）。最初の見直しまでは重点なし（既定の集中先のまま）。旧 S2（`-BattleStrategy>=2`）と同時には働かない。
 
 ## 0. 決まっていること（ユーザー決定 11-22。変えない）
 

@@ -503,7 +503,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
  UpdateFrontLine(Team);
  // Front plan log (-BattleFrontPlanLog=1): only in a frame where the line was just rebuilt, so the known-enemy view it reads is the one
  // UpdateFrontLine refreshed (calling AreaIntelView at another time would move its once-per-second refresh and change the match).
- if(FrontPlanLogOn()&&FrontLineAt[Team]!=FrontWas&&FrontLine[Team].Num()==BattleSectors::Rows)FrontPlanSample(Team);
+ if((FrontPlanLogOn()||FrontPlanOn(Team))&&FrontLineAt[Team]!=FrontWas&&FrontLine[Team].Num()==BattleSectors::Rows)FrontPlanSample(Team);
 }
 
 bool UBattleMatch::GroupOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const

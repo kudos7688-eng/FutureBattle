@@ -380,6 +380,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  const bool bStrategy=bArea&&BattleTactics::AreaStrategy().bEnabled;
  // Strategy layer S2 (BattleStrategy.cpp, -BattleStrategy>=2): the team's plan is reviewed once here, before any intent is read.
  if(bStrategy)UpdateStrategy(Team);
+ // Front plan stage 2 (BattleFrontLine.cpp, -BattleFrontPlan=1; off while -BattleStrategy>=2 runs for the team).
+ if(bStrategy)UpdateFrontPlan(Team);
  const FAreaIntent TeamIntent=AreaIntent(Team);
  // Squad groups (BattleGroups.cpp): members, AI formation (trial) and phases, before the orders that read them.
  if((CompositionTeams&(1<<Team))!=0)UpdateCompositionPurposes(Team);
