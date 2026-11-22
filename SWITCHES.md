@@ -267,7 +267,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSightScanInterval` | Value | .4 | BattleLeaderRuntime.cpp:117 |  |
 | `-BattleSightScanNear` | Value | 1.e7 | BattleLeaderRuntime.cpp:117 |  |
 | `-BattleSightSlowFar` | Value | 0 | BattleLeaderRuntime.cpp:114 |  |
-| `-BattleSightTeamMask` | Value | 0 | BattleLeaderRuntime.cpp:397 |  |
+| `-BattleSightTeamMask` | Value | 1 | BattleLeaderRuntime.cpp:397 | default 1 since 2026-11-22 (user decision); =0 = own soldiers block their side's sight and bullets again |
 | `-BattleSightTrial` | Param | off | BattleLeaderRuntime.cpp:243 |  |
 | `-BattleSightVisual` | Param | off | BattleLeaderRuntime.cpp:237 |  |
 | `-BattleSituationLog` | Value | 0 | BattleStrategy.cpp:31 |  |
