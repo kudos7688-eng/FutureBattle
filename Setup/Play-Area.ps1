@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I','J')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$WalkLook=0)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(0,1,2)][int]$WalkLook=0)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
@@ -16,6 +16,8 @@ if ($CloseRange -gt 0) { $cm = $CloseRange * 100; $extra += @("-BattleRangeSight
 # an enemy he sees himself and turns toward where he was hit from; -WalkLook 1 = a soldier on the move turns his head to the enemy he
 # knows of or to his share of the ground around the way. Both teams.
 if ($OwnTarget -gt 0) { $extra += "-BattleOwnTarget=$OwnTarget" }
+# -OwnTargetCover 1/2 (with -OwnTarget): he takes cover near by against the enemy he fires back at (2: also when walking, within 50 m).
+if ($OwnTargetCover -gt 0) { $extra += "-BattleOwnTargetCover=$OwnTargetCover" }
 if ($WalkLook -gt 0) { $extra += "-BattleWalkLook=$WalkLook" }
 if ($Map -eq 'H') {
     & (Join-Path $PSScriptRoot 'Initialize-MapH.ps1') -Project $project

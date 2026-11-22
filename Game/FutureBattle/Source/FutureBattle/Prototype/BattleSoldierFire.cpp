@@ -20,6 +20,19 @@ int32 UBattleLeaderRuntime::OwnTargetMode(int32 Team)
  return Only<0 || Only==Team ? Value : 0;
 }
 
+// Trial -BattleOwnTargetCover=1/2 (default 0, 2026-11-22, user: with -BattleOwnTarget more soldiers fire standing in the open): a
+// soldier who fires at his own target looks for cover near by against that enemy (the usual cover action, with that enemy as
+// its target) and fires from it. =1: only a soldier who is not walking (the squad's route, fire on the move, his arrival walk
+// or the player's order). =2: also a walking soldier when that enemy is within 50 m - he leaves the march until the cover
+// action ends (the enemy unseen for 5 s, out of range, a new order). Needs -BattleOwnTarget; the same team limit.
+// No cover that near (about 6 m): a soldier who is not walking goes to cover up to 15 m away (StartCoverApproach with
+// bHoldToo - soldiers of a holding squad too, who are most of those standing) and asks again there.
+int32 UBattleLeaderRuntime::OwnTargetCover(int32 Team)
+{
+ static const int32 Value=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleOwnTargetCover="),V);return FMath::Clamp(V,0,2);}();
+ return OwnTargetMode(Team) ? Value : 0;
+}
+
 // The enemy soldier he sees himself now (not a report) within the distance at which he may open fire - the same rule as for the
 // squad's target: his weapon's engagement distance, its reach while he is under fire. Just hit (2 s): one in the direction the
 // shot came from (within 15 degrees) comes first; else the nearest. bAtShooter tells which. INDEX_NONE when he sees none.

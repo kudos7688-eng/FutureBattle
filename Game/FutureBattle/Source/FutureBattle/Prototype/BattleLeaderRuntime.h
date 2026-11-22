@@ -485,7 +485,7 @@ public:
  // Concealment (hedges tagged BattleConcealment in the map): blocks sight but shots ignore it. Collected once per world.
  TArray<AActor*> ConcealmentActors;
  bool bConcealmentBuilt=false;
- bool StartCoverApproach(int32 ID,FVector Threat,int32 Target,double Now,float LocalRadius);
+ bool StartCoverApproach(int32 ID,FVector Threat,int32 Target,double Now,float LocalRadius,bool bHoldToo=false);
  // -BattleContactCover: the firing point of a cover slot against Threat (observed position). The slot itself when a soldier can crouch
  // out of sight and stand up to fire, or when he can fire from it with most of his body covered; otherwise the nearest step sideways
  // (1 to 4 m) with a line to the threat. False when the slot is too exposed or offers no such point.
@@ -591,6 +591,11 @@ public:
  // change (the squad's target, movement and cover do not); nothing is saved. BattleSoldierFire.cpp; counts
  // own_target_{frames,shots,at_shooter_frames,no_squad_target_frames,squad_target_unseen_frames,hit_turn_frames}.
  static int32 OwnTargetMode(int32 Team);
+ // Trial -BattleOwnTargetCover=1/2 (default 0): firing at his own target, he takes cover near by against it (=2: also when
+ // walking and that enemy is within 50 m). Counts own_cover_{requests,taken,taken_walking,none} and own_target_open_{standing,walking}_frames.
+ static int32 OwnTargetCover(int32 Team);
+ // Soldiers walking to cover against their own target (not saved: after a load such a walk ends by the squad's target rules).
+ TSet<int32> OwnCoverWalks;
  int32 OwnTarget(int32 ID,const FVector& Pos,double Now,bool& bAtShooter) const;
  void RevealShooter(int32 VictimID,int32 ShooterID,const FVector& From);
  // Evaluation only (sight diagnostics on, behaviour unchanged, 2026-11-21): a hit soldier who does not see his shooter. Why each of the

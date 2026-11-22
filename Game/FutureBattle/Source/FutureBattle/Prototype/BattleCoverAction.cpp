@@ -244,12 +244,13 @@ bool UBattleLeaderRuntime::StartHuddle(int32 ID,FVector Threat,int32 Target,doub
  SightExperiment.Cover(TEXT("huddle_none"));return false;
 }
 
-bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Target,double Now,float LocalRadius)
+bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Target,double Now,float LocalRadius,bool bHoldToo)
 {
  auto& Diag=SightExperiment;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
  if(!U || !U->IsAlive() || U->CoverPhase || Threat.ContainsNaN() || !Bodies.Contains(ID))return false;
- const auto* Squad=Store->FindSquad(U->SquadID);if(!Squad || Squad->Order==EBattleOrder::Hold || Squad->Order==EBattleOrder::Move)return false;
+ // bHoldToo (-BattleOwnTargetCover): a soldier of a squad that holds may also walk to cover.
+ const auto* Squad=Store->FindSquad(U->SquadID);if(!Squad || (Squad->Order==EBattleOrder::Hold && !bHoldToo) || Squad->Order==EBattleOrder::Move)return false;
  auto* Cover=GetWorld()->GetSubsystem<UBattleCover>();Cover->BuildSlots();
  const auto* T=GetDefault<UBattleTuning>();
  const FVector Pos=Position(ID),Eye=Threat+FVector(0,0,60);

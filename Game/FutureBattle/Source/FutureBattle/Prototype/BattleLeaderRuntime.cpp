@@ -994,6 +994,28 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const bool bHitCover=!bOwnOrder && UnderFireCoverEnabled() && !bSeenCover && !bMoveFire && !bVehicleBody && S->Order!=EBattleOrder::Move && !U->CoverPhase &&
   !CoverApproaches.Contains(ID) && UnitShotFrom(ID,Now,HitFrom) && Contact && Now-Contact->LastSeenTime<=FMath::Min(5.f,U->Perception.MemorySeconds) &&
   FVector::DistSquared2D(Pos,Contact->LastKnownPosition)<=FMath::Square(TargetRange(ID)) && !(S->Order!=EBattleOrder::Hold && !StopForCombat && P->Path.IsValidIndex(B.Waypoint));
+ // Trial -BattleOwnTargetCover (BattleSoldierFire.cpp): firing at his own target with no cover search of the squad's running
+ // for him - the cover near by against that enemy, with that enemy as the cover action's target.
+ if(bOwnEngage && !U->CoverPhase && !CoverApproaches.Contains(ID))
+ {
+  const bool bOwnMarch=bMoveFire || bOwnWalking || bArrivalWalk || (!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute);
+  const int32 OwnCover=bSeenCover || bHitCover || bOwnOrder || U->Order==EBattleOrder::Move ? 0 : OwnTargetCover(U->Team);
+  SightExperiment.Cover(bOwnMarch?TEXT("own_target_open_walking_frames"):TEXT("own_target_open_standing_frames"));
+  if(BattleTactics::CoverActionsEnabled() && OwnCover && ProbeSlot && Now>=RetryAt &&
+   (!bOwnMarch || (OwnCover>=2 && FVector::DistSquared2D(Pos,OwnContact->LastKnownPosition)<=FMath::Square(5000.))))
+  {
+   if(LeaderFirst){}else if(HitFirst)++PriorityProbesThisFrame;else if(ProbeBudget)++CoverProbesThisFrame;else NextCoverProbe=Now+FMath::Max(0.f,CoverTuning->AICoverProbeInterval);
+   CoverProbeAfter.Add(ID,Now+2.);
+   SightExperiment.Cover(TEXT("own_cover_requests"));
+   const float OwnRadius=(ProbeBudget||LeaderFirst)?CoverTuning->AICoverSearchRadius:BattleFieldLayout::IsUrban(GetWorld())?650.f:CoverTuning->CoverActionSearchRadius;
+   if(RequestCoverAction(ID,OwnContact->LastKnownPosition,OwnTargetID,OwnRadius))
+   {SightExperiment.Cover(TEXT("own_cover_taken"));if(bOwnMarch)SightExperiment.Cover(TEXT("own_cover_taken_walking"));return;}
+   // None that near: a soldier who is not walking goes to cover up to 15 m away (AICoverApproachRadius; a straight clear way,
+   // not closer to that enemy, inside his squad's sector) and asks again there.
+   if(!bOwnMarch && StartCoverApproach(ID,OwnContact->LastKnownPosition,OwnTargetID,Now,OwnRadius,true)){OwnCoverWalks.Add(ID);SightExperiment.Cover(TEXT("own_cover_walk"));if(S->Order==EBattleOrder::Hold)SightExperiment.Cover(TEXT("own_cover_walk_hold"));}
+   else SightExperiment.Cover(TEXT("own_cover_none"));
+  }
+ }
  if(BattleTactics::CoverActionsEnabled() && (bSeenCover || bHitCover) && !bMoveFire && ProbeSlot && Now>=RetryAt && U->Weapon!=EBattleWeapon::Mortar && !bVehicleBody)
  {
   NoCoverProneUntil.Remove(ID); // a new search: lie down again only if it also finds nothing
@@ -1031,7 +1053,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   }
   if(CoverPriorityEnabled()){if(CoverApproaches.Contains(ID))CoverProbeFailedAt.Remove(ID);else CoverProbeFailedAt.Add(ID,Now);}
  }
- const bool Approaching=CoverApproaches.Contains(ID) && StepCoverApproach(ID,Dt,Now,CombatContact?TargetID:INDEX_NONE);
+ // -BattleOwnTargetCover: the walk to cover against his own target goes on by that target, not by the squad's.
+ if(OwnCoverWalks.Num() && OwnCoverWalks.Contains(ID) && !CoverApproaches.Contains(ID))OwnCoverWalks.Remove(ID);
+ const bool Approaching=CoverApproaches.Contains(ID) && StepCoverApproach(ID,Dt,Now,OwnCoverWalks.Contains(ID)?CoverApproaches.FindChecked(ID).Target:CombatContact?TargetID:INDEX_NONE);
  if(StopForCombat || S->Order==EBattleOrder::Hold) B.bTrafficWait=false;
  const bool bDriving=!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute;
  if(bDriving && !Approaching && FirePositions.Num())FirePositions.Remove(ID); // back on the march: the place is free again
