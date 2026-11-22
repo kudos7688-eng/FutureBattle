@@ -181,6 +181,14 @@ public:
  TMap<int32,FVector> FrontPosts; // squad of a front-holding group -> the sector centre it holds (transient)
  TSet<int32> FrontLeads; // squads of a front-holding group on a row's front place, not a support place (transient, like FrontPosts)
  float FrontLineAt[2]={-1.f,-1.f},FrontLineLogAt[2]={-1.f,-1.f};
+ // Front plan, stage 1 (Docs/design-front-strategy.md, trial -BattleFrontPlanLog=1, default 0): the team's front line split into 3-5
+ // sections (cut where impassable terrain separates neighbouring rows), with each section's push, damage, known enemies and points
+ // logged as BATTLE_FRONT_SECTION every 30 s. Log only: nothing reads it back, so the match is unchanged. Transient (not saved).
+ struct FFrontPlanTeam { TArray<int8> SectionOfRow; TArray<int32> SectionFirst; int32 Sections=0; float NextLog=-1.f; TArray<float> SampleAt; TArray<double> Damage, MeanCol; /* per sample, Sections values each */ };
+ FFrontPlanTeam FrontPlanState[2];
+ static bool FrontPlanLogOn();
+ void BuildFrontSections(int32 Team);
+ void FrontPlanSample(int32 Team); // called right after UpdateFrontLine refreshed the team's line (same frame: AreaIntelView is cached)
  int32 FrontReleased[2]={0,0}; // squads the front army has released to the reserve so far (display: the player's notice)
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.

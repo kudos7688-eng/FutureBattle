@@ -935,3 +935,111 @@ void UBattleMatch::ClampFrontTimers()
   G.PhaseAt=FMath::Min(G.PhaseAt,Elapsed);
  }
 }
+
+// ---- Front plan, stage 1: sections and their log (Docs/design-front-strategy.md 2.2 and 7; trial -BattleFrontPlanLog=1, default 0) ----
+// Log only. Rows are the team's own rows (FrontCell), so both teams of a 180-degree symmetric map get the same sections.
+bool UBattleMatch::FrontPlanLogOn()
+{
+ static const int32 On=BattleFrontValues::Arg(TEXT("BattleFrontPlanLog="),0);
+ return On!=0;
+}
+
+void UBattleMatch::BuildFrontSections(int32 Team)
+{
+ constexpr int32 Cols=BattleSectors::Columns,Rows=BattleSectors::Rows;
+ FFrontPlanTeam& P=FrontPlanState[Team];
+ const bool bLow=AreaHome(Team).X<0;
+ auto ColOf=[&](const FIntPoint& C){return bLow?C.X:Cols-1-C.X;};
+ const int32 HomeCol=FMath::Clamp(ColOf(BattleSectors::Cell(AreaHome(Team))),0,Cols-1);
+ const int32 EnemyHomeCol=FMath::Clamp(ColOf(BattleSectors::Cell(AreaHome(1-Team))),0,Cols-1);
+ // Mountains and lakes block a crossing between two rows; rivers do not (they run across the axis and have bridges and fords).
+ auto Open=[&](int32 C,int32 Y){const FIntPoint Cell=FrontCell(Team,C,Y);if(!BattleSectors::Valid(Cell))return false;const char K=BattleFieldLayout::SectorKind(GetWorld(),Cell);return K!='M'&&K!='L';};
+ const int32 C0=FMath::Min(HomeCol+1,EnemyHomeCol-1),C1=FMath::Max(HomeCol+1,EnemyHomeCol-1),Span=C1-C0+1;
+ TArray<int32> Cross;Cross.Init(0,Rows-1);
+ for(int32 Y=0;Y+1<Rows;++Y)for(int32 C=C0;C<=C1;++C)Cross[Y]+=Open(C,Y)&&Open(C,Y+1)?1:0;
+ // Segments: cut below row Y where at most a quarter of the span crosses to row Y+1 (a mountain wall between two roads).
+ TArray<int32> First;First.Add(0);
+ for(int32 Y=0;Y+1<Rows;++Y)if(Cross[Y]*4<=Span)First.Add(Y+1);
+ auto Len=[&](int32 I){return (I+1<First.Num()?First[I+1]:Rows)-First[I];};
+ // Split a segment at its row boundary with the least crossing (the middle on ties).
+ auto Split=[&](int32 I)
+ {
+  const int32 A=First[I],B=A+Len(I);int32 Best=-1;
+  for(int32 Y=A+1;Y<B;++Y)if(Best<0||Cross[Y-1]<Cross[Best-1]||(Cross[Y-1]==Cross[Best-1]&&FMath::Abs(2*Y-A-B)<FMath::Abs(2*Best-A-B)))Best=Y;
+  if(Best>0)First.Insert(Best,I+1);
+ };
+ for(int32 I=0;I<First.Num();++I)while(Len(I)>5)Split(I);
+ // At most 5 sections: merge the neighbouring pair with the fewest rows. One-row sections join their smaller neighbour.
+ while(First.Num()>5){int32 Best=1;for(int32 I=1;I<First.Num();++I)if(Len(I-1)+Len(I)<Len(Best-1)+Len(Best))Best=I;First.RemoveAt(Best);}
+ for(int32 I=0;I<First.Num()&&First.Num()>3;)
+  if(Len(I)==1){const int32 J=I==0?1:I+1==First.Num()?I:(Len(I-1)<=Len(I+1)?I:I+1);First.RemoveAt(J);I=0;}else ++I;
+ // At least 3 sections: split the longest.
+ while(First.Num()<3){int32 Best=0;for(int32 I=1;I<First.Num();++I)if(Len(I)>Len(Best))Best=I;if(Len(Best)<2)break;Split(Best);}
+ P.SectionFirst=First;P.Sections=First.Num();P.SectionOfRow.Init(0,Rows);
+ for(int32 I=0;I<First.Num();++I)for(int32 Y=First[I];Y<First[I]+Len(I);++Y)P.SectionOfRow[Y]=int8(I);
+ P.SampleAt.Reset();P.Damage.Reset();P.MeanCol.Reset();
+ FString Ranges,Cut;
+ for(int32 I=0;I<First.Num();++I)Ranges+=FString::Printf(TEXT("%s%d-%d"),I?TEXT(","):TEXT(""),First[I]+1,First[I]+Len(I));
+ for(int32 Y=0;Y+1<Rows;++Y)if(Cross[Y]*4<=Span)Cut+=FString::Printf(TEXT("%s%d:%d"),Cut.IsEmpty()?TEXT(""):TEXT(","),Y+1,Cross[Y]);
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_SECTIONS team=%d sections=%d rows=%s span=%d walls=%s"),Team,P.Sections,*Ranges,Span,Cut.IsEmpty()?TEXT("none"):*Cut);
+}
+
+void UBattleMatch::FrontPlanSample(int32 Team)
+{
+ constexpr int32 Cols=BattleSectors::Columns,Rows=BattleSectors::Rows;
+ FFrontPlanTeam& P=FrontPlanState[Team];
+ if(P.SectionOfRow.Num()!=Rows)BuildFrontSections(Team);
+ const int32 NS=P.Sections;if(NS<=0)return;
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ const auto* Tactics=GetWorld()->GetSubsystem<UBattleSquadTactics>();
+ if(!Store||!R)return;
+ const bool bLow=AreaHome(Team).X<0;
+ auto ColOf=[&](const FIntPoint& C){return bLow?C.X:Cols-1-C.X;};
+ auto RowOf=[&](const FIntPoint& C){return bLow?C.Y:Rows-1-C.Y;};
+ const int32 HomeCol=FMath::Clamp(ColOf(BattleSectors::Cell(AreaHome(Team))),0,Cols-1);
+ const TArray<int32>& Line=FrontLine[Team];
+ // Own infantry squads by the section their leader stands in (out of the home column); the damage of the last 5 s is spread over the
+ // 2 s between samples (RecentDamage x Interval / 5).
+ TArray<double> Dmg,Hp,Col;TArray<int32> Squads,Known,CoverN,Count;
+ Dmg.Init(0.,NS);Hp.Init(0.,NS);Col.Init(0.,NS);Squads.Init(0,NS);Known.Init(0,NS);CoverN.Init(0,NS);Count.Init(0,NS);
+ for(const auto& Pair:Store->GetSquads())
+ {
+  const auto& S=Pair.Value;
+  if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||BattleSquadType::IsVehicle(S.SquadType)||S.SquadType==BattleSquadType::Scout)continue;
+  const FIntPoint C=BattleSectors::Cell(R->Position(S.LeaderUnitID));if(!BattleSectors::Valid(C)||ColOf(C)<=HomeCol)continue;
+  const int32 K=P.SectionOfRow[RowOf(C)];++Squads[K];
+  if(const auto* O=Tactics?Tactics->Find(Pair.Key):nullptr){Dmg[K]+=O->RecentDamage*BattleFrontValues::Interval/5.;Hp[K]+=O->Health;}
+ }
+ for(int32 Y=0;Y<Rows;++Y){Col[P.SectionOfRow[Y]]+=Line[Y];++Count[P.SectionOfRow[Y]];}
+ for(int32 K=0;K<NS;++K)Col[K]/=FMath::Max(1,Count[K]);
+ P.SampleAt.Add(Elapsed);P.Damage.Append(Dmg);P.MeanCol.Append(Col);
+ // Keep 65 s of samples.
+ int32 Drop=0;while(Drop<P.SampleAt.Num()&&P.SampleAt[Drop]<Elapsed-65.f)++Drop;
+ if(Drop){P.SampleAt.RemoveAt(0,Drop);P.Damage.RemoveAt(0,Drop*NS);P.MeanCol.RemoveAt(0,Drop*NS);}
+ if(Elapsed<P.NextLog)return;
+ P.NextLog=Elapsed+BattleFrontValues::LogInterval;
+ // Known enemies from the line's column minus one to four ahead (AreaIntelView, cached this frame by UpdateFrontLine); sectors with
+ // cover on the line and two columns ahead; points: own ones in the section, and not-own ones up to two columns ahead of the line.
+ for(const FVector& E:AreaIntelView(Team).Enemies)if(const FIntPoint C=BattleSectors::Cell(E);BattleSectors::Valid(C))
+ {const int32 Y=RowOf(C);if(ColOf(C)>=Line[Y]-1&&ColOf(C)<=Line[Y]+4)++Known[P.SectionOfRow[Y]];}
+ for(int32 Y=0;Y<Rows;++Y)for(int32 C=Line[Y];C<=FMath::Min(Cols-1,Line[Y]+2);++C)
+  if(const FIntPoint Cell=FrontCell(Team,C,Y);BattleSectors::Valid(Cell)&&BattleFrontValues::Cover(BattleFieldLayout::SectorKind(GetWorld(),Cell))>0.)++CoverN[P.SectionOfRow[Y]];
+ TArray<FString> OwnPts,Ahead;OwnPts.Init(FString(),NS);Ahead.Init(FString(),NS);
+ for(int32 I=0;I<Objectives.Num();++I)
+ {
+  const FIntPoint C=BattleSectors::Cell(Objectives[I].Position);if(!BattleSectors::Valid(C))continue;
+  const int32 Y=RowOf(C),K=P.SectionOfRow[Y];
+  if(ObservedOwner(Team,I)==Team)OwnPts[K].AppendChar(TCHAR('A'+I));
+  else if(ColOf(C)>Line[Y]-1&&ColOf(C)<=Line[Y]+2)Ahead[K].AppendChar(TCHAR('A'+I));
+ }
+ const int32 N=P.SampleAt.Num();int32 Old=0;while(Old+1<N&&P.SampleAt[Old+1]<=Elapsed-60.f)++Old;
+ for(int32 K=0;K<NS;++K)
+ {
+  double D60=0;for(int32 J=0;J<N;++J)D60+=P.Damage[J*NS+K];
+  const double Push=N?P.MeanCol[(N-1)*NS+K]-P.MeanCol[Old*NS+K]:0.;
+  const int32 A=P.SectionFirst[K],B=K+1<NS?P.SectionFirst[K+1]:Rows;
+  FString L;for(int32 Y=A;Y<B;++Y)L+=FString::Printf(TEXT("%s%d"),Y>A?TEXT(","):TEXT(""),Line[Y]);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_SECTION team=%d t=%.1f sec=%d rows=%d-%d line=%s push=%+.2f over=%.0f dmg=%.3f hp=%.0f squads=%d known=%d cover=%d own=%s ahead=%s"),
+   Team,Elapsed,K+1,A+1,B,*L,Push,N?P.SampleAt[N-1]-P.SampleAt[Old]:0.f,Hp[K]>0.?D60/Hp[K]:0.,Hp[K],Squads[K],Known[K],CoverN[K],OwnPts[K].IsEmpty()?TEXT("-"):*OwnPts[K],Ahead[K].IsEmpty()?TEXT("-"):*Ahead[K]);
+ }
+}
