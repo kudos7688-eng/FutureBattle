@@ -1654,6 +1654,11 @@ bool UBattleLeaderRuntime::PinnedFlankEnabled()
  static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattlePinnedFlank="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
  return bOn;
 }
+bool UBattleLeaderRuntime::HireMirrorEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleHireMirror="),V);return V!=0;}();
+ return bOn;
+}
 bool UBattleLeaderRuntime::SectorSymmetricEnabled()
 {
  static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSymmetric="),V);return V!=0;}(); // default on since 2026-11-22 (user decision)
