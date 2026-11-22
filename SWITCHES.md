@@ -251,7 +251,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSectorRoute` | Value | -1 | BattleSectorRoute.cpp:16 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleSectorSlotReserve` | Value | 1 | BattleStableMovement.cpp:81 |  |
 | `-BattleSectorSmoke` | Param | off | BattleLeaderRuntime.cpp:214 |  |
-| `-BattleSectorSymmetric` | Value | 0 | BattleLeaderRuntime.cpp:1644 |  |
+| `-BattleSectorSymmetric` | Value | 1 | BattleLeaderRuntime.cpp:1644 | default on since 2026-11-22 (user decision) |
 | `-BattleSectorViewShot` | Value | 空文字列 | BattleHUD.cpp:1263 |  |
 | `-BattleSeed` | Value | 7 | BattleBenchmark.cpp:42 |  |
 | `-BattleSenseMode` | Value | 空文字列 | BattleBenchmark.cpp:29 |  |
