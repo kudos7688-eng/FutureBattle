@@ -29,6 +29,14 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-22 17時10分 Claude（実装計画ロードマップ）：`-BattleAreaPointSupply` の計測。拠点での弾の補充は起きるが、AIどうしの試合は全く変わらない（弾が尽きる兵がいない）
+- **決定（ユーザー、15時40分の項を見て）**：`-BattleAIBlindFire` は切替のまま。発動のきっかけは段階2の「C 制圧射撃」で考える（ROADMAP に記録、858d91d）。
+- **計測**：凍結ビルド `teammask-379936d`（`-BattleSightTeamMask` 既定ON。`-BattleOrderSync`・`-BattleHireMirror` の既定化 099f3f2 より前）、30FPS 並列、マップE・I・A、種7・19×左右。既定（`econ-HI-*-sd2`）と `-AreaPointSupply 1`（`Run-EconomyMatrix` の条件 `PT`、`econ-PT-*-sd2`）。16本すべて合格。
+- **結果**：拠点での補充（run.log の `AREA_POINT_SUPPLY`）は4本あたり E 27回・I 40回・A 30回（1回 30〜120発）起きた。それでも **12組すべてで射撃数・撃破・得点・前線の時間・本拠地への補給の往復が既定と同じ**。`Compare-MatchResults` でもマップI 種7 は IDENTICAL（78項目）。
+- **読み方**：補充は予備の弾（`UBattleState::AddReserve`、上限は武器ごとの予備）を足すだけで、AIの兵は試合の間に弾を撃ち尽くさない（本拠地への補給の往復は人数と体力で起き、弾では起きない）。そのため足した弾が使われず、AIどうしの試合には効かない。効くのはプレイヤーの部隊が撃ち尽くしそうなときだけ（`Play-Area.ps1` は前から ON）。
+- **制限**：AIが弾のために拠点へ寄る判断は無い（11-19 の項のまま）。弾の量が戦い方に効かないことは、補給の仕組み全体（段階6など）の課題として残る。
+- **次の一手**：既定にするかをユーザーに尋ねる（AIどうしの評価は変わらず、プレイの規則と評価の規則がそろう）。その次は `-BattleAreaComposition`（段階3で測り直してから）。
+
 ## 2026-11-22 16時50分 Claude（Codex委任）：外骨格を早くまとめて買う `-BattleAreaExoEarly`。群は早く組めるようになったが、自走砲の撃破は増えない（main 2b69453、既定0）
 
 - **組み込んだもの**：`-BattleAreaExoEarly=1`（既定0）。最初の3回の購入（拠点取り）のあと、`-AreaExoKeep` の数の外骨格を、偵察の次・ほかの特殊兵種より先にまとめて買う。設計は `Docs/design-vehicle-survival.md` の「外骨格を早くまとめて買う」。
