@@ -333,8 +333,9 @@ public:
  // One sight trace from the context's eye to End on ECC_Visibility, recorded for the hit statistics when they are on (TargetID -1: a point).
  FHitResult TraceSight(const FBattleSightContext& Context,const FVector& End,int32 TargetID,ESightHitSource Source) const;
  static bool SightHitStatsEnabled();
- // Trial -BattleSightTeamMask=1 (rules, default OFF; user request 2026-11-17): soldiers of one side do not block their own side's line of
- // sight. Each soldier body carries the mask bit 1<<team (FBodyInstance mask filter) and sight queries ignore the observer's bit
+ // -BattleSightTeamMask (rules, default ON since 2026-11-22 by user decision; =0 restores the old rule; user request 2026-11-17): soldiers
+ // of one side do not block their own side's line of sight, nor its bullets (Fire traces with Sight(ID).Query, which carries the mask).
+ // Each soldier body carries the mask bit 1<<team (FBodyInstance mask filter) and sight queries ignore the observer's bit
  // (FCollisionQueryParams::IgnoreMask; Chaos skips a shape when the two masks share a bit). The trace channel stays ECC_Visibility.
  static bool SightTeamMaskEnabled();
  FMaskFilter SightTeamMaskFor(int32 ObserverID) const;
@@ -641,6 +642,9 @@ public:
  // sorted with ties by world X then Y (BuildMovementPlan, ReassignOccupiedArrival), read them in the team's own frame: the
  // east team (AreaHome.X > 0) turned 180 degrees, so on the point-symmetric maps both teams break ties alike.
  static bool SectorSymmetricEnabled();
+ // -BattleHireMirror (2026-11-22; default 1 since the user decision that day, =0 the earlier rows): in an area battle purchased squads appear at home rows point-mirrored for the
+ // east team (rows mirrored in Y as well as X), so both teams' new squads start at the same place in their own frames.
+ static bool HireMirrorEnabled();
  // -BattleSectorSymmetric: -1 for the east team (its frame turned 180 degrees), else 1.
  int32 SectorTurn(int32 Team) const;
  // -BattleSectorSymmetric: the sector of a point as the team reads it - for the east team the sector of the point turned 180

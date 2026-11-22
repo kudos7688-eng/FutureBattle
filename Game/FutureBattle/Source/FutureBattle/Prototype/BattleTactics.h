@@ -25,6 +25,8 @@ namespace BattleTactics
  bool VehicleOrderHere();
  bool ArtilleryPosts(); // Trial -BattleArtilleryPosts=1 (default 0): public mortar posts and raids.
  bool ArtilleryRaidChase(); // Trial -BattleArtilleryRaidChase=1 (default 0), requires ArtilleryPosts.
+ int32 ArtilleryRaidGroup(); // Trial -BattleArtilleryRaidGroup=<2..3> (default 0 = off): a raid takes up to this many squads, gathers them and goes round the flank; requires ArtilleryRaidChase.
+ int32 ArtilleryRaidScreen(); // -BattleArtilleryRaidScreen=<0..4> (default 2, only with ArtilleryRaidGroup): infantry squads that push the front out on the raid group's side.
  float ArtilleryRaidSneak(); // Trial -BattleArtilleryRaidSneak=<m> (default 0 = off, cm returned): a raid moves without stopping to fight until its leader is this close to the target; requires ArtilleryPosts.
  int32 AreaSPGCost(); // Optional -BattleAreaSPGCost override.
  bool ArtilleryFlash(); // Trial -BattleArtilleryFlash=1 (default 0): heard indirect fire reveals a rough position.
