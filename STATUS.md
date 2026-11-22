@@ -414,7 +414,7 @@
 - **観測の規則 ON の確認**：マップE seed7 60FPS `-RoundTripSave -ObservedArmour 1 -ObservedTactics 1` は完走（`SIGHT_EXPERIMENT_RESULT failures=0`、`BATTLE_MIXED_SAVE_SOAK_RESULT failures=0`、571/643）。
 - **次の一手**：ロックの列の番で codex をビルドし、`-ArtilleryRaidSneak 0/80`（30FPS、2 seed）を比べる。外骨格が自走砲に届けば main へ取り込む。迫撃砲を使わせるなら `-AreaMortarKeep 1` も評価する。
 
-## 2026-11-22 13時00分 Claude（ロードマップに従う改善活動）：再開。マップJ の F2 の到着の不合格の原因と直し（ブランチ `strategy`、未ビルド）
+## 2026-11-22 12時50分 Claude（ロードマップに従う改善活動）：再開。マップJ の F2 の到着の不合格の原因と直し（ブランチ `strategy`、未ビルド）
 - **原因**：区画の監査で F2（南西の道の拠点）へ向かった部隊の兵は、西の本拠地の南の丘（高さ5m、`BattleMapJ::Hills` の (16,11) の回転）の上の面の角で止まっていた（`BATTLE_MOVE_STALL` の高さ 5〜6m、経路の点は角を斜めに下りる）。丘の坂は4辺だけで角に無く、手で動かす部下は45cmより大きい段差を下りられない。この丘は本拠地から南の道へ出る通り道の上にあった。
 - **直し**（61b76a9）：マップJ ではこの丘を外して公園の区画にし、見張り所を道の外側の尾根の上へ移した。丘の作り（`BattleTerrain::AddHill`）は G・H・I と共通なので変えていない（変えると G・H・I の試合が変わる）。`Initialize-MapJ.ps1 -Force` で作り直せるようにした。
 - **同じ作業ツリーの未確認の変更**：西東の同点の直し `-BattleRouteTieSymmetric`（既定0、c583ca8）。main の `RouteFlankSide` は区画AIの `-BattleSectorSymmetric`（既定ON）の対象外で、今も部隊番号の偶奇で決めている。
