@@ -272,7 +272,7 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
    E.Avoid=G.Avoid;E.AvoidRemaining=double(G.AvoidUntil)-double(Elapsed);E.StartLiving=G.StartLiving;E.StartStrength=G.StartStrength;
    E.StallPoint=G.StallPoint;E.Stalls=G.Stalls;E.bOpened=G.bOpened;E.bArrived=G.bArrived;
    E.ArrivalAge=double(Elapsed)-double(G.ArrivedAt);E.Extensions=G.Extensions;
-   E.Kind=G.Kind;E.SurpriseRow=G.SurpriseRow;E.SurpriseBridgeStage=G.SurpriseBridgeStage;E.SurpriseBridgeLeader=G.SurpriseBridgeLeader;
+   E.Kind=G.Kind;E.bFocus2=G.bFocus2;E.SurpriseRow=G.SurpriseRow;E.SurpriseBridgeStage=G.SurpriseBridgeStage;E.SurpriseBridgeLeader=G.SurpriseBridgeLeader;
    E.SurpriseBridgeAge=double(Elapsed)-double(G.SurpriseBridgeAt);E.SurpriseNextCol=G.SurpriseNextCol;
    E.FrontHold=G.FrontHold;E.FrontGap=G.FrontGap;E.FrontNeed=G.FrontNeed;E.FrontReleaseAge=double(Elapsed)-double(G.FrontReleaseAt);E.FrontExcessAge=G.FrontExcessSince<0.f?-1.:double(Elapsed)-double(G.FrontExcessSince);E.bFrontDrawn=G.bFrontDrawn;E.FrontBackAge=double(Elapsed)-double(G.FrontBackAt);E.FrontStepAge=double(Elapsed)-double(G.FrontStepAt);
    E.SurpriseBridgeEntry=G.SurpriseBridgeEntry;E.SurpriseBridgeExit=G.SurpriseBridgeExit;E.SurpriseBridgeGoal=G.SurpriseBridgeGoal;
@@ -456,7 +456,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
    G.Avoid=E.Avoid;G.AvoidUntil=float(double(Elapsed)+E.AvoidRemaining);G.StartLiving=E.StartLiving;G.StartStrength=E.StartStrength;
    G.StallPoint=E.StallPoint;G.Stalls=E.Stalls;G.bOpened=E.bOpened;G.bArrived=E.bArrived;
    G.ArrivedAt=float(double(Elapsed)-E.ArrivalAge);G.Extensions=E.Extensions;
-   G.Kind=E.Kind;G.SurpriseRow=E.SurpriseRow;G.SurpriseBridgeStage=E.SurpriseBridgeStage;G.SurpriseBridgeLeader=E.SurpriseBridgeLeader;
+   G.Kind=E.Kind;G.bFocus2=E.bFocus2;G.SurpriseRow=E.SurpriseRow;G.SurpriseBridgeStage=E.SurpriseBridgeStage;G.SurpriseBridgeLeader=E.SurpriseBridgeLeader;
    G.SurpriseBridgeAt=float(double(Elapsed)-E.SurpriseBridgeAge);G.SurpriseNextCol=E.SurpriseNextCol;
    G.FrontHold=E.FrontHold;G.FrontGap=E.FrontGap;G.FrontNeed=E.FrontNeed;G.FrontReleaseAt=float(double(Elapsed)-E.FrontReleaseAge);G.FrontExcessSince=E.FrontExcessAge<0.?-1.f:float(double(Elapsed)-E.FrontExcessAge);G.bFrontDrawn=E.bFrontDrawn;G.FrontBackAt=float(double(Elapsed)-E.FrontBackAge);G.FrontStepAt=float(double(Elapsed)-E.FrontStepAge);
    G.SurpriseBridgeEntry=E.SurpriseBridgeEntry;G.SurpriseBridgeExit=E.SurpriseBridgeExit;G.SurpriseBridgeGoal=E.SurpriseBridgeGoal;
