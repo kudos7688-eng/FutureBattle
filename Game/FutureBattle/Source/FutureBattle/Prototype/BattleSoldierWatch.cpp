@@ -1,4 +1,4 @@
-// Individual AI, watch (2026-11-22, trial -BattleSoldierWatch=1, default 0): where a soldier who stands still with nothing to fire
+// Individual AI, watch (2026-11-22, -BattleSoldierWatch, default 1 by the user's decision of 2026-11-22; =0 turns it off): where a soldier who stands still with nothing to fire
 // at looks. Sight has a forward field of view (FieldOfView, 120 degrees), and such a soldier kept facing the way he walked in, so
 // enemies to the side shot him unseen (map I, 30 FPS: about 1100 hits a match on soldiers standing in the open whose shooter saw
 // them while they did not see the shooter). Observed information only: his own contacts (sightings and reports) and the map
@@ -11,7 +11,7 @@
 
 bool UBattleLeaderRuntime::SoldierWatchEnabled(int32 Team)
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSoldierWatch="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSoldierWatch="),V);return V!=0;}();
  static const int32 Only=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSoldierWatchTeam="),V);return V==0||V==1?V:-1;}();
  return bOn && (Only<0 || Only==Team);
 }

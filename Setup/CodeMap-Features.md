@@ -34,7 +34,7 @@
 | 姿勢（立ち・しゃがみ） | @UBattleLeaderRuntime::SetStance 、 @UBattleLeaderRuntime::UpdateAIStance | 数値は @BattleStance::EyeOffset ほか |
 | 制圧（撃たれて動けない） | @UBattleLeaderRuntime::AddSuppression 、 @UBattleLeaderRuntime::IsPinned | 調整値は @BattleSuppression::Tuning |
 | 兵ごとの脅威と遮蔽の取り直し（個人AI段階A） | @UBattleLeaderRuntime::GatherThreats 、 @UBattleLeaderRuntime::CheckCoverThreats | 試験切替 `-BattleThreatCover`（既定0）。遮蔽を選ぶ側は @UBattleLeaderRuntime::RequestCoverAction の2段の候補 |
-| 止まった兵の見張りの向き（個人AI） | @UBattleLeaderRuntime::SoldierWatchDirection | 試験切替 `-BattleSoldierWatch`（既定0）。`Follow` の向きの分岐で `-BattleAttackFocus` の後ろ。視野は前方120度 |
+| 止まった兵の見張りの向き（個人AI） | @UBattleLeaderRuntime::SoldierWatchDirection | `-BattleSoldierWatch`（既定1、11-22 ユーザー決定。=0 で切る）。`Follow` の向きの分岐で `-BattleAttackFocus` の後ろ。視野は前方120度 |
 | 区画の中で兵が遮蔽を移る（個人AI段階B1） | @UBattleLeaderRuntime::StepSoldierMove 、 @UBattleLeaderRuntime::RateCoverPlace | 試験切替 `-BattleSoldierMove`（既定0）。呼び出しは @UBattleLeaderRuntime::StepCoverAction の隠れている間（1秒に1回・1フレーム4人まで） |
 | 個人AIをプレイヤーの周りだけで動かす | @UBattleLeaderRuntime::SoldierAIFocus | 試験切替 `-BattleSoldierAIFocus=<m>`（既定0＝全員）、`-BattleSoldierAIFocusAt=X,Y`。段階A（@UBattleLeaderRuntime::CheckCoverThreats ほか）とB1（@UBattleLeaderRuntime::StepSoldierMove）の入口で見る |
 | プレイヤーが兵1人に出す移動の命令（Ctrl＋クリックで選ぶ・右クリックで移動先・Hで戻す） | @UBattleLeaderRuntime::IssueSoldierOrder 、 @UBattleLeaderRuntime::StepSoldierOrder 、 @ABattleController::SelectSoldierAt 、直接操作では @ABattleController::CommandSoldierFromView （G） | 兵の状態 `bSoldierOrder`（保存される）。@UBattleLeaderRuntime::Follow の `bOwnOrder`。自動試験 `-BattleSoldierOrderTest`（@UBattleLeaderRuntime::StepSoldierOrderTest） |

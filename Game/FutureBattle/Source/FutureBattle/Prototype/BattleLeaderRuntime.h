@@ -560,7 +560,7 @@ public:
  // flanking or aiming indirect fire) faces where the shot came from, so his forward field of view can find the shooter. Movement keeps
  // its own steering (only the facing changes). Counts hit_face_turned.
  static bool HitFaceEnabled();
- // Trial -BattleSoldierWatch=1 (default 0, 2026-11-22; -BattleSoldierWatchTeam=0/1 for one team): a soldier standing still with
+ // -BattleSoldierWatch (default 1, user decision 2026-11-22; =0 turns it off; -BattleSoldierWatchTeam=0/1 for one team): a soldier standing still with
  // nothing to fire at (not in a cover action, not a vehicle, not under direct control) faces the squad's target when he knows
  // where it is, else the nearest enemy he sees, else the nearest he knows of (memory and reports still held; both within his
  // weapon's reach), else his share of the ground ahead (toward the enemy's home, or 70 degrees to either side by his place in the
