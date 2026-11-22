@@ -255,6 +255,13 @@ public:
  // Rows of the focus section (1) and the target point's column, for the line's continuity; empty / -1 without a front plan focus.
  void FrontPlanFocusRows(int32 Team,TArray<uint8>& InFocus,int32& TargetCol) const; // called right after UpdateFrontLine refreshed the team's line (same frame: AreaIntelView is cached)
  int32 FrontReleased[2]={0,0}; // squads the front army has released to the reserve so far (display: the player's notice)
+ // Reserve behind the front (trial -BattleFrontReserve=1, user request 2026-11-22: unassigned squads went to and fro in place). The free
+ // squads the front army could take wait at a place two or three columns behind its line, a row of their own each (transient).
+ bool FrontReserveOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ TMap<int32,FVector> FrontReservePosts; // reserve squad -> the sector centre it waits at
+ TMap<int32,int32> FrontReserveRow; // reserve squad -> its row (the team's own row order), kept while it stays in the reserve
+ // Measurement of the free squads' moves (log only, BATTLE_FRONT_LINE free_rev/free_moved_m; transient): last leader position and 2 s step.
+ TMap<int32,FVector> FreeLastPos,FreeLastStep; int32 FreeReversals[2]={0,0}; double FreeMoved[2]={0.,0.};
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;

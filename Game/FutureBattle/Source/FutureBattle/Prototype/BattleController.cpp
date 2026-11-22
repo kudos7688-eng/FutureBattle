@@ -706,6 +706,7 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
    {
     const uint8 Next=(R->StanceOf(U->GetUnitID())+1)%3;
     if(R->SetStance(U->GetUnitID(),Next,GetWorld()->GetTimeSeconds()))ShowNotice(Next==BattleStance::Prone?TEXT("PRONE / X TO STAND"):Next==BattleStance::Crouch?TEXT("CROUCHED / X FOR PRONE"):TEXT("STANDING / X TO CROUCH"));
+    else ShowNotice(TEXT("CHANGING STANCE")); // the last change still takes time (0.5 s, 1.2 s to or from prone)
     return true;
    }
  // F / LB swaps the hand and back mounts. Primary fire uses the equipped weapon.

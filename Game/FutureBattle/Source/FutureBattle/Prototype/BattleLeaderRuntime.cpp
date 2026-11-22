@@ -1225,6 +1225,15 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   const auto* P=Plans.Find(U->SquadID);const auto* C=P?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,P->TargetID):nullptr;
   const double D=C?FVector::Dist(Position(ID),C->LastKnownPosition):-1;
   E.ShotDistances.Add(D);if(E.FirstShot<0){E.FirstShot=GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed;E.FirstShotDistance=D;}
+  // Diagnostic -BattleShotLog (evaluation matches only, reads state, changes nothing): where each shot was fired from and at what
+  // (the squad target's last known place, the distance recorded above), to find where the long shots of a map happen (map K).
+  static const bool bShotLog=FParse::Param(FCommandLine::Get(),TEXT("BattleShotLog"));
+  if(bShotLog&&C)
+  {
+   const FVector Sp=Position(ID);const auto* ShotSquad=Store->FindSquad(U->SquadID);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SHOT_AT t=%.1f unit=%d team=%d type=%d d_cm=%.0f shooter=%.0f,%.0f,%.0f target=%.0f,%.0f,%.0f visible=%d"),
+    GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed,ID,U->Team,ShotSquad?int32(ShotSquad->SquadType):-1,D,Sp.X,Sp.Y,Sp.Z,C->LastKnownPosition.X,C->LastKnownPosition.Y,C->LastKnownPosition.Z,C->bVisible?1:0);
+  }
  }
  if(Phase3 && Phase3->bEnabled) ++Phase3->Shots;
  const float SuppressedScale=SuppressionSpreadScale(ID,Now);
