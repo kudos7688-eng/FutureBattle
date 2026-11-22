@@ -287,7 +287,7 @@ void UBattleMatch::UpdateArea(float Dt)
   const auto* S=Store->FindSquad(SID);const bool bHome=AtHome.Contains(SID);
   // A supply vehicle at home loads its stock again (BattleSupplyCar.cpp).
   if(bHome&&S->SquadType==BattleSquadType::Supply)RestockSupplyCar(SID);
-  // Trial -BattleAreaPointSupply=1: the same ammunition refill at a point the squad's team owns (calm: not contested, not being captured).
+  // -BattleAreaPointSupply (default ON since 2026-11-22): the same ammunition refill at a point the squad's team owns (calm: not contested, not being captured).
   bool bPoint=false;
   if(!bHome&&BattleTactics::Supply().bPointAmmo&&S->CommandStatus==EBattleCommandStatus::Active)
   {

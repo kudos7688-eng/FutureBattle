@@ -54,7 +54,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleAreaMaxSquads` | Value | 30 | BattleTactics.cpp:59 |  |
 | `-BattleAreaMortarKeep` | Value | -1（= 設定値 0） | BattleTactics.cpp:98 |  |
 | `-BattleAreaPlan` | Value | 0 | BattleTactics.cpp:92 |  |
-| `-BattleAreaPointSupply` | Value | False | BattleTactics.cpp:39 |  |
+| `-BattleAreaPointSupply` | Value | True | BattleTactics.cpp:39 |  |
 | `-BattleAreaScoutKeep` | Value | -1（= 設定値 0） | BattleTactics.cpp:94 |  |
 | `-BattleAreaSmoke` | Param | off | BattleArea.cpp:46, BattleMixedBodies.cpp:114 |  |
 | `-BattleAreaSPGCost` | Strifind/Value | 35 | BattleArtillery.cpp:94, BattleController.cpp:46 |  |

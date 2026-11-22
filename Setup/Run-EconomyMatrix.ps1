@@ -181,6 +181,8 @@ $supply=@{
  'BF'=@('-ExtraArgs','-BattleAIBlindFire=1')
  # PT = ammunition at owned points (-BattleAreaPointSupply=1: a leader 10 s within 25 m of an owned, uncontested point refills the squad's reserve).
  'PT'=@('-AreaPointSupply','1')
+ # PT0 = no ammunition at points (-BattleAreaPointSupply=0) after PT became the default (2026-11-22).
+ 'PT0'=@('-AreaPointSupply','0')
  # SC = the sector AI combination the sector lane uses as its base (s22/s23) plus arrival walk (maps H/I).
  'SC'=@('-SectorContact','1','-SectorRoute','1','-SectorFlank','1','-SectorFront','1','-WaypointPass','1','-SectorMoveFire','1','-CoverHuddle','1','-PinnedFlank','1','-ArrivalThreat','1','-SectorCoverRoute','1','-ArrivalWalk','1')
 }
