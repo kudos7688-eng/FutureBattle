@@ -1644,6 +1644,12 @@ bool UBattleLeaderRuntime::SectorSymmetricEnabled()
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSymmetric="),V);return V!=0;}();
  return bOn;
 }
+FIntPoint UBattleLeaderRuntime::SectorCellFor(int32 Team,const FVector& At) const
+{
+ if(SectorTurn(Team)>0)return BattleSectors::Cell(At);
+ const FIntPoint Turned=BattleSectors::Cell(FVector(-At.X,-At.Y,At.Z));
+ return FIntPoint(BattleSectors::Columns-1-Turned.X,BattleSectors::Rows-1-Turned.Y);
+}
 int32 UBattleLeaderRuntime::SectorTurn(int32 Team) const
 {
  if(!SectorSymmetricEnabled() || (Team!=0 && Team!=1))return 1;

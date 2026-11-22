@@ -51,7 +51,7 @@ bool UBattleMatch::CloseInStage(int32 SID,const FVector& Leader,FVector& Stage)
 	if(!Runtime || !Runtime->CloseInThreat(SID,Threat))return false;
 	Runtime->ClearCloseIn(SID);
 	const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);if(!S)return false;
-	const FIntPoint Here=BattleSectors::Cell(Leader);const double Base=FVector::Dist2D(Leader,Threat);
+	const FIntPoint Here=Runtime->SectorCellFor(S->Team,Leader);const double Base=FVector::Dist2D(Leader,Threat); // -BattleSectorSymmetric
 	double Best=-DBL_MAX;FIntPoint Pick(-1,-1);
 	const int32 Turn=Runtime->SectorTurn(S->Team); // -BattleSectorSymmetric: the east team scans in its own frame
 	for(int32 DY=-1;DY<=1;++DY)for(int32 DX=-1;DX<=1;++DX)
@@ -82,7 +82,8 @@ bool UBattleMatch::PinnedFlankStage(int32 SID,const FVector& Leader,FVector& Sta
 	auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();FVector Threat;
 	if(!Runtime || !Runtime->PinnedThreat(SID,Threat))return false;
 	Runtime->ClearPinned(SID);
-	const FIntPoint Here=BattleSectors::Cell(Leader);
+	const auto* PinnedOf=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
+	const FIntPoint Here=Runtime->SectorCellFor(PinnedOf?PinnedOf->Team:-1,Leader); // -BattleSectorSymmetric
 	const FVector Front=(Leader-Threat).GetSafeNormal2D();const double Base=FVector::Dist2D(Leader,Threat);
 	double Best=-DBL_MAX;FIntPoint Pick(-1,-1);
 	const auto* PinnedSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
@@ -164,7 +165,10 @@ void UBattleMatch::UpdateSectorFront(int32 Team,const TArray<FVector>& KnownEnem
 
 bool UBattleMatch::SectorStage(const FBattleSquadState& S,const FVector& Leader,const FVector& Step,const FVector& Goal,const TArray<FVector>& KnownEnemies,FVector& Stage) const
 {
-	const FIntPoint Here=BattleSectors::Cell(Leader),StepCell=BattleSectors::Cell(Step),GoalCell=BattleSectors::Cell(Goal);
+	// -BattleSectorSymmetric: the sectors as the team reads them (a junction on a sector border falls on the same side for both teams).
+	const auto* CellRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+	auto TeamCell=[&](const FVector& At){return CellRuntime?CellRuntime->SectorCellFor(S.Team,At):BattleSectors::Cell(At);};
+	const FIntPoint Here=TeamCell(Leader),StepCell=TeamCell(Step),GoalCell=TeamCell(Goal);
 	if(!BattleSectors::Valid(StepCell))return false;
 	const double Remaining=FVector::Dist2D(Leader,Goal);
 	// Trial -BattleSectorFlank=1: enemies this team knows of within 200 m of the goal. Their front is taken to face the squad
