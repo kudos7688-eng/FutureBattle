@@ -44,6 +44,11 @@ void UBattleLeaderRuntime::RunExoShot()
   {0,25.f,BattleStance::Stand,false,TEXT("front")},{0,100.f,BattleStance::Stand,false,TEXT("side")},{0,180.f,BattleStance::Stand,false,TEXT("back")},
   {0,25.f,BattleStance::Stand,false,TEXT("launcher_front"),true},{0,150.f,BattleStance::Stand,false,TEXT("launcher_back"),true},
   {0,25.f,BattleStance::Stand,true,TEXT("noshield")},{0,100.f,BattleStance::Stand,true,TEXT("move_side"),false,true},{0,25.f,BattleStance::Stand,true,TEXT("move_strafe"),false,true},
+  // The bazooka in hand while moving (its glide clip) and close up (2026-11-22: the head turned backwards on the move, the shoulder
+  // plates stood off the body).
+  {0,100.f,BattleStance::Stand,true,TEXT("launcher_move_side"),true,true},{0,25.f,BattleStance::Stand,true,TEXT("launcher_move_front"),true,true},
+  {0,200.f,BattleStance::Stand,true,TEXT("launcher_move_back"),true,true},
+  {0,25.f,BattleStance::Stand,true,TEXT("launcher_close_front"),true,false,190.f,80.f,60.f},{0,200.f,BattleStance::Stand,true,TEXT("launcher_close_back"),true,false,190.f,90.f,60.f},
   {0,25.f,BattleStance::Stand,true,TEXT("close_front"),false,false,190.f,80.f,60.f},{0,100.f,BattleStance::Stand,true,TEXT("close_side"),false,false,190.f,80.f,60.f},{0,200.f,BattleStance::Stand,true,TEXT("close_back"),false,false,190.f,90.f,60.f},
   // Action shots, from 3.2 m (Action 1: a launcher shot's clips, 2: a rifle shot, 3: a rifle reload), taken Capture seconds after
   // it starts: the launcher's kick, its reload seen from the front (the round going into the muzzle) and from the left (the hand
