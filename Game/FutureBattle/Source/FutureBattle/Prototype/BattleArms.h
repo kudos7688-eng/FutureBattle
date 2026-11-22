@@ -23,6 +23,8 @@ namespace BattleArms
  constexpr int32 SniperLimit=3; // sniper teams per team (they do not count against the scout pair limit)
  int32 AssaultMode();     // -BattleArmsAssault: 0 off, 1 elite assault roles dash close (UBattleLeaderRuntime::StartAssault), 2 also one
                           // grenade carrier per ordinary rifle squad
+ bool ChargeEnabled();    // -BattleArmsCharge=1: the assault roles (with -BattleArmsAssault=2 also ordinary riflemen) charge an enemy
+                          // they see within 12 m, or after an assault bound one known within 25 m, and strike him (StartCharge)
  bool SmokeEnabled();     // -BattleArmsSmoke: the self-test (UBattleLeaderRuntime::RunArmsSmoke)
  bool AnyTrial();         // any of the switches above
  uint8 EliteKit(int32 Slot);            // role of a slot (slots past the table are riflemen)
@@ -46,6 +48,13 @@ namespace BattleArms
  float GrenadeSquadGap(); // one hand grenade per squad per this many seconds
  struct FMelee { float Damage=60.f,Reach=200.f,Cooldown=1.2f,ConeCos=.5f; };
  const FMelee& Melee();
+ // The charge: at an enemy he sees within Range cm, or - within BoundWindow s after an assault bound brought him to cover - at one
+ // seen or reported within Known s and BoundRange cm (also hidden behind his cover: he runs to where the enemy was last seen). Not
+ // more than CrowdMax known enemies within CrowdRadius of the target (him included) and a clear straight way. The soldier runs at
+ // SpeedScale x the walking speed to Stop cm from him for at most Limit s; the next charge waits Cooldown s from this start; at most
+ // SquadMax of a squad at once.
+ struct FCharge { float Range=1200.f,BoundRange=2500.f,BoundWindow=15.f,Known=3.f,Stop=120.f,Limit=8.f,SpeedScale=1.3f,CrowdRadius=600.f,Cooldown=8.f; int32 CrowdMax=2,SquadMax=2; };
+ const FCharge& Charge();
  struct FMedic { float Rate=4.f,Range=1000.f; };
  const FMedic& Medic();
  // The pistol: one shot while drawn (rounds loaded, shot timer shared with the primary). False when it cannot fire.

@@ -320,6 +320,7 @@ bool UBattleLeaderRuntime::StartFirePosition(int32 ID,FVector Threat,int32 Targe
 bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 Target)
 {
  auto* A=CoverApproaches.Find(ID);if(!A)return false;
+ if(A->bCharge)return StepCharge(ID,Dt,Now); // a charge at a seen enemy (BattleArms.cpp, -BattleArmsCharge)
  auto& Diag=SightExperiment;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);
  const bool bContactCover=U && BattleTactics::ContactCover(U->Team);
@@ -358,7 +359,7 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
   if((bContactCover || A->bAssault) && Contact)
   {
    const int32 Goal=A->Target;const FVector Threat=Contact->LastKnownPosition;
-   if(A->bAssault)Diag.Cover(TEXT("arms_assault_arrived"));
+   if(A->bAssault){Diag.Cover(TEXT("arms_assault_arrived"));ArmsBoundArrived.Add(ID,Now);} // the charge may follow (BattleArms.cpp)
    Diag.Cover(End);CoverApproaches.Remove(ID);
    if(RequestCoverAction(ID,Threat,Goal,250.f))Diag.Cover(TEXT("approach_arrived_took_cover"));
    return false;

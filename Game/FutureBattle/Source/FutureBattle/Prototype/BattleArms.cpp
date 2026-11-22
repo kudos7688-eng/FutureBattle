@@ -18,6 +18,7 @@
 #include "BattleCover.h"
 #include "BattleVATDisplay.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/StaticMesh.h"
@@ -43,8 +44,9 @@ bool BattleArms::SniperEnabled(){static const bool b=IntSwitch(TEXT("BattleSnipe
 int32 BattleArms::AreaSniperKeep(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleAreaSniperKeep=")),0,SniperLimit);return N;}
 int32 BattleArms::SniperCost(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleSniperCost="),14),1,200);return N;}
 int32 BattleArms::AssaultMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleArmsAssault=")),0,2);return N;}
+bool BattleArms::ChargeEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsCharge="))!=0;return b;}
 bool BattleArms::SmokeEnabled(){static const bool b=FParse::Param(FCommandLine::Get(),TEXT("BattleArmsSmoke"));return b;}
-bool BattleArms::AnyTrial(){return SidearmsEnabled()||GrenadeCount()>0||MeleeEnabled()||EliteEnabled()||AreaEliteKeep()>0||SniperEnabled()||AreaSniperKeep()>0||AssaultMode()>0||SmokeEnabled();}
+bool BattleArms::AnyTrial(){return SidearmsEnabled()||GrenadeCount()>0||MeleeEnabled()||EliteEnabled()||AreaEliteKeep()>0||SniperEnabled()||AreaSniperKeep()>0||AssaultMode()>0||ChargeEnabled()||SmokeEnabled();}
 
 uint8 BattleArms::EliteKit(int32 Slot)
 {
@@ -152,6 +154,7 @@ const BattleArms::FMelee& BattleArms::Melee()
  static const FMelee M=[]{FMelee X;X.Damage=FMath::Clamp(FloatSwitch(TEXT("BattleMeleeDamage="),60.f),0.f,1000.f);return X;}();
  return M;
 }
+const BattleArms::FCharge& BattleArms::Charge(){static const FCharge C;return C;}
 const BattleArms::FMedic& BattleArms::Medic()
 {
  static const FMedic M=[]{FMedic X;X.Rate=FMath::Clamp(FloatSwitch(TEXT("BattleMedicRate="),4.f),0.f,100.f);return X;}();
@@ -250,7 +253,7 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
   ArmsNextMelee=Now+.25;
   const bool bAll=BattleArms::MeleeEnabled();const float Reach=BattleArms::Melee().Reach+60.f;
   TArray<int32> IDs;
-  for(const auto& B:Bodies)if(const auto* U=Store->Find(B.Key);U&&U->IsAlive()&&U->MeleeWait<=0.f&&U->Action!=EBattleAction::DirectControl&&(bAll||U->Kit!=0)&&!IsVehicle(B.Key))IDs.Add(B.Key);
+  for(const auto& B:Bodies)if(const auto* U=Store->Find(B.Key);U&&U->IsAlive()&&U->MeleeWait<=0.f&&U->Action!=EBattleAction::DirectControl&&(bAll||U->Kit!=0||ArmsCharging(B.Key))&&!IsVehicle(B.Key))IDs.Add(B.Key);
   IDs.Sort();
   for(int32 ID:IDs)
   {
@@ -261,6 +264,52 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
    for(const auto& C:*Contacts)if(C.Value.bVisible&&!C.Value.bShared)
    {const double D=FVector::DistSquared2D(Pos,C.Value.LastKnownPosition);if(D<Best||(D==Best&&C.Key<Hint)){Best=D;Hint=C.Key;}}
    if(Hint!=INDEX_NONE)MeleeStrike(ID,Now,false,Hint);
+  }
+ }
+ // Charges (-BattleArmsCharge), four times a second: an assault role (the elite breacher, assault man and rifleman; with
+ // -BattleArmsAssault=2 also the riflemen of ordinary rifle squads, not leaders or heavy weapons) runs at an enemy while his squad
+ // fights (StepCharge), fires at him on the way and strikes him at arm's length (the pass above): an enemy he sees within 12 m, or
+ // up to 15 s after an assault bound brought him to cover, an enemy known within 25 m (seen or reported within 3 s, also one hidden
+ // behind his cover). Not at a group (more than two known enemies within 6 m of him), not through a wall or obstacle, not to
+ // another floor, at most two of a squad at once.
+ if(BattleArms::ChargeEnabled()&&Now>=ArmsNextCharge)
+ {
+  ArmsNextCharge=Now+.25;
+  const auto& Ch=BattleArms::Charge();
+  TArray<int32> IDs;
+  for(const auto& B:Bodies)if(const auto* U=Store->Find(B.Key);U&&U->IsAlive()&&U->Action!=EBattleAction::DirectControl&&!IsVehicle(B.Key)&&
+   !ArmsCharging(B.Key)&&Now>=ArmsChargeNext.FindRef(B.Key))IDs.Add(B.Key);
+  IDs.Sort();
+  for(int32 ID:IDs)
+  {
+   const auto* U=Store->Find(ID);if(!U||!U->IsAlive())continue;
+   const auto* S=Store->FindSquad(U->SquadID);const auto* P=Plans.Find(U->SquadID);
+   if(!S||!P||S->CommandStatus!=EBattleCommandStatus::Active||S->Order==EBattleOrder::Move||P->TargetID==INDEX_NONE||S->SquadType==BattleSquadType::Exo)continue;
+   const bool bRole=U->Kit==BattleArms::KitBreacher||U->Kit==BattleArms::KitAssault||U->Kit==BattleArms::KitRifleman;
+   const bool bPlain=BattleArms::AssaultMode()>=2&&S->Grade==0&&S->SquadType==BattleSquadType::Rifle&&S->LeaderUnitID!=ID&&U->Weapon==EBattleWeapon::Carbine;
+   if(!bRole&&!bPlain)continue;
+   int32 Charging=0;for(int32 Member:S->Members)Charging+=ArmsCharging(Member)?1:0;
+   if(Charging>=Ch.SquadMax)continue;
+   const auto* Contacts=Sense->GetContacts(ID);if(!Contacts)continue;
+   const FVector Pos=Position(ID);int32 Best=INDEX_NONE;double BestD=0.;FVector BestAt=FVector::ZeroVector;bool bBestSeen=false;
+   const double* Arrived=ArmsBoundArrived.Find(ID);const bool bAfterBound=Arrived&&Now-*Arrived<=Ch.BoundWindow;
+   for(const auto& C:*Contacts)
+   {
+    if(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(C.Value.ObservedSquadType):IsVehicle(C.Key))continue;
+    const bool bSeen=C.Value.bVisible&&!C.Value.bShared;const double D=FVector::Dist2D(Pos,C.Value.LastKnownPosition);
+    if(D<=Ch.Stop||FMath::Abs(C.Value.LastKnownPosition.Z-Pos.Z)>150.)continue;
+    if(!(bSeen&&D<=Ch.Range)&&!(bAfterBound&&Now-C.Value.LastSeenTime<=Ch.Known&&D<=Ch.BoundRange))continue;
+    if(Best!=INDEX_NONE&&(D>BestD||(D==BestD&&C.Key>Best)))continue;
+    Best=C.Key;BestD=D;BestAt=C.Value.LastKnownPosition;bBestSeen=bSeen;
+   }
+   if(Best==INDEX_NONE)continue;
+   int32 Crowd=0;
+   for(const auto& O:*Contacts)Crowd+=(Now-O.Value.LastSeenTime<=3.&&FVector::DistSquared2D(O.Value.LastKnownPosition,BestAt)<=FMath::Square(double(Ch.CrowdRadius)))?1:0;
+   if(Crowd>Ch.CrowdMax){SightExperiment.Cover(TEXT("arms_charge_crowded"));ArmsChargeNext.Add(ID,Now+2.);continue;}
+   const bool bStarted=StartCharge(ID,Best,BestAt,Now);
+   if(bStarted&&!bBestSeen)SightExperiment.Cover(TEXT("arms_charge_hidden"));
+   if(bStarted&&BestD>Ch.Range)SightExperiment.Cover(TEXT("arms_charge_far"));
+   ArmsChargeNext.Add(ID,Now+(bStarted?double(Ch.Cooldown):2.));
   }
  }
  // Twice a second: medics heal, grenadiers fire launcher rounds, soldiers with grenades throw them.
@@ -381,6 +430,57 @@ bool UBattleLeaderRuntime::StartAssault(int32 ID,int32 Target,const FVector& Tar
  CoverApproaches.Add(ID,A);FirePositions.Remove(ID);
  SightExperiment.Cover(TEXT("arms_assault_started"));
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_ASSAULT unit=%d team=%d target=%d from=%.0f to=%.0f"),ID,U->Team,Target,Base,FVector::Dist2D(BestAnchor,TargetAt));
+ return true;
+}
+
+bool UBattleLeaderRuntime::StartCharge(int32 ID,int32 Target,const FVector& TargetAt,double Now)
+{
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
+ if(!U||!U->IsAlive()||!Bodies.Contains(ID)||IsVehicle(ID)||TargetAt.ContainsNaN())return false;
+ const auto& Ch=BattleArms::Charge();const FVector Pos=Position(ID);
+ // A clear straight way for his body to the stop in front of the enemy (true geometry, the same test as the cover approach's walk).
+ const FVector Stop=TargetAt+(Pos-TargetAt).GetSafeNormal2D()*Ch.Stop;
+ if(GetWorld()->SweepTestByObjectType(Pos,Stop,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))
+ {SightExperiment.Cover(TEXT("arms_charge_blocked"));return false;}
+ // The charge starts from where he is: out of his cover first; it replaces a dash or walk to cover.
+ if(U->CoverPhase)CancelCoverAction(ID);
+ U=Store->Find(ID);
+ if(const auto* Old=CoverApproaches.Find(ID))SightExperiment.Cover(Old->bAssault?TEXT("arms_charge_from_dash"):TEXT("arms_charge_from_walk"));
+ FCoverApproach A;A.Goal=TargetAt;A.Target=Target;A.Revision=U->OrderRevision;A.Until=Now+Ch.Limit;A.bCharge=true;
+ CoverApproaches.Add(ID,A);FirePositions.Remove(ID);
+ SightExperiment.Cover(TEXT("arms_charge_started"));
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_CHARGE unit=%d team=%d target=%d from=%.0f weapon=%d"),ID,U->Team,Target,FVector::Dist2D(Pos,TargetAt),int32(U->ActiveWeapon()));
+ return true;
+}
+
+bool UBattleLeaderRuntime::StepCharge(int32 ID,float Dt,double Now)
+{
+ auto* A=CoverApproaches.Find(ID);if(!A)return false;
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
+ const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
+ const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,A->Target);
+ const auto& Ch=BattleArms::Charge();const FVector Pos=Position(ID);const TCHAR* End=nullptr;
+ // It ends with his death, a move order (or the squad out of command), the enemy forgotten, at the place where the enemy was seen
+ // last with nobody seen or reported there for more than a second (down, or gone), or the time limit. A hidden enemy is charged at
+ // where he was last seen; when he shows himself on the way the goal follows him.
+ if(!U||!U->IsAlive())End=TEXT("arms_charge_end_died");
+ else if(!S||S->CommandStatus!=EBattleCommandStatus::Active||S->Order==EBattleOrder::Move)End=TEXT("arms_charge_end_order");
+ else if(!Contact)End=TEXT("arms_charge_end_lost");
+ else if(A->bReached&&Now-Contact->LastSeenTime>1.)End=TEXT("arms_charge_end_done");
+ else if(Now>A->Until)End=TEXT("arms_charge_end_timeout");
+ if(End){SightExperiment.Cover(End);CoverApproaches.Remove(ID);return false;}
+ // Toward where the enemy is seen now; at arm's length he stands and strikes (StepArms) while the close weapons fire point-blank.
+ A->Goal=Contact->LastKnownPosition;
+ const double D=FVector::Dist2D(Pos,A->Goal);
+ if(D<=Ch.Stop+10.){if(!A->bReached){A->bReached=true;SightExperiment.Cover(TEXT("arms_charge_reached"));}return true;}
+ auto& B=Bodies.FindChecked(ID);const FVector Dir=(A->Goal-Pos).GetSafeNormal2D();
+ if(B.Actor.IsValid()){B.Actor->AddMovementInput(Dir);B.Velocity=B.Actor->GetVelocity();}
+ else
+ {
+  FHitResult Hit;const float Stride=FMath::Min(GetDefault<UBattleTuning>()->MoveSpeed*Ch.SpeedScale*Dt,float(D-Ch.Stop));
+  B.Capsule->MoveComponent(Dir*Stride,B.Capsule->GetComponentQuat(),true,&Hit);
+  auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=B.Capsule->GetComponentLocation();B.Velocity=(F.Position-Pos)/FMath::Max(.001f,Dt);
+ }
  return true;
 }
 
@@ -540,6 +640,7 @@ bool UBattleLeaderRuntime::MeleeStrike(int32 ID,double Now,bool bPlayer,int32 Hi
  const bool bHit=Damage>0.f&&Store->ApplyDamageFrom(Victim,Team,Damage,Pos,ID,EBattleKillKind::Melee);
  const bool bKilled=bHit&&!Store->Find(Victim)->IsAlive();
  SightExperiment.Cover(bPlayer?TEXT("arms_melee_strikes_player"):TEXT("arms_melee_strikes"));
+ if(!bPlayer&&ArmsCharging(ID))SightExperiment.Cover(TEXT("arms_charge_strikes"));
  if(bKilled)SightExperiment.Cover(TEXT("arms_melee_kills"));
  if(bHit&&SightExperiment.Started)
  {
@@ -582,6 +683,9 @@ bool UBattleLeaderRuntime::UseSidearm(int32 ID,int32 TargetID,double Now)
 int32 UBattleLeaderRuntime::ArmsRoleTarget(int32 ID,int32 SquadTarget) const
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
+ // A charging soldier (-BattleArmsCharge) fires at the enemy he runs at while he sees him.
+ if(const auto* Run=CoverApproaches.Find(ID);U&&Run&&Run->bCharge)
+  if(const auto* C=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,Run->Target);C&&C->bVisible&&!C->bShared)return Run->Target;
  if(!U||(U->Kit!=BattleArms::KitMarksman&&U->Kit!=BattleArms::KitSniper&&U->Kit!=BattleArms::KitBreacher&&U->Kit!=BattleArms::KitAssault))return SquadTarget;
  const auto* Contacts=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(ID);if(!Contacts)return SquadTarget;
  const FVector Pos=Position(ID);const double Engage2=FMath::Square(double(BattleRanges::Engage(U->Weapon)));

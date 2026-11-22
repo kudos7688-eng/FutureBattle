@@ -837,8 +837,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const bool bArmourAI=(BattleTactics::ObservedArmour()?HasArmourKnowledge(U->Team):VehicleIDs.Num()>0) && BattleTactics::ArmourAI(U->Team);
  const bool bVehicleBody=IsVehicle(ID);
  const int32 SquadTargetID=bArmourAI && U->Weapon==EBattleWeapon::AntiTank && P->ArmourTargetID!=INDEX_NONE ? P->ArmourTargetID : P->TargetID;
- // Elite platoon roles (BattleArms.cpp): the marksman and the close weapons may pick their own visible target.
- const int32 TargetID=U->Kit?ArmsRoleTarget(ID,SquadTargetID):SquadTargetID;
+ // Elite platoon roles (BattleArms.cpp): the marksman and the close weapons may pick their own visible target; a charging soldier
+ // fires at the enemy he runs at.
+ const int32 TargetID=(U->Kit||ArmsCharging(ID))?ArmsRoleTarget(ID,SquadTargetID):SquadTargetID;
  const auto* ArmourContact=BattleTactics::ObservedArmour()?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,TargetID):nullptr;
  const bool bSaveRounds=bArmourAI && bArea && U->Weapon==EBattleWeapon::AntiTank && TargetID!=INDEX_NONE && !(BattleTactics::ObservedArmour()?(ArmourContact&&BattleSquadType::IsVehicle(ArmourContact->ObservedSquadType)):IsVehicle(TargetID)) &&
   U->Ammo+U->Reserve<=GetDefault<UBattleTuning>()->ATKeepRounds && GetWorld()->GetSubsystem<UBattleMatch>()->KnownEnemyVehicles(U->Team)>0;
@@ -926,7 +927,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const bool bHitCover=UnderFireCoverEnabled() && !bSeenCover && !bMoveFire && !bVehicleBody && S->Order!=EBattleOrder::Move && !U->CoverPhase &&
   !CoverApproaches.Contains(ID) && UnitShotFrom(ID,Now,HitFrom) && Contact && Now-Contact->LastSeenTime<=FMath::Min(5.f,U->Perception.MemorySeconds) &&
   FVector::DistSquared2D(Pos,Contact->LastKnownPosition)<=FMath::Square(TargetRange(ID)) && !(S->Order!=EBattleOrder::Hold && !StopForCombat && P->Path.IsValidIndex(B.Waypoint));
- if(BattleTactics::CoverActionsEnabled() && (bSeenCover || bHitCover) && !bMoveFire && ProbeSlot && Now>=RetryAt && U->Weapon!=EBattleWeapon::Mortar && !bVehicleBody)
+ // A charging soldier (BattleArms.cpp, -BattleArmsCharge) does not stop for cover.
+ if(BattleTactics::CoverActionsEnabled() && (bSeenCover || bHitCover) && !bMoveFire && ProbeSlot && Now>=RetryAt && U->Weapon!=EBattleWeapon::Mortar && !bVehicleBody && !ArmsCharging(ID))
  {
   NoCoverProneUntil.Remove(ID); // a new search: lie down again only if it also finds nothing
   if(LeaderFirst){}else if(HitFirst){++PriorityProbesThisFrame;SightExperiment.Cover(TEXT("cover_priority_probe"));}else if(ProbeBudget)++CoverProbesThisFrame;else NextCoverProbe=Now+FMath::Max(0.f,CoverTuning->AICoverProbeInterval);
@@ -968,7 +970,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const bool bDriving=S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute;
  if(bDriving && !Approaching && FirePositions.Num())FirePositions.Remove(ID); // back on the march: the place is free again
  // -BattleContactCover: a soldier walking to cover finishes that walk before he follows the squad's path again.
- if(S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !(Approaching && (bContactCover || bOutsideContact)))
+ // A charging soldier (BattleArms.cpp, -BattleArmsCharge) runs at his enemy, not along the path.
+ if(S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !(Approaching && (bContactCover || bOutsideContact || ArmsCharging(ID))))
  {
   if(bWideField && bStableMovement) StableMove(ID,Dt,Now,Direction);
   else
