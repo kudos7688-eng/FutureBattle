@@ -156,18 +156,40 @@ void UBattleMatch::Update(float DeltaSeconds)
 	Elapsed += DeltaSeconds;
 	UpdatePlayerRoutes(DeltaSeconds);
 	UpdateTerrainTest(DeltaSeconds);
+	// OrderSync (area matches): team 0's orders wait for this step's purchases, below (BattleMatch.h).
+	const bool bSync=bArea&&OrderSync();bool bDelegateNow=false;
 	if (CanDelegateAllies())
 	{
 		DelegationClock += DeltaSeconds;
 		if (DelegationClock >= 5.f)
 		{
 			DelegationClock = 0.f;
-			UpdateTeamOrders(0, true);
+			if(bSync)bDelegateNow=true;else UpdateTeamOrders(0, true);
 		}
 	}
 	if (!BattleFieldLayout::IsLarge(GetWorld())) UpdateSupport(DeltaSeconds);
 	UpdateObjectives(DeltaSeconds);
- if(bArea){UpdateArea(DeltaSeconds);UpdateSituationLog();DirectorClock+=DeltaSeconds;if(DirectorClock>=5){DirectorClock=0;UpdateAreaHiring();UpdateEnemyOrders();}CheckTimeLimit();return;}
+ if(bArea)
+ {
+  UpdateArea(DeltaSeconds);UpdateSituationLog();DirectorClock+=DeltaSeconds;
+  if(DirectorClock>=5)
+  {
+   DirectorClock=0;
+   // SetupPhase: on the first step the AI teams spend their starting resources before any orders (Elapsed<1: not after a load).
+   if(SetupPhase()&&!bSetupDone&&Elapsed<1.f)
+   {
+    bSetupDone=bSetupBurst=true;
+    for(int32 Pass=0;Pass<60;++Pass){const int32 Before=Credits[0]+Credits[1];UpdateAreaHiring();if(Credits[0]+Credits[1]==Before)break;}
+    bSetupBurst=false;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SETUP credits=%d/%d active=%d/%d time=%.1f"),Credits[0],Credits[1],ActiveSquads(0),ActiveSquads(1),Elapsed);
+   }
+   else UpdateAreaHiring();
+   if(bDelegateNow)UpdateTeamOrders(0,true);
+   UpdateEnemyOrders();
+  }
+  else if(bDelegateNow)UpdateTeamOrders(0,true);
+  CheckTimeLimit();return;
+ }
 	if (Phase != EBattleMatchPhase::Combat) return;
 	DirectorClock += DeltaSeconds; SupplyClock += DeltaSeconds;
 	if (DirectorClock >= 5.f)

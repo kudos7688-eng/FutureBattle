@@ -1,6 +1,7 @@
 #include "BattleSave.h"
 #include "BattleFieldLayout.h"
 #include "BattleTactics.h"
+#include "BattleMatch.h"
 namespace {
 bool Finite(double V,double Low,double High){return FMath::IsFinite(V)&&V>=Low&&V<=High;}
 bool ValidPoint(FVector P,FVector2D Limit){return !P.ContainsNaN()&&FMath::Abs(P.X)<=Limit.X&&FMath::Abs(P.Y)<=Limit.Y&&Finite(P.Z,-1000,10000);}
@@ -118,7 +119,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   if(Area.HireSpent.Num()!=2)return Fail(TEXT("Invalid area hire record"));
   for(int32 Team=0;Team<2;++Team)
   {
-   const int32 Hires=TeamSquads[Team]-25;
+   const int32 Hires=TeamSquads[Team]-UBattleMatch::StartSquads(); // -BattleStartSquads (default 25)
    if(Hires<0||TeamActive[Team]>BattleTactics::AreaHire().MaxActive||Area.HireSpent[Team]<Hires||Area.HireSpent[Team]>100100||(Hires==0)!=(Area.HireSpent[Team]==0))return Fail(TEXT("Invalid area squad hiring"));
   }
   // Income (2026-11-14) adds to the starting 100. Pre-income saves have Income {0,0} and IncomeClock 0.
@@ -142,8 +143,10 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   for(float Since:Area.StrategyThreatSince)if(!Finite(Since,-1,Elapsed+.01))return Fail(TEXT("Invalid strategy hold state"));
   for(int32 SID:Area.StrategyHired)if(!BySquad.FindRef(SID))return Fail(TEXT("Invalid strategy hire"));
 
-  if(Retired[0]+Area.HireSpent[0]+AllyCredits!=100+Area.Income[0]||Retired[1]+Area.HireSpent[1]+EnemyCredits!=100+Area.Income[1])return Fail(TEXT("Area resource conservation mismatch"));
-  if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=ExpectedRoster||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=2*Objectives.Num()||Area.SeenAt.Num()!=2*Objectives.Num()||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>Current||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
+  // Starting resources: -BattleAreaStartCredits (default 100; the check had 100 fixed, which failed any other value).
+  const int32 Start=BattleTactics::AreaIncome().StartCredits;
+  if(Retired[0]+Area.HireSpent[0]+AllyCredits!=Start+Area.Income[0]||Retired[1]+Area.HireSpent[1]+EnemyCredits!=Start+Area.Income[1])return Fail(TEXT("Area resource conservation mismatch"));
+  if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=ExpectedRoster||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=2*Objectives.Num()||Area.SeenAt.Num()!=2*Objectives.Num()||!Finite(AllyCredits,0,Start+Area.Income[0])||!Finite(EnemyCredits,0,Start+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>Current||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
   for(int32 Team=0;Team<2;++Team)if(!Finite(Area.BaseHP[Team],0,1000)||!Finite(Area.KnownEnemyBaseHP[Team],-1,1000))return Fail(TEXT("Invalid base state"));
   for(int32 I=0;I<Area.KnownOwners.Num();++I)if(Area.KnownOwners[I]<-2||Area.KnownOwners[I]>1||!Finite(Area.SeenAt[I],-1,Elapsed+.01))return Fail(TEXT("Invalid observed objective"));
   int32 Reserved[2]={0,0};

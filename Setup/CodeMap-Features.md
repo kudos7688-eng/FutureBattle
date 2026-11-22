@@ -33,6 +33,11 @@
 | 遮蔽の動作（接近・のぞき撃ち） | @UBattleLeaderRuntime::RequestCoverAction 、 @UBattleLeaderRuntime::StepCoverAction | 切替は @BattleTactics::CoverActionsEnabled ほか |
 | 姿勢（立ち・しゃがみ） | @UBattleLeaderRuntime::SetStance 、 @UBattleLeaderRuntime::UpdateAIStance | 数値は @BattleStance::EyeOffset ほか |
 | 制圧（撃たれて動けない） | @UBattleLeaderRuntime::AddSuppression 、 @UBattleLeaderRuntime::IsPinned | 調整値は @BattleSuppression::Tuning |
+| 兵ごとの脅威と遮蔽の取り直し（個人AI段階A） | @UBattleLeaderRuntime::GatherThreats 、 @UBattleLeaderRuntime::CheckCoverThreats | 試験切替 `-BattleThreatCover`（既定0）。遮蔽を選ぶ側は @UBattleLeaderRuntime::RequestCoverAction の2段の候補 |
+| 止まった兵の見張りの向き（個人AI） | @UBattleLeaderRuntime::SoldierWatchDirection | `-BattleSoldierWatch`（既定1、11-22 ユーザー決定。=0 で切る）。`Follow` の向きの分岐で `-BattleAttackFocus` の後ろ。視野は前方120度 |
+| 区画の中で兵が遮蔽を移る（個人AI段階B1） | @UBattleLeaderRuntime::StepSoldierMove 、 @UBattleLeaderRuntime::RateCoverPlace | 試験切替 `-BattleSoldierMove`（既定0）。呼び出しは @UBattleLeaderRuntime::StepCoverAction の隠れている間（1秒に1回・1フレーム4人まで） |
+| 個人AIをプレイヤーの周りだけで動かす | @UBattleLeaderRuntime::SoldierAIFocus | 試験切替 `-BattleSoldierAIFocus=<m>`（既定0＝全員）、`-BattleSoldierAIFocusAt=X,Y`。段階A（@UBattleLeaderRuntime::CheckCoverThreats ほか）とB1（@UBattleLeaderRuntime::StepSoldierMove）の入口で見る |
+| プレイヤーが兵1人に出す移動の命令（Ctrl＋クリックで選ぶ・右クリックで移動先・Hで戻す） | @UBattleLeaderRuntime::IssueSoldierOrder 、 @UBattleLeaderRuntime::StepSoldierOrder 、 @ABattleController::SelectSoldierAt 、直接操作では @ABattleController::CommandSoldierFromView （G） | 兵の状態 `bSoldierOrder`（保存される）。@UBattleLeaderRuntime::Follow の `bOwnOrder`。自動試験 `-BattleSoldierOrderTest`（@UBattleLeaderRuntime::StepSoldierOrderTest） |
 | 射撃の散らばり | @BattleTactics::SpreadDegrees 、 @BattleTactics::ShotDirection | 照準の遅れは @UBattleState::UpdateAim 。プレイヤーの直接操作だけの倍率は @ABattleUnit::PlayerSpreadScale |
 | 部隊の戦術（撤退・集合・援護・迂回） | @UBattleSquadTactics::Step 、 @UBattleSquadTactics::Evaluate 、 @UBattleSquadTactics::Apply | 撤退 @UBattleSquadTactics::RetreatGoal 、援護 @UBattleSquadTactics::AcceptSupport 、迂回 @UBattleSquadTactics::TryFlank |
 | 陣営全体の判断（援護・迂回の割り振り） | @UBattleTeamAI::Step | |
@@ -124,6 +129,10 @@ BattleMuzzleFlash | 銃口の閃光（表示だけ。発光する楕円体の使
 BattleState | 正規状態：兵・部隊の記録、命令、弾薬、被害、調整値 UBattleTuning、兵科の差
 BattleSupport | 旧アリーナの支援砲撃（UBattleMatch の一部）
 BattleSuppression | 制圧の値と効果
+BattleSoldierWatch | 個人AI `-BattleSoldierWatch`：止まっていて撃つ相手のいない兵が、知っている最も近い敵へ、無ければ小隊で分けた前方へ向く（視野120度。UBattleLeaderRuntime の一部）
+BattleThreatCover | 個人AI段階A `-BattleThreatCover`：兵ごとの脅威（自分の目撃4秒＋撃たれた方向）、全員から隠れる遮蔽、見破られた遮蔽を出て探し直す（UBattleLeaderRuntime の一部）
+BattleSoldierMove | 個人AI段階B1 `-BattleSoldierMove`：区画の中で、隠れている兵が近くのもっと良い遮蔽を採点して自分で移る（UBattleLeaderRuntime の一部）
+BattleSoldierOrder | プレイヤーが兵1人に出す移動の命令：命令と歩き（UBattleLeaderRuntime）、Ctrl＋クリックの選択と右クリックの命令（ABattleController）、印（ABattleHUD）、自動試験 `-BattleSoldierOrderTest`
 BattleTacticalAI | 旧全Actor経路の兵の戦術行動（ABattleAIController の一部）
 BattleTactics | 調整値の束（補給、雇用、戦略、収入）と試験切替、散らばり、露出の計算
 BattleTacticsSave | 戦術状態と陣営 AI の保存・復元
