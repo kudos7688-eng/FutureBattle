@@ -344,7 +344,11 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    if(!G->bFrontDrawn)
    {
     int32 Back=0;
-    if(Elapsed-G->FrontBackAt>=BackHold)for(int32 Y=0;Y<Rows;++Y)if(Share(Y)>=BackDamage&&H[Y]>HomeCol){--H[Y];++Back;}
+    if(Elapsed-G->FrontBackAt>=BackHold)for(int32 Y=0;Y<Rows;++Y)if(Share(Y)>=BackDamage&&H[Y]>HomeCol)
+    {
+     if(FrontRoleOfRow(Team,Y)==TEXT('H')){++FrontPlanState[Team].HoldBlocks;continue;} // stage 4: a hold section does not fall back
+     --H[Y];++Back;
+    }
     if(Back)
     {
      G->FrontBackAt=Elapsed;
@@ -370,6 +374,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
     TArray<int32> Next=H;int32 Moved=0,Pushed=0;
     for(int32 Y=0;Y<Rows;++Y)if(H[Y]+1<EnemyHomeCol-1&&(Reached[Y]<0||Reached[Y]>=H[Y]-RowLag))
     {
+     if(FrontRoleOfRow(Team,Y)==TEXT('H')){++FrontPlanState[Team].HoldSteps;continue;} // stage 4: a hold section does not push out
      const int32 Own=Near(OwnCount,Y,H[Y]-1,H[Y]+1),Enemy=Near(EnemyAll,Y,H[Y],H[Y]+2);
      const bool bQuiet=Hurt[Y]==0&&!(Enemy>=SwampMin&&Enemy>=Swamp*Own);
      const bool bLight=Share(Y)<LightDamage&&Own>=PushRatio*Enemy;
@@ -442,13 +447,22 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
     // A row with no passable front place is left whatever its neighbours.
     if((bA&&bB&&bClear)||FrontCover[Y]<=-1000.){Empty[Y]=1;Gaps+=FString::Printf(TEXT("%s%d"),Gaps.IsEmpty()?TEXT(""):TEXT(","),Y+1);}
    }
+   // Stage 4: a may-fall-back section holds every second row (half a squad per row), unless an enemy is known right in front of the row.
+   if(FrontPlanFlexOn(Team))
+   {
+    const FFrontPlanTeam& FP=FrontPlanState[Team];int32 Thin=0;
+    for(int32 Y=0;Y<Rows;++Y)if(!Empty[Y]&&FrontRoleOfRow(Team,Y)==TEXT('R')&&FP.SectionFirst.IsValidIndex(FP.SectionOfRow[Y])&&(Y-FP.SectionFirst[FP.SectionOfRow[Y]])%2==1&&Known(Y,Line[Y],Line[Y]+1)==0)
+    {Empty[Y]=1;++Thin;Gaps+=FString::Printf(TEXT("%s%d"),Gaps.IsEmpty()?TEXT(""):TEXT(","),Y+1);}
+    FrontPlanState[Team].ThinNow=Thin;
+   }
    G->FrontGap=Empty;
    // The line's need: a front place per held row, a support place per row with a known enemy in front of it, and two more.
    {
     int32 Contact=0;
     for(int32 Y=0;Y<Rows;++Y){int32 N=0;for(int32 C=Line[Y];C<=FMath::Min(Cols-1,Line[Y]+3);++C)if(const int32* V=EnemyCount.Find(FrontCell(Team,C,Y)))N+=*V;Contact+=N>0?1:0;}
     int32 Held=0;for(int32 Y=0;Y<Rows;++Y)Held+=Empty[Y]?0:1;
-    G->FrontNeed=FMath::Clamp(Held+Contact+2,2,2*Rows);
+    int32 HoldSecs=0;if(FrontPlanFlexOn(Team))for(const TCHAR Role:FrontPlanState[Team].Role)HoldSecs+=Role==TEXT('H')?1:0; // stage 4: a reserve squad per hold section
+    G->FrontNeed=FMath::Clamp(Held+Contact+2+HoldSecs,2,2*Rows);
    }
    // Front places (with fewer squads than rows, the rows spread evenly among the squads).
    TArray<int32> FrontRows;for(int32 Y=0;Y<Rows;++Y)if(!Empty[Y])FrontRows.Add(Y);
@@ -457,8 +471,8 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    FrontCount=Cells.Num();
    // Support places.
    struct FSpot{double S;int32 C,Y;};TArray<FSpot> Spots;
-   for(int32 Y=0;Y<Rows;++Y)for(int32 D=1;D<=3;++D)if(const int32 C=Line[Y]-D;C>=HomeCol&&!Used.Contains(FrontCell(Team,C,Y))&&CoverAt(C,Y)>-1000.)
-    Spots.Add({CoverAt(C,Y)+(D==1?.5:D==3?-1.:0.)+.5*FMath::Min(Known(Y,Line[Y],Line[Y]+3),4)+(Empty[Y]?.5:0.)
+   for(int32 Y=0;Y<Rows;++Y)for(int32 D=1;D<=3;++D)if(const int32 C=Line[Y]-D;C>=HomeCol&&!Used.Contains(FrontCell(Team,C,Y))&&CoverAt(C,Y)>-1000.&&FrontRoleOfRow(Team,Y)!=TEXT('R'))
+    Spots.Add({CoverAt(C,Y)+(D==1?.5:D==3?-1.:0.)+.5*FMath::Min(Known(Y,Line[Y],Line[Y]+3),4)+(Empty[Y]?.5:0.)+(FrontRoleOfRow(Team,Y)==TEXT('H')?2.:0.)
      +(Kept.Contains(FrontCell(Team,C,Y))?1.5:0.),C,Y}); // a support place a squad already holds stays (map I 2026-11-22: supports hopped rows with each sighting)
    Spots.Sort([](const FSpot& A,const FSpot& B){return A.S!=B.S?A.S>B.S:A.Y!=B.Y?A.Y<B.Y:A.C>B.C;});
    // Support squads per row: one each first (rows facing enemies first by the score), then a second, then any (Codex review: the cap
@@ -1009,13 +1023,14 @@ void UBattleMatch::FrontPlanSample(int32 Team)
  // Own infantry squads by the section their leader stands in (out of the home column); the damage of the last 5 s is spread over the
  // 2 s between samples (RecentDamage x Interval / 5).
  TArray<double> Dmg,Col;TArray<int32> Count;Dmg.Init(0.,NS);Col.Init(0.,NS);Count.Init(0,NS);
- P.Hp.Init(0.,NS);P.SquadsN.Init(0,NS);P.KnownN.Init(0,NS);P.CoverN.Init(0,NS);P.OwnMask.Init(0u,NS);P.AheadMask.Init(0u,NS);P.Push.Init(0.,NS);P.Dmg.Init(0.,NS);
+ P.Hp.Init(0.,NS);P.SquadsN.Init(0,NS);P.KnownN.Init(0,NS);P.CoverN.Init(0,NS);P.OwnMask.Init(0u,NS);P.AheadMask.Init(0u,NS);P.Push.Init(0.,NS);P.Dmg.Init(0.,NS);P.Soldiers.Init(0,NS);
  for(const auto& Pair:Store->GetSquads())
  {
   const auto& S=Pair.Value;
   if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||BattleSquadType::IsVehicle(S.SquadType)||S.SquadType==BattleSquadType::Scout)continue;
   const FIntPoint C=BattleSectors::Cell(R->Position(S.LeaderUnitID));if(!BattleSectors::Valid(C)||ColOf(C)<=HomeCol)continue;
   const int32 K=P.SectionOfRow[RowOf(C)];++P.SquadsN[K];
+  for(int32 UID:S.Members)if(const auto* U=Store->Find(UID);U&&U->IsAlive())++P.Soldiers[K];
   if(const auto* O=Tactics?Tactics->Find(Pair.Key):nullptr){Dmg[K]+=O->RecentDamage*BattleFrontValues::Interval/5.;P.Hp[K]+=O->Health;}
  }
  for(int32 Y=0;Y<Rows;++Y){Col[P.SectionOfRow[Y]]+=Line[Y];++Count[P.SectionOfRow[Y]];}
@@ -1045,6 +1060,7 @@ void UBattleMatch::FrontPlanSample(int32 Team)
   P.Dmg[K]=P.Hp[K]>0.?D60/P.Hp[K]:0.;
  }
  P.StatAt=Elapsed;
+ if(FrontPlanFlexOn(Team))UpdateFrontRoles(Team);
  if(Elapsed<P.NextLog)return;
  P.NextLog=Elapsed+BattleFrontValues::LogInterval;
  auto Letters=[&](uint32 M){FString Out;for(int32 I=0;I<32;++I)if((M>>I)&1)Out.AppendChar(TCHAR('A'+I));return Out.IsEmpty()?FString(TEXT("-")):Out;};
@@ -1129,4 +1145,65 @@ void UBattleMatch::UpdateFrontPlan(int32 Team)
  if(Focus!=Old||bTaken)
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_PLAN team=%d t=%.1f focus=%d sec=%d old=%d reason=%s score=%.2f push=%.2f dmg=%.3f known=%d next=%d nextScore=%.2f"),
    Team,Elapsed,Focus,Best>=0?Best+1:0,Old,Why,Best>=0?BestScore:0.,Best>=0?P.Push[Best]:0.,Best>=0?P.Dmg[Best]:0.,Best>=0?P.KnownN[Best]:0,Next>=0?Next+1:0,Next>=0?NextScore:0.);
+}
+
+// ---- Front plan, stage 4: section roles (Docs/design-front-strategy.md 2.3, 3.2-3.4; trial -BattleFrontPlanFlex=1, default 0) ----
+bool UBattleMatch::FrontPlanFlexOn(int32 Team) const
+{
+ static const int32 On=BattleFrontValues::Arg(TEXT("BattleFrontPlanFlex="),0);
+ return On!=0&&FrontPlanOn(Team);
+}
+
+TCHAR UBattleMatch::FrontRoleOfRow(int32 Team,int32 Row) const
+{
+ if(Team<0||Team>1)return 0;
+ const FFrontPlanTeam& P=FrontPlanState[Team];
+ if(!P.SectionOfRow.IsValidIndex(Row)||!P.Role.IsValidIndex(P.SectionOfRow[Row])||!FrontPlanFlexOn(Team))return 0;
+ return P.Role[P.SectionOfRow[Row]];
+}
+
+void UBattleMatch::UpdateFrontRoles(int32 Team)
+{
+ FFrontPlanTeam& P=FrontPlanState[Team];
+ const int32 NS=P.Sections;if(NS<=0)return;
+ if(P.Role.Num()!=NS){P.Role.Init(TEXT('K'),NS);P.RoleAt.Init(Elapsed,NS);}
+ // Posture: behind while the own points (observed) are fewer than the points observed as the enemy's, for 30 s (3.2). The score gap
+ // part of the design needs the enemy's score, which the side does not observe, so only the points count.
+ int32 OwnPts=0,EnemyPts=0;for(int32 I=0;I<Objectives.Num();++I){const int32 O=ObservedOwner(Team,I);OwnPts+=O==Team;EnemyPts+=O==1-Team;}
+ if(OwnPts<EnemyPts){if(P.BehindSince<0.f)P.BehindSince=Elapsed;}else P.BehindSince=-1.f;
+ const bool bWasBehind=P.bBehind;
+ P.bBehind=P.BehindSince>=0.f&&Elapsed-P.BehindSince>=30.f;
+ TArray<uint8> InFocus;int32 TargetCol=-1;FrontPlanFocusRows(Team,InFocus,TargetCol);
+ const int32 N=P.SampleAt.Num();
+ auto DamageOver=[&](int32 K,float Seconds){double D=0;for(int32 J=0;J<N;++J)if(P.SampleAt[J]>Elapsed-Seconds)D+=P.Damage[J*NS+K];return D;};
+ bool bChanged=false;
+ for(int32 K=0;K<NS;++K)
+ {
+  bool bFocus=false;for(int32 Y=0;Y<InFocus.Num();++Y)bFocus|=InFocus[Y]&&P.SectionOfRow[Y]==K;
+  const TCHAR Was=P.Role[K];TCHAR Now=Was;
+  if(bFocus)Now=TEXT('F');
+  else if(P.OwnMask[K]!=0u)
+  {
+   // Hold (3.3): an own point and 15% of the section's health lost in 20 s, or known enemies ahead 1.2 times the own soldiers there.
+   // Back to keep after 30 s without damage.
+   const bool bPressed=(P.Hp[K]>0.&&DamageOver(K,20.f)/P.Hp[K]>=.15)||(P.KnownN[K]>=4&&P.KnownN[K]>=1.2*P.Soldiers[K]);
+   if(bPressed)Now=TEXT('H');
+   else if(Was==TEXT('H'))Now=DamageOver(K,30.f)>0.?TEXT('H'):TEXT('K');
+   else Now=TEXT('K');
+  }
+  else
+  {
+   // May fall back (3.2): only while behind; a role lasts at least 90 s unless the posture changes.
+   const TCHAR Want=P.bBehind?TEXT('R'):TEXT('K');
+   Now=Want==Was||(Was!=TEXT('R')&&Was!=TEXT('K'))||P.bBehind!=bWasBehind||Elapsed-P.RoleAt[K]>=90.f?Want:Was;
+  }
+  if(Now!=Was){P.Role[K]=Now;P.RoleAt[K]=Elapsed;++P.RoleChanges;bChanged=true;}
+ }
+ if(bChanged||Elapsed>=P.RoleLogAt)
+ {
+  P.RoleLogAt=Elapsed+BattleFrontValues::LogInterval;
+  FString Roles;for(int32 K=0;K<NS;++K)Roles.AppendChar(P.Role[K]);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_ROLES team=%d t=%.1f roles=%s behind=%d points=%d/%d changes=%d hold_blocks=%d hold_steps=%d thin_rows=%d"),
+   Team,Elapsed,*Roles,P.bBehind?1:0,OwnPts,EnemyPts,P.RoleChanges,P.HoldBlocks,P.HoldSteps,P.ThinNow);
+ }
 }

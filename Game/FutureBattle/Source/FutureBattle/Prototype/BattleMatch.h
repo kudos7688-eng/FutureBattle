@@ -207,13 +207,23 @@ public:
  // latest stats (push, damage, known enemies ahead) and its target point; the target goes to Area.StrategyFocus (S6 and the attack group
  // read it through StrategyFocusPoint); UpdateFrontLine keeps own points as the line's floor and lets the focus section stand out.
  struct FFrontPlanTeam { TArray<int8> SectionOfRow; TArray<int32> SectionFirst; int32 Sections=0; float NextLog=-1.f; TArray<float> SampleAt; TArray<double> Damage, MeanCol; /* per sample, Sections values each */
-  float StatAt=-1.f; TArray<double> Push, Dmg, Hp; TArray<int32> SquadsN, KnownN, CoverN; TArray<uint32> OwnMask, AheadMask; /* latest stats per section */ };
+  float StatAt=-1.f; TArray<double> Push, Dmg, Hp; TArray<int32> SquadsN, KnownN, CoverN; TArray<uint32> OwnMask, AheadMask; /* latest stats per section */
+  // Stage 4 (-BattleFrontPlanFlex=1): own soldiers per section, each section's role ('F' focus, 'K' keep, 'H' hold, 'R' may fall back)
+  // and since when, the "behind" posture and since when its condition holds, and counters of the intended actions (log only).
+  TArray<int32> Soldiers; TArray<TCHAR> Role; TArray<float> RoleAt; float BehindSince=-1.f; bool bBehind=false;
+  int32 HoldBlocks=0, HoldSteps=0, ThinNow=0, RoleChanges=0; float RoleLogAt=-1.f; };
  FFrontPlanTeam FrontPlanState[2];
  static bool FrontPlanLogOn();
  void BuildFrontSections(int32 Team);
  void FrontPlanSample(int32 Team);
  bool FrontPlanOn(int32 Team) const;
  void UpdateFrontPlan(int32 Team);
+ // Stage 4 (Docs/design-front-strategy.md 2.3, 3.2-3.4; trial -BattleFrontPlanFlex=1, default 0, needs -BattleFrontPlan=1): section roles.
+ // A hold section neither falls back nor steps and draws support places; a may-fall-back section (only while behind, never with an own
+ // point or the focus) holds every second row only and gets no support places, so its squads go to other rows or back to the reserve.
+ bool FrontPlanFlexOn(int32 Team) const;
+ void UpdateFrontRoles(int32 Team);
+ TCHAR FrontRoleOfRow(int32 Team,int32 Row) const; // 0 without roles
  // Rows of the focus section (1) and the target point's column, for the line's continuity; empty / -1 without a front plan focus.
  void FrontPlanFocusRows(int32 Team,TArray<uint8>& InFocus,int32& TargetCol) const; // called right after UpdateFrontLine refreshed the team's line (same frame: AreaIntelView is cached)
  int32 FrontReleased[2]={0,0}; // squads the front army has released to the reserve so far (display: the player's notice)
