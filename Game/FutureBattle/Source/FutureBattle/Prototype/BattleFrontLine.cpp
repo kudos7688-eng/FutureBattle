@@ -113,9 +113,12 @@ namespace BattleFrontValues
 
 bool UBattleMatch::FrontLineOn(int32 Team) const
 {
- // Default on since 2026-11-21 (user decision after test play).
- static const int32 On=BattleFrontValues::Arg(TEXT("BattleFrontLine="),1);
+ // Default on since 2026-11-21 (user decision after test play). Only an explicit -BattleFrontLine=1 is a trial that
+ // -BattleAreaTrialTeam limits to one team (2026-11-22 fix: a one-sided trial of another switch left the other team without its
+ // front army on the sector maps); without the argument both teams have it.
+ static const int32 On=BattleFrontValues::Arg(TEXT("BattleFrontLine="),-1);
  if(On==0||!bArea||Team<0||Team>1||!BattleFieldLayout::Of(GetWorld()).bSectors)return false;
+ if(On<0)return true;
  const int32 Trial=BattleTactics::AreaStrategy().TrialTeam;
  return Trial<0||Trial==Team;
 }

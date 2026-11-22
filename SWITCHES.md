@@ -145,14 +145,14 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleFrontAuto` | Value | 1 | BattleFrontLine.cpp:38 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontGap` | Value | 1 | BattleFrontLine.cpp:48 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontHold` | Value | 1 | BattleFrontLine.cpp:54 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
-| `-BattleFrontLine` | Value | 1 | BattleFrontLine.cpp:117 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
+| `-BattleFrontLine` | Value | -1 | BattleFrontLine.cpp:119 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontOpen` | Value | 40 | BattleFrontLine.cpp:59 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontShare` | Value | 1.f | BattleFrontLine.cpp:44 |  |
-| `-BattleFrontSquads` | Value | 4 | BattleFrontLine.cpp:224 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
+| `-BattleFrontSquads` | Value | 4 | BattleFrontLine.cpp:227 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFX` | Value | 1 | BattleEffects.cpp:35 |  |
 | `-BattleFXCheck` | Param | off | BattleFXCheck.cpp:186 |  |
-| `-BattleGroupFireSupport` | Value | 1 | BattleArtillery.cpp:236, BattleGroups.cpp:290 | default 1 (user 2026-11-21) |
-| `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:540 |  |
+| `-BattleGroupFireSupport` | Value | -1 | BattleArtillery.cpp:237, BattleGroups.cpp:291 | -1 = on for both teams (default, user 2026-11-21) |
+| `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:542 |  |
 | `-BattleHeavyCost` | Value | 未解決 | BattleState.cpp:568 |  |
 | `-BattleHeavyDamage` | Value | 未解決 | BattleState.cpp:568 |  |
 | `-BattleHeavyHealth` | Value | 未解決 | BattleState.cpp:567 |  |
@@ -328,8 +328,8 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSuppressionRadius` | Value | 200.f | BattleSuppression.cpp:14 |  |
 | `-BattleSuppressionSpread` | Value | 1.5f | BattleSuppression.cpp:15 |  |
 | `-BattleSuppressionSupport` | Value | 1.f | BattleSuppression.cpp:17 |  |
-| `-BattleSurpriseGroup` | Value | 0 | BattleFrontLine.cpp:750 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
-| `-BattleSurpriseSquads` | Value | 2 | BattleFrontLine.cpp:772 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
+| `-BattleSurpriseGroup` | Value | 0 | BattleFrontLine.cpp:753 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
+| `-BattleSurpriseSquads` | Value | 2 | BattleFrontLine.cpp:775 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleSymmetricStart` | Value | -1 | BattleGroups.cpp:58 |  |
 | `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:77 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |
