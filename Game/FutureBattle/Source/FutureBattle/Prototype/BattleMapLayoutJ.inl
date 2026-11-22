@@ -162,7 +162,9 @@
 			else if(Vr%3==1)
 			{
 				Put(TEXT("Tower"),0,1500,3600,900,1800);Put(TEXT("TowerWing"),1500,-150,900,2200,2400);UseJ(GreyJ);
-				Put(TEXT("Planter"),-1400,-1300,600,200,130);Car(-1200,-1700,true);
+				// 2026-11-22: the planter stood 2 m from the car (y -1300 vs -1700) and soldiers walking between them jammed there
+				// (sector audit on map J: the squad sent to I8 stalled in sector F7 with no enemy near); now 5 m apart.
+				Put(TEXT("Planter"),-1400,-1000,600,200,130);Car(-1200,-1700,true);
 			}
 			else
 			{
