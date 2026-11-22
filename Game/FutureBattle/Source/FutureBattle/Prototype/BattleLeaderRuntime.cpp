@@ -861,7 +861,10 @@ bool UBattleLeaderRuntime::FollowerOverlapsOff()
 }
 void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
 {
- if(WalkLooks.Num())WalkLooks.Remove(ID); // -BattleWalkLook: his view of the last frame; set again below while it holds
+ // -BattleWalkLook: his view of the last frame holds through this call - his own sight checks below (CanSee) look where his
+ // head is turned, so he can turn to an enemy at his side and fire - and ends with it unless he takes the look again.
+ bool bLookAgain=false;
+ ON_SCOPE_EXIT{if(!bLookAgain && WalkLooks.Num())WalkLooks.Remove(ID);};
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()) return;
  auto& B=Bodies.FindChecked(ID);
  // The player's order to this soldier ends (squad order, squad stopped, taken over...) before his cover action runs.
@@ -894,6 +897,19 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   (!bRangeAwareCombat || FVector::DistSquared(Pos,Contact->LastKnownPosition)<=FMath::Square(UnderFire(ID)?BattleRanges::Reach(U->Weapon):BattleRanges::Engage(U->Weapon))) &&
   (S->TacticalPlan.Action!=EBattleSquadTactic::Support || TargetID==S->TacticalPlan.SupportTarget);
  const bool CanEngage=ObservedEngage&&CanSee(ID,TargetID);
+ // Trial -BattleOwnTarget (default 0, BattleSoldierFire.cpp): he cannot fire at the squad's target - he fires at an enemy he
+ // sees himself within the engagement distance. Only his aim and his fire: the squad's target, movement and cover stay.
+ bool bOwnAtShooter=false;
+ const int32 OwnTargetID=!CanEngage && OwnTargetMode(U->Team) && !bVehicleBody && !bSaveRounds && U->Weapon!=EBattleWeapon::Mortar &&
+  U->Weapon!=EBattleWeapon::AntiTank && !IsArtillery(ID) ? OwnTarget(ID,Pos,Now,bOwnAtShooter) : INDEX_NONE;
+ const auto* OwnContact=OwnTargetID!=INDEX_NONE?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,OwnTargetID):nullptr;
+ const bool bOwnEngage=OwnContact && CanSee(ID,OwnTargetID);
+ if(bOwnEngage)
+ {
+  SightExperiment.Cover(TEXT("own_target_frames"));
+  if(bOwnAtShooter)SightExperiment.Cover(TEXT("own_target_at_shooter_frames"));
+  SightExperiment.Cover(TargetID==INDEX_NONE?TEXT("own_target_no_squad_target_frames"):TEXT("own_target_squad_target_unseen_frames"));
+ }
  // Evaluation only: an engagement that only the return-fire rule allows (beyond the AI engagement distance, within reach).
  if(CanEngage&&SightExperiment.Enabled&&bRangeAwareCombat&&UnderFire(ID)&&FVector::DistSquared(Pos,Contact->LastKnownPosition)>FMath::Square(BattleRanges::Engage(U->Weapon)))SightExperiment.Cover(TEXT("return_fire_engage"));
  // Trial -BattleSectorContact=1: against an enemy outside the sector, a soldier stops only in cover (or on his way to it);
@@ -1078,15 +1094,17 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  // Indirect fire (mortar gunner, self-propelled gun; BattleArtillery.cpp): set-up while still, target from known positions, firing.
  FVector ArtilleryDirection=FVector::ZeroVector;
  const bool bArtilleryAim=bArea && IsArtillery(ID) && StepArtillery(ID,Now,B.Velocity.Size2D()>20.f,ArtilleryDirection);
- FVector BaseTarget;const bool BaseEngage=!CanEngage&&S->Order!=EBattleOrder::Move&&GetWorld()->GetSubsystem<UBattleMatch>()->CanFireAtBase(ID,BaseTarget);
+ FVector BaseTarget;const bool BaseEngage=!CanEngage&&!bOwnEngage&&S->Order!=EBattleOrder::Move&&GetWorld()->GetSubsystem<UBattleMatch>()->CanFireAtBase(ID,BaseTarget);
  // Stances: fire from the current eye height, and aim at the height the visible target presents.
  const FVector Muzzle(0,0,BattleStance::EyeOffset(StanceOf(ID)));
  if(BaseEngage)Direction=(BaseTarget-(Pos+Muzzle)).GetSafeNormal();
- else if(CanEngage)
+ else if(CanEngage || bOwnEngage)
  {
+  // The squad's target, or under -BattleOwnTarget his own.
+  const int32 AimID=CanEngage?TargetID:OwnTargetID;const auto* AimContact=CanEngage?Contact:OwnContact;
   // A target leaning out past an edge for a blind shot is aimed at where he shows (he is seen there, PrepareSightTrace).
   FVector Shown;
-  Direction=((SideExposure(TargetID,Now,Shown)?Shown:Contact->LastKnownPosition+FVector(0,0,TargetAimOffset(TargetID)))-(Pos+Muzzle)).GetSafeNormal();
+  Direction=((SideExposure(AimID,Now,Shown)?Shown:AimContact->LastKnownPosition+FVector(0,0,TargetAimOffset(AimID)))-(Pos+Muzzle)).GetSafeNormal();
  }
  else if(S->TacticalPlan.Action==EBattleSquadTactic::Flank)
  {
@@ -1095,8 +1113,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   const auto* Known=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,S->TacticalPlan.FlankTarget);
   Direction=((Known?Known->LastKnownPosition:S->TacticalPlan.FlankContact)-Position(ID)).GetSafeNormal2D();
  }
- else if(FVector From;HitFaceEnabled() && !bArtilleryAim && !IsVehicle(ID) && HitWithin(ID,Now,2.) && UnitShotFrom(ID,Now,From) && FVector::DistSquared2D(From,Pos)>1.e4)
- {Direction=(From-Pos).GetSafeNormal2D();SightExperiment.Cover(TEXT("hit_face_turned"));}
+ // (-BattleOwnTarget=2 turns him the same way, for its team.)
+ else if(FVector From;(HitFaceEnabled() || OwnTargetMode(U->Team)>=2) && !bArtilleryAim && !IsVehicle(ID) && HitWithin(ID,Now,2.) && UnitShotFrom(ID,Now,From) && FVector::DistSquared2D(From,Pos)>1.e4)
+ {Direction=(From-Pos).GetSafeNormal2D();SightExperiment.Cover(HitFaceEnabled()?TEXT("hit_face_turned"):TEXT("own_target_hit_turn_frames"));}
  // Trial -BattleAttackFocus=1: a still soldier of a sector squad with nothing to fire at watches the squad's focus, the members
  // fanned 0/-20/+20/-40/+40 degrees (with the 120-degree view, the squad watches about 200 degrees around the focus).
  else if(AttackFocusEnabled() && P->bFocus && !bArtilleryAim && !bVehicleBody && S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission &&
@@ -1116,7 +1135,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  else if(FVector Look;WalkLookMode(U->Team) && !bArtilleryAim && !bVehicleBody &&
   (B.Actor.IsValid()?B.Actor->GetVelocity().SizeSquared2D():B.Velocity.SizeSquared2D())>400. &&
   WalkLookDirection(ID,TargetID,Pos,B.Actor.IsValid()?B.Actor->GetVelocity():B.Velocity,Now,Look))
-  WalkLooks.Add(ID,Look);
+  {WalkLooks.Add(ID,Look);bLookAgain=true;}
  // A vehicle turns its turret to the target; its hull keeps the driving heading (SteerVehicle).
  // The main gun's target (stage 2) takes the turret; the machine gun keeps firing along Direction at its own target.
  // A mortar gunner without a direct target faces his indirect-fire target; a self-propelled gun turns its gun to it.
@@ -1157,7 +1176,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  if(B.Actor.IsValid())B.Actor->NoteDisplayAim(Direction,Now);
  if(BaseEngage)Fire(ID,Pos+Muzzle,Direction,false);
  if(CanEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false) && S->TacticalPlan.Action==EBattleSquadTactic::Support) GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(S->SquadID,TargetID); }
- Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:(BattleTactics::ObservedTactics()?ObservedEngage:CanEngage)?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
+ else if(bOwnEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false)) SightExperiment.Cover(TEXT("own_target_shots")); }
+ Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:((BattleTactics::ObservedTactics()?ObservedEngage:CanEngage)||bOwnEngage)?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
 }
 bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot)
 {
@@ -1781,7 +1801,7 @@ void UBattleLeaderRuntime::NoteUnderFire(int32 ID)
  // A direct hit adds one impulse even when a shield absorbs all damage (all weapon damage paths).
  if(ExoSuppressionApplies(ID))AddSuppression(ID,BattleSuppression::Tuning().PerShot,GetWorld()->GetTimeSeconds());
  if(UBattleMatch::DangerRouteOn())if(const auto* V=GetWorld()->GetSubsystem<UBattleState>()->Find(ID))GetWorld()->GetSubsystem<UBattleMatch>()->NoteSectorDanger(V->Team,Position(ID));
- if(ShotDirectionEnabled() || ThreatCoverEnabled(0) || ThreatCoverEnabled(1) || SoldierMoveEnabled(0) || SoldierMoveEnabled(1) || UnderFireCoverEnabled() || CoverPriorityEnabled() || HitFaceEnabled() || (BattleTactics::VehicleHitCover()&&IsVehicle(ID))){FVector From;if(GetWorld()->GetSubsystem<UBattleState>()->PendingHitSource(From))ShotFrom.Add(ID,TPair<FVector,double>(From,GetWorld()->GetTimeSeconds()));}
+ if(ShotDirectionEnabled() || ThreatCoverEnabled(0) || ThreatCoverEnabled(1) || SoldierMoveEnabled(0) || SoldierMoveEnabled(1) || OwnTargetMode(0) || OwnTargetMode(1) || UnderFireCoverEnabled() || CoverPriorityEnabled() || HitFaceEnabled() || (BattleTactics::VehicleHitCover()&&IsVehicle(ID))){FVector From;if(GetWorld()->GetSubsystem<UBattleState>()->PendingHitSource(From))ShotFrom.Add(ID,TPair<FVector,double>(From,GetWorld()->GetTimeSeconds()));}
  if(SectorContactEnabled() || SectorMoveFireEnabled() || !SectorFireBack.IsEmpty())SectorHitUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);
  if(SightExperiment.Enabled)if(const int32 Shooter=GetWorld()->GetSubsystem<UBattleState>()->PendingHitShooter();Shooter!=INDEX_NONE)DiagnoseHitSight(ID,Shooter);
  if(HitRevealEnabled()){const auto* Store=GetWorld()->GetSubsystem<UBattleState>();FVector From;const int32 Shooter=Store->PendingHitShooter();

@@ -577,12 +577,20 @@ public:
  // Trial -BattleWalkLook=1/2 (default 0, 2026-11-22; -BattleWalkLookTeam=0/1 for one team): a soldier on the move with nothing to
  // fire at keeps his body along his way and turns his head - only his view (Sight) changes. He looks at the enemy he knows of
  // within his sight (KnownEnemyDirection), else to his share of the ground around the squad's way by his place in the squad
- // (ahead, 50 and 100 degrees to either side). =2: the members who look ahead keep looking ahead. WalkLooks holds his view of
- // this frame (cleared at the start of each Follow and on a load; not saved: after a load it comes back with his next Follow
- // after his first scan). BattleSoldierWatch.cpp; counts walk_look_{ahead,side,target,seen,contact}_frames.
+ // (ahead, 50 and 100 degrees to either side). =2: the members who look ahead keep looking ahead. WalkLooks holds his view
+ // from one Follow to the end of the next (so his own sight checks there use it; dropped there unless he takes the look again,
+ // and on a load; not saved: after a load it comes back with his next Follow after his first scan). BattleSoldierWatch.cpp; counts walk_look_{ahead,side,target,seen,contact}_frames.
  static int32 WalkLookMode(int32 Team);
  bool WalkLookDirection(int32 ID,int32 TargetID,const FVector& Pos,const FVector& Way,double Now,FVector& Out);
  TMap<int32,FVector> WalkLooks;
+ // Trial -BattleOwnTarget=1/2 (default 0, 2026-11-22; -BattleOwnTargetTeam=0/1 for one team): a soldier who cannot fire at the
+ // squad's target (none, unknown to him, out of his sight or of the distance) fires at an enemy soldier he sees himself within
+ // the engagement distance - the one in the direction he was just hit from first, else the nearest. =2: hit with nothing to
+ // fire at, he also turns toward where the shot came from for 2 s (as -BattleHitFace). Only his aim, fire and that turn
+ // change (the squad's target, movement and cover do not); nothing is saved. BattleSoldierFire.cpp; counts
+ // own_target_{frames,shots,at_shooter_frames,no_squad_target_frames,squad_target_unseen_frames,hit_turn_frames}.
+ static int32 OwnTargetMode(int32 Team);
+ int32 OwnTarget(int32 ID,const FVector& Pos,double Now,bool& bAtShooter) const;
  void RevealShooter(int32 VictimID,int32 ShooterID,const FVector& From);
  // Evaluation only (sight diagnostics on, behaviour unchanged, 2026-11-21): a hit soldier who does not see his shooter. Why each of the
  // two lines (victim->shooter, shooter->victim) fails, using the same checks as CanSee (range, field of view, first blocking hit).
