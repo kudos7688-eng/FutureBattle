@@ -23,11 +23,29 @@
 | 前線軍（群制御、`groupui`） | **11-22 3時30分 main へ**：テストプレイの指摘で作り直し。持ち場は行ごとの固定位置（遮蔽で前後を選び、畑の行は空ける）、最初の割り当ては歩く距離、前進は群が20秒ごとに行ごと、最初の前線は40%（`-BattleFrontOpen`）、要る数だけ前線軍に残し余りは未所属へ。Ctrl+右ドラッグは左右に引く | 試遊（Ctrl+右ドラッグ・通知の実画面確認）。数値は仮 |
 | 車両・砲兵・点検の直し（Codex委任、`FutureBattle-codex`） | **11-21〜22 main へ（すべて既定0、既定の試合は不変）**：自走砲が動かない直し `-BattleVehicleOrderHere`、戦車の被弾後の隠れ `-BattleVehicleHitCover`・主砲の発砲で位置が知られる `-BattleTankGunFlash`、砲兵の発砲で位置が知られる `-BattleArtilleryFlash`、自走砲の射程 `-BattleSPGRange`・費用 `-BattleAreaSPGCost`、公開の砲撃陣地と襲撃 `-BattleArtilleryPosts`（襲撃は外骨格→装甲車、ユーザー決定）、発砲を追う襲撃 `-BattleArtilleryRaidChase`、前線を抜ける襲撃 `-BattleArtilleryRaidSneak`、外骨格の強襲群 `-BattleArtilleryRaidGroup`（群は組めて外骨格の損失が減るが、自走砲の撃破はまだ増えない、11-22 15時15分）、外骨格の早買い `-BattleAreaExoEarly`（群は早く組めるが撃破は増えない、11-22 16時50分）、観測した情報だけで判断 `-BattleObservedArmour`／`-BattleObservedTactics`、点検05 の保存の検査（上限は 1 GiB）、点検07 の結果を変えない高速化、点検09 の画面の直し。評価：射程55000で自走砲の撃破が3〜4割減る。**構える深さ `-BattleArtilleryStandoff 0.35`＋前線を抜ける襲撃で、外骨格が自走砲を撃破できた（2 seed で3両）。発射は7分の1**（11-22 8時50分）。設計は `Docs/design-vehicle-survival.md`・`Docs/design-observation.md` | 戦車の直し A/B（2試合では効果が見えない）と砲兵の各切替を既定にするか。点検09 U06（3解像度）・U12（パッドのメニュー）の画面確認。AI が迫撃砲を買わない（陣地が使われない）。視界100m のマップA の保存は 69 MB |
 | 歩兵の装備・精鋭小隊・狙撃班（`arms` ブランチ、`FutureBattle-arms`） | **11-22 6時30分**：副武装の拳銃 `-BattleSidearms`、手りゅう弾 `-BattleGrenades=n`、近接攻撃 `-BattleMelee`、新しい武器5種（拳銃・短機関銃・散弾銃・選抜射手銃・擲弾銃）と狙撃銃、**精鋭小隊**（8人の役割分担、`-BattleElite`＝ `=` キー／AI `-BattleAreaEliteKeep=n`）、**狙撃班**（狙撃手＋観測手、`-BattleSniperTeam`＝ `]` キー／AI `-BattleAreaSniperKeep=n`）。すべて既定0。直接操作は G 投てき・V 近接・F 拳銃。ビルド・Test-Battle・Test-Area・自己試験 `-BattleArmsSmoke` 合格、既定の試合は main と IDENTICAL。試遊は `Setup\Play-Area.ps1 -Map I -Arms`（`FutureBattle-arms` から）。設計 `Docs/design-infantry-arms.md`。main へは未取り込み。**9時25分**：詰め寄り `-BattleArmsAssault=1/2`（遮蔽から遮蔽へ40m以内ずつ）。`=2`（普通の小隊も走る）でマップIの AI が手りゅう弾を1試合7〜25個投げ、30m未満の射撃も出た。**12時45分**：突撃 `-BattleArmsCharge`（12m以内に見えている敵、詰め寄りの後は25m以内の知っている敵へ駆け込み、2m以内で殴る）。区画の切替なしのマップEでは突撃10・近接で倒した5。**14時55分**：詰め寄りを走り切る形に（見失っても行き先の遮蔽まで走り、次は最後に見えた位置へ）。試遊の条件で、遮蔽まで着く割合が15%→約80%、突撃はマップI 26回・マップE 92回、近接で倒したのは7人・22人。**17時40分**：突撃の通り道がふさがっていれば遮蔽の横から走る。突撃はマップI 87回・マップE 157回、近接で倒したのは18人・39人 | 精鋭小隊だけの `=1` は近い戦いにならない。詰め寄りの20秒の時間切れの兵は一歩も動いていない（制圧はオフなので伏せではない。味方の体に止められている見込み、未確認）。強さの片側試験は未実施、数値は仮。画面での確認（模型・投てきの球・アニメ）は未実施。main への取り込み |
-| 個人AI（`soldierai` ブランチ、`FutureBattle-soldierai`） | **11-22 17時30分：撃ち返し `-BattleOwnTarget`（既定0、ブランチ soldierai 1470636、main には未取り込み）を入れたチームは、片側試験12本すべてで得をした**（戦死 −14〜−21%、近い戦いでも通常の距離でも）。小隊の目標を撃てない兵が、自分で見ている敵を撃つ。歩いている兵の視線 `-BattleWalkLook`（既定0）は欠けを直し、単独でも戦死が4本とも減った（上積みは未確定）。13時30分：soldierai を main へ取り込んだ（ce6b488。ユーザー決定）。既定ON：止まった兵の見張りの向き `-BattleSoldierWatch`（12時20分）。プレイヤーの操作：兵1人への命令（作戦画面で Ctrl＋クリック→右クリック、TPS視点で G、H で戻す）。既定0の試験切替：段階A `-BattleThreatCover`・しゃがみ判定 `-BattleThreatCoverCrouch`・区画内の移動 `-BattleSoldierMove`・プレイヤーの周りだけ `-BattleSoldierAIFocus` | 兵1人への命令の実際の操作（自動試験だけ）。武器のブランチ `arms` が TPS視点の G を手りゅう弾に使うので、取り込むときにキーを決める。見張りの勝ち負けへの効果は未確認。撃ち返しと視線は片側4本ずつ・マップIだけで、保存の往復とTPS視点の画は未確認 |
+| 個人AI（`soldierai` ブランチ、`FutureBattle-soldierai`） | **11-22 18時20分：撃ち返し `-BattleOwnTarget` と視線 `-BattleWalkLook` を、試験切替（既定0）として main へ取り込んだ（09c34dc）**。撃ち返し（小隊の目標を撃てない兵が、自分で見ている敵を撃つ）を入れたチームは、片側試験20本すべてで「撃破−戦死」が増えた（マップI の近い戦い・通常の距離、マップE。戦死 −11〜−21%）。既定にするかはユーザーの判断待ち。試し方：`Play-Area.ps1 -Map I -OwnTarget 2 -WalkLook 1`。視線は欠けを直し、単独でも戦死が4本とも減った（上積みは未確定）。13時30分：soldierai を main へ取り込んだ（ce6b488。ユーザー決定）。既定ON：止まった兵の見張りの向き `-BattleSoldierWatch`（12時20分）。プレイヤーの操作：兵1人への命令（作戦画面で Ctrl＋クリック→右クリック、TPS視点で G、H で戻す）。既定0の試験切替：段階A `-BattleThreatCover`・しゃがみ判定 `-BattleThreatCoverCrouch`・区画内の移動 `-BattleSoldierMove`・プレイヤーの周りだけ `-BattleSoldierAIFocus` | 兵1人への命令の実際の操作（自動試験だけ）。武器のブランチ `arms` が TPS視点の G を手りゅう弾に使うので、取り込むときにキーを決める。見張りの勝ち負けへの効果は未確認。撃ち返しは2マップ・条件ごとに4本。TPS視点の画と、射撃数が6〜8割増える影響は未確認 |
 
 **いま誰が何を調べているか・各系統がわかったこと**は調査の掲示板で引く：`python -I Setup/Board.py status`／`find <語>`（`Docs/design-investigation-board.md`）。
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
+
+## 2026-11-22 18時20分 Claude（個人AI）：撃ち返し `-BattleOwnTarget` と視線 `-BattleWalkLook` を試験切替（既定0）として main へ取り込んだ。通常の距離とマップE でも、撃ち返しを入れたチームが8本すべてで得をした
+
+- **変更**（main 09c34dc）：ブランチ `soldierai` を取り込んだ。入ったのは、試験切替 `-BattleOwnTarget=1/2` と `-BattleWalkLook=1/2`（どちらも既定0。`…Team=0/1` で片方のチームだけ）、診断 `hitfov_*`、`Play-Area.ps1 -OwnTarget N -WalkLook N`、`Test-WideSight.ps1 -OwnTarget -OwnTargetTeam -WalkLook -WalkLookTeam`。既定の試合は変わらない。中身は17時30分の項目。
+- **検証**：soldierai（main 31d8db8 を取り込んだ 39968db）でビルド成功、Test-Battle failures=0、既定の試合は群制御の `gu7-I-s7-def` と IDENTICAL（`so3-I-ref-s7`）。main でもビルド成功、Test-Battle failures=0（`Setup/Battle-Smoke-20261122-181554.log`）、既定の試合は同じく IDENTICAL（`so-main-I-own-s7`）。追加の試合はマップI・E、30FPS・並列、`-CoverActions 1 -FlankCoordination 1`、12本すべて合格（soldierai の `so3-*`）。
+- **結果：撃ち返し2だけを片方のチームに入れた場合**（通常の距離。種7・11 × チーム0・1 の4本ずつ。同じ種の「今のまま」との差を、入れたチームから見た値）
+
+  | 条件 | 戦死 | 撃破 | 射撃数 | 撃破−戦死 | 得点差 |
+  |---|---|---|---|---|---|
+  | マップI | −11%（−16、−20、−15、+6） | +35%（+17、+29、+41、+54） | +75% | +92（+70、+103、+100、+95） | +258（+170、+599、+287、−24） |
+  | マップE | −14%（−22、−6、−13、−14） | +26%（+15、+32、+38、+18） | +61% | +84（+79、+82、+106、+67） | +267（+190、+364、+253、+261） |
+
+  17時30分の12本と合わせて、撃ち返しを入れた片側試験は20本。「撃破−戦死」は20本すべてで増え、得点差は18本で増えた。マップE では、入れたチームが4本とも勝った（基準は2本ともチーム0の勝ち）。
+- **保存の往復**：撃ち返しを両軍に入れ、保存の往復ありで流した試合（`so3-I-ot2-rt-s7`）は合格し、往復の検査も通った。往復なしの同じ試合との比較はしていない。
+- **制限**：2マップで、条件ごとに4本。値1（撃たれた方向へ向かない）は測っていない。両軍に入れた通常の距離の試合は、保存の往復の1本だけ。射撃数が6〜8割増えることの影響（弾の消費、補給の回数、音や見た目）は見ていない。TPS視点の画は撮っていない。処理時間は並列の試合なので比べていない。
+- **試し方**：`.\Setup\Play-Area.ps1 -Map I -OwnTarget 2 -WalkLook 1`（近い戦いで見るなら `-CloseRange 50` を足す）。両軍に入る。
+- **判断**：既定0のまま。既定にするかはユーザーが決める。
+- **次の一手**：ユーザーの判断待ち（撃ち返しを既定にするか。近くで会ったら止まって遮蔽に入る動きを試験切替で作るか）。
 
 ## 2026-11-22 18時25分 Claude（ロードマップに従う改善活動）：マップJ は既定どうしでも西が有利（拠点を持った時間は8本すべて西が多い）。S2 は西で使うと大きく負け、東で使うと得をしていた
 
