@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 376 種類。
+計 377 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -73,6 +73,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleArmourSectorGate` | Value | 0 | BattleWeaponOrders.cpp:16 |  |
 | `-BattleArmsAssault` | Value | 0 | BattleArms.cpp:47 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleArmsCharge` | Value | 0 | BattleArms.cpp:48 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
+| `-BattleArmsChargeSlide` | Value | 0 | BattleArms.cpp:51 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleArmsSlide` | Value | 0 | BattleArms.cpp:50 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleArmsSmoke` | Param | off | BattleArms.cpp:49 |  |
 | `-BattleArrivalThreat` | Value | 0 | BattleLeaderRuntime.cpp:1617 |  |
@@ -144,11 +145,11 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleFrontHold` | Value | 1 | BattleFrontLine.cpp:45 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontLine` | Value | 1 | BattleFrontLine.cpp:64 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontSquads` | Value | 4 | BattleFrontLine.cpp:163 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
-| `-BattleGrenadeDamage` | Value | 90.f | BattleArms.cpp:143 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
-| `-BattleGrenadeRadius` | Value | 500.f | BattleArms.cpp:143 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
-| `-BattleGrenadeRange` | Value | 3000.f | BattleArms.cpp:144 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleGrenadeDamage` | Value | 90.f | BattleArms.cpp:144 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleGrenadeRadius` | Value | 500.f | BattleArms.cpp:144 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleGrenadeRange` | Value | 3000.f | BattleArms.cpp:145 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleGrenades` | Value | 0 | BattleArms.cpp:39 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleGrenadeSquadGap` | Value | 3.f | BattleArms.cpp:153 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleGrenadeSquadGap` | Value | 3.f | BattleArms.cpp:154 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleGroupFireSupport` | Value | 1 | BattleArtillery.cpp:202, BattleGroups.cpp:290 | default 1 (user 2026-11-21) |
 | `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:533 |  |
 | `-BattleHeavyCost` | Value | 未解決 | BattleState.cpp:569 |  |
@@ -163,7 +164,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleHitReveal` | Value | 0 | BattleLeaderRuntime.cpp:1508 |  |
 | `-BattleKillLog` | Value | 1 | BattleHUD.cpp:1181 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
-| `-BattleLauncherDamage` | Value | 60.f | BattleArms.cpp:150 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleLauncherDamage` | Value | 60.f | BattleArms.cpp:151 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleLeaderCommand` | Value | 0 | BattleGameMode.cpp:54 |  |
 | `-BattleLeaderGuard` | Value | 0 | BattleTactics.cpp:16 |  |
 | `-BattleLeaderHealth` | Value | 3.0 | BattleTactics.cpp:23 |  |
@@ -178,9 +179,9 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleMatchReport` | Value | 空文字列 | BattleMatchSoak.cpp:56 |  |
 | `-BattleMatchScenario` | Value | 0 | BattleMatchSoak.cpp:18 |  |
 | `-BattleMatchSoak` | Param | off | BattleMatchSoak.cpp:14 |  |
-| `-BattleMedicRate` | Value | 4.f | BattleArms.cpp:162 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleMedicRate` | Value | 4.f | BattleArms.cpp:163 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleMelee` | Value | 0 | BattleArms.cpp:40 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleMeleeDamage` | Value | 60.f | BattleArms.cpp:156 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleMeleeDamage` | Value | 60.f | BattleArms.cpp:157 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleMixedFastMatch` | Param | off | BattleLeaderRuntime.cpp:76 |  |
 | `-BattleMixedFastSmoke` | Param | off | BattleLeaderRuntime.cpp:217 |  |
 | `-BattleMixedSaveSmoke` | Param | off | BattleArtillery.cpp:89, BattleLeaderRuntime.cpp:219, BattleMixedBodies.cpp:114, BattleSave.cpp:93 |  |

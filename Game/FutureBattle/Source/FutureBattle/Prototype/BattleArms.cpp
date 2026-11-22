@@ -48,6 +48,7 @@ int32 BattleArms::AssaultMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT
 bool BattleArms::ChargeEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsCharge="))!=0;return b;}
 bool BattleArms::SmokeEnabled(){static const bool b=FParse::Param(FCommandLine::Get(),TEXT("BattleArmsSmoke"));return b;}
 bool BattleArms::SlideEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsSlide="),1)!=0;return b;}
+bool BattleArms::ChargeSlideEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsChargeSlide="),1)!=0;return b;}
 bool BattleArms::AnyTrial(){return SidearmsEnabled()||GrenadeCount()>0||MeleeEnabled()||EliteEnabled()||AreaEliteKeep()>0||SniperEnabled()||AreaSniperKeep()>0||AssaultMode()>0||ChargeEnabled()||SmokeEnabled();}
 
 uint8 BattleArms::EliteKit(int32 Slot)
@@ -509,6 +510,22 @@ bool UBattleLeaderRuntime::StartCharge(int32 ID,int32 Target,const FVector& Targ
  return true;
 }
 
+int32 BattleArms::SlideRest(UPrimitiveComponent* Body,const FVector& Delta,const FHitResult& Hit,const FVector& Dir,int32& Side)
+{
+ if(!Body||!Hit.bBlockingHit||Hit.bStartPenetrating||FMath::Abs(Hit.Normal.Z)>=.7f)return 0;
+ const FVector Wall=FVector(Hit.Normal.X,Hit.Normal.Y,0.).GetSafeNormal(),Rest=Delta*(1.f-Hit.Time);
+ FVector Along=FVector::VectorPlaneProject(Rest,Wall);
+ if(Along.SizeSquared2D()<FMath::Square(.3*Rest.Size2D()))
+ {
+  const FVector Round=FVector::CrossProduct(Wall,FVector::UpVector);
+  if(!Side)Side=FVector::DotProduct(Round,Dir)>=0.?1:-1;
+  Along=Round*(Side*Rest.Size2D());
+ }
+ const int32 Bit=Hit.GetComponent()&&Hit.GetComponent()->GetCollisionObjectType()==ECC_Pawn?1:2;
+ FHitResult SlideHit;Body->MoveComponent(Along,Body->GetComponentQuat(),true,&SlideHit);
+ return Bit;
+}
+
 bool UBattleLeaderRuntime::StepCharge(int32 ID,float Dt,double Now)
 {
  auto* A=CoverApproaches.Find(ID);if(!A)return false;
@@ -529,7 +546,7 @@ bool UBattleLeaderRuntime::StepCharge(int32 ID,float Dt,double Now)
  // A charge from a step aside (StartCharge) walks to that place first.
  A->Goal=Contact->LastKnownPosition;
  const double D=FVector::Dist2D(Pos,A->Goal);
- if(D<=Ch.Stop+10.){A->bVia=false;if(!A->bReached){A->bReached=true;SightExperiment.Cover(TEXT("arms_charge_reached"));}return true;}
+ if(D<=Ch.Stop+10.){A->bVia=false;if(!A->bReached){A->bReached=true;SightExperiment.Cover(TEXT("arms_charge_reached"));if(A->Slid)SightExperiment.Cover(TEXT("arms_charge_reached_slid"));}return true;}
  if(A->bVia&&FVector::Dist2D(Pos,A->Via)<=Ch.ViaReach){A->bVia=false;SightExperiment.Cover(TEXT("arms_charge_side_reached"));}
  const FVector To=A->bVia?A->Via:A->Goal;const double Left=A->bVia?FVector::Dist2D(Pos,A->Via):D-Ch.Stop;
  auto& B=Bodies.FindChecked(ID);const FVector Dir=(To-Pos).GetSafeNormal2D();
@@ -538,6 +555,13 @@ bool UBattleLeaderRuntime::StepCharge(int32 ID,float Dt,double Now)
  {
   FHitResult Hit;const float Stride=FMath::Min(GetDefault<UBattleTuning>()->MoveSpeed*Ch.SpeedScale*Dt,float(Left));
   B.Capsule->MoveComponent(Dir*Stride,B.Capsule->GetComponentQuat(),true,&Hit);
+  // Like an assault dash, a charge slides along a body or wall it hits (a walker body slides by itself). -BattleArmsChargeSlide=0: not.
+  if(BattleArms::ChargeSlideEnabled())
+   if(const int32 Bit=BattleArms::SlideRest(B.Capsule.Get(),Dir*Stride,Hit,Dir,A->SlideSide))
+   {
+    if(!(A->Slid&Bit))SightExperiment.Cover(Bit==1?TEXT("arms_charge_slid_body"):TEXT("arms_charge_slid_world"));
+    A->Slid|=Bit;
+   }
   auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=B.Capsule->GetComponentLocation();B.Velocity=(F.Position-Pos)/FMath::Max(.001f,Dt);
  }
  return true;

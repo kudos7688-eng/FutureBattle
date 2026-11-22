@@ -431,21 +431,12 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
   FHitResult Hit;B.Capsule->MoveComponent(Delta,B.Capsule->GetComponentQuat(),true,&Hit);
   // An assault dash slides along a body or wall it hits for the rest of the step instead of pushing into it (a walker body slides by
   // itself); hit straight on, he goes round to one side, the same side for the whole dash. Other walks keep the plain step.
-  if(auto* Dash=bDash?CoverApproaches.Find(ID):nullptr;Dash&&BattleArms::SlideEnabled()&&Hit.bBlockingHit&&!Hit.bStartPenetrating&&FMath::Abs(Hit.Normal.Z)<.7f)
-  {
-   const FVector Wall=FVector(Hit.Normal.X,Hit.Normal.Y,0.).GetSafeNormal(),Rest=Delta*(1.f-Hit.Time);
-   FVector Along=FVector::VectorPlaneProject(Rest,Wall);
-   if(Along.SizeSquared2D()<FMath::Square(.3*Rest.Size2D()))
+  if(auto* Dash=bDash?CoverApproaches.Find(ID):nullptr;Dash&&BattleArms::SlideEnabled())
+   if(const int32 Bit=BattleArms::SlideRest(B.Capsule.Get(),Delta,Hit,D,Dash->SlideSide)) // BattleArms.cpp
    {
-    const FVector Round=FVector::CrossProduct(Wall,FVector::UpVector);
-    if(!Dash->SlideSide)Dash->SlideSide=FVector::DotProduct(Round,D)>=0.?1:-1;
-    Along=Round*(Dash->SlideSide*Rest.Size2D());
+    if(!(Dash->Slid&Bit))Diag.Cover(Bit==1?TEXT("arms_assault_slid_body"):TEXT("arms_assault_slid_world"));
+    Dash->Slid|=Bit;
    }
-   const int32 Bit=Hit.GetComponent()&&Hit.GetComponent()->GetCollisionObjectType()==ECC_Pawn?1:2;
-   if(!(Dash->Slid&Bit))Diag.Cover(Bit==1?TEXT("arms_assault_slid_body"):TEXT("arms_assault_slid_world"));
-   Dash->Slid|=Bit;
-   FHitResult SlideHit;B.Capsule->MoveComponent(Along,B.Capsule->GetComponentQuat(),true,&SlideHit);
-  }
   auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=B.Capsule->GetComponentLocation();B.Velocity=(F.Position-Pos)/FMath::Max(.001f,Dt);
   // Evaluation of an assault dash (the timeout and stuck records above): moved, or stopped by what.
   if(auto* Dash=bDash?CoverApproaches.Find(ID):nullptr)
