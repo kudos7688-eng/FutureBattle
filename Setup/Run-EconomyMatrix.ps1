@@ -150,6 +150,8 @@ $supply=@{
  # ST2 = stage S2, recon -> focus attack (with -TrialTeam only that team, through -AreaTrialTeam).
  'SL1'=@('-SituationLog','1')
  'ST2'=@('-Strategy','2')
+ # ST2P = ST2 with the pass check (-BattleStrategyPass=1, sector maps; Docs/design-terrain-ai.md 3-4).
+ 'ST2P'=@('-Strategy','2','-StrategyPass','1')
  'ST3'=@('-Strategy','3')
  'ST4'=@('-Strategy','4')
  # RTS = symmetric tie-break of the home-assault flank side (-BattleRouteTieSymmetric, 2026-11-22; maps E-I with the symmetric start).
@@ -181,6 +183,11 @@ $supply=@{
  'BF'=@('-ExtraArgs','-BattleAIBlindFire=1')
  # PT = ammunition at owned points (-BattleAreaPointSupply=1: a leader 10 s within 25 m of an owned, uncontested point refills the squad's reserve).
  'PT'=@('-AreaPointSupply','1')
+ # PT0 = no ammunition at points (-BattleAreaPointSupply=0) after PT became the default (2026-11-22).
+ 'PT0'=@('-AreaPointSupply','0')
+ # AC = the AI buys the mixed composition (-BattleAreaComposition=1: armoured cars, mortars, then a tank and an SPG, AT teams per known enemy vehicle);
+ # with -TrialTeam only that team (stage 3 of ROADMAP: the all-types side against the default, infantry-only side).
+ 'AC'=@('-AreaComposition','1')
  # SC = the sector AI combination the sector lane uses as its base (s22/s23) plus arrival walk (maps H/I).
  'SC'=@('-SectorContact','1','-SectorRoute','1','-SectorFlank','1','-SectorFront','1','-WaypointPass','1','-SectorMoveFire','1','-CoverHuddle','1','-PinnedFlank','1','-ArrivalThreat','1','-SectorCoverRoute','1','-ArrivalWalk','1')
 }
