@@ -623,7 +623,7 @@ public:
  // sorted with ties by world X then Y (BuildMovementPlan, ReassignOccupiedArrival), read them in the team's own frame: the
  // east team (AreaHome.X > 0) turned 180 degrees, so on the point-symmetric maps both teams break ties alike.
  static bool SectorSymmetricEnabled();
- // Trial -BattleHireMirror=1 (2026-11-22, default 0): in an area battle purchased squads appear at home rows point-mirrored for the
+ // -BattleHireMirror (2026-11-22; default 1 since the user decision that day, =0 the earlier rows): in an area battle purchased squads appear at home rows point-mirrored for the
  // east team (rows mirrored in Y as well as X), so both teams' new squads start at the same place in their own frames.
  static bool HireMirrorEnabled();
  // -BattleSectorSymmetric: -1 for the east team (its frame turned 180 degrees), else 1.

@@ -156,7 +156,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleHeavyMembers` | Value | 未解決 | BattleState.cpp:567 |  |
 | `-BattleHeavySpeed` | Value | 未解決 | BattleState.cpp:568 |  |
 | `-BattleHeightTest` | Param | off | BattleTerrainTest.cpp:27 |  |
-| `-BattleHireMirror` | Value | 0 | BattleLeaderRuntime.cpp:1659 |  |
+| `-BattleHireMirror` | Value | 1 | BattleLeaderRuntime.cpp:1659 | default on (user decision 2026-11-22) |
 | `-BattleHireSightRefresh` | Value | 0 | BattleMixedRecruitment.cpp:114 |  |
 | `-BattleHitDirection` | Value | 1 | BattleHUD.cpp:1120 |  |
 | `-BattleHitFace` | Value | 0 | BattleLeaderRuntime.cpp:1560 |  |
@@ -202,7 +202,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleObservedTactics` | Strifind/Value | 0 | BattleAreaSmoke.cpp:465, BattleArmourAI.cpp:40 |  |
 | `-BattleOffscreenMarkers` | Value | 1 | BattleHUD.cpp:1158 |  |
 | `-BattleOpponentPreset` | Value | 空文字列 | BattleBenchmark.cpp:48 | ReadTier → BattleBenchmark.cpp:45（ヘルパー経由） |
-| `-BattleOrderSync` | Value | -1 | BattleArea.cpp:126 |  |
+| `-BattleOrderSync` | Value | 1 | BattleArea.cpp:126 | default on (user decision 2026-11-22) |
 | `-BattlePeekRangeCheck` | Value | 0 | BattleCoverAction.cpp:24 | trial: projected peeks must be 100..450 cm from their anchor |
 | `-BattlePerceptionGrid` | Value | True | BattleLeaderRuntime.cpp:109 |  |
 | `-BattlePerceptionSlices` | Value | 4 | BattleBenchmark.cpp:56 |  |
