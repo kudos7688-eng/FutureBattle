@@ -1656,7 +1656,7 @@ bool UBattleLeaderRuntime::PinnedFlankEnabled()
 }
 bool UBattleLeaderRuntime::HireMirrorEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleHireMirror="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleHireMirror="),V);return V!=0;}(); // default on (user decision 2026-11-22)
  return bOn;
 }
 bool UBattleLeaderRuntime::SectorSymmetricEnabled()

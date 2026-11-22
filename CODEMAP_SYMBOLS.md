@@ -67,7 +67,7 @@
 - `BattleMapJ.h`: BattleMapJ::Centre:44, BattleMapJ::Impassable:45, BattleMapJ::IsPass:47, BattleMapJ::Variant:54, BattleMapJ::Offset:59, BattleMapJ::Size:60, BattleMapJ::Mirror:62
 - `BattleMapStats.cpp`: UBattleLeaderRuntime::RunMapStats:38
 - `BattleMassTrial.cpp`: ABattleMassTrialUnit::ABattleMassTrialUnit:6, UBattleTrialMovement::PlanStep:11, UBattleTrialMovement::ApplyStep:21, UBattleMassTrial::Start:38, UBattleMassTrial::Update:52, UBattleMassTrial::Stop:80
-- `BattleMatch.h`: UBattleMatch::StartSquadCount:135, UBattleMatch::SupplyTeamNear:151, UBattleMatch::Total:303, UBattleMatch::ObservedType:344, UBattleMatch::RecentArmourObservation:345, UBattleMatch::IsEnabled:487
+- `BattleMatch.h`: UBattleMatch::StartSquadCount:136, UBattleMatch::SupplyTeamNear:152, UBattleMatch::Total:304, UBattleMatch::ObservedType:345, UBattleMatch::RecentArmourObservation:346, UBattleMatch::IsEnabled:488
 - `BattleMatch.cpp`: UBattleMatch::InitializeMatch:15, UBattleMatch::SquadPrice:38, UBattleMatch::CurrentSquadPrice:51, UBattleMatch::HireSquad:56, UBattleMatch::StartCombat:124, UBattleMatch::CanDelegateAllies:137, UBattleMatch::SetAllyDelegated:144, UBattleMatch::Update:152, UBattleMatch::ObjectiveValue:213, UBattleMatch::MatchTimeLimit:214, UBattleMatch::CheckTimeLimit:216, UBattleMatch::UpdateObjectives:226, UBattleMatch::InObjective:245, UBattleMatch::AdvanceObjectiveControl:250, UBattleMatch::UpdateEnemyOrders:285, UBattleMatch::ChooseObjective:290, UBattleMatch::AreaStrategyTarget:303, UBattleMatch::UpdateTeamOrders:373, UBattleMatch::Resupply:533, UBattleMatch::Finish:552
 - `BattleMatchSmoke.cpp`: ABattleGameMode::RunMatchSmokeTest:11
 - `BattleMatchSoak.cpp`: ABattleGameMode::UpdateMatchSoak:12

@@ -123,7 +123,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  return true;
 }
 bool UBattleMatch::SetupPhase(){static const int32 V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSetupPhase="),X);return X;}();return V!=0;}
-bool UBattleMatch::OrderSync(){static const int32 V=[]{int32 X=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleOrderSync="),X);return X;}();return V<0?SetupPhase():V!=0;}
+bool UBattleMatch::OrderSync(){static const int32 V=[]{int32 X=1;FParse::Value(FCommandLine::Get(),TEXT("BattleOrderSync="),X);return X;}();return V!=0;} // default on (user decision 2026-11-22)
 int32 UBattleMatch::StartSquads(){static const int32 V=[]{int32 X=25;FParse::Value(FCommandLine::Get(),TEXT("BattleStartSquads="),X);return FMath::Clamp(X,1,25);}();return V;}
 void UBattleMatch::UpdateAreaHiring()
 {
