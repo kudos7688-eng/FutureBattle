@@ -29,7 +29,7 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
-## 2026-11-22 20時55分 Claude（マップ）：マップK（密な小さい市街地）の区画図の案（文書と図だけ）
+## 2026-11-22 20時40分 Claude（マップ）：マップK（密な小さい市街地）の区画図の案（文書と図だけ）
 
 - **依頼**：方針の案1「案1で進める」。
 - **成果**：[Docs/design-map-k.md](Docs/design-map-k.md) と区画図 [Docs/MapK-Sectors.svg](Docs/MapK-Sectors.svg)（`Setup/Export-MapK.py`、エンジン不要）。600m×400m、区画12×8、畑・林・水・山なし、入れる家30軒、拠点6つ（北・中央・南に2つずつ）、大通りは2回折れて直線は最長200m。
