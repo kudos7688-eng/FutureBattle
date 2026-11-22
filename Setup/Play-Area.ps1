@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I','J')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$WalkLook=0)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
@@ -17,6 +17,9 @@ if ($CloseRange -gt 0) { $cm = $CloseRange * 100; $extra += @("-BattleRangeSight
 # knows of or to his share of the ground around the way. Both teams.
 if ($OwnTarget -gt 0) { $extra += "-BattleOwnTarget=$OwnTarget" }
 if ($WalkLook -gt 0) { $extra += "-BattleWalkLook=$WalkLook" }
+# Front plan stage 7 (Docs/design-front-strategy.md 6; trials, default 0): the player's team plans by sections of its front line; U opens the
+# plan panel (section roles, purchase reservations, hiring delegation), the top bar shows the own plan. Team 0 only; second focus allowed.
+if ($FrontPlanPlayer) { $extra += @('-BattleFrontPlan=1','-BattleFrontPlanTeam=0','-BattleFrontPlanPlayer=1','-BattleFrontPlanFocus2=1','-BattleHireReserve=1') }
 if ($Map -eq 'H') {
     & (Join-Path $PSScriptRoot 'Initialize-MapH.ps1') -Project $project
 }
