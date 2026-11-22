@@ -21,9 +21,9 @@ bool UBattleLeaderRuntime::SoldierWatchEnabled(int32 Team)
 
 int32 UBattleLeaderRuntime::WalkLookMode(int32 Team)
 {
- static const int32 Mode=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleWalkLook="),V);return FMath::Clamp(V,0,2);}();
+ static const int32 Value=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleWalkLook="),V);return FMath::Clamp(V,0,2);}();
  static const int32 Only=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleWalkLookTeam="),V);return V==0||V==1?V:-1;}();
- return Only<0 || Only==Team ? Mode : 0;
+ return Only<0 || Only==Team ? Value : 0;
 }
 
 // The enemy a soldier with nothing to fire at knows of best, from his own contacts only. Returns 1 the squad's target when he
@@ -89,7 +89,7 @@ bool UBattleLeaderRuntime::SoldierWatchDirection(int32 ID,int32 TargetID,const F
 bool UBattleLeaderRuntime::WalkLookDirection(int32 ID,int32 TargetID,const FVector& Pos,const FVector& Way,double Now,FVector& Out)
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);if(!U)return false;
- const int32 Mode=WalkLookMode(U->Team);if(!Mode)return false;
+ const int32 LookMode=WalkLookMode(U->Team);if(!LookMode)return false;
  // As the watch: not before his first perception scan (match start or a load).
  if(!GetWorld()->GetSubsystem<UBattlePerception>()->LastScanTimes.Contains(ID))return false;
  const auto* S=Store->FindSquad(U->SquadID);const FVector Ahead=Way.GetSafeNormal2D();if(!S || Ahead.IsNearlyZero())return false;
@@ -101,7 +101,7 @@ bool UBattleLeaderRuntime::WalkLookDirection(int32 ID,int32 TargetID,const FVect
  // An enemy he knows of within his sight comes first (the squad's target, one he sees, one reported): he looks there, sees it
  // and can fire on the move. =2: the members who look ahead keep looking ahead, where the squad is walking into.
  static const TCHAR* const Keys[]={nullptr,TEXT("walk_look_target_frames"),TEXT("walk_look_seen_frames"),TEXT("walk_look_contact_frames")};
- if(Mode<2 || Offset!=0.f) if(const int32 Kind=KnownEnemyDirection(ID,TargetID,Pos,Now,Out,U->Perception.SightRange)){Diag.Cover(Keys[Kind]);return true;}
+ if(LookMode<2 || Offset!=0.f) if(const int32 Kind=KnownEnemyDirection(ID,TargetID,Pos,Now,Out,U->Perception.SightRange)){Diag.Cover(Keys[Kind]);return true;}
  Out=Ahead.RotateAngleAxis(Offset,FVector::UpVector);
  Diag.Cover(Offset==0.f?TEXT("walk_look_ahead_frames"):TEXT("walk_look_side_frames"));
  return true;
