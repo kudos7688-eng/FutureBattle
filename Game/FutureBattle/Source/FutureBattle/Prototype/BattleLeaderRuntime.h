@@ -457,6 +457,11 @@ public:
  // Stances (BattleStance.h; map E default). Runtime only: 0 stand, 1 crouch, 2 prone, and the earliest time each may change again.
  TMap<int32,uint8> Stances;
  TMap<int32,double> StanceLockedUntil;
+ // Trial -BattleStanceMove=2: until when a soldier on the move stays crouched after his last threat (LowMoveHoldSeconds).
+ // Crouching lowers his eye: behind a low wall he lost the enemy, stood up, saw him again and crouched again (in a map E match
+ // about 25,000 changes each way); the hold keeps him low through that.
+ TMap<int32,double> LowMoveUntil;
+ static constexpr double LowMoveHoldSeconds=3.;
  uint8 StanceOf(int32 ID) const {const uint8* Found=Stances.Find(ID);return Found?*Found:0;}
  // bOnTheMove: he walks off as the stance changes; a near follower's transition clip is then played within
  // BattleBodyAnim::MovingTransitionSeconds (a leader's body hurries its own from its velocity, ABattleUnit::UpdateBodyAnim).
@@ -596,7 +601,8 @@ public:
  // roof or upper floor (a static obstacle 1.2-8 m above the slot: inside houses and sheds, by windows) before the ones outside.
  // Counts arrival_indoor_*.
  static bool CoverIndoorEnabled();
- // Trial -BattleAttackFocus=1 (2026-11-22, default 0; user idea 11-22: an attack order toward an enemy squad or sector, and cover
+ // -BattleAttackFocus (2026-11-22, default 1 by user decision after s25 on map I: hits in the open -16..-20%, shooter outside the
+ // view -16..-40%; =0 for the old rules; user idea 11-22: an attack order toward an enemy squad or sector, and cover
  // against that direction - stage 1+2, the sector AI picks the focus itself): a sector squad keeps a focus point, the enemies its
  // team sees now (RouteKnownEnemies: own sightings and scout reports, no hidden state) in the destination sector and its 8
  // neighbours - the sector with the most of them (ties: nearer to the destination), their mean position; else the known enemy
@@ -619,6 +625,9 @@ public:
  static bool SectorSymmetricEnabled();
  // -BattleSectorSymmetric: -1 for the east team (its frame turned 180 degrees), else 1.
  int32 SectorTurn(int32 Team) const;
+ // -BattleSectorSymmetric: the sector of a point as the team reads it - for the east team the sector of the point turned 180
+ // degrees, turned back (a point on a sector border then falls on the same side for both teams). Else BattleSectors::Cell.
+ FIntPoint SectorCellFor(int32 Team,const FVector& At) const;
  // -BattleAttackFocus: each team's current sightings (RouteKnownEnemies), refreshed at most once a second.
  TArray<FVector> FocusEnemies[2];double FocusEnemiesAt[2]={-1.,-1.};
  bool PickAttackFocus(const struct FBattleSquadState& S,double Now,FVector& Out,const TCHAR*& Source);

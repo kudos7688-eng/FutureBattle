@@ -490,7 +490,7 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
  CancelCoverAction(ID);ClearSoldierOrder(ID,TEXT("died"));
  VehicleIDs.Remove(ID); // a destroyed vehicle is a wreck: no armour or spotting rules
  // Stances are for the living: restore the normal body shape before the death pose is applied.
- SetStance(ID,BattleStance::Stand,GetWorld()->GetTimeSeconds(),true);Stances.Remove(ID);StanceLockedUntil.Remove(ID);NoCoverProneUntil.Remove(ID);CoverProbeFailedAt.Remove(ID);
+ SetStance(ID,BattleStance::Stand,GetWorld()->GetTimeSeconds(),true);Stances.Remove(ID);StanceLockedUntil.Remove(ID);LowMoveUntil.Remove(ID);NoCoverProneUntil.Remove(ID);CoverProbeFailedAt.Remove(ID);
  if(Phase3 && Phase3->bEnabled) Phase3->OnDeath(ID);
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U) return;
  // War score trial: every loss (shot or stopped by the leader's death) scores for the other team.
@@ -821,8 +821,12 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    if(bArea && !VehicleNav && P.Path.Num()>1 && BattleTactics::SymmetricStart(GetWorld()) && GetWorld()->GetSubsystem<UBattleMatch>()->AreaHome(S->Team).X>0)
    {
     FNavLocation MirrorFrom,MirrorTo;
-    if(Nav->ProjectPointToNavigation(FVector(-From.Location.X,-From.Location.Y,From.Location.Z),MirrorFrom,FVector(100,100,300)) && Nav->ProjectPointToNavigation(FVector(-To.Location.X,-To.Location.Y,To.Location.Z),MirrorTo,FVector(100,100,300)))
-     if(auto* West=Nav->FindPathToLocationSynchronously(GetWorld(),MirrorFrom.Location,MirrorTo.Location);West && West->IsValid() && !West->IsPartial() && West->PathPoints.Num()>1)
+    // Evaluation: an east path that keeps its own route (path_mirror_skipped_*).
+    if(!Nav->ProjectPointToNavigation(FVector(-From.Location.X,-From.Location.Y,From.Location.Z),MirrorFrom,FVector(100,100,300)) || !Nav->ProjectPointToNavigation(FVector(-To.Location.X,-To.Location.Y,To.Location.Z),MirrorTo,FVector(100,100,300)))
+     SightExperiment.Cover(TEXT("path_mirror_skipped_project"));
+    else if(auto* West=Nav->FindPathToLocationSynchronously(GetWorld(),MirrorFrom.Location,MirrorTo.Location);!(West && West->IsValid() && !West->IsPartial() && West->PathPoints.Num()>1))
+     SightExperiment.Cover(TEXT("path_mirror_skipped_west_path"));
+    else
      {
       TArray<FVector> Image;bool bOnMesh=true;
       for(const FVector& Q:West->PathPoints)
@@ -1652,6 +1656,12 @@ bool UBattleLeaderRuntime::SectorSymmetricEnabled()
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSymmetric="),V);return V!=0;}();
  return bOn;
 }
+FIntPoint UBattleLeaderRuntime::SectorCellFor(int32 Team,const FVector& At) const
+{
+ if(SectorTurn(Team)>0)return BattleSectors::Cell(At);
+ const FIntPoint Turned=BattleSectors::Cell(FVector(-At.X,-At.Y,At.Z));
+ return FIntPoint(BattleSectors::Columns-1-Turned.X,BattleSectors::Rows-1-Turned.Y);
+}
 int32 UBattleLeaderRuntime::SectorTurn(int32 Team) const
 {
  if(!SectorSymmetricEnabled() || (Team!=0 && Team!=1))return 1;
@@ -1660,7 +1670,7 @@ int32 UBattleLeaderRuntime::SectorTurn(int32 Team) const
 }
 bool UBattleLeaderRuntime::AttackFocusEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAttackFocus="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleAttackFocus="),V);return V!=0;}();
  return bOn;
 }
 bool UBattleLeaderRuntime::FocusTargetEnabled()

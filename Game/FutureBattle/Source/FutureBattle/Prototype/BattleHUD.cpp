@@ -1392,7 +1392,8 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
  if(const auto* FM=GetWorld()->GetSubsystem<UBattleMatch>();FM&&FM->FrontLine[0].Num()==BattleSectors::Rows)
  {
   const FLinearColor FrontInk(1.f,.55f,.15f,.9f);const double Sign=FM->AreaHome(0).X<0?1.:-1.;
-  auto EdgeX=[&](int32 Row){return BattleSectors::Center(FM->FrontCell(0,FM->FrontLine[0][Row],Row)).X+Sign*Size*.5;};
+  // By grid row (top to bottom); FrontLine is in the team's own rows, which run the other way for the team on the high X side.
+  auto EdgeX=[&](int32 GridRow){const int32 Row=Sign>0?GridRow:BattleSectors::Rows-1-GridRow;return BattleSectors::Center(FM->FrontCell(0,FM->FrontLine[0][Row],Row)).X+Sign*Size*.5;};
   auto Thick=[&](FVector A,FVector B){FVector2D SA,SB;if(PC->ProjectWorldLocationToScreen(A,SA)&&PC->ProjectWorldLocationToScreen(B,SB)&&(OnScreen(SA)||OnScreen(SB)))DrawLine(SA.X,SA.Y,SB.X,SB.Y,FrontInk,3.f);};
   for(int32 R=0;R<BattleSectors::Rows;++R)
   {
