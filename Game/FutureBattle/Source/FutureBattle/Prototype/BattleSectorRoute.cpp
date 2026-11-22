@@ -13,13 +13,13 @@
 
 bool UBattleMatch::SectorRouteOn()
 {
-	static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorRoute="),V);return V!=0;}();
+	static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorRoute="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
 	return bOn;
 }
 
 bool UBattleMatch::SectorCoverRouteOn()
 {
-	static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorCoverRoute="),V);return V!=0;}();
+	static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorCoverRoute="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
 	return bOn;
 }
 
@@ -51,11 +51,12 @@ bool UBattleMatch::CloseInStage(int32 SID,const FVector& Leader,FVector& Stage)
 	if(!Runtime || !Runtime->CloseInThreat(SID,Threat))return false;
 	Runtime->ClearCloseIn(SID);
 	const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);if(!S)return false;
-	const FIntPoint Here=BattleSectors::Cell(Leader);const double Base=FVector::Dist2D(Leader,Threat);
+	const FIntPoint Here=Runtime->SectorCellFor(S->Team,Leader);const double Base=FVector::Dist2D(Leader,Threat); // -BattleSectorSymmetric
 	double Best=-DBL_MAX;FIntPoint Pick(-1,-1);
+	const int32 Turn=Runtime->SectorTurn(S->Team); // -BattleSectorSymmetric: the east team scans in its own frame
 	for(int32 DY=-1;DY<=1;++DY)for(int32 DX=-1;DX<=1;++DX)
 	{
-		const FIntPoint C(Here.X+DX,Here.Y+DY);
+		const FIntPoint C(Here.X+Turn*DX,Here.Y+Turn*DY);
 		if((!DX&&!DY) || !BattleSectors::Valid(C))continue;
 		const char K=BattleFieldLayout::SectorKind(GetWorld(),C);if(K=='R'||K=='M'||K=='L'||K=='F')continue;
 		if(SectorFrontOn() && (S->Team==0||S->Team==1) && SectorState[S->Team].FindRef(C)==2)continue;
@@ -81,12 +82,15 @@ bool UBattleMatch::PinnedFlankStage(int32 SID,const FVector& Leader,FVector& Sta
 	auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();FVector Threat;
 	if(!Runtime || !Runtime->PinnedThreat(SID,Threat))return false;
 	Runtime->ClearPinned(SID);
-	const FIntPoint Here=BattleSectors::Cell(Leader);
+	const auto* PinnedOf=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
+	const FIntPoint Here=Runtime->SectorCellFor(PinnedOf?PinnedOf->Team:-1,Leader); // -BattleSectorSymmetric
 	const FVector Front=(Leader-Threat).GetSafeNormal2D();const double Base=FVector::Dist2D(Leader,Threat);
 	double Best=-DBL_MAX;FIntPoint Pick(-1,-1);
+	const auto* PinnedSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
+	const int32 Turn=Runtime->SectorTurn(PinnedSquad?PinnedSquad->Team:-1); // -BattleSectorSymmetric
 	for(int32 DY=-1;DY<=1;++DY)for(int32 DX=-1;DX<=1;++DX)
 	{
-		const FIntPoint C(Here.X+DX,Here.Y+DY);
+		const FIntPoint C(Here.X+Turn*DX,Here.Y+Turn*DY);
 		if((!DX&&!DY) || !BattleSectors::Valid(C) || BattleSectors::Impassable(BattleFieldLayout::SectorKind(GetWorld(),C)))continue;
 		const FVector P=BattleSectors::Center(C),V=P-Threat;const double D=FVector::Dist2D(P,Threat);
 		if(D<Base-BattleSectors::Size || D>Base+BattleSectors::Size*.5)continue; // not much closer, not falling back
@@ -117,13 +121,13 @@ int32 UBattleMatch::SectorCoverCount(FIntPoint Cell) const
 
 bool UBattleMatch::SectorFlankOn()
 {
-	static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorFlank="),V);return V!=0;}();
+	static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorFlank="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
 	return bOn;
 }
 
 bool UBattleMatch::SectorFrontOn()
 {
-	static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorFront="),V);return V!=0;}();
+	static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorFront="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)
 	return bOn;
 }
 
@@ -161,7 +165,10 @@ void UBattleMatch::UpdateSectorFront(int32 Team,const TArray<FVector>& KnownEnem
 
 bool UBattleMatch::SectorStage(const FBattleSquadState& S,const FVector& Leader,const FVector& Step,const FVector& Goal,const TArray<FVector>& KnownEnemies,FVector& Stage) const
 {
-	const FIntPoint Here=BattleSectors::Cell(Leader),StepCell=BattleSectors::Cell(Step),GoalCell=BattleSectors::Cell(Goal);
+	// -BattleSectorSymmetric: the sectors as the team reads them (a junction on a sector border falls on the same side for both teams).
+	const auto* CellRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+	auto TeamCell=[&](const FVector& At){return CellRuntime?CellRuntime->SectorCellFor(S.Team,At):BattleSectors::Cell(At);};
+	const FIntPoint Here=TeamCell(Leader),StepCell=TeamCell(Step),GoalCell=TeamCell(Goal);
 	if(!BattleSectors::Valid(StepCell))return false;
 	const double Remaining=FVector::Dist2D(Leader,Goal);
 	// Trial -BattleSectorFlank=1: enemies this team knows of within 200 m of the goal. Their front is taken to face the squad
@@ -183,9 +190,14 @@ bool UBattleMatch::SectorStage(const FBattleSquadState& S,const FVector& Leader,
 		{Stage=BattleSectors::Center(Current);return true;}
 	}
 	double Best=-DBL_MAX;bool bFound=false;
+	TArray<double,TInlineAllocator<9>> Scores; // evaluation: ties at the best score (BATTLE_SECTOR_STAGE_PICK)
+	// -BattleSectorSymmetric: the east team scans in its own frame (turned 180 degrees), so ties between the two sectors beside
+	// the line to a goal at a sector centre fall the same way for both teams.
+	const auto* SymRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+	const int32 Turn=SymRuntime?SymRuntime->SectorTurn(S.Team):1;
 	for(int32 DY=-1;DY<=1;++DY)for(int32 DX=-1;DX<=1;++DX)
 	{
-		const FIntPoint C(StepCell.X+DX,StepCell.Y+DY);
+		const FIntPoint C(StepCell.X+Turn*DX,StepCell.Y+Turn*DY);
 		if(!BattleSectors::Valid(C) || C==Here || BattleSectors::Impassable(BattleFieldLayout::SectorKind(GetWorld(),C)))continue; // no stop in the river (the kind of the map's own sector table)
 		if(bFinal && C==GoalCell)continue; // the flank stop comes first
 		// -BattleSectorFront: no stop inside an enemy sector short of the goal; the last stop before one is a front sector.
@@ -210,9 +222,18 @@ bool UBattleMatch::SectorStage(const FBattleSquadState& S,const FVector& Leader,
 			const double Side=FMath::Abs(Front.X*V.Y-Front.Y*V.X)/BattleSectors::Size,Ahead=FVector::DotProduct(Front,V)/BattleSectors::Size;
 			StageScore+=12.*FMath::Min(Side,3.)-(Ahead>0 && Side<1.?30.:0.);
 		}
+		Scores.Add(StageScore);
 		if(StageScore>Best){Best=StageScore;Stage=P;bFound=true;}
 	}
 	if(bFound)GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(Near?TEXT("SectorFlankStage"):TEXT("SectorRouteStage"));
+	// Evaluation: a new stop (not the one the squad already marches to), with how many candidates tied with it.
+	if(bFound && (!S.bSectorMission || BattleSectors::Cell(S.MissionDestination)!=BattleSectors::Cell(Stage)))
+	{
+		int32 Ties=0;for(const double V:Scores)Ties+=V>=Best-.01;
+		const FIntPoint StageCell=BattleSectors::Cell(Stage);
+		UE_LOG(LogTemp,Display,TEXT("BATTLE_SECTOR_STAGE_PICK t=%.1f team=%d squad=%d here=%d,%d step=%d,%d stage=%d,%d goal=%d,%d best=%.2f ties=%d near=%d"),
+			GetWorld()->GetTimeSeconds(),S.Team,S.SquadID,Here.X,Here.Y,StepCell.X,StepCell.Y,StageCell.X,StageCell.Y,GoalCell.X,GoalCell.Y,Best,Ties,Near);
+	}
 	if(bFound && bFrontOn && SectorFrontCells[S.Team].Contains(BattleSectors::Cell(Stage)))GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("SectorFrontStage"));
 	return bFound;
 }

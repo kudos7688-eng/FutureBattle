@@ -91,7 +91,11 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  for(const auto& C:O.Contacts) if(FVector::Dist2D(Here,C.Value.LastKnownPosition)<=T->EffectiveWeaponRange()) { ++Threats; Visible|=C.Value.bVisible && !C.Value.bShared; }
  const float FullHP=FMath::Max(1.f,O.FullHealth(T->Health));
  const bool Depleted=O.Armed==0 || O.Living<=S->Members.Num()*T->SquadRetreatLivingRatio || O.Health/FullHP<T->SquadRetreatHealthRatio;
- const bool Emergency=Threats>0 && (Depleted || O.RecentDamage>=T->Health*S->Members.Num()*T->SquadRetreatDamageRatio || Threats>FMath::Max(3.f,O.Armed*BattleSquadType::ScoreCount(S->SquadType)*T->SquadRetreatThreatRatio));
+ // Trial -BattleArtilleryRaidSneak: a raid on its way does not fall back only because it sees many enemies (it is meant to pass them;
+ // measured raids looped retreat/regroup every 3 s at the front); ammo, losses, health and heavy recent damage still make it fall back.
+ const auto* RaidSneakMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+ const bool bRaidSneak=RaidSneakMatch && RaidSneakMatch->RaidSneaking(SID);
+ const bool Emergency=Threats>0 && (Depleted || O.RecentDamage>=T->Health*S->Members.Num()*T->SquadRetreatDamageRatio || (!bRaidSneak && Threats>FMath::Max(3.f,O.Armed*BattleSquadType::ScoreCount(S->SquadType)*T->SquadRetreatThreatRatio)));
  const FString Cause=O.Armed==0?TEXT("AMMO EXHAUSTED"):
   O.Living<=S->Members.Num()*T->SquadRetreatLivingRatio?FString::Printf(TEXT("MEMBERS %d/%d"),O.Living,S->Members.Num()):
   O.Health/FullHP<T->SquadRetreatHealthRatio?FString::Printf(TEXT("HEALTH %.0f%%"),O.Health/FullHP*100):
@@ -211,6 +215,12 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  }
  if(P.Action==EBattleSquadTactic::Regroup || P.Action==EBattleSquadTactic::Recover)
  {
+  // Trial -BattleArtilleryRaidSneak: a regrouping raid goes straight back to its raid when nothing forces it back (exo: shield up again).
+  if(bRaidSneak && P.Action==EBattleSquadTactic::Regroup && !Emergency && O.Armed>0 && P.Age>=2.f && (!bExo || ShieldRatio>=T->ExoResumeShield))
+  {
+   const auto RaidOrder=S->MissionOrder; const FVector RaidGoal=S->MissionDestination;
+   if(Runtime->IssueOrder(SID,RaidOrder,RaidGoal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("RAID / RESUME MISSION"));Runtime->IssueOrder(SID,RaidOrder,RaidGoal,true);Event(TEXT("RaidResume"));return;}
+  }
   if(Threats && P.RetrySeconds<=0 && (Emergency || P.Action==EBattleSquadTactic::Regroup)) { Retreat(); return; }
   // Armour AI: a vehicle resumes above its repair threshold (below it, it drives home; between that and 60% it used to wait forever).
   const float ResumeHealth=(S->SquadType==BattleSquadType::Exo||(bVehicle&&BattleTactics::ArmourAI(S->Team)))?FMath::Min(.6f,GetDefault<UBattleTuning>()->VehicleRepairRatio):.6f;
@@ -262,7 +272,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  {
   // A moving surprise group (trial -BattleSurpriseGroup=1) goes back to its move as soon as it may (Codex review 2026-11-21: holding at
   // every seen enemy stopped the whole group, the leading armour too).
-  const bool bSneak=Match->SurpriseMoving(SID);
+  const bool bSneak=Match->SurpriseMoving(SID)||Match->RaidSneaking(SID);
   if((P.SafeSeconds>=4 || bSneak) && P.Age>=3)
   {
    const auto Order=S->MissionOrder; const FVector Goal=S->MissionDestination;
@@ -270,5 +280,5 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   }
   return;
  }
- if(Visible && O.Armed>0 && !Match->SurpriseMoving(SID)) Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("KNOWN ENEMY / HOLD FIRING POSITION"));
+ if(Visible && O.Armed>0 && !Match->SurpriseMoving(SID) && !Match->RaidSneaking(SID)) Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("KNOWN ENEMY / HOLD FIRING POSITION"));
 }

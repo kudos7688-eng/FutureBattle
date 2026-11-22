@@ -135,6 +135,9 @@ struct FBattleLeaderPlan
  double PinnedSince=0,PinnedBestDist=0;bool bPinned=false;FVector PinnedAt=FVector::ZeroVector;
  // Trial -BattleArrivalThreat=1: the direction the arrival places were chosen against (zero = the direction of advance).
  FVector ArrivalFacing=FVector::ZeroVector;double FacingCheckAt=0;
+ // Trial -BattleAttackFocus=1: the point this sector squad defends toward (from its team's sightings, re-picked every 3 s) and
+ // the direction its current arrival places were chosen against (from the destination; zero = not chosen against a focus).
+ FVector Focus=FVector::ZeroVector;bool bFocus=false;FVector FocusPlanDir=FVector::ZeroVector;double FocusCheckAt=0,FocusReplanAt=0;
  // Trial -BattleCloseIn=1: in its sector, fighting a target over 90 m away for 8 s while at least even (the -BattleSquadCoverCheck
  // count) = too far (the AI order loop then moves the squad one sector closer, UBattleMatch::CloseInStage).
  double FarSince=0,FarCheckAt=0;bool bCloseIn=false;FVector CloseInAt=FVector::ZeroVector;
@@ -208,6 +211,9 @@ public:
  // Exoskeleton second weapon (BattleExo.cpp): picks a target among what the soldier sees itself and fires an anti-tank round.
  void StepExoLaunchers(double Now);
  bool FireExoLauncher(int32 ID,const FVector& Aim,double Now);
+ // Display only: the launcher in hand through its recoil and reload clips (BattleExo.cpp); returns their length (0 without them:
+ // the launcher shows half a second as before).
+ float PlayExoLauncherAction(int32 ID,double Now);
  double ExoNextPick=0;int64 ExoLauncherShots=0,ExoLauncherHits=0;
  // Look: armour parts on a rig that follows the chest and keeps the body's heading, the launcher tube, and a shield bubble shown while shield points are left.
  // bSuit: the AC01 suit (ApplyExoSuit: own body, clips and weapon models) instead of the placeholder plates.
@@ -396,11 +402,12 @@ public:
  void AuditFollowerPoses(double Now);
  // Every frame: a near follower that fired within BattleBodyAnim::ReadySeconds turns his mesh (whole-body clip, no upper layer)
  // so the rifle in his hand points along his last shot: across (B.MuzzleYaw, at most MaxFollowerMuzzleYaw) to his facing, and
- // up or down (B.MuzzlePitch, at most MaxFollowerMuzzlePitch) to the shot's pitch, the body tilting about the capsule centre
- // (the hips) with its feet kept at their height (at 15 degrees a toe or heel 30 cm off the centre moves about 8 cm). Both ease back to 0 when he stops firing. Not in cover (the cover clips turn the mesh themselves), not prone,
+ // up or down (B.MuzzlePitch, at most MaxFollowerMuzzlePitch) to the shot's pitch, the upper body bending about spine_01
+ // (UBattleVATSkeletalMeshComponent::SpinePitch; the legs and feet keep the clip's pose). Both ease back to 0 when he stops
+ // firing. Not in cover (the cover clips turn the mesh themselves), not prone,
  // not reloading or running. Followers keep their single-node clip (the far display and bone reductions rely on it).
  void AimFollowerRifles(double Now);
- static constexpr float MaxFollowerMuzzleYaw=45.f,MaxFollowerMuzzlePitch=15.f;
+ static constexpr float MaxFollowerMuzzleYaw=45.f,MaxFollowerMuzzlePitch=20.f;
  TMap<int32,FVector> FollowerAims; // a follower's last shot direction (Fire), for AimFollowerRifles
  // Corpse removal (BattleCorpses.cpp; display only, runtime only). -BattleCorpseLifetime=S (default 20; 0 = bodies stay):
  // S seconds after death a body sinks into the ground for 1.5 s and is then hidden. The unit record, its position and
@@ -441,15 +448,30 @@ public:
  // Stances (BattleStance.h; map E default). Runtime only: 0 stand, 1 crouch, 2 prone, and the earliest time each may change again.
  TMap<int32,uint8> Stances;
  TMap<int32,double> StanceLockedUntil;
+ // Trial -BattleStanceMove=2: until when a soldier on the move stays crouched after his last threat (LowMoveHoldSeconds).
+ // Crouching lowers his eye: behind a low wall he lost the enemy, stood up, saw him again and crouched again (in a map E match
+ // about 25,000 changes each way); the hold keeps him low through that.
+ TMap<int32,double> LowMoveUntil;
+ static constexpr double LowMoveHoldSeconds=3.;
  uint8 StanceOf(int32 ID) const {const uint8* Found=Stances.Find(ID);return Found?*Found:0;}
- bool SetStance(int32 ID,uint8 Stance,double Now,bool bForce=false);
+ // bOnTheMove: he walks off as the stance changes; a near follower's transition clip is then played within
+ // BattleBodyAnim::MovingTransitionSeconds (a leader's body hurries its own from its velocity, ABattleUnit::UpdateBodyAnim).
+ bool SetStance(int32 ID,uint8 Stance,double Now,bool bForce=false,bool bOnTheMove=false);
  // Follower clip for pose 0 idle / 1 walk / 2 reload; with -BattleStanceAnim=1 a crouched follower gets the crouch clip.
  class UAnimSequence* FollowerClip(int32 ID,int32 Pose) const;
  // Drops a follower's rifle turn and tilt (AimFollowerRifles) and puts his mesh back in its plain place: at death and when
  // the far display takes the body (it keeps the mesh's transform for the far body and a returning corpse).
  void ClearFollowerRifleTurn(int32 ID);
  void RefreshFollowerPose(int32 ID);
- void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight);
+ // Plays FollowerClip on a near follower's mesh (a crouched or prone walk at the rate its steps match his walking speed).
+ void PlayFollowerClip(int32 ID,int32 Pose);
+ // A stance transition still playing on a near follower ends now (his pose's loop at its own rate): the far display keeps the
+ // clip's rate and time when it takes the body, and the transition's hurried rate carried into the far walk and back.
+ void EndFollowerTransition(int32 ID);
+ // He sees an enemy himself now (his own visible contacts, not ones shared by others).
+ bool SeesEnemy(int32 ID) const;
+ // bThreat: he is under fire or sees an enemy now (his own state and sight), for -BattleStanceMove=2.
+ void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight,bool bThreat=false);
  // Concealment (hedges tagged BattleConcealment in the map): blocks sight but shots ignore it. Collected once per world.
  TArray<AActor*> ConcealmentActors;
  bool bConcealmentBuilt=false;
@@ -520,6 +542,14 @@ public:
  // flanking or aiming indirect fire) faces where the shot came from, so his forward field of view can find the shooter. Movement keeps
  // its own steering (only the facing changes). Counts hit_face_turned.
  static bool HitFaceEnabled();
+ // -BattleSoldierWatch (default 1, user decision 2026-11-22; =0 turns it off; -BattleSoldierWatchTeam=0/1 for one team): a soldier standing still with
+ // nothing to fire at (not in a cover action, not a vehicle, not under direct control) faces the squad's target when he knows
+ // where it is, else the nearest enemy he sees, else the nearest he knows of (memory and reports still held; both within his
+ // weapon's reach), else his share of the ground ahead (toward the enemy's home, or 70 degrees to either side by his place in the
+ // squad). Not before his first perception scan (match start or a load). Sight has a 120-degree forward field of view.
+ // BattleSoldierWatch.cpp; counts watch_{target,seen,contact,sector}_frames.
+ static bool SoldierWatchEnabled(int32 Team);
+ bool SoldierWatchDirection(int32 ID,int32 TargetID,const FVector& Pos,double Now,FVector& Out);
  void RevealShooter(int32 VictimID,int32 ShooterID,const FVector& From);
  // Evaluation only (sight diagnostics on, behaviour unchanged, 2026-11-21): a hit soldier who does not see his shooter. Why each of the
  // two lines (victim->shooter, shooter->victim) fails, using the same checks as CanSee (range, field of view, first blocking hit).
@@ -548,6 +578,36 @@ public:
  // roof or upper floor (a static obstacle 1.2-8 m above the slot: inside houses and sheds, by windows) before the ones outside.
  // Counts arrival_indoor_*.
  static bool CoverIndoorEnabled();
+ // -BattleAttackFocus (2026-11-22, default 1 by user decision after s25 on map I: hits in the open -16..-20%, shooter outside the
+ // view -16..-40%; =0 for the old rules; user idea 11-22: an attack order toward an enemy squad or sector, and cover
+ // against that direction - stage 1+2, the sector AI picks the focus itself): a sector squad keeps a focus point, the enemies its
+ // team sees now (RouteKnownEnemies: own sightings and scout reports, no hidden state) in the destination sector and its 8
+ // neighbours - the sector with the most of them (ties: nearer to the destination), their mean position; else the known enemy
+ // nearest to the destination within 200 m; else none (the old rules). Re-picked every 3 s. Its arrival cover slots need an
+ // obstacle within 2.5 m toward the focus or 30 degrees either side (instead of straight ahead along the way in, or the
+ // -BattleArrivalThreat direction, whose re-facing it replaces), a still soldier with nothing to fire at watches the focus
+ // (members fanned 0/-20/+20/-40/+40 degrees), and in its sector the squad re-plans its arrival places when the focus turns more
+ // than 45 degrees from the direction they were chosen against (or appears after they were chosen without one; at most every
+ // 10 s). Counts attack_focus_*, arrival_focus_facing, focus_facing_frames.
+ static bool AttackFocusEnabled();
+ // Trial -BattleFocusTarget=1 (2026-11-22, default 0; with -BattleAttackFocus): the squad's target choice counts a visible enemy
+ // more than 45 degrees off the focus (seen from the squad centre) as 1.5 times as far, so the squad fires toward its focus first
+ // and still answers a much nearer enemy elsewhere. Counts focus_target_in_cone / focus_target_off_cone.
+ static bool FocusTargetEnabled();
+ // -BattleSectorSymmetric (2026-11-22, default 1 since 11-22 12:00 by user decision, =0 the old way; west/east bias of the sector AI on map I, STATUS 11-22 5:00): the sector
+ // AI's choices that scan the 3x3 sectors around a squad in a fixed compass order and keep the first of equal scores (the stop
+ // beside the next junction, the pinned squad's flank stop, the close-in stop - BattleSectorRoute.cpp), and the arrival places
+ // sorted with ties by world X then Y (BuildMovementPlan, ReassignOccupiedArrival), read them in the team's own frame: the
+ // east team (AreaHome.X > 0) turned 180 degrees, so on the point-symmetric maps both teams break ties alike.
+ static bool SectorSymmetricEnabled();
+ // -BattleSectorSymmetric: -1 for the east team (its frame turned 180 degrees), else 1.
+ int32 SectorTurn(int32 Team) const;
+ // -BattleSectorSymmetric: the sector of a point as the team reads it - for the east team the sector of the point turned 180
+ // degrees, turned back (a point on a sector border then falls on the same side for both teams). Else BattleSectors::Cell.
+ FIntPoint SectorCellFor(int32 Team,const FVector& At) const;
+ // -BattleAttackFocus: each team's current sightings (RouteKnownEnemies), refreshed at most once a second.
+ TArray<FVector> FocusEnemies[2];double FocusEnemiesAt[2]={-1.,-1.};
+ bool PickAttackFocus(const struct FBattleSquadState& S,double Now,FVector& Out,const TCHAR*& Source);
  // Trial -BattleCoverStrict=1 (2026-11-20, default 0; user: "cover that does not hide from the enemy, standing in the open"):
  // a cover place counts only when the threat sees at most 2 of the 5 body samples (was 3) - for the cover actions, for the
  // arrival places of a sector squad and its places along the wall (checked against the known enemy nearest to the sector), and
@@ -651,7 +711,7 @@ private:
  UPROPERTY() TObjectPtr<class ABattleVATDisplay> VAT;
  int32 SmokeFailures=0, SmokeStage=0, QAStage=0; FVector SmokeSavedPeek=FVector::ZeroVector;
  // Body display checks of the cover smoke (muzzle along the aim while strafing; hit reaction recovery).
- float SmokeMuzzleMax=0.f, SmokeHead=0.f; int32 SmokeMuzzleFrames=0, SmokeShots=0; FQuat SmokeChest=FQuat::Identity; double SmokeHit=0.; const class UAnimSequence* SmokeHitClip=nullptr;
+ float SmokeMuzzleMax=0.f, SmokeHead=0.f; FVector SmokeDir=FVector::ZeroVector; int32 SmokeMuzzleFrames=0, SmokeShots=0; FQuat SmokeChest=FQuat::Identity; double SmokeHit=0.; const class UAnimSequence* SmokeHitClip=nullptr;
  FString QAPrefix;
  FVector SmokePosition=FVector::ZeroVector;
  TSharedPtr<FMassEntityManager> Manager;

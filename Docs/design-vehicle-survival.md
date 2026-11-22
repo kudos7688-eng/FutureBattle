@@ -71,6 +71,18 @@ Bも同じマップI・シード・共通条件で、まず省略と `-TankGunFl
 
 今回は指示に従いビルド・Editor起動・テスト・計測を実施していない。スモークには既定OFFチェックのみ追加した。生成テストはNavと地形に依存し安価な純粋チェックではないため追加しない。STATUSおよびjournalは変更していない。
 
+## 発砲位置を追う襲撃（-BattleArtilleryRaidChase）
+
+マップI、両陣営に自走砲1・外骨格1を維持し、`-BattleArtilleryPosts=1 -BattleArtilleryFlash=1 -BattleSPGRange=55000` とした計測では、外骨格の襲撃10件すべてが `reason=expired`、自走砲撃破は0だった。公開陣地を使うのは迫撃砲だけで、この試合ではAIが迫撃砲を購入せず、自走砲は `AreaArtilleryPost` で別の位置にいた。陣地30m以内の発砲だけを証拠とする条件と、移動に足りない60秒の期限が原因。
+
+`-BattleArtilleryRaidChase=1` は既定0・ArtilleryPosts有効時だけの試験。各陣営の `FireReveals` から `bArtillery` かつ報告のMemory内の最新発砲を取り込み、陣地からの距離に関係なく報告位置を記憶する。同時刻は射手IDの小さい順。敵の実体や真位置は読まず、30mの報告誤差もそのまま使う。一度取り込んだ報告は元の発砲時刻から120秒未満まで襲撃目標にでき、再読では時刻を延ばさない。疑わしい陣地がなくても出発し、活動中はより新しい発砲へ目標を更新する。有効な発砲記憶がなければ疑わしい陣地へ戻る。候補条件・外骨格優先／次に装甲車・同距離の小隊ID順は従来どおりで、距離だけを襲撃目標まで測る。命令はAttackMove、群・道路・区画命令からの除外も維持する。
+
+最後の発砲／対象陣地の証拠から120秒で `expired`。隊長が目標の水平2500cm以内に到着し、新しい発砲なしで20秒滞在すると `cleared`。新しい発砲や範囲外への移動で到着待機をやり直す。確認済みの同じ証拠だけで直ちに再出発しないよう、cleared時の証拠時刻を保持する。inactive／losses／manual／purposeは維持。開始ログには `target=<compact vector> source=flash|post`、新しい発砲への追従には `BATTLE_ARTILLERY_RAID_RETARGET team=.. squad=.. target=..` を追加する（試験ON時のみ）。
+
+保存フィールド・形式は変更しない。発砲記憶、目標、証拠時刻、到着時刻、確認済み時刻は一時状態で、ArtilleryRaidsと同じ初期化／復元経路で消す。復元後は既存どおり陣地候補と観測から再構築し、新しい発砲を知るまでは陣地経路を使う（疑いがなければ出発しない）。OFF時は従来の60秒判定・目標・候補順・ログを維持し、乱数・Nav・視線トレースは追加しない。BattleAreaSmokeの隣接箇所はスイッチのログ一覧ではなく既定値検査なので変更しない。
+
+評価は同じマップI・両軍の維持条件・射程・seed群で、`Test-WideSight.ps1 -ArtilleryPosts 1 -ArtilleryFlash 1 -SPGRange 55000 -ArtilleryRaidChase 0/1` を比較する（Chase引数は-1で省略、既定-1）。襲撃開始・追従・終了理由、到着までの時間、発砲位置との距離、自走砲撃破・砲撃数、襲撃側損失と両軍得点を記録する。既定試合とPosts=1試合の双方で省略／明示OFF／変更前の結果とログの一致、陣地外発砲だけの出発、同時刻の決定性、20秒／120秒境界、新しい発砲による待機再開、陣地へのフォールバック、保存復元を確認する。測定機情報は開始前に取得しmanifestへ保存する。今回のビルド・Editor起動・テスト・計測は禁止指示により未実施。
+
 ## 観測に基づく装甲判断（-BattleObservedArmour）
 
 2026-11-21実装、実行未検証。`-BattleObservedArmour=1` は両陣営共通の試験で既定0。`BattleTactics::ObservedArmour()` がコマンドラインを一度だけ読み取る。他のAI切替を強制ONにしない。
@@ -90,3 +102,27 @@ OFFでは従来の分類・残弾／生存照会・VehicleIDs条件・照準式�
 ## 観測に基づく戦術判断（-BattleObservedTactics）
 
 既定OFFの共通試験切替でO04・O05・O07・O08・O09・O11を修正する。仕様、OFF互換性、保存と負荷の制限は [観測に基づく戦術判断](design-observation.md) を参照。
+
+## 襲撃が前線を抜ける（-BattleArtilleryRaidSneak）
+
+追う襲撃（`-BattleArtilleryRaidChase=1`）の最初の評価（2026-11-22 2時30分、マップI 30FPS、seed7・19、両軍に自走砲1・外骨格1、陣地・発砲・射程55000・費用45）では、襲撃の外骨格は発砲を追って目標を110回ほど取り直したが、自走砲の撃破は0のままだった。外骨格の小隊は x≈-7000（中央の手前）で `ENGAGE / FLANK / SUPPORT` を繰り返し、盾が落ちると `RETREAT` して本拠地の補給へ戻っていた。攻撃前進（AttackMove）は途中の敵すべてと撃ち合うため、前線を抜けられない。
+
+`-BattleArtilleryRaidSneak=<m>`（既定0＝今のまま、0〜500）は、襲撃の小隊の隊長が目標からこの距離より遠い間（`UBattleMatch::RaidSneaking`）、次の3つをする。近づいたら攻撃前進に戻る。`-BattleArtilleryPosts=1` のときだけ働く。
+- 命令を移動（Move）にする（遮蔽の行動もしない、`BattleCoverAction.cpp`）。
+- 小隊の戦術（ST2）が、敵が見えても「その場で撃ち合う（Hold）」に切り替えない。交戦中なら3秒で任務に戻る。奇襲の群の移動（`SurpriseMoving`）と同じ扱い（`BattleSquadRetreat.cpp`）。命令を移動にするだけでは、ST2 は命令の種類を見ずに Hold へ切り替えるので効かない（自己レビューで確認）。
+- 部隊間の連携（`BattleTeamAI.cpp` の `Managed`）が、回り込み・援護に使わない。実行中の回り込み・援護は解かれる。
+盾が落ちたときの後退（`SHIELD DOWN / BREAK CONTACT`）と補給への帰還は残す。
+
+2026-11-22 5時30分の評価（マップI 30FPS、Sneak 0/80、2 seed）では、Sneak 80 で自走砲の発射と撃破が半分以下になったが、自走砲は撃破されなかった。襲撃の外骨格の小隊は中央の手前（x≈-8000〜-11000）で、約3秒ごとに `RETREAT reason=CONTACTS 11〜26 / ARMED 1` と `REGROUP` を繰り返していた。見えている敵の数が「撃てる兵×得点の人数×比」を超えると緊急の後退になり、集合中に敵が見えるとまた後退する（`BattleSquadRetreat.cpp`）。外骨格は1人で敵の群れを抜ける役なので、数だけの判定では必ず後退する。そこで、襲撃の途中（`RaidSneaking`）だけ、次の2つを足した。
+- 敵の数だけによる緊急の後退をしない。弾切れ・兵の減少・体力の低下・直近の大きな被害による後退は残す。
+- 集合中で緊急でなく、弾があり（外骨格は盾が戻ったら）、2秒たったら、すぐ襲撃の任務に戻る（`RAID / RESUME MISSION`）。
+
+あわせて `-BattleArtilleryRaidChase` の目標の取り直しを絞った：発砲の報告には最大30mの誤差があり、同じ場所から撃つ砲でも数秒ごとに目標が動いて命令が出し直され、経路を作り直していた（命令は目標が20cm動けば出し直される）。新しい発砲が今の目標から50m以内で、隊長がまだ目標に着いていなければ、目標は変えずに証拠の時刻と到着の待ちだけを更新する。391042d の評価（取り直し110回前後）はこの変更の前のもの。
+
+評価：上の条件に `-ArtilleryRaidChase 1` を足し、`-ArtilleryRaidSneak 0` と `80` を30FPSで比べる。見る値は、自走砲の撃破、襲撃の終わり方（`cleared`/`expired`/`losses`）、外骨格の損失、両軍の得点。
+
+## 自走砲の構える深さ（-BattleArtilleryStandoff）
+
+AI の砲兵は、分かっている敵すべてから「射程×`ArtilleryStandoff`（設定 0.6）」以上離れ、いちばん近い敵が「射程×`ArtilleryAdvance`（0.8）」より遠ければ近づく（`UBattleMatch::AreaArtilleryPost`）。射程55000では330〜440m後ろに構え、マップI（本拠地は x=±42000）では襲撃の目標が x≈-28000〜-48000 と自軍の本拠地のすぐ前だった。射程を少し絞っても、自走砲は本拠地の近くから撃ち続け、襲撃は敵の後方の奥まで行く必要がある。
+
+`-BattleArtilleryStandoff=<0〜1>` は、この割合を起動引数で上書きする（既定は設定の値で、今のまま）。評価：`-SPGRange 55000 -ArtilleryRaidChase 1 -ArtilleryRaidSneak 80` に `-ArtilleryStandoff 0.6/0.35` を比べ、自走砲の位置（襲撃の目標の x）、自走砲の発射・撃破・被撃破、外骨格の損失を見る。

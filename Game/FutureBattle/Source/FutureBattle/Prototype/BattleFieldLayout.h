@@ -27,6 +27,8 @@ namespace BattleFieldLayout
 		// the larger income. Independent of the geometry below, so a new map can take it without being map E.
 		bool bUrban=false;
 		bool bSectors=false;
+		// 2026-11-22 (user decision, roadmap stage 1): the sector AI combination is on by default on this map (see SectorComboSwitch).
+		bool bSectorCombo=false;
 		// Kind of a sector on a map with sectors, in the letters of BattleSectors.h (R river, B bridge approach, S ford, J junction or
 		// plaza, H house, W warehouse, F field, T wood, ^ hill). Null on maps without sectors.
 		char (*SectorKind)(FIntPoint)=nullptr;
@@ -133,7 +135,7 @@ namespace BattleFieldLayout
 				FMapDef D=Urban;D.Name=TEXT("Lvl_BattleWide_I");
 				// Sector orders as on map H (the same 20 x 14 grid of 50m, the same origin): capture and hold by sector, objectives held by
 				// the whole sector. Map I's own kinds are given in the letters of BattleSectors.h.
-				D.bSectors=true;
+				D.bSectors=true;D.bSectorCombo=true;
 				D.SectorKind=[](FIntPoint C)->char
 				{
 					switch(BattleMapI::Kind(C.X,C.Y))
@@ -249,6 +251,12 @@ namespace BattleFieldLayout
 	inline bool IsExpanded(const UWorld* World) {return Of(World).bExpanded;}
 	inline bool IsUrbanMap(const FString& Map) {return ByName(Map).bUrban;}
 	inline bool IsUrban(const UWorld* World) {return Of(World).bUrban;}
+	// 2026-11-22 (user decision, roadmap stage 1): the sector AI combination -BattleSectorContact/-Route/-Flank/-Front/-MoveFire/
+	// -CoverRoute, -BattleCoverHuddle, -BattlePinnedFlank and -BattleArrivalThreat is on by default on maps with bSectorCombo
+	// (map I) and off elsewhere. The switches are read without a world, so the leader runtime records the map's default when it
+	// starts on a world (UBattleLeaderRuntime::Start). An explicit -Battle<Name>=0/1 still wins on every map.
+	inline bool& SectorComboDefault() {static bool bOn=false;return bOn;}
+	inline bool SectorComboSwitch(int32 Arg) {return Arg>=0?Arg!=0:SectorComboDefault();}
 	inline bool IsSightField(const UWorld* World) {return Of(World).Kind==EMapKind::Wide;}
 	inline bool IsLarge(const UWorld* World) {return Of(World).Kind!=EMapKind::Arena;}
 	// Objectives of the wide maps by map name (also used to validate saves). Other names get the three objectives of map A.

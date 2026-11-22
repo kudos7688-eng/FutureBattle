@@ -107,6 +107,46 @@ void ABattleVATDisplay::AdvanceFar(FBattleVATEntry& E,float Dt)
  if(!E.Dead && M && M->ShouldTickPose() && M->ShouldTickAnimation())FAnimationRuntime::AdvanceTime(true,(E.Rate*Data->Clips[E.Pose].Clip->RateScale)*Dt,E.Time,Data->Clips[E.Pose].Length);
 }
 bool UBattleVATSkeletalMeshComponent::ShouldCreateRenderState()const{return !VATFar && Super::ShouldCreateRenderState();}
+// Runs after the pose is evaluated and before the engine flips it to the shown buffer; the rifle and other socket children
+// follow afterwards (UpdateChildTransforms). Only a newly made pose is bent (bNeedToFlipSpaceBaseBuffers): a held pose
+// (skipped frame) was bent when it was made, and bending it again would add up. Single-buffered bones are not bent: on a
+// skipped frame the engine copies the unbent cached pose straight into the shown buffer (the bend would flicker).
+void UBattleVATSkeletalMeshComponent::FinalizeBoneTransform()
+{
+ if(bNeedToFlipSpaceBaseBuffers)AppliedSpinePitch=0.f;
+ if(bNeedToFlipSpaceBaseBuffers && bDoubleBufferedComponentSpaceTransforms && FMath::Abs(SpinePitch)>.01f && !VATFar && GetSkeletalMeshAsset())
+ {
+  if(BendMesh!=GetSkeletalMeshAsset())
+  {
+   BendMesh=GetSkeletalMeshAsset();
+   const FReferenceSkeleton& Ref=GetSkeletalMeshAsset()->GetRefSkeleton();
+   BendRoot=Ref.FindBoneIndex(TEXT("spine_01"));
+   BendBones.Init(false,Ref.GetNum());
+   // Parents come before their children in the reference skeleton.
+   if(BendRoot!=INDEX_NONE)
+   {
+    BendBones[BendRoot]=true;
+    for(int32 I=BendRoot+1;I<Ref.GetNum();++I){const int32 P=Ref.GetParentIndex(I);if(P!=INDEX_NONE && BendBones[P])BendBones[I]=true;}
+   }
+  }
+  TArray<FTransform>& Pose=GetEditableComponentSpaceTransforms();
+  if(BendRoot!=INDEX_NONE && Pose.IsValidIndex(BendRoot))
+  {
+   // The mesh's forward is +Y and its right is +X: a turn about +X by a positive angle raises the forward toward +Z.
+   const FQuat Bend(FVector::XAxisVector,FMath::DegreesToRadians(SpinePitch));
+   const FVector Pivot=Pose[BendRoot].GetLocation();
+   for(const FBoneIndexType I:FillComponentSpaceTransformsRequiredBones)
+    if(BendBones.IsValidIndex(I) && BendBones[I] && Pose.IsValidIndex(I))
+    {
+     FTransform& T=Pose[I];
+     T.SetLocation(Pivot+Bend.RotateVector(T.GetLocation()-Pivot));
+     T.SetRotation((Bend*T.GetRotation()).GetNormalized());
+    }
+   AppliedSpinePitch=SpinePitch;
+  }
+ }
+ Super::FinalizeBoneTransform();
+}
 void ABattleVATDisplay::Advance(int32 ID,float Dt)
 {
  auto& E=Entries.FindChecked(ID);
@@ -233,6 +273,8 @@ void ABattleVATDisplay::Enter(FBattleVATEntry& E)
  if(!AssetsReady)return;
  M->HandleExistingParallelEvaluationTask(true,true);
  auto* Node=M->GetSingleNodeInstance();if(!Node || !BattleFollowerBones::Eligible(M))return;
+ // A stance transition still playing ends first: its (hurried) rate and time are not the pose's loop the far body plays.
+ if(!Audit)Runtime->EndFollowerTransition(E.ID);
  E.Time=Node->GetCurrentTime();E.Rate=Node->GetPlayRate()*M->GlobalAnimRateScale;
  // Frame skipping (trial): the clip time is behind by the frames not yet evaluated. Catch up, then let the far display
  // advance it every frame again.

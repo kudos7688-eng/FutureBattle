@@ -2,11 +2,19 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleState.h"
 #include "BattleMatch.h"
+#include "BattleAudio.h"
+#include "BattleEffects.h"
 
 int32 UBattleLeaderRuntime::Explode(int32 ShooterID,FVector At,int32 ExcludeID,float RadiusIn,float DamageIn)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Shooter=Store->Find(ShooterID);if(!Shooter)return 0;
  const auto* T=GetDefault<UBattleTuning>();const float Radius=FMath::Max(1.f,RadiusIn>=0.f?RadiusIn:T->ATSplashRadius);const float Splash=DamageIn>=0.f?DamageIn:T->ATSplashDamage;
+ // Sound and effect only (2026-11-22): the size follows the blast radius (1 = an anti-tank round, 1.25 = a tank shell).
+ {
+  const float Size=FMath::Clamp(Radius/FMath::Max(1.f,T->ATSplashRadius),.8f,3.f);
+  BattleAudio::Explosion(GetWorld(),At,Size);
+  BattleEffects::Explosion(GetWorld(),At,Size);
+ }
  const int32 Team=Shooter->Team;const auto* ShooterSquad=Store->FindSquad(Shooter->SquadID);
  // Collect first: damage broadcasts deaths, which may change the body map.
  TArray<TPair<int32,float>> Hits;

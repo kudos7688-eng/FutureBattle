@@ -122,7 +122,7 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  // No further fallible validation after this transaction boundary.
  CoverApproaches.Reset();FirePositions.Reset();
  SuppressionZeroAt.Reset();
- Stances.Reset();StanceLockedUntil.Reset();
+ Stances.Reset();StanceLockedUntil.Reset();LowMoveUntil.Reset();
  PC->ResetMatchControl();
  const bool UseVAT=bDisplayLODEnabled;
  if(VAT)VAT->ResetBodies();
