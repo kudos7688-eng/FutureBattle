@@ -27,6 +27,8 @@ namespace BattleArms
                           // they see within 12 m, or after an assault bound one known within 30 m, and strike him (StartCharge)
  bool SmokeEnabled();     // -BattleArmsSmoke: the self-test (UBattleLeaderRuntime::RunArmsSmoke)
  bool AnyTrial();         // any of the switches above
+ bool SlideEnabled();     // -BattleArmsSlide=0 (evaluation, default 1): assault dashes neither slide along what they hit nor give up
+                          // after 2 s without getting closer (StepCoverApproach), as before 11-22 20:45. Not part of AnyTrial.
  uint8 EliteKit(int32 Slot);            // role of a slot (slots past the table are riflemen)
  uint8 GradeKit(uint8 Grade,int32 Slot); // the role of a slot in a squad of that grade (1 elite platoon, 2 sniper team)
  bool ValidGrade(uint8 SquadType,uint8 Grade); // 0 any; 1 rifle squads; 2 scout pairs

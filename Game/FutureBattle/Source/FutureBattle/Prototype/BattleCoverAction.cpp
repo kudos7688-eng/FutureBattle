@@ -394,8 +394,8 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
   }
  }
  // An assault dash gives up when it has not got StuckGain cm closer to its cover in StuckSeconds s of walking (bodies or a wall he
- // cannot slide past); StepArms starts his next bound at the earliest 12 s after this one began.
- if(!End && A->bAssault)
+ // cannot slide past); StepArms starts his next bound at the earliest 12 s after this one began. -BattleArmsSlide=0: neither.
+ if(!End && A->bAssault && BattleArms::SlideEnabled())
  {
   const double Left=FVector::Dist2D(Pos,A->Goal);const auto& Ch=BattleArms::Charge();
   if(A->Best<0.||Left<A->Best-Ch.StuckGain){A->Best=Left;A->Stuck=0.f;}
@@ -431,7 +431,7 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
   FHitResult Hit;B.Capsule->MoveComponent(Delta,B.Capsule->GetComponentQuat(),true,&Hit);
   // An assault dash slides along a body or wall it hits for the rest of the step instead of pushing into it (a walker body slides by
   // itself); hit straight on, he goes round to one side, the same side for the whole dash. Other walks keep the plain step.
-  if(auto* Dash=bDash?CoverApproaches.Find(ID):nullptr;Dash&&Hit.bBlockingHit&&!Hit.bStartPenetrating&&FMath::Abs(Hit.Normal.Z)<.7f)
+  if(auto* Dash=bDash?CoverApproaches.Find(ID):nullptr;Dash&&BattleArms::SlideEnabled()&&Hit.bBlockingHit&&!Hit.bStartPenetrating&&FMath::Abs(Hit.Normal.Z)<.7f)
   {
    const FVector Wall=FVector(Hit.Normal.X,Hit.Normal.Y,0.).GetSafeNormal(),Rest=Delta*(1.f-Hit.Time);
    FVector Along=FVector::VectorPlaneProject(Rest,Wall);
