@@ -14,6 +14,8 @@ namespace BattleMapK
 {
 	using BattleMapJ::Columns;using BattleMapJ::Rows;using BattleMapJ::Cell;using BattleMapJ::HalfX;using BattleMapJ::HalfY;
 	using BattleMapJ::Centre;using BattleMapJ::Impassable;using BattleMapJ::Hash;using BattleMapJ::Variant;
+	// Map K: a low wall beside a corner tower and two barriers in a car park (generation 1 had 3-5 cover places on one side there).
+	constexpr bool bDenseCover=true;
 	using BattleMapJ::FMirror;using BattleMapJ::Mirror;using BattleMapJ::FRoad;
 	// The letters of BattleMapJ.h: H house (enterable), B office towers, A apartment blocks, C church, K factory, U ruins, Y car park,
 	// G park, Q shops, W warehouse, P plaza, O objective plaza with a house, S home base, M mountain.
@@ -77,7 +79,9 @@ namespace BattleMapK
 		{
 			static const double Places[4][2]={{-300,400},{400,-300},{-500,-450},{350,500}};
 			static const double Sizes[3][2]={{1600,1100},{1400,1200},{1800,1000}};
-			const int32 V=Variant(C,R,12);const FVector2D O=F.Offset(Places[V%4][0],Places[V%4][1]);const FVector2D S=F.Size(Sizes[V/4][0],Sizes[V/4][1]);
+			// (11,10): its drawn place put the upper floor over the middle of the sector, and a sector order to it was refused (sector
+			// audit sa-K-r1 and r2, cells I4 and L11); the next place is used there.
+			const int32 V=Variant(C,R,12)+(C==11&&R==10?1:0);const FVector2D O=F.Offset(Places[V%4][0],Places[V%4][1]);const FVector2D S=F.Size(Sizes[(V/4)%3][0],Sizes[(V/4)%3][1]);
 			Out.X=M.X+O.X;Out.Y=M.Y+O.Y;Out.W=S.X;Out.H=S.Y;return true;
 		}
 		if(K==TEXT('O'))

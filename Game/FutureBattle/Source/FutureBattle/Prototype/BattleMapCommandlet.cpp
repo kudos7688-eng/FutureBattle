@@ -192,6 +192,37 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 #define BattleMapJ BattleMapK
 #include "BattleMapLayoutJ.inl"
 #undef BattleMapJ
+			// Sight breakers on the roads of map K (2026-11-22): with the roads open, nine shots in ten of the first matches were fired
+			// from 125-150m along a road (mk1-K-*), as on map I. At the middle of every sector edge a road passes, two parked lorries
+			// stand staggered, each closing a little more than half of the 9m between the sectors: no straight line along the road
+			// passes, a walker goes round them (4m beside each, 10m between the two). None beside a mountain or a home base.
+			{
+				WallMat=Material(TEXT("M_MapRust"),FLinearColor(.36f,.2f,.1f));
+				auto KindAt=[](double X,double Y){return BattleMapK::Kind(FMath::FloorToInt((X+BattleMapK::HalfX)/BattleMapK::Cell),FMath::FloorToInt((Y+BattleMapK::HalfY)/BattleMapK::Cell));};
+				auto Closed=[](TCHAR K){return K==TEXT('M')||K==TEXT('S')||K==TEXT(' ');};
+				int32 Breakers=0;
+				for(const BattleMapK::FRoad& Rd:BattleMapK::Roads())
+				{
+					const double Mid=(Rd.From+Rd.To)*.5,MX=Rd.bAlongX?Mid:Rd.At,MY=Rd.bAlongX?Rd.At:Mid;
+					const bool bSelf=FMath::Abs(MX)<1.&&FMath::Abs(MY)<1.;
+					// Emit places the 180-degree partner: take one road of each pair (and the positive half of the road through the middle).
+					if(!bSelf&&!(MX>1.||(FMath::Abs(MX)<1.&&MY>1.)))continue;
+					for(double P=FMath::FloorToDouble(Rd.From/5000.)*5000.+2500.;P<Rd.To;P+=5000.)
+					{
+						if(P<Rd.From||(bSelf&&P<0.))continue;
+						const double PX=Rd.bAlongX?P:Rd.At,PY=Rd.bAlongX?Rd.At:P;
+						if(Closed(KindAt(PX+(Rd.bAlongX?0.:100.),PY+(Rd.bAlongX?100.:0.)))||Closed(KindAt(PX-(Rd.bAlongX?0.:100.),PY-(Rd.bAlongX?100.:0.))))continue;
+						const double Sg=((FMath::RoundToInt(P/5000.-.5)+FMath::RoundToInt(Rd.At/5000.))&1)?1.:-1.;
+						for(int32 Half:{-1,1})
+						{
+							const double Along=P+Half*500.,Across=Rd.At-Half*Sg*200.;
+							if(Rd.bAlongX)Emit(TEXT("RoadLorry"),Along,Across,220,500,280);else Emit(TEXT("RoadLorry"),Across,Along,500,220,280);
+						}
+						++Breakers;
+					}
+				}
+				UE_LOG(LogTemp,Display,TEXT("TOWN_K_BREAKERS pairs=%d (x2 by rotation)"),Breakers);
+			}
 		}
 		else if(UrbanH)
 #include "BattleMapLayoutH.inl"
