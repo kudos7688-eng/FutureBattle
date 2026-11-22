@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（164 モジュール、41386 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（164 モジュール、41450 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -49,13 +49,13 @@
 | 射撃の散らばり | `BattleTactics::SpreadDegrees` (BattleTactics.cpp:198) 、 `BattleTactics::ShotDirection` (BattleTactics.cpp:206) | 照準の遅れは `UBattleState::UpdateAim` (BattleState.cpp:319) 。プレイヤーの直接操作だけの倍率は `ABattleUnit::PlayerSpreadScale` (BattleUnit.cpp:159) |
 | 部隊の戦術（撤退・集合・援護・迂回） | `UBattleSquadTactics::Step` (BattleSquadTactics.cpp:97) 、 `UBattleSquadTactics::Evaluate` (BattleSquadRetreat.cpp:79) 、 `UBattleSquadTactics::Apply` (BattleSquadRetreat.cpp:10) | 撤退 `UBattleSquadTactics::RetreatGoal` (BattleSquadRetreat.cpp:26) 、援護 `UBattleSquadTactics::AcceptSupport` (BattleSquadSupport.cpp:71) 、迂回 `UBattleSquadTactics::TryFlank` (BattleSquadFlank.cpp:46) |
 | 陣営全体の判断（援護・迂回の割り振り） | `UBattleTeamAI::Step` (BattleTeamAI.cpp:16) | |
-| 試合の進行・勝敗・制限時間 | `UBattleMatch::InitializeMatch` (BattleMatch.cpp:15) 、 `UBattleMatch::Update` (BattleMatch.cpp:152) 、 `UBattleMatch::Finish` (BattleMatch.cpp:552) | 拠点の占領は `UBattleMatch::UpdateObjectives` (BattleMatch.cpp:226) |
+| 試合の進行・勝敗・制限時間 | `UBattleMatch::InitializeMatch` (BattleMatch.cpp:15) 、 `UBattleMatch::Update` (BattleMatch.cpp:152) 、 `UBattleMatch::Finish` (BattleMatch.cpp:554) | 拠点の占領は `UBattleMatch::UpdateObjectives` (BattleMatch.cpp:226) |
 | 雇用（旧・固定の価格） | `UBattleMatch::HireSquad` (BattleMatch.cpp:56) 、 `UBattleMatch::CurrentSquadPrice` (BattleMatch.cpp:51) | 実体を出すのは `UBattleLeaderRuntime::SpawnPurchasedSquad` (BattleMixedRecruitment.cpp:41) |
 | エリア戦の雇用（AI が何を雇うか） | `UBattleMatch::UpdateAreaHiring` (BattleArea.cpp:128) 、 `UBattleMatch::AreaHireNeed` (BattleArea.cpp:315) 、 `UBattleMatch::HireAreaSquad` (BattleArea.cpp:85) | 調整値は `BattleTactics::AreaHire` (BattleTactics.cpp:50) |
 | エリア戦の収入・拠点 HP | `UBattleMatch::UpdateArea` (BattleArea.cpp:222) （収入の支払いもここ）、 `UBattleMatch::DamageBase` (BattleArea.cpp:66) | 調整値は `BattleTactics::AreaIncome` (BattleTactics.cpp:116) 。状態は `BattleAreaState.h` |
 | エリア戦の AI 戦略（どこを攻めるか） | `UBattleMatch::UpdateEnemyOrders` (BattleMatch.cpp:285) → `UBattleMatch::UpdateTeamOrders` (BattleMatch.cpp:373) 、 `UBattleMatch::AreaStrategyTarget` (BattleMatch.cpp:303) 、 `UBattleMatch::AreaIntent` (BattleArea.cpp:343) | 調整値は `BattleTactics::AreaStrategy` (BattleTactics.cpp:68) 。前線は `UBattleMatch::AreaFronts` (BattleArea.cpp:397) 。戦略層（試験、`Docs/design-strategy-layer.md`）の状況図は `UBattleMatch::BuildSituation` (BattleStrategy.cpp:104) 、集中先は `UBattleMatch::UpdateStrategy` (BattleStrategy.cpp:287) （ `FAreaIntent::FocusPoint` で S6 と攻撃群へ） |
 | 偵察・情報（見えていない区域の扱い） | `UBattleMatch::UpdateScoutReports` (BattleScoutReport.cpp:48) 、 `UBattleMatch::AreaIntelView` (BattleAreaIntel.cpp:20) | 偵察兵の配置は `UBattleMatch::AreaScoutPost` (BattleArea.cpp:437) 。昇格は `UBattleLeaderRuntime::PromoteScout` (BattleMixedRecruitment.cpp:118) |
-| 補給（弾薬） | `UBattleMatch::Resupply` (BattleMatch.cpp:533) 、 `BattleTactics::Supply` (BattleTactics.cpp:27) | 往復時間の記録（評価用）は `UBattleSquadTactics::SupplyTripEnd` (BattleSquadTactics.cpp:71) 。エリア戦の本拠地・味方の拠点での弾の補充は `UBattleMatch::UpdateArea` (BattleArea.cpp:222) 、直接操作中に部下から弾を受け取るのは `ABattleController::UpdatePlayerAmmo` (BattleController.cpp:909) |
+| 補給（弾薬） | `UBattleMatch::Resupply` (BattleMatch.cpp:535) 、 `BattleTactics::Supply` (BattleTactics.cpp:27) | 往復時間の記録（評価用）は `UBattleSquadTactics::SupplyTripEnd` (BattleSquadTactics.cpp:71) 。エリア戦の本拠地・味方の拠点での弾の補充は `UBattleMatch::UpdateArea` (BattleArea.cpp:222) 、直接操作中に部下から弾を受け取るのは `ABattleController::UpdatePlayerAmmo` (BattleController.cpp:909) |
 | 補充（倒れた部下の補充） | `UBattleLeaderRuntime::ReplaceFollower` (BattleMixedRecruitment.cpp:12) 、 `UBattleState::ReplaceDeadFollower` (BattleState.cpp:113) | |
 | 戦果点 | `UBattleMatch::UpdateWarScore` (BattleWarScore.cpp:52) 、 `UBattleMatch::WarScoreBreakdown` (BattleWarScore.cpp:75) | 調整値は `BattleWarScore::Tuning` (BattleWarScore.cpp:19) |
 | 支援砲撃（旧アリーナ） | `UBattleMatch::RequestSupport` (BattleSupport.cpp:8) 、 `UBattleMatch::UpdateSupport` (BattleSupport.cpp:36) | 混成には未接続 |
@@ -110,7 +110,7 @@
 | `BattleFieldReplay` | .cpp | 206 |  | 広域試験の記録と再生（UBattleSquadTrial の一部） |
 | `BattleFieldTurn` | .cpp | 168 |  | 広域試験 T2b（UBattleSquadTrial の一部） |
 | `BattleFollowerBones` | .h/.cpp | 10 + 39 | BattleFollowerBones | 霧で隠れた部下のボーン表示の切替 |
-| `BattleFrontLine` | .cpp | 937 |  | Surprise bridge waypoints: UpdateSurpriseBridge, BattleSurpriseRoute::Bridge / Intersects; fixed H/I map geometry, entrance / exit / edge goal, retained on same-time restore |
+| `BattleFrontLine` | .cpp | 994 |  | Surprise bridge waypoints: UpdateSurpriseBridge, BattleSurpriseRoute::Bridge / Intersects; fixed H/I map geometry, entrance / exit / edge goal, retained on same-time restore |
 | `BattleGameMode` | .h/.cpp | 97 + 373 | ABattleGameMode | モードの統合、起動時の組み立て、毎フレームの入口、基本回帰 |
 | `BattleGroups` | .cpp | 608 |  | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部） |
 | `BattleHUD` | .h/.cpp | 73 + 1535 | ABattleHUD | 画面表示（HUD、ミニマップ、部隊一覧、通知、命令の印） |
@@ -118,7 +118,7 @@
 | `BattleMapI` | .h | 112 | BattleMapI | マップI（区画を前提にした設計）の表：50mの区画 20×14 の種類 `Kind`、道路 `Roads`、川・橋・浅瀬の位置、家 `Houses`・丘 `Hills`、高さの表 `MakeHeights`、拠点 `Objectives`。配置は `BattleMapLayoutI.inl`（生成と共有） |
 | `BattleMapJ` | .h | 141 | BattleMapJ, FMirror | マップJ（11-22、`Docs/design-map-j-terrain.md`）の区画の表：山 `M`（通れない・見通しを遮る）・湖 `L`（通れない）と、ビル・集合住宅・教会・工場・廃墟・駐車場・公園・商店の区画。区画ごとの配置の候補と8通りの向き（`Variant`／`Mirror`）、入れる家の位置（`HouseOf`）、拠点・丘・道。配置は `BattleMapLayoutJ.inl`、生成は `BattleMapCommandlet`（`-WideField=J`、`Setup/Initialize-MapJ.ps1`） |
 | `BattleMapStats` | .cpp | 186 |  | マップの統計（区域ごとの見通し・遮蔽、経路の長さ）を JSON に書き出す。試合は行わない（UBattleLeaderRuntime の一部） |
-| `BattleMatch` | .h/.cpp | 480 + 562 | FAreaIntent, FBattleObjective, FBattleStrike, FPlayerRoute, UBattleMatch, FGroupStrength | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗 |
+| `BattleMatch` | .h/.cpp | 485 + 564 | FAreaIntent, FBattleObjective, FBattleStrike, FPlayerRoute, UBattleMatch, FGroupStrength | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗 |
 | `BattleMetrics` | .h/.cpp | 65 + 142 | FBattleMetricFrame, UBattleMetrics, FBattleScopedMetric | 計測値の記録（1フレームの時間、判断の回数） |
 | `BattleMixedBodies` | .cpp | 197 |  | 混成の兵の体の生成・破棄・復元（UBattleLeaderRuntime の一部） |
 | `BattleMixedDriver` | .h/.cpp | 50 + 341 | FBattleMixedUnit, FBattleMixedDriver, MixedNavigation | 混成の兵1人ぶんの実行（旧 AIController と同じ役を Actor なしで行う） |
