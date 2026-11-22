@@ -541,11 +541,36 @@ bool UBattleLeaderRuntime::StepCharge(int32 ID,float Dt,double Now)
  else if(!Contact)End=TEXT("arms_charge_end_lost");
  else if(A->bReached&&Now-Contact->LastSeenTime>1.)End=TEXT("arms_charge_end_done");
  else if(Now>A->Until)End=TEXT("arms_charge_end_timeout");
- if(End){SightExperiment.Cover(End);CoverApproaches.Remove(ID);return false;}
+ if(End)
+ {
+  // Evaluation: a charge that reached the enemy but never struck, and why at its last step (diagnostics only).
+  if(A->bReached&&!A->bStruck)
+  {
+   static const TCHAR* const Why[]={TEXT("arms_charge_nostrike_ready"),TEXT("arms_charge_nostrike_target_down"),TEXT("arms_charge_nostrike_unseen"),
+    TEXT("arms_charge_nostrike_floor"),TEXT("arms_charge_nostrike_far"),TEXT("arms_charge_nostrike_wall"),TEXT("arms_charge_nostrike_wait")};
+   SightExperiment.Cover(TEXT("arms_charge_nostrike"));SightExperiment.Cover(Why[FMath::Min<int32>(A->NoStrike,6)]);
+   if(SightExperiment.Enabled&&ArmsNoStrikeLogs<200)
+   {
+    ++ArmsNoStrikeLogs;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_CHARGE_NOSTRIKE unit=%d why=%d end=%s dist=%.0f known_error=%.0f slid=%d"),ID,int32(A->NoStrike),End,A->StrikeDist,
+     A->KnownErr,A->Slid);
+   }
+  }
+  SightExperiment.Cover(End);CoverApproaches.Remove(ID);return false;
+ }
  // Toward where the enemy is seen now; at arm's length he stands and strikes (StepArms) while the close weapons fire point-blank.
  // A charge from a step aside (StartCharge) walks to that place first.
  A->Goal=Contact->LastKnownPosition;
  const double D=FVector::Dist2D(Pos,A->Goal);
+ // Evaluation (no effect on play): once at the enemy's known position, what would keep the strike pass (StepArms, MeleeStrike) from
+ // striking his target now: 1 target down, 2 not seen, 3 another floor, 4 his true position out of reach, 5 a wall, 6 cooling down.
+ if((A->bReached||D<=Ch.Stop+10.)&&!A->bStruck)
+ {
+  const auto* T=Store->Find(A->Target);const bool bAlive=T&&T->IsAlive();const FVector TP=bAlive?Position(A->Target):Contact->LastKnownPosition;
+  A->StrikeDist=FVector::Dist2D(TP,Pos);A->KnownErr=FVector::Dist2D(TP,Contact->LastKnownPosition);
+  A->NoStrike=!bAlive?1:!Contact->bVisible||Contact->bShared?2:FMath::Abs(TP.Z-Pos.Z)>150.?3:A->StrikeDist>BattleArms::Melee().Reach?4:
+   GetWorld()->LineTraceTestByObjectType(Pos+FVector(0,0,40),TP+FVector(0,0,40),FCollisionObjectQueryParams(ECC_WorldStatic))?5:U->MeleeWait>0.f?6:0;
+ }
  if(D<=Ch.Stop+10.){A->bVia=false;if(!A->bReached){A->bReached=true;SightExperiment.Cover(TEXT("arms_charge_reached"));if(A->Slid)SightExperiment.Cover(TEXT("arms_charge_reached_slid"));}return true;}
  if(A->bVia&&FVector::Dist2D(Pos,A->Via)<=Ch.ViaReach){A->bVia=false;SightExperiment.Cover(TEXT("arms_charge_side_reached"));}
  const FVector To=A->bVia?A->Via:A->Goal;const double Left=A->bVia?FVector::Dist2D(Pos,A->Via):D-Ch.Stop;
@@ -723,7 +748,7 @@ bool UBattleLeaderRuntime::MeleeStrike(int32 ID,double Now,bool bPlayer,int32 Hi
  const bool bHit=Damage>0.f&&Store->ApplyDamageFrom(Victim,Team,Damage,Pos,ID,EBattleKillKind::Melee);
  const bool bKilled=bHit&&!Store->Find(Victim)->IsAlive();
  SightExperiment.Cover(bPlayer?TEXT("arms_melee_strikes_player"):TEXT("arms_melee_strikes"));
- if(!bPlayer&&ArmsCharging(ID))SightExperiment.Cover(TEXT("arms_charge_strikes"));
+ if(!bPlayer&&ArmsCharging(ID)){SightExperiment.Cover(TEXT("arms_charge_strikes"));CoverApproaches.FindChecked(ID).bStruck=true;}
  if(bKilled)SightExperiment.Cover(TEXT("arms_melee_kills"));
  if(bHit&&SightExperiment.Started)
  {

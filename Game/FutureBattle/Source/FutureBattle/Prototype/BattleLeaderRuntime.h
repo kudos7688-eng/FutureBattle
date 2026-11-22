@@ -254,7 +254,7 @@ public:
  struct FArmsBoundMemory{int32 Target=INDEX_NONE;FVector At=FVector::ZeroVector;double SeenAt=-1.e9;};
  TMap<int32,FArmsBoundMemory> ArmsBoundMemory;
  TMap<int32,double> ArmsChargeNext,ArmsBoundArrived;double ArmsNextCharge=0;
- int32 ArmsBlockedLogs=0,ArmsTimeoutLogs=0,ArmsStuckLogs=0; // evaluation: BATTLE_ARMS_CHARGE_BLOCKED (at most 300) / BATTLE_ARMS_ASSAULT_TIMEOUT / BATTLE_ARMS_ASSAULT_STUCK (200 each) lines
+ int32 ArmsBlockedLogs=0,ArmsTimeoutLogs=0,ArmsStuckLogs=0,ArmsNoStrikeLogs=0; // evaluation: BATTLE_ARMS_CHARGE_BLOCKED (at most 300) / BATTLE_ARMS_ASSAULT_TIMEOUT / BATTLE_ARMS_ASSAULT_STUCK / BATTLE_ARMS_CHARGE_NOSTRIKE (200 each) lines
  void RunArmsSmoke(double Now); // -BattleArmsSmoke (with -BattleElite=1): BATTLE_ARMS_SMOKE_RESULT failures=N, once after the start
  bool bArmsSmokeDone=false;
  double ArmsNextPick=0,ArmsNextMelee=0,ArmsNextHeal=0;int32 ArmsIssuedUnits=-1;bool bArmsElite=false;
@@ -404,7 +404,10 @@ public:
  // bit 2 along a wall. Best / Stuck: his closest distance to the cover so far and the walking time since he last got closer (he gives
  // up after FCharge::StuckSeconds); SlideSide: the side he goes round a body he hits straight on (+1 / -1, kept for the dash).
  struct FCoverApproach{FVector Goal=FVector::ZeroVector,Via=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0,Best=-1.;float Stuck=0.f;bool bKeptTargetChange=false,bFree=false,bStandUp=false,bFallback=false,bAssault=false,bCharge=false,bReached=false,bLost=false,bVia=false;
-  int32 Steps=0,Moved=0,Blocked=0,StanceWaits=0,CoverWaits=0,SlideSide=0,Slid=0;bool bBlockPawn=false,bBlockStart=false,bHeld=false;FName Block;};
+  int32 Steps=0,Moved=0,Blocked=0,StanceWaits=0,CoverWaits=0,SlideSide=0,Slid=0;bool bBlockPawn=false,bBlockStart=false,bHeld=false;FName Block;
+  // Evaluation of a charge that reached the enemy (StepCharge): bStruck after any strike during it; otherwise NoStrike is why he could
+  // not strike at the last step (BATTLE_ARMS_CHARGE_NOSTRIKE), with the true distance and the error of the known position.
+  bool bStruck=false;uint8 NoStrike=0;float StrikeDist=0.f,KnownErr=0.f;};
  // -BattleContactCover: where a soldier settled after walking to a firing position that is not a cover slot (runtime only, evaluation).
  TMap<int32,FVector> FirePositions;
  TMap<int32,FCoverApproach> CoverApproaches;
