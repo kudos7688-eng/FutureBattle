@@ -57,6 +57,8 @@ namespace BattleFrontValues
  // it by the situation from there. -BattleFrontOpen=0: the first line is where the own soldiers stand (the earlier start).
  constexpr int32 ReleaseMargin=1, ReleaseMax=4; constexpr float ReleaseHold=20.f, ExcessHold=15.f; // squads above the need released (5b)
  int32 OpenPercent(){static const int32 V=FMath::Clamp(Arg(TEXT("BattleFrontOpen="),40),0,80);return V;}
+ // Reserve behind the front (trial -BattleFrontReserve=1, default 0; user request 2026-11-22, 6c below). Needs Hold().
+ bool Reserve(){static const int32 On=Arg(TEXT("BattleFrontReserve="),0);return On!=0&&Hold();}
  // Second test play 2026-11-21 19:10 "too slow": half of the squads counted as off their posts (35 m from the sector centre), so the line
  // stepped only every 60 s. Now on the post sector or within one sector of its centre, and shorter waits.
  // The group sets the pace (user proposal 2026-11-22: squads were swayed too much by the others): every StepEvery seconds each row
@@ -226,21 +228,22 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  const int32 Need=Hold()&&FrontID!=INDEX_NONE?Groups[FrontID].FrontNeed:0;
  const int32 Want=Need>0?Need:Army()?2*Rows:FMath::Clamp(Arg(TEXT("BattleFrontSquads="),4),2,12);
  const int32 Have=FrontID!=INDEX_NONE?Groups[FrontID].Squads.Num():0;
+ // A squad the front army may take: AI-led (delegated, for the player's team), rifle or heavy, active, outside groups and missions.
+ // The reserve (6c) is these squads too.
+ auto IsFree=[&](int32 SID,const auto& S)
+ {
+  if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(SID)!=INDEX_NONE)return false;
+  if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Heavy)return false;
+  if(Area.HirePurpose.Contains(SID)||IntelPurpose.Contains(SID)||ArmyPinned.Contains(SID))return false;
+  // The real orders never send heavy squads on the home assault (UpdateTeamOrders), so their base slot does not hold them (Codex 2026-11-21).
+  bool bBase=false;AreaStrategyTarget(SID,Team,bBase);return !(bBase&&S.SquadType!=BattleSquadType::Heavy);
+ };
  // After a release the fill waits ReleaseHold seconds (Codex review: a need going 16 -> 18 right after a release took the same squads back).
  if(Have<Want&&AutoFill()&&(FrontID==INDEX_NONE||Elapsed-Groups[FrontID].FrontReleaseAt>=ReleaseHold))
  {
   const FVector LineMid=BattleSectors::Center(FrontCell(Team,Line[Rows/2],Rows/2));
   struct FFree{int32 SID;double D;};TArray<FFree> Free;
-  for(const auto& P:Store->GetSquads())
-  {
-   const auto& S=P.Value;
-   if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(P.Key)!=INDEX_NONE)continue;
-   if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Heavy)continue;
-   if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key)||ArmyPinned.Contains(P.Key))continue;
-   // The real orders never send heavy squads on the home assault (UpdateTeamOrders), so their base slot does not hold them (Codex 2026-11-21).
-   bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase&&S.SquadType!=BattleSquadType::Heavy)continue;
-   Free.Add({P.Key,FVector::DistSquared2D(R->Position(S.LeaderUnitID),LineMid)});
-  }
+  for(const auto& P:Store->GetSquads())if(IsFree(P.Key,P.Value))Free.Add({P.Key,FVector::DistSquared2D(R->Position(P.Value.LeaderUnitID),LineMid)});
   Free.Sort([](const FFree& A,const FFree& B){return A.D!=B.D?A.D<B.D:A.SID<B.SID;});
   const int32 ShareCap=FMath::CeilToInt(Share(Team)*double(Have+Free.Num())-1e-9);
   TArray<int32> Pick;for(const auto& F:Free)if(Have+Pick.Num()<FMath::Min(Want,ShareCap))Pick.Add(F.SID);
@@ -562,13 +565,81 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
   }
   if(!Gaps.IsEmpty())Posts+=FString::Printf(TEXT(" gaps=%s"),*Gaps); // rows left empty (1-based)
  }
+ // 6c. Reserve behind the front (trial -BattleFrontReserve=1, user request 2026-11-22 after test play: unassigned squads went back and
+ //  forth in place, as the team's point allocation gave them another point now and then). The free squads the front army could take (the
+ //  fill above takes them first when the need grows; an attack group may take them too) wait behind its line instead: each keeps a row of
+ //  its own (a new one takes the nearest row among those with the fewest reserve squads) and waits in the sector with more cover two or
+ //  three columns behind the line in that row, so it moves only when the line steps there.
+ for(auto It=FrontReservePosts.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||S->Team==Team)It.RemoveCurrent();
+ // Measurement (log only, with and without the reserve): how the free squads move, sampled at each update; a reversal is a step against
+ // the squad's previous step (both over 3 m). A squad that leaves the free squads starts afresh when it comes back.
+ if(Hold()&&FrontID!=INDEX_NONE)
+ {
+  TSet<int32> Seen;
+  for(const auto& P:Store->GetSquads())if(IsFree(P.Key,P.Value))
+  {
+   Seen.Add(P.Key);const FVector Now=R->Position(P.Value.LeaderUnitID);
+   if(const FVector* Was=FreeLastPos.Find(P.Key))
+   {
+    const FVector Step(Now.X-Was->X,Now.Y-Was->Y,0.);
+    if(Step.SizeSquared2D()>FMath::Square(300.))
+    {
+     FreeMoved[Team]+=Step.Size2D();
+     if(const FVector* Prev=FreeLastStep.Find(P.Key);Prev&&FVector::DotProduct(*Prev,Step)<0.)++FreeReversals[Team];
+     FreeLastStep.Add(P.Key,Step);
+    }
+   }
+   FreeLastPos.Add(P.Key,Now);
+  }
+  for(auto It=FreeLastPos.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||(S->Team==Team&&!Seen.Contains(It.Key()))){FreeLastStep.Remove(It.Key());It.RemoveCurrent();}
+ }
+ if(Reserve()&&FrontID!=INDEX_NONE&&Line.Num()==Rows)
+ {
+  // The waiting column of each row (INDEX_NONE: none passable there).
+  TArray<int32> WaitCol;WaitCol.Init(INDEX_NONE,Rows);
+  for(int32 Y=0;Y<Rows;++Y)
+  {
+   double Best=-1.e9;
+   for(int32 C=FMath::Max(0,Line[Y]-2);C>=0;--C)
+   {
+    const FIntPoint Cell=FrontCell(Team,C,Y);if(!BattleSectors::Valid(Cell))continue;
+    const char Kind=BattleFieldLayout::SectorKind(GetWorld(),Cell);if(BattleSectors::Impassable(Kind)&&Kind!='R')continue;
+    const double WaitScore=Cover(Kind)+(C==Line[Y]-2?.3:0.)-(C<Line[Y]-3?10.*(Line[Y]-3-C):0.); // further back only where nothing nearer is passable
+    if(WaitScore>Best){Best=WaitScore;WaitCol[Y]=C;}
+    if(C<=Line[Y]-3&&Best>-50.)break;
+   }
+  }
+  TArray<int32> Waiting;for(const auto& P:Store->GetSquads())if(IsFree(P.Key,P.Value))Waiting.Add(P.Key);
+  Waiting.Sort();
+  for(auto It=FrontReserveRow.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||(S->Team==Team&&!Waiting.Contains(It.Key())))It.RemoveCurrent();
+  TArray<int32> Count;Count.Init(0,Rows);
+  for(int32 SID:Waiting)if(const int32* Row=FrontReserveRow.Find(SID))
+  {if(WaitCol.IsValidIndex(*Row)&&WaitCol[*Row]!=INDEX_NONE)++Count[*Row];else FrontReserveRow.Remove(SID);}
+  FString ReserveList;
+  for(int32 SID:Waiting)
+  {
+   if(!FrontReserveRow.Contains(SID))if(const auto* S=Store->FindSquad(SID))
+   {
+    const FVector P=R->Position(S->LeaderUnitID);double Best=1.e30;int32 BestRow=INDEX_NONE;
+    for(int32 Y=0;Y<Rows;++Y)if(WaitCol[Y]!=INDEX_NONE)
+    {const double Cost=1.e12*Count[Y]+FVector::DistSquared2D(P,BattleSectors::Center(FrontCell(Team,WaitCol[Y],Y)));if(Cost<Best){Best=Cost;BestRow=Y;}}
+    if(BestRow!=INDEX_NONE){FrontReserveRow.Add(SID,BestRow);++Count[BestRow];}
+   }
+   if(const int32* Row=FrontReserveRow.Find(SID))
+   {
+    const FIntPoint Cell=FrontCell(Team,WaitCol[*Row],*Row);FrontReservePosts.Add(SID,BattleSectors::Center(Cell));
+    ReserveList+=FString::Printf(TEXT("%s%d:%c%d"),ReserveList.IsEmpty()?TEXT(""):TEXT(","),SID,TCHAR('A'+Cell.X),1+Cell.Y);
+   }
+  }
+  if(!ReserveList.IsEmpty())Posts+=FString::Printf(TEXT(" reserve=%s"),*ReserveList);
+ }
  // 7. The surprise group (trial -BattleSurpriseGroup=1).
  UpdateSurpriseGroup(Team,FrontID);
  if(Elapsed>=FrontLineLogAt[Team])
  {
   FrontLineLogAt[Team]=Elapsed+LogInterval;
   FString Cells;for(int32 Y=0;Y<Rows;++Y)Cells+=FString::Printf(TEXT("%s%d"),Y?TEXT(","):TEXT(""),Line[Y]);
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_LINE time=%.0f team=%d line=%s group=%d posts=%s"),Elapsed,Team,*Cells,FrontID,Posts.IsEmpty()?TEXT(" none"):*Posts);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_LINE time=%.0f team=%d line=%s group=%d free_rev=%d free_moved_m=%.0f posts=%s"),Elapsed,Team,*Cells,FrontID,FreeReversals[Team],FreeMoved[Team]/100.,Posts.IsEmpty()?TEXT(" none"):*Posts);
  }
 }
 
@@ -612,6 +683,14 @@ int32 UBattleMatch::SetDrawnFrontLine(int32 Team,const TArray<FVector>& Points)
  FString L;for(int32 Y=0;Y<Rows;++Y)L+=FString::Printf(TEXT("%s%d"),Y?TEXT(","):TEXT(""),H[Y]);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_INPUT FrontLine team=%d drawn rows=%d line=%s time=%.1f"),Team,Set,*L,Elapsed);
  return Set;
+}
+
+bool UBattleMatch::FrontReserveOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const
+{
+ const FVector* Post=FrontReservePosts.Find(SquadID);if(!Post)return false;
+ const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SquadID);if(!S||S->Team!=Team||(Team==0&&!S->bPlayerDelegated))return false;
+ Center=FVector(Post->X,Post->Y,AreaHome(Team).Z);Order=EBattleOrder::AttackMove; // like the front posts: fights what comes and holds there
+ return true;
 }
 
 bool UBattleMatch::FrontGroupOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const

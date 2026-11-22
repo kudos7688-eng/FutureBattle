@@ -33,6 +33,8 @@ if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J' -or $Map -eq 'K') {
     $extra += '-BattleSectorMove=1'
     # Grouped mortars and guns support the group's squads in trouble (trial, groupui play 2026-11-21).
     $extra += '-BattleGroupFireSupport=1'
+    # Free squads the front army could take wait two or three sectors behind its line instead of going to and fro (trial, user 2026-11-22).
+    $extra += '-BattleFrontReserve=1'
     if ($SectorAI) { $extra += '-BattleSectorAI=1' }
     # Sector AI trials (default off in matches): fire back when shot, sector route, flank and front stages, pass a crowded corner,
     # fire on the move until inside the sector (no stop: -BattleSquadCoverCheck and -BattleBounding left out, user 11-20), line up

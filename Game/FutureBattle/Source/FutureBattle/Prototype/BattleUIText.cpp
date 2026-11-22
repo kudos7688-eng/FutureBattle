@@ -35,7 +35,7 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("UNIT DOWN / select another ally"),TEXT("兵が倒れた ／ 別の味方を選んでください"));
   M.Add(TEXT("AI COMMAND / P TO RESUME IF PAUSED"),TEXT("AI指揮 ／ 停止中ならPで再開"));M.Add(TEXT("MANUAL COMMAND / CURRENT ORDERS RETAINED"),TEXT("手動指揮 ／ 今の命令を維持"));
   M.Add(TEXT("SELECT FRIENDLY SQUADS FIRST"),TEXT("先に味方の部隊を選んでください"));
-  M.Add(TEXT("PRONE / X TO STAND"),TEXT("伏せ ／ Xで立つ"));M.Add(TEXT("CROUCHED / X FOR PRONE"),TEXT("しゃがみ ／ Xで伏せ"));M.Add(TEXT("STANDING / X TO CROUCH"),TEXT("立ち ／ Xでしゃがむ"));
+  M.Add(TEXT("PRONE / X TO STAND"),TEXT("伏せ ／ Xで立つ"));M.Add(TEXT("CROUCHED / X FOR PRONE"),TEXT("しゃがみ ／ Xで伏せ"));M.Add(TEXT("STANDING / X TO CROUCH"),TEXT("立ち ／ Xでしゃがむ"));M.Add(TEXT("CHANGING STANCE"),TEXT("姿勢を変えている途中"));
   M.Add(TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("COVER / FIRE = BLIND FIRE / AIM + FIRE = PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で壁越しに撃つ ／ 構えて射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("BLIND FIRE"),TEXT("壁越し射撃"));M.Add(TEXT("NO NEARBY COVER WITH SAFE PEEK"),TEXT("近くに安全に撃てる遮蔽がない"));
   M.Add(TEXT("AI PAUSED / practice controls freely"),TEXT("AI停止中 ／ 自由に操作を練習できます"));M.Add(TEXT("AI RESUMED"),TEXT("AI再開"));
   // Match and save messages.
