@@ -497,8 +497,8 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      FAreaIntent Mix6;M->AreaComposition(0,Mix6,6);
      M->KnownVehicles[0]=SavedKnown;M->CarChoices.Remove(TSID);
      Check(Calm==0&&(Shock==0||(Shock==1&&!BackGoal.ContainsNaN()))&&NoneKnown==0&&NoATTarget==INDEX_NONE&&KnownNow==1&&ATTarget==SeenPoint,TEXT("armour AI: no reaction without a threat; a known enemy vehicle draws the anti-tank teams to the nearest point"));
-     Check(Mix0.ATKeep==0&&Mix0.TankKeep==0&&Mix0.SPGKeep==0&&Mix0.ACKeep==1&&Mix0.MortarKeep==1&&Mix6.ATKeep==1&&Mix6.TankKeep==FMath::Min(2,TT->AreaTankLimit)&&Mix6.SPGKeep==0&&!BattleTactics::AreaComposition(1),
-      TEXT("composition: car and mortar first, a tank after six purchases, anti-tank teams and a second tank against known armour; off by default"));
+     Check(Mix0.ATKeep==0&&Mix0.TankKeep==0&&Mix0.SPGKeep==0&&Mix0.ACKeep==1&&Mix0.MortarKeep==1&&Mix6.ATKeep==1&&Mix6.TankKeep==FMath::Min(2,TT->AreaTankLimit)&&Mix6.SPGKeep==0&&BattleTactics::AreaComposition(1),
+      TEXT("composition: car and mortar first, a tank after six purchases, anti-tank teams and a second tank against known armour; on by default"));
      // Squad groups, stage 1 (BattleGroups.cpp): a player group of two squads; not run by the AI until both are delegated; then it gathers
      // at a rally point short of its objective, advances after the assembly time, and a regrouped squad leaves its old group.
      {

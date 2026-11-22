@@ -14,7 +14,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleAllyPass` | Value | 0 | BattleStableMovement.cpp:33 |  |
 | `-BattleArea` | Param | off | BattleLeaderRuntime.cpp:80, BattleState.cpp:580 |  |
 | `-BattleAreaACKeep` | Value | -1（= 設定値 0） | BattleTactics.cpp:97 |  |
-| `-BattleAreaAllTypes` | Value | 0 | BattleArmourAI.cpp:77 |  |
+| `-BattleAreaAllTypes` | Value | 0 | BattleArmourAI.cpp:80 |  |
 | `-BattleAreaATKeep` | Value | -1（= 設定値 0） | BattleTactics.cpp:95 |  |
 | `-BattleAreaAttackWeight` | Value | 2.0 | BattleTactics.cpp:75 |  |
 | `-BattleAreaBaseFlank` | Value | 1.3f | BattleTactics.cpp:88 |  |
@@ -26,7 +26,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleAreaBaseShare` | Value | 0.2 | BattleTactics.cpp:76 |  |
 | `-BattleAreaBaseShareHigh` | Value | 0.3f | BattleTactics.cpp:79 |  |
 | `-BattleAreaBaseShareLow` | Value | 0.f | BattleTactics.cpp:78 |  |
-| `-BattleAreaComposition` | Value | false | BattleArmourAI.cpp:69 |  |
+| `-BattleAreaComposition` | Value | -1 | BattleArmourAI.cpp:71 |  |
 | `-BattleAreaCompositionPlanner` | Value | 0 | BattleComposition.cpp:12 |  |
 | `-BattleAreaCompositionPlannerTeams` | Value | 0 | BattleComposition.cpp:13 |  |
 | `-BattleAreaDepot` | Value | 0 | BattleAreaDepot.cpp:22 |  |
@@ -68,7 +68,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleAreaWarResourceValue` | Value | 1 | BattleWarScore.cpp:11 |  |
 | `-BattleAreaWarScore` | Value | 0 | BattleWarScore.cpp:10 |  |
 | `-BattleAreaWarTarget` | Value | 0 | BattleWarScore.cpp:12 |  |
-| `-BattleAreaWithout` | Value | -1 | BattleArmourAI.cpp:83 |  |
+| `-BattleAreaWithout` | Value | -1 | BattleArmourAI.cpp:86 |  |
 | `-BattleArmourAI` | Value | true | BattleArmourAI.cpp:62 |  |
 | `-BattleArmourAITeam` | Value | -1 | BattleArmourAI.cpp:63 |  |
 | `-BattleArmourSectorGate` | Value | 0 | BattleWeaponOrders.cpp:16 |  |

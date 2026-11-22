@@ -518,7 +518,7 @@ public:
 	UPROPERTY(Config, EditAnywhere) int32 ATKeepRounds = 2;
 	UPROPERTY(Config, EditAnywhere) float VehicleMemory = 120.f;
 	UPROPERTY(Config, EditAnywhere) float TankOverwatch = 12000.f;
-	UPROPERTY(Config, EditAnywhere) bool bAreaComposition = false;
+	UPROPERTY(Config, EditAnywhere) bool bAreaComposition = true; // default true since 2026-11-22 (user decision; stage 3 one-team test +101.6); -BattleAreaComposition=0 = infantry and heavy only
 	// Squad groups, stage 1 (2026-11-18, BattleGroups.cpp; first values). An AI attack group: GroupRifleSquads rifle squads with a tank and a
 	// mortar team when the team has them. It gathers GroupRallyBack (GroupRallyBackProfile with the range profile) short of its objective,
 	// advances once GroupReadyShare of the squads present are within GroupRallyRadius of the rally point or after GroupAssembleMax seconds,

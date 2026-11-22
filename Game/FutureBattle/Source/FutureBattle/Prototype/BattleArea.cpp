@@ -150,7 +150,7 @@ void UBattleMatch::UpdateAreaHiring()
   }
   if(Without==BattleSquadType::Heavy)HireIntent.HeavyShare=0.f;
   if(HireIntent.HeavyShare>0&&Heavy<HireIntent.HeavyShare*(Bought+1))Type=BattleSquadType::Heavy;
-  // Strategic layer trial -BattleAreaComposition=1: the AI sets the numbers of special squad types it keeps (BattleArmourAI.cpp).
+  // Strategic layer -BattleAreaComposition (default on since 2026-11-22): the AI sets the numbers of special squad types it keeps (BattleArmourAI.cpp).
   const bool bComposition=BattleTactics::AreaComposition(Team)||bAllTypes;const uint8 PlainType=Type;
   if(bComposition)AreaComposition(Team,HireIntent,Bought);
   switch(Without)

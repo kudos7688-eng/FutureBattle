@@ -10,7 +10,7 @@
 //   anti-tank weapon falls back from a visible tank it cannot hurt; a regrouped vehicle resumes above its repair threshold.
 //  Tactical: tanks support the point with the most known enemies from an overwatch post short of it, outside known anti-tank reach;
 //   anti-tank teams go to the point nearest the enemy vehicles their team knows of.
-//  Strategic (-BattleAreaComposition=0/1, UBattleTuning::bAreaComposition, default 0; the trial team with -BattleAreaTrialTeam): the AI
+//  Strategic (-BattleAreaComposition=0/1, UBattleTuning::bAreaComposition, default 1 since 2026-11-22; an explicit =1 with -BattleAreaTrialTeam: that team only): the AI
 //   chooses its own mix: an armoured car and a mortar team early, a tank and a self-propelled gun later, anti-tank teams as soon as it
 //   knows of enemy vehicles, a second tank against known armour.
 // AI cognition: only what the team knows (UBattleMatch::AreaIntelView: own soldiers' sightings and scout or lookout reports). A known
@@ -66,9 +66,12 @@ bool BattleTactics::ArmourAI(int32 Team)
 
 bool BattleTactics::AreaComposition(int32 Team)
 {
- static const bool bOn=[]{int32 V=GetDefault<UBattleTuning>()->bAreaComposition?1:0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaComposition="),V);return V!=0;}();
+ // On by default for both teams since 2026-11-22 (user decision). Only an explicit -BattleAreaComposition=1 is a trial that
+ // -BattleAreaTrialTeam limits to one team, so a one-sided trial of another switch keeps the mix on both sides; =0 turns it off.
+ static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaComposition="),V);return V;}();
+ if(Arg<0)return GetDefault<UBattleTuning>()->bAreaComposition;
  const int32 Trial=AreaStrategy().TrialTeam;
- return bOn&&(Trial<0||Trial==Team);
+ return Arg!=0&&(Trial<0||Trial==Team);
 }
 
 // Subtraction evaluation (Docs/design-subtraction-eval.md). -BattleAreaAllTypes=1: both teams buy the all-types mix, whatever the trial team.
