@@ -24,7 +24,7 @@ namespace BattleMapJ
 		{
 			TEXT("TFGTHFTFFT"), // 13   north lane (outer edge)
 			TEXT("FHUFOTHFTF"), // 12   north lane objective O (col 14); north road on its south edge (y = +250m)
-			TEXT("THFFTFhTFF"), // 11   knoll h (col 16)
+			TEXT("THFFTFGTFF"), // 11   park (col 16; v1 had a knoll here, see Hills)
 			TEXT("MMMFMMMTDF"), // 10   north range, pass at col 13; depot D (col 18)
 			TEXT("BLLPQHGTHF"), //  9   lake L (cols 11-12)
 			TEXT("ALLPBCHSSS"), //  8
@@ -110,13 +110,13 @@ namespace BattleMapJ
 		}();
 		return List;
 	}
-	// Hills of the east half: a knoll (5m) in the north lane and a ridge (7m) in the south lane, each filling its own sectors (h).
+	// Hills of the east half: a ridge (7m) in the south lane filling its own sectors (h). (v1 also had a 5m knoll at (16,11), on the way
+	// out of the home into the lane: hand-moved soldiers walked off its top at a corner without a ramp and stalled, sector audit F2.)
 	inline const TArray<BattleTerrain::FHill>& Hills()
 	{
 		static const TArray<BattleTerrain::FHill> List=[]
 		{
 			TArray<BattleTerrain::FHill> L;
-			{BattleTerrain::FHill H;H.X=32500;H.Y=22500;H.W=2000;H.H=2000;H.Top=500;H.Run=1300;L.Add(H);}
 			{BattleTerrain::FHill H;H.X=15000;H.Y=-30000;H.W=6000;H.H=2400;H.Top=700;H.Run=2000;L.Add(H);}
 			return L;
 		}();

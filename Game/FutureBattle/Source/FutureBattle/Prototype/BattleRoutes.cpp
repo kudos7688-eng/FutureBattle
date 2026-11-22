@@ -10,6 +10,9 @@
 #include "BattleLeaderRuntime.h"
 #include "BattlePerception.h"
 #include "BattleState.h"
+#include "BattleTactics.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 bool UBattleMatch::RoutesOn() const
 {
@@ -37,6 +40,16 @@ int32 UBattleMatch::RouteFlankSide(const FVector& From,const FVector& OwnHome,co
  if(FMath::Abs(From.Y)>Edge*.7&&FVector::Dist2D(From,OwnHome)>8000)return From.Y>0?1:-1;
  int32 North=0,South=0;for(const FVector& E:KnownEnemies){North+=E.Y>Edge;South+=E.Y<-Edge;}
  if(North!=South)return North<South?1:-1;
+ // Trial -BattleRouteTieSymmetric=1 (default 0; sector lane's note 2026-11-22): the tie went by the squad number for both teams, so on
+ // the 180-degree maps both took the same absolute side and their squad numbers differ. With the symmetric start the tie goes by the
+ // team's own allocation index and is mirrored for the east team, so both teams split their home assaults the same way.
+ static const bool bTieSymmetric=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleRouteTieSymmetric="),V);return V!=0;}();
+ if(bTieSymmetric&&BattleTactics::SymmetricStart(GetWorld()))
+ {
+  const int32 Team=FVector::DistSquared2D(OwnHome,AreaHome(0))<=FVector::DistSquared2D(OwnHome,AreaHome(1))?0:1;
+  const int32 Side=(BattleTactics::AllocationIndex(GetWorld(),SquadID,Team)/10)%2?1:-1;
+  return OwnHome.X>0?-Side:Side;
+ }
  return (SquadID/10)%2?1:-1;
 }
 

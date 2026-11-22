@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 397 種類。
+計 398 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -232,7 +232,8 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleReturnFire` | Value | 0 | BattleTactics.cpp:170 |  |
 | `-BattleReuseSightContext` | Value | True | BattleLeaderRuntime.cpp:106 |  |
 | `-BattleRifleMembers` | Value | 未解決 | BattleState.cpp:580 |  |
-| `-BattleRoutes` | Value | -1 | BattleRoutes.cpp:17 |  |
+| `-BattleRoutes` | Value | -1 | BattleRoutes.cpp:20 |  |
+| `-BattleRouteTieSymmetric` | Value | 0 | BattleRoutes.cpp:46 |  |
 | `-BattleSaveReloadBoundary` | Value | 0 | BattleArtillery.cpp:105 |  |
 | `-BattleSaveRoutes` | Value | 0 | BattleSave.cpp:90 |  |
 | `-BattleScaleScreenshot` | Value | 空文字列 | BattleLargeFieldTest.cpp:19, BattleScaleSmoke.cpp:17 |  |
@@ -302,11 +303,11 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleStateTrace` | Value | 0 | BattleStateTrace.cpp:24 |  |
 | `-BattleStateTraceDetail` | Value | 空文字列 | BattleStateTrace.cpp:26 |  |
 | `-BattleSTObserveSeconds` | Value | 8 | BattleSquadTacticsSmoke.cpp:126 |  |
-| `-BattleStrategy` | Value | 0 | BattleStrategy.cpp:232 |  |
-| `-BattleStrategyFocusHold` | Value | 90.f | BattleStrategy.cpp:251 | Seconds → BattleStrategy.cpp:213（ヘルパー経由） |
-| `-BattleStrategyOpen` | Value | 150.f | BattleStrategy.cpp:245 | Seconds → BattleStrategy.cpp:213（ヘルパー経由） |
-| `-BattleStrategyReview` | Value | 60.f | BattleStrategy.cpp:287 | Seconds → BattleStrategy.cpp:213（ヘルパー経由） |
-| `-BattleStrategyTeam` | Value | -1 | BattleStrategy.cpp:239 |  |
+| `-BattleStrategy` | Value | 0 | BattleStrategy.cpp:238 |  |
+| `-BattleStrategyFocusHold` | Value | 90.f | BattleStrategy.cpp:257 | Seconds → BattleStrategy.cpp:219（ヘルパー経由） |
+| `-BattleStrategyOpen` | Value | 150.f | BattleStrategy.cpp:251 | Seconds → BattleStrategy.cpp:219（ヘルパー経由） |
+| `-BattleStrategyReview` | Value | 60.f | BattleStrategy.cpp:293 | Seconds → BattleStrategy.cpp:219（ヘルパー経由） |
+| `-BattleStrategyTeam` | Value | -1 | BattleStrategy.cpp:245 |  |
 | `-BattleSTScreens` | Value | 空文字列 | BattleSquadTacticsSmoke.cpp:127 |  |
 | `-BattleSupplyAwayRatio` | Value | 1.0 | BattleTactics.cpp:36 |  |
 | `-BattleSupplyHeal` | Value | 10.0 | BattleTactics.cpp:36 |  |
