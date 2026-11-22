@@ -190,8 +190,18 @@ void UBattleMatch::UpdateAreaHiring()
    const int32 SupplyWant=FMath::Min(HireIntent.SupplyKeep,Bought/After);
    if(Type==BattleSquadType::Rifle&&SupplyWant>0&&ActiveOfType(Team,BattleSquadType::Supply)<SupplyWant)Type=BattleSquadType::Supply;
   }
+  // Subtraction evaluation -BattleAreaEnsureTypes=1 (default 0): one of each rarely reached type is bought once (ever, lost ones are
+  // not replaced) after the first After purchases, ahead of everything but scouts, and the team saves for it instead of falling back.
+  bool bEnsured=false;
+  if(bAllTypes&&BattleTactics::AreaEnsureTypes()&&Type!=BattleSquadType::Scout&&Bought>=FMath::Max(1,GetDefault<UBattleTuning>()->AreaScoutAfterHires))
+   for(const uint8 Ensure:{BattleSquadType::SPGun,BattleSquadType::Exo,BattleSquadType::Supply})
+   {
+    if(Ensure==Without)continue;
+    bool bEver=false;for(const auto& P:Store->GetSquads())if(P.Value.Team==Team&&P.Key>StartSquadCount()&&P.Value.SquadType==Ensure){bEver=true;break;}
+    if(!bEver){Type=Ensure;bEnsured=true;break;}
+   }
   // Composition trial: an expensive type the team is far from affording (below 60% of its cost) does not hold up the plain purchases.
-  if(bComposition&&Type!=PlainType&&BattleSquadType::AreaCost(Type)>=20&&Credits[Team]-Pending<FMath::CeilToInt(BattleSquadType::AreaCost(Type)*.6f)+HireIntent.HireReserve)Type=PlainType;
+  if(!bEnsured&&bComposition&&Type!=PlainType&&BattleSquadType::AreaCost(Type)>=20&&Credits[Team]-Pending<FMath::CeilToInt(BattleSquadType::AreaCost(Type)*.6f)+HireIntent.HireReserve)Type=PlainType;
   const int32 TypeCost=Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
   if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=BattleTactics::AreaHire().MaxActive)continue;
   // Pacing (own clock and own purchase history only): spacing between purchases and no purchases near the time limit,

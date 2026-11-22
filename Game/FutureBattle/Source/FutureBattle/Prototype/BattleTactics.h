@@ -126,6 +126,7 @@ namespace BattleTactics
  // Subtraction evaluation trials (default 0 / -1; Docs/design-subtraction-eval.md): -BattleAreaAllTypes=1 both teams buy every type;
  // -BattleAreaWithout=<type> removes one type from the trial team (both teams without -BattleAreaTrialTeam).
  bool AreaAllTypes();
+ bool AreaEnsureTypes(); // -BattleAreaEnsureTypes=1: with the all-types mix, one SPG, exo and supply vehicle each are bought first
  int32 AreaWithout(int32 Team);
  // Squad groups -BattleAreaGroups=0/1 (UBattleTuning::bAreaGroups, default 1 since 2026-11-20 by user decision; the trial team with -BattleAreaTrialTeam): the AI forms one attack group per team (BattleGroups.cpp).
  bool AreaGroups(int32 Team);
