@@ -150,6 +150,8 @@ $supply=@{
  # ST2 = stage S2, recon -> focus attack (with -TrialTeam only that team, through -AreaTrialTeam).
  'SL1'=@('-SituationLog','1')
  'ST2'=@('-Strategy','2')
+ # ST2P = ST2 with the pass check (-BattleStrategyPass=1, sector maps; Docs/design-terrain-ai.md 3-4).
+ 'ST2P'=@('-Strategy','2','-StrategyPass','1')
  'ST3'=@('-Strategy','3')
  'ST4'=@('-Strategy','4')
  # RTS = symmetric tie-break of the home-assault flank side (-BattleRouteTieSymmetric, 2026-11-22; maps E-I with the symmetric start).
