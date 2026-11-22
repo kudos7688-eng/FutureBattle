@@ -7,7 +7,7 @@
 | 作業系統 | 今の状態 | ユーザーの判断待ち・未対応 |
 |---|---|---|
 | 経済・AI戦略 | FS13BR5（本拠地攻撃の側面迂回1.3・片側集中・残り5人で補給）が既定（ユーザー指示。偏りを直した再試験では差が誤差の範囲だったが維持）。**片側試験の偏り（相手側の S4/S6 が切れる）は 11-18 0時50分に修正済み**。11-15〜11-17 の勝敗を問う片側試験はずれていた可能性がある。戦車は段階2（主砲）まで、AIが戦車を買う既定は0。情報活用（`-BattleAreaIntel`）は既定OFF | 保存往復の検証で `Invalid cover peek distance` が出て試合が失敗することがある（未調査）。歩兵だけのマップAの基準が 11-17 朝からずれている（未特定） |
-| 視線判定の負荷対策 | 視線判定の並列化（`-BattleSightParallel`）と見回し0.4秒を既定にした。判定のコードを1か所にまとめた（試合の結果は不変） | 味方の兵が視線を遮らない `-BattleSightTeamMask`（既定OFF）を既定にするか |
+| 視線判定の負荷対策 | 視線判定の並列化（`-BattleSightParallel`）と見回し0.4秒を既定にした。判定のコードを1か所にまとめた（試合の結果は不変）。**11-22 15時40分：味方の兵が視線も自軍の弾も遮らない `-BattleSightTeamMask` を全マップで既定ON**（ユーザー決定。市街地で撃破 +13〜16%） | 単独の性能の計測（並列の値では知覚が E +0.4ms） |
 | 現状の負荷問題 | 今の既定でマップE・描画ありは1フレーム平均11.8ms（`PERFORMANCE.md`）。止まりの原因を特定：開始時139ms＝全部隊の最初の判断の集中、雇用時30〜60ms＝雇用のたびの視線判定の一斉更新（`RefreshVisibility`）。試験切替 `-BattleHireSightRefresh=0` で雇用時の止まりが消えることを確認 | **`-BattleHireSightRefresh=0` を既定にするか**（試合は変わる。12戦で勝者は全組同じ）。開始時の止まり、60FPS・マップAの基準、骨入りの兵とVAT表示の対策は未実施 |
 | 新機能（`FutureBattle-suppression` ワークツリー） | しゃがみアニメ（`-BattleStanceAnim`）を既定ON。姿勢の仕組みはマップEだけ既定ON。**11-18：装甲車（種類5）・迫撃砲班（種類6）・自走砲（種類7）の段階1と、装甲車・間接射撃の最低限の戦術行動（段階2）、兵種を扱うAIの4層の改善（段階3「装甲AI」、`-BattleArmourAI` 既定1／戦略層の `-BattleAreaComposition` は既定0）を実装**（回帰合格、既定の試合は不変、AIは既定で買わない）。main へは未取り込み | 遠くのVAT表示の兵はしゃがんでも立ったまま。自走砲が強すぎる（数値は未調整）。**`-BattleAreaComposition` を既定にするか**（歩兵だけの相手に3seedで平均+202、片側のみ）。部隊群の層は段階3（進退：見送り・予備・序盤の直行・押している間は粘る）まで実装（`-BattleAreaGroups` 既定0、プレイヤーは F で編成・V で群を選択。**9seedの片側試験：マップA +70（±30）、マップE −49（±30）。マップA/D系だけ既定にするかはユーザー判断**。画面での確認は未実施）。11-18：別セッションが外骨格兵（種類8）を追加（118d339）。**防衛中の交戦範囲 `-BattleDefendEngage`（既定0）を9seedで確かめて既定にするか**（3seedでマップA +76、マップE +21）。**外骨格兵（種類8、11-18 6時50分）が強すぎる見込み（値の調整）、Fabの素材の選定**。main との統合（「マップの現状と改善案」の main の未コミット7ファイルと重なる。先方のコミット後に声をかけて行う） |
 | 現状の負荷問題 | マップE・描画ありは1フレーム平均11.8〜12.3ms・p95 14.0〜14.9ms（同じ試合の2回の計測。`PERFORMANCE.md`）。部下の骨の更新の間引き `-BattleFollowerAnimSkip`／上限 `-BattleFollowerAnimBudget`（試験切替、既定OFF。試合は不変で −0.8〜0.9ms）。部下の重なり検査なし `-BattleFollowerNoOverlap`（試験切替、既定OFF。試合は不変で約 −0.3ms）。射撃前の視線判定の並列化 `-BattleFollowSightParallel`（試験切替、既定OFF。効果なし・結果が変わる）。遠い兵の部品の更新を止める `-BattleVATFarLight`（試験切替、既定OFF。効果は約0.1msで結果が変わる）。雇用時の視線判定の一斉更新をやめた（既定、ユーザー決定。雇用時の止まり30〜60msが消えた）。遮蔽位置の一覧を試合開始前に作る（開始時の止まり139msの正体。試合は不変）。判断の数の上限 `-BattleThinkCap`（試験切替、既定OFF） | 30FPS固定の試合モードでは開始前に経路網ができず、開始時75msが残る（計測条件の問題）。60FPS・マップAの基準は未実施。`-BattleFollowerAnimSkip` を既定にするか（TPS・FPS視点での見た目は未確認）。描画ありの計測がPC全体ごと約2倍遅くなることがある（原因未特定） |
@@ -29,6 +29,15 @@
 | 個人AI（`soldierai` ブランチ、`FutureBattle-soldierai`） | **11-22 13時30分：soldierai を main へ取り込んだ**（ce6b488。ユーザー決定）。既定ON：止まった兵の見張りの向き `-BattleSoldierWatch`（12時20分）。プレイヤーの操作：兵1人への命令（作戦画面で Ctrl＋クリック→右クリック、TPS視点で G、H で戻す）。既定0の試験切替：段階A `-BattleThreatCover`・しゃがみ判定 `-BattleThreatCoverCrouch`・区画内の移動 `-BattleSoldierMove`・プレイヤーの周りだけ `-BattleSoldierAIFocus` | 兵1人への命令の実際の操作（自動試験だけ）。武器のブランチ `arms` が TPS視点の G を手りゅう弾に使うので、取り込むときにキーを決める。見張りの勝ち負けへの効果は未確認 |
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
+
+## 2026-11-22 15時40分 Claude（実装計画ロードマップ）：`-BattleSightTeamMask` を全マップで既定ON にした（ユーザー決定、main 379936d）。`-BattleAIBlindFire` は既定の規則では一度も発動しない
+- **決定（ユーザー、13時20分の計測を見て）**：「既定」＝全マップで既定ON（味方の体が自軍の弾も止めないことを承知のうえ）。
+- **変更**（ブランチ `teammask`、main へ 379936d）：`UBattleLeaderRuntime::SightTeamMaskEnabled` の既定を1。`=0` で旧の規則（味方の体が視線と自軍の弾を止める）。ヘッダーの説明を直した。`Run-EconomyMatrix` に条件 `TM0`（`-SightTeamMask 0`）と `BF`（`-ExtraArgs -BattleAIBlindFire=1`）。SWITCHES・CODEMAP を作り直した。
+- **検証**：main で Build-Editor 成功。Test-Battle 合格（`Setup/Battle-Smoke-20261122-151811.log`、failures=0）。Test-Area 合格（`teammask-379936d`、failures=0）。凍結ビルド `teammask-379936d`、30FPS、マップE 種7 の左右2組で、既定 ＝ `-SightTeamMask 1` 明示が `Compare-MatchResults` で IDENTICAL（78項目）。
+- **影響**：**全マップの既定の試合が変わる**。15時40分より前の既定の試合を基準にした比較は、取り直しが要る。市街地で射撃・撃破が増える（13時20分の項：E 撃破 +16%、I +13%）。知覚の処理の時間は 12本並列の30FPSの値で E 2.8 → 3.2 ms、I 2.5 → 2.7 ms、A 1.9 → 1.5 ms（並列の計測なので目安。単独の性能の計測はしていない）。
+- **`-BattleAIBlindFire` の計測**（同じ凍結ビルド、マップE・I、種7・19×左右、`econ-{HI,BF}-{E,I}-s*-sd2`）：8組すべてが既定と全く同じ結果（射撃数・得点・遮蔽の値まで一致）。引数は試合に届いている（run.log に `-BattleAIBlindFire=1`）。原因：AI のブラインドファイアは「覗き待ちの兵が釘付け（`IsPinned`）のとき」だけ撃つ（`BattleCoverAction.cpp` の `peek_hold_suppressed`）。釘付けは制圧の試験 `-BattleSuppression=1`（11-14 に不採用、既定0）か外骨格の盾の制圧（既定0）でしか起きないので、既定の規則では `peek_hold_suppressed`・`blind_shots_ai` とも0。**今の作りのままでは、既定にしても何も変わらない**。
+- **制限**：BF はマップA を測っていない（同じ理由で発動しない）。描画ありの画面では見ていない。
+- **次の一手**：`-BattleAIBlindFire` の扱い（発動のきっかけを既定で起きるもの、例えば撃たれた直後の覗き待ちに作り直すか、切替のまま段階2の「C 制圧射撃」で考えるか）をユーザーに尋ねる。計測して尋ねる順の次は `-BattleAreaPointSupply`。
 
 ## 2026-11-22 15時15分 Claude（Codex委任）：外骨格の強襲群（ユーザー提案）。群は組めて外骨格の損失が減るが、自走砲の撃破はまだ増えない（main 86540c2、既定0）
 
