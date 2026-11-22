@@ -416,9 +416,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
       M->Credits[0]=CR;M->HireQueueSecond=-1;M->UpdateHireQueue();
       const bool Bought=M->Area.HireQueue.IsEmpty()&&M->ActiveSquads(0)==ActiveBefore+1&&M->Credits[0]==CR-BattleTactics::AreaHire().Cost;
       Check(Queued&&Bought,TEXT("reservations: waits for resources, then buys within the second"));
-      // Remove the bought squad again so the checks below see the same force.
-      if(const auto* RS=Store->FindSquad(M->LastHiredSquadID))for(const int32 Member:TArray<int32>(RS->Members))Store->ApplyDamage(Member,1,10000);
-      M->UpdateArea(1);M->Area.Replacements.Reset();M->Credits[0]=CR;
+      // The bought squad stays (an ordinary purchase: the save checks below keep resource conservation).
      }
     }
     // Performance: a far tank's line of sight is traced once per TankSightReuse seconds per observer (range and view each scan);
