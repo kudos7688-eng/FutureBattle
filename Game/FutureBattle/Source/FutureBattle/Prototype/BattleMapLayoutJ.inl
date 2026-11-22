@@ -349,10 +349,20 @@
 			if(BattleMapJ::OnRoad(bAlongX,At,Mid))return;
 			if(BattleMapJ::bDenseCover)
 			{
-				// Map K: a yard wall 2.5m high along 40m of every border without a road, open for 5m at each corner, so that nobody sees
-				// from one sector far into the next (the first two generations kept nine shots in ten at 100-150m).
+				// Map K: a yard wall 2.5m high along every border without a road, from corner to corner (short of a crossing road), with
+				// two doorways of 3m at places that differ from border to border. Generation 3 left 5m open at each corner: that made a
+				// lane 10m wide along every sector line, and more than half of the shots beyond 100m went along those lanes or
+				// diagonally through the corners (mk3s-K-s7 and s43-swap, -BattleShotLog).
 				UseJ((Pick&1)?BrickMatJ:GreyJ);
-				if(bAlongX)Emit(TEXT("YardHighWall"),Mid,At,4000,60,250);else Emit(TEXT("YardHighWall"),At,Mid,60,4000,250);
+				auto CrossK=[&](double End){return BattleMapJ::OnRoad(!bAlongX,End,At-100.)||BattleMapJ::OnRoad(!bAlongX,End,At+100.);};
+				const double Lo=Mid-2500.+(CrossK(Mid-2500.)?500.:0.),Hi=Mid+2500.-(CrossK(Mid+2500.)?500.:0.);
+				const double DoorA=Mid-1700.+400.*((Pick>>1)%3),DoorB=Mid+700.+400.*((Pick>>3)%3);
+				const double Ends[3][2]={{Lo,DoorA-150.},{DoorA+150.,DoorB-150.},{DoorB+150.,Hi}};
+				for(const auto& E:Ends)
+				{
+					const double M2=(E[0]+E[1])*.5,L2=E[1]-E[0];
+					if(bAlongX)Emit(TEXT("YardHighWall"),M2,At,L2,60,250);else Emit(TEXT("YardHighWall"),At,M2,60,L2,250);
+				}
 				return;
 			}
 			const uint32 Kd=Pick%5;if(Kd==4)return; // open
