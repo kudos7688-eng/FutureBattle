@@ -269,7 +269,7 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
  // Charges (-BattleArmsCharge), four times a second: an assault role (the elite breacher, assault man and rifleman; with
  // -BattleArmsAssault=2 also the riflemen of ordinary rifle squads, not leaders or heavy weapons) runs at an enemy while his squad
  // fights (StepCharge), fires at him on the way and strikes him at arm's length (the pass above): an enemy he sees within 12 m, or
- // up to 15 s after an assault bound brought him to cover, an enemy known within 25 m (seen or reported within 3 s, also one hidden
+ // up to 15 s after an assault bound brought him to cover, an enemy known within 30 m (seen or reported within 3 s, also one hidden
  // behind his cover). Not at a group (more than two known enemies within 6 m of him), not through a wall or obstacle, not to
  // another floor, at most two of a squad at once.
  if(BattleArms::ChargeEnabled()&&Now>=ArmsNextCharge)
@@ -288,7 +288,7 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
    const bool bRole=U->Kit==BattleArms::KitBreacher||U->Kit==BattleArms::KitAssault||U->Kit==BattleArms::KitRifleman;
    const bool bPlain=BattleArms::AssaultMode()>=2&&S->Grade==0&&S->SquadType==BattleSquadType::Rifle&&S->LeaderUnitID!=ID&&U->Weapon==EBattleWeapon::Carbine;
    if(!bRole&&!bPlain)continue;
-   int32 Charging=0;for(int32 Member:S->Members)Charging+=ArmsCharging(Member)?1:0;
+   int32 Charging=0;for(int32 Member:S->Members)if(const auto* M=Store->Find(Member);M&&M->IsAlive()&&ArmsCharging(Member))++Charging;
    if(Charging>=Ch.SquadMax)continue;
    const auto* Contacts=Sense->GetContacts(ID);if(!Contacts)continue;
    const FVector Pos=Position(ID);int32 Best=INDEX_NONE;double BestD=0.;FVector BestAt=FVector::ZeroVector;bool bBestSeen=false;
@@ -315,6 +315,9 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
  // Twice a second: medics heal, grenadiers fire launcher rounds, soldiers with grenades throw them.
  if(Now<ArmsNextPick)return;
  ArmsNextPick=Now+.5;
+ // Dashes and charges of soldiers who died on the way (Follow no longer steps them) end here, so they hold no squad place or slot.
+ for(auto It=CoverApproaches.CreateIterator();It;++It)if(It.Value().bAssault||It.Value().bCharge)
+  if(const auto* Dead=Store->Find(It.Key());!Dead||!Dead->IsAlive()){SightExperiment.Cover(It.Value().bCharge?TEXT("arms_charge_end_died"):TEXT("arms_assault_end_died"));It.RemoveCurrent();}
  const auto& G=BattleArms::Grenade();const auto& L=BattleArms::LauncherRound();const auto& Med=BattleArms::Medic();
  TArray<int32> IDs;
  for(const auto& B:Bodies)if(const auto* U=Store->Find(B.Key);U&&U->IsAlive()&&U->Action!=EBattleAction::DirectControl&&!IsVehicle(B.Key)&&
@@ -340,7 +343,8 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
   // Close-quarters assault (-BattleArmsAssault): the elite platoon's breacher, assault man and rifleman (mode 2: also one grenade
   // carrier of an ordinary rifle squad) close on a known enemy 30-150 m away in bounds from cover to cover, while no more than two of
   // the squad are dashing and the enemies around the target are not more than half the squad. Known: seen by him, or seen / reported
-  // within 3 s.
+  // within 3 s. A bound runs on to its cover when the enemy is lost; with no enemy known, the next bound heads for where the last
+  // bound's enemy was seen (within 30 s of that sighting) until he is within 18 m of that place (a bound ends 8 m short, gains 10 m).
   if(const int32 DashMode=BattleArms::AssaultMode();DashMode>0&&S->Order!=EBattleOrder::Move&&!CoverApproaches.Contains(ID)&&Now>=ArmsAssaultNext.FindRef(ID))
   {
    const bool bRole=U->Kit==BattleArms::KitBreacher||U->Kit==BattleArms::KitAssault||U->Kit==BattleArms::KitRifleman;
@@ -359,7 +363,15 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
      if(Around*2>Living)continue;
      Best=C.Key;BestD=D;BestAt=C.Value.LastKnownPosition;
     }
-    if(Best!=INDEX_NONE)ArmsAssaultNext.Add(ID,Now+(StartAssault(ID,Best,BestAt,Now)?12.:4.));
+    bool bFromMemory=false;
+    if(Best==INDEX_NONE&&Dashing<(bRole?2:1))if(const auto* Mem=ArmsBoundMemory.Find(ID);Mem&&Now-Mem->SeenAt<=30.)
+    {const double D=FVector::Dist2D(Pos,Mem->At);if(D>1800.&&D<15000.){Best=Mem->Target;BestAt=Mem->At;bFromMemory=true;}}
+    if(Best!=INDEX_NONE)
+    {
+     const bool bBound=StartAssault(ID,Best,BestAt,Now);
+     if(bBound&&bFromMemory)SightExperiment.Cover(TEXT("arms_assault_from_memory"));
+     ArmsAssaultNext.Add(ID,Now+(bBound?12.:4.));
+    }
     U=Store->Find(ID);
    }
   }
@@ -428,6 +440,9 @@ bool UBattleLeaderRuntime::StartAssault(int32 ID,int32 Target,const FVector& Tar
  U=Store->Find(ID);
  FCoverApproach A;A.Goal=BestAnchor;A.Slot=BestSlot;A.Target=Target;A.Revision=U->OrderRevision;A.Until=Now+20.;A.bAssault=true;
  CoverApproaches.Add(ID,A);FirePositions.Remove(ID);
+ // Where the enemy was seen (updated in StepCoverApproach while he is known): the next bound heads there if he is lost. A bound to
+ // that remembered place does not renew the sighting, so the chain ends 30 s after the enemy was last seen.
+ if(const auto* Seen=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,Target)){auto& M=ArmsBoundMemory.FindOrAdd(ID);M.Target=Target;M.At=Seen->LastKnownPosition;M.SeenAt=Seen->LastSeenTime;}
  SightExperiment.Cover(TEXT("arms_assault_started"));
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_ASSAULT unit=%d team=%d target=%d from=%.0f to=%.0f"),ID,U->Team,Target,Base,FVector::Dist2D(BestAnchor,TargetAt));
  return true;

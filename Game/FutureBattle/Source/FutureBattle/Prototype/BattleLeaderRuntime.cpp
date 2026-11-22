@@ -927,8 +927,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const bool bHitCover=UnderFireCoverEnabled() && !bSeenCover && !bMoveFire && !bVehicleBody && S->Order!=EBattleOrder::Move && !U->CoverPhase &&
   !CoverApproaches.Contains(ID) && UnitShotFrom(ID,Now,HitFrom) && Contact && Now-Contact->LastSeenTime<=FMath::Min(5.f,U->Perception.MemorySeconds) &&
   FVector::DistSquared2D(Pos,Contact->LastKnownPosition)<=FMath::Square(TargetRange(ID)) && !(S->Order!=EBattleOrder::Hold && !StopForCombat && P->Path.IsValidIndex(B.Waypoint));
- // A charging soldier (BattleArms.cpp, -BattleArmsCharge) does not stop for cover.
- if(BattleTactics::CoverActionsEnabled() && (bSeenCover || bHitCover) && !bMoveFire && ProbeSlot && Now>=RetryAt && U->Weapon!=EBattleWeapon::Mortar && !bVehicleBody && !ArmsCharging(ID))
+ // A charging or assault-dashing soldier (BattleArms.cpp) does not stop for cover on the way.
+ if(BattleTactics::CoverActionsEnabled() && (bSeenCover || bHitCover) && !bMoveFire && ProbeSlot && Now>=RetryAt && U->Weapon!=EBattleWeapon::Mortar && !bVehicleBody && !ArmsDashing(ID))
  {
   NoCoverProneUntil.Remove(ID); // a new search: lie down again only if it also finds nothing
   if(LeaderFirst){}else if(HitFirst){++PriorityProbesThisFrame;SightExperiment.Cover(TEXT("cover_priority_probe"));}else if(ProbeBudget)++CoverProbesThisFrame;else NextCoverProbe=Now+FMath::Max(0.f,CoverTuning->AICoverProbeInterval);
@@ -970,8 +970,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const bool bDriving=S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute;
  if(bDriving && !Approaching && FirePositions.Num())FirePositions.Remove(ID); // back on the march: the place is free again
  // -BattleContactCover: a soldier walking to cover finishes that walk before he follows the squad's path again.
- // A charging soldier (BattleArms.cpp, -BattleArmsCharge) runs at his enemy, not along the path.
- if(S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !(Approaching && (bContactCover || bOutsideContact || ArmsCharging(ID))))
+ // A charging or assault-dashing soldier (BattleArms.cpp) runs his own way, not along the squad's path.
+ if(S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !(Approaching && (bContactCover || bOutsideContact || ArmsDashing(ID))))
  {
   if(bWideField && bStableMovement) StableMove(ID,Dt,Now,Direction);
   else

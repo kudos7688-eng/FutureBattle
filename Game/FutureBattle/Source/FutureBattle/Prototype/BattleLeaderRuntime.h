@@ -240,14 +240,19 @@ public:
  void DrawArmsShells(double Now);
  // Close-quarters assault (-BattleArmsAssault=1/2, BattleArms.cpp): bounds from cover to cover (at most 40 m each) toward a known
  // enemy within 150 m, so grenades, close weapons and strikes come within reach. Runtime only, like the other cover approaches.
+ // A bound runs on to its cover with the enemy lost; ArmsBoundMemory keeps where the bound's enemy was seen last, and with no enemy
+ // known the next bound heads there (for 30 s after that sighting). Cleared on restore with the cover approaches.
  bool StartAssault(int32 ID,int32 Target,const FVector& TargetAt,double Now);
  TMap<int32,double> ArmsAssaultNext;
  // Charge (-BattleArmsCharge=1, BattleArms.cpp): an assault role runs at an enemy he sees within 12 m (after an assault bound, one
- // known within 25 m), fires at him on the way and strikes him at arm's length. A cover approach with bCharge whose goal follows the
+ // known within 30 m), fires at him on the way and strikes him at arm's length. A cover approach with bCharge whose goal follows the
  // enemy (StepCharge). ArmsBoundArrived: when an assault bound last reached its cover (StepCoverApproach). Runtime only.
  bool StartCharge(int32 ID,int32 Target,const FVector& TargetAt,double Now);
  bool StepCharge(int32 ID,float Dt,double Now);
  bool ArmsCharging(int32 ID) const{const auto* A=CoverApproaches.Find(ID);return A&&A->bCharge;}
+ bool ArmsDashing(int32 ID) const{const auto* A=CoverApproaches.Find(ID);return A&&(A->bAssault||A->bCharge);} // assault bound or charge
+ struct FArmsBoundMemory{int32 Target=INDEX_NONE;FVector At=FVector::ZeroVector;double SeenAt=-1.e9;};
+ TMap<int32,FArmsBoundMemory> ArmsBoundMemory;
  TMap<int32,double> ArmsChargeNext,ArmsBoundArrived;double ArmsNextCharge=0;
  void RunArmsSmoke(double Now); // -BattleArmsSmoke (with -BattleElite=1): BATTLE_ARMS_SMOKE_RESULT failures=N, once after the start
  bool bArmsSmokeDone=false;
@@ -391,7 +396,7 @@ public:
  // Trial -BattleCoverApproach: runtime-only walk toward a hidden cover slot (not saved; cleared on restore).
  // bAssault (BattleArms.cpp, -BattleArmsAssault): a dash to cover close to the enemy; on arrival the soldier takes that cover.
  // bCharge (BattleArms.cpp, -BattleArmsCharge): a run at a seen enemy; the goal follows him and StepCharge moves the soldier.
- struct FCoverApproach{FVector Goal=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false,bFree=false,bStandUp=false,bFallback=false,bAssault=false,bCharge=false,bReached=false;};
+ struct FCoverApproach{FVector Goal=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false,bFree=false,bStandUp=false,bFallback=false,bAssault=false,bCharge=false,bReached=false,bLost=false;};
  // -BattleContactCover: where a soldier settled after walking to a firing position that is not a cover slot (runtime only, evaluation).
  TMap<int32,FVector> FirePositions;
  TMap<int32,FCoverApproach> CoverApproaches;

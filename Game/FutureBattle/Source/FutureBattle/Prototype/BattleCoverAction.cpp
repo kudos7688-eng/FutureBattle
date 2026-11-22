@@ -1,4 +1,5 @@
 #include "BattleLeaderRuntime.h"
+#include "BattleArms.h"
 #include "BattleCover.h"
 #include "BattleTactics.h"
 #include "BattleRanges.h"
@@ -330,13 +331,14 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
  // An assault dash (BattleArms.cpp) survives a re-issued order while the squad still fights where it is (not a move order).
  else if(U->OrderRevision!=A->Revision && !(A->bAssault && Store->FindSquad(U->SquadID) && Store->FindSquad(U->SquadID)->Order!=EBattleOrder::Move))End=TEXT("approach_cancel_new_order");
  // -BattleContactCover: the squad's target flickers; the walk goes on while this soldier's own sighting is fresh (the stale check below).
- // An assault dash (BattleArms.cpp) goes on while the soldier's own sighting is fresh even when the squad stops trading fire.
+ // An assault dash (BattleArms.cpp) runs on to its cover even when the squad stops trading fire.
  else if(Target==INDEX_NONE && !bContactCover && !A->bAssault)End=TEXT("approach_cancel_disengaged");
  // The squad re-picks its target every think; keep walking while this soldier still sees its own threat.
- // An assault dash (BattleArms.cpp) goes on toward an enemy hidden behind his cover while the sighting is fresh (the stale check below).
+ // An assault dash (BattleArms.cpp) runs on to its cover when its enemy hides or the squad picks another target.
  else if(Target!=A->Target && !(Contact && Contact->bVisible) && !bContactCover && !A->bAssault)End=TEXT("approach_cancel_target_changed");
- // An assault dash keeps going toward an enemy seen or reported within 10 s (he is often behind his cover meanwhile).
- else if(!Contact || Now-Contact->LastSeenTime>FMath::Min(A->bAssault?10.f:5.f,U->Perception.MemorySeconds))End=TEXT("approach_cancel_contact_stale");
+ // An assault dash (BattleArms.cpp) runs on to its cover even when the enemy is lost: the cover is still a place closer to where he
+ // was, and the next bound heads for where he was seen last (StepArms).
+ else if(!A->bAssault && (!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds)))End=TEXT("approach_cancel_contact_stale");
  else if(!A->bFree && !GetWorld()->GetSubsystem<UBattleCover>()->IsAvailable(A->Slot,ID,Now))End=TEXT("approach_cancel_slot_taken");
  else if(FVector::Dist2D(Pos,A->Goal)<120)
  {
@@ -356,23 +358,32 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
    else{FirePositions.Add(ID,Done.Goal);CoverProbeAfter.Add(ID,Now+8.);Diag.Cover(TEXT("fire_position_settled"));}
    return false;
   }
+  // An assault bound has reached its cover and the charge may follow (BattleArms.cpp); with the enemy forgotten he stays there.
+  if(A->bAssault){Diag.Cover(TEXT("arms_assault_arrived"));ArmsBoundArrived.Add(ID,Now);}
   if((bContactCover || A->bAssault) && Contact)
   {
    const int32 Goal=A->Target;const FVector Threat=Contact->LastKnownPosition;
-   if(A->bAssault){Diag.Cover(TEXT("arms_assault_arrived"));ArmsBoundArrived.Add(ID,Now);} // the charge may follow (BattleArms.cpp)
    Diag.Cover(End);CoverApproaches.Remove(ID);
    if(RequestCoverAction(ID,Threat,Goal,250.f))Diag.Cover(TEXT("approach_arrived_took_cover"));
    return false;
   }
  }
  else if(Now>A->Until)End=TEXT("approach_cancel_timeout");
+ if(!End && A->bAssault)
+ {
+  // Run through: count the dashes that go on with the enemy lost (they used to end after 10 s), and remember where he was seen.
+  if(!A->bLost && (!Contact || Now-Contact->LastSeenTime>FMath::Min(10.f,U->Perception.MemorySeconds))){A->bLost=true;Diag.Cover(TEXT("arms_assault_ran_on"));}
+  if(Contact){auto& M=ArmsBoundMemory.FindOrAdd(ID);M.Target=A->Target;M.At=Contact->LastKnownPosition;M.SeenAt=Contact->LastSeenTime;}
+ }
  if(End){Diag.Cover(A->bFree?TEXT("fire_position_cancelled"):End);CoverApproaches.Remove(ID);return false;}
  if(Target!=A->Target && !A->bKeptTargetChange){A->bKeptTargetChange=true;Diag.Cover(TEXT("approach_kept_after_target_change"));}
  auto& B=Bodies.FindChecked(ID);const FVector D=(A->Goal-Pos).GetSafeNormal2D();
  if(B.Actor.IsValid()){B.Actor->AddMovementInput(D);B.Velocity=B.Actor->GetVelocity();}
  else
  {
-  FHitResult Hit;B.Capsule->MoveComponent(D*FMath::Min(GetDefault<UBattleTuning>()->MoveSpeed*Dt,float(FVector::Dist2D(Pos,A->Goal))),B.Capsule->GetComponentQuat(),true,&Hit);
+  // An assault dash (BattleArms.cpp) runs at the charge's speed; other walks keep the walking speed.
+  const float Stride=A->bAssault?GetDefault<UBattleTuning>()->MoveSpeed*BattleArms::Charge().SpeedScale*Dt:GetDefault<UBattleTuning>()->MoveSpeed*Dt;
+  FHitResult Hit;B.Capsule->MoveComponent(D*FMath::Min(Stride,float(FVector::Dist2D(Pos,A->Goal))),B.Capsule->GetComponentQuat(),true,&Hit);
   auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=B.Capsule->GetComponentLocation();B.Velocity=(F.Position-Pos)/FMath::Max(.001f,Dt);
  }
  return true;

@@ -121,6 +121,7 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  }
  // No further fallible validation after this transaction boundary.
  CoverApproaches.Reset();FirePositions.Reset();
+ ArmsBoundMemory.Reset();ArmsBoundArrived.Reset(); // where assault bounds saw their enemy and reached cover (BattleArms.cpp)
  SuppressionZeroAt.Reset();
  Stances.Reset();StanceLockedUntil.Reset();
  PC->ResetMatchControl();
