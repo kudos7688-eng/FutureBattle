@@ -19,6 +19,8 @@ struct FBattleSightExperiment
  int32 ObjectiveShots[MaxObjectives]={};
  double ObjectiveDamage[MaxObjectives]={},ObjectiveFirstShot[MaxObjectives]={-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
  TArray<double> ShotDistances, PathMS;
+ // Stage A cost (evaluation only): each threat check past its once-a-second gate, and each relocation search inside it (ms).
+ TArray<double> ThreatCheckMS, RelocateSearchMS;
  double MaxPathLength=0;
  TSet<int32> PreviouslySeeing;
  TArray<double> EngagementDistances; // Evaluation-only cover action funnel (unit-frames, requests, outcomes). Never read by AI decisions.

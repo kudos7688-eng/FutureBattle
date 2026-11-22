@@ -379,12 +379,12 @@ void ABattleController::ToggleMode()
 	else ShowNotice(TEXT("Select a friendly unit first"));
 }
 void ABattleController::ControlSelected() { if (bTactical && !Selected.IsEmpty()) ControlUnit(Selected[0]); }
-void ABattleController::SetSelection(ABattleUnit* Unit) { Selected.Reset(); if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0 && LeaderSelectable(Unit)) Selected.Add(Unit); }
+void ABattleController::SetSelection(ABattleUnit* Unit) { SoldierSelection = INDEX_NONE; Selected.Reset(); if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0 && LeaderSelectable(Unit)) Selected.Add(Unit); }
 
 void ABattleController::SelectAll()
 {
 	if (!bTactical) return;
-	Selected.Reset();
+	SoldierSelection = INDEX_NONE; Selected.Reset();
 	if (ABattleGameMode* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>())
 		for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0 && LeaderSelectable(Unit)) Selected.Add(Unit);
 }
@@ -415,6 +415,7 @@ void ABattleController::SelectGroupSelected()
 	for (ABattleUnit* Unit : Selected) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0)
 		if (const int32 Group = Match->GroupOf(Unit->GetState()->SquadID); Group != INDEX_NONE) Wanted.Add(Group);
 	if (Wanted.IsEmpty()) { ShowNotice(TEXT("群に入っている部隊を選択してから V")); return; }
+	SoldierSelection = INDEX_NONE; // a squad selection again (orders go to squads, not to a picked soldier)
 	for (ABattleUnit* Unit : Mode->Units) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0 && LeaderSelectable(Unit) && Wanted.Contains(Match->GroupOf(Unit->GetState()->SquadID))) Selected.AddUnique(Unit);
 	ShowNotice(FString::Printf(TEXT("群を選択：%d 部隊"), Selected.Num()));
 }
@@ -687,6 +688,9 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
 		return true;
 	}
 	// The order is given on release: a click orders the point, a drag draws a way (BattlePlayerPath.cpp).
+	// A picked soldier takes the right click as his own order (no drawn way).
+	if (bTactical && SoldierSelection != INDEX_NONE && Params.Key == EKeys::RightMouseButton)
+	{ if (Params.Event == IE_Released) { FVector2D At; if (GetPointerPosition(At)) OrderSoldierAt(At); } return true; }
 	if (Params.Key == EKeys::RightMouseButton && Params.Event == IE_Pressed) { BeginPathDraw(); return true; }
 	if (Params.Key == EKeys::RightMouseButton && Params.Event == IE_Released) { EndPathDraw(); return true; }
 	return bHandled;
@@ -699,6 +703,9 @@ void ABattleController::PrimaryReleased()
 	if (!bTactical) return;
 	FVector2D End;
 	if (!GetPointerPosition(End)) return;
+	// Ctrl+click: one soldier for an order of his own (BattleSoldierOrder.cpp); any other selection drops him.
+	if ((IsInputKeyDown(EKeys::LeftControl) || IsInputKeyDown(EKeys::RightControl)) && FVector2D::Distance(End, DragOrigin) <= 10) { SelectSoldierAt(End); return; }
+	SoldierSelection = INDEX_NONE;
 	const bool bAdd = IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
 	if (!bAdd) Selected.Reset();
 	if (FVector2D::Distance(End, DragOrigin) > 10)
@@ -728,6 +735,7 @@ void ABattleController::ChooseAttackMove()
 
 void ABattleController::ChooseDefend()
 {
+	if (!bTactical) { CommandSoldierFromView(); return; }
 	if (bTactical) { PendingOrder = EBattleOrder::Defend; ShowNotice(BattleFieldLayout::Of(GetWorld()).bSectors?TEXT("区画維持：対象区画を右クリック"):TEXT("DEFEND: right-click center")); }
 }
 
@@ -863,6 +871,7 @@ void ABattleController::IssueOrderAt(FVector Target, EBattleOrder Order)
 void ABattleController::HoldSelected()
 {
  PendingOrder=EBattleOrder::Move;bPathDraw=false;DrawnPath.Reset();DrawnLength=0;
+ if(ReturnSelectedSoldier()) return; // both views: a picked soldier is sent back first
  if(!bTactical)return;
  if(auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->IsEnabled())
  {
@@ -958,7 +967,7 @@ void ABattleController::PlayerTick(float DeltaTime)
 		if (GetPointerPosition(P)) if (const int32 ID = SquadListIDAt(P); ID >= 0)
 			if (const auto* S = GetWorld()->GetSubsystem<UBattleState>()->FindSquad(ID))
 				if (auto* L = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); L->CanSelectLeader(S->LeaderUnitID))
-					if (ABattleUnit* A = L->Actor(S->LeaderUnitID)) Selected.AddUnique(A);
+					if (ABattleUnit* A = L->Actor(S->LeaderUnitID)) { SoldierSelection = INDEX_NONE; Selected.AddUnique(A); }
 	}
 	Selected.RemoveAll([](const TObjectPtr<ABattleUnit>& Unit) { return !Unit || !Unit->IsAlive(); });
 	if (bTactical) bAimHeld = false;
@@ -1028,7 +1037,7 @@ void ABattleController::SelectSquadListRow(FVector2D P)
  if(Entry.bNewGroup) { ShowNotice(TEXT("部隊をこの行へドラッグすると、新しい攻撃群を作ります")); return; }
  if(Entry.bGroupHeader) { SelectGroup(Entry.GroupID); return; }
  // Shift + click adds the squad to the selection (2026-11-21).
- if(L->CanSelectLeader(Row.LeaderUnitID) && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift))) { if(ABattleUnit* A=L->Actor(Row.LeaderUnitID)) Selected.AddUnique(A); }
+ if(L->CanSelectLeader(Row.LeaderUnitID) && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift))) { if(ABattleUnit* A=L->Actor(Row.LeaderUnitID)) { SoldierSelection=INDEX_NONE; Selected.AddUnique(A); } }
  else if(L->CanSelectLeader(Row.LeaderUnitID)) SetSelection(L->Actor(Row.LeaderUnitID));
  else ShowNotice(Row.bActive?TEXT("この隊長は操作不可です"):TEXT("この部隊は機能停止しています"));
 }
@@ -1269,7 +1278,7 @@ void ABattleController::SelectGroup(int32 GroupID)
 {
  auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>();
  if(!Match || !Mode || !Match->Groups.Contains(GroupID)) return;
- Selected.Reset();
+ SoldierSelection=INDEX_NONE; Selected.Reset();
  for(ABattleUnit* Unit:Mode->Units) if(Unit && Unit->IsAlive() && Unit->GetState()->Team==0 && LeaderSelectable(Unit) && Match->GroupOf(Unit->GetState()->SquadID)==GroupID) Selected.AddUnique(Unit);
  ShowNotice(Selected.Num()>0?FString::Printf(TEXT("群%d を選択：%d 部隊"),GroupID,Selected.Num()):FString::Printf(TEXT("群%d に操作できる隊長がいません"),GroupID));
 }
