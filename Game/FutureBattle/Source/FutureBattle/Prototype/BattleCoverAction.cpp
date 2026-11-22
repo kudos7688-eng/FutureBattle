@@ -322,6 +322,7 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
 {
  auto* A=CoverApproaches.Find(ID);if(!A)return false;
  if(A->bCharge)return StepCharge(ID,Dt,Now); // a charge at a seen enemy (BattleArms.cpp, -BattleArmsCharge)
+ if(A->bAssault)++A->Steps; // evaluation (the timeout record below)
  auto& Diag=SightExperiment;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);
  const bool bContactCover=U && BattleTactics::ContactCover(U->Team);
@@ -377,11 +378,18 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
    const double Left=FVector::Dist2D(Pos,A->Goal);const auto* Body=Bodies.Find(ID);const double Speed=Body?Body->Velocity.Size2D():0.;
    Diag.Cover(Left<500.?TEXT("arms_assault_timeout_near"):TEXT("arms_assault_timeout_far"));
    if(Speed<30.)Diag.Cover(TEXT("arms_assault_timeout_still"));
+   // What held him most: walking steps that moved him, steps stopped by another body or by the world, waiting to stand up, a
+   // cover action. A walker body (an Actor) records no steps.
+   const int32 Held=FMath::Max(A->Blocked,FMath::Max(A->StanceWaits,A->CoverWaits));
+   Diag.Cover(A->Moved>=Held&&A->Moved>0?TEXT("arms_assault_timeout_moving"):Held==0?TEXT("arms_assault_timeout_other"):
+    A->Blocked==Held?(A->bBlockPawn?TEXT("arms_assault_timeout_blocked_body"):TEXT("arms_assault_timeout_blocked_world")):
+    A->StanceWaits==Held?TEXT("arms_assault_timeout_stance"):TEXT("arms_assault_timeout_cover"));
    if(Diag.Enabled&&ArmsTimeoutLogs<200)
    {
     ++ArmsTimeoutLogs;
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_ASSAULT_TIMEOUT unit=%d left=%.0f speed=%.0f actor=%d position=%s"),ID,Left,Speed,
-     Body&&Body->Actor.IsValid()?1:0,*Pos.ToCompactString());
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_ASSAULT_TIMEOUT unit=%d left=%.0f speed=%.0f actor=%d position=%s steps=%d moved=%d blocked=%d stance=%d cover=%d block=%s body=%d start=%d"),
+     ID,Left,Speed,Body&&Body->Actor.IsValid()?1:0,*Pos.ToCompactString(),A->Steps,A->Moved,A->Blocked,A->StanceWaits,A->CoverWaits,*A->Block.ToString(),
+     A->bBlockPawn?1:0,A->bBlockStart?1:0);
    }
   }
  }
@@ -401,6 +409,17 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
   const float Stride=A->bAssault?GetDefault<UBattleTuning>()->MoveSpeed*BattleArms::Charge().SpeedScale*Dt:GetDefault<UBattleTuning>()->MoveSpeed*Dt;
   FHitResult Hit;B.Capsule->MoveComponent(D*FMath::Min(Stride,float(FVector::Dist2D(Pos,A->Goal))),B.Capsule->GetComponentQuat(),true,&Hit);
   auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=B.Capsule->GetComponentLocation();B.Velocity=(F.Position-Pos)/FMath::Max(.001f,Dt);
+  // Evaluation of an assault dash (the timeout record above): moved, or stopped by what.
+  if(auto* Dash=CoverApproaches.Find(ID);Dash&&Dash->bAssault)
+  {
+   if(!Hit.bBlockingHit||FVector::DistSquared2D(F.Position,Pos)>1.)++Dash->Moved;
+   else
+   {
+    ++Dash->Blocked;Dash->bBlockStart=Hit.bStartPenetrating;
+    Dash->bBlockPawn=Hit.GetComponent()&&Hit.GetComponent()->GetCollisionObjectType()==ECC_Pawn;
+    Dash->Block=Hit.GetActor()?Hit.GetActor()->GetClass()->GetFName():NAME_None;
+   }
+  }
  }
  return true;
 }

@@ -398,7 +398,11 @@ public:
  // bAssault (BattleArms.cpp, -BattleArmsAssault): a dash to cover close to the enemy; on arrival the soldier takes that cover.
  // bCharge (BattleArms.cpp, -BattleArmsCharge): a run at a seen enemy; the goal follows him and StepCharge moves the soldier. With
  // bVia he first walks to Via, a step aside from where the straight way was blocked (StartCharge).
- struct FCoverApproach{FVector Goal=FVector::ZeroVector,Via=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false,bFree=false,bStandUp=false,bFallback=false,bAssault=false,bCharge=false,bReached=false,bLost=false,bVia=false;};
+ // Evaluation of an assault dash (its timeout record): Steps taken, steps that Moved him or were Blocked (Block: class of what
+ // stopped him, bBlockPawn: another body, bBlockStart: overlapping it at the start), frames he waited to stand up (StanceWaits) or
+ // spent in a cover action (CoverWaits) instead of walking.
+ struct FCoverApproach{FVector Goal=FVector::ZeroVector,Via=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false,bFree=false,bStandUp=false,bFallback=false,bAssault=false,bCharge=false,bReached=false,bLost=false,bVia=false;
+  int32 Steps=0,Moved=0,Blocked=0,StanceWaits=0,CoverWaits=0;bool bBlockPawn=false,bBlockStart=false;FName Block;};
  // -BattleContactCover: where a soldier settled after walking to a firing position that is not a cover slot (runtime only, evaluation).
  TMap<int32,FVector> FirePositions;
  TMap<int32,FCoverApproach> CoverApproaches;

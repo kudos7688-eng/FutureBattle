@@ -823,7 +823,11 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()) return;
  auto& B=Bodies.FindChecked(ID);
- if(StepCoverAction(ID,Dt,Now))return;
+ if(StepCoverAction(ID,Dt,Now))
+ {
+  if(CoverApproaches.Num())if(auto* A=CoverApproaches.Find(ID);A&&A->bAssault)++A->CoverWaits; // evaluation (BattleArms.cpp)
+  return;
+ }
  if(B.Actor.IsValid() && B.Actor->IsPlayerControlled())
  {
   // Direct control: walking stands the soldier up again (there is no crouch-walk or crawl yet).
@@ -893,7 +897,12 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   const bool LostSight=!CanEngage && Contact && !Contact->bVisible && Now-Contact->LastSeenTime<=4.;
   UpdateAIStance(ID,Now,WillMove,StopForCombat,LostSight);
   // Getting up takes time: no walking until the soldier is standing.
-  if(WillMove && StanceOf(ID)!=BattleStance::Stand){if(SightExperiment.Enabled)CoverGate.Add(ID,8);Store->SetAction(ID,EBattleAction::Idle);return;}
+  if(WillMove && StanceOf(ID)!=BattleStance::Stand)
+  {
+   if(SightExperiment.Enabled)CoverGate.Add(ID,8);
+   if(auto* A=CoverApproaches.Find(ID);A&&A->bAssault)++A->StanceWaits; // evaluation (BattleArms.cpp)
+   Store->SetAction(ID,EBattleAction::Idle);return;
+  }
  }
  // -BattleContactCover (this soldier's team): per-frame probe budget, 2 s retry, walks to cover and to free firing positions.
  const bool bContactCover=BattleTactics::ContactCover(U->Team) && !bVehicleBody;
