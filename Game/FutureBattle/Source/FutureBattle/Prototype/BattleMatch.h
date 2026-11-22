@@ -140,6 +140,11 @@ public:
  // when the AI no longer wants that type. Bought squads go where the groups' own fills take them (attack army first, then front army).
  int32 HireDelegate(int32 Team) const;
  int32 RefillShort(int32 Team) const;
+ // Stage 7 (Docs/design-front-strategy.md 5.2 and 6, with -BattleHireReserve=1): the player's own delegation of team 0's purchases in a
+ // played match (not the AI-vs-AI experiment): the level, the resources the AI leaves and the types it may not buy (Area.PlayerHire*).
+ static constexpr int32 PlayerHireReserveMax=400, PlayerHireReserveStep=20;
+ bool PlayerDelegating(int32 Team) const;
+ void SetPlayerHiring(int32 Delegate,int32 Reserve,int32 Deny);
  // Once per match second: per team, the first reservation (in order, the first of each type) that can be bought is bought.
  void UpdateHireQueue();
  int32 HireQueueSecond=-1;
@@ -233,6 +238,16 @@ public:
  bool FrontPlanFlexOn(int32 Team) const;
  void UpdateFrontRoles(int32 Team);
  TCHAR FrontRoleOfRow(int32 Team,int32 Row) const; // 0 without roles
+ // Stage 7 (Docs/design-front-strategy.md 6; trial -BattleFrontPlanPlayer=1, default 0, needs -BattleFrontPlan for team 0): the player
+ // sets a section's role (Area.PlayerSectionRole). A focus of the player's makes only those sections focus candidates; a section set to
+ // keep, hold or fall back is never the focus; the rest is left to the AI. Without -BattleFrontPlanFlex the AI itself sets only focus
+ // and keep, so hold and fall back come from the player alone.
+ static bool FrontPlanPlayerOn();
+ bool PlayerRolesOn(int32 Team) const;
+ bool FrontRolesOn(int32 Team) const; // stage 4 roles or the player's
+ uint8 PlayerSectionRole(int32 Section) const;
+ bool CyclePlayerSectionRole(int32 Section); // the next allowed role; LastMessage says which
+ static const TCHAR* SectionRoleJa(uint8 PlayerRole);
  // Stage 5 (Docs/design-front-strategy.md 3.1, 4; trial -BattleFrontPlanFocus2=1, default 0, needs -BattleFrontPlan=1): a second focus
  // section and attack army while the first one pushes (section push > 0, its attack group below 30% losses) and at least three free AI
  // rifle squads remain after the front army took its need.

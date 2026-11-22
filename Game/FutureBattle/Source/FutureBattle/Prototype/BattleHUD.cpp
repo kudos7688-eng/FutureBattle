@@ -196,6 +196,25 @@ void ABattleHUD::DrawHUD()
    }
    ShownStrategyFocus=Focus;ShownStrategyHolds=HoldBits;
   }
+  // Front plan band (stage 7, -BattleFrontPlanPlayer=1): the own plan by section, the player's choices included. The enemy's is never shown.
+  if(Match->bArea&&Match->PlayerRolesOn(0))
+  {
+   const auto& BandFP=Match->FrontPlanState[0];
+   const int32 BandFocus=Match->StrategyFocusPoint(0);
+   FString BandPlan=BandFocus!=INDEX_NONE?FString::Printf(TEXT("自軍の方針：重点 → 拠点%c"),TCHAR('A'+BandFocus)):FString(TEXT("自軍の方針：重点なし"));
+   if(Match->Objectives.IsValidIndex(BandFP.Focus2))BandPlan+=FString::Printf(TEXT("・拠点%c"),TCHAR('A'+BandFP.Focus2));
+   FString BandHolds,BandBacks;
+   for(int32 BandK=0;BandK<BandFP.Role.Num();++BandK)
+   {
+    if(BandFP.Role[BandK]==TEXT('H'))BandHolds+=FString::Printf(TEXT("%s%d"),BandHolds.IsEmpty()?TEXT(""):TEXT("・"),BandK+1);
+    if(BandFP.Role[BandK]==TEXT('R'))BandBacks+=FString::Printf(TEXT("%s%d"),BandBacks.IsEmpty()?TEXT(""):TEXT("・"),BandK+1);
+   }
+   if(!BandHolds.IsEmpty())BandPlan+=FString::Printf(TEXT(" ／ 保持：区間%s"),*BandHolds);
+   if(!BandBacks.IsEmpty())BandPlan+=FString::Printf(TEXT(" ／ 下がってよい：区間%s"),*BandBacks);
+   int32 Chosen=0;for(const uint8 PickRole:Match->Area.PlayerSectionRole)Chosen+=PickRole!=0;
+   BandPlan+=Chosen?FString::Printf(TEXT(" ／ 指定 %d区間 ／ [U] 作戦方針"),Chosen):FString(TEXT(" ／ [U] 作戦方針"));
+   DrawRect(Ink,16,193,560,22);Label(BandPlan,28,196,FLinearColor(1.f,.85f,.35f),.8f);
+  }
 		for (const auto& Strike : Match->Strikes)
 		{
 			FVector2D Point;
@@ -512,7 +531,24 @@ void ABattleHUD::DrawHUD()
  DrawOrderWays();
  DrawNoticeLog();
  DrawSectorPanel(PC);
+ DrawPlanPanel(PC);
  DrawGamepadMenu(PC);
+}
+
+void ABattleHUD::DrawPlanPanel(ABattleController* PC)
+{
+ if(!PC||!Canvas||!PC->IsTactical()||!PC->IsPlanPanelOpen())return;
+ const auto L=FBattlePlanPanelLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld());
+ if(L.Items.IsEmpty())return;
+ const FLinearColor Ink(.025f,.04f,.065f,.95f),Mint(.28f,.95f,.8f),Muted(.62f,.7f,.77f),White(.94f,.97f,1.f),Gold(1.f,.85f,.35f);
+ DrawRect(Ink,L.Origin.X,L.Origin.Y,L.Size.X,L.Size.Y);DrawRect(Gold,L.Origin.X,L.Origin.Y,L.Size.X,2);
+ for(const auto& I:L.Items)
+ {
+  if(I.Kind==0){DrawText(I.Text,I.Tone==4?Gold:I.Tone==5?Muted:White,I.Origin.X,I.Origin.Y,GEngine->GetSmallFont(),I.Tone==4?1.f:.8f);continue;}
+  const FLinearColor Fill=I.Tone==1?FLinearColor(.10f,.24f,.24f,.98f):I.Tone==2?FLinearColor(.25f,.08f,.08f,.98f):I.Tone==3?FLinearColor(.45f,.4f,.1f,.98f):FLinearColor(.08f,.11f,.15f,.98f);
+  DrawRect(Fill,I.Origin.X,I.Origin.Y,I.Size.X,I.Size.Y);
+  DrawText(I.Text,I.Tone==2?Muted:I.Tone==3?FLinearColor::Yellow:Mint,I.Origin.X+6,I.Origin.Y+3,GEngine->GetSmallFont(),.8f);
+ }
 }
 
 void ABattleHUD::DrawGamepadMenu(ABattleController* PC)
@@ -1422,6 +1458,21 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
    const double X=EdgeX(R),Y0=-HY+R*Size;
    for(double Y=Y0;Y<Y0+Size-1;Y+=StepLen)Thick(Ground(X,Y),Ground(X,FMath::Min(Y+StepLen,Y0+Size)));
    if(R+1<BattleSectors::Rows&&EdgeX(R+1)!=X){const double X1=EdgeX(R+1),Y=Y0+Size;for(double T=0;T<1;T+=.25)Thick(Ground(FMath::Lerp(X,X1,T),Y),Ground(FMath::Lerp(X,X1,T+.25),Y));}
+  }
+  // Front plan stage 7: each section's number and role at its middle row's line (the player's choice marked).
+  if(FM->PlayerRolesOn(0))
+  {
+   const auto& LineFP=FM->FrontPlanState[0];
+   for(int32 SecK=0;SecK<LineFP.Sections;++SecK)
+   {
+    int32 SecFirst=-1,SecLast=-1;for(int32 SR=0;SR<LineFP.SectionOfRow.Num();++SR)if(LineFP.SectionOfRow[SR]==SecK){if(SecFirst<0)SecFirst=SR;SecLast=SR;}
+    if(SecFirst<0)continue;
+    const int32 MidRow=(SecFirst+SecLast)/2;const FVector LineMid=BattleSectors::Center(FM->FrontCell(0,FM->FrontLine[0][MidRow],MidRow));
+    FVector2D LabelAt;if(!PC->ProjectWorldLocationToScreen(Ground(LineMid.X+Sign*Size*.5,LineMid.Y),LabelAt)||!OnScreen(LabelAt))continue;
+    const TCHAR SecRole=LineFP.Role.IsValidIndex(SecK)?LineFP.Role[SecK]:TEXT('K');
+    const TCHAR* RoleJa=SecRole==TEXT('F')?TEXT("重点"):SecRole==TEXT('H')?TEXT("保持"):SecRole==TEXT('R')?TEXT("下がってよい"):TEXT("保つ");
+    DrawText(FString::Printf(TEXT("区間%d %s%s"),SecK+1,RoleJa,FM->PlayerSectionRole(SecK)?TEXT("（指定）"):TEXT("")),FrontInk,LabelAt.X+6,LabelAt.Y-18,GEngine->GetSmallFont(),1.f);
+   }
   }
  }
  // The sector under the pointer: a bright outline.

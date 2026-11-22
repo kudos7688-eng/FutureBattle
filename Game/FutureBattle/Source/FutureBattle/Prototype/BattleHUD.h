@@ -13,6 +13,7 @@ public:
 	virtual void DrawHUD() override;
 private:
  void DrawGamepadMenu(class ABattleController* PC);
+ void DrawPlanPanel(class ABattleController* PC); // front plan stage 7 (U)
  void DrawSquadList();
  // Tactical minimap: own squads and only what the player's side has observed (never unseen enemies).
  void DrawMinimap();

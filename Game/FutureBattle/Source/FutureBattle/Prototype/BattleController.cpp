@@ -14,6 +14,8 @@
 #include "BattleUnit.h"
 #include "BattleGameMode.h"
 #include "BattleMatch.h"
+#include "BattleSectors.h"
+#include "BattleSectorView.h"
 #include "BattlePerception.h"
 #include "BattleNavigation.h"
 #include "Camera/CameraComponent.h"
@@ -169,6 +171,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("HireSupply"), EKeys::Hyphen, &ABattleController::HireSupply);
 	Button(TEXT("CancelReservation"), EKeys::BackSpace, &ABattleController::CancelNewestReservation);
 	Button(TEXT("ReservationToFront"), EKeys::Equals, &ABattleController::NewestReservationToFront);
+	Button(TEXT("PlanPanel"), EKeys::U, &ABattleController::TogglePlanPanel);
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
 	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
 	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
@@ -284,6 +287,124 @@ void ABattleController::NewestReservationToFront()
 	const int32 Type = Match->Area.HireQueue[Mine.Last()].Type;
 	Match->MoveHire(0, -1, -Mine.Num());
 	ShowNotice(FString::Printf(TEXT("予約を先頭へ移しました：%s"), ReservationTypeJa(Type)));
+}
+// ---- Plan panel (front plan stage 7, Docs/design-front-strategy.md 6) ----
+static const TCHAR* PlanTypeJa(int32 Type)
+{
+ static const TCHAR* Names[]={TEXT("小銃"),TEXT("重装"),TEXT("斥候"),TEXT("対戦車"),TEXT("戦車"),TEXT("装甲車"),TEXT("迫撃砲"),TEXT("自走砲"),TEXT("外骨格"),TEXT("補給車")};
+ return Type>=0&&Type<UE_ARRAY_COUNT(Names)?Names[Type]:TEXT("?");
+}
+static const TCHAR* PlanRoleJa(TCHAR Role)
+{
+ return Role==TEXT('F')?TEXT("重点"):Role==TEXT('H')?TEXT("保持"):Role==TEXT('R')?TEXT("下がってよい"):TEXT("保つ");
+}
+FBattlePlanPanelLayout FBattlePlanPanelLayout::Make(FVector2D View,const UWorld* World)
+{
+ FBattlePlanPanelLayout L;
+ const auto* M=World?World->GetSubsystem<UBattleMatch>():nullptr;
+ if(!M||!M->bArea||(!M->PlayerRolesOn(0)&&!UBattleMatch::HireReserveOn()))return L;
+ L.Size.X=FMath::Min(620.f,float(View.X)-32.f);L.Origin=FVector2D(FMath::Max(16.f,(float(View.X)-L.Size.X)*.5f),230.f);
+ constexpr float Row=24.f;
+ const float X0=L.Origin.X+12,Right=L.Origin.X+L.Size.X-12;float Y=L.Origin.Y+8;
+ auto Text=[&](FString S,float X,uint8 Tone){FItem I;I.Origin=FVector2D(X,Y+3);I.Text=MoveTemp(S);I.Tone=Tone;L.Items.Add(MoveTemp(I));};
+ auto Btn=[&](uint8 Kind,int32 Index,FString S,float X,float Width,uint8 Tone){FItem I;I.Origin=FVector2D(X,Y);I.Size=FVector2D(Width,Row-3);I.Kind=Kind;I.Index=Index;I.Text=MoveTemp(S);I.Tone=Tone;L.Items.Add(MoveTemp(I));};
+ Text(TEXT("作戦方針 ／ U で閉じる"),X0,4);Btn(8,0,TEXT("×"),Right-26,26,0);Y+=Row+4;
+ if(M->PlayerRolesOn(0))
+ {
+  // Sections of the own front line: where (the line's sector names in the first and last row), the observed points inside and
+  // ahead, the role now (the player's or the AI's) and the player's choice as a button.
+  const auto& P=M->FrontPlanState[0];
+  Text(TEXT("前線の区間：右のボタンで役割を切り替え（指定の無い区間は AI が決める）"),X0,0);Y+=Row;
+  if(P.Sections<=0){Text(TEXT("まだありません（戦闘が始まると決まる）"),X0+8,5);Y+=Row;}
+  for(int32 K=0;K<P.Sections;++K)
+  {
+   int32 First=-1,Last=-1;for(int32 R=0;R<P.SectionOfRow.Num();++R)if(P.SectionOfRow[R]==K){if(First<0)First=R;Last=R;}
+   FString Where;
+   if(First>=0&&M->FrontLine[0].Num()==BattleSectors::Rows)
+    Where=FString::Printf(TEXT("%s〜%s"),*BattleSectorView::SectorName(M->FrontCell(0,M->FrontLine[0][First],First)),*BattleSectorView::SectorName(M->FrontCell(0,M->FrontLine[0][Last],Last)));
+   FString Own,Ahead;
+   for(int32 I=0;I<M->Objectives.Num()&&I<32;++I)
+   {
+    if(P.OwnMask.IsValidIndex(K)&&((P.OwnMask[K]>>I)&1u))Own.AppendChar(TCHAR('A'+I));
+    if(P.AheadMask.IsValidIndex(K)&&((P.AheadMask[K]>>I)&1u))Ahead.AppendChar(TCHAR('A'+I));
+   }
+   Text(FString::Printf(TEXT("区間%d %s ／ 自軍の拠点 %s ／ 前の拠点 %s ／ 今：%s"),K+1,*Where,Own.IsEmpty()?TEXT("なし"):*Own,Ahead.IsEmpty()?TEXT("なし"):*Ahead,
+    PlanRoleJa(P.Role.IsValidIndex(K)?P.Role[K]:TEXT('K'))),X0+8,0);
+   const uint8 Pick=M->PlayerSectionRole(K);
+   Btn(1,K,FString::Printf(TEXT("指定：%s"),UBattleMatch::SectionRoleJa(Pick)),Right-150,150,Pick?3:0);
+   Y+=Row;
+  }
+  Y+=4;
+ }
+ if(UBattleMatch::HireReserveOn())
+ {
+  const TArray<int32> Mine=M->HireQueueOf(0);
+  Text(FString::Printf(TEXT("購入予約 %d/%d（購入キーで追加 ／ ↑ 一つ前へ ／ × 取り消し）"),Mine.Num(),UBattleMatch::HireQueueMax),X0,0);Y+=Row;
+  for(int32 K=0;K<Mine.Num();++K)
+  {
+   const auto& Q=M->Area.HireQueue[Mine[K]];FString Why;const int32 B=M->HireBlock(0,uint8(Q.Type),Why);
+   const TCHAR* Wait=B==0?TEXT("順番待ち"):Why.Contains(TEXT("resources"))?TEXT("資源待ち"):Why.Contains(TEXT("slot"))?TEXT("小隊の上限待ち"):TEXT("上限待ち");
+   Text(FString::Printf(TEXT("%d. %s ／ %s ／ %.0f秒%s"),K+1,PlanTypeJa(Q.Type),Wait,M->Elapsed-Q.At,Q.bByAI?TEXT(" ／ AIの予約"):TEXT("")),X0+8,0);
+   if(K>0)Btn(2,K,TEXT("↑"),Right-62,28,0);
+   Btn(3,K,TEXT("×"),Right-28,28,0);
+   Y+=Row;
+  }
+  Y+=4;
+  static const TCHAR* DelegateJa[]={TEXT("手動"),TEXT("補充だけ委任"),TEXT("全部委任")};
+  const int32 D=FMath::Min<int32>(M->Area.PlayerHireDelegate,2);
+  Text(TEXT("雇用の委任"),X0,0);Btn(4,0,DelegateJa[D],X0+100,140,D?3:0);
+  Text(TEXT("AI が残す資源"),X0+270,0);Btn(5,0,TEXT("−"),X0+390,26,0);Text(FString::Printf(TEXT("%d"),M->Area.PlayerHireReserve),X0+424,0);Btn(6,0,TEXT("＋"),X0+470,26,0);
+  Y+=Row;
+  Text(TEXT("委任のとき AI が買ってよい兵種（押すと切り替え）"),X0,5);Y+=Row;
+  float BX=X0;
+  for(int32 T=0;T<BattleSquadType::Count;++T)
+  {
+   if(BX+56>Right){BX=X0;Y+=Row;}
+   Btn(7,T,PlanTypeJa(T),BX,54,((M->Area.PlayerHireDeny>>T)&1)?2:1);BX+=58;
+  }
+  Y+=Row;
+ }
+ L.Size.Y=Y-L.Origin.Y+6;
+ return L;
+}
+void ABattleController::TogglePlanPanel()
+{
+ auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ if(!bTactical||!Match->IsEnabled()||!Match->bArea)return;
+ if(!bPlanPanel&&!Match->PlayerRolesOn(0)&&!UBattleMatch::HireReserveOn())
+ {ShowNotice(TEXT("作戦方針は、前線の区間の指定（試験切替）か購入予約（試験切替）が有効なときに使えます"));return;}
+ bPlanPanel=!bPlanPanel;
+}
+bool ABattleController::PlanPanelInput(const FInputKeyEventArgs& Params)
+{
+ const bool bMouse=Params.Key==EKeys::LeftMouseButton||Params.Key==EKeys::RightMouseButton||Params.Key==EKeys::MouseScrollUp||Params.Key==EKeys::MouseScrollDown;
+ if(!bMouse)return false;
+ if(Params.Key==EKeys::LeftMouseButton&&Params.Event==IE_Released&&bPlanPress){bPlanPress=false;bTriggerHeld=false;return true;}
+ if(!bPlanPanel)return false;
+ FVector2D P;int32 ViewW,ViewH;GetViewportSize(ViewW,ViewH);
+ if(!GetPointerPosition(P))return false;
+ const auto L=FBattlePlanPanelLayout::Make(FVector2D(ViewW,ViewH),GetWorld());
+ if(!L.Contains(P))return false;
+ if(Params.Key!=EKeys::LeftMouseButton||Params.Event!=IE_Pressed)return true;
+ bPlanPress=true;bTriggerHeld=false;
+ const int32 Hit=L.ItemAt(P);if(Hit==INDEX_NONE)return true;
+ auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();const auto& It=L.Items[Hit];
+ const int32 D=Match->Area.PlayerHireDelegate,Reserve=Match->Area.PlayerHireReserve,Deny=Match->Area.PlayerHireDeny;
+ switch(It.Kind)
+ {
+ case 1: Match->CyclePlayerSectionRole(It.Index);ShowNotice(Match->LastMessage);break;
+ case 2: Match->MoveHire(0,It.Index,-1);break;
+ case 3: Match->CancelHire(0,It.Index);break;
+ case 4:
+  Match->SetPlayerHiring((D+1)%3,Reserve,Deny);
+  ShowNotice(Match->Area.PlayerHireDelegate==0?TEXT("雇用：手動（AI は買わない）"):Match->Area.PlayerHireDelegate==1?TEXT("雇用：補充だけ委任（足りない小銃・重装を AI が予約）"):TEXT("雇用：全部委任（兵種も AI が決めて予約）"));
+  break;
+ case 5: case 6: Match->SetPlayerHiring(D,Reserve+(It.Kind==6?1:-1)*UBattleMatch::PlayerHireReserveStep,Deny);break;
+ case 7: Match->SetPlayerHiring(D,Reserve,Deny^(1<<It.Index));break;
+ case 8: bPlanPanel=false;break;
+ default: break;
+ }
+ return true;
 }
 void ABattleController::StartMatch()
 {
@@ -605,6 +726,7 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
    return true;
   }
  }
+ if(bTactical&&PlanPanelInput(Params))return true;
 	FVector2D Pointer;
  // The squad list is drawn after delegation, so its whole panel owns the overlap.
 	const bool OverDelegation = GetPointerPosition(Pointer) && !SquadPanelAtPointer() && DelegationPanelAt(Pointer);

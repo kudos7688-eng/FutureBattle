@@ -186,7 +186,23 @@ int32 UBattleMatch::HireDelegate(int32 Team) const
 {
  static const int32 Level=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleHireDelegate="),X);return FMath::Clamp(X,0,2);}();
  static const int32 Only=[]{int32 X=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleHireDelegateTeam="),X);return X;}();
+ if(PlayerDelegating(Team))return Area.PlayerHireDelegate; // stage 7: the player's own choice
  return Only<0||Only==Team?Level:0;
+}
+bool UBattleMatch::PlayerDelegating(int32 Team) const
+{
+ if(Team!=0||!HireReserveOn()||Area.PlayerHireDelegate==0)return false;
+ const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ return R&&!R->SightExperiment.Enabled;
+}
+void UBattleMatch::SetPlayerHiring(int32 Delegate,int32 Reserve,int32 Deny)
+{
+ Area.PlayerHireDelegate=uint8(FMath::Clamp(Delegate,0,2));
+ Area.PlayerHireReserve=FMath::Clamp(Reserve,0,PlayerHireReserveMax);
+ Area.PlayerHireDeny=Deny&((1<<BattleSquadType::Count)-1);
+ // A manual player keeps only the own reservations: the AI's waiting ones are cancelled.
+ if(Area.PlayerHireDelegate==0)for(int32 I=Area.HireQueue.Num()-1;I>=0;--I)if(Area.HireQueue[I].Team==0&&Area.HireQueue[I].bByAI)Area.HireQueue.RemoveAt(I);
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HIRE_DELEGATE_PLAYER t=%.1f level=%d reserve=%d deny=%d"),Elapsed,int32(Area.PlayerHireDelegate),Area.PlayerHireReserve,Area.PlayerHireDeny);
 }
 int32 UBattleMatch::RefillShort(int32 Team) const
 {
@@ -195,7 +211,7 @@ int32 UBattleMatch::RefillShort(int32 Team) const
  int32 Want=0,Have=0;bool bAttack=false;
  for(const auto& P:Groups)
  {
-  const auto& G=P.Value;if(G.Team!=Team||G.bPlayer)continue;
+  const auto& G=P.Value;if(G.Team!=Team||(G.bPlayer&&!PlayerDelegating(Team)))continue;
   if(G.Kind==1){Want+=G.FrontNeed;Have+=G.Squads.Num();}
   else if(G.Kind==0&&!G.bFocus2&&!bAttack)
   {
@@ -253,8 +269,9 @@ void UBattleMatch::UpdateAreaHiring()
  UpdateIntelPurposes();
  for(int32 Team=0;Team<2;++Team)
  {
-  if(Team==0&&!R->SightExperiment.Enabled)continue; // The player's resources are spent only by the player.
-  if((CompositionTeams&(1<<Team))!=0){UpdateCompositionHiring(Team);continue;}
+  // The player's resources are spent only by the player, or by the AI as far as the player delegated it (stage 7).
+  if(Team==0&&!R->SightExperiment.Enabled&&!PlayerDelegating(0))continue;
+  if((CompositionTeams&(1<<Team))!=0&&!PlayerDelegating(Team)){UpdateCompositionHiring(Team);continue;}
   int32 Pending=0;for(const auto& Q:Area.Replacements)Pending+=Store->Find(Q.Key)->Team==Team;
   // Squad type by the intent's heavy share: heavy infantry while the team's bought heavy squads are below that share of its purchases.
   FAreaIntent HireIntent=AreaIntent(Team); uint8 Type=BattleSquadType::Rifle;
@@ -316,9 +333,12 @@ void UBattleMatch::UpdateAreaHiring()
   // Stage 6 (-BattleHireDelegate): purchases through the reservation list (see HireDelegate).
   const int32 Delegate=HireDelegate(Team);
   if(Delegate==1)Type=PlainType;
+  // Stage 7: a type the player does not let the AI buy falls back to the plain type (all), or no purchase.
+  bool bDenied=false;
+  if(PlayerDelegating(Team)&&((Area.PlayerHireDeny>>Type)&1)){if(Delegate==2&&!((Area.PlayerHireDeny>>PlainType)&1))Type=PlainType;else bDenied=true;}
   if(Delegate>0)
   {
-   const int32 Short=Delegate==1?RefillShort(Team):1;
+   const int32 Short=bDenied?0:Delegate==1?RefillShort(Team):1;
    const TArray<int32> MineQ=HireQueueOf(Team);int32 AIAt=-1;
    for(int32 K=0;K<MineQ.Num()&&AIAt<0;++K)if(Area.HireQueue[MineQ[K]].bByAI)AIAt=K;
    if(AIAt>=0)
@@ -326,7 +346,7 @@ void UBattleMatch::UpdateAreaHiring()
     if(Short>0&&Area.HireQueue[MineQ[AIAt]].Type==Type)continue; // still wanted: it waits
     CancelHire(Team,AIAt);
    }
-   if(Short<=0||Credits[Team]-Pending<HireIntent.HireReserve)continue;
+   if(Short<=0||Credits[Team]-Pending<(PlayerDelegating(Team)?Area.PlayerHireReserve:HireIntent.HireReserve))continue;
   }
   else if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=BattleTactics::AreaHire().MaxActive)continue;
   // Pacing (own clock and own purchase history only): spacing between purchases and no purchases near the time limit,

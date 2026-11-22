@@ -2,6 +2,7 @@
 #include "BattleFieldLayout.h"
 #include "BattleTactics.h"
 #include "BattleMatch.h"
+#include "BattleSectors.h"
 namespace {
 bool Finite(double V,double Low,double High){return FMath::IsFinite(V)&&V>=Low&&V<=High;}
 bool ValidPoint(FVector P,FVector2D Limit){return !P.ContainsNaN()&&FMath::Abs(P.X)<=Limit.X&&FMath::Abs(P.Y)<=Limit.Y&&Finite(P.Z,-1000,10000);}
@@ -132,6 +133,10 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   for(const auto& P:Area.HirePurpose)if(!((P.Value>=0&&P.Value<Objectives.Num())||P.Value==100||P.Value==101)||!BySquad.FindRef(P.Key))return Fail(TEXT("Invalid area hire purpose"));
   // Purchase reservations: at most 12 per team, known types, past reservation times.
   {int32 N[2]={0,0};for(const auto& Q:Area.HireQueue){if(Q.Team<0||Q.Team>1||++N[Q.Team]>UBattleMatch::HireQueueMax||Q.Type<0||Q.Type>=BattleSquadType::Count||Q.Dest<-1||!Finite(Q.At,0,Elapsed+.01))return Fail(TEXT("Invalid hire reservation"));}}
+  // Stage 7: the player's section roles and hiring delegation.
+  if(Area.PlayerSectionRole.Num()>BattleSectors::Rows||Area.PlayerHireDelegate>2||Area.PlayerHireReserve<0||Area.PlayerHireReserve>UBattleMatch::PlayerHireReserveMax||
+     Area.PlayerHireDeny<0||Area.PlayerHireDeny>=(1<<BattleSquadType::Count))return Fail(TEXT("Invalid player plan"));
+  for(const uint8 Role:Area.PlayerSectionRole)if(Role>4)return Fail(TEXT("Invalid player section role"));
   if(Area.HomeHitAt.Num()!=2||!Finite(Area.HomeHitAt[0],-1000,Elapsed+.01)||!Finite(Area.HomeHitAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area home hit clock"));
   // Strategy layer S2 (BattleStrategy.cpp): focus objectives in range, clocks finite (focus/avoid-begin in the past; review/avoid-end within a match).
   if(Area.StrategyPhase.Num()!=2||Area.StrategyFocus.Num()!=2||Area.StrategyFocusAt.Num()!=2||Area.StrategyReviewAt.Num()!=2||Area.StrategyAvoid.Num()!=2||Area.StrategyAvoidUntil.Num()!=2)return Fail(TEXT("Invalid strategy state"));

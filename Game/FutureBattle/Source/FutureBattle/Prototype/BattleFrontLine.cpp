@@ -448,7 +448,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
     if((bA&&bB&&bClear)||FrontCover[Y]<=-1000.){Empty[Y]=1;Gaps+=FString::Printf(TEXT("%s%d"),Gaps.IsEmpty()?TEXT(""):TEXT(","),Y+1);}
    }
    // Stage 4: a may-fall-back section holds every second row (half a squad per row), unless an enemy is known right in front of the row.
-   if(FrontPlanFlexOn(Team))
+   if(FrontRolesOn(Team))
    {
     const FFrontPlanTeam& FP=FrontPlanState[Team];int32 Thin=0;
     for(int32 Y=0;Y<Rows;++Y)if(!Empty[Y]&&FrontRoleOfRow(Team,Y)==TEXT('R')&&FP.SectionFirst.IsValidIndex(FP.SectionOfRow[Y])&&(Y-FP.SectionFirst[FP.SectionOfRow[Y]])%2==1&&Known(Y,Line[Y],Line[Y]+1)==0)
@@ -461,7 +461,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
     int32 Contact=0;
     for(int32 Y=0;Y<Rows;++Y){int32 N=0;for(int32 C=Line[Y];C<=FMath::Min(Cols-1,Line[Y]+3);++C)if(const int32* V=EnemyCount.Find(FrontCell(Team,C,Y)))N+=*V;Contact+=N>0?1:0;}
     int32 Held=0;for(int32 Y=0;Y<Rows;++Y)Held+=Empty[Y]?0:1;
-    int32 HoldSecs=0;if(FrontPlanFlexOn(Team))for(const TCHAR Role:FrontPlanState[Team].Role)HoldSecs+=Role==TEXT('H')?1:0; // stage 4: a reserve squad per hold section
+    int32 HoldSecs=0;if(FrontRolesOn(Team))for(const TCHAR Role:FrontPlanState[Team].Role)HoldSecs+=Role==TEXT('H')?1:0; // stage 4: a reserve squad per hold section
     G->FrontNeed=FMath::Clamp(Held+Contact+2+HoldSecs,2,2*Rows);
    }
    // Front places (with fewer squads than rows, the rows spread evenly among the squads).
@@ -1060,7 +1060,7 @@ void UBattleMatch::FrontPlanSample(int32 Team)
   P.Dmg[K]=P.Hp[K]>0.?D60/P.Hp[K]:0.;
  }
  P.StatAt=Elapsed;
- if(FrontPlanFlexOn(Team))UpdateFrontRoles(Team);
+ if(FrontRolesOn(Team))UpdateFrontRoles(Team);
  if(Elapsed<P.NextLog)return;
  P.NextLog=Elapsed+BattleFrontValues::LogInterval;
  auto Letters=[&](uint32 M){FString Out;for(int32 I=0;I<32;++I)if((M>>I)&1)Out.AppendChar(TCHAR('A'+I));return Out.IsEmpty()?FString(TEXT("-")):Out;};
@@ -1106,8 +1106,13 @@ void UBattleMatch::UpdateFrontPlan(int32 Team)
  auto Fix=[](auto& A,auto V){if(A.Num()!=2)A.Init(V,2);};
  Fix(Area.StrategyPhase,0);Fix(Area.StrategyFocus,-1);Fix(Area.StrategyFocusAt,-1.f);Fix(Area.StrategyReviewAt,-1.f);Fix(Area.StrategyAvoid,-1);Fix(Area.StrategyAvoidUntil,-1.f);
  int32& Focus=Area.StrategyFocus[Team];float& FocusAt=Area.StrategyFocusAt[Team];float& ReviewAt=Area.StrategyReviewAt[Team];int32& SPhase=Area.StrategyPhase[Team];
+ // Stage 7: with a focus section of the player's only those sections are candidates (also during the opening); otherwise the sections
+ // the player left to the AI. A section the player set to keep, hold or fall back is never the focus.
+ const bool bPlayer=PlayerRolesOn(Team);
+ bool bPlayerF=false;if(bPlayer)for(int32 K=0;K<NS;++K)bPlayerF|=PlayerSectionRole(K)==1;
+ auto Candidate=[&](int32 K){if(!bPlayer)return true;const uint8 R=PlayerSectionRole(K);return bPlayerF?R==1:R==0;};
  // The opening (no push history yet): no focus, so S6 and the attack group keep their default target (the nearest point not own).
- if(Elapsed<StrategyOpenSeconds()*MatchTimeLimit()/600.f)return;
+ if(Elapsed<StrategyOpenSeconds()*MatchTimeLimit()/600.f&&!bPlayerF)return;
  const bool bValid=Objectives.IsValidIndex(Focus);
  const bool bTaken=bValid&&ObservedOwner(Team,Focus)==Team;
  if(Elapsed<ReviewAt&&bValid&&!bTaken)return;
@@ -1122,7 +1127,7 @@ void UBattleMatch::UpdateFrontPlan(int32 Team)
  int32 Best=-1,Next=-1,BestPoint=INDEX_NONE;double BestScore=0,NextScore=0;
  for(int32 K=0;K<NS;++K)
  {
-  if(P.AheadMask[K]==0u)continue;
+  if(P.AheadMask[K]==0u||!Candidate(K))continue;
   double Value=0;int32 Point=INDEX_NONE;double PointD=DBL_MAX;
   for(int32 I=0;I<Objectives.Num()&&I<32;++I)if((P.AheadMask[K]>>I)&1)
   {
@@ -1135,7 +1140,7 @@ void UBattleMatch::UpdateFrontPlan(int32 Team)
  }
  // The focus stays at least the hold time unless its point was taken or it has no candidate left.
  const TCHAR* Why=bTaken?TEXT("taken"):!bValid?TEXT("first"):TEXT("review");
- if(bValid&&!bTaken&&Best!=FocusSec&&Elapsed-FocusAt<StrategyFocusHoldSeconds()&&FocusSec>=0&&P.AheadMask[FocusSec]!=0u){Best=FocusSec;BestPoint=Focus;Why=TEXT("hold");}
+ if(bValid&&!bTaken&&Best!=FocusSec&&Elapsed-FocusAt<StrategyFocusHoldSeconds()&&FocusSec>=0&&P.AheadMask[FocusSec]!=0u&&Candidate(FocusSec)){Best=FocusSec;BestPoint=Focus;Why=TEXT("hold");}
  // Within the focus section keep the current target while it is still ahead of the line.
  if(Best>=0&&Best==FocusSec&&bValid&&!bTaken&&Focus<32&&((P.AheadMask[Best]>>Focus)&1))BestPoint=Focus;
  const int32 Old=Focus;
@@ -1151,14 +1156,18 @@ void UBattleMatch::UpdateFrontPlan(int32 Team)
   const int32 FocusSecNow=Objectives.IsValidIndex(Focus)?SectionOf(Focus):-1;
   int32 AIGroup=INDEX_NONE;for(const auto& G:Groups)if(G.Value.Team==Team&&!G.Value.bPlayer&&G.Value.Kind==0&&!G.Value.bFocus2)AIGroup=AIGroup==INDEX_NONE?G.Key:FMath::Min(AIGroup,G.Key);
   double Loss=0.;if(const FBattleGroup* G1=Groups.Find(AIGroup);G1&&G1->StartLiving>0)Loss=1.-double(GroupLiving(*G1))/G1->StartLiving;
-  const bool bPushing=FocusSecNow>=0&&P.Push.IsValidIndex(FocusSecNow)&&P.Push[FocusSecNow]>0.&&Loss<.3;
+  // Stage 7: a second focus section of the player's is taken without the pushing condition; with one focus of the player's the AI may
+  // add a second among the sections left to it.
+  int32 PlayerF2=-1;if(bPlayerF)for(int32 K=0;K<NS;++K)if(PlayerSectionRole(K)==1&&K!=FocusSecNow)PlayerF2=K;
+  auto Candidate2=[&](int32 K){if(PlayerF2>=0)return K==PlayerF2;if(!bPlayer)return true;const uint8 R=PlayerSectionRole(K);return R==0||R==1;};
+  const bool bPushing=PlayerF2>=0||(FocusSecNow>=0&&P.Push.IsValidIndex(FocusSecNow)&&P.Push[FocusSecNow]>0.&&Loss<.3);
   const bool bTaken2=Objectives.IsValidIndex(FP.Focus2)&&ObservedOwner(Team,FP.Focus2)==Team;
   const int32 Old2=FP.Focus2;const TCHAR* Why2=TEXT("none");
   if(!bPushing){if(FP.Focus2>=0){FP.Focus2=-1;Why2=TEXT("first_not_pushing");}}
-  else if(FP.Focus2<0||bTaken2||Elapsed-FP.Focus2At>=StrategyFocusHoldSeconds()||SectionOf(FP.Focus2)==FocusSecNow)
+  else if(FP.Focus2<0||bTaken2||Elapsed-FP.Focus2At>=StrategyFocusHoldSeconds()||SectionOf(FP.Focus2)==FocusSecNow||!Candidate2(SectionOf(FP.Focus2)))
   {
    int32 Pick=-1;double PickScore=0;int32 PickPoint=INDEX_NONE;
-   for(int32 K=0;K<NS;++K)if(K!=FocusSecNow&&P.AheadMask[K]!=0u)
+   for(int32 K=0;K<NS;++K)if(K!=FocusSecNow&&P.AheadMask[K]!=0u&&Candidate2(K))
    {
     double Value=0;int32 Point=INDEX_NONE;double PointD=DBL_MAX;
     for(int32 I=0;I<Objectives.Num()&&I<32;++I)if((P.AheadMask[K]>>I)&1){Value=FMath::Max(Value,double(ObjectiveValue(I)));const double D=FVector::DistSquared2D(Objectives[I].Position,Home);if(D<PointD){PointD=D;Point=I;}}
@@ -1189,7 +1198,7 @@ TCHAR UBattleMatch::FrontRoleOfRow(int32 Team,int32 Row) const
 {
  if(Team<0||Team>1)return 0;
  const FFrontPlanTeam& P=FrontPlanState[Team];
- if(!P.SectionOfRow.IsValidIndex(Row)||!P.Role.IsValidIndex(P.SectionOfRow[Row])||!FrontPlanFlexOn(Team))return 0;
+ if(!P.SectionOfRow.IsValidIndex(Row)||!P.Role.IsValidIndex(P.SectionOfRow[Row])||!FrontRolesOn(Team))return 0;
  return P.Role[P.SectionOfRow[Row]];
 }
 
@@ -1231,6 +1240,9 @@ void UBattleMatch::UpdateFrontRoles(int32 Team)
    const TCHAR Want=P.bBehind?TEXT('R'):TEXT('K');
    Now=Want==Was||(Was!=TEXT('R')&&Was!=TEXT('K'))||P.bBehind!=bWasBehind||Elapsed-P.RoleAt[K]>=90.f?Want:Was;
   }
+  if(!FrontPlanFlexOn(Team)&&Now!=TEXT('F'))Now=TEXT('K'); // stage 7 without stage 4: the AI sets only focus and keep
+  // Stage 7: the player's role wins (fall back never with an own point inside).
+  if(PlayerRolesOn(Team))if(const uint8 Pick=PlayerSectionRole(K))Now=Pick==1?TEXT('F'):Pick==3?TEXT('H'):Pick==4&&P.OwnMask[K]==0u?TEXT('R'):TEXT('K');
   if(Now!=Was){P.Role[K]=Now;P.RoleAt[K]=Elapsed;++P.RoleChanges;bChanged=true;}
  }
  if(bChanged||Elapsed>=P.RoleLogAt)
@@ -1253,4 +1265,52 @@ int32 UBattleMatch::GroupFocusPoint(const FBattleGroup& G) const
 {
  if(G.bFocus2&&G.Team>=0&&G.Team<2)return FrontPlanState[G.Team].Focus2>=0?FrontPlanState[G.Team].Focus2:INDEX_NONE;
  return StrategyFocusPoint(G.Team);
+}
+
+// ---- Front plan, stage 7: the player's section roles (Docs/design-front-strategy.md 6; trial -BattleFrontPlanPlayer=1, default 0) ----
+bool UBattleMatch::FrontPlanPlayerOn()
+{
+ static const int32 On=BattleFrontValues::Arg(TEXT("BattleFrontPlanPlayer="),0);
+ return On!=0;
+}
+
+bool UBattleMatch::PlayerRolesOn(int32 Team) const
+{
+ return Team==0&&FrontPlanPlayerOn()&&FrontPlanOn(0);
+}
+
+bool UBattleMatch::FrontRolesOn(int32 Team) const
+{
+ return FrontPlanFlexOn(Team)||PlayerRolesOn(Team);
+}
+
+uint8 UBattleMatch::PlayerSectionRole(int32 Section) const
+{
+ return Area.PlayerSectionRole.IsValidIndex(Section)?Area.PlayerSectionRole[Section]:0;
+}
+
+const TCHAR* UBattleMatch::SectionRoleJa(uint8 PlayerRole)
+{
+ static const TCHAR* Names[]={TEXT("AIに任せる"),TEXT("重点"),TEXT("保つ"),TEXT("保持"),TEXT("下がってよい")};
+ return PlayerRole<UE_ARRAY_COUNT(Names)?Names[PlayerRole]:TEXT("?");
+}
+
+bool UBattleMatch::CyclePlayerSectionRole(int32 Section)
+{
+ const FFrontPlanTeam& P=FrontPlanState[0];
+ if(!PlayerRolesOn(0)||Section<0||Section>=P.Sections){LastMessage=TEXT("前線の区間がまだありません");return false;}
+ if(Area.PlayerSectionRole.Num()!=P.Sections)Area.PlayerSectionRole.SetNumZeroed(P.Sections);
+ // At most two focus sections (one without the second focus trial); never "may fall back" with an own point inside (decision 3).
+ int32 Focus=0;for(int32 K=0;K<P.Sections;++K)Focus+=K!=Section&&Area.PlayerSectionRole[K]==1;
+ const int32 MaxFocus=FrontPlanFocus2On(0)?2:1;
+ const bool bOwn=P.OwnMask.IsValidIndex(Section)&&P.OwnMask[Section]!=0u;
+ uint8 Role=Area.PlayerSectionRole[Section];
+ for(int32 N=0;N<5;++N){Role=uint8((Role+1)%5);if((Role==1&&Focus>=MaxFocus)||(Role==4&&bOwn))continue;break;}
+ Area.PlayerSectionRole[Section]=Role;
+ // The next plan update reviews the focus at once.
+ if(Area.StrategyReviewAt.Num()==2)Area.StrategyReviewAt[0]=Elapsed;
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_PLAYER_ROLE t=%.1f section=%d role=%d"),Elapsed,Section+1,int32(Role));
+ LastMessage=FString::Printf(TEXT("区間%d：%s"),Section+1,SectionRoleJa(Role));
+ if(Role==1&&!(P.AheadMask.IsValidIndex(Section)&&P.AheadMask[Section]!=0u))LastMessage+=TEXT("（前に拠点が見えるまで攻撃軍は向かわない）");
+ return true;
 }
