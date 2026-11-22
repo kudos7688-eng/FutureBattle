@@ -159,7 +159,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleHeavyMembers` | Value | 未解決 | BattleState.cpp:567 |  |
 | `-BattleHeavySpeed` | Value | 未解決 | BattleState.cpp:568 |  |
 | `-BattleHeightTest` | Param | off | BattleTerrainTest.cpp:27 |  |
-| `-BattleHireMirror` | Value | 0 | BattleLeaderRuntime.cpp:1659 |  |
+| `-BattleHireMirror` | Value | 1 | BattleLeaderRuntime.cpp:1659 | default on (user decision 2026-11-22) |
 | `-BattleHireSightRefresh` | Value | 0 | BattleMixedRecruitment.cpp:114 |  |
 | `-BattleHitDirection` | Value | 1 | BattleHUD.cpp:1120 |  |
 | `-BattleHitFace` | Value | 0 | BattleLeaderRuntime.cpp:1560 |  |
@@ -205,7 +205,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleObservedTactics` | Strifind/Value | 0 | BattleAreaSmoke.cpp:465, BattleArmourAI.cpp:40 |  |
 | `-BattleOffscreenMarkers` | Value | 1 | BattleHUD.cpp:1158 |  |
 | `-BattleOpponentPreset` | Value | 空文字列 | BattleBenchmark.cpp:48 | ReadTier → BattleBenchmark.cpp:45（ヘルパー経由） |
-| `-BattleOrderSync` | Value | -1 | BattleArea.cpp:126 |  |
+| `-BattleOrderSync` | Value | 1 | BattleArea.cpp:126 | default on (user decision 2026-11-22) |
 | `-BattlePeekRangeCheck` | Value | 0 | BattleCoverAction.cpp:24 | trial: projected peeks must be 100..450 cm from their anchor |
 | `-BattlePerceptionGrid` | Value | True | BattleLeaderRuntime.cpp:109 |  |
 | `-BattlePerceptionSlices` | Value | 4 | BattleBenchmark.cpp:56 |  |
@@ -272,7 +272,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSightScanInterval` | Value | .4 | BattleLeaderRuntime.cpp:117 |  |
 | `-BattleSightScanNear` | Value | 1.e7 | BattleLeaderRuntime.cpp:117 |  |
 | `-BattleSightSlowFar` | Value | 0 | BattleLeaderRuntime.cpp:114 |  |
-| `-BattleSightTeamMask` | Value | 0 | BattleLeaderRuntime.cpp:397 |  |
+| `-BattleSightTeamMask` | Value | 1 | BattleLeaderRuntime.cpp:397 | default 1 since 2026-11-22 (user decision); =0 = own soldiers block their side's sight and bullets again |
 | `-BattleSightTrial` | Param | off | BattleLeaderRuntime.cpp:243 |  |
 | `-BattleSightVisual` | Param | off | BattleLeaderRuntime.cpp:237 |  |
 | `-BattleSituationLog` | Value | 0 | BattleStrategy.cpp:31 |  |

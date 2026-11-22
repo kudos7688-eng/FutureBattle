@@ -394,7 +394,7 @@ bool UBattleLeaderRuntime::SightHitStatsEnabled()
 }
 bool UBattleLeaderRuntime::SightTeamMaskEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSightTeamMask="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSightTeamMask="),V);return V!=0;}(); // default 1 since 2026-11-22 (user decision); =0 = own soldiers block their side's sight and bullets again
  return bOn;
 }
 FMaskFilter UBattleLeaderRuntime::SightTeamMaskFor(int32 ObserverID) const
@@ -1656,7 +1656,7 @@ bool UBattleLeaderRuntime::PinnedFlankEnabled()
 }
 bool UBattleLeaderRuntime::HireMirrorEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleHireMirror="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleHireMirror="),V);return V!=0;}(); // default on (user decision 2026-11-22)
  return bOn;
 }
 bool UBattleLeaderRuntime::SectorSymmetricEnabled()
