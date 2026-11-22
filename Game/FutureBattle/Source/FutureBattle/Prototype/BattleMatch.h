@@ -122,6 +122,18 @@ public:
  // AI purchase rule, every director tick: own resources minus own pending replenishments >= cost + reserve, and a free slot.
  // Team 1 always; team 0 only in the all-AI sight experiment.
  void UpdateAreaHiring();
+ // Start of an area match (user decision 2026-11-22 after the east/west front army count differed, 17 vs 18):
+ //  - OrderSync (-BattleOrderSync=1, also on with -BattleSetupPhase=1): each 5 s step buys first and then gives both teams their orders.
+ //    Before, team 0's orders came before the purchases and team 1's after them, so team 1 used each new squad 5 s earlier.
+ //  - SetupPhase (-BattleSetupPhase=1): the AI teams spend their starting resources at once before the first orders (the player buys
+ //    and gives orders while the match waits paused at the start, then starts it with P).
+ //  - StartSquads (-BattleStartSquads=N, 1..25, default 25): rifle squads each team starts with (spread over the usual start places);
+ //    with fewer of them, -BattleAreaStartCredits gives the resources to build the rest freely.
+ static bool OrderSync();
+ static bool SetupPhase();
+ static int32 StartSquads();
+ int32 StartSquadCount() const { return 2*StartSquads(); } // squads of both teams at the start; higher squad IDs were bought
+ bool bSetupDone=false, bSetupBurst=false;
  // Initialized only for new ON matches. Loading pre-extension-4 saves explicitly disables the planner.
  int32 CompositionTeams=0;
  UPROPERTY() TArray<FCompositionTeamState> CompositionState;

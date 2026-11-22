@@ -95,6 +95,13 @@ void ABattleHUD::DrawHUD()
 	Label(PC->IsTactical() ? TEXT("作戦指揮") : Controlled && !Controlled->UsesThirdPersonView() ? TEXT("直接操作（一人称）") : TEXT("直接操作（三人称）"), W * .4f, 30, Mint, 1.2f);
 	Label(FString::Printf(TEXT("味方 %02d ／ 敵 %02d ／ 発見中 %02d"), Allies, Enemies, Spotted), W * .4f, 54, White, .9f);
 	Label(Mode->bCombatPaused ? TEXT("AI停止中 [P]") : TEXT("AI稼働中 [P]"), W - 165, 35, Mode->bCombatPaused ? FLinearColor::Yellow : Muted);
+	// Setup before the start (-BattleSetupPhase=1, user decision 2026-11-22): the match waits paused at 0 s for the player's purchases and orders.
+	if (const auto* SetupMatch = GetWorld()->GetSubsystem<UBattleMatch>(); SetupMatch && SetupMatch->bArea && UBattleMatch::SetupPhase() && Mode->bCombatPaused && SetupMatch->Elapsed <= 0.f)
+	{
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, .55f), W * .5f - 330, 120, 660, 54);
+		Label(FString::Printf(TEXT("開始前の編成 ／ 資源 %d ／ 部隊 %d/%d"), SetupMatch->Credits[0], SetupMatch->ActiveSquads(0), BattleTactics::AreaHire().MaxActive), W * .5f - 318, 126, FLinearColor::Yellow, 1.f);
+		Label(TEXT("1〜6で部隊を購入し、前線軍・攻撃軍と命令を整えたら P で開始"), W * .5f - 318, 150, White, .85f);
+	}
 	if (const auto* SpeedPC = Cast<ABattleController>(GetOwningPlayerController()); SpeedPC && SpeedPC->IsTactical())
 		Label(FString::Printf(TEXT("速度 x%d [.]"), SpeedPC->GetGameSpeed()), W - 165, 55, SpeedPC->GetGameSpeed() > 1 ? FLinearColor::Yellow : Muted);
 	const auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();

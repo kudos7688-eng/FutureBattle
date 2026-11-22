@@ -28,7 +28,7 @@ int32 UBattleMatch::AreaScore(int32 Team)const
 void UBattleMatch::InitializeArea()
 {
  BattleComposition::LogStart(); // stage 1: returns before constructing definitions when OFF
- Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();FireReveals[0].Reset();FireReveals[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
+ Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();FireReveals[0].Reset();FireReveals[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();bSetupDone=bSetupBurst=false;FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
  // A team knows the objectives it holds from the start (the depots of map F).
@@ -122,6 +122,9 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  LastMessage=SquadType==BattleSquadType::Supply?FString::Printf(TEXT("Supply vehicle deployed / -%d resources"),Cost):SquadType==BattleSquadType::Exo?FString::Printf(TEXT("Exoskeleton soldier deployed / -%d resources"),Cost):SquadType==BattleSquadType::SPGun?FString::Printf(TEXT("Self-propelled gun deployed / -%d resources"),Cost):SquadType==BattleSquadType::Mortar?FString::Printf(TEXT("Mortar team deployed / -%d resources"),Cost):SquadType==BattleSquadType::ArmoredCar?FString::Printf(TEXT("Armoured car deployed / -%d resources"),Cost):SquadType==BattleSquadType::Tank?FString::Printf(TEXT("Tank deployed / -%d resources"),Cost):SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
  return true;
 }
+bool UBattleMatch::SetupPhase(){static const int32 V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSetupPhase="),X);return X;}();return V!=0;}
+bool UBattleMatch::OrderSync(){static const int32 V=[]{int32 X=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleOrderSync="),X);return X;}();return V<0?SetupPhase():V!=0;}
+int32 UBattleMatch::StartSquads(){static const int32 V=[]{int32 X=25;FParse::Value(FCommandLine::Get(),TEXT("BattleStartSquads="),X);return FMath::Clamp(X,1,25);}();return V;}
 void UBattleMatch::UpdateAreaHiring()
 {
  const auto& H=BattleTactics::AreaHire();
@@ -135,7 +138,7 @@ void UBattleMatch::UpdateAreaHiring()
   int32 Pending=0;for(const auto& Q:Area.Replacements)Pending+=Store->Find(Q.Key)->Team==Team;
   // Squad type by the intent's heavy share: heavy infantry while the team's bought heavy squads are below that share of its purchases.
   FAreaIntent HireIntent=AreaIntent(Team); uint8 Type=BattleSquadType::Rifle;
-  int32 Bought=0,Heavy=0;for(const auto& P:Store->GetSquads())if(P.Value.Team==Team){Bought+=P.Key>50;Heavy+=P.Value.SquadType==BattleSquadType::Heavy;}
+  int32 Bought=0,Heavy=0;for(const auto& P:Store->GetSquads())if(P.Value.Team==Team){Bought+=P.Key>StartSquadCount();Heavy+=P.Value.SquadType==BattleSquadType::Heavy;}
   // Subtraction evaluation (Docs/design-subtraction-eval.md, trials default 0): -BattleAreaAllTypes=1 gives BOTH teams the all-types mix
   // (the composition schedule below plus heavy share 0.2, two scout pairs, one exoskeleton soldier, one supply vehicle; command-line
   // keep values are not mixed in); -BattleAreaWithout=<type> then removes one type (the trial team only with -BattleAreaTrialTeam).
@@ -191,7 +194,7 @@ void UBattleMatch::UpdateAreaHiring()
   // Pacing (own clock and own purchase history only): spacing between purchases and no purchases near the time limit,
   // where a squad costs score (15 resources for 10 living) and has little time to take a point.
   if(H.Stop>0&&Elapsed>=MatchTimeLimit()-H.Stop)continue;
-  if(H.Interval>0&&Area.LastAIHireAt.IsValidIndex(Team)&&Elapsed-Area.LastAIHireAt[Team]<H.Interval)continue;
+  if(!bSetupBurst&&H.Interval>0&&Area.LastAIHireAt.IsValidIndex(Team)&&Elapsed-Area.LastAIHireAt[Team]<H.Interval)continue; // the setup buys at once
   // P1 trial: buy only for an observed need and keep that mission for the new squad.
   int32 Need=-1;
   const bool bPurpose=H.bPurpose&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==Team);

@@ -140,8 +140,11 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
  WalkPose=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/Characters/Mannequins/Anims/Rifle/Walk/MF_Rifle_Walk_Fwd"));
  ReloadPose=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/Characters/Mannequins/Anims/Rifle/MM_Rifle_Reload"));
  int32 NoControl=INDEX_NONE; FParse::Value(FCommandLine::Get(),TEXT("BattleLeaderNoControl="),NoControl);
- for(int32 Team=0;Team<2;++Team) for(int32 Group=0;Group<Count/20;++Group)
+ // -BattleStartSquads (area maps): fewer squads per team, picked evenly from the usual start places (BattleMatch.h).
+ const int32 PerTeam=Count/20,Starting=bWideField&&BattleFieldLayout::IsSightField(GetWorld())?FMath::Min(PerTeam,UBattleMatch::StartSquads()):PerTeam;
+ for(int32 Team=0;Team<2;++Team) for(int32 Pick=0;Pick<Starting;++Pick)
  {
+  const int32 Group=Starting>=PerTeam?Pick:(2*Pick+1)*PerTeam/(2*Starting);
   TArray<int32> IDs;
   const int32 Side=Swap?1-Team:Team;
   // Symmetric start trial: the east side's rows are the west side's rotated 180 degrees (north-south reversed), on the area maps.
@@ -210,7 +213,7 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
    if(auto* NavSystem=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
     if(auto* Recast=Cast<ARecastNavMesh>(NavSystem->GetDefaultNavDataInstance()))
     {Recast->DefaultMaxSearchNodes=32768.f;const_cast<FNavigationQueryFilter&>(*Recast->GetDefaultQueryFilter()).SetMaxSearchNodes(32768);}
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WIDE_MIXED_READY squads=50 actors=50 mass=%d objectives=%d paused=1"),50*(BattleSquadType::RifleMembers()-1),Match->Objectives.Num());
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WIDE_MIXED_READY squads=%d actors=%d mass=%d objectives=%d paused=1"),2*Starting,2*Starting,2*Starting*(BattleSquadType::RifleMembers()-1),Match->Objectives.Num());
   if(FParse::Param(FCommandLine::Get(),TEXT("BattleSectorSmoke")))
   {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSectorSmoke,6.f,false);}
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleCoverActionSmoke")))
