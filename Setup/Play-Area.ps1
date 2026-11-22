@@ -1,11 +1,17 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I','J')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
 # Strategy layer (Docs/design-strategy-layer.md; trial, default 0): both AI teams, and the squads the player delegates (J), plan by
 # the situation map; the top bar shows the own plan. 2 = recon -> focus attack, 3 = + hold and counter, 4 = + purchases for the focus.
 if ($Strategy -gt 0) { $extra += "-BattleStrategy=$Strategy" }
+# Setup before the start (user decision 2026-11-22, trial): 15 rifle squads instead of 25 and 250 resources instead of 100 (the 10 squads'
+# worth plus the usual 100), the match waits paused for purchases and orders; P starts it. Purchases come before both teams' orders.
+if ($Setup) { $extra += @('-BattleSetupPhase=1','-BattleStartSquads=15','-BattleAreaStartCredits=250') }
+# Close fights to look at (ROADMAP 2026-11-22, stage 1 of fights inside a sector): sight and engagement cut to 30 or 50 m, so squads
+# meet inside one sector. For watching the current AI at close range, not a play condition.
+if ($CloseRange -gt 0) { $cm = $CloseRange * 100; $extra += @("-BattleRangeSight=$cm","-BattleRangeEngage=$cm","-BattleRangeEngageSupport=$cm") }
 if ($Map -eq 'H') {
     & (Join-Path $PSScriptRoot 'Initialize-MapH.ps1') -Project $project
 }

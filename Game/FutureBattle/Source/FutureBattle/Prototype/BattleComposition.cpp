@@ -55,7 +55,7 @@ BattleComposition::FInput BattleComposition::Capture(const UBattleMatch& Match,c
  for(int32 SquadID:SquadIDs)
  {
   const auto& Squad=Store.GetSquads().FindChecked(SquadID);if(Squad.Team!=Team)continue;
-  Result.LegacyBought+=SquadID>50;Result.LegacyHeavy+=Squad.SquadType==BattleSquadType::Heavy;
+  Result.LegacyBought+=SquadID>Match.StartSquadCount();Result.LegacyHeavy+=Squad.SquadType==BattleSquadType::Heavy;
   if(Squad.CommandStatus!=EBattleCommandStatus::Active)continue;
   ++Result.Active;if(Squad.SquadType>=BattleSquadType::Count)continue;
   auto& Type=Result.Types[Squad.SquadType];++Type.Active;

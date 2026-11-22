@@ -168,6 +168,15 @@ public:
 	bool ShowsUnspottedBodies() const;
 	void RefreshBodyPresentation();
 	const TArray<TObjectPtr<ABattleUnit>>& GetSelection() const { return Selected; }
+ // One soldier picked with Ctrl+click for an order of his own (BattleSoldierOrder.cpp); INDEX_NONE = none.
+ int32 GetSoldierSelection() const { return SoldierSelection; }
+ void SetSoldierSelection(int32 ID) { SoldierSelection = ID; }
+ bool PickSoldier(FVector2D Screen,int32& Out) const;
+ void SelectSoldierAt(FVector2D Screen);
+ void OrderSoldierAt(FVector2D Screen);
+ bool ReturnSelectedSoldier();
+ // Direct control (G): aim at a friendly soldier to pick him, then aim at a place to send him there (BattleSoldierOrder.cpp).
+ void CommandSoldierFromView();
 	bool IsSelected(const ABattleUnit* Unit) const { return Selected.Contains(Unit); }
 	void SetSelection(ABattleUnit* Unit);
 	bool IsDragging() const { return bTactical && bTriggerHeld; }
@@ -230,6 +239,7 @@ private:
 	UPROPERTY() TObjectPtr<ABattleUnit> VaultUnit;
 	FVector VaultFrom = FVector::ZeroVector, VaultTo = FVector::ZeroVector; double VaultPeak = 0; float VaultTime = 0, VaultDuration = .4f;
 	int32 DelegationPress = INDEX_NONE;
+ int32 SoldierSelection = INDEX_NONE;
  bool bSquadListPress=false;
  // A left press that started on the minimap (moves the tactical camera); its release is swallowed too.
  bool bMinimapPress=false;
