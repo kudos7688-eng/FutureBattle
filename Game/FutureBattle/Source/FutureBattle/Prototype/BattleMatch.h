@@ -364,7 +364,8 @@ public:
  // within 150 m of that home. Own soldiers and known enemies (sightings now, scout reports, and remembered contacts weighted by
  // age) only; never the enemy's true positions. Built on demand without touching any cache (AreaIntelView is not called).
  struct FSituationTheatre { int32 Own=0; double OwnPower=0; int32 Fresh=0; double Memory=0; double KnownPower=0; double EnemySeenAge=-1, PointSeenAge=-1; int32 Owner=-2; uint8 State=0; /* 0 unknown, 1 enemy ahead, 2 even, 3 own ahead */ };
- struct FBattleSituation { double At=-1; TArray<FSituationTheatre> Theatres; };
+ // PassThreat (sector maps): per pass in StrategyPasses, the known enemies at the pass or its exits, weighted as in the theatres.
+ struct FBattleSituation { double At=-1; TArray<FSituationTheatre> Theatres; TArray<double> PassThreat; };
  int32 TheatreOf(int32 Team, const FVector& P) const;
  // Sector maps (H, I, J): theatres by path over passable sectors (Docs/design-terrain-ai.md 3-1), built once per map from the sector
  // kinds only: the sector -> theatre table and, per theatre, a bit for each theatre whose sectors touch it (3-2). Empty elsewhere.
@@ -374,6 +375,11 @@ public:
  // Path steps (sectors) between objective sectors (N x N) and from each home to each objective (2 x N); MAX_int32 = no path
  // (Docs/design-terrain-ai.md 3-3: the focus score's distance from the own front goes by path on sector maps).
  mutable TArray<int32> TheatreSteps, HomeTheatreSteps;
+ // Passes (Docs/design-terrain-ai.md 2 and 3-4): open sectors closed on both sides along one axis by a mountain, lake, river or the
+ // map edge (map J: the four gaps in the ridges; maps H/I: bridges and fords). PassOfCell holds the pass index for the pass sector and
+ // its two exits across the other axis (-1 elsewhere). Built with the theatres, from the sector kinds only.
+ mutable TArray<FIntPoint> StrategyPasses;
+ mutable TArray<int8> PassOfCell;
  mutable FString SectorTheatresMap;
  void BuildSituation(int32 Team, FBattleSituation& Out) const;
  // -BattleSituationLog=1 (default 0): BATTLE_SITUATION every 30 match seconds per team and theatre, with the true enemy count of the
@@ -388,6 +394,9 @@ public:
  static bool StrategyOn(int32 Team, int32 Level);
  static float StrategyOpenSeconds();      // before the first review (x match length / 600)
  static float StrategyFocusHoldSeconds(); // least time a focus is kept
+ // -BattleStrategyPass=1 (default 0; sector maps): a focus candidate whose way from the own front can avoid the passes with known
+ // enemies only by a detour of more than 4 sectors loses 5 points (Docs/design-terrain-ai.md 3-4).
+ static bool StrategyPassOn();
  int32 StrategyFocusPoint(int32 Team) const; // INDEX_NONE without a valid focus
  void UpdateStrategy(int32 Team);
  // Stage S3 (-BattleStrategy=3): own points held against a known superior enemy (Area.StrategyHoldMask).

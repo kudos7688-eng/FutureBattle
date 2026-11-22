@@ -51,35 +51,56 @@ int32 UBattleMatch::TheatreOf(int32 Team,const FVector& P) const
  return Best;
 }
 
-void UBattleMatch::BuildSectorTheatres() const
+namespace
 {
- const auto& Def=BattleFieldLayout::Of(GetWorld());
- if(!Def.bSectors){SectorTheatres.Reset();TheatreNeighbours.Reset();return;}
- if(SectorTheatresMap==Def.Name&&SectorTheatres.Num()==BattleSectors::Columns*BattleSectors::Rows)return;
- using namespace BattleSectors;
- const int32 N=Objectives.Num();const int32 Cells=Columns*Rows;
- SectorTheatres.Init(-1,Cells);TheatreNeighbours.Init(0,FMath::Max(0,N));TheatreSteps.Init(MAX_int32,FMath::Max(0,N*N));HomeTheatreSteps.Init(MAX_int32,FMath::Max(0,2*N));SectorTheatresMap=Def.Name;
- if(N<1||N>16)return;
- auto Index=[](FIntPoint C){return C.Y*Columns+C.X;};
- auto Open=[&](FIntPoint C){return Valid(C)&&!Impassable(BattleFieldLayout::SectorKind(GetWorld(),C));};
- // Breadth-first distances in sector steps from every objective's sector (4 neighbours, diagonals when both sides are open).
- TArray<TArray<int32>> Steps;Steps.SetNum(N);
- for(int32 I=0;I<N;++I)
+ // Breadth-first distances in sector steps from Start over open sectors (4 neighbours, diagonals when both sides are open);
+ // MAX_int32 where there is no path. Closed (optional, one flag per sector) marks open sectors not to enter (threatened passes, 3-4).
+ void SectorSteps(const UWorld* World,FIntPoint Start,const TArray<bool>* Closed,TArray<int32>& Out)
  {
-  Steps[I].Init(MAX_int32,Cells);const FIntPoint Start=Cell(Objectives[I].Position);if(!Valid(Start))continue;
-  TArray<FIntPoint> Queue;Queue.Add(Start);Steps[I][Index(Start)]=0;
+  using namespace BattleSectors;
+  auto Index=[](FIntPoint C){return C.Y*Columns+C.X;};
+  auto Open=[&](FIntPoint C){return Valid(C)&&!Impassable(BattleFieldLayout::SectorKind(World,C))&&!(Closed&&(*Closed)[Index(C)]);};
+  Out.Init(MAX_int32,Columns*Rows);if(!Valid(Start))return;
+  TArray<FIntPoint> Queue;Queue.Add(Start);Out[Index(Start)]=0;
   for(int32 Head=0;Head<Queue.Num();++Head)
   {
-   const FIntPoint Here=Queue[Head];const int32 D=Steps[I][Index(Here)];
+   const FIntPoint Here=Queue[Head];const int32 D=Out[Index(Here)];
    for(int32 DX=-1;DX<=1;++DX)for(int32 DY=-1;DY<=1;++DY)
    {
     if(!DX&&!DY)continue;const FIntPoint To(Here.X+DX,Here.Y+DY);if(!Open(To))continue;
     if(DX&&DY&&(!Open(FIntPoint(Here.X+DX,Here.Y))||!Open(FIntPoint(Here.X,Here.Y+DY))))continue;
-    if(Steps[I][Index(To)]<=D+1)continue;
-    Steps[I][Index(To)]=D+1;Queue.Add(To);
+    if(Out[Index(To)]<=D+1)continue;
+    Out[Index(To)]=D+1;Queue.Add(To);
    }
   }
  }
+}
+
+void UBattleMatch::BuildSectorTheatres() const
+{
+ const auto& Def=BattleFieldLayout::Of(GetWorld());
+ if(!Def.bSectors){SectorTheatres.Reset();TheatreNeighbours.Reset();StrategyPasses.Reset();PassOfCell.Reset();return;}
+ if(SectorTheatresMap==Def.Name&&SectorTheatres.Num()==BattleSectors::Columns*BattleSectors::Rows)return;
+ using namespace BattleSectors;
+ const int32 N=Objectives.Num();const int32 Cells=Columns*Rows;
+ SectorTheatres.Init(-1,Cells);TheatreNeighbours.Init(0,FMath::Max(0,N));TheatreSteps.Init(MAX_int32,FMath::Max(0,N*N));HomeTheatreSteps.Init(MAX_int32,FMath::Max(0,2*N));SectorTheatresMap=Def.Name;
+ StrategyPasses.Reset();PassOfCell.Init(-1,Cells);
+ auto Index=[](FIntPoint C){return C.Y*Columns+C.X;};
+ auto Open=[&](FIntPoint C){return Valid(C)&&!Impassable(BattleFieldLayout::SectorKind(GetWorld(),C));};
+ // Passes (2, 3-4): an open sector closed on both sides along exactly one axis; its exits are the open sectors across the other.
+ for(int32 Y=0;Y<Rows;++Y)for(int32 X=0;X<Columns;++X)
+ {
+  const FIntPoint C(X,Y);if(!Open(C)||StrategyPasses.Num()>=100)continue;
+  const bool bClosedX=!Open(FIntPoint(X-1,Y))&&!Open(FIntPoint(X+1,Y)),bClosedY=!Open(FIntPoint(X,Y-1))&&!Open(FIntPoint(X,Y+1));
+  if(bClosedX==bClosedY)continue; // neither: open ground; both: an enclosed sector, not a way through
+  const int32 P=StrategyPasses.Add(C);PassOfCell[Index(C)]=int8(P);
+  const FIntPoint ExitA=bClosedX?FIntPoint(X,Y-1):FIntPoint(X-1,Y),ExitB=bClosedX?FIntPoint(X,Y+1):FIntPoint(X+1,Y);
+  for(const FIntPoint E:{ExitA,ExitB})if(Open(E)&&PassOfCell[Index(E)]<0)PassOfCell[Index(E)]=int8(P);
+ }
+ if(N<1||N>16)return;
+ // Breadth-first distances in sector steps from every objective's sector.
+ TArray<TArray<int32>> Steps;Steps.SetNum(N);
+ for(int32 I=0;I<N;++I)SectorSteps(GetWorld(),Cell(Objectives[I].Position),nullptr,Steps[I]);
  // Path steps between objectives and from both homes (3-3).
  for(int32 I=0;I<N;++I)
  {
@@ -111,6 +132,9 @@ void UBattleMatch::BuildSituation(int32 Team,FBattleSituation& Out) const
  using namespace BattleSituationValues;
  const double Now=GetWorld()->GetTimeSeconds();
  Out.At=Elapsed;Out.Theatres.SetNum(N+2);
+ // Sector maps: the known enemies at each pass are counted with the theatres (3-4).
+ if(BattleFieldLayout::Of(GetWorld()).bSectors)BuildSectorTheatres();
+ Out.PassThreat.Init(0.,StrategyPasses.Num());
  TArray<FGroupStrength> OwnPower;OwnPower.SetNum(N+2);
  // Known enemies by unit ID: the freshest sighting among the team's soldiers (soldiers in ID order, so ties keep the same one).
  struct FKnown{FVector At=FVector::ZeroVector;double Age=0;uint8 Type=255;};
@@ -145,6 +169,10 @@ void UBattleMatch::BuildSituation(int32 Team,FBattleSituation& Out) const
   if(Age<=FreshAge)++X.Fresh;else X.Memory+=W;
   FGroupStrength One;One.Add(Type);X.KnownPower+=W*(One.Total()+One.Unknown*RifleWeight);
   if(X.EnemySeenAge<0||Age<X.EnemySeenAge)X.EnemySeenAge=Age;
+  if(Out.PassThreat.Num())
+   if(const FIntPoint PassCell=BattleSectors::Cell(At);BattleSectors::Valid(PassCell))
+    if(const int32 PassIndex=PassOfCell.IsValidIndex(PassCell.Y*BattleSectors::Columns+PassCell.X)?PassOfCell[PassCell.Y*BattleSectors::Columns+PassCell.X]:-1;
+       Out.PassThreat.IsValidIndex(PassIndex))Out.PassThreat[PassIndex]+=W;
  };
  TArray<int32> Keys;Known.GetKeys(Keys);Keys.Sort();
  for(int32 Key:Keys){const FKnown& K=Known[Key];AddEnemy(K.At,K.Age,K.Type);}
@@ -231,6 +259,16 @@ namespace BattleStrategyValues
  constexpr double CounterSeconds=90.; // the counter candidate (where the attackers came from) keeps its bonus this long
  constexpr double CounterBonus=5.;
  constexpr double HoldWeight=2.;      // S1 weight multiplier of a held point
+ // Passes (-BattleStrategyPass=1, sector maps; Docs/design-terrain-ai.md 3-4).
+ constexpr double PassThreatMin=1.;   // known enemies (fresh + weighted memory) at a pass or its exits that make it threatened
+ constexpr int32 PassDetour=4;        // sectors: a longer way round the threatened passes counts as no way round
+ constexpr double PassPenalty=5.;
+}
+
+bool UBattleMatch::StrategyPassOn()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleStrategyPass="),V);return V!=0;}();
+ return bOn;
 }
 
 int32 UBattleMatch::StrategyLevel()
@@ -388,6 +426,31 @@ void UBattleMatch::UpdateStrategy(int32 Team)
   }
   return S.Theatres[I].OwnPower+(A!=INDEX_NONE?S.Theatres[A].OwnPower:0.)+(B!=INDEX_NONE?S.Theatres[B].OwnPower:0.);
  };
+ // -BattleStrategyPass (3-4): the passes with known enemies are closed and the way from the own front is measured again; a candidate
+ // then reached only by a detour of more than PassDetour sectors (or not at all) loses PassPenalty. Known enemies only.
+ uint32 PassBlocked=0;int32 Threatened=0;
+ if(StrategyPassOn()&&bPathSteps&&N<=32&&S.PassThreat.Num()==StrategyPasses.Num()&&PassOfCell.Num()==BattleSectors::Columns*BattleSectors::Rows)
+ {
+  TArray<bool> Closed;Closed.Init(false,BattleSectors::Columns*BattleSectors::Rows);
+  for(int32 P=0;P<StrategyPasses.Num();++P)
+   if(S.PassThreat[P]>=PassThreatMin){Closed[StrategyPasses[P].Y*BattleSectors::Columns+StrategyPasses[P].X]=true;++Threatened;}
+  if(Threatened)
+  {
+   TArray<FIntPoint> Sources;Sources.Add(BattleSectors::Cell(Home));for(int32 J:OwnPoints)Sources.Add(BattleSectors::Cell(Objectives[J].Position));
+   TArray<int32> Safe;
+   for(int32 I=0;I<N;++I)
+   {
+    if(OwnPoints.Contains(I))continue;
+    int32 Steps=HomeTheatreSteps[Team*N+I];for(int32 J:OwnPoints)Steps=FMath::Min(Steps,TheatreSteps[J*N+I]);
+    if(Steps==MAX_int32)continue;
+    SectorSteps(GetWorld(),BattleSectors::Cell(Objectives[I].Position),&Closed,Safe);
+    int32 SafeSteps=MAX_int32;
+    for(const FIntPoint& Src:Sources)if(BattleSectors::Valid(Src))SafeSteps=FMath::Min(SafeSteps,Safe[Src.Y*BattleSectors::Columns+Src.X]);
+    if(SafeSteps==MAX_int32||SafeSteps>Steps+PassDetour)PassBlocked|=1u<<I;
+   }
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STRATEGY_PASS team=%d t=%.1f passes=%d threatened=%d blocked=0x%x"),Team,Elapsed,StrategyPasses.Num(),Threatened,PassBlocked);
+  }
+ }
  int32 Best=INDEX_NONE,Next=INDEX_NONE,Unknown=0;double BestScore=0,NextScore=0;
  for(int32 I=0;I<N;++I)
  {
@@ -395,7 +458,8 @@ void UBattleMatch::UpdateStrategy(int32 Team)
   const auto& X=S.Theatres[I];
   // An unknown theatre is not guessed at: it is not a focus candidate (user decision 2026-11-17).
   if(X.State==0){++Unknown;continue;}
-  const double CandidateScore=-KnownWeight*X.KnownPower+OwnWeight*OwnNear(I)-DistanceWeight*FrontDistance(I)/10000.-(I==Avoid?AvoidPenalty:0.)+(I==Focus?KeepBonus:0.)+(I==Counter?CounterBonus:0.);
+  const double CandidateScore=-KnownWeight*X.KnownPower+OwnWeight*OwnNear(I)-DistanceWeight*FrontDistance(I)/10000.-(I==Avoid?AvoidPenalty:0.)+(I==Focus?KeepBonus:0.)+(I==Counter?CounterBonus:0.)-
+   (I<32&&((PassBlocked>>I)&1)?PassPenalty:0.);
   if(Best==INDEX_NONE||CandidateScore>BestScore){Next=Best;NextScore=BestScore;Best=I;BestScore=CandidateScore;}
   else if(Next==INDEX_NONE||CandidateScore>NextScore){Next=I;NextScore=CandidateScore;}
  }
