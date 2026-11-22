@@ -175,6 +175,8 @@ $supply=@{
  'TM'=@('-SightTeamMask','1')
  # TM0 = the old rule (-BattleSightTeamMask=0: own soldiers block their side's sight and bullets) after TM became the default (2026-11-22).
  'TM0'=@('-SightTeamMask','0')
+ # BF = AI blind fire (-BattleAIBlindFire=1: a pinned soldier holding at a peek point shoots blind from cover; Test-WideSight has no own parameter).
+ 'BF'=@('-ExtraArgs','-BattleAIBlindFire=1')
  # SC = the sector AI combination the sector lane uses as its base (s22/s23) plus arrival walk (maps H/I).
  'SC'=@('-SectorContact','1','-SectorRoute','1','-SectorFlank','1','-SectorFront','1','-WaypointPass','1','-SectorMoveFire','1','-CoverHuddle','1','-PinnedFlank','1','-ArrivalThreat','1','-SectorCoverRoute','1','-ArrivalWalk','1')
 }
