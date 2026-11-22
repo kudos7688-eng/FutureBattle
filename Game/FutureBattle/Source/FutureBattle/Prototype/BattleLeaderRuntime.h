@@ -254,6 +254,7 @@ public:
  struct FArmsBoundMemory{int32 Target=INDEX_NONE;FVector At=FVector::ZeroVector;double SeenAt=-1.e9;};
  TMap<int32,FArmsBoundMemory> ArmsBoundMemory;
  TMap<int32,double> ArmsChargeNext,ArmsBoundArrived;double ArmsNextCharge=0;
+ int32 ArmsBlockedLogs=0,ArmsTimeoutLogs=0; // evaluation: BATTLE_ARMS_CHARGE_BLOCKED (at most 300) / BATTLE_ARMS_ASSAULT_TIMEOUT (200) lines
  void RunArmsSmoke(double Now); // -BattleArmsSmoke (with -BattleElite=1): BATTLE_ARMS_SMOKE_RESULT failures=N, once after the start
  bool bArmsSmokeDone=false;
  double ArmsNextPick=0,ArmsNextMelee=0,ArmsNextHeal=0;int32 ArmsIssuedUnits=-1;bool bArmsElite=false;
@@ -395,8 +396,9 @@ public:
  bool bFirePositionHereGood=false;
  // Trial -BattleCoverApproach: runtime-only walk toward a hidden cover slot (not saved; cleared on restore).
  // bAssault (BattleArms.cpp, -BattleArmsAssault): a dash to cover close to the enemy; on arrival the soldier takes that cover.
- // bCharge (BattleArms.cpp, -BattleArmsCharge): a run at a seen enemy; the goal follows him and StepCharge moves the soldier.
- struct FCoverApproach{FVector Goal=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false,bFree=false,bStandUp=false,bFallback=false,bAssault=false,bCharge=false,bReached=false,bLost=false;};
+ // bCharge (BattleArms.cpp, -BattleArmsCharge): a run at a seen enemy; the goal follows him and StepCharge moves the soldier. With
+ // bVia he first walks to Via, a step aside from where the straight way was blocked (StartCharge).
+ struct FCoverApproach{FVector Goal=FVector::ZeroVector,Via=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0;bool bKeptTargetChange=false,bFree=false,bStandUp=false,bFallback=false,bAssault=false,bCharge=false,bReached=false,bLost=false,bVia=false;};
  // -BattleContactCover: where a soldier settled after walking to a firing position that is not a cover slot (runtime only, evaluation).
  TMap<int32,FVector> FirePositions;
  TMap<int32,FCoverApproach> CoverApproaches;

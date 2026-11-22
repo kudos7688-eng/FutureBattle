@@ -368,7 +368,23 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
    return false;
   }
  }
- else if(Now>A->Until)End=TEXT("approach_cancel_timeout");
+ else if(Now>A->Until)
+ {
+  End=TEXT("approach_cancel_timeout");
+  // Evaluation: how far an assault bound (BattleArms.cpp) still had to go when its time ran out, and whether he was still moving.
+  if(A->bAssault)
+  {
+   const double Left=FVector::Dist2D(Pos,A->Goal);const auto* Body=Bodies.Find(ID);const double Speed=Body?Body->Velocity.Size2D():0.;
+   Diag.Cover(Left<500.?TEXT("arms_assault_timeout_near"):TEXT("arms_assault_timeout_far"));
+   if(Speed<30.)Diag.Cover(TEXT("arms_assault_timeout_still"));
+   if(Diag.Enabled&&ArmsTimeoutLogs<200)
+   {
+    ++ArmsTimeoutLogs;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_ASSAULT_TIMEOUT unit=%d left=%.0f speed=%.0f actor=%d position=%s"),ID,Left,Speed,
+     Body&&Body->Actor.IsValid()?1:0,*Pos.ToCompactString());
+   }
+  }
+ }
  if(!End && A->bAssault)
  {
   // Run through: count the dashes that go on with the enemy lost (they used to end after 10 s), and remember where he was seen.

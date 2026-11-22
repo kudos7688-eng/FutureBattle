@@ -18,6 +18,7 @@
 #include "BattleCover.h"
 #include "BattleVATDisplay.h"
 #include "Components/StaticMeshComponent.h"
+#include "NavigationSystem.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -270,8 +271,8 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
  // -BattleArmsAssault=2 also the riflemen of ordinary rifle squads, not leaders or heavy weapons) runs at an enemy while his squad
  // fights (StepCharge), fires at him on the way and strikes him at arm's length (the pass above): an enemy he sees within 12 m, or
  // up to 15 s after an assault bound brought him to cover, an enemy known within 30 m (seen or reported within 3 s, also one hidden
- // behind his cover). Not at a group (more than two known enemies within 6 m of him), not through a wall or obstacle, not to
- // another floor, at most two of a squad at once.
+ // behind his cover). Not at a group (more than two known enemies within 6 m of him), not through a wall or obstacle (he may start
+ // from a step aside to get round his own cover, StartCharge), not to another floor, at most two of a squad at once.
  if(BattleArms::ChargeEnabled()&&Now>=ArmsNextCharge)
  {
   ArmsNextCharge=Now+.25;
@@ -453,18 +454,56 @@ bool UBattleLeaderRuntime::StartCharge(int32 ID,int32 Target,const FVector& Targ
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
  if(!U||!U->IsAlive()||!Bodies.Contains(ID)||IsVehicle(ID)||TargetAt.ContainsNaN())return false;
  const auto& Ch=BattleArms::Charge();const FVector Pos=Position(ID);
+ const FCollisionObjectQueryParams Static(ECC_WorldStatic);const FCollisionShape Body=FCollisionShape::MakeCapsule(36,88);
+ auto StopFrom=[&](const FVector& From){return TargetAt+(From-TargetAt).GetSafeNormal2D()*Ch.Stop;};
+ auto Clear=[&](const FVector& From,const FVector& To){return !GetWorld()->SweepTestByObjectType(From,To,FQuat::Identity,Static,Body);};
  // A clear straight way for his body to the stop in front of the enemy (true geometry, the same test as the cover approach's walk).
- const FVector Stop=TargetAt+(Pos-TargetAt).GetSafeNormal2D()*Ch.Stop;
- if(GetWorld()->SweepTestByObjectType(Pos,Stop,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))
- {SightExperiment.Cover(TEXT("arms_charge_blocked"));return false;}
+ FVector Via=Pos;bool bVia=false;FHitResult Hit;
+ if(GetWorld()->SweepSingleByObjectType(Hit,Pos,StopFrom(Pos),FQuat::Identity,Static,Body))
+ {
+  // Evaluation: where the straight way is blocked (inside something at the start, within 2.5 m of him, within 2.5 m of the stop, or
+  // between) and whether he is in a cover action (low cover: he fires standing up behind it, no firing point to the side).
+  const double Len=FVector::Dist(Pos,StopFrom(Pos)),At=Hit.bStartPenetrating?0.:double(Hit.Distance);
+  const bool bLow=U->CoverPhase&&FVector::Dist2D(U->CoverPeek,U->CoverAnchor)<100.;
+  SightExperiment.Cover(TEXT("arms_charge_blocked"));
+  SightExperiment.Cover(Hit.bStartPenetrating?TEXT("arms_charge_blocked_start"):At<250.?TEXT("arms_charge_blocked_near"):Len-At<250.?TEXT("arms_charge_blocked_far"):TEXT("arms_charge_blocked_mid"));
+  if(U->CoverPhase)SightExperiment.Cover(bLow?TEXT("arms_charge_blocked_low_cover"):TEXT("arms_charge_blocked_in_cover"));
+  if(SightExperiment.Enabled&&ArmsBlockedLogs<300)
+  {
+   ++ArmsBlockedLogs;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_CHARGE_BLOCKED unit=%d len=%.0f hit=%.0f start=%d cover=%d low=%d actor=%s component=%s"),ID,Len,At,
+    Hit.bStartPenetrating?1:0,int32(U->CoverPhase),bLow?1:0,*GetNameSafe(Hit.GetActor()),*GetNameSafe(Hit.GetComponent()));
+  }
+  // A step aside round the obstacle - often the cover he is in, which by its choice stands between him and the enemy: his cover's
+  // firing point (high cover), or a place SideStep1 / SideStep2 to either side on the navigation mesh, on his floor and not past
+  // the enemy, with a clear walk there and a clear straight way from there. He walks there first (StepCharge).
+  TArray<FVector,TInlineAllocator<5>> Steps;
+  if(U->CoverPhase&&!bLow)Steps.Add(U->CoverPeek);
+  if(auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+  {
+   const FVector Lateral=FVector::CrossProduct((TargetAt-Pos).GetSafeNormal2D(),FVector::UpVector);
+   for(const float Offset:{-Ch.SideStep1,Ch.SideStep1,-Ch.SideStep2,Ch.SideStep2})
+    if(FNavLocation Projected;Nav->ProjectPointToNavigation(Pos+Lateral*Offset-FVector(0,0,90),Projected,FVector(50,50,150)))Steps.Add(Projected.Location+FVector(0,0,90));
+  }
+  for(int32 i=0;i<Steps.Num()&&!bVia;++i)
+  {
+   const FVector& Aside=Steps[i];
+   if(FMath::Abs(Aside.Z-Pos.Z)>150.||FVector::Dist2D(Aside,TargetAt)<=Ch.Stop+100.||!Clear(Pos,Aside)||!Clear(Aside,StopFrom(Aside)))continue;
+   Via=Aside;bVia=true;
+   if(i==0&&U->CoverPhase&&!bLow)SightExperiment.Cover(TEXT("arms_charge_side_peek"));
+  }
+  if(!bVia){SightExperiment.Cover(TEXT("arms_charge_side_none"));return false;}
+  SightExperiment.Cover(TEXT("arms_charge_side_found"));
+ }
  // The charge starts from where he is: out of his cover first; it replaces a dash or walk to cover.
  if(U->CoverPhase)CancelCoverAction(ID);
  U=Store->Find(ID);
  if(const auto* Old=CoverApproaches.Find(ID))SightExperiment.Cover(Old->bAssault?TEXT("arms_charge_from_dash"):TEXT("arms_charge_from_walk"));
- FCoverApproach A;A.Goal=TargetAt;A.Target=Target;A.Revision=U->OrderRevision;A.Until=Now+Ch.Limit;A.bCharge=true;
+ FCoverApproach A;A.Goal=TargetAt;A.Target=Target;A.Revision=U->OrderRevision;A.Until=Now+Ch.Limit;A.bCharge=true;A.Via=Via;A.bVia=bVia;
  CoverApproaches.Add(ID,A);FirePositions.Remove(ID);
  SightExperiment.Cover(TEXT("arms_charge_started"));
- UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_CHARGE unit=%d team=%d target=%d from=%.0f weapon=%d"),ID,U->Team,Target,FVector::Dist2D(Pos,TargetAt),int32(U->ActiveWeapon()));
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_CHARGE unit=%d team=%d target=%d from=%.0f weapon=%d side=%.0f"),ID,U->Team,Target,FVector::Dist2D(Pos,TargetAt),
+  int32(U->ActiveWeapon()),bVia?FVector::Dist2D(Pos,Via):0.);
  return true;
 }
 
@@ -485,14 +524,17 @@ bool UBattleLeaderRuntime::StepCharge(int32 ID,float Dt,double Now)
  else if(Now>A->Until)End=TEXT("arms_charge_end_timeout");
  if(End){SightExperiment.Cover(End);CoverApproaches.Remove(ID);return false;}
  // Toward where the enemy is seen now; at arm's length he stands and strikes (StepArms) while the close weapons fire point-blank.
+ // A charge from a step aside (StartCharge) walks to that place first.
  A->Goal=Contact->LastKnownPosition;
  const double D=FVector::Dist2D(Pos,A->Goal);
- if(D<=Ch.Stop+10.){if(!A->bReached){A->bReached=true;SightExperiment.Cover(TEXT("arms_charge_reached"));}return true;}
- auto& B=Bodies.FindChecked(ID);const FVector Dir=(A->Goal-Pos).GetSafeNormal2D();
+ if(D<=Ch.Stop+10.){A->bVia=false;if(!A->bReached){A->bReached=true;SightExperiment.Cover(TEXT("arms_charge_reached"));}return true;}
+ if(A->bVia&&FVector::Dist2D(Pos,A->Via)<=Ch.ViaReach){A->bVia=false;SightExperiment.Cover(TEXT("arms_charge_side_reached"));}
+ const FVector To=A->bVia?A->Via:A->Goal;const double Left=A->bVia?FVector::Dist2D(Pos,A->Via):D-Ch.Stop;
+ auto& B=Bodies.FindChecked(ID);const FVector Dir=(To-Pos).GetSafeNormal2D();
  if(B.Actor.IsValid()){B.Actor->AddMovementInput(Dir);B.Velocity=B.Actor->GetVelocity();}
  else
  {
-  FHitResult Hit;const float Stride=FMath::Min(GetDefault<UBattleTuning>()->MoveSpeed*Ch.SpeedScale*Dt,float(D-Ch.Stop));
+  FHitResult Hit;const float Stride=FMath::Min(GetDefault<UBattleTuning>()->MoveSpeed*Ch.SpeedScale*Dt,float(Left));
   B.Capsule->MoveComponent(Dir*Stride,B.Capsule->GetComponentQuat(),true,&Hit);
   auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=B.Capsule->GetComponentLocation();B.Velocity=(F.Position-Pos)/FMath::Max(.001f,Dt);
  }

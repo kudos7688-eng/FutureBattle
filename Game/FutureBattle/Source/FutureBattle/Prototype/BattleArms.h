@@ -50,10 +50,11 @@ namespace BattleArms
  const FMelee& Melee();
  // The charge: at an enemy he sees within Range cm, or - within BoundWindow s after an assault bound brought him to cover - at one
  // seen or reported within Known s and BoundRange cm (also hidden behind his cover: he runs to where the enemy was last seen). Not
- // more than CrowdMax known enemies within CrowdRadius of the target (him included) and a clear straight way. The soldier runs at
- // SpeedScale x the walking speed to Stop cm from him for at most Limit s; the next charge waits Cooldown s from this start; at most
- // SquadMax of a squad at once.
- struct FCharge { float Range=1200.f,BoundRange=3000.f,BoundWindow=15.f,Known=3.f,Stop=120.f,Limit=8.f,SpeedScale=1.3f,CrowdRadius=600.f,Cooldown=8.f; int32 CrowdMax=2,SquadMax=2; };
+ // more than CrowdMax known enemies within CrowdRadius of the target (him included) and a clear straight way - from where he is, or
+ // from a step aside (his cover's firing point, or SideStep1 / SideStep2 cm to either side), which he walks to first (until within
+ // ViaReach cm). The soldier runs at SpeedScale x the walking speed to Stop cm from him for at most Limit s; the next charge waits
+ // Cooldown s from this start; at most SquadMax of a squad at once.
+ struct FCharge { float Range=1200.f,BoundRange=3000.f,BoundWindow=15.f,Known=3.f,Stop=120.f,Limit=8.f,SpeedScale=1.3f,CrowdRadius=600.f,Cooldown=8.f,SideStep1=220.f,SideStep2=400.f,ViaReach=40.f; int32 CrowdMax=2,SquadMax=2; };
  const FCharge& Charge();
  struct FMedic { float Rate=4.f,Range=1000.f; };
  const FMedic& Medic();
