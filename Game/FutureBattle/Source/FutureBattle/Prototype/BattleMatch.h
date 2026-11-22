@@ -187,6 +187,8 @@ public:
  bool FrontReserveOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
  TMap<int32,FVector> FrontReservePosts; // reserve squad -> the sector centre it waits at
  TMap<int32,int32> FrontReserveRow; // reserve squad -> its row (the team's own row order), kept while it stays in the reserve
+ // Measurement of the free squads' moves (log only, BATTLE_FRONT_LINE free_rev/free_moved_m; transient): last leader position and 2 s step.
+ TMap<int32,FVector> FreeLastPos,FreeLastStep; int32 FreeReversals[2]={0,0}; double FreeMoved[2]={0.,0.};
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;

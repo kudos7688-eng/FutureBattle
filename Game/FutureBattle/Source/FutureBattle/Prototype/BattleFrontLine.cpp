@@ -568,6 +568,28 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  //  its own (a new one takes the nearest row among those with the fewest reserve squads) and waits in the sector with more cover two or
  //  three columns behind the line in that row, so it moves only when the line steps there.
  for(auto It=FrontReservePosts.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||S->Team==Team)It.RemoveCurrent();
+ // Measurement (log only, with and without the reserve): how the free squads move, sampled at each update; a reversal is a step against
+ // the squad's previous step (both over 3 m). A squad that leaves the free squads starts afresh when it comes back.
+ if(Hold()&&FrontID!=INDEX_NONE)
+ {
+  TSet<int32> Seen;
+  for(const auto& P:Store->GetSquads())if(IsFree(P.Key,P.Value))
+  {
+   Seen.Add(P.Key);const FVector Now=R->Position(P.Value.LeaderUnitID);
+   if(const FVector* Was=FreeLastPos.Find(P.Key))
+   {
+    const FVector Step(Now.X-Was->X,Now.Y-Was->Y,0.);
+    if(Step.SizeSquared2D()>FMath::Square(300.))
+    {
+     FreeMoved[Team]+=Step.Size2D();
+     if(const FVector* Prev=FreeLastStep.Find(P.Key);Prev&&FVector::DotProduct(*Prev,Step)<0.)++FreeReversals[Team];
+     FreeLastStep.Add(P.Key,Step);
+    }
+   }
+   FreeLastPos.Add(P.Key,Now);
+  }
+  for(auto It=FreeLastPos.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||(S->Team==Team&&!Seen.Contains(It.Key()))){FreeLastStep.Remove(It.Key());It.RemoveCurrent();}
+ }
  if(Reserve()&&FrontID!=INDEX_NONE&&Line.Num()==Rows)
  {
   // The waiting column of each row (INDEX_NONE: none passable there).
@@ -614,7 +636,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  {
   FrontLineLogAt[Team]=Elapsed+LogInterval;
   FString Cells;for(int32 Y=0;Y<Rows;++Y)Cells+=FString::Printf(TEXT("%s%d"),Y?TEXT(","):TEXT(""),Line[Y]);
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_LINE time=%.0f team=%d line=%s group=%d posts=%s"),Elapsed,Team,*Cells,FrontID,Posts.IsEmpty()?TEXT(" none"):*Posts);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_LINE time=%.0f team=%d line=%s group=%d free_rev=%d free_moved_m=%.0f posts=%s"),Elapsed,Team,*Cells,FrontID,FreeReversals[Team],FreeMoved[Team]/100.,Posts.IsEmpty()?TEXT(" none"):*Posts);
  }
 }
 
