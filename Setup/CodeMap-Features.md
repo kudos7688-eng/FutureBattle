@@ -35,6 +35,8 @@
 | 制圧（撃たれて動けない） | @UBattleLeaderRuntime::AddSuppression 、 @UBattleLeaderRuntime::IsPinned | 調整値は @BattleSuppression::Tuning |
 | 兵ごとの脅威と遮蔽の取り直し（個人AI段階A） | @UBattleLeaderRuntime::GatherThreats 、 @UBattleLeaderRuntime::CheckCoverThreats | 試験切替 `-BattleThreatCover`（既定0）。遮蔽を選ぶ側は @UBattleLeaderRuntime::RequestCoverAction の2段の候補 |
 | 止まった兵の見張りの向き（個人AI） | @UBattleLeaderRuntime::SoldierWatchDirection | `-BattleSoldierWatch`（既定1、11-22 ユーザー決定。=0 で切る）。`Follow` の向きの分岐で `-BattleAttackFocus` の後ろ。視野は前方120度 |
+| 歩いている兵の視線（個人AI、近い戦い） | @UBattleLeaderRuntime::WalkLookDirection 、 @UBattleLeaderRuntime::KnownEnemyDirection | 試験切替 `-BattleWalkLook`（既定0）。体は進む向きのまま、視線（`Sight` の向き、`WalkLooks`）だけを知っている敵か小隊で分けた向きへ振る。`Follow` の向きの分岐の最後。診断 `hitfov_*`（視野の外から撃たれた兵の状態）は `DiagnoseHitSight` |
+| 兵が自分で撃つ相手を選ぶ（個人AI、近い戦い） | @UBattleLeaderRuntime::OwnTarget | 試験切替 `-BattleOwnTarget=1/2`（既定0）。小隊の目標を撃てない兵が、自分で見ている交戦距離内の敵兵を撃つ（撃たれた方向の敵が先、次に近い敵）。`Follow` の `CanEngage` の直後で選び、狙いと射撃だけを変える。値2は、撃つ相手がいないとき撃たれた方向へ2秒向く（`-BattleHitFace` と同じ分岐）。数は `own_target_*` |
 | 区画の中で兵が遮蔽を移る（個人AI段階B1） | @UBattleLeaderRuntime::StepSoldierMove 、 @UBattleLeaderRuntime::RateCoverPlace | 試験切替 `-BattleSoldierMove`（既定0）。呼び出しは @UBattleLeaderRuntime::StepCoverAction の隠れている間（1秒に1回・1フレーム4人まで） |
 | 個人AIをプレイヤーの周りだけで動かす | @UBattleLeaderRuntime::SoldierAIFocus | 試験切替 `-BattleSoldierAIFocus=<m>`（既定0＝全員）、`-BattleSoldierAIFocusAt=X,Y`。段階A（@UBattleLeaderRuntime::CheckCoverThreats ほか）とB1（@UBattleLeaderRuntime::StepSoldierMove）の入口で見る |
 | プレイヤーが兵1人に出す移動の命令（Ctrl＋クリックで選ぶ・右クリックで移動先・Hで戻す） | @UBattleLeaderRuntime::IssueSoldierOrder 、 @UBattleLeaderRuntime::StepSoldierOrder 、 @ABattleController::SelectSoldierAt 、直接操作では @ABattleController::CommandSoldierFromView （G） | 兵の状態 `bSoldierOrder`（保存される）。@UBattleLeaderRuntime::Follow の `bOwnOrder`。自動試験 `-BattleSoldierOrderTest`（@UBattleLeaderRuntime::StepSoldierOrderTest） |
@@ -129,6 +131,7 @@ BattleMuzzleFlash | 銃口の閃光（表示だけ。発光する楕円体の使
 BattleState | 正規状態：兵・部隊の記録、命令、弾薬、被害、調整値 UBattleTuning、兵科の差
 BattleSupport | 旧アリーナの支援砲撃（UBattleMatch の一部）
 BattleSuppression | 制圧の値と効果
+BattleSoldierFire | 個人AI `-BattleOwnTarget`（試験切替）：小隊の目標を撃てない兵が、自分で見ている敵兵を撃つ（UBattleLeaderRuntime の一部）
 BattleSoldierWatch | 個人AI `-BattleSoldierWatch`：止まっていて撃つ相手のいない兵が、知っている最も近い敵へ、無ければ小隊で分けた前方へ向く（視野120度。UBattleLeaderRuntime の一部）
 BattleThreatCover | 個人AI段階A `-BattleThreatCover`：兵ごとの脅威（自分の目撃4秒＋撃たれた方向）、全員から隠れる遮蔽、見破られた遮蔽を出て探し直す（UBattleLeaderRuntime の一部）
 BattleSoldierMove | 個人AI段階B1 `-BattleSoldierMove`：区画の中で、隠れている兵が近くのもっと良い遮蔽を採点して自分で移る（UBattleLeaderRuntime の一部）
