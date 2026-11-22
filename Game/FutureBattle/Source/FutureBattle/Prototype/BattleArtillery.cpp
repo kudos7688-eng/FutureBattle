@@ -847,7 +847,9 @@ void UBattleMatch::UpdateArtilleryRaids(int32 Team)
   if(RaidRank<NearestRaidRank||(RaidRank==NearestRaidRank&&(RaidDistance<NearestRaidDistance||(RaidDistance==NearestRaidDistance&&(NearestRaider==INDEX_NONE||RaidPair.Key<NearestRaider)))))
    {NearestRaider=RaidPair.Key;NearestRaidRank=RaidRank;NearestRaidDistance=RaidDistance;}
  }
- if(RaidGroupSize>0&&!RaidPicks.IsEmpty())
+ // Measured: exos are bought one at a time and each went alone at once (all squads=1, all lost); the group waits for two candidates.
+ if(RaidGroupSize>0&&RaidPicks.Num()<2)return;
+ if(RaidGroupSize>0)
  {
   // Trial -BattleArtilleryRaidGroup: single raiders died on the way (map I); the raid takes the best few candidates in the same order
   // (exo first, nearest, lowest ID), gathers them at their centre, then goes round the flank together (UpdateArtilleryRaidGroup).
