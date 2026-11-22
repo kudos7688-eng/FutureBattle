@@ -25,10 +25,31 @@
 | 戦略層・マップJ（ロードマップに従う改善活動） | **11-22 main へ取り込み（b58f391）**：戦略層 S1〜S4（`-BattleSituationLog`・`-BattleStrategy=2/3/4`、既定0）、上部の帯、引き算の評価の切替（`-BattleAreaAllTypes`・`-BattleAreaWithout`）、`-BattleFrontShare`、分岐点の記録 `-BattleStateTrace`、往復保存の時刻 `-BattleVerifySaveAt`、**マップJ**（通れない山・湖で3本の道、ビルなど多様な建物、`Play-Area.ps1 -Map J`）。既定の試合は不変（IDENTICAL）。設計は `Docs/design-*.md`（段階2〜7、地形のAI、画面、部隊一覧、負荷、ロックの列）。計測ロックはファイルの列（`Setup/Lock-Queue.ps1`、ユーザー決定）。得点の規則は今のまま（ユーザー決定）。**11-22 14時45分（main 8097aeb）**：マップJ の丘を外して区画の監査 failures=0、戦略層の距離を区画の道のりに、試験切替 `-BattleRouteTieSymmetric`（既定0）。ST2 の片側試験はマップE 3シードで打ち切り（得 −6.7） | 戦略層のマップJ での片側試験（ST2・峠の評価 ST2P、未ビルド）、RTS のマップI の追加の試合、マップJ の画面確認（ユーザー）、段階2の描画ありの切り分け |
 | 前線軍（群制御、`groupui`） | **11-22 3時30分 main へ**：テストプレイの指摘で作り直し。持ち場は行ごとの固定位置（遮蔽で前後を選び、畑の行は空ける）、最初の割り当ては歩く距離、前進は群が20秒ごとに行ごと、最初の前線は40%（`-BattleFrontOpen`）、要る数だけ前線軍に残し余りは未所属へ。Ctrl+右ドラッグは左右に引く | 試遊（Ctrl+右ドラッグ・通知の実画面確認）。数値は仮 |
 | 車両・砲兵・点検の直し（Codex委任、`FutureBattle-codex`） | **11-21〜22 main へ（すべて既定0、既定の試合は不変）**：自走砲が動かない直し `-BattleVehicleOrderHere`、戦車の被弾後の隠れ `-BattleVehicleHitCover`・主砲の発砲で位置が知られる `-BattleTankGunFlash`、砲兵の発砲で位置が知られる `-BattleArtilleryFlash`、自走砲の射程 `-BattleSPGRange`・費用 `-BattleAreaSPGCost`、公開の砲撃陣地と襲撃 `-BattleArtilleryPosts`（襲撃は外骨格→装甲車、ユーザー決定）、発砲を追う襲撃 `-BattleArtilleryRaidChase`、前線を抜ける襲撃 `-BattleArtilleryRaidSneak`、観測した情報だけで判断 `-BattleObservedArmour`／`-BattleObservedTactics`、点検05 の保存の検査（上限は 1 GiB）、点検07 の結果を変えない高速化、点検09 の画面の直し。評価：射程55000で自走砲の撃破が3〜4割減る。**構える深さ `-BattleArtilleryStandoff 0.35`＋前線を抜ける襲撃で、外骨格が自走砲を撃破できた（2 seed で3両）。発射は7分の1**（11-22 8時50分）。設計は `Docs/design-vehicle-survival.md`・`Docs/design-observation.md` | 戦車の直し A/B（2試合では効果が見えない）と砲兵の各切替を既定にするか。点検09 U06（3解像度）・U12（パッドのメニュー）の画面確認。AI が迫撃砲を買わない（陣地が使われない）。視界100m のマップA の保存は 69 MB |
-| 歩兵の装備・精鋭小隊・狙撃班（`arms` ブランチ、`FutureBattle-arms`） | **11-22 6時30分**：副武装の拳銃 `-BattleSidearms`、手りゅう弾 `-BattleGrenades=n`、近接攻撃 `-BattleMelee`、新しい武器5種（拳銃・短機関銃・散弾銃・選抜射手銃・擲弾銃）と狙撃銃、**精鋭小隊**（8人の役割分担、`-BattleElite`＝ `=` キー／AI `-BattleAreaEliteKeep=n`）、**狙撃班**（狙撃手＋観測手、`-BattleSniperTeam`＝ `]` キー／AI `-BattleAreaSniperKeep=n`）。すべて既定0。直接操作は G 投てき・V 近接・F 拳銃。ビルド・Test-Battle・Test-Area・自己試験 `-BattleArmsSmoke` 合格、既定の試合は main と IDENTICAL。試遊は `Setup\Play-Area.ps1 -Map I -Arms`（`FutureBattle-arms` から）。設計 `Docs/design-infantry-arms.md`。main へは未取り込み。**9時25分**：詰め寄り `-BattleArmsAssault=1/2`（遮蔽から遮蔽へ40m以内ずつ）。`=2`（普通の小隊も走る）でマップIの AI が手りゅう弾を1試合7〜25個投げ、30m未満の射撃も出た。**12時45分**：突撃 `-BattleArmsCharge`（12m以内に見えている敵、詰め寄りの後は25m以内の知っている敵へ駆け込み、2m以内で殴る）。区画の切替なしのマップEでは突撃10・近接で倒した5 | 精鋭小隊だけの `=1` は近い戦いにならない。**試遊の条件では近接攻撃がまだ起きない**（詰め寄りが相手を見失ってやめ、兵が25m以内まで近づかない。突撃はマップI 2回・マップE 1回）。強さの片側試験は未実施、数値は仮。画面での確認（模型・投てきの球・アニメ）は未実施。main への取り込み |
+| 歩兵の装備・精鋭小隊・狙撃班（`arms` ブランチ、`FutureBattle-arms`） | **11-22 6時30分**：副武装の拳銃 `-BattleSidearms`、手りゅう弾 `-BattleGrenades=n`、近接攻撃 `-BattleMelee`、新しい武器5種（拳銃・短機関銃・散弾銃・選抜射手銃・擲弾銃）と狙撃銃、**精鋭小隊**（8人の役割分担、`-BattleElite`＝ `=` キー／AI `-BattleAreaEliteKeep=n`）、**狙撃班**（狙撃手＋観測手、`-BattleSniperTeam`＝ `]` キー／AI `-BattleAreaSniperKeep=n`）。すべて既定0。直接操作は G 投てき・V 近接・F 拳銃。ビルド・Test-Battle・Test-Area・自己試験 `-BattleArmsSmoke` 合格、既定の試合は main と IDENTICAL。試遊は `Setup\Play-Area.ps1 -Map I -Arms`（`FutureBattle-arms` から）。設計 `Docs/design-infantry-arms.md`。main へは未取り込み。**9時25分**：詰め寄り `-BattleArmsAssault=1/2`（遮蔽から遮蔽へ40m以内ずつ）。`=2`（普通の小隊も走る）でマップIの AI が手りゅう弾を1試合7〜25個投げ、30m未満の射撃も出た。**12時45分**：突撃 `-BattleArmsCharge`（12m以内に見えている敵、詰め寄りの後は25m以内の知っている敵へ駆け込み、2m以内で殴る）。区画の切替なしのマップEでは突撃10・近接で倒した5。**14時55分**：詰め寄りを走り切る形に（見失っても行き先の遮蔽まで走り、次は最後に見えた位置へ）。試遊の条件で、遮蔽まで着く割合が15%→約80%、突撃はマップI 26回・マップE 92回、近接で倒したのは7人・22人 | 精鋭小隊だけの `=1` は近い戦いにならない。突撃の多くが通り道（自分の遮蔽と見ている）にふさがれて始まらない。詰め寄りの20秒の時間切れが増えた。強さの片側試験は未実施、数値は仮。画面での確認（模型・投てきの球・アニメ）は未実施。main への取り込み |
 | 個人AI（`soldierai` ブランチ、`FutureBattle-soldierai`） | **11-22 13時30分：soldierai を main へ取り込んだ**（ce6b488。ユーザー決定）。既定ON：止まった兵の見張りの向き `-BattleSoldierWatch`（12時20分）。プレイヤーの操作：兵1人への命令（作戦画面で Ctrl＋クリック→右クリック、TPS視点で G、H で戻す）。既定0の試験切替：段階A `-BattleThreatCover`・しゃがみ判定 `-BattleThreatCoverCrouch`・区画内の移動 `-BattleSoldierMove`・プレイヤーの周りだけ `-BattleSoldierAIFocus` | 兵1人への命令の実際の操作（自動試験だけ）。武器のブランチ `arms` が TPS視点の G を手りゅう弾に使うので、取り込むときにキーを決める。見張りの勝ち負けへの効果は未確認 |
 
 古い項目：11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
+
+## 2026-11-22 14時55分 Claude（武器と高級小隊）：詰め寄りを走り切る形に（ブランチ `arms`、既定0のまま）。試遊の条件でも兵が敵の近くまで届き、突撃と近接の倒しが出るようになった
+
+- **依頼**：詰め寄りの途中で相手を見失っても行き先の遮蔽まで走り切り、次の詰め寄りは最後に見えた位置へ向かう（ユーザー「走り切る」）。
+- **変更**（arms f6540be。切替は増やさず `-BattleArmsAssault` の動きを変えた）：
+  - 詰め寄りは相手を見失ってもやめない（前は10秒でやめていた）。歩きの1.3倍の速さで、途中で遮蔽を探して止まらず、小隊の進路にも戻らない。やめるのは、死亡・移動の命令・行き先の遮蔽を取られた・20秒の時間切れ。
+  - 相手が最後に見えた位置を覚え、今知っている敵がいなければ次の詰め寄りはそこへ向かう（最後に見えてから30秒まで、その位置の18m手前まで）。
+  - 突撃の「詰め寄りの後」の距離を25m→30mにした。途中で死んだ兵の詰め寄り・突撃を片付ける。読み込みのときは覚えた位置も消す。
+  - 設計は `Docs/design-infantry-arms.md` の「詰め寄りを走り切る」。
+- **検証**（arms のビルド、30FPS・描画なし。試遊の条件＝区画の切替10個と `-CoverActions 1 -FlankCoordination 1`。全部ON＋詰め寄り `=2`＋往復保存、各1試合）：
+  - Build・Test-Battle 合格（`FutureBattle-arms/Setup/Battle-Smoke-20261122-144403.log`）。自己試験・往復保存はすべて合格、エラー0。
+  - 既定の試合：マップI s7 が `s24-I-def-s7`（arms の分かれた元の main）と IDENTICAL（78項目）。
+  - 詰め寄りが遮蔽まで着いた割合：マップI 15%→83%、マップE 16%→77%（突撃なしでも 15%→81%）。
+  - 突撃：マップI 2→26回（届いた15・殴った8）、マップE 1→92回（届いた54・殴った23）。近接で倒した：マップI 0→7、マップE 0→22。
+  - 30m未満の射撃：マップI 6→220、マップE 63→409。手りゅう弾：マップI 8→111個、マップE 48→226個。
+  - 出力は `FutureBattle-arms/Setup/Benchmarks/SightTrial-20261111/arms9-*`。
+- **未実施・制限**：
+  - 突撃を止めている一番の理由は「通り道がふさがっている」（マップI 191回、マップE 222回）。着いた遮蔽そのものが敵との間にあるためと見ている（未確認）。次の候補は、遮蔽の横へ一歩出た所から通り道を調べる形。
+  - 詰め寄りの20秒の時間切れが増えた（マップEで32→176回）。詰まる場所は未確認。
+  - 点数は各1試合で、両軍とも同じ決まり。勝ち負けの入れ替わりは試合ごとのぶれの範囲で、強さは判断していない。画面での確認と強さの片側試験は未実施。
+  - main への取り込みは未実施（新しい main で既定の一致を確かめ直す必要がある。TPS視点の G キーの重なりもある）。arms ブランチはこのPCの中だけ。
 
 ## 2026-11-22 14時45分 Claude（ロードマップに従う改善活動）：マップJ の到着の不合格を直して main へ（8097aeb）。戦略層 ST2 の片側試験はマップE 3シードで打ち切り（得 −6.7）。同点の直し RTS はマップI で効いているが2本では判断できない
 
