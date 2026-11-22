@@ -10,5 +10,6 @@
 - 作業区切りでSTATUSに変更範囲・検証・制限・次の一手を記録する。方針変更はROADMAP、重要な経緯はHANDOFFへ残す。未実施を合格と書かない。
 
 - 実装を探すときは、検索を始める前に [CODEMAP.md](CODEMAP.md) の「毎フレームの流れ」と「機能 → 入口」で読む場所を決める。関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。表に無い機能を調べたら、分かった入口を `Setup/CodeMap-Features.md` に1行足す。C++ の関数を足した・消した・移した作業の区切りでは `Setup/Export-CodeMap.py` で作り直す（1秒未満。ビルドも計測ロックも要らない。「未解決」が出たら表を直す）。
+- 調べ始める前に `python -I Setup/Board.py find <語>` で他のセッションの進行中の調査とわかったことを引き、長い調査は `claim` で登録、わかったことは `note`、終えたら `done`（AGENTS.md の「調査の掲示板」）。
 
 この入口は共通文書を置き換えない。最新仕様・承認範囲は都度STATUS/ROADMAPと実コード・ログを照合する。
