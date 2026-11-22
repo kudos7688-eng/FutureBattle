@@ -601,8 +601,8 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    {
     const FIntPoint Cell=FrontCell(Team,C,Y);if(!BattleSectors::Valid(Cell))continue;
     const char Kind=BattleFieldLayout::SectorKind(GetWorld(),Cell);if(BattleSectors::Impassable(Kind)&&Kind!='R')continue;
-    const double Score=Cover(Kind)+(C==Line[Y]-2?.3:0.)-(C<Line[Y]-3?10.*(Line[Y]-3-C):0.); // further back only where nothing nearer is passable
-    if(Score>Best){Best=Score;WaitCol[Y]=C;}
+    const double WaitScore=Cover(Kind)+(C==Line[Y]-2?.3:0.)-(C<Line[Y]-3?10.*(Line[Y]-3-C):0.); // further back only where nothing nearer is passable
+    if(WaitScore>Best){Best=WaitScore;WaitCol[Y]=C;}
     if(C<=Line[Y]-3&&Best>-50.)break;
    }
   }
