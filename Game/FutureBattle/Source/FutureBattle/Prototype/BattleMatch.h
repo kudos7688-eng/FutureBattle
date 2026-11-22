@@ -237,8 +237,6 @@ public:
  // section and attack army while the first one pushes (section push > 0, its attack group below 30% losses) and at least three free AI
  // rifle squads remain after the front army took its need.
  bool FrontPlanFocus2On(int32 Team) const;
- // The point an AI attack group follows: the second focus for the second attack army, else the team focus (StrategyFocusPoint).
- int32 GroupFocusPoint(const FBattleGroup& G) const;
  // Rows of the focus section (1) and the target point's column, for the line's continuity; empty / -1 without a front plan focus.
  void FrontPlanFocusRows(int32 Team,TArray<uint8>& InFocus,int32& TargetCol) const; // called right after UpdateFrontLine refreshed the team's line (same frame: AreaIntelView is cached)
  int32 FrontReleased[2]={0,0}; // squads the front army has released to the reserve so far (display: the player's notice)
@@ -344,6 +342,8 @@ public:
 	void AssignGroupRoles(FBattleGroup& Group) const;
 	FVector GroupSupportPost(int32 Team, int32 Point) const;
 	TMap<int32, FBattleGroup> Groups;
+ // The point an AI attack group follows: the second focus for the second attack army, else the team focus (StrategyFocusPoint).
+ int32 GroupFocusPoint(const FBattleGroup& G) const;
 	TMap<int32, int32> SquadGroup; // squad -> group
 	int32 NextGroupID = 1;
 	int32 GroupOf(int32 SquadID) const; // INDEX_NONE when the squad is in no group

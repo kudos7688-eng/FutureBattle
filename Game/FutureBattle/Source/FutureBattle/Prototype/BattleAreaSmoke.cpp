@@ -411,10 +411,10 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      M->Area.HireQueue.Reset();
      if(M->ActiveSquads(0)<BattleTactics::AreaHire().MaxActive)
      {
-      const int32 Before=M->ActiveSquads(0);M->Credits[0]=0;
-      const bool Queued=M->ReserveHire(0,BattleSquadType::Rifle,false)==2&&M->ActiveSquads(0)==Before;
+      const int32 ActiveBefore=M->ActiveSquads(0);M->Credits[0]=0;
+      const bool Queued=M->ReserveHire(0,BattleSquadType::Rifle,false)==2&&M->ActiveSquads(0)==ActiveBefore;
       M->Credits[0]=CR;M->HireQueueSecond=-1;M->UpdateHireQueue();
-      const bool Bought=M->Area.HireQueue.IsEmpty()&&M->ActiveSquads(0)==Before+1&&M->Credits[0]==CR-BattleTactics::AreaHire().Cost;
+      const bool Bought=M->Area.HireQueue.IsEmpty()&&M->ActiveSquads(0)==ActiveBefore+1&&M->Credits[0]==CR-BattleTactics::AreaHire().Cost;
       Check(Queued&&Bought,TEXT("reservations: waits for resources, then buys within the second"));
       // Remove the bought squad again so the checks below see the same force.
       if(const auto* RS=Store->FindSquad(M->LastHiredSquadID))for(const int32 Member:TArray<int32>(RS->Members))Store->ApplyDamage(Member,1,10000);
