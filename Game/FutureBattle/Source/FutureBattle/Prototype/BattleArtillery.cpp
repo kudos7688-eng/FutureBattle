@@ -76,6 +76,18 @@ float BattleTactics::ArtilleryRaidSneak()
  return ArtilleryPosts()?Metres*100.f:0.f;
 }
 
+int32 BattleTactics::ArtilleryRaidGroup()
+{
+ static const int32 Size=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryRaidGroup="),V);return V>=2?FMath::Min(V,3):0;}();
+ return ArtilleryRaidChase()?Size:0;
+}
+
+int32 BattleTactics::ArtilleryRaidScreen()
+{
+ static const int32 Count=[]{int32 V=2;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryRaidScreen="),V);return FMath::Clamp(V,0,4);}();
+ return ArtilleryRaidGroup()>0?Count:0;
+}
+
 int32 BattleTactics::AreaSPGCost()
 {
  static int32 OverrideCost=35;
@@ -631,6 +643,7 @@ void UBattleMatch::GenerateArtilleryPosts()
  if(!BattleTactics::ArtilleryPosts())return;
  ArtilleryRaids.Reset();MortarPostChoices.Reset();
  ArtilleryRaidChases.Reset();ArtilleryRaidFlashes[0]=ArtilleryRaidFlashes[1]=FArtilleryRaidFlash();ArtilleryRaidClearedAt[0]=ArtilleryRaidClearedAt[1]=-1.;
+ ArtilleryRaidGroups[0]=ArtilleryRaidGroups[1]=FArtilleryRaidGroup();
  for(int32 PostTeam=0;PostTeam<2;++PostTeam){ArtilleryPostPositions[PostTeam].Reset();ArtilleryPostEvidence[PostTeam].Init(-1.,3);}
  auto* PostNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
  const ANavigationData* PostData=nullptr;
@@ -802,6 +815,8 @@ void UBattleMatch::UpdateArtilleryRaids(int32 Team)
   if(RaidEnd){UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID_END team=%d squad=%d reason=%s"),Team,RaidSquadID,RaidEnd);ArtilleryRaids.Remove(RaidSquadID);if(ChaseRaid)ArtilleryRaidChases.Remove(RaidSquadID);}
   else HasRaid=true;
  }
+ const int32 RaidGroupSize=BattleTactics::ArtilleryRaidGroup();
+ if(RaidGroupSize>0)UpdateArtilleryRaidGroup(Team);
  if(HasRaid)return;
  int32 SuspectedPost=INDEX_NONE;
  for(int32 SuspectIndex=0;SuspectIndex<EvidenceTimes.Num();++SuspectIndex)
@@ -813,6 +828,7 @@ void UBattleMatch::UpdateArtilleryRaids(int32 Team)
  // User decision 2026-11-21: a raid on artillery is dangerous; send exoskeleton soldiers first (fast, shielded, launcher kills
  // guns), armoured cars only when no exo is free; never rifle squads or heavy infantry.
  int32 NearestRaider=INDEX_NONE,NearestRaidRank=MAX_int32;double NearestRaidDistance=DBL_MAX;int32 RaidSlot=0;
+ struct FRaidPick { int32 Rank; double Distance; int32 SquadID; };TArray<FRaidPick> RaidPicks;
  for(const auto& RaidPair:RaidStore->GetSquads())if(RaidPair.Value.Team==Team)
  {
   ++RaidSlot;const auto& CandidateSquad=RaidPair.Value;const uint8 RaidType=CandidateSquad.SquadType;
@@ -827,8 +843,29 @@ void UBattleMatch::UpdateArtilleryRaids(int32 Team)
   if(CandidateLiving==0||CandidateLiving*2<CandidateSquad.Members.Num())continue;
   const double RaidDistance=FVector::DistSquared2D(RaidRuntime->Position(CandidateSquad.LeaderUnitID),RaidTarget);
   const int32 RaidRank=RaidType==BattleSquadType::Exo?0:1;
+  if(RaidGroupSize>0)RaidPicks.Add({RaidRank,RaidDistance,RaidPair.Key});
   if(RaidRank<NearestRaidRank||(RaidRank==NearestRaidRank&&(RaidDistance<NearestRaidDistance||(RaidDistance==NearestRaidDistance&&(NearestRaider==INDEX_NONE||RaidPair.Key<NearestRaider)))))
    {NearestRaider=RaidPair.Key;NearestRaidRank=RaidRank;NearestRaidDistance=RaidDistance;}
+ }
+ if(RaidGroupSize>0&&!RaidPicks.IsEmpty())
+ {
+  // Trial -BattleArtilleryRaidGroup: single raiders died on the way (map I); the raid takes the best few candidates in the same order
+  // (exo first, nearest, lowest ID), gathers them at their centre, then goes round the flank together (UpdateArtilleryRaidGroup).
+  RaidPicks.Sort([](const FRaidPick& A,const FRaidPick& B){return A.Rank!=B.Rank?A.Rank<B.Rank:A.Distance!=B.Distance?A.Distance<B.Distance:A.SquadID<B.SquadID;});
+  auto& NewRaidGroup=ArtilleryRaidGroups[Team];NewRaidGroup=FArtilleryRaidGroup();
+  const int32 PickCount=FMath::Min(RaidGroupSize,RaidPicks.Num());
+  for(int32 PickIndex=0;PickIndex<PickCount;++PickIndex)
+  {
+   const int32 PickedRaider=RaidPicks[PickIndex].SquadID;
+   ArtilleryRaids.Add(PickedRaider,SuspectedPost);
+   auto& PickedChase=ArtilleryRaidChases.FindOrAdd(PickedRaider);PickedChase=FArtilleryRaidChase();
+   PickedChase.Target=RaidTarget;PickedChase.EvidenceAt=RaidTargetEvidence;PickedChase.bFlash=HasRaidFlash;PickedChase.FlashAt=HasRaidFlash?RememberedFlash.At:-1.;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID team=%d squad=%d post=%d target=%s source=%s"),Team,PickedRaider,SuspectedPost,*RaidTarget.ToCompactString(),HasRaidFlash?TEXT("flash"):TEXT("post"));
+   if(const auto* PickedSquad=RaidStore->FindSquad(PickedRaider))NewRaidGroup.Rally+=RaidRuntime->Position(PickedSquad->LeaderUnitID);
+  }
+  NewRaidGroup.Rally/=double(PickCount);NewRaidGroup.Rally.Z=0;NewRaidGroup.PhaseAt=Elapsed;NewRaidGroup.Phase=PickCount>=2?0:2;
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID_GROUP team=%d phase=%s squads=%d rally=%s"),Team,PickCount>=2?TEXT("gather"):TEXT("strike"),PickCount,*NewRaidGroup.Rally.ToCompactString());
+  return;
  }
  if(NearestRaider!=INDEX_NONE)
  {
@@ -841,6 +878,94 @@ void UBattleMatch::UpdateArtilleryRaids(int32 Team)
   }
   else UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID team=%d squad=%d post=%d"),Team,NearestRaider,SuspectedPost);
  }
+}
+
+void UBattleMatch::UpdateArtilleryRaidGroup(int32 Team)
+{
+ auto& RaidGroup=ArtilleryRaidGroups[Team];if(RaidGroup.Phase<0)return;
+ const auto* GroupStore=GetWorld()->GetSubsystem<UBattleState>();const auto* GroupRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ TArray<FVector> GroupPositions;int32 LeadRaider=INDEX_NONE;
+ TArray<int32> GroupKeys;ArtilleryRaids.GetKeys(GroupKeys);GroupKeys.Sort();
+ for(int32 GroupSquadID:GroupKeys)if(const auto* GroupSquad=GroupStore->FindSquad(GroupSquadID);GroupSquad&&GroupSquad->Team==Team)
+  if(const auto* GroupLeader=GroupStore->Find(GroupSquad->LeaderUnitID);GroupLeader&&GroupLeader->IsAlive())
+  {GroupPositions.Add(GroupRuntime->Position(GroupSquad->LeaderUnitID));if(LeadRaider==INDEX_NONE)LeadRaider=GroupSquadID;}
+ const FArtilleryRaidChase* LeadChase=LeadRaider!=INDEX_NONE?ArtilleryRaidChases.Find(LeadRaider):nullptr;
+ if(!LeadChase)
+ {
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID_GROUP team=%d phase=end"),Team);
+  RaidGroup=FArtilleryRaidGroup();return;
+ }
+ FVector GroupCentre=FVector::ZeroVector;for(const FVector& GroupPosition:GroupPositions)GroupCentre+=GroupPosition;GroupCentre/=double(GroupPositions.Num());GroupCentre.Z=0;
+ auto AllWithin=[&GroupPositions](const FVector& Point,double Radius){for(const FVector& Member:GroupPositions)if(FVector::DistSquared2D(Member,Point)>FMath::Square(Radius))return false;return true;};
+ if(RaidGroup.Phase==0&&(AllWithin(RaidGroup.Rally,4000.)||Elapsed-RaidGroup.PhaseAt>=30.))
+ {
+  PlanArtilleryRaidFlank(Team,GroupCentre,LeadChase->Target);RaidGroup.Phase=1;RaidGroup.PhaseAt=Elapsed;
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID_GROUP team=%d phase=flank squads=%d way=%s screen=%s screens=%d"),Team,GroupPositions.Num(),
+   *RaidGroup.Way.ToCompactString(),*RaidGroup.Screen.ToCompactString(),RaidGroup.Screens.Num());
+ }
+ else if(RaidGroup.Phase==1&&(AllWithin(RaidGroup.Way,5000.)||Elapsed-RaidGroup.PhaseAt>=90.||
+         FVector::DistSquared2D(GroupCentre,LeadChase->Target)<=FVector::DistSquared2D(RaidGroup.Way,LeadChase->Target)))
+ {
+  RaidGroup.Phase=2;RaidGroup.PhaseAt=Elapsed;
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_RAID_GROUP team=%d phase=strike squads=%d"),Team,GroupPositions.Num());
+ }
+ // The screen holds the front out on the raid's side while the group goes round and for a minute of the strike, then rejoins the team.
+ if(RaidGroup.Phase==2&&Elapsed-RaidGroup.PhaseAt>=60.)RaidGroup.Screens.Reset();
+ RaidGroup.Screens.RemoveAll([this,GroupStore,Team](int32 ScreenID){const auto* ScreenSquad=GroupStore->FindSquad(ScreenID);
+  return !ScreenSquad||ScreenSquad->CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!ScreenSquad->bPlayerDelegated)||Area.HirePurpose.Contains(ScreenID)||IntelPurpose.Contains(ScreenID);});
+}
+
+void UBattleMatch::PlanArtilleryRaidFlank(int32 Team,const FVector& From,const FVector& Target)
+{
+ auto& FlankGroup=ArtilleryRaidGroups[Team];FlankGroup.Screens.Reset();
+ FVector FlankAxis=Target-From;FlankAxis.Z=0;const double FlankLength=FlankAxis.Size2D();
+ if(FlankLength<1.){FlankGroup.Way=Target;FlankGroup.Screen=From;return;}
+ const FVector FlankDir=FlankAxis/FlankLength,FlankSide(-FlankDir.Y,FlankDir.X,0.);
+ // The side with fewer known enemies (own sight, scout reports) between the group and its target (observed information only; ties go left of the line).
+ int32 SideCrowd[2]={0,0};
+ for(const FVector& SeenEnemy:AreaIntelView(Team).Enemies)
+ {
+  const FVector SeenOffset=SeenEnemy-From;const double SeenAlong=FVector::DotProduct(SeenOffset,FlankDir);
+  if(SeenAlong>=0.&&SeenAlong<=FlankLength)++SideCrowd[FVector::DotProduct(SeenOffset,FlankSide)>=0.?0:1];
+ }
+ const double FlankSign=SideCrowd[1]<SideCrowd[0]?-1.:1.,FlankOffset=FMath::Clamp(.4*FlankLength,8000.,20000.);
+ const FVector2D FlankHalf=BattleFieldLayout::FieldHalfExtent(GetWorld());
+ auto InsideField=[&FlankHalf](FVector Point){if(FlankHalf.X>6000.&&FlankHalf.Y>6000.){Point.X=FMath::Clamp(Point.X,-FlankHalf.X+3000.,FlankHalf.X-3000.);Point.Y=FMath::Clamp(Point.Y,-FlankHalf.Y+3000.,FlankHalf.Y-3000.);}return Point;};
+ FlankGroup.Way=InsideField(From+FlankDir*(.55*FlankLength)+FlankSide*(FlankSign*FlankOffset));
+ FlankGroup.Screen=InsideField(From+FlankDir*(.4*FlankLength)+FlankSide*(FlankSign*.6*FlankOffset));
+ const int32 ScreenCount=BattleTactics::ArtilleryRaidScreen();if(ScreenCount<=0)return;
+ // The infantry squads nearest the screen point push the front out there (rifle and heavy squads the team AI runs, no mission of their own).
+ const auto* ScreenStore=GetWorld()->GetSubsystem<UBattleState>();const auto* ScreenRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ struct FScreenPick { double Distance; int32 SquadID; };TArray<FScreenPick> ScreenPicks;
+ for(const auto& ScreenPair:ScreenStore->GetSquads())if(ScreenPair.Value.Team==Team)
+ {
+  const auto& ScreenSquad=ScreenPair.Value;
+  if(ScreenSquad.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!ScreenSquad.bPlayerDelegated)||
+     (ScreenSquad.SquadType!=BattleSquadType::Rifle&&ScreenSquad.SquadType!=BattleSquadType::Heavy)||
+     ArtilleryRaids.Contains(ScreenPair.Key)||Area.HirePurpose.Contains(ScreenPair.Key)||IntelPurpose.Contains(ScreenPair.Key))continue;
+  if(const FPlayerRoute* ScreenRoute=PlayerRoutes.Find(ScreenPair.Key);ScreenRoute&&ScreenRoute->bMission)continue;
+  if(const auto* ScreenGroup=Groups.Find(GroupOf(ScreenPair.Key));ScreenGroup&&GroupAIRun(*ScreenGroup))continue;
+  int32 ScreenLiving=0;for(int32 ScreenMember:ScreenSquad.Members)if(const auto* ScreenUnit=ScreenStore->Find(ScreenMember);ScreenUnit&&ScreenUnit->IsAlive())++ScreenLiving;
+  if(ScreenLiving==0||ScreenLiving*2<ScreenSquad.Members.Num()||!ScreenStore->Find(ScreenSquad.LeaderUnitID))continue;
+  ScreenPicks.Add({FVector::DistSquared2D(ScreenRuntime->Position(ScreenSquad.LeaderUnitID),FlankGroup.Screen),ScreenPair.Key});
+ }
+ ScreenPicks.Sort([](const FScreenPick& A,const FScreenPick& B){return A.Distance!=B.Distance?A.Distance<B.Distance:A.SquadID<B.SquadID;});
+ for(int32 ScreenIndex=0;ScreenIndex<FMath::Min(ScreenCount,ScreenPicks.Num());++ScreenIndex)FlankGroup.Screens.Add(ScreenPicks[ScreenIndex].SquadID);
+}
+
+bool UBattleMatch::ArtilleryRaidGoal(int32 Team,int32 SquadID,FVector& Center,EBattleOrder& Order) const
+{
+ if(Team<0||Team>1)return false;
+ const auto& GoalGroup=ArtilleryRaidGroups[Team];if(GoalGroup.Phase<0)return false;
+ if(ArtilleryRaids.Contains(SquadID))
+ {
+  // Gathering and going round, the raid squads move (they do not stop at seen enemies); striking, the normal raid order applies.
+  if(GoalGroup.Phase==0){Center=GoalGroup.Rally;Order=EBattleOrder::Move;return true;}
+  if(GoalGroup.Phase==1){Center=GoalGroup.Way;Order=EBattleOrder::Move;return true;}
+  return false;
+ }
+ if(GoalGroup.Phase>=1&&GoalGroup.Screens.Contains(SquadID)){Center=GoalGroup.Screen;Order=EBattleOrder::AttackMove;return true;}
+ return false;
 }
 
 bool UBattleMatch::RaidSneaking(int32 SquadID) const

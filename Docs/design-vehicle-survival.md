@@ -126,3 +126,17 @@ OFFでは従来の分類・残弾／生存照会・VehicleIDs条件・照準式�
 AI の砲兵は、分かっている敵すべてから「射程×`ArtilleryStandoff`（設定 0.6）」以上離れ、いちばん近い敵が「射程×`ArtilleryAdvance`（0.8）」より遠ければ近づく（`UBattleMatch::AreaArtilleryPost`）。射程55000では330〜440m後ろに構え、マップI（本拠地は x=±42000）では襲撃の目標が x≈-28000〜-48000 と自軍の本拠地のすぐ前だった。射程を少し絞っても、自走砲は本拠地の近くから撃ち続け、襲撃は敵の後方の奥まで行く必要がある。
 
 `-BattleArtilleryStandoff=<0〜1>` は、この割合を起動引数で上書きする（既定は設定の値で、今のまま）。評価：`-SPGRange 55000 -ArtilleryRaidChase 1 -ArtilleryRaidSneak 80` に `-ArtilleryStandoff 0.6/0.35` を比べ、自走砲の位置（襲撃の目標の x）、自走砲の発射・撃破・被撃破、外骨格の損失を見る。
+
+## 強襲群（-BattleArtilleryRaidGroup、2026-11-22 ユーザー提案）
+
+問題：構える深さ0.6のままの自走砲は前線から330〜440m後ろにいて、外骨格1隊の襲撃は途中で全滅する（マップI、Sneak 80 で撃破0、`reason=inactive`）。深さ0.35で前に出した自走砲は、届いた外骨格のランチャーで撃破できた。届けば倒せるので、戦力をまとめて届かせる。
+
+規則（`-BattleArtilleryRaidGroup=<2〜3>`、既定0。`-BattleArtilleryRaidChase=1` が要る。`-BattleArtilleryRaidSneak` と併用する前提）：
+1. 襲撃を始めるとき、候補（外骨格→装甲車、近い順、ID順。小銃・重歩兵は使わない）から上位の最大N隊を選ぶ。2隊以上なら、その中心を集結点にして集まる（移動命令）。全隊が集結点から40m以内に入るか、30秒たったら次へ進む。1隊だけなら、今の襲撃と同じ。
+2. 回り込み：集結点の中心から目標への直線の左右で、分かっている敵（自軍の視界・偵察の報告）が少ない側（同数なら左）へ、直線の55%の距離で横に 0.4×距離（80〜200m）ずらした経由点へ移動命令で向かう。全隊が経由点から50m以内に入るか、90秒たつか、群の中心が経由点より目標に近くなったら、攻撃へ移る。
+3. 前線を広げる：回り込みを始めるとき、同じ側の、直線の40%の距離で横に 0.6×ずらした点に、近い小銃・重歩兵を `-BattleArtilleryRaidScreen=<0〜4>`（既定2）隊まで攻撃移動させる（目的・集団・プレイヤー経路のある隊は使わない）。攻撃に移って60秒で解く。
+4. 攻撃：今の襲撃の命令（発砲を追う目標へ、Sneak の半径までは移動命令）。終わり方（`cleared`／`expired`／`losses`／`inactive`）は隊ごとに今のまま。群の隊が全部終わると群も終わる。
+
+ログ：`BATTLE_ARTILLERY_RAID_GROUP team phase=gather|flank|strike|end`（flank は way・screen・screens 数つき）。群の状態は保存しない（`GenerateArtilleryPosts` で襲撃と一緒に消える）。
+
+評価：マップI 30FPS、`-ArtilleryFlash 1 -ArtilleryPosts 1 -SPGRange 55000 -AreaSPGCost 45 -AreaSPGKeep 1 -ArtilleryRaidChase 1 -ArtilleryRaidSneak 80`、深さは既定の0.6。`-AreaExoKeep 3` で、群なし／2隊／3隊を比べる。見るのは、自走砲の発射・撃破・被撃破、外骨格の損失、得点。
