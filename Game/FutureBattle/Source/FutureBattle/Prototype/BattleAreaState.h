@@ -2,6 +2,20 @@
 #include "CoreMinimal.h"
 #include "BattleAreaState.generated.h"
 
+// Purchase reservation (Docs/design-front-strategy.md 5.1, -BattleHireReserve=1). Resources are only spent when it is bought.
+USTRUCT()
+struct FBattleHireReservation
+{
+ GENERATED_BODY()
+ UPROPERTY() int32 Team=0;
+ UPROPERTY() int32 Type=0;
+ // Destination (stage 6: section / group); -1 = none.
+ UPROPERTY() int32 Dest=-1;
+ // Match time (Elapsed) of the reservation.
+ UPROPERTY() float At=0;
+ UPROPERTY() bool bByAI=false;
+};
+
 USTRUCT()
 struct FBattleAreaState
 {
@@ -26,6 +40,8 @@ struct FBattleAreaState
   // 100 = enemy home assault, 101 = own home defence; and the match time the own home last took damage (-1000 = never).
  UPROPERTY() TMap<int32,int32> HirePurpose;
  UPROPERTY() TArray<float> HomeHitAt={-1000,-1000};
+ // Purchase reservations of both teams in reservation order (absent in older saves = empty; BattleArea.cpp UpdateHireQueue).
+ UPROPERTY() TArray<FBattleHireReservation> HireQueue;
  // War score trial (BattleWarScore.h; absent in older saves = 0). Per team: score from held central points and from enemy losses,
  // each observer's estimate of the OPPONENT's point score (from last observed ownership), and the shared scoring clock.
  UPROPERTY() TArray<int32> WarPoint={0,0};

@@ -136,6 +136,11 @@ public:
 	void HireArmoredCar();
 	void HireMortar();
 	void HireSPGun();
+	// Area purchase key: a plain purchase, or with -BattleHireReserve=1 a purchase reservation (BattleArea.cpp ReserveHire).
+	void BuyArea(uint8 SquadType);
+	// -BattleHireReserve=1: Backspace cancels the newest own reservation, = moves it to the front.
+	void CancelNewestReservation();
+	void NewestReservationToFront();
 	void HireExo();
 	void HireSupply();
 	void StartMatch();

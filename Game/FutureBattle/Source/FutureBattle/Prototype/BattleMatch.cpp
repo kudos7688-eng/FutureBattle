@@ -171,7 +171,7 @@ void UBattleMatch::Update(float DeltaSeconds)
 	UpdateObjectives(DeltaSeconds);
  if(bArea)
  {
-  UpdateArea(DeltaSeconds);UpdateSituationLog();DirectorClock+=DeltaSeconds;
+  UpdateArea(DeltaSeconds);UpdateSituationLog();UpdateHireQueue();DirectorClock+=DeltaSeconds;
   if(DirectorClock>=5)
   {
    DirectorClock=0;

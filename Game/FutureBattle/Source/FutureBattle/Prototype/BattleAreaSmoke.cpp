@@ -397,6 +397,30 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     const bool Second=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Tank);const int32 C2=M->Credits[0];
     const bool Third=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Tank);
     Check(Second&&!Third&&M->Credits[0]==C2&&M->ActiveOfType(0,BattleSquadType::Tank)==2,TEXT("tanks: at most 2 per team"));
+    // Purchase reservations (BattleArea.cpp ReserveHire, Docs/design-front-strategy.md 5.1): a purchase blocked by a limit waits in the
+    // list without spending; at most 12 per team; cancel and reorder; the list buys once the block clears (resources here).
+    {
+     M->Area.HireQueue.Reset();const int32 CR=M->Credits[0];
+     bool AllWait=true;for(int32 K=0;K<UBattleMatch::HireQueueMax;++K)AllWait&=M->ReserveHire(0,BattleSquadType::Tank,false,K)==2;
+     const bool Full=M->ReserveHire(0,BattleSquadType::Tank,false,99)==0;
+     Check(AllWait&&Full&&M->Credits[0]==CR&&M->HireQueueOf(0).Num()==UBattleMatch::HireQueueMax,TEXT("reservations: a blocked purchase waits without spending, 12 at most"));
+     const bool Cancelled=M->CancelHire(0,-1)&&M->HireQueueOf(0).Num()==UBattleMatch::HireQueueMax-1;
+     const bool Moved=M->MoveHire(0,-1,-100)&&M->Area.HireQueue[M->HireQueueOf(0)[0]].Dest==UBattleMatch::HireQueueMax-2&&M->Area.HireQueue[M->HireQueueOf(0)[1]].Dest==0;
+     M->HireQueueSecond=-1;M->UpdateHireQueue();
+     Check(Cancelled&&Moved&&M->HireQueueOf(0).Num()==UBattleMatch::HireQueueMax-1&&M->Credits[0]==CR,TEXT("reservations: cancel, move to the front, still waiting at the tank limit"));
+     M->Area.HireQueue.Reset();
+     if(M->ActiveSquads(0)<BattleTactics::AreaHire().MaxActive)
+     {
+      const int32 Before=M->ActiveSquads(0);M->Credits[0]=0;
+      const bool Queued=M->ReserveHire(0,BattleSquadType::Rifle,false)==2&&M->ActiveSquads(0)==Before;
+      M->Credits[0]=CR;M->HireQueueSecond=-1;M->UpdateHireQueue();
+      const bool Bought=M->Area.HireQueue.IsEmpty()&&M->ActiveSquads(0)==Before+1&&M->Credits[0]==CR-BattleTactics::AreaHire().Cost;
+      Check(Queued&&Bought,TEXT("reservations: waits for resources, then buys within the second"));
+      // Remove the bought squad again so the checks below see the same force.
+      if(const auto* RS=Store->FindSquad(M->LastHiredSquadID))for(const int32 Member:TArray<int32>(RS->Members))Store->ApplyDamage(Member,1,10000);
+      M->UpdateArea(1);M->Area.Replacements.Reset();M->Credits[0]=CR;
+     }
+    }
     // Performance: a far tank's line of sight is traced once per TankSightReuse seconds per observer (range and view each scan);
     // a tank's accepted (or refused) goal is not reissued by the director every update.
     {

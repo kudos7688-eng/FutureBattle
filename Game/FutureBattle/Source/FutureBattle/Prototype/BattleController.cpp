@@ -167,6 +167,8 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("HireSPGun"), EKeys::Nine, &ABattleController::HireSPGun);
 	Button(TEXT("HireExo"), EKeys::Zero, &ABattleController::HireExo);
 	Button(TEXT("HireSupply"), EKeys::Hyphen, &ABattleController::HireSupply);
+	Button(TEXT("CancelReservation"), EKeys::BackSpace, &ABattleController::CancelNewestReservation);
+	Button(TEXT("ReservationToFront"), EKeys::Equals, &ABattleController::NewestReservationToFront);
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
 	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
 	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
@@ -235,7 +237,8 @@ void ABattleController::HireTraining(EBattleTraining Training)
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled()) return;
 	// Area battle: key 3 buys heavy infantry (squad type 1); key 2 the rifle squad.
-	if (Match->bArea && Training == EBattleTraining::Veteran) { Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Heavy); ShowNotice(Match->LastMessage); return; }
+	if (Match->bArea && Training == EBattleTraining::Veteran) { BuyArea(BattleSquadType::Heavy); return; }
+	if (Match->bArea && Training == EBattleTraining::Regular && UBattleMatch::HireReserveOn()) { BuyArea(BattleSquadType::Rifle); return; }
 	Match->HireSquad(0, Training); ShowNotice(Match->LastMessage);
 }
 void ABattleController::HireRecruit() { HireTraining(EBattleTraining::Recruit); }
@@ -246,7 +249,41 @@ void ABattleController::HireScout()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Scout); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::Scout);
+}
+// ---- Purchase reservations (Docs/design-front-strategy.md 5.1 and 6; -BattleHireReserve=1, default 0) ----
+static const TCHAR* ReservationTypeJa(int32 Type)
+{
+ static const TCHAR* Names[]={TEXT("小銃小隊"),TEXT("重装歩兵"),TEXT("斥候"),TEXT("対戦車班"),TEXT("戦車"),TEXT("装甲車"),TEXT("迫撃砲班"),TEXT("自走砲"),TEXT("強化外骨格兵"),TEXT("補給車")};
+ return Type>=0&&Type<int32(UE_ARRAY_COUNT(Names))?Names[Type]:TEXT("部隊");
+}
+void ABattleController::BuyArea(uint8 SquadType)
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!UBattleMatch::HireReserveOn()) { Match->HireAreaSquad(0, EBattleTraining::Regular, false, SquadType); ShowNotice(Match->LastMessage); return; }
+	const int32 Result = Match->ReserveHire(0, SquadType, false);
+	if (Result != 2) { ShowNotice(Match->LastMessage); return; }
+	ShowNotice(FString::Printf(TEXT("予約しました：%s ／ 予約 %d/%d ／ Backspace：最後の予約を取り消し ／ =：最後の予約を先頭へ"), ReservationTypeJa(SquadType), Match->HireQueueOf(0).Num(), UBattleMatch::HireQueueMax));
+}
+void ABattleController::CancelNewestReservation()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!UBattleMatch::HireReserveOn() || !bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	const TArray<int32> Mine = Match->HireQueueOf(0);
+	if (Mine.IsEmpty()) { ShowNotice(TEXT("取り消す予約はありません")); return; }
+	const int32 Type = Match->Area.HireQueue[Mine.Last()].Type;
+	Match->CancelHire(0, -1);
+	ShowNotice(FString::Printf(TEXT("予約を取り消しました：%s ／ 予約 %d/%d"), ReservationTypeJa(Type), Mine.Num() - 1, UBattleMatch::HireQueueMax));
+}
+void ABattleController::NewestReservationToFront()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!UBattleMatch::HireReserveOn() || !bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	const TArray<int32> Mine = Match->HireQueueOf(0);
+	if (Mine.Num() < 2) { ShowNotice(TEXT("並べ替える予約がありません")); return; }
+	const int32 Type = Match->Area.HireQueue[Mine.Last()].Type;
+	Match->MoveHire(0, -1, -Mine.Num());
+	ShowNotice(FString::Printf(TEXT("予約を先頭へ移しました：%s"), ReservationTypeJa(Type)));
 }
 void ABattleController::StartMatch()
 {
@@ -1452,47 +1489,47 @@ void ABattleController::HireAntiTank()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::AntiTank); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::AntiTank);
 }
 // Area battle: key 6 buys a tank (squad type 4, at most AreaTankLimit per team).
 void ABattleController::HireTank()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Tank); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::Tank);
 }
 // Area battle: key 7 buys an armoured car (squad type 5, at most AreaACLimit per team).
 void ABattleController::HireArmoredCar()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::ArmoredCar); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::ArmoredCar);
 }
 // Area battle: key 8 buys a mortar team (squad type 6, at most AreaMortarLimit per team).
 void ABattleController::HireMortar()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Mortar); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::Mortar);
 }
 // Area battle: the - key buys a supply vehicle (squad type 9, at most AreaSupplyLimit per team; BattleSupplyCar.cpp).
 void ABattleController::HireSupply()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Supply); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::Supply);
 }
 // Area battle: key 0 buys an armoured exoskeleton soldier (squad type 8, at most AreaExoLimit per team).
 void ABattleController::HireExo()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Exo); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::Exo);
 }
 // Area battle: key 9 buys a self-propelled gun (squad type 7, at most AreaSPGLimit per team).
 void ABattleController::HireSPGun()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::SPGun); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::SPGun);
 }

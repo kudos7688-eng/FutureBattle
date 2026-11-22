@@ -146,6 +146,21 @@ void ABattleHUD::DrawHUD()
 		else Label(TEXT("占領8秒 ／ 5秒ごとに収入+20 ／ 補給1発につき1 ／ F8 保存 ／ F9 読込"), 28, 141, Muted, .85f);
 		DrawRect(Ink, 16, 165, 560, 26);
   if(Match->bArea)Label(TEXT("本拠地：10秒で補充 ／ 兵1人につき資源1 ／ F8 保存 ／ F9 読込"),28,172,Mint,.85f);
+  // Purchase reservations (-BattleHireReserve=1): the own list in order with each one's wait (Docs/design-front-strategy.md 6).
+  if(Match->bArea&&UBattleMatch::HireReserveOn())
+  {
+   static const TCHAR* Short[]={TEXT("小銃"),TEXT("重装"),TEXT("斥候"),TEXT("対戦車"),TEXT("戦車"),TEXT("装甲車"),TEXT("迫撃砲"),TEXT("自走砲"),TEXT("外骨格"),TEXT("補給車")};
+   const TArray<int32> Mine=Match->HireQueueOf(0);
+   FString Text=FString::Printf(TEXT("予約 %d/%d"),Mine.Num(),UBattleMatch::HireQueueMax);
+   for(int32 K=0;K<Mine.Num();++K)
+   {
+    const auto& Q=Match->Area.HireQueue[Mine[K]];FString Why;const int32 B=Match->HireBlock(0,uint8(Q.Type),Why);
+    const TCHAR* Wait=B==0?TEXT("順番待ち"):Why.Contains(TEXT("resources"))?TEXT("資源待ち"):Why.Contains(TEXT("slot"))?TEXT("小隊の上限待ち"):TEXT("上限待ち");
+    Text+=FString::Printf(TEXT(" ／ %d.%s（%s %.0f秒）"),K+1,Q.Type>=0&&Q.Type<int32(UE_ARRAY_COUNT(Short))?Short[Q.Type]:TEXT("?"),Wait,Match->Elapsed-Q.At);
+   }
+   if(Mine.Num())Text+=TEXT(" ／ Backspace 取消 ／ = 先頭へ");
+   DrawRect(Ink,576,165,720,26);Label(Text,588,172,Mint,.8f);
+  }
   else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch)Label(TEXT("本拠地・保有拠点で補給：1発につき資源1 ／ F8 保存 ／ F9 読込 ／ 支援攻撃なし"),28,172,Mint,.85f);
   else if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("固定戦力 ／ 増援・補給・支援攻撃なし"),28,172,Mint,.85f);
 		else Label(FString::Printf(TEXT("[B] 支援攻撃 400 ／ 残り%d ／ 再装填 %.0f秒 ／ 選択部隊が知る位置へ"), 3 - Match->SupportUsed[0], Match->SupportCooldown[0]), 28, 172, Mint, .85f);

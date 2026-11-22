@@ -130,6 +130,8 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   if(Area.LastAIHireAt.Num()!=2||!Finite(Area.LastAIHireAt[0],-1000,Elapsed+.01)||!Finite(Area.LastAIHireAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area AI hire clock"));
   // P1 trial (2026-11-16): bought-squad missions point at existing squads with a known mission; home hit times are past clocks.
   for(const auto& P:Area.HirePurpose)if(!((P.Value>=0&&P.Value<Objectives.Num())||P.Value==100||P.Value==101)||!BySquad.FindRef(P.Key))return Fail(TEXT("Invalid area hire purpose"));
+  // Purchase reservations: at most 12 per team, known types, past reservation times.
+  {int32 N[2]={0,0};for(const auto& Q:Area.HireQueue){if(Q.Team<0||Q.Team>1||++N[Q.Team]>UBattleMatch::HireQueueMax||Q.Type<0||Q.Type>=BattleSquadType::Count||Q.Dest<-1||!Finite(Q.At,0,Elapsed+.01))return Fail(TEXT("Invalid hire reservation"));}}
   if(Area.HomeHitAt.Num()!=2||!Finite(Area.HomeHitAt[0],-1000,Elapsed+.01)||!Finite(Area.HomeHitAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area home hit clock"));
   // Strategy layer S2 (BattleStrategy.cpp): focus objectives in range, clocks finite (focus/avoid-begin in the past; review/avoid-end within a match).
   if(Area.StrategyPhase.Num()!=2||Area.StrategyFocus.Num()!=2||Area.StrategyFocusAt.Num()!=2||Area.StrategyReviewAt.Num()!=2||Area.StrategyAvoid.Num()!=2||Area.StrategyAvoidUntil.Num()!=2)return Fail(TEXT("Invalid strategy state"));
