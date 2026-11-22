@@ -484,6 +484,7 @@ bool UBattleState::ApplyDamageFrom(int32 ID, int32 AttackingTeam, float Damage, 
 
 void UBattleState::NoteKill(int32 ID)
 {
+ DeathBy.Add(ID,{PendingKiller,PendingKind,GetWorld()->GetTimeSeconds()});
  const auto* V=Find(ID);const auto* K=Find(PendingKiller);
  if(!V||!K||(V->Team!=0&&K->Team!=0))return;
  if(KillNotices.Num()>=8)KillNotices.RemoveAt(0);

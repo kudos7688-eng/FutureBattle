@@ -549,11 +549,19 @@ bool UBattleLeaderRuntime::StepCharge(int32 ID,float Dt,double Now)
    static const TCHAR* const Why[]={TEXT("arms_charge_nostrike_ready"),TEXT("arms_charge_nostrike_target_down"),TEXT("arms_charge_nostrike_unseen"),
     TEXT("arms_charge_nostrike_floor"),TEXT("arms_charge_nostrike_far"),TEXT("arms_charge_nostrike_wall"),TEXT("arms_charge_nostrike_wait")};
    SightExperiment.Cover(TEXT("arms_charge_nostrike"));SightExperiment.Cover(Why[FMath::Min<int32>(A->NoStrike,6)]);
+   if(A->NoStrike==1)
+   {
+    static const TCHAR* const By[]={TEXT("arms_charge_down_by_unknown"),TEXT("arms_charge_down_by_self"),TEXT("arms_charge_down_by_squad"),TEXT("arms_charge_down_by_team"),
+     TEXT("arms_charge_down_by_enemy"),TEXT("arms_charge_down_by_unknown")};
+    SightExperiment.Cover(By[FMath::Min<int32>(A->DownBy,5)]);
+    SightExperiment.Cover(A->DownAt<A->ReachedAt?TEXT("arms_charge_down_before_reach"):TEXT("arms_charge_down_after_reach"));
+   }
    if(SightExperiment.Enabled&&ArmsNoStrikeLogs<200)
    {
     ++ArmsNoStrikeLogs;
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_CHARGE_NOSTRIKE unit=%d why=%d end=%s dist=%.0f known_error=%.0f slid=%d"),ID,int32(A->NoStrike),End,A->StrikeDist,
-     A->KnownErr,A->Slid);
+    const double Start=A->Until-Ch.Limit;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_CHARGE_NOSTRIKE unit=%d why=%d end=%s dist=%.0f known_error=%.0f slid=%d by=%d kind=%d down=%.1f reached=%.1f"),ID,
+     int32(A->NoStrike),End,A->StrikeDist,A->KnownErr,A->Slid,int32(A->DownBy),int32(A->DownKind),A->DownAt>0.?A->DownAt-Start:-1.,A->ReachedAt-Start);
    }
   }
   SightExperiment.Cover(End);CoverApproaches.Remove(ID);return false;
@@ -566,7 +574,14 @@ bool UBattleLeaderRuntime::StepCharge(int32 ID,float Dt,double Now)
  // striking his target now: 1 target down, 2 not seen, 3 another floor, 4 his true position out of reach, 5 a wall, 6 cooling down.
  if((A->bReached||D<=Ch.Stop+10.)&&!A->bStruck)
  {
+  if(A->ReachedAt==0.)A->ReachedAt=Now;
   const auto* T=Store->Find(A->Target);const bool bAlive=T&&T->IsAlive();const FVector TP=bAlive?Position(A->Target):Contact->LastKnownPosition;
+  if(!bAlive&&!A->DownBy)
+  {
+   const auto* By=Store->DeathBy.Find(A->Target);const auto* K=By?Store->Find(By->Killer):nullptr;
+   A->DownBy=!K?5:By->Killer==ID?1:K->SquadID==U->SquadID?2:K->Team==U->Team?3:4;
+   A->DownKind=By?uint8(By->Kind):0;A->DownAt=By?By->Time:0.;
+  }
   A->StrikeDist=FVector::Dist2D(TP,Pos);A->KnownErr=FVector::Dist2D(TP,Contact->LastKnownPosition);
   A->NoStrike=!bAlive?1:!Contact->bVisible||Contact->bShared?2:FMath::Abs(TP.Z-Pos.Z)>150.?3:A->StrikeDist>BattleArms::Melee().Reach?4:
    GetWorld()->LineTraceTestByObjectType(Pos+FVector(0,0,40),TP+FVector(0,0,40),FCollisionObjectQueryParams(ECC_WorldStatic))?5:U->MeleeWait>0.f?6:0;

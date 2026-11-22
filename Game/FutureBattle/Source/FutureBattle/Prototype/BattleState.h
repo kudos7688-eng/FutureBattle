@@ -851,6 +851,10 @@ public:
 	TArray<FBattleHitNotice> HitNotices;
 	// Kill log (2026-11-20, display only): deaths with a known killer where either side is team 0, newest last, at most 8.
 	TArray<FBattleKillNotice> KillNotices;
+	// Evaluation (11-23, arms branch): who killed each dead unit, with what and when (StepCharge's no-strike record). Rules and display
+	// never read it; not saved.
+	struct FDeathBy { int32 Killer = INDEX_NONE; EBattleKillKind Kind = EBattleKillKind::Unknown; double Time = 0.; };
+	TMap<int32, FDeathBy> DeathBy;
 	int32 AddReserve(int32 ID, int32 Rounds);
 	// Moves reserve rounds between two living soldiers with the same kind of weapon; returns the rounds moved.
 	int32 MoveReserve(int32 FromID, int32 ToID, int32 Rounds);
