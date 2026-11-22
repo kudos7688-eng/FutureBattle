@@ -186,6 +186,7 @@ bool UBattleMatch::SectorStage(const FBattleSquadState& S,const FVector& Leader,
 		{Stage=BattleSectors::Center(Current);return true;}
 	}
 	double Best=-DBL_MAX;bool bFound=false;
+	TArray<double,TInlineAllocator<9>> Scores; // evaluation: ties at the best score (BATTLE_SECTOR_STAGE_PICK)
 	// -BattleSectorSymmetric: the east team scans in its own frame (turned 180 degrees), so ties between the two sectors beside
 	// the line to a goal at a sector centre fall the same way for both teams.
 	const auto* SymRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
@@ -217,9 +218,18 @@ bool UBattleMatch::SectorStage(const FBattleSquadState& S,const FVector& Leader,
 			const double Side=FMath::Abs(Front.X*V.Y-Front.Y*V.X)/BattleSectors::Size,Ahead=FVector::DotProduct(Front,V)/BattleSectors::Size;
 			StageScore+=12.*FMath::Min(Side,3.)-(Ahead>0 && Side<1.?30.:0.);
 		}
+		Scores.Add(StageScore);
 		if(StageScore>Best){Best=StageScore;Stage=P;bFound=true;}
 	}
 	if(bFound)GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(Near?TEXT("SectorFlankStage"):TEXT("SectorRouteStage"));
+	// Evaluation: a new stop (not the one the squad already marches to), with how many candidates tied with it.
+	if(bFound && (!S.bSectorMission || BattleSectors::Cell(S.MissionDestination)!=BattleSectors::Cell(Stage)))
+	{
+		int32 Ties=0;for(const double V:Scores)Ties+=V>=Best-.01;
+		const FIntPoint StageCell=BattleSectors::Cell(Stage);
+		UE_LOG(LogTemp,Display,TEXT("BATTLE_SECTOR_STAGE_PICK t=%.1f team=%d squad=%d here=%d,%d step=%d,%d stage=%d,%d goal=%d,%d best=%.2f ties=%d near=%d"),
+			GetWorld()->GetTimeSeconds(),S.Team,S.SquadID,Here.X,Here.Y,StepCell.X,StepCell.Y,StageCell.X,StageCell.Y,GoalCell.X,GoalCell.Y,Best,Ties,Near);
+	}
 	if(bFound && bFrontOn && SectorFrontCells[S.Team].Contains(BattleSectors::Cell(Stage)))GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("SectorFrontStage"));
 	return bFound;
 }

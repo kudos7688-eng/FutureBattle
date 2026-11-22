@@ -570,7 +570,8 @@ public:
  // roof or upper floor (a static obstacle 1.2-8 m above the slot: inside houses and sheds, by windows) before the ones outside.
  // Counts arrival_indoor_*.
  static bool CoverIndoorEnabled();
- // Trial -BattleAttackFocus=1 (2026-11-22, default 0; user idea 11-22: an attack order toward an enemy squad or sector, and cover
+ // -BattleAttackFocus (2026-11-22, default 1 by user decision after s25 on map I: hits in the open -16..-20%, shooter outside the
+ // view -16..-40%; =0 for the old rules; user idea 11-22: an attack order toward an enemy squad or sector, and cover
  // against that direction - stage 1+2, the sector AI picks the focus itself): a sector squad keeps a focus point, the enemies its
  // team sees now (RouteKnownEnemies: own sightings and scout reports, no hidden state) in the destination sector and its 8
  // neighbours - the sector with the most of them (ties: nearer to the destination), their mean position; else the known enemy

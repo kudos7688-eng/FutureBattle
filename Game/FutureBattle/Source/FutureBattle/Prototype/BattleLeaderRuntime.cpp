@@ -821,8 +821,12 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    if(bArea && !VehicleNav && P.Path.Num()>1 && BattleTactics::SymmetricStart(GetWorld()) && GetWorld()->GetSubsystem<UBattleMatch>()->AreaHome(S->Team).X>0)
    {
     FNavLocation MirrorFrom,MirrorTo;
-    if(Nav->ProjectPointToNavigation(FVector(-From.Location.X,-From.Location.Y,From.Location.Z),MirrorFrom,FVector(100,100,300)) && Nav->ProjectPointToNavigation(FVector(-To.Location.X,-To.Location.Y,To.Location.Z),MirrorTo,FVector(100,100,300)))
-     if(auto* West=Nav->FindPathToLocationSynchronously(GetWorld(),MirrorFrom.Location,MirrorTo.Location);West && West->IsValid() && !West->IsPartial() && West->PathPoints.Num()>1)
+    // Evaluation: an east path that keeps its own route (path_mirror_skipped_*).
+    if(!Nav->ProjectPointToNavigation(FVector(-From.Location.X,-From.Location.Y,From.Location.Z),MirrorFrom,FVector(100,100,300)) || !Nav->ProjectPointToNavigation(FVector(-To.Location.X,-To.Location.Y,To.Location.Z),MirrorTo,FVector(100,100,300)))
+     SightExperiment.Cover(TEXT("path_mirror_skipped_project"));
+    else if(auto* West=Nav->FindPathToLocationSynchronously(GetWorld(),MirrorFrom.Location,MirrorTo.Location);!(West && West->IsValid() && !West->IsPartial() && West->PathPoints.Num()>1))
+     SightExperiment.Cover(TEXT("path_mirror_skipped_west_path"));
+    else
      {
       TArray<FVector> Image;bool bOnMesh=true;
       for(const FVector& Q:West->PathPoints)
@@ -1648,7 +1652,7 @@ int32 UBattleLeaderRuntime::SectorTurn(int32 Team) const
 }
 bool UBattleLeaderRuntime::AttackFocusEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAttackFocus="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleAttackFocus="),V);return V!=0;}();
  return bOn;
 }
 bool UBattleLeaderRuntime::FocusTargetEnabled()
