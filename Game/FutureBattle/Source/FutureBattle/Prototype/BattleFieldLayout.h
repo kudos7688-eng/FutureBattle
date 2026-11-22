@@ -182,8 +182,8 @@ namespace BattleFieldLayout
 				D.ObjectiveValues={2,1,1,1,1,1,1,2};
 				D.PointIncomeScale=.5f;
 				D.CityHalf=FVector2D(35000,15000);
-				// Lookouts: the knolls in the north lane (east) and the south lane (west).
-				D.Lookouts={FVector(32500,22500,500),FVector(-32500,-22500,500)};
+				// Lookouts: the ridges at the outer edge of the south lane (east) and the north lane (west).
+				D.Lookouts={FVector(15000,-30000,700),FVector(-15000,30000,700)};
 				auto Node=[&D](double X,double Y){const FVector P(X,Y,0);for(int32 I=0;I<D.RouteNodes.Num();++I)if(D.RouteNodes[I].Equals(P,1))return I;return D.RouteNodes.Add(P);};
 				auto Edge=[&](double X0,double Y0,double X1,double Y1,ERouteLane Lane){FRouteEdge E;E.A=Node(X0,Y0);E.B=Node(X1,Y1);E.Lane=Lane;D.RouteEdges.Add(E);};
 				const double AvenueX[]={-42000,-25000,-17500,0,17500,25000,42000};

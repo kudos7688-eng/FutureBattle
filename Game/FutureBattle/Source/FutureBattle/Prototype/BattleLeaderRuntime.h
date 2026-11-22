@@ -333,8 +333,9 @@ public:
  // One sight trace from the context's eye to End on ECC_Visibility, recorded for the hit statistics when they are on (TargetID -1: a point).
  FHitResult TraceSight(const FBattleSightContext& Context,const FVector& End,int32 TargetID,ESightHitSource Source) const;
  static bool SightHitStatsEnabled();
- // Trial -BattleSightTeamMask=1 (rules, default OFF; user request 2026-11-17): soldiers of one side do not block their own side's line of
- // sight. Each soldier body carries the mask bit 1<<team (FBodyInstance mask filter) and sight queries ignore the observer's bit
+ // -BattleSightTeamMask (rules, default ON since 2026-11-22 by user decision; =0 restores the old rule; user request 2026-11-17): soldiers
+ // of one side do not block their own side's line of sight, nor its bullets (Fire traces with Sight(ID).Query, which carries the mask).
+ // Each soldier body carries the mask bit 1<<team (FBodyInstance mask filter) and sight queries ignore the observer's bit
  // (FCollisionQueryParams::IgnoreMask; Chaos skips a shape when the two masks share a bit). The trace channel stays ECC_Visibility.
  static bool SightTeamMaskEnabled();
  FMaskFilter SightTeamMaskFor(int32 ObserverID) const;

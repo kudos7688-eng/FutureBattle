@@ -215,6 +215,13 @@ public:
  FArtilleryRaidFlash ArtilleryRaidFlashes[2];
  TMap<int32,FArtilleryRaidChase> ArtilleryRaidChases;
  double ArtilleryRaidClearedAt[2]={-1.,-1.}; // Do not restart a cleared search on the same evidence.
+ // Trial -BattleArtilleryRaidGroup: the team's raid group (phase -1 none, 0 gather at Rally, 1 round the flank via Way, 2 strike the
+ // raid target) and the infantry squads that push the front out at Screen on the same side while the group goes round.
+ struct FArtilleryRaidGroup { int32 Phase=-1; FVector Rally=FVector::ZeroVector,Way=FVector::ZeroVector,Screen=FVector::ZeroVector; double PhaseAt=-1.; TArray<int32> Screens; };
+ FArtilleryRaidGroup ArtilleryRaidGroups[2];
+ void UpdateArtilleryRaidGroup(int32 Team);
+ void PlanArtilleryRaidFlank(int32 Team,const FVector& From,const FVector& Target);
+ bool ArtilleryRaidGoal(int32 Team,int32 SquadID,FVector& Center,EBattleOrder& Order) const;
  mutable TMap<int32,int32> MortarPostChoices;
  void GenerateArtilleryPosts();
  void UpdateArtilleryRaids(int32 Team);
@@ -372,6 +379,9 @@ public:
  void BuildSectorTheatres() const;
  mutable TArray<int8> SectorTheatres;
  mutable TArray<uint16> TheatreNeighbours;
+ // Path steps (sectors) between objective sectors (N x N) and from each home to each objective (2 x N); MAX_int32 = no path
+ // (Docs/design-terrain-ai.md 3-3: the focus score's distance from the own front goes by path on sector maps).
+ mutable TArray<int32> TheatreSteps, HomeTheatreSteps;
  mutable FString SectorTheatresMap;
  void BuildSituation(int32 Team, FBattleSituation& Out) const;
  // -BattleSituationLog=1 (default 0): BATTLE_SITUATION every 30 match seconds per team and theatre, with the true enemy count of the
