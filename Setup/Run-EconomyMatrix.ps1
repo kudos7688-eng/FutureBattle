@@ -188,6 +188,7 @@ $supply=@{
  # AC = the AI buys the mixed composition (-BattleAreaComposition=1: armoured cars, mortars, then a tank and an SPG, AT teams per known enemy vehicle);
  # with -TrialTeam only that team (stage 3 of ROADMAP: the all-types side against the default, infantry-only side).
  'AC'=@('-AreaComposition','1')
+ 'AC0'=@('-AreaComposition','0')
  # SC = the sector AI combination the sector lane uses as its base (s22/s23) plus arrival walk (maps H/I).
  'SC'=@('-SectorContact','1','-SectorRoute','1','-SectorFlank','1','-SectorFront','1','-WaypointPass','1','-SectorMoveFire','1','-CoverHuddle','1','-PinnedFlank','1','-ArrivalThreat','1','-SectorCoverRoute','1','-ArrivalWalk','1')
 }

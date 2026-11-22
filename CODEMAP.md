@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（165 モジュール、41623 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（165 モジュール、41626 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -88,7 +88,7 @@
 | `BattleAreaDepot` | .cpp | 49 |  | 集積所の重み：価値が1より大きい拠点（マップFの集積所）への割り振りの重みを、守る・取り返す・襲うの状況で変える（UBattleMatch の一部） |
 | `BattleAreaIntel` | .cpp | 113 |  | エリア戦の情報：観測に基づく区域の見え方と脅威（UBattleMatch の一部） |
 | `BattleAreaState` | .h | 54 | FBattleAreaState | エリア戦の保存される状態（拠点 HP、収入、観測） |
-| `BattleArmourAI` | .cpp | 347 |  | 兵種を扱うAI：効かない車両を狙わない、対戦車兵の弾の温存、知っている敵車両、戦車の待機位置、兵種の構成（UBattleLeaderRuntime と UBattleMatch の一部） |
+| `BattleArmourAI` | .cpp | 350 |  | 兵種を扱うAI：効かない車両を狙わない、対戦車兵の弾の温存、知っている敵車両、戦車の待機位置、兵種の構成（UBattleLeaderRuntime と UBattleMatch の一部） |
 | `BattleArtillery` | .cpp | 985 |  | 迫撃砲と自走砲：間接射撃の目標選び、着弾、陣地の位置（UBattleLeaderRuntime と UBattleMatch の一部） |
 | `BattleAudio` | .h/.cpp | 37 + 365 | BattleAudio | 効果音（音だけ。銃声・着弾・かすめる弾・爆発・発射・砲弾の飛来・装填/構え・拠点と勝敗の合図。素材は Docs/ASSET_SOURCES_AUDIO_FX.md。`-BattleSFX=0` で止まる） |
 | `BattleBlindFire` | .h/.cpp | 47 + 145 | BattleBlindFire | 遮蔽の陰からのブラインドファイア（弾の出る位置・AIの試験・アニメ。UBattleLeaderRuntime の一部） |
