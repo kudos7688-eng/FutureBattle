@@ -10,5 +10,6 @@
 - 変更前に `git status --short -uno` を確認し（`-uno` なしだと計測結果の未追跡ファイルが数千行出る。未追跡は `git status --short -- Game/FutureBattle/Source Game/FutureBattle/Config` のように場所を絞って見る）、ユーザーの未コミット変更を保持する。試作マップの手編集を自動再生成の -Force で上書きしない。
 - C++変更後は `Setup/Build-Editor.ps1`、挙動変更後は `Setup/Test-Battle.ps1` を実施し、必要な実画面確認を追加する。成功判定はログの `BATTLE_SMOKE_RESULT failures=0`。ビルド時のEditor DLLロックに注意し、未保存作業を失う強制終了は避ける。
 - 作業の区切りごとに、別途依頼されなくてもSTATUSへ実装済み範囲・実施した検証・未解決事項・次の一手を更新する。方針が変わったらROADMAPを更新する。重要な経緯はHANDOFFへ追記し、古い完了待ち記述を最新状態と誤解させない。未実施の確認を完了と書かない。
+- **調査の掲示板**（2026-11-22 から、ユーザー決定。`Docs/design-investigation-board.md`）：原因究明・挙動の調べを始める前に `python -I Setup/Board.py find <語>` で、他の系統の進行中の調査とわかったことを引く。30分以上かかりそうな調査は `claim --who <系統名> --topic ... --keys <切替名,ファイル名,日本語の語>` で登録し、重なりが出たら相手の記録を読むか相手のセッションに聞いてから進める。原因・行き止まり・効いた/効かなかった数値は `note` で1行残し、終えたら `done`（やめたら `drop`）。置き場所は作業ツリーの外（`FPS\.lock\`）なので、どのブランチからもすぐ見える。
 - チャットの記憶だけに依存せず、ファイルに残した合意と実際のコード・ログを確認して継続する。
 - T5以降に実施する各計測では、開始前に `Setup/Get-MeasurementMachine.ps1` の `Get-MeasurementMachine` で測定機情報を取得し、manifestの `machine` に保存する（JSON深さ5以上）。GPU名・VRAM（bytesと取得元）・ドライバ版、CPU名・物理コア数/論理プロセッサ数、物理メモリ容量（bytes）、OS名/版/ビルド/アーキテクチャを含める。複数GPU/CPUは全件保存し、実際の描画GPUはUEログと照合する。既存結果への後付けはしない。VRAM取得不能はnullと理由を残し、32bitのCIM AdapterRAM値を実容量と誤認しない。

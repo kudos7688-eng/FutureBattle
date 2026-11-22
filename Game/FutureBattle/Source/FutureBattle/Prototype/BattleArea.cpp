@@ -181,8 +181,11 @@ void UBattleMatch::UpdateAreaHiring()
    const int32 SPGWant=FMath::Min(HireIntent.SPGKeep,Bought/After);
    if(Type==BattleSquadType::Rifle&&SPGWant>0&&ActiveOfType(Team,BattleSquadType::SPGun)<SPGWant)Type=BattleSquadType::SPGun;
    // Armoured exoskeleton soldiers (trial -BattleAreaExoKeep, default AreaExoKeep 0): the same pacing, last.
-   const int32 ExoWant=FMath::Min(HireIntent.ExoKeep,Bought/After);
-   if(Type==BattleSquadType::Rifle&&ExoWant>0&&ActiveOfType(Team,BattleSquadType::Exo)<ExoWant)Type=BattleSquadType::Exo;
+   // Trial -BattleAreaExoEarly=1 (default 0): after the first After purchases (points first), all ExoKeep at once and before the other special types (after scouts), so that a raid
+   // group (-BattleArtilleryRaidGroup) can form; measured without it the exos came one at a time after 300 s and the group formed late.
+   static const bool bExoEarly=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaExoEarly="),V);return V==1;}();
+   const int32 ExoWant=bExoEarly?(Bought>=After?HireIntent.ExoKeep:0):FMath::Min(HireIntent.ExoKeep,Bought/After);
+   if((Type==BattleSquadType::Rifle||(bExoEarly&&Type!=BattleSquadType::Scout))&&ExoWant>0&&ActiveOfType(Team,BattleSquadType::Exo)<ExoWant)Type=BattleSquadType::Exo;
    // Supply vehicles (trial -BattleAreaSupplyKeep, default AreaSupplyKeep 0; BattleSupplyCar.cpp): the same pacing, after everything else.
    const int32 SupplyWant=FMath::Min(HireIntent.SupplyKeep,Bought/After);
    if(Type==BattleSquadType::Rifle&&SupplyWant>0&&ActiveOfType(Team,BattleSquadType::Supply)<SupplyWant)Type=BattleSquadType::Supply;

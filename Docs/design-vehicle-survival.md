@@ -140,3 +140,9 @@ AI の砲兵は、分かっている敵すべてから「射程×`ArtilleryStand
 ログ：`BATTLE_ARTILLERY_RAID_GROUP team phase=gather|flank|strike|end`（flank は way・screen・screens 数つき）。群の状態は保存しない（`GenerateArtilleryPosts` で襲撃と一緒に消える）。
 
 評価：マップI 30FPS、`-ArtilleryFlash 1 -ArtilleryPosts 1 -SPGRange 55000 -AreaSPGCost 45 -AreaSPGKeep 1 -ArtilleryRaidChase 1 -ArtilleryRaidSneak 80`、深さは既定の0.6。`-AreaExoKeep 3` で、群なし／2隊／3隊を比べる。見るのは、自走砲の発射・撃破・被撃破、外骨格の損失、得点。
+
+### 外骨格を早くまとめて買う（-BattleAreaExoEarly）
+
+初回の評価では、外骨格は300秒ごろから1隊ずつ買われ、群が組めるのは試合の後半だけだった。`-BattleAreaExoEarly=1`（既定0）では、最初の `AreaScoutAfterHires`（3）回の購入（拠点取り）のあと、`ExoKeep` 隊をまとめて、偵察の次・ほかの特殊兵種（対戦車・戦車・装甲車・砲兵）より先に買う。評価：`-AreaExoKeep 3 -AreaExoEarly 1` で、群なし／群2を比べる。
+
+結果（11-22、マップI 30FPS、seed7・19）：外骨格は15〜20秒で各軍2隊そろう（3隊目は資金と損失の補充しだいで140秒以降）。群は352〜427秒に組めた（早く買わない場合は583〜739秒）。外骨格の損失は群2で0〜2隊／軍。ただし自走砲の撃破は群なし0〜1、群2で1〜2（早く買わない場合と同程度）で、決め手にはならない。襲撃は自走砲が見つかってから始まるので、早くそろえても出番は後半に寄る。
