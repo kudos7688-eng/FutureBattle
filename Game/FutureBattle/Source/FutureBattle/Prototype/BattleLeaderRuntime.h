@@ -542,6 +542,14 @@ public:
  // flanking or aiming indirect fire) faces where the shot came from, so his forward field of view can find the shooter. Movement keeps
  // its own steering (only the facing changes). Counts hit_face_turned.
  static bool HitFaceEnabled();
+ // -BattleSoldierWatch (default 1, user decision 2026-11-22; =0 turns it off; -BattleSoldierWatchTeam=0/1 for one team): a soldier standing still with
+ // nothing to fire at (not in a cover action, not a vehicle, not under direct control) faces the squad's target when he knows
+ // where it is, else the nearest enemy he sees, else the nearest he knows of (memory and reports still held; both within his
+ // weapon's reach), else his share of the ground ahead (toward the enemy's home, or 70 degrees to either side by his place in the
+ // squad). Not before his first perception scan (match start or a load). Sight has a 120-degree forward field of view.
+ // BattleSoldierWatch.cpp; counts watch_{target,seen,contact,sector}_frames.
+ static bool SoldierWatchEnabled(int32 Team);
+ bool SoldierWatchDirection(int32 ID,int32 TargetID,const FVector& Pos,double Now,FVector& Out);
  void RevealShooter(int32 VictimID,int32 ShooterID,const FVector& From);
  // Evaluation only (sight diagnostics on, behaviour unchanged, 2026-11-21): a hit soldier who does not see his shooter. Why each of the
  // two lines (victim->shooter, shooter->victim) fails, using the same checks as CanSee (range, field of view, first blocking hit).
@@ -570,7 +578,8 @@ public:
  // roof or upper floor (a static obstacle 1.2-8 m above the slot: inside houses and sheds, by windows) before the ones outside.
  // Counts arrival_indoor_*.
  static bool CoverIndoorEnabled();
- // Trial -BattleAttackFocus=1 (2026-11-22, default 0; user idea 11-22: an attack order toward an enemy squad or sector, and cover
+ // -BattleAttackFocus (2026-11-22, default 1 by user decision after s25 on map I: hits in the open -16..-20%, shooter outside the
+ // view -16..-40%; =0 for the old rules; user idea 11-22: an attack order toward an enemy squad or sector, and cover
  // against that direction - stage 1+2, the sector AI picks the focus itself): a sector squad keeps a focus point, the enemies its
  // team sees now (RouteKnownEnemies: own sightings and scout reports, no hidden state) in the destination sector and its 8
  // neighbours - the sector with the most of them (ties: nearer to the destination), their mean position; else the known enemy
@@ -585,7 +594,7 @@ public:
  // more than 45 degrees off the focus (seen from the squad centre) as 1.5 times as far, so the squad fires toward its focus first
  // and still answers a much nearer enemy elsewhere. Counts focus_target_in_cone / focus_target_off_cone.
  static bool FocusTargetEnabled();
- // Trial -BattleSectorSymmetric=1 (2026-11-22, default 0; west/east bias of the sector AI on map I, STATUS 11-22 5:00): the sector
+ // -BattleSectorSymmetric (2026-11-22, default 1 since 11-22 12:00 by user decision, =0 the old way; west/east bias of the sector AI on map I, STATUS 11-22 5:00): the sector
  // AI's choices that scan the 3x3 sectors around a squad in a fixed compass order and keep the first of equal scores (the stop
  // beside the next junction, the pinned squad's flank stop, the close-in stop - BattleSectorRoute.cpp), and the arrival places
  // sorted with ties by world X then Y (BuildMovementPlan, ReassignOccupiedArrival), read them in the team's own frame: the
@@ -593,6 +602,9 @@ public:
  static bool SectorSymmetricEnabled();
  // -BattleSectorSymmetric: -1 for the east team (its frame turned 180 degrees), else 1.
  int32 SectorTurn(int32 Team) const;
+ // -BattleSectorSymmetric: the sector of a point as the team reads it - for the east team the sector of the point turned 180
+ // degrees, turned back (a point on a sector border then falls on the same side for both teams). Else BattleSectors::Cell.
+ FIntPoint SectorCellFor(int32 Team,const FVector& At) const;
  // -BattleAttackFocus: each team's current sightings (RouteKnownEnemies), refreshed at most once a second.
  TArray<FVector> FocusEnemies[2];double FocusEnemiesAt[2]={-1.,-1.};
  bool PickAttackFocus(const struct FBattleSquadState& S,double Now,FVector& Out,const TCHAR*& Source);

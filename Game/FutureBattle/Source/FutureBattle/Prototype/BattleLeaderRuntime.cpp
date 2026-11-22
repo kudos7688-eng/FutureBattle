@@ -824,8 +824,12 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    if(bArea && !VehicleNav && P.Path.Num()>1 && BattleTactics::SymmetricStart(GetWorld()) && GetWorld()->GetSubsystem<UBattleMatch>()->AreaHome(S->Team).X>0)
    {
     FNavLocation MirrorFrom,MirrorTo;
-    if(Nav->ProjectPointToNavigation(FVector(-From.Location.X,-From.Location.Y,From.Location.Z),MirrorFrom,FVector(100,100,300)) && Nav->ProjectPointToNavigation(FVector(-To.Location.X,-To.Location.Y,To.Location.Z),MirrorTo,FVector(100,100,300)))
-     if(auto* West=Nav->FindPathToLocationSynchronously(GetWorld(),MirrorFrom.Location,MirrorTo.Location);West && West->IsValid() && !West->IsPartial() && West->PathPoints.Num()>1)
+    // Evaluation: an east path that keeps its own route (path_mirror_skipped_*).
+    if(!Nav->ProjectPointToNavigation(FVector(-From.Location.X,-From.Location.Y,From.Location.Z),MirrorFrom,FVector(100,100,300)) || !Nav->ProjectPointToNavigation(FVector(-To.Location.X,-To.Location.Y,To.Location.Z),MirrorTo,FVector(100,100,300)))
+     SightExperiment.Cover(TEXT("path_mirror_skipped_project"));
+    else if(auto* West=Nav->FindPathToLocationSynchronously(GetWorld(),MirrorFrom.Location,MirrorTo.Location);!(West && West->IsValid() && !West->IsPartial() && West->PathPoints.Num()>1))
+     SightExperiment.Cover(TEXT("path_mirror_skipped_west_path"));
+    else
      {
       TArray<FVector> Image;bool bOnMesh=true;
       for(const FVector& Q:West->PathPoints)
@@ -1092,6 +1096,11 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   Direction=(P->Focus-Pos).GetSafeNormal2D().RotateAngleAxis(Fan[FMath::Max(0,S->Members.IndexOfByKey(ID))%5],FVector::UpVector);
   SightExperiment.Cover(TEXT("focus_facing_frames"));
  }
+ // -BattleSoldierWatch: standing still with nothing to fire at and not watching a focus (other squads, or no focus yet), he looks
+ // toward what he knows of the enemy (BattleSoldierWatch.cpp).
+ else if(FVector Watch;SoldierWatchEnabled(U->Team) && !bArtilleryAim && !bVehicleBody &&
+  (B.Actor.IsValid()?B.Actor->GetVelocity().SizeSquared2D():B.Velocity.SizeSquared2D())<=400. && SoldierWatchDirection(ID,TargetID,Pos,Now,Watch))
+  Direction=Watch;
  // A vehicle turns its turret to the target; its hull keeps the driving heading (SteerVehicle).
  // The main gun's target (stage 2) takes the turret; the machine gun keeps firing along Direction at its own target.
  // A mortar gunner without a direct target faces his indirect-fire target; a self-propelled gun turns its gun to it.
@@ -1640,8 +1649,14 @@ bool UBattleLeaderRuntime::PinnedFlankEnabled()
 }
 bool UBattleLeaderRuntime::SectorSymmetricEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSymmetric="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSymmetric="),V);return V!=0;}(); // default on since 2026-11-22 (user decision)
  return bOn;
+}
+FIntPoint UBattleLeaderRuntime::SectorCellFor(int32 Team,const FVector& At) const
+{
+ if(SectorTurn(Team)>0)return BattleSectors::Cell(At);
+ const FIntPoint Turned=BattleSectors::Cell(FVector(-At.X,-At.Y,At.Z));
+ return FIntPoint(BattleSectors::Columns-1-Turned.X,BattleSectors::Rows-1-Turned.Y);
 }
 int32 UBattleLeaderRuntime::SectorTurn(int32 Team) const
 {
@@ -1651,7 +1666,7 @@ int32 UBattleLeaderRuntime::SectorTurn(int32 Team) const
 }
 bool UBattleLeaderRuntime::AttackFocusEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAttackFocus="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleAttackFocus="),V);return V!=0;}();
  return bOn;
 }
 bool UBattleLeaderRuntime::FocusTargetEnabled()
