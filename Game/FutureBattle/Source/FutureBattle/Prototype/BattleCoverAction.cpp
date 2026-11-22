@@ -360,7 +360,7 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
    return false;
   }
   // An assault bound has reached its cover and the charge may follow (BattleArms.cpp); with the enemy forgotten he stays there.
-  if(A->bAssault){Diag.Cover(TEXT("arms_assault_arrived"));ArmsBoundArrived.Add(ID,Now);}
+  if(A->bAssault){Diag.Cover(TEXT("arms_assault_arrived"));if(A->Slid)Diag.Cover(TEXT("arms_assault_arrived_slid"));ArmsBoundArrived.Add(ID,Now);}
   if((bContactCover || A->bAssault) && Contact)
   {
    const int32 Goal=A->Target;const FVector Threat=Contact->LastKnownPosition;
@@ -393,6 +393,25 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
    }
   }
  }
+ // An assault dash gives up when it has not got StuckGain cm closer to its cover in StuckSeconds s of walking (bodies or a wall he
+ // cannot slide past); StepArms starts his next bound at the earliest 12 s after this one began.
+ if(!End && A->bAssault)
+ {
+  const double Left=FVector::Dist2D(Pos,A->Goal);const auto& Ch=BattleArms::Charge();
+  if(A->Best<0.||Left<A->Best-Ch.StuckGain){A->Best=Left;A->Stuck=0.f;}
+  else if((A->Stuck+=Dt)>Ch.StuckSeconds)
+  {
+   End=TEXT("arms_assault_end_stuck");
+   Diag.Cover(!A->bHeld?TEXT("arms_assault_end_stuck_other"):A->bBlockPawn?TEXT("arms_assault_end_stuck_body"):TEXT("arms_assault_end_stuck_world"));
+   if(Diag.Enabled&&ArmsStuckLogs<200)
+   {
+    ++ArmsStuckLogs;const auto* Body=Bodies.Find(ID);
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_ASSAULT_STUCK unit=%d left=%.0f actor=%d position=%s steps=%d moved=%d blocked=%d slid=%d held=%d block=%s body=%d start=%d"),
+     ID,Left,Body&&Body->Actor.IsValid()?1:0,*Pos.ToCompactString(),A->Steps,A->Moved,A->Blocked,A->Slid,A->bHeld?1:0,*A->Block.ToString(),A->bBlockPawn?1:0,
+     A->bBlockStart?1:0);
+   }
+  }
+ }
  if(!End && A->bAssault)
  {
   // Run through: count the dashes that go on with the enemy lost (they used to end after 10 s), and remember where he was seen.
@@ -406,13 +425,33 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
  else
  {
   // An assault dash (BattleArms.cpp) runs at the charge's speed; other walks keep the walking speed.
-  const float Stride=A->bAssault?GetDefault<UBattleTuning>()->MoveSpeed*BattleArms::Charge().SpeedScale*Dt:GetDefault<UBattleTuning>()->MoveSpeed*Dt;
-  FHitResult Hit;B.Capsule->MoveComponent(D*FMath::Min(Stride,float(FVector::Dist2D(Pos,A->Goal))),B.Capsule->GetComponentQuat(),true,&Hit);
-  auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=B.Capsule->GetComponentLocation();B.Velocity=(F.Position-Pos)/FMath::Max(.001f,Dt);
-  // Evaluation of an assault dash (the timeout record above): moved, or stopped by what.
-  if(auto* Dash=CoverApproaches.Find(ID);Dash&&Dash->bAssault)
+  const bool bDash=A->bAssault;
+  const float Stride=bDash?GetDefault<UBattleTuning>()->MoveSpeed*BattleArms::Charge().SpeedScale*Dt:GetDefault<UBattleTuning>()->MoveSpeed*Dt;
+  const FVector Delta=D*FMath::Min(Stride,float(FVector::Dist2D(Pos,A->Goal)));
+  FHitResult Hit;B.Capsule->MoveComponent(Delta,B.Capsule->GetComponentQuat(),true,&Hit);
+  // An assault dash slides along a body or wall it hits for the rest of the step instead of pushing into it (a walker body slides by
+  // itself); hit straight on, he goes round to one side, the same side for the whole dash. Other walks keep the plain step.
+  if(auto* Dash=bDash?CoverApproaches.Find(ID):nullptr;Dash&&Hit.bBlockingHit&&!Hit.bStartPenetrating&&FMath::Abs(Hit.Normal.Z)<.7f)
   {
-   if(!Hit.bBlockingHit||FVector::DistSquared2D(F.Position,Pos)>1.)++Dash->Moved;
+   const FVector Wall=FVector(Hit.Normal.X,Hit.Normal.Y,0.).GetSafeNormal(),Rest=Delta*(1.f-Hit.Time);
+   FVector Along=FVector::VectorPlaneProject(Rest,Wall);
+   if(Along.SizeSquared2D()<FMath::Square(.3*Rest.Size2D()))
+   {
+    const FVector Round=FVector::CrossProduct(Wall,FVector::UpVector);
+    if(!Dash->SlideSide)Dash->SlideSide=FVector::DotProduct(Round,D)>=0.?1:-1;
+    Along=Round*(Dash->SlideSide*Rest.Size2D());
+   }
+   const int32 Bit=Hit.GetComponent()&&Hit.GetComponent()->GetCollisionObjectType()==ECC_Pawn?1:2;
+   if(!(Dash->Slid&Bit))Diag.Cover(Bit==1?TEXT("arms_assault_slid_body"):TEXT("arms_assault_slid_world"));
+   Dash->Slid|=Bit;
+   FHitResult SlideHit;B.Capsule->MoveComponent(Along,B.Capsule->GetComponentQuat(),true,&SlideHit);
+  }
+  auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=B.Capsule->GetComponentLocation();B.Velocity=(F.Position-Pos)/FMath::Max(.001f,Dt);
+  // Evaluation of an assault dash (the timeout and stuck records above): moved, or stopped by what.
+  if(auto* Dash=bDash?CoverApproaches.Find(ID):nullptr)
+  {
+   Dash->bHeld=Hit.bBlockingHit&&FVector::DistSquared2D(F.Position,Pos)<=1.;
+   if(!Dash->bHeld)++Dash->Moved;
    else
    {
     ++Dash->Blocked;Dash->bBlockStart=Hit.bStartPenetrating;

@@ -53,8 +53,10 @@ namespace BattleArms
  // more than CrowdMax known enemies within CrowdRadius of the target (him included) and a clear straight way - from where he is, or
  // from a step aside (his cover's firing point, or SideStep1 / SideStep2 cm to either side), which he walks to first (until within
  // ViaReach cm). The soldier runs at SpeedScale x the walking speed to Stop cm from him for at most Limit s; the next charge waits
- // Cooldown s from this start; at most SquadMax of a squad at once.
- struct FCharge { float Range=1200.f,BoundRange=3000.f,BoundWindow=15.f,Known=3.f,Stop=120.f,Limit=8.f,SpeedScale=1.3f,CrowdRadius=600.f,Cooldown=8.f,SideStep1=220.f,SideStep2=400.f,ViaReach=40.f; int32 CrowdMax=2,SquadMax=2; };
+ // Cooldown s from this start; at most SquadMax of a squad at once. An assault bound (-BattleArmsAssault, StepCoverApproach) runs at
+ // SpeedScale too, slides along a body or wall it hits, and gives up when it has not got StuckGain cm closer to its cover in
+ // StuckSeconds s of walking.
+ struct FCharge { float Range=1200.f,BoundRange=3000.f,BoundWindow=15.f,Known=3.f,Stop=120.f,Limit=8.f,SpeedScale=1.3f,CrowdRadius=600.f,Cooldown=8.f,SideStep1=220.f,SideStep2=400.f,ViaReach=40.f,StuckSeconds=2.f,StuckGain=50.f; int32 CrowdMax=2,SquadMax=2; };
  const FCharge& Charge();
  struct FMedic { float Rate=4.f,Range=1000.f; };
  const FMedic& Medic();

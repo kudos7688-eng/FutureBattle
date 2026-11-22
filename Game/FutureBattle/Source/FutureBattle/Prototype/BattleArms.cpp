@@ -346,6 +346,7 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
   // the squad are dashing and the enemies around the target are not more than half the squad. Known: seen by him, or seen / reported
   // within 3 s. A bound runs on to its cover when the enemy is lost; with no enemy known, the next bound heads for where the last
   // bound's enemy was seen (within 30 s of that sighting) until he is within 18 m of that place (a bound ends 8 m short, gains 10 m).
+  // A bound slides along a body or wall in its way and gives up after 2 s without getting closer (StepCoverApproach, FCharge).
   if(const int32 DashMode=BattleArms::AssaultMode();DashMode>0&&S->Order!=EBattleOrder::Move&&!CoverApproaches.Contains(ID)&&Now>=ArmsAssaultNext.FindRef(ID))
   {
    const bool bRole=U->Kit==BattleArms::KitBreacher||U->Kit==BattleArms::KitAssault||U->Kit==BattleArms::KitRifleman;
