@@ -12,6 +12,8 @@ namespace BattleMapJ
 {
 	constexpr int32 Columns=20,Rows=14;
 	constexpr double Cell=5000.,HalfX=50000.,HalfY=35000.;
+	// Extra low cover in the layouts that were short of it on map K (BattleMapLayoutJ.inl); off here, so map J stays as generated.
+	constexpr bool bDenseCover=false;
 	// H two-storey house (enterable)     B office tower block (not enterable, 12-30m)   A apartment block (not enterable, 9-12m)
 	// C church with a bell tower         K factory (hall without roof, chimney)          U ruins (broken walls, rubble)
 	// Y car park                         G park                                          Q row of shops (not enterable)
