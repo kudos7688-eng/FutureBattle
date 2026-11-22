@@ -150,7 +150,7 @@ void UBattleMatch::UpdateAreaHiring()
   }
   if(Without==BattleSquadType::Heavy)HireIntent.HeavyShare=0.f;
   if(HireIntent.HeavyShare>0&&Heavy<HireIntent.HeavyShare*(Bought+1))Type=BattleSquadType::Heavy;
-  // Strategic layer trial -BattleAreaComposition=1: the AI sets the numbers of special squad types it keeps (BattleArmourAI.cpp).
+  // Strategic layer -BattleAreaComposition (default on since 2026-11-22): the AI sets the numbers of special squad types it keeps (BattleArmourAI.cpp).
   const bool bComposition=BattleTactics::AreaComposition(Team)||bAllTypes;const uint8 PlainType=Type;
   if(bComposition)AreaComposition(Team,HireIntent,Bought);
   switch(Without)
@@ -181,8 +181,11 @@ void UBattleMatch::UpdateAreaHiring()
    const int32 SPGWant=FMath::Min(HireIntent.SPGKeep,Bought/After);
    if(Type==BattleSquadType::Rifle&&SPGWant>0&&ActiveOfType(Team,BattleSquadType::SPGun)<SPGWant)Type=BattleSquadType::SPGun;
    // Armoured exoskeleton soldiers (trial -BattleAreaExoKeep, default AreaExoKeep 0): the same pacing, last.
-   const int32 ExoWant=FMath::Min(HireIntent.ExoKeep,Bought/After);
-   if(Type==BattleSquadType::Rifle&&ExoWant>0&&ActiveOfType(Team,BattleSquadType::Exo)<ExoWant)Type=BattleSquadType::Exo;
+   // Trial -BattleAreaExoEarly=1 (default 0): after the first After purchases (points first), all ExoKeep at once and before the other special types (after scouts), so that a raid
+   // group (-BattleArtilleryRaidGroup) can form; measured without it the exos came one at a time after 300 s and the group formed late.
+   static const bool bExoEarly=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaExoEarly="),V);return V==1;}();
+   const int32 ExoWant=bExoEarly?(Bought>=After?HireIntent.ExoKeep:0):FMath::Min(HireIntent.ExoKeep,Bought/After);
+   if((Type==BattleSquadType::Rifle||(bExoEarly&&Type!=BattleSquadType::Scout))&&ExoWant>0&&ActiveOfType(Team,BattleSquadType::Exo)<ExoWant)Type=BattleSquadType::Exo;
    // Supply vehicles (trial -BattleAreaSupplyKeep, default AreaSupplyKeep 0; BattleSupplyCar.cpp): the same pacing, after everything else.
    const int32 SupplyWant=FMath::Min(HireIntent.SupplyKeep,Bought/After);
    if(Type==BattleSquadType::Rifle&&SupplyWant>0&&ActiveOfType(Team,BattleSquadType::Supply)<SupplyWant)Type=BattleSquadType::Supply;
@@ -284,7 +287,7 @@ void UBattleMatch::UpdateArea(float Dt)
   const auto* S=Store->FindSquad(SID);const bool bHome=AtHome.Contains(SID);
   // A supply vehicle at home loads its stock again (BattleSupplyCar.cpp).
   if(bHome&&S->SquadType==BattleSquadType::Supply)RestockSupplyCar(SID);
-  // Trial -BattleAreaPointSupply=1: the same ammunition refill at a point the squad's team owns (calm: not contested, not being captured).
+  // -BattleAreaPointSupply (default ON since 2026-11-22): the same ammunition refill at a point the squad's team owns (calm: not contested, not being captured).
   bool bPoint=false;
   if(!bHome&&BattleTactics::Supply().bPointAmmo&&S->CommandStatus==EBattleCommandStatus::Active)
   {

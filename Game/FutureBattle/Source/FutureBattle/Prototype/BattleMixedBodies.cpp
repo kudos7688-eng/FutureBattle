@@ -133,7 +133,7 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  const double Now=GetWorld()->GetTimeSeconds();TArray<FBattleUnitState> Records;
  // Places left because they were seen into (stage A): kept by position for the time left. The position decides which place
  // it is (BrokenCoverSlot), so nothing here depends on how or whether the places are built yet.
- BrokenCover.Reset();RelocateWaiting.Reset();
+ BrokenCover.Reset();RelocateWaiting.Reset();WalkLooks.Reset();
  for(const auto& E:Save->Units)if(E.BrokenCoverSlot!=INDEX_NONE && E.BrokenCoverLeft>0)
   BrokenCover.Add(E.State.UnitID,FBattleBrokenCover{E.BrokenCoverSlot,E.BrokenCoverAt,Now+FMath::Min(10.f,E.BrokenCoverLeft)});
  for(const auto& E:Save->Units)

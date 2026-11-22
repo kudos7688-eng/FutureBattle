@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I','J')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$WalkLook=0)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
@@ -12,14 +12,22 @@ if ($Setup) { $extra += @('-BattleSetupPhase=1','-BattleStartSquads=15','-Battle
 # Close fights to look at (ROADMAP 2026-11-22, stage 1 of fights inside a sector): sight and engagement cut to 30 or 50 m, so squads
 # meet inside one sector. For watching the current AI at close range, not a play condition.
 if ($CloseRange -gt 0) { $cm = $CloseRange * 100; $extra += @("-BattleRangeSight=$cm","-BattleRangeEngage=$cm","-BattleRangeEngageSupport=$cm") }
+# Individual AI trials (default 0, ROADMAP 2026-11-22 stage 2): -OwnTarget 2 = a soldier who cannot fire at the squad's target fires at
+# an enemy he sees himself and turns toward where he was hit from; -WalkLook 1 = a soldier on the move turns his head to the enemy he
+# knows of or to his share of the ground around the way. Both teams.
+if ($OwnTarget -gt 0) { $extra += "-BattleOwnTarget=$OwnTarget" }
+if ($WalkLook -gt 0) { $extra += "-BattleWalkLook=$WalkLook" }
 if ($Map -eq 'H') {
     & (Join-Path $PSScriptRoot 'Initialize-MapH.ps1') -Project $project
 }
 if ($Map -eq 'J') {
     & (Join-Path $PSScriptRoot 'Initialize-MapJ.ps1') -Project $project
 }
+if ($Map -eq 'K') {
+    & (Join-Path $PSScriptRoot 'Initialize-MapK.ps1') -Project $project
+}
 # Maps with sectors (H, I): the same play condition.
-if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J') {
+if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J' -or $Map -eq 'K') {
     $extra += '-BattleLeaderGuard=1'
     # Player's move click = sector move that fires on the move; a drawn line = point move (BattlePlayerPath.cpp).
     $extra += '-BattleSectorMove=1'

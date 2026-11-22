@@ -518,7 +518,7 @@ public:
 	UPROPERTY(Config, EditAnywhere) int32 ATKeepRounds = 2;
 	UPROPERTY(Config, EditAnywhere) float VehicleMemory = 120.f;
 	UPROPERTY(Config, EditAnywhere) float TankOverwatch = 12000.f;
-	UPROPERTY(Config, EditAnywhere) bool bAreaComposition = false;
+	UPROPERTY(Config, EditAnywhere) bool bAreaComposition = true; // default true since 2026-11-22 (user decision; stage 3 one-team test +101.6); -BattleAreaComposition=0 = infantry and heavy only
 	// Squad groups, stage 1 (2026-11-18, BattleGroups.cpp; first values). An AI attack group: GroupRifleSquads rifle squads with a tank and a
 	// mortar team when the team has them. It gathers GroupRallyBack (GroupRallyBackProfile with the range profile) short of its objective,
 	// advances once GroupReadyShare of the squads present are within GroupRallyRadius of the rally point or after GroupAssembleMax seconds,
@@ -611,9 +611,9 @@ public:
 	// Direct control only: with an empty reserve the possessed soldier takes one magazine from the squad mate (same kind of weapon, within
 	// PlayerAmmoShareRange) who carries the most. Rounds are moved, never created; 0 turns it off.
 	UPROPERTY(Config, EditAnywhere) float PlayerAmmoShareRange = 2000.f;
-	// Area trial -BattleAreaPointSupply=1 (default OFF until measured; Play-Area.ps1 turns it on): a squad whose leader stands within
+	// Area rule -BattleAreaPointSupply (default ON since 2026-11-22 by user decision; =0 turns it off): a squad whose leader stands within
 	// AreaPointSupplyRadius of a point its team owns (not contested, not being captured) gets the home ammunition refill there.
-	UPROPERTY(Config, EditAnywhere) bool bAreaPointSupply = false;
+	UPROPERTY(Config, EditAnywhere) bool bAreaPointSupply = true;
 	UPROPERTY(Config, EditAnywhere) float AreaPointSupplyRadius = 2500.f;
 	UPROPERTY(Config, EditAnywhere) float AimSettleSeconds = .8f;
 	UPROPERTY(Config, EditAnywhere) float AimResetDegrees = 3.f;
