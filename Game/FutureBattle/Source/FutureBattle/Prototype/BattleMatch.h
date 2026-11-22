@@ -359,6 +359,9 @@ public:
  void BuildSectorTheatres() const;
  mutable TArray<int8> SectorTheatres;
  mutable TArray<uint16> TheatreNeighbours;
+ // Path steps (sectors) between objective sectors (N x N) and from each home to each objective (2 x N); MAX_int32 = no path
+ // (Docs/design-terrain-ai.md 3-3: the focus score's distance from the own front goes by path on sector maps).
+ mutable TArray<int32> TheatreSteps, HomeTheatreSteps;
  mutable FString SectorTheatresMap;
  void BuildSituation(int32 Team, FBattleSituation& Out) const;
  // -BattleSituationLog=1 (default 0): BATTLE_SITUATION every 30 match seconds per team and theatre, with the true enemy count of the
