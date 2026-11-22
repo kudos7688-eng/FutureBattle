@@ -617,7 +617,7 @@ public:
  // more than 45 degrees off the focus (seen from the squad centre) as 1.5 times as far, so the squad fires toward its focus first
  // and still answers a much nearer enemy elsewhere. Counts focus_target_in_cone / focus_target_off_cone.
  static bool FocusTargetEnabled();
- // Trial -BattleSectorSymmetric=1 (2026-11-22, default 0; west/east bias of the sector AI on map I, STATUS 11-22 5:00): the sector
+ // -BattleSectorSymmetric (2026-11-22, default 1 since 11-22 12:00 by user decision, =0 the old way; west/east bias of the sector AI on map I, STATUS 11-22 5:00): the sector
  // AI's choices that scan the 3x3 sectors around a squad in a fixed compass order and keep the first of equal scores (the stop
  // beside the next junction, the pinned squad's flank stop, the close-in stop - BattleSectorRoute.cpp), and the arrival places
  // sorted with ties by world X then Y (BuildMovementPlan, ReassignOccupiedArrival), read them in the team's own frame: the

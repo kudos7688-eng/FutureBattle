@@ -1653,7 +1653,7 @@ bool UBattleLeaderRuntime::PinnedFlankEnabled()
 }
 bool UBattleLeaderRuntime::SectorSymmetricEnabled()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSymmetric="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSymmetric="),V);return V!=0;}(); // default on since 2026-11-22 (user decision)
  return bOn;
 }
 FIntPoint UBattleLeaderRuntime::SectorCellFor(int32 Team,const FVector& At) const

@@ -100,6 +100,7 @@ if ($CoverOutward -ge 0) { $a+="-BattleCoverOutward=$CoverOutward" }
 if ($CoverDense -ge 0) { $a+="-BattleCoverDense=$CoverDense" }
 if ($CoverIndoor -ge 0) { $a+="-BattleCoverIndoor=$CoverIndoor" }
 if ($AttackFocus -ge 0) { $a+="-BattleAttackFocus=$AttackFocus" }
+if ($SoldierWatch -ge 0) { $a+="-BattleSoldierWatch=$SoldierWatch" }; if ($SoldierWatchTeam -ge 0) { $a+="-BattleSoldierWatchTeam=$SoldierWatchTeam" }
 if ($FocusTarget -ge 0) { $a+="-BattleFocusTarget=$FocusTarget" }
 if ($SectorSymmetric -ge 0) { $a+="-BattleSectorSymmetric=$SectorSymmetric" }
 $a+=@("-BattleAreaCompositionPlanner=$AreaCompositionPlanner","-BattleAreaCompositionPlannerTeams=$AreaCompositionPlannerTeams")
@@ -109,7 +110,6 @@ if ($ThreatCover -ge 0) { $a+="-BattleThreatCover=$ThreatCover" }; if ($ThreatCo
 if ($ThreatCoverRelocate -ge 0) { $a+="-BattleThreatCoverRelocate=$ThreatCoverRelocate" }
 if ($ThreatCoverCrouch -ge 0) { $a+="-BattleThreatCoverCrouch=$ThreatCoverCrouch" }; if ($ThreatCoverCrouchTeam -ge 0) { $a+="-BattleThreatCoverCrouchTeam=$ThreatCoverCrouchTeam" }
 # Individual AI watch (2026-11-22, trial, default 0): a soldier standing still with nothing to fire at faces what he knows of the enemy.
-if ($SoldierWatch -ge 0) { $a+="-BattleSoldierWatch=$SoldierWatch" }; if ($SoldierWatchTeam -ge 0) { $a+="-BattleSoldierWatchTeam=$SoldierWatchTeam" }
 # Individual AI stage B1 (2026-11-20, trial, default 0): a soldier in cover walks to a clearly better cover place inside the squad's sector. -SoldierMoveTeam limits it to one team.
 if ($SoldierMove -ge 0) { $a+="-BattleSoldierMove=$SoldierMove" }; if ($SoldierMoveTeam -ge 0) { $a+="-BattleSoldierMoveTeam=$SoldierMoveTeam" }
 if($AreaHire -ge 0){$a+="-BattleAreaHire=$AreaHire"}
