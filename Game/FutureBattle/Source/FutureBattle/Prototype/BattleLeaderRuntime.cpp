@@ -979,6 +979,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   // (crouched or crawling, at its speed below).
   if(WillMove && StanceOf(ID)!=BattleStance::Stand && BattleStance::MoveMode()<2){if(SightExperiment.Enabled)CoverGate.Add(ID,8);Store->SetAction(ID,EBattleAction::Idle);return;}
  }
+ // Off the stance maps the AI has no stance rules: a soldier the player crouched or laid down and then left stands up again.
+ else if(!bVehicleBody && StanceOf(ID)!=BattleStance::Stand)SetStance(ID,BattleStance::Stand,Now,true);
  // -BattleContactCover (this soldier's team): per-frame probe budget, 2 s retry, walks to cover and to free firing positions.
  const bool bContactCover=BattleTactics::ContactCover(U->Team) && !bVehicleBody;
  const bool ProbeBudget=BattleTactics::AICoverProbeBudgetEnabled() || bContactCover;
