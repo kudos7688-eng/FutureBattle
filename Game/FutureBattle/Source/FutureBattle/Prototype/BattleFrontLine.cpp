@@ -620,8 +620,14 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
   for(auto It=FreeLastPos.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||(S->Team==Team&&!Seen.Contains(It.Key()))){FreeLastStep.Remove(It.Key());It.RemoveCurrent();}
   // Crowding (log only, crowd=): the team's infantry squads whose leader shares a sector with another of them, summed per update.
   TMap<FIntPoint,int32> PerCell;
+  // Across the map (log only, lat_front= / lat_other=): the same squads per row of the team's own order, front army apart from the rest.
+  if(LatFront[Team].Num()!=Rows){LatFront[Team].Init(0,Rows);LatOther[Team].Init(0,Rows);}
   for(const auto& P:Store->GetSquads())if(P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&!BattleSquadType::IsVehicle(P.Value.SquadType)&&!BattleSquadType::IsArtillery(P.Value.SquadType))
-   if(const auto* L=Store->Find(P.Value.LeaderUnitID);L&&L->IsAlive())++PerCell.FindOrAdd(BattleSectors::Cell(R->Position(P.Value.LeaderUnitID)));
+   if(const auto* L=Store->Find(P.Value.LeaderUnitID);L&&L->IsAlive())
+   {
+    const FIntPoint C=BattleSectors::Cell(R->Position(P.Value.LeaderUnitID));++PerCell.FindOrAdd(C);
+    if(BattleSectors::Valid(C)&&LatFront[Team].IsValidIndex(RowOf(C)))++(GroupOf(P.Key)==FrontID&&FrontID!=INDEX_NONE?LatFront[Team]:LatOther[Team])[RowOf(C)];
+   }
   for(const auto& C:PerCell)SectorCrowd[Team]+=FMath::Max(0,C.Value-1);
   // Width (log only, lanes=): the rows (across the map) with an own infantry squad at the line or up to two columns behind it, summed per update.
   if(Line.Num()==Rows){TSet<int32> Lanes;for(const auto& C:PerCell){const int32 Y=RowOf(C.Key),X=ColOf(C.Key);if(Line.IsValidIndex(Y)&&X>=Line[Y]-2&&X<=Line[Y]+1)Lanes.Add(Y);}FrontLanes[Team]+=Lanes.Num();}
@@ -672,7 +678,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  {
   FrontLineLogAt[Team]=Elapsed+LogInterval;
   FString Cells;for(int32 Y=0;Y<Rows;++Y)Cells+=FString::Printf(TEXT("%s%d"),Y?TEXT(","):TEXT(""),Line[Y]);
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_LINE time=%.0f team=%d line=%s group=%d free_rev=%d free_moved_m=%.0f crowd=%d lanes=%d road=%d posts=%s"),Elapsed,Team,*Cells,FrontID,FreeReversals[Team],FreeMoved[Team]/100.,SectorCrowd[Team],FrontLanes[Team],RoadSteps[Team],Posts.IsEmpty()?TEXT(" none"):*Posts);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_LINE time=%.0f team=%d line=%s group=%d free_rev=%d free_moved_m=%.0f crowd=%d lanes=%d road=%d lat_front=%s lat_other=%s posts=%s"),Elapsed,Team,*Cells,FrontID,FreeReversals[Team],FreeMoved[Team]/100.,SectorCrowd[Team],FrontLanes[Team],RoadSteps[Team],*FString::JoinBy(LatFront[Team],TEXT(","),[](int32 V){return FString::FromInt(V);}),*FString::JoinBy(LatOther[Team],TEXT(","),[](int32 V){return FString::FromInt(V);}),Posts.IsEmpty()?TEXT(" none"):*Posts);
  }
 }
 
