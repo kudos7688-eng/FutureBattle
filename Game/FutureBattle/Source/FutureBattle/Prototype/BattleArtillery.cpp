@@ -321,11 +321,12 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
     const double D2=FVector::DistSquared2D(Pos,R.Position);if(D2<Min2||D2>Max2)continue;
     if(!Best||R.At>Best->At||(R.At==Best->At&&FR.Key<BestKey)){Best=&R;BestKey=FR.Key;}
    }
-   if(Best&&!AllyNear(U->Team,Best->Position,Blast+ArtillerySpread(bSPG,FVector::Dist2D(Pos,Best->Position))))
+   const FVector BestAt=Best&&Best->Count>0?Best->Sum/double(Best->Count):Best?Best->Position:FVector::ZeroVector; // the mean of the gun's repeated reports
+   if(Best&&!AllyNear(U->Team,BestAt,Blast+ArtillerySpread(bSPG,FVector::Dist2D(Pos,BestAt))))
    {
-    Aim=Best->Position;
+    Aim=BestAt;
     if(const int32* Last=CounterBatteryTarget.Find(ID);!Last||*Last!=BestKey)
-     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COUNTER_BATTERY unit=%d team=%d target=%d aim=(%.0f,%.0f) age=%.1f range=%.0f"),ID,U->Team,BestKey,Aim.X,Aim.Y,CM->Elapsed-Best->At,FVector::Dist2D(Pos,Aim));
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COUNTER_BATTERY unit=%d team=%d target=%d aim=(%.0f,%.0f) age=%.1f range=%.0f reports=%d"),ID,U->Team,BestKey,Aim.X,Aim.Y,CM->Elapsed-Best->At,FVector::Dist2D(Pos,Aim),Best->Count);
     CounterBatteryTarget.Add(ID,BestKey);++CounterBatteryAims;
     return true;
    }
@@ -546,10 +547,14 @@ bool UBattleLeaderRuntime::FireArtillery(int32 ID,const FVector& Aim,double Now)
     FRandomStream RevealRandom(int32(uint32(ID)*2654435761u+uint32(A.Shots)*40503u+15401u));
     auto& RevealReport=RevealMatch->FireReveals[RevealTeam].FindOrAdd(ID);
     if(BattleTactics::ObservedArmour())RevealReport.ObservedSquadType=bSPG?BattleSquadType::SPGun:BattleSquadType::Mortar;
+    const bool bRevealFresh=RevealReport.bArtillery&&RevealReport.Count>0&&RevealMatch->Elapsed-RevealReport.At<=30.;
     RevealReport.bArtillery=true;RevealReport.At=RevealMatch->Elapsed;RevealReport.Memory=30.;RevealReport.ErrorRadius=3000.f;
     const float RevealAngle=RevealRandom.FRand()*2.f*PI;
     const float RevealRadius=FMath::Sqrt(RevealRandom.FRand())*RevealReport.ErrorRadius;
     RevealReport.Position=Start+FVector(FMath::Cos(RevealAngle)*RevealRadius,FMath::Sin(RevealAngle)*RevealRadius,0);
+    // Repeated reports of one gun (within 30 s and 60 m of their mean) are averaged for counter-battery fire; used by nothing else.
+    if(bRevealFresh&&FVector::Dist2D(RevealReport.Sum/double(RevealReport.Count),RevealReport.Position)<=6000.){RevealReport.Sum+=RevealReport.Position;++RevealReport.Count;}
+    else{RevealReport.Sum=RevealReport.Position;RevealReport.Count=1;}
     RevealMatch->IntelViews[RevealTeam].At=-1;
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_FLASH team=%d shooter=%d type=%s observer=%d range=%.0f at=%s"),RevealTeam,ID,bSPG?TEXT("spg"):TEXT("mortar"),RevealLeader,FMath::Sqrt(RevealDistanceSquared),*RevealReport.Position.ToCompactString());
     break;

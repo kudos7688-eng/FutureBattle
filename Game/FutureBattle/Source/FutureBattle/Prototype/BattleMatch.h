@@ -364,7 +364,7 @@ public:
 	void UpdateIntelPurposes();
 	TMap<int32, int32> IntelPurpose;           // squad -> point it was bought to defend (transient)
 	mutable FAreaIntelView IntelViews[2];
- struct FFireReveal { uint8 ObservedSquadType=255; bool bArtillery=false; double At=0,Memory=10.; float ErrorRadius=500.f; FVector Position=FVector::ZeroVector; };
+ struct FFireReveal { uint8 ObservedSquadType=255; bool bArtillery=false; double At=0,Memory=10.; float ErrorRadius=500.f; FVector Position=FVector::ZeroVector; FVector Sum=FVector::ZeroVector; int32 Count=0; }; // Sum/Count: averaged artillery reports (counter-battery)
  // Shared gun reports, keyed by shooter unit ID; match seconds, transient, never saved.
  mutable TMap<int32,FFireReveal> FireReveals[2];
 	TMap<int32, FScoutReport> ScoutReports;
