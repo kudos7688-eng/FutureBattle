@@ -46,11 +46,14 @@ int32 BattleArms::AreaSniperKeep(){static const int32 N=FMath::Clamp(IntSwitch(T
 int32 BattleArms::SniperCost(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleSniperCost="),14),1,200);return N;}
 int32 BattleArms::AssaultMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleArmsAssault=")),0,2);return N;}
 bool BattleArms::ChargeEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsCharge="))!=0;return b;}
+bool BattleArms::SectorTaskEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsSectorTask="))!=0;return b;}
+bool BattleArms::RushWatchEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsRushWatch="))!=0;return b;}
+bool BattleArms::CoverFireEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsCoverFire="))!=0;return b;}
 bool BattleArms::SmokeEnabled(){static const bool b=FParse::Param(FCommandLine::Get(),TEXT("BattleArmsSmoke"));return b;}
 bool BattleArms::SlideEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsSlide="),1)!=0;return b;}
 bool BattleArms::ChargeFallenEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsChargeFallen="),1)!=0;return b;}
 bool BattleArms::ChargeSlideEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsChargeSlide="),1)!=0;return b;}
-bool BattleArms::AnyTrial(){return SidearmsEnabled()||GrenadeCount()>0||MeleeEnabled()||EliteEnabled()||AreaEliteKeep()>0||SniperEnabled()||AreaSniperKeep()>0||AssaultMode()>0||ChargeEnabled()||SmokeEnabled();}
+bool BattleArms::AnyTrial(){return SidearmsEnabled()||GrenadeCount()>0||MeleeEnabled()||EliteEnabled()||AreaEliteKeep()>0||SniperEnabled()||AreaSniperKeep()>0||AssaultMode()>0||ChargeEnabled()||SectorTaskEnabled()||RushWatchEnabled()||CoverFireEnabled()||SmokeEnabled();}
 
 uint8 BattleArms::EliteKit(int32 Slot)
 {
@@ -270,6 +273,13 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
    if(Hint!=INDEX_NONE)MeleeStrike(ID,Now,false,Hint);
   }
  }
+ // Defenders watching for rushing enemies and covering fire for bounds (BattleArmsSector.cpp), four times a second.
+ if((BattleArms::RushWatchEnabled()||BattleArms::CoverFireEnabled())&&Now>=ArmsNextRush)
+ {
+  ArmsNextRush=Now+.25;
+  if(BattleArms::RushWatchEnabled())StepArmsRush(Now);
+  if(BattleArms::CoverFireEnabled())StepArmsCoverCalls(Now);
+ }
  // Charges (-BattleArmsCharge), four times a second: an assault role (the elite breacher, assault man and rifleman; with
  // -BattleArmsAssault=2 also the riflemen of ordinary rifle squads, not leaders or heavy weapons) runs at an enemy while his squad
  // fights (StepCharge), fires at him on the way and strikes him at arm's length (the pass above): an enemy he sees within 12 m, or
@@ -296,12 +306,15 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
    if(Charging>=Ch.SquadMax)continue;
    const auto* Contacts=Sense->GetContacts(ID);if(!Contacts)continue;
    const FVector Pos=Position(ID);int32 Best=INDEX_NONE;double BestD=0.;FVector BestAt=FVector::ZeroVector;bool bBestSeen=false;
-   const double* Arrived=ArmsBoundArrived.Find(ID);const bool bAfterBound=Arrived&&Now-*Arrived<=Ch.BoundWindow;
+   // -BattleArmsSectorTask: a squad not on an attack task charges only enemies seen close inside the place it defends.
+   const bool bDefendOnly=BattleArms::SectorTaskEnabled()&&S->Order!=EBattleOrder::AttackMove;
+   const double* Arrived=ArmsBoundArrived.Find(ID);const bool bAfterBound=!bDefendOnly&&Arrived&&Now-*Arrived<=Ch.BoundWindow;
    for(const auto& C:*Contacts)
    {
     if(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(C.Value.ObservedSquadType):IsVehicle(C.Key))continue;
     const bool bSeen=C.Value.bVisible&&!C.Value.bShared;const double D=FVector::Dist2D(Pos,C.Value.LastKnownPosition);
     if(D<=Ch.Stop||FMath::Abs(C.Value.LastKnownPosition.Z-Pos.Z)>150.)continue;
+    if(bDefendOnly&&!ArmsInDefendedArea(*S,C.Value.LastKnownPosition))continue;
     if(!(bSeen&&D<=Ch.Range)&&!(bAfterBound&&Now-C.Value.LastSeenTime<=Ch.Known&&D<=Ch.BoundRange))continue;
     if(Best!=INDEX_NONE&&(D>BestD||(D==BestD&&C.Key>Best)))continue;
     Best=C.Key;BestD=D;BestAt=C.Value.LastKnownPosition;bBestSeen=bSeen;
@@ -350,7 +363,9 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
   // within 3 s. A bound runs on to its cover when the enemy is lost; with no enemy known, the next bound heads for where the last
   // bound's enemy was seen (within 30 s of that sighting) until he is within 18 m of that place (a bound ends 8 m short, gains 10 m).
   // A bound slides along a body or wall in its way and gives up after 2 s without getting closer (StepCoverApproach, FCharge).
-  if(const int32 DashMode=BattleArms::AssaultMode();DashMode>0&&S->Order!=EBattleOrder::Move&&!CoverApproaches.Contains(ID)&&Now>=ArmsAssaultNext.FindRef(ID))
+  // -BattleArmsSectorTask (BattleArmsSector.cpp): only squads on an attack task bound; defenders stay in their place.
+  if(const int32 DashMode=BattleArms::AssaultMode();DashMode>0&&S->Order!=EBattleOrder::Move&&(!BattleArms::SectorTaskEnabled()||S->Order==EBattleOrder::AttackMove)&&
+   !CoverApproaches.Contains(ID)&&Now>=ArmsAssaultNext.FindRef(ID))
   {
    const bool bRole=U->Kit==BattleArms::KitBreacher||U->Kit==BattleArms::KitAssault||U->Kit==BattleArms::KitRifleman;
    const bool bPlain=DashMode>=2&&S->Grade==0&&S->SquadType==BattleSquadType::Rifle&&U->Grenades>0&&S->LeaderUnitID!=ID;
@@ -394,6 +409,8 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
    Known.Add(TPair<int32,FVector>(C.Key,C.Value.LastKnownPosition));Hidden.Add(!(C.Value.bVisible&&!C.Value.bShared));
   }
   if(Known.IsEmpty())continue;
+  // -BattleArmsRushWatch: a defender throws at an enemy rushing his squad's place first (BattleArmsSector.cpp).
+  if(bGrenade&&BattleArms::RushWatchEnabled()&&ArmsRushers.Contains(U->SquadID)&&ArmsRushGrenade(ID,Now))continue;
   // The best landing point: most known enemies within one blast, then a hidden one (behind cover, out of his sight), then near.
   // A hand grenade needs two or more together or a hidden one; the launcher (the grenadier's main weapon) takes any target.
   auto Pick=[&](const BattleArms::FBlast& B,float MaxRange,bool bAny,FVector& At)->bool
@@ -449,6 +466,7 @@ bool UBattleLeaderRuntime::StartAssault(int32 ID,int32 Target,const FVector& Tar
  // that remembered place does not renew the sighting, so the chain ends 30 s after the enemy was last seen.
  if(const auto* Seen=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,Target)){auto& M=ArmsBoundMemory.FindOrAdd(ID);M.Target=Target;M.At=Seen->LastKnownPosition;M.SeenAt=Seen->LastSeenTime;}
  SightExperiment.Cover(TEXT("arms_assault_started"));
+ if(BattleArms::CoverFireEnabled())AddArmsCoverCall(ID,Target,TargetAt,Pos,BestWalk/FMath::Max(1.f,GetDefault<UBattleTuning>()->MoveSpeed*BattleArms::Charge().SpeedScale),Now);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_ASSAULT unit=%d team=%d target=%d from=%.0f to=%.0f"),ID,U->Team,Target,Base,FVector::Dist2D(BestAnchor,TargetAt));
  return true;
 }

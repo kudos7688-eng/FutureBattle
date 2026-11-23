@@ -379,7 +379,8 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
    return false;
   }
   // An assault bound has reached its cover and the charge may follow (BattleArms.cpp); with the enemy forgotten he stays there.
-  if(A->bAssault){Diag.Cover(TEXT("arms_assault_arrived"));if(A->Slid)Diag.Cover(TEXT("arms_assault_arrived_slid"));ArmsBoundArrived.Add(ID,Now);}
+  if(A->bRetreat)Diag.Cover(TEXT("arms_rush_retreat_arrived")); // a defender's fall-back (BattleArmsSector.cpp) is no bound
+  else if(A->bAssault){Diag.Cover(TEXT("arms_assault_arrived"));if(A->Slid)Diag.Cover(TEXT("arms_assault_arrived_slid"));ArmsBoundArrived.Add(ID,Now);}
   if((bContactCover || A->bAssault) && Contact)
   {
    const int32 Goal=A->Target;const FVector Threat=Contact->LastKnownPosition;
