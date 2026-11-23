@@ -118,6 +118,7 @@ void ABattleController::SetupInputComponent()
 	{
 		UInputAction* Action = NewObject<UInputAction>(this, Name);
 		Action->ValueType = Type;
+		Action->bTriggerWhenPaused = true; // the game-speed pause (CycleGameSpeed) keeps the camera, orders and menus working
 		Actions.Add(Action);
 		Mapping->MapKey(Action, Key);
 		return Action;
@@ -1251,15 +1252,22 @@ void ABattleController::CycleGameSpeed()
 {
 	if (GetNetMode() != NM_Standalone) { ShowNotice(TEXT("Game speed: standalone only")); return; }
 	if (!bTactical) { ShowNotice(TEXT("Game speed: tactical view only (direct control runs at x1)")); return; }
-	GameSpeed = GameSpeed == 1 ? 2 : GameSpeed == 2 ? 4 : 1;
+	// x1 -> x2 -> x4 -> paused (0) -> x1 (user request 2026-11-24: a pause inside the speed steps).
+	GameSpeed = GameSpeed == 1 ? 2 : GameSpeed == 2 ? 4 : GameSpeed == 4 ? 0 : 1;
 	ApplyGameSpeed();
-	ShowNotice(FString::Printf(TEXT("GAME SPEED x%d [.]"), GameSpeed));
+	ShowNotice(GameSpeed == 0 ? FString(TEXT("GAME PAUSED [.]")) : FString::Printf(TEXT("GAME SPEED x%d [.]"), GameSpeed));
 }
 
 void ABattleController::ApplyGameSpeed()
 {
 	// Simulation steps scale with the world delta, so AI, movement and timers all run faster together.
-	if (GetNetMode() == NM_Standalone) UGameplayStatics::SetGlobalTimeDilation(GetWorld(), bTactical ? float(GameSpeed) : 1.f);
+	if (GetNetMode() != NM_Standalone) return;
+	// Speed 0 is a real game pause: the world stops, the controller keeps its full tick (camera, selection, orders, gamepad).
+	// Direct control always runs at x1, so taking a soldier lifts the pause; returning to the tactical view pauses again.
+	const bool bPause = bTactical && GameSpeed == 0;
+	bShouldPerformFullTickWhenPaused = true;
+	UGameplayStatics::SetGlobalTimeDilation(GetWorld(), bTactical && GameSpeed > 0 ? float(GameSpeed) : 1.f);
+	if (UGameplayStatics::IsGamePaused(GetWorld()) != bPause) UGameplayStatics::SetGamePaused(GetWorld(), bPause);
 }
 
 // ---- Notification log (command UI). Only what the player's side observes: own home HP, observed point owners, own squads,

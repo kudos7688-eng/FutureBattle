@@ -1190,7 +1190,8 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   Mode->bCombatPaused=true;PC->EnterTactical();
   {
    PC->CycleGameSpeed();const float X2=UGameplayStatics::GetGlobalTimeDilation(GetWorld());PC->CycleGameSpeed();const float X4=UGameplayStatics::GetGlobalTimeDilation(GetWorld());
-   PC->CycleGameSpeed();Check(X2==2.f&&X4==4.f&&UGameplayStatics::GetGlobalTimeDilation(GetWorld())==1.f&&PC->GetGameSpeed()==1,TEXT("tactical speed toggle cycles x2 x4 x1"));
+   PC->CycleGameSpeed();const bool Paused=UGameplayStatics::IsGamePaused(GetWorld())&&PC->GetGameSpeed()==0;
+   PC->CycleGameSpeed();Check(X2==2.f&&X4==4.f&&Paused&&!UGameplayStatics::IsGamePaused(GetWorld())&&UGameplayStatics::GetGlobalTimeDilation(GetWorld())==1.f&&PC->GetGameSpeed()==1,TEXT("tactical speed toggle cycles x2 x4 pause x1"));
   }
   // Notification log (command UI): the stopped squads and observed points of this fixture appear before the screenshot.
   PC->UpdateNoticeLog(true);Check(PC->VisibleNotices().Num()>0,TEXT("notification log records observed events"));

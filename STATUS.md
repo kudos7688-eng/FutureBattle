@@ -31,6 +31,14 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-24 03時00分 Claude（AI起動で開始・一時停止）：試遊の試合は AI 起動の状態で始まり、速度の切替に一時停止を入れた（ユーザー指示）
+
+- **AI 起動で開始**：区画マップの試合（`-BattleWideMixed`）は `BattleLeaderRuntime::Start` で必ず AI 停止（`bCombatPaused=true`）で始まっていた。新しい起動引数 `-BattleStartRunning` があれば起動で始める。渡すのは `Setup/Play-Area.ps1`（デスクトップの試遊）だけ。`-Setup`（開始前の編成）も起動で始める（ユーザー指示。編成の帯は P で止めると出る）。計測・試験はこの引数を渡さず、`Play-Area.ps1` を呼ぶ試験スクリプトも無いので、**計測用の試合の既定の動きは変わらない**。`BATTLE_WIDE_MIXED_READY` のログの `paused=` は実際の値を出すようにした（以前は 1 固定の文字列）。
+- **一時停止**：作戦画面の速度切替（`.`／パッド十字→）を x1 → x2 → x4 → 一時停止 → x1 に。一時停止は本当のゲームの一時停止（`SetGamePaused`）。入力の動作は `bTriggerWhenPaused`、操作側は `bShouldPerformFullTickWhenPaused` で、止まっている間もカメラ・選択・命令・購入画面が使える。直接操作は常に x1（一時停止中に兵を操作すると解け、作戦画面に戻ると再び止まる）。右上に「一時停止 [.]」。P の AI 停止は別のまま。予約購入の配備は試合の時間で進むので、一時停止中は配備されない。
+- **検証**：購入パネルのセッションが main 084e99d（本変更込み）でビルド合格、Test-Battle 合格（`Setup/Battle-Smoke-20261124-021649.log`、FAIL 0）、Test-Area 合格（`tactical speed toggle cycles x2 x4 pause x1` PASS）。**試遊と同じ起動での目視（開始時 paused=0、一時停止中のカメラ操作）は計測ロックの順番待ちで未実施**、済んだらこの項目に追記する。
+- 制限：strategy・groupui の作業用コピーの `Play-Area.ps1`（マップJ 作戦方針、マップI 群制御のショートカット）は main を取り込むまで停止で始まる。
+- 変更：`BattleLeaderRuntime.cpp`、`BattleController.cpp`、`BattleHUD.cpp`、`BattleUIText.cpp`、`BattleAreaSmoke.cpp`、`Setup/Play-Area.ps1`、`PROTOTYPE.md`。
+
 ## 2026-11-24 02時20分 Claude（購入パネル）：購入画面で予約購入できるようにした（`-BattleHireReserve` をプレイヤー既定1、main 084e99d）
 
 - **依頼**：ユーザー「予約購入できるようにならない？」。11-22 の設計で入っていた購入予約（`UBattleMatch::ReserveHire`、`Docs/design-front-strategy.md` 5.1、試験切替・既定0）を、プレイヤー向けに既定でオンにして購入画面へ組み込んだ。
