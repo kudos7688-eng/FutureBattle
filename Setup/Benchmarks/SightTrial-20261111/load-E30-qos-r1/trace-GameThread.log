@@ -1,0 +1,344 @@
+﻿Log file open, 11/24/26 04:57:38
+LogWindows: Failed to load 'aqProf.dll' (GetLastError=126)
+LogWindows: File 'aqProf.dll' does not exist
+LogProfilingDebugging: Loading WinPixEventRuntime.dll for PIX profiling (from ../../../Engine/Binaries/ThirdParty/Windows/WinPixEventRuntime/x64).
+LogWindows: Failed to load 'VtuneApi.dll' (GetLastError=126)
+LogWindows: File 'VtuneApi.dll' does not exist
+LogWindows: Failed to load 'VtuneApi32e.dll' (GetLastError=126)
+LogWindows: File 'VtuneApi32e.dll' does not exist
+LogWindows: Enabling Tpause support
+LogInit: Running DelayedAutoRegister Phase StartOfEnginePreInit
+LogCore: UTS: Unreal Trace Server launched successfully
+LogModuleManager: InternalLoadLibrary: 'PakFile' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-PakFile.dll')
+LogModuleManager: InternalLoadLibrary: 'RSA' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-RSA.dll')
+LogInit: Running DelayedAutoRegister Phase FileSystemReady
+LogInit: Running DelayedAutoRegister Phase TaskGraphSystemReady
+LogStats: Stats thread started at 0.168623
+LogInit: Running DelayedAutoRegister Phase StatSystemReady
+LogModuleManager: InternalLoadLibrary: 'CoreUObject' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-CoreUObject.dll')
+LogICUInternationalization: ICU TimeZone Detection - Raw Offset: +9:00, Platform Override: ''
+LogInit: Session CrashGUID >====================================================
+         Session CrashGUID >   UECC-Windows-0C240D6141A25D26A468C4AA38E0CEFB
+         Session CrashGUID >====================================================
+LogConfig: No local boot hotfix file found at: [../../../Engine/Programs/UnrealInsights/Saved/PersistentDownloadDir/HotfixForNextBoot.txt]
+LogInit: Running DelayedAutoRegister Phase IniSystemReady
+LogPluginManager: Mounting Engine plugin AudioInsights
+LogPluginManager: Mounting Engine plugin AudioModulationInsights
+LogPluginManager: Mounting Engine plugin ChaosInsights
+LogPluginManager: Mounting Engine plugin IoStoreInsights
+LogPluginManager: Mounting Engine plugin MassInsights
+LogPluginManager: Mounting Engine plugin RenderGraphInsights
+LogPluginManager: Mounting Engine plugin RenderTraceInsights
+LogPluginManager: Mounting Engine plugin NiagaraInsights
+LogPluginManager: Mounting Engine plugin AudioWidgets
+LogPluginManager: Mounting Engine plugin NetworkPredictionInsights
+LogPluginManager: Mounting Engine plugin HttpInsights
+LogPluginManager: Mounting Engine plugin UdpMessaging
+LogPluginManager: Mounting Engine plugin MessagingInsights
+LogPluginManager: Mounting Engine plugin TcpMessaging
+LogPluginManager: Mounting Engine plugin SlateInsights
+LogPluginManager: Mounting Engine plugin GameplayInsights
+LogPluginManager: Mounting Engine plugin XCodeSourceCodeAccess
+LogPluginManager: Mounting Engine plugin VisualStudioSourceCodeAccess
+LogInit: Running DelayedAutoRegister Phase EarliestPossiblePluginsLoaded
+LogInit: ExecutableName: UnrealInsights.exe
+LogInit: Build: ++UE5+Release-5.8-CL-58902052
+LogInit: Platform=WindowsEditor
+LogInit: MachineId=745ad8c54c44791b7072478e3d78a8bd
+LogInit: DeviceId=
+LogInit: Engine Version: 5.8.4-58902052+++UE5+Release-5.8
+LogInit: Compatible Engine Version: 5.8.0-55116800+++UE5+Release-5.8
+LogInit: Net CL: 55116800
+LogInit: OS: Windows 11 (26H2) [10.0.26300.9974] (), CPU: Intel(R) Core(TM) i7-14700KF, GPU: NVIDIA GeForce RTX 5070 Ti
+LogInit: CPU Model ID: 6b71, microcode revision: 12f
+LogInit: Compiled (64-bit): Oct  6 2026 00:45:40
+LogInit: Architecture: x64
+LogInit: Compiled with Visual C++: 19.50.35739.00
+LogInit: Build Configuration: Development
+LogInit: Branch Name: ++UE5+Release-5.8
+LogInit: Command Line: -OpenTraceFile="C:\Users\nanek\Documents\FPS\FutureBattle\Setup\Benchmarks\SightTrial-20261111\load-E30-qos-r1\trace.utrace" -ABSLOG="C:\Users\nanek\Documents\FPS\FutureBattle\Setup\Benchmarks\SightTrial-20261111\load-E30-qos-r1\trace-GameThread.log" -AutoQuit -NoUI -ExecOnAnalysisCompleteCmd="@=C:\Users\nanek\Documents\FPS\FutureBattle\Setup\Benchmarks\SightTrial-20261111\load-E30-qos-r1\trace-GameThread.cmd.txt" -log  -Messaging
+LogInit: Base Directory: C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/
+LogInit: Allocator: Mimalloc
+LogInit: Installed Engine Build: 1
+LogInit: This binary is optimized with LTO: no, PGO: no, instrumented for PGO data collection: no
+LogDevObjectVersion: Number of dev versions registered: 35
+LogDevObjectVersion:   Dev-Blueprints (B0D832E4-1F89-4F0D-ACCF-7EB736FD4AA2): 10
+LogDevObjectVersion:   Dev-Build (E1C64328-A22C-4D53-A36C-8E866417BD8C): 0
+LogDevObjectVersion:   Dev-Core (375EC13C-06E4-48FB-B500-84F0262A717E): 4
+LogDevObjectVersion:   Dev-Editor (E4B068ED-F494-42E9-A231-DA0B2E46BB41): 40
+LogDevObjectVersion:   Dev-Framework (CFFC743F-43B0-4480-9391-14DF171D2073): 37
+LogDevObjectVersion:   Dev-Mobile (B02B49B5-BB20-44E9-A304-32B752E40360): 3
+LogDevObjectVersion:   Dev-Networking (A4E4105C-59A1-49B5-A7C5-40C4547EDFEE): 0
+LogDevObjectVersion:   Dev-Online (39C831C9-5AE6-47DC-9A44-9C173E1C8E7C): 0
+LogDevObjectVersion:   Dev-Physics (78F01B33-EBEA-4F98-B9B4-84EACCB95AA2): 20
+LogDevObjectVersion:   Dev-Platform (6631380F-2D4D-43E0-8009-CF276956A95A): 0
+LogDevObjectVersion:   Dev-Rendering (12F88B9F-8875-4AFC-A67C-D90C383ABD29): 49
+LogDevObjectVersion:   Dev-Sequencer (7B5AE74C-D270-4C10-A958-57980B212A5A): 13
+LogDevObjectVersion:   Dev-VR (D7296918-1DD6-4BDD-9DE2-64A83CC13884): 3
+LogDevObjectVersion:   Dev-LoadTimes (C2A15278-BFE7-4AFE-6C17-90FF531DF755): 1
+LogDevObjectVersion:   Private-Geometry (6EACA3D4-40EC-4CC1-B786-8BED09428FC5): 3
+LogDevObjectVersion:   Dev-AnimPhys (29E575DD-E0A3-4627-9D10-D276232CDCEA): 17
+LogDevObjectVersion:   Dev-Anim (AF43A65D-7FD3-4947-9873-3E8ED9C1BB05): 15
+LogDevObjectVersion:   Dev-ReflectionCapture (6B266CEC-1EC7-4B8F-A30B-E4D90942FC07): 1
+LogDevObjectVersion:   Dev-Automation (0DF73D61-A23F-47EA-B727-89E90C41499A): 1
+LogDevObjectVersion:   FortniteMain (601D1886-AC64-4F84-AA16-D3DE0DEAC7D6): 268
+LogDevObjectVersion:   FortniteValkyrie (8DBC2C5B-54A7-43E0-A768-FCBB7DA29060): 8
+LogDevObjectVersion:   FortniteSeason (5B4C06B7-2463-4AF8-805B-BF70CDF5D0DD): 15
+LogDevObjectVersion:   FortniteRelease (E7086368-6B23-4C58-8439-1B7016265E91): 20
+LogDevObjectVersion:   Dev-Enterprise (9DFFBCD6-494F-0158-E221-12823C92A888): 11
+LogDevObjectVersion:   Dev-Niagara (F2AED0AC-9AFE-416F-8664-AA7FFA26D6FC): 1
+LogDevObjectVersion:   Dev-Destruction (174F1F0B-B4C6-45A5-B13F-2EE8D0FB917D): 10
+LogDevObjectVersion:   Dev-Physics-Ext (35F94A83-E258-406C-A318-09F59610247C): 41
+LogDevObjectVersion:   Dev-PhysicsMaterial-Chaos (B68FC16E-8B1B-42E2-B453-215C058844FE): 1
+LogDevObjectVersion:   Dev-CineCamera (B2E18506-4273-CFC2-A54E-F4BB758BBA07): 1
+LogDevObjectVersion:   Dev-VirtualProduction (64F58936-FD1B-42BA-BA96-7289D5D0FA4E): 1
+LogDevObjectVersion:   UE5-Main (697DD581-E64F-41AB-AA4A-51ECBEB7B628): 123
+LogDevObjectVersion:   UE5-Release (D89B5E42-24BD-4D46-8412-ACA8DF641779): 68
+LogDevObjectVersion:   UE5-SpecialProject (59DA5D52-1232-4948-B878-597870B8E98B): 9
+LogDevObjectVersion:   Dev-MediaFramework (6F0ED827-A609-4895-9C91-998D90180EA4): 2
+LogDevObjectVersion:   Dev-NaniteResearch (30D58BE3-95EA-4282-A6E3-B159D8EBB06A): 1
+LogInit: Presizing for max 100000 objects, including 0 objects not considered by GC.
+LogStreaming: Display: AsyncLoading2 - Created: Async Loading Thread: false, Async Post Load: false, Multithreaded: false
+LogInit: Object subsystem initialized
+LogConfig: Applying CVar settings from Section [Startup] File [../../../Engine/Config/ConsoleVariables.ini]
+LogConfig: CVar [[p.chaos.AllowCreatePhysxBodies:1]] deferred - dummy variable created
+[2026.11.23-19.57.38:733][  0]LogConfig: CVar [[fx.SkipVectorVMBackendOptimizations:1]] deferred - dummy variable created
+[2026.11.23-19.57.38:733][  0]LogConfig: Applying CVar settings from Section [Startup_Windows] File [../../../Engine/Config/ConsoleVariables.ini]
+[2026.11.23-19.57.38:733][  0]LogConfig: Applying CVar settings from Section [ConsoleVariables] File [Engine]
+[2026.11.23-19.57.38:733][  0]LogConfig: Set CVar [[WindowsApplication.UseWorkerThreadForRawInput:0]]
+[2026.11.23-19.57.38:733][  0]LogConfig: CVar [[r.PSOPrecache.KeepInMemoryForActiveMaterials:1]] deferred - dummy variable created
+[2026.11.23-19.57.38:733][  0]LogInit: Computer: DESKTOP-IPQ6CAF
+[2026.11.23-19.57.38:733][  0]LogInit: User: nanek
+[2026.11.23-19.57.38:733][  0]LogInit: CPU Page size=4096, Cores=20
+[2026.11.23-19.57.38:733][  0]LogInit: High frequency timer resolution =10.000000 MHz
+[2026.11.23-19.57.38:733][  0]LogInit: Gaming Handheld Device: 0
+[2026.11.23-19.57.38:742][  0]LogMemory: Process is running as part of a Windows Job with separate resource limits
+[2026.11.23-19.57.38:742][  0]LogMemory: Memory total: Physical=63.8GB (64GB approx) Virtual=77.0GB
+[2026.11.23-19.57.38:742][  0]LogMemory: Platform Memory Stats for WindowsEditor
+[2026.11.23-19.57.38:742][  0]LogMemory: Process Physical Memory: 93.28 MB used, 93.28 MB peak
+[2026.11.23-19.57.38:742][  0]LogMemory: Process Virtual Memory: 171.21 MB used, 171.21 MB peak
+[2026.11.23-19.57.38:742][  0]LogMemory: Physical Memory: 25387.45 MB used,  39961.33 MB free, 65348.79 MB total
+[2026.11.23-19.57.38:742][  0]LogMemory: Virtual Memory: 46172.28 MB used,  32648.45 MB free, 78820.73 MB total
+[2026.11.23-19.57.38:755][  0]LogUObjectArray: 989 objects as part of root set at end of initial load.
+[2026.11.23-19.57.38:755][  0]LogUObjectArray: CloseDisregardForGC: 0/0 objects in disregard for GC pool
+[2026.11.23-19.57.38:756][  0]LogInit: Using OS detected language (ja-JP).
+[2026.11.23-19.57.38:756][  0]LogInit: Using OS detected locale (ja-JP).
+[2026.11.23-19.57.38:756][  0]LogTextLocalizationManager: No specific localization for 'ja-JP' exists, so 'ja' will be used for the language.
+[2026.11.23-19.57.38:794][  0]LogInit: Using OS detected language (ja-JP).
+[2026.11.23-19.57.38:794][  0]LogInit: Using OS detected locale (ja-JP).
+[2026.11.23-19.57.38:794][  0]LogTextLocalizationManager: No localization for 'ja-JP' exists, so 'en' will be used for the language.
+[2026.11.23-19.57.38:794][  0]LogTextLocalizationManager: No localization for 'ja-JP' exists, so 'en' will be used for the locale.
+[2026.11.23-19.57.38:831][  0]LogPackageLocalizationCache: Processed 5 localized package path(s) for 1 prioritized culture(s) in 0.000271 seconds
+[2026.11.23-19.57.38:832][  0]LogModuleManager: StartProcessingNewlyLoadedObjects
+[2026.11.23-19.57.38:834][  0]LogSlate: Using FreeType 2.14.1
+[2026.11.23-19.57.38:835][  0]LogSlate: SlateFontServices - WITH_FREETYPE: 1, WITH_HARFBUZZ: 1
+[2026.11.23-19.57.38:843][  0]LogWindowsTouchpad: Display: CacheForceMaxTouchpadSensitivityMode SetMaxTouchpadSensitivity
+[2026.11.23-19.57.38:844][  0]LogInputDeviceRegistry: RegisterDevice: DeviceId=0 InputDeviceName=WindowsApplication HardwareDeviceIdentifier=KBM (changed=true)
+[2026.11.23-19.57.38:906][  0]LogModuleManager: InternalLoadLibrary: 'Settings' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-Settings.dll')
+[2026.11.23-19.57.38:908][  0]LogModuleManager: InternalLoadLibrary: 'InputCore' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-InputCore.dll')
+[2026.11.23-19.57.38:909][  0]LogSlate: New Slate User Created. Platform User Id 0, User Index 0, Is Virtual User: 0
+[2026.11.23-19.57.38:910][  0]LogSlate: Slate User Registered.  User Index 0, Is Virtual User: 0
+[2026.11.23-19.57.38:919][  0]LogStandaloneRenderer: D3D11 adapters settings:
+[2026.11.23-19.57.38:919][  0]LogStandaloneRenderer: D3D11 adapters:
+[2026.11.23-19.57.38:919][  0]LogStandaloneRenderer: Testing D3D11 adapter: 0. Description: 'NVIDIA GeForce RTX 5070 Ti'. VendorId: 10de. DeviceId: 2c05.
+[2026.11.23-19.57.39:081][  0]LogStandaloneRenderer:   0. 'NVIDIA GeForce RTX 5070 Ti'. Feature level: 11_1
+[2026.11.23-19.57.39:081][  0]LogStandaloneRenderer: Testing D3D11 adapter: 1. Description: 'Microsoft Basic Render Driver'. VendorId: 1414. DeviceId: 008c.
+[2026.11.23-19.57.39:083][  0]LogStandaloneRenderer:   1. 'Microsoft Basic Render Driver'. Feature level: 11_1
+[2026.11.23-19.57.39:083][  0]LogStandaloneRenderer:   Skip adapter.
+[2026.11.23-19.57.39:083][  0]LogStandaloneRenderer: Selected D3D11 Description: 'NVIDIA GeForce RTX 5070 Ti'. VendorId: 10de. DeviceId: 2c05.
+[2026.11.23-19.57.39:172][  0]LogModuleManager: InternalLoadLibrary: 'ImageWrapper' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-ImageWrapper.dll')
+[2026.11.23-19.57.39:189][  0]LogSlateD3D: Warning: Could not load file for Slate resource: [../../../Engine/Platforms/VisionOS/Content/Editor/Slate/Launcher/Platform_VisionOS_24x.png] '../../../Engine/Platforms/VisionOS/Content/Editor/Slate/Launcher/Platform_VisionOS_24x.png'
+[2026.11.23-19.57.39:189][  0]LogSlateD3D: Warning: Could not load file for Slate resource: [../../../Engine/Platforms/VisionOS/Content/Editor/Slate/Launcher/Platform_VisionOS_128x.png] '../../../Engine/Platforms/VisionOS/Content/Editor/Slate/Launcher/Platform_VisionOS_128x.png'
+[2026.11.23-19.57.39:189][  0]LogSlateD3D: Warning: Could not load file for Slate resource: [../../../Engine/Platforms/VisionOS/Content/Editor/Slate/Launcher/Platform_VisionOS_128x.png] '../../../Engine/Platforms/VisionOS/Content/Editor/Slate/Launcher/Platform_VisionOS_128x.png'
+[2026.11.23-19.57.39:223][  0]LogModuleManager: InternalLoadLibrary: 'TraceInsightsCore' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-TraceInsightsCore.dll')
+[2026.11.23-19.57.39:265][  0]LogModuleManager: InternalLoadLibrary: 'TraceInsights' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-TraceInsights.dll')
+[2026.11.23-19.57.39:277][  0]LogModuleManager: InternalLoadLibrary: 'TraceServices' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-TraceServices.dll')
+[2026.11.23-19.57.39:277][  0]LogModuleManager: InternalLoadLibrary: 'TraceAnalysis' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-TraceAnalysis.dll')
+[2026.11.23-19.57.39:288][  0]LogModuleManager: InternalLoadLibrary: 'MessageLog' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-MessageLog.dll')
+[2026.11.23-19.57.39:294][  0]LogTimingProfiler: Initialize
+[2026.11.23-19.57.39:295][  0]LogTimingProfiler: OnSessionChanged
+[2026.11.23-19.57.39:295][  0]LogLoadingProfiler: Initialize
+[2026.11.23-19.57.39:295][  0]LogLoadingProfiler: OnSessionChanged
+[2026.11.23-19.57.39:296][  0]LogNetworkingProfiler: Initialize
+[2026.11.23-19.57.39:297][  0]LogNetworkingProfiler: OnSessionChanged
+[2026.11.23-19.57.39:297][  0]LogMemoryProfiler: Initialize
+[2026.11.23-19.57.39:297][  0]LogMemoryProfiler: OnSessionChanged
+[2026.11.23-19.57.39:297][  0]LogObjectProfiler: Initialize
+[2026.11.23-19.57.39:298][  0]LogObjectProfiler: OnSessionChanged
+[2026.11.23-19.57.39:298][  0]LogModuleManager: InternalLoadLibrary: 'SourceCodeAccess' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-SourceCodeAccess.dll')
+[2026.11.23-19.57.39:300][  0]LogModuleManager: InternalLoadLibrary: 'UdpMessaging' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Messaging/UdpMessaging/Binaries/Win64/UnrealInsights-UdpMessaging.dll')
+[2026.11.23-19.57.39:307][  0]LogModuleManager: InternalLoadLibrary: 'Networking' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-Networking.dll')
+[2026.11.23-19.57.39:307][  0]LogModuleManager: InternalLoadLibrary: 'Sockets' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-Sockets.dll')
+[2026.11.23-19.57.39:307][  0]LogInit: WinSock: version 1.1 (2.2), MaxSocks=32767, MaxUdp=65467
+[2026.11.23-19.57.39:308][  0]LogUdpMessaging: Initializing bridge on interface 0.0.0.0:0 to multicast group 230.0.0.1:6666.
+[2026.11.23-19.57.39:308][  0]LogModuleManager: InternalLoadLibrary: 'Messaging' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-Messaging.dll')
+[2026.11.23-19.57.39:309][  0]LogUdpMessaging: Display: Unicast socket bound to '0.0.0.0:52618'.
+[2026.11.23-19.57.39:314][  0]LogUdpMessaging: Display: Added local interface '192.168.3.129' to multicast group '230.0.0.1:6666'
+[2026.11.23-19.57.39:314][  0]LogUdpMessaging: Display: Added local interface '172.30.48.1' to multicast group '230.0.0.1:6666'
+[2026.11.23-19.57.39:314][  0]LogUdpMessaging: Display: Added local interface '127.0.0.1' to multicast group '230.0.0.1:6666'
+[2026.11.23-19.57.39:314][  0]LogUdpMessaging: Display: Using asynchronous task graph for message deserialization.
+[2026.11.23-19.57.39:315][  0]LogModuleManager: InternalLoadLibrary: 'TcpMessaging' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Messaging/TcpMessaging/Binaries/Win64/UnrealInsights-TcpMessaging.dll')
+[2026.11.23-19.57.39:316][  0]LogTcpMessaging: Initializing TcpMessaging bridge
+[2026.11.23-19.57.39:316][  0]LogModuleManager: InternalLoadLibrary: 'AudioInsights' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/AudioInsights/Binaries/Win64/UnrealInsights-AudioInsights.dll')
+[2026.11.23-19.57.39:352][  0]LogModuleManager: InternalLoadLibrary: 'SessionServices' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-SessionServices.dll')
+[2026.11.23-19.57.39:362][  0]LogModuleManager: InternalLoadLibrary: 'AudioModulationInsights' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/AudioModulationInsights/Binaries/Win64/UnrealInsights-AudioModulationInsights.dll')
+[2026.11.23-19.57.39:365][  0]LogModuleManager: InternalLoadLibrary: 'ChaosInsightsAnalysis' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/ChaosInsights/Binaries/Win64/UnrealInsights-ChaosInsightsAnalysis.dll')
+[2026.11.23-19.57.39:366][  0]LogModuleManager: InternalLoadLibrary: 'ChaosInsightsUI' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/ChaosInsights/Binaries/Win64/UnrealInsights-ChaosInsightsUI.dll')
+[2026.11.23-19.57.39:367][  0]LogModuleManager: InternalLoadLibrary: 'IoStoreInsights' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/IoStoreInsights/Binaries/Win64/UnrealInsights-IoStoreInsights.dll')
+[2026.11.23-19.57.39:370][  0]LogModuleManager: InternalLoadLibrary: 'MassInsightsAnalysis' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/MassInsights/Binaries/Win64/UnrealInsights-MassInsightsAnalysis.dll')
+[2026.11.23-19.57.39:372][  0]LogModuleManager: InternalLoadLibrary: 'MassInsightsUI' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/MassInsights/Binaries/Win64/UnrealInsights-MassInsightsUI.dll')
+[2026.11.23-19.57.39:375][  0]LogModuleManager: InternalLoadLibrary: 'RenderGraphInsights' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/RenderGraphInsights/Binaries/Win64/UnrealInsights-RenderGraphInsights.dll')
+[2026.11.23-19.57.39:376][  0]LogModuleManager: InternalLoadLibrary: 'RenderTraceInsights' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/RenderTraceInsights/Binaries/Win64/UnrealInsights-RenderTraceInsights.dll')
+[2026.11.23-19.57.39:378][  0]LogModuleManager: InternalLoadLibrary: 'NiagaraInsights' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/FX/NiagaraInsights/Binaries/Win64/UnrealInsights-NiagaraInsights.dll')
+[2026.11.23-19.57.39:380][  0]LogModuleManager: InternalLoadLibrary: 'AudioWidgetsCore' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Runtime/AudioWidgets/Binaries/Win64/UnrealInsights-AudioWidgetsCore.dll')
+[2026.11.23-19.57.39:380][  0]LogModuleManager: InternalLoadLibrary: 'NetworkPredictionInsights' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Runtime/NetworkPredictionInsights/Binaries/Win64/UnrealInsights-NetworkPredictionInsights.dll')
+[2026.11.23-19.57.39:383][  0]LogModuleManager: InternalLoadLibrary: 'WorkspaceMenuStructure' ('C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealInsights-WorkspaceMenuStructure.dll')
+[2026.11.23-19.57.39:384][  0]LogModuleManager: InternalLoadLibrary: 'HttpInsights' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Experimental/HttpInsights/Binaries/Win64/UnrealInsights-HttpInsights.dll')
+[2026.11.23-19.57.39:386][  0]LogModuleManager: InternalLoadLibrary: 'UdpMessagingInsights' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Messaging/MessagingInsights/Binaries/Win64/UnrealInsights-UdpMessagingInsights.dll')
+[2026.11.23-19.57.39:388][  0]LogModuleManager: InternalLoadLibrary: 'SlateInsights' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Slate/SlateInsights/Binaries/Win64/UnrealInsights-SlateInsights.dll')
+[2026.11.23-19.57.39:391][  0]LogModuleManager: InternalLoadLibrary: 'GameplayInsights' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Animation/GameplayInsights/Binaries/Win64/UnrealInsights-GameplayInsights.dll')
+[2026.11.23-19.57.39:396][  0]LogModuleManager: InternalLoadLibrary: 'VisualStudioSourceCodeAccess' ('C:/Program Files/Epic Games/UE_5.8/Engine/Plugins/Developer/VisualStudioSourceCodeAccess/Binaries/Win64/UnrealInsights-VisualStudioSourceCodeAccess.dll')
+[2026.11.23-19.57.39:400][  0]LogInit: Setting process to per monitor DPI aware
+[2026.11.23-19.57.39:413][  0]LogObjectProfiler: OnSessionChanged
+[2026.11.23-19.57.39:413][  0]LogMemoryProfiler: OnSessionChanged
+[2026.11.23-19.57.39:413][  0]LogNetworkingProfiler: OnSessionChanged
+[2026.11.23-19.57.39:413][  0]LogLoadingProfiler: OnSessionChanged
+[2026.11.23-19.57.39:413][  0]LogTimingProfiler: OnSessionChanged
+[2026.11.23-19.57.39:413][  0]LogInit: Display: Insights slate application initialized successfully.
+[2026.11.23-19.57.39:415][  0]LogSlate: InvalidateAllWidgets triggered.  All widgets were invalidated
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:421][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:422][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:423][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:424][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:425][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:426][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:427][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:427][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:427][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:427][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.39:427][  0]LogTraceServices: Error: [MemAlloc] Invalid Tag on Thread 2 (Tracker=0)!
+[2026.11.23-19.57.51:720][ 49]LogTraceServices: Warning: [CpuProfiler] MetadataSpec -- de-duplicated timer for SpecId 14321 -- old: 6489 (GPUSortBatch) metadata="_Batch%d(%s)" (0 fields) --> new: 6490 (GPUSortBatch) metadata="KeyGen_%s" (0 fields) !!!
+[2026.11.23-19.57.51:720][ 49]LogTraceServices: Warning: [CpuProfiler] MetadataSpec -- de-duplicated timer for SpecId 14341 -- old: 5377 (UpdateGPUScene) metadata=" NumPrimitiveDataUploads %u" (0 fields) --> new: 6499 (UpdateGPUScene) metadata=" NumPrimitiveDataUploads %u" (0 fields) !!!
+[2026.11.23-19.58.34:997][222]LogTraceServices: [Regions] Analysis completed (0 timers, 0 categories, 0 timing regions, 0 lanes).
+[2026.11.23-19.58.34:997][222]LogTraceServices: [Logs] Analysis completed (18 messages, 14 specs, 999 categories).
+[2026.11.23-19.58.34:997][222]LogRenderTrace: Warning: Analysis ended with 1 pending RHI command lists, force-closing them.
+[2026.11.23-19.58.34:999][222]LogTraceServices: [MemTags] Analysis completed (0 trackers, 1 tag sets, 0 tags).
+[2026.11.23-19.58.34:999][222]LogTraceServices: [Meta] Analysis completed (4103 events, 0 alloc events, 0 allocs, 0 bytes).
+[2026.11.23-19.58.34:999][222]LogTraceServices: Error: [MemAlloc] TagTracker errors: 25252
+[2026.11.23-19.58.34:999][222]LogTraceServices: [LoadTime] Analysis completed (0 threads, 0 active async packages, 0 active requests + 0 fake requests, 0 active linkers, 0 active batches, 0 exports, 15 classes).
+[2026.11.23-19.58.35:074][222]LogTraceServices: [StackSampling] max stack size: 0 frames
+[2026.11.23-19.58.35:074][222]LogTraceServices: [StackSampling] Analysis completed (0 timers, 0 timelines, 0 threads, 0 stack samples, 0 stack frames).
+[2026.11.23-19.58.35:075][222]LogTraceServices: Warning: [CpuProfiler] Number of timer/metadata warnings: 2
+[2026.11.23-19.58.35:075][222]LogTraceServices: [CpuProfiler] Analysis completed (53 threads, 7561 timers, 16491 spec ids, 1091704745 scopes, 4997000290 bytes, 4.6 bytes/scope).
+[2026.11.23-19.58.35:075][222]LogTraceServices: [Verse] Analysis completed (0 timers, 0 samples; max stack size = 0).
+[2026.11.23-19.58.35:243][223]TraceInsights: Analysis has completed in 55.84s (9.3X speed; session duration: 8m 36.5s).
+[2026.11.23-19.58.35:243][223]Executing commands on analysis completed...
+[2026.11.23-19.58.35:243][223]Executing commands using response file ("C:\Users\nanek\Documents\FPS\FutureBattle\Setup\Benchmarks\SightTrial-20261111\load-E30-qos-r1\trace-GameThread.cmd.txt")...
+[2026.11.23-19.58.35:243][223]TimingInsights.ExportTimerStatistics "C:/Users/nanek/Documents/FPS/FutureBattle/Setup/Benchmarks/SightTrial-20261111/load-E30-qos-r1/trace-GameThread.csv" -threads="GameThread" -sortBy=TotalInclusiveTime
+[2026.11.23-19.58.35:243][223]  Filename: "C:/Users/nanek/Documents/FPS/FutureBattle/Setup/Benchmarks/SightTrial-20261111/load-E30-qos-r1/trace-GameThread.csv"
+[2026.11.23-19.58.35:243][223]  Token: -threads="GameThread"
+[2026.11.23-19.58.35:246][223]  Token: -sortBy=TotalInclusiveTime
+[2026.11.23-19.59.13:822][223]TraceInsights: Exported timing statistics to file in 0.018s ("C:/Users/nanek/Documents/FPS/FutureBattle/Setup/Benchmarks/SightTrial-20261111/load-E30-qos-r1/trace-GameThread.csv").
+[2026.11.23-19.59.13:822][223]Commands executed in 38.578s.
+[2026.11.23-19.59.13:822][223]LogCore: Engine exit requested (reason: Application is closing because it was started with the AutoQuit parameter and session analysis is complete.)
+[2026.11.23-19.59.13:845][224]LogSlate: Slate User Destroyed.  User Index 0, Is Virtual User: 0
+[2026.11.23-19.59.13:846][224]LogExit: Preparing to exit.
+[2026.11.23-19.59.14:380][224]LogExit: Object subsystem successfully closed.
+[2026.11.23-19.59.14:597][224]LogObjectProfiler: Shutdown
+[2026.11.23-19.59.14:597][224]LogMemoryProfiler: Shutdown
+[2026.11.23-19.59.14:598][224]LogNetworkingProfiler: Shutdown
+[2026.11.23-19.59.14:598][224]LogLoadingProfiler: Shutdown
+[2026.11.23-19.59.14:599][224]LogTimingProfiler: Shutdown
+[2026.11.23-19.59.14:670][224]LogAnalysisCache: Display: Closing analysis cache, 0.00 MiB read, 0.00 MiB written.
+[2026.11.23-19.59.15:932][224]LogPakFile: Destroying PakPlatformFile
+[2026.11.23-19.59.15:934][224]LogExit: Exiting.
+[2026.11.23-19.59.15:945][224]Log file closed, 11/24/26 04:59:15
