@@ -31,7 +31,7 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
-## 2026-11-24 04時45分 Claude（マップ）：マップK 版7（道のトラックを縦向き、すき間 4.9m→7.1m）を main に入れた。車体 半径1.5m・判定の幅5m なら戦車は街に届き、出入口で押し続けない。幅6m は街の入口で0両。既定の値は変えていない
+## 2026-11-24 04時43分 Claude（マップ）：マップK 版7（道のトラックを縦向き、すき間 4.9m→7.1m）を main に入れた。車体 半径1.5m・判定の幅5m なら戦車は街に届き、出入口で押し続けない。幅6m は街の入口で0両。既定の値は変えていない
 
 - 変更：`BattleMapCommandlet.cpp` の道のトラックを縦向き（4.5m×2.2m）にして道の端（中心から3.5m）へ寄せ、`Lvl_BattleWide_K.umap` を作り直した。生成の自己検査は3つとも failures=0（`Setup/Create-MapK-3f07ac8f-*.log`）。main のビルドと `Test-Battle` は合格（`Battle-Smoke-20261124-044136.log`）。マップA〜J は変えていない。
 - 比べ方：版7、30 FPS 並列、`-CoverActions 1 -FlankCoordination 1 -BattleShotLog`、seed 7・43。車体は `-ini:Game:[/Script/FutureBattle.BattleTuning]:TankRadius=150`（`SPGRadius` も）、判定は mapk 作業ツリーの `DefaultEngine.ini` の Vehicle `AgentRadius` を起動の間だけ書き換え（終了後200に戻した）。ビルドは main 7425e09 を取り込んだもの（`-BattleSectorSight` 既定1 を含むので、版6までの数字とは直接比べない）。
