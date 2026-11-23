@@ -182,6 +182,8 @@ $supply=@{
  # 2026-11-23 (user decision '1と3'): the same with a repair depot 150 m beside each home and guns kept 60 m from their home (both teams).
  'DGB'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60')
  'DG'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-CounterBattery','1')
+ # DGT (2026-11-23): DG answering only a report of the last 15 s with 2 shells, then 60 s at soldiers (-CounterBatteryShots 2).
+ 'DGT'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-CounterBattery','1','-CounterBatteryShots','2')
  # Front army share (2026-11-22, ROADMAP stage 5; maps H/I): FS50 / FS30 = the AI fills its front army up to half / 30% of its free infantry.
  'FS50'=@('-FrontShare','0.5')
  'FS30'=@('-FrontShare','0.3')

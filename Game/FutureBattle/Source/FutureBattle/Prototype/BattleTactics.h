@@ -31,6 +31,8 @@ namespace BattleTactics
  int32 AreaSPGCost(); // Optional -BattleAreaSPGCost override.
  bool ArtilleryFlash(); // Trial -BattleArtilleryFlash=1 (default 0): heard indirect fire reveals a rough position.
  bool CounterBattery(int32 Team); // Trial -BattleCounterBattery=1 (default 0): a team's guns shoot first at revealed enemy artillery (needs ArtilleryFlash).
+ int32 CounterBatteryShots(); // Trial -BattleCounterBatteryShots=<n> (default 0 = always): counter-battery fires n shells, then rests.
+ float CounterBatteryRest(); // -BattleCounterBatteryRest=<s> (default 60): the rest after a burst, when the gun shoots only at soldiers.
  float RepairDepot(); // Trial -BattleRepairDepot=<m> (default 0 = repair at home): vehicles and exos are repaired at a depot this far beside the home (cm).
  float ArtilleryHomeGap(); // Trial -BattleArtilleryHomeGap=<m> (default 0): guns and mortars keep at least this far from their own home (cm).
  float ArtilleryVehicleSplash(); // Trial -BattleArtilleryVehicleSplash=<0..1> (default 0): share of a gun shell's blast that hurts vehicles near (not on) the impact.

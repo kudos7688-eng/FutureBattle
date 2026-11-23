@@ -289,6 +289,9 @@ public:
  int64 ArtilleryGroupAims=0;
  TMap<int32,int32> CounterBatteryTarget; // -BattleCounterBattery: the enemy shooter each gun last aimed at (log on change; not saved)
  int64 CounterBatteryAims=0;
+ TMap<int32,int32> CounterBatteryShots; // -BattleCounterBatteryShots: counter-battery shells fired in the current burst (not saved)
+ TMap<int32,double> CounterBatteryRestUntil; // ... and the time the gun shoots only at soldiers until (not saved)
+ int64 CounterBatteryFired=0,CounterBatteryRests=0;
  bool AllyNear(int32 Team,const FVector& At,double Radius) const;
  // Launches one shell at Aim (spread applied, flight time Distance / shell speed). Consumes mortar ammunition or loads the gun.
  bool FireArtillery(int32 ID,const FVector& Aim,double Now);

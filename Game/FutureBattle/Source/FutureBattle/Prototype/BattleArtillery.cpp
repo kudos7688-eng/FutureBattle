@@ -69,6 +69,20 @@ bool BattleTactics::CounterBattery(int32 Team)
  return Trial<0||Trial==Team;
 }
 
+// "Sometimes" counter-battery (2026-11-23, user choice after the always-on version spent the own gun on the enemy gun):
+// -BattleCounterBatteryShots=<n> (default 0 = every shell while a report is fresh): only a report of the last 15 s (the enemy gun is
+// firing now) is answered, with n shells; then the gun rests -BattleCounterBatteryRest=<s> (default 60) shooting only at soldiers.
+int32 BattleTactics::CounterBatteryShots()
+{
+ static const int32 V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCounterBatteryShots="),X);return FMath::Max(0,X);}();
+ return V;
+}
+float BattleTactics::CounterBatteryRest()
+{
+ static const float V=[]{float X=60.f;FParse::Value(FCommandLine::Get(),TEXT("BattleCounterBatteryRest="),X);return FMath::Max(0.f,X);}();
+ return V;
+}
+
 // -BattleArtilleryVehicleSplash=<0..1> (default 0 = vehicles only by a direct hit, as before): a gun shell also hurts vehicles within its
 // blast radius by this share of the soldiers' falloff (both teams; physics, not a trial-team choice).
 float BattleTactics::ArtilleryVehicleSplash()
@@ -354,13 +368,15 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
  const double Min2=FMath::Square(double(ArtilleryMinRange(bSPG))),Max2=FMath::Square(double(ArtilleryMaxRange(bSPG)));
  const double Blast=ArtilleryBlastRadius(bSPG),Blast2=Blast*Blast;
  // Counter-battery (-BattleCounterBattery=1): the newest fresh artillery report in range comes first; ties by shooter key.
- if(bSPG&&U->Team>=0&&U->Team<2&&BattleTactics::CounterBattery(U->Team))
+ const int32 CBShots=BattleTactics::CounterBatteryShots();
+ const double* CBRest=CBShots>0?CounterBatteryRestUntil.Find(ID):nullptr;
+ if(bSPG&&U->Team>=0&&U->Team<2&&BattleTactics::CounterBattery(U->Team)&&!(CBRest&&Now<*CBRest))
   if(const auto* CM=GetWorld()->GetSubsystem<UBattleMatch>())
   {
    int32 BestKey=INDEX_NONE;const UBattleMatch::FFireReveal* Best=nullptr;
    for(const auto& FR:CM->FireReveals[U->Team])
    {
-    const auto& R=FR.Value;if(!R.bArtillery||CM->Elapsed-R.At>R.Memory||CM->Elapsed<R.At)continue;
+    const auto& R=FR.Value;if(!R.bArtillery||CM->Elapsed-R.At>(CBShots>0?FMath::Min(15.,double(R.Memory)):R.Memory)||CM->Elapsed<R.At)continue;
     const double D2=FVector::DistSquared2D(Pos,R.Position);if(D2<Min2||D2>Max2)continue;
     if(!Best||R.At>Best->At||(R.At==Best->At&&FR.Key<BestKey)){Best=&R;BestKey=FR.Key;}
    }
@@ -533,7 +549,21 @@ bool UBattleLeaderRuntime::StepArtillery(int32 ID,double Now,bool bMoving,FVecto
    bReady=Now>=A.ReadyAt&&Turret&&Turret->IsValid()&&FMath::Abs(FMath::FindDeltaAngleDegrees((*Turret)->GetComponentRotation().Yaw,Direction.Rotation().Yaw))<=3.f;
   }
   else bReady=U->Ammo>0&&U->ReloadEndTime<=0.&&Now>=U->NextShotTime;
-  if(bReady)FireArtillery(ID,A.Aim,Now);
+  if(bReady)
+  {
+   FireArtillery(ID,A.Aim,Now);
+   if(bSPG&&CounterBatteryTarget.Contains(ID))
+   {
+    ++CounterBatteryFired;
+    if(const int32 CBShots=BattleTactics::CounterBatteryShots();CBShots>0&&++CounterBatteryShots.FindOrAdd(ID)>=CBShots)
+    {
+     // The burst is spent: rest, and pick a soldier target at once.
+     CounterBatteryShots.Remove(ID);CounterBatteryRestUntil.Add(ID,Now+BattleTactics::CounterBatteryRest());++CounterBatteryRests;
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COUNTER_BATTERY_REST unit=%d team=%d shots=%d until=%.1f"),ID,U->Team,CBShots,Now+BattleTactics::CounterBatteryRest());
+     CounterBatteryTarget.Remove(ID);A.NextPick=Now;
+    }
+   }
+  }
  }
  // The mortar loads its next round from the reserve.
  if(!bSPG){const auto* After=Store->Find(ID);if(After&&After->Ammo==0&&After->Reserve>0&&After->ReloadEndTime==0)Store->StartReload(ID,Now);}
