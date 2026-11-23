@@ -266,6 +266,7 @@ public:
 	FString Notice;
 	double NoticeUntil = 0.;
 	void ShowNotice(const FString& Text);
+	void ShowWallCoverNotice(int32 UnitID); // what the wall cover just taken lets him do (BattleWallCover.cpp)
 	// Notification log (newest first, at most 32 kept; the HUD draws those of the last 60 s).
 	TArray<FBattleNoticeEntry> NoticeLog;
 	void PushNotice(uint8 Kind,const FString& Text,FVector Where);
@@ -292,6 +293,7 @@ public:
 	float ViewMagnification() const;
 	// Direct control: the right button is held (aim), and the view level it gives (1 aim, 2 scope x4, 3 scope x8).
 	bool bAimHeld = false;
+	FVector DirectMoveInput = FVector::ZeroVector; // this frame's movement input of direct control (world, flat), for the wall cover
 	int32 AimLevel = 1;
 	UFUNCTION(Exec) void BattleVerify();
 private:

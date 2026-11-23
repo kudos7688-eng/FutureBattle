@@ -398,6 +398,20 @@ public:
  bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f,bool bAllHidden=false,const TFunction<bool(int32,const FVector&)>& Accept=nullptr);
  void CancelCoverAction(int32 ID);
  bool StepCoverAction(int32 ID,float Dt,double Now);
+ // Wall cover of the directly controlled soldier (BattleWallCover.cpp, user 11-24; -BattlePlayerWallCover=0 turns it off).
+ // Pressing against a wall for WallPushSeconds, or C facing one, takes cover right there: behind a low wall crouched (aim to
+ // stand up and fire over it, fire without aiming = blind fire), at a high wall standing (aim near its edge = lean out past
+ // it). Moving anywhere but into the wall, or C, leaves it and gives back the stance he had. AI soldiers never use it.
+ static bool PlayerWallCoverEnabled();
+ bool TryWallCover(int32 ID,FVector Toward,double Now);
+ // Every frame of direct control with the player's movement input (world, flat): pressing into walls, leaving, aiming.
+ // Returns 1 when he took cover, 2 when he left it.
+ uint8 StepPlayerWallCover(int32 ID,FVector Input,bool bAiming,bool bSprinting,float Dt,double Now);
+ bool IsWallCover(int32 ID) const {return WallCovers.Contains(ID);}
+ // Display: the hidden pose faces the wall whatever way the camera turns (degrees added to the mesh yaw), and the cover clips
+ // are picked toward the wall (the threat side) instead of the body's facing.
+ float WallCoverYaw(int32 ID,const FVector& BodyForward) const;
+ FVector CoverFacing(int32 ID,const FVector& Fallback) const;
  void RunCoverActionSmoke();
  void RunSectorSmoke();
  double NextCoverProbe=0;
@@ -519,6 +533,10 @@ public:
  // Stances (BattleStance.h; map E default). Runtime only: 0 stand, 1 crouch, 2 prone, and the earliest time each may change again.
  TMap<int32,uint8> Stances;
  TMap<int32,double> StanceLockedUntil;
+ // Wall cover (BattleWallCover.cpp). Runtime only: a loaded battle keeps the cover action as a free place.
+ struct FWallCover {FVector Normal=FVector::ZeroVector;uint8 PrevStance=0;bool bHigh=false;bool bPeek=false;};
+ TMap<int32,FWallCover> WallCovers;
+ TMap<int32,float> WallPushSeconds;
  // Trial -BattleStanceMove=2: until when a soldier on the move stays crouched after his last threat (LowMoveHoldSeconds).
  // Crouching lowers his eye: behind a low wall he lost the enemy, stood up, saw him again and crouched again (in a map E match
  // about 25,000 changes each way); the hold keeps him low through that.
