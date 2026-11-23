@@ -464,7 +464,10 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
  {
   ABattleUnit* A=Actor(1);
   const uint8 Want=SmokeStage==24?BattleStance::Crouch:BattleStance::Prone;
-  if(BayStart<0.){Stances.Add(1,Want);A->VisualStance=Want;BayStart=Now;SmokeMuzzleMax=0.f;SmokeMuzzleFrames=0;SmokeShots=0;SmokeHead=-1.f;SmokeDir=OpenWay(A);}
+  // Rendered run: these two stages are photographed from the player's own eye (the view before is restored after them).
+  static TWeakObjectPtr<AActor> ViewBefore;
+  if(BayStart<0.){Stances.Add(1,Want);A->VisualStance=Want;BayStart=Now;SmokeMuzzleMax=0.f;SmokeMuzzleFrames=0;SmokeShots=0;SmokeHead=-1.f;SmokeDir=OpenWay(A);
+   if(PC&&!BodyShotPrefix().IsEmpty()){if(SmokeStage==24)ViewBefore=PC->GetViewTarget();PC->SetViewTarget(A);}}
   A->AddMovementInput(SmokeDir,1.f);
   const auto* Body=Cast<UBattleBodyAnimInstance>(A->GetMesh()->GetAnimInstance());
   const FVector Local=A->GetActorRotation().UnrotateVector(A->GetVelocity());
@@ -489,6 +492,17 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    int32(Want),StanceOf(1)==Want && A->VisualStance==Want?1:0,Cap,Expected,SmokeMuzzleMax,SmokeMuzzleFrames,SmokeShots,Base?*Base->GetName():TEXT("none"),Ground,Rate);
   Check(StanceOf(1)==Want && A->VisualStance==Want && FMath::Abs(Cap-Expected)<1.f && SmokeMuzzleMax>Expected*.8f && SmokeMuzzleMax<Expected*1.05f && SmokeMuzzleFrames>=10 && SmokeShots==0,
    Want==BattleStance::Crouch?TEXT("the player walks crouched at the crouched speed with the crouched walk"):TEXT("the player crawls prone at the prone speed with the prone crawl"));
+  // His view and his shot sink with the stance (they stayed at standing height before 2026-11-24).
+  {
+   FVector ShotStart,ShotDir;A->GetPlayerShot(ShotStart,ShotDir);
+   const float Camera=float(A->FirstPersonCamera->GetComponentLocation().Z-A->GetActorLocation().Z),Shot=float(ShotStart.Z-A->GetActorLocation().Z);
+   const float Want65=65.f+BattleStance::EyeOffset(Want)-BattleStance::EyeOffset(BattleStance::Stand);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STANCE_EYE stance=%d camera=%.1f shot=%.1f expected=%.1f eye=%.1f"),int32(Want),Camera,Shot,Want65,float(A->EyePosition().Z-A->GetActorLocation().Z));
+   Check(FMath::Abs(Camera-Want65)<1.f&&FMath::Abs(Shot-Want65)<1.f,TEXT("the player's camera and shot start sink to the stance's eye height"));
+   if(PC&&!BodyShotPrefix().IsEmpty())FScreenshotRequest::RequestScreenshot(FPaths::ChangeExtension(BodyShotPrefix(),TEXT(""))+(Want==BattleStance::Crouch?TEXT("-eye-crouch.png"):TEXT("-eye-prone.png")),true,false);
+   // The view goes back a moment later (the picture is taken at the end of a later frame).
+   if(PC&&SmokeStage==25&&ViewBefore.IsValid()){FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,FTimerDelegate::CreateWeakLambda(PC,[PC]{if(ViewBefore.IsValid())PC->SetViewTarget(ViewBefore.Get());}),.3f,false);}
+  }
   if(SmokeStage==24){SmokeStage=25;BayStart=-1.;Later(.001f);return;}
   // Standing again: the full walking speed comes back.
   Stances.Remove(1);A->VisualStance=BattleStance::Stand;A->SetSprinting(false);

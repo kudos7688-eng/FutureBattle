@@ -118,7 +118,8 @@ const FBattleUnitState* ABattleUnit::GetState() const
 }
 
 bool ABattleUnit::IsAlive() const { const auto* S = GetState(); return S && S->IsAlive(); }
-FVector ABattleUnit::EyePosition() const { return GetActorLocation() + FVector(0, 0, 60); }
+// The eye sinks with the stance (BattleStance::EyeOffset, as the runtime's sight and shots); the capsule keeps its height.
+FVector ABattleUnit::EyePosition() const { return GetActorLocation() + FVector(0, 0, BattleStance::EyeOffset(VisualStance)); }
 
 // Closer than this to the eye the rear camera is inside the head or the chest.
 static constexpr float CameraInBodyDistance = 70.f;
@@ -184,6 +185,9 @@ void ABattleUnit::GetPlayerShot(FVector& Start, FVector& Direction)
 {
 	// Keep the shot at the soldier's eye: the rear camera must never fire around cover.
 	Start = FirstPersonCamera->GetComponentLocation();
+	// While the camera is still sinking after a stance change, the shot already leaves no higher than the new eye (the
+	// enemy's sight of him has changed at once), so getting down never fires over a wall that now hides him.
+	Start.Z = FMath::Min(Start.Z, GetActorLocation().Z + 65.f + BattleStance::EyeOffset(VisualStance) - BattleStance::EyeOffset(BattleStance::Stand));
 	Direction = GetControlRotation().Vector();
 	if (!bThirdPersonView) return;
 	FMinimalViewInfo View; CalcCamera(0.f, View);
@@ -206,6 +210,12 @@ void ABattleUnit::Tick(float DeltaTime)
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattleUnitTick);
 	Super::Tick(DeltaTime);
 	if (AimLevel || AimZoom > 1.f || ScopeAlpha > 0.f) UpdateAimView();
+	// Stances: the camera (view, held rifle and the player's shot start) sinks with the body over about the stance change.
+	{
+		const float Target = BattleStance::EyeOffset(VisualStance) - BattleStance::EyeOffset(BattleStance::Stand);
+		const float Drop = FMath::FInterpConstantTo(CameraStanceDrop, Target, DeltaTime, 120.f);
+		if (Drop != CameraStanceDrop) { FirstPersonCamera->AddRelativeLocation(FVector(0, 0, Drop - CameraStanceDrop)); CameraStanceDrop = Drop; }
+	}
 	if (const auto* State = GetState())
 	{
 		if (State->IsAlive()) GetWorld()->GetSubsystem<UBattleState>()->UpdateAim(UnitID, GetWorld()->GetTimeSeconds(), GetVelocity().Size2D(), GetBaseAimRotation().Vector(), GetCharacterMovement()->IsMovingOnGround());

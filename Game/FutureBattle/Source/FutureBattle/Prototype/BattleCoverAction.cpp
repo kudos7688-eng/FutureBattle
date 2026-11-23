@@ -468,7 +468,9 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  else if(B.Actor.IsValid())B.Actor->GetCharacterMovement()->StopMovementImmediately();
  if(!Player && Contact)
  {
-  const FVector Aim=(Contact->LastKnownPosition+FVector(0,0,35)-(Position(ID)+FVector(0,0,60))).GetSafeNormal();
+  // From his own eye height (a crouched or prone peek no longer fires from standing height).
+  const FVector Eye=Position(ID)+FVector(0,0,BattleStance::EyeOffset(StanceOf(ID)));
+  const FVector Aim=(Contact->LastKnownPosition+FVector(0,0,35)-Eye).GetSafeNormal();
   if(B.Actor.IsValid())B.Actor->SetActorRotation(FRotator(0,Aim.Rotation().Yaw,0));
   else {Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity).Forward=Aim.GetSafeNormal2D();B.Capsule->SetWorldRotation(FRotator(0,Aim.Rotation().Yaw,0));}
   Store->UpdateAim(ID,Now,B.Velocity.Size2D(),Aim,true);
@@ -478,7 +480,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
    if(U->Ammo==0){Store->StartReload(ID,Now);Diag.Cover(TEXT("peekwait_reloading"));}
    else
    {
-    const bool Shot=Fire(ID,Position(ID)+FVector(0,0,60),Aim,false);
+    const bool Shot=Fire(ID,Eye,Aim,false);
     if(Shot){Diag.Cover(TEXT("cover_shots"));if(++CoverPeekShots.FindOrAdd(ID)==1)Diag.Cover(TEXT("peek_first_shot"));}
     else Diag.Cover(U->ReloadEndTime>0?TEXT("peekwait_reloading"):Now<U->NextShotTime?TEXT("peekwait_cooldown"):TEXT("peekwait_fire_other"));
     if(Shot && Squad->TacticalPlan.Action==EBattleSquadTactic::Support)GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(Squad->SquadID,U->CoverTargetID);
