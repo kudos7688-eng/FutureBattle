@@ -31,6 +31,16 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-24 04時20分 Claude（観測ルールの相談）：区画視界の境目を30・50・100mに広げてもマップJの悪化は変わらない。分隊単位の知識の段階1・2を main に入れた（段階2は試験切替、既定0、main ebbb86b）
+
+- **変更範囲**：`BattleSectorSight.cpp`（`-BattleSectorSightNear`）、`BattlePerception.h/.cpp`（分隊の表・分隊間の報告・`Knows`）、`BattleLeaderRuntime.cpp`・`BattleCoverAction.cpp`・`BattleSoldierWatch.cpp`・`BattleSquadTactics.cpp`・`BattleSupport.cpp`・`BattleScoutReport.cpp`（読む側）、`SWITCHES.md`、`CODEMAP*.md`、設計書2つ。
+- **検証**：ビルド、`Test-Battle` failures=0（段階1の後と段階2の後の2回）。既定の試合は入れる前と IDENTICAL（マップI seed 7：`obs-base-I-s7`＝`obs-sk1-I-s7`＝`obs-sk2off-I-s7`）。
+- **境目の距離（ユーザー指示、マップJ・seed 7・19×左右・片側、切替0との得点差の変化）**：20m 平均 −167（4組とも悪化）、30m −136、50m −194、100m −163。16組中15組で悪化し、境目による違いはない。**マップJ の悪化は本当の差で、境目の距離が原因ではない**。既定の20mは変えていない。表は `Docs/design-sector-combat.md` 7.3。
+- **基準の取り直し**：main が進んだため、11-23 の切替0の試合（`obs-str-ss0-J-*`）とは一致しない。今回の基準は `obs-n-ss0-J-*`（凍結ビルド `obs-sk1near`）。
+- **段階2（`-BattleSquadKnowledge=1`、片側は `-BattleSquadKnowledgeTeam=`）の1試合**（マップI seed 7、両軍）：報告の待ちの最大 7491 → 370件、届いた報告 199万 → 13万件。得点は 769/621 → 383/496 で、両軍の合計が減り、前線を進める段階の回数が 228 → 78 に減った（1試合だけ。分隊が前へ出にくくなった可能性、原因は未確認）。
+- **制限・未実施**：段階2の片側比較（ロックに並び直した、9番目）、保存（分隊の表は保存しない。読み込み後は隊員の接触から作り直す）、軍全体の記憶の読み手、画面での確認。push はしていない。
+- **次の一手**：段階2の片側比較（マップ I・J、16試合）。前へ出にくくなる原因を1試合のログで確かめる。境目とマップJの悪化をどうするかはユーザーが決める。
+
 ## 2026-11-24 03時45分 Claude（ロードマップに従う改善活動）：段階7の続き（委任したプレイヤーの攻撃群が重点へ連動・購入予約の行き先・群ごとの連動の切替）を main へ（main 95dde77、すべて既定0、既定の試合は不変）
 
 - **依頼**：ユーザーの「連動を入れる」「待つ間に予約の行き先も実装して」「待つ間に群ごとの連動の切替も実装して」。設計は `Docs/design-front-strategy.md` 段階7。
