@@ -408,6 +408,13 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      const bool Moved=M->MoveHire(0,-1,-100)&&M->Area.HireQueue[M->HireQueueOf(0)[0]].Dest==UBattleMatch::HireQueueMax-2&&M->Area.HireQueue[M->HireQueueOf(0)[1]].Dest==0;
      M->HireQueueSecond=-1;M->UpdateHireQueue();
      Check(Cancelled&&Moved&&M->HireQueueOf(0).Num()==UBattleMatch::HireQueueMax-1&&M->Credits[0]==CR,TEXT("reservations: cancel, move to the front, still waiting at the tank limit"));
+     // Destination: a click cycles none -> sections -> own groups -> reserve; an unknown value starts again at none.
+     {
+      const TArray<int32> Choices=M->HireDestChoices(0);
+      const bool First=M->CycleHireDest(0,0)&&M->Area.HireQueue[M->HireQueueOf(0)[0]].Dest==-1;
+      const bool CycledTwice=M->CycleHireDest(0,0)&&M->Area.HireQueue[M->HireQueueOf(0)[0]].Dest==Choices[1%Choices.Num()];
+      Check(First&&CycledTwice&&Choices[0]==-1&&Choices.Last()==UBattleMatch::HireDestReserve&&!M->CycleHireDest(0,99),TEXT("reservations: the destination cycles through the choices"));
+     }
      M->Area.HireQueue.Reset();
      if(M->ActiveSquads(0)<BattleTactics::AreaHire().MaxActive)
      {
@@ -1190,7 +1197,8 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   Mode->bCombatPaused=true;PC->EnterTactical();
   {
    PC->CycleGameSpeed();const float X2=UGameplayStatics::GetGlobalTimeDilation(GetWorld());PC->CycleGameSpeed();const float X4=UGameplayStatics::GetGlobalTimeDilation(GetWorld());
-   PC->CycleGameSpeed();Check(X2==2.f&&X4==4.f&&UGameplayStatics::GetGlobalTimeDilation(GetWorld())==1.f&&PC->GetGameSpeed()==1,TEXT("tactical speed toggle cycles x2 x4 x1"));
+   PC->CycleGameSpeed();const bool Paused=UGameplayStatics::IsGamePaused(GetWorld())&&PC->GetGameSpeed()==0;
+   PC->CycleGameSpeed();Check(X2==2.f&&X4==4.f&&Paused&&!UGameplayStatics::IsGamePaused(GetWorld())&&UGameplayStatics::GetGlobalTimeDilation(GetWorld())==1.f&&PC->GetGameSpeed()==1,TEXT("tactical speed toggle cycles x2 x4 pause x1"));
   }
   // Notification log (command UI): the stopped squads and observed points of this fixture appear before the screenshot.
   PC->UpdateNoticeLog(true);Check(PC->VisibleNotices().Num()>0,TEXT("notification log records observed events"));
@@ -1247,6 +1255,20 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_FaceButton_Right,IE_Pressed,1.f));PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_FaceButton_Right,IE_Released,0.f));
     const bool bClosed=!PC->IsBuyPanelOpen();PC->bGamepadActive=false;
     Check(bOpen&&bLayout&&bMoved&&bClosed,*FString::Printf(TEXT("purchase panel opens, hits its rows, fits and takes the pad (open %d, layout %d, moved %d, closed %d)"),bOpen?1:0,bLayout?1:0,bMoved?1:0,bClosed?1:0)); }
+  // Purchase panel reservations (default on since 2026-11-23): the tank row, which cannot be bought here (no resources), is reserved through
+  // the panel without buying; the panel counts it in the row and lists it as a chip whose cancel box is hit; cancelling that type removes it.
+  // The checks above leave the match finished; purchases need the combat phase, so it is set for this check and put back after.
+  { auto* SM=GetWorld()->GetSubsystem<UBattleMatch>();const int32 Credits0=SM->Credits[0];SM->Credits[0]=0;const EBattleMatchPhase Phase0=SM->Phase;SM->Phase=EBattleMatchPhase::Combat;
+    const int32 Q0=SM->HireQueueOf(0).Num(),Active0=SM->ActiveSquads(0);int32 TankRow=INDEX_NONE;
+    {const auto L0=FBattleBuyPanelLayout::Make(FVector2D(1920,1080),GetWorld());for(int32 I=0;I<L0.Rows.Num();++I)if(L0.Rows[I].Type==BattleSquadType::Tank)TankRow=I;}
+    const bool bCalled=TankRow>=0&&PC->BuyFromPanel(TankRow);const FString Why=SM->LastMessage;const int32 Q1=SM->HireQueueOf(0).Num();
+    const auto L=FBattleBuyPanelLayout::Make(FVector2D(1920,1080),GetWorld());
+    const bool bQueued=SM->HireQueueOf(0).Num()==Q0+1&&SM->ActiveSquads(0)==Active0&&L.Chips.Num()==Q0+1&&L.Rows.IsValidIndex(TankRow)&&L.Rows[TankRow].Reserved>=1
+     &&L.ChipButtonAt(L.Chips.Last().CancelOrigin+FVector2D(L.ButtonSize*.5f),true)==L.Chips.Num()-1;
+    const bool bCancelled=PC->CancelReservationOfType(BattleSquadType::Tank)&&SM->HireQueueOf(0).Num()==Q0;
+    SM->Credits[0]=Credits0;const int32 PhaseUsed=int32(SM->Phase);SM->Phase=Phase0;
+    Check(UBattleMatch::HireReserveOn()&&bCalled&&bQueued&&bCancelled,*FString::Printf(TEXT("purchase panel reserves what cannot be bought and cancels it (on %d, called %d, queued %d, cancelled %d; queue %d->%d, active %d->%d, phase %d, area %d, why '%s')"),
+     UBattleMatch::HireReserveOn()?1:0,bCalled?1:0,bQueued?1:0,bCancelled?1:0,Q0,Q1,Active0,SM->ActiveSquads(0),PhaseUsed,SM->bArea?1:0,*Why)); }
   // Gamepad: tactical pad buttons read as the same keys; a simulated pad press marks the pad as the active device.
   { const bool Map=PC->GamepadToKey(EKeys::Gamepad_FaceButton_Top)==EKeys::T&&PC->GamepadToKey(EKeys::Gamepad_FaceButton_Bottom)==EKeys::LeftMouseButton&&PC->GamepadToKey(EKeys::Gamepad_FaceButton_Left)==EKeys::RightMouseButton;
     PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_LeftThumbstick,IE_Pressed,1.f));PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_LeftThumbstick,IE_Released,0.f));

@@ -8,7 +8,23 @@ UENUM(BlueprintType)
 // AntiTank (2026-11-17, ROADMAP heavy equipment): one round loaded, a long reload, an explosion that also hurts infantry around the impact.
 // Mortar (2026-11-18, indirect fire): never fires along the line of sight (UBattleLeaderRuntime::Fire refuses it); it lobs shells at
 // positions the team knows (BattleArtillery.cpp) after setting up while still. One round loaded, MortarReserve in reserve.
-enum class EBattleWeapon : uint8 { Carbine, SupportGun, AntiTank, Mortar };
+// Infantry arms (2026-11-22, Docs/design-infantry-arms.md): Pistol (the sidearm, also a primary for no one yet), SMG, Shotgun,
+// Marksman (designated marksman rifle) and GrenadeLauncher (lobbed explosive rounds, no direct fire like the mortar; BattleArms.cpp).
+// Appended only: saved records keep their values. Values of the new weapons: BattleWeaponDef (BattleArms.cpp).
+// Sniper (2026-11-22, the sniper team): a bolt-action rifle for very long shots.
+enum class EBattleWeapon : uint8 { Carbine, SupportGun, AntiTank, Mortar, Pistol, SMG, Shotgun, Marksman, GrenadeLauncher, Sniper };
+constexpr uint8 BattleLastWeapon=uint8(EBattleWeapon::Sniper);
+
+// Values of the weapons added on 2026-11-22 (nullptr for the four older ones, which read UBattleTuning). Ranges are scales of the
+// carbine's engage/reach distance with an optional cap (cm, 0 = none). DamageNear applies within NearRange and falls to DamageScale
+// at FarRange (the shotgun; others have DamageNear = DamageScale).
+struct FBattleWeaponDef
+{
+ int32 Magazine=1,Reserve=0,AmmoKind=0;
+ float Reload=1.f,AIInterval=1.f,PlayerInterval=.2f,DamageScale=1.f,DamageNear=1.f,NearRange=0.f,FarRange=0.f,SpreadScale=1.f;
+ float EngageScale=1.f,EngageCap=0.f,ReachScale=1.f,ReachCap=0.f,SuppressionScale=1.f;
+};
+const FBattleWeaponDef* BattleWeaponDef(EBattleWeapon W);
 
 inline EBattleWeapon WeaponForSlot(int32 Slot)
 {
@@ -197,6 +213,11 @@ struct FBattleSquadState
  // ST1 does not generate autonomous plans. ST2 will add selection and versioned plan saves.
  UPROPERTY(Transient) FBattleSquadTacticalPlan TacticalPlan;
  UPROPERTY() float FlankCooldown = 0;
+ // Infantry arms (2026-11-22): 1 = elite platoon (a rifle squad with roles per slot), 2 = sniper team (a scout pair: sniper and
+ // spotter); BattleArms.cpp. Absent in older saves = 0.
+ UPROPERTY() uint8 Grade = 0;
+ // Seconds until any member may throw the next hand grenade (one per squad per BattleArms grenade gap; relative, saved).
+ UPROPERTY() float GrenadeGap = 0;
 };
 
 // Authoritative match data. Possession and Actor lifetime never create/reset this record.
@@ -286,6 +307,21 @@ struct FBattleUnitState
  UPROPERTY() int32 SPGAmmo = 0;
 	UPROPERTY() bool bLauncherSelected = false;
 	UPROPERTY() float LauncherWait = 0.f;
+	// Infantry arms (2026-11-22, BattleArms.cpp, Docs/design-infantry-arms.md). Kit: the role in an elite platoon (BattleArms::EKit,
+	// 0 = none). bArmsIssued: the trial equipment was handed out once (never twice after a load). Grenades: hand grenades left.
+	// Side*: the pistol (rounds loaded / in reserve / drawn now). Waits are relative seconds (survive saving).
+	UPROPERTY() uint8 Kit = 0;
+	UPROPERTY() bool bArmsIssued = false;
+	UPROPERTY() int32 Grenades = 0;
+	UPROPERTY() int32 SideAmmo = 0;
+	UPROPERTY() int32 SideReserve = 0;
+	UPROPERTY() bool bSidearmSelected = false;
+	UPROPERTY() float SideWait = 0.f;    // pistol reload left
+	UPROPERTY() float GrenadeWait = 0.f; // until the next throw / launcher round
+	UPROPERTY() float MeleeWait = 0.f;   // until the next strike
+	bool HasSidearm() const { return SideAmmo + SideReserve > 0 || bSidearmSelected; }
+	// The weapon in the hands now: the pistol while drawn, else the primary.
+	EBattleWeapon ActiveWeapon() const { return bSidearmSelected ? EBattleWeapon::Pistol : Weapon; }
 	// Carries a weapon that hurts armour: an anti-tank soldier or an exoskeleton with launcher rounds left.
 	bool CarriesAntiTank() const { return Weapon == EBattleWeapon::AntiTank || Launcher > 0; }
 	bool IsAlive() const { return HP > 0.f; }
@@ -325,13 +361,14 @@ public:
 	UPROPERTY(Config, EditAnywhere) int32 MortarReserve = 11;
 	UPROPERTY(Config, EditAnywhere) float MortarReloadSeconds = 4.f;
 	UPROPERTY(Config, EditAnywhere) float MortarShotInterval = .5f;
-	int32 Capacity(EBattleWeapon W) const { return W == EBattleWeapon::Mortar ? MortarMagazine : W == EBattleWeapon::AntiTank ? ATMagazine : W == EBattleWeapon::SupportGun ? SupportMagazine : Magazine; }
-	float ReloadTime(EBattleWeapon W) const { return W == EBattleWeapon::Mortar ? MortarReloadSeconds : W == EBattleWeapon::AntiTank ? ATReloadSeconds : W == EBattleWeapon::SupportGun ? SupportReloadSeconds : ReloadSeconds; }
+	int32 Capacity(EBattleWeapon W) const { if (const auto* D = BattleWeaponDef(W)) return D->Magazine; return W == EBattleWeapon::Mortar ? MortarMagazine : W == EBattleWeapon::AntiTank ? ATMagazine : W == EBattleWeapon::SupportGun ? SupportMagazine : Magazine; }
+	float ReloadTime(EBattleWeapon W) const { if (const auto* D = BattleWeaponDef(W)) return D->Reload; return W == EBattleWeapon::Mortar ? MortarReloadSeconds : W == EBattleWeapon::AntiTank ? ATReloadSeconds : W == EBattleWeapon::SupportGun ? SupportReloadSeconds : ReloadSeconds; }
 	// Soldiers hand reserve rounds only to a weapon of the same kind.
-	static int32 AmmoKind(EBattleWeapon W) { return W == EBattleWeapon::Mortar ? 2 : W == EBattleWeapon::AntiTank ? 1 : 0; }
-	int32 ReserveFor(EBattleWeapon W) const { return W == EBattleWeapon::Mortar ? MortarReserve : W == EBattleWeapon::AntiTank ? ATReserve : ReserveAmmo; }
+	static int32 AmmoKind(EBattleWeapon W) { if (const auto* D = BattleWeaponDef(W)) return D->AmmoKind; return W == EBattleWeapon::Mortar ? 2 : W == EBattleWeapon::AntiTank ? 1 : 0; }
+	int32 ReserveFor(EBattleWeapon W) const { if (const auto* D = BattleWeaponDef(W)) return D->Reserve; return W == EBattleWeapon::Mortar ? MortarReserve : W == EBattleWeapon::AntiTank ? ATReserve : ReserveAmmo; }
 	float ShotInterval(EBattleWeapon W, bool bPlayer) const
 	{
+		if (const auto* D = BattleWeaponDef(W)) return bPlayer ? D->PlayerInterval : D->AIInterval;
 		if (W == EBattleWeapon::Mortar) return MortarShotInterval;
 		if (W == EBattleWeapon::AntiTank) return ATShotInterval;
 		if (W == EBattleWeapon::SupportGun) return bPlayer ? SupportPlayerInterval : SupportAIInterval;
@@ -736,7 +773,7 @@ public:
 };
 
 // What killed a unit, for the HUD's kill log (display only).
-enum class EBattleKillKind : uint8 { Unknown, Shot, Blast, Artillery, TankGun, Launcher };
+enum class EBattleKillKind : uint8 { Unknown, Shot, Blast, Artillery, TankGun, Launcher, Grenade, Melee };
 
 // A death that involves the player's team (team 0) with a known killer (display only: the HUD's kill log; not saved).
 // Names are copied when it happens, so the entry stays readable after the squad is gone.
@@ -770,6 +807,7 @@ public:
 	// Maximum HP of a unit: Health, times the trial -BattleLeaderHealth multiplier for a squad leader.
 	float MaxHealthOf(int32 UnitID) const;
 	void SetSquadType(int32 SquadID,uint8 Type);
+	void SetSquadGrade(int32 SquadID,uint8 Grade); // 1 elite platoon (rifle squad), 2 sniper team (scout pair); BattleArms.cpp. Name only; roles come at purchase
 	bool DisableLeaderSquad(int32 SquadID);
 	// Scout pairs: the surviving member takes command (becomes the Actor-represented, player-selectable leader).
 	bool HandOverLeader(int32 SquadID, int32 NewLeaderID);
@@ -804,6 +842,7 @@ public:
 	bool ToggleExoWeapon(int32 UnitID);
 	bool UseLauncher(int32 UnitID); // one round out, the load time starts; false when empty or still loading
 	void RefillLauncher(int32 UnitID);
+	int32 RefillArms(int32 UnitID); // infantry arms (BattleArms.cpp): grenades back to the issued count, the pistol's reserve full; 0 without arms
  bool UseSPGAmmo(int32 UnitID);
  int32 RefillSPGAmmo(int32 UnitID);
 	float MaxShieldOf(int32 UnitID) const;
@@ -824,6 +863,10 @@ public:
 	TArray<FBattleHitNotice> HitNotices;
 	// Kill log (2026-11-20, display only): deaths with a known killer where either side is team 0, newest last, at most 8.
 	TArray<FBattleKillNotice> KillNotices;
+	// Evaluation (11-23, arms branch): who killed each dead unit, with what and when (StepCharge's no-strike record). Rules and display
+	// never read it; not saved.
+	struct FDeathBy { int32 Killer = INDEX_NONE; EBattleKillKind Kind = EBattleKillKind::Unknown; double Time = 0.; };
+	TMap<int32, FDeathBy> DeathBy;
 	int32 AddReserve(int32 ID, int32 Rounds);
 	// Moves reserve rounds between two living soldiers with the same kind of weapon; returns the rounds moved.
 	int32 MoveReserve(int32 FromID, int32 ToID, int32 Rounds);

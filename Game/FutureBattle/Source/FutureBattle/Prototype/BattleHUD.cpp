@@ -1,4 +1,5 @@
 #include "BattleHUD.h"
+#include "BattleArms.h"
 #include "BattleSquadTactics.h"
 #include "BattleLeaderRuntime.h"
 #include "ProfilingDebugging/CsvProfiler.h"
@@ -103,7 +104,7 @@ void ABattleHUD::DrawHUD()
 		Label(TEXT("B の購入画面で部隊を買い、前線軍・攻撃軍と命令を整えたら P で開始"), W * .5f - 318, 150, White, .85f);
 	}
 	if (const auto* SpeedPC = Cast<ABattleController>(GetOwningPlayerController()); SpeedPC && SpeedPC->IsTactical())
-		Label(FString::Printf(TEXT("速度 x%d [.]"), SpeedPC->GetGameSpeed()), W - 165, 55, SpeedPC->GetGameSpeed() > 1 ? FLinearColor::Yellow : Muted);
+		Label(SpeedPC->GetGameSpeed() == 0 ? FString(TEXT("一時停止 [.]")) : FString::Printf(TEXT("速度 x%d [.]"), SpeedPC->GetGameSpeed()), W - 165, 55, SpeedPC->GetGameSpeed() != 1 ? FLinearColor::Yellow : Muted);
 	const auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (Match->IsEnabled())
 	{
@@ -146,8 +147,9 @@ void ABattleHUD::DrawHUD()
 		else Label(TEXT("占領8秒 ／ 5秒ごとに収入+20 ／ 補給1発につき1 ／ F8 保存 ／ F9 読込"), 28, 141, Muted, .85f);
 		DrawRect(Ink, 16, 165, 560, 26);
   if(Match->bArea)Label(TEXT("本拠地：10秒で補充 ／ 兵1人につき資源1 ／ F8 保存 ／ F9 読込"),28,172,Mint,.85f);
-  // Purchase reservations (-BattleHireReserve=1): the own list in order with each one's wait (Docs/design-front-strategy.md 6).
-  if(Match->bArea&&UBattleMatch::HireReserveOn())
+  // Purchase reservations (-BattleHireReserve, default 1 since 2026-11-23): the own list in order with each one's wait
+  // (Docs/design-front-strategy.md 6), only while there is one (the purchase panel shows the list too).
+  if(Match->bArea&&UBattleMatch::HireReserveOn()&&!Match->HireQueueOf(0).IsEmpty())
   {
    static const TCHAR* Short[]={TEXT("小銃"),TEXT("重装"),TEXT("斥候"),TEXT("対戦車"),TEXT("戦車"),TEXT("装甲車"),TEXT("迫撃砲"),TEXT("自走砲"),TEXT("外骨格"),TEXT("補給車")};
    const TArray<int32> Mine=Match->HireQueueOf(0);
@@ -159,7 +161,7 @@ void ABattleHUD::DrawHUD()
     Text+=FString::Printf(TEXT(" ／ %d.%s（%s %.0f秒）"),K+1,Q.Type>=0&&Q.Type<int32(UE_ARRAY_COUNT(Short))?Short[Q.Type]:TEXT("?"),Wait,Match->Elapsed-Q.At);
    }
    if(Mine.Num())Text+=TEXT(" ／ Backspace 取消 ／ = 先頭へ");
-   DrawRect(Ink,576,165,720,26);Label(Text,588,172,Mint,.8f);
+   DrawRect(Ink,576,165,FMath::Min(720.f,W-592.f),26);Label(Text,588,172,Mint,.8f);
   }
   // The area battle's own line is drawn above; without this the large-field and support lines below were drawn over it (since 147a610).
   else if(Match->bArea){}
@@ -373,7 +375,11 @@ void ABattleHUD::DrawHUD()
 	if (Focus && Focus->GetState())
 	{
 		const FBattleUnitState* S = Focus->GetState();
-		Label(FString::Printf(TEXT("%s %02d ／ 部隊%02d   HP %.0f%s   弾 %02d / %02d   %s ／ %s   再試行 %d%s"), S->bLauncherSelected && !PC->IsTactical() ? TEXT("バズーカ") : S->Weapon == EBattleWeapon::Mortar ? TEXT("迫撃砲") : S->Weapon == EBattleWeapon::AntiTank ? TEXT("対戦車火器") : S->Weapon == EBattleWeapon::SupportGun ? TEXT("支援火器") : TEXT("小銃"), S->UnitID, S->SquadID, S->HP, GetWorld()->GetSubsystem<UBattleState>()->MaxShieldOf(S->UnitID) > 0.f ? *FString::Printf(TEXT(" ＋盾 %.0f   対戦車弾 %d%s%s"), S->Shield, S->Launcher, S->LauncherWait > 0.f ? TEXT("（装填中）") : TEXT(""), PC->IsTactical() ? TEXT("") : PC->bGamepadActive ? TEXT(" [LBで切替]") : TEXT(" [Fで切替]")) : TEXT(""), S->Ammo, S->Reserve,
+		// Infantry arms (BattleArms.cpp): the elite role, the weapon in the hands (the pistol while drawn) and the grenades left.
+		FString WeaponLabel = S->bLauncherSelected && !PC->IsTactical() ? FString(TEXT("バズーカ")) : FString(BattleArms::WeaponName(S->ActiveWeapon()));
+		if (S->Kit) WeaponLabel = FString(BattleArms::KitName(S->Kit)) + TEXT("・") + WeaponLabel;
+		if (S->Grenades > 0 || S->SideAmmo + S->SideReserve > 0) WeaponLabel += FString::Printf(TEXT("（手りゅう弾 %d%s）"), S->Grenades, S->bSidearmSelected || S->SideAmmo + S->SideReserve <= 0 ? TEXT("") : PC->IsTactical() ? TEXT("・拳銃あり") : PC->bGamepadActive ? TEXT("・LBで拳銃") : TEXT("・Fで拳銃"));
+		Label(FString::Printf(TEXT("%s %02d ／ 部隊%02d   HP %.0f%s   弾 %02d / %02d   %s ／ %s   再試行 %d%s"), *WeaponLabel, S->UnitID, S->SquadID, S->HP, GetWorld()->GetSubsystem<UBattleState>()->MaxShieldOf(S->UnitID) > 0.f ? *FString::Printf(TEXT(" ＋盾 %.0f   対戦車弾 %d%s%s"), S->Shield, S->Launcher, S->LauncherWait > 0.f ? TEXT("（装填中）") : TEXT(""), PC->IsTactical() ? TEXT("") : PC->bGamepadActive ? TEXT(" [LBで切替]") : TEXT(" [Fで切替]")) : TEXT(""), S->bSidearmSelected ? S->SideAmmo : S->Ammo, S->bSidearmSelected ? S->SideReserve : S->Reserve,
 			*BattleUIText::Ja(BattleOrderName(S->Order)), *BattleUIText::Ja(BattleActionName(S->Action)), S->MoveRetries, S->ReloadEndTime > 0 ? TEXT("   装填中…") : TEXT("")), 34, PC->IsTactical()?BottomBar.SummaryY:H-112, S->Action == EBattleAction::MoveFailed ? FLinearColor::Yellow : White, 1.05f);
 		if(!Mode->bLeaderCommand)
         {
@@ -464,8 +470,8 @@ void ABattleHUD::DrawHUD()
 			for (int32 I = 0; I < FBattleCommandBarLayout::Count; ++I)
 			{
 				const auto& Button = Bar.Buttons[I];
-				const bool bUsable = I >= 6 ? (Match->bArea && BattleTactics::AreaHire().bEnabled) : bAny;
-				const bool bPending = (I == 1 && PC->PendingOrder == EBattleOrder::AttackMove) || (I == 2 && PC->PendingOrder == EBattleOrder::Defend) || (I == 6 && PC->IsBuyPanelOpen());
+				const bool bUsable = I == 7 ? BattleFieldLayout::Of(GetWorld()).bSectors : I >= 6 ? (Match->bArea && BattleTactics::AreaHire().bEnabled) : bAny;
+				const bool bPending = (I == 1 && PC->PendingOrder == EBattleOrder::AttackMove) || (I == 2 && PC->PendingOrder == EBattleOrder::Defend) || (I == 6 && PC->IsBuyPanelOpen()) || (I == 7 && (PC->IsFrontDrawArmed() || PC->IsDrawingFrontLine()));
 				DrawRect(bPending ? FLinearColor(.45f, .4f, .1f, .98f) : bUsable ? FLinearColor(.10f, .24f, .24f, .98f) : FLinearColor(.08f, .11f, .15f, .98f), Button.Origin.X, Button.Origin.Y, Button.Width, Bar.ButtonHeight);
                 Label(Button.Caption, Button.Origin.X+8, Button.Origin.Y+5, bPending ? FLinearColor::Yellow : bUsable ? Mint : Muted, Button.Scale);
 			}
@@ -568,25 +574,40 @@ void ABattleHUD::DrawBuyPanel(ABattleController* PC)
  DrawRect(FLinearColor(.08f,.11f,.15f,.98f),L.CloseOrigin.X,L.CloseOrigin.Y,L.CloseSize,L.CloseSize);
  DrawText(TEXT("×"),Mint,L.CloseOrigin.X+7,L.CloseOrigin.Y+4,GEngine->GetSmallFont(),.9f);
  const float X0=L.Origin.X,StateX=L.Origin.X+L.Size.X-12-L.StateWidth;
- const float Cols[]={X0+L.ColKey,X0+L.ColName,X0+L.ColMembers,X0+L.ColCost,X0+L.ColOwned,X0+L.ColRole,StateX};
- const float Ends[]={X0+L.ColName,X0+L.ColMembers,X0+L.ColCost,X0+L.ColOwned,X0+L.ColRole,StateX,L.Origin.X+L.Size.X-12};
- const TCHAR* Names[]={TEXT("キー"),TEXT("兵種"),TEXT("人数"),TEXT("費用"),TEXT("保有"),TEXT("役割"),TEXT("状態")};
- for(int32 C=0;C<7;++C)Cell(Names[C],Muted,Cols[C],L.HeaderY,Ends[C]-Cols[C]-6,.75f);
+ constexpr int32 NumCols=8;
+ const float Cols[NumCols]={X0+L.ColKey,X0+L.ColName,X0+L.ColMembers,X0+L.ColCost,X0+L.ColOwned,X0+L.ColReserved,X0+L.ColRole,StateX};
+ const float Ends[NumCols]={X0+L.ColName,X0+L.ColMembers,X0+L.ColCost,X0+L.ColOwned,X0+L.ColReserved,X0+L.ColRole,StateX,L.Origin.X+L.Size.X-12};
+ const TCHAR* Names[NumCols]={TEXT("キー"),TEXT("兵種"),TEXT("人数"),TEXT("費用"),TEXT("保有"),L.bReserve?TEXT("予約"):TEXT(""),TEXT("役割"),TEXT("状態")};
+ for(int32 C=0;C<NumCols;++C)Cell(Names[C],Muted,Cols[C],L.HeaderY,Ends[C]-Cols[C]-6,.75f);
  // Highlight: the pad's chosen row, or the row under the mouse pointer.
  int32 Lit=INDEX_NONE;
  if(PC->bGamepadActive)Lit=PC->GetBuyPanelRow();
  else if(FVector2D P;PC->GetPointerPosition(P))Lit=L.RowAt(P);
  for(int32 I=0;I<L.Rows.Num();++I)
  {
-  const auto& R=L.Rows[I];const bool bLit=I==Lit,bOk=R.Block==0;
-  const FLinearColor Fill=bLit?(bOk?FLinearColor(.16f,.38f,.36f,.98f):FLinearColor(.20f,.20f,.24f,.98f)):bOk?FLinearColor(.10f,.24f,.24f,.98f):FLinearColor(.07f,.09f,.12f,.98f);
+  // Fill: teal = a click buys now, amber = a click reserves (-BattleHireReserve), dark = nothing can be done now.
+  const auto& R=L.Rows[I];const bool bLit=I==Lit,bOk=R.Block==0,bReservable=L.bReserve&&R.Block==1;
+  const FLinearColor Fill=bOk?(bLit?FLinearColor(.16f,.38f,.36f,.98f):FLinearColor(.10f,.24f,.24f,.98f))
+   :bReservable?(bLit?FLinearColor(.34f,.25f,.10f,.98f):FLinearColor(.20f,.15f,.07f,.98f)):(bLit?FLinearColor(.20f,.20f,.24f,.98f):FLinearColor(.07f,.09f,.12f,.98f));
   DrawRect(Fill,R.Origin.X,R.Origin.Y,R.Size.X,R.Size.Y);
   if(bLit)DrawRect(Gold,R.Origin.X,R.Origin.Y,3,R.Size.Y);
-  const float TY=R.Origin.Y+5;const FLinearColor Main=bOk?White:Muted;
-  const FString Key=FString::Printf(TEXT("[%s]"),*R.Key);
-  const FString* Texts[]={&Key,&R.Name,&R.Members,&R.Cost,&R.Owned,&R.Role,&R.State};
-  for(int32 C=0;C<7;++C)
-   Cell(*Texts[C],C==6?(bOk?Mint:R.Block==1?Wait:Muted):C==5?Muted:C==0?(bOk?Mint:Muted):Main,Cols[C],TY,Ends[C]-Cols[C]-6,C==1?.85f:.8f);
+  const float TY=R.Origin.Y+5;const FLinearColor Main=bOk||bReservable?White:Muted;
+  const FString Key=R.Key.IsEmpty()?FString():FString::Printf(TEXT("[%s]"),*R.Key),Reserved=R.Reserved>0?FString::Printf(TEXT("%d"),R.Reserved):FString();
+  const FString* Texts[NumCols]={&Key,&R.Name,&R.Members,&R.Cost,&R.Owned,&Reserved,&R.Role,&R.State};
+  for(int32 C=0;C<NumCols;++C)
+   Cell(*Texts[C],C==7?(bOk?Mint:bReservable?Wait:Muted):C==5?Gold:C==6?Muted:C==0?(bOk?Mint:Muted):Main,Cols[C],TY,Ends[C]-Cols[C]-6,C==1?.85f:.8f);
+ }
+ // Own reservations in order (-BattleHireReserve): a chip each with "move forward" (not on the first) and "cancel" boxes.
+ if(L.bReserve)
+ {
+  Cell(L.QueueTitle,L.Chips.IsEmpty()?Muted:Gold,L.Origin.X+12,L.QueueY,L.Size.X-24,.75f);
+  for(const auto& C:L.Chips)
+  {
+   DrawRect(C.bByAI?FLinearColor(.10f,.13f,.18f,.98f):FLinearColor(.20f,.15f,.07f,.98f),C.Origin.X,C.Origin.Y,C.Size.X,C.Size.Y);
+   Cell(C.Text,White,C.Origin.X+6,C.Origin.Y+4,C.UpOrigin.X-C.Origin.X-10,.75f);
+   if(C.Index>0){DrawRect(FLinearColor(.08f,.11f,.15f,.98f),C.UpOrigin.X,C.UpOrigin.Y,L.ButtonSize,L.ButtonSize);DrawText(TEXT("↑"),Mint,C.UpOrigin.X+5,C.UpOrigin.Y+2,GEngine->GetSmallFont(),.8f);}
+   DrawRect(FLinearColor(.08f,.11f,.15f,.98f),C.CancelOrigin.X,C.CancelOrigin.Y,L.ButtonSize,L.ButtonSize);DrawText(TEXT("×"),Mint,C.CancelOrigin.X+5,C.CancelOrigin.Y+2,GEngine->GetSmallFont(),.8f);
+  }
  }
  Cell(L.Footer,Muted,L.Origin.X+12,L.FooterY,L.Size.X-24,.75f);
 }
@@ -784,7 +805,7 @@ void ABattleHUD::DrawSquadList()
    if(Placed) Center/=Placed;
    DrawRect(Leaders>0&&Picked==Leaders?FLinearColor(.24f,.2f,.06f):FLinearColor(.13f,.11f,.05f),Layout.Origin.X+3,Y,Layout.Width-12,Layout.RowHeight-2);
    int32 Full=0; const int32 Living=Match->GroupLiving(*G,&Full);
-   const TCHAR* Who=!G->bPlayer?TEXT("AI編成"):Match->GroupAIRun(*G)?TEXT("委任"):TEXT("手動指揮");
+   const TCHAR* Who=!G->bPlayer?TEXT("AI編成"):Match->PlayerGroupFollowsFocus(*G)?TEXT("委任・重点に連動"):G->bPlayer&&G->Kind==0&&!G->bFollowFocus&&Match->GroupAIRun(*G)?TEXT("委任・連動なし"):Match->GroupAIRun(*G)?TEXT("委任"):TEXT("手動指揮");
    DrawText(FString::Printf(TEXT("群%d　%s"),G->ID,Who),Gold,Layout.Origin.X+9,Y+4,GEngine->GetSmallFont(),1);
    DrawText(FString::Printf(TEXT("%d部隊 ／ 兵 %d/%d"),G->Squads.Num(),Living,Full),Gold,Layout.Origin.X+Layout.Width-150,Y+4,GEngine->GetSmallFont(),.85f);
    static const TCHAR* const PhaseNames[]={TEXT("集結"),TEXT("前進"),TEXT("保持")};
@@ -1331,8 +1352,11 @@ void ABattleHUD::DrawKillLog(ABattleController* PC)
    case EBattleKillKind::Artillery:return TEXT("砲撃");
    case EBattleKillKind::TankGun:return TEXT("戦車砲");
    case EBattleKillKind::Launcher:return TEXT("バズーカ");
+   case EBattleKillKind::Grenade:return N.KillerWeapon==EBattleWeapon::GrenadeLauncher?TEXT("擲弾"):TEXT("手りゅう弾");
+   case EBattleKillKind::Melee:return TEXT("近接");
    case EBattleKillKind::Shot:
     if(N.bKillerVehicle)return TEXT("車載機関銃");
+    if(N.KillerWeapon>=EBattleWeapon::Pistol)return BattleArms::WeaponName(N.KillerWeapon);
     return N.KillerWeapon==EBattleWeapon::SupportGun?TEXT("機関銃"):N.KillerWeapon==EBattleWeapon::AntiTank?TEXT("対戦車兵"):N.KillerWeapon==EBattleWeapon::Mortar?TEXT("砲"):TEXT("小銃");
    default:return TEXT("");
   }

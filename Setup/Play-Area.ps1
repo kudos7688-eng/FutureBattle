@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[ValidateSet(0,1)][int]$VehicleRoadGoal=0)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
@@ -9,7 +9,7 @@ if ($Strategy -gt 0) { $extra += "-BattleStrategy=$Strategy" }
 # Trial (2026-11-23, default 0): a vehicle ordered into a place it cannot enter (a walled sector of map K) goes to the nearest road instead of refusing the order.
 if ($VehicleRoadGoal -gt 0) { $extra += "-BattleVehicleRoadGoal=$VehicleRoadGoal" }
 # Setup before the start (user decision 2026-11-22, trial): 15 rifle squads instead of 25 and 250 resources instead of 100 (the 10 squads'
-# worth plus the usual 100), the match waits paused for purchases and orders; P starts it. Purchases come before both teams' orders.
+# worth plus the usual 100); since 2026-11-24 the match starts running (P pauses it to show the setup panel). Purchases come before both teams' orders.
 if ($Setup) { $extra += @('-BattleSetupPhase=1','-BattleStartSquads=15','-BattleAreaStartCredits=250') }
 # Close fights to look at (ROADMAP 2026-11-22, stage 1 of fights inside a sector): sight and engagement cut to 30 or 50 m, so squads
 # meet inside one sector. For watching the current AI at close range, not a play condition.
@@ -42,6 +42,10 @@ if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J' -or $Map -eq 'K') {
     $extra += '-BattleGroupFireSupport=1'
     # Free squads the front army could take wait two or three sectors behind its line instead of going to and fro (trial, user 2026-11-22).
     $extra += '-BattleFrontReserve=1'
+    # Infantry without anti-tank weapons that fell back from a tank waits there instead of walking back into it (trial, user 2026-11-23).
+    $extra += '-BattleArmourWait=1'
+    # A group gives its squads one sector each around its rally and its point, from the side first (trial, user 2026-11-23).
+    $extra += '-BattleGroupSectors=1'
     if ($SectorAI) { $extra += '-BattleSectorAI=1' }
     # Sector AI trials (default off in matches): fire back when shot, sector route, flank and front stages, pass a crowded corner,
     # fire on the move until inside the sector (no stop: -BattleSquadCoverCheck and -BattleBounding left out, user 11-20), line up
@@ -49,6 +53,11 @@ if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J' -or $Map -eq 'K') {
     # samples and no standing in the open, soldiers do not block each other's sight, cover faces where shots came from (user 11-20).
     if ($SectorTrials) { $extra += @('-BattleSectorContact=1','-BattleSectorRoute=1','-BattleSectorFlank=1','-BattleSectorFront=1','-BattleWaypointPass=1','-BattleSectorMoveFire=1','-BattleCoverHuddle=1','-BattlePinnedFlank=1','-BattleArrivalThreat=1','-BattleSectorCoverRoute=1','-BattleCoverStrict=1','-BattleSightTeamMask=1','-BattleShotDirection=1','-BattleDangerRoute=1','-BattleCloseIn=1','-BattleSectorCoverWalk=1','-BattleUnderFireCover=1','-BattleNoCoverFallback=1','-BattleCoverPriority=1') }
 }
+# Infantry arms trial (Docs/design-infantry-arms.md, default off): pistols, 2 hand grenades and melee for every foot soldier,
+# elite platoons and sniper teams (rows of the purchase panel) for the player, one of each kept by the AI (G grenade, V strike, F pistol in direct control).
+if ($Arms) { $extra += @('-BattleSidearms=1','-BattleGrenades=2','-BattleMelee=1','-BattleElite=1','-BattleAreaEliteKeep=1','-BattleSniperTeam=1','-BattleAreaSniperKeep=1','-BattleArmsAssault=1','-BattleArmsCharge=1') }
+# Player matches start with the AI running (user request 2026-11-23); tests leave this out and start paused. -Setup starts running too (user 2026-11-24).
+$extra += '-BattleStartRunning'
 $editor = 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe'
 $playArgs = @("/Game/Prototype/Lvl_BattleWide_$Map", '-game', '-windowed', '-ResX=1920', '-ResY=1080', '-ForceRes', '-BattleWideMixed', '-BattleArea', '-BattleCoverActions=1', '-BattleFlankCoordination=1', '-BattleAreaPointSupply=1', '-BattleFollowerAnimSkip=1') + $extra
 if ($TestAfterPlay -and $Map -eq 'H') {

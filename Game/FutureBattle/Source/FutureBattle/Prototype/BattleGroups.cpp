@@ -14,6 +14,7 @@
 #include "BattleRanges.h"
 #include "BattleTactics.h"
 #include "BattleFieldLayout.h"
+#include "BattleSectors.h"
 #include "NavigationSystem.h"
 #include "FutureBattle.h"
 #include "Misc/CommandLine.h"
@@ -413,7 +414,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
   {
    const bool bAvoid=Elapsed<G->AvoidUntil&&Objectives.IsValidIndex(G->Avoid);
    // Strategy layer S2 (BattleStrategy.cpp): the team's focus first, while it is not own and the group is not avoiding it.
-   if(!G->bPlayer)if(const int32 F=GroupFocusPoint(*G);F!=INDEX_NONE&&ObservedOwner(Team,F)!=Team&&!(bAvoid&&F==G->Avoid))return F;
+   if(!G->bPlayer||PlayerGroupFollowsFocus(*G))if(const int32 F=GroupFocusPoint(*G);F!=INDEX_NONE&&ObservedOwner(Team,F)!=Team&&!(bAvoid&&F==G->Avoid))return F;
    const double Limit=bAvoid?FVector::Dist2D(Objectives[G->Avoid].Position,Home)*BattleGroupValues::DeepRatio:DBL_MAX;
    int32 Best=INDEX_NONE;double BestD=DBL_MAX;
    for(int32 I=0;I<Objectives.Num();++I)
@@ -469,7 +470,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
    if(bOwn){Enter(2,TEXT("already_own"));continue;}
    // Strategy layer S2: a group still gathering turns to a new team focus (an advance under way finishes first).
    // Not more often than every 30 s (group lane 2026-11-22: switching a gathering group's goal makes it go back and forth).
-   if(!G->bPlayer&&Elapsed-G->PhaseAt>=30.f)if(const int32 F=GroupFocusPoint(*G);F!=INDEX_NONE&&F!=G->Objective&&ObservedOwner(Team,F)!=Team&&!(Elapsed<G->AvoidUntil&&F==G->Avoid)){Attack(F,TEXT("strategy_focus"));continue;}
+   if((!G->bPlayer||PlayerGroupFollowsFocus(*G))&&Elapsed-G->PhaseAt>=30.f)if(const int32 F=GroupFocusPoint(*G);F!=INDEX_NONE&&F!=G->Objective&&ObservedOwner(Team,F)!=Team&&!(Elapsed<G->AvoidUntil&&F==G->Avoid)){Attack(F,TEXT("strategy_focus"));continue;}
    const bool bAssembled=Present>=2&&Ready>=FMath::CeilToInt(Present*FMath::Clamp(T->GroupReadyShare,.1f,1.f));
    const float Waited=Elapsed-G->PhaseAt;
    if(!bAssembled&&Waited<FMath::Max(0.f,T->GroupAssembleMax))continue;
@@ -551,6 +552,52 @@ void UBattleMatch::UpdateGroups(int32 Team)
  if((FrontPlanLogOn()||FrontPlanOn(Team))&&FrontLineAt[Team]!=FrontWas&&FrontLine[Team].Num()==BattleSectors::Rows)FrontPlanSample(Team);
 }
 
+// Trial -BattleGroupSectors=1 (default 0; user test play 2026-11-23: the squads of a group sent along a route to the central crossroads
+// stood there together and were shot together; several squads also crowded into one sector). On sector maps the group gives its squads
+// that go to the same place one sector each: the place's own sector (the point: one squad is enough to take it, as presence in the
+// sector counts) and the sectors around it, those beside it across the line of advance first (they come at the enemy there from the
+// side), then those behind; never the sectors beyond it, nor mountains, lakes or rivers; more cover first; sectors that hold a front army
+// post last. The choice depends only on the group's squads (sorted by ID), the map and the front posts, so it holds still from one
+// update to the next. More squads than sectors share them again in the same order.
+static bool GroupSectorsOn(){static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupSectors="),V);return V!=0;}();return On;}
+
+bool UBattleMatch::GroupSectorPost(const FBattleGroup& G,int32 Team,int32 SquadID,const FVector& Anchor,bool bPhaseRally,bool bAnchorFirst,FVector& Out) const
+{
+ if(!GroupSectorsOn()||!BattleFieldLayout::Of(GetWorld()).bSectors)return false;
+ const FIntPoint A=BattleSectors::Cell(Anchor);if(!BattleSectors::Valid(A))return false;
+ // The squads that go to this place, in ID order: at the rally all but mortars and supply; at the point the assault squads, and the
+ // support and guard squads once they move up (as GroupOrder sends them).
+ const bool bOwn=Objectives.IsValidIndex(G.Objective)&&ObservedOwner(Team,G.Objective)==Team;
+ TArray<int32> Members;
+ for(int32 SID:G.Squads)
+ {
+  const uint8 Role=GroupRole(G,SID);
+  if(bPhaseRally?(Role==3||Role==5||Role==255):!(Role==0||((Role==1||Role==4)&&(bOwn||G.Phase!=1))))continue;
+  if(BattleTactics::GroupStrengthEnabled())if(const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);!S||!GroupSquadPresent(*S))continue;
+  Members.Add(SID);
+ }
+ Members.Sort();
+ const int32 Index=Members.Find(SquadID);if(Index==INDEX_NONE)return false;
+ const FVector Advance=(AreaHome(1-Team)-AreaHome(Team)).GetSafeNormal2D();
+ TSet<FIntPoint> Posted;for(const auto& P:FrontPosts)Posted.Add(BattleSectors::Cell(P.Value));
+ struct FCand{FIntPoint Cell;double Score;};TArray<FCand> Cands;
+ for(int32 DX=-1;DX<=1;++DX)for(int32 DY=-1;DY<=1;++DY)
+ {
+  const FIntPoint C(A.X+DX,A.Y+DY);if(!BattleSectors::Valid(C))continue;
+  const char Kind=BattleFieldLayout::SectorKind(GetWorld(),C);if(BattleSectors::Impassable(Kind)||Kind=='R')continue;
+  const double Along=FVector::DotProduct(BattleSectors::Center(C)-BattleSectors::Center(A),Advance)/BattleSectors::Size;
+  if(Along>.5)continue; // beyond the place, on the enemy's side
+  const double CoverScore=Kind=='H'||Kind=='W'?3.:Kind=='T'||Kind=='^'?2.:Kind=='J'||Kind=='B'||Kind=='S'?1.:0.;
+  double SectorScore=CoverScore+(DX==0&&DY==0?(bAnchorFirst?100.:1.5):Along>-.5?1.:.3)-(Posted.Contains(C)?2.:0.);
+  Cands.Add({C,SectorScore});
+ }
+ if(Cands.IsEmpty())return false;
+ Cands.Sort([](const FCand& L,const FCand& R){return L.Score!=R.Score?L.Score>R.Score:L.Cell.X!=R.Cell.X?L.Cell.X<R.Cell.X:L.Cell.Y<R.Cell.Y;});
+ const FIntPoint Cell=Cands[Index%Cands.Num()].Cell;
+ Out=Cell==A?Anchor:BattleSectors::Center(Cell);Out.Z=Anchor.Z;
+ return true;
+}
+
 bool UBattleMatch::GroupOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const
 {
  const int32 ID=GroupOf(SquadID);const auto* G=ID!=INDEX_NONE?Groups.Find(ID):nullptr;
@@ -566,7 +613,9 @@ bool UBattleMatch::GroupOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOr
  {
   // Gather at the rally point, fighting what comes within range on the way and there (a Defend order would only watch the rally
   // point itself); a mortar team keeps its standoff from known enemies.
-  Center=bMortar?AreaArtilleryPost(Team,SquadID,G->Rally):G->Rally;Order=EBattleOrder::AttackMove;return true;
+  Center=bMortar?AreaArtilleryPost(Team,SquadID,G->Rally):G->Rally;Order=EBattleOrder::AttackMove;
+  if(!bMortar)GroupSectorPost(*G,Team,SquadID,G->Rally,true,false,Center); // trial -BattleGroupSectors: one sector per squad
+  return true;
  }
  // Always an attack-move order: at a point the team holds, the group's squads stay there and fight what comes within range (a Defend
  // order only watches DefenseRadius around the place).
@@ -580,7 +629,11 @@ bool UBattleMatch::GroupOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOr
   Center=AreaTankPost(Team,G->Objective,GetDefault<UBattleTuning>()->GroupTankBack);
   if(S->bHasMission&&FVector::Dist2D(S->MissionDestination,Center)<2500.)Center=S->MissionDestination;
  }
- else Center=bMortar?AreaArtilleryPost(Team,SquadID,Point):Point;
+ else
+ {
+  Center=bMortar?AreaArtilleryPost(Team,SquadID,Point):Point;
+  if(!bMortar)GroupSectorPost(*G,Team,SquadID,Point,false,!bOwn,Center); // trial -BattleGroupSectors: one sector per squad, from the side
+ }
  return true;
 }
 

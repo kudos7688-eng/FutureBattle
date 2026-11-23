@@ -67,6 +67,7 @@ void UBattleMatch::UpdateScoutReports()
    Perception->RayOwn[1],Perception->RayOwn[0],Perception->RaySquad[1],Perception->RaySquad[0],Perception->RayShared[1],Perception->RayShared[0],Perception->RayUnknown[1],Perception->RayUnknown[0],Perception->RayKnownPairs);
  if(Perception->RayWindow>=0&&FMath::FloorToInt(Now/60.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/60.))
  {
+  if(UBattlePerception::SquadKnowledgeMode(0)||UBattlePerception::SquadKnowledgeMode(1))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SQUAD_KNOWLEDGE t=%.0f queued=%lld delivered=%lld peak=%lld heard_reads=%lld"),Now,Perception->SquadReportsQueued,Perception->SquadReportsDelivered,Perception->SquadReportsPeak,Perception->SquadKnowsHeard);
   if(Perception->SectorSightSkipped>0)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SECTOR_SIGHT t=%.0f skipped=%lld"),Now,Perception->SectorSightSkipped);
   for(int32 Z=0;Z<3;++Z)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SIGHT_RAYS_ZONE t=%.0f zone=%d other_seen=%lld other_blocked=%lld rifle_member_seen=%lld rifle_member_blocked=%lld"),Now,Z,
    Perception->RayZone[Z][0][1],Perception->RayZone[Z][0][0],Perception->RayZone[Z][1][1],Perception->RayZone[Z][1][0]);

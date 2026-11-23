@@ -45,7 +45,7 @@ struct FBattleNoticeLayout
 // Since 2026-11-23 the ten purchase buttons are one "購入 [B]" button (index 6) that opens the purchase panel.
 struct FBattleCommandBarLayout
 {
- static constexpr int32 Count=7;
+ static constexpr int32 Count=8; // 7: draw the front line (user 2026-11-23: Ctrl + right drag never reached the game in test play)
  struct FButton { FVector2D Origin=FVector2D::ZeroVector; float Width=0, Scale=.85f; FString Caption; };
  FButton Buttons[Count];
  float ButtonHeight=26, PanelTop=0, SummaryY=0;
@@ -65,7 +65,7 @@ struct FBattleCommandBarLayout
 struct FBattlePlanPanelLayout
 {
  // Kind: 0 text, 1 section role, 2 reservation one up, 3 reservation cancel, 4 delegation level, 5 reserve down, 6 reserve up,
- // 7 type allowed, 8 close. Tone: buttons 0 plain, 1 allowed, 2 denied, 3 chosen; text 0 plain, 4 title, 5 muted.
+ // 7 type allowed, 8 close, 9 reservation destination, 10 attack group follows the focus. Tone: buttons 0 plain, 1 allowed, 2 denied, 3 chosen; text 0 plain, 4 title, 5 muted.
  struct FItem { FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector; uint8 Kind=0, Tone=0; int32 Index=0; FString Text; };
  TArray<FItem> Items; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector;
  static FBattlePlanPanelLayout Make(FVector2D View,const UWorld* World);
@@ -79,21 +79,31 @@ struct FBattlePlanPanelLayout
 
 // Purchase panel (2026-11-23, user request: with more squad types the ten purchase keys and buttons became hard to use). In the area
 // battle's tactical view B (pad: D-pad left) or the command bar's purchase button opens it above the bottom panel: one row per squad type
-// with its key, size, cost, how many the own side has (and the limit), what it is for and whether it can be bought now. A click on a row
-// buys that type through the same path as its key (ABattleController::BuyArea, a reservation with -BattleHireReserve=1); the panel stays
-// open for further purchases. The number keys still buy directly. Shared by Canvas and input (BattleBuyPanel.cpp).
+// with its key, size, cost, how many the own side has (and the limit), how many are reserved, what it is for and whether it can be bought
+// now. A click on a row buys that type through the same path as its key (ABattleController::BuyArea); the panel stays open for further
+// purchases. The number keys still buy directly. Reservations (user request 2026-11-23 evening; -BattleHireReserve, default 1): a type
+// that cannot be bought now (resources, squad slots, type limit) is reserved instead and bought by UBattleMatch::UpdateHireQueue when it
+// can; a right click on a row (pad X) cancels that type's newest reservation, and the panel lists the own reservations in order with
+// buttons to move one forward and to cancel it. Shared by Canvas and input (BattleBuyPanel.cpp).
 struct FBattleBuyPanelLayout
 {
- // Block: 0 can be bought now, 1 waits for resources or a limit (reservable with -BattleHireReserve=1), 2 not now (e.g. before combat).
- struct FRow { uint8 Type=0; int32 Block=0; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector; FString Key, Name, Members, Cost, Owned, Role, State; };
- TArray<FRow> Rows; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector, CloseOrigin=FVector2D::ZeroVector;
- FString Title, Footer; float HeaderY=0, FooterY=0;
- static constexpr float RowHeight=26.f, CloseSize=24.f, Width=700.f;
+ // Block: 0 can be bought now, 1 waits for resources or a limit (a click reserves it), 2 not now (e.g. before combat).
+ struct FRow { uint8 Type=0, Grade=0; int32 Block=0, Reserved=0; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector; FString Key, Name, Members, Cost, Owned, Role, State; };
+ // One own reservation in order (Index = position in the own order, 0 first): its text, the "move forward" and "cancel" boxes.
+ struct FChip { int32 Index=0; bool bByAI=false; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector, UpOrigin=FVector2D::ZeroVector, CancelOrigin=FVector2D::ZeroVector; FString Text; };
+ TArray<FRow> Rows; TArray<FChip> Chips; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector, CloseOrigin=FVector2D::ZeroVector;
+ FString Title, Footer, QueueTitle; float HeaderY=0, QueueY=0, FooterY=0; bool bReserve=false;
+ static constexpr float RowHeight=26.f, CloseSize=24.f, Width=760.f, ChipHeight=22.f, ButtonSize=20.f;
+ static constexpr int32 ChipsPerLine=4;
  // Column offsets from the panel's left edge (the state column is right-aligned to the panel width).
- static constexpr float ColKey=14.f, ColName=52.f, ColMembers=164.f, ColCost=222.f, ColOwned=276.f, ColRole=346.f, StateWidth=164.f;
+ static constexpr float ColKey=14.f, ColName=52.f, ColMembers=164.f, ColCost=222.f, ColOwned=276.f, ColReserved=340.f, ColRole=392.f, StateWidth=176.f;
  // bPad: the footer names the pad buttons. RowCount: the number of rows (one per squad type the player can buy).
  static FBattleBuyPanelLayout Make(FVector2D View,const UWorld* World,bool bPad=false);
  static int32 RowCount();
+ // Japanese name of a squad type (as in the rows), and why a reservation waits, from UBattleMatch::ReserveHire's message (resources short by
+ // how much, squad slots, the type's limit, the same type ahead, resources saved for an older reservation).
+ static const TCHAR* TypeName(int32 Type);
+ static FString WaitText(const class UBattleMatch* Match,uint8 Type,const FString& Why);
  bool Contains(FVector2D P) const {return P.X>=Origin.X&&P.X<Origin.X+Size.X&&P.Y>=Origin.Y&&P.Y<Origin.Y+Size.Y;}
  int32 RowAt(FVector2D P) const
  {
@@ -101,6 +111,12 @@ struct FBattleBuyPanelLayout
   return INDEX_NONE;
  }
  bool CloseAt(FVector2D P) const {return P.X>=CloseOrigin.X&&P.X<CloseOrigin.X+CloseSize&&P.Y>=CloseOrigin.Y&&P.Y<CloseOrigin.Y+CloseSize;}
+ // The chip whose "move forward" (bCancel false) or "cancel" (bCancel true) box is at P, or INDEX_NONE.
+ int32 ChipButtonAt(FVector2D P,bool bCancel) const
+ {
+  for(int32 I=0;I<Chips.Num();++I){const FVector2D O=bCancel?Chips[I].CancelOrigin:Chips[I].UpOrigin;if(P.X>=O.X&&P.X<O.X+ButtonSize&&P.Y>=O.Y&&P.Y<O.Y+ButtonSize)return I;}
+  return INDEX_NONE;
+ }
 };
 
 UCLASS()
@@ -181,12 +197,14 @@ public:
 	void HireMortar();
 	void HireSPGun();
 	// Area purchase key: a plain purchase, or with -BattleHireReserve=1 a purchase reservation (BattleArea.cpp ReserveHire).
-	void BuyArea(uint8 SquadType);
+	void BuyArea(uint8 SquadType,uint8 Grade=0); // Grade 1 / 2: an elite platoon / sniper team (BattleArms.cpp), bought directly
 	// -BattleHireReserve=1: Backspace cancels the newest own reservation, = moves it to the front.
 	void CancelNewestReservation();
 	void NewestReservationToFront();
 	void HireExo();
 	void HireSupply();
+	void HireElite(); // = key: an elite platoon (-BattleElite=1; BattleArms.cpp)
+	void HireSniper(); // ] key: a sniper team (-BattleSniperTeam=1; BattleArms.cpp)
 	void StartMatch();
 	void SaveMatch();
 	void LoadMatch();
@@ -204,6 +222,8 @@ public:
 	void BuyKey();
 	// Buys the type of the panel row Row (the same path as its number key); false when the panel has no such row.
 	bool BuyFromPanel(int32 Row);
+	// Cancels the own newest reservation of the squad type (the panel's right click, pad X); false when there is none.
+	bool CancelReservationOfType(uint8 Type);
 	// Play-speed toggle (tactical view, standalone only): [.] cycles x1/x2/x4 via global time dilation; direct control always runs at x1.
 	void CycleGameSpeed();
 	// Route choice (BattlePlayerRoutes.cpp): the next of automatic, centre, north, south for the selected squads.
@@ -218,6 +238,7 @@ public:
 	void EndPathDraw();
 	bool IsDrawingPath() const { return bPathDraw; }
 	bool IsDrawingFrontLine() const { return bPathDraw && bFrontDraw; } // Ctrl + right drag: the front line (UBattleMatch::SetDrawnFrontLine)
+	bool IsFrontDrawArmed() const { return bFrontDrawArmed; }
 	const TArray<FVector>& GetDrawnPath() const { return DrawnPath; }
 	float PanSpeed() const;
 	bool TryVault(ABattleUnit* Unit);
@@ -294,7 +315,7 @@ private:
 	bool bTactical = true;
 	int32 GameSpeed = 1;
 	bool bTriggerHeld = false;
-	bool bPathDraw = false, bFrontDraw = false; TArray<FVector> DrawnPath; double DrawnLength = 0; FVector2D PathScreenStart = FVector2D::ZeroVector;
+	bool bPathDraw = false, bFrontDraw = false, bFrontDrawArmed = false; /* armed: command button 7, the next right drag is the front line */ TArray<FVector> DrawnPath; double DrawnLength = 0; FVector2D PathScreenStart = FVector2D::ZeroVector;
 	UPROPERTY() TObjectPtr<ABattleUnit> VaultUnit;
 	FVector VaultFrom = FVector::ZeroVector, VaultTo = FVector::ZeroVector; double VaultPeak = 0; float VaultTime = 0, VaultDuration = .4f;
 	int32 DelegationPress = INDEX_NONE;
@@ -311,6 +332,8 @@ private:
  int32 BuyPanelRow=0;
  TSet<FKey> BuyPadKeys;
  FVector2D LastBuyPointer=FVector2D(-1,-1);
+ // Reservations of the own side already announced as bought (UBattleMatch::HireQueueBought[0]).
+ int32 SeenReservationBuys=0;
  bool BuyPanelInput(const FInputKeyEventArgs& Params);
  bool HandleBuyPanelPad(const FInputKeyEventArgs& Params);
  void UpdateBuyPanel();
