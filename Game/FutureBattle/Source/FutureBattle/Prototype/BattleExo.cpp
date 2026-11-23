@@ -159,7 +159,7 @@ bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
   if(auto* Paint=Body->CreateDynamicMaterialInstance(0))
   {
    Paint->SetVectorParameterValue(TEXT("VisorColor"),U->Team==0?FLinearColor(.25f,2.2f,4.f):FLinearColor(4.f,.35f,.25f));
-   Paint->SetVectorParameterValue(TEXT("PaintColor"),U->Team==0?FLinearColor(.5f,.52f,.55f):FLinearColor(.3f,.28f,.22f));
+   Paint->SetVectorParameterValue(TEXT("PaintColor"),U->Team==0?FLinearColor(.3f,.32f,.35f):FLinearColor(.28f,.21f,.11f));
    Paint->SetVectorParameterValue(TEXT("AccentColor"),U->Team==0?FLinearColor(.05f,.2f,.5f):FLinearColor(.5f,.06f,.04f));
   }
   Back=NewObject<UStaticMeshComponent>(A);Back->SetupAttachment(Body,TEXT("spine_05"));
