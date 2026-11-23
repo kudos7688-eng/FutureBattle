@@ -350,18 +350,27 @@
 			if(BattleMapJ::bDenseCover)
 			{
 				// Map K: a yard wall 2.5m high along every border without a road, from corner to corner (short of a crossing road), with
-				// two doorways of 3m at places that differ from border to border. Generation 3 left 5m open at each corner: that made a
+				// two doorways of 6m (3m in generation 4) at places that differ from border to border. Generation 3 left 5m open at each corner: that made a
 				// lane 10m wide along every sector line, and more than half of the shots beyond 100m went along those lanes or
 				// diagonally through the corners (mk3s-K-s7 and s43-swap, -BattleShotLog).
 				UseJ((Pick&1)?BrickMatJ:GreyJ);
 				auto CrossK=[&](double End){return BattleMapJ::OnRoad(!bAlongX,End,At-100.)||BattleMapJ::OnRoad(!bAlongX,End,At+100.);};
 				const double Lo=Mid-2500.+(CrossK(Mid-2500.)?500.:0.),Hi=Mid+2500.-(CrossK(Mid+2500.)?500.:0.);
 				const double DoorA=Mid-1700.+400.*((Pick>>1)%3),DoorB=Mid+700.+400.*((Pick>>3)%3);
-				const double Ends[3][2]={{Lo,DoorA-150.},{DoorA+150.,DoorB-150.},{DoorB+150.,Hi}};
+				const double Ends[3][2]={{Lo,DoorA-300.},{DoorA+300.,DoorB-300.},{DoorB+300.,Hi}};
 				for(const auto& E:Ends)
 				{
-					const double M2=(E[0]+E[1])*.5,L2=E[1]-E[0];
+					const double M2=(E[0]+E[1])*.5,L2=E[1]-E[0];if(L2<50.)continue;
 					if(bAlongX)Emit(TEXT("YardHighWall"),M2,At,L2,60,250);else Emit(TEXT("YardHighWall"),At,M2,60,L2,250);
+				}
+				// Generation 5: a blind wall 14m long stands 4m behind each doorway (on one side of the border), so a soldier walks round
+				// it but nobody sees straight through. In generation 4 three in four of the shots beyond 100m passed through a doorway
+				// (mk5-K-off-s7 and s43: the crossing places of the firing lines sit exactly in the doorways). The doorways are 6m wide
+				// because six in ten of the movement stalls of generation 4 were a crowd at one 3m doorway beside the avenue.
+				const double SideA=(!bAlongX&&FMath::Abs(At)<1.)?1.:((Pick>>5)&1)?1.:-1.;const double Doors[2][2]={{DoorA,SideA},{DoorB,(!bAlongX&&FMath::Abs(At)<1.)?1.:-SideA}};
+				for(const auto& D:Doors)
+				{
+					if(bAlongX)Emit(TEXT("YardBlind"),D[0],At+D[1]*460.,1400,60,250);else Emit(TEXT("YardBlind"),At+D[1]*460.,D[0],60,1400,250);
 				}
 				return;
 			}
