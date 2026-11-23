@@ -1249,14 +1249,18 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     Check(bOpen&&bLayout&&bMoved&&bClosed,*FString::Printf(TEXT("purchase panel opens, hits its rows, fits and takes the pad (open %d, layout %d, moved %d, closed %d)"),bOpen?1:0,bLayout?1:0,bMoved?1:0,bClosed?1:0)); }
   // Purchase panel reservations (default on since 2026-11-23): the tank row, which cannot be bought here (no resources), is reserved through
   // the panel without buying; the panel counts it in the row and lists it as a chip whose cancel box is hit; cancelling that type removes it.
-  { auto* SM=GetWorld()->GetSubsystem<UBattleMatch>();const int32 Q0=SM->HireQueueOf(0).Num(),Active0=SM->ActiveSquads(0);int32 TankRow=INDEX_NONE;
+  // The checks above leave the match finished; purchases need the combat phase, so it is set for this check and put back after.
+  { auto* SM=GetWorld()->GetSubsystem<UBattleMatch>();const int32 Credits0=SM->Credits[0];SM->Credits[0]=0;const EBattleMatchPhase Phase0=SM->Phase;SM->Phase=EBattleMatchPhase::Combat;
+    const int32 Q0=SM->HireQueueOf(0).Num(),Active0=SM->ActiveSquads(0);int32 TankRow=INDEX_NONE;
     {const auto L0=FBattleBuyPanelLayout::Make(FVector2D(1920,1080),GetWorld());for(int32 I=0;I<L0.Rows.Num();++I)if(L0.Rows[I].Type==BattleSquadType::Tank)TankRow=I;}
-    const bool bCalled=TankRow>=0&&PC->BuyFromPanel(TankRow);
+    const bool bCalled=TankRow>=0&&PC->BuyFromPanel(TankRow);const FString Why=SM->LastMessage;const int32 Q1=SM->HireQueueOf(0).Num();
     const auto L=FBattleBuyPanelLayout::Make(FVector2D(1920,1080),GetWorld());
     const bool bQueued=SM->HireQueueOf(0).Num()==Q0+1&&SM->ActiveSquads(0)==Active0&&L.Chips.Num()==Q0+1&&L.Rows.IsValidIndex(TankRow)&&L.Rows[TankRow].Reserved>=1
      &&L.ChipButtonAt(L.Chips.Last().CancelOrigin+FVector2D(L.ButtonSize*.5f),true)==L.Chips.Num()-1;
     const bool bCancelled=PC->CancelReservationOfType(BattleSquadType::Tank)&&SM->HireQueueOf(0).Num()==Q0;
-    Check(UBattleMatch::HireReserveOn()&&bCalled&&bQueued&&bCancelled,*FString::Printf(TEXT("purchase panel reserves what cannot be bought and cancels it (on %d, called %d, queued %d, cancelled %d)"),UBattleMatch::HireReserveOn()?1:0,bCalled?1:0,bQueued?1:0,bCancelled?1:0)); }
+    SM->Credits[0]=Credits0;const int32 PhaseUsed=int32(SM->Phase);SM->Phase=Phase0;
+    Check(UBattleMatch::HireReserveOn()&&bCalled&&bQueued&&bCancelled,*FString::Printf(TEXT("purchase panel reserves what cannot be bought and cancels it (on %d, called %d, queued %d, cancelled %d; queue %d->%d, active %d->%d, phase %d, area %d, why '%s')"),
+     UBattleMatch::HireReserveOn()?1:0,bCalled?1:0,bQueued?1:0,bCancelled?1:0,Q0,Q1,Active0,SM->ActiveSquads(0),PhaseUsed,SM->bArea?1:0,*Why)); }
   // Gamepad: tactical pad buttons read as the same keys; a simulated pad press marks the pad as the active device.
   { const bool Map=PC->GamepadToKey(EKeys::Gamepad_FaceButton_Top)==EKeys::T&&PC->GamepadToKey(EKeys::Gamepad_FaceButton_Bottom)==EKeys::LeftMouseButton&&PC->GamepadToKey(EKeys::Gamepad_FaceButton_Left)==EKeys::RightMouseButton;
     PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_LeftThumbstick,IE_Pressed,1.f));PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_LeftThumbstick,IE_Released,0.f));
