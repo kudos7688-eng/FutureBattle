@@ -3,6 +3,7 @@
 // bought now (-BattleHireReserve, default 1). See FBattleBuyPanelLayout.
 #include "BattleController.h"
 #include "BattleMatch.h"
+#include "BattleArms.h"
 #include "BattleState.h"
 #include "BattleTactics.h"
 #include "BattleGameMode.h"
@@ -13,8 +14,9 @@
 
 namespace
 {
- struct FBuyEntry { uint8 Type; const TCHAR* Key; const TCHAR* Name; const TCHAR* Role; };
- // Row order = number-key order (2 .. 0, -); those keys still buy directly.
+ struct FBuyEntry { uint8 Type; const TCHAR* Key; const TCHAR* Name; const TCHAR* Role; uint8 Grade=0; };
+ // Row order = number-key order (2 .. 0, -); those keys still buy directly. The elite platoon and the sniper team (BattleArms.cpp,
+ // Grade 1 / 2) have no key and show only with their trial switches (-BattleElite=1 / -BattleSniperTeam=1).
  const FBuyEntry BuyEntries[]=
  {
   {BattleSquadType::Rifle,TEXT("2"),TEXT("小銃小隊"),TEXT("歩兵の主力")},
@@ -27,7 +29,10 @@ namespace
   {BattleSquadType::SPGun,TEXT("9"),TEXT("自走砲"),TEXT("遠くへ曲射する車両")},
   {BattleSquadType::Exo,TEXT("0"),TEXT("外骨格兵"),TEXT("盾と対戦車弾を持つ1人")},
   {BattleSquadType::Supply,TEXT("-"),TEXT("補給車"),TEXT("近くの部隊に弾を補給")},
+  {BattleSquadType::Rifle,TEXT(""),TEXT("精鋭小隊"),TEXT("8人の役割分担・手りゅう弾"),1},
+  {BattleSquadType::Scout,TEXT(""),TEXT("狙撃班"),TEXT("狙撃手と観測手の2人"),2},
  };
+ bool Shown(const FBuyEntry& E){return E.Grade==1?BattleArms::EliteEnabled():E.Grade==2?BattleArms::SniperEnabled():true;}
  // Per-type limit of the own side (UBattleMatch::HireBlock); -1 = only the active squad limit.
  int32 TypeLimit(uint8 Type)
  {
@@ -45,10 +50,10 @@ namespace
   default: return -1;
   }
  }
- int32 TypeCost(uint8 Type){return Type==BattleSquadType::Rifle?BattleTactics::AreaHire().Cost:BattleSquadType::AreaCost(Type);}
+ int32 TypeCost(uint8 Type,uint8 Grade=0){return Grade==1?BattleArms::EliteCost():Grade==2?BattleArms::SniperCost():Type==BattleSquadType::Rifle?BattleTactics::AreaHire().Cost:BattleSquadType::AreaCost(Type);}
 }
 
-int32 FBattleBuyPanelLayout::RowCount(){return UE_ARRAY_COUNT(BuyEntries);}
+int32 FBattleBuyPanelLayout::RowCount(){int32 N=0;for(const auto& E:BuyEntries)N+=Shown(E);return N;}
 
 const TCHAR* FBattleBuyPanelLayout::TypeName(int32 Type)
 {
@@ -89,20 +94,25 @@ FBattleBuyPanelLayout FBattleBuyPanelLayout::Make(FVector2D View,const UWorld* W
  if(L.bReserve)L.Title+=FString::Printf(TEXT(" ／ 予約 %d/%d"),Mine.Num(),UBattleMatch::HireQueueMax);
  float Y=L.Origin.Y+8.f+CloseSize+4.f;
  L.HeaderY=Y+5.f;Y+=RowHeight;
- for(int32 I=0;I<N;++I)
+ // Elite platoons are rifle squads and sniper teams scout pairs (Grade 1 / 2): each row counts only its own grade.
+ auto Graded=[M](uint8 Type,uint8 Grade){int32 C=0;for(const auto& P:M->GetWorld()->GetSubsystem<UBattleState>()->GetSquads())C+=P.Value.Team==0&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==Type&&P.Value.Grade==Grade;return C;};
+ for(const FBuyEntry& E:BuyEntries)
  {
-  const FBuyEntry& E=BuyEntries[I];
-  FRow R;R.Type=E.Type;R.Key=E.Key;R.Name=E.Name;R.Role=E.Role;
+  if(!Shown(E))continue;
+  FRow R;R.Type=E.Type;R.Grade=E.Grade;R.Key=E.Key;R.Name=E.Name;R.Role=E.Role;
   R.Origin=FVector2D(L.Origin.X+6.f,Y);R.Size=FVector2D(L.Size.X-12.f,RowHeight-2.f);
   R.Members=BattleSquadType::IsVehicle(E.Type)?FString(TEXT("1両")):FString::Printf(TEXT("%d人"),BattleSquadType::Members(E.Type));
-  const int32 Cost=TypeCost(E.Type);R.Cost=FString::FromInt(Cost);
-  const int32 Have=M->ActiveOfType(0,E.Type),Limit=TypeLimit(E.Type);
+  const int32 Cost=TypeCost(E.Type,E.Grade);R.Cost=FString::FromInt(Cost);
+  const bool bGraded=E.Grade>0||((E.Type==BattleSquadType::Rifle||E.Type==BattleSquadType::Scout)&&(BattleArms::EliteEnabled()||BattleArms::SniperEnabled()));
+  const int32 Have=bGraded?Graded(E.Type,E.Grade):M->ActiveOfType(0,E.Type),Limit=E.Grade==2?BattleArms::SniperLimit:E.Grade==1?-1:TypeLimit(E.Type);
   R.Owned=Limit>=0?FString::Printf(TEXT("%d/%d"),Have,Limit):FString::FromInt(Have);
-  for(const int32 Q:Mine)R.Reserved+=M->Area.HireQueue[Q].Type==E.Type;
-  FString Why;R.Block=M->HireBlock(0,E.Type,Why);
+  if(E.Grade==0)for(const int32 Q:Mine)R.Reserved+=M->Area.HireQueue[Q].Type==E.Type;
+  FString Why;R.Block=M->HireBlock(0,E.Type,Why,E.Grade);
+  // The elite platoon and the sniper team (Grade 1 / 2) are bought directly, never reserved.
+  const bool bReserveRow=L.bReserve&&E.Grade==0;
   // What a click does now (UBattleMatch::ReserveHire): buy, or queue behind the same type / behind a reservation saving resources.
-  if(R.Block==0)R.State=!L.bReserve?FString(TEXT("購入できる")):R.Reserved>0?FString(TEXT("予約に入る（同じ兵種の後）")):Starved>=0?FString(TEXT("予約に入る（資源をためている）")):FString(TEXT("購入できる"));
-  else{const FString Wait=WaitText(M,E.Type,Why);R.State=R.Block==1&&L.bReserve?FString::Printf(TEXT("予約できる（%s）"),*Wait):Wait;}
+  if(R.Block==0)R.State=!bReserveRow?FString(TEXT("購入できる")):R.Reserved>0?FString(TEXT("予約に入る（同じ兵種の後）")):Starved>=0?FString(TEXT("予約に入る（資源をためている）")):FString(TEXT("購入できる"));
+  else{const FString Wait=E.Grade>0&&Why.Contains(TEXT("resources"))?FString::Printf(TEXT("資源 あと%d"),FMath::Max(1,Cost-M->Credits[0])):WaitText(M,E.Type,Why);R.State=R.Block==1&&bReserveRow?FString::Printf(TEXT("予約できる（%s）"),*Wait):Wait;}
   L.Rows.Add(MoveTemp(R));Y+=RowHeight;
  }
  if(L.bReserve)
@@ -156,7 +166,7 @@ bool ABattleController::BuyFromPanel(int32 Row)
  int32 W=0,H=0;GetViewportSize(W,H);
  const auto L=FBattleBuyPanelLayout::Make(FVector2D(W,H),GetWorld());
  if(!L.Rows.IsValidIndex(Row))return false;
- BuyPanelRow=Row;BuyArea(L.Rows[Row].Type);
+ BuyPanelRow=Row;BuyArea(L.Rows[Row].Type,L.Rows[Row].Grade);
  return true;
 }
 
@@ -199,7 +209,7 @@ bool ABattleController::BuyPanelInput(const FInputKeyEventArgs& Params)
   return true;
  }
  if(const int32 C=L.ChipButtonAt(P,false);C!=INDEX_NONE){if(L.Chips[C].Index>0)Match->MoveHire(0,L.Chips[C].Index,-1);return true;}
- if(const int32 Row=L.RowAt(P);Row!=INDEX_NONE){BuyPanelRow=Row;BuyArea(L.Rows[Row].Type);}
+ if(const int32 Row=L.RowAt(P);Row!=INDEX_NONE){BuyPanelRow=Row;BuyArea(L.Rows[Row].Type,L.Rows[Row].Grade);}
  return true;
 }
 

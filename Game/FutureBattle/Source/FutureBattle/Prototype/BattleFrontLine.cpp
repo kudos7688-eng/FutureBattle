@@ -551,9 +551,12 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
     const int32 LastRow=Last?RowOf(*Last):0;
     const int32 Shift=Last&&OldHold.IsValidIndex(LastRow)&&Line.IsValidIndex(LastRow)?Line[LastRow]-OldHold[LastRow]:0;
     const FVector Expected=Last?BattleSectors::Center(FrontCell(Team,FMath::Clamp(ColOf(*Last)+Shift,0,Cols-1),LastRow)):FVector::ZeroVector;
+    // Stage 7 reservation destination: a bought squad sent to a section takes a post there first.
+    const int32* Wish=Last?nullptr:FrontSectionWish.Find(Present[I].SID);
+    const auto& WishPlan=FrontPlanState[Team];
     for(int32 J=0;J<NB;++J)
      Pairs.Add({Last?1.e13*FMath::Abs(SlotRow[J]-LastRow)+(bLead!=(J<FrontCount)?1.e11:0.)+FVector::DistSquared2D(Expected,BattleSectors::Center(Cells[J]))
-      :1.e15+FVector::DistSquared2D(R->Position(S->LeaderUnitID),BattleSectors::Center(Cells[J])),I,J});
+      :1.e15+(Wish&&!(WishPlan.SectionOfRow.IsValidIndex(SlotRow[J])&&WishPlan.SectionOfRow[SlotRow[J]]==*Wish)?1.e14:0.)+FVector::DistSquared2D(R->Position(S->LeaderUnitID),BattleSectors::Center(Cells[J])),I,J});
    }
    Pairs.Sort([](const FPair& A,const FPair& B){return A.D!=B.D?A.D<B.D:A.I!=B.I?A.I<B.I:A.J<B.J;});
    for(const auto& Pair:Pairs)if(!Placed[Pair.I]&&Owner[Pair.J]==INDEX_NONE){Owner[Pair.J]=Pair.I;Placed[Pair.I]=true;}
@@ -583,6 +586,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
   {
    const int32 SID=Present[Owner[J]].SID;
    FrontPosts.Add(SID,BattleSectors::Center(Cells[J]));
+   FrontSectionWish.Remove(SID); // the first post was given
    Posts+=FString::Printf(TEXT(" %d:%c%d%s"),SID,TCHAR('A'+Cells[J].X),1+Cells[J].Y,Pushes[J]?TEXT("+"):TEXT(""));
   }
   if(!Gaps.IsEmpty())Posts+=FString::Printf(TEXT(" gaps=%s"),*Gaps); // rows left empty (1-based)
@@ -614,6 +618,11 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    FreeLastPos.Add(P.Key,Now);
   }
   for(auto It=FreeLastPos.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||(S->Team==Team&&!Seen.Contains(It.Key()))){FreeLastStep.Remove(It.Key());It.RemoveCurrent();}
+  // Crowding (log only, crowd=): the team's infantry squads whose leader shares a sector with another of them, summed per update.
+  TMap<FIntPoint,int32> PerCell;
+  for(const auto& P:Store->GetSquads())if(P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&!BattleSquadType::IsVehicle(P.Value.SquadType)&&!BattleSquadType::IsArtillery(P.Value.SquadType))
+   if(const auto* L=Store->Find(P.Value.LeaderUnitID);L&&L->IsAlive())++PerCell.FindOrAdd(BattleSectors::Cell(R->Position(P.Value.LeaderUnitID)));
+  for(const auto& C:PerCell)SectorCrowd[Team]+=FMath::Max(0,C.Value-1);
  }
  if(Reserve()&&FrontID!=INDEX_NONE&&Line.Num()==Rows)
  {
@@ -661,7 +670,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  {
   FrontLineLogAt[Team]=Elapsed+LogInterval;
   FString Cells;for(int32 Y=0;Y<Rows;++Y)Cells+=FString::Printf(TEXT("%s%d"),Y?TEXT(","):TEXT(""),Line[Y]);
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_LINE time=%.0f team=%d line=%s group=%d free_rev=%d free_moved_m=%.0f posts=%s"),Elapsed,Team,*Cells,FrontID,FreeReversals[Team],FreeMoved[Team]/100.,Posts.IsEmpty()?TEXT(" none"):*Posts);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_LINE time=%.0f team=%d line=%s group=%d free_rev=%d free_moved_m=%.0f crowd=%d posts=%s"),Elapsed,Team,*Cells,FrontID,FreeReversals[Team],FreeMoved[Team]/100.,SectorCrowd[Team],Posts.IsEmpty()?TEXT(" none"):*Posts);
  }
 }
 
@@ -1346,7 +1355,27 @@ bool UBattleMatch::FrontPlanFocus2On(int32 Team) const
 int32 UBattleMatch::GroupFocusPoint(const FBattleGroup& G) const
 {
  if(G.bFocus2&&G.Team>=0&&G.Team<2)return FrontPlanState[G.Team].Focus2>=0?FrontPlanState[G.Team].Focus2:INDEX_NONE;
+ // Stage 7: the second following player group takes the second focus when there is one.
+ if(PlayerGroupFollowsFocus(G)&&Objectives.IsValidIndex(FrontPlanState[G.Team].Focus2))
+ {
+  int32 Rank=0;for(const auto& P:Groups)if(P.Key<G.ID&&PlayerGroupFollowsFocus(P.Value))++Rank;
+  if(Rank==1)return FrontPlanState[G.Team].Focus2;
+ }
  return StrategyFocusPoint(G.Team);
+}
+
+bool UBattleMatch::PlayerGroupFollowsFocus(const FBattleGroup& G) const
+{
+ return G.bPlayer&&G.Kind==0&&G.bFollowFocus&&PlayerRolesOn(G.Team)&&GroupAIRun(G);
+}
+
+bool UBattleMatch::SetGroupFollowFocus(int32 GroupID,bool bFollow)
+{
+ FBattleGroup* G=Groups.Find(GroupID);
+ if(!G||G->Team!=0||!G->bPlayer||G->Kind!=0)return false;
+ G->bFollowFocus=bFollow;
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_FOLLOW_FOCUS group=%d follow=%d t=%.1f"),GroupID,bFollow?1:0,Elapsed);
+ return true;
 }
 
 // ---- Front plan, stage 7: the player's section roles (Docs/design-front-strategy.md 6; trial -BattleFrontPlanPlayer=1, default 0) ----
