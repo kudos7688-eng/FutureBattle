@@ -152,6 +152,7 @@ BattleVATDisplay | 遠距離の兵を VAT で描く表示
 BattleVATMaterial | VAT 用マテリアルの作成（エディタ用。宣言は BattleVATBake.h）
 BattleVehicle | 車両の設定、操舵、砲塔、車両どうしの視認（UBattleLeaderRuntime の一部）
 BattleVehicleTactics | 車両の戦術：車両への脅威の見積もり、装甲車の行き先（UBattleMatch の一部）
+BattleATHunt | 試験切替：対戦車兵の距離、装甲車が見た対戦車兵の排除要請、装甲車が歩兵の前に出る盾（UBattleMatch の一部）
 BattleVehicleNavMesh | 車両専用のナビメッシュの型（歩兵用と分けるため）
 BattleViewVisibility | 視点ごとの描画の切替（T5 試験用）
 BattleWarScore | 戦果点（UBattleMatch の一部）
@@ -182,4 +183,4 @@ BattleCompositionRuntime | 編成AIと観測・収入窓・既存購入実行の
 BattleCompositionState | CombatStateVersion=4で保存する編成AIの陣営状態
 BattleCompositionSave | 編成AI保存の版・陣営・時刻・参照先検証
 BattleCompositionSmoke | 編成AIの選択・貯蓄・保存往復のスモーク検査（UBattleLeaderRuntimeの一部）
-BattleSectorSight | 区画内・区画間の戦い（試験切替 `-BattleSectorSight`、既定0、`Docs/design-sector-combat.md`）：区画のあるマップで、通常小隊は別の区画（20m より遠い）の敵を探す光線を隊長だけが出し、隊員は隊長が今見ている敵を発射直前の視線判定で撃つ（UBattleLeaderRuntime の一部。走査の側は `UBattlePerception::Update` の `SkipCross`）
+BattleSectorSight | 区画内・区画間の戦い（`-BattleSectorSight`、11-23 から既定1＝通常小隊だけ。`=2` は兵種ごとの決まり `SectorSightRole`〔試験〕、`=0` で元の動き。`Docs/design-sector-combat.md`）：区画のあるマップで、通常小隊は別の区画（20m より遠い）の敵を探す光線を隊長だけが出し、隊員は隊長が今見ている敵を発射直前の視線判定で撃つ（UBattleLeaderRuntime の一部。走査の側は `UBattlePerception::Update` の `SkipCross`）
