@@ -272,6 +272,33 @@ int32 UBattleMatch::AreaArmourReaction(int32 Team,int32 SquadID,float DamageRati
  return 0;
 }
 
+// Trial -BattleArmourWait=1 (default 0; user test play 2026-11-23: unassigned squads went to and fro in place). Infantry with no anti-tank
+// weapon falls back from a tank it sees (above), regroups, and once nothing is in weapon range for a few seconds resumes its mission, walks
+// back into the tank's sight and falls back again, every few seconds. With the trial, a regrouped squad does not resume while its members
+// saw such a tank within the last ArmourWaitMemory seconds near the squad or near its mission point; it waits where it regrouped.
+// Own contacts only (seen positions), as the fall-back itself.
+bool UBattleMatch::ArmourWait(int32 SquadID,const FVector& Goal) const
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArmourWait="),V);return V!=0;}();
+ if(!On||!bArea)return false;
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ const auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();
+ const auto* S=Store?Store->FindSquad(SquadID):nullptr;
+ if(!S||!R||!Sense||BattleSquadType::IsVehicle(S->SquadType)||S->SquadType==BattleSquadType::Exo)return false;
+ for(int32 ID:S->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive()&&((U->Weapon==EBattleWeapon::AntiTank&&U->Ammo+U->Reserve>0)||U->Launcher>0))return false;
+ const auto* T=GetDefault<UBattleTuning>();
+ const double Fear=FMath::Max(0.f,BattleRanges::Get().bActive?T->ArmourFearRangeProfile:T->ArmourFearRange);
+ constexpr double ArmourWaitMemory=30.;
+ const FVector Here=R->Position(S->LeaderUnitID);const double Now=GetWorld()->GetTimeSeconds();
+ for(int32 ID:S->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())if(const auto* Contacts=Sense->GetContacts(ID))
+  for(const auto& C:*Contacts)
+   if(!C.Value.bShared&&Now-C.Value.LastSeenTime<=ArmourWaitMemory&&(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(C.Value.ObservedSquadType):R->IsVehicle(C.Key))
+      &&BattleSquadType::ArmorSmallArms(BattleTactics::ObservedArmour()?C.Value.ObservedSquadType:R->VehicleType(C.Key))<=0.f
+      &&(FVector::Dist2D(Here,C.Value.LastKnownPosition)<=Fear||FVector::Dist2D(Goal,C.Value.LastKnownPosition)<=Fear))
+    return true;
+ return false;
+}
+
 // ---------------------------------------------------------------- tactical
 
 int32 UBattleMatch::AreaVehicleChoice(int32 SquadID,TFunctionRef<double(int32)> ScoreOf) const

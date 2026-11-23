@@ -115,7 +115,9 @@ public:
  FString WarScoreBreakdown(int32 Team) const;
  // Area new squad (regular only) into a free slot (< BattleTactics::AreaHire().MaxActive active squads, default 25) for BattleTactics::AreaHire().Cost resources.
  // bAuto: AI purchase (no selection change; a team-0 squad is delegated). Cancels pending replenishments the spend can no longer cover.
- bool HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,uint8 SquadType=0);
+ bool HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,uint8 SquadType=0,uint8 Grade=0); // Grade 1: elite platoon (BattleArms.cpp)
+ int32 ActiveElite(int32 Team) const;
+ int32 ActiveSnipers(int32 Team) const; // sniper teams (scout pairs of grade 2); ActiveScouts counts only ordinary pairs
  int32 LastHiredSquadID=INDEX_NONE;
  // Purchase reservations (Docs/design-front-strategy.md 5.1). -BattleHireReserve=1 routes the player's purchase keys and the purchase
  // panel through ReserveHire (default 1 since 2026-11-23, user request; =0 for plain purchases). The AI never reserves unless its hiring is
@@ -125,7 +127,7 @@ public:
  static constexpr int32 HireQueueMax=12;
  // Why a purchase cannot happen now: 0 = it can, 1 = it can later (resources, squad slots, type limit: a reservation waits),
  // 2 = not in this state (disabled, not in combat, bad type, 100 squad records). Why gets HireAreaSquad's message.
- int32 HireBlock(int32 Team,uint8 SquadType,FString& Why) const;
+ int32 HireBlock(int32 Team,uint8 SquadType,FString& Why,uint8 Grade=0) const; // Grade 1 elite platoon, 2 sniper team (BattleArms.cpp)
  // Buys now when nothing of the same type waits ahead and nothing is starved (as a plain purchase); otherwise queues.
  // Returns 0 refused (LastMessage says why), 1 bought, 2 queued.
  int32 ReserveHire(int32 Team,uint8 SquadType,bool bByAI,int32 Dest=-1);
@@ -146,6 +148,13 @@ public:
  // played match (not the AI-vs-AI experiment): the level, the resources the AI leaves and the types it may not buy (Area.PlayerHire*).
  static constexpr int32 PlayerHireReserveMax=400, PlayerHireReserveStep=20;
  bool PlayerDelegating(int32 Team) const;
+ // Reservation destination (FBattleHireReservation::Dest, own team 0 only): -1 none, 0..Rows-1 a front plan section (the front army,
+ // posted in that section first), HireDestReserve the unassigned reserve, HireDestGroup + group ID that group (front army or attack group).
+ static constexpr int32 HireDestReserve=999, HireDestGroup=1000;
+ TArray<int32> HireDestChoices(int32 Team) const; // in the order a click cycles through them
+ bool CycleHireDest(int32 Team,int32 Index); // Index into HireQueueOf(Team)
+ FString HireDestJa(int32 Dest) const;
+ void ApplyHireDest(int32 Team,int32 SquadID,int32 Dest);
  void SetPlayerHiring(int32 Delegate,int32 Reserve,int32 Deny);
  // Once per match second: per team, the first reservation (in order, the first of each type) that can be bought is bought.
  void UpdateHireQueue();
@@ -214,6 +223,9 @@ public:
  void ClampFrontTimers();
  float SurpriseNextAt[2]={0.f,0.f},SurpriseSkipLogAt[2]={0.f,0.f};
  TMap<int32,FVector> FrontPosts; // squad of a front-holding group -> the sector centre it holds (transient)
+ // Reservation destinations (stage 7, Docs/design-front-strategy.md 5.1): a bought squad sent to a front section waits here for its first
+ // post, which then prefers that section's rows (squad -> section; transient: after a restore before the first post it takes any post).
+ TMap<int32,int32> FrontSectionWish;
  TSet<int32> FrontLeads; // squads of a front-holding group on a row's front place, not a support place (transient, like FrontPosts)
  float FrontLineAt[2]={-1.f,-1.f},FrontLineLogAt[2]={-1.f,-1.f};
  // Front plan, stage 1 (Docs/design-front-strategy.md, trial -BattleFrontPlanLog=1, default 0): the team's front line split into 3-5
@@ -265,7 +277,7 @@ public:
  TMap<int32,FVector> FrontReservePosts; // reserve squad -> the sector centre it waits at
  TMap<int32,int32> FrontReserveRow; // reserve squad -> its row (the team's own row order), kept while it stays in the reserve
  // Measurement of the free squads' moves (log only, BATTLE_FRONT_LINE free_rev/free_moved_m; transient): last leader position and 2 s step.
- TMap<int32,FVector> FreeLastPos,FreeLastStep; int32 FreeReversals[2]={0,0}; double FreeMoved[2]={0.,0.};
+ TMap<int32,FVector> FreeLastPos,FreeLastStep; int32 FreeReversals[2]={0,0}; double FreeMoved[2]={0.,0.}; int32 SectorCrowd[2]={0,0}; /* summed extra squads per shared sector at each update */
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;
@@ -333,6 +345,8 @@ public:
 	// Squad reaction to armour: 1 = a vehicle backs away to Goal (a known anti-tank soldier within reach, or DamageRatio of its health
 	// lost in 5 s), 2 = infantry with no anti-tank weapon falls back from a tank it sees, 0 = none.
 	int32 AreaArmourReaction(int32 Team, int32 SquadID, float DamageRatio, FVector& Goal, FString& Why) const;
+ // Trial -BattleArmourWait=1 (BattleArmourAI.cpp): an infantry squad with no anti-tank weapon that knows a tank near it or near Goal.
+ bool ArmourWait(int32 SquadID, const FVector& Goal) const;
 	// Tank objective (the point with the most known enemies, outside the city of map E) and its overwatch post short of that point.
 	int32 AreaTankTarget(int32 Team, int32 SquadID) const;
 	FVector AreaTankPost(int32 Team, int32 Point, float Overwatch = -1.f) const; // Overwatch below zero: UBattleTuning::TankOverwatch
@@ -350,6 +364,7 @@ public:
 		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */
 		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp) */
 		bool bFocus2 = false; /* front plan stage 5: the second attack army, aimed at FFrontPlanTeam::Focus2 (Kind 0) */
+		bool bFollowFocus = true; /* front plan stage 7: a player's attack group follows the focus while delegated (the player's per-group switch) */
 		int32 SurpriseRow = 0; /* surprise group: the edge sector row it moves along */
 		uint8 SurpriseBridgeStage = 0; /* 0 none, 1 entrance, 2 exit, 3 original edge goal; retained during same-time restore */
 		int32 SurpriseBridgeLeader = INDEX_NONE;
@@ -376,6 +391,11 @@ public:
 	TMap<int32, FBattleGroup> Groups;
  // The point an AI attack group follows: the second focus for the second attack army, else the team focus (StrategyFocusPoint).
  int32 GroupFocusPoint(const FBattleGroup& G) const;
+ // Stage 7 link to the army control (user 11-23): with -BattleFrontPlanPlayer=1 a player's attack group the player delegated (J) follows
+ // the team focus like the AI's attack army: the first such group (lowest ID) the focus, the second the second focus when there is one.
+ // A group under manual command keeps the player's orders.
+ bool PlayerGroupFollowsFocus(const FBattleGroup& G) const;
+ bool SetGroupFollowFocus(int32 GroupID,bool bFollow); // the player's switch per attack group (plan panel)
 	TMap<int32, int32> SquadGroup; // squad -> group
 	int32 NextGroupID = 1;
 	int32 GroupOf(int32 SquadID) const; // INDEX_NONE when the squad is in no group
@@ -408,6 +428,8 @@ public:
 	void UpdateGroups(int32 Team);
 	// The order of a squad in a group the AI runs (false: the squad keeps the normal allocation).
 	bool GroupOrder(int32 SquadID, int32 Team, FVector& Center, EBattleOrder& Order) const;
+ // Trial -BattleGroupSectors=1 (BattleGroups.cpp): the sector of SquadID among the group's squads that go to Anchor, one squad per sector.
+ bool GroupSectorPost(const FBattleGroup& G, int32 Team, int32 SquadID, const FVector& Anchor, bool bPhaseRally, bool bAnchorFirst, FVector& Out) const;
 	// Anti-tank team objective: the point nearest a known enemy vehicle; INDEX_NONE while the team knows of none.
 	int32 AreaATTarget(int32 Team, int32 SquadID) const;
 	// Exoskeleton soldier objective (BattleExo.cpp): the team's fast reserve. An own point with more known enemies than own soldiers

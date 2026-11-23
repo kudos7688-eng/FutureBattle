@@ -26,6 +26,15 @@ bool UBattleMatch::RequestSupport(int32 ObserverID)
 		const double Rank = (Contact.bVisible ? 1000. : 0.) + Contact.Confidence * 100. - Age;
 		if (!Chosen || Rank > Best || (Rank == Best && Contact.TargetID < Chosen->TargetID)) { Chosen = &Contact; Best = Rank; }
 	}
+	// -BattleSquadKnowledge=1: what his squad saw and heard is in the squad's table.
+	if (const auto* SquadKnown = GetWorld()->GetSubsystem<UBattlePerception>()->GetSquadContacts(Observer->SquadID)) for (const auto& Pair : *SquadKnown)
+	{
+		const auto& Contact = Pair.Value.Contact;
+		const double Age = GetWorld()->GetTimeSeconds() - Contact.LastSeenTime;
+		if (Contact.Confidence < .35f || Age < 0 || Age > Observer->Perception.MemorySeconds || Contact.LastKnownPosition.ContainsNaN()) continue;
+		const double Rank = (Contact.bVisible ? 1000. : 0.) + Contact.Confidence * 100. - Age;
+		if (!Chosen || Rank > Best || (Rank == Best && Contact.TargetID < Chosen->TargetID)) { Chosen = &Contact; Best = Rank; }
+	}
 	if (!Chosen) return Fail(TEXT("No reliable known enemy position / scout or receive a report"));
 	// Snapshot the observed coordinate. Target actors and their current positions are never consulted here.
 	FBattleStrike Strike; Strike.Team = Team; Strike.Position = Chosen->LastKnownPosition;

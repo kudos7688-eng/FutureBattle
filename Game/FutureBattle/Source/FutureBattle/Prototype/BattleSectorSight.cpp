@@ -18,7 +18,9 @@ int32 UBattleLeaderRuntime::SectorSightMode(int32 Team)
 
 bool UBattleLeaderRuntime::SectorSightFar(const FVector& From,const FVector& To)
 {
- return BattleSectors::Cell(From)!=BattleSectors::Cell(To) && FVector::DistSquared2D(From,To)>FMath::Square(2000.);
+ // -BattleSectorSightNear=<cm> (default 2000, 500..20000): an enemy across a sector edge but this close is still an in-sector enemy.
+ static const double Near=[]{double V=2000.;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSightNear="),V);return FMath::Clamp(V,500.,20000.);}();
+ return BattleSectors::Cell(From)!=BattleSectors::Cell(To) && FVector::DistSquared2D(From,To)>FMath::Square(Near);
 }
 
 int32 UBattleLeaderRuntime::SectorLookout(const FBattleSquadState& Squad) const
