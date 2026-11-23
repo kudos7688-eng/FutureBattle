@@ -101,7 +101,7 @@ FVector UBattleMatch::RepairPoint(int32 Team) const
  {
   bDepotPointBuilt[Team]=true;DepotPoint[Team]=Home;
   FVector Want=Home+FVector(0.,(Home.X>0?1.:-1.)*Offset,0.);
-  if(const auto* Nav=UNavigationSystemV1::GetCurrent<UNavigationSystemV1>(GetWorld()))
+  if(const auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
   {FNavLocation L;if(Nav->ProjectPointToNavigation(Want,L,FVector(2000.,2000.,5000.)))DepotPoint[Team]=L.Location;}
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_REPAIR_DEPOT team=%d home=%s depot=%s offset=%.0f"),Team,*Home.ToCompactString(),*DepotPoint[Team].ToCompactString(),Offset);
  }
