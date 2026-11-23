@@ -39,7 +39,7 @@ namespace BattleTactics
  bool ObservedArmour(); // Trial -BattleObservedArmour=1 (default 0): classify enemies from observations.
  bool VehicleHitCover(); // Trial -BattleVehicleHitCover=1 (default 0): hide from own hits before starting home repair.
  int32 ATRange(); // Trial -BattleATRange=<cm> (default 0 = profile): anti-tank launcher reach; engage 3/4 of it (BattleATHunt.cpp).
- bool ATHunt(); // Trial -BattleATHunt=1 (default 0): an armoured unit that sees an anti-tank soldier asks nearby infantry to attack it.
+ int32 ATHunt(); // Trial -BattleATHunt=1|2 (default 0; 2 = the squad goes on to the last seen position when the soldier is lost): an armoured unit that sees an anti-tank soldier asks nearby infantry to attack it.
  bool ACShield(); // Trial -BattleACShield=1 (default 0): an armoured car goes ahead of attacking infantry and holds against anti-tank soldiers.
  bool SaveReloadBoundary(); // Trial -BattleSaveReloadBoundary=1 (default 0): finish due reloads on the save copy.
  int32 OverrideSaveReloadBoundaryForSmoke(int32 Value); // Smoke only; -1 restores command-line policy.
