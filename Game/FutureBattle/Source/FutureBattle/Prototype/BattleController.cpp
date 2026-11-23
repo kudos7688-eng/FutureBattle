@@ -332,6 +332,20 @@ FBattlePlanPanelLayout FBattlePlanPanelLayout::Make(FVector2D View,const UWorld*
    Y+=Row;
   }
   Y+=4;
+  // The player's attack groups: a delegated group (J) with the switch on goes for the focus; manual command keeps the player's orders.
+  TArray<int32> Own;for(const auto& G:M->Groups)if(G.Value.Team==0&&G.Value.bPlayer&&G.Value.Kind==0)Own.Add(G.Key);
+  Own.Sort();
+  if(!Own.IsEmpty()){Text(TEXT("攻撃群：重点への連動（委任している群だけが重点へ向かう）"),X0,0);Y+=Row;}
+  for(const int32 ID:Own)
+  {
+   const auto& G=M->Groups[ID];
+   const bool bAI=M->GroupAIRun(G);const int32 F=M->GroupFocusPoint(G);
+   Text(FString::Printf(TEXT("群%d ／ %s ／ 目標 %s%s"),ID,bAI?TEXT("委任"):TEXT("手動指揮"),M->Objectives.IsValidIndex(G.Objective)?*FString::Printf(TEXT("拠点%c"),TCHAR('A'+G.Objective)):TEXT("なし"),
+    M->PlayerGroupFollowsFocus(G)&&M->Objectives.IsValidIndex(F)?*FString::Printf(TEXT(" ／ 重点 拠点%c"),TCHAR('A'+F)):TEXT("")),X0+8,0);
+   Btn(10,ID,G.bFollowFocus?TEXT("重点に連動する"):TEXT("重点に連動しない"),Right-150,150,G.bFollowFocus?3:0);
+   Y+=Row;
+  }
+  if(!Own.IsEmpty())Y+=4;
  }
  if(UBattleMatch::HireReserveOn())
  {
@@ -402,6 +416,10 @@ bool ABattleController::PlanPanelInput(const FInputKeyEventArgs& Params)
  case 7: Match->SetPlayerHiring(D,Reserve,Deny^(1<<It.Index));break;
  case 8: bPlanPanel=false;break;
  case 9: Match->CycleHireDest(0,It.Index);break;
+ case 10:
+  if(const auto* G=Match->Groups.Find(It.Index);G&&Match->SetGroupFollowFocus(It.Index,!G->bFollowFocus))
+   ShowNotice(FString::Printf(TEXT("群%d：%s"),It.Index,Match->Groups[It.Index].bFollowFocus?TEXT("委任中は重点へ向かう"):TEXT("重点に連動しない（委任中は近い拠点から攻める）")));
+  break;
  default: break;
  }
  return true;

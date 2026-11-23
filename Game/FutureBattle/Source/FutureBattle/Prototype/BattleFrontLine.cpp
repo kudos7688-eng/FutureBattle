@@ -1361,7 +1361,16 @@ int32 UBattleMatch::GroupFocusPoint(const FBattleGroup& G) const
 
 bool UBattleMatch::PlayerGroupFollowsFocus(const FBattleGroup& G) const
 {
- return G.bPlayer&&G.Kind==0&&PlayerRolesOn(G.Team)&&GroupAIRun(G);
+ return G.bPlayer&&G.Kind==0&&G.bFollowFocus&&PlayerRolesOn(G.Team)&&GroupAIRun(G);
+}
+
+bool UBattleMatch::SetGroupFollowFocus(int32 GroupID,bool bFollow)
+{
+ FBattleGroup* G=Groups.Find(GroupID);
+ if(!G||G->Team!=0||!G->bPlayer||G->Kind!=0)return false;
+ G->bFollowFocus=bFollow;
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_FOLLOW_FOCUS group=%d follow=%d t=%.1f"),GroupID,bFollow?1:0,Elapsed);
+ return true;
 }
 
 // ---- Front plan, stage 7: the player's section roles (Docs/design-front-strategy.md 6; trial -BattleFrontPlanPlayer=1, default 0) ----

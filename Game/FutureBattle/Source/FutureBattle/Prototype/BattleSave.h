@@ -106,6 +106,7 @@ struct FBattleSavedGroup
  UPROPERTY() uint8 SurpriseBridgeStage=0;
  UPROPERTY() int32 SurpriseBridgeLeader=INDEX_NONE;
  UPROPERTY() bool bFocus2=false; // front plan stage 5 (absent in older saves = false)
+ UPROPERTY() bool bFollowFocus=true; // front plan stage 7, the player's per-group switch (absent in older saves = true)
  UPROPERTY() double SurpriseBridgeAge=0;
  UPROPERTY() int32 SurpriseNextCol=-1;
  UPROPERTY() TArray<int32> FrontHold;

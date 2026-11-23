@@ -356,6 +356,7 @@ public:
 		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */
 		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp) */
 		bool bFocus2 = false; /* front plan stage 5: the second attack army, aimed at FFrontPlanTeam::Focus2 (Kind 0) */
+		bool bFollowFocus = true; /* front plan stage 7: a player's attack group follows the focus while delegated (the player's per-group switch) */
 		int32 SurpriseRow = 0; /* surprise group: the edge sector row it moves along */
 		uint8 SurpriseBridgeStage = 0; /* 0 none, 1 entrance, 2 exit, 3 original edge goal; retained during same-time restore */
 		int32 SurpriseBridgeLeader = INDEX_NONE;
@@ -386,6 +387,7 @@ public:
  // the team focus like the AI's attack army: the first such group (lowest ID) the focus, the second the second focus when there is one.
  // A group under manual command keeps the player's orders.
  bool PlayerGroupFollowsFocus(const FBattleGroup& G) const;
+ bool SetGroupFollowFocus(int32 GroupID,bool bFollow); // the player's switch per attack group (plan panel)
 	TMap<int32, int32> SquadGroup; // squad -> group
 	int32 NextGroupID = 1;
 	int32 GroupOf(int32 SquadID) const; // INDEX_NONE when the squad is in no group
