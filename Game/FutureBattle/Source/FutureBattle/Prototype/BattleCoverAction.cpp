@@ -41,6 +41,14 @@ void UBattleLeaderRuntime::CancelCoverAction(int32 ID)
   B->Mesh->SetRelativeLocation(FVector(0,0,-90));
   if(U->IsAlive()){B->Mesh->SetRelativeRotation(FRotator(0,-90,0));RefreshFollowerPose(ID);}
  }
+ // Wall cover (BattleWallCover.cpp): leaving gives back the stance he had before (still registered, so it applies off the
+ // stance maps too).
+ if(const FWallCover* W=WallCovers.Find(ID))
+ {
+  if(U->IsAlive())SetStance(ID,W->PrevStance,GetWorld()->GetTimeSeconds(),true);
+  WallCovers.Remove(ID);
+ }
+ WallPushSeconds.Remove(ID);
 }
 
 void UBattleLeaderRuntime::EndPeekDiag(int32 ID,const TCHAR* Cause)
@@ -615,6 +623,11 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  // Stances: crouch while hidden behind cover, stand to move and to fire from the peek point.
  // (Direct control too: behind low cover the player is only hidden while crouched.) For the player only when the phase changes:
  // between changes his own X wins (and a soldier he takes over in the middle of a cover action keeps his stance).
- if(!Player || U->CoverPhase!=PhaseAtStart)SetStance(ID,U->CoverPhase==2?BattleStance::Crouch:BattleStance::Stand,Now,true);
+ // Wall cover at a high wall (BattleWallCover.cpp): he stands against it while hidden too.
+ if(!Player || U->CoverPhase!=PhaseAtStart)
+ {
+  const FWallCover* Wall=WallCovers.Find(ID);
+  SetStance(ID,U->CoverPhase==2 && !(Wall && Wall->bHigh)?BattleStance::Crouch:BattleStance::Stand,Now,true);
+ }
  return true;
 }

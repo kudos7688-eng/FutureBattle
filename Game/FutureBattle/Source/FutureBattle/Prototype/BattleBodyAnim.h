@@ -96,8 +96,9 @@ class UBattleBodyAnimInstance : public UAnimInstance
  GENERATED_BODY()
 public:
  // Inputs, set every frame on the game thread (ABattleUnit::UpdateBodyAnim).
- // The lower-body clip; a change cross-fades over 0.2 s. A clip that does not loop holds its last frame. Rate scales its clock.
- void SetBase(UAnimSequence* Clip,bool bLoop=true,float Rate=1.f);
+ // The lower-body clip; a change cross-fades over 0.2 s (Fade>0: over Fade seconds, e.g. the slower walks of a crouch or a
+ // crawl). A clip that does not loop holds its last frame. Rate scales its clock.
+ void SetBase(UAnimSequence* Clip,bool bLoop=true,float Rate=1.f,float Fade=-1.f);
  // The upper-body layer (above spine_01). Time<0 plays it on its own clock; Time>=0 sets the position (reload synced to the timer).
  void SetUpper(UAnimSequence* Clip,float Weight,float Time=-1.f);
  // Aim pose blended by pitch in degrees (up positive) under the upper layer; Weight 0 shows the base clip's own upper body.
@@ -121,6 +122,7 @@ private:
  UPROPERTY(Transient) TObjectPtr<UAnimSequence> PreviousClip;
  UPROPERTY(Transient) TObjectPtr<UAnimSequence> UpperClip;
  UPROPERTY(Transient) TObjectPtr<UAnimSequence> OverlayClip;
+ float FadeSeconds=.2f;
  float BaseRate=1.f,BaseTime=0.f,PreviousTime=0.f,PreviousWeight=0.f,UpperTime=0.f,UpperWeight=0.f,OverlayTime=0.f,OverlayWeight=0.f,AimPitch=0.f,AimWeight=0.f,RaiseWeight=0.f;
  FVector RaiseTarget=FVector::ZeroVector;
  bool bBaseLoop=true,bPreviousLoop=true,bUpperDriven=false;

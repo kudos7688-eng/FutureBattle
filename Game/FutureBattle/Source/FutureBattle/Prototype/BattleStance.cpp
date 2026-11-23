@@ -73,10 +73,11 @@ bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForc
 {
  // Off the stance maps (BattleStance::Enabled: map E by default) only the player's own X (not forced) crouches and lays down the
  // directly controlled soldier (the user could not crouch on map I); forced changes such as the cover action's crouch stay off
- // there as before, and anyone may stand up again (the soldier he leaves, below in the AI step).
+ // there as before, and anyone may stand up again (the soldier he leaves, below in the AI step). The player's wall cover
+ // (BattleWallCover.cpp) is his own choice: its crouch, and giving back his stance when he leaves, apply there too.
  if(!BattleStance::Enabled(GetWorld()) && Stance!=BattleStance::Stand)
  {
-  if(bForce)return false;
+  if(bForce && !WallCovers.Contains(ID))return false;
   const auto* Body=Bodies.Find(ID);
   if(!(Body && Body->Actor.IsValid() && Body->Actor->IsPlayerControlled()))return false;
  }

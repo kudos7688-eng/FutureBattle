@@ -510,11 +510,23 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 		SetMeshLean(Lean, GetWorld()->GetDeltaSeconds());
 	}
 	// Lower body: a stance change plays its transition once, then the idle or the walk in the direction of travel.
+	// Cross-fade of the walks of a crouch or crawl, and of a stance change on the move (the ordinary 0.2 s cut them short).
+	constexpr float StanceBlendSeconds = .35f;
 	if (VisualStance != BodyStance)
 	{
-		TransitionClip = Transition(BodyStance, VisualStance);
-		TransitionUntil = TransitionClip ? Now + TransitionClip->GetPlayLength() : 0.;
-		TransitionRate = 1.f;
+		// User 11-24: changing stance on the move looked unnatural (the clip played in place while the body slid on).
+		// A crouch or stand-up on the move cross-fades straight into the walk of the new stance (StanceBlendSeconds); lying down
+		// and getting up from prone play their clip, and the player does not walk meanwhile (SetSprinting). The player's own
+		// change ends within the rule's stance lock (0.5 s, 1.2 s to or from prone; UBattleLeaderRuntime::SetStance), so the
+		// body is ready when the next change is allowed. Display only.
+		const bool bProne = BodyStance == BattleStance::Prone || VisualStance == BattleStance::Prone;
+		const bool bMoving = GetVelocity().SizeSquared2D() > 400.;
+		TransitionClip = bMoving && !bProne ? nullptr : Transition(BodyStance, VisualStance);
+		// On the move a prone change keeps the hurried clip below (MovingTransitionSeconds); from standing still the player waits.
+		TransitionRate = TransitionClip && IsPlayerControlled() && !bMoving ? FMath::Max(1.f, float(TransitionClip->GetPlayLength() / (bProne ? 1.2 : .5))) : 1.f;
+		TransitionUntil = TransitionClip ? Now + TransitionClip->GetPlayLength() / TransitionRate : 0.;
+		bTransitionProne = TransitionClip && bProne && !bMoving;
+		StanceBlendUntil = TransitionClip ? 0. : Now + StanceBlendSeconds;
 		BodyStance = VisualStance;
 	}
 	// Cover clips (BattleCoverClips.h): hidden and firing poses of the cover action, with a one-shot between phases. The table
@@ -522,7 +534,7 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	if (S.CoverPhase != ShownCoverPhase)
 	{
 		using namespace BattleCoverClips;
-		if (!ShownCoverPhase && S.CoverPhase) CoverClipSet = CoverSet(GetWorld(), S, GetActorForwardVector());
+		if (!ShownCoverPhase && S.CoverPhase) CoverClipSet = CoverSet(GetWorld(), S, Leaders ? Leaders->CoverFacing(UnitID, GetActorForwardVector()) : GetActorForwardVector());
 		const TCHAR* Shot = nullptr; float ShotYaw = 0.f;
 		if (S.CoverPhase == 2 && ShownCoverPhase == 1) { Shot = CoverClipSet.Enter; ShotYaw = YawOffset(2); }
 		else if (S.CoverPhase == 4) { Shot = CoverClipSet.ToAim; ShotYaw = YawOffset(4); }
@@ -550,6 +562,8 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 		else if (S.CoverPhase == 4) { CoverBase = CoverClip(CoverClipSet.Aim); Yaw = BattleCoverClips::YawOffset(4); }
 		if (CoverBase)
 		{
+			// The player's wall cover (BattleWallCover.cpp): the hidden pose stays against the wall while the camera turns the body.
+			if (S.CoverPhase != 4 && !Blind && Leaders) Yaw += Leaders->WallCoverYaw(UnitID, GetActorForwardVector());
 			SetMeshYaw(Yaw);
 			// Over the top: the hands lift the rifle above the cover (two-bone IK) while the body stays crouched behind it.
 			// Target: 12 cm over the measured cover top, 30 cm ahead of the body toward the shot (display only).
@@ -578,6 +592,10 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	// Getting up on the move (moving stands the soldier up): the rest of the transition plays fast enough to end within
 	// MovingTransitionSeconds instead of sliding along the ground at its own speed.
 	const double Hurry = MovingTransitionSeconds(TransitionClip.Get());
+	// Walking off in the middle of a crouch or stand-up: it blends into the walk at once instead of sliding through the clip.
+	// (MovingTransitionSeconds is 0.4 s for those, 0.6 s for the prone ones.)
+	if (TransitionClip && Now < TransitionUntil && Hurry < .5 && Local.SizeSquared2D() > 400.)
+	{ TransitionUntil = Now; StanceBlendUntil = Now + StanceBlendSeconds; }
 	if (TransitionClip && Now < TransitionUntil && TransitionRate == 1.f && Local.SizeSquared2D() > 400. && TransitionUntil - Now > Hurry)
 	{
 		TransitionRate = float((TransitionUntil - Now) / Hurry);
@@ -591,7 +609,8 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	UAnimSequence* Walk = Locomotion(VisualStance, Local, bRun);
 	// Walking crouched or prone (-BattleStanceMove): the steps keep pace with the body (rate from the clip's own ground speed).
 	const float WalkRate = VisualStance != BattleStance::Stand && Local.SizeSquared2D() > 400. ? MatchRate(Walk, float(Local.Size2D())) : 1.f;
-	Body.SetBase(bTransition ? TransitionClip.Get() : Walk, !bTransition, bTransition ? TransitionRate : WalkRate);
+	const float Fade = !bTransition && (VisualStance != BattleStance::Stand || Now < StanceBlendUntil) ? StanceBlendSeconds : -1.f;
+	Body.SetBase(bTransition ? TransitionClip.Get() : Walk, !bTransition, bTransition ? TransitionRate : WalkRate, Fade);
 	// Upper body: reload (synced to the reload timer), blind fire, otherwise the aim pose at the weapon's pitch.
 	const float Duration = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
 	const bool bProne = VisualStance == BattleStance::Prone;
@@ -710,7 +729,10 @@ void ABattleUnit::SetSprinting(bool bRequested)
  // -BattleStanceMove (default 1): crouched or prone, the directly controlled soldier walks at that stance's share of his speed
  // (called every frame of direct control, so a stance change takes effect at once).
  const float Low = bDirectAvoidanceOverride && IsAlive() && BattleStance::MoveMode() >= 1 ? BattleStance::MoveScale(VisualStance) : 1.f;
- const float Scale = bSprint ? 1.6f : Low;
+ // Lying down or getting up from prone (user 11-24: walking during it slid the body): no walking until the clip has played
+ // (UpdateBodyAnim; at most the 1.2 s stance lock).
+ const bool bHold = bDirectAvoidanceOverride && IsAlive() && bTransitionProne && TransitionClip && GetWorld()->GetTimeSeconds() < TransitionUntil;
+ const float Scale = bHold ? 0.f : bSprint ? 1.6f : Low;
  if (Scale != 1.f && (WalkSpeedBeforeSprint > 0.f || Movement->MaxWalkSpeed > 0.f))
  {
   if (WalkSpeedBeforeSprint == 0.f) WalkSpeedBeforeSprint = Movement->MaxWalkSpeed;

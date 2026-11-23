@@ -112,6 +112,8 @@ private:
 	UPROPERTY() TObjectPtr<UAnimSequence> TransitionClip;
 	double TransitionUntil = 0., ShownShot = -10.;
 	float TransitionRate = 1.f; // above 1 once a stance transition is hurried on the move (BattleBodyAnim::MovingTransitionSeconds)
+	bool bTransitionProne = false; // the transition lies down or gets up from prone: the player does not walk while it plays (SetSprinting)
+	double StanceBlendUntil = 0.;  // a crouch or stand-up on the move blends into the new walk instead of playing its clip
 	float ShownHP = -1.f;
 	// Cover clips (BattleCoverClips.h): the set picked when the cover action starts, the one-shot between phases, mesh yaw.
 	uint8 ShownCoverPhase = 0;

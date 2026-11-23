@@ -508,6 +508,65 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
   Stances.Remove(1);A->VisualStance=BattleStance::Stand;A->SetSprinting(false);
   Check(FMath::Abs(A->GetCharacterMovement()->MaxWalkSpeed-Walk)<1.f,TEXT("standing up restores the player's walking speed"));
  }
+ // Wall cover of the player (BattleWallCover.cpp, user 11-24), at the cover object beside his first anchor (both runs): C facing
+ // it or pressing against it takes cover right there, aiming over a low wall stands him up, moving off gives back his stance.
+ // This map has no stances: the wall cover's crouch must apply there too.
+ {
+  static FVector WallSpot,WallNormal;
+  ABattleUnit* A=Actor(1);
+  if(SmokeStage<30)
+  {
+   const FVector Anchor=Store->Find(1)->CoverAnchor;
+   CancelCoverAction(1);if(PC)PC->ControlUnit(A);
+   // The nearest wall face around the anchor at the height of a crouched soldier's top.
+   float Best=1.e9f;WallNormal=FVector::ZeroVector;
+   const FCollisionQueryParams Params(NAME_None,false,A);
+   for(int32 I=0;I<16;++I)
+   {
+    const FVector Way=FRotator(0,I*22.5f,0).Vector(),From=Anchor+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch));
+    FHitResult Hit;
+    if(GetWorld()->LineTraceSingleByObjectType(Hit,From,From+Way*250.f,FCollisionObjectQueryParams(ECC_WorldStatic),Params) && FMath::Abs(Hit.ImpactNormal.Z)<.4f && Hit.Distance<Best)
+    {Best=Hit.Distance;WallNormal=FVector(Hit.ImpactNormal.X,Hit.ImpactNormal.Y,0).GetSafeNormal();WallSpot=FVector(Hit.ImpactPoint.X,Hit.ImpactPoint.Y,Anchor.Z)+WallNormal*48.f;}
+   }
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WALL_COVER_SMOKE wall_cm=%.0f normal=%s spot=%s"),Best,*WallNormal.ToCompactString(),*WallSpot.ToCompactString());
+   Check(!WallNormal.IsNearlyZero(),TEXT("a wall is found beside the first cover anchor"));
+   Place(1,WallSpot);if(PC)PC->SetControlRotation((-WallNormal).Rotation());
+   SmokeStage=31;Later(.3f);return;
+  }
+  if(SmokeStage==31)
+  {
+   Check(!TryWallCover(1,WallNormal,Now),TEXT("no wall in that direction: no wall cover"));
+   Check(TryWallCover(1,-WallNormal,Now) && IsWallCover(1) && Store->Find(1)->CoverSlot==FreeCoverSlot && FVector::Dist2D(Store->Find(1)->CoverAnchor,Position(1))<1.,TEXT("C facing a wall takes cover right where he stands"));
+   SmokeStage=32;Later(.3f);return;
+  }
+  if(SmokeStage==32)
+  {
+   const auto* U=Store->Find(1);const bool bHigh=WallCovers.Contains(1) && WallCovers.FindChecked(1).bHigh;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WALL_COVER_SMOKE phase=%d high=%d stance=%d peek_cm=%.0f"),U->CoverPhase,bHigh?1:0,StanceOf(1),FVector::Dist2D(U->CoverAnchor,U->CoverPeek));
+   Check(U->CoverPhase==2 && FVector::Dist2D(Position(1),U->CoverAnchor)<40,TEXT("wall cover hides him at the wall"));
+   Check(StanceOf(1)==(bHigh?BattleStance::Stand:BattleStance::Crouch),TEXT("he crouches behind a low wall and stands at a high one (also off the stance maps)"));
+   StepPlayerWallCover(1,-WallNormal,false,false,.016f,Now);
+   Check(U->CoverPhase==2 && IsWallCover(1),TEXT("pressing on into the wall keeps the wall cover"));
+   if(!bHigh){StepPlayerWallCover(1,FVector::ZeroVector,true,false,.016f,Now);SmokeStage=33;Later(.3f);return;}
+   SmokeStage=34;Later(.001f);return;
+  }
+  if(SmokeStage==33)
+  {
+   Check(Store->Find(1)->CoverPhase==4 && StanceOf(1)==BattleStance::Stand,TEXT("aiming behind a low wall stands him up to fire over it"));
+   SmokeStage=34;Later(.001f);return;
+  }
+  if(SmokeStage==34)
+  {
+   Check(StepPlayerWallCover(1,WallNormal,false,false,.016f,Now)==2 && Store->Find(1)->CoverPhase==0 && !IsWallCover(1) && StanceOf(1)==BattleStance::Stand,TEXT("moving off the wall leaves the cover and gives back his stance"));
+   Place(1,WallSpot);SmokeStage=35;Later(.3f);return;
+  }
+  if(SmokeStage==35)
+  {
+   uint8 Took=0;for(int32 I=0;I<5 && Took!=1;++I)Took=StepPlayerWallCover(1,-WallNormal,false,false,.1f,Now);
+   Check(Took==1 && IsWallCover(1) && Store->Find(1)->CoverPhase!=0,TEXT("pressing against a wall for 0.3 s takes cover"));
+   CancelCoverAction(1);SmokeStage=36;
+  }
+ }
  if(BodyShotPrefix().IsEmpty())CancelCoverAction(1);
  Check(Store->Find(1)->CoverPhase==0,TEXT("explicit release clears cover action"));
  IssueOrder(1,EBattleOrder::Move,Fixture(FVector(-1500,18000,0)));StepCoverAction(1,.1f,Now);

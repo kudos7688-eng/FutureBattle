@@ -1292,6 +1292,9 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
    if(BattleBlindFire::IsOverTop(*U))BlindFireTop.Add(ID,BattleBlindFire::CoverTop(GetWorld(),Origin,Position(ID)));
    else BlindFireSide.Add(ID,Origin);
   }
+  // Wall cover in the middle of a high wall (no edge to lean out past, BattleWallCover.cpp): the shot leaves the cover and is
+  // fired as an ordinary one.
+  else if(bPlayerShot && WallCovers.Contains(ID) && !WallCovers.FindChecked(ID).bPeek)CancelCoverAction(ID);
   else
   {
    if(bPlayerShot && U->CoverPhase==2){auto& Cover=Store->Units.FindChecked(ID);Cover.CoverPhase=3;Cover.CoverSeconds=3;}
