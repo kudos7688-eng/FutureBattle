@@ -560,7 +560,18 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
   auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()); FNavLocation Projected;
   // Vehicles use their own navigation data (wide agent) for the goal and the route.
   const ANavigationData* VehicleNav=NavFor(S->LeaderUnitID);AActor* VehicleContext=VehicleNav?Actor(S->LeaderUnitID):nullptr;
-  const bool Projectable=Nav&&Nav->ProjectPointToNavigation(Goal,Projected,VehicleNav?FVector(600,600,400):FVector(100,100,400),VehicleNav);
+  bool Projectable=Nav&&Nav->ProjectPointToNavigation(Goal,Projected,VehicleNav?FVector(600,600,400):FVector(100,100,400),VehicleNav);
+  // Trial -BattleVehicleRoadGoal=1 (default 0, user decision 2026-11-23 "tanks need not enter every sector"): a vehicle ordered to
+  // a place more than 6m from the vehicle navigation mesh (inside a walled sector of map K) had its order refused and stayed where it
+  // was. With the switch it is sent to the nearest place of that mesh within 15m, 30m or 60m of the goal instead (the road beside
+  // the sector). The mesh itself is the definition of where a vehicle may go. vehicle_goal_off_nav counts the case with or without
+  // the switch, vehicle_goal_moved the replaced goals. No AI order of the map K matches of 2026-11-23 met the case (0 of 4 matches).
+  if(!Projectable&&Nav&&VehicleNav)
+  {
+   SightExperiment.Cover(TEXT("vehicle_goal_off_nav"));
+   static const int32 RoadGoal=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleVehicleRoadGoal="),V);return V;}();
+   if(RoadGoal>0)for(double Reach:{1500.,3000.,6000.})if(Nav->ProjectPointToNavigation(Goal,Projected,FVector(Reach,Reach,400),VehicleNav)){Projectable=true;SightExperiment.Cover(TEXT("vehicle_goal_moved"));break;}
+  }
   if(!Projectable){if(VehicleNav||NavFor(S->LeaderUnitID)!=nullptr||IsVehicle(S->LeaderUnitID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_ORDER_FAIL squad=%d reason=project nav=%s goal=%s"),SID,VehicleNav?*VehicleNav->GetName():TEXT("none"),*Goal.ToCompactString());Refuse();return false;}
   auto* Route=Nav->FindPathToLocationSynchronously(GetWorld(),Position(S->LeaderUnitID),Projected.Location,VehicleContext);
   // A tank whose goal lies where it cannot fit (the narrow streets of map E) drives to the end of the partial route instead.
