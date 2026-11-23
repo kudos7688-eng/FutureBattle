@@ -346,32 +346,38 @@
 		auto OpenJ=[](TCHAR A,TCHAR B){auto SkipK=[](TCHAR T){return T==TEXT('h')||T==TEXT('M')||T==TEXT('L')||T==TEXT('S')||T==TEXT(' ');};return SkipK(A)||SkipK(B);};
 		auto BorderJ=[&](bool bAlongX,double At,double Mid,uint32 Pick)
 		{
-			if(BattleMapJ::OnRoad(bAlongX,At,Mid))return;
+			const bool bRoadJ=BattleMapJ::OnRoad(bAlongX,At,Mid);
+			if(bRoadJ&&!BattleMapJ::bDenseCover)return;
 			if(BattleMapJ::bDenseCover)
 			{
-				// Map K: a yard wall 2.5m high along every border without a road, from corner to corner (short of a crossing road), with
-				// two doorways of 6m (3m in generation 4) at places that differ from border to border. Generation 3 left 5m open at each corner: that made a
-				// lane 10m wide along every sector line, and more than half of the shots beyond 100m went along those lanes or
-				// diagonally through the corners (mk3s-K-s7 and s43-swap, -BattleShotLog).
+				// Map K: a yard wall 2.5m high along every border, from corner to corner (short of a crossing road), with two doorways
+				// of 6m at places that differ from border to border, and a blind wall 14m long 4m behind each doorway, so a soldier walks
+				// round it but nobody sees straight through. History (STATUS 2026-11-22 21:45 to 11-23): generation 3 left 5m open at each
+				// corner, and the far shots went along the lanes that made; generation 4 closed the corners and had plain 3m doorways, and
+				// three in four far shots went straight through a doorway while six in ten stalls were a crowd at one of them; generation 5
+				// added the blinds and widened the doorways. Generation 6: a road has such a wall on both its sides (5m from its middle,
+				// the blinds on the sectors' side), because the far shots left in generation 5 crossed the open borders along the roads.
 				UseJ((Pick&1)?BrickMatJ:GreyJ);
 				auto CrossK=[&](double End){return BattleMapJ::OnRoad(!bAlongX,End,At-100.)||BattleMapJ::OnRoad(!bAlongX,End,At+100.);};
 				const double Lo=Mid-2500.+(CrossK(Mid-2500.)?500.:0.),Hi=Mid+2500.-(CrossK(Mid+2500.)?500.:0.);
-				const double DoorA=Mid-1700.+400.*((Pick>>1)%3),DoorB=Mid+700.+400.*((Pick>>3)%3);
-				const double Ends[3][2]={{Lo,DoorA-300.},{DoorA+300.,DoorB-300.},{DoorB+300.,Hi}};
-				for(const auto& E:Ends)
+				auto WallK=[&](double Line,double Side,uint32 Bits)
 				{
-					const double M2=(E[0]+E[1])*.5,L2=E[1]-E[0];if(L2<50.)continue;
-					if(bAlongX)Emit(TEXT("YardHighWall"),M2,At,L2,60,250);else Emit(TEXT("YardHighWall"),At,M2,60,L2,250);
-				}
-				// Generation 5: a blind wall 14m long stands 4m behind each doorway (on one side of the border), so a soldier walks round
-				// it but nobody sees straight through. In generation 4 three in four of the shots beyond 100m passed through a doorway
-				// (mk5-K-off-s7 and s43: the crossing places of the firing lines sit exactly in the doorways). The doorways are 6m wide
-				// because six in ten of the movement stalls of generation 4 were a crowd at one 3m doorway beside the avenue.
-				const double SideA=(!bAlongX&&FMath::Abs(At)<1.)?1.:((Pick>>5)&1)?1.:-1.;const double Doors[2][2]={{DoorA,SideA},{DoorB,(!bAlongX&&FMath::Abs(At)<1.)?1.:-SideA}};
-				for(const auto& D:Doors)
-				{
-					if(bAlongX)Emit(TEXT("YardBlind"),D[0],At+D[1]*460.,1400,60,250);else Emit(TEXT("YardBlind"),At+D[1]*460.,D[0],60,1400,250);
-				}
+					const double DoorA=Mid-1700.+400.*((Bits>>1)%3),DoorB=Mid+700.+400.*((Bits>>3)%3);
+					const double Ends[3][2]={{Lo,DoorA-300.},{DoorA+300.,DoorB-300.},{DoorB+300.,Hi}};
+					for(const auto& E:Ends)
+					{
+						const double M2=(E[0]+E[1])*.5,L2=E[1]-E[0];if(L2<50.)continue;
+						if(bAlongX)Emit(TEXT("YardHighWall"),M2,Line,L2,60,250);else Emit(TEXT("YardHighWall"),Line,M2,60,L2,250);
+					}
+					// Side: +1 or -1 puts both blinds on that side; 0 puts one on each side (a border between two sectors).
+					const double SideA=Side!=0.?Side:((Bits>>5)&1)?1.:-1.;const double Doors[2][2]={{DoorA,SideA},{DoorB,Side!=0.?Side:-SideA}};
+					for(const auto& D:Doors)
+					{
+						if(bAlongX)Emit(TEXT("YardBlind"),D[0],Line+D[1]*460.,1400,60,250);else Emit(TEXT("YardBlind"),Line+D[1]*460.,D[0],60,1400,250);
+					}
+				};
+				if(bRoadJ){WallK(At+500.,1.,Pick);WallK(At-500.,-1.,Pick>>7);}
+				else WallK(At,(!bAlongX&&FMath::Abs(At)<1.)?1.:0.,Pick);
 				return;
 			}
 			const uint32 Kd=Pick%5;if(Kd==4)return; // open

@@ -1232,6 +1232,21 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   // Command bar: the attack-move button arms the same pending order as the T key; the move button clears it.
   { PC->PressCommandButton(1);const bool Armed=PC->PendingOrder==EBattleOrder::AttackMove;PC->PressCommandButton(0);
     Check(Armed&&PC->PendingOrder==EBattleOrder::Move,TEXT("command bar buttons arm and clear orders")); }
+  // Purchase panel (2026-11-23): the purchase button opens it with one row per squad type; rows and the close box are hit where they are
+  // drawn and the panel fits above the bottom panel at 1080p and 720p; the pad's D-pad down moves the highlighted row and its B closes it.
+  // Nothing is bought here (the shot check Setup/Test-BuyPanelShot.ps1 buys through the panel).
+  { PC->PressCommandButton(6);const bool bOpen=PC->IsBuyPanelOpen();bool bLayout=true;
+    for(const FVector2D View:{FVector2D(1920,1080),FVector2D(1280,720)})
+    { const auto L=FBattleBuyPanelLayout::Make(View,GetWorld());const float Top=FBattleCommandBarLayout::Make(View,GetWorld()).PanelTop;
+      bLayout&=L.Rows.Num()==FBattleBuyPanelLayout::RowCount()&&L.Origin.X>=16.f&&L.Origin.Y>=16.f&&L.Origin.X+L.Size.X<=View.X-16.f&&L.Origin.Y+L.Size.Y<=Top;
+      for(int32 I=0;I<L.Rows.Num();++I)bLayout&=L.RowAt(L.Rows[I].Origin+L.Rows[I].Size*.5f)==I;
+      const FVector2D Close=L.CloseOrigin+FVector2D(L.CloseSize*.5f);bLayout&=L.CloseAt(Close)&&L.RowAt(Close)==INDEX_NONE; }
+    const int32 Row=PC->GetBuyPanelRow();
+    PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_DPad_Down,IE_Pressed,1.f));PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_DPad_Down,IE_Released,0.f));
+    const bool bMoved=PC->GetBuyPanelRow()==(Row+1)%FBattleBuyPanelLayout::RowCount();
+    PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_FaceButton_Right,IE_Pressed,1.f));PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_FaceButton_Right,IE_Released,0.f));
+    const bool bClosed=!PC->IsBuyPanelOpen();PC->bGamepadActive=false;
+    Check(bOpen&&bLayout&&bMoved&&bClosed,*FString::Printf(TEXT("purchase panel opens, hits its rows, fits and takes the pad (open %d, layout %d, moved %d, closed %d)"),bOpen?1:0,bLayout?1:0,bMoved?1:0,bClosed?1:0)); }
   // Gamepad: tactical pad buttons read as the same keys; a simulated pad press marks the pad as the active device.
   { const bool Map=PC->GamepadToKey(EKeys::Gamepad_FaceButton_Top)==EKeys::T&&PC->GamepadToKey(EKeys::Gamepad_FaceButton_Bottom)==EKeys::LeftMouseButton&&PC->GamepadToKey(EKeys::Gamepad_FaceButton_Left)==EKeys::RightMouseButton;
     PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_LeftThumbstick,IE_Pressed,1.f));PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_LeftThumbstick,IE_Released,0.f));
