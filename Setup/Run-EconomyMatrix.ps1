@@ -184,6 +184,12 @@ $supply=@{
  'DG'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-CounterBattery','1')
  # DGT (2026-11-23): DG answering only a report of the last 15 s with 2 shells, then 60 s at soldiers (-CounterBatteryShots 2).
  'DGT'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-CounterBattery','1','-CounterBatteryShots','2')
+ # Depot that breaks (2026-11-23, user proposal): DH = DGB + the depot's 400 hp (shells, enemies within 25 m; 120 s down) and the gun
+ # post scored by the trip to the depot + 100 m x the chance return fire lands on it (both teams). DHR = DH + the raids that chase
+ # fire reports (-ArtilleryPosts 1 -ArtilleryRaidChase 1, both teams). DHRC = DHR + burst counter-battery (trial team).
+ 'DH'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100')
+ 'DHR'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-ArtilleryPosts','1','-ArtilleryRaidChase','1')
+ 'DHRC'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-ArtilleryPosts','1','-ArtilleryRaidChase','1','-CounterBattery','1','-CounterBatteryShots','2')
  # Front army share (2026-11-22, ROADMAP stage 5; maps H/I): FS50 / FS30 = the AI fills its front army up to half / 30% of its free infantry.
  'FS50'=@('-FrontShare','0.5')
  'FS30'=@('-FrontShare','0.3')

@@ -122,6 +122,57 @@ FVector UBattleMatch::RepairPoint(int32 Team) const
  return DepotPoint[Team];
 }
 
+// The depot can be broken (2026-11-23, user proposal: return fire and raids that hit the depot make firing next to it a risk).
+// -BattleDepotHealth=<hp> (default 0 = it never breaks): a gun shell within its blast radius plus 3 m does the soldiers' falloff damage,
+// and every living enemy within 25 m wears it down by 4 hp/s. Broken, it repairs nothing for -BattleDepotRebuild=<s> (default 120);
+// machines then go to the home to be repaired, as without the depot. Then it is whole again.
+float BattleTactics::DepotHealth()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleDepotHealth="),X);return FMath::IsFinite(X)?FMath::Max(0.f,X):0.f;}();
+ return RepairDepot()>0.f?V:0.f;
+}
+float BattleTactics::DepotRebuild()
+{
+ static const float V=[]{float X=120.f;FParse::Value(FCommandLine::Get(),TEXT("BattleDepotRebuild="),X);return FMath::IsFinite(X)?FMath::Max(0.f,X):120.f;}();
+ return V;
+}
+float BattleTactics::ArtilleryPostRisk()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryPostRisk="),X);return FMath::IsFinite(X)?FMath::Max(0.f,X):0.f;}();
+ return RepairDepot()>0.f?V:0.f;
+}
+bool UBattleMatch::DepotWorking(int32 Team) const
+{
+ return BattleTactics::RepairDepot()>0.f&&Team>=0&&Team<2&&!(DepotDownUntil[Team]>=0.&&Elapsed<DepotDownUntil[Team]);
+}
+void UBattleMatch::DamageDepot(int32 Team,float Damage,const TCHAR* Cause)
+{
+ const float Health=BattleTactics::DepotHealth();
+ if(Health<=0.f||Damage<=0.f||!DepotWorking(Team))return;
+ DepotDamage[Team]+=Damage;
+ if(DepotDamage[Team]>=Health)
+ {
+  DepotDamage[Team]=0.f;DepotDownUntil[Team]=Elapsed+BattleTactics::DepotRebuild();++DepotBreaks[Team];
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_DEPOT_BROKEN team=%d cause=%s at=%.1f until=%.1f breaks=%d"),Team,Cause,Elapsed,DepotDownUntil[Team],DepotBreaks[Team]);
+ }
+}
+void UBattleMatch::UpdateDepots(float Dt)
+{
+ if(BattleTactics::DepotHealth()<=0.f||Dt<=0.f)return;
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ if(!Store||!R)return;
+ for(int32 Team=0;Team<2;++Team)
+ {
+  if(DepotDownUntil[Team]>=0.&&Elapsed>=DepotDownUntil[Team])
+  {DepotDownUntil[Team]=-1.;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_DEPOT_REBUILT team=%d at=%.1f"),Team,Elapsed);}
+  if(!DepotWorking(Team))continue;
+  const FVector Depot=RepairPoint(Team);int32 Near=0;
+  for(const auto& S:Store->GetSquads())if(S.Value.Team==1-Team)
+   for(const int32 ID:S.Value.Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive()&&FVector::DistSquared2D(R->Position(ID),Depot)<=FMath::Square(2500.))++Near;
+  if(Near>0)DamageDepot(Team,4.f*Near*Dt,TEXT("raid"));
+ }
+}
+
 bool BattleTactics::ArtilleryPosts()
 {
  static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryPosts="),V);return V==1;}();
@@ -279,7 +330,42 @@ FVector UBattleMatch::AreaArtilleryPost(int32 Team,int32 SquadID,const FVector& 
  }
  // Trial -BattleArtilleryHomeGap: not within the gap of the own home (counter-battery fire at the gun would hit the home); pushed out
  // from the home, straight sideways (away from the depot side) when the post is the home itself.
- if(const float Gap=BattleTactics::ArtilleryHomeGap();Gap>0.f)
+ // Trial -BattleArtilleryPostRisk (with the depot): instead of the fixed sideways push, the post is scored. Cost in metres = the distance
+ // to the depot (a damaged gun drives there) + Risk x the chance that return fire at the gun lands on the depot: 1 within the blast
+ // radius plus 3 m of it, falling to 0 at that plus 30 m (the error of the averaged fire reports) plus the gun's spread at 60% range.
+ // Candidates: the post itself when outside the home gap, and points 0/20/40 m beyond the gap round the home (not behind it), on the
+ // navigation mesh and clear of the standoff. None found keeps the fixed push below.
+ const float PostRisk=BattleTactics::ArtilleryPostRisk();
+ bool bScored=false;
+ if(PostRisk>0.f&&S->SquadType==BattleSquadType::SPGun)
+ {
+  const FVector Home=AreaHome(Team),Depot=RepairPoint(Team);const double Gap=BattleTactics::ArtilleryHomeGap();
+  const double Safe=double(R->ArtilleryBlastRadius(true))+300.,Reach=Safe+3000.+R->ArtillerySpread(true,Range*.6);
+  auto Chance=[&](const FVector& P){return FMath::Clamp(1.-(FVector::Dist2D(P,Depot)-Safe)/FMath::Max(1.,Reach-Safe),0.,1.);};
+  auto Cost=[&](const FVector& P){return FVector::Dist2D(P,Depot)/100.+double(PostRisk)*Chance(P);};
+  const bool bPostOk=FVector::Dist2D(Post,Home)>=Gap;
+  if(!bPostOk||Chance(Post)>0.)
+  {
+   FVector Best=Post;double BestCost=bPostOk?Cost(Post):DBL_MAX;
+   const auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+   const double HomeSign=Home.X>0?1.:-1.;
+   for(int32 Ring=0;Ring<3;++Ring)for(int32 A=0;A<24;++A)
+   {
+    const double Angle=A*PI/12.;const FVector Dir(FMath::Cos(Angle),FMath::Sin(Angle),0.);
+    if(Dir.X*HomeSign>.2)continue; // behind the home is the map edge
+    FVector P=Home+Dir*(FMath::Max(Gap,1000.)+Ring*2000.);P.Z=Home.Z;
+    if(Nav){FNavLocation L;if(!Nav->ProjectPointToNavigation(P,L,FVector(500.,500.,5000.)))continue;P=L.Location;}
+    if(!Clear(P))continue;
+    const double C=Cost(P);if(C<BestCost){BestCost=C;Best=P;}
+   }
+   if(BestCost<DBL_MAX)
+   {
+    Post=Best;bScored=true;
+   }
+  }
+  else bScored=true;
+ }
+ if(const float Gap=BattleTactics::ArtilleryHomeGap();Gap>0.f&&!bScored)
  {
   const FVector Home=AreaHome(Team);
   if(FVector::Dist2D(Post,Home)<Gap)
@@ -726,6 +812,17 @@ int32 UBattleLeaderRuntime::ArtilleryImpact(const FArtilleryShell& Shell)
    const float Transmission=!BattleTactics::BlastOcclusionEnabled()?1.f:
     (BattleTactics::HasTerrainLine(GetWorld(),Shell.At,Surface+(Shell.At-Surface).GetSafeNormal()*2.)?1.f:0.f);
    if(Transmission>0.f&&M->DamageBase(M->BaseActors[Enemy],Team,(Shell.bSPG?T->SPGBaseDamage:T->MortarBaseDamage)*Transmission))++ArtilleryBaseHits;
+  }
+ }
+ // Trial -BattleDepotHealth: the enemy depot within the blast radius plus 3 m takes the falloff damage.
+ if(M&&Enemy>=0&&Enemy<2&&BattleTactics::DepotHealth()>0.f&&M->DepotWorking(Enemy))
+ {
+  const double DD=FVector::Dist2D(M->RepairPoint(Enemy),Shell.At),Reach=double(Radius)+300.;
+  if(DD<Reach)
+  {
+   const float DepotHit=float(MaxDamage*(1.-DD/Reach));
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_DEPOT_HIT team=%d shooter=%d damage=%.0f distance=%.0f"),Enemy,Shell.ShooterID,DepotHit,DD);
+   M->DamageDepot(Enemy,DepotHit,Shell.bSPG?TEXT("gun"):TEXT("mortar"));
   }
  }
  const double Now=GetWorld()->GetTimeSeconds();

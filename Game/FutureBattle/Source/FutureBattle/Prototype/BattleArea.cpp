@@ -237,6 +237,7 @@ void UBattleMatch::UpdateArea(float Dt)
  const auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>();
  if(!bArea||Phase!=EBattleMatchPhase::Combat||!Mode||Mode->bCombatPaused||!FMath::IsFinite(Dt)||Dt<=0)return;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ UpdateDepots(Dt);
  Area.ObserveClock+=Dt;
  if(Area.ObserveClock>=.2f)
  {
@@ -307,8 +308,9 @@ void UBattleMatch::UpdateArea(float Dt)
   // A supply vehicle of the squad's side nearby with stock left gives the same refill anywhere and loses the rounds it gave.
   const int32 Car=!bHome&&!bPoint&&S->CommandStatus==EBattleCommandStatus::Active&&S->SquadType!=BattleSquadType::Supply?SupplyCarNear(S->Team,R->Position(S->LeaderUnitID)):INDEX_NONE;
   const bool bTeamSupply=Car!=INDEX_NONE;
-  // Trial -BattleRepairDepot: vehicles and exos recover health at the depot (leader within 25 m), and no longer at the home.
-  const bool bDepotMachine=BattleTactics::RepairDepot()>0.f&&(S->SquadType==BattleSquadType::Exo||R->IsVehicle(S->LeaderUnitID));
+  // Trial -BattleRepairDepot: vehicles and exos recover health at the depot (leader within 25 m), and no longer at the home
+  // (at the home again while -BattleDepotHealth has broken the depot).
+  const bool bDepotMachine=DepotWorking(S->Team)&&(S->SquadType==BattleSquadType::Exo||R->IsVehicle(S->LeaderUnitID));
   if(bDepotMachine&&S->CommandStatus==EBattleCommandStatus::Active&&FVector::Dist2D(R->Position(S->LeaderUnitID),RepairPoint(S->Team))<=2500.)
    if(const float DepotHeal=BattleTactics::Supply().HealPerSecond;DepotHeal>0.f)for(int32 ID:S->Members)Store->Heal(ID,DepotHeal*Step);
   if(!bHome&&!bPoint&&!bTeamSupply){Area.AmmoTimers.Remove(SID);continue;}
