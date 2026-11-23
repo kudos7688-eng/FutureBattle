@@ -372,6 +372,10 @@ public:
 	TMap<int32, FBattleGroup> Groups;
  // The point an AI attack group follows: the second focus for the second attack army, else the team focus (StrategyFocusPoint).
  int32 GroupFocusPoint(const FBattleGroup& G) const;
+ // Stage 7 link to the army control (user 11-23): with -BattleFrontPlanPlayer=1 a player's attack group the player delegated (J) follows
+ // the team focus like the AI's attack army: the first such group (lowest ID) the focus, the second the second focus when there is one.
+ // A group under manual command keeps the player's orders.
+ bool PlayerGroupFollowsFocus(const FBattleGroup& G) const;
 	TMap<int32, int32> SquadGroup; // squad -> group
 	int32 NextGroupID = 1;
 	int32 GroupOf(int32 SquadID) const; // INDEX_NONE when the squad is in no group

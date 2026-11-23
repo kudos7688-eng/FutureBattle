@@ -1346,7 +1346,18 @@ bool UBattleMatch::FrontPlanFocus2On(int32 Team) const
 int32 UBattleMatch::GroupFocusPoint(const FBattleGroup& G) const
 {
  if(G.bFocus2&&G.Team>=0&&G.Team<2)return FrontPlanState[G.Team].Focus2>=0?FrontPlanState[G.Team].Focus2:INDEX_NONE;
+ // Stage 7: the second following player group takes the second focus when there is one.
+ if(PlayerGroupFollowsFocus(G)&&Objectives.IsValidIndex(FrontPlanState[G.Team].Focus2))
+ {
+  int32 Rank=0;for(const auto& P:Groups)if(P.Key<G.ID&&PlayerGroupFollowsFocus(P.Value))++Rank;
+  if(Rank==1)return FrontPlanState[G.Team].Focus2;
+ }
  return StrategyFocusPoint(G.Team);
+}
+
+bool UBattleMatch::PlayerGroupFollowsFocus(const FBattleGroup& G) const
+{
+ return G.bPlayer&&G.Kind==0&&PlayerRolesOn(G.Team)&&GroupAIRun(G);
 }
 
 // ---- Front plan, stage 7: the player's section roles (Docs/design-front-strategy.md 6; trial -BattleFrontPlanPlayer=1, default 0) ----

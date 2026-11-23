@@ -784,7 +784,7 @@ void ABattleHUD::DrawSquadList()
    if(Placed) Center/=Placed;
    DrawRect(Leaders>0&&Picked==Leaders?FLinearColor(.24f,.2f,.06f):FLinearColor(.13f,.11f,.05f),Layout.Origin.X+3,Y,Layout.Width-12,Layout.RowHeight-2);
    int32 Full=0; const int32 Living=Match->GroupLiving(*G,&Full);
-   const TCHAR* Who=!G->bPlayer?TEXT("AI編成"):Match->GroupAIRun(*G)?TEXT("委任"):TEXT("手動指揮");
+   const TCHAR* Who=!G->bPlayer?TEXT("AI編成"):Match->PlayerGroupFollowsFocus(*G)?TEXT("委任・重点に連動"):Match->GroupAIRun(*G)?TEXT("委任"):TEXT("手動指揮");
    DrawText(FString::Printf(TEXT("群%d　%s"),G->ID,Who),Gold,Layout.Origin.X+9,Y+4,GEngine->GetSmallFont(),1);
    DrawText(FString::Printf(TEXT("%d部隊 ／ 兵 %d/%d"),G->Squads.Num(),Living,Full),Gold,Layout.Origin.X+Layout.Width-150,Y+4,GEngine->GetSmallFont(),.85f);
    static const TCHAR* const PhaseNames[]={TEXT("集結"),TEXT("前進"),TEXT("保持")};
