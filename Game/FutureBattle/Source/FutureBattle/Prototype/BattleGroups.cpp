@@ -588,8 +588,8 @@ bool UBattleMatch::GroupSectorPost(const FBattleGroup& G,int32 Team,int32 SquadI
   const double Along=FVector::DotProduct(BattleSectors::Center(C)-BattleSectors::Center(A),Advance)/BattleSectors::Size;
   if(Along>.5)continue; // beyond the place, on the enemy's side
   const double CoverScore=Kind=='H'||Kind=='W'?3.:Kind=='T'||Kind=='^'?2.:Kind=='J'||Kind=='B'||Kind=='S'?1.:0.;
-  double Score=CoverScore+(DX==0&&DY==0?(bAnchorFirst?100.:1.5):Along>-.5?1.:.3)-(Posted.Contains(C)?2.:0.);
-  Cands.Add({C,Score});
+  double SectorScore=CoverScore+(DX==0&&DY==0?(bAnchorFirst?100.:1.5):Along>-.5?1.:.3)-(Posted.Contains(C)?2.:0.);
+  Cands.Add({C,SectorScore});
  }
  if(Cands.IsEmpty())return false;
  Cands.Sort([](const FCand& L,const FCand& R){return L.Score!=R.Score?L.Score>R.Score:L.Cell.X!=R.Cell.X?L.Cell.X<R.Cell.X:L.Cell.Y<R.Cell.Y;});
