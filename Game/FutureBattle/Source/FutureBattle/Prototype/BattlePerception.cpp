@@ -174,6 +174,16 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	static TArray<FSightJob> Jobs; static TArray<const FLiveUnit*> JobCandidates; static TSet<int32> InView;
 	Jobs.Reset(); JobCandidates.Reset();
 	TSet<int32> UpdatedObservers;
+	// Evaluation only (-BattleSightRayStats=1): what each squad saw itself before this update's scans. Read by the counters only.
+	static const bool bRayStats = [] { int32 V = 0; FParse::Value(FCommandLine::Get(), TEXT("BattleSightRayStats="), V); return V != 0; }();
+	TMap<int32, TSet<int32>> RaySquadSeen;
+	if (bRayStats)
+	{
+		for (const auto& Pair : Alive) if (const auto* Known = Observers.Find(Pair.Key))
+			for (const auto& Contact : Known->Contacts) if (!Contact.Value.bShared && Now - Contact.Value.LastSeenTime <= .45)
+				RaySquadSeen.FindOrAdd(Pair.Value.State->SquadID).Add(Contact.Key);
+		if (const int64 Window = FMath::FloorToInt64(Now / .2); Window != RayWindow) { RayKnownPairs += RayWindowPairs.Num(); RayWindowPairs.Reset(); RayWindow = Window; }
+	}
 	{
 		FBattleScopedMetric ScanTiming(Metrics, EBattleMetricPhase::SightScan);
 		CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattleSightScan);
@@ -304,6 +314,15 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 							const FSightTrace& T = Traces[Pre[K] - 2];
 							if (bStats) Leader->RecordSightHit(T.Hit, Candidate.State->UnitID, T.Cycles, UBattleLeaderRuntime::SightFromPerception);
 							Visible = Leader->SightHitVisible(T.Hit, Candidate.State->UnitID) ? 1 : 0;
+							if (bRayStats)
+							{
+								const int32 RayTarget = Candidate.State->UnitID, RaySquadID = Job.Pair->Value.State->SquadID;
+								const FBattleContact* Mine = Observer.Contacts.Find(RayTarget);
+								const TSet<int32>* Mates = RaySquadSeen.Find(RaySquadID);
+								const bool bMine = Mine && !Mine->bShared && Now - Mine->LastSeenTime <= .45, bMates = Mates && Mates->Contains(RayTarget);
+								++(bMine ? RayOwn : bMates ? RaySquad : Mine ? RayShared : RayUnknown)[Visible];
+								if (bMine || bMates) RayWindowPairs.Add((uint64(uint32(RaySquadID)) << 32) | uint32(RayTarget));
+							}
 						}
 						Consider(Observer, *Job.Pair, Job.Sight, Job.bFarPulse, InView, Candidate, Visible);
 					}

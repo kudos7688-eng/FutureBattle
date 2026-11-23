@@ -53,6 +53,11 @@ public:
 	int64 SlowScans = 0, NormalScans = 0; // scan interval counters (BATTLE_SIGHT_SCAN)
 	double UnseenScanInterval = .2, ScanNearCm = 1.e7; // seconds between scans of an observer that saw no enemy (match: 0.4, set by UBattleLeaderRuntime)
 	int64 ParallelUpdates = 0, ParallelTraces = 0; // parallel sight trial counters (BATTLE_SIGHT_PARALLEL)
+	// Evaluation only (-BattleSightRayStats=1, default 0; nothing in the match reads these): where the parallel scan's rays go.
+	// [0] = ray blocked, [1] = target seen. Own: the observer saw the target himself within 0.45 s. Squad: a squad mate did.
+	// Shared: known only from a report. Unknown: no contact. RayKnownPairs: distinct (squad, target) among Own+Squad rays per 0.2 s.
+	int64 RayOwn[2] = {0, 0}, RaySquad[2] = {0, 0}, RayShared[2] = {0, 0}, RayUnknown[2] = {0, 0}, RayKnownPairs = 0, RayWindow = -1;
+	TSet<uint64> RayWindowPairs;
 	bool bSlowUnknownFar = false; // Diagnostic only: unknown targets beyond 1200cm on alternate visits.
 	void Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double Now, int32 Slice = 0, int32 SliceCount = 1);
 	const TMap<int32, FBattleContact>* GetContacts(int32 ObserverID) const;

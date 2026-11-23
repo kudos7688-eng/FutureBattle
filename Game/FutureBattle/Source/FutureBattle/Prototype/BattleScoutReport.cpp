@@ -62,6 +62,9 @@ void UBattleMatch::UpdateScoutReports()
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SIGHT_SCAN t=%.0f slow=%lld normal=%lld"),Now,Perception->SlowScans,Perception->NormalScans);
  if(Perception->ParallelUpdates>0&&FMath::FloorToInt(Now/60.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/60.))
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SIGHT_PARALLEL t=%.0f updates=%lld traces=%lld"),Now,Perception->ParallelUpdates,Perception->ParallelTraces);
+ if(Perception->RayWindow>=0&&FMath::FloorToInt(Now/60.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/60.))
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SIGHT_RAYS t=%.0f own_seen=%lld own_blocked=%lld squad_seen=%lld squad_blocked=%lld shared_seen=%lld shared_blocked=%lld unknown_seen=%lld unknown_blocked=%lld known_pairs=%lld"),Now,
+   Perception->RayOwn[1],Perception->RayOwn[0],Perception->RaySquad[1],Perception->RaySquad[0],Perception->RayShared[1],Perception->RayShared[0],Perception->RayUnknown[1],Perception->RayUnknown[0],Perception->RayKnownPairs);
  if(R->VehicleIDs.Num()&&FMath::FloorToInt(Now/60.)!=FMath::FloorToInt((Now-GetWorld()->GetDeltaSeconds())/60.))
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_COST t=%.0f sight_traces=%lld sight_reused=%lld sight_ms=%.1f orders=%d order_ms=%.1f order_skips=%lld gun_shots=%lld gun_hits=%lld gun_vehicle_hits=%lld gun_kills=%lld gun_base_hits=%lld gun_picks=%lld gun_ms=%.1f"),Now,R->TankSightTraces,R->TankSightReused,R->TankSightMs,R->TankOrders,R->TankOrderMs,R->TankOrderSkips,
    R->TankGunShots,R->TankGunHits,R->TankGunVehicleHits,R->TankGunKills,R->TankGunBaseHits,R->TankGunPicks,R->TankGunMs);
