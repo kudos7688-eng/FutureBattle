@@ -42,9 +42,10 @@ struct FBattleNoticeLayout
  int32 RowAt(FVector2D P) const;
 };
 // Command bar (command UI 2026-11-16): buttons on the bottom panel that call the same actions as the keys.
+// Since 2026-11-23 the ten purchase buttons are one "購入 [B]" button (index 6) that opens the purchase panel.
 struct FBattleCommandBarLayout
 {
- static constexpr int32 Count=16;
+ static constexpr int32 Count=7;
  struct FButton { FVector2D Origin=FVector2D::ZeroVector; float Width=0, Scale=.85f; FString Caption; };
  FButton Buttons[Count];
  float ButtonHeight=26, PanelTop=0, SummaryY=0;
@@ -74,6 +75,32 @@ struct FBattlePlanPanelLayout
   for(int32 I=0;I<Items.Num();++I){const auto& T=Items[I];if(T.Kind!=0&&P.X>=T.Origin.X&&P.X<T.Origin.X+T.Size.X&&P.Y>=T.Origin.Y&&P.Y<T.Origin.Y+T.Size.Y)return I;}
   return INDEX_NONE;
  }
+};
+
+// Purchase panel (2026-11-23, user request: with more squad types the ten purchase keys and buttons became hard to use). In the area
+// battle's tactical view B (pad: D-pad left) or the command bar's purchase button opens it above the bottom panel: one row per squad type
+// with its key, size, cost, how many the own side has (and the limit), what it is for and whether it can be bought now. A click on a row
+// buys that type through the same path as its key (ABattleController::BuyArea, a reservation with -BattleHireReserve=1); the panel stays
+// open for further purchases. The number keys still buy directly. Shared by Canvas and input (BattleBuyPanel.cpp).
+struct FBattleBuyPanelLayout
+{
+ // Block: 0 can be bought now, 1 waits for resources or a limit (reservable with -BattleHireReserve=1), 2 not now (e.g. before combat).
+ struct FRow { uint8 Type=0; int32 Block=0; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector; FString Key, Name, Members, Cost, Owned, Role, State; };
+ TArray<FRow> Rows; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector, CloseOrigin=FVector2D::ZeroVector;
+ FString Title, Footer; float HeaderY=0, FooterY=0;
+ static constexpr float RowHeight=26.f, CloseSize=24.f, Width=700.f;
+ // Column offsets from the panel's left edge (the state column is right-aligned to the panel width).
+ static constexpr float ColKey=14.f, ColName=52.f, ColMembers=164.f, ColCost=222.f, ColOwned=276.f, ColRole=346.f, StateWidth=164.f;
+ // bPad: the footer names the pad buttons. RowCount: the number of rows (one per squad type the player can buy).
+ static FBattleBuyPanelLayout Make(FVector2D View,const UWorld* World,bool bPad=false);
+ static int32 RowCount();
+ bool Contains(FVector2D P) const {return P.X>=Origin.X&&P.X<Origin.X+Size.X&&P.Y>=Origin.Y&&P.Y<Origin.Y+Size.Y;}
+ int32 RowAt(FVector2D P) const
+ {
+  for(int32 I=0;I<Rows.Num();++I){const auto& R=Rows[I];if(P.X>=R.Origin.X&&P.X<R.Origin.X+R.Size.X&&P.Y>=R.Origin.Y&&P.Y<R.Origin.Y+R.Size.Y)return I;}
+  return INDEX_NONE;
+ }
+ bool CloseAt(FVector2D P) const {return P.X>=CloseOrigin.X&&P.X<CloseOrigin.X+CloseSize&&P.Y>=CloseOrigin.Y&&P.Y<CloseOrigin.Y+CloseSize;}
 };
 
 UCLASS()
@@ -170,6 +197,13 @@ public:
 	// Plan panel (front plan stage 7): U opens and closes it in the tactical view.
 	bool IsPlanPanelOpen() const { return bPlanPanel; }
 	void TogglePlanPanel();
+	// Purchase panel (BattleBuyPanel.cpp): B opens and closes it in the area battle (elsewhere B is still the support request).
+	bool IsBuyPanelOpen() const { return bTactical && bBuyPanel; }
+	int32 GetBuyPanelRow() const { return BuyPanelRow; }
+	void ToggleBuyPanel();
+	void BuyKey();
+	// Buys the type of the panel row Row (the same path as its number key); false when the panel has no such row.
+	bool BuyFromPanel(int32 Row);
 	// Play-speed toggle (tactical view, standalone only): [.] cycles x1/x2/x4 via global time dilation; direct control always runs at x1.
 	void CycleGameSpeed();
 	// Route choice (BattlePlayerRoutes.cpp): the next of automatic, centre, north, south for the selected squads.
@@ -271,6 +305,15 @@ private:
  // Plan panel: open, and a left press inside it (its release is swallowed too).
  bool bPlanPanel=false, bPlanPress=false;
  bool PlanPanelInput(const FInputKeyEventArgs& Params);
+ // Purchase panel: open, a left press inside it (its release is swallowed too), the highlighted row (pointer or D-pad), the pad
+ // buttons it took (their releases are swallowed too) and the last pointer position (a move over a row highlights it).
+ bool bBuyPanel=false, bBuyPress=false;
+ int32 BuyPanelRow=0;
+ TSet<FKey> BuyPadKeys;
+ FVector2D LastBuyPointer=FVector2D(-1,-1);
+ bool BuyPanelInput(const FInputKeyEventArgs& Params);
+ bool HandleBuyPanelPad(const FInputKeyEventArgs& Params);
+ void UpdateBuyPanel();
  int32 PressedSquadID=INDEX_NONE;
  FDelegateHandle LeaderDeathHandle;
  // Notification polling: what the player's side last knew (own home HP, observed point owners, own squads' state).

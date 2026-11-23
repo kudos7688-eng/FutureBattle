@@ -39,21 +39,18 @@
 
 FBattleCommandBarLayout FBattleCommandBarLayout::Make(FVector2D View,const UWorld* World,bool bPad)
 {
- static const TCHAR* const KeyNames[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("小隊を購入 [2]"), TEXT("重装歩兵 [3]"), TEXT("偵察組 [4]"), TEXT("対戦車班 [5]"), TEXT("戦車 [6]"), TEXT("装甲車 [7]"), TEXT("迫撃砲班 [8]"), TEXT("自走砲 [9]"), TEXT("外骨格 [0]"), TEXT("補給車 [-]") };
- static const TCHAR* const PadNames[] = { TEXT("移動 [X]"), TEXT("攻撃移動 [Y]"), TEXT("防衛 [RB]"), TEXT("停止 [B]"), TEXT("手動指揮 [十字↑]"), TEXT("AIに委任 [十字↓]"), TEXT("小隊を購入 [十字←]"), TEXT("重装歩兵 [Aでクリック]"), TEXT("偵察組 [Aでクリック]"), TEXT("対戦車班 [Aでクリック]"), TEXT("戦車 [Aでクリック]"), TEXT("装甲車 [Aでクリック]"), TEXT("迫撃砲班 [Aでクリック]"), TEXT("自走砲 [Aでクリック]"), TEXT("外骨格 [Aでクリック]"), TEXT("補給車 [Aでクリック]") };
+ static const TCHAR* const KeyNames[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("部隊を購入 [B]") };
+ static const TCHAR* const PadNames[] = { TEXT("移動 [X]"), TEXT("攻撃移動 [Y]"), TEXT("防衛 [RB]"), TEXT("停止 [B]"), TEXT("手動指揮 [十字↑]"), TEXT("AIに委任 [十字↓]"), TEXT("部隊を購入 [十字←]") };
  static_assert(UE_ARRAY_COUNT(KeyNames) == FBattleCommandBarLayout::Count && UE_ARRAY_COUNT(PadNames) == FBattleCommandBarLayout::Count, "one label per command button");
  FBattleCommandBarLayout Layout;
  const float Left=34.f, Right=FMath::Max(Left+1.f,float(View.X)-34.f), Available=Right-Left;
  const bool bSectors=World&&BattleFieldLayout::Of(World).bSectors;
- const bool bGunCost=BattleTactics::ArtilleryPosts()||FCString::Strifind(FCommandLine::Get(),TEXT("BattleAreaSPGCost="))!=nullptr;
  float CursorX=Left, CursorY=0;
  for(int32 Index=0;Index<Count;++Index)
  {
   FString Captions[2]={KeyNames[Index],PadNames[Index]};
   if(bSectors&&(Index==1||Index==2))
   {Captions[0]=Index==1?TEXT("区画制圧 [T]"):TEXT("区画維持 [G]");Captions[1]=Index==1?TEXT("区画制圧 [Y]"):TEXT("区画維持 [RB]");}
-  if(Index==13&&bGunCost)
-  {Captions[0]=FString::Printf(TEXT("自走砲 %d [9]"),BattleSquadType::AreaCost(BattleSquadType::SPGun));Captions[1]=FString::Printf(TEXT("自走砲 %d [A]"),BattleSquadType::AreaCost(BattleSquadType::SPGun));}
   float MaxWidth=0, MaxHeight=0;
   for(const FString& Caption:Captions)
   {float TextWidth=0,TextHeight=0;UCanvas::StrLen(GEngine->GetSmallFont(),Caption,TextWidth,TextHeight,false,nullptr);MaxWidth=FMath::Max(MaxWidth,TextWidth);MaxHeight=FMath::Max(MaxHeight,TextHeight);}
@@ -175,7 +172,7 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
 	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
 	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
-	Button(TEXT("RequestSupport"), EKeys::B, &ABattleController::RequestSupport);
+	Button(TEXT("BuyKey"), EKeys::B, &ABattleController::BuyKey); // area battle: purchase panel; otherwise the support request
 	Button(TEXT("Reload"), EKeys::R, &ABattleController::Reload);
 	Button(TEXT("ToggleCombat"), EKeys::P, &ABattleController::ToggleCombat);
 	Button(TEXT("GameSpeed"), EKeys::Period, &ABattleController::CycleGameSpeed);
@@ -374,6 +371,7 @@ void ABattleController::TogglePlanPanel()
  if(!bPlanPanel&&!Match->PlayerRolesOn(0)&&!UBattleMatch::HireReserveOn())
  {ShowNotice(TEXT("作戦方針は、前線の区間の指定（試験切替）か購入予約（試験切替）が有効なときに使えます"));return;}
  bPlanPanel=!bPlanPanel;
+ if(bPlanPanel)bBuyPanel=false; // one panel at a time
 }
 bool ABattleController::PlanPanelInput(const FInputKeyEventArgs& Params)
 {
@@ -633,6 +631,7 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
  if(Params.Key.IsGamepadKey()) bGamepadActive=true;
  else if(Params.Key.IsMouseButton()||!Params.Key.IsAnalog()) bGamepadActive=false;
  if(HandleGamepadMenu(Params))return true;
+ if(HandleBuyPanelPad(Params))return true;
  FInputKeyEventArgs Logical=Params;
  if(Params.Key.IsGamepadKey())
  {
@@ -686,7 +685,7 @@ void ABattleController::CancelPlayerInput(bool bGamepadOnly)
  if(!bGamepadOnly||Released.Contains(EKeys::SpaceBar))
   if(auto* Controlled=Cast<ABattleUnit>(GetPawn()))Controlled->StopJumping();
  if(!bGamepadOnly||Released.Contains(EKeys::LeftMouseButton))
- {bTriggerHeld=false;DelegationPress=INDEX_NONE;bSquadListPress=false;bMinimapPress=false;PressedSquadID=INDEX_NONE;}
+ {bTriggerHeld=false;DelegationPress=INDEX_NONE;bSquadListPress=false;bMinimapPress=false;bBuyPress=false;PressedSquadID=INDEX_NONE;}
  if(!bGamepadOnly||Released.Contains(EKeys::RightMouseButton))
  {bAimHeld=false;bPathDraw=false;DrawnPath.Reset();DrawnLength=0;}
 }
@@ -728,6 +727,7 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
   }
  }
  if(bTactical&&PlanPanelInput(Params))return true;
+ if(bTactical&&BuyPanelInput(Params))return true;
 	FVector2D Pointer;
  // The squad list is drawn after delegation, so its whole panel owns the overlap.
 	const bool OverDelegation = GetPointerPosition(Pointer) && !SquadPanelAtPointer() && DelegationPanelAt(Pointer);
@@ -1120,6 +1120,7 @@ void ABattleController::PlayerTick(float DeltaTime)
 	UpdateGamepad(DeltaTime);
 	UpdatePathDraw();
 	UpdateVault(DeltaTime);
+	UpdateBuyPanel();
 	// Shift + moving the pointer over the squad list adds every squad passed over to the selection (user request 2026-11-21).
 	if (bTactical && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift)) && SquadPanelAtPointer())
 	{
@@ -1454,16 +1455,7 @@ void ABattleController::PressCommandButton(int32 Index)
  case 3: HoldSelected(); break;
  case 4: TakeCommandSelected(); break;
  case 5: DelegateSelected(); break;
- case 6: HireRegular(); break;
- case 7: HireVeteran(); break; // area battle: heavy infantry
- case 8: HireScout(); break; // area battle: scout pair
- case 9: HireAntiTank(); break; // area battle: anti-tank team
- case 10: HireTank(); break; // area battle: tank
- case 11: HireArmoredCar(); break; // area battle: armoured car
- case 12: HireMortar(); break; // area battle: mortar team
- case 13: HireSPGun(); break; // area battle: self-propelled gun
- case 14: HireExo(); break; // area battle: armoured exoskeleton soldier
- case 15: HireSupply(); break; // area battle: supply vehicle
+ case 6: { auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); if(Match->bArea) ToggleBuyPanel(); else HireRegular(); } break; // purchase panel (the old match: a squad)
  default: break;
  }
 }
@@ -1529,7 +1521,7 @@ FKey ABattleController::GamepadToKey(const FKey& Key) const
   if(Key==EKeys::Gamepad_Special_Left) return EKeys::E;                      // View: control the selected leader
   if(Key==EKeys::Gamepad_DPad_Up) return EKeys::K;                           // manual command
   if(Key==EKeys::Gamepad_DPad_Down) return EKeys::J;                         // delegate to AI
-  if(Key==EKeys::Gamepad_DPad_Left) return EKeys::Two;                       // buy a squad
+  if(Key==EKeys::Gamepad_DPad_Left) return EKeys::B;                         // purchase panel (old match: support request)
   if(Key==EKeys::Gamepad_DPad_Right) return EKeys::Period;                   // game speed
   if(Key==EKeys::Gamepad_RightThumbstick) return EKeys::Enter;               // start the match
  }
