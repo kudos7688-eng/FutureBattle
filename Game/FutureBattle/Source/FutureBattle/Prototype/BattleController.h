@@ -45,7 +45,7 @@ struct FBattleNoticeLayout
 // Since 2026-11-23 the ten purchase buttons are one "購入 [B]" button (index 6) that opens the purchase panel.
 struct FBattleCommandBarLayout
 {
- static constexpr int32 Count=7;
+ static constexpr int32 Count=8; // 7: draw the front line (user 2026-11-23: Ctrl + right drag never reached the game in test play)
  struct FButton { FVector2D Origin=FVector2D::ZeroVector; float Width=0, Scale=.85f; FString Caption; };
  FButton Buttons[Count];
  float ButtonHeight=26, PanelTop=0, SummaryY=0;
@@ -218,6 +218,7 @@ public:
 	void EndPathDraw();
 	bool IsDrawingPath() const { return bPathDraw; }
 	bool IsDrawingFrontLine() const { return bPathDraw && bFrontDraw; } // Ctrl + right drag: the front line (UBattleMatch::SetDrawnFrontLine)
+	bool IsFrontDrawArmed() const { return bFrontDrawArmed; }
 	const TArray<FVector>& GetDrawnPath() const { return DrawnPath; }
 	float PanSpeed() const;
 	bool TryVault(ABattleUnit* Unit);
@@ -294,7 +295,7 @@ private:
 	bool bTactical = true;
 	int32 GameSpeed = 1;
 	bool bTriggerHeld = false;
-	bool bPathDraw = false, bFrontDraw = false; TArray<FVector> DrawnPath; double DrawnLength = 0; FVector2D PathScreenStart = FVector2D::ZeroVector;
+	bool bPathDraw = false, bFrontDraw = false, bFrontDrawArmed = false; /* armed: command button 7, the next right drag is the front line */ TArray<FVector> DrawnPath; double DrawnLength = 0; FVector2D PathScreenStart = FVector2D::ZeroVector;
 	UPROPERTY() TObjectPtr<ABattleUnit> VaultUnit;
 	FVector VaultFrom = FVector::ZeroVector, VaultTo = FVector::ZeroVector; double VaultPeak = 0; float VaultTime = 0, VaultDuration = .4f;
 	int32 DelegationPress = INDEX_NONE;

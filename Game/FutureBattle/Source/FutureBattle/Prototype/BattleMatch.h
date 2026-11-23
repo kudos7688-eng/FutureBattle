@@ -323,6 +323,8 @@ public:
 	// Squad reaction to armour: 1 = a vehicle backs away to Goal (a known anti-tank soldier within reach, or DamageRatio of its health
 	// lost in 5 s), 2 = infantry with no anti-tank weapon falls back from a tank it sees, 0 = none.
 	int32 AreaArmourReaction(int32 Team, int32 SquadID, float DamageRatio, FVector& Goal, FString& Why) const;
+ // Trial -BattleArmourWait=1 (BattleArmourAI.cpp): an infantry squad with no anti-tank weapon that knows a tank near it or near Goal.
+ bool ArmourWait(int32 SquadID, const FVector& Goal) const;
 	// Tank objective (the point with the most known enemies, outside the city of map E) and its overwatch post short of that point.
 	int32 AreaTankTarget(int32 Team, int32 SquadID) const;
 	FVector AreaTankPost(int32 Team, int32 Point, float Overwatch = -1.f) const; // Overwatch below zero: UBattleTuning::TankOverwatch

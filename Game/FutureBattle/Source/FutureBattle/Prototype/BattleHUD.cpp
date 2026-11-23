@@ -464,8 +464,8 @@ void ABattleHUD::DrawHUD()
 			for (int32 I = 0; I < FBattleCommandBarLayout::Count; ++I)
 			{
 				const auto& Button = Bar.Buttons[I];
-				const bool bUsable = I >= 6 ? (Match->bArea && BattleTactics::AreaHire().bEnabled) : bAny;
-				const bool bPending = (I == 1 && PC->PendingOrder == EBattleOrder::AttackMove) || (I == 2 && PC->PendingOrder == EBattleOrder::Defend) || (I == 6 && PC->IsBuyPanelOpen());
+				const bool bUsable = I == 7 ? BattleFieldLayout::Of(GetWorld()).bSectors : I >= 6 ? (Match->bArea && BattleTactics::AreaHire().bEnabled) : bAny;
+				const bool bPending = (I == 1 && PC->PendingOrder == EBattleOrder::AttackMove) || (I == 2 && PC->PendingOrder == EBattleOrder::Defend) || (I == 6 && PC->IsBuyPanelOpen()) || (I == 7 && (PC->IsFrontDrawArmed() || PC->IsDrawingFrontLine()));
 				DrawRect(bPending ? FLinearColor(.45f, .4f, .1f, .98f) : bUsable ? FLinearColor(.10f, .24f, .24f, .98f) : FLinearColor(.08f, .11f, .15f, .98f), Button.Origin.X, Button.Origin.Y, Button.Width, Bar.ButtonHeight);
                 Label(Button.Caption, Button.Origin.X+8, Button.Origin.Y+5, bPending ? FLinearColor::Yellow : bUsable ? Mint : Muted, Button.Scale);
 			}

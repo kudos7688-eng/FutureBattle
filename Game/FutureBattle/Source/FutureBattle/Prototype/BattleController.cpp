@@ -39,8 +39,8 @@
 
 FBattleCommandBarLayout FBattleCommandBarLayout::Make(FVector2D View,const UWorld* World,bool bPad)
 {
- static const TCHAR* const KeyNames[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("部隊を購入 [B]") };
- static const TCHAR* const PadNames[] = { TEXT("移動 [X]"), TEXT("攻撃移動 [Y]"), TEXT("防衛 [RB]"), TEXT("停止 [B]"), TEXT("手動指揮 [十字↑]"), TEXT("AIに委任 [十字↓]"), TEXT("部隊を購入 [十字←]") };
+ static const TCHAR* const KeyNames[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("部隊を購入 [B]"), TEXT("前線を引く") };
+ static const TCHAR* const PadNames[] = { TEXT("移動 [X]"), TEXT("攻撃移動 [Y]"), TEXT("防衛 [RB]"), TEXT("停止 [B]"), TEXT("手動指揮 [十字↑]"), TEXT("AIに委任 [十字↓]"), TEXT("部隊を購入 [十字←]"), TEXT("前線を引く") };
  static_assert(UE_ARRAY_COUNT(KeyNames) == FBattleCommandBarLayout::Count && UE_ARRAY_COUNT(PadNames) == FBattleCommandBarLayout::Count, "one label per command button");
  FBattleCommandBarLayout Layout;
  const float Left=34.f, Right=FMath::Max(Left+1.f,float(View.X)-34.f), Available=Right-Left;
@@ -1456,6 +1456,13 @@ void ABattleController::PressCommandButton(int32 Index)
  case 4: TakeCommandSelected(); break;
  case 5: DelegateSelected(); break;
  case 6: { auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); if(Match->bArea) ToggleBuyPanel(); else HireRegular(); } break; // purchase panel (the old match: a squad)
+ // The next right drag draws the front line, without Ctrl (BattlePlayerPath.cpp); a second press takes it back.
+ case 7:
+  if(!BattleFieldLayout::Of(GetWorld()).bSectors){ShowNotice(TEXT("前線は区画のあるマップだけです"));break;}
+  bFrontDrawArmed=!bFrontDrawArmed;
+  ShowNotice(bFrontDrawArmed?TEXT("前線：右ドラッグで左右に引く／右クリックだけで前線軍に任せる"):TEXT("前線を引くのをやめました"));
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_INPUT FrontDrawArmed=%d"),bFrontDrawArmed?1:0);
+  break;
  default: break;
  }
 }
