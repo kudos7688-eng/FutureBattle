@@ -31,6 +31,15 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-24 06時15分 Claude（観測ルールの相談）：「撃たれた兵は撃ってきた敵を自分で探す」例外（`-BattleSectorSightHit`、既定0）を入れてマップJで測った。入替なしは良くなり、入替ありは悪いまま。段階2（分隊単位の知識）の片側比較は8試合中6試合で悪い
+
+- 変更：`-BattleSectorSightHit=1`（撃たれた本人）／`=2`（同じ分隊の全員）が、撃ってきた別区画の敵を5秒間は自分でも探す。既定0。`BattleSectorSight.cpp`・`BattlePerception.h/.cpp`（`AllowCrossSector`）・`BattleLeaderRuntime.cpp`（`NoteUnderFire`）。数える値 `sector_sight_hit_looks`・`sector_sight_member_own_cross_engage_frames`。
+- 検証：ビルド、`Test-Battle` failures=0。既定0は入れる前と得点・射撃数が一致（マップJ seed 7、違いは足した数える値の欄だけ）。凍結ビルド `obs-sshit`。
+- マップJ（片側だけ区画視界、seed 7・19×入替、切替0との差の平均）：例外なし −167（悪化4/4）、`=1` −150（3/4）、`=2` −88（2/4）。入替なしは `=2` で +210・+102、入替ありは −366・−297。例外は1試合 1600〜2400回働いた。表は `Docs/design-sector-combat.md` 7.4。
+- 段階2の片側比較（`-BattleSquadKnowledge=1`、チーム0）：マップI 平均 −60（悪化3/4）、マップJ 平均 −82（悪化3/4）。`Docs/design-squad-knowledge.md` 9.0。
+- 制限：各条件4試合。入替ありで悪いままの理由、段階2で弱くなる理由は未確認。画面での確認なし。
+- 次の一手：ユーザーの判断待ち（区画視界の既定を1のままにするか0へ戻すか、例外をどう扱うか）。調べるなら、入替ありの側で隊員が撃たれてから撃ち返すまでの様子。
+
 ## 2026-11-24 05時02分 Claude（RB01一般兵）：RB01 の体（`-BattleSoldierBody`、既定0）を main へ取り込んだ（55bc154）。描画ありマップEの負荷は今の既定で約18ms。11-18 の約12ms から増えた分は、ほぼ全部が作戦画面の戦場の霧の表示（`BattleHUD_DrawFieldOverlay` 5.8ms）
 
 - **取り込み**：rb01 に main（35ed7cb）を取り込み直し、ぶつかったのは自動生成の `CODEMAP.md`・`CODEMAP_SYMBOLS.md`・`SWITCHES.md` だけ（作り直して解決）。rb01 のビルドと `Test-Battle` は合格（failures=0、4時47分）。main は rb01 へ早送り（55bc154）、main のビルドは合格。main・rb01 とも GitHub に push 済み。既定は0なので既定の試合は変わらない（1時の比較で Quinn と IDENTICAL）。

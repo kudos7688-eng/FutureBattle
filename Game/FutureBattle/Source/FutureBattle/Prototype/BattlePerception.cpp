@@ -146,8 +146,10 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	{
 		const int32* Role = SectorMembers.Num() ? SectorMembers.Find(Pair.Key) : nullptr;
 		return Role && UBattleLeaderRuntime::SectorSightFar(Pair.Value.Position, Candidate.Position) &&
-			!(*Role == 2 && Leader->IsVehicle(Candidate.State->UnitID)) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID);
+			!(*Role == 2 && Leader->IsVehicle(Candidate.State->UnitID)) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID) &&
+			!(CrossSectorLook.Num() && CrossSectorLook.FindRef((uint64(uint32(Pair.Key)) << 32) | uint32(Candidate.State->UnitID)) >= Now);
 	};
+	for (auto It = CrossSectorLook.CreateIterator(); It; ++It) if (It.Value() < Now) It.RemoveCurrent();
 	// One candidate of one observer's scan. Visible: -1 = test line of sight here, 0/1 = result already traced (parallel trial).
 	auto Consider = [&](FBattleObserver& Observer, const TPair<int32, FLiveUnit>& Pair, const FBattleSightContext& Sight, bool bFarPulse, TSet<int32>& InView, const FLiveUnit& Candidate, int32 Visible)
 	{

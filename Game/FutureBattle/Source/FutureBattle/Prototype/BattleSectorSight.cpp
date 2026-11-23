@@ -16,6 +16,12 @@ int32 UBattleLeaderRuntime::SectorSightMode(int32 Team)
  return Only<0 || Only==Team ? Value : 0;
 }
 
+int32 UBattleLeaderRuntime::SectorSightHitMode()
+{
+ static const int32 Value=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSightHit="),V);return FMath::Clamp(V,0,2);}();
+ return Value;
+}
+
 bool UBattleLeaderRuntime::SectorSightFar(const FVector& From,const FVector& To)
 {
  // -BattleSectorSightNear=<cm> (default 2000, 500..20000): an enemy across a sector edge but this close is still an in-sector enemy.

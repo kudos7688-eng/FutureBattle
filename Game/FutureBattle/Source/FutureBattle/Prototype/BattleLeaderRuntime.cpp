@@ -929,6 +929,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   (S->TacticalPlan.Action!=EBattleSquadTactic::Support || TargetID==S->TacticalPlan.SupportTarget);
  const bool CanEngage=ObservedEngage&&CanSee(ID,TargetID);
  if(CanEngage && Contact->SourceUnitID!=ID && SectorSightMember(ID))SightExperiment.Cover(TEXT("sector_sight_member_engage_frames"));
+ if(CanEngage && Contact->SourceUnitID==ID && SectorSightMember(ID) && SectorSightFar(Pos,Contact->LastKnownPosition))SightExperiment.Cover(TEXT("sector_sight_member_own_cross_engage_frames"));
  // Trial -BattleOwnTarget (default 0, BattleSoldierFire.cpp): he cannot fire at the squad's target - he fires at an enemy he
  // sees himself within the engagement distance. Only his aim and his fire: the squad's target, movement and cover stay.
  bool bOwnAtShooter=false;
@@ -1912,6 +1913,17 @@ void UBattleLeaderRuntime::NoteUnderFire(int32 ID)
  if(ShotDirectionEnabled() || ThreatCoverEnabled(0) || ThreatCoverEnabled(1) || SoldierMoveEnabled(0) || SoldierMoveEnabled(1) || OwnTargetMode(0) || OwnTargetMode(1) || UnderFireCoverEnabled() || CoverPriorityEnabled() || HitFaceEnabled() || (BattleTactics::VehicleHitCover()&&IsVehicle(ID))){FVector From;if(GetWorld()->GetSubsystem<UBattleState>()->PendingHitSource(From))ShotFrom.Add(ID,TPair<FVector,double>(From,GetWorld()->GetTimeSeconds()));}
  if(SectorContactEnabled() || SectorMoveFireEnabled() || !SectorFireBack.IsEmpty())SectorHitUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);
  if(SightExperiment.Enabled)if(const int32 Shooter=GetWorld()->GetSubsystem<UBattleState>()->PendingHitShooter();Shooter!=INDEX_NONE)DiagnoseHitSight(ID,Shooter);
+ if(const int32 HitLook=SectorSightHitMode())
+ {
+  const auto* HitStore=GetWorld()->GetSubsystem<UBattleState>();const auto* Victim=HitStore->Find(ID);const int32 HitBy=HitStore->PendingHitShooter();
+  if(Victim && HitBy!=INDEX_NONE && SectorSightMode(Victim->Team))
+  {
+   auto* HitSense=GetWorld()->GetSubsystem<UBattlePerception>();const double Until=GetWorld()->GetTimeSeconds()+5.;int32 Lookers=0;
+   if(HitLook>=2){if(const auto* HitSquad=HitStore->FindSquad(Victim->SquadID))for(int32 Mate:HitSquad->Members)if(SectorSightRole(Mate)){HitSense->AllowCrossSector(Mate,HitBy,Until);++Lookers;}}
+   else if(SectorSightRole(ID)){HitSense->AllowCrossSector(ID,HitBy,Until);++Lookers;}
+   if(Lookers)SightExperiment.Cover(TEXT("sector_sight_hit_looks"));
+  }
+ }
  if(HitRevealEnabled()){const auto* Store=GetWorld()->GetSubsystem<UBattleState>();FVector From;const int32 Shooter=Store->PendingHitShooter();
   if(Shooter!=INDEX_NONE && Store->PendingHitSource(From))RevealShooter(ID,Shooter,From);}
  if(!BattleTactics::ReturnFireEnabled())return;
