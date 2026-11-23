@@ -31,6 +31,12 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-24 04時25分 Claude（体のアニメ・ブラインドファイア）：TPS 視点でプレイヤーがしゃがめない不具合を直した（ユーザー指摘、main 7425e09）。遮蔽の試験の10件の失敗は、直しの途中の版のものだった
+
+- **直したこと**：姿勢のあるマップ（E）以外でも、X でプレイヤーが操る兵がしゃがむ・伏せる。AI の姿勢と遮蔽行動の強制しゃがみは、姿勢のないマップでは従来どおり立ったまま（`BattleStance.cpp` の SetStance：姿勢のないマップでは強制でない・プレイヤーが操る兵だけ通す）。操る兵を離れると立ちに戻す（`BattleLeaderRuntime.cpp`）。
+- **遮蔽の試験の10件の失敗**：最初の直し（強制しゃがみまでプレイヤーに効いた版）で、遮蔽に入った次のフレームに遮蔽行動が取り消されていた。強制を通さない直し（cbc0dc0）のあと、blindfire（取り消し元の一時ログ入り）と main（9a72e4b）の両方で Test-CoverActions は failures=0。原因の取り消し元は再現しなくなったので特定していない。
+- **検証**：Build-Editor（blindfire・main）、Test-CoverActions（`cover-diag1`、`cover-main-0424`）、Test-TPSControl、Test-Battle は合格（main の Test-Battle は群制御の 04時15分の回）。**マップI の実画面で X が効くかはユーザー確認待ち。**
+
 ## 2026-11-24 04時20分 Claude（観測ルールの相談）：区画視界の境目を30・50・100mに広げてもマップJの悪化は変わらない。分隊単位の知識の段階1・2を main に入れた（段階2は試験切替、既定0、main ebbb86b）
 
 - **変更範囲**：`BattleSectorSight.cpp`（`-BattleSectorSightNear`）、`BattlePerception.h/.cpp`（分隊の表・分隊間の報告・`Knows`）、`BattleLeaderRuntime.cpp`・`BattleCoverAction.cpp`・`BattleSoldierWatch.cpp`・`BattleSquadTactics.cpp`・`BattleSupport.cpp`・`BattleScoutReport.cpp`（読む側）、`SWITCHES.md`、`CODEMAP*.md`、設計書2つ。
