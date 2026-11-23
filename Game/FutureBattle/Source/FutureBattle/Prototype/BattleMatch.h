@@ -117,8 +117,10 @@ public:
  // bAuto: AI purchase (no selection change; a team-0 squad is delegated). Cancels pending replenishments the spend can no longer cover.
  bool HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,uint8 SquadType=0);
  int32 LastHiredSquadID=INDEX_NONE;
- // Purchase reservations (Docs/design-front-strategy.md 5.1). -BattleHireReserve=1 (default 0) routes the player's purchase keys
- // through ReserveHire; the queue itself works without the switch (smoke test) and is empty unless something reserves.
+ // Purchase reservations (Docs/design-front-strategy.md 5.1). -BattleHireReserve=1 routes the player's purchase keys and the purchase
+ // panel through ReserveHire (default 1 since 2026-11-23, user request; =0 for plain purchases). The AI never reserves unless its hiring is
+ // delegated (-BattleHireDelegate / the player's delegation), so matches without player input do not change. The queue itself works
+ // without the switch (smoke test) and is empty unless something reserves.
  static bool HireReserveOn();
  static constexpr int32 HireQueueMax=12;
  // Why a purchase cannot happen now: 0 = it can, 1 = it can later (resources, squad slots, type limit: a reservation waits),
@@ -148,6 +150,8 @@ public:
  // Once per match second: per team, the first reservation (in order, the first of each type) that can be bought is bought.
  void UpdateHireQueue();
  int32 HireQueueSecond=-1;
+ // Reservations bought per team in this run (not saved), and the last one's type and maker: the player's notice (BattleBuyPanel.cpp).
+ int32 HireQueueBought[2]={0,0}, HireQueueBoughtType[2]={-1,-1}; bool HireQueueBoughtByAI[2]={false,false};
  // P1 trial: the observed need a new AI squad would serve (see FAreaHireTuning), or -1 for none.
  int32 AreaHireNeed(int32 Team) const;
  // AI purchase rule, every director tick: own resources minus own pending replenishments >= cost + reserve, and a free slot.
@@ -299,6 +303,12 @@ public:
  // raid target) and the infantry squads that push the front out at Screen on the same side while the group goes round.
  struct FArtilleryRaidGroup { int32 Phase=-1; FVector Rally=FVector::ZeroVector,Way=FVector::ZeroVector,Screen=FVector::ZeroVector; double PhaseAt=-1.; TArray<int32> Screens; };
  FArtilleryRaidGroup ArtilleryRaidGroups[2];
+ // Trials -BattleATHunt / -BattleACShield (BattleATHunt.cpp). Not saved (trial state).
+ struct FATHunt { int32 Team=0; int32 Target=INDEX_NONE; FVector Position=FVector::ZeroVector; double StartAt=-1.,SeenAt=-1.; };
+ TMap<int32,FATHunt> ATHunts; double ATHuntClock[2]={-1.,-1.};
+ void UpdateATHunts(int32 Team);
+ bool ATHuntGoal(int32 Team,int32 SquadID,FVector& Center) const;
+ bool ACShieldPost(int32 Team,int32 SquadID,FVector& Post) const;
  void UpdateArtilleryRaidGroup(int32 Team);
  void PlanArtilleryRaidFlank(int32 Team,const FVector& From,const FVector& Target);
  bool ArtilleryRaidGoal(int32 Team,int32 SquadID,FVector& Center,EBattleOrder& Order) const;

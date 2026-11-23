@@ -518,6 +518,12 @@ public:
  // for this squad only, without taking cover on the way). Set after IssueOrder by the player controller; any later explicit
  // order clears it. AI squads never have it, so matches between AIs are unchanged.
  static bool SectorMoveEnabled();
+ // Trial -BattleSectorSight (default 0, BattleSectorSight.cpp, Docs/design-sector-combat.md): in-sector and cross-sector fights.
+ static int32 SectorSightMode(int32 Team);
+ static bool SectorSightFar(const FVector& From,const FVector& To);
+ int32 SectorLookout(const struct FBattleSquadState& Squad) const;
+ bool SectorSightMember(int32 ID) const {return SectorSightRole(ID)!=0;}
+ int32 SectorSightRole(int32 ID) const; // 0 scans as before, 1 leaves cross-sector enemies to the lookout, 2 scans cross-sector vehicles only
  // Trial -BattleSectorMoveFire=1 (2026-11-20, default 0): every squad on a sector mission (AI squads and the player's sector
  // attack/hold orders) fights as the player's sector move does - until a member is inside the sector it fires on the move and
  // fights back at enemies outside the sector that shoot at it, without stopping or walking to cover on the way.

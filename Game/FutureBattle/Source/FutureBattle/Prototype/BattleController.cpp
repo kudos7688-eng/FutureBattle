@@ -118,6 +118,7 @@ void ABattleController::SetupInputComponent()
 	{
 		UInputAction* Action = NewObject<UInputAction>(this, Name);
 		Action->ValueType = Type;
+		Action->bTriggerWhenPaused = true; // the game-speed pause (CycleGameSpeed) keeps the camera, orders and menus working
 		Actions.Add(Action);
 		Mapping->MapKey(Action, Key);
 		return Action;
@@ -263,7 +264,8 @@ void ABattleController::BuyArea(uint8 SquadType)
 	if (!UBattleMatch::HireReserveOn()) { Match->HireAreaSquad(0, EBattleTraining::Regular, false, SquadType); ShowNotice(Match->LastMessage); return; }
 	const int32 Result = Match->ReserveHire(0, SquadType, false);
 	if (Result != 2) { ShowNotice(Match->LastMessage); return; }
-	ShowNotice(FString::Printf(TEXT("予約しました：%s ／ 予約 %d/%d ／ Backspace：最後の予約を取り消し ／ =：最後の予約を先頭へ"), ReservationTypeJa(SquadType), Match->HireQueueOf(0).Num(), UBattleMatch::HireQueueMax));
+	// Why it waits (resources short by n, a limit, the same type ahead ...) from ReserveHire's message; it is bought automatically later.
+	ShowNotice(FString::Printf(TEXT("予約しました：%s（%s）／ 予約 %d/%d ／ 買えるようになると自動で配備 ／ 取り消しは購入画面で右クリック・Backspace"), ReservationTypeJa(SquadType), *FBattleBuyPanelLayout::WaitText(Match, SquadType, Match->LastMessage), Match->HireQueueOf(0).Num(), UBattleMatch::HireQueueMax));
 }
 void ABattleController::CancelNewestReservation()
 {
@@ -698,14 +700,14 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
  { bAimHeld=Params.Event==IE_Pressed; return true; }
  if(!bTactical && bAimHeld && (Params.Key==EKeys::MouseScrollUp||Params.Key==EKeys::MouseScrollDown))
  { if(Params.Event==IE_Pressed) AimLevel=FMath::Clamp(AimLevel+(Params.Key==EKeys::MouseScrollUp?1:-1),1,3); return true; }
- // Stances (map E): X cycles stand -> crouch -> prone for the directly controlled soldier.
+ // Stances: X cycles stand -> crouch -> prone for the directly controlled soldier, on every map (the AI uses stances on map E).
  if(!bTactical && Params.Key==EKeys::X && Params.Event==IE_Pressed)
   if(auto* U=Cast<ABattleUnit>(GetPawn()))
-   if(auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();R->IsEnabled()&&BattleStance::Enabled(GetWorld()))
+   if(auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();R->IsEnabled())
    {
     const uint8 Next=(R->StanceOf(U->GetUnitID())+1)%3;
-    if(R->SetStance(U->GetUnitID(),Next,GetWorld()->GetTimeSeconds()))ShowNotice(Next==BattleStance::Prone?TEXT("PRONE / X TO STAND"):Next==BattleStance::Crouch?TEXT("CROUCHED / X FOR PRONE"):TEXT("STANDING / X TO CROUCH"));
-    else ShowNotice(TEXT("CHANGING STANCE")); // the last change still takes time (0.5 s, 1.2 s to or from prone)
+    if(R->SetStance(U->GetUnitID(),Next,GetWorld()->GetTimeSeconds()))ShowNotice(Next==BattleStance::Prone?TEXT("伏せ（X で立つ）"):Next==BattleStance::Crouch?TEXT("しゃがみ（X で伏せる）"):TEXT("立ち（X でしゃがむ）"));
+    else ShowNotice(TEXT("姿勢を変えています")); // the last change still takes time (0.5 s, 1.2 s to or from prone)
     return true;
    }
  // F / LB swaps the hand and back mounts. Primary fire uses the equipped weapon.
@@ -1250,15 +1252,22 @@ void ABattleController::CycleGameSpeed()
 {
 	if (GetNetMode() != NM_Standalone) { ShowNotice(TEXT("Game speed: standalone only")); return; }
 	if (!bTactical) { ShowNotice(TEXT("Game speed: tactical view only (direct control runs at x1)")); return; }
-	GameSpeed = GameSpeed == 1 ? 2 : GameSpeed == 2 ? 4 : 1;
+	// x1 -> x2 -> x4 -> paused (0) -> x1 (user request 2026-11-24: a pause inside the speed steps).
+	GameSpeed = GameSpeed == 1 ? 2 : GameSpeed == 2 ? 4 : GameSpeed == 4 ? 0 : 1;
 	ApplyGameSpeed();
-	ShowNotice(FString::Printf(TEXT("GAME SPEED x%d [.]"), GameSpeed));
+	ShowNotice(GameSpeed == 0 ? FString(TEXT("GAME PAUSED [.]")) : FString::Printf(TEXT("GAME SPEED x%d [.]"), GameSpeed));
 }
 
 void ABattleController::ApplyGameSpeed()
 {
 	// Simulation steps scale with the world delta, so AI, movement and timers all run faster together.
-	if (GetNetMode() == NM_Standalone) UGameplayStatics::SetGlobalTimeDilation(GetWorld(), bTactical ? float(GameSpeed) : 1.f);
+	if (GetNetMode() != NM_Standalone) return;
+	// Speed 0 is a real game pause: the world stops, the controller keeps its full tick (camera, selection, orders, gamepad).
+	// Direct control always runs at x1, so taking a soldier lifts the pause; returning to the tactical view pauses again.
+	const bool bPause = bTactical && GameSpeed == 0;
+	bShouldPerformFullTickWhenPaused = true;
+	UGameplayStatics::SetGlobalTimeDilation(GetWorld(), bTactical && GameSpeed > 0 ? float(GameSpeed) : 1.f);
+	if (UGameplayStatics::IsGamePaused(GetWorld()) != bPause) UGameplayStatics::SetGamePaused(GetWorld(), bPause);
 }
 
 // ---- Notification log (command UI). Only what the player's side observes: own home HP, observed point owners, own squads,
