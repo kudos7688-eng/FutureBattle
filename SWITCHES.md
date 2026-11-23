@@ -272,7 +272,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSectorMove` | Value | 0 | BattleLeaderRuntime.cpp:1614 |  |
 | `-BattleSectorMoveFire` | Value | -1 | BattleLeaderRuntime.cpp:1624 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleSectorRoute` | Value | -1 | BattleSectorRoute.cpp:16 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
-| `-BattleSectorSight` | Value | 0 | BattleSectorSight.cpp:14 |  |
+| `-BattleSectorSight` | Value | 1 | BattleSectorSight.cpp:14 |  |
 | `-BattleSectorSightTeam` | Value | -1 | BattleSectorSight.cpp:15 |  |
 | `-BattleSectorSlotReserve` | Value | 1 | BattleStableMovement.cpp:81 |  |
 | `-BattleSectorSmoke` | Param | off | BattleLeaderRuntime.cpp:217 |  |
@@ -286,10 +286,10 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleShotLog` | Param | off | BattleLeaderRuntime.cpp:1271 |  |
 | `-BattleSightExperiment` | Value | 未解決 | BattleLeaderRuntime.cpp:82 |  |
 | `-BattleSightHitStats` | Value | 0 | BattleLeaderRuntime.cpp:395 |  |
-| `-BattleSightPairReuse` | Value | 0 | BattleLeaderRuntime.cpp:355, BattlePerception.cpp:181 |  |
-| `-BattleSightParallel` | Value | 1 | BattlePerception.cpp:180 |  |
+| `-BattleSightPairReuse` | Value | 0 | BattleLeaderRuntime.cpp:355, BattlePerception.cpp:182 |  |
+| `-BattleSightParallel` | Value | 1 | BattlePerception.cpp:181 |  |
 | `-BattleSightRange` | Value | 空文字列 | BattleState.cpp:18 |  |
-| `-BattleSightRayStats` | Value | 0 | BattlePerception.cpp:189 |  |
+| `-BattleSightRayStats` | Value | 0 | BattlePerception.cpp:190 |  |
 | `-BattleSightScanInterval` | Value | .4 | BattleLeaderRuntime.cpp:117 |  |
 | `-BattleSightScanNear` | Value | 1.e7 | BattleLeaderRuntime.cpp:117 |  |
 | `-BattleSightSlowFar` | Value | 0 | BattleLeaderRuntime.cpp:114 |  |
