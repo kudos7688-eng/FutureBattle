@@ -101,13 +101,14 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			!Observer.Contacts.Contains(Candidate.State->UnitID) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID);
 	};
 	// Trial -BattleSectorSight (default 0, BattleSectorSight.cpp): rifle squad members leave enemies in another sector to the lookout.
-	TSet<int32> SectorMembers;
+	TMap<int32, int32> SectorMembers;
 	if (Mixed && (UBattleLeaderRuntime::SectorSightMode(0) || UBattleLeaderRuntime::SectorSightMode(1)))
-		for (const auto& Pair : Alive) if (Leader->SectorSightMember(Pair.Key)) SectorMembers.Add(Pair.Key);
+		for (const auto& Pair : Alive) if (const int32 Role = Leader->SectorSightRole(Pair.Key)) SectorMembers.Add(Pair.Key, Role);
 	auto SkipCross = [&](const FBattleObserver& Observer, const TPair<int32, FLiveUnit>& Pair, const FLiveUnit& Candidate)
 	{
-		return SectorMembers.Num() && SectorMembers.Contains(Pair.Key) && UBattleLeaderRuntime::SectorSightFar(Pair.Value.Position, Candidate.Position) &&
-			!Observer.DetectionStarted.Contains(Candidate.State->UnitID);
+		const int32* Role = SectorMembers.Num() ? SectorMembers.Find(Pair.Key) : nullptr;
+		return Role && UBattleLeaderRuntime::SectorSightFar(Pair.Value.Position, Candidate.Position) &&
+			!(*Role == 2 && Leader->IsVehicle(Candidate.State->UnitID)) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID);
 	};
 	// One candidate of one observer's scan. Visible: -1 = test line of sight here, 0/1 = result already traced (parallel trial).
 	auto Consider = [&](FBattleObserver& Observer, const TPair<int32, FLiveUnit>& Pair, const FBattleSightContext& Sight, bool bFarPulse, TSet<int32>& InView, const FLiveUnit& Candidate, int32 Visible)
