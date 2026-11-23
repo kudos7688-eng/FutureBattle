@@ -387,6 +387,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  if((CompositionTeams&(1<<Team))!=0)UpdateCompositionPurposes(Team);
  UpdateGroups(Team);
  if(bArea&&BattleTactics::ArtilleryPosts())UpdateArtilleryRaids(Team);
+ if(bArea&&BattleTactics::ATHunt())UpdateATHunts(Team);
  // Routes (map F): what the team sees now, gathered once for all its squads.
  const bool bRoutes=bStrategy&&RoutesOn();TArray<FVector> RouteEnemies;if(bRoutes)RouteEnemies=RouteKnownEnemies(Team);
 	for (const auto& Pair : Store->GetSquads()) if (Pair.Value.Team == Team)
@@ -409,6 +410,10 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   // Armoured cars (tactical role, stage 2): an open point away from known anti-tank threats (AreaCarTarget); never the home assault.
   if(bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::ArmoredCar)
   {bStrategyBase=false;if(const int32 CarTarget=AreaCarTarget(Team,Pair.Key);CarTarget!=INDEX_NONE)Target=CarTarget;}
+  // Trial -BattleACShield: ahead of the nearest attacking own infantry squad (none: as above).
+  bool bCarShield=false;FVector CarShield=FVector::ZeroVector;
+  if(bStrategy&&!Purpose&&BattleTactics::ACShield()&&Pair.Value.SquadType==BattleSquadType::ArmoredCar&&Pair.Value.CommandStatus==EBattleCommandStatus::Active)
+   bCarShield=ACShieldPost(Team,Pair.Key,CarShield);
   // Exoskeleton soldiers (tactical role): the fast reserve (AreaExoTarget); never the home assault.
   if(bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::Exo&&Pair.Value.CommandStatus==EBattleCommandStatus::Active)
   {bStrategyBase=false;if(const int32 ExoTarget=AreaExoTarget(Team,Pair.Key);ExoTarget!=INDEX_NONE)Target=ExoTarget;}
@@ -464,8 +469,13 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   bool bRaidScreen=false;
   if(bArea&&BattleTactics::ArtilleryRaidGroup()>0){FVector RaidGoalCenter=Center;EBattleOrder RaidGoalOrder=Order;
    if(ArtilleryRaidGoal(Team,Pair.Key,RaidGoalCenter,RaidGoalOrder)){Center=RaidGoalCenter;Order=RaidGoalOrder;bRaidScreen=RaidPost==nullptr;}}
-  const bool bRaidDuty=RaidPost!=nullptr||bRaidScreen;
+  // Trial -BattleATHunt: a squad asked by an armoured unit attacks the anti-tank soldier it saw (BattleATHunt.cpp).
+  bool bATHunt=false;
+  if(bArea&&BattleTactics::ATHunt()){FVector HuntCenter;if(ATHuntGoal(Team,Pair.Key,HuntCenter)){Center=HuntCenter;Order=EBattleOrder::AttackMove;bATHunt=true;}}
+  const bool bRaidDuty=RaidPost!=nullptr||bRaidScreen||bATHunt;
   // The tank's overwatch post; a post near its current mission is kept (no new order for every small change in what the team knows).
+  if(bCarShield){Center=CarShield;Order=EBattleOrder::AttackMove;if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2000.)Center=Pair.Value.MissionDestination;
+   else UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AC_SHIELD team=%d squad=%d post=%s"),Team,Pair.Key,*Center.ToCompactString());}
   if(bTankPost){Center=AreaTankPost(Team,Target);if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2500.)Center=Pair.Value.MissionDestination;}
   // A squad in a group the AI runs follows its group: the rally point while gathering, then the group's objective together.
   if(!bRaidDuty&&!bMortarPost&&bStrategy&&!Purpose&&!Groups.IsEmpty())GroupOrder(Pair.Key,Team,Center,Order);
