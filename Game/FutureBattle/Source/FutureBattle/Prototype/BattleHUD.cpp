@@ -592,7 +592,7 @@ void ABattleHUD::DrawBuyPanel(ABattleController* PC)
   DrawRect(Fill,R.Origin.X,R.Origin.Y,R.Size.X,R.Size.Y);
   if(bLit)DrawRect(Gold,R.Origin.X,R.Origin.Y,3,R.Size.Y);
   const float TY=R.Origin.Y+5;const FLinearColor Main=bOk||bReservable?White:Muted;
-  const FString Key=FString::Printf(TEXT("[%s]"),*R.Key),Reserved=R.Reserved>0?FString::Printf(TEXT("%d"),R.Reserved):FString();
+  const FString Key=R.Key.IsEmpty()?FString():FString::Printf(TEXT("[%s]"),*R.Key),Reserved=R.Reserved>0?FString::Printf(TEXT("%d"),R.Reserved):FString();
   const FString* Texts[NumCols]={&Key,&R.Name,&R.Members,&R.Cost,&R.Owned,&Reserved,&R.Role,&R.State};
   for(int32 C=0;C<NumCols;++C)
    Cell(*Texts[C],C==7?(bOk?Mint:bReservable?Wait:Muted):C==5?Gold:C==6?Muted:C==0?(bOk?Mint:Muted):Main,Cols[C],TY,Ends[C]-Cols[C]-6,C==1?.85f:.8f);
