@@ -340,8 +340,8 @@ FVector UBattleMatch::AreaArtilleryPost(int32 Team,int32 SquadID,const FVector& 
  if(PostRisk>0.f&&S->SquadType==BattleSquadType::SPGun)
  {
   const FVector Home=AreaHome(Team),Depot=RepairPoint(Team);const double Gap=BattleTactics::ArtilleryHomeGap();
-  const double Safe=double(R->ArtilleryBlastRadius(true))+300.,Reach=Safe+3000.+R->ArtillerySpread(true,Range*.6);
-  auto Chance=[&](const FVector& P){return FMath::Clamp(1.-(FVector::Dist2D(P,Depot)-Safe)/FMath::Max(1.,Reach-Safe),0.,1.);};
+  const double Safe=double(R->ArtilleryBlastRadius(true))+300.,RiskReach=Safe+3000.+R->ArtillerySpread(true,Range*.6);
+  auto Chance=[&](const FVector& P){return FMath::Clamp(1.-(FVector::Dist2D(P,Depot)-Safe)/FMath::Max(1.,RiskReach-Safe),0.,1.);};
   auto Cost=[&](const FVector& P){return FVector::Dist2D(P,Depot)/100.+double(PostRisk)*Chance(P);};
   const bool bPostOk=FVector::Dist2D(Post,Home)>=Gap;
   if(!bPostOk||Chance(Post)>0.)
