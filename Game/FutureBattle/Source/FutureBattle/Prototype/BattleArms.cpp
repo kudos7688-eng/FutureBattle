@@ -48,6 +48,7 @@ int32 BattleArms::AssaultMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT
 bool BattleArms::ChargeEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsCharge="))!=0;return b;}
 bool BattleArms::SmokeEnabled(){static const bool b=FParse::Param(FCommandLine::Get(),TEXT("BattleArmsSmoke"));return b;}
 bool BattleArms::SlideEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsSlide="),1)!=0;return b;}
+bool BattleArms::ChargeFallenEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsChargeFallen="),1)!=0;return b;}
 bool BattleArms::ChargeSlideEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsChargeSlide="),1)!=0;return b;}
 bool BattleArms::AnyTrial(){return SidearmsEnabled()||GrenadeCount()>0||MeleeEnabled()||EliteEnabled()||AreaEliteKeep()>0||SniperEnabled()||AreaSniperKeep()>0||AssaultMode()>0||ChargeEnabled()||SmokeEnabled();}
 
@@ -541,6 +542,14 @@ bool UBattleLeaderRuntime::StepCharge(int32 ID,float Dt,double Now)
  else if(!Contact)End=TEXT("arms_charge_end_lost");
  else if(A->bReached&&Now-Contact->LastSeenTime>1.)End=TEXT("arms_charge_end_done");
  else if(Now>A->Until)End=TEXT("arms_charge_end_timeout");
+ // He saw the enemy fall: down while he had him in his own sight within the last second (user decision 11-23: stop when the enemy is
+ // down; an enemy who hides, or falls where he cannot see, is still run at). Reports from others do not count.
+ // -BattleArmsChargeFallen=0: he runs on to the last seen place.
+ else if(BattleArms::ChargeFallenEnabled()&&!A->bReached&&A->LastSaw>0.&&Now-A->LastSaw<=1.)
+ {
+  if(const auto* T=Store->Find(A->Target);!T||!T->IsAlive())End=TEXT("arms_charge_end_fallen");
+ }
+ if(Contact&&Contact->bVisible&&!Contact->bShared)A->LastSaw=Now;
  if(End)
  {
   // Evaluation: a charge that reached the enemy but never struck, and why at its last step (diagnostics only).

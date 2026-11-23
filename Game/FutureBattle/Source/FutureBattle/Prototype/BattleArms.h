@@ -32,6 +32,8 @@ namespace BattleArms
  bool AnyTrial();         // any of the switches above
  bool SlideEnabled();     // -BattleArmsSlide=0 (evaluation, default 1): assault dashes neither slide along what they hit nor give up
                           // after 2 s without getting closer (StepCoverApproach), as before 11-22 20:45. Not part of AnyTrial.
+ bool ChargeFallenEnabled(); // -BattleArmsChargeFallen=0 (evaluation, default 1): a charge goes on to the enemy's last seen place after
+                          // the charger saw him fall (StepCharge), as before 11-23 09:00. Not part of AnyTrial.
  bool ChargeSlideEnabled(); // -BattleArmsChargeSlide=0 (evaluation, default 1): charges (StepCharge) do not slide along what they hit,
                           // as before 11-23 00:00. Not part of AnyTrial.
  // Moves Body on by the rest of a blocked step (Delta, stopped at Hit) along the surface it hit instead of pushing into it; hit

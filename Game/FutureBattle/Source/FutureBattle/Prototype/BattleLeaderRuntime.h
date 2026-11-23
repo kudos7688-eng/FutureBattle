@@ -409,7 +409,9 @@ public:
   // not strike at the last step (BATTLE_ARMS_CHARGE_NOSTRIKE), with the true distance and the error of the known position.
   // DownBy: who downed his target (1 he himself, 2 his squad, 3 another of his team, 4 the enemy's own side, 5 unknown), DownKind the
   // EBattleKillKind, DownAt when; ReachedAt when he first reached the enemy.
-  bool bStruck=false;uint8 NoStrike=0,DownBy=0,DownKind=0;float StrikeDist=0.f,KnownErr=0.f;double DownAt=0.,ReachedAt=0.;};
+  bool bStruck=false;uint8 NoStrike=0,DownBy=0,DownKind=0;float StrikeDist=0.f,KnownErr=0.f;double DownAt=0.,ReachedAt=0.;
+  double LastSaw=0.; // a charge: when he last saw his enemy himself (StepCharge, -BattleArmsChargeFallen)
+ };
  // -BattleContactCover: where a soldier settled after walking to a firing position that is not a cover slot (runtime only, evaluation).
  TMap<int32,FVector> FirePositions;
  TMap<int32,FCoverApproach> CoverApproaches;
