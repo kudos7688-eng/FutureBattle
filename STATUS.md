@@ -31,6 +31,21 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-24 03時15分 Claude（AC01）：伏せ・しゃがみでプレイヤーの視点と射点が立った高さのままだったのを直した（ユーザー指摘）
+
+- **原因**：プレイヤーの弾はカメラ（体の中心 +65cm）から出る。`SetStance` は体の見た目を縮めるだけで、カメラは動かなかった。敵の視界（`Sight`）は姿勢の目の高さ（伏せ −50cm）を使うので、伏せたプレイヤーは低い壁に隠れたまま、壁越しに撃てていた。
+- **変更**（`BattleUnit.cpp/.h`、`BattleCoverAction.cpp`）：
+  - `ABattleUnit::Tick` で、カメラを `EyeOffset(VisualStance)-60` まで毎秒120cmで沈める。銃・三人称の回り込みの中心・射点もいっしょに沈む。
+  - `GetPlayerShot` の始点は、沈み切る前でも新しい姿勢の目の高さより上にしない。
+  - `EyePosition` は姿勢の目の高さを返す。
+  - AI が遮蔽から顔を出して撃つ処理（`BattleCoverAction`）も、+60固定から姿勢の目の高さにした。
+- **検証**：Build-Editor 成功。Test-Battle は failures=0。
+  - Test-CoverActions（描画あり）は failures=0。新しい確認として、しゃがみと伏せでカメラと射点が期待どおりだった（しゃがみ +5/+5、期待 +5。伏せ −45/−45、期待 −45）。
+  - 画面は `Setup/Benchmarks/FlankStages-20261112/stance-eye-r2/cover-eye-{crouch,prone}.png` で確かめた。
+- **制限**：
+  - 試合の勝敗は回していない。この変更はプレイヤーの射点（伏せの壁越しの撃ち）と、AI の覗き撃ちの高さだけに効く。
+  - `BattleBlindFire.cpp:142` と `BattleSquadSupport.cpp:22` の +60 は残した。前者は始点を遮蔽の上か横に置き直すので効かない。後者は射線の判定。
+
 ## 2026-11-24 02時50分 Claude（観測ルールの相談）：分隊単位の知識の段階2（分隊の中の報告をなくす）の設計を詰めた。実装・ビルド・試合はしていない
 
 - **変更範囲**：`Docs/design-squad-knowledge.md` だけ（段階1の状況、新しい9節）。Source は触っていない。
