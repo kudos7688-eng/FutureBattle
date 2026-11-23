@@ -64,7 +64,7 @@ int32 BattleStance::MoveMode()
 }
 bool BattleStance::Steady()
 {
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleStanceSteady="),V);return V!=0;}();
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleStanceSteady="),V);return V!=0;}();
  return bOn;
 }
 float BattleStance::MoveScale(uint8 Stance){return Stance==Prone?.25f:Stance==Crouch?.55f:1.f;}

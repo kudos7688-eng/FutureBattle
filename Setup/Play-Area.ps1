@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(0,1)][int]$StanceSteady=0,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(-1,0,1)][int]$StanceSteady=-1,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
@@ -20,8 +20,9 @@ if ($CloseRange -gt 0) { $cm = $CloseRange * 100; $extra += @("-BattleRangeSight
 if ($OwnTarget -gt 0) { $extra += "-BattleOwnTarget=$OwnTarget" }
 # -OwnTargetCover 1/2 (with -OwnTarget): he takes cover near by against the enemy he fires back at (2: also when walking, within 50 m).
 if ($OwnTargetCover -gt 0) { $extra += "-BattleOwnTargetCover=$OwnTargetCover" }
-# -StanceSteady 1: fewer crouch/stand changes on the spot (stays standing where crouching hid his enemy; 3 s down after an empty peek).
-if ($StanceSteady -gt 0) { $extra += "-BattleStanceSteady=$StanceSteady" }
+# -StanceSteady: fewer crouch/stand changes on the spot (stays standing where crouching hid his enemy; 3 s down after an empty peek).
+# Default 1 in the game since 2026-11-24; -StanceSteady 0 restores the old behaviour.
+if ($StanceSteady -ge 0) { $extra += "-BattleStanceSteady=$StanceSteady" }
 if ($WalkLook -gt 0) { $extra += "-BattleWalkLook=$WalkLook" }
 # Front plan stage 7 (Docs/design-front-strategy.md 6; trials, default 0): the player's team plans by sections of its front line; U opens the
 # plan panel (section roles, purchase reservations, hiring delegation), the top bar shows the own plan. Team 0 only; second focus allowed.
