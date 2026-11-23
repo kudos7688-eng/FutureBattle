@@ -47,7 +47,7 @@
 | 試合の進行・勝敗・制限時間 | @UBattleMatch::InitializeMatch 、 @UBattleMatch::Update 、 @UBattleMatch::Finish | 拠点の占領は @UBattleMatch::UpdateObjectives |
 | 雇用（旧・固定の価格） | @UBattleMatch::HireSquad 、 @UBattleMatch::CurrentSquadPrice | 実体を出すのは @UBattleLeaderRuntime::SpawnPurchasedSquad |
 | エリア戦の雇用（AI が何を雇うか） | @UBattleMatch::UpdateAreaHiring 、 @UBattleMatch::AreaHireNeed 、 @UBattleMatch::HireAreaSquad | 調整値は @BattleTactics::AreaHire |
-| プレイヤーの購入画面（B キー、2026-11-23） | @FBattleBuyPanelLayout::Make 、 @ABattleController::BuyPanelInput 、 @ABattleController::HandleBuyPanelPad 、 @ABattleHUD::DrawBuyPanel | 行を押すと @ABattleController::BuyArea （数字キーと同じ）。B は @ABattleController::BuyKey （エリア戦以外は支援要請）。画面の確認は `Setup/Test-BuyPanelShot.ps1` |
+| プレイヤーの購入画面（B キー、2026-11-23） | @FBattleBuyPanelLayout::Make 、 @ABattleController::BuyPanelInput 、 @ABattleController::HandleBuyPanelPad 、 @ABattleHUD::DrawBuyPanel | 行を押すと @ABattleController::BuyArea （数字キーと同じ。買えなければ予約 @UBattleMatch::ReserveHire 、列を買うのは @UBattleMatch::UpdateHireQueue 、取り消しは @ABattleController::CancelReservationOfType ）。B は @ABattleController::BuyKey （エリア戦以外は支援要請）。画面の確認は `Setup/Test-BuyPanelShot.ps1` |
 | エリア戦の収入・拠点 HP | @UBattleMatch::UpdateArea （収入の支払いもここ）、 @UBattleMatch::DamageBase | 調整値は @BattleTactics::AreaIncome 。状態は `BattleAreaState.h` |
 | エリア戦の AI 戦略（どこを攻めるか） | @UBattleMatch::UpdateEnemyOrders → @UBattleMatch::UpdateTeamOrders 、 @UBattleMatch::AreaStrategyTarget 、 @UBattleMatch::AreaIntent | 調整値は @BattleTactics::AreaStrategy 。前線は @UBattleMatch::AreaFronts 。戦略層（試験、`Docs/design-strategy-layer.md`）の状況図は @UBattleMatch::BuildSituation 、集中先は @UBattleMatch::UpdateStrategy （ `FAreaIntent::FocusPoint` で S6 と攻撃群へ） |
 | 偵察・情報（見えていない区域の扱い） | @UBattleMatch::UpdateScoutReports 、 @UBattleMatch::AreaIntelView | 偵察兵の配置は @UBattleMatch::AreaScoutPost 。昇格は @UBattleLeaderRuntime::PromoteScout |
@@ -183,4 +183,4 @@ BattleCompositionRuntime | 編成AIと観測・収入窓・既存購入実行の
 BattleCompositionState | CombatStateVersion=4で保存する編成AIの陣営状態
 BattleCompositionSave | 編成AI保存の版・陣営・時刻・参照先検証
 BattleCompositionSmoke | 編成AIの選択・貯蓄・保存往復のスモーク検査（UBattleLeaderRuntimeの一部）
-BattleSectorSight | 区画内・区画間の戦い（試験切替 `-BattleSectorSight`、既定0、`Docs/design-sector-combat.md`）：区画のあるマップで、通常小隊は別の区画（20m より遠い）の敵を探す光線を隊長だけが出し、隊員は隊長が今見ている敵を発射直前の視線判定で撃つ（UBattleLeaderRuntime の一部。走査の側は `UBattlePerception::Update` の `SkipCross`）
+BattleSectorSight | 区画内・区画間の戦い（`-BattleSectorSight`、11-23 から既定1＝通常小隊だけ。`=2` は兵種ごとの決まり `SectorSightRole`〔試験〕、`=0` で元の動き。`Docs/design-sector-combat.md`）：区画のあるマップで、通常小隊は別の区画（20m より遠い）の敵を探す光線を隊長だけが出し、隊員は隊長が今見ている敵を発射直前の視線判定で撃つ（UBattleLeaderRuntime の一部。走査の側は `UBattlePerception::Update` の `SkipCross`）
