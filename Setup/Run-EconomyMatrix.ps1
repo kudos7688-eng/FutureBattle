@@ -195,9 +195,9 @@ $supply=@{
  'RH'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-MachineRepairRate','1','-RepairHoldFire','1')
  'AM'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-SPGAmmo','1','-RepairHoldFire','1')
  'RAM'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-MachineRepairRate','1','-RepairHoldFire','1','-SPGAmmo','1')
- # POS = DH + firing posture (user proposal): 10 s set-up after stopping (config 8) and 10 s without moving after a shot; ALLW = RAM + POS.
- 'POS'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-SPGSetup','10','-SPGStayAfterFire','10')
- 'ALLW'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-MachineRepairRate','1','-RepairHoldFire','1','-SPGAmmo','1','-SPGSetup','10','-SPGStayAfterFire','10')
+ # POS = DH + firing posture (user proposal, values by the user): 30 s set-up after stopping (config 8) and 30 s without moving after a shot; ALLW = RAM + POS.
+ 'POS'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-SPGSetup','30','-SPGStayAfterFire','30')
+ 'ALLW'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-MachineRepairRate','1','-RepairHoldFire','1','-SPGAmmo','1','-SPGSetup','30','-SPGStayAfterFire','30')
  # Front army share (2026-11-22, ROADMAP stage 5; maps H/I): FS50 / FS30 = the AI fills its front army up to half / 30% of its free infantry.
  'FS50'=@('-FrontShare','0.5')
  'FS30'=@('-FrontShare','0.3')
