@@ -263,7 +263,8 @@ void ABattleController::BuyArea(uint8 SquadType)
 	if (!UBattleMatch::HireReserveOn()) { Match->HireAreaSquad(0, EBattleTraining::Regular, false, SquadType); ShowNotice(Match->LastMessage); return; }
 	const int32 Result = Match->ReserveHire(0, SquadType, false);
 	if (Result != 2) { ShowNotice(Match->LastMessage); return; }
-	ShowNotice(FString::Printf(TEXT("予約しました：%s ／ 予約 %d/%d ／ Backspace：最後の予約を取り消し ／ =：最後の予約を先頭へ"), ReservationTypeJa(SquadType), Match->HireQueueOf(0).Num(), UBattleMatch::HireQueueMax));
+	// Why it waits (resources short by n, a limit, the same type ahead ...) from ReserveHire's message; it is bought automatically later.
+	ShowNotice(FString::Printf(TEXT("予約しました：%s（%s）／ 予約 %d/%d ／ 買えるようになると自動で配備 ／ 取り消しは購入画面で右クリック・Backspace"), ReservationTypeJa(SquadType), *FBattleBuyPanelLayout::WaitText(Match, SquadType, Match->LastMessage), Match->HireQueueOf(0).Num(), UBattleMatch::HireQueueMax));
 }
 void ABattleController::CancelNewestReservation()
 {
