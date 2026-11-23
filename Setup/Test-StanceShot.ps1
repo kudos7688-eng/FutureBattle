@@ -3,7 +3,8 @@
 # map E (stances on by default there). -Anim adds -BattleStanceAnim=1 (Lyra rifle crouch clips); without it the
 # placeholder (squashed body) is shown.
 # -Tracer adds -BattleTracerShot: a 6 m line from where each soldier's tracer starts (the muzzle), and TRACER_SHOT log lines.
-param([string]$Name='stance-r1',[switch]$Anim,[switch]$Tracer,[ValidateSet('A','D','E')][string]$Map='E')
+# -RB01 adds -BattleSoldierBody=1 (2026-11-23): the infantry use the RB01 body instead of Quinn.
+param([string]$Name='stance-r1',[switch]$Anim,[switch]$Tracer,[ValidateSet('A','D','E')][string]$Map='E',[switch]$RB01)
 $ErrorActionPreference='Stop'
 if($Name -notmatch '^[a-zA-Z0-9_-]+$'){throw 'Simple name required'}
 . (Join-Path $PSScriptRoot 'Get-MeasurementMachine.ps1')
@@ -17,6 +18,7 @@ $log=Join-Path $out 'run.log'
 $a=@(('"'+$project+'"'),"/Game/Prototype/Lvl_BattleWide_$Map",'-game','-unattended','-nosound','-nosplash','-BattleWideMixed','-BattleStanceShot','-BattleStances=1','-RenderOffscreen','-ForceRes','-ResX=1280','-ResY=720',('-BattleWideScreens="'+(Join-Path $out 'shot')+'"'),('-abslog="'+$log+'"'))
 $a+=('-BattleStanceAnim='+[int][bool]$Anim)
 if($Tracer){$a+='-BattleTracerShot'}
+if($RB01){$a+='-BattleSoldierBody=1'}
 @{machine=(Get-MeasurementMachine);dll=(Get-FileHash $dll).Hash;arguments=$a}|ConvertTo-Json -Depth 8|Set-Content (Join-Path $out 'manifest.json') -Encoding utf8
 $p=Start-Process 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe' -ArgumentList $a -WindowStyle Hidden -PassThru
 if(!$p.WaitForExit(240000)){Stop-Process -Id $p.Id;throw 'Stance shot timeout'}

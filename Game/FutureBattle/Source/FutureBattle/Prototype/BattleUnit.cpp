@@ -13,6 +13,7 @@
 #include "BattleStance.h"
 #include "BattleBlindFire.h"
 #include "BattleBodyAnim.h"
+#include "BattleSoldierBody.h"
 #include "BattleSquadAI.h"
 #include "BattleMetrics.h"
 #include "BattleMatch.h"
@@ -99,6 +100,8 @@ void ABattleUnit::InitializeUnit(int32 ID)
 		TeamLabel->SetText(FText::FromString(FString::Printf(TEXT("%s %02d"), S->Team == 0 ? TEXT("ALLY") : TEXT("HOSTILE"), ID)));
 		TeamLabel->SetTextRenderColor(S->Team == 0 ? FColor(75, 230, 195) : FColor(255, 90, 70));
 	}
+	// Trial -BattleSoldierBody=1 (BattleSoldierBody.h): the RB01 body on the same skeleton. The exo look replaces it afterwards.
+	if (BattleSoldierBody::Version() == 1) GetMesh()->SetSkeletalMesh(BattleSoldierBody::LoadMesh());
 	FString TrialVariant;
 	bWeaponVisuals = !FParse::Param(FCommandLine::Get(), TEXT("BattleLegacyWeaponVisuals"));
 	bTrialPose = FParse::Value(FCommandLine::Get(), TEXT("BattleSquadTrial="), TrialVariant);

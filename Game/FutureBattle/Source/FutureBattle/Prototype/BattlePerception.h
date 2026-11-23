@@ -101,6 +101,9 @@ public:
 	// [zone][role][seen]: zone 0 = same sector or within 20 m, 1 = neighbouring sector, 2 = farther; role 1 = rifle squad member who is not the leader.
 	int64 RayZone[3][2][2] = {};
 	int64 SectorSightSkipped = 0; // -BattleSectorSight: cross-sector candidates a rifle squad member left to his lookout
+	// Trial -BattleSectorSightHit: until the given time the observer scans for this cross-sector enemy himself (he was hit by him). Not saved.
+	void AllowCrossSector(int32 ObserverID, int32 TargetID, double Until) { double& Held = CrossSectorLook.FindOrAdd((uint64(uint32(ObserverID)) << 32) | uint32(TargetID)); Held = FMath::Max(Held, Until); }
+	TMap<uint64, double> CrossSectorLook;
 	bool bSlowUnknownFar = false; // Diagnostic only: unknown targets beyond 1200cm on alternate visits.
 	void Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double Now, int32 Slice = 0, int32 SliceCount = 1);
 	const TMap<int32, FBattleContact>* GetContacts(int32 ObserverID) const;
@@ -123,7 +126,7 @@ public:
 	// Trial -BattleHitReveal: the observer was just shot by TargetID and has a clear line to him. The detection delay counts as
 	// already spent and the observer scans on the next frame; the contact still forms only through the normal scan (line of sight).
 	void RevealShooter(int32 ObserverID, int32 TargetID, double Now, float DetectionSeconds);
-	void Reset() { Observers.Reset(); PendingReports.Reset(); PendingCounts.Reset(); NextScanTimes.Reset(); LastScanTimes.Reset(); SquadIntel.Reset(); SquadReports.Reset(); SquadReportKeys.Reset(); }
+	void Reset() { Observers.Reset(); PendingReports.Reset(); PendingCounts.Reset(); NextScanTimes.Reset(); LastScanTimes.Reset(); CrossSectorLook.Reset(); SquadIntel.Reset(); SquadReports.Reset(); SquadReportKeys.Reset(); }
 	void Capture(TMap<int32, FBattleObserver>& OutObservers, TArray<FBattleReport>& OutReports, double Now) const;
 	void Restore(const TMap<int32, FBattleObserver>& SavedObservers, const TArray<FBattleReport>& SavedReports, double Now);
 private:

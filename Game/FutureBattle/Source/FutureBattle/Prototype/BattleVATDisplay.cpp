@@ -1,5 +1,6 @@
 #include "BattleVATDisplay.h"
 #include "BattleVATData.h"
+#include "BattleSoldierBody.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleFollowerBones.h"
 #include "BattleStance.h"
@@ -177,7 +178,7 @@ bool ABattleVATDisplay::Initialize(UBattleLeaderRuntime* InRuntime)
 {
  Runtime=InRuntime;
  Audit=FParse::Param(FCommandLine::Get(),TEXT("P3VATAudit"));
- Data=LoadObject<UBattleVATData>(nullptr,TEXT("/Game/Prototype/DisplayLODTrial/DA_BattleVAT"));
+ Data=LoadObject<UBattleVATData>(nullptr,*(BattleSoldierBody::VATRoot()+TEXT("DA_BattleVAT"))); // the bake that matches the infantry body
  if(!Data || Data->Meshes.Num()!=3 || Data->Clips.Num()!=3)return false;
 #if WITH_EDITOR
  // Complete startup asset rebuilds before any parallel pose task can reference them.

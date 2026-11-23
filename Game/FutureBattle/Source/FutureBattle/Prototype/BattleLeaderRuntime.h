@@ -587,6 +587,9 @@ public:
  static bool SectorMoveEnabled();
  // Trial -BattleSectorSight (default 0, BattleSectorSight.cpp, Docs/design-sector-combat.md): in-sector and cross-sector fights.
  static int32 SectorSightMode(int32 Team);
+ // Trial -BattleSectorSightHit (default 0; user idea 2026-11-24): a soldier who leaves cross-sector enemies to his lookout looks
+ // for the enemy who has just hit him himself, for 5 s (the usual scan and detection delay). =2: his whole squad looks for that enemy.
+ static int32 SectorSightHitMode();
  static bool SectorSightFar(const FVector& From,const FVector& To);
  int32 SectorLookout(const struct FBattleSquadState& Squad) const;
  bool SectorSightMember(int32 ID) const {return SectorSightRole(ID)!=0;}

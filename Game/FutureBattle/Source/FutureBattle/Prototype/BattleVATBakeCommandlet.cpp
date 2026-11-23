@@ -1,6 +1,7 @@
 #include "BattleVATBakeCommandlet.h"
 #include "BattleVATData.h"
 #include "BattleVATBake.h"
+#include "BattleSoldierBody.h"
 #if WITH_EDITOR
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
@@ -20,7 +21,7 @@ int32 UBattleVATBakeCommandlet::Main(const FString& Params)
  if(FParse::Param(*Params,TEXT("ImportStanceAnims"))) return ImportBattleStanceAnims();
  if(FParse::Param(*Params,TEXT("ImportBodyAnims"))) return ImportBattleBodyAnims();
  if(!FParse::Param(*Params,TEXT("Inspect"))) return BakeBattleVAT();
- auto* Skel=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple"));
+ auto* Skel=BattleSoldierBody::LoadMesh(); // Quinn, or RB01 with -BattleSoldierBody=1
  if(!Skel) return 1;
  for(int32 I=0;I<Skel->GetResourceForRendering()->LODRenderData.Num();++I)
   UE_LOG(LogTemp,Display,TEXT("VAT_INSPECT lod=%d vertices=%d"),I,Skel->GetResourceForRendering()->LODRenderData[I].GetNumVertices());
