@@ -31,7 +31,7 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
-## 2026-11-24 00時20分 Claude（マップ）：戦車の車体の幅と「向かうかどうかの判定の幅」を分ける比較（ユーザー提案）。判定を広げるとマップKの街に戦車が入れなくなる。既定は変えていない
+## 2026-11-24 00時18分 Claude（マップ）：戦車の車体の幅と「向かうかどうかの判定の幅」を分ける比較（ユーザー提案）。判定を広げるとマップKの街に戦車が入れなくなる。既定は変えていない
 
 - きっかけ：ユーザーの試遊（マップK 版6、`-BattleVehicleRoadGoal=1`）で、相手の戦車が道沿いの塀の出入口（塀と目隠しのあいだ4m、x=82m y=-8m 付近）で2試合とも3分以上、速度が出たまま動けなくなった（`Saved/Logs/FutureBattle-backup-2026.11.23-14.06.18.log`）。車体の当たり（`TankRadius` 200）と車両ナビの半径（`DefaultEngine.ini` の Vehicle `AgentRadius` 200）が同じで余裕が0。
 - 比べ方：マップK 版6、30 FPS 並列、`-CoverActions 1 -FlankCoordination 1`、seed 7・43。元の結果は `vg-K-off-s7/-s43`。車体は `-ini:Game:[/Script/FutureBattle.BattleTuning]:TankRadius=150`（`SPGRadius` も）で渡し、ナビの半径は mapk 作業ツリーの `DefaultEngine.ini` を試合の起動の間だけ書き換えた（終了後に200へ戻し、差分なしを確認）。
