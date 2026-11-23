@@ -65,7 +65,7 @@ struct FBattleCommandBarLayout
 struct FBattlePlanPanelLayout
 {
  // Kind: 0 text, 1 section role, 2 reservation one up, 3 reservation cancel, 4 delegation level, 5 reserve down, 6 reserve up,
- // 7 type allowed, 8 close. Tone: buttons 0 plain, 1 allowed, 2 denied, 3 chosen; text 0 plain, 4 title, 5 muted.
+ // 7 type allowed, 8 close, 9 reservation destination, 10 attack group follows the focus. Tone: buttons 0 plain, 1 allowed, 2 denied, 3 chosen; text 0 plain, 4 title, 5 muted.
  struct FItem { FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector; uint8 Kind=0, Tone=0; int32 Index=0; FString Text; };
  TArray<FItem> Items; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector;
  static FBattlePlanPanelLayout Make(FVector2D View,const UWorld* World);
@@ -88,7 +88,7 @@ struct FBattlePlanPanelLayout
 struct FBattleBuyPanelLayout
 {
  // Block: 0 can be bought now, 1 waits for resources or a limit (a click reserves it), 2 not now (e.g. before combat).
- struct FRow { uint8 Type=0; int32 Block=0, Reserved=0; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector; FString Key, Name, Members, Cost, Owned, Role, State; };
+ struct FRow { uint8 Type=0, Grade=0; int32 Block=0, Reserved=0; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector; FString Key, Name, Members, Cost, Owned, Role, State; };
  // One own reservation in order (Index = position in the own order, 0 first): its text, the "move forward" and "cancel" boxes.
  struct FChip { int32 Index=0; bool bByAI=false; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector, UpOrigin=FVector2D::ZeroVector, CancelOrigin=FVector2D::ZeroVector; FString Text; };
  TArray<FRow> Rows; TArray<FChip> Chips; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector, CloseOrigin=FVector2D::ZeroVector;
@@ -197,12 +197,14 @@ public:
 	void HireMortar();
 	void HireSPGun();
 	// Area purchase key: a plain purchase, or with -BattleHireReserve=1 a purchase reservation (BattleArea.cpp ReserveHire).
-	void BuyArea(uint8 SquadType);
+	void BuyArea(uint8 SquadType,uint8 Grade=0); // Grade 1 / 2: an elite platoon / sniper team (BattleArms.cpp), bought directly
 	// -BattleHireReserve=1: Backspace cancels the newest own reservation, = moves it to the front.
 	void CancelNewestReservation();
 	void NewestReservationToFront();
 	void HireExo();
 	void HireSupply();
+	void HireElite(); // = key: an elite platoon (-BattleElite=1; BattleArms.cpp)
+	void HireSniper(); // ] key: a sniper team (-BattleSniperTeam=1; BattleArms.cpp)
 	void StartMatch();
 	void SaveMatch();
 	void LoadMatch();

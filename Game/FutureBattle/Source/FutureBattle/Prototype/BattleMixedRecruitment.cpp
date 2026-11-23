@@ -1,4 +1,5 @@
 #include "BattleLeaderRuntime.h"
+#include "BattleArms.h"
 #include "BattleSave.h"
 #include "BattleMatch.h"
 #include "BattleFieldLayout.h"
@@ -15,6 +16,7 @@ bool UBattleLeaderRuntime::ReplaceFollower(int32 DeadID)
  const auto* S=Old?Store->FindSquad(Old->SquadID):nullptr;
  if(!bArea||!Old||Old->IsAlive()||Old->bRetired||Old->bActorRepresentation||!S||!BattleSquadType::Replenished(S->SquadType)||S->CommandStatus!=EBattleCommandStatus::Active||Store->GetUnits().Num()>=BattleRosterLimits::Area)return false;
  const auto Weapon=Old->Weapon;const auto Training=Old->Training;const int32 Team=Old->Team,SID=S->SquadID;
+ const uint8 Kit=Old->Kit; // elite platoon role (BattleArms.cpp): the replacement takes it over
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!Nav)return false;
  FVector PositionToUse;bool Found=false;
  for(int32 I=0;I<32&&!Found;++I)
@@ -30,6 +32,7 @@ bool UBattleLeaderRuntime::ReplaceFollower(int32 DeadID)
  const int32 ID=Store->RegisterUnit(Team,0,Weapon);Store->SetTrainingPreset(ID,Training);
  const bool Replaced=Store->ReplaceDeadFollower(DeadID,ID,PositionToUse);check(Replaced);
  Store->Heal(ID,1.e6f); // a replacement starts at its squad type's full health (heavy infantry x3)
+ if(Kit){int32 Slot=0;while(Slot<16&&BattleArms::EliteKit(Slot)!=Kit)++Slot;IssueEliteKit(ID,Slot);}
  if(VAT)VAT->RemoveUnit(DeadID);
  Corpses.Remove(DeadID);HiddenCorpses.Remove(DeadID);
  if(auto* Previous=Bodies.Find(DeadID)){HitIDs.Remove(Previous->Capsule.Get());DestroyBody(*Previous);Bodies.Remove(DeadID);}
@@ -38,11 +41,14 @@ bool UBattleLeaderRuntime::ReplaceFollower(int32 DeadID)
  return true;
 }
 
-bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Training,FString& Error,bool bSelect,int32* OutSquadID,uint8 SquadType)
+bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Training,FString& Error,bool bSelect,int32* OutSquadID,uint8 SquadType,uint8 Grade)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  // Squad type (rifle squad or heavy infantry) sets the number of members, their weapons and health.
  if(SquadType>=BattleSquadType::Count) SquadType=BattleSquadType::Rifle;
+ // Elite platoon (BattleArms.cpp): a rifle squad whose slots carry the roles' weapons.
+ if(!BattleArms::ValidGrade(SquadType,Grade)) Grade=0; // 1 elite platoon (rifle squad), 2 sniper team (scout pair)
+ auto SlotWeapon=[&](int32 Slot){return Grade?BattleArms::KitWeapon(BattleArms::GradeKit(Grade,Slot)):BattleSquadType::Weapon(SquadType,Slot);};
  const int32 N=BattleSquadType::Members(SquadType);
  auto Fail=[&](const TCHAR* Why){Error=Why;return false;};
  if((!bMixedFastMatch&&!bArea) || !Mode || Team<0||Team>1||static_cast<uint8>(Training)>2)return Fail(TEXT("Mixed recruitment unavailable"));
@@ -75,7 +81,7 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  for(int32 Slot=0;Slot<N;++Slot)
  {
   FBattleSavedUnit E;E.Position=Positions[Slot];E.Rotation=FRotator(0,Side>0?180:0,0);
-  E.State.bActorRepresentation=Slot==0;E.State.Weapon=BattleSquadType::Weapon(SquadType,Slot);
+  E.State.bActorRepresentation=Slot==0;E.State.Weapon=SlotWeapon(Slot);
   FBattleLeaderBody B;
   if(!CreateBody(E,DisplayHost,B))
   {DestroyBody(B);for(auto& Old:Staged)DestroyBody(Old);return Fail(TEXT("Representation staging failed; purchase retained"));}
@@ -85,7 +91,8 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  TArray<int32> Members;
  for(int32 Slot=0;Slot<N;++Slot)
  {
-  const int32 ID=Store->RegisterUnit(Team,0,BattleSquadType::Weapon(SquadType,Slot));Store->SetTrainingPreset(ID,Training);Members.Add(ID);
+  const int32 ID=Store->RegisterUnit(Team,0,SlotWeapon(Slot));Store->SetTrainingPreset(ID,Training);Members.Add(ID);
+  if(Grade)IssueEliteKit(ID,Slot,Grade);
   auto& B=Staged[Slot];Bodies.Add(ID,B);
   if(B.Actor.IsValid()){B.Actor->InitializeUnit(ID);Mode->Units.Add(B.Actor.Get());HitIDs.Add(B.Actor->GetCapsuleComponent(),ID);}
   else {Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity).UnitID=ID;HitIDs.Add(B.Capsule.Get(),ID);}
@@ -93,6 +100,7 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  const int32 SID=Store->CreateLeaderSquad(Team,Members,Members[0],Team==0);
  check(SID!=INDEX_NONE);
  if(SquadType!=BattleSquadType::Rifle) Store->SetSquadType(SID,SquadType);
+ if(Grade)Store->SetSquadGrade(SID,Grade);
  if(BattleSquadType::IsVehicle(SquadType)) ConfigureVehicle(Members[0]);
  ApplySquadLook(SID);
  FBattleLeaderPlan Plan;Plan.Center=Positions[0];Plans.Add(SID,Plan);

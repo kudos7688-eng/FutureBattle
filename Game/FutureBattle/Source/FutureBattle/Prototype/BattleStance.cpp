@@ -111,6 +111,8 @@ bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForc
 
 UAnimSequence* UBattleLeaderRuntime::FollowerClip(int32 ID,int32 Pose) const
 {
+ // Infantry arms (BattleArms.cpp): a strike or throw clip for a moment.
+ if(!ArmsActionUntil.IsEmpty())if(UAnimSequence* Arms=ArmsClip(ID,GetWorld()->GetTimeSeconds()))return Arms;
  // Blind fire (BattleBlindFire.cpp): the clip that raises the rifle over or around the cover, while it lasts.
  if(Pose!=2 && IsBlindFiring(ID,GetWorld()->GetTimeSeconds()))
   if(const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID))

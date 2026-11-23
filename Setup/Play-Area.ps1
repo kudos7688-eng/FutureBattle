@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[ValidateSet(0,1)][int]$VehicleRoadGoal=0)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
@@ -53,6 +53,9 @@ if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J' -or $Map -eq 'K') {
     # samples and no standing in the open, soldiers do not block each other's sight, cover faces where shots came from (user 11-20).
     if ($SectorTrials) { $extra += @('-BattleSectorContact=1','-BattleSectorRoute=1','-BattleSectorFlank=1','-BattleSectorFront=1','-BattleWaypointPass=1','-BattleSectorMoveFire=1','-BattleCoverHuddle=1','-BattlePinnedFlank=1','-BattleArrivalThreat=1','-BattleSectorCoverRoute=1','-BattleCoverStrict=1','-BattleSightTeamMask=1','-BattleShotDirection=1','-BattleDangerRoute=1','-BattleCloseIn=1','-BattleSectorCoverWalk=1','-BattleUnderFireCover=1','-BattleNoCoverFallback=1','-BattleCoverPriority=1') }
 }
+# Infantry arms trial (Docs/design-infantry-arms.md, default off): pistols, 2 hand grenades and melee for every foot soldier,
+# elite platoons and sniper teams (rows of the purchase panel) for the player, one of each kept by the AI (G grenade, V strike, F pistol in direct control).
+if ($Arms) { $extra += @('-BattleSidearms=1','-BattleGrenades=2','-BattleMelee=1','-BattleElite=1','-BattleAreaEliteKeep=1','-BattleSniperTeam=1','-BattleAreaSniperKeep=1','-BattleArmsAssault=1','-BattleArmsCharge=1') }
 # Player matches start with the AI running (user request 2026-11-23); tests leave this out and start paused. -Setup starts running too (user 2026-11-24).
 $extra += '-BattleStartRunning'
 $editor = 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe'

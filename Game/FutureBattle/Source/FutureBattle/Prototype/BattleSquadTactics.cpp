@@ -44,6 +44,14 @@ FBattleSquadObservation UBattleSquadTactics::Observe(const FBattleSquadState& Sq
  if (const auto* History = DamageHistory.Find(Squad.SquadID))
   for (const auto& Hit : *History) if (ActiveSeconds - Hit.Key <= 5.) Out.RecentDamage += Hit.Value;
  // Only own members and their delivered contacts. Never resolve a contact to an enemy body/state.
+ // -BattleSquadKnowledge=1: the squad's table already holds the newest contact of each enemy (same rule as the merge below).
+ const auto* SquadKnown = Perception->GetSquadContacts(Squad.SquadID);
+ if (SquadKnown) for (const auto& Pair : *SquadKnown)
+ {
+  const auto& C = Pair.Value.Contact;
+  if (C.Confidence <= .35f || C.LastKnownPosition.ContainsNaN() || !FMath::IsFinite(C.LastSeenTime) || C.LastSeenTime > Now + .01) continue;
+  Out.Contacts.Add(C.TargetID, C);
+ }
  for (int32 ID : Squad.Members) if (const auto* U = Store->Find(ID); U && U->IsAlive())
  {
   ++Out.Living; Out.Health += U->HP; Out.MaxHealth += Store->MaxHealthOf(ID); Out.Ammo += U->Ammo; Out.Reserve += U->Reserve;
@@ -54,6 +62,7 @@ FBattleSquadObservation UBattleSquadTactics::Observe(const FBattleSquadState& Sq
   Out.Flank += U->Role == EBattleRole::Flank; Out.Failed += U->Action == EBattleAction::MoveFailed;
   if (const auto* Contacts = Perception->GetContacts(ID)) for (const auto& Pair : *Contacts)
   {
+   if (SquadKnown && !Pair.Value.bShared) continue; // his own sightings are in the squad's table; a hint (AddHint) is still his own
    const auto& C = Pair.Value;
    if (C.Confidence <= .35f || C.LastKnownPosition.ContainsNaN() || !FMath::IsFinite(C.LastSeenTime) ||
        Now - C.LastSeenTime > U->Perception.MemorySeconds || C.LastSeenTime > Now + .01) continue;

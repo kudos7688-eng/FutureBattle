@@ -1,4 +1,5 @@
 #include "BattleUnit.h"
+#include "UObject/StrongObjectPtr.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleMuzzleFlash.h"
 #include "BattleAudio.h"
@@ -101,7 +102,7 @@ void ABattleUnit::InitializeUnit(int32 ID)
 	FString TrialVariant;
 	bWeaponVisuals = !FParse::Param(FCommandLine::Get(), TEXT("BattleLegacyWeaponVisuals"));
 	bTrialPose = FParse::Value(FCommandLine::Get(), TEXT("BattleSquadTrial="), TrialVariant);
-	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, GetMesh(), GetState()->Weapon, false);
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, GetMesh(), GetState()->ActiveWeapon(), false);
 	// Body animation (BattleBodyAnim.h; -BattleBodyAnim=0 keeps the single whole-body clip).
 	if (bWeaponVisuals && !bTrialPose && BattleBodyAnim::Enabled() && BattleBodyAnim::Get(BattleBodyAnim::EClip::StandIdle))
 	{
@@ -118,7 +119,8 @@ const FBattleUnitState* ABattleUnit::GetState() const
 }
 
 bool ABattleUnit::IsAlive() const { const auto* S = GetState(); return S && S->IsAlive(); }
-FVector ABattleUnit::EyePosition() const { return GetActorLocation() + FVector(0, 0, 60); }
+// The eye sinks with the stance (BattleStance::EyeOffset, as the runtime's sight and shots); the capsule keeps its height.
+FVector ABattleUnit::EyePosition() const { return GetActorLocation() + FVector(0, 0, BattleStance::EyeOffset(VisualStance)); }
 
 // Closer than this to the eye the rear camera is inside the head or the chest.
 static constexpr float CameraInBodyDistance = 70.f;
@@ -184,6 +186,9 @@ void ABattleUnit::GetPlayerShot(FVector& Start, FVector& Direction)
 {
 	// Keep the shot at the soldier's eye: the rear camera must never fire around cover.
 	Start = FirstPersonCamera->GetComponentLocation();
+	// While the camera is still sinking after a stance change, the shot already leaves no higher than the new eye (the
+	// enemy's sight of him has changed at once), so getting down never fires over a wall that now hides him.
+	Start.Z = FMath::Min(Start.Z, GetActorLocation().Z + 65.f + BattleStance::EyeOffset(VisualStance) - BattleStance::EyeOffset(BattleStance::Stand));
 	Direction = GetControlRotation().Vector();
 	if (!bThirdPersonView) return;
 	FMinimalViewInfo View; CalcCamera(0.f, View);
@@ -206,6 +211,12 @@ void ABattleUnit::Tick(float DeltaTime)
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattleUnitTick);
 	Super::Tick(DeltaTime);
 	if (AimLevel || AimZoom > 1.f || ScopeAlpha > 0.f) UpdateAimView();
+	// Stances: the camera (view, held rifle and the player's shot start) sinks with the body over about the stance change.
+	{
+		const float Target = BattleStance::EyeOffset(VisualStance) - BattleStance::EyeOffset(BattleStance::Stand);
+		const float Drop = FMath::FInterpConstantTo(CameraStanceDrop, Target, DeltaTime, 120.f);
+		if (Drop != CameraStanceDrop) { FirstPersonCamera->AddRelativeLocation(FVector(0, 0, Drop - CameraStanceDrop)); CameraStanceDrop = Drop; }
+	}
 	if (const auto* State = GetState())
 	{
 		if (State->IsAlive()) GetWorld()->GetSubsystem<UBattleState>()->UpdateAim(UnitID, GetWorld()->GetTimeSeconds(), GetVelocity().Size2D(), GetBaseAimRotation().Vector(), GetCharacterMovement()->IsMovingOnGround());
@@ -323,7 +334,18 @@ void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequenc
 		}
 	}
 	const bool bFirstPerson = IsPlayerControlled() && !bThirdPersonView;
-	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->ActiveWeapon(), bFirstPerson);
+}
+
+void ABattleUnit::RemountWeapon()
+{
+	const bool bFirstPerson = IsPlayerControlled() && !bThirdPersonView;
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->ActiveWeapon(), bFirstPerson);
+}
+
+void ABattleUnit::PlayArmsClip(UAnimSequence* Clip)
+{
+	if (auto* Body = Cast<UBattleBodyAnimInstance>(GetMesh()->GetAnimInstance()); Body && Clip) Body->PlayOverlay(Clip, 1.f);
 }
 
 float ABattleUnit::PlayLookSequence(UAnimSequence* First, UAnimSequence* Then, double Time)
@@ -360,10 +382,24 @@ void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Pare
 		return;
 	}
 	// No anti-tank or mortar model yet: the support gun model, larger.
-	const bool Support = Weapon == EBattleWeapon::SupportGun || Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar;
-	Model->SetStaticMesh(Support ? SupportModel : CarbineModel);
+	const bool Support = Weapon == EBattleWeapon::SupportGun || Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar || Weapon == EBattleWeapon::Shotgun;
+	// Weapons added 2026-11-22 (BattleArms.cpp) use existing models: the exoskeleton's rifle for the marksman rifle and its launcher,
+	// smaller, for the grenade launcher; the carbine model shortened for the pistol and SMG, the support model shortened for the shotgun.
+	static TStrongObjectPtr<UStaticMesh> AC01Rifle, AC01Launcher; static bool bAC01Loaded = false;
+	if (!bAC01Loaded && (Weapon == EBattleWeapon::Marksman || Weapon == EBattleWeapon::Sniper || Weapon == EBattleWeapon::GrenadeLauncher))
+	{
+		bAC01Loaded = true;
+		AC01Rifle.Reset(LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Rifle.SM_AC01_Rifle"), nullptr, LOAD_NoWarn));
+		AC01Launcher.Reset(LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Launcher.SM_AC01_Launcher"), nullptr, LOAD_NoWarn));
+	}
+	UStaticMesh* Own = Weapon == EBattleWeapon::Marksman || Weapon == EBattleWeapon::Sniper ? AC01Rifle.Get() : Weapon == EBattleWeapon::GrenadeLauncher ? AC01Launcher.Get() : nullptr;
+	Model->SetStaticMesh(Own ? Own : Support ? SupportModel.Get() : CarbineModel.Get());
 	Model->AttachToComponent(Parent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, bFirstPerson ? NAME_None : FName(TEXT("hand_r")));
-	Model->SetRelativeScale3D(FVector(Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar ? 1.35 : Support ? 1.0 : .62));
+	const double Scale = Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar ? 1.35 : Weapon == EBattleWeapon::Shotgun ? .7 :
+		Weapon == EBattleWeapon::Pistol ? .3 : Weapon == EBattleWeapon::SMG ? .45 : Weapon == EBattleWeapon::Marksman ? (Own ? .85 : .8) :
+		Weapon == EBattleWeapon::GrenadeLauncher ? (Own ? .55 : .8) : Weapon == EBattleWeapon::Sniper ? (Own ? 1.0 : .7) : Support ? 1.0 : .62;
+	// The sniper rifle: the same rifle model with a longer barrel (the models point along their local -Y).
+	Model->SetRelativeScale3D(Weapon == EBattleWeapon::Sniper ? FVector(Scale, Scale * 1.3, Scale) : FVector(Scale));
 	Model->SetRelativeRotation(FRotator(0,90,0));
 	Model->SetRelativeLocation(FVector(47,15,-16));
 	if (!bFirstPerson)
@@ -723,7 +759,7 @@ void ABattleUnit::SetDirectControl(bool bDirect)
 	const bool bFirstPerson = bDirect && !bThirdPersonView;
 	AimLevel = 0; AimZoom = 1.f; ScopeAlpha = 0.f; bScopeHidden = false; Rifle->SetOwnerNoSee(false);
 	GetMesh()->SetOwnerNoSee(bFirstPerson);
-	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->ActiveWeapon(), bFirstPerson);
 	TeamLabel->SetVisibility(false);
 }
 

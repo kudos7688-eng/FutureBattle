@@ -33,6 +33,10 @@ public:
 	ABattleUnit(const FObjectInitializer& Init = FObjectInitializer::Get());
 	void InitializeUnit(int32 ID);
 	void MountWeapon(UStaticMeshComponent* Model, USceneComponent* Parent, EBattleWeapon Weapon, bool bFirstPerson) const;
+	// Infantry arms (BattleArms.cpp): mount the weapon in the hands again (the pistol while drawn), and play a strike or throw clip
+	// once on the body (display only).
+	void RemountWeapon();
+	void PlayArmsClip(class UAnimSequence* Clip);
 	bool HasWeaponVisuals() const { return bWeaponVisuals; }
 	// Display only: where a tracer starts. The muzzle of a visible weapon model, else a point ahead of the eye the shot is traced from.
 	static FVector TracerStart(const UStaticMeshComponent* Model, const FVector& Eye, const FVector& Direction);
@@ -104,6 +108,7 @@ private:
 	void UpdateBodyAnim(class UBattleBodyAnimInstance& Body, const FBattleUnitState& S);
 	class UBattleBodyAnimInstance* BodyAnim() const;
 	uint8 BodyStance = 0;
+	float CameraStanceDrop = 0.f; // how far the camera has sunk below its standing height (Tick, BattleStance::EyeOffset)
 	UPROPERTY() TObjectPtr<UAnimSequence> TransitionClip;
 	double TransitionUntil = 0., ShownShot = -10.;
 	float TransitionRate = 1.f; // above 1 once a stance transition is hurried on the move (BattleBodyAnim::MovingTransitionSeconds)
