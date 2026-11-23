@@ -261,7 +261,7 @@ public:
  TMap<int32,FVector> FrontReservePosts; // reserve squad -> the sector centre it waits at
  TMap<int32,int32> FrontReserveRow; // reserve squad -> its row (the team's own row order), kept while it stays in the reserve
  // Measurement of the free squads' moves (log only, BATTLE_FRONT_LINE free_rev/free_moved_m; transient): last leader position and 2 s step.
- TMap<int32,FVector> FreeLastPos,FreeLastStep; int32 FreeReversals[2]={0,0}; double FreeMoved[2]={0.,0.};
+ TMap<int32,FVector> FreeLastPos,FreeLastStep; int32 FreeReversals[2]={0,0}; double FreeMoved[2]={0.,0.}; int32 SectorCrowd[2]={0,0}; /* summed extra squads per shared sector at each update */
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;
@@ -400,6 +400,8 @@ public:
 	void UpdateGroups(int32 Team);
 	// The order of a squad in a group the AI runs (false: the squad keeps the normal allocation).
 	bool GroupOrder(int32 SquadID, int32 Team, FVector& Center, EBattleOrder& Order) const;
+ // Trial -BattleGroupSectors=1 (BattleGroups.cpp): the sector of SquadID among the group's squads that go to Anchor, one squad per sector.
+ bool GroupSectorPost(const FBattleGroup& G, int32 Team, int32 SquadID, const FVector& Anchor, bool bPhaseRally, bool bAnchorFirst, FVector& Out) const;
 	// Anti-tank team objective: the point nearest a known enemy vehicle; INDEX_NONE while the team knows of none.
 	int32 AreaATTarget(int32 Team, int32 SquadID) const;
 	// Exoskeleton soldier objective (BattleExo.cpp): the team's fast reserve. An own point with more known enemies than own soldiers

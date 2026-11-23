@@ -614,6 +614,11 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    FreeLastPos.Add(P.Key,Now);
   }
   for(auto It=FreeLastPos.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||(S->Team==Team&&!Seen.Contains(It.Key()))){FreeLastStep.Remove(It.Key());It.RemoveCurrent();}
+  // Crowding (log only, crowd=): the team's infantry squads whose leader shares a sector with another of them, summed per update.
+  TMap<FIntPoint,int32> PerCell;
+  for(const auto& P:Store->GetSquads())if(P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&!BattleSquadType::IsVehicle(P.Value.SquadType)&&!BattleSquadType::IsArtillery(P.Value.SquadType))
+   if(const auto* L=Store->Find(P.Value.LeaderUnitID);L&&L->IsAlive())++PerCell.FindOrAdd(BattleSectors::Cell(R->Position(P.Value.LeaderUnitID)));
+  for(const auto& C:PerCell)SectorCrowd[Team]+=FMath::Max(0,C.Value-1);
  }
  if(Reserve()&&FrontID!=INDEX_NONE&&Line.Num()==Rows)
  {
@@ -661,7 +666,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  {
   FrontLineLogAt[Team]=Elapsed+LogInterval;
   FString Cells;for(int32 Y=0;Y<Rows;++Y)Cells+=FString::Printf(TEXT("%s%d"),Y?TEXT(","):TEXT(""),Line[Y]);
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_LINE time=%.0f team=%d line=%s group=%d free_rev=%d free_moved_m=%.0f posts=%s"),Elapsed,Team,*Cells,FrontID,FreeReversals[Team],FreeMoved[Team]/100.,Posts.IsEmpty()?TEXT(" none"):*Posts);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_LINE time=%.0f team=%d line=%s group=%d free_rev=%d free_moved_m=%.0f crowd=%d posts=%s"),Elapsed,Team,*Cells,FrontID,FreeReversals[Team],FreeMoved[Team]/100.,SectorCrowd[Team],Posts.IsEmpty()?TEXT(" none"):*Posts);
  }
 }
 
