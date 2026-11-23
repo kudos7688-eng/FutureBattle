@@ -24,7 +24,7 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("MANUAL COMMAND"),TEXT("手動指揮"));M.Add(TEXT("WAITING FOR REPORT"),TEXT("報告待ち"));M.Add(TEXT("LeaderDeath"),TEXT("隊長戦死"));
   M.Add(TEXT("NO KNOWN CONTACT"),TEXT("既知の敵なし"));M.Add(TEXT("KNOWN CONTACT"),TEXT("既知の敵あり"));M.Add(TEXT("LOCAL AI"),TEXT("部隊AI"));
   M.Add(TEXT("HOME SUPPLY"),TEXT("本拠地で補給"));M.Add(TEXT("RETURN WITH LEADER"),TEXT("隊長と帰還"));M.Add(TEXT("COMPLETE"),TEXT("完了"));M.Add(TEXT("RESUME"),TEXT("任務に復帰"));
-  M.Add(TEXT("AMMO EXHAUSTED"),TEXT("弾切れ"));M.Add(TEXT("NO SAFER REACHABLE ROUTE"),TEXT("安全な経路なし"));
+  M.Add(TEXT("AMMO EXHAUSTED"),TEXT("弾切れ"));M.Add(TEXT("ARMOUR NEAR"),TEXT("戦車が近い"));M.Add(TEXT("WAIT BEHIND"),TEXT("後ろで待機"));M.Add(TEXT("NO SAFER REACHABLE ROUTE"),TEXT("安全な経路なし"));
   // One-line notices from the controller.
   M.Add(TEXT("ATTACK MOVE: right-click destination"),TEXT("攻撃移動：右クリックで目的地"));M.Add(TEXT("DEFEND: right-click center"),TEXT("防衛：右クリックで中心"));
   M.Add(TEXT("COVER RELEASED"),TEXT("遮蔽を解除"));M.Add(TEXT("Game speed: standalone only"),TEXT("速度の変更は単独起動のときだけ"));

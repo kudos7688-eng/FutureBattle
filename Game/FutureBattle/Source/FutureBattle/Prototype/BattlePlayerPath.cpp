@@ -49,10 +49,13 @@ void ABattleController::BeginPathDraw()
  // Ctrl + right drag draws the own front line (user request 2026-11-21 after test play); no selection needed.
  // Slate's modifier state as well: it holds even when the key's press went to another handler first.
  const bool bCtrl=IsInputKeyDown(EKeys::LeftControl)||IsInputKeyDown(EKeys::RightControl)||(FSlateApplication::IsInitialized()&&FSlateApplication::Get().GetModifierKeys().IsControlDown());
- if(bTactical&&bCtrl)
+ // The command bar's "前線を引く" button arms the same draw for the next right drag (user 2026-11-23: the Ctrl draw was never logged in test play).
+ if(bTactical&&(bCtrl||bFrontDrawArmed))
  {
+  bFrontDrawArmed=false;
   FVector2D Pointer;FVector At;
   if(GetPointerPosition(Pointer)&&PickOrderPoint(Pointer,At)){bPathDraw=bFrontDraw=true;DrawnPath.Add(At);PathScreenStart=Pointer;}
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_INPUT FrontDrawBegin ctrl=%d started=%d"),bCtrl?1:0,bFrontDraw?1:0);
   return;
  }
  if(!bTactical||Selected.IsEmpty())return;

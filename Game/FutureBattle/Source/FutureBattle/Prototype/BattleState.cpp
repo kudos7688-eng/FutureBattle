@@ -1,4 +1,5 @@
 #include "BattleState.h"
+#include "BattleArms.h"
 #include "BattleMetrics.h"
 #include "BattleSquadTactics.h"
 #include "BattleLeaderRuntime.h"
@@ -483,11 +484,12 @@ bool UBattleState::ApplyDamageFrom(int32 ID, int32 AttackingTeam, float Damage, 
 
 void UBattleState::NoteKill(int32 ID)
 {
+ DeathBy.Add(ID,{PendingKiller,PendingKind,GetWorld()->GetTimeSeconds()});
  const auto* V=Find(ID);const auto* K=Find(PendingKiller);
  if(!V||!K||(V->Team!=0&&K->Team!=0))return;
  if(KillNotices.Num()>=8)KillNotices.RemoveAt(0);
  FBattleKillNotice N;N.Time=GetWorld()->GetTimeSeconds();N.KillerID=K->UnitID;N.VictimID=ID;N.KillerTeam=K->Team;N.VictimTeam=V->Team;
- N.Kind=PendingKind;N.KillerWeapon=K->Weapon;
+ N.Kind=PendingKind;N.KillerWeapon=K->ActiveWeapon(); // the pistol while drawn (BattleArms.cpp)
  if(const auto* S=FindSquad(K->SquadID)){N.KillerSquad=S->DisplayName;N.bKillerVehicle=BattleSquadType::IsVehicle(S->SquadType);}
  if(const auto* S=FindSquad(V->SquadID)){N.VictimSquad=S->DisplayName;N.bVictimLeader=S->LeaderUnitID==ID;N.bVictimVehicle=BattleSquadType::IsVehicle(S->SquadType);}
  KillNotices.Add(N);
@@ -636,6 +638,14 @@ void UBattleState::SetSquadType(int32 SquadID,uint8 Type)
  if(Type==BattleSquadType::Supply) S->DisplayName=FString::Printf(TEXT("第%d補給車"),SquadID);
  const float Shield=BattleSquadType::ShieldMax(Type);bShields|=Shield>0.f;bExoskeletons|=Type==BattleSquadType::Exo;
  for(int32 ID:S->Members) if(auto* U=Units.Find(ID); U&&U->IsAlive()) {U->HP=MaxHealthOf(ID);U->Shield=Shield;U->ShieldWait=0.f;U->Launcher=BattleSquadType::LauncherRounds(Type);U->LauncherWait=0.f;U->SPGAmmo=Type==BattleSquadType::SPGun&&BattleTactics::SPGAmmoEnabled()?FMath::Clamp(GetDefault<UBattleTuning>()->SPGInitialAmmo,0,FMath::Max(0,GetDefault<UBattleTuning>()->SPGAmmoCapacity)):0;}
+}
+
+void UBattleState::SetSquadGrade(int32 SquadID,uint8 Grade)
+{
+ auto* S=Squads.Find(SquadID);if(!S||!BattleArms::ValidGrade(S->SquadType,Grade))return;
+ S->Grade=Grade;
+ if(Grade==1)S->DisplayName=FString::Printf(TEXT("第%d精鋭小隊"),SquadID);
+ if(Grade==2)S->DisplayName=FString::Printf(TEXT("第%d狙撃班"),SquadID);
 }
 
 // Main-gun rounds use the normal area supply sites/timer, independently of machine-gun ammunition.
