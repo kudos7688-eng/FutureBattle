@@ -307,6 +307,10 @@ void UBattleMatch::UpdateArea(float Dt)
   // A supply vehicle of the squad's side nearby with stock left gives the same refill anywhere and loses the rounds it gave.
   const int32 Car=!bHome&&!bPoint&&S->CommandStatus==EBattleCommandStatus::Active&&S->SquadType!=BattleSquadType::Supply?SupplyCarNear(S->Team,R->Position(S->LeaderUnitID)):INDEX_NONE;
   const bool bTeamSupply=Car!=INDEX_NONE;
+  // Trial -BattleRepairDepot: vehicles and exos recover health at the depot (leader within 25 m), and no longer at the home.
+  const bool bDepotMachine=BattleTactics::RepairDepot()>0.f&&(S->SquadType==BattleSquadType::Exo||R->IsVehicle(S->LeaderUnitID));
+  if(bDepotMachine&&S->CommandStatus==EBattleCommandStatus::Active&&FVector::Dist2D(R->Position(S->LeaderUnitID),RepairPoint(S->Team))<=2500.)
+   if(const float DepotHeal=BattleTactics::Supply().HealPerSecond;DepotHeal>0.f)for(int32 ID:S->Members)Store->Heal(ID,DepotHeal*Step);
   if(!bHome&&!bPoint&&!bTeamSupply){Area.AmmoTimers.Remove(SID);continue;}
   float& AmmoTime=Area.AmmoTimers.FindOrAdd(SID);AmmoTime+=Step;
   if(AmmoTime>=10)
@@ -317,7 +321,7 @@ void UBattleMatch::UpdateArea(float Dt)
   }
   if(!bHome)continue; // a point gives ammunition only: no healing, no replacements
   // Trial -BattleSupplyHeal>0: living members (leader included) recover HP at home, up to their own maximum.
-  if(const float Heal=BattleTactics::Supply().HealPerSecond;Heal>0.f)
+  if(const float Heal=BattleTactics::Supply().HealPerSecond;Heal>0.f&&!bDepotMachine)
    for(int32 ID:S->Members)Store->Heal(ID,Heal*Step);
   // Scout pairs are never replenished.
   if(BattleSquadType::Replenished(S->SquadType))

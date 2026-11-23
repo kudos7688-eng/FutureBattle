@@ -103,6 +103,10 @@ public:
  bool DamageBase(AActor* Target,int32 AttackerTeam,float Damage);
  bool CanFireAtBase(int32 UnitID,FVector& Target) const;
  FVector AreaHome(int32 Team) const;
+ // Where vehicles and exos are repaired: the home, or the depot beside it with -BattleRepairDepot (BattleArtillery.cpp). Transient cache.
+ FVector RepairPoint(int32 Team) const;
+ mutable FVector DepotPoint[2]={FVector::ZeroVector,FVector::ZeroVector};
+ mutable bool bDepotPointBuilt[2]={false,false};
  int32 ObservedOwner(int32 Team,int32 Point) const;
  int32 AreaScore(int32 Team) const;
  // War score trial (BattleWarScore.h). Earned = points + enemy losses; Score adds unspent resources; Estimate is what Observer

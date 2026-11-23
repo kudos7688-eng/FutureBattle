@@ -77,6 +77,37 @@ float BattleTactics::ArtilleryVehicleSplash()
  return V;
 }
 
+// 2026-11-23 (user decision "1と3" after counter-battery fire hit the home behind which the enemy gun stood): two trials, both default 0.
+// -BattleRepairDepot=<m>: vehicles and exoskeleton soldiers are repaired at a depot <m> beside their home (UBattleMatch::RepairPoint)
+// instead of at the home; ammunition and replacements stay at home. -BattleArtilleryHomeGap=<m>: an artillery post (AreaArtilleryPost)
+// keeps at least <m> from the own home, on the side away from the depot.
+float BattleTactics::RepairDepot()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleRepairDepot="),X);return FMath::IsFinite(X)?FMath::Clamp(X,0.f,400.f)*100.f:0.f;}();
+ return V;
+}
+float BattleTactics::ArtilleryHomeGap()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryHomeGap="),X);return FMath::IsFinite(X)?FMath::Clamp(X,0.f,300.f)*100.f:0.f;}();
+ return V;
+}
+// The depot beside the home (the point-symmetric side: +Y for the home on +X), projected on the navigation mesh once per team; the
+// home itself without -BattleRepairDepot or when no navigable point is found.
+FVector UBattleMatch::RepairPoint(int32 Team) const
+{
+ const FVector Home=AreaHome(Team);const float Offset=BattleTactics::RepairDepot();
+ if(Offset<=0.f||Team<0||Team>1)return Home;
+ if(!bDepotPointBuilt[Team])
+ {
+  bDepotPointBuilt[Team]=true;DepotPoint[Team]=Home;
+  FVector Want=Home+FVector(0.,(Home.X>0?1.:-1.)*Offset,0.);
+  if(const auto* Nav=UNavigationSystemV1::GetCurrent<UNavigationSystemV1>(GetWorld()))
+  {FNavLocation L;if(Nav->ProjectPointToNavigation(Want,L,FVector(2000.,2000.,5000.)))DepotPoint[Team]=L.Location;}
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_REPAIR_DEPOT team=%d home=%s depot=%s offset=%.0f"),Team,*Home.ToCompactString(),*DepotPoint[Team].ToCompactString(),Offset);
+ }
+ return DepotPoint[Team];
+}
+
 bool BattleTactics::ArtilleryPosts()
 {
  static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryPosts="),V);return V==1;}();
@@ -230,6 +261,18 @@ FVector UBattleMatch::AreaArtilleryPost(int32 Team,int32 SquadID,const FVector& 
     FVector P=*Nearest+Dir*(Reach+Step);P.Z=Post.Z;
     if(Clear(P)){Post=P;break;}
    }
+  }
+ }
+ // Trial -BattleArtilleryHomeGap: not within the gap of the own home (counter-battery fire at the gun would hit the home); pushed out
+ // from the home, straight sideways (away from the depot side) when the post is the home itself.
+ if(const float Gap=BattleTactics::ArtilleryHomeGap();Gap>0.f)
+ {
+  const FVector Home=AreaHome(Team);
+  if(FVector::Dist2D(Post,Home)<Gap)
+  {
+   FVector Out=(Post-Home).GetSafeNormal2D();
+   if(Out.IsNearlyZero()||Out.X*Home.X>0.)Out=FVector(0.,Home.X>0?-1.:1.,0.); // behind the home is the map edge: go sideways
+   Post=Home+Out*double(Gap);Post.Z=Home.Z;
   }
  }
  // A post near the current mission is kept: no new order for every small change in what the team knows.
