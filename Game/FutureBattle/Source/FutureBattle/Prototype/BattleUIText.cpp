@@ -37,7 +37,7 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("SELECT FRIENDLY SQUADS FIRST"),TEXT("先に味方の部隊を選んでください"));
   M.Add(TEXT("PRONE / X TO STAND"),TEXT("伏せ ／ Xで立つ"));M.Add(TEXT("CROUCHED / X FOR PRONE"),TEXT("しゃがみ ／ Xで伏せ"));M.Add(TEXT("STANDING / X TO CROUCH"),TEXT("立ち ／ Xでしゃがむ"));M.Add(TEXT("CHANGING STANCE"),TEXT("姿勢を変えている途中"));
   M.Add(TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("COVER / FIRE = BLIND FIRE / AIM + FIRE = PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で壁越しに撃つ ／ 構えて射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("BLIND FIRE"),TEXT("壁越し射撃"));M.Add(TEXT("NO NEARBY COVER WITH SAFE PEEK"),TEXT("近くに安全に撃てる遮蔽がない"));
-  M.Add(TEXT("AI PAUSED / practice controls freely"),TEXT("AI停止中 ／ 自由に操作を練習できます"));M.Add(TEXT("AI RESUMED"),TEXT("AI再開"));
+  M.Add(TEXT("AI PAUSED / practice controls freely"),TEXT("AI停止中 ／ 自由に操作を練習できます"));M.Add(TEXT("AI RESUMED"),TEXT("AI再開"));M.Add(TEXT("GAME PAUSED [.]"),TEXT("一時停止 [.]"));
   // Match and save messages.
   M.Add(TEXT("Player route save requires BattleSaveRoutes=1"),TEXT("経路付き保存を読むには -BattleSaveRoutes=1 が必要です"));
   M.Add(TEXT("Invalid player route extension"),TEXT("保存されたプレイヤー経路の版・件数・時計が不正です"));
