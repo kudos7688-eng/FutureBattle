@@ -190,6 +190,11 @@ $supply=@{
  'DH'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100')
  'DHR'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-ArtilleryPosts','1','-ArtilleryRaidChase','1')
  'DHRC'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-ArtilleryPosts','1','-ArtilleryRaidChase','1','-CounterBattery','1','-CounterBatteryShots','2')
+ # SPG weaknesses (2026-11-24, user choice): RH = DH + repairs at 1 hp/s (vehicles and exos) and no gun fire on the trip home;
+ # AM = DH + the gun's ammunition limit (-SPGAmmo 1: 12 rounds, refilled at home) and no fire on the trip; RAM = both (all both teams).
+ 'RH'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-MachineRepairRate','1','-RepairHoldFire','1')
+ 'AM'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-SPGAmmo','1','-RepairHoldFire','1')
+ 'RAM'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-MachineRepairRate','1','-RepairHoldFire','1','-SPGAmmo','1')
  # Front army share (2026-11-22, ROADMAP stage 5; maps H/I): FS50 / FS30 = the AI fills its front army up to half / 30% of its free infantry.
  'FS50'=@('-FrontShare','0.5')
  'FS30'=@('-FrontShare','0.3')

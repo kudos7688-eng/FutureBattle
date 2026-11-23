@@ -37,6 +37,8 @@ namespace BattleTactics
  float DepotRebuild(); // -BattleDepotRebuild=<s> (default 120): a broken depot repairs nothing for this long.
  float ArtilleryPostRisk(); // Trial -BattleArtilleryPostRisk=<m> (default 0 = the fixed sideways gap): a gun post near the home is chosen by
                             // metres to the depot (the repair trip) plus this many metres times the chance return fire lands on the depot.
+ float MachineRepairRate(); // Trial -BattleMachineRepairRate=<hp/s> (default 0 = the supply heal, 10/s): vehicles and exos are repaired this fast.
+ bool RepairHoldFire(); // Trial -BattleRepairHoldFire=1 (default 0): a gun on its trip home for repair or ammunition does not fire.
  float RepairDepot(); // Trial -BattleRepairDepot=<m> (default 0 = repair at home): vehicles and exos are repaired at a depot this far beside the home (cm).
  float ArtilleryHomeGap(); // Trial -BattleArtilleryHomeGap=<m> (default 0): guns and mortars keep at least this far from their own home (cm).
  float ArtilleryVehicleSplash(); // Trial -BattleArtilleryVehicleSplash=<0..1> (default 0): share of a gun shell's blast that hurts vehicles near (not on) the impact.

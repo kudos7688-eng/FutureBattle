@@ -312,7 +312,7 @@ void UBattleMatch::UpdateArea(float Dt)
   // (at the home again while -BattleDepotHealth has broken the depot).
   const bool bDepotMachine=DepotWorking(S->Team)&&(S->SquadType==BattleSquadType::Exo||R->IsVehicle(S->LeaderUnitID));
   if(bDepotMachine&&S->CommandStatus==EBattleCommandStatus::Active&&FVector::Dist2D(R->Position(S->LeaderUnitID),RepairPoint(S->Team))<=2500.)
-   if(const float DepotHeal=BattleTactics::Supply().HealPerSecond;DepotHeal>0.f)for(int32 ID:S->Members)Store->Heal(ID,DepotHeal*Step);
+   if(const float DepotHeal=BattleTactics::MachineRepairRate()>0.f?BattleTactics::MachineRepairRate():BattleTactics::Supply().HealPerSecond;DepotHeal>0.f)for(int32 ID:S->Members)Store->Heal(ID,DepotHeal*Step);
   if(!bHome&&!bPoint&&!bTeamSupply){Area.AmmoTimers.Remove(SID);continue;}
   float& AmmoTime=Area.AmmoTimers.FindOrAdd(SID);AmmoTime+=Step;
   if(AmmoTime>=10)
@@ -323,7 +323,9 @@ void UBattleMatch::UpdateArea(float Dt)
   }
   if(!bHome)continue; // a point gives ammunition only: no healing, no replacements
   // Trial -BattleSupplyHeal>0: living members (leader included) recover HP at home, up to their own maximum.
-  if(const float Heal=BattleTactics::Supply().HealPerSecond;Heal>0.f&&!bDepotMachine)
+  // Trial -BattleMachineRepairRate: vehicles and exos are repaired at that rate instead.
+  const bool bMachineHere=S->SquadType==BattleSquadType::Exo||R->IsVehicle(S->LeaderUnitID);
+  if(const float Heal=bMachineHere&&BattleTactics::MachineRepairRate()>0.f?BattleTactics::MachineRepairRate():BattleTactics::Supply().HealPerSecond;Heal>0.f&&!bDepotMachine)
    for(int32 ID:S->Members)Store->Heal(ID,Heal*Step);
   // Scout pairs are never replenished.
   if(BattleSquadType::Replenished(S->SquadType))

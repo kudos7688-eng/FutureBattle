@@ -126,6 +126,20 @@ FVector UBattleMatch::RepairPoint(int32 Team) const
 // -BattleDepotHealth=<hp> (default 0 = it never breaks): a gun shell within its blast radius plus 3 m does the soldiers' falloff damage,
 // and every living enemy within 25 m wears it down by 4 hp/s. Broken, it repairs nothing for -BattleDepotRebuild=<s> (default 120);
 // machines then go to the home to be repaired, as without the depot. Then it is whole again.
+// SPG weaknesses (2026-11-24, user choice "修理と弾に限り"; the ammunition limit is the existing -BattleSPGAmmo=1).
+// -BattleMachineRepairRate=<hp/s> (default 0 = the supply heal): vehicles and exos are repaired at the depot or home this fast.
+// -BattleRepairHoldFire=1 (default 0): a self-propelled gun whose squad is on its trip home (HOME SUPPLY: repair or ammunition) does
+// not fire until the trip ends (it fired from the depot while being repaired, so damage cost it nothing).
+float BattleTactics::MachineRepairRate()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleMachineRepairRate="),X);return FMath::IsFinite(X)?FMath::Max(0.f,X):0.f;}();
+ return V;
+}
+bool BattleTactics::RepairHoldFire()
+{
+ static const bool V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleRepairHoldFire="),X);return X==1;}();
+ return V;
+}
 float BattleTactics::DepotHealth()
 {
  static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleDepotHealth="),X);return FMath::IsFinite(X)?FMath::Max(0.f,X):0.f;}();
@@ -600,6 +614,10 @@ bool UBattleLeaderRuntime::StepArtillery(int32 ID,double Now,bool bMoving,FVecto
  // Guard stale entries; restore rebases the clocks and carries elapsed setup separately.
  if(A.ReadyAt>Now+FMath::Max(0.f,T->SPGReload)+1.)A.ReadyAt=Now;
  if(A.StillSince>Now)A.StillSince=-1;
+ // Trial -BattleRepairHoldFire: no fire on the trip home (repair or ammunition); the set-up starts again after it.
+ if(bSPG&&BattleTactics::RepairHoldFire())
+  if(const auto* GunSquad=Store->FindSquad(U->SquadID);GunSquad&&GunSquad->TacticalPlan.Action==EBattleSquadTactic::Recover&&GunSquad->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY")))
+  {A.StillSince=-1;A.SetupCredit=0;++RepairHeldShots;return false;}
  // Moving undoes the set-up (the target is kept until the next pick).
  if(bMoving){A.StillSince=-1;A.SetupCredit=0;return false;}
  if(A.StillSince<0)A.StillSince=Now;
