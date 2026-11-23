@@ -58,6 +58,25 @@ bool BattleTactics::ArtilleryFlash()
  return On;
 }
 
+// Counter-battery fire (2026-11-23, user request after the subtraction showed the gun unanswered). -BattleCounterBattery=1 (default 0;
+// the trial team only with -BattleAreaTrialTeam): a self-propelled gun shoots first at the newest fresh report of enemy artillery fire
+// within its range (BATTLE_ARTILLERY_FLASH reports, so -BattleArtilleryFlash=1 is needed; observed reports only, never the true position).
+bool BattleTactics::CounterBattery(int32 Team)
+{
+ static const int32 V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCounterBattery="),X);return X;}();
+ if(V==0||!ArtilleryFlash())return false;
+ const int32 Trial=AreaStrategy().TrialTeam;
+ return Trial<0||Trial==Team;
+}
+
+// -BattleArtilleryVehicleSplash=<0..1> (default 0 = vehicles only by a direct hit, as before): a gun shell also hurts vehicles within its
+// blast radius by this share of the soldiers' falloff (both teams; physics, not a trial-team choice).
+float BattleTactics::ArtilleryVehicleSplash()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryVehicleSplash="),X);return FMath::IsFinite(X)?FMath::Clamp(X,0.f,1.f):0.f;}();
+ return V;
+}
+
 bool BattleTactics::ArtilleryPosts()
 {
  static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryPosts="),V);return V==1;}();
@@ -291,6 +310,27 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
  if(BattleTactics::ArtilleryPosts()&&!bSPG&&!GetWorld()->GetSubsystem<UBattleMatch>()->AtArtilleryPost(U->Team,Pos))return false;
  const double Min2=FMath::Square(double(ArtilleryMinRange(bSPG))),Max2=FMath::Square(double(ArtilleryMaxRange(bSPG)));
  const double Blast=ArtilleryBlastRadius(bSPG),Blast2=Blast*Blast;
+ // Counter-battery (-BattleCounterBattery=1): the newest fresh artillery report in range comes first; ties by shooter key.
+ if(bSPG&&U->Team>=0&&U->Team<2&&BattleTactics::CounterBattery(U->Team))
+  if(const auto* CM=GetWorld()->GetSubsystem<UBattleMatch>())
+  {
+   int32 BestKey=INDEX_NONE;const UBattleMatch::FFireReveal* Best=nullptr;
+   for(const auto& FR:CM->FireReveals[U->Team])
+   {
+    const auto& R=FR.Value;if(!R.bArtillery||CM->Elapsed-R.At>R.Memory||CM->Elapsed<R.At)continue;
+    const double D2=FVector::DistSquared2D(Pos,R.Position);if(D2<Min2||D2>Max2)continue;
+    if(!Best||R.At>Best->At||(R.At==Best->At&&FR.Key<BestKey)){Best=&R;BestKey=FR.Key;}
+   }
+   if(Best&&!AllyNear(U->Team,Best->Position,Blast+ArtillerySpread(bSPG,FVector::Dist2D(Pos,Best->Position))))
+   {
+    Aim=Best->Position;
+    if(const int32* Last=CounterBatteryTarget.Find(ID);!Last||*Last!=BestKey)
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COUNTER_BATTERY unit=%d team=%d target=%d aim=(%.0f,%.0f) age=%.1f range=%.0f"),ID,U->Team,BestKey,Aim.X,Aim.Y,CM->Elapsed-Best->At,FVector::Dist2D(Pos,Aim));
+    CounterBatteryTarget.Add(ID,BestKey);++CounterBatteryAims;
+    return true;
+   }
+  }
+ CounterBatteryTarget.Remove(ID);
  // Soldiers only: the explosion does not hurt vehicles (a gun's direct hit on one is luck, not a plan).
  TArray<TPair<int32,FVector>> Soldiers;
  if(!BattleTactics::ArtilleryClustersEnabled()||!bTeamClusters)
@@ -570,6 +610,12 @@ int32 UBattleLeaderRuntime::ArtilleryImpact(const FArtilleryShell& Shell)
   if(IsVehicle(B.Key))
   {
    if(Shell.bSPG&&FVector::Dist2D(P,Shell.At)<=BattleSquadType::VehicleRadius(VehicleType(B.Key))&&FMath::Abs(P.Z-Shell.At.Z)<=400.)Hits.Add(TPair<int32,float>(B.Key,MaxDamage*ArtilleryBlastTransmission(Shell.At,P)));
+   // Trial -BattleArtilleryVehicleSplash (default 0): a near miss by a gun shell hurts the vehicle by a share of the blast falloff.
+   else if(const float Splash=Shell.bSPG?BattleTactics::ArtilleryVehicleSplash():0.f;Splash>0.f)
+   {
+    const double VD=FVector::Dist(P,Shell.At);
+    if(VD<Radius){const float VDamage=float(MaxDamage*(1.0-VD/Radius))*Splash*ArtilleryBlastTransmission(Shell.At,P);if(VDamage>0.f)Hits.Add(TPair<int32,float>(B.Key,VDamage));}
+   }
    continue;
   }
   const double D=FVector::Dist(P,Shell.At);if(D>Radius)continue;

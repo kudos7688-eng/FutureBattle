@@ -173,6 +173,12 @@ $supply=@{
  'W7E'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-AreaWithout','7')
  'W8E'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-AreaWithout','8')
  'W9E'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-AreaWithout','9')
+ # 2026-11-23 counter-battery: CBB = ALLE plus heard artillery reveals (the base), CB = CBB plus counter-battery fire (one-sided with
+ # -TrialTeam); CBSB / CBS = the same with gun near misses hurting vehicles (-ArtilleryVehicleSplash 1, both teams).
+ 'CBB'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1')
+ 'CB'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-CounterBattery','1')
+ 'CBSB'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1')
+ 'CBS'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-CounterBattery','1')
  # Front army share (2026-11-22, ROADMAP stage 5; maps H/I): FS50 / FS30 = the AI fills its front army up to half / 30% of its free infantry.
  'FS50'=@('-FrontShare','0.5')
  'FS30'=@('-FrontShare','0.3')

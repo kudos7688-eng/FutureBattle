@@ -30,6 +30,8 @@ namespace BattleTactics
  float ArtilleryRaidSneak(); // Trial -BattleArtilleryRaidSneak=<m> (default 0 = off, cm returned): a raid moves without stopping to fight until its leader is this close to the target; requires ArtilleryPosts.
  int32 AreaSPGCost(); // Optional -BattleAreaSPGCost override.
  bool ArtilleryFlash(); // Trial -BattleArtilleryFlash=1 (default 0): heard indirect fire reveals a rough position.
+ bool CounterBattery(int32 Team); // Trial -BattleCounterBattery=1 (default 0): a team's guns shoot first at revealed enemy artillery (needs ArtilleryFlash).
+ float ArtilleryVehicleSplash(); // Trial -BattleArtilleryVehicleSplash=<0..1> (default 0): share of a gun shell's blast that hurts vehicles near (not on) the impact.
  float SPGRange(); // Optional -BattleSPGRange override; absent keeps the configured range.
  // Optional -BattleArtilleryStandoff=<0..1> override of UBattleTuning::ArtilleryStandoff (an AI artillery squad keeps this share of its
  // range from every known enemy; 0.6 put the SPG next to its own home on map I, out of any raid's reach). Absent keeps the config value.

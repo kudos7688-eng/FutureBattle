@@ -287,6 +287,8 @@ public:
  bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey=nullptr,bool bTeamClusters=false,double Now=0.,const TMap<int32,uint8>* KnownTypes=nullptr);
  TMap<int32,int32> ArtillerySupportSquad; // group fire support: the own squad each gun last fired for (log on change; not saved)
  int64 ArtilleryGroupAims=0;
+ TMap<int32,int32> CounterBatteryTarget; // -BattleCounterBattery: the enemy shooter each gun last aimed at (log on change; not saved)
+ int64 CounterBatteryAims=0;
  bool AllyNear(int32 Team,const FVector& At,double Radius) const;
  // Launches one shell at Aim (spread applied, flight time Distance / shell speed). Consumes mortar ammunition or loads the gun.
  bool FireArtillery(int32 ID,const FVector& Aim,double Now);
