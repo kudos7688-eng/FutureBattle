@@ -1033,11 +1033,13 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  }
  const bool Approaching=CoverApproaches.Contains(ID) && StepCoverApproach(ID,Dt,Now,CombatContact?TargetID:INDEX_NONE);
  if(StopForCombat || S->Order==EBattleOrder::Hold) B.bTrafficWait=false;
- const bool bDriving=!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute;
+ // Trial -BattleSPGStayAfterFire: a gun that has just fired does not drive off.
+ const bool bGunStays=GunStaysAfterFire(ID,Now);
+ const bool bDriving=!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !bGunStays;
  if(bDriving && !Approaching && FirePositions.Num())FirePositions.Remove(ID); // back on the march: the place is free again
  // -BattleContactCover: a soldier walking to cover finishes that walk before he follows the squad's path again.
  if(bOwnWalking)StepSoldierOrder(ID,Dt,Now,Direction);
- else if(!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !(Approaching && (bContactCover || bOutsideContact)))
+ else if(!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !bGunStays && !(Approaching && (bContactCover || bOutsideContact)))
  {
   if(bWideField && bStableMovement) StableMove(ID,Dt,Now,Direction);
   else

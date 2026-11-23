@@ -37,6 +37,8 @@ namespace BattleTactics
  float DepotRebuild(); // -BattleDepotRebuild=<s> (default 120): a broken depot repairs nothing for this long.
  float ArtilleryPostRisk(); // Trial -BattleArtilleryPostRisk=<m> (default 0 = the fixed sideways gap): a gun post near the home is chosen by
                             // metres to the depot (the repair trip) plus this many metres times the chance return fire lands on the depot.
+ float SPGSetup(); // Optional -BattleSPGSetup=<s> (absent = config SPGSetupSeconds 8): set-up after the gun stops.
+ float SPGStayAfterFire(); // Trial -BattleSPGStayAfterFire=<s> (default 0): the gun cannot move for this long after a shot.
  float MachineRepairRate(); // Trial -BattleMachineRepairRate=<hp/s> (default 0 = the supply heal, 10/s): vehicles and exos are repaired this fast.
  bool RepairHoldFire(); // Trial -BattleRepairHoldFire=1 (default 0): a gun on its trip home for repair or ammunition does not fire.
  float RepairDepot(); // Trial -BattleRepairDepot=<m> (default 0 = repair at home): vehicles and exos are repaired at a depot this far beside the home (cm).

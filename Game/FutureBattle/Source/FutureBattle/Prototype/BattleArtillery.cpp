@@ -130,6 +130,26 @@ FVector UBattleMatch::RepairPoint(int32 Team) const
 // -BattleMachineRepairRate=<hp/s> (default 0 = the supply heal): vehicles and exos are repaired at the depot or home this fast.
 // -BattleRepairHoldFire=1 (default 0): a self-propelled gun whose squad is on its trip home (HOME SUPPLY: repair or ammunition) does
 // not fire until the trip ends (it fired from the depot while being repaired, so damage cost it nothing).
+// Firing posture (2026-11-24, user proposal): -BattleSPGSetup=<s> overrides the gun's set-up after it stops (config 8 s);
+// -BattleSPGStayAfterFire=<s> (default 0): after a shot the gun cannot drive off for this long (it cannot dodge return fire or leave
+// for repair at once).
+float BattleTactics::SPGSetup()
+{
+ static const float V=[]{float X=-1.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSPGSetup="),X);return FMath::IsFinite(X)?X:-1.f;}();
+ return V;
+}
+float BattleTactics::SPGStayAfterFire()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSPGStayAfterFire="),X);return FMath::IsFinite(X)?FMath::Max(0.f,X):0.f;}();
+ return V;
+}
+bool UBattleLeaderRuntime::GunStaysAfterFire(int32 ID,double Now) const
+{
+ const float Stay=BattleTactics::SPGStayAfterFire();
+ if(Stay<=0.f||!IsSPG(ID))return false;
+ const auto* A=Artillery.Find(ID);
+ return A&&A->LastFired>=0.&&Now>=A->LastFired&&Now-A->LastFired<Stay;
+}
 float BattleTactics::MachineRepairRate()
 {
  static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleMachineRepairRate="),X);return FMath::IsFinite(X)?FMath::Max(0.f,X):0.f;}();
@@ -644,7 +664,7 @@ bool UBattleLeaderRuntime::StepArtillery(int32 ID,double Now,bool bMoving,FVecto
  if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,A.TargetKey,A.Aim)){A.bHasTarget=false;A.NextPick=Now;return false;}
  Direction=(A.Aim-Position(ID)).GetSafeNormal2D();
  if(Direction.IsNearlyZero())return false;
- const float Setup=FMath::Max(0.f,bSPG?T->SPGSetupSeconds:T->MortarSetupSeconds);
+ const float Setup=FMath::Max(0.f,bSPG?(BattleTactics::SPGSetup()>=0.f?BattleTactics::SPGSetup():T->SPGSetupSeconds):T->MortarSetupSeconds);
  if(Now-A.StillSince+A.SetupCredit>=Setup)
  {
   bool bReady=false;
@@ -693,7 +713,7 @@ bool UBattleLeaderRuntime::FireArtillery(int32 ID,const FVector& Aim,double Now)
  if(BattleTactics::ArtilleryPosts()&&!bSPG&&!GetWorld()->GetSubsystem<UBattleMatch>()->AtArtilleryPost(U->Team,Position(ID)))return false;
  if(BattleTactics::ArtilleryClustersEnabled()&&AllyNear(U->Team,Aim,ArtilleryBlastRadius(bSPG)+ArtillerySpread(bSPG,FVector::Dist2D(Position(ID),Aim))))return false;
  auto& A=Artillery.FindOrAdd(ID);
- if(bSPG){if(Now<A.ReadyAt||!Store->UseSPGAmmo(ID))return false;A.ReadyAt=Now+FMath::Max(.5f,T->SPGReload);}
+ if(bSPG){if(Now<A.ReadyAt||!Store->UseSPGAmmo(ID))return false;A.ReadyAt=Now+FMath::Max(.5f,T->SPGReload);A.LastFired=Now;}
  else if(!Store->ConsumeShot(ID,Now,T->ShotInterval(EBattleWeapon::Mortar,false)))return false;
  U=Store->Find(ID);
  const FVector Start=Position(ID);const double Distance=FVector::Dist2D(Start,Aim);
