@@ -323,7 +323,7 @@ void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequenc
 	CurrentPose = nullptr;
 	if (!Idle)
 	{
-		LookFire = LookReload = LookSequenceFirst = LookSequenceThen = nullptr;
+		LookFire = LookReload = LookSequenceFirst = LookSequenceThen = LookJump = LookLand = nullptr;
 		// The look is gone and UpdateLookTilt no longer runs: drop its lean so the plain body stands upright.
 		LookVelShown = LookShotVelocity = FVector::ZeroVector;
 		if (!MeshTiltShown.Equals(FQuat::Identity, 1.e-4f))
@@ -630,9 +630,16 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 		// Action clips (SetLookActions, PlayLookSequence), standing only, moving or not (the glide keeps the feet still too):
 		// a running sequence (the launcher's recoil, then its reload), else the reload paced by the reload timer, else the recoil
 		// of the last shot, from its start at every shot. Each starts and ends on the idle's first frame.
+		// Jump (SetLookJump): the take-off and the landing are noted in any stance; the clips show standing only.
+		const bool bAir = LookJump && !GetCharacterMovement()->IsMovingOnGround();
+		if (bAir && LookAirStart < 0.) LookAirStart = Now;
+		if (!bAir && LookAirStart >= 0.) { if (Now - LookAirStart >= LookLandAfter) LookLandStart = Now; LookAirStart = -1.; }
 		if (VisualStance == BattleStance::Stand && !bLookTransition)
 		{
 			const double Since = Now - LookSequenceStart;
+			if (bAir) { Pose = LookJump; bAction = true; ActionAt = FMath::Min(Now - LookAirStart, double(LookJump->GetPlayLength()) - .034); }
+			else if (LookLand && Now - LookLandStart < LookLand->GetPlayLength()) { Pose = LookLand; bAction = true; ActionAt = Now - LookLandStart; }
+			else
 			const float First = LookSequenceFirst ? LookSequenceFirst->GetPlayLength() : 0.f;
 			const float Then = LookSequenceThen ? LookSequenceThen->GetPlayLength() : 0.f;
 			if (LookSequenceFirst && Since >= 0. && Since < First) { Pose = LookSequenceFirst; ActionAt = Since; bAction = true; }

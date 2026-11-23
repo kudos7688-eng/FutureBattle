@@ -58,6 +58,11 @@ void UBattleLeaderRuntime::RunExoShot()
   {0,260.f,BattleStance::Stand,true,TEXT("launcher_reload_left"),true,false,320.f,80.f,45.f,1,1.75f,TEXT("Dual_Reload")},
   {0,25.f,BattleStance::Stand,true,TEXT("rifle_fire"),false,false,320.f,80.f,45.f,2,.12f,TEXT("OneHand_Fire")},
   {0,60.f,BattleStance::Stand,true,TEXT("rifle_reload"),false,false,320.f,80.f,45.f,3,1.f,TEXT("OneHand_ReloadStill")},
+  // Jump shots (Action 4: a jump of the game's height, 480 cm/s up; 2026-11-24): high in the air with the rifle and with the
+  // launcher (the jump clip), and just after touching down (the landing clip).
+  {0,90.f,BattleStance::Stand,true,TEXT("jump_air"),false,false,520.f,150.f,110.f,4,.4f,TEXT("OneHand_Jump")},
+  {0,30.f,BattleStance::Stand,true,TEXT("launcher_jump_air"),true,false,520.f,150.f,110.f,4,.4f,TEXT("Dual_Jump")},
+  {0,90.f,BattleStance::Stand,true,TEXT("jump_land"),false,false,380.f,80.f,30.f,4,1.12f,TEXT("OneHand_Land")},
   {0,60.f,BattleStance::Crouch,true,TEXT("crouch")},{0,60.f,BattleStance::Prone,true,TEXT("prone")},
   {0,120.f,BattleStance::Prone,true,TEXT("prone_side")},{0,200.f,BattleStance::Prone,true,TEXT("prone_back")},  // after the get-down clip
   {0,30.f,BattleStance::Prone,true,TEXT("prone_close_front"),false,false,180.f,25.f,-50.f},{0,95.f,BattleStance::Prone,true,TEXT("prone_close_side"),false,false,180.f,25.f,-50.f},
@@ -80,6 +85,7 @@ void UBattleLeaderRuntime::RunExoShot()
  if(S.bMove)if(auto* Move=A->GetLookMove())A->GetMesh()->PlayAnimation(Move,true);
  if(S.Action==1)PlayExoLauncherAction(ID,Now);
  if(S.Action==2)A->NoteVisualShot(Now);
+ if(S.Action==4)A->LaunchCharacter(FVector(0,0,A->GetCharacterMovement()->JumpZVelocity),false,true);
  if(S.Action==3){auto& Edit=Store->Units.FindChecked(ID);Edit.Ammo=FMath::Max(0,Edit.Ammo-1);if(!Store->StartReload(ID,Now))++SmokeFailures;}
  const FVector P=Position(ID);const FVector Direction=FRotator(0,A->GetActorRotation().Yaw+S.Yaw,0).Vector();
  const FVector Eye=P+Direction*S.Distance+FVector(0,0,S.EyeZ);
