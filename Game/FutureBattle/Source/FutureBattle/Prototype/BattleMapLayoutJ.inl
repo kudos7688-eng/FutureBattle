@@ -23,6 +23,7 @@
 	UMaterial* FieldMatJ=Material(TEXT("M_MapField"),FLinearColor(.3f,.27f,.12f));
 	UMaterial* GrassMatJ=Material(TEXT("M_MapGrass"),FLinearColor(.12f,.24f,.08f));
 	UMaterial* PaveMatJ=Material(TEXT("M_MapPave"),FLinearColor(.2f,.2f,.21f));
+	UMaterial* LaneMatJ=Material(TEXT("M_MapLane"),FLinearColor(.33f,.29f,.22f));
 	// Emit and Piece take their material from WallMat (captured by reference): set it before a group of pieces.
 	auto UseJ=[&](UMaterial* NewMat){WallMat=NewMat;};
 	// Ground paint (no collision): roads, fields, parks, car parks, lakes.
@@ -87,20 +88,39 @@
 		}
 	}
 	FRandomStream RandomJ(20261122);
+	int32 LanesK=0,LaneDroppedK=0,LaneClearedK=0,LaneSectorsK=0;
 	for(int32 Cx=BattleMapJ::Columns/2;Cx<BattleMapJ::Columns;++Cx)for(int32 Rx=0;Rx<BattleMapJ::Rows;++Rx)
 	{
 		const TCHAR Kx=BattleMapJ::Kind(Cx,Rx);const FVector2D Mx=BattleMapJ::Centre(Cx,Rx);const double SXc=Mx.X,SYc=Mx.Y;
 		const BattleMapJ::FMirror Mr=BattleMapJ::Mirror(Cx,Rx);
 		const int32 Vr=BattleMapJ::Variant(Cx,Rx,6);const uint32 Hh=BattleMapJ::Hash(Cx,Rx,3);
+		// Map K, generation 8 (lanes inside the sectors): the content below runs twice. PassK 1 only collects the tall pieces
+		// (BigK: over 3m, a lane goes round them); PassK 2 builds, leaving out the low pieces that stand on a lane (LaneK).
+		// bKeepK: pieces that stay even on a lane (the cover of an objective). PassK 0: as on map J.
+		int32 PassK=0;bool bKeepK=false;TArray<FBox2D> BigK,LaneK;
+		auto OnLaneK=[&](double X,double Y,double W,double D)
+		{
+			const FBox2D Bx(FVector2D(X-FMath::Abs(W)*.5,Y-FMath::Abs(D)*.5),FVector2D(X+FMath::Abs(W)*.5,Y+FMath::Abs(D)*.5));
+			for(const FBox2D& Ln:LaneK)if(Ln.Intersect(Bx))return true;
+			return false;
+		};
 		// Put: an obstacle given in the sector's own frame (offset from the middle, size), turned by the sector's orientation.
 		auto Put=[&](const TCHAR* Lb,double Ox,double Oy,double Sw,double Sd,double Hz,bool bCc=false)
-		{const FVector2D Of=Mr.Offset(Ox,Oy),Sz=Mr.Size(Sw,Sd);Emit(Lb,SXc+Of.X,SYc+Of.Y,Sz.X,Sz.Y,Hz,bCc);};
+		{
+			const FVector2D Of=Mr.Offset(Ox,Oy),Sz=Mr.Size(Sw,Sd);
+			if(PassK==1){if(Hz>300.)BigK.Add(FBox2D(FVector2D(SXc+Of.X-FMath::Abs(Sz.X)*.5,SYc+Of.Y-FMath::Abs(Sz.Y)*.5),FVector2D(SXc+Of.X+FMath::Abs(Sz.X)*.5,SYc+Of.Y+FMath::Abs(Sz.Y)*.5)));return;}
+			if(PassK==2&&Hz<=300.&&!bKeepK&&OnLaneK(SXc+Of.X,SYc+Of.Y,Sz.X,Sz.Y)){++LaneClearedK;return;}
+			Emit(Lb,SXc+Of.X,SYc+Of.Y,Sz.X,Sz.Y,Hz,bCc);
+		};
 		auto PutOn=[&](const TCHAR* Lb,double Ox,double Oy,double Z0,double Sw,double Sd,double Hz)
-		{const FVector2D Of=Mr.Offset(Ox,Oy),Sz=Mr.Size(Sw,Sd);Piece(Lb,SXc+Of.X,SYc+Of.Y,Z0,Sz.X,Sz.Y,Hz);};
+		{if(PassK==1)return;const FVector2D Of=Mr.Offset(Ox,Oy),Sz=Mr.Size(Sw,Sd);Piece(Lb,SXc+Of.X,SYc+Of.Y,Z0,Sz.X,Sz.Y,Hz);};
 		// A tree: a trunk that stops bullets and a crown that is only drawn.
 		auto Tree=[&](double Ox,double Oy)
 		{
-			const FVector2D Of=Mr.Offset(Ox,Oy);UseJ(TrunkMatJ);Emit(TEXT("Tree"),SXc+Of.X,SYc+Of.Y,70,70,700);
+			const FVector2D Of=Mr.Offset(Ox,Oy);
+			if(PassK==1)return;
+			if(PassK==2&&OnLaneK(SXc+Of.X,SYc+Of.Y,70,70)){++LaneClearedK;return;}
+			UseJ(TrunkMatJ);Emit(TEXT("Tree"),SXc+Of.X,SYc+Of.Y,70,70,700);
 			for(int32 Sg:{-1,1})Box(TEXT("TreeCrown"),FVector((SXc+Of.X)*Sg,(SYc+Of.Y)*Sg,600),FVector(380,380,260),TreeMatJ,false);
 		};
 		// A hall without a roof: walls of Hz cm, doors in the front (south) wall and in each end wall, in the sector's frame.
@@ -118,6 +138,7 @@
 		// (an O sector's house stands in the frame's north-east corner) or a built north side (D).
 		auto ObjectiveCoverJ=[&](bool bHouseNE,bool bNorthBuilt)
 		{
+			bKeepK=true;
 			for(int32 Side:{-1,1})
 			{
 				if(!(bNorthBuilt&&Side>0))Put(TEXT("PlazaWall"),0,Side*900,500,60,120);
@@ -128,8 +149,11 @@
 					Put(TEXT("PlazaCrate"),Side*1200,Other*1200,140,140,130);
 				}
 			}
+			bKeepK=false;
 		};
 		auto Car=[&](double Ox,double Oy,bool bAlongX){Put(TEXT("Car"),Ox,Oy,bAlongX?450:200,bAlongX?200:450,150);};
+		auto ContentJ=[&]()
+		{
 		UseJ(GreyJ);
 		switch(Kx)
 		{
@@ -341,6 +365,103 @@
 			break;
 		default: break; // hills are built above
 		}
+		};
+		if(BattleMapJ::bDenseCover&&Kx!=TEXT('M')&&Kx!=TEXT('L')&&Kx!=TEXT('h')&&Kx!=TEXT('S')&&Kx!=TEXT(' '))
+		{
+			// Lanes (user request 2026-11-24: a continuous way through the sectors, not only templates turned about): from one
+			// doorway of each walled side a lane 3.5m wide runs in, turns once and meets the others at a hub. The legs are at most
+			// some 37m long and every doorway has its blind wall on one side, so a lane gives a way to walk but no long line of sight.
+			// Fields and woods (their content is random: no second run) only get the lane painted.
+			const bool bDryK=Kx!=TEXT('F')&&Kx!=TEXT('T');
+			if(bDryK)
+			{
+				PassK=1;ContentJ();
+				BattleTerrain::FHouse Hk;
+				if(BattleMapJ::HouseOf(Cx,Rx,Hk))BigK.Add(FBox2D(FVector2D(Hk.X-Hk.W*.5-50.,Hk.Y-Hk.H*.5-50.),FVector2D(Hk.X+Hk.W*.5+50.,Hk.Y+Hk.H*.5+50.)));
+			}
+			struct FSideK{bool bOk=false;bool bAlongX=false;double Line=0.,In=0.;double Door[2]={0.,0.};bool bBlind[2]={false,false};};
+			// The wall this sector has towards (C2,R2): the same numbers as BorderJ below. Dir: +1 when this sector lies on the
+			// greater side of the border line. bX0: the border on the x = 0 line (both blinds on the east side).
+			auto SideK=[&](int32 C2,int32 R2,bool bAlongX,double At,double Mid,uint32 Pick,double Dir,bool bX0)
+			{
+				FSideK Sd;if(C2<0||C2>=BattleMapJ::Columns||R2<0||R2>=BattleMapJ::Rows)return Sd;
+				const TCHAR K2=BattleMapJ::Kind(C2,R2);
+				if(K2==TEXT('M')||K2==TEXT('L')||K2==TEXT('h')||K2==TEXT(' '))return Sd;
+				Sd.bOk=true;Sd.bAlongX=bAlongX;Sd.In=Dir;
+				if(K2==TEXT('S')||BattleMapJ::IsPass(Cx,Rx)||BattleMapJ::IsPass(C2,R2)){Sd.Line=At;Sd.Door[0]=Mid-600.;Sd.Door[1]=Mid+600.;return Sd;}
+				const bool bRoadK=BattleMapJ::OnRoad(bAlongX,At,Mid);
+				const uint32 Bits=bRoadK?(Dir>0.?Pick:(Pick>>7)):Pick;Sd.Line=bRoadK?At+Dir*500.:At;
+				Sd.Door[0]=Mid-1700.+400.*((Bits>>1)%3);Sd.Door[1]=Mid+700.+400.*((Bits>>3)%3);
+				const double SideA=bX0?1.:((Bits>>5)&1)?1.:-1.;
+				Sd.bBlind[0]=bRoadK||SideA==Dir;Sd.bBlind[1]=bRoadK||(bX0?1.:-SideA)==Dir;
+				return Sd;
+			};
+			const double HalfK=BattleMapJ::Cell*.5;
+			FSideK SidesK[4];
+			SidesK[0]=SideK(Cx,Rx+1,true,SYc+HalfK,SXc,BattleMapJ::Hash(Cx,Rx,20),-1.,false);
+			SidesK[1]=SideK(Cx,Rx-1,true,SYc-HalfK,SXc,BattleMapJ::Hash(Cx,Rx-1,20),1.,false);
+			SidesK[2]=SideK(Cx+1,Rx,false,SXc+HalfK,SYc,BattleMapJ::Hash(Cx,Rx,21),-1.,false);
+			if(Cx>BattleMapJ::Columns/2)SidesK[3]=SideK(Cx-1,Rx,false,SXc-HalfK,SYc,BattleMapJ::Hash(Cx-1,Rx,21),1.,false);
+			else if(SYc>0)SidesK[3]=SideK(Cx-1,Rx,false,0.,SYc,BattleMapJ::Hash(Cx,Rx,22),1.,true);
+			else
+			{
+				// South of the middle the x = 0 border is the turned copy of the one north of it.
+				SidesK[3]=SideK(Cx-1,Rx,false,0.,-SYc,BattleMapJ::Hash(Cx,BattleMapJ::Rows-1-Rx,22),-1.,true);
+				SidesK[3].Line=-SidesK[3].Line;SidesK[3].In=1.;const double D0=-SidesK[3].Door[0];SidesK[3].Door[0]=-SidesK[3].Door[1];SidesK[3].Door[1]=D0;
+				Swap(SidesK[3].bBlind[0],SidesK[3].bBlind[1]);
+			}
+			// The pieces of the lane from doorway Ix of a side to the hub; false when a tall piece or another blind is in the way.
+			auto LaneOfK=[&](const FSideK& Sd,int32 Ix,double HubX,double HubY,TArray<FBox2D>& Out)
+			{
+				const double HubA=Sd.bAlongX?HubX:HubY,HubC=Sd.bAlongX?HubY:HubX,Dr=Sd.Door[Ix],Wd=175.;
+				const double Ea=Sd.bBlind[Ix]?Dr+(HubA>=Dr?900.:-900.):Dr;
+				if(Sd.bBlind[1-Ix]&&FMath::Abs(Ea-Sd.Door[1-Ix])<900.)return false;
+				auto Add=[&](double A0,double A1,double C0,double C1)
+				{
+					const double Al=FMath::Min(A0,A1),Ah=FMath::Max(A0,A1),Cl=FMath::Min(C0,C1),Ch=FMath::Max(C0,C1);
+					Out.Add(Sd.bAlongX?FBox2D(FVector2D(Al,Cl),FVector2D(Ah,Ch)):FBox2D(FVector2D(Cl,Al),FVector2D(Ch,Ah)));
+				};
+				if(Sd.bBlind[Ix])Add(Dr,Ea+(Ea>Dr?Wd:-Wd),Sd.Line+Sd.In*70.,Sd.Line+Sd.In*420.);
+				Add(Ea-Wd,Ea+Wd,Sd.Line+Sd.In*40.,HubC+Sd.In*Wd);
+				Add(Ea+(HubA>=Ea?-Wd:Wd),HubA+(HubA>=Ea?Wd:-Wd),HubC-Wd,HubC+Wd);
+				for(const FBox2D& Ln:Out)for(const FBox2D& Bg:BigK)if(Ln.Intersect(Bg))return false;
+				return true;
+			};
+			const bool bObjectiveK=Kx==TEXT('O')||Kx==TEXT('D');
+			int32 BestK=-1;double BestX=0.,BestY=0.;int32 BestDoor[4]={-1,-1,-1,-1};
+			for(int32 Try=0;Try<(bObjectiveK?1:25);++Try)
+			{
+				const int32 Ix=bObjectiveK?12:int32((Hh+uint32(Try)*7)%25);
+				const double HubX=SXc+(Ix%5-2)*600.,HubY=SYc+(Ix/5-2)*600.;
+				bool bHubFree=true;for(const FBox2D& Bg:BigK)if(Bg.ExpandBy(175.).IsInside(FVector2D(HubX,HubY)))bHubFree=false;
+				if(!bHubFree)continue;
+				int32 Score=0;int32 Door[4]={-1,-1,-1,-1};
+				for(int32 Si=0;Si<4;++Si)
+				{
+					if(!SidesK[Si].bOk)continue;
+					for(int32 Op=0;Op<2&&Door[Si]<0;++Op)
+					{
+						const int32 Dx=int32((Hh>>(Si+9))&1)^Op;TArray<FBox2D> Tmp;
+						if(LaneOfK(SidesK[Si],Dx,HubX,HubY,Tmp)){Door[Si]=Dx;++Score;}
+					}
+				}
+				if(Score>BestK){BestK=Score;BestX=HubX;BestY=HubY;for(int32 Si=0;Si<4;++Si)BestDoor[Si]=Door[Si];}
+			}
+			++LaneSectorsK;
+			for(int32 Si=0;Si<4;++Si)
+			{
+				if(!SidesK[Si].bOk)continue;
+				if(BestDoor[Si]<0){++LaneDroppedK;continue;}
+				TArray<FBox2D> Tmp;LaneOfK(SidesK[Si],BestDoor[Si],BestX,BestY,Tmp);++LanesK;
+				for(const FBox2D& Ln:Tmp)
+				{
+					LaneK.Add(Ln);const FVector2D Cn=Ln.GetCenter(),Sz=Ln.GetSize();
+					for(int32 Sg:{-1,1})Box(TEXT("Lane"),FVector(Cn.X*Sg,Cn.Y*Sg,2.25),FVector(Sz.X,Sz.Y,4.5),LaneMatJ,false);
+				}
+			}
+			PassK=bDryK?2:0;
+		}
+		ContentJ();PassK=0;
 		// Borders (north and east edge of every sector; the west edge on the x = 0 line): a hedge, a stone wall, a fence of low posts
 		// or nothing, where no road runs, leaving the corners open. None beside a hill, a mountain, a lake or a home base.
 		auto OpenJ=[](TCHAR A,TCHAR B){auto SkipK=[](TCHAR T){return T==TEXT('h')||T==TEXT('M')||T==TEXT('L')||T==TEXT('S')||T==TEXT(' ');};return SkipK(A)||SkipK(B);};
@@ -392,5 +513,6 @@
 		if(Cx==BattleMapJ::Columns/2&&SYc>0&&!OpenAt(Cx-1,Rx))BorderJ(false,0,SYc,BattleMapJ::Hash(Cx,Rx,22));
 	}
 	UseJ(GreyJ);
+	if(BattleMapJ::bDenseCover)UE_LOG(LogTemp,Display,TEXT("TOWN_K_LANES sectors=%d lanes=%d dropped=%d cleared=%d (x2 by rotation)"),LaneSectorsK,LanesK,LaneDroppedK,LaneClearedK);
 	UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_LAYOUT objects=%d (x2 by rotation) layout=terrain-j-v1"),Objects);
 }
