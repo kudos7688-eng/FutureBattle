@@ -157,7 +157,7 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  return true;
 }
 // ---- Purchase reservations (Docs/design-front-strategy.md 5.1) ----
-bool UBattleMatch::HireReserveOn(){static const int32 V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleHireReserve="),X);return X;}();return V!=0;}
+bool UBattleMatch::HireReserveOn(){static const int32 V=[]{int32 X=1;FParse::Value(FCommandLine::Get(),TEXT("BattleHireReserve="),X);return X;}();return V!=0;}
 static const TCHAR* HireWaitTag(const FString& Why){return Why.Contains(TEXT("resources"))?TEXT("credits"):Why.Contains(TEXT("slot"))?TEXT("slot"):Why.Contains(TEXT("limit"))?TEXT("type"):TEXT("other");}
 TArray<int32> UBattleMatch::HireQueueOf(int32 Team) const
 {
@@ -277,6 +277,7 @@ void UBattleMatch::UpdateHireQueue()
    if(Block!=0)continue;
    Area.HireQueue.RemoveAt(I);
    if(!HireAreaSquad(Team,EBattleTraining::Regular,Q.bByAI,uint8(Q.Type))){Area.HireQueue.Insert(Q,I);continue;}
+   ++HireQueueBought[Team];HireQueueBoughtType[Team]=Q.Type;HireQueueBoughtByAI[Team]=Q.bByAI;
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HIRE_RESERVE team=%d t=%.1f op=buy type=%d dest=%d by=%s waited=%.1f squad=%d queue=%d"),Team,Elapsed,Q.Type,Q.Dest,Q.bByAI?TEXT("AI"):TEXT("player"),Elapsed-Q.At,LastHiredSquadID,HireQueueOf(Team).Num());
    break;
   }

@@ -119,8 +119,10 @@ public:
  int32 ActiveElite(int32 Team) const;
  int32 ActiveSnipers(int32 Team) const; // sniper teams (scout pairs of grade 2); ActiveScouts counts only ordinary pairs
  int32 LastHiredSquadID=INDEX_NONE;
- // Purchase reservations (Docs/design-front-strategy.md 5.1). -BattleHireReserve=1 (default 0) routes the player's purchase keys
- // through ReserveHire; the queue itself works without the switch (smoke test) and is empty unless something reserves.
+ // Purchase reservations (Docs/design-front-strategy.md 5.1). -BattleHireReserve=1 routes the player's purchase keys and the purchase
+ // panel through ReserveHire (default 1 since 2026-11-23, user request; =0 for plain purchases). The AI never reserves unless its hiring is
+ // delegated (-BattleHireDelegate / the player's delegation), so matches without player input do not change. The queue itself works
+ // without the switch (smoke test) and is empty unless something reserves.
  static bool HireReserveOn();
  static constexpr int32 HireQueueMax=12;
  // Why a purchase cannot happen now: 0 = it can, 1 = it can later (resources, squad slots, type limit: a reservation waits),
@@ -150,6 +152,8 @@ public:
  // Once per match second: per team, the first reservation (in order, the first of each type) that can be bought is bought.
  void UpdateHireQueue();
  int32 HireQueueSecond=-1;
+ // Reservations bought per team in this run (not saved), and the last one's type and maker: the player's notice (BattleBuyPanel.cpp).
+ int32 HireQueueBought[2]={0,0}, HireQueueBoughtType[2]={-1,-1}; bool HireQueueBoughtByAI[2]={false,false};
  // P1 trial: the observed need a new AI squad would serve (see FAreaHireTuning), or -1 for none.
  int32 AreaHireNeed(int32 Team) const;
  // AI purchase rule, every director tick: own resources minus own pending replenishments >= cost + reserve, and a free slot.

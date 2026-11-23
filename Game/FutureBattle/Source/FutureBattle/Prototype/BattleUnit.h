@@ -108,6 +108,7 @@ private:
 	void UpdateBodyAnim(class UBattleBodyAnimInstance& Body, const FBattleUnitState& S);
 	class UBattleBodyAnimInstance* BodyAnim() const;
 	uint8 BodyStance = 0;
+	float CameraStanceDrop = 0.f; // how far the camera has sunk below its standing height (Tick, BattleStance::EyeOffset)
 	UPROPERTY() TObjectPtr<UAnimSequence> TransitionClip;
 	double TransitionUntil = 0., ShownShot = -10.;
 	float TransitionRate = 1.f; // above 1 once a stance transition is hurried on the move (BattleBodyAnim::MovingTransitionSeconds)
