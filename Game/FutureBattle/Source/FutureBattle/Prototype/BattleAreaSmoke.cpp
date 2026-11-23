@@ -408,6 +408,13 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      const bool Moved=M->MoveHire(0,-1,-100)&&M->Area.HireQueue[M->HireQueueOf(0)[0]].Dest==UBattleMatch::HireQueueMax-2&&M->Area.HireQueue[M->HireQueueOf(0)[1]].Dest==0;
      M->HireQueueSecond=-1;M->UpdateHireQueue();
      Check(Cancelled&&Moved&&M->HireQueueOf(0).Num()==UBattleMatch::HireQueueMax-1&&M->Credits[0]==CR,TEXT("reservations: cancel, move to the front, still waiting at the tank limit"));
+     // Destination: a click cycles none -> sections -> own groups -> reserve; an unknown value starts again at none.
+     {
+      const TArray<int32> Choices=M->HireDestChoices(0);
+      const bool First=M->CycleHireDest(0,0)&&M->Area.HireQueue[M->HireQueueOf(0)[0]].Dest==-1;
+      const bool Second=M->CycleHireDest(0,0)&&M->Area.HireQueue[M->HireQueueOf(0)[0]].Dest==Choices[1%Choices.Num()];
+      Check(First&&Second&&Choices[0]==-1&&Choices.Last()==UBattleMatch::HireDestReserve&&!M->CycleHireDest(0,99),TEXT("reservations: the destination cycles through the choices"));
+     }
      M->Area.HireQueue.Reset();
      if(M->ActiveSquads(0)<BattleTactics::AreaHire().MaxActive)
      {

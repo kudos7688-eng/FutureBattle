@@ -144,6 +144,13 @@ public:
  // played match (not the AI-vs-AI experiment): the level, the resources the AI leaves and the types it may not buy (Area.PlayerHire*).
  static constexpr int32 PlayerHireReserveMax=400, PlayerHireReserveStep=20;
  bool PlayerDelegating(int32 Team) const;
+ // Reservation destination (FBattleHireReservation::Dest, own team 0 only): -1 none, 0..Rows-1 a front plan section (the front army,
+ // posted in that section first), HireDestReserve the unassigned reserve, HireDestGroup + group ID that group (front army or attack group).
+ static constexpr int32 HireDestReserve=999, HireDestGroup=1000;
+ TArray<int32> HireDestChoices(int32 Team) const; // in the order a click cycles through them
+ bool CycleHireDest(int32 Team,int32 Index); // Index into HireQueueOf(Team)
+ FString HireDestJa(int32 Dest) const;
+ void ApplyHireDest(int32 Team,int32 SquadID,int32 Dest);
  void SetPlayerHiring(int32 Delegate,int32 Reserve,int32 Deny);
  // Once per match second: per team, the first reservation (in order, the first of each type) that can be bought is bought.
  void UpdateHireQueue();
@@ -210,6 +217,9 @@ public:
  void ClampFrontTimers();
  float SurpriseNextAt[2]={0.f,0.f},SurpriseSkipLogAt[2]={0.f,0.f};
  TMap<int32,FVector> FrontPosts; // squad of a front-holding group -> the sector centre it holds (transient)
+ // Reservation destinations (stage 7, Docs/design-front-strategy.md 5.1): a bought squad sent to a front section waits here for its first
+ // post, which then prefers that section's rows (squad -> section; transient: after a restore before the first post it takes any post).
+ TMap<int32,int32> FrontSectionWish;
  TSet<int32> FrontLeads; // squads of a front-holding group on a row's front place, not a support place (transient, like FrontPosts)
  float FrontLineAt[2]={-1.f,-1.f},FrontLineLogAt[2]={-1.f,-1.f};
  // Front plan, stage 1 (Docs/design-front-strategy.md, trial -BattleFrontPlanLog=1, default 0): the team's front line split into 3-5

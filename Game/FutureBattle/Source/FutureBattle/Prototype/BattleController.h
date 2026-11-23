@@ -65,7 +65,7 @@ struct FBattleCommandBarLayout
 struct FBattlePlanPanelLayout
 {
  // Kind: 0 text, 1 section role, 2 reservation one up, 3 reservation cancel, 4 delegation level, 5 reserve down, 6 reserve up,
- // 7 type allowed, 8 close. Tone: buttons 0 plain, 1 allowed, 2 denied, 3 chosen; text 0 plain, 4 title, 5 muted.
+ // 7 type allowed, 8 close, 9 reservation destination. Tone: buttons 0 plain, 1 allowed, 2 denied, 3 chosen; text 0 plain, 4 title, 5 muted.
  struct FItem { FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector; uint8 Kind=0, Tone=0; int32 Index=0; FString Text; };
  TArray<FItem> Items; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector;
  static FBattlePlanPanelLayout Make(FVector2D View,const UWorld* World);

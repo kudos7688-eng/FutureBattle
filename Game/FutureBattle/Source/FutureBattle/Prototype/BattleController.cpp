@@ -336,12 +336,13 @@ FBattlePlanPanelLayout FBattlePlanPanelLayout::Make(FVector2D View,const UWorld*
  if(UBattleMatch::HireReserveOn())
  {
   const TArray<int32> Mine=M->HireQueueOf(0);
-  Text(FString::Printf(TEXT("購入予約 %d/%d（購入キーで追加 ／ ↑ 一つ前へ ／ × 取り消し）"),Mine.Num(),UBattleMatch::HireQueueMax),X0,0);Y+=Row;
+  Text(FString::Printf(TEXT("購入予約 %d/%d（購入キーで追加 ／ 行き先は押して切り替え ／ ↑ 一つ前へ ／ × 取り消し）"),Mine.Num(),UBattleMatch::HireQueueMax),X0,0);Y+=Row;
   for(int32 K=0;K<Mine.Num();++K)
   {
    const auto& Q=M->Area.HireQueue[Mine[K]];FString Why;const int32 B=M->HireBlock(0,uint8(Q.Type),Why);
    const TCHAR* Wait=B==0?TEXT("順番待ち"):Why.Contains(TEXT("resources"))?TEXT("資源待ち"):Why.Contains(TEXT("slot"))?TEXT("小隊の上限待ち"):TEXT("上限待ち");
    Text(FString::Printf(TEXT("%d. %s ／ %s ／ %.0f秒%s"),K+1,PlanTypeJa(Q.Type),Wait,M->Elapsed-Q.At,Q.bByAI?TEXT(" ／ AIの予約"):TEXT("")),X0+8,0);
+   Btn(9,K,FString::Printf(TEXT("行き先：%s"),*M->HireDestJa(Q.Dest)),Right-200,132,Q.Dest>=0?3:0);
    if(K>0)Btn(2,K,TEXT("↑"),Right-62,28,0);
    Btn(3,K,TEXT("×"),Right-28,28,0);
    Y+=Row;
@@ -400,6 +401,7 @@ bool ABattleController::PlanPanelInput(const FInputKeyEventArgs& Params)
  case 5: case 6: Match->SetPlayerHiring(D,Reserve+(It.Kind==6?1:-1)*UBattleMatch::PlayerHireReserveStep,Deny);break;
  case 7: Match->SetPlayerHiring(D,Reserve,Deny^(1<<It.Index));break;
  case 8: bPlanPanel=false;break;
+ case 9: Match->CycleHireDest(0,It.Index);break;
  default: break;
  }
  return true;
