@@ -93,4 +93,4 @@ slot = slots[0]; slot.material_interface = material; slot.material_slot_name = '
 mesh.materials = slots
 if v2.physics_asset: mesh.set_editor_property('physics_asset', v2.physics_asset)
 assert u.EditorAssetLibrary.save_loaded_asset(mesh, False)
-u.log('AC01_T3_IMPORT_OK ' + str([sub.get_num_verts(mesh, i) for i in range(3)]) + ' vertex_colors=%s material=%s' % (mesh.get_editor_property('has_vertex_colors'), mesh.materials[0].material_interface.get_name()))
+u.log('AC01_T3_IMPORT_OK ' + str([sub.get_num_verts(mesh, i) for i in range(3)]) + ' material=%s' % (mesh.materials[0].material_interface.get_name()))

@@ -113,6 +113,8 @@ void UBattleLeaderRuntime::RunExoShot()
   const bool bOk=!Expect||(Shown&&Shown->GetName().Contains(Expect));
   UE_LOG(LogFutureBattle,Display,TEXT("EXO_SHOT_CAPTURE shot=%s pose=%s%s"),Name,Shown?*Shown->GetName():TEXT("none"),bOk?TEXT(""):TEXT(" EXPECTED_OTHER"));
   if(!bOk)++SmokeFailures;
+  // The other team's body is hidden while no one of team 0 spots it (RefreshVisibility); shown again for the picture.
+  if(Body.IsValid())Body->SetActorHiddenInGame(false);
   if(bShoot)FScreenshotRequest::RequestScreenshot(File,false,false);
  }),S.Capture,false);
  ++ExoShotStage;Later(FMath::Max(1.2f,S.Capture+.6f));

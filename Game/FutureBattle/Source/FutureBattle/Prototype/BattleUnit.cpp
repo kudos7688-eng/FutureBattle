@@ -637,12 +637,11 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 		if (VisualStance == BattleStance::Stand && !bLookTransition)
 		{
 			const double Since = Now - LookSequenceStart;
-			if (bAir) { Pose = LookJump; bAction = true; ActionAt = FMath::Min(Now - LookAirStart, double(LookJump->GetPlayLength()) - .034); }
-			else if (LookLand && Now - LookLandStart < LookLand->GetPlayLength()) { Pose = LookLand; bAction = true; ActionAt = Now - LookLandStart; }
-			else
 			const float First = LookSequenceFirst ? LookSequenceFirst->GetPlayLength() : 0.f;
 			const float Then = LookSequenceThen ? LookSequenceThen->GetPlayLength() : 0.f;
-			if (LookSequenceFirst && Since >= 0. && Since < First) { Pose = LookSequenceFirst; ActionAt = Since; bAction = true; }
+			if (bAir) { Pose = LookJump; bAction = true; ActionAt = FMath::Min(Now - LookAirStart, double(LookJump->GetPlayLength()) - .034); }
+			else if (LookLand && Now - LookLandStart < LookLand->GetPlayLength()) { Pose = LookLand; bAction = true; ActionAt = Now - LookLandStart; }
+			else if (LookSequenceFirst && Since >= 0. && Since < First) { Pose = LookSequenceFirst; ActionAt = Since; bAction = true; }
 			else if (LookSequenceThen && Since >= First && Since < First + Then) { Pose = LookSequenceThen; ActionAt = Since - First; bAction = true; }
 			else if (Reloading && LookReload)
 			{
