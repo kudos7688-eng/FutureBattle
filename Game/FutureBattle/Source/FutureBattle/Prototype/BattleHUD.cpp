@@ -161,6 +161,8 @@ void ABattleHUD::DrawHUD()
    if(Mine.Num())Text+=TEXT(" ／ Backspace 取消 ／ = 先頭へ");
    DrawRect(Ink,576,165,720,26);Label(Text,588,172,Mint,.8f);
   }
+  // The area battle's own line is drawn above; without this the large-field and support lines below were drawn over it (since 147a610).
+  else if(Match->bArea){}
   else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch)Label(TEXT("本拠地・保有拠点で補給：1発につき資源1 ／ F8 保存 ／ F9 読込 ／ 支援攻撃なし"),28,172,Mint,.85f);
   else if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("固定戦力 ／ 増援・補給・支援攻撃なし"),28,172,Mint,.85f);
 		else Label(FString::Printf(TEXT("[B] 支援攻撃 400 ／ 残り%d ／ 再装填 %.0f秒 ／ 選択部隊が知る位置へ"), 3 - Match->SupportUsed[0], Match->SupportCooldown[0]), 28, 172, Mint, .85f);
@@ -592,6 +594,7 @@ void ABattleHUD::DrawBuyPanel(ABattleController* PC)
 void ABattleHUD::DrawGamepadMenu(ABattleController* PC)
 {
  if(!PC->IsTactical()||(!PC->bGamepadActive&&!PC->IsGamepadMenuOpen()&&!PC->IsGroundFloorPending()))return;
+ if(PC->IsBuyPanelOpen()&&!PC->IsGamepadMenuOpen())return; // the purchase panel stands where the hint is; its footer names the pad buttons
  const auto MenuBar=FBattleCommandBarLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld(),true);
  const float MenuWidth=FMath::Min(360.f,FMath::Max(1.f,float(Canvas->SizeX)-32.f));
  const float MenuRowHeight=FMath::Max(26.f,MenuBar.ButtonHeight);

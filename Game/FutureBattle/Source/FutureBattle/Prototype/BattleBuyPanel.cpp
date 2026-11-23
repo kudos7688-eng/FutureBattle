@@ -168,6 +168,7 @@ static void UpdateBuyPanelShot(ABattleController* PC)
  if(Stage==0&&T>6.&&Match->bArea&&Match->Phase==EBattleMatchPhase::Combat&&PC->IsTactical())
  {
   if(!PC->IsBuyPanelOpen())PC->ToggleBuyPanel();
+  PC->bGamepadActive=false; // the pictures show the mouse labels (the pad stage below switches to the pad)
   int32 W=0,H=0;PC->GetViewportSize(W,H);
   const auto L=FBattleBuyPanelLayout::Make(FVector2D(W,H),World);
   const float Top=FBattleCommandBarLayout::Make(FVector2D(W,H),World).PanelTop;
@@ -186,7 +187,7 @@ static void UpdateBuyPanelShot(ABattleController* PC)
   const int32 Credits=Match->Credits[0],Active=Match->ActiveSquads(0),Have=Row>=0?Match->ActiveOfType(0,L.Rows[Row].Type):-1;
   const bool bCalled=Row>=0&&PC->BuyFromPanel(Row);
   const bool bBought=bCalled&&Match->ActiveSquads(0)==Active+1&&Match->ActiveOfType(0,L.Rows[Row].Type)==Have+1&&Match->Credits[0]<Credits;
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BUY_PANEL_SHOT stage=buy t=%.1f row=%d type=%d bought=%d credits=%d->%d active=%d->%d open=%d"),T,Row,Row>=0?int32(L.Rows[Row].Type):-1,bBought?1:0,Credits,Match->Credits[0],Active,Match->ActiveSquads(0),PC->IsBuyPanelOpen()?1:0);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BUY_PANEL_SHOT stage=buy t=%.1f row=%d type=%d bought=%d credits=%d->%d active=%d->%d open=%d pad_labels=%d"),T,Row,Row>=0?int32(L.Rows[Row].Type):-1,bBought?1:0,Credits,Match->Credits[0],Active,Match->ActiveSquads(0),PC->IsBuyPanelOpen()?1:0,PC->bGamepadActive?1:0);
   Stage=3;Next=T+.6;
  }
  else if(Stage==3&&T>=Next){FScreenshotRequest::RequestScreenshot(Prefix+TEXT("-bought.png"),true,false);Stage=4;Next=T+1.;}
