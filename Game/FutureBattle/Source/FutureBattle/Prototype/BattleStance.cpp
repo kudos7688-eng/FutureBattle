@@ -66,7 +66,13 @@ float BattleStance::MoveScale(uint8 Stance){return Stance==Prone?.25f:Stance==Cr
 
 bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForce,bool bOnTheMove)
 {
- if(!BattleStance::Enabled(GetWorld()))return false;
+ // Off the stance maps (BattleStance::Enabled: map E by default) only the directly controlled soldier crouches and goes prone
+ // (the user could not crouch on map I), and anyone may stand up again (the soldier he leaves, below in the AI step).
+ if(!BattleStance::Enabled(GetWorld()) && Stance!=BattleStance::Stand)
+ {
+  const auto* Body=Bodies.Find(ID);
+  if(!(Body && Body->Actor.IsValid() && Body->Actor->IsPlayerControlled()))return false;
+ }
  const uint8 Current=StanceOf(ID);
  if(Current==Stance||Stance>BattleStance::Prone)return false;
  if(!bForce&&Now<StanceLockedUntil.FindRef(ID))return false;

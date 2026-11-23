@@ -700,14 +700,14 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
  { bAimHeld=Params.Event==IE_Pressed; return true; }
  if(!bTactical && bAimHeld && (Params.Key==EKeys::MouseScrollUp||Params.Key==EKeys::MouseScrollDown))
  { if(Params.Event==IE_Pressed) AimLevel=FMath::Clamp(AimLevel+(Params.Key==EKeys::MouseScrollUp?1:-1),1,3); return true; }
- // Stances (map E): X cycles stand -> crouch -> prone for the directly controlled soldier.
+ // Stances: X cycles stand -> crouch -> prone for the directly controlled soldier, on every map (the AI uses stances on map E).
  if(!bTactical && Params.Key==EKeys::X && Params.Event==IE_Pressed)
   if(auto* U=Cast<ABattleUnit>(GetPawn()))
-   if(auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();R->IsEnabled()&&BattleStance::Enabled(GetWorld()))
+   if(auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();R->IsEnabled())
    {
     const uint8 Next=(R->StanceOf(U->GetUnitID())+1)%3;
-    if(R->SetStance(U->GetUnitID(),Next,GetWorld()->GetTimeSeconds()))ShowNotice(Next==BattleStance::Prone?TEXT("PRONE / X TO STAND"):Next==BattleStance::Crouch?TEXT("CROUCHED / X FOR PRONE"):TEXT("STANDING / X TO CROUCH"));
-    else ShowNotice(TEXT("CHANGING STANCE")); // the last change still takes time (0.5 s, 1.2 s to or from prone)
+    if(R->SetStance(U->GetUnitID(),Next,GetWorld()->GetTimeSeconds()))ShowNotice(Next==BattleStance::Prone?TEXT("伏せ（X で立つ）"):Next==BattleStance::Crouch?TEXT("しゃがみ（X で伏せる）"):TEXT("立ち（X でしゃがむ）"));
+    else ShowNotice(TEXT("姿勢を変えています")); // the last change still takes time (0.5 s, 1.2 s to or from prone)
     return true;
    }
  // F / LB swaps the hand and back mounts. Primary fire uses the equipped weapon.
