@@ -272,7 +272,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSectorMove` | Value | 0 | BattleLeaderRuntime.cpp:1614 |  |
 | `-BattleSectorMoveFire` | Value | -1 | BattleLeaderRuntime.cpp:1624 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleSectorRoute` | Value | -1 | BattleSectorRoute.cpp:16 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
-| `-BattleSectorSight` | Value | 0 | BattleSectorSight.cpp:14 |  |
+| `-BattleSectorSight` | Value | 1 | BattleSectorSight.cpp:14 |  |
 | `-BattleSectorSightTeam` | Value | -1 | BattleSectorSight.cpp:15 |  |
 | `-BattleSectorSlotReserve` | Value | 1 | BattleStableMovement.cpp:81 |  |
 | `-BattleSectorSmoke` | Param | off | BattleLeaderRuntime.cpp:217 |  |
@@ -286,10 +286,10 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleShotLog` | Param | off | BattleLeaderRuntime.cpp:1271 |  |
 | `-BattleSightExperiment` | Value | 未解決 | BattleLeaderRuntime.cpp:82 |  |
 | `-BattleSightHitStats` | Value | 0 | BattleLeaderRuntime.cpp:395 |  |
-| `-BattleSightPairReuse` | Value | 0 | BattleLeaderRuntime.cpp:355, BattlePerception.cpp:181 |  |
-| `-BattleSightParallel` | Value | 1 | BattlePerception.cpp:180 |  |
+| `-BattleSightPairReuse` | Value | 0 | BattleLeaderRuntime.cpp:355, BattlePerception.cpp:182 |  |
+| `-BattleSightParallel` | Value | 1 | BattlePerception.cpp:181 |  |
 | `-BattleSightRange` | Value | 空文字列 | BattleState.cpp:18 |  |
-| `-BattleSightRayStats` | Value | 0 | BattlePerception.cpp:189 |  |
+| `-BattleSightRayStats` | Value | 0 | BattlePerception.cpp:190 |  |
 | `-BattleSightScanInterval` | Value | .4 | BattleLeaderRuntime.cpp:117 |  |
 | `-BattleSightScanNear` | Value | 1.e7 | BattleLeaderRuntime.cpp:117 |  |
 | `-BattleSightSlowFar` | Value | 0 | BattleLeaderRuntime.cpp:114 |  |
@@ -383,7 +383,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleWideMapAudit` | Param | off | BattleLeaderRuntime.cpp:241 |  |
 | `-BattleWideMapGeometryOnly` | Param | off | BattleWideMapAudit.cpp:157 |  |
 | `-BattleWideMixed` | Param | off | BattleGameMode.cpp:55, BattleLeaderRuntime.cpp:78 |  |
-| `-BattleWideScreens` | Value | 空文字列（BattleAreaSmoke.cpp:1264） / 空文字列（BattleContactTrial.cpp:97） / 空文字列（BattleDeathShot.cpp:42） / 空文字列（BattleExoShot.cpp:101） / 未解決（BattleFXCheck.cpp:197） / 空文字列（BattleMixedFastSmoke.cpp:34） / 空文字列（BattleMixedSaveSmoke.cpp:306） / 空文字列（BattleMovementTrial.cpp:108） / 空文字列（BattleScopeShot.cpp:45） / 空文字列（BattleSightVisual.cpp:30） / 空文字列（BattleSquadFlankSmoke.cpp:165） / 空文字列（BattleSquadRetreatSmoke.cpp:20） / 空文字列（BattleStanceShot.cpp:96） / 空文字列（BattleTeamSupportSmoke.cpp:122） / 空文字列（BattleWideMapAudit.cpp:40） / 空文字列（BattleWideMapAudit.cpp:159） / 空文字列（BattleWideMapAudit.cpp:190） / 空文字列（BattleWideMixedSmoke.cpp:39） / 空文字列（BattleWideMixedSmoke.cpp:53） | BattleAreaSmoke.cpp:1264, BattleContactTrial.cpp:97, BattleDeathShot.cpp:42, BattleExoShot.cpp:101, BattleFXCheck.cpp:197, BattleMixedFastSmoke.cpp:34, BattleMixedSaveSmoke.cpp:306, BattleMovementTrial.cpp:108, BattleScopeShot.cpp:45, BattleSightVisual.cpp:30, BattleSquadFlankSmoke.cpp:165, BattleSquadRetreatSmoke.cpp:20, BattleStanceShot.cpp:96, BattleTeamSupportSmoke.cpp:122, BattleWideMapAudit.cpp:40, BattleWideMapAudit.cpp:159, BattleWideMapAudit.cpp:190, BattleWideMixedSmoke.cpp:39, BattleWideMixedSmoke.cpp:53 |  |
+| `-BattleWideScreens` | Value | 空文字列（BattleAreaSmoke.cpp:1268） / 空文字列（BattleContactTrial.cpp:97） / 空文字列（BattleDeathShot.cpp:42） / 空文字列（BattleExoShot.cpp:101） / 未解決（BattleFXCheck.cpp:197） / 空文字列（BattleMixedFastSmoke.cpp:34） / 空文字列（BattleMixedSaveSmoke.cpp:306） / 空文字列（BattleMovementTrial.cpp:108） / 空文字列（BattleScopeShot.cpp:45） / 空文字列（BattleSightVisual.cpp:30） / 空文字列（BattleSquadFlankSmoke.cpp:165） / 空文字列（BattleSquadRetreatSmoke.cpp:20） / 空文字列（BattleStanceShot.cpp:96） / 空文字列（BattleTeamSupportSmoke.cpp:122） / 空文字列（BattleWideMapAudit.cpp:40） / 空文字列（BattleWideMapAudit.cpp:159） / 空文字列（BattleWideMapAudit.cpp:190） / 空文字列（BattleWideMixedSmoke.cpp:39） / 空文字列（BattleWideMixedSmoke.cpp:53） | BattleAreaSmoke.cpp:1268, BattleContactTrial.cpp:97, BattleDeathShot.cpp:42, BattleExoShot.cpp:101, BattleFXCheck.cpp:197, BattleMixedFastSmoke.cpp:34, BattleMixedSaveSmoke.cpp:306, BattleMovementTrial.cpp:108, BattleScopeShot.cpp:45, BattleSightVisual.cpp:30, BattleSquadFlankSmoke.cpp:165, BattleSquadRetreatSmoke.cpp:20, BattleStanceShot.cpp:96, BattleTeamSupportSmoke.cpp:122, BattleWideMapAudit.cpp:40, BattleWideMapAudit.cpp:159, BattleWideMapAudit.cpp:190, BattleWideMixedSmoke.cpp:39, BattleWideMixedSmoke.cpp:53 |  |
 | `-BattleWideSmoke` | Param | off | BattleLeaderRuntime.cpp:255 |  |
 | `-BattleWideSoak` | Param | off | BattleLeaderRuntime.cpp:257 |  |
 | `-BayFlank` | Value | 0 | BattleFlankBayTrial.cpp:17 |  |
