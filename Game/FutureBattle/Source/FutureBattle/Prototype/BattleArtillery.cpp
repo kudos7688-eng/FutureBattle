@@ -346,6 +346,8 @@ FVector UBattleMatch::AreaArtilleryPost(int32 Team,int32 SquadID,const FVector& 
   const bool bPostOk=FVector::Dist2D(Post,Home)>=Gap;
   if(!bPostOk||Chance(Post)>0.)
   {
+   // Near the home the standoff is often not clear anywhere (the post fell back to the home): then the candidates are scored without it.
+   const bool bAnyClear=Clear(Post);
    FVector Best=Post;double BestCost=bPostOk?Cost(Post):DBL_MAX;
    const auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
    const double HomeSign=Home.X>0?1.:-1.;
@@ -355,7 +357,7 @@ FVector UBattleMatch::AreaArtilleryPost(int32 Team,int32 SquadID,const FVector& 
     if(Dir.X*HomeSign>.2)continue; // behind the home is the map edge
     FVector P=Home+Dir*(FMath::Max(Gap,1000.)+Ring*2000.);P.Z=Home.Z;
     if(Nav){FNavLocation L;if(!Nav->ProjectPointToNavigation(P,L,FVector(500.,500.,5000.)))continue;P=L.Location;}
-    if(!Clear(P))continue;
+    if(bAnyClear&&!Clear(P))continue;
     const double C=Cost(P);if(C<BestCost){BestCost=C;Best=P;}
    }
    if(BestCost<DBL_MAX)
