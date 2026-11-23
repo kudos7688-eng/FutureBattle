@@ -58,6 +58,9 @@ public:
 	// Shared: known only from a report. Unknown: no contact. RayKnownPairs: distinct (squad, target) among Own+Squad rays per 0.2 s.
 	int64 RayOwn[2] = {0, 0}, RaySquad[2] = {0, 0}, RayShared[2] = {0, 0}, RayUnknown[2] = {0, 0}, RayKnownPairs = 0, RayWindow = -1;
 	TSet<uint64> RayWindowPairs;
+	// [zone][role][seen]: zone 0 = same sector or within 20 m, 1 = neighbouring sector, 2 = farther; role 1 = rifle squad member who is not the leader.
+	int64 RayZone[3][2][2] = {};
+	int64 SectorSightSkipped = 0; // -BattleSectorSight: cross-sector candidates a rifle squad member left to his lookout
 	bool bSlowUnknownFar = false; // Diagnostic only: unknown targets beyond 1200cm on alternate visits.
 	void Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double Now, int32 Slice = 0, int32 SliceCount = 1);
 	const TMap<int32, FBattleContact>* GetContacts(int32 ObserverID) const;

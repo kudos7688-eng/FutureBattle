@@ -182,3 +182,4 @@ BattleCompositionRuntime | 編成AIと観測・収入窓・既存購入実行の
 BattleCompositionState | CombatStateVersion=4で保存する編成AIの陣営状態
 BattleCompositionSave | 編成AI保存の版・陣営・時刻・参照先検証
 BattleCompositionSmoke | 編成AIの選択・貯蓄・保存往復のスモーク検査（UBattleLeaderRuntimeの一部）
+BattleSectorSight | 区画内・区画間の戦い（試験切替 `-BattleSectorSight`、既定0、`Docs/design-sector-combat.md`）：区画のあるマップで、通常小隊は別の区画（20m より遠い）の敵を探す光線を隊長だけが出し、隊員は隊長が今見ている敵を発射直前の視線判定で撃つ（UBattleLeaderRuntime の一部。走査の側は `UBattlePerception::Update` の `SkipCross`）
