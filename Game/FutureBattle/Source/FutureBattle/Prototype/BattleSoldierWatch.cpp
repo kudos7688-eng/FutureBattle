@@ -37,7 +37,8 @@ int32 UBattleLeaderRuntime::KnownEnemyDirection(int32 ID,int32 TargetID,const FV
  const double Memory=U->Perception.MemorySeconds;
  auto Held=[&](const FBattleContact& K){return K.bVisible || Now-K.LastSeenTime<=Memory;};
  // 1. The squad's target, when he knows where it is (out of sight now): he keeps looking there.
- if(const FBattleContact* K=Contacts->Find(TargetID); K && Held(*K))
+ const auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();FBattleContact KnownOfTarget;
+ if(const FBattleContact* K=Sense->Knows(ID,U->SquadID,TargetID,KnownOfTarget)?&KnownOfTarget:nullptr; K && Held(*K))
   if(const auto* T=Store->Find(TargetID); T && T->IsAlive() && T->Team!=U->Team)
   if(Within<=0. || FVector::DistSquared2D(Pos,K->LastKnownPosition)<=FMath::Square(Within))
   {
@@ -56,6 +57,14 @@ int32 UBattleLeaderRuntime::KnownEnemyDirection(int32 ID,int32 TargetID,const FV
   const double D=FVector::DistSquared2D(Pos,C.Value.LastKnownPosition);if(D<=1.)continue;
   if(C.Value.bVisible && !C.Value.bShared && D<BestSeen){BestSeen=D;AtSeen=C.Value.LastKnownPosition;}
   if(D<BestHeld){BestHeld=D;AtHeld=C.Value.LastKnownPosition;}
+ }
+ // -BattleSquadKnowledge=1: what his comrades saw and what the squad heard is in the squad's table.
+ if(const auto* SquadKnown=Sense->GetSquadContacts(U->SquadID))for(const auto& C:*SquadKnown)
+ {
+  if(!Held(C.Value.Contact))continue;
+  const auto* T=Store->Find(C.Key);if(!T || !T->IsAlive() || T->Team==U->Team)continue;
+  const double D=FVector::DistSquared2D(Pos,C.Value.Contact.LastKnownPosition);
+  if(D>1. && D<BestHeld){BestHeld=D;AtHeld=C.Value.Contact.LastKnownPosition;}
  }
  if(BestSeen<Reach){Out=(AtSeen-Pos).GetSafeNormal2D();if(!Out.IsNearlyZero())return 2;}
  if(BestHeld<Reach){Out=(AtHeld-Pos).GetSafeNormal2D();if(!Out.IsNearlyZero())return 3;}

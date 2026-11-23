@@ -111,7 +111,7 @@ BattleMoveCourse | 移動の計測コース
 BattleNavigation | 目的地の補正と隊形の位置
 BattleNetwork | ネットワーク試作（GameMode、Controller、HUD）
 BattleNetworkSerialization | ネットワーク用の兵の直列化
-BattlePerception | 認識：見えた敵の記憶、保存と復元
+BattlePerception | 認識：見えた敵の記憶、保存と復元。分隊単位の知識（`-BattleSquadKnowledge=1`〔試験、既定0〕：分隊の表と分隊間の報告は `Update` の末尾、読み口は `Knows`・`FindSquadContact`・`GetSquadContacts`。段階1の表は `BuildSquadKnowledge`。`Docs/design-squad-knowledge.md`）
 BattlePhase3 | Phase3 の大規模試験経路（通常の混成とは別の処理）
 BattleRanges | 認識・交戦の距離（マップごとに決まる）
 BattleReplayData | 再生用データの型（試験専用）

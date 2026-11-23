@@ -645,9 +645,20 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  const FVector FocusDir=P.bFocus?(P.Focus-P.Center).GetSafeNormal2D():FVector::ZeroVector;
  const bool bFocusTarget=FocusTargetEnabled() && AttackFocusEnabled() && Sector && P.bFocus && !FocusDir.IsNearlyZero();
  bool bBestInCone=true;
- if(S->Order!=EBattleOrder::Move) for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) if(const auto* Contacts=Sense->GetContacts(ID))
-  for(const auto& C:*Contacts) if(C.Value.bVisible && !C.Value.bShared)
+ // The squad's table of known enemies (design-squad-knowledge.md stage 1). Nothing below changes the contacts, so it stays valid.
+ FBattleSquadKnowledge Known;Sense->BuildSquadKnowledge(S->Members,Known);
+ // The enemies a living member sees himself and is in range of, for the two "are we outnumbered" checks below.
+ auto SeenInRange=[&]{int32 N=0;for(const auto& KT:Known.ByTarget)for(const auto& G:KT.Value)
+  if(G.Contact->bVisible && !G.Contact->bShared && Store->Find(G.MemberID)->IsAlive() &&
+     FVector::DistSquared(Position(G.MemberID),G.Contact->LastKnownPosition)<=FMath::Square(TargetRange(G.MemberID))){++N;break;}
+  return N;};
+ struct FKnownRef{int32 Key;const FBattleContact& Value;};
+ // -BattleSquadKnowledge=1: the squad's own table holds the newest information; otherwise the first member's contact, as before.
+ auto SquadKnown=[&](int32 TargetID)->const FBattleContact*{if(const auto* K=Sense->FindSquadContact(SID,TargetID))return &K->Contact;return Known.First(TargetID);};
+ if(S->Order!=EBattleOrder::Move) for(const auto& KT:Known.ByTarget) for(const auto& G:KT.Value)
+  if(G.Contact->bVisible && !G.Contact->bShared && Store->Find(G.MemberID)->IsAlive())
   {
+   const int32 ID=G.MemberID;const FKnownRef C{KT.Key,*G.Contact};
    if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C.Value.LastKnownPosition)>FMath::Square(TargetRange(ID))) continue;
    if(Sector && BattleSectors::Cell(C.Value.LastKnownPosition)!=SectorCell && !OutsideOK(ID,C.Value.LastKnownPosition)) continue;
    if(!BattleTactics::OrderAllowsTarget(*S,C.Key,C.Value.LastKnownPosition))continue;
@@ -664,8 +675,9 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  {
   const float Hold=FMath::Max(0.f,GetDefault<UBattleTuning>()->TargetHoldSeconds);
   if(S->TacticalPlan.Action!=EBattleSquadTactic::Support || PreviousTarget==S->TacticalPlan.SupportTarget)
-   for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) if(const auto* C=Sense->FindContact(ID,PreviousTarget))
+   if(const auto* Held=Known.ByTarget.Find(PreviousTarget)) for(const auto& G:*Held) if(Store->Find(G.MemberID)->IsAlive())
    {
+    const int32 ID=G.MemberID;const auto* C=G.Contact;
     if(C->bShared || Now-C->LastSeenTime>Hold+1.e-6) continue;
     if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C->LastKnownPosition)>FMath::Square(TargetRange(ID))) continue;
     if(Sector && BattleSectors::Cell(C->LastKnownPosition)!=SectorCell && !OutsideOK(ID,C->LastKnownPosition)) continue;
@@ -684,12 +696,12 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  if(bShotAt && P.TargetID!=INDEX_NONE)
  {
   if(BattleTactics::ObservedTactics())P.bSectorContact=BattleSectors::Cell(SelectedTargetAt)!=SectorCell;
-  else for(int32 ID:S->Members)if(const auto* C=Sense->FindContact(ID,P.TargetID)){P.bSectorContact=BattleSectors::Cell(C->LastKnownPosition)!=SectorCell;break;}
+  else if(const auto* C=SquadKnown(P.TargetID))P.bSectorContact=BattleSectors::Cell(C->LastKnownPosition)!=SectorCell;
   if(P.bSectorContact)SightExperiment.Cover(TEXT("sector_contact_target"));
  }
  FVector TargetAt=FVector::ZeroVector;bool bTargetKnown=false;
  if(BattleTactics::ObservedTactics()){TargetAt=SelectedTargetAt;bTargetKnown=P.TargetID!=INDEX_NONE;}
- else if(P.TargetID!=INDEX_NONE)for(int32 ID:S->Members)if(const auto* C=Sense->FindContact(ID,P.TargetID)){TargetAt=C->LastKnownPosition;bTargetKnown=true;break;}
+ else if(const auto* C=P.TargetID!=INDEX_NONE?SquadKnown(P.TargetID):nullptr){TargetAt=C->LastKnownPosition;bTargetKnown=true;}
  // Trial -BattleSquadCoverCheck=1: a squad that fires on the move decides as a whole whether to stop in cover here - only when
  // it can hide and is at least even with the enemies it sees; otherwise it keeps firing on the move.
  if(SquadCoverCheckEnabled() && Sector && (SectorMoveFireEnabled() || SectorFireBack.Contains(SID)) && bTargetKnown &&
@@ -698,16 +710,11 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   if(Now>=P.CoverCheckAt)
   {
    P.CoverCheckAt=Now+2.;
-   int32 Own=0;TSet<int32> Seen;
-   for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive())
-   {
-    ++Own;
-    if(const auto* Contacts=Sense->GetContacts(ID))for(const auto& C:*Contacts)
-     if(C.Value.bVisible && !C.Value.bShared && FVector::DistSquared(Position(ID),C.Value.LastKnownPosition)<=FMath::Square(TargetRange(ID)))Seen.Add(C.Key);
-   }
+   int32 Own=0;for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive())++Own;
+   const int32 Seen=SeenInRange();
    for(const auto& B:Bodies)if(const auto* O=Store->Find(B.Key);O && O->IsAlive() && O->Team==S->Team && O->SquadID!=SID &&
       FVector::DistSquared2D(Position(B.Key),P.Center)<FMath::Square(3000.))++Own;
-   const bool bEven=Own>=Seen.Num();
+   const bool bEven=Own>=Seen;
    FVector HideFrom=TargetAt;if(FVector From;ShotDirectionEnabled() && SquadShotFrom(SID,Now,From) && ShotFromOther(P.Center,TargetAt,From))HideFrom=From;
    const bool bWas=P.bCoverStop;P.bCoverStop=bEven && SquadCanHide(SID,HideFrom,Now);
    SightExperiment.Cover(P.bCoverStop?TEXT("squad_cover_stop"):bEven?TEXT("squad_cover_move_on"):TEXT("squad_cover_outnumbered"));
@@ -737,16 +744,11 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   bool bFar=FVector::DistSquared2D(P.Center,TargetAt)>FMath::Square(9000.);
   if(bFar)
   {
-   int32 Own=0;TSet<int32> Seen;
-   for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive())
-   {
-    ++Own;
-    if(const auto* Contacts=Sense->GetContacts(ID))for(const auto& C:*Contacts)
-     if(C.Value.bVisible && !C.Value.bShared && FVector::DistSquared(Position(ID),C.Value.LastKnownPosition)<=FMath::Square(TargetRange(ID)))Seen.Add(C.Key);
-   }
+   int32 Own=0;for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive())++Own;
+   const int32 Seen=SeenInRange();
    for(const auto& B:Bodies)if(const auto* O=Store->Find(B.Key);O && O->IsAlive() && O->Team==S->Team && O->SquadID!=SID &&
       FVector::DistSquared2D(Position(B.Key),P.Center)<FMath::Square(3000.))++Own;
-   bFar=Own>=Seen.Num();
+   bFar=Own>=Seen;
    if(!bFar)SightExperiment.Cover(TEXT("close_in_outnumbered"));
   }
   if(!bFar)P.FarSince=0;
@@ -794,7 +796,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   {
    E.Cover(TEXT("squad_target_lost"));E.SquadTargetLostAt.Add(SID,Now);
    bool Recent=false;
-   for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) if(const auto* C=Sense->FindContact(ID,PreviousTarget)) if(!C->bShared && Now-C->LastSeenTime<=1.) {Recent=true;break;}
+   if(const auto* Held=Known.ByTarget.Find(PreviousTarget)) for(const auto& G:*Held) if(Store->Find(G.MemberID)->IsAlive() && !G.Contact->bShared && Now-G.Contact->LastSeenTime<=1.) {Recent=true;break;}
    if(Recent)E.Cover(TEXT("squad_target_lost_member_saw_within_1s"));
   }
   else if(PreviousTarget==INDEX_NONE && P.TargetID!=INDEX_NONE)
@@ -912,7 +914,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const auto* ArmourContact=BattleTactics::ObservedArmour()?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,TargetID):nullptr;
  const bool bSaveRounds=bArmourAI && bArea && U->Weapon==EBattleWeapon::AntiTank && TargetID!=INDEX_NONE && !(BattleTactics::ObservedArmour()?(ArmourContact&&BattleSquadType::IsVehicle(ArmourContact->ObservedSquadType)):IsVehicle(TargetID)) &&
   U->Ammo+U->Reserve<=GetDefault<UBattleTuning>()->ATKeepRounds && GetWorld()->GetSubsystem<UBattleMatch>()->KnownEnemyVehicles(U->Team)>0;
- const FBattleContact* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,TargetID);
+ FBattleContact KnownOfTarget;
+ const FBattleContact* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,U->SquadID,TargetID,KnownOfTarget)?&KnownOfTarget:nullptr;
  // Trial -BattleSectorSight (BattleSectorSight.cpp): a rifle squad member who does not see the squad's target himself uses his
  // lookout's sighting of it when it is a cross-sector enemy for him. His own line of sight (CanSee below) still decides his fire.
  if(TargetID!=INDEX_NONE && !(Contact && Contact->bVisible && !Contact->bShared) && SectorSightMember(ID))
@@ -1175,7 +1178,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  {
   // Movement has already consumed its steering vector. Keep watch toward known
   // contact information while moving sideways; never resolve the enemy body here.
-  const auto* Known=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,S->TacticalPlan.FlankTarget);
+  FBattleContact KnownOfFlank;
+  const auto* Known=GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,S->SquadID,S->TacticalPlan.FlankTarget,KnownOfFlank)?&KnownOfFlank:nullptr;
   Direction=((Known?Known->LastKnownPosition:S->TacticalPlan.FlankContact)-Position(ID)).GetSafeNormal2D();
  }
  // (-BattleOwnTarget=2 turns him the same way, for its team.)
@@ -1296,7 +1300,8 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  {
   auto& E=SightExperiment;++E.Shots;
   if(const auto* ShooterSquad=Store->FindSquad(U->SquadID); ShooterSquad && ShooterSquad->SquadType<BattleSquadType::Count && U->Team>=0 && U->Team<2) ++E.TypeShots[U->Team][ShooterSquad->SquadType];
-  const auto* P=Plans.Find(U->SquadID);const auto* C=P?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,P->TargetID):nullptr;
+  const auto* P=Plans.Find(U->SquadID);FBattleContact KnownOfShot;
+  const auto* C=P&&GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,U->SquadID,P->TargetID,KnownOfShot)?&KnownOfShot:nullptr;
   const double D=C?FVector::Dist(Position(ID),C->LastKnownPosition):-1;
   E.ShotDistances.Add(D);if(E.FirstShot<0){E.FirstShot=GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed;E.FirstShotDistance=D;}
   // Diagnostic -BattleShotLog (evaluation matches only, reads state, changes nothing): where each shot was fired from and at what
