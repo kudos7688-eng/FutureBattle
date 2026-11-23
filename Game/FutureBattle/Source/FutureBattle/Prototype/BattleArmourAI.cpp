@@ -215,6 +215,7 @@ int32 UBattleMatch::AreaArmourReaction(int32 Team,int32 SquadID,float DamageRati
   }
   const bool bShock=DamageRatio>=FMath::Max(.01f,T->VehicleShockRatio);
   if(!Threat&&!bShock)return 0;
+  if(BattleTactics::ACShield()&&S->SquadType==BattleSquadType::ArmoredCar&&!bShock)return 0; // trial: holds, the infantry hunts the soldier
   const FVector ToHome=(Home-Here).GetSafeNormal2D();
   FVector Away=Threat?((Here-*Threat).GetSafeNormal2D()+ToHome*.5).GetSafeNormal2D():ToHome;if(Away.IsNearlyZero())Away=ToHome;
   const double Distance=Threat?FMath::Max(2000.,Keep+2000.-Nearest):10000.;
