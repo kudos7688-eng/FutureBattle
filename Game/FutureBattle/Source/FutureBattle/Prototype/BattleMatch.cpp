@@ -495,7 +495,13 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     const FVector P=Runtime->Position(Pair.Value.LeaderUnitID);
     // The player's route choice for the squad comes before the AI's own (empty map in matches without a player's choice).
     const bool bChosen=!PlayerRoutes.IsEmpty()&&PlayerRouteLane(Pair.Key)!=0;
-    const FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies);
+    FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies);
+    // Trial -BattleSectorNoRoad=1 (default 0; user test play 2026-11-24: the attack group was shot together at the central crossroads,
+    // the front gathered in the centre with nobody on the flanks; on the sector maps the roads funnelled every distant AI order through
+    // the junctions of the avenue before the group's sectors and the front's posts). On maps with sectors AI infantry goes straight to
+    // its goal (sector by sector, as the sector layer moves it); vehicles keep the roads, and a route the player chose is kept.
+    static const bool bNoRoad=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorNoRoad="),V);return V!=0;}();
+    if(bNoRoad&&!bChosen&&BattleFieldLayout::Of(GetWorld()).bSectors&&!Runtime->IsVehicle(Pair.Value.LeaderUnitID))Step=Center;
     // -BattlePinnedFlank: a pinned AI sector squad first takes a sector beside the threat.
     static const bool bSectorAIOn=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
     FVector PinStage;
@@ -515,7 +521,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
      static const bool bSectorAI=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
      if(SectorRouteOn()&&bSectorAI&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&!Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&SectorStage(Pair.Value,P,Step,Center,RouteEnemies,Stage))
      {Center=Stage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
-     else if(!Step.Equals(Center,1)){bRoadWaypoint=true;Center=Step;if(Order==EBattleOrder::Defend)Order=EBattleOrder::AttackMove;}
+     else if(!Step.Equals(Center,1)){bRoadWaypoint=true;Center=Step;if(!Runtime->IsVehicle(Pair.Value.LeaderUnitID))++RoadSteps[Team]; /* log only (road=) */if(Order==EBattleOrder::Defend)Order=EBattleOrder::AttackMove;}
     }
    }
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())
