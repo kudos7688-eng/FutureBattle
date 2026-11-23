@@ -4,7 +4,7 @@
 `Grep "HireSquad" CODEMAP_SYMBOLS.md` のように引く。.h は本体をその場に書いた関数だけを載せる（宣言だけの関数は .cpp 側）。
 
 - `BattleAIController.cpp`: ABattleAIController::ABattleAIController:15, ABattleAIController::ResetExecution:22, ABattleAIController::OnUnPossess:38, ABattleAIController::OnPossess:45, ABattleAIController::BeginOrder:52, ABattleAIController::SuspendMovement:65, ABattleAIController::PrepareControlHandoff:72, ABattleAIController::RetryMove:77, ABattleAIController::ExecuteMove:103, ABattleAIController::Tick:153
-- `BattleATHunt.cpp`: BattleTactics::ATRange:13, BattleTactics::ATHunt:20, BattleTactics::ACShield:26, UBattleMatch::UpdateATHunts:32, UBattleMatch::ATHuntGoal:100, UBattleMatch::ACShieldPost:106
+- `BattleATHunt.cpp`: BattleTactics::ATRange:13, BattleTactics::ATHunt:20, BattleTactics::ACShield:27, UBattleMatch::UpdateATHunts:33, UBattleMatch::ATHuntGoal:104, UBattleMatch::ACShieldPost:110
 - `BattleAbilitySmoke.cpp`: ABattleGameMode::RunAbilitySmokeTest:15
 - `BattleAnimTaskTrial.cpp`: ABattleAnimTaskTrial::ABattleAnimTaskTrial:10, ABattleAnimTaskTrial::Start:15, ABattleAnimTaskTrial::Compare:34, ABattleAnimTaskTrial::Tick:50
 - `BattleAnimTasks.cpp`: FBattleAnimTasks::Apply:6

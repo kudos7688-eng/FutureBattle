@@ -17,9 +17,10 @@ int32 BattleTactics::ATRange()
  return Reach;
 }
 
-bool BattleTactics::ATHunt()
+int32 BattleTactics::ATHunt()
 {
- static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleATHunt="),V);return V==1;}();
+ // 1: as measured 2026-11-23 (a hunt ends after 20 s unseen). 2: an unseen hunt goes on to the last seen position and ends there.
+ static const int32 On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleATHunt="),V);return V==1||V==2?V:0;}();
  return On;
 }
 
@@ -47,8 +48,11 @@ void UBattleMatch::UpdateATHunts(int32 Team)
   FATHunt& Hunt=ATHunts[HunterID];if(Hunt.Team!=Team)continue;
   const auto* Hunter=Store->FindSquad(HunterID);const auto* Target=Store->Find(Hunt.Target);
   for(int32 I=0;I<V.EnemyKeys.Num()&&I<V.Enemies.Num();++I)if(V.EnemyKeys[I]==Hunt.Target){Hunt.Position=V.Enemies[I];Hunt.SeenAt=Elapsed;break;}
+  // -BattleATHunt=2: an unseen soldier is searched for at his last seen position (ends when the squad leader is within 15 m of it).
+  const bool bSearch=BattleTactics::ATHunt()==2;
+  const bool bArrived=bSearch&&Hunter&&Elapsed-Hunt.SeenAt>2.&&FVector::DistSquared2D(R->Position(Hunter->LeaderUnitID),Hunt.Position)<FMath::Square(1500.);
   const TCHAR* End=!Target||!Target->IsAlive()?TEXT("killed"):!Hunter||Hunter->CommandStatus!=EBattleCommandStatus::Active?TEXT("inactive"):
-   Elapsed-Hunt.SeenAt>20.?TEXT("unseen"):Elapsed-Hunt.StartAt>60.?TEXT("timeout"):nullptr;
+   bArrived?TEXT("searched"):!bSearch&&Elapsed-Hunt.SeenAt>20.?TEXT("unseen"):Elapsed-Hunt.StartAt>60.?TEXT("timeout"):nullptr;
   if(End)
   {
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AT_HUNT_END team=%d squad=%d target=%d reason=%s after=%.0f"),Team,HunterID,Hunt.Target,End,Elapsed-Hunt.StartAt);

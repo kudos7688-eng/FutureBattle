@@ -8,7 +8,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
-| `-BattleACShield` | Value | 0 | BattleATHunt.cpp:28 |  |
+| `-BattleACShield` | Value | 0 | BattleATHunt.cpp:29 |  |
 | `-BattleAIBlindFire` | Value | 0 | BattleBlindFire.cpp:27 | Switch → BattleBlindFire.cpp:14（ヘルパー経由） |
 | `-BattleAICoverProbe` | Value | 0 | BattleTactics.cpp:10 |  |
 | `-BattleAimAssist` | Value | 1 | BattleController.cpp:1616 |  |
@@ -93,7 +93,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleArtilleryRaidScreen` | Value | 2 | BattleArtillery.cpp:87 |  |
 | `-BattleArtilleryRaidSneak` | Value | 0.f | BattleArtillery.cpp:75 |  |
 | `-BattleArtilleryStandoff` | Value | .6f | BattleArtillery.cpp:110 |  |
-| `-BattleATHunt` | Value | 0 | BattleATHunt.cpp:22 |  |
+| `-BattleATHunt` | Value | 0 | BattleATHunt.cpp:23 |  |
 | `-BattleATRange` | Value | 0 | BattleATHunt.cpp:16 |  |
 | `-BattleAttackFocus` | Value | 1 | BattleLeaderRuntime.cpp:1830 |  |
 | `-BattleBenchmark` | Param | off | BattleBenchmark.cpp:28, BattleController.cpp:104, BattleLeaderRuntime.cpp:78 |  |
