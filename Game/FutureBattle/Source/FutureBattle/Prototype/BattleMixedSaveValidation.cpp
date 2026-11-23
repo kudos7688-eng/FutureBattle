@@ -143,7 +143,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   // P1 trial (2026-11-16): bought-squad missions point at existing squads with a known mission; home hit times are past clocks.
   for(const auto& P:Area.HirePurpose)if(!((P.Value>=0&&P.Value<Objectives.Num())||P.Value==100||P.Value==101)||!BySquad.FindRef(P.Key))return Fail(TEXT("Invalid area hire purpose"));
   // Purchase reservations: at most 12 per team, known types, past reservation times.
-  {int32 N[2]={0,0};for(const auto& Q:Area.HireQueue){if(Q.Team<0||Q.Team>1||++N[Q.Team]>UBattleMatch::HireQueueMax||Q.Type<0||Q.Type>=BattleSquadType::Count||Q.Dest<-1||!Finite(Q.At,0,Elapsed+.01))return Fail(TEXT("Invalid hire reservation"));}}
+  {int32 N[2]={0,0};for(const auto& Q:Area.HireQueue){if(Q.Team<0||Q.Team>1||++N[Q.Team]>UBattleMatch::HireQueueMax||Q.Type<0||Q.Type>=BattleSquadType::Count||Q.Dest<-1||Q.Dest>1000000||!Finite(Q.At,0,Elapsed+.01))return Fail(TEXT("Invalid hire reservation"));}}
   // Stage 7: the player's section roles and hiring delegation.
   if(Area.PlayerSectionRole.Num()>BattleSectors::Rows||Area.PlayerHireDelegate>2||Area.PlayerHireReserve<0||Area.PlayerHireReserve>UBattleMatch::PlayerHireReserveMax||
      Area.PlayerHireDeny<0||Area.PlayerHireDeny>=(1<<BattleSquadType::Count))return Fail(TEXT("Invalid player plan"));

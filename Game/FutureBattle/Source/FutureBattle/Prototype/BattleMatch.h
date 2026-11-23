@@ -148,6 +148,13 @@ public:
  // played match (not the AI-vs-AI experiment): the level, the resources the AI leaves and the types it may not buy (Area.PlayerHire*).
  static constexpr int32 PlayerHireReserveMax=400, PlayerHireReserveStep=20;
  bool PlayerDelegating(int32 Team) const;
+ // Reservation destination (FBattleHireReservation::Dest, own team 0 only): -1 none, 0..Rows-1 a front plan section (the front army,
+ // posted in that section first), HireDestReserve the unassigned reserve, HireDestGroup + group ID that group (front army or attack group).
+ static constexpr int32 HireDestReserve=999, HireDestGroup=1000;
+ TArray<int32> HireDestChoices(int32 Team) const; // in the order a click cycles through them
+ bool CycleHireDest(int32 Team,int32 Index); // Index into HireQueueOf(Team)
+ FString HireDestJa(int32 Dest) const;
+ void ApplyHireDest(int32 Team,int32 SquadID,int32 Dest);
  void SetPlayerHiring(int32 Delegate,int32 Reserve,int32 Deny);
  // Once per match second: per team, the first reservation (in order, the first of each type) that can be bought is bought.
  void UpdateHireQueue();
@@ -216,6 +223,9 @@ public:
  void ClampFrontTimers();
  float SurpriseNextAt[2]={0.f,0.f},SurpriseSkipLogAt[2]={0.f,0.f};
  TMap<int32,FVector> FrontPosts; // squad of a front-holding group -> the sector centre it holds (transient)
+ // Reservation destinations (stage 7, Docs/design-front-strategy.md 5.1): a bought squad sent to a front section waits here for its first
+ // post, which then prefers that section's rows (squad -> section; transient: after a restore before the first post it takes any post).
+ TMap<int32,int32> FrontSectionWish;
  TSet<int32> FrontLeads; // squads of a front-holding group on a row's front place, not a support place (transient, like FrontPosts)
  float FrontLineAt[2]={-1.f,-1.f},FrontLineLogAt[2]={-1.f,-1.f};
  // Front plan, stage 1 (Docs/design-front-strategy.md, trial -BattleFrontPlanLog=1, default 0): the team's front line split into 3-5
@@ -352,6 +362,7 @@ public:
 		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */
 		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp) */
 		bool bFocus2 = false; /* front plan stage 5: the second attack army, aimed at FFrontPlanTeam::Focus2 (Kind 0) */
+		bool bFollowFocus = true; /* front plan stage 7: a player's attack group follows the focus while delegated (the player's per-group switch) */
 		int32 SurpriseRow = 0; /* surprise group: the edge sector row it moves along */
 		uint8 SurpriseBridgeStage = 0; /* 0 none, 1 entrance, 2 exit, 3 original edge goal; retained during same-time restore */
 		int32 SurpriseBridgeLeader = INDEX_NONE;
@@ -378,6 +389,11 @@ public:
 	TMap<int32, FBattleGroup> Groups;
  // The point an AI attack group follows: the second focus for the second attack army, else the team focus (StrategyFocusPoint).
  int32 GroupFocusPoint(const FBattleGroup& G) const;
+ // Stage 7 link to the army control (user 11-23): with -BattleFrontPlanPlayer=1 a player's attack group the player delegated (J) follows
+ // the team focus like the AI's attack army: the first such group (lowest ID) the focus, the second the second focus when there is one.
+ // A group under manual command keeps the player's orders.
+ bool PlayerGroupFollowsFocus(const FBattleGroup& G) const;
+ bool SetGroupFollowFocus(int32 GroupID,bool bFollow); // the player's switch per attack group (plan panel)
 	TMap<int32, int32> SquadGroup; // squad -> group
 	int32 NextGroupID = 1;
 	int32 GroupOf(int32 SquadID) const; // INDEX_NONE when the squad is in no group

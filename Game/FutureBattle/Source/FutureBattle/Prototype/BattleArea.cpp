@@ -1,5 +1,6 @@
 #include "BattleMatch.h"
 #include "BattleArms.h"
+#include "BattleSectors.h"
 #include "BattleComposition.h"
 #include "BattleFieldLayout.h"
 #include "BattleLeaderRuntime.h"
@@ -29,7 +30,7 @@ int32 UBattleMatch::AreaScore(int32 Team)const
 void UBattleMatch::InitializeArea()
 {
  BattleComposition::LogStart(); // stage 1: returns before constructing definitions when OFF
- Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();FireReveals[0].Reset();FireReveals[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();FrontReservePosts.Reset();FrontReserveRow.Reset();FreeLastPos.Reset();FreeLastStep.Reset();FreeReversals[0]=FreeReversals[1]=0;FreeMoved[0]=FreeMoved[1]=0.;bSetupDone=bSetupBurst=false;FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
+ Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();FireReveals[0].Reset();FireReveals[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();FrontSectionWish.Reset();FrontReservePosts.Reset();FrontReserveRow.Reset();FreeLastPos.Reset();FreeLastStep.Reset();FreeReversals[0]=FreeReversals[1]=0;FreeMoved[0]=FreeMoved[1]=0.;bSetupDone=bSetupBurst=false;FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
  // A team knows the objectives it holds from the start (the depots of map F).
@@ -180,7 +181,11 @@ int32 UBattleMatch::ReserveHire(int32 Team,uint8 SquadType,bool bByAI,int32 Dest
  if(Block==2){LastMessage=Why;return 0;}
  const TArray<int32> Mine=HireQueueOf(Team);
  bool bAhead=false;for(const int32 I:Mine)bAhead|=Area.HireQueue[I].Type==SquadType;
- if(Block==0&&!bAhead&&HireStarved(Team)<0)return HireAreaSquad(Team,EBattleTraining::Regular,bByAI,SquadType)?1:0;
+ if(Block==0&&!bAhead&&HireStarved(Team)<0)
+ {
+  if(!HireAreaSquad(Team,EBattleTraining::Regular,bByAI,SquadType))return 0;
+  ApplyHireDest(Team,LastHiredSquadID,Dest);return 1;
+ }
  if(Mine.Num()>=HireQueueMax){LastMessage=TEXT("Reservation list full (12)");return 0;}
  FBattleHireReservation Q;Q.Team=Team;Q.Type=SquadType;Q.Dest=Dest;Q.At=Elapsed;Q.bByAI=bByAI;Area.HireQueue.Add(Q);
  if(Block==0)Why=bAhead?TEXT("same type ahead"):TEXT("starved reservation ahead");
@@ -252,6 +257,55 @@ int32 UBattleMatch::RefillShort(int32 Team) const
  }
  return Want-Have;
 }
+TArray<int32> UBattleMatch::HireDestChoices(int32 Team) const
+{
+ TArray<int32> Out={-1};
+ if(Team!=0)return Out;
+ if(PlayerRolesOn(0))for(int32 K=0;K<FrontPlanState[0].Sections;++K)Out.Add(K);
+ TArray<int32> IDs;for(const auto& P:Groups)if(P.Value.Team==0&&(P.Value.Kind==1||(P.Value.Kind==0&&P.Value.bPlayer)))IDs.Add(P.Key);
+ IDs.Sort();for(const int32 ID:IDs)Out.Add(HireDestGroup+ID);
+ Out.Add(HireDestReserve);
+ return Out;
+}
+bool UBattleMatch::CycleHireDest(int32 Team,int32 Index)
+{
+ const TArray<int32> Mine=HireQueueOf(Team);if(!Mine.IsValidIndex(Index))return false;
+ int32& Dest=Area.HireQueue[Mine[Index]].Dest;
+ const TArray<int32> Choices=HireDestChoices(Team);
+ const int32 At=Choices.Find(Dest);
+ Dest=Choices[At==INDEX_NONE?0:(At+1)%Choices.Num()];
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HIRE_RESERVE team=%d t=%.1f op=dest index=%d dest=%d"),Team,Elapsed,Index,Dest);
+ return true;
+}
+FString UBattleMatch::HireDestJa(int32 Dest) const
+{
+ if(Dest<0)return TEXT("指定なし");
+ if(Dest==HireDestReserve)return TEXT("予備");
+ if(Dest>=HireDestGroup)
+ {
+  const auto* G=Groups.Find(Dest-HireDestGroup);
+  if(!G)return FString::Printf(TEXT("群%d（なし）"),Dest-HireDestGroup);
+  return G->Kind==1?FString(TEXT("前線軍")):FString::Printf(TEXT("群%d"),G->ID);
+ }
+ return FString::Printf(TEXT("区間%d"),Dest+1);
+}
+void UBattleMatch::ApplyHireDest(int32 Team,int32 SquadID,int32 Dest)
+{
+ // Own team only (the armies of team 0 are the player's); the AI's reservations carry no destination.
+ if(Team!=0||Dest<0||SquadID==INDEX_NONE)return;
+ bool bDone=false;
+ if(Dest==HireDestReserve)bDone=AssignArmy(SquadID,0);
+ else if(Dest>=HireDestGroup)
+ {
+  if(const auto* G=Groups.Find(Dest-HireDestGroup);G&&G->Team==0)bDone=G->Kind==1?AssignArmy(SquadID,1):G->Kind==0?AssignArmy(SquadID,2,G->ID):false;
+ }
+ else if(Dest<BattleSectors::Rows)
+ {
+  bDone=AssignArmy(SquadID,1);
+  if(bDone&&PlayerRolesOn(0))FrontSectionWish.Add(SquadID,Dest);
+ }
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HIRE_DEST team=%d t=%.1f squad=%d dest=%d done=%d"),Team,Elapsed,SquadID,Dest,bDone?1:0);
+}
 void UBattleMatch::UpdateHireQueue()
 {
  if(!bArea||Area.HireQueue.IsEmpty())return;
@@ -278,6 +332,7 @@ void UBattleMatch::UpdateHireQueue()
    Area.HireQueue.RemoveAt(I);
    if(!HireAreaSquad(Team,EBattleTraining::Regular,Q.bByAI,uint8(Q.Type))){Area.HireQueue.Insert(Q,I);continue;}
    ++HireQueueBought[Team];HireQueueBoughtType[Team]=Q.Type;HireQueueBoughtByAI[Team]=Q.bByAI;
+   ApplyHireDest(Team,LastHiredSquadID,Q.Dest);
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HIRE_RESERVE team=%d t=%.1f op=buy type=%d dest=%d by=%s waited=%.1f squad=%d queue=%d"),Team,Elapsed,Q.Type,Q.Dest,Q.bByAI?TEXT("AI"):TEXT("player"),Elapsed-Q.At,LastHiredSquadID,HireQueueOf(Team).Num());
    break;
   }
