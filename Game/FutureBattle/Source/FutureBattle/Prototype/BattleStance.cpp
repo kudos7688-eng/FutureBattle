@@ -62,6 +62,11 @@ int32 BattleStance::MoveMode()
  static const int32 Mode=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleStanceMove="),V);return FMath::Clamp(V,0,2);}();
  return Mode;
 }
+bool BattleStance::Steady()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleStanceSteady="),V);return V!=0;}();
+ return bOn;
+}
 float BattleStance::MoveScale(uint8 Stance){return Stance==Prone?.25f:Stance==Crouch?.55f:1.f;}
 
 bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForce,bool bOnTheMove)
@@ -285,10 +290,21 @@ void UBattleLeaderRuntime::UpdateAIStance(int32 ID,double Now,bool bMoving,bool 
  if(bLostSight)
  {
   // The remembered target is no longer visible from down here: stand up and look for a few seconds.
-  if(Current!=BattleStance::Stand&&SetStance(ID,BattleStance::Stand,Now)){StanceLockedUntil.Add(ID,Now+3.);SightExperiment.Cover(TEXT("stance_stood_to_look"));}
+  if(Current!=BattleStance::Stand&&SetStance(ID,BattleStance::Stand,Now))
+  {
+   StanceLockedUntil.Add(ID,Now+3.);SightExperiment.Cover(TEXT("stance_stood_to_look"));
+   // -BattleStanceSteady: remember where crouching hid his enemy from him.
+   if(BattleStance::Steady())CrouchBlindAt.Add(ID,Position(ID));
+  }
   return;
  }
  // -BattleNoCoverFallback: no cover and no better place found - lie down while he still sees his target.
  if(const double* T=NoCoverProneUntil.Find(ID)){if(*T>Now){SetStance(ID,BattleStance::Prone,Now);return;}NoCoverProneUntil.Remove(ID);}
+ // -BattleStanceSteady: at the place where crouching hid his enemy from him he stays standing (no crouch, stand, crouch again).
+ if(BattleStance::Steady())if(const FVector* At=CrouchBlindAt.Find(ID))
+ {
+  if(FVector::DistSquared2D(*At,Position(ID))>FMath::Square(250.))CrouchBlindAt.Remove(ID);
+  else if(Current==BattleStance::Stand){SightExperiment.Cover(TEXT("steady_stay_standing_frames"));return;}
+ }
  SetStance(ID,BattleStance::Crouch,Now);
 }

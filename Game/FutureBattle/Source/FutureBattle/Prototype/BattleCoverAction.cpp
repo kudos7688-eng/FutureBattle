@@ -47,6 +47,16 @@ void UBattleLeaderRuntime::EndPeekDiag(int32 ID,const TCHAR* Cause)
  int32 Shots=0;if(!CoverPeekShots.RemoveAndCopyValue(ID,Shots))return;
  SightExperiment.Cover(*FString::Printf(TEXT("peek_end_%s"),Cause));
  SightExperiment.Cover(Shots<=0?TEXT("peek_end_shots_0"):Shots==1?TEXT("peek_end_shots_1"):TEXT("peek_end_shots_2plus"));
+ if(BattleStance::Steady()){if(Shots<=0)QuietPeeks.Add(ID);else QuietPeeks.Remove(ID);}
+}
+
+// How long a soldier who reached his hidden place stays down before he stands up to peek: 0.8 s, or with -BattleStanceSteady
+// SteadyHideSeconds after a peek with no shot.
+float UBattleLeaderRuntime::CoverHideSeconds(int32 ID)
+{
+ if(!BattleStance::Steady() || !QuietPeeks.Remove(ID))return .8f;
+ SightExperiment.Cover(TEXT("steady_long_hide"));
+ return SteadyHideSeconds;
 }
 
 bool UBattleLeaderRuntime::CoverLineClear(int32 ID,FVector From,FVector Threat) const
@@ -450,7 +460,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
   const FVector Goal=U->CoverPhase==1?U->CoverAnchor:U->CoverPeek;
   const FVector Before=Position(ID),D=(Goal-Before).GetSafeNormal2D();
   if(FVector::Dist2D(Before,Goal)<40)
-  {U->CoverPhase=U->CoverPhase==1?2:4;U->CoverSeconds=U->CoverPhase==2?.8f:AIPeekFire?FMath::Clamp(GetDefault<UBattleTuning>()->AICoverPeekSeconds,.1f,3.f):1.2f;if(U->CoverPhase==4 && !Player)
+  {U->CoverPhase=U->CoverPhase==1?2:4;U->CoverSeconds=U->CoverPhase==2?CoverHideSeconds(ID):AIPeekFire?FMath::Clamp(GetDefault<UBattleTuning>()->AICoverPeekSeconds,.1f,3.f):1.2f;if(U->CoverPhase==4 && !Player)
    {
     CoverPeekShots.Add(ID,0);
     // Evaluation only: what the AI knew and whether its weapon was ready when it reached the peek point.

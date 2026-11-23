@@ -496,7 +496,7 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
  CancelCoverAction(ID);ClearSoldierOrder(ID,TEXT("died"));
  VehicleIDs.Remove(ID); // a destroyed vehicle is a wreck: no armour or spotting rules
  // Stances are for the living: restore the normal body shape before the death pose is applied.
- SetStance(ID,BattleStance::Stand,GetWorld()->GetTimeSeconds(),true);Stances.Remove(ID);StanceLockedUntil.Remove(ID);LowMoveUntil.Remove(ID);NoCoverProneUntil.Remove(ID);CoverProbeFailedAt.Remove(ID);
+ SetStance(ID,BattleStance::Stand,GetWorld()->GetTimeSeconds(),true);Stances.Remove(ID);StanceLockedUntil.Remove(ID);LowMoveUntil.Remove(ID);NoCoverProneUntil.Remove(ID);CrouchBlindAt.Remove(ID);QuietPeeks.Remove(ID);CoverProbeFailedAt.Remove(ID);
  if(Phase3 && Phase3->bEnabled) Phase3->OnDeath(ID);
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U) return;
  // War score trial: every loss (shot or stopped by the leader's death) scores for the other team.
@@ -889,7 +889,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   return;
  }
  const auto* S=Store->FindSquad(U->SquadID); auto* P=Plans.Find(U->SquadID); if(!P || S->CommandStatus!=EBattleCommandStatus::Active) return;
- FVector Pos=Position(ID), Direction=Forward(ID); B.Velocity=FVector::ZeroVector;
+ FVector Pos=Position(ID), Direction=Forward(ID); const FVector LastVelocity=B.Velocity; B.Velocity=FVector::ZeroVector;
  // The player's order to this soldier (BattleSoldierOrder.cpp): his own place instead of the squad's movement.
  const bool bOwnOrder=U->bSoldierOrder && SoldierOrderActive(ID);
  const bool bOwnWalking=bOwnOrder && FVector::DistSquared2D(Pos,U->SoldierGoal)>FMath::Square(100.);
@@ -975,6 +975,14 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   // Trial -BattleStanceMove=2: a threat is being under fire or seeing any enemy himself (a Move order has no squad target).
   const bool bThreat=BattleStance::MoveMode()>=2 && WillMove && (UnderFire(ID) || (Contact && Contact->bVisible && !Contact->bShared) || SeesEnemy(ID));
   UpdateAIStance(ID,Now,WillMove,StopForCombat,LostSight,bThreat);
+  // Evaluation (route_*_frames): soldiers of a squad on its way (not holding, not in a cover action) - walking, or standing still
+  // (last frame's speed under 0.5 m/s): for no fight, or stopped for a fight standing or low, and standing with no enemy in sight.
+  if(SightExperiment.Enabled && bOnRoute && !bOwnOrder && S->Order!=EBattleOrder::Hold && !U->CoverPhase && !CoverApproaches.Contains(ID))
+  {
+   const bool bStill=LastVelocity.SizeSquared2D()<2500.;const bool bLow=StanceOf(ID)!=BattleStance::Stand;
+   SightExperiment.Cover(!bStill?TEXT("route_walking_frames"):!StopForCombat?TEXT("route_still_no_fight_frames"):bLow?TEXT("route_still_fight_low_frames"):TEXT("route_still_fight_standing_frames"));
+   if(bStill && StopForCombat && !bLow && !(Contact && Contact->bVisible))SightExperiment.Cover(TEXT("route_still_fight_standing_unseen_frames"));
+  }
   // Getting up takes time: no walking until the soldier is standing. With -BattleStanceMove=2 he walks in his stance instead
   // (crouched or crawling, at its speed below).
   if(WillMove && StanceOf(ID)!=BattleStance::Stand && BattleStance::MoveMode()<2){if(SightExperiment.Enabled)CoverGate.Add(ID,8);Store->SetAction(ID,EBattleAction::Idle);return;}

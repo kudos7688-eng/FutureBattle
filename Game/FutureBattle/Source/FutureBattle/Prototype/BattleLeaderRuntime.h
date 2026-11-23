@@ -463,6 +463,12 @@ public:
  // about 25,000 changes each way); the hold keeps him low through that.
  TMap<int32,double> LowMoveUntil;
  static constexpr double LowMoveHoldSeconds=3.;
+ // Trial -BattleStanceSteady (BattleStance.h; runtime only): where crouching hid a soldier's enemy from him, and the soldiers whose
+ // last peek from cover ended with no shot (they stay down SteadyHideSeconds instead of 0.8 s).
+ TMap<int32,FVector> CrouchBlindAt;
+ TSet<int32> QuietPeeks;
+ static constexpr float SteadyHideSeconds=3.f;
+ float CoverHideSeconds(int32 ID);
  uint8 StanceOf(int32 ID) const {const uint8* Found=Stances.Find(ID);return Found?*Found:0;}
  // bOnTheMove: he walks off as the stance changes; a near follower's transition clip is then played within
  // BattleBodyAnim::MovingTransitionSeconds (a leader's body hurries its own from its velocity, ABattleUnit::UpdateBodyAnim).
