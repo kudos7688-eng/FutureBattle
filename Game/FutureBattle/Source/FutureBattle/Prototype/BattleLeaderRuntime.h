@@ -259,7 +259,7 @@ public:
  // enemy within 150 m, so grenades, close weapons and strikes come within reach. Runtime only, like the other cover approaches.
  // A bound runs on to its cover with the enemy lost; ArmsBoundMemory keeps where the bound's enemy was seen last, and with no enemy
  // known the next bound heads there (for 30 s after that sighting). Cleared on restore with the cover approaches.
- bool StartAssault(int32 ID,int32 Target,const FVector& TargetAt,double Now);
+ bool StartAssault(int32 ID,int32 Target,const FVector& TargetAt,double Now,bool bInArea=false); // bInArea: a defender's bound, within 20 m inside its defended area
  TMap<int32,double> ArmsAssaultNext;
  // Charge (-BattleArmsCharge=1, BattleArms.cpp): an assault role runs at an enemy he sees within 12 m (after an assault bound, one
  // known within 30 m), fires at him on the way and strikes him at arm's length. A cover approach with bCharge whose goal follows the

@@ -46,7 +46,8 @@ int32 BattleArms::AreaSniperKeep(){static const int32 N=FMath::Clamp(IntSwitch(T
 int32 BattleArms::SniperCost(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleSniperCost="),14),1,200);return N;}
 int32 BattleArms::AssaultMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleArmsAssault=")),0,2);return N;}
 bool BattleArms::ChargeEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsCharge="))!=0;return b;}
-bool BattleArms::SectorTaskEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsSectorTask="))!=0;return b;}
+int32 BattleArms::SectorTaskMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleArmsSectorTask=")),0,2);return N;}
+bool BattleArms::SectorTaskEnabled(){return SectorTaskMode()>0;}
 bool BattleArms::RushWatchEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsRushWatch="))!=0;return b;}
 bool BattleArms::CoverFireEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsCoverFire="))!=0;return b;}
 bool BattleArms::SmokeEnabled(){static const bool b=FParse::Param(FCommandLine::Get(),TEXT("BattleArmsSmoke"));return b;}
@@ -363,8 +364,10 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
   // within 3 s. A bound runs on to its cover when the enemy is lost; with no enemy known, the next bound heads for where the last
   // bound's enemy was seen (within 30 s of that sighting) until he is within 18 m of that place (a bound ends 8 m short, gains 10 m).
   // A bound slides along a body or wall in its way and gives up after 2 s without getting closer (StepCoverApproach, FCharge).
-  // -BattleArmsSectorTask (BattleArmsSector.cpp): only squads on an attack task bound; defenders stay in their place.
-  if(const int32 DashMode=BattleArms::AssaultMode();DashMode>0&&S->Order!=EBattleOrder::Move&&(!BattleArms::SectorTaskEnabled()||S->Order==EBattleOrder::AttackMove)&&
+  // -BattleArmsSectorTask (BattleArmsSector.cpp): squads on an attack task bound as before. With 1 a defending squad bounds only
+  // to a cover at most 20 m away inside its defended area (never to a remembered place); with 2 it does not bound at all.
+  const bool bDefendBound=BattleArms::SectorTaskEnabled()&&S->Order!=EBattleOrder::AttackMove;
+  if(const int32 DashMode=BattleArms::AssaultMode();DashMode>0&&S->Order!=EBattleOrder::Move&&(!bDefendBound||BattleArms::SectorTaskMode()==1)&&
    !CoverApproaches.Contains(ID)&&Now>=ArmsAssaultNext.FindRef(ID))
   {
    const bool bRole=U->Kit==BattleArms::KitBreacher||U->Kit==BattleArms::KitAssault||U->Kit==BattleArms::KitRifleman;
@@ -384,11 +387,11 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
      Best=C.Key;BestD=D;BestAt=C.Value.LastKnownPosition;
     }
     bool bFromMemory=false;
-    if(Best==INDEX_NONE&&Dashing<(bRole?2:1))if(const auto* Mem=ArmsBoundMemory.Find(ID);Mem&&Now-Mem->SeenAt<=30.)
+    if(Best==INDEX_NONE&&!bDefendBound&&Dashing<(bRole?2:1))if(const auto* Mem=ArmsBoundMemory.Find(ID);Mem&&Now-Mem->SeenAt<=30.)
     {const double D=FVector::Dist2D(Pos,Mem->At);if(D>1800.&&D<15000.){Best=Mem->Target;BestAt=Mem->At;bFromMemory=true;}}
     if(Best!=INDEX_NONE)
     {
-     const bool bBound=StartAssault(ID,Best,BestAt,Now);
+     const bool bBound=StartAssault(ID,Best,BestAt,Now,bDefendBound);
      if(bBound&&bFromMemory)SightExperiment.Cover(TEXT("arms_assault_from_memory"));
      ArmsAssaultNext.Add(ID,Now+(bBound?12.:4.));
     }
@@ -433,7 +436,7 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
  }
 }
 
-bool UBattleLeaderRuntime::StartAssault(int32 ID,int32 Target,const FVector& TargetAt,double Now)
+bool UBattleLeaderRuntime::StartAssault(int32 ID,int32 Target,const FVector& TargetAt,double Now,bool bInArea)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
  if(!U||!U->IsAlive()||!Bodies.Contains(ID)||IsVehicle(ID)||TargetAt.ContainsNaN())return false;
@@ -443,12 +446,14 @@ bool UBattleLeaderRuntime::StartAssault(int32 ID,int32 Target,const FVector& Tar
  // from him, and has a straight walkable line to it (the same test as the cover approach). The most progress, then the shorter
  // walk. No dash across the open without cover at the end; the next bound follows from there (StepArms, every 12 s at most).
  int32 BestSlot=INDEX_NONE;double BestProgress=-1.,BestWalk=DBL_MAX;FVector BestAnchor=FVector::ZeroVector;
+ const FBattleSquadState* InSquad=bInArea?Store->FindSquad(U->SquadID):nullptr;
  const FVector Probe=Pos+(TargetAt-Pos).GetSafeNormal2D()*FMath::Max(0.,FMath::Min(3000.,Base-1500.));
  for(int32 Slot:Cover->NearbySlots(Probe,2000.f,96))
  {
   const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
   const double ToEnemy=FVector::Dist2D(Anchor,TargetAt),Walk=FVector::Dist2D(Pos,Anchor),Progress=Base-ToEnemy;
-  if(ToEnemy<800.||Progress<1000.||Walk>4000.||Progress<BestProgress-1.||(FMath::Abs(Progress-BestProgress)<=1.&&Walk>=BestWalk))continue;
+  if(ToEnemy<800.||Progress<1000.||Walk>(bInArea?2000.:4000.)||Progress<BestProgress-1.||(FMath::Abs(Progress-BestProgress)<=1.&&Walk>=BestWalk))continue;
+  if(bInArea&&(!InSquad||!ArmsInDefendedArea(*InSquad,Anchor)))continue;
   if(!Cover->IsAvailable(Slot,ID,Now))continue;
   bool bTaken=false;for(const auto& Other:CoverApproaches)if(Other.Key!=ID&&Other.Value.Slot==Slot){bTaken=true;break;}
   if(bTaken)continue;
@@ -465,7 +470,7 @@ bool UBattleLeaderRuntime::StartAssault(int32 ID,int32 Target,const FVector& Tar
  // Where the enemy was seen (updated in StepCoverApproach while he is known): the next bound heads there if he is lost. A bound to
  // that remembered place does not renew the sighting, so the chain ends 30 s after the enemy was last seen.
  if(const auto* Seen=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,Target)){auto& M=ArmsBoundMemory.FindOrAdd(ID);M.Target=Target;M.At=Seen->LastKnownPosition;M.SeenAt=Seen->LastSeenTime;}
- SightExperiment.Cover(TEXT("arms_assault_started"));
+ SightExperiment.Cover(TEXT("arms_assault_started"));if(bInArea)SightExperiment.Cover(TEXT("arms_assault_defend_bounds"));
  if(BattleArms::CoverFireEnabled())AddArmsCoverCall(ID,Target,TargetAt,Pos,BestWalk/FMath::Max(1.f,GetDefault<UBattleTuning>()->MoveSpeed*BattleArms::Charge().SpeedScale),Now);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_ASSAULT unit=%d team=%d target=%d from=%.0f to=%.0f"),ID,U->Team,Target,Base,FVector::Dist2D(BestAnchor,TargetAt));
  return true;

@@ -28,7 +28,8 @@ namespace BattleArms
                           // grenade carrier per ordinary rifle squad
  bool ChargeEnabled();    // -BattleArmsCharge=1: the assault roles (with -BattleArmsAssault=2 also ordinary riflemen) charge an enemy
                           // they see within 12 m, or after an assault bound one known within 30 m, and strike him (StartCharge)
- bool SectorTaskEnabled(); // -BattleArmsSectorTask=1: assault bounds only on attack tasks, defenders charge inside their place (BattleArmsSector.cpp)
+ int32 SectorTaskMode();   // -BattleArmsSectorTask: 1 defenders bound and charge only inside their place (bounds at most 20 m), 2 defenders never bound (BattleArmsSector.cpp)
+ bool SectorTaskEnabled(); // SectorTaskMode()>0
  bool RushWatchEnabled();  // -BattleArmsRushWatch=1: defenders notice enemies rushing them and answer (BattleArmsSector.cpp)
  bool CoverFireEnabled();  // -BattleArmsCoverFire=1: covering fire for assault bounds from squads within 60 m (BattleArmsSector.cpp)
  bool SmokeEnabled();     // -BattleArmsSmoke: the self-test (UBattleLeaderRuntime::RunArmsSmoke)
