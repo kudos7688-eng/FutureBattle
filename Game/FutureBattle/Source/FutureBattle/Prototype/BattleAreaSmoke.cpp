@@ -397,6 +397,28 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     const bool Second=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Tank);const int32 C2=M->Credits[0];
     const bool Third=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Tank);
     Check(Second&&!Third&&M->Credits[0]==C2&&M->ActiveOfType(0,BattleSquadType::Tank)==2,TEXT("tanks: at most 2 per team"));
+    // Purchase reservations (BattleArea.cpp ReserveHire, Docs/design-front-strategy.md 5.1): a purchase blocked by a limit waits in the
+    // list without spending; at most 12 per team; cancel and reorder; the list buys once the block clears (resources here).
+    {
+     M->Area.HireQueue.Reset();const int32 CR=M->Credits[0];
+     bool AllWait=true;for(int32 K=0;K<UBattleMatch::HireQueueMax;++K)AllWait&=M->ReserveHire(0,BattleSquadType::Tank,false,K)==2;
+     const bool Full=M->ReserveHire(0,BattleSquadType::Tank,false,99)==0;
+     Check(AllWait&&Full&&M->Credits[0]==CR&&M->HireQueueOf(0).Num()==UBattleMatch::HireQueueMax,TEXT("reservations: a blocked purchase waits without spending, 12 at most"));
+     const bool Cancelled=M->CancelHire(0,-1)&&M->HireQueueOf(0).Num()==UBattleMatch::HireQueueMax-1;
+     const bool Moved=M->MoveHire(0,-1,-100)&&M->Area.HireQueue[M->HireQueueOf(0)[0]].Dest==UBattleMatch::HireQueueMax-2&&M->Area.HireQueue[M->HireQueueOf(0)[1]].Dest==0;
+     M->HireQueueSecond=-1;M->UpdateHireQueue();
+     Check(Cancelled&&Moved&&M->HireQueueOf(0).Num()==UBattleMatch::HireQueueMax-1&&M->Credits[0]==CR,TEXT("reservations: cancel, move to the front, still waiting at the tank limit"));
+     M->Area.HireQueue.Reset();
+     if(M->ActiveSquads(0)<BattleTactics::AreaHire().MaxActive)
+     {
+      const int32 ActiveBefore=M->ActiveSquads(0);M->Credits[0]=0;
+      const bool Queued=M->ReserveHire(0,BattleSquadType::Rifle,false)==2&&M->ActiveSquads(0)==ActiveBefore;
+      M->Credits[0]=CR;M->HireQueueSecond=-1;M->UpdateHireQueue();
+      const bool Bought=M->Area.HireQueue.IsEmpty()&&M->ActiveSquads(0)==ActiveBefore+1&&M->Credits[0]==CR-BattleTactics::AreaHire().Cost;
+      Check(Queued&&Bought,TEXT("reservations: waits for resources, then buys within the second"));
+      // The bought squad stays (an ordinary purchase: the save checks below keep resource conservation).
+     }
+    }
     // Performance: a far tank's line of sight is traced once per TankSightReuse seconds per observer (range and view each scan);
     // a tank's accepted (or refused) goal is not reissued by the director every update.
     {
@@ -497,8 +519,8 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      FAreaIntent Mix6;M->AreaComposition(0,Mix6,6);
      M->KnownVehicles[0]=SavedKnown;M->CarChoices.Remove(TSID);
      Check(Calm==0&&(Shock==0||(Shock==1&&!BackGoal.ContainsNaN()))&&NoneKnown==0&&NoATTarget==INDEX_NONE&&KnownNow==1&&ATTarget==SeenPoint,TEXT("armour AI: no reaction without a threat; a known enemy vehicle draws the anti-tank teams to the nearest point"));
-     Check(Mix0.ATKeep==0&&Mix0.TankKeep==0&&Mix0.SPGKeep==0&&Mix0.ACKeep==1&&Mix0.MortarKeep==1&&Mix6.ATKeep==1&&Mix6.TankKeep==FMath::Min(2,TT->AreaTankLimit)&&Mix6.SPGKeep==0&&!BattleTactics::AreaComposition(1),
-      TEXT("composition: car and mortar first, a tank after six purchases, anti-tank teams and a second tank against known armour; off by default"));
+     Check(Mix0.ATKeep==0&&Mix0.TankKeep==0&&Mix0.SPGKeep==0&&Mix0.ACKeep==1&&Mix0.MortarKeep==1&&Mix6.ATKeep==1&&Mix6.TankKeep==FMath::Min(2,TT->AreaTankLimit)&&Mix6.SPGKeep==0&&BattleTactics::AreaComposition(1),
+      TEXT("composition: car and mortar first, a tank after six purchases, anti-tank teams and a second tank against known armour; on by default"));
      // Squad groups, stage 1 (BattleGroups.cpp): a player group of two squads; not run by the AI until both are delegated; then it gathers
      // at a rally point short of its objective, advances after the assembly time, and a regrouped squad leaves its old group.
      {
@@ -1210,6 +1232,21 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   // Command bar: the attack-move button arms the same pending order as the T key; the move button clears it.
   { PC->PressCommandButton(1);const bool Armed=PC->PendingOrder==EBattleOrder::AttackMove;PC->PressCommandButton(0);
     Check(Armed&&PC->PendingOrder==EBattleOrder::Move,TEXT("command bar buttons arm and clear orders")); }
+  // Purchase panel (2026-11-23): the purchase button opens it with one row per squad type; rows and the close box are hit where they are
+  // drawn and the panel fits above the bottom panel at 1080p and 720p; the pad's D-pad down moves the highlighted row and its B closes it.
+  // Nothing is bought here (the shot check Setup/Test-BuyPanelShot.ps1 buys through the panel).
+  { PC->PressCommandButton(6);const bool bOpen=PC->IsBuyPanelOpen();bool bLayout=true;
+    for(const FVector2D View:{FVector2D(1920,1080),FVector2D(1280,720)})
+    { const auto L=FBattleBuyPanelLayout::Make(View,GetWorld());const float Top=FBattleCommandBarLayout::Make(View,GetWorld()).PanelTop;
+      bLayout&=L.Rows.Num()==FBattleBuyPanelLayout::RowCount()&&L.Origin.X>=16.f&&L.Origin.Y>=16.f&&L.Origin.X+L.Size.X<=View.X-16.f&&L.Origin.Y+L.Size.Y<=Top;
+      for(int32 I=0;I<L.Rows.Num();++I)bLayout&=L.RowAt(L.Rows[I].Origin+L.Rows[I].Size*.5f)==I;
+      const FVector2D Close=L.CloseOrigin+FVector2D(L.CloseSize*.5f);bLayout&=L.CloseAt(Close)&&L.RowAt(Close)==INDEX_NONE; }
+    const int32 Row=PC->GetBuyPanelRow();
+    PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_DPad_Down,IE_Pressed,1.f));PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_DPad_Down,IE_Released,0.f));
+    const bool bMoved=PC->GetBuyPanelRow()==(Row+1)%FBattleBuyPanelLayout::RowCount();
+    PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_FaceButton_Right,IE_Pressed,1.f));PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_FaceButton_Right,IE_Released,0.f));
+    const bool bClosed=!PC->IsBuyPanelOpen();PC->bGamepadActive=false;
+    Check(bOpen&&bLayout&&bMoved&&bClosed,*FString::Printf(TEXT("purchase panel opens, hits its rows, fits and takes the pad (open %d, layout %d, moved %d, closed %d)"),bOpen?1:0,bLayout?1:0,bMoved?1:0,bClosed?1:0)); }
   // Gamepad: tactical pad buttons read as the same keys; a simulated pad press marks the pad as the active device.
   { const bool Map=PC->GamepadToKey(EKeys::Gamepad_FaceButton_Top)==EKeys::T&&PC->GamepadToKey(EKeys::Gamepad_FaceButton_Bottom)==EKeys::LeftMouseButton&&PC->GamepadToKey(EKeys::Gamepad_FaceButton_Left)==EKeys::RightMouseButton;
     PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_LeftThumbstick,IE_Pressed,1.f));PC->InputKey(FInputKeyEventArgs::CreateSimulated(EKeys::Gamepad_LeftThumbstick,IE_Released,0.f));

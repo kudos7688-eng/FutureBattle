@@ -146,8 +146,49 @@ $supply=@{
  'FLD'=@('-FrontLine','1','-FrontAuto','0')
  'GF1'=@('-FrontLine','0','-GroupFireSupport','1')
  'SG1'=@('-FrontLine','1','-FrontAuto','1','-SurpriseGroup','1')
+ # Strategy layer (2026-11-22, Docs/design-strategy-layer.md): SL1 = situation map log only (must equal the baseline);
+ # ST2 = stage S2, recon -> focus attack (with -TrialTeam only that team, through -AreaTrialTeam).
+ 'SL1'=@('-SituationLog','1')
+ 'ST2'=@('-Strategy','2')
+ # ST2P = ST2 with the pass check (-BattleStrategyPass=1, sector maps; Docs/design-terrain-ai.md 3-4).
+ 'ST2P'=@('-Strategy','2','-StrategyPass','1')
+ 'ST3'=@('-Strategy','3')
+ 'ST4'=@('-Strategy','4')
+ # RTS = symmetric tie-break of the home-assault flank side (-BattleRouteTieSymmetric, 2026-11-22; maps E-I with the symmetric start).
+ 'RTS'=@('-RouteTieSymmetric','1')
+ # Subtraction evaluation (2026-11-22, Docs/design-subtraction-eval.md): ALL = both teams buy every type (use as -Baseline);
+ # W1..W9 = the same without one type (heavy, scout, AT, tank, armoured car, mortar, SPG, exo, supply; with -TrialTeam that team only).
+ 'ALL'=@('-AreaAllTypes','1')
+ 'W1'=@('-AreaAllTypes','1','-AreaWithout','1')
+ 'W2'=@('-AreaAllTypes','1','-AreaWithout','2')
+ 'W3'=@('-AreaAllTypes','1','-AreaWithout','3')
+ 'W4'=@('-AreaAllTypes','1','-AreaWithout','4')
+ 'W5'=@('-AreaAllTypes','1','-AreaWithout','5')
+ 'W6'=@('-AreaAllTypes','1','-AreaWithout','6')
+ 'W7'=@('-AreaAllTypes','1','-AreaWithout','7')
+ 'W8'=@('-AreaAllTypes','1','-AreaWithout','8')
+ 'W9'=@('-AreaAllTypes','1','-AreaWithout','9')
+ # Front army share (2026-11-22, ROADMAP stage 5; maps H/I): FS50 / FS30 = the AI fills its front army up to half / 30% of its free infantry.
+ 'FS50'=@('-FrontShare','0.5')
+ 'FS30'=@('-FrontShare','0.3')
  # Stage 1 (2026-11-22): WP = corner waypoint pass (-BattleWaypointPass=1) on top of the default (HI).
  'WP'=@('-WaypointPass','1')
+ # WP0 = the old movement rule (-BattleWaypointPass=0) after the waypoint pass became the default (2026-11-22).
+ 'WP0'=@('-WaypointPass','0')
+ # TM = own side's soldiers do not block sight (-BattleSightTeamMask=1; the shot trace uses the same query, so they do not stop the side's bullets either).
+ 'TM'=@('-SightTeamMask','1')
+ # TM0 = the old rule (-BattleSightTeamMask=0: own soldiers block their side's sight and bullets) after TM became the default (2026-11-22).
+ 'TM0'=@('-SightTeamMask','0')
+ # BF = AI blind fire (-BattleAIBlindFire=1: a pinned soldier holding at a peek point shoots blind from cover; Test-WideSight has no own parameter).
+ 'BF'=@('-ExtraArgs','-BattleAIBlindFire=1')
+ # PT = ammunition at owned points (-BattleAreaPointSupply=1: a leader 10 s within 25 m of an owned, uncontested point refills the squad's reserve).
+ 'PT'=@('-AreaPointSupply','1')
+ # PT0 = no ammunition at points (-BattleAreaPointSupply=0) after PT became the default (2026-11-22).
+ 'PT0'=@('-AreaPointSupply','0')
+ # AC = the AI buys the mixed composition (-BattleAreaComposition=1: armoured cars, mortars, then a tank and an SPG, AT teams per known enemy vehicle);
+ # with -TrialTeam only that team (stage 3 of ROADMAP: the all-types side against the default, infantry-only side).
+ 'AC'=@('-AreaComposition','1')
+ 'AC0'=@('-AreaComposition','0')
  # SC = the sector AI combination the sector lane uses as its base (s22/s23) plus arrival walk (maps H/I).
  'SC'=@('-SectorContact','1','-SectorRoute','1','-SectorFlank','1','-SectorFront','1','-WaypointPass','1','-SectorMoveFire','1','-CoverHuddle','1','-PinnedFlank','1','-ArrivalThreat','1','-SectorCoverRoute','1','-ArrivalWalk','1')
 }

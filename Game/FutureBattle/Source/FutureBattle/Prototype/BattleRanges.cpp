@@ -2,6 +2,7 @@
 #include "BattleFieldLayout.h"
 #include "Engine/World.h"
 #include "FutureBattle.h"
+#include "BattleTactics.h"
 
 const BattleRanges::FProfile& BattleRanges::Get()
 {
@@ -38,7 +39,7 @@ float BattleRanges::Engage(EBattleWeapon Weapon)
  if(const auto* D=BattleWeaponDef(Weapon))
  {const float Base=P.bActive?P.EngageCarbine:GetDefault<UBattleTuning>()->EffectiveWeaponRange();const float V=Base*D->EngageScale;return D->EngageCap>0.f?FMath::Min(V,D->EngageCap):V;}
  // Anti-tank weapon: ATRange on maps A-D, 200 m with the range profile (ROADMAP revised table).
- if(Weapon==EBattleWeapon::AntiTank)return P.bActive?20000.f:FMath::Max(100.f,GetDefault<UBattleTuning>()->ATRange);
+ if(Weapon==EBattleWeapon::AntiTank)return P.bActive?(BattleTactics::ATRange()>0?BattleTactics::ATRange()*.75f:20000.f):FMath::Max(100.f,GetDefault<UBattleTuning>()->ATRange);
  // The mortar never fires along the line of sight (indirect fire, BattleArtillery.cpp): no direct engagement distance.
  if(Weapon==EBattleWeapon::Mortar)return 0.f;
  return P.bActive?(Weapon==EBattleWeapon::SupportGun?P.EngageSupport:P.EngageCarbine):GetDefault<UBattleTuning>()->EffectiveWeaponRange();
@@ -49,7 +50,7 @@ float BattleRanges::Reach(EBattleWeapon Weapon)
  const auto& P=Get();
  if(const auto* D=BattleWeaponDef(Weapon))
  {const float Base=P.bActive?P.ReachCarbine:GetDefault<UBattleTuning>()->EffectiveWeaponRange();const float V=FMath::Max(Base*D->ReachScale,Engage(Weapon));return D->ReachCap>0.f?FMath::Max(FMath::Min(V,D->ReachCap),Engage(Weapon)):V;}
- if(Weapon==EBattleWeapon::AntiTank)return P.bActive?30000.f:FMath::Max(100.f,GetDefault<UBattleTuning>()->ATRange);
+ if(Weapon==EBattleWeapon::AntiTank)return P.bActive?(BattleTactics::ATRange()>0?float(BattleTactics::ATRange()):30000.f):FMath::Max(100.f,GetDefault<UBattleTuning>()->ATRange);
  if(Weapon==EBattleWeapon::Mortar)return 0.f;
  return P.bActive?(Weapon==EBattleWeapon::SupportGun?P.ReachSupport:P.ReachCarbine):GetDefault<UBattleTuning>()->EffectiveWeaponRange();
 }

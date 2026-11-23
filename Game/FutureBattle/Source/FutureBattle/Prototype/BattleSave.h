@@ -8,8 +8,11 @@
 
 namespace BattleSaveValidation
 {
- constexpr int32 MaxBytes=64*1024*1024;
+ // 1 GiB: refuses absurd files before the codec, far above any real save. The first limit (64 MiB, review 05 S10) rejected
+ // legitimate map A saves at the 80 s round trip (2026-11-22; ~1000 soldiers, tagged contact maps).
+ constexpr int32 MaxBytes=1024*1024*1024;
  USaveGame* Decode(const TArray<uint8>& Bytes,FString& Error);
+ USaveGame* Decode(const TArray<uint8>& Bytes,FString& Error,int32 Limit); // Smoke tests pass a small limit (no 1 GiB buffer).
  USaveGame* Decode(const TArray<uint8>& Bytes);
  double ClockLimit(const FString& MapName);
  // Far beyond a real match, with ample headroom for subsequent increments.
@@ -25,6 +28,12 @@ struct FBattleSavedUnit
 	UPROPERTY() FBattleUnitState State;
 	UPROPERTY() FVector Position = FVector::ZeroVector;
 	UPROPERTY() FRotator Rotation = FRotator::ZeroRotator;
+	// Stage A (-BattleThreatCover): the cover place he left because it was seen into, and the seconds left (at most 10) before
+	// he may take it again. INDEX_NONE (also in saves made before 2026-11-21) = none. Slot numbers follow the order the places
+	// were built in, so the place itself is saved too and decides on load (the number is only tried first).
+	UPROPERTY() int32 BrokenCoverSlot = INDEX_NONE;
+	UPROPERTY() float BrokenCoverLeft = 0;
+	UPROPERTY() FVector BrokenCoverAt = FVector::ZeroVector;
 };
 
 // Versioned, single-map match snapshot. Timers are relative to the save instant.
@@ -111,12 +120,17 @@ struct FBattleSavedGroup
  UPROPERTY() int32 SurpriseRow=0;
  UPROPERTY() uint8 SurpriseBridgeStage=0;
  UPROPERTY() int32 SurpriseBridgeLeader=INDEX_NONE;
+ UPROPERTY() bool bFocus2=false; // front plan stage 5 (absent in older saves = false)
  UPROPERTY() double SurpriseBridgeAge=0;
  UPROPERTY() int32 SurpriseNextCol=-1;
  UPROPERTY() TArray<int32> FrontHold;
  UPROPERTY() double FrontStepAge=0;
  UPROPERTY() bool bFrontDrawn=false;
  UPROPERTY() double FrontBackAge=100;
+ UPROPERTY() TArray<uint8> FrontGap;
+ UPROPERTY() int32 FrontNeed=0;
+ UPROPERTY() double FrontReleaseAge=100;
+ UPROPERTY() double FrontExcessAge=-1; // -1: no excess
  UPROPERTY() FVector SurpriseBridgeEntry=FVector::ZeroVector;
  UPROPERTY() FVector SurpriseBridgeExit=FVector::ZeroVector;
  UPROPERTY() FVector SurpriseBridgeGoal=FVector::ZeroVector;

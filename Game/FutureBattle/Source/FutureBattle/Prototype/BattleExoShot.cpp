@@ -1,6 +1,7 @@
 // Exoskeleton look check (2026-11-18): -BattleExoShot -BattleArea -BattleWideScreens=<prefix> on a wide mixed map.
 // Combat is paused; one exoskeleton soldier per team is deployed at its home and photographed from 3.2 m: front, side and back with the
-// shield up, then with the shield gone, crouched and prone, and the other team's soldier. Setup/Test-ExoShot.ps1 runs it.
+// shield up, then with the shield gone, close-ups from 1.9 m, the action clips (the launcher's recoil and reload, the rifle's recoil
+// and reload), crouched, prone and prone close-ups from 1.8 m (and from above), and the other team's soldier. Setup/Test-ExoShot.ps1 runs it.
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
 #include "BattleController.h"
@@ -37,12 +38,30 @@ void UBattleLeaderRuntime::RunExoShot()
   }
   ++ExoShotStage;Later(1.5f);return;
  }
- struct FShot{int32 Team;float Yaw;uint8 Stance;bool bShieldDown;const TCHAR* Name;bool bLauncher=false;bool bMove=false;};
+ struct FShot{int32 Team;float Yaw;uint8 Stance;bool bShieldDown;const TCHAR* Name;bool bLauncher=false;bool bMove=false;float Distance=430.f;float EyeZ=70.f;float AimZ=30.f;
+  uint8 Action=0;float Capture=.6f;const TCHAR* Expect=nullptr;};
  static const FShot Shots[]={
   {0,25.f,BattleStance::Stand,false,TEXT("front")},{0,100.f,BattleStance::Stand,false,TEXT("side")},{0,180.f,BattleStance::Stand,false,TEXT("back")},
   {0,25.f,BattleStance::Stand,false,TEXT("launcher_front"),true},{0,150.f,BattleStance::Stand,false,TEXT("launcher_back"),true},
-  {0,25.f,BattleStance::Stand,true,TEXT("noshield")},{0,100.f,BattleStance::Stand,true,TEXT("move_side"),false,true},{0,25.f,BattleStance::Stand,true,TEXT("move_strafe"),false,true},{0,60.f,BattleStance::Crouch,true,TEXT("crouch")},{0,60.f,BattleStance::Prone,true,TEXT("prone")},
+  {0,25.f,BattleStance::Stand,true,TEXT("noshield")},{0,100.f,BattleStance::Stand,true,TEXT("move_side"),false,true},{0,25.f,BattleStance::Stand,true,TEXT("move_strafe"),false,true},
+  // The bazooka in hand while moving (its glide clip) and close up (2026-11-22: the head turned backwards on the move, the shoulder
+  // plates stood off the body).
+  {0,100.f,BattleStance::Stand,true,TEXT("launcher_move_side"),true,true},{0,25.f,BattleStance::Stand,true,TEXT("launcher_move_front"),true,true},
+  {0,200.f,BattleStance::Stand,true,TEXT("launcher_move_back"),true,true},
+  {0,25.f,BattleStance::Stand,true,TEXT("launcher_close_front"),true,false,190.f,80.f,60.f},{0,200.f,BattleStance::Stand,true,TEXT("launcher_close_back"),true,false,190.f,90.f,60.f},
+  {0,25.f,BattleStance::Stand,true,TEXT("close_front"),false,false,190.f,80.f,60.f},{0,100.f,BattleStance::Stand,true,TEXT("close_side"),false,false,190.f,80.f,60.f},{0,200.f,BattleStance::Stand,true,TEXT("close_back"),false,false,190.f,90.f,60.f},
+  // Action shots, from 3.2 m (Action 1: a launcher shot's clips, 2: a rifle shot, 3: a rifle reload), taken Capture seconds after
+  // it starts: the launcher's kick, its reload seen from the front (the round going into the muzzle) and from the left (the hand
+  // behind the hip), the rifle's kick, the rifle reload half way. The clip showing then must be Expect.
+  {0,25.f,BattleStance::Stand,true,TEXT("launcher_fire"),true,false,320.f,80.f,45.f,1,.1f,TEXT("Dual_Fire")},
+  {0,25.f,BattleStance::Stand,true,TEXT("launcher_reload_front"),true,false,320.f,80.f,45.f,1,2.3f,TEXT("Dual_Reload")},
+  {0,260.f,BattleStance::Stand,true,TEXT("launcher_reload_left"),true,false,320.f,80.f,45.f,1,1.75f,TEXT("Dual_Reload")},
+  {0,25.f,BattleStance::Stand,true,TEXT("rifle_fire"),false,false,320.f,80.f,45.f,2,.12f,TEXT("OneHand_Fire")},
+  {0,60.f,BattleStance::Stand,true,TEXT("rifle_reload"),false,false,320.f,80.f,45.f,3,1.f,TEXT("OneHand_ReloadStill")},
+  {0,60.f,BattleStance::Crouch,true,TEXT("crouch")},{0,60.f,BattleStance::Prone,true,TEXT("prone")},
   {0,120.f,BattleStance::Prone,true,TEXT("prone_side")},{0,200.f,BattleStance::Prone,true,TEXT("prone_back")},  // after the get-down clip
+  {0,30.f,BattleStance::Prone,true,TEXT("prone_close_front"),false,false,180.f,25.f,-50.f},{0,95.f,BattleStance::Prone,true,TEXT("prone_close_side"),false,false,180.f,25.f,-50.f},
+  {0,160.f,BattleStance::Prone,true,TEXT("prone_close_back"),false,false,180.f,25.f,-50.f},{0,60.f,BattleStance::Prone,true,TEXT("prone_close_top"),false,false,120.f,170.f,-60.f},
   {1,25.f,BattleStance::Stand,false,TEXT("enemy")}};
  const int32 Index=ExoShotStage-1;
  if(Index>=UE_ARRAY_COUNT(Shots)){Finish();return;}
@@ -50,6 +69,7 @@ void UBattleLeaderRuntime::RunExoShot()
  if(!A){++SmokeFailures;Finish();return;}
  if(S.bShieldDown&&Store->Find(ID)->Shield>0.f)Store->ApplyDamage(ID,1-S.Team,Store->Find(ID)->Shield);
  if(BattleStance::Enabled(GetWorld()))SetStance(ID,S.Stance,Now,true);
+ A->PlayLookSequence(nullptr,nullptr,Now);  // the last shot's launcher clips stop
  // Launcher shots: the bazooka in the right hand and the rifle on the back (the AI firing pose, held).
  if(auto* L=ExoLooks.Find(ID))L->AILauncherUntil=S.bLauncher?Now+1.e6:0.;
  UpdateExoLooks();
@@ -58,8 +78,11 @@ void UBattleLeaderRuntime::RunExoShot()
  const float Walk=A->GetCharacterMovement()->MaxWalkSpeed;
  A->SetLookShotVelocity(!S.bMove?FVector::ZeroVector:FCString::Strcmp(S.Name,TEXT("move_strafe"))==0?FVector(0,Walk,0):FVector(Walk,0,0));
  if(S.bMove)if(auto* Move=A->GetLookMove())A->GetMesh()->PlayAnimation(Move,true);
+ if(S.Action==1)PlayExoLauncherAction(ID,Now);
+ if(S.Action==2)A->NoteVisualShot(Now);
+ if(S.Action==3){auto& Edit=Store->Units.FindChecked(ID);Edit.Ammo=FMath::Max(0,Edit.Ammo-1);if(!Store->StartReload(ID,Now))++SmokeFailures;}
  const FVector P=Position(ID);const FVector Direction=FRotator(0,A->GetActorRotation().Yaw+S.Yaw,0).Vector();
- const FVector Eye=P+Direction*430+FVector(0,0,70);
+ const FVector Eye=P+Direction*S.Distance+FVector(0,0,S.EyeZ);
  static TWeakObjectPtr<ACameraActor> Camera;
  if(!Camera.IsValid())
  {
@@ -67,7 +90,7 @@ void UBattleLeaderRuntime::RunExoShot()
   auto& PP=Camera->GetCameraComponent()->PostProcessSettings;PP.bOverride_MotionBlurAmount=true;PP.MotionBlurAmount=0;
   Camera->GetCameraComponent()->SetFieldOfView(60);
  }
- Camera->SetActorLocationAndRotation(Eye,(P+FVector(0,0,30)-Eye).Rotation());
+ Camera->SetActorLocationAndRotation(Eye,(P+FVector(0,0,S.AimZ)-Eye).Rotation());
  PC->SetViewTarget(Camera.Get());
  PC->bAutoManageActiveCameraTarget=false;if(PC->GetHUD())PC->GetHUD()->bShowHUD=false;
  const auto* Look=ExoLooks.Find(ID);
@@ -77,6 +100,14 @@ void UBattleLeaderRuntime::RunExoShot()
  if(!Look||!Look->Bubble.IsValid()||Look->Bubble->IsVisible()!=(Store->Find(ID)->Shield>0.f))++SmokeFailures;
  FString Prefix;FParse::Value(FCommandLine::Get(),TEXT("BattleWideScreens="),Prefix);
  const FString File=Prefix+FString::Printf(TEXT("-%d-%s.png"),Index+1,S.Name);
- if(!Prefix.IsEmpty()){FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,FTimerDelegate::CreateWeakLambda(this,[File](){FScreenshotRequest::RequestScreenshot(File,false,false);}),.6f,false);}
- ++ExoShotStage;Later(1.2f);
+ const TWeakObjectPtr<ABattleUnit> Body(A);
+ FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,FTimerDelegate::CreateWeakLambda(this,[this,File,Body,Name=S.Name,Expect=S.Expect,bShoot=!Prefix.IsEmpty()]()
+ {
+  const UAnimSequence* Shown=Body.IsValid()?Body->GetShownPose():nullptr;
+  const bool bOk=!Expect||(Shown&&Shown->GetName().Contains(Expect));
+  UE_LOG(LogFutureBattle,Display,TEXT("EXO_SHOT_CAPTURE shot=%s pose=%s%s"),Name,Shown?*Shown->GetName():TEXT("none"),bOk?TEXT(""):TEXT(" EXPECTED_OTHER"));
+  if(!bOk)++SmokeFailures;
+  if(bShoot)FScreenshotRequest::RequestScreenshot(File,false,false);
+ }),S.Capture,false);
+ ++ExoShotStage;Later(FMath::Max(1.2f,S.Capture+.6f));
 }

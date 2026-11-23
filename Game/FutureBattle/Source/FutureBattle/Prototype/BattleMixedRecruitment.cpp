@@ -60,13 +60,15 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  // Area homes follow -BattleTrialSwap; MixedFast keeps its fixed sides. Side points from the centre to the home.
  const float HomeX=bArea?GetWorld()->GetSubsystem<UBattleMatch>()->AreaHome(Team).X:(Team?1:-1)*BattleFieldLayout::HomeDistance(GetWorld());
  const float Side=HomeX>=0?1.f:-1.f;
+ // -BattleHireMirror: the east team's rows are mirrored across the centre line too (point symmetry with the west team's).
+ const float RowSign=bArea&&Side>0&&HireMirrorEnabled()?-1.f:1.f;
  for(int32 Column=0;Column<5 && Positions.Num()<N;++Column)for(int32 Row=0;Row<8 && Positions.Num()<N;++Row)
  {
   TArray<FVector> Candidate;
   for(int32 Slot=0;Slot<N;++Slot)
   {
    FNavLocation P;
-   if(!Nav->ProjectPointToNavigation(FVector(HomeX-Side*(400+Column*350-(Slot/5)*120),(Row-3.5)*600+(Slot%5-2)*120,0),P,FVector(60,60,250)))break;
+   if(!Nav->ProjectPointToNavigation(FVector(HomeX-Side*(400+Column*350-(Slot/5)*120),RowSign*((Row-3.5)*600+(Slot%5-2)*120),0),P,FVector(60,60,250)))break;
    const FVector Position=P.Location+FVector(0,0,100);
    if(GetWorld()->OverlapBlockingTestByChannel(Position,FQuat::Identity,ECC_Pawn,FCollisionShape::MakeCapsule(40,90)))break;
    bool Occupied=false;for(FVector Other:Candidate)Occupied|=FVector::Dist2D(Position,Other)<100;

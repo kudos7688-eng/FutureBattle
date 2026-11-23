@@ -4,6 +4,8 @@
 #include "Misc/Parse.h"
 #include "BattleFieldLayout.h"
 #include "BattleMapI.h"
+#include "BattleMapJ.h"
+#include "BattleMapK.h"
 #include "NavigationPath.h"
 
 #if WITH_EDITOR
@@ -39,7 +41,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 {
 #if WITH_EDITOR
 	FString Wide;FParse::Value(*Params,TEXT("WideField="),Wide);
-	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D") && Wide!=TEXT("E") && Wide!=TEXT("F") && Wide!=TEXT("G") && Wide!=TEXT("H") && Wide!=TEXT("I")) return 6;
+	if(!Wide.IsEmpty() && Wide!=TEXT("A") && Wide!=TEXT("B") && Wide!=TEXT("C") && Wide!=TEXT("D") && Wide!=TEXT("E") && Wide!=TEXT("F") && Wide!=TEXT("G") && Wide!=TEXT("H") && Wide!=TEXT("I") && Wide!=TEXT("J") && Wide!=TEXT("K")) return 6;
 	const bool Expanded=Wide==TEXT("D");
 	// Map E (2026-11-14): 1000m x 700m, urban centre with five objectives, open flanks with hedges and low walls.
 	// Map F (2026-11-18): the size, homes and city objectives of E; a city of districts with an avenue tanks can use, two flank
@@ -52,11 +54,17 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 	// bridge and a ford on each side, hills of 5m and 7m. It takes the rules of map E and the height table of map G.
 	const bool UrbanI=Wide==TEXT("I");
 	const bool UrbanH=Wide==TEXT("H");
-	const bool Urban=UrbanH||Wide==TEXT("E")||UrbanF||UrbanI;
+	// Map J (2026-11-22, BattleMapJ.h, BattleMapLayoutJ.inl): the grid of map I with impassable mountains and lakes and varied buildings.
+	const bool UrbanJ=Wide==TEXT("J");
+	// Map K (2026-11-22, BattleMapK.h, Docs/design-map-k.md): a dense small town ringed by mountains, built from the sector kinds and
+	// layouts of map J (BattleMapLayoutJ.inl is included a second time with BattleMapK in place of BattleMapJ).
+	const bool UrbanK=Wide==TEXT("K");
+	auto KindJK=[UrbanK](int32 C,int32 R){return UrbanK?BattleMapK::Kind(C,R):BattleMapJ::Kind(C,R);};
+	const bool Urban=UrbanH||Wide==TEXT("E")||UrbanF||UrbanI||UrbanJ||UrbanK;
 	// Maps with a height table: their houses and hills (east half), for the navigation volumes and the checks below.
-	const bool Terrain=UrbanG||UrbanH||UrbanI;
-	const TArray<BattleTerrain::FHouse> TerrainHouses=UrbanI?BattleMapI::Houses():UrbanH?BattleSectors::Houses():UrbanG?BattleTerrain::HousesG():TArray<BattleTerrain::FHouse>();
-	const TArray<BattleTerrain::FHill> TerrainHills=UrbanI?BattleMapI::Hills():UrbanH?BattleSectors::Hills():UrbanG?BattleTerrain::HillsG():TArray<BattleTerrain::FHill>();
+	const bool Terrain=UrbanG||UrbanH||UrbanI||UrbanJ||UrbanK;
+	const TArray<BattleTerrain::FHouse> TerrainHouses=UrbanK?BattleMapK::Houses():UrbanJ?BattleMapJ::Houses():UrbanI?BattleMapI::Houses():UrbanH?BattleSectors::Houses():UrbanG?BattleTerrain::HousesG():TArray<BattleTerrain::FHouse>();
+	const TArray<BattleTerrain::FHill> TerrainHills=UrbanK?BattleMapK::Hills():UrbanJ?BattleMapJ::Hills():UrbanI?BattleMapI::Hills():UrbanH?BattleSectors::Hills():UrbanG?BattleTerrain::HillsG():TArray<BattleTerrain::FHill>();
 	const FString WideName=TEXT("Lvl_BattleWide_")+Wide;
 	const bool Sight=!Wide.IsEmpty();
 	const bool Large = Sight || FParse::Param(*Params,TEXT("LargeField"));
@@ -173,6 +181,50 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 		if(UrbanI)
 		{
 #include "BattleMapLayoutI.inl"
+		}
+		else if(UrbanJ)
+		{
+#include "BattleMapLayoutJ.inl"
+		}
+		else if(UrbanK)
+		{
+// The layouts of map J over the sector table, roads and houses of map K (the log line of the layout says terrain-j-v1).
+#define BattleMapJ BattleMapK
+#include "BattleMapLayoutJ.inl"
+#undef BattleMapJ
+			// Sight breakers on the roads of map K (2026-11-22): with the roads open, nine shots in ten of the first matches were fired
+			// from 125-150m along a road (mk1-K-*), as on map I. At the middle of every sector edge a road passes, two parked lorries
+			// stand staggered, each closing a little more than half of the 9m between the sectors: no straight line along the road
+			// passes, a walker goes round them (4m beside each, 10m between the two). None beside a mountain or a home base.
+			{
+				WallMat=Material(TEXT("M_MapRust"),FLinearColor(.36f,.2f,.1f));
+				auto KindAt=[](double X,double Y){return BattleMapK::Kind(FMath::FloorToInt((X+BattleMapK::HalfX)/BattleMapK::Cell),FMath::FloorToInt((Y+BattleMapK::HalfY)/BattleMapK::Cell));};
+				auto Closed=[](TCHAR K){return K==TEXT('M')||K==TEXT('S')||K==TEXT(' ');};
+				int32 Breakers=0;
+				for(const BattleMapK::FRoad& Rd:BattleMapK::Roads())
+				{
+					const double Mid=(Rd.From+Rd.To)*.5,MX=Rd.bAlongX?Mid:Rd.At,MY=Rd.bAlongX?Rd.At:Mid;
+					const bool bSelf=FMath::Abs(MX)<1.&&FMath::Abs(MY)<1.;
+					// Emit places the 180-degree partner: take one road of each pair (and the positive half of the road through the middle).
+					if(!bSelf&&!(MX>1.||(FMath::Abs(MX)<1.&&MY>1.)))continue;
+					for(double P=FMath::FloorToDouble(Rd.From/5000.)*5000.+2500.;P<Rd.To;P+=5000.)
+					{
+						if(P<Rd.From||(bSelf&&P<0.))continue;
+						const double PX=Rd.bAlongX?P:Rd.At,PY=Rd.bAlongX?Rd.At:P;
+						if(Closed(KindAt(PX+(Rd.bAlongX?0.:100.),PY+(Rd.bAlongX?100.:0.)))||Closed(KindAt(PX-(Rd.bAlongX?0.:100.),PY-(Rd.bAlongX?100.:0.))))continue;
+						const double Sg=((FMath::RoundToInt(P/5000.-.5)+FMath::RoundToInt(Rd.At/5000.))&1)?1.:-1.;
+						// Generation 6: one lorry across half the road at each place (4.5m of the 9.4m between the walls), on alternating sides, clear of the doorways of the walls beside the road
+						// (those stand 4m to 18m and -6m to -20m along from this point). The staggered pair of generations 2-5 left a tank
+						// (vehicle agent radius 2m) no way through once the road had walls on both sides (mk7-K: no tank entered the town).
+						{
+							const double Along=P-100.,Across=Rd.At+Sg*245.;
+							if(Rd.bAlongX)Emit(TEXT("RoadLorry"),Along,Across,220,450,280);else Emit(TEXT("RoadLorry"),Across,Along,450,220,280);
+						}
+						++Breakers;
+					}
+				}
+				UE_LOG(LogTemp,Display,TEXT("TOWN_K_BREAKERS pairs=%d (x2 by rotation)"),Breakers);
+			}
 		}
 		else if(UrbanH)
 #include "BattleMapLayoutH.inl"
@@ -437,6 +489,24 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 			Water->SetAreaClass(UNavArea_Null::StaticClass());Water->PostEditChange();
 		}
 	}
+	// Map J: mountains and lakes are holes in the navigation mesh (mountains also stand there as solid rock; lakes have no collision,
+	// so sight and shots cross the water). One volume per sector, with its 180-degree partner.
+	if(UrbanJ||UrbanK)
+	{
+		for(int32 Cx=BattleMapJ::Columns/2;Cx<BattleMapJ::Columns;++Cx)for(int32 Rx=0;Rx<BattleMapJ::Rows;++Rx)
+		{
+			const TCHAR Kx=KindJK(Cx,Rx);if(!BattleMapJ::Impassable(Kx))continue;
+			const FVector2D Mx=BattleMapJ::Centre(Cx,Rx);
+			for(int32 Sign:{-1,1})
+			{
+				ANavModifierVolume* NoWalk=World->SpawnActor<ANavModifierVolume>(FVector(Sign*Mx.X,Sign*Mx.Y,60),FRotator::ZeroRotator);
+				NoWalk->SetActorLabel(Kx==TEXT('M')?TEXT("MountainNoWalk"):TEXT("LakeNoWalk"));
+				UCubeBuilder* NoWalkCube=NewObject<UCubeBuilder>(NoWalk);NoWalkCube->X=BattleMapJ::Cell;NoWalkCube->Y=BattleMapJ::Cell;NoWalkCube->Z=320;
+				UActorFactory::CreateBrushForVolumeActor(NoWalk,NoWalkCube);NoWalk->GetBrushComponent()->BuildSimpleBrushCollision();
+				NoWalk->SetAreaClass(UNavArea_Null::StaticClass());NoWalk->PostEditChange();
+			}
+		}
+	}
 	if (UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
 	{
 		// Commandlets do not tick the editor loading loop that normally releases this lock.
@@ -496,7 +566,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
                 Failures+=BlockedRoads;
                 UE_LOG(LogTemp,Display,TEXT("SECTOR_ROAD_RESULT blocked=%d segments=%d"),BlockedRoads,Def.RouteEdges.Num());
             }
-			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=%s rotation=180"),Failures,OpenLines,UrbanI?TEXT("sectors-v2"):UrbanH?TEXT("river-town-v2"):UrbanG?TEXT("heights-v1"):UrbanF?TEXT("districts-v1"):TEXT("urban-v2"));
+			UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_RESULT failures=%d open_lines=%d layout=%s rotation=180"),Failures,OpenLines,UrbanK?TEXT("town-k-v1"):UrbanJ?TEXT("terrain-j-v1"):UrbanI?TEXT("sectors-v2"):UrbanH?TEXT("river-town-v2"):UrbanG?TEXT("heights-v1"):UrbanF?TEXT("districts-v1"):TEXT("urban-v2"));
 			if(Terrain)
 			{
 				// The geometry agrees with the height table (a trace down at nine points of every patch; points under a crate or a
@@ -556,6 +626,41 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 				}
 				UE_LOG(LogTemp,Display,TEXT("SECTOR_MAP_COVER sectors=%d checked=%d short=%d least_per_side=%d fields=%d field_mean_per_side=%.1f"),Columns*Rows,Checked,Short,Least,FieldCount,FieldCount?double(FieldSum)/FieldCount:0.);
 				UE_LOG(LogTemp,Display,TEXT("SECTOR_MAP_RESULT failures=%d"),(bRiver?0:1)+Short);
+			}
+			if(UrbanJ||UrbanK)
+			{
+				// Map J: no ground in a mountain or a lake sector (25 samples each); the passes and the lanes connect (homes and objectives
+				// were checked above); cover towards every side in the sectors that are held (as map I; fields, hills, mountains, lakes and
+				// home bases are not counted). A shortage of cover is reported, not a failure (the varied layouts are new, 2026-11-22).
+				int32 Blocked=0,Leaks=0,Checked=0,Short=0,Least=MAX_int32;
+				for(int32 Cx=0;Cx<BattleMapJ::Columns;++Cx)for(int32 Rx=0;Rx<BattleMapJ::Rows;++Rx)
+				{
+					const TCHAR Kx=KindJK(Cx,Rx);const FVector2D Mx=BattleMapJ::Centre(Cx,Rx);
+					if(BattleMapJ::Impassable(Kx))
+					{
+						++Blocked;int32 Ground=0;FNavLocation At;
+						for(double DX=-2000;DX<=2000;DX+=1000)for(double DY=-2000;DY<=2000;DY+=1000)Ground+=Nav->ProjectPointToNavigation(FVector(Mx.X+DX,Mx.Y+DY,0),At,FVector(40,40,60));
+						if(Ground){++Leaks;UE_LOG(LogTemp,Warning,TEXT("TERRAIN_J_LEAK c=%d r=%d kind=%c ground_samples=%d/25"),Cx,Rx,Kx,Ground);}
+						continue;
+					}
+					if(Kx==TEXT('F')||Kx==TEXT('h')||Kx==TEXT('S'))continue;
+					int32 N[4]={0,0,0,0};
+					for(double DX=-2250;DX<=2250;DX+=250)for(double DY=-2250;DY<=2250;DY+=250)
+					{
+						FNavLocation At;if(!Nav->ProjectPointToNavigation(FVector(Mx.X+DX,Mx.Y+DY,0),At,FVector(40,40,60)))continue;
+						const FVector Eye=At.Location+FVector(0,0,100);const FVector Dirs[4]={FVector(0,1,0),FVector(1,0,0),FVector(0,-1,0),FVector(-1,0,0)};
+						for(int32 D=0;D<4;++D)N[D]+=World->LineTraceTestByObjectType(Eye,Eye+Dirs[D]*250,FCollisionObjectQueryParams(ECC_WorldStatic));
+					}
+					const int32 Min=FMath::Min(FMath::Min(N[0],N[1]),FMath::Min(N[2],N[3]));++Checked;Least=FMath::Min(Least,Min);
+					if(Min<6){++Short;UE_LOG(LogTemp,Warning,TEXT("SECTOR_MAP_COVER_SHORT c=%d r=%d kind=%c n=%d e=%d s=%d w=%d"),Cx,Rx,Kx,N[0],N[1],N[2],N[3]);}
+				}
+				// Across a range: from the north lane to the valley the path must go round by a pass (longer than 1.3 x the straight line).
+				auto* Around=Nav->FindPathToLocationSynchronously(World,FVector(2500,27500,0),FVector(2500,7500,0));
+				// Map K has no range to go round: its mountains only ring the town (the homes and objectives were reached above).
+				const bool bAround=UrbanK||(Around&&Around->IsValid()&&!Around->IsPartial()&&Around->GetPathLength()>1.3*20000.);
+				UE_LOG(LogTemp,Display,TEXT("TERRAIN_J_RESULT failures=%d blocked_sectors=%d leaks=%d detour_cm=%.0f detour_ok=%d cover_checked=%d cover_short=%d least_per_side=%d"),
+					Leaks+(bAround?0:1),Blocked,Leaks,Around&&Around->IsValid()?Around->GetPathLength():-1.,bAround?1:0,Checked,Short,Least==MAX_int32?0:Least);
+				if(Leaks||!bAround) return 7;
 			}
 			if(Failures) return 7;
 		}

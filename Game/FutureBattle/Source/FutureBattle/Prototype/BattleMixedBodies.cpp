@@ -123,18 +123,26 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  CoverApproaches.Reset();FirePositions.Reset();
  ArmsBoundMemory.Reset();ArmsBoundArrived.Reset(); // where assault bounds saw their enemy and reached cover (BattleArms.cpp)
  SuppressionZeroAt.Reset();
- Stances.Reset();StanceLockedUntil.Reset();
+ Stances.Reset();StanceLockedUntil.Reset();LowMoveUntil.Reset();
  PC->ResetMatchControl();
  const bool UseVAT=bDisplayLODEnabled;
  if(VAT)VAT->ResetBodies();
  for(auto& Pair:Bodies) DestroyBody(Pair.Value);
  if(DisplayHost) DisplayHost->Destroy();
- DisplayHost=NewHost;Bodies=MoveTemp(Staged);HitIDs.Reset();Plans.Reset();AvoidanceGrid.Reset();Mode->Units.Reset();Corpses.Reset();HiddenCorpses.Reset();
+ DisplayHost=NewHost;Bodies=MoveTemp(Staged);HitIDs.Reset();Plans.Reset();AvoidanceGrid.Reset();Mode->Units.Reset();Corpses.Reset();HiddenCorpses.Reset();SoldierPaths.Reset();
  GetWorld()->GetSubsystem<UBattleSquadAI>()->Reset();GetWorld()->GetSubsystem<UBattleCover>()->ResetReservations();
  const double Now=GetWorld()->GetTimeSeconds();TArray<FBattleUnitState> Records;
+ // Places left because they were seen into (stage A): kept by position for the time left. The position decides which place
+ // it is (BrokenCoverSlot), so nothing here depends on how or whether the places are built yet.
+ BrokenCover.Reset();RelocateWaiting.Reset();WalkLooks.Reset();
+ for(const auto& E:Save->Units)if(E.BrokenCoverSlot!=INDEX_NONE && E.BrokenCoverLeft>0)
+  BrokenCover.Add(E.State.UnitID,FBattleBrokenCover{E.BrokenCoverSlot,E.BrokenCoverAt,Now+FMath::Min(10.f,E.BrokenCoverLeft)});
  for(const auto& E:Save->Units)
  {
   auto U=E.State;U.ReloadEndTime=U.ReloadEndTime>0?Now+U.ReloadEndTime:0;U.NextShotTime+=Now;
+  U.SoldierMoveUntil=U.SoldierMoveUntil>0?Now+U.SoldierMoveUntil:0;U.SoldierMoveAfter=U.SoldierMoveAfter>0?Now+U.SoldierMoveAfter:0;
+  // Past times stay positive (0 means none) even when the world clock is still early; the window then starts at most that much later.
+  U.CoverFirstBreak=U.CoverFirstBreak>0?FMath::Max(.001,Now+U.CoverFirstBreak-2.5):0;U.SoldierStalledSince=U.SoldierStalledSince>0?FMath::Max(.001,Now-U.SoldierStalledSince):0;
   U.CoverSlot=INDEX_NONE;U.AimStableSince=-1;U.MoveRetries=0;U.Role=EBattleRole::Independent;U.CoordinatedTarget=INDEX_NONE;
   U.Action=U.IsAlive()?EBattleAction::Idle:EBattleAction::Dead;U.DecisionReason=TEXT("RESTORED / REVALIDATE PATH");
   if(Save->CombatStateVersion<3&&BattleTactics::SPGAmmoEnabled())

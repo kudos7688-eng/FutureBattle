@@ -13,6 +13,8 @@ public:
 	virtual void DrawHUD() override;
 private:
  void DrawGamepadMenu(class ABattleController* PC);
+ void DrawPlanPanel(class ABattleController* PC); // front plan stage 7 (U)
+ void DrawBuyPanel(class ABattleController* PC); // purchase panel (B, 2026-11-23; layout FBattleBuyPanelLayout)
  void DrawSquadList();
  // Tactical minimap: own squads and only what the player's side has observed (never unseen enemies).
  void DrawMinimap();
@@ -34,6 +36,8 @@ private:
  void DrawMinimapRangeRings(class ABattleController* PC, const struct FBattleMinimapLayout& Map);
  // The predicted way of the selected squads and the way being drawn (BattlePlayerPath.cpp).
  void DrawOrderWays();
+ // The player's orders to single soldiers and the soldier picked with Ctrl+click (BattleSoldierOrder.cpp).
+ void DrawSoldierOrders();
  // Hit direction (2026-11-19, display only): while the player controls a soldier, a red arc around the crosshair points to
  // where each recent hit came from (1.5 s fade; a faint ring when the source is unknown). -BattleHitDirection=0 hides it.
  void DrawHitDirection(class ABattleController* PC);
@@ -58,6 +62,9 @@ private:
  TMap<int32,const FBattleContact*> FrameContacts;
  TSet<int32> FrameVisibleContacts;
  TArray<FVector2D> OverlayScreen;
+ // Strategy band (Docs/design-strategy-ui.md 2.1/2.3; only while the strategy layer runs for the player's side): the last focus and
+ // holds shown, to notice when they change.
+ int32 ShownStrategyFocus=-2,ShownStrategyHolds=-1;
  TBitArray<> OverlayOn;
  TArray<float> OverlayDark;
  TArray<uint8> OverlayCount;

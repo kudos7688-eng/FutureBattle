@@ -156,18 +156,40 @@ void UBattleMatch::Update(float DeltaSeconds)
 	Elapsed += DeltaSeconds;
 	UpdatePlayerRoutes(DeltaSeconds);
 	UpdateTerrainTest(DeltaSeconds);
+	// OrderSync (area matches): team 0's orders wait for this step's purchases, below (BattleMatch.h).
+	const bool bSync=bArea&&OrderSync();bool bDelegateNow=false;
 	if (CanDelegateAllies())
 	{
 		DelegationClock += DeltaSeconds;
 		if (DelegationClock >= 5.f)
 		{
 			DelegationClock = 0.f;
-			UpdateTeamOrders(0, true);
+			if(bSync)bDelegateNow=true;else UpdateTeamOrders(0, true);
 		}
 	}
 	if (!BattleFieldLayout::IsLarge(GetWorld())) UpdateSupport(DeltaSeconds);
 	UpdateObjectives(DeltaSeconds);
- if(bArea){UpdateArea(DeltaSeconds);DirectorClock+=DeltaSeconds;if(DirectorClock>=5){DirectorClock=0;UpdateAreaHiring();UpdateEnemyOrders();}CheckTimeLimit();return;}
+ if(bArea)
+ {
+  UpdateArea(DeltaSeconds);UpdateSituationLog();UpdateHireQueue();DirectorClock+=DeltaSeconds;
+  if(DirectorClock>=5)
+  {
+   DirectorClock=0;
+   // SetupPhase: on the first step the AI teams spend their starting resources before any orders (Elapsed<1: not after a load).
+   if(SetupPhase()&&!bSetupDone&&Elapsed<1.f)
+   {
+    bSetupDone=bSetupBurst=true;
+    for(int32 Pass=0;Pass<60;++Pass){const int32 Before=Credits[0]+Credits[1];UpdateAreaHiring();if(Credits[0]+Credits[1]==Before)break;}
+    bSetupBurst=false;
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SETUP credits=%d/%d active=%d/%d time=%.1f"),Credits[0],Credits[1],ActiveSquads(0),ActiveSquads(1),Elapsed);
+   }
+   else UpdateAreaHiring();
+   if(bDelegateNow)UpdateTeamOrders(0,true);
+   UpdateEnemyOrders();
+  }
+  else if(bDelegateNow)UpdateTeamOrders(0,true);
+  CheckTimeLimit();return;
+ }
 	if (Phase != EBattleMatchPhase::Combat) return;
 	DirectorClock += DeltaSeconds; SupplyClock += DeltaSeconds;
 	if (DirectorClock >= 5.f)
@@ -325,6 +347,9 @@ int32 UBattleMatch::AreaStrategyTarget(int32 SquadID, int32 Team, bool& bBase) c
  if(Intent.FocusGain>0&&Sum>0)
  {
   int32 Best=INDEX_NONE;double BestD=DBL_MAX;const FVector Home=AreaHome(Team);
+  // Strategy layer S2: the focus the team chose from its situation map comes first (while it is not observed as own).
+  if(Objectives.IsValidIndex(Intent.FocusPoint)&&ObservedOwner(Team,Intent.FocusPoint)!=Team)Best=Rotate?Objectives.Num()-1-Intent.FocusPoint:Intent.FocusPoint;
+  else
   for(int32 I=0;I<Objectives.Num();++I){const int32 P=Rotate?Objectives.Num()-1-I:I;if(ObservedOwner(Team,P)==Team)continue;const double D=FVector::DistSquared2D(Objectives[P].Position,Home);if(D<BestD){BestD=D;Best=I;}}
   if(Best!=INDEX_NONE){Sum+=Weight[Best]*Intent.FocusGain;Weight[Best]*=1.0+Intent.FocusGain;}
  }
@@ -353,11 +378,16 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
 	int32 Group = 0;
  // S1 (default ON, -BattleAreaStrategy=0 = old round-robin): weighted point spread from observed ownership only.
  const bool bStrategy=bArea&&BattleTactics::AreaStrategy().bEnabled;
+ // Strategy layer S2 (BattleStrategy.cpp, -BattleStrategy>=2): the team's plan is reviewed once here, before any intent is read.
+ if(bStrategy)UpdateStrategy(Team);
+ // Front plan stage 2 (BattleFrontLine.cpp, -BattleFrontPlan=1; off while -BattleStrategy>=2 runs for the team).
+ if(bStrategy)UpdateFrontPlan(Team);
  const FAreaIntent TeamIntent=AreaIntent(Team);
  // Squad groups (BattleGroups.cpp): members, AI formation (trial) and phases, before the orders that read them.
  if((CompositionTeams&(1<<Team))!=0)UpdateCompositionPurposes(Team);
  UpdateGroups(Team);
  if(bArea&&BattleTactics::ArtilleryPosts())UpdateArtilleryRaids(Team);
+ if(bArea&&BattleTactics::ATHunt())UpdateATHunts(Team);
  // Routes (map F): what the team sees now, gathered once for all its squads.
  const bool bRoutes=bStrategy&&RoutesOn();TArray<FVector> RouteEnemies;if(bRoutes)RouteEnemies=RouteKnownEnemies(Team);
 	for (const auto& Pair : Store->GetSquads()) if (Pair.Value.Team == Team)
@@ -380,6 +410,10 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   // Armoured cars (tactical role, stage 2): an open point away from known anti-tank threats (AreaCarTarget); never the home assault.
   if(bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::ArmoredCar)
   {bStrategyBase=false;if(const int32 CarTarget=AreaCarTarget(Team,Pair.Key);CarTarget!=INDEX_NONE)Target=CarTarget;}
+  // Trial -BattleACShield: ahead of the nearest attacking own infantry squad (none: as above).
+  bool bCarShield=false;FVector CarShield=FVector::ZeroVector;
+  if(bStrategy&&!Purpose&&BattleTactics::ACShield()&&Pair.Value.SquadType==BattleSquadType::ArmoredCar&&Pair.Value.CommandStatus==EBattleCommandStatus::Active)
+   bCarShield=ACShieldPost(Team,Pair.Key,CarShield);
   // Exoskeleton soldiers (tactical role): the fast reserve (AreaExoTarget); never the home assault.
   if(bStrategy&&!Purpose&&Pair.Value.SquadType==BattleSquadType::Exo&&Pair.Value.CommandStatus==EBattleCommandStatus::Active)
   {bStrategyBase=false;if(const int32 ExoTarget=AreaExoTarget(Team,Pair.Key);ExoTarget!=INDEX_NONE)Target=ExoTarget;}
@@ -427,11 +461,26 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   if(bMortarPost){Center=ChooseMortarPost(Team,Pair.Key);Order=EBattleOrder::Defend;}
   else if(bArtillery&&bArea)Center=AreaArtilleryPost(Team,Pair.Key,Center);
   const int32* RaidPost=bArea&&BattleTactics::ArtilleryPosts()?ArtilleryRaids.Find(Pair.Key):nullptr;
-  if(RaidPost){Center=ArtilleryPostPositions[1-Team][*RaidPost];Order=EBattleOrder::AttackMove;}
+  if(RaidPost){Center=BattleTactics::ArtilleryRaidChase()?ArtilleryRaidChases.FindChecked(Pair.Key).Target:ArtilleryPostPositions[1-Team][*RaidPost];Order=EBattleOrder::AttackMove;
+   // Trial -BattleArtilleryRaidSneak: measured raids stalled in the mid-field fights; until the leader is near the target the raid
+   // moves, the squad tactics do not hold at every seen enemy (BattleSquadRetreat.cpp) and the team AI does not use it for flank/support.
+   if(RaidSneaking(Pair.Key))Order=EBattleOrder::Move;}
+  // Trial -BattleArtilleryRaidGroup: the raid group's rally point / flank waypoint, and the infantry screen on the same side.
+  bool bRaidScreen=false;
+  if(bArea&&BattleTactics::ArtilleryRaidGroup()>0){FVector RaidGoalCenter=Center;EBattleOrder RaidGoalOrder=Order;
+   if(ArtilleryRaidGoal(Team,Pair.Key,RaidGoalCenter,RaidGoalOrder)){Center=RaidGoalCenter;Order=RaidGoalOrder;bRaidScreen=RaidPost==nullptr;}}
+  // Trial -BattleATHunt: a squad asked by an armoured unit attacks the anti-tank soldier it saw (BattleATHunt.cpp).
+  bool bATHunt=false;
+  if(bArea&&BattleTactics::ATHunt()){FVector HuntCenter;if(ATHuntGoal(Team,Pair.Key,HuntCenter)){Center=HuntCenter;Order=EBattleOrder::AttackMove;bATHunt=true;}}
+  const bool bRaidDuty=RaidPost!=nullptr||bRaidScreen||bATHunt;
   // The tank's overwatch post; a post near its current mission is kept (no new order for every small change in what the team knows).
+  if(bCarShield){Center=CarShield;Order=EBattleOrder::AttackMove;if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2000.)Center=Pair.Value.MissionDestination;
+   else UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AC_SHIELD team=%d squad=%d post=%s"),Team,Pair.Key,*Center.ToCompactString());}
   if(bTankPost){Center=AreaTankPost(Team,Target);if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2500.)Center=Pair.Value.MissionDestination;}
   // A squad in a group the AI runs follows its group: the rally point while gathering, then the group's objective together.
-  if(!RaidPost&&!bMortarPost&&bStrategy&&!Purpose&&!Groups.IsEmpty())GroupOrder(Pair.Key,Team,Center,Order);
+  if(!bRaidDuty&&!bMortarPost&&bStrategy&&!Purpose&&!Groups.IsEmpty())GroupOrder(Pair.Key,Team,Center,Order);
+  // Trial -BattleFrontReserve: a free squad of the front army's reserve waits behind the line (BattleFrontLine.cpp, 6c).
+  if(!bRaidDuty&&!bMortarPost&&bStrategy&&!Purpose&&!FrontReservePosts.IsEmpty()&&GroupOf(Pair.Key)==INDEX_NONE)FrontReserveOrder(Pair.Key,Team,Center,Order);
   // A supply vehicle (BattleSupplyCar.cpp): home to load while low, else behind its group's post or the front own point; never the home assault.
   if(bStrategy&&Pair.Value.SquadType==BattleSquadType::Supply)SupplyCarOrder(Pair.Key,Team,Center,Order);
   // Routes: a distant goal is reached junction by junction along the roads of the map (BattleRoutes.cpp). Not for scout pairs
@@ -440,7 +489,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   // A surprise bridge leg is already a precise waypoint; road/sector routing must not replace it with another crossing.
   bool bSurpriseBridge=false;
   if(bStrategy&&!Purpose&&SurpriseOn(Team))if(const auto* G=Groups.Find(GroupOf(Pair.Key));G&&G->Kind==2&&G->Phase<2&&G->SurpriseBridgeStage!=0&&GroupAIRun(*G))bSurpriseBridge=true;
-  if(!RaidPost&&!bMortarPost&&bRoutes&&!bScout&&!bHomeDefence&&!bSurpriseBridge)
+  if(!bRaidDuty&&!bMortarPost&&bRoutes&&!bScout&&!bHomeDefence&&!bSurpriseBridge)
    if(auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();Runtime&&Runtime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
    {
     const FVector P=Runtime->Position(Pair.Value.LeaderUnitID);
@@ -475,7 +524,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
    if(S.CommandStatus!=EBattleCommandStatus::Active) continue;
    // A tank keeps the goal it was given even when it drives only to the end of a partial route (SameVehicleMission).
    static const bool EnableSectorAI=[](){int32 V=0; FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
-   const bool Sector=!RaidPost && !bMortarPost && EnableSectorAI && !bSurpriseBridge && !bRoadWaypoint && BattleFieldLayout::Of(GetWorld()).bSectors && (bSectorStage || !BaseAssault) && !Purpose && !Leader->IsVehicle(S.LeaderUnitID)
+   const bool Sector=!bRaidDuty && !bMortarPost && EnableSectorAI && !bSurpriseBridge && !bRoadWaypoint && BattleFieldLayout::Of(GetWorld()).bSectors && (bSectorStage || !BaseAssault) && !Purpose && !Leader->IsVehicle(S.LeaderUnitID)
       && (Order==EBattleOrder::AttackMove || Order==EBattleOrder::Defend) && BattleSectors::Valid(BattleSectors::Cell(Center));
    if(Sector)Center=BattleSectors::Center(BattleSectors::Cell(Center));
    if(!S.bHasMission || S.bSectorMission!=Sector || S.MissionOrder!=Order || !(Sector?BattleSectors::Cell(S.MissionDestination)==BattleSectors::Cell(Center):S.MissionDestination.Equals(Center,20))) if(!Leader->SameVehicleMission(Pair.Key,Order,Center)) Leader->IssueOrder(Pair.Key,Order,Center,true,Sector);

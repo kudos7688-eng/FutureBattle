@@ -3,6 +3,8 @@
 #include "Engine/World.h"
 #include "BattleSectors.h"
 #include "BattleMapI.h"
+#include "BattleMapJ.h"
+#include "BattleMapK.h"
 
 namespace BattleFieldLayout
 {
@@ -26,6 +28,8 @@ namespace BattleFieldLayout
 		// the larger income. Independent of the geometry below, so a new map can take it without being map E.
 		bool bUrban=false;
 		bool bSectors=false;
+		// 2026-11-22 (user decision, roadmap stage 1): the sector AI combination is on by default on this map (see SectorComboSwitch).
+		bool bSectorCombo=false;
 		// Kind of a sector on a map with sectors, in the letters of BattleSectors.h (R river, B bridge approach, S ford, J junction or
 		// plaza, H house, W warehouse, F field, T wood, ^ hill). Null on maps without sectors.
 		char (*SectorKind)(FIntPoint)=nullptr;
@@ -132,7 +136,7 @@ namespace BattleFieldLayout
 				FMapDef D=Urban;D.Name=TEXT("Lvl_BattleWide_I");
 				// Sector orders as on map H (the same 20 x 14 grid of 50m, the same origin): capture and hold by sector, objectives held by
 				// the whole sector. Map I's own kinds are given in the letters of BattleSectors.h.
-				D.bSectors=true;
+				D.bSectors=true;D.bSectorCombo=true;
 				D.SectorKind=[](FIntPoint C)->char
 				{
 					switch(BattleMapI::Kind(C.X,C.Y))
@@ -156,6 +160,82 @@ namespace BattleFieldLayout
 				for(int32 I=0;I<6;++I){Edge(RoadX[I],20000,RoadX[I+1],20000,ERouteLane::North);Edge(RoadX[I],-20000,RoadX[I+1],-20000,ERouteLane::South);}
 				for(double X:RoadX){Edge(X,20000,X,0,ERouteLane::Connector);Edge(X,0,X,-20000,ERouteLane::Connector);}
 				D.Heights=BattleMapI::MakeHeights(D.HalfExtent);
+				T.Add(D);
+			}
+			// J (2026-11-22, Docs/design-map-j-terrain.md): the grid of I with two mountain ranges (impassable, they block sight) that split
+			// the field into a north lane, a valley with the town and a lake, and a south lane, joined by passes; varied buildings (office
+			// towers, apartment blocks, a church, factories, ruins, car parks, parks, shops). Eight objectives as on I (0 and 7 depots).
+			{
+				FMapDef D=Urban;D.Name=TEXT("Lvl_BattleWide_J");
+				D.bSectors=true;
+				D.SectorKind=[](FIntPoint C)->char
+				{
+					switch(BattleMapJ::Kind(C.X,C.Y))
+					{
+					case TEXT('h'):return '^';case TEXT('P'):case TEXT('O'):case TEXT('Y'):return 'J';
+					case TEXT('D'):case TEXT('W'):case TEXT('K'):return 'W';
+					case TEXT('H'):case TEXT('B'):case TEXT('A'):case TEXT('C'):case TEXT('Q'):case TEXT('U'):return 'H';
+					case TEXT('T'):case TEXT('G'):return 'T';case TEXT('M'):return 'M';case TEXT('L'):return 'L';default:return 'F';
+					}
+				};
+				D.Objectives=BattleMapJ::Objectives();
+				D.ObjectiveOwners={0,-1,-1,-1,-1,-1,-1,1};
+				D.ObjectiveValues={2,1,1,1,1,1,1,2};
+				D.PointIncomeScale=.5f;
+				D.CityHalf=FVector2D(35000,15000);
+				// Lookouts: the ridges at the outer edge of the south lane (east) and the north lane (west).
+				D.Lookouts={FVector(15000,-30000,700),FVector(-15000,30000,700)};
+				auto Node=[&D](double X,double Y){const FVector P(X,Y,0);for(int32 I=0;I<D.RouteNodes.Num();++I)if(D.RouteNodes[I].Equals(P,1))return I;return D.RouteNodes.Add(P);};
+				auto Edge=[&](double X0,double Y0,double X1,double Y1,ERouteLane Lane){FRouteEdge E;E.A=Node(X0,Y0);E.B=Node(X1,Y1);E.Lane=Lane;D.RouteEdges.Add(E);};
+				const double AvenueX[]={-42000,-25000,-17500,0,17500,25000,42000};
+				for(int32 I=0;I<6;++I)Edge(AvenueX[I],0,AvenueX[I+1],0,ERouteLane::Centre);
+				const double LaneX[]={-40000,-25000,-17500,0,17500,25000,40000};
+				for(int32 I=0;I<6;++I){Edge(LaneX[I],25000,LaneX[I+1],25000,ERouteLane::North);Edge(LaneX[I],-25000,LaneX[I+1],-25000,ERouteLane::South);}
+				// Lanes join the valley only through the passes (x = +-17500) and beside the homes (x = +-40000).
+				for(double X:{-40000.,-17500.,17500.,40000.}){Edge(X,25000,X,0,ERouteLane::Connector);Edge(X,0,X,-25000,ERouteLane::Connector);}
+				Edge(-42000,0,-40000,0,ERouteLane::Centre);Edge(40000,0,42000,0,ERouteLane::Centre);
+				D.Heights=BattleMapJ::MakeHeights(D.HalfExtent);
+				T.Add(D);
+			}
+			// K (2026-11-22, Docs/design-map-k.md): a dense small town (600m x 400m, columns 4..15, rows 3..10 of the grid of I and J) ringed
+			// by mountains, for close fights that come from the ground. No field, wood, hill or water; six objectives; the homes of J.
+			{
+				FMapDef D=Urban;D.Name=TEXT("Lvl_BattleWide_K");
+				D.bSectors=true;
+				D.SectorKind=[](FIntPoint C)->char
+				{
+					switch(BattleMapK::Kind(C.X,C.Y))
+					{
+					case TEXT('P'):case TEXT('O'):case TEXT('Y'):return 'J';
+					case TEXT('W'):case TEXT('K'):return 'W';
+					case TEXT('H'):case TEXT('B'):case TEXT('A'):case TEXT('C'):case TEXT('Q'):case TEXT('U'):return 'H';
+					case TEXT('G'):return 'T';case TEXT('M'):return 'M';default:return 'F';
+					}
+				};
+				D.Objectives=BattleMapK::Objectives();
+				D.ObjectiveOwners={-1,-1,-1,-1,-1,-1};
+				D.ObjectiveValues={1,1,1,1,1,1};
+				D.PointIncomeScale=.7f;
+				D.CityHalf=FVector2D(30000,20000);
+				// Lookouts: the parks at the north-east and south-west corners of the town.
+				D.Lookouts={FVector(27500,17500,0),FVector(-27500,-17500,0)};
+				auto Node=[&D](double X,double Y){const FVector P(X,Y,0);for(int32 I=0;I<D.RouteNodes.Num();++I)if(D.RouteNodes[I].Equals(P,1))return I;return D.RouteNodes.Add(P);};
+				auto Edge=[&](double X0,double Y0,double X1,double Y1,ERouteLane Lane){FRouteEdge E;E.A=Node(X0,Y0);E.B=Node(X1,Y1);E.Lane=Lane;D.RouteEdges.Add(E);};
+				// Routes follow the roads of BattleMapK::Roads(). Centre: the avenue with its two turns.
+				const double Avenue[][2]={{-42000,0},{-35000,0},{-35000,-5000},{-30000,-5000},{-10000,-5000},{-10000,0},{10000,0},{10000,5000},{30000,5000},{35000,5000},{35000,0},{42000,0}};
+				for(int32 I=0;I+1<UE_ARRAY_COUNT(Avenue);++I)Edge(Avenue[I][0],Avenue[I][1],Avenue[I+1][0],Avenue[I+1][1],ERouteLane::Centre);
+				const double North[][2]={{-30000,15000},{-10000,15000},{-10000,10000},{10000,10000},{10000,15000},{30000,15000}};
+				for(int32 I=0;I+1<UE_ARRAY_COUNT(North);++I)
+				{
+					Edge(North[I][0],North[I][1],North[I+1][0],North[I+1][1],ERouteLane::North);
+					Edge(-North[I][0],-North[I][1],-North[I+1][0],-North[I+1][1],ERouteLane::South);
+				}
+				// Connectors: beside the town's ends (x = +-300m) and through its middle (x = +-100m).
+				Edge(30000,15000,30000,5000,ERouteLane::Connector);Edge(30000,5000,30000,-15000,ERouteLane::Connector);
+				Edge(-30000,-15000,-30000,-5000,ERouteLane::Connector);Edge(-30000,-5000,-30000,15000,ERouteLane::Connector);
+				Edge(10000,10000,10000,5000,ERouteLane::Connector);Edge(10000,0,10000,-10000,ERouteLane::Connector);
+				Edge(-10000,-10000,-10000,-5000,ERouteLane::Connector);Edge(-10000,0,-10000,10000,ERouteLane::Connector);
+				D.Heights=BattleMapK::MakeHeights(D.HalfExtent);
 				T.Add(D);
 			}
             {
@@ -213,6 +293,12 @@ namespace BattleFieldLayout
 	inline bool IsExpanded(const UWorld* World) {return Of(World).bExpanded;}
 	inline bool IsUrbanMap(const FString& Map) {return ByName(Map).bUrban;}
 	inline bool IsUrban(const UWorld* World) {return Of(World).bUrban;}
+	// 2026-11-22 (user decision, roadmap stage 1): the sector AI combination -BattleSectorContact/-Route/-Flank/-Front/-MoveFire/
+	// -CoverRoute, -BattleCoverHuddle, -BattlePinnedFlank and -BattleArrivalThreat is on by default on maps with bSectorCombo
+	// (map I) and off elsewhere. The switches are read without a world, so the leader runtime records the map's default when it
+	// starts on a world (UBattleLeaderRuntime::Start). An explicit -Battle<Name>=0/1 still wins on every map.
+	inline bool& SectorComboDefault() {static bool bOn=false;return bOn;}
+	inline bool SectorComboSwitch(int32 Arg) {return Arg>=0?Arg!=0:SectorComboDefault();}
 	inline bool IsSightField(const UWorld* World) {return Of(World).Kind==EMapKind::Wide;}
 	inline bool IsLarge(const UWorld* World) {return Of(World).Kind!=EMapKind::Arena;}
 	// Objectives of the wide maps by map name (also used to validate saves). Other names get the three objectives of map A.

@@ -1,18 +1,47 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[switch]$Arms)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
+# Strategy layer (Docs/design-strategy-layer.md; trial, default 0): both AI teams, and the squads the player delegates (J), plan by
+# the situation map; the top bar shows the own plan. 2 = recon -> focus attack, 3 = + hold and counter, 4 = + purchases for the focus.
+if ($Strategy -gt 0) { $extra += "-BattleStrategy=$Strategy" }
+# Trial (2026-11-23, default 0): a vehicle ordered into a place it cannot enter (a walled sector of map K) goes to the nearest road instead of refusing the order.
+if ($VehicleRoadGoal -gt 0) { $extra += "-BattleVehicleRoadGoal=$VehicleRoadGoal" }
+# Setup before the start (user decision 2026-11-22, trial): 15 rifle squads instead of 25 and 250 resources instead of 100 (the 10 squads'
+# worth plus the usual 100), the match waits paused for purchases and orders; P starts it. Purchases come before both teams' orders.
+if ($Setup) { $extra += @('-BattleSetupPhase=1','-BattleStartSquads=15','-BattleAreaStartCredits=250') }
+# Close fights to look at (ROADMAP 2026-11-22, stage 1 of fights inside a sector): sight and engagement cut to 30 or 50 m, so squads
+# meet inside one sector. For watching the current AI at close range, not a play condition.
+if ($CloseRange -gt 0) { $cm = $CloseRange * 100; $extra += @("-BattleRangeSight=$cm","-BattleRangeEngage=$cm","-BattleRangeEngageSupport=$cm") }
+# Individual AI trials (default 0, ROADMAP 2026-11-22 stage 2): -OwnTarget 2 = a soldier who cannot fire at the squad's target fires at
+# an enemy he sees himself and turns toward where he was hit from; -WalkLook 1 = a soldier on the move turns his head to the enemy he
+# knows of or to his share of the ground around the way. Both teams.
+if ($OwnTarget -gt 0) { $extra += "-BattleOwnTarget=$OwnTarget" }
+# -OwnTargetCover 1/2 (with -OwnTarget): he takes cover near by against the enemy he fires back at (2: also when walking, within 50 m).
+if ($OwnTargetCover -gt 0) { $extra += "-BattleOwnTargetCover=$OwnTargetCover" }
+if ($WalkLook -gt 0) { $extra += "-BattleWalkLook=$WalkLook" }
+# Front plan stage 7 (Docs/design-front-strategy.md 6; trials, default 0): the player's team plans by sections of its front line; U opens the
+# plan panel (section roles, purchase reservations, hiring delegation), the top bar shows the own plan. Team 0 only; second focus allowed.
+if ($FrontPlanPlayer) { $extra += @('-BattleFrontPlan=1','-BattleFrontPlanTeam=0','-BattleFrontPlanPlayer=1','-BattleFrontPlanFocus2=1','-BattleHireReserve=1') }
 if ($Map -eq 'H') {
     & (Join-Path $PSScriptRoot 'Initialize-MapH.ps1') -Project $project
 }
+if ($Map -eq 'J') {
+    & (Join-Path $PSScriptRoot 'Initialize-MapJ.ps1') -Project $project
+}
+if ($Map -eq 'K') {
+    & (Join-Path $PSScriptRoot 'Initialize-MapK.ps1') -Project $project
+}
 # Maps with sectors (H, I): the same play condition.
-if ($Map -eq 'H' -or $Map -eq 'I') {
+if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J' -or $Map -eq 'K') {
     $extra += '-BattleLeaderGuard=1'
     # Player's move click = sector move that fires on the move; a drawn line = point move (BattlePlayerPath.cpp).
     $extra += '-BattleSectorMove=1'
     # Grouped mortars and guns support the group's squads in trouble (trial, groupui play 2026-11-21).
     $extra += '-BattleGroupFireSupport=1'
+    # Free squads the front army could take wait two or three sectors behind its line instead of going to and fro (trial, user 2026-11-22).
+    $extra += '-BattleFrontReserve=1'
     if ($SectorAI) { $extra += '-BattleSectorAI=1' }
     # Sector AI trials (default off in matches): fire back when shot, sector route, flank and front stages, pass a crowded corner,
     # fire on the move until inside the sector (no stop: -BattleSquadCoverCheck and -BattleBounding left out, user 11-20), line up

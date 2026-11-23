@@ -19,6 +19,15 @@ class UCapsuleComponent;
 class USkeletalMeshComponent;
 class UStaticMeshComponent;
 
+// Stage A: a cover place a soldier left because it was seen into. The place is kept by position (slot numbers follow the
+// order the places were built in), so it means the same place after a load, also before the places are built again.
+struct FBattleBrokenCover
+{
+ int32 Slot=INDEX_NONE; // as numbered when he left it (for saves and logs)
+ FVector At=FVector::ZeroVector;
+ double Until=0;
+};
+
 USTRUCT()
 struct FBattleFollowerFragment : public FMassFragment
 {
@@ -135,6 +144,9 @@ struct FBattleLeaderPlan
  double PinnedSince=0,PinnedBestDist=0;bool bPinned=false;FVector PinnedAt=FVector::ZeroVector;
  // Trial -BattleArrivalThreat=1: the direction the arrival places were chosen against (zero = the direction of advance).
  FVector ArrivalFacing=FVector::ZeroVector;double FacingCheckAt=0;
+ // Trial -BattleAttackFocus=1: the point this sector squad defends toward (from its team's sightings, re-picked every 3 s) and
+ // the direction its current arrival places were chosen against (from the destination; zero = not chosen against a focus).
+ FVector Focus=FVector::ZeroVector;bool bFocus=false;FVector FocusPlanDir=FVector::ZeroVector;double FocusCheckAt=0,FocusReplanAt=0;
  // Trial -BattleCloseIn=1: in its sector, fighting a target over 90 m away for 8 s while at least even (the -BattleSquadCoverCheck
  // count) = too far (the AI order loop then moves the squad one sector closer, UBattleMatch::CloseInStage).
  double FarSince=0,FarCheckAt=0;bool bCloseIn=false;FVector CloseInAt=FVector::ZeroVector;
@@ -208,6 +220,9 @@ public:
  // Exoskeleton second weapon (BattleExo.cpp): picks a target among what the soldier sees itself and fires an anti-tank round.
  void StepExoLaunchers(double Now);
  bool FireExoLauncher(int32 ID,const FVector& Aim,double Now);
+ // Display only: the launcher in hand through its recoil and reload clips (BattleExo.cpp); returns their length (0 without them:
+ // the launcher shows half a second as before).
+ float PlayExoLauncherAction(int32 ID,double Now);
  double ExoNextPick=0;int64 ExoLauncherShots=0,ExoLauncherHits=0;
  // Look: armour parts on a rig that follows the chest and keeps the body's heading, the launcher tube, and a shield bubble shown while shield points are left.
  // bSuit: the AC01 suit (ApplyExoSuit: own body, clips and weapon models) instead of the placeholder plates.
@@ -363,8 +378,9 @@ public:
  // One sight trace from the context's eye to End on ECC_Visibility, recorded for the hit statistics when they are on (TargetID -1: a point).
  FHitResult TraceSight(const FBattleSightContext& Context,const FVector& End,int32 TargetID,ESightHitSource Source) const;
  static bool SightHitStatsEnabled();
- // Trial -BattleSightTeamMask=1 (rules, default OFF; user request 2026-11-17): soldiers of one side do not block their own side's line of
- // sight. Each soldier body carries the mask bit 1<<team (FBodyInstance mask filter) and sight queries ignore the observer's bit
+ // -BattleSightTeamMask (rules, default ON since 2026-11-22 by user decision; =0 restores the old rule; user request 2026-11-17): soldiers
+ // of one side do not block their own side's line of sight, nor its bullets (Fire traces with Sight(ID).Query, which carries the mask).
+ // Each soldier body carries the mask bit 1<<team (FBodyInstance mask filter) and sight queries ignore the observer's bit
  // (FCollisionQueryParams::IgnoreMask; Chaos skips a shape when the two masks share a bit). The trace channel stays ECC_Visibility.
  static bool SightTeamMaskEnabled();
  FMaskFilter SightTeamMaskFor(int32 ObserverID) const;
@@ -379,7 +395,7 @@ public:
  int64 MoveSweeps=0,MoveHitSoldier=0,MoveHitWorld=0,MoveShortened=0; // Mass follower moves (BATTLE_MOVE_SWEEP)
  bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot);
  FVector TracerStart(int32 ID,const FVector& Start,const FVector& Direction) const;
- bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f);
+ bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f,bool bAllHidden=false,const TFunction<bool(int32,const FVector&)>& Accept=nullptr);
  void CancelCoverAction(int32 ID);
  bool StepCoverAction(int32 ID,float Dt,double Now);
  void RunCoverActionSmoke();
@@ -457,11 +473,12 @@ public:
  void AuditFollowerPoses(double Now);
  // Every frame: a near follower that fired within BattleBodyAnim::ReadySeconds turns his mesh (whole-body clip, no upper layer)
  // so the rifle in his hand points along his last shot: across (B.MuzzleYaw, at most MaxFollowerMuzzleYaw) to his facing, and
- // up or down (B.MuzzlePitch, at most MaxFollowerMuzzlePitch) to the shot's pitch, the body tilting about the capsule centre
- // (the hips) with its feet kept at their height (at 15 degrees a toe or heel 30 cm off the centre moves about 8 cm). Both ease back to 0 when he stops firing. Not in cover (the cover clips turn the mesh themselves), not prone,
+ // up or down (B.MuzzlePitch, at most MaxFollowerMuzzlePitch) to the shot's pitch, the upper body bending about spine_01
+ // (UBattleVATSkeletalMeshComponent::SpinePitch; the legs and feet keep the clip's pose). Both ease back to 0 when he stops
+ // firing. Not in cover (the cover clips turn the mesh themselves), not prone,
  // not reloading or running. Followers keep their single-node clip (the far display and bone reductions rely on it).
  void AimFollowerRifles(double Now);
- static constexpr float MaxFollowerMuzzleYaw=45.f,MaxFollowerMuzzlePitch=15.f;
+ static constexpr float MaxFollowerMuzzleYaw=45.f,MaxFollowerMuzzlePitch=20.f;
  TMap<int32,FVector> FollowerAims; // a follower's last shot direction (Fire), for AimFollowerRifles
  // Corpse removal (BattleCorpses.cpp; display only, runtime only). -BattleCorpseLifetime=S (default 20; 0 = bodies stay):
  // S seconds after death a body sinks into the ground for 1.5 s and is then hidden. The unit record, its position and
@@ -474,6 +491,10 @@ public:
  void StepCorpses();
  void HideCorpse(int32 ID);
  bool IsCorpseHidden(int32 ID) const {return HiddenCorpses.Contains(ID);}
+ // Stage 2 diagnosis (BattleStateTrace.cpp, Docs/design-divergence-trace.md): -BattleStateTrace=<N> writes BATTLE_STATE_TRACE every N
+ // frames with one hash per block of the match state (positions, health, cover, perception, plans, match, shots); reads only.
+ void StepStateTrace();
+ int32 StateTraceFrame=0;
  bool IsBlindFiring(int32 ID,double Now) const {const double* T=BlindFireUntil.Find(ID);return T&&*T>Now;}
  // Where a blind shot leaves: above the top of a low cover, or just past the edge of a wide one, with a clear first stretch
  // toward AimPoint. False when neither works (the caller falls back to the old peek).
@@ -498,19 +519,34 @@ public:
  // Stances (BattleStance.h; map E default). Runtime only: 0 stand, 1 crouch, 2 prone, and the earliest time each may change again.
  TMap<int32,uint8> Stances;
  TMap<int32,double> StanceLockedUntil;
+ // Trial -BattleStanceMove=2: until when a soldier on the move stays crouched after his last threat (LowMoveHoldSeconds).
+ // Crouching lowers his eye: behind a low wall he lost the enemy, stood up, saw him again and crouched again (in a map E match
+ // about 25,000 changes each way); the hold keeps him low through that.
+ TMap<int32,double> LowMoveUntil;
+ static constexpr double LowMoveHoldSeconds=3.;
  uint8 StanceOf(int32 ID) const {const uint8* Found=Stances.Find(ID);return Found?*Found:0;}
- bool SetStance(int32 ID,uint8 Stance,double Now,bool bForce=false);
+ // bOnTheMove: he walks off as the stance changes; a near follower's transition clip is then played within
+ // BattleBodyAnim::MovingTransitionSeconds (a leader's body hurries its own from its velocity, ABattleUnit::UpdateBodyAnim).
+ bool SetStance(int32 ID,uint8 Stance,double Now,bool bForce=false,bool bOnTheMove=false);
  // Follower clip for pose 0 idle / 1 walk / 2 reload; with -BattleStanceAnim=1 a crouched follower gets the crouch clip.
  class UAnimSequence* FollowerClip(int32 ID,int32 Pose) const;
  // Drops a follower's rifle turn and tilt (AimFollowerRifles) and puts his mesh back in its plain place: at death and when
  // the far display takes the body (it keeps the mesh's transform for the far body and a returning corpse).
  void ClearFollowerRifleTurn(int32 ID);
  void RefreshFollowerPose(int32 ID);
- void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight);
+ // Plays FollowerClip on a near follower's mesh (a crouched or prone walk at the rate its steps match his walking speed).
+ void PlayFollowerClip(int32 ID,int32 Pose);
+ // A stance transition still playing on a near follower ends now (his pose's loop at its own rate): the far display keeps the
+ // clip's rate and time when it takes the body, and the transition's hurried rate carried into the far walk and back.
+ void EndFollowerTransition(int32 ID);
+ // He sees an enemy himself now (his own visible contacts, not ones shared by others).
+ bool SeesEnemy(int32 ID) const;
+ // bThreat: he is under fire or sees an enemy now (his own state and sight), for -BattleStanceMove=2.
+ void UpdateAIStance(int32 ID,double Now,bool bMoving,bool bCombat,bool bLostSight,bool bThreat=false);
  // Concealment (hedges tagged BattleConcealment in the map): blocks sight but shots ignore it. Collected once per world.
  TArray<AActor*> ConcealmentActors;
  bool bConcealmentBuilt=false;
- bool StartCoverApproach(int32 ID,FVector Threat,int32 Target,double Now,float LocalRadius);
+ bool StartCoverApproach(int32 ID,FVector Threat,int32 Target,double Now,float LocalRadius,bool bHoldToo=false);
  // -BattleContactCover: the firing point of a cover slot against Threat (observed position). The slot itself when a soldier can crouch
  // out of sight and stand up to fire, or when he can fire from it with most of his body covered; otherwise the nearest step sideways
  // (1 to 4 m) with a line to the threat. False when the slot is too exposed or offers no such point.
@@ -523,12 +559,31 @@ public:
  static constexpr int32 FreeCoverSlot=-2;
  bool StepCoverApproach(int32 ID,float Dt,double Now,int32 Target);
  bool IssueOrder(int32 SquadID,EBattleOrder Order,FVector Goal,bool bMissionUpdate=false,bool bSector=false);
+ // Player's order to one soldier (2026-11-20, BattleSoldierOrder.cpp): Ctrl+click picks a soldier of a player squad in the
+ // tactical view, a right click sends him alone to a place within SoldierOrderLeash of his squad's centre. He walks his own
+ // nav path (firing on the move), holds there (taking cover within 4 m when he sees his squad's target) and ignores the
+ // individual AI stage B1 until the squad gets a new order, the squad moves away, or he is sent back (H).
+ static constexpr float SoldierOrderLeash=4000.f;
+ bool IssueSoldierOrder(int32 ID,FVector Goal,FString& Why);
+ bool ReturnSoldier(int32 ID);
+ void ClearSoldierOrder(int32 ID,const TCHAR* Why);
+ bool SoldierOrderActive(int32 ID);
+ void StepSoldierOrder(int32 ID,float Dt,double Now,FVector& Direction);
+ struct FSoldierPath{TArray<FVector> Points;int32 Next=1;};
+ TMap<int32,FSoldierPath> SoldierPaths; // cache only; rebuilt from the saved goal (stall time and repaths are unit state)
+ void StepSoldierOrderTest();
+ struct FSoldierOrderTest{int32 Stage=0,Unit=INDEX_NONE,Squad=INDEX_NONE,Failures=0;FVector Goal=FVector::ZeroVector;double Since=0,Arrived=0,ShotAt=0;int32 Shot=0;FString EndWhy;} SoldierTest;
  // Trial -BattleSectorMove=1 (2026-11-20, default 0; Play-Area turns it on for maps with sectors): the player's plain move click
  // is a sector mission (an attack move into the sector) whose squad, until a member is inside the sector, never stops to fight:
  // it keeps walking and fires on the move, also back at enemies outside the sector that shoot at it (as -BattleSectorContact,
  // for this squad only, without taking cover on the way). Set after IssueOrder by the player controller; any later explicit
  // order clears it. AI squads never have it, so matches between AIs are unchanged.
  static bool SectorMoveEnabled();
+ // Trial -BattleSectorSight (default 0, BattleSectorSight.cpp, Docs/design-sector-combat.md): in-sector and cross-sector fights.
+ static int32 SectorSightMode(int32 Team);
+ static bool SectorSightFar(const FVector& From,const FVector& To);
+ int32 SectorLookout(const struct FBattleSquadState& Squad) const;
+ bool SectorSightMember(int32 ID) const;
  // Trial -BattleSectorMoveFire=1 (2026-11-20, default 0): every squad on a sector mission (AI squads and the player's sector
  // attack/hold orders) fights as the player's sector move does - until a member is inside the sector it fires on the move and
  // fights back at enemies outside the sector that shoot at it, without stopping or walking to cover on the way.
@@ -577,6 +632,37 @@ public:
  // flanking or aiming indirect fire) faces where the shot came from, so his forward field of view can find the shooter. Movement keeps
  // its own steering (only the facing changes). Counts hit_face_turned.
  static bool HitFaceEnabled();
+ // -BattleSoldierWatch (default 1, user decision 2026-11-22; =0 turns it off; -BattleSoldierWatchTeam=0/1 for one team): a soldier standing still with
+ // nothing to fire at (not in a cover action, not a vehicle, not under direct control) faces the squad's target when he knows
+ // where it is, else the nearest enemy he sees, else the nearest he knows of (memory and reports still held; both within his
+ // weapon's reach), else his share of the ground ahead (toward the enemy's home, or 70 degrees to either side by his place in the
+ // squad). Not before his first perception scan (match start or a load). Sight has a 120-degree forward field of view.
+ // BattleSoldierWatch.cpp; counts watch_{target,seen,contact,sector}_frames.
+ static bool SoldierWatchEnabled(int32 Team);
+ bool SoldierWatchDirection(int32 ID,int32 TargetID,const FVector& Pos,double Now,FVector& Out);
+ int32 KnownEnemyDirection(int32 ID,int32 TargetID,const FVector& Pos,double Now,FVector& Out,double Within) const;
+ // Trial -BattleWalkLook=1/2 (default 0, 2026-11-22; -BattleWalkLookTeam=0/1 for one team): a soldier on the move with nothing to
+ // fire at keeps his body along his way and turns his head - only his view (Sight) changes. He looks at the enemy he knows of
+ // within his sight (KnownEnemyDirection), else to his share of the ground around the squad's way by his place in the squad
+ // (ahead, 50 and 100 degrees to either side). =2: the members who look ahead keep looking ahead. WalkLooks holds his view
+ // from one Follow to the end of the next (so his own sight checks there use it; dropped there unless he takes the look again,
+ // and on a load; not saved: after a load it comes back with his next Follow after his first scan). BattleSoldierWatch.cpp; counts walk_look_{ahead,side,target,seen,contact}_frames.
+ static int32 WalkLookMode(int32 Team);
+ bool WalkLookDirection(int32 ID,int32 TargetID,const FVector& Pos,const FVector& Way,double Now,FVector& Out);
+ TMap<int32,FVector> WalkLooks;
+ // Trial -BattleOwnTarget=1/2 (default 0, 2026-11-22; -BattleOwnTargetTeam=0/1 for one team): a soldier who cannot fire at the
+ // squad's target (none, unknown to him, out of his sight or of the distance) fires at an enemy soldier he sees himself within
+ // the engagement distance - the one in the direction he was just hit from first, else the nearest. =2: hit with nothing to
+ // fire at, he also turns toward where the shot came from for 2 s (as -BattleHitFace). Only his aim, fire and that turn
+ // change (the squad's target, movement and cover do not); nothing is saved. BattleSoldierFire.cpp; counts
+ // own_target_{frames,shots,at_shooter_frames,no_squad_target_frames,squad_target_unseen_frames,hit_turn_frames}.
+ static int32 OwnTargetMode(int32 Team);
+ // Trial -BattleOwnTargetCover=1/2 (default 0): firing at his own target, he takes cover near by against it (=2: also when
+ // walking and that enemy is within 50 m). Counts own_cover_{requests,taken,taken_walking,none} and own_target_open_{standing,walking}_frames.
+ static int32 OwnTargetCover(int32 Team);
+ // Soldiers walking to cover against their own target (not saved: after a load such a walk ends by the squad's target rules).
+ TSet<int32> OwnCoverWalks;
+ int32 OwnTarget(int32 ID,const FVector& Pos,double Now,bool& bAtShooter) const;
  void RevealShooter(int32 VictimID,int32 ShooterID,const FVector& From);
  // Evaluation only (sight diagnostics on, behaviour unchanged, 2026-11-21): a hit soldier who does not see his shooter. Why each of the
  // two lines (victim->shooter, shooter->victim) fails, using the same checks as CanSee (range, field of view, first blocking hit).
@@ -605,6 +691,39 @@ public:
  // roof or upper floor (a static obstacle 1.2-8 m above the slot: inside houses and sheds, by windows) before the ones outside.
  // Counts arrival_indoor_*.
  static bool CoverIndoorEnabled();
+ // -BattleAttackFocus (2026-11-22, default 1 by user decision after s25 on map I: hits in the open -16..-20%, shooter outside the
+ // view -16..-40%; =0 for the old rules; user idea 11-22: an attack order toward an enemy squad or sector, and cover
+ // against that direction - stage 1+2, the sector AI picks the focus itself): a sector squad keeps a focus point, the enemies its
+ // team sees now (RouteKnownEnemies: own sightings and scout reports, no hidden state) in the destination sector and its 8
+ // neighbours - the sector with the most of them (ties: nearer to the destination), their mean position; else the known enemy
+ // nearest to the destination within 200 m; else none (the old rules). Re-picked every 3 s. Its arrival cover slots need an
+ // obstacle within 2.5 m toward the focus or 30 degrees either side (instead of straight ahead along the way in, or the
+ // -BattleArrivalThreat direction, whose re-facing it replaces), a still soldier with nothing to fire at watches the focus
+ // (members fanned 0/-20/+20/-40/+40 degrees), and in its sector the squad re-plans its arrival places when the focus turns more
+ // than 45 degrees from the direction they were chosen against (or appears after they were chosen without one; at most every
+ // 10 s). Counts attack_focus_*, arrival_focus_facing, focus_facing_frames.
+ static bool AttackFocusEnabled();
+ // Trial -BattleFocusTarget=1 (2026-11-22, default 0; with -BattleAttackFocus): the squad's target choice counts a visible enemy
+ // more than 45 degrees off the focus (seen from the squad centre) as 1.5 times as far, so the squad fires toward its focus first
+ // and still answers a much nearer enemy elsewhere. Counts focus_target_in_cone / focus_target_off_cone.
+ static bool FocusTargetEnabled();
+ // -BattleSectorSymmetric (2026-11-22, default 1 since 11-22 12:00 by user decision, =0 the old way; west/east bias of the sector AI on map I, STATUS 11-22 5:00): the sector
+ // AI's choices that scan the 3x3 sectors around a squad in a fixed compass order and keep the first of equal scores (the stop
+ // beside the next junction, the pinned squad's flank stop, the close-in stop - BattleSectorRoute.cpp), and the arrival places
+ // sorted with ties by world X then Y (BuildMovementPlan, ReassignOccupiedArrival), read them in the team's own frame: the
+ // east team (AreaHome.X > 0) turned 180 degrees, so on the point-symmetric maps both teams break ties alike.
+ static bool SectorSymmetricEnabled();
+ // -BattleHireMirror (2026-11-22; default 1 since the user decision that day, =0 the earlier rows): in an area battle purchased squads appear at home rows point-mirrored for the
+ // east team (rows mirrored in Y as well as X), so both teams' new squads start at the same place in their own frames.
+ static bool HireMirrorEnabled();
+ // -BattleSectorSymmetric: -1 for the east team (its frame turned 180 degrees), else 1.
+ int32 SectorTurn(int32 Team) const;
+ // -BattleSectorSymmetric: the sector of a point as the team reads it - for the east team the sector of the point turned 180
+ // degrees, turned back (a point on a sector border then falls on the same side for both teams). Else BattleSectors::Cell.
+ FIntPoint SectorCellFor(int32 Team,const FVector& At) const;
+ // -BattleAttackFocus: each team's current sightings (RouteKnownEnemies), refreshed at most once a second.
+ TArray<FVector> FocusEnemies[2];double FocusEnemiesAt[2]={-1.,-1.};
+ bool PickAttackFocus(const struct FBattleSquadState& S,double Now,FVector& Out,const TCHAR*& Source);
  // Trial -BattleCoverStrict=1 (2026-11-20, default 0; user: "cover that does not hide from the enemy, standing in the open"):
  // a cover place counts only when the threat sees at most 2 of the 5 body samples (was 3) - for the cover actions, for the
  // arrival places of a sector squad and its places along the wall (checked against the known enemy nearest to the sector), and
@@ -625,6 +744,52 @@ public:
  static bool ShotFromOther(const FVector& Me,const FVector& Target,const FVector& From)
  {return FVector::DistSquared2D(From,Target)>FMath::Square(1000.) && FVector::DotProduct((From-Me).GetSafeNormal2D(),(Target-Me).GetSafeNormal2D())<0.866f;}
  static float CoverExposureLimit(){return CoverStrictEnabled()?.41f:.6f;}
+ // Trial -BattleThreatCover=1 (2026-11-20, default 0; individual AI stage A, BattleThreatCover.cpp; -BattleThreatCoverTeam=0/1
+ // limits it to one team): a soldier keeps the enemies he knows himself (his own sightings of the last 4 s within reach, and
+ // where he was last hit from) as his threats. A cover place must hide him from all of them (the target first, up to 2 more),
+ // and once a second (deterministic, staggered by unit) a soldier hidden in cover checks that it still does; when a threat
+ // sees too much of him (or the place is flanked) he leaves it and searches again at once, never taking the same place back
+ // within 10 s. When no place hides him from everyone he takes the best one against his target, as before.
+ static bool ThreatCoverEnabled(int32 Team);
+ static int32 ThreatCoverMode(int32 Team); // -BattleThreatCover=2: narrowed threats, leave after two breaks in a row
+ int32 GatherThreats(int32 ID,FVector Primary,double Now,TArray<FVector,TInlineAllocator<3>>& Out) const;
+ bool ExposedToThreats(int32 ID,FVector Anchor,const TArray<FVector,TInlineAllocator<3>>& Threats) const;
+ // Trial -BattleThreatCoverCrouch=1 (2026-11-21, default 0; with stances and -BattleThreatCover): a stage A soldier's cover
+ // places are judged with the crouched body's points (breaks, threats that see in, choosing places). Map I runs: 33-52% of
+ // confirmed breaks were hidden when crouched.
+ static bool ThreatCoverCrouch(int32 Team); // -BattleThreatCoverCrouchTeam=0/1: one team only
+ float ThreatSeen(int32 ID,FVector Anchor,FVector Threat) const; // fraction of the body a threat sees at the place
+ bool CheckCoverThreats(int32 ID,FVector Primary,double Now,float Dt);
+ // Trial -BattleThreatCoverRelocate (2026-11-21, default 0; with -BattleThreatCover): before leaving a broken place he looks for
+ // the next one from where he is (12 m, inside the squad's sector and 30 m of its centre, not a place someone walks to;
+ // hidden from every threat when another one sees in) and walks there; the walk is not ended halfway by a stale contact.
+ // 1 = none found: leave as before. 2 = none found: stay (keeping down while another threat sees in) and search again at
+ // each confirmed break. Searches: 2 soldiers a frame (B1 has its own 4). 3 (2026-11-21) = none found: stay, but instead of
+ // keeping down he fights from where he is: the nearest enemy he sees that sees into the place and that he can fire at from it
+ // becomes his target (or stays it), and he peeks from the place itself (it is seen into anyway); with none such he keeps his
+ // usual peek. He searches again at each confirmed break, as with 2.
+ static int32 ThreatCoverRelocate();
+ int32 ExposingEnemy(int32 ID,FVector Anchor,double Now) const; // BattleThreatCover.cpp
+ uint64 RelocateFrame=0;int32 RelocatesThisFrame=0;
+ // Soldiers who found the search budget full, with whether other threats saw in: on the next frame they search again with
+ // the break already confirmed (no new check). Not saved: after a load they wait for their own phase, as before.
+ TMap<int32,bool> RelocateWaiting;
+ bool BrokenCoverSlot(int32 ID,int32 Slot,double Now) const; // BattleThreatCover.cpp
+ void MarkBrokenCover(int32 ID,int32 Slot,double Until);
+ TMap<int32,FBattleBrokenCover> BrokenCover;
+ // Trial -BattleSoldierMove=1 (2026-11-20, default 0; individual AI stage B1, BattleSoldierMove.cpp; -BattleSoldierMoveTeam=0/1
+ // limits it to one team): an AI infantryman hidden in cover during a sector mission rates his place once a second (staggered
+ // by unit, at most 4 soldiers a frame) against up to 8 free cover places within 25 m in the squad's sector and 30 m of its
+ // centre, and walks to the best one when it is clearly better (hidden from the target and his other threats, a firing point,
+ // within engagement range, little exposure on the way, short walk, not crowded). At most half of a squad relocates at once,
+ // only while a squadmate is in cover, and not again within 8 s. The squad still chooses sectors and arrival places.
+ static bool SoldierMoveEnabled(int32 Team);
+ float RateCoverPlace(int32 ID,FVector From,FVector Anchor,FVector Peek,bool bFire,const TArray<FVector,TInlineAllocator<3>>& Threats) const;
+ bool StepSoldierMove(int32 ID,FVector Primary,double Now,float Dt);
+ uint64 SoldierMoveFrame=0;int32 SoldierMovesThisFrame=0;
+ // -BattleSoldierAIFocus=<m>: stage A and B1 only near the player (or -BattleSoldierAIFocusAt=X,Y in metres), both teams.
+ bool SoldierAIFocus(int32 ID) const;
+ mutable uint64 FocusFrame=0;mutable FVector FocusPoint=FVector::ZeroVector;mutable bool FocusValid=false;
  // Several squads of a team in one place share the places: slots reserved by anyone and places that soldiers are already
  // walking to do not count, and the soldiers of other stopping squads near by who still look for cover are counted against it.
  bool SquadCanHide(int32 SquadID,FVector Threat,double Now) const;
@@ -708,7 +873,7 @@ private:
  UPROPERTY() TObjectPtr<class ABattleVATDisplay> VAT;
  int32 SmokeFailures=0, SmokeStage=0, QAStage=0; FVector SmokeSavedPeek=FVector::ZeroVector;
  // Body display checks of the cover smoke (muzzle along the aim while strafing; hit reaction recovery).
- float SmokeMuzzleMax=0.f, SmokeHead=0.f; int32 SmokeMuzzleFrames=0, SmokeShots=0; FQuat SmokeChest=FQuat::Identity; double SmokeHit=0.; const class UAnimSequence* SmokeHitClip=nullptr;
+ float SmokeMuzzleMax=0.f, SmokeHead=0.f; FVector SmokeDir=FVector::ZeroVector; int32 SmokeMuzzleFrames=0, SmokeShots=0; FQuat SmokeChest=FQuat::Identity; double SmokeHit=0.; const class UAnimSequence* SmokeHitClip=nullptr;
  FString QAPrefix;
  FVector SmokePosition=FVector::ZeroVector;
  TSharedPtr<FMassEntityManager> Manager;

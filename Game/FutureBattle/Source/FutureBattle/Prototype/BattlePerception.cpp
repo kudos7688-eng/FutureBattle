@@ -6,6 +6,7 @@
 #include "BattleMetrics.h"
 #include "BattleTactics.h"
 #include "BattleMatch.h"
+#include "BattleSectors.h"
 
 void UBattlePerception::Capture(TMap<int32, FBattleObserver>& OutObservers, TArray<FBattleReport>& OutReports, double Now) const
 {
@@ -99,6 +100,15 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			FVector::DistSquared(Sight.Position, Candidate.Position) > FMath::Square(1200.f) &&
 			!Observer.Contacts.Contains(Candidate.State->UnitID) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID);
 	};
+	// Trial -BattleSectorSight (default 0, BattleSectorSight.cpp): rifle squad members leave enemies in another sector to the lookout.
+	TSet<int32> SectorMembers;
+	if (Mixed && (UBattleLeaderRuntime::SectorSightMode(0) || UBattleLeaderRuntime::SectorSightMode(1)))
+		for (const auto& Pair : Alive) if (Leader->SectorSightMember(Pair.Key)) SectorMembers.Add(Pair.Key);
+	auto SkipCross = [&](const FBattleObserver& Observer, const TPair<int32, FLiveUnit>& Pair, const FLiveUnit& Candidate)
+	{
+		return SectorMembers.Num() && SectorMembers.Contains(Pair.Key) && UBattleLeaderRuntime::SectorSightFar(Pair.Value.Position, Candidate.Position) &&
+			!Observer.DetectionStarted.Contains(Candidate.State->UnitID);
+	};
 	// One candidate of one observer's scan. Visible: -1 = test line of sight here, 0/1 = result already traced (parallel trial).
 	auto Consider = [&](FBattleObserver& Observer, const TPair<int32, FLiveUnit>& Pair, const FBattleSightContext& Sight, bool bFarPulse, TSet<int32>& InView, const FLiveUnit& Candidate, int32 Visible)
 	{
@@ -109,6 +119,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 		if (Metrics->bRecording) ++Metrics->PerceptionCandidates;
 		if (SkipFar(Observer, Sight, bFarPulse, Candidate))
 		{ if (Metrics->bRecording) ++Metrics->FarCandidatesSkipped; return; }
+		if (SkipCross(Observer, Pair, Candidate)) { ++SectorSightSkipped; return; }
 		if (Visible >= 0 ? Visible == 0 : Mixed ? !(bReuseSightContext ? (VehicleSpot2 > 0. && FVector::DistSquared(Sight.Position, Candidate.Position) > Sight.RangeSquared && Leader->IsVehicle(Candidate.State->UnitID) ? Leader->CanSeeVehicleFar(Pair.Key, Sight, Candidate.State->UnitID, Now) : Leader->CanSeeWithContext(Sight,Candidate.State->UnitID,Pair.Key)) : Leader->CanSee(Pair.Key,Candidate.State->UnitID)) : !Unit->CanSeeSnapshot(Sight, Candidate.Unit, Candidate.Position, true)) return;
 		const int32 TargetID = Candidate.State->UnitID;
 		InView.Add(TargetID);
@@ -174,6 +185,16 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	static TArray<FSightJob> Jobs; static TArray<const FLiveUnit*> JobCandidates; static TSet<int32> InView;
 	Jobs.Reset(); JobCandidates.Reset();
 	TSet<int32> UpdatedObservers;
+	// Evaluation only (-BattleSightRayStats=1): what each squad saw itself before this update's scans. Read by the counters only.
+	static const bool bRayStats = [] { int32 V = 0; FParse::Value(FCommandLine::Get(), TEXT("BattleSightRayStats="), V); return V != 0; }();
+	TMap<int32, TSet<int32>> RaySquadSeen;
+	if (bRayStats)
+	{
+		for (const auto& Pair : Alive) if (const auto* Known = Observers.Find(Pair.Key))
+			for (const auto& Contact : Known->Contacts) if (!Contact.Value.bShared && Now - Contact.Value.LastSeenTime <= .45)
+				RaySquadSeen.FindOrAdd(Pair.Value.State->SquadID).Add(Contact.Key);
+		if (const int64 Window = FMath::FloorToInt64(Now / .2); Window != RayWindow) { RayKnownPairs += RayWindowPairs.Num(); RayWindowPairs.Reset(); RayWindow = Window; }
+	}
 	{
 		FBattleScopedMetric ScanTiming(Metrics, EBattleMetricPhase::SightScan);
 		CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattleSightScan);
@@ -268,6 +289,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 					{
 						const FLiveUnit& Candidate = *JobCandidates[K]; Pre[K] = -1;
 						if (Candidate.State->Team == Job.Pair->Value.State->Team || SkipFar(Observer, Job.Sight, Job.bFarPulse, Candidate)) continue;
+						if (SkipCross(Observer, *Job.Pair, Candidate)) continue;
 						if (VehicleSpot2 > 0. && FVector::DistSquared(Job.Sight.Position, Candidate.Position) > Job.Sight.RangeSquared && Leader->IsVehicle(Candidate.State->UnitID)) continue;
 						FVector End;
 						if (!Leader->PrepareSightTrace(Job.Sight, Candidate.State->UnitID, End)) { Pre[K] = 0; continue; }
@@ -304,6 +326,20 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 							const FSightTrace& T = Traces[Pre[K] - 2];
 							if (bStats) Leader->RecordSightHit(T.Hit, Candidate.State->UnitID, T.Cycles, UBattleLeaderRuntime::SightFromPerception);
 							Visible = Leader->SightHitVisible(T.Hit, Candidate.State->UnitID) ? 1 : 0;
+							if (bRayStats)
+							{
+								const int32 RayTarget = Candidate.State->UnitID, RaySquadID = Job.Pair->Value.State->SquadID;
+								const FBattleContact* Mine = Observer.Contacts.Find(RayTarget);
+								const TSet<int32>* Mates = RaySquadSeen.Find(RaySquadID);
+								const bool bMine = Mine && !Mine->bShared && Now - Mine->LastSeenTime <= .45, bMates = Mates && Mates->Contains(RayTarget);
+								++(bMine ? RayOwn : bMates ? RaySquad : Mine ? RayShared : RayUnknown)[Visible];
+								if (bMine || bMates) RayWindowPairs.Add((uint64(uint32(RaySquadID)) << 32) | uint32(RayTarget));
+								const FIntPoint FromCell = BattleSectors::Cell(Job.Pair->Value.Position), ToCell = BattleSectors::Cell(Candidate.Position);
+								const int32 CellGap = FMath::Max(FMath::Abs(FromCell.X - ToCell.X), FMath::Abs(FromCell.Y - ToCell.Y));
+								const int32 Zone = CellGap == 0 || FVector::DistSquared2D(Job.Pair->Value.Position, Candidate.Position) <= FMath::Square(2000.) ? 0 : CellGap == 1 ? 1 : 2;
+								const auto* RaySquadState = GetWorld()->GetSubsystem<UBattleState>()->FindSquad(RaySquadID);
+								++RayZone[Zone][RaySquadState && RaySquadState->SquadType == BattleSquadType::Rifle && RaySquadState->LeaderUnitID != Job.Pair->Key ? 1 : 0][Visible];
+							}
 						}
 						Consider(Observer, *Job.Pair, Job.Sight, Job.bFarPulse, InView, Candidate, Visible);
 					}

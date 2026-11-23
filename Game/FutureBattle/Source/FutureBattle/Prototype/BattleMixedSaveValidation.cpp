@@ -2,6 +2,8 @@
 #include "BattleArms.h"
 #include "BattleFieldLayout.h"
 #include "BattleTactics.h"
+#include "BattleMatch.h"
+#include "BattleSectors.h"
 namespace {
 bool Finite(double V,double Low,double High){return FMath::IsFinite(V)&&V>=Low&&V<=High;}
 bool ValidPoint(FVector P,FVector2D Limit){return !P.ContainsNaN()&&FMath::Abs(P.X)<=Limit.X&&FMath::Abs(P.Y)<=Limit.Y&&Finite(P.Z,-1000,10000);}
@@ -129,7 +131,7 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   if(Area.HireSpent.Num()!=2)return Fail(TEXT("Invalid area hire record"));
   for(int32 Team=0;Team<2;++Team)
   {
-   const int32 Hires=TeamSquads[Team]-25;
+   const int32 Hires=TeamSquads[Team]-UBattleMatch::StartSquads(); // -BattleStartSquads (default 25)
    if(Hires<0||TeamActive[Team]>BattleTactics::AreaHire().MaxActive||Area.HireSpent[Team]<Hires||Area.HireSpent[Team]>100100||(Hires==0)!=(Area.HireSpent[Team]==0))return Fail(TEXT("Invalid area squad hiring"));
   }
   // Income (2026-11-14) adds to the starting 100. Pre-income saves have Income {0,0} and IncomeClock 0.
@@ -140,9 +142,29 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   if(Area.LastAIHireAt.Num()!=2||!Finite(Area.LastAIHireAt[0],-1000,Elapsed+.01)||!Finite(Area.LastAIHireAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area AI hire clock"));
   // P1 trial (2026-11-16): bought-squad missions point at existing squads with a known mission; home hit times are past clocks.
   for(const auto& P:Area.HirePurpose)if(!((P.Value>=0&&P.Value<Objectives.Num())||P.Value==100||P.Value==101)||!BySquad.FindRef(P.Key))return Fail(TEXT("Invalid area hire purpose"));
+  // Purchase reservations: at most 12 per team, known types, past reservation times.
+  {int32 N[2]={0,0};for(const auto& Q:Area.HireQueue){if(Q.Team<0||Q.Team>1||++N[Q.Team]>UBattleMatch::HireQueueMax||Q.Type<0||Q.Type>=BattleSquadType::Count||Q.Dest<-1||!Finite(Q.At,0,Elapsed+.01))return Fail(TEXT("Invalid hire reservation"));}}
+  // Stage 7: the player's section roles and hiring delegation.
+  if(Area.PlayerSectionRole.Num()>BattleSectors::Rows||Area.PlayerHireDelegate>2||Area.PlayerHireReserve<0||Area.PlayerHireReserve>UBattleMatch::PlayerHireReserveMax||
+     Area.PlayerHireDeny<0||Area.PlayerHireDeny>=(1<<BattleSquadType::Count))return Fail(TEXT("Invalid player plan"));
+  for(const uint8 Role:Area.PlayerSectionRole)if(Role>4)return Fail(TEXT("Invalid player section role"));
   if(Area.HomeHitAt.Num()!=2||!Finite(Area.HomeHitAt[0],-1000,Elapsed+.01)||!Finite(Area.HomeHitAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area home hit clock"));
-  if(Retired[0]+Area.HireSpent[0]+AllyCredits!=100+Area.Income[0]||Retired[1]+Area.HireSpent[1]+EnemyCredits!=100+Area.Income[1])return Fail(TEXT("Area resource conservation mismatch"));
-  if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=ExpectedRoster||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=2*Objectives.Num()||Area.SeenAt.Num()!=2*Objectives.Num()||!Finite(AllyCredits,0,100+Area.Income[0])||!Finite(EnemyCredits,0,100+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>Current||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
+  // Strategy layer S2 (BattleStrategy.cpp): focus objectives in range, clocks finite (focus/avoid-begin in the past; review/avoid-end within a match).
+  if(Area.StrategyPhase.Num()!=2||Area.StrategyFocus.Num()!=2||Area.StrategyFocusAt.Num()!=2||Area.StrategyReviewAt.Num()!=2||Area.StrategyAvoid.Num()!=2||Area.StrategyAvoidUntil.Num()!=2)return Fail(TEXT("Invalid strategy state"));
+  for(int32 Team=0;Team<2;++Team)
+   if(Area.StrategyPhase[Team]<0||Area.StrategyPhase[Team]>4||Area.StrategyFocus[Team]<-1||Area.StrategyFocus[Team]>=Objectives.Num()||Area.StrategyAvoid[Team]<-1||Area.StrategyAvoid[Team]>=Objectives.Num()||
+      !Finite(Area.StrategyFocusAt[Team],-1,Elapsed+.01)||!Finite(Area.StrategyReviewAt[Team],-1,Elapsed+3600)||!Finite(Area.StrategyAvoidUntil[Team],-1,Elapsed+3600))return Fail(TEXT("Invalid strategy state"));
+  // Stage S3: held points are own objectives (bits below the objective count), threat clocks in the past, counter in range.
+  if(Area.StrategyHoldMask.Num()!=2||Area.StrategyCounter.Num()!=2||Area.StrategyCounterUntil.Num()!=2||(Area.StrategyThreatSince.Num()!=0&&Area.StrategyThreatSince.Num()!=2*Objectives.Num()))return Fail(TEXT("Invalid strategy hold state"));
+  for(int32 Team=0;Team<2;++Team)
+   if(Area.StrategyHoldMask[Team]<0||(Objectives.Num()<31&&(Area.StrategyHoldMask[Team]>>Objectives.Num())!=0)||Area.StrategyCounter[Team]<-1||Area.StrategyCounter[Team]>=Objectives.Num()||!Finite(Area.StrategyCounterUntil[Team],-1,Elapsed+3600))return Fail(TEXT("Invalid strategy hold state"));
+  for(float Since:Area.StrategyThreatSince)if(!Finite(Since,-1,Elapsed+.01))return Fail(TEXT("Invalid strategy hold state"));
+  for(int32 SID:Area.StrategyHired)if(!BySquad.FindRef(SID))return Fail(TEXT("Invalid strategy hire"));
+
+  // Starting resources: -BattleAreaStartCredits (default 100; the check had 100 fixed, which failed any other value).
+  const int32 Start=BattleTactics::AreaIncome().StartCredits;
+  if(Retired[0]+Area.HireSpent[0]+AllyCredits!=Start+Area.Income[0]||Retired[1]+Area.HireSpent[1]+EnemyCredits!=Start+Area.Income[1])return Fail(TEXT("Area resource conservation mismatch"));
+  if(Version!=3||MapName==TEXT("Lvl_BattleField500")||Current!=ExpectedRoster||Area.BaseHP.Num()!=2||Area.KnownEnemyBaseHP.Num()!=2||Area.KnownOwners.Num()!=2*Objectives.Num()||Area.SeenAt.Num()!=2*Objectives.Num()||!Finite(AllyCredits,0,Start+Area.Income[0])||!Finite(EnemyCredits,0,Start+Area.Income[1])||!Finite(Area.ObserveClock,0,.21)||!Finite(Area.SupplyClock,0,1.1)||Area.Replacements.Num()>Current||Area.AmmoTimers.Num()>Squads.Num())return Fail(TEXT("Invalid area state"));
   for(int32 Team=0;Team<2;++Team)if(!Finite(Area.BaseHP[Team],0,1000)||!Finite(Area.KnownEnemyBaseHP[Team],-1,1000))return Fail(TEXT("Invalid base state"));
   for(int32 I=0;I<Area.KnownOwners.Num();++I)if(Area.KnownOwners[I]<-2||Area.KnownOwners[I]>1||!Finite(Area.SeenAt[I],-1,Elapsed+.01))return Fail(TEXT("Invalid observed objective"));
   int32 Reserved[2]={0,0};
