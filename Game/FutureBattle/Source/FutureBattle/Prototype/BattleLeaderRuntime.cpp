@@ -3,6 +3,7 @@
 #include "BattleAudio.h"
 #include "BattleFollowerBones.h"
 #include "BattleVATDisplay.h"
+#include "BattleSoldierBody.h"
 #include "BattlePhase3.h"
 #include "BattleGameMode.h"
 #include "BattleFieldLayout.h"
@@ -134,7 +135,7 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
  const auto Archetype=Manager->CreateArchetype({FBattleFollowerFragment::StaticStruct()});
  DisplayHost=GetWorld()->SpawnActor<AActor>();
  auto* Root=NewObject<USceneComponent>(DisplayHost); DisplayHost->SetRootComponent(Root); DisplayHost->AddInstanceComponent(Root); Root->RegisterComponent();
- auto* MeshAsset=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple"));
+ auto* MeshAsset=BattleSoldierBody::LoadMesh(); // Quinn, or RB01 with -BattleSoldierBody=1
  auto* Idle=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/Characters/Mannequins/Anims/Rifle/MF_Rifle_Idle_ADS"));
  IdlePose=Idle;
  WalkPose=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/Characters/Mannequins/Anims/Rifle/Walk/MF_Rifle_Walk_Fwd"));

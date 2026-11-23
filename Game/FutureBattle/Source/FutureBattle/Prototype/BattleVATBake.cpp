@@ -2,6 +2,7 @@
 #include "BattleVATBake.h"
 #if WITH_EDITOR
 #include "BattleVATData.h"
+#include "BattleSoldierBody.h"
 #include "AnimToTextureBPLibrary.h"
 #include "Animation/AnimSequence.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -21,7 +22,8 @@
 
 namespace BattleVATBake
 {
-const FString Root=TEXT("/Game/Prototype/DisplayLODTrial/");
+// Quinn bakes into /Game/Prototype/DisplayLODTrial/; with -BattleSoldierBody=1 the RB01 body bakes into its own folder.
+const FString& Root(){static const FString R=BattleSoldierBody::VATRoot();return R;}
 bool Save(UObject* Object)
 {
  auto* P=Object->GetOutermost(); P->MarkPackageDirty();
@@ -30,7 +32,7 @@ bool Save(UObject* Object)
 }
 template<class T> T* NewAsset(const FString& Name)
 {
- const FString Path=Root+Name;
+ const FString Path=Root()+Name;
  return NewObject<T>(CreatePackage(*Path),*Name,RF_Public|RF_Standalone);
 }
 UTexture2D* Texture(const FString& Name,int32 W,int32 H,const TArray<FFloat16Color>& Pixels)
@@ -55,12 +57,15 @@ int32 BakeBattleVAT()
  using namespace BattleVATBake;
  if(!UEditorLoadingAndSavingUtils::NewBlankMap(false))return 9;
  // Refuse accidental overwrites even inside the generated asset folder.
- if(FPackageName::DoesPackageExist(Root+TEXT("DA_BattleVAT")))
+ if(FPackageName::DoesPackageExist(Root()+TEXT("DA_BattleVAT")))
  {UE_LOG(LogTemp,Error,TEXT("VAT_BAKE existing output; choose a clean trial folder"));return 10;}
- auto* Skel=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple"));
+ auto* Skel=BattleSoldierBody::LoadMesh();
  if(!Skel)return 11;
+ UE_LOG(LogTemp,Display,TEXT("VAT_BAKE body=%s root=%s"),*Skel->GetPathName(),*Root());
  auto* Data=NewAsset<UBattleVATData>(TEXT("DA_BattleVAT"));
- Data->Provenance=TEXT("UE5.8.4 bundled Quinn LOD2; existing rifle clips and CC0 Kenney weapons. Original materials retained. Explicit 60Hz samples including endpoint. RGBA16F. Trial only.");
+ Data->Provenance=BattleSoldierBody::Version()==1
+  ?TEXT("RB01 (Tripo-generated, Art/RB01_Tripo) LOD2 on SK_Mannequin; existing rifle clips and CC0 Kenney weapons. Original materials retained. Explicit 60Hz samples including endpoint. RGBA16F. Trial only.")
+  :TEXT("UE5.8.4 bundled Quinn LOD2; existing rifle clips and CC0 Kenney weapons. Original materials retained. Explicit 60Hz samples including endpoint. RGBA16F. Trial only.");
  int32 Rows=0;
  for(const TCHAR* Name:{TEXT("/Game/Characters/Mannequins/Anims/Rifle/MF_Rifle_Idle_ADS"),TEXT("/Game/Characters/Mannequins/Anims/Rifle/Walk/MF_Rifle_Walk_Fwd"),TEXT("/Game/Characters/Mannequins/Anims/Rifle/MM_Rifle_Reload")})
  {
@@ -69,12 +74,12 @@ int32 BakeBattleVAT()
   C.Samples=FMath::CeilToInt(C.Length*Data->SampleRate)+1;Rows+=C.Samples;Data->Clips.Add(C);
  }
  Data->Meshes.SetNum(3);FMeshSamples Samples[3];
- Data->Meshes[0].Mesh=UAnimToTextureBPLibrary::ConvertSkeletalMeshToStaticMesh(Skel,Root+TEXT("SM_Body"),2);
+ Data->Meshes[0].Mesh=UAnimToTextureBPLibrary::ConvertSkeletalMeshToStaticMesh(Skel,Root()+TEXT("SM_Body"),2);
  for(int32 M=1;M<3;++M)
  {
   const FString Name=M==1?TEXT("SM_Carbine"):TEXT("SM_Support");
   auto* Src=LoadObject<UStaticMesh>(nullptr,*(TEXT("/Game/Prototype/Weapons/")+Name));if(!Src)return 13;
-  Data->Meshes[M].Mesh=DuplicateObject<UStaticMesh>(Src,CreatePackage(*(Root+Name)),*Name);
+  Data->Meshes[M].Mesh=DuplicateObject<UStaticMesh>(Src,CreatePackage(*(Root()+Name)),*Name);
  }
  const auto& LOD=Skel->GetResourceForRendering()->LODRenderData[2];
  double MaxMappingError=0;
@@ -108,7 +113,8 @@ int32 BakeBattleVAT()
   V.Vertices=S.Ref.Num();V.Width=FMath::RoundUpToPowerOfTwo(V.Vertices);V.Height=Rows;
   if(V.Width>16384 || Rows>16384)return 20;
   for(const auto& Pair:Indices)UV.Set(Pair.Key,V.UVChannel,FVector2f((Pair.Value+.5f)/V.Width,.5f));
-  if(MaxMappingError>0.001){UE_LOG(LogTemp,Error,TEXT("VAT_BAKE mapping error %.9f cm"),MaxMappingError);return 16;}
+  // 0.01 cm (was 0.001 until 2026-11-23: RB01's LOD2 maps at 0.0014 cm). Still well below the 16-bit quantization (0.04-0.09 cm).
+  if(MaxMappingError>0.01){UE_LOG(LogTemp,Error,TEXT("VAT_BAKE mapping error %.9f cm"),MaxMappingError);return 16;}
   S.P.SetNumZeroed(V.Width*Rows);S.N.SetNumZeroed(V.Width*Rows);S.X.SetNumZeroed(V.Width*Rows);
   auto& Settings=V.Mesh->GetSourceModel(0).BuildSettings;Settings.bUseFullPrecisionUVs=true;Settings.bRecomputeNormals=false;Settings.bRecomputeTangents=false;Settings.bGenerateLightmapUVs=false;
   V.Mesh->CommitMeshDescription(0);V.Mesh->Build(false);
@@ -166,9 +172,9 @@ int32 BakeBattleVAT()
 }
 int32 ValidateBattleVAT()
 {
- auto* D=LoadObject<UBattleVATData>(nullptr,TEXT("/Game/Prototype/DisplayLODTrial/DA_BattleVAT"));if(!D)return 40;
+ auto* D=LoadObject<UBattleVATData>(nullptr,*(BattleVATBake::Root()+TEXT("DA_BattleVAT")));if(!D)return 40;
  auto* World=UEditorLoadingAndSavingUtils::NewBlankMap(false);auto* A=World->SpawnActor<AActor>();auto* M=NewObject<USkeletalMeshComponent>(A);
- auto* Skel=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple"));M->SetSkeletalMesh(Skel);M->RegisterComponent();M->PlayAnimation(D->Clips[0].Clip,true);M->SetPosition(0,false);M->TickAnimation(0,false);M->RefreshBoneTransforms(nullptr);
+ auto* Skel=BattleSoldierBody::LoadMesh();M->SetSkeletalMesh(Skel);M->RegisterComponent();M->PlayAnimation(D->Clips[0].Clip,true);M->SetPosition(0,false);M->TickAnimation(0,false);M->RefreshBoneTransforms(nullptr);
  TArray<FFinalSkinVertex> Skin;M->GetCPUSkinnedVertices(Skin,2);
  const auto& LOD=Skel->GetResourceForRendering()->LODRenderData[2];
  for(int32 G=0;G<3;++G)
