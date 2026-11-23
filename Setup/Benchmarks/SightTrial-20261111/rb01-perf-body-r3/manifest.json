@@ -1,0 +1,1357 @@
+﻿{
+    "machine":  {
+                    "schema_version":  1,
+                    "captured_at_utc":  "2026-11-23T15:37:05.1487437Z",
+                    "gpus":  [
+                                 {
+                                     "name":  "NVIDIA GeForce RTX 5070 Ti",
+                                     "pnp_device_id":  "PCI\\VEN_10DE\u0026DEV_2C05\u0026SUBSYS_143D196E\u0026REV_A1\\4\u00267BE56FF\u00260\u00260008",
+                                     "driver_version":  "32.0.16.2101",
+                                     "vram_bytes":  17094934528,
+                                     "vram_source":  "Registry HardwareInformation.qwMemorySize",
+                                     "vram_note":  null,
+                                     "cim_adapter_ram_bytes":  4293918720
+                                 }
+                             ],
+                    "cpus":  [
+                                 {
+                                     "name":  "Intel(R) Core(TM) i7-14700KF",
+                                     "cores":  20,
+                                     "logical_processors":  28
+                                 }
+                             ],
+                    "memory_bytes":  68523167744,
+                    "os":  {
+                               "name":  "Microsoft Windows 11 Pro",
+                               "version":  "10.0.26300",
+                               "build_number":  "26300",
+                               "architecture":  "64-bit"
+                           }
+                },
+    "source_snapshot":  null,
+    "reusedFrom":  null,
+    "savedSettings":  [
+                          {
+                              "sha256":  "0F6E5F6EE35D1D08016AA73927D665B380165B85189CB086957465D6A40923C6",
+                              "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Saved\\Config\\WindowsEditor\\Editor.ini"
+                          },
+                          {
+                              "sha256":  "F05CAFAD118A6507E3131B07AADEF0AE4B20A11AAB636702695A60ECB1247436",
+                              "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Saved\\Config\\WindowsEditor\\EditorPerProjectUserSettings.ini"
+                          },
+                          {
+                              "sha256":  "016A43F03D173C242DBB3C766EF00A613953BF9E7542E4C1343B705900639BB7",
+                              "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Saved\\Config\\WindowsEditor\\GameUserSettings.ini"
+                          }
+                      ],
+    "reuseKey":  null,
+    "behaviorConcurrency":  1,
+    "compositionPlanner":  {
+                               "purchase":  "planner_when_enabled",
+                               "teams":  0,
+                               "stage":  2,
+                               "enabled":  0
+                           },
+    "timingComparable":  true,
+    "map":  "813C73967D83025CE7455ABEB7379D69CA48E7E4840151C76DD2E62F709F0F09",
+    "files":  [
+                  {
+                      "sha256":  "8F432C1E0E9D663212A7FC87E77396263ED4DFFDA1D3B97637A5D34FABE1F050",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle.Target.cs"
+                  },
+                  {
+                      "sha256":  "F3B1FA75186300B1DC6A1A01A751063C65C0564C7F83133E874779FB06834E80",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattleEditor.Target.cs"
+                  },
+                  {
+                      "sha256":  "C98E92B99BDBB7106644D46147BE816EC345AD724AB5CBE2F6B0AD4368B145A3",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\FutureBattle.Build.cs"
+                  },
+                  {
+                      "sha256":  "7161E494FD07F5BA70DDAA404C88F1D03F71370C16B1819167BA461076B7B6E7",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\FutureBattle.cpp"
+                  },
+                  {
+                      "sha256":  "F4BC1354BA8E4D8BC6E6B772FA1487A535416927AB4D48C6F89BA923B1CB4B58",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\FutureBattle.h"
+                  },
+                  {
+                      "sha256":  "F4E81C9AF3C5B6DD66C5FAD9499211B6104E2A7EAC360DFFD49CE9EE398204D0",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\FutureBattleCharacter.cpp"
+                  },
+                  {
+                      "sha256":  "06F9360CC59CAC53AD86C067C3C56EF869EC12D201592A2AF3B7E2863667F562",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\FutureBattleCharacter.h"
+                  },
+                  {
+                      "sha256":  "52F8A0CD8DDCD996DB894DD72F5A002BEA5642B83773A5DD882094996E4BB433",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\FutureBattleGameMode.cpp"
+                  },
+                  {
+                      "sha256":  "D77A7F3ECADF5D25A19D65E1CA37B009C3FA6763A8E3FBA89734EA69719A6F8F",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\FutureBattleGameMode.h"
+                  },
+                  {
+                      "sha256":  "52D7C60637388BA948845F87ED0E5C36326A843966447D8C66BE585380D2CBF8",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\FutureBattlePlayerController.cpp"
+                  },
+                  {
+                      "sha256":  "7437EDFF8FC55359073C5813E88908B44ECFDCB105B2AF59456F561516BD53F4",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\FutureBattlePlayerController.h"
+                  },
+                  {
+                      "sha256":  "8C055A658D63A98360479AA22005C8A7CE020A6B5AFDBA963323F21EAEB0A4C5",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleAbilitySmoke.cpp"
+                  },
+                  {
+                      "sha256":  "53078231CB64398D93DEDF71E42E7109343E3A8FE7D549E9112712E4E5DF46E9",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleAIController.cpp"
+                  },
+                  {
+                      "sha256":  "E3C4DB6D163D646517ED92AD0A9A7FEE12CFE91500383F844F075B4D11424AF3",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleAnimTasks.cpp"
+                  },
+                  {
+                      "sha256":  "D51F884E1B6391B1909FF7479AC46036B10D35EF27A6920667C9356ADEB8D661",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleAnimTasks.h"
+                  },
+                  {
+                      "sha256":  "FD81D76D2B91DFCD6357A04B1CF7FD5EF8979C0207FE619C8BDCD8FF04167C54",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleAnimTaskTrial.cpp"
+                  },
+                  {
+                      "sha256":  "A76D83C6290B308407F1051F0C3590F8BE53622E701F81FBE70BEA7ED7D64FC3",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleAnimTaskTrial.h"
+                  },
+                  {
+                      "sha256":  "E4EC13841336AA77C495A76354BBDA877BDF6C6BFE400730B6989D1AE6A928D6",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleAntiTank.cpp"
+                  },
+                  {
+                      "sha256":  "6B36ADF1E8BB79D2E4E22CD25158EF11E44FC6C4B44227183A159DC8D349B724",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleArea.cpp"
+                  },
+                  {
+                      "sha256":  "B58F08645A4DF0041890F22C5C05705789023693966E8FF189AC23E80193244E",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleAreaDepot.cpp"
+                  },
+                  {
+                      "sha256":  "F8765344D14BD0A2D12A0E0E8523B3AD066328D17036FB0EA784A21C6EEDBC31",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleAreaIntel.cpp"
+                  },
+                  {
+                      "sha256":  "B9A7AC9CB4B95015CBADA953E79AB6BC11FEB4A7CF0C2541F3BE4A35FDB3847B",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleAreaSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "3350D97A6524D810D094A13C95380E37840F6570B39F6CCA66A88E1C57160289",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleAreaState.h"
+                  },
+                  {
+                      "sha256":  "6AA70D0871640B8B1E92753D6FEED9EF00EF786F884C0652B90C3385D37854F4",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleArmourAI.cpp"
+                  },
+                  {
+                      "sha256":  "8C877553679265B50495CBA70EED23615DD8B4EC42D1A6C18929E08B8F4864DA",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleArtillery.cpp"
+                  },
+                  {
+                      "sha256":  "71B18FC8654B422D1A260673FFC96D5222F3A3BD922CFD58D2CC2B18AF77ADCB",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleAudio.cpp"
+                  },
+                  {
+                      "sha256":  "110800F3B3179BBAABD471BFAFB8092D564082AA131D23298940CF3467226076",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleAudio.h"
+                  },
+                  {
+                      "sha256":  "83AF0B7EF940063655B49AA47CF3599585680C1984809C56B3D9A27D5A47BF2A",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleBenchmark.cpp"
+                  },
+                  {
+                      "sha256":  "BBA8E511FB0EA58055AAAD22EC53FF2495295BA082AD3162BD07504CCB033B27",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleBlindFire.cpp"
+                  },
+                  {
+                      "sha256":  "B0F2DFA03B73920A899EA1B9E6DBC23DCC45C5964FED1224628ABDA0F7AE6B26",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleBlindFire.h"
+                  },
+                  {
+                      "sha256":  "30013AFA0AE7F684F4F89BC1E0CD0448128D15F6EBFC65EC7FA3A302BB794DE2",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleBodyAnim.cpp"
+                  },
+                  {
+                      "sha256":  "F478CE0A84A6538BA59808E0E4317E1D6834CF6FE1BD33DBE7D438FFFD7B3EEF",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleBodyAnim.h"
+                  },
+                  {
+                      "sha256":  "BDA94421FF006CC60C691A4647A575014AD38B067BB946115DDC3E5741191F19",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleBodyAnimImport.cpp"
+                  },
+                  {
+                      "sha256":  "759072A4CB1ACAC460036BF45B9D056C44AD24B8D93B7933DB75685EDEA33146",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleBuyPanel.cpp"
+                  },
+                  {
+                      "sha256":  "49911568B3B55929094A4A115F78598C629C5AB65AA9A1CA258A82D01B37FFB9",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleComposition.cpp"
+                  },
+                  {
+                      "sha256":  "32A2AE7706294E999F141E4BDE5F9D6F431ED7FF585A734692D6A959058E1EAF",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleComposition.h"
+                  },
+                  {
+                      "sha256":  "6EA2CF1243BBCEFC6252F72DB876CD49BFCEDBC03916A95ADF1A20AE228B6D08",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleCompositionPlanner.cpp"
+                  },
+                  {
+                      "sha256":  "7C4F817BFE0E57559B0465D622ADC24FE18F734E03A64929F54AFA1F9406D450",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleCompositionRuntime.cpp"
+                  },
+                  {
+                      "sha256":  "1751DCEB0CE68A7997D415D586AF6262F3BB8D0F8864C20B50349F47100FD6B2",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleCompositionSave.cpp"
+                  },
+                  {
+                      "sha256":  "60AF7AA8BBCCEAF02B69E04B758F3CCFA12FA46783D6DDC355EA9D6D4A3F4079",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleCompositionSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "E7FF3849F9FD7C601DB38FBF94506C71CF6E780F517783688235B2832D84E20A",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleCompositionState.h"
+                  },
+                  {
+                      "sha256":  "AF0502271524580900949AFE006555449098E8681FEEDEE8657AC222E33AA857",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleConeTrialCommandlet.cpp"
+                  },
+                  {
+                      "sha256":  "3F8D60D4424E2468A5F1C054293A70E7B9BD5D9225009C525F76E2E72BA5445E",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleConeTrialCommandlet.h"
+                  },
+                  {
+                      "sha256":  "BD1C0D90CAB14CC48CFDB4969C3317D019F850C8915026E382CA23D7B568FB76",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleContactMovement.cpp"
+                  },
+                  {
+                      "sha256":  "7EEA26FA89DB743F0F6ED9EFEA0D50B3BD5331DC757596A56969EAEFE3770A24",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleContactTrial.cpp"
+                  },
+                  {
+                      "sha256":  "E152811BD8E92BBCEB0F474C73CD8D3758353D401CF65698357F15991988FD73",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleContextTrial.cpp"
+                  },
+                  {
+                      "sha256":  "7BD978920BA5D3DD5362E61313FD32C490E23390C6061C4C8354A9FD69D71F06",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleController.cpp"
+                  },
+                  {
+                      "sha256":  "382CE99DEE110DA19DD7239D7E45CD9C6F6B5532F73B677208689F8F8F01B7B4",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleController.h"
+                  },
+                  {
+                      "sha256":  "433B2975B7CA3BFECB2EC40B6D7BE9F4D8F8BE9CEBC6F63AEFA230EE7D57708D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleCornerTrial.cpp"
+                  },
+                  {
+                      "sha256":  "6BFB7A42C3D4587945D1DEEDF827E1B26B3A76821DE4C69A451490400DF0E56B",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleCorpses.cpp"
+                  },
+                  {
+                      "sha256":  "A1DA33BFC797A9EE6B1EEE5FA8C6775E0B46CFD4D46F8D623240F333A8DC9EB9",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleCover.cpp"
+                  },
+                  {
+                      "sha256":  "3C924C8F7606D75ABF4CC5533D3340B117C5E994590F696FC239FF6DB5919881",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleCover.h"
+                  },
+                  {
+                      "sha256":  "27A69F7D0D0D7A83A1F87D319C895CCA3F3AA521FA6673CD998263787ACFBDE8",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleCoverAction.cpp"
+                  },
+                  {
+                      "sha256":  "6F9666F39726FA6D72DA92A23C8E9FF974ECFBC8E6993CC879F7A9DCBEC8F2B7",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleCoverActionSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "5A107D766EE417F3A8B11FD182F98366BE3EE96E786A0496E41379E0B7727168",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleCoverClips.h"
+                  },
+                  {
+                      "sha256":  "A8B54B7F8878D7EB3D795AF89B346271CA6E658AB1897639E0208260E8C5B94D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleDeathShot.cpp"
+                  },
+                  {
+                      "sha256":  "2E4B98A1366433948FCAE81EB523DE73118E6392AC0C759B51749EE64B5C494C",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleDelegationSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "BAE8593609FCDDA012B6E5C20588C95C74F2BD1A520AED95AC43BFB785180CFF",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleDisplayLODTrial.cpp"
+                  },
+                  {
+                      "sha256":  "D7EA9EC48F9119CA9B93DB902C834AD91EE7532F6AA5259E7378378B191FFA8B",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleEffects.cpp"
+                  },
+                  {
+                      "sha256":  "3F2CD32E7C05812681431BAD216615A84E5EBEFC3F9749B035464FAA3820784C",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleEffects.h"
+                  },
+                  {
+                      "sha256":  "B11FB2B661BBFC5525713C3352AC271DEF6643E2878BB7FD1F0D4F8C7F1B6C00",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleExo.cpp"
+                  },
+                  {
+                      "sha256":  "7403F21F607480EADCD7A96EE83C10C943BF301F2496BF22341156FCF8F192D7",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleExoShot.cpp"
+                  },
+                  {
+                      "sha256":  "C3E8E0233FF36F185266D90821CFFCEEE92D998FB99EB6FAA16DA09C24CFD92D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleFieldLayout.h"
+                  },
+                  {
+                      "sha256":  "1494F74D385313CC39B372BF153BC25148BD4857A509B50D34A00346C26CA647",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleFieldReplay.cpp"
+                  },
+                  {
+                      "sha256":  "43CCE9CC17CCBC6A1082BC39AFE3FDE3D9CD00AD539AAF75DB0E74611DE779B2",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleFieldTrial.cpp"
+                  },
+                  {
+                      "sha256":  "B4A91DCBCD7A39A7F04C4E9F813A6CABD02EAC08A14EDDD65A49F667E0910ABE",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleFieldTurn.cpp"
+                  },
+                  {
+                      "sha256":  "E81DDAE0085A8DF744FC77B3BEAA00C7951A142CCBE81E4360330BA6A2449CEB",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleFieldViewTrial.cpp"
+                  },
+                  {
+                      "sha256":  "F197CAE1013E86CE5566C14FA6FF5AF6518863639599403009E77C95C534392F",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleFlankBayTrial.cpp"
+                  },
+                  {
+                      "sha256":  "7FBFBD72A855CBEC915F41466EC4025809C6CAF2D935B771F06F2095D2D9C841",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleFollowerBones.cpp"
+                  },
+                  {
+                      "sha256":  "CB8A690DC971803ED2E47D531544CB2B678EB58AAFCC08E90B95DE00ED1CD613",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleFollowerBones.h"
+                  },
+                  {
+                      "sha256":  "410957BF70C3B96DF28470894D6C2170F4E2E2CB61A6CEC967D83D05DA52F784",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleFrontLine.cpp"
+                  },
+                  {
+                      "sha256":  "F1F4DFC15DB62B0D19E12980A1BFD0B93035A75208193C59B54DFECA52FE2B11",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleFXCheck.cpp"
+                  },
+                  {
+                      "sha256":  "708CD1F4FB2CBB5FC2C5EC0DA184E350974E95584AA9C689B4E70205C799328F",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleFXCheck.h"
+                  },
+                  {
+                      "sha256":  "8D9ADFB612FA31CA4A8EFAB5CD679D2F716CFF708275358381D2F16C0BDE92BE",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleGameMode.cpp"
+                  },
+                  {
+                      "sha256":  "40BE60C481A3E0C876A22E6DF55F8C1FDFEAC0A650702C745AFB8BEF851FF8DB",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleGameMode.h"
+                  },
+                  {
+                      "sha256":  "08AF078B99E2F3CBA059B69A422855247306176AF858FA3BC713D5A3A3F9B389",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleGridTrial.cpp"
+                  },
+                  {
+                      "sha256":  "DC55E5405D85AD848400C866BD0BA6ECF1C9FDC7DCCD2D64268E1033E3B83797",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleGroups.cpp"
+                  },
+                  {
+                      "sha256":  "EC121F8D82F01CC6545ED8FE7592E88F1AC6FF32ECF91B7672B23DBC54F77318",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleHiddenBoneTrial.cpp"
+                  },
+                  {
+                      "sha256":  "ECABD318011243DC24307C775032EECB0F15B809FD4DDE650EEED60009D366F6",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleHiddenBoneTrial.h"
+                  },
+                  {
+                      "sha256":  "0A0AD75440A8DF9A9D8FEE1EF68D8FC65F717D9A6BEDC9488A90EB511544B19C",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleHUD.cpp"
+                  },
+                  {
+                      "sha256":  "0B4848FD9CE0CB9F8B64A0E9CF09E12F434BCE50DE4476642F50917C743ED5B0",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleHUD.h"
+                  },
+                  {
+                      "sha256":  "B8C094AFC01188FDD012A3017A63F50EDD545332CBC00D38D9282A33809CBC8A",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleLargeFieldTest.cpp"
+                  },
+                  {
+                      "sha256":  "22F7F29BD6B9BAD148F8C406CD9FD4AE60E52FB79E963C23D114E521EF00AEEA",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleLeaderRuntime.cpp"
+                  },
+                  {
+                      "sha256":  "9F2928D23ADEFB116173279190E5F696E220F9FA95E7D1074A3EDFD129622AC5",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleLeaderRuntime.h"
+                  },
+                  {
+                      "sha256":  "000639CFA200AD726CD5FFE360B03EC6EAFE884A4B4AFF15A7C192613176AD77",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleLeaderSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "E4FDF825042F0EA88F1DB350E0FF7EC03D8DC15FB763EEEC3A5B10A1231BF49D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMapCommandlet.cpp"
+                  },
+                  {
+                      "sha256":  "170EECA56D88881C85888E2731C39FB9C7659AC3EAFF3D70492494B2F5F32521",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMapCommandlet.h"
+                  },
+                  {
+                      "sha256":  "5C227054E7D1BC5B95BC8227C2EC2BE6FFFD22DF332D58256A95ACBA78C0BA38",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMapI.h"
+                  },
+                  {
+                      "sha256":  "65B9BCE51E37F3958C7327FDDAAC5DF4816C893DF9495F8B620630EFF5CB0B87",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMapJ.h"
+                  },
+                  {
+                      "sha256":  "854E0EDDCC8F7D839B02E8FE562F40722780479FA9D6CDB2F08B759552E0DFE0",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMapK.h"
+                  },
+                  {
+                      "sha256":  "89A1E0C06B27D5495534F75A7D0D6264A02891BEC2CE2AFBAC1609F476A80FBC",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMapLayoutF.inl"
+                  },
+                  {
+                      "sha256":  "BB2E63077C3FEFA50B916421617207236AF4729E47FE25D9A8A74E3A58B3FECA",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMapLayoutG.inl"
+                  },
+                  {
+                      "sha256":  "21790E052F1C9A45302D4C6FFCA88E795893AA6873A3AEF8280CACDA59D03D3D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMapLayoutH.inl"
+                  },
+                  {
+                      "sha256":  "80F35780EB18F51D2857548E9923A5F672C03CA003FB9039DA3C9898BB759DFC",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMapLayoutI.inl"
+                  },
+                  {
+                      "sha256":  "3928876A5C0564EB46A527D2174901F8EB283DD4A723BC3EC6E4A511F2287DCA",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMapLayoutJ.inl"
+                  },
+                  {
+                      "sha256":  "931B0CE6D3444D1A5345EED34A1245499E7ECD5E624C685326C6965BE3F217F3",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMapStats.cpp"
+                  },
+                  {
+                      "sha256":  "AEA81E06E3F7003A2AE89D94761BA3AF0F4145D31404D0B294222C84473AABCB",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMassTrial.cpp"
+                  },
+                  {
+                      "sha256":  "A99A50BB4630C9BB6241740380F55AD613285974BCCF40394A89A32A9209FE2A",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMassTrial.h"
+                  },
+                  {
+                      "sha256":  "B4BA95F31DE675225358D1C5160D9EBA69B50BE160AA662577D9AB8342197573",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMatch.cpp"
+                  },
+                  {
+                      "sha256":  "52B4616F02FD432D442055EFB8AAE326959A518B03C76C9E2B857E7780502DB2",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMatch.h"
+                  },
+                  {
+                      "sha256":  "883D2D6490108E72668E1E0AB51A57BEF8958851898F594A3B0EE276CA75AFF9",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMatchSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "01023A2C6314338D65C946066610D26F649FBFC74706D7DB099C7E1BEDA2673D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMatchSoak.cpp"
+                  },
+                  {
+                      "sha256":  "9BE1EF5A5E7AD28688BE215E39B9F8759A7D2A6670EB2BCC88F5CE3B69226224",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMaterialTrial.cpp"
+                  },
+                  {
+                      "sha256":  "4F9230706747477F032FD60AFCF55E4B8A6AD0925736C96E0E15EFA40FB5FD00",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMetrics.cpp"
+                  },
+                  {
+                      "sha256":  "DCBA173AE20A94EBBA95119D5C9A4CF74262E8CBD83F134A7BE785F71242186F",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMetrics.h"
+                  },
+                  {
+                      "sha256":  "53B558E855AD7CC3A902F56D1705EAFD35B699BF0A8AEE2195B1996AED76D433",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMixedBodies.cpp"
+                  },
+                  {
+                      "sha256":  "45BD4E60993D1F8E0EA26915E149B900EB09FED995A963115C18C020B35C0514",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMixedDriver.cpp"
+                  },
+                  {
+                      "sha256":  "190A0F1E25AEAEDFBE30C352981A0BB45483A0171E1AB5FCC809F531E6F34A6A",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMixedDriver.h"
+                  },
+                  {
+                      "sha256":  "A6C7F2C9D4C3753CDEFE3B49670CDC133D3CCC45676BD96EC07B0995DB0E5671",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMixedFastSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "C9CFCE9A3DA5B28FEB7A1AAC927CBB7F79D9CD2FA066F2CD4F3BA32E86948129",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMixedRecruitment.cpp"
+                  },
+                  {
+                      "sha256":  "8422914EE4928748A18F55CCC5A90A7FFF79A9A219F61785A15ACC8A312CBC99",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMixedSaveSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "27C86C139604D537351706AA9A3E132C933EEF7EAF77C1384718B78E8DB15DD8",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMixedSaveValidation.cpp"
+                  },
+                  {
+                      "sha256":  "59AA1FCC44AD8579ED5996B9A464681706F211F1103660D9218DD95FCF522DBF",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMixedSquadAI.cpp"
+                  },
+                  {
+                      "sha256":  "2D98DD62CC9F2D49DD8C4E9849951633CE51755108980EAB1B008956980E7697",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMoveCourse.cpp"
+                  },
+                  {
+                      "sha256":  "BFE2821378C00DBEA07CB009C5680965F2B2C43671982E382CC079489191CAB4",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMoveCourse.h"
+                  },
+                  {
+                      "sha256":  "06CBBB035F0BCDD80F6D1EDA8397D9AE6001B5765220863BE430A11422B65358",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMovementTrial.cpp"
+                  },
+                  {
+                      "sha256":  "031ED2973C08101BEADE8B10FAFC5C3329B59F14F36B40D7DD8486B45CBA3A9C",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMovingSquadTrial.cpp"
+                  },
+                  {
+                      "sha256":  "3EF47D1A0616E318CBE82FCA4BD45CB8FA07A276BF95140B029950F225E83FFF",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMuzzleFlash.cpp"
+                  },
+                  {
+                      "sha256":  "C6B05CAB8CB62B2335E4AE8065A3A38A8B27FC3CDC718CA6A8B8FE68A3AF8DD2",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleMuzzleFlash.h"
+                  },
+                  {
+                      "sha256":  "7F49188CA055EFB64138578763A9F6846573A2B6C847D336EBE511A865104D0C",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleNavigation.cpp"
+                  },
+                  {
+                      "sha256":  "8A485CE33AEE6B7F46B7CB1FB770BB2E7B1022812C489B3371E6D052AF38666C",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleNavigation.h"
+                  },
+                  {
+                      "sha256":  "0A7F58479899CEC3564CB69DAF0E52CF85C07E994EC380DBDCB32A47E2C629C7",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleNetwork.cpp"
+                  },
+                  {
+                      "sha256":  "FC24B9E7F096DE7EE6BA4660A36F5F3DC23B8FFF98858CCC3FECAA47C9B29598",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleNetwork.h"
+                  },
+                  {
+                      "sha256":  "70A4891163EB98D4B641119142005F6CCF249A0C2C57F7DE00141D1FE342A8AA",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleNetworkBenchmark.cpp"
+                  },
+                  {
+                      "sha256":  "14172849FBCC1F827F8957CA0BEE80418B5F71C9A6CF15346CB8A840873A82BF",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleNetworkPilot.cpp"
+                  },
+                  {
+                      "sha256":  "9AEFDC26BECADFCB192E69623929EC7D0F66B6D8D8D40A6621561D0CD8186891",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleNetworkPilotProbe.cpp"
+                  },
+                  {
+                      "sha256":  "6585A1431E12341FD088CB0EB69B150DA698C004FCFC3AFF1582AD25E64EF6C4",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleNetworkProbe.cpp"
+                  },
+                  {
+                      "sha256":  "A922DC961170F788E9AA794D7AA1F14907CC2A4D3FCCE5A833E3197CAA08AD9C",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleNetworkSerialization.cpp"
+                  },
+                  {
+                      "sha256":  "7681B5E4E19A3334D3C91E6E176B410B4BCEFADCB4D2871302CCC029EF208F7B",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleObjectiveSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "D5E28BF3A87A81786F56E80F886C83F17ED52CA6105247155BEEA2789D6F0FCA",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleOrderSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "62E8855ABFEE5D466551D6D1D6C1AF174FD58BE247CA98BD2A30C915306E3E19",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattlePerception.cpp"
+                  },
+                  {
+                      "sha256":  "A0C53A74FA9AE5136665EA0422324C925C3F5BE71961685E960539480114E380",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattlePerception.h"
+                  },
+                  {
+                      "sha256":  "925E4AA7701F9EBAD68C09B96282DE9EF3793CE0FB9E8BF0D42DB71B47E505C4",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattlePerceptionOptimizationSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "A49F5794437500582E8B7E7C50CAB24ECC4F25300C15F289A4406078524D38A1",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattlePerceptionSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "32993135DDAABE88CB75F5F89F3AF6D496AD4A53A1856D14F2B846FD98D19D17",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattlePhase3.cpp"
+                  },
+                  {
+                      "sha256":  "176EF2884C8CDFBD8173D662516D8F257343BD3D70259EB52ACD4A0CDBC66735",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattlePhase3.h"
+                  },
+                  {
+                      "sha256":  "B5BF22B7E63EE0D5D36BF7F1A0343AA45A0521C5E7A3D6D9B205AC36F9EF60A0",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattlePhase3Checks.cpp"
+                  },
+                  {
+                      "sha256":  "01EF3BF07DAE598B60B33CB8B3A3E2E80E391A42E50BA92FC172CFC4D1D7A2A3",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattlePlayerPath.cpp"
+                  },
+                  {
+                      "sha256":  "255C7934D8E5682D9F8F6138DEB3B8C6479CCFC53B9EFDED9AB0FCF66BCCD519",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattlePlayerRoutes.cpp"
+                  },
+                  {
+                      "sha256":  "B93BF6A5B187F541108F600E19D758416E42211DC341AFA4684127D5857EF8B0",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleRagdoll.cpp"
+                  },
+                  {
+                      "sha256":  "2B26A5FFCCE55CD56E3E6F60DA30A6D38C4BA02C54B25D38F843D43323888E57",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleRagdoll.h"
+                  },
+                  {
+                      "sha256":  "930ECD65295CD87286C3741C00CA8D844DC68B487A36EB8FC70B18E89EFF111B",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleRanges.cpp"
+                  },
+                  {
+                      "sha256":  "3A9BF30BACFCB8128A0843BCA886798A9F756F5B4E121B53570FBDE393F9858E",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleRanges.h"
+                  },
+                  {
+                      "sha256":  "914EE7DC715150CD055AAD871D0200689F243E32F5FCA6F5DE5DA67F19DCFC53",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleRenderDiagnostic.cpp"
+                  },
+                  {
+                      "sha256":  "450116589F27D38F6C241A9D0F71C0B39CB4A727284C1A0FE82CBECB62B889E8",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleRenderDiagnostic.h"
+                  },
+                  {
+                      "sha256":  "8B62BBEAC5A696F0BEFBAB6844607728D6E3797716504B7381310516C8FAC111",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleReplayData.h"
+                  },
+                  {
+                      "sha256":  "C68FB2B19BBADEF400CA33351AF6B9B572D8248DDD5BAB25697377D98E1016DE",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleRoutes.cpp"
+                  },
+                  {
+                      "sha256":  "9B397489D86316B2314A15539D691F9BCFA56453D07D16CC7A15825DAE9C1094",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSave.cpp"
+                  },
+                  {
+                      "sha256":  "61522B841F0757F8846D5D30CEDDCA8FD5A8C8BEC3C417AF998E9DEB01C86F5D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSave.h"
+                  },
+                  {
+                      "sha256":  "B4ECAF3048FB39A0CAEE070B56859D94D5AAFB4F9AD4B2BED5582297AA490948",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSaveSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "EF513084D7A0500307B56A243801C679BE1B5CAF550A944E25AF2B8C4FC9C853",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleScaleSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "2EAF709C3485E02435026C6063F05219D37DB3D56AD1E943CAD92C14455FEE22",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleScopeShot.cpp"
+                  },
+                  {
+                      "sha256":  "E939CBF3B49406CB32A20DC074394C4F4CE3CCA255EF13EE2700CEA6FA6C0CD0",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleScoutReport.cpp"
+                  },
+                  {
+                      "sha256":  "567631B0F80C71B82A21858B5E98E33057BD9EB92C1A0F4DC2A784B26426FD17",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSectorAudit.cpp"
+                  },
+                  {
+                      "sha256":  "3B1A6F3C4F4E4130FDC01C5DC5D13469C58E7A7C128D4D0C0ABE0E609843CD80",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSectorRoads.inl"
+                  },
+                  {
+                      "sha256":  "C1574024816A6AB52BFAC32B636357E5487B7DC0B85A342F9A4EC4C1D175E7B1",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSectorRoute.cpp"
+                  },
+                  {
+                      "sha256":  "E2F2470257FF2BE420E87C24D005B7AB2833C0F2708D416078866BAA0F8E89A3",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSectors.h"
+                  },
+                  {
+                      "sha256":  "121381EED0106E9718B9C84E33949A84F899C9AC8566F30F70B9764A48200B8E",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSectorView.cpp"
+                  },
+                  {
+                      "sha256":  "8872B438BFB4EBB20A83BDF811D30A595E90036E5EB740EEE4A09FD585A5D543",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSectorView.h"
+                  },
+                  {
+                      "sha256":  "D8ED47727C4560ED9AC9CEE0137EEE0E29D8FF9C48A290521D7C08BADA4E7B43",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSightExperiment.cpp"
+                  },
+                  {
+                      "sha256":  "1E0A2ED8CA5E02531C8CBE36FD8D8D1B9CA4335E840FF651422D870382A27F51",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSightExperiment.h"
+                  },
+                  {
+                      "sha256":  "729CCBFD8A4FFCB97E7756640D01140966B9F98B8F40B0FECF34AA97FD65D6D3",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSightTrial.cpp"
+                  },
+                  {
+                      "sha256":  "9634ABCC02A23A24956407C96CD8C8BCED62B06EB09E3077B3BB4CA49C2EBEB8",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSightVisual.cpp"
+                  },
+                  {
+                      "sha256":  "B39B067CC1774E5129BACF6C148E65A24E7E9C1000956233B386197035F32A58",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSoldierBody.cpp"
+                  },
+                  {
+                      "sha256":  "7A11BF20C90F6DD943252D31964EF4EC060AFADB9468FE8AFD8B1C14E52B3297",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSoldierBody.h"
+                  },
+                  {
+                      "sha256":  "E1F2E598E9E01696FC132B3ED516114AAE2B0D25E7AA1144A9E8D801D3A1D326",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSoldierFire.cpp"
+                  },
+                  {
+                      "sha256":  "586D8785671C1D84521EF909E6383A90E89EDE626D42722339877C63EE58590A",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSoldierMove.cpp"
+                  },
+                  {
+                      "sha256":  "E373E4B37B4B20CDF078E472531521992032F162734E62FB9603CB7A86C82263",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSoldierOrder.cpp"
+                  },
+                  {
+                      "sha256":  "D24A2F00D9F452D600D90CE54677B5CC09E872CBD84A6A02CAC9A098B0316DBE",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSoldierWatch.cpp"
+                  },
+                  {
+                      "sha256":  "A6EE333B8CB1BB315A8A4E904ACBB0A927B24CA35E0CDC0A4587F4EFFA1D4F45",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSquadAI.cpp"
+                  },
+                  {
+                      "sha256":  "D9D902AAAC451198D0F3C6FF2B1F3F68CBB9B5B116AA082D7ED66A1742192869",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSquadAI.h"
+                  },
+                  {
+                      "sha256":  "9BA89B48F700F1FCC6629983C95C1F7B0358EFA27C39869B87A5D95FDC787713",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSquadFlank.cpp"
+                  },
+                  {
+                      "sha256":  "DCB7A0EF69AEAA9695CD54A2C7E4FA596451FFFB7933FC20D4BB013785F546B9",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSquadFlankSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "FE401538BE510804CB3CB40FF3CDEDA7789EA513888CF268599C3DEA7A268036",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSquadRetreat.cpp"
+                  },
+                  {
+                      "sha256":  "C61B079E3D0878B14D1D3A98EB65991BA2410752BE36DD7FAAA274EE8B368C7E",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSquadRetreatSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "A102DB79F4DA294E99C07DDE1EE77A15D8034E0ADF1925F2276137C5D387E062",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSquadSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "014F86829B97EE0297FBDCE2241B6F77AD4D016E31C9E27F7BFF56532E4569DF",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSquadSupport.cpp"
+                  },
+                  {
+                      "sha256":  "CDD9D1B54931538119E989E2B3A90A990096C8706C2FBC4633288516521EECF7",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSquadTactics.cpp"
+                  },
+                  {
+                      "sha256":  "E81CF3DD59C85A4DBA3DBA82E150C459D7737333FD82551B4E1ED055E9E66BF0",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSquadTactics.h"
+                  },
+                  {
+                      "sha256":  "D35E5B3F35B0CE079407D8E3F57F236A01B92583CBA26E3550D658C3CC051795",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSquadTacticsSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "92034E06E8B168F835E60A94A0955A5EA193F51E824B9CEC8046F1DBAF5299F3",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSquadTrial.cpp"
+                  },
+                  {
+                      "sha256":  "EA5B054CD759623DDF4C3B7FBE05AA8CC97684CFE9FBC6474765601135190B82",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSquadTrial.h"
+                  },
+                  {
+                      "sha256":  "1BB6050DAC1A648B1D856D7A6A31AEDF163D8C400D87D78007AE12A04B2768BC",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleStableMovement.cpp"
+                  },
+                  {
+                      "sha256":  "C196C754FFE355DD3D8DB3BAEEECBCF399722101789E32189AC33307CF5537C2",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleStance.cpp"
+                  },
+                  {
+                      "sha256":  "D994BEC9D94309C2E4860239E54DB3F12322C1D82712CD808ED75E02352D5815",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleStance.h"
+                  },
+                  {
+                      "sha256":  "B5266F317D15F2403D1EE0F126FFB60584ABBE51804C3AA1651C4657C10D5ADA",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleStanceAnimImport.cpp"
+                  },
+                  {
+                      "sha256":  "E1EE706BDEE6B9E85B03163007603B8A42666A323BC661C3D7B4C43A341868C0",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleStanceShot.cpp"
+                  },
+                  {
+                      "sha256":  "4E79F446179ECCA0AA115AD67E8065517F1F8867AF50587E44A9E2B9DDAFFB92",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleState.cpp"
+                  },
+                  {
+                      "sha256":  "82B79F05E3B47EA74DF4A592E8BE2347B4B36A3FC985F21E3F51DE845CF06DEF",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleState.h"
+                  },
+                  {
+                      "sha256":  "A97A66CDE1B071720B7BFA30573210303CFBD08DAC770D161F924EE40E69B42F",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleStateTrace.cpp"
+                  },
+                  {
+                      "sha256":  "ADC10C8C9FD0543EB31694B7ECA0D278143F9B3E4B4B036D0666BB2E25F32841",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleStrategy.cpp"
+                  },
+                  {
+                      "sha256":  "5ECC7BF74229D047D9E00ACF2FDCEC5B3A99305E7D28DB8095DB4D2B84527F32",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSupplyCar.cpp"
+                  },
+                  {
+                      "sha256":  "739010D1FF98FC7C4B1C00426BC3C86B1E5A9EEF5BC58F012BE69483864C8D9A",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSupport.cpp"
+                  },
+                  {
+                      "sha256":  "720B27D4B68E2A7068F66DADBAA2B8A1F60642A6928794C96CA06B91E4F469F7",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSupportSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "70C41F76437C02E1123E210B9A9DDABB9FD2909F7A2CF919DFBF4E65E304A120",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSuppression.cpp"
+                  },
+                  {
+                      "sha256":  "9DF26725061B15CFD9F928646F5DBA3348E94DA42FAB8DDA140C6346619708CB",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleSuppression.h"
+                  },
+                  {
+                      "sha256":  "BFCCBA45F4B0DA1F1CBDCE6DA42632B268488E4F8C3D60B77027D97CF5A00A1B",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleTacticalAI.cpp"
+                  },
+                  {
+                      "sha256":  "67F919C8145AA6136B5D1DAC5712D44DF1B0E0091AACCA86FBFB3B5F27BA37F2",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleTacticalSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "581A38563437360784513FECBDBABA2BA14D99566F9496425CF8889CEE6E1302",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleTactics.cpp"
+                  },
+                  {
+                      "sha256":  "A344A11AF369BC0676E1EA5B336065FE98F124CDCA1FE92912FF2FFE0A3E67AB",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleTactics.h"
+                  },
+                  {
+                      "sha256":  "68D63C0CC49D755E4030550A49A6F448AF07C8CB9DDE3C80316FE3AAFA6B6FC4",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleTacticsSave.cpp"
+                  },
+                  {
+                      "sha256":  "A002E69BA3C30124464492EB17570F56F5F70C38A149A7B5F67F2BEFF4E7B039",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleTacticsSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "9EF2B2A0EFEA032682B6082BFD532292367296F3A7F402A09D14B618CAD0C0CE",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleTankGun.cpp"
+                  },
+                  {
+                      "sha256":  "58235C72D3F36D6616DA2244D7DCF5B5EFB57F7ECD2669B833A7294D61EADDB2",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleTeamAI.cpp"
+                  },
+                  {
+                      "sha256":  "B6E813CE5914A3592D7C7045A31F0EC058E9A821C3A1C6A1C7D4FB934A1CE261",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleTeamAI.h"
+                  },
+                  {
+                      "sha256":  "50A0E96D44DBB83494CFA119566DDC4660B6BDD016615EC602BD782A348BA196",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleTeamSupportSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "AA344A052CF883E44DF63FA2B87AF118E86E42E3B00590FC0E33C0D5F39D0881",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleTerrain.h"
+                  },
+                  {
+                      "sha256":  "505ABC5518F531E77C986FF4C8F20FC2DCCE6BB6C102AC39D96D377A2FEF5966",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleTerrainTest.cpp"
+                  },
+                  {
+                      "sha256":  "92C28ACFBE8B8F15B8779CA8A38B2FB34C8BB3C19AA829218C6A976F8BF5B663",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleThirdPersonSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "231B0E8A2765237F3A9BC8A6B461C1277E69356022EDD642F17C8491B184EED3",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleThreatCover.cpp"
+                  },
+                  {
+                      "sha256":  "60E3F4CFDC3C52EA408D9D2CECED4F6827EA499501D29CAD6F4B094E6D5A4707",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleUIText.cpp"
+                  },
+                  {
+                      "sha256":  "9648F776CAA1A0105495D675F98C5125D5552E4819FCDCE86E9E27911EA8567A",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleUIText.h"
+                  },
+                  {
+                      "sha256":  "06177F44E1583256E48FCADF841EF23FD44EBCE94EE80E32356325E82020C906",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleUnit.cpp"
+                  },
+                  {
+                      "sha256":  "65D4C914995AA9AA1CA9BC0E56BB2F00AA02386F999E54784015D323C847A63D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleUnit.h"
+                  },
+                  {
+                      "sha256":  "180896A89DF3E2B140E6DF60C391C17C17DC1F2A320CB502EA4568C90A279746",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleVATBake.cpp"
+                  },
+                  {
+                      "sha256":  "B3AC9756FF617F45B09C09D71816490649D02DD3E2495AAD509DF77EDCCA93A0",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleVATBake.h"
+                  },
+                  {
+                      "sha256":  "5633ACE50A2F7A84D8E490E1B32770942BF4AA3C1E9D7DF352162E17AD71660B",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleVATBakeCommandlet.cpp"
+                  },
+                  {
+                      "sha256":  "11AA6AF33835BE5F25D8AC9BD5A5694C911C7B025024C14935EA1771AECE9EDB",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleVATBakeCommandlet.h"
+                  },
+                  {
+                      "sha256":  "276504804BC5B3A2CA638A4A424817D6517CEA96B7A10E692CC2179749323AC2",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleVATData.h"
+                  },
+                  {
+                      "sha256":  "EFBD2511904A7DE99A626DDB917DC19D940971F99792B7F69600D2FD1B0627CD",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleVATDisplay.cpp"
+                  },
+                  {
+                      "sha256":  "59C2280B333C13876B9901B8933A98DB193D71D6CFFFA7EF9A0522DCD0D3B42E",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleVATDisplay.h"
+                  },
+                  {
+                      "sha256":  "96DC77EF4E4EFDBE6D4B48147C84CDAD8100B924DC807F8BFCF4FE78731ACCCA",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleVATMaterial.cpp"
+                  },
+                  {
+                      "sha256":  "CB1441D2762E04C70C95FB1CEDFD198DDB62ABCEB5019BE5E69ACCC56CC8099C",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleVehicle.cpp"
+                  },
+                  {
+                      "sha256":  "CD4B9BF02816AD65402CC3837C405DF74D9DD3B2B31D18F06CD1B6DEF543E2E2",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleVehicleNavMesh.h"
+                  },
+                  {
+                      "sha256":  "22EF8AAC6CDE461903395FD1693AEB69452C9F0C2EEF7A5BAFE3755044E250AC",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleVehicleTactics.cpp"
+                  },
+                  {
+                      "sha256":  "C59711A58C279FE51D332007B76824DFF9C16575AFFC27DCC82442BAFEB8D913",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleViewVisibility.cpp"
+                  },
+                  {
+                      "sha256":  "B079A906874A40B8D81ABC2D427A03ABA75D0436C57C0C5EBC5A02FB771D1402",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleViewVisibility.h"
+                  },
+                  {
+                      "sha256":  "0D37A596A83D73BA66CAE84F8D468E1A62115A2DD158BFDAC5BD59C998A04282",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleWarScore.cpp"
+                  },
+                  {
+                      "sha256":  "DDB450FFB10C08FBEA521A94AF395ACC8A73880824F0EBCEBA192BAE84F12EB3",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleWarScore.h"
+                  },
+                  {
+                      "sha256":  "D0F5A799C31E89CDB8721FE9CEC518BB3E103E1A84DBDE120C672566B2944069",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleWeaponOrders.cpp"
+                  },
+                  {
+                      "sha256":  "AC3E484AC3D4D648676695BAC21D9DF1393AE881D25CE6760541AC4C83C45CD2",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleWeaponPreview.cpp"
+                  },
+                  {
+                      "sha256":  "CE7E743AA01C6B21B0E8C6A45C0FFB675A1B4BC8B712BB9E1E3FA0FA1B55D652",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleWeaponRangeTrial.cpp"
+                  },
+                  {
+                      "sha256":  "3263BE83FE3A6DD4FE59DF708E172EAF24283F55434A4BA209F6A84D2615AB40",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleWideMapAudit.cpp"
+                  },
+                  {
+                      "sha256":  "47B5B77DD81E1D984FA70FC4C25B52FE87187E05AEF2ACA772ABC31576038BAF",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Prototype\\BattleWideMixedSmoke.cpp"
+                  },
+                  {
+                      "sha256":  "6BDD232C5AC4B1B3FB8814BA6D08565F8DB7DC955F733A497841948C330713BA",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\CombatCharacter.cpp"
+                  },
+                  {
+                      "sha256":  "8C5E9D20F8930AC3A334ADE19D3213C230C92A6F8696B564497145F9F68387E8",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\CombatCharacter.h"
+                  },
+                  {
+                      "sha256":  "868F294CE822F060B44261A1B73A71C52E6BC2B745EB2DB572A1A1DE8BCC4EF8",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\CombatGameMode.cpp"
+                  },
+                  {
+                      "sha256":  "0D22D9E00AAE9544F29D81F73588870E77C7339DE6F2277482CA002D12F208D6",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\CombatGameMode.h"
+                  },
+                  {
+                      "sha256":  "938482B07A34210BBA98BA55370F94A1B470AE343D4B62F98913A8FFF7BF82E4",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\CombatPlayerController.cpp"
+                  },
+                  {
+                      "sha256":  "A0438CECBD065FC53897FCDCFC41881E2DD7A778479A126A3147B3DC3A37EB20",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\CombatPlayerController.h"
+                  },
+                  {
+                      "sha256":  "284D569AA4E0DA606FA57CDE8972F2AE5386F2563A7096FA1C9BBEF018B90C1D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\AI\\CombatAIController.cpp"
+                  },
+                  {
+                      "sha256":  "DFE3912B8F2A8395DCA2B00FACC8255817D68F7DBBCFA50373A32752D538D8D1",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\AI\\CombatAIController.h"
+                  },
+                  {
+                      "sha256":  "03937D099E01DA430A2AD5E85E9B23536F686B3239B695CE6772F8ADCE4AB6DB",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\AI\\CombatEnemy.cpp"
+                  },
+                  {
+                      "sha256":  "F0A48761EFFE77535D7BBC5F8E38D440535E6FDA1561B1DE4CF6E25430DEA092",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\AI\\CombatEnemy.h"
+                  },
+                  {
+                      "sha256":  "12A10515ADE0BC00B4C42A9AAEC24E67353F6107A4022F359F19D0F9D939173F",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\AI\\CombatEnemySpawner.cpp"
+                  },
+                  {
+                      "sha256":  "7340C0EDF7D88A69187117FDB602D4DDA686D29E5C0472F89BF91C530D1696FE",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\AI\\CombatEnemySpawner.h"
+                  },
+                  {
+                      "sha256":  "9CB87C332C423D41831A770B00C76382A7FD08A9B0F847D31C0E85D2A5345FEF",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\AI\\CombatStateTreeUtility.cpp"
+                  },
+                  {
+                      "sha256":  "4F318C7613254956132DE5304D1AA59B6495A8F8417ACFE4F417F71D694C27FE",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\AI\\CombatStateTreeUtility.h"
+                  },
+                  {
+                      "sha256":  "55FF89EC36863BF9D4FF0BB69F0608D8071FFD3A8AF325E1350160954BA76C0E",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\AI\\EnvQueryContext_Danger.cpp"
+                  },
+                  {
+                      "sha256":  "C500A30A31D48E1E0EA2C89CD4CDA6A49CBD4BC53874EE3BAF7D8AEC0E50C592",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\AI\\EnvQueryContext_Danger.h"
+                  },
+                  {
+                      "sha256":  "29709E7FCC2F5B016E089B1FF36031BB4309C282D1FBE1991BCAA77967A9CF92",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\AI\\EnvQueryContext_Player.cpp"
+                  },
+                  {
+                      "sha256":  "A01581486AF43F53DA11549769CC900A3F98D1F792FC0B837EEEC44347587B47",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\AI\\EnvQueryContext_Player.h"
+                  },
+                  {
+                      "sha256":  "A7BA5BE23D5972270C787A42534591214B607FAE13DFB41DDCC9724F12FC9817",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Animation\\AnimNotify_CheckChargedAttack.cpp"
+                  },
+                  {
+                      "sha256":  "7217E969011C57388DBC568484211517F883E015F2014E20A62A5B306C8117F6",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Animation\\AnimNotify_CheckChargedAttack.h"
+                  },
+                  {
+                      "sha256":  "6F208A41AE7FA918E14A155513A524698D638CBD09592FCAED2254AF6458B766",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Animation\\AnimNotify_CheckCombo.cpp"
+                  },
+                  {
+                      "sha256":  "7FBA79FD88E486ED1C938081158049BB734D8E82CE4284FBEF46E2D023A68033",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Animation\\AnimNotify_CheckCombo.h"
+                  },
+                  {
+                      "sha256":  "330DA20E757DCE4A66307456E45CB504B95BB2B7390F57A766119887BBC09192",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Animation\\AnimNotify_DoAttackTrace.cpp"
+                  },
+                  {
+                      "sha256":  "DB0A34ED8243E7E75C4B49CFBA76623045A7D756B05EB8B4254EA89B974C3564",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Animation\\AnimNotify_DoAttackTrace.h"
+                  },
+                  {
+                      "sha256":  "93AA5C83DE6C151F1A3E61BABC3A784540863943CAD6DD739358A9BAFB5C067D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Gameplay\\CombatActivationVolume.cpp"
+                  },
+                  {
+                      "sha256":  "C6934E8F0AE70A3812D855283CFB46DF8005E3A93935126545FD64E302B189C5",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Gameplay\\CombatActivationVolume.h"
+                  },
+                  {
+                      "sha256":  "49DC1064892D878FEBCD45A8D1EF098F9785702F6AFA3556F8F5490CA8B01033",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Gameplay\\CombatCheckpointVolume.cpp"
+                  },
+                  {
+                      "sha256":  "14DCECA3D22159F950430C77CB0B29FB18BF2134D53F5FC4156A0DB18963BC00",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Gameplay\\CombatCheckpointVolume.h"
+                  },
+                  {
+                      "sha256":  "11A1C8650864AFDEDBD423CF6014FFA8898C89F5A508A4E155FFF980983EB68B",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Gameplay\\CombatDamageableBox.cpp"
+                  },
+                  {
+                      "sha256":  "798B7962553E0A5B9C2488358D5B0BF6DB0766133B952347B20A4DAE80640B81",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Gameplay\\CombatDamageableBox.h"
+                  },
+                  {
+                      "sha256":  "0C6B76BF72E5C7415A2577521669A195A17E588174E25504263F13EE521FD3C6",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Gameplay\\CombatDummy.cpp"
+                  },
+                  {
+                      "sha256":  "69240EE78D0432269E092F3A056B51466C3289022C18AB465D5E310FFD7D6D38",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Gameplay\\CombatDummy.h"
+                  },
+                  {
+                      "sha256":  "8F0324387AA077014C2FE82FEEE09B6A305F27839090D1881AACA29EE6C4B594",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Gameplay\\CombatLavaFloor.cpp"
+                  },
+                  {
+                      "sha256":  "35480E9854364122FE89ED8A99FDCC5594541F8E9183062D8C3AD99B3F5F32ED",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Gameplay\\CombatLavaFloor.h"
+                  },
+                  {
+                      "sha256":  "E2F80A8A5FAFF0F3B7851080DA2A603AB0F7B5F5631A18846BE77F858DFD7174",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Interfaces\\CombatActivatable.cpp"
+                  },
+                  {
+                      "sha256":  "667420904131AB6DD15425DFCDC86F8CBC76E7C8192F448B714EE455E1ABC68A",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Interfaces\\CombatActivatable.h"
+                  },
+                  {
+                      "sha256":  "2A0E7797FEFA8F31A41260377879AA8E7278C146B3E04719EECA10052F3B4B21",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Interfaces\\CombatAttacker.cpp"
+                  },
+                  {
+                      "sha256":  "02D3519E3DD56562B5C0ED97A42CB63EBA04927565F2EB5058C835B181EC1578",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Interfaces\\CombatAttacker.h"
+                  },
+                  {
+                      "sha256":  "8B466A64C3C1AD64CA25E7342C161173B1C3BC7F975751695AF6703D9F43748A",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Interfaces\\CombatDamageable.cpp"
+                  },
+                  {
+                      "sha256":  "4A93E03FD3026D02BF5209A667576EE2A6B26D98EB1F6D8BE4571AB7682A42ED",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\Interfaces\\CombatDamageable.h"
+                  },
+                  {
+                      "sha256":  "66072F80A18FD2B36FF7ED9D2360129DFE3665F810209D8CDA47E097D51A501E",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\UI\\CombatLifeBar.cpp"
+                  },
+                  {
+                      "sha256":  "B334B1E05929D5614FF04935A3DC5DD97BEFE4BBB486F0436C6D5AB3073B9208",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Combat\\UI\\CombatLifeBar.h"
+                  },
+                  {
+                      "sha256":  "176A26C72F343397C316744B9B049C180AB3ED09A65FAA4553B1A960F778732E",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Platforming\\PlatformingCharacter.cpp"
+                  },
+                  {
+                      "sha256":  "5E862072AF0919D7C4C04C740E823A0568BFFAC00577D1A73BB934D15C63DA1F",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Platforming\\PlatformingCharacter.h"
+                  },
+                  {
+                      "sha256":  "F717126AB93860AD9C102BFA067B2D14DFD1F4A755FA952D7C6B907D4D47B1E7",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Platforming\\PlatformingGameMode.cpp"
+                  },
+                  {
+                      "sha256":  "FCA351D4DC24ABCD810453E9DCAD37B10404D5B2E2E5FD6613B301C868FF4094",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Platforming\\PlatformingGameMode.h"
+                  },
+                  {
+                      "sha256":  "A4B39CAE063BA50407BD9B8E3C1D1CF06C728FAA3CB6E88E7F75D17E04903D8D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Platforming\\PlatformingPlayerController.cpp"
+                  },
+                  {
+                      "sha256":  "45DB8B4FA47A7C6D90A049783B07E9D2EAD05FB622DDF77DC03F01B07C447E35",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Platforming\\PlatformingPlayerController.h"
+                  },
+                  {
+                      "sha256":  "BAB4B0AA7C6912A40145A4EE0C1FE96DF765FADF610F370FFB1EAD2DC338859A",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Platforming\\Animation\\AnimNotify_EndDash.cpp"
+                  },
+                  {
+                      "sha256":  "3FA1ACFF7BC00157507F670DE00B40A14F35A6A131C95A1A7646CACB364C080A",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_Platforming\\Animation\\AnimNotify_EndDash.h"
+                  },
+                  {
+                      "sha256":  "7B271DB57B2FDB2131DD2F17A6D2DF947528BDF1B74F80654A01FBEE6AC83DAD",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\SideScrollingCameraManager.cpp"
+                  },
+                  {
+                      "sha256":  "BE383DB6F6CC92CDC22D68D00CD1ECBD0C7A5EFF7150F8AE1049C11AC0362C20",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\SideScrollingCameraManager.h"
+                  },
+                  {
+                      "sha256":  "6B3AB05A43AD858B183475D5CDA14DDD97A3D52A3B504C5617842AEEDF282296",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\SideScrollingCharacter.cpp"
+                  },
+                  {
+                      "sha256":  "A8F855B846D8E44F5A8318398AE7589ABFE18FD7A0EBF321DD33D9FFD51E3640",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\SideScrollingCharacter.h"
+                  },
+                  {
+                      "sha256":  "346E5F8B66B2401326F76DAE03C3D4ECAC2B69E3BFB14CEADDECAF2A5C235E66",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\SideScrollingGameMode.cpp"
+                  },
+                  {
+                      "sha256":  "756DBF932D68B05C3CE3C6E3B12DAB05CFCF09A07407A49BE9FAF422C2007D67",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\SideScrollingGameMode.h"
+                  },
+                  {
+                      "sha256":  "D10D2DA8B18C0EEE638B6670E0DA240AAE641761410A6F08E3D86C4CABE831BE",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\SideScrollingPlayerController.cpp"
+                  },
+                  {
+                      "sha256":  "CE8A2757C326C732A7D2099513FA8087BB83F6FC0AA029674BC3EA5A73940DD3",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\SideScrollingPlayerController.h"
+                  },
+                  {
+                      "sha256":  "D88C97C73AE881DD4E01E66CD716BC08CE72C62D55685D5A77B44D85D4400FFB",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\AI\\SideScrollingAIController.cpp"
+                  },
+                  {
+                      "sha256":  "A03041F0AA841A98CCBC374270ED4B430944821BED0BE42D00ED464CBC6DDA56",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\AI\\SideScrollingAIController.h"
+                  },
+                  {
+                      "sha256":  "2EE346C7399B8E567883C87DC584CCEB9AEA66782541B0AA85ABA803663DD192",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\AI\\SideScrollingNPC.cpp"
+                  },
+                  {
+                      "sha256":  "DBBF579FCCC41103B9A42241C2091CCAA7B179CFB93A45A1C72D78B3D7871AB0",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\AI\\SideScrollingNPC.h"
+                  },
+                  {
+                      "sha256":  "CBBC76A40E15807BC8CDCB36A2C221A78E436DB049DE9B91271076184C439F32",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\AI\\SideScrollingStateTreeUtility.cpp"
+                  },
+                  {
+                      "sha256":  "D2180D29F86B969E8BF3CFC38DC478DD9F84D72DBBC511B1214E133FC7ED2E1F",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\AI\\SideScrollingStateTreeUtility.h"
+                  },
+                  {
+                      "sha256":  "EC45C344D86420C8BF298F96D24A9CE566002F63927D1451A6C34411B7AF0791",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\Gameplay\\SideScrollingJumpPad.cpp"
+                  },
+                  {
+                      "sha256":  "9A1887131B94913C0CD1A5BFDBEF33228BA19572ADAB159CA8B40F145566DE8F",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\Gameplay\\SideScrollingJumpPad.h"
+                  },
+                  {
+                      "sha256":  "B4546CCBF1135CD0F5FF6FA6BF7D2E22F3BCC5968EE01F40EFAD67235A9183E9",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\Gameplay\\SideScrollingMovingPlatform.cpp"
+                  },
+                  {
+                      "sha256":  "2CB2BB3D5E8D5CAD9CCC951F0A5BD20FF986492B9D09EF1E26B1195349855D4D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\Gameplay\\SideScrollingMovingPlatform.h"
+                  },
+                  {
+                      "sha256":  "2010ED63CDD56CC71D14C88E2D6AB1C7BEFA7EDBCB8026921D4D89A663DEC37D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\Gameplay\\SideScrollingPickup.cpp"
+                  },
+                  {
+                      "sha256":  "4E3ACBC5D236D25B99F882597BE2327973C2AABD3A0586D9BAD5222E2089F393",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\Gameplay\\SideScrollingPickup.h"
+                  },
+                  {
+                      "sha256":  "4067A7458E1070343B0FBA40A07EF5FF147F6AD4667D7113CEA6493D54FC79AF",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\Gameplay\\SideScrollingSoftPlatform.cpp"
+                  },
+                  {
+                      "sha256":  "29B8B0D8679783A777028C6C086F57D2105084C7F66AC99717D60BF2D3F92F40",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\Gameplay\\SideScrollingSoftPlatform.h"
+                  },
+                  {
+                      "sha256":  "F145765DA2993E59752419CCD968DB75DBC7359F98008B3758480F4DD2FA2E52",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\Interfaces\\SideScrollingInteractable.cpp"
+                  },
+                  {
+                      "sha256":  "7DB9C88A12CC339CF767DA9D9C6172F28F196A6D12D0BB8E4AFB575CB7EB9F00",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\Interfaces\\SideScrollingInteractable.h"
+                  },
+                  {
+                      "sha256":  "80429AD41EF9DDBDBEC1E9100CEE1196FA2497DD6E552F630DD18C7761D8F5B1",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\UI\\SideScrollingUI.cpp"
+                  },
+                  {
+                      "sha256":  "D5C7899C6D98EDC402E5AA4BF677CAAA0D03609E59427C77EC647F35DF126E07",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Source\\FutureBattle\\Variant_SideScrolling\\UI\\SideScrollingUI.h"
+                  },
+                  {
+                      "sha256":  "D2E3AEB56FE082CF8D7215B479DE4A8389EC723E9DF713266FCEC68DE2CC2C89",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Config\\DefaultEditor.ini"
+                  },
+                  {
+                      "sha256":  "721E2D60FF67464D39E5987FCD923BE4929A917EE2C97CE2A1CA8AABC58E9CE6",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Config\\DefaultEditorPerProjectUserSettings.ini"
+                  },
+                  {
+                      "sha256":  "7789E1B845130DBCDA0FD9C312140D9837FF310F0308C2BE50ADA8111512A948",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Config\\DefaultEngine.ini"
+                  },
+                  {
+                      "sha256":  "93CD6F42E69131C99F151C36FB5D1032735B52755B90E8A2A66C89F5CD14F47B",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Config\\DefaultGame.ini"
+                  },
+                  {
+                      "sha256":  "A0A26C2A77FA2B5818A0CB766E31B490A689AFC5FAB51F7AB9A0816725B8737D",
+                      "path":  "C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\Config\\DefaultInput.ini"
+                  }
+              ],
+    "arguments":  [
+                      "\"C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Game\\FutureBattle\\FutureBattle.uproject\"",
+                      "/Game/Prototype/Lvl_BattleWide_E",
+                      "-game",
+                      "-unattended",
+                      "-nosound",
+                      "-nosplash",
+                      "-BattleWideMixed",
+                      "-BattleRangeAware=1",
+                      "-BattleSightRange=5000",
+                      "-abslog=\"C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Setup\\Benchmarks\\SightTrial-20261111\\rb01-perf-body-r3\\run.log\"",
+                      "-BattleSquadFlank=1",
+                      "-BattleCoverActions=0",
+                      "-BattleFlankCoordination=0",
+                      "-BattleAICoverProbe=0",
+                      "-BattleCoverApproach=0",
+                      "-BattleLeaderGuard=0",
+                      "-BattleAreaCompositionPlanner=0",
+                      "-BattleAreaCompositionPlannerTeams=0",
+                      "-BattleFlankRelaxed=0",
+                      "-BattleFlankTeams=3",
+                      "-BattleTacticalObserve",
+                      "-BattleArea",
+                      "-BattleSightExperiment=\"C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Setup\\Benchmarks\\SightTrial-20261111\\rb01-perf-body-r3\\metrics.json\"",
+                      "-BattleTrialSeed=7",
+                      "-UseFixedTimeStep",
+                      "-FPS=30",
+                      "-RenderOffscreen",
+                      "-ForceRes",
+                      "-ResX=1920",
+                      "-ResY=1080",
+                      "-BattleWideScreens=\"C:\\Users\\nanek\\Documents\\FPS\\FutureBattle-rb01\\Setup\\Benchmarks\\SightTrial-20261111\\rb01-perf-body-r3\\screen\"",
+                      "-BattleSoldierBody=1"
+                  ],
+    "dll":  "758CD494B77A3AE810E1070DF56503535FC8DDD395D45C7DA5F0BB69D1F1306F",
+    "compositionResolvedLog":  [
+
+                               ]
+}
