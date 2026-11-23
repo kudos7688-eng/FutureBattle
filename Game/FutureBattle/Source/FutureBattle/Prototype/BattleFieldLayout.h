@@ -4,6 +4,7 @@
 #include "BattleSectors.h"
 #include "BattleMapI.h"
 #include "BattleMapJ.h"
+#include "BattleMapK.h"
 
 namespace BattleFieldLayout
 {
@@ -194,6 +195,47 @@ namespace BattleFieldLayout
 				for(double X:{-40000.,-17500.,17500.,40000.}){Edge(X,25000,X,0,ERouteLane::Connector);Edge(X,0,X,-25000,ERouteLane::Connector);}
 				Edge(-42000,0,-40000,0,ERouteLane::Centre);Edge(40000,0,42000,0,ERouteLane::Centre);
 				D.Heights=BattleMapJ::MakeHeights(D.HalfExtent);
+				T.Add(D);
+			}
+			// K (2026-11-22, Docs/design-map-k.md): a dense small town (600m x 400m, columns 4..15, rows 3..10 of the grid of I and J) ringed
+			// by mountains, for close fights that come from the ground. No field, wood, hill or water; six objectives; the homes of J.
+			{
+				FMapDef D=Urban;D.Name=TEXT("Lvl_BattleWide_K");
+				D.bSectors=true;
+				D.SectorKind=[](FIntPoint C)->char
+				{
+					switch(BattleMapK::Kind(C.X,C.Y))
+					{
+					case TEXT('P'):case TEXT('O'):case TEXT('Y'):return 'J';
+					case TEXT('W'):case TEXT('K'):return 'W';
+					case TEXT('H'):case TEXT('B'):case TEXT('A'):case TEXT('C'):case TEXT('Q'):case TEXT('U'):return 'H';
+					case TEXT('G'):return 'T';case TEXT('M'):return 'M';default:return 'F';
+					}
+				};
+				D.Objectives=BattleMapK::Objectives();
+				D.ObjectiveOwners={-1,-1,-1,-1,-1,-1};
+				D.ObjectiveValues={1,1,1,1,1,1};
+				D.PointIncomeScale=.7f;
+				D.CityHalf=FVector2D(30000,20000);
+				// Lookouts: the parks at the north-east and south-west corners of the town.
+				D.Lookouts={FVector(27500,17500,0),FVector(-27500,-17500,0)};
+				auto Node=[&D](double X,double Y){const FVector P(X,Y,0);for(int32 I=0;I<D.RouteNodes.Num();++I)if(D.RouteNodes[I].Equals(P,1))return I;return D.RouteNodes.Add(P);};
+				auto Edge=[&](double X0,double Y0,double X1,double Y1,ERouteLane Lane){FRouteEdge E;E.A=Node(X0,Y0);E.B=Node(X1,Y1);E.Lane=Lane;D.RouteEdges.Add(E);};
+				// Routes follow the roads of BattleMapK::Roads(). Centre: the avenue with its two turns.
+				const double Avenue[][2]={{-42000,0},{-35000,0},{-35000,-5000},{-30000,-5000},{-10000,-5000},{-10000,0},{10000,0},{10000,5000},{30000,5000},{35000,5000},{35000,0},{42000,0}};
+				for(int32 I=0;I+1<UE_ARRAY_COUNT(Avenue);++I)Edge(Avenue[I][0],Avenue[I][1],Avenue[I+1][0],Avenue[I+1][1],ERouteLane::Centre);
+				const double North[][2]={{-30000,15000},{-10000,15000},{-10000,10000},{10000,10000},{10000,15000},{30000,15000}};
+				for(int32 I=0;I+1<UE_ARRAY_COUNT(North);++I)
+				{
+					Edge(North[I][0],North[I][1],North[I+1][0],North[I+1][1],ERouteLane::North);
+					Edge(-North[I][0],-North[I][1],-North[I+1][0],-North[I+1][1],ERouteLane::South);
+				}
+				// Connectors: beside the town's ends (x = +-300m) and through its middle (x = +-100m).
+				Edge(30000,15000,30000,5000,ERouteLane::Connector);Edge(30000,5000,30000,-15000,ERouteLane::Connector);
+				Edge(-30000,-15000,-30000,-5000,ERouteLane::Connector);Edge(-30000,-5000,-30000,15000,ERouteLane::Connector);
+				Edge(10000,10000,10000,5000,ERouteLane::Connector);Edge(10000,0,10000,-10000,ERouteLane::Connector);
+				Edge(-10000,-10000,-10000,-5000,ERouteLane::Connector);Edge(-10000,0,-10000,10000,ERouteLane::Connector);
+				D.Heights=BattleMapK::MakeHeights(D.HalfExtent);
 				T.Add(D);
 			}
             {

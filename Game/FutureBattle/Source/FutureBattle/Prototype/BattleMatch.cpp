@@ -171,7 +171,7 @@ void UBattleMatch::Update(float DeltaSeconds)
 	UpdateObjectives(DeltaSeconds);
  if(bArea)
  {
-  UpdateArea(DeltaSeconds);UpdateSituationLog();DirectorClock+=DeltaSeconds;
+  UpdateArea(DeltaSeconds);UpdateSituationLog();UpdateHireQueue();DirectorClock+=DeltaSeconds;
   if(DirectorClock>=5)
   {
    DirectorClock=0;
@@ -380,6 +380,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  const bool bStrategy=bArea&&BattleTactics::AreaStrategy().bEnabled;
  // Strategy layer S2 (BattleStrategy.cpp, -BattleStrategy>=2): the team's plan is reviewed once here, before any intent is read.
  if(bStrategy)UpdateStrategy(Team);
+ // Front plan stage 2 (BattleFrontLine.cpp, -BattleFrontPlan=1; off while -BattleStrategy>=2 runs for the team).
+ if(bStrategy)UpdateFrontPlan(Team);
  const FAreaIntent TeamIntent=AreaIntent(Team);
  // Squad groups (BattleGroups.cpp): members, AI formation (trial) and phases, before the orders that read them.
  if((CompositionTeams&(1<<Team))!=0)UpdateCompositionPurposes(Team);
@@ -467,6 +469,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   if(bTankPost){Center=AreaTankPost(Team,Target);if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2500.)Center=Pair.Value.MissionDestination;}
   // A squad in a group the AI runs follows its group: the rally point while gathering, then the group's objective together.
   if(!bRaidDuty&&!bMortarPost&&bStrategy&&!Purpose&&!Groups.IsEmpty())GroupOrder(Pair.Key,Team,Center,Order);
+  // Trial -BattleFrontReserve: a free squad of the front army's reserve waits behind the line (BattleFrontLine.cpp, 6c).
+  if(!bRaidDuty&&!bMortarPost&&bStrategy&&!Purpose&&!FrontReservePosts.IsEmpty()&&GroupOf(Pair.Key)==INDEX_NONE)FrontReserveOrder(Pair.Key,Team,Center,Order);
   // A supply vehicle (BattleSupplyCar.cpp): home to load while low, else behind its group's post or the front own point; never the home assault.
   if(bStrategy&&Pair.Value.SquadType==BattleSquadType::Supply)SupplyCarOrder(Pair.Key,Team,Center,Order);
   // Routes: a distant goal is reached junction by junction along the roads of the map (BattleRoutes.cpp). Not for scout pairs

@@ -399,6 +399,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);if(!U || !U->CoverPhase)return false;
  auto* Squad=Store->FindSquad(U->SquadID);auto& B=Bodies.FindChecked(ID);
  const bool Player=B.Actor.IsValid()&&B.Actor->IsPlayerControlled();
+ const auto PhaseAtStart=U->CoverPhase; // the player's stance is set only when the phase changes (below)
  auto& Diag=SightExperiment;
  if(!BattleTactics::CoverActionsEnabled() || !U->IsAlive() || !Squad || Squad->CommandStatus!=EBattleCommandStatus::Active || U->OrderRevision!=U->CoverOrderRevision || (!Player && U->Order==EBattleOrder::Move && !U->bSoldierOrder))
  {Diag.Cover(!U->IsAlive()?TEXT("cancel_died"):(!Squad || Squad->CommandStatus!=EBattleCommandStatus::Active)?TEXT("cancel_squad_inactive"):TEXT("cancel_new_order"));CancelCoverAction(ID);return false;}
@@ -516,7 +517,8 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  U->DecisionReason=U->CoverPhase==2?(IsBlindFiring(ID,Now)?TEXT("COVER / BLIND FIRE"):TEXT("COVER / HIDDEN - FIRE TO PEEK")):U->CoverPhase==4?TEXT("COVER / EXPOSED FIRING WINDOW"):TEXT("COVER / MOVING - FIRE BLOCKED");
  if(!Player)U->Action=U->CoverPhase==2?EBattleAction::TakingCover:U->CoverPhase==4?EBattleAction::Engaging:EBattleAction::Moving;
  // Stances: crouch while hidden behind cover, stand to move and to fire from the peek point.
- // (Direct control too: behind low cover the player is only hidden while crouched.)
- SetStance(ID,U->CoverPhase==2?BattleStance::Crouch:BattleStance::Stand,Now,true);
+ // (Direct control too: behind low cover the player is only hidden while crouched.) For the player only when the phase changes:
+ // between changes his own X wins (and a soldier he takes over in the middle of a cover action keeps his stance).
+ if(!Player || U->CoverPhase!=PhaseAtStart)SetStance(ID,U->CoverPhase==2?BattleStance::Crouch:BattleStance::Stand,Now,true);
  return true;
 }

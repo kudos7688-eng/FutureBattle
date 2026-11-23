@@ -158,6 +158,7 @@
 			{
 				Put(TEXT("Tower"),1250,1200,1500,1300,2400+(Hh%4)*200);UseJ(GreyJ);
 				Put(TEXT("Planter"),-1300,-1300,600,200,130);Put(TEXT("Planter"),-1500,800,200,600,130);Car(1300,-1500,true);
+				if(BattleMapJ::bDenseCover)Put(TEXT("PlanterWall"),600,-700,60,700,130);
 			}
 			else if(Vr%3==1)
 			{
@@ -219,6 +220,7 @@
 				if((Hh>>(Ix+6))&1)Car(-1500+Ix*600,-1300,false);
 			}
 			Put(TEXT("LampPost"),1850,0,30,30,600);Put(TEXT("LampPost"),-1850,0,30,30,600);Put(TEXT("Booth"),-1800,-1900,250,200,260);
+			if(BattleMapJ::bDenseCover){Put(TEXT("Barrier"),-900,-700,700,60,130);Put(TEXT("Barrier"),900,700,700,60,130);}
 			break;
 		case TEXT('G'):
 			// Park: trees in a loose ring, hedges, a statue and benches.
@@ -345,6 +347,24 @@
 		auto BorderJ=[&](bool bAlongX,double At,double Mid,uint32 Pick)
 		{
 			if(BattleMapJ::OnRoad(bAlongX,At,Mid))return;
+			if(BattleMapJ::bDenseCover)
+			{
+				// Map K: a yard wall 2.5m high along every border without a road, from corner to corner (short of a crossing road), with
+				// two doorways of 3m at places that differ from border to border. Generation 3 left 5m open at each corner: that made a
+				// lane 10m wide along every sector line, and more than half of the shots beyond 100m went along those lanes or
+				// diagonally through the corners (mk3s-K-s7 and s43-swap, -BattleShotLog).
+				UseJ((Pick&1)?BrickMatJ:GreyJ);
+				auto CrossK=[&](double End){return BattleMapJ::OnRoad(!bAlongX,End,At-100.)||BattleMapJ::OnRoad(!bAlongX,End,At+100.);};
+				const double Lo=Mid-2500.+(CrossK(Mid-2500.)?500.:0.),Hi=Mid+2500.-(CrossK(Mid+2500.)?500.:0.);
+				const double DoorA=Mid-1700.+400.*((Pick>>1)%3),DoorB=Mid+700.+400.*((Pick>>3)%3);
+				const double Ends[3][2]={{Lo,DoorA-150.},{DoorA+150.,DoorB-150.},{DoorB+150.,Hi}};
+				for(const auto& E:Ends)
+				{
+					const double M2=(E[0]+E[1])*.5,L2=E[1]-E[0];
+					if(bAlongX)Emit(TEXT("YardHighWall"),M2,At,L2,60,250);else Emit(TEXT("YardHighWall"),At,M2,60,L2,250);
+				}
+				return;
+			}
 			const uint32 Kd=Pick%5;if(Kd==4)return; // open
 			const bool bHedge=Kd<=1;const bool bPosts=Kd==3;UseJ(bHedge?TreeMatJ:GreyJ);
 			const double Len=bPosts?1600:2000,Thick=bHedge?100:60,Hz=bHedge?220:bPosts?110:130;

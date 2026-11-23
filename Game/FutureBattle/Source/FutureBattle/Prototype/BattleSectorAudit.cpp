@@ -58,7 +58,11 @@ void BattleSectorAudit(UBattleMatch& Match,float DeltaSeconds)
   // 2. One sector each for up to eight squads, on the west side (team 0's own): houses, a junction, fields, woods.
   // Map J (2026-11-22): (7,3) is a mountain there; the pass (6,3) instead.
   const bool bMapJ=FCString::Strcmp(BattleFieldLayout::Of(World).Name,TEXT("Lvl_BattleWide_J"))==0;
-  const FIntPoint Cells[8]={FIntPoint(5,6),FIntPoint(6,7),FIntPoint(4,5),FIntPoint(8,7),FIntPoint(3,9),bMapJ?FIntPoint(6,3):FIntPoint(7,3),FIntPoint(5,1),FIntPoint(2,6)};
+  // Map K (2026-11-22): the town is columns 4..15, rows 3..10; the rest is mountain.
+  const bool bMapK=FCString::Strcmp(BattleFieldLayout::Of(World).Name,TEXT("Lvl_BattleWide_K"))==0;
+  const FIntPoint CellsK[8]={FIntPoint(5,6),FIntPoint(6,7),FIntPoint(4,5),FIntPoint(8,7),FIntPoint(5,9),FIntPoint(7,3),FIntPoint(6,4),FIntPoint(4,8)};
+  const FIntPoint CellsIJ[8]={FIntPoint(5,6),FIntPoint(6,7),FIntPoint(4,5),FIntPoint(8,7),FIntPoint(3,9),bMapJ?FIntPoint(6,3):FIntPoint(7,3),FIntPoint(5,1),FIntPoint(2,6)};
+  const FIntPoint* Cells=bMapK?CellsK:CellsIJ;
   SectorAuditRows.Reset();
   for(int32 I=0;I<8&&I+1<IDs.Num();++I)
   {

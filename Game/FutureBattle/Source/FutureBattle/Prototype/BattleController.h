@@ -59,6 +59,23 @@ struct FBattleCommandBarLayout
  }
 };
 
+// Plan panel (front plan stage 7, Docs/design-front-strategy.md 6; U in the tactical view): the player's section roles
+// (-BattleFrontPlanPlayer=1) and the purchase reservations with the hiring delegation (-BattleHireReserve=1). Shared by Canvas and input.
+struct FBattlePlanPanelLayout
+{
+ // Kind: 0 text, 1 section role, 2 reservation one up, 3 reservation cancel, 4 delegation level, 5 reserve down, 6 reserve up,
+ // 7 type allowed, 8 close. Tone: buttons 0 plain, 1 allowed, 2 denied, 3 chosen; text 0 plain, 4 title, 5 muted.
+ struct FItem { FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector; uint8 Kind=0, Tone=0; int32 Index=0; FString Text; };
+ TArray<FItem> Items; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector;
+ static FBattlePlanPanelLayout Make(FVector2D View,const UWorld* World);
+ bool Contains(FVector2D P) const {return P.X>=Origin.X&&P.X<Origin.X+Size.X&&P.Y>=Origin.Y&&P.Y<Origin.Y+Size.Y;}
+ int32 ItemAt(FVector2D P) const
+ {
+  for(int32 I=0;I<Items.Num();++I){const auto& T=Items[I];if(T.Kind!=0&&P.X>=T.Origin.X&&P.X<T.Origin.X+T.Size.X&&P.Y>=T.Origin.Y&&P.Y<T.Origin.Y+T.Size.Y)return I;}
+  return INDEX_NONE;
+ }
+};
+
 UCLASS()
 class ABattleController : public APlayerController
 {
@@ -136,6 +153,11 @@ public:
 	void HireArmoredCar();
 	void HireMortar();
 	void HireSPGun();
+	// Area purchase key: a plain purchase, or with -BattleHireReserve=1 a purchase reservation (BattleArea.cpp ReserveHire).
+	void BuyArea(uint8 SquadType);
+	// -BattleHireReserve=1: Backspace cancels the newest own reservation, = moves it to the front.
+	void CancelNewestReservation();
+	void NewestReservationToFront();
 	void HireExo();
 	void HireSupply();
 	void StartMatch();
@@ -145,6 +167,9 @@ public:
 	void ResetMatchControl();
 	void RequestSupport();
 	bool IsTactical() const { return bTactical; }
+	// Plan panel (front plan stage 7): U opens and closes it in the tactical view.
+	bool IsPlanPanelOpen() const { return bPlanPanel; }
+	void TogglePlanPanel();
 	// Play-speed toggle (tactical view, standalone only): [.] cycles x1/x2/x4 via global time dilation; direct control always runs at x1.
 	void CycleGameSpeed();
 	// Route choice (BattlePlayerRoutes.cpp): the next of automatic, centre, north, south for the selected squads.
@@ -243,6 +268,9 @@ private:
  bool bSquadListPress=false;
  // A left press that started on the minimap (moves the tactical camera); its release is swallowed too.
  bool bMinimapPress=false;
+ // Plan panel: open, and a left press inside it (its release is swallowed too).
+ bool bPlanPanel=false, bPlanPress=false;
+ bool PlanPanelInput(const FInputKeyEventArgs& Params);
  int32 PressedSquadID=INDEX_NONE;
  FDelegateHandle LeaderDeathHandle;
  // Notification polling: what the player's side last knew (own home HP, observed point owners, own squads' state).
