@@ -365,6 +365,19 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
     if(Distance<=Best && ClearMovementSegment(Position(ID),Route[I])) {Best=Distance;B->Waypoint=I;}
    }
   }
+  // Trial -BattleCutOffRoute=1 (2026-11-25, default 0; hand-over from the supply lane, STATUS 11-25): the shared path starts at the
+  // centre of the squad, so a member on the other side of a wall (map K: the yard walls, doorways 12m and more apart) walks
+  // straight at its next point and presses against the wall. StableMove gives him a route of his own after 2s, but the squad
+  // replan that the pressing itself asks for (4s) resets every corridor here and sends him back to the wall. With the switch a
+  // member on foot who cannot walk straight to his corridor point gets his own route to his arrival place at once.
+  static const bool bCutOffRoute=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCutOffRoute="),V);return V!=0;}();
+  if(bCutOffRoute && Nav && BattleFieldLayout::IsUrban(GetWorld()) && !NavFor(ID) && Route.IsValidIndex(B->Waypoint) && !ClearMovementSegment(Position(ID),Route[B->Waypoint]))
+   if(const FVector* OwnGoal=P.ArrivalGoals.Find(ID))
+    if(auto* OwnPath=Nav->FindPathToLocationSynchronously(GetWorld(),Position(ID),*OwnGoal);OwnPath && OwnPath->IsValid() && !OwnPath->IsPartial() && OwnPath->PathPoints.Num()>1)
+    {
+     TArray<FVector> OwnRoute;for(const auto& OwnPoint:OwnPath->PathPoints)OwnRoute.Add(OwnPoint);
+     Route=MoveTemp(OwnRoute);B->Waypoint=1;SightExperiment.Cover(TEXT("move_cutoff_route"));
+    }
  }
 }
 
