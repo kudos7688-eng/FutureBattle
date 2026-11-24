@@ -471,7 +471,8 @@ bool UBattleLeaderRuntime::StartAssault(int32 ID,int32 Target,const FVector& Tar
  // that remembered place does not renew the sighting, so the chain ends 30 s after the enemy was last seen.
  if(const auto* Seen=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,Target)){auto& M=ArmsBoundMemory.FindOrAdd(ID);M.Target=Target;M.At=Seen->LastKnownPosition;M.SeenAt=Seen->LastSeenTime;}
  SightExperiment.Cover(TEXT("arms_assault_started"));if(bInArea)SightExperiment.Cover(TEXT("arms_assault_defend_bounds"));
- if(BattleArms::CoverFireEnabled())AddArmsCoverCall(ID,Target,TargetAt,Pos,BestWalk/FMath::Max(1.f,GetDefault<UBattleTuning>()->MoveSpeed*BattleArms::Charge().SpeedScale),Now);
+ // A defender's short bound inside its area (bInArea) calls no covering fire.
+ if(BattleArms::CoverFireEnabled()&&!bInArea)AddArmsCoverCall(ID,Target,TargetAt,Pos,BestWalk/FMath::Max(1.f,GetDefault<UBattleTuning>()->MoveSpeed*BattleArms::Charge().SpeedScale),Now);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARMS_ASSAULT unit=%d team=%d target=%d from=%.0f to=%.0f"),ID,U->Team,Target,Base,FVector::Dist2D(BestAnchor,TargetAt));
  return true;
 }
