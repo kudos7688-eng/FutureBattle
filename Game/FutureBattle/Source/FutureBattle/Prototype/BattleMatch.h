@@ -264,6 +264,14 @@ public:
  uint8 PlayerSectionRole(int32 Section) const;
  bool CyclePlayerSectionRole(int32 Section); // the next allowed role; LastMessage says which
  static const TCHAR* SectionRoleJa(uint8 PlayerRole);
+ // Section orders (trial -BattleFrontSectionOrders=1, default 0, needs the player roles): roles 5 advance and 6 fall back move the
+ // section's rows of the front army's line one column per front step (StepEvery) toward Area.FrontTarget. With the trial on, a line the
+ // player draws becomes that target instead of moving the whole line at once. Advance waits until the row's squads reached the line;
+ // fall back without a target behind goes on to the home column; an own point stays the floor of its row (as before).
+ bool FrontSectionOrdersOn(int32 Team) const;
+ TCHAR SectionOrderOfRow(int32 Team,int32 Row) const; // 'A' advance, 'B' fall back, 0 otherwise
+ void RunFrontOrderScript(int32 Team,const TArray<int32>& Hold,int32 HomeCol,int32 EnemyHomeCol); // test hook -BattleFrontOrderScript
+ bool FrontOrderScriptDone=false;
  // Stage 5 (Docs/design-front-strategy.md 3.1, 4; trial -BattleFrontPlanFocus2=1, default 0, needs -BattleFrontPlan=1): a second focus
  // section and attack army while the first one pushes (section push > 0, its attack group below 30% losses) and at least three free AI
  // rifle squads remain after the front army took its need.

@@ -298,7 +298,7 @@ static const TCHAR* PlanTypeJa(int32 Type)
 }
 static const TCHAR* PlanRoleJa(TCHAR Role)
 {
- return Role==TEXT('F')?TEXT("重点"):Role==TEXT('H')?TEXT("保持"):Role==TEXT('R')?TEXT("下がってよい"):TEXT("保つ");
+ return Role==TEXT('F')?TEXT("重点"):Role==TEXT('H')?TEXT("保持"):Role==TEXT('R')?TEXT("下がってよい"):Role==TEXT('A')?TEXT("前進"):Role==TEXT('B')?TEXT("後退"):TEXT("保つ");
 }
 FBattlePlanPanelLayout FBattlePlanPanelLayout::Make(FVector2D View,const UWorld* World)
 {

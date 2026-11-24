@@ -147,7 +147,9 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   // Stage 7: the player's section roles and hiring delegation.
   if(Area.PlayerSectionRole.Num()>BattleSectors::Rows||Area.PlayerHireDelegate>2||Area.PlayerHireReserve<0||Area.PlayerHireReserve>UBattleMatch::PlayerHireReserveMax||
      Area.PlayerHireDeny<0||Area.PlayerHireDeny>=(1<<BattleSquadType::Count))return Fail(TEXT("Invalid player plan"));
-  for(const uint8 Role:Area.PlayerSectionRole)if(Role>4)return Fail(TEXT("Invalid player section role"));
+  for(const uint8 Role:Area.PlayerSectionRole)if(Role>6)return Fail(TEXT("Invalid player section role"));
+  if(Area.FrontTarget.Num()>BattleSectors::Rows)return Fail(TEXT("Invalid front target"));
+  for(const int32 C:Area.FrontTarget)if(C<-1||C>=BattleSectors::Columns)return Fail(TEXT("Invalid front target"));
   if(Area.HomeHitAt.Num()!=2||!Finite(Area.HomeHitAt[0],-1000,Elapsed+.01)||!Finite(Area.HomeHitAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area home hit clock"));
   // Strategy layer S2 (BattleStrategy.cpp): focus objectives in range, clocks finite (focus/avoid-begin in the past; review/avoid-end within a match).
   if(Area.StrategyPhase.Num()!=2||Area.StrategyFocus.Num()!=2||Area.StrategyFocusAt.Num()!=2||Area.StrategyReviewAt.Num()!=2||Area.StrategyAvoid.Num()!=2||Area.StrategyAvoidUntil.Num()!=2)return Fail(TEXT("Invalid strategy state"));
