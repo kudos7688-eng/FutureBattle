@@ -41,5 +41,9 @@ namespace BattleStance
  // hid his enemy at a place he stays standing there (within 2.5 m). (2) Behind cover, he stood up to peek every 0.8 s hidden,
  // and 72% of the peeks ended with no shot (no enemy seen); with the trial, after a peek with no shot he stays down 3 s.
  bool Steady();
+ // Trial -BattleArrivalReady=1 (default 0, 2026-11-24, user: soldiers of a moving squad stand idle on the way). On map I, 49% of
+ // the time a soldier of a squad on its way stands still with no fight he is at his arrival place (70% of that waiting for squad
+ // mates still walking). With the trial he crouches there (arrival places prefer cover) until his place changes or a fight starts.
+ bool ArrivalReady();
  float MoveScale(uint8 Stance);    // 1 / 0.55 / 0.25 of the walking speed
 }
