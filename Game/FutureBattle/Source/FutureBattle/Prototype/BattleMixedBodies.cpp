@@ -122,7 +122,7 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  }
  // No further fallible validation after this transaction boundary.
  CoverApproaches.Reset();FirePositions.Reset();
- ArmsBoundMemory.Reset();ArmsBoundArrived.Reset();ArmsRushSamples.Reset();ArmsRushers.Reset();ArmsRetreatNext.Reset();ArmsCoverCalls.Reset();ArmsCoverFire.Reset(); // + sector tasks (BattleArmsSector.cpp)
+ ArmsBoundMemory.Reset();ArmsBoundArrived.Reset();ArmsHitAt.Reset();ArmsRushSamples.Reset();ArmsRushers.Reset();ArmsRetreatNext.Reset();ArmsCoverCalls.Reset();ArmsCoverFire.Reset(); // + sector tasks (BattleArmsSector.cpp)
   // where assault bounds saw their enemy and reached cover (BattleArms.cpp)
  SuppressionZeroAt.Reset();
  Stances.Reset();StanceLockedUntil.Reset();LowMoveUntil.Reset();CrouchBlindAt.Reset();QuietPeeks.Reset(); // -BattleStanceSteady memories

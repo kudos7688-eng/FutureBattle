@@ -271,6 +271,7 @@ public:
  struct FArmsBoundMemory{int32 Target=INDEX_NONE;FVector At=FVector::ZeroVector;double SeenAt=-1.e9;};
  TMap<int32,FArmsBoundMemory> ArmsBoundMemory;
  TMap<int32,double> ArmsChargeNext,ArmsBoundArrived;double ArmsNextCharge=0;
+ TMap<int32,double> ArmsHitAt; // -BattleArmsHoldFire: when each soldier was last hit (NoteUnderFire). Runtime only.
  // Sector tasks (BattleArmsSector.cpp, -BattleArmsSectorTask / -BattleArmsRushWatch / -BattleArmsCoverFire). Runtime only, cleared on
  // restore. ArmsRushSamples: a defending squad's last sighting of an enemy (key squad << 32 | enemy); ArmsRushers: per squad, the
  // enemies seen closing on its place at 3 m/s or more (kept 3 s); ArmsCoverCalls: per bounder, the point to fire at; ArmsCoverFire:

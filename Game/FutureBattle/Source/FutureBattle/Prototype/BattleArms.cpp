@@ -57,6 +57,7 @@ bool BattleArms::SmokeEnabled(){static const bool b=FParse::Param(FCommandLine::
 bool BattleArms::SlideEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsSlide="),1)!=0;return b;}
 bool BattleArms::ChargeFallenEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsChargeFallen="),1)!=0;return b;}
 bool BattleArms::ChargeSlideEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsChargeSlide="),1)!=0;return b;}
+bool BattleArms::HoldFireEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsHoldFire="),0)!=0;return b;}
 bool BattleArms::ForTeam(int32 Team){static const int32 T=IntSwitch(TEXT("BattleArmsTeam="),-1);return T<0||T==Team;}
 bool BattleArms::AnyTrial(){return SidearmsEnabled()||GrenadeCount()>0||MeleeEnabled()||EliteEnabled()||AreaEliteKeep()>0||SniperEnabled()||AreaSniperKeep()>0||AssaultMode()>0||ChargeEnabled()||SectorTaskEnabled()||RushWatchEnabled()||CoverFireEnabled()||SmokeEnabled();}
 
@@ -391,8 +392,18 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
      if(Around*2>Living)continue;
      Best=C.Key;BestD=D;BestAt=C.Value.LastKnownPosition;
     }
+    // -BattleArmsHoldFire: hold and fire rather than bound while hit within 5 s, or while he sees the target himself within his
+    // weapon's engage range (he can already fight it from here); a held soldier does not bound to a remembered place either.
+    bool bHeld=false;
+    if(Best!=INDEX_NONE&&BattleArms::HoldFireEnabled())
+    {
+     const double* Hit=ArmsHitAt.Find(ID);const bool bHit=Hit&&Now-*Hit<=5.;
+     const auto* BC=Contacts?Contacts->Find(Best):nullptr;
+     const bool bShoot=BC&&BC->bVisible&&!BC->bShared&&BestD<=BattleRanges::Engage(U->ActiveWeapon());
+     if(bHit||bShoot){SightExperiment.Cover(bHit?TEXT("arms_hold_hit"):TEXT("arms_hold_can_shoot"));ArmsAssaultNext.Add(ID,Now+4.);Best=INDEX_NONE;bHeld=true;}
+    }
     bool bFromMemory=false;
-    if(Best==INDEX_NONE&&!bDefendBound&&Dashing<(bRole?2:1))if(const auto* Mem=ArmsBoundMemory.Find(ID);Mem&&Now-Mem->SeenAt<=30.)
+    if(Best==INDEX_NONE&&!bHeld&&!bDefendBound&&Dashing<(bRole?2:1))if(const auto* Mem=ArmsBoundMemory.Find(ID);Mem&&Now-Mem->SeenAt<=30.)
     {const double D=FVector::Dist2D(Pos,Mem->At);if(D>1800.&&D<15000.){Best=Mem->Target;BestAt=Mem->At;bFromMemory=true;}}
     if(Best!=INDEX_NONE)
     {
