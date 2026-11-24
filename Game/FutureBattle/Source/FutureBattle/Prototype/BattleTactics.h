@@ -30,6 +30,20 @@ namespace BattleTactics
  float ArtilleryRaidSneak(); // Trial -BattleArtilleryRaidSneak=<m> (default 0 = off, cm returned): a raid moves without stopping to fight until its leader is this close to the target; requires ArtilleryPosts.
  int32 AreaSPGCost(); // Optional -BattleAreaSPGCost override.
  bool ArtilleryFlash(); // Trial -BattleArtilleryFlash=1 (default 0): heard indirect fire reveals a rough position.
+ bool CounterBattery(int32 Team); // Trial -BattleCounterBattery=1 (default 0): a team's guns shoot first at revealed enemy artillery (needs ArtilleryFlash).
+ int32 CounterBatteryShots(); // Trial -BattleCounterBatteryShots=<n> (default 0 = always): counter-battery fires n shells, then rests.
+ float CounterBatteryRest(); // -BattleCounterBatteryRest=<s> (default 60): the rest after a burst, when the gun shoots only at soldiers.
+ float DepotHealth(); // Trial -BattleDepotHealth=<hp> (default 0 = the depot cannot break; needs RepairDepot): shells and enemies at it wear it down.
+ float DepotRebuild(); // -BattleDepotRebuild=<s> (default 120): a broken depot repairs nothing for this long.
+ float ArtilleryPostRisk(); // Trial -BattleArtilleryPostRisk=<m> (default 0 = the fixed sideways gap): a gun post near the home is chosen by
+                            // metres to the depot (the repair trip) plus this many metres times the chance return fire lands on the depot.
+ float SPGSetup(); // Optional -BattleSPGSetup=<s> (absent = config SPGSetupSeconds 8): set-up after the gun stops.
+ float SPGStayAfterFire(); // Trial -BattleSPGStayAfterFire=<s> (default 0): the gun cannot move for this long after a shot.
+ float MachineRepairRate(); // Trial -BattleMachineRepairRate=<hp/s> (default 0 = the supply heal, 10/s): vehicles and exos are repaired this fast.
+ bool RepairHoldFire(); // Trial -BattleRepairHoldFire=1 (default 0): a gun on its trip home for repair or ammunition does not fire.
+ float RepairDepot(); // Trial -BattleRepairDepot=<m> (default 0 = repair at home): vehicles and exos are repaired at a depot this far beside the home (cm).
+ float ArtilleryHomeGap(); // Trial -BattleArtilleryHomeGap=<m> (default 0): guns and mortars keep at least this far from their own home (cm).
+ float ArtilleryVehicleSplash(); // Trial -BattleArtilleryVehicleSplash=<0..1> (default 0): share of a gun shell's blast that hurts vehicles near (not on) the impact.
  float SPGRange(); // Optional -BattleSPGRange override; absent keeps the configured range.
  // Optional -BattleArtilleryStandoff=<0..1> override of UBattleTuning::ArtilleryStandoff (an AI artillery squad keeps this share of its
  // range from every known enemy; 0.6 put the SPG next to its own home on map I, out of any raid's reach). Absent keeps the config value.
@@ -129,6 +143,7 @@ namespace BattleTactics
  // Subtraction evaluation trials (default 0 / -1; Docs/design-subtraction-eval.md): -BattleAreaAllTypes=1 both teams buy every type;
  // -BattleAreaWithout=<type> removes one type from the trial team (both teams without -BattleAreaTrialTeam).
  bool AreaAllTypes();
+ bool AreaEnsureTypes(); // -BattleAreaEnsureTypes=1: with the all-types mix, one SPG, exo and supply vehicle each are bought first
  int32 AreaWithout(int32 Team);
  // Squad groups -BattleAreaGroups=0/1 (UBattleTuning::bAreaGroups, default 1 since 2026-11-20 by user decision; the trial team with -BattleAreaTrialTeam): the AI forms one attack group per team (BattleGroups.cpp).
  bool AreaGroups(int32 Team);

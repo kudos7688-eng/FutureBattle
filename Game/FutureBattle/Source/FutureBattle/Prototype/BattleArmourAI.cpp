@@ -80,6 +80,14 @@ bool BattleTactics::AreaAllTypes()
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaAllTypes="),V);return V!=0;}();
  return bOn;
 }
+// -BattleAreaEnsureTypes=1 (default 0, both teams, evaluation only): with the all-types mix, each team buys one self-propelled gun,
+// exoskeleton soldier and supply vehicle (in that order, after the first AreaScoutAfterHires purchases) before the other special types,
+// waiting until it can afford them; without it the purchase order rarely reached those types and their subtraction measured nothing.
+bool BattleTactics::AreaEnsureTypes()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaEnsureTypes="),V);return V!=0;}();
+ return bOn;
+}
 // -BattleAreaWithout=<type 1-9>: the type the team does not buy (the trial team only with -BattleAreaTrialTeam); -1 = none.
 int32 BattleTactics::AreaWithout(int32 Team)
 {

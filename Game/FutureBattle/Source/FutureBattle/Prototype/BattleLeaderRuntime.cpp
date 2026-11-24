@@ -1115,12 +1115,14 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  if(OwnCoverWalks.Num() && OwnCoverWalks.Contains(ID) && !CoverApproaches.Contains(ID))OwnCoverWalks.Remove(ID);
  const bool Approaching=CoverApproaches.Contains(ID) && StepCoverApproach(ID,Dt,Now,OwnCoverWalks.Contains(ID)?CoverApproaches.FindChecked(ID).Target:CombatContact?TargetID:INDEX_NONE);
  if(StopForCombat || S->Order==EBattleOrder::Hold) B.bTrafficWait=false;
- const bool bDriving=!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute;
+ // Trial -BattleSPGStayAfterFire: a gun that has just fired does not drive off.
+ const bool bGunStays=GunStaysAfterFire(ID,Now);
+ const bool bDriving=!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !bGunStays;
  if(bDriving && !Approaching && FirePositions.Num())FirePositions.Remove(ID); // back on the march: the place is free again
  // -BattleContactCover: a soldier walking to cover finishes that walk before he follows the squad's path again.
  // A charging or assault-dashing soldier (BattleArms.cpp) runs his own way, not along the squad's path.
  if(bOwnWalking)StepSoldierOrder(ID,Dt,Now,Direction);
- else if(!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !(Approaching && (bContactCover || bOutsideContact || ArmsDashing(ID))))
+ else if(!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !bGunStays && !(Approaching && (bContactCover || bOutsideContact || ArmsDashing(ID))))
  {
   if(bWideField && bStableMovement) StableMove(ID,Dt,Now,Direction);
   else

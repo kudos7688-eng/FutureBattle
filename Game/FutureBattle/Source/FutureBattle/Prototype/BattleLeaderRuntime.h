@@ -313,7 +313,8 @@ public:
  int64 TankGunShots=0,TankGunHits=0,TankGunKills=0,TankGunVehicleHits=0,TankGunBaseHits=0,TankGunPicks=0;double TankGunMs=0;
  // Indirect fire (BattleArtillery.cpp, stage 1 2026-11-18): the mortar gunner (weapon Mortar) and the self-propelled gun (squad type 7).
  // Saved by combat extension 1. SetupCredit carries elapsed setup across a new world clock without a negative StillSince sentinel.
- struct FArtillery{double StillSince=-1,ReadyAt=0,NextPick=0,SetupCredit=0;int32 Shots=0,TargetKey=INDEX_NONE;FVector Aim=FVector::ZeroVector;bool bHasTarget=false,bBase=false;};
+ struct FArtillery{double StillSince=-1,ReadyAt=0,NextPick=0,SetupCredit=0,LastFired=-1; // LastFired: not saved (-BattleSPGStayAfterFire)
+ int32 Shots=0,TargetKey=INDEX_NONE;FVector Aim=FVector::ZeroVector;bool bHasTarget=false,bBase=false;};
  struct FArtilleryShell{int32 ShooterID=INDEX_NONE,Team=0;uint8 ShooterType=0;bool bSPG=false;FVector At=FVector::ZeroVector;float Remaining=0;};
  TMap<int32,FArtillery> Artillery;
  TArray<FArtilleryShell> ArtilleryShells;
@@ -327,11 +328,18 @@ public:
  // Per frame from Follow: set-up (bMoving undoes it), a target pick every ArtilleryPickInterval s while still, firing when set up and
  // loaded. True with Direction (2D) towards the current target.
  bool StepArtillery(int32 ID,double Now,bool bMoving,FVector& Direction);
+ bool GunStaysAfterFire(int32 ID,double Now) const; // -BattleSPGStayAfterFire
  // Picks an aim point from Known (unit key -> known position): a cluster of at least ArtilleryMinCluster soldiers within range and no
  // own unit within the blast radius plus spread (bFriendlyHeld: a candidate was refused for that). Then the enemy home if seen.
  bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey=nullptr,bool bTeamClusters=false,double Now=0.,const TMap<int32,uint8>* KnownTypes=nullptr);
  TMap<int32,int32> ArtillerySupportSquad; // group fire support: the own squad each gun last fired for (log on change; not saved)
  int64 ArtilleryGroupAims=0;
+ TMap<int32,int32> CounterBatteryTarget; // -BattleCounterBattery: the enemy shooter each gun last aimed at (log on change; not saved)
+ int64 CounterBatteryAims=0;
+ TMap<int32,int32> CounterBatteryShots; // -BattleCounterBatteryShots: counter-battery shells fired in the current burst (not saved)
+ TMap<int32,double> CounterBatteryRestUntil; // ... and the time the gun shoots only at soldiers until (not saved)
+ int64 CounterBatteryFired=0,CounterBatteryRests=0;
+ int64 RepairHeldShots=0; // -BattleRepairHoldFire: artillery steps skipped on the trip home
  bool AllyNear(int32 Team,const FVector& At,double Radius) const;
  // Launches one shell at Aim (spread applied, flight time Distance / shell speed). Consumes mortar ammunition or loads the gun.
  bool FireArtillery(int32 ID,const FVector& Aim,double Now);
