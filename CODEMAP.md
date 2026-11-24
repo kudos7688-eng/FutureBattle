@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（173 モジュール、47361 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（173 モジュール、47374 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -165,7 +165,7 @@
 | `BattleSoldierWatch` | .cpp | 117 |  | 個人AI `-BattleSoldierWatch`：止まっていて撃つ相手のいない兵が、知っている最も近い敵へ、無ければ小隊で分けた前方へ向く（視野120度。UBattleLeaderRuntime の一部） |
 | `BattleSquadAI` | .h/.cpp | 35 + 198 | FBattleSquadPlan, UBattleSquadAI | 旧全Actor経路の部隊 AI |
 | `BattleSquadFlank` | .cpp | 202 |  | 迂回の判断（UBattleSquadTactics の一部） |
-| `BattleSquadRetreat` | .cpp | 306 |  | 撤退の判断と適用（UBattleSquadTactics の一部。Evaluate と Apply はここ） |
+| `BattleSquadRetreat` | .cpp | 319 |  | 撤退の判断と適用（UBattleSquadTactics の一部。Evaluate と Apply はここ） |
 | `BattleSquadSupport` | .cpp | 119 |  | 援護の受け渡し（UBattleSquadTactics の一部） |
 | `BattleSquadTactics` | .h/.cpp | 100 + 160 | FBattleSquadObservation, UBattleSquadTactics | 部隊の戦術の土台：観測、毎フレームの更新、記録 |
 | `BattleStableMovement` | .cpp | 666 |  | 混成の移動計画と実行（UBattleLeaderRuntime の一部） |

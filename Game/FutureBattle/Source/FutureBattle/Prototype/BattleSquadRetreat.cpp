@@ -145,6 +145,19 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   if(Emergency){Event(TEXT("FieldSupplyAbortEmergency"));Retreat();return;}
   FVector Car;int32 CarID=INDEX_NONE;
   if(!Match->FieldSupplyPoint(SID,Car,&CarID)){Event(TEXT("FieldSupplyLost"));Store->CancelSquadTacticalPlan(SID,TEXT("FIELD SUPPLY / NO VEHICLE"));return;}
+  // Log only (-BattleFieldSupplyLog, default off; STATUS 2026-11-25): where the squad on its trip is and what order it holds, every 5 s.
+  static const bool bTripLog=FParse::Param(FCommandLine::Get(),TEXT("BattleFieldSupplyLog"));
+  if(bTripLog)
+  {
+   static TMap<int32,double> TripLogAt;double& At=TripLogAt.FindOrAdd(SID,-100.);
+   if(Match->Elapsed-At>=5.||Match->Elapsed<At)
+   {
+    At=Match->Elapsed;const auto* LU=Store->Find(S->LeaderUnitID);
+    UE_LOG(LogFutureBattle,Display,TEXT("FIELD_SUPPLY_TRIP t=%.0f squad=%d car=%d dist=%.0f here=%s carpos=%s plan_dest=%s remaining=%.0f age=%.0f order=%d dest=%s mission=%d leader_order=%d leader_action=%d leader_dest=%s retries=%d threats=%d armed=%d living=%d"),
+     Match->Elapsed,SID,CarID,FVector::Dist2D(Here,Car),*Here.ToCompactString(),*Car.ToCompactString(),*P.Destination.ToCompactString(),P.Remaining,P.Age,int32(S->Order),*S->Destination.ToCompactString(),int32(S->MissionOrder),
+     LU?int32(LU->Order):-1,LU?int32(LU->Action):-1,LU?*LU->Destination.ToCompactString():TEXT("none"),LU?LU->MoveRetries:-1,Threats,O.Armed,O.Living);
+   }
+  }
   if(O.Armed>=FMath::CeilToInt(O.Living*.9f)&&bAmmoBack)
   {
    const auto Order=S->MissionOrder;const FVector Goal=S->MissionDestination;
