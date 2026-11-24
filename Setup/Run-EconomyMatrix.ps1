@@ -168,6 +168,41 @@ $supply=@{
  'W7'=@('-AreaAllTypes','1','-AreaWithout','7')
  'W8'=@('-AreaAllTypes','1','-AreaWithout','8')
  'W9'=@('-AreaAllTypes','1','-AreaWithout','9')
+ # 2026-11-23: with -AreaEnsureTypes 1 both teams buy one SPG, exo and supply vehicle first (ALL alone never reached them).
+ 'ALLE'=@('-AreaAllTypes','1','-AreaEnsureTypes','1')
+ 'W7E'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-AreaWithout','7')
+ 'W8E'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-AreaWithout','8')
+ 'W9E'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-AreaWithout','9')
+ # 2026-11-23 counter-battery: CBB = ALLE plus heard artillery reveals (the base), CB = CBB plus counter-battery fire (one-sided with
+ # -TrialTeam); CBSB / CBS = the same with gun near misses hurting vehicles (-ArtilleryVehicleSplash 1, both teams).
+ 'CBB'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1')
+ 'CB'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-CounterBattery','1')
+ 'CBSB'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1')
+ 'CBS'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-CounterBattery','1')
+ # 2026-11-23 (user decision '1と3'): the same with a repair depot 150 m beside each home and guns kept 60 m from their home (both teams).
+ 'DGB'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60')
+ 'DG'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-CounterBattery','1')
+ # DGT (2026-11-23): DG answering only a report of the last 15 s with 2 shells, then 60 s at soldiers (-CounterBatteryShots 2).
+ 'DGT'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-CounterBattery','1','-CounterBatteryShots','2')
+ # Depot that breaks (2026-11-23, user proposal): DH = DGB + the depot's 400 hp (shells, enemies within 25 m; 120 s down) and the gun
+ # post scored by the trip to the depot + 100 m x the chance return fire lands on it (both teams). DHR = DH + the raids that chase
+ # fire reports (-ArtilleryPosts 1 -ArtilleryRaidChase 1, both teams). DHRC = DHR + burst counter-battery (trial team).
+ 'DH'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100')
+ 'DHR'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-ArtilleryPosts','1','-ArtilleryRaidChase','1')
+ 'DHRC'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-ArtilleryPosts','1','-ArtilleryRaidChase','1','-CounterBattery','1','-CounterBatteryShots','2')
+ # SPG weaknesses (2026-11-24, user choice): RH = DH + repairs at 1 hp/s (vehicles and exos) and no gun fire on the trip home;
+ # AM = DH + the gun's ammunition limit (-SPGAmmo 1: 12 rounds, refilled at home) and no fire on the trip; RAM = both (all both teams).
+ 'RH'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-MachineRepairRate','1','-RepairHoldFire','1')
+ 'AM'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-SPGAmmo','1','-RepairHoldFire','1')
+ 'AM4'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-SPGAmmo','1','-RepairHoldFire','1','-ExtraArgs:-ini:Game:[/Script/FutureBattle.BattleTuning]:SPGAmmoCapacity=4,[/Script/FutureBattle.BattleTuning]:SPGInitialAmmo=4')
+ 'AM8'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-SPGAmmo','1','-RepairHoldFire','1','-ExtraArgs:-ini:Game:[/Script/FutureBattle.BattleTuning]:SPGAmmoCapacity=8,[/Script/FutureBattle.BattleTuning]:SPGInitialAmmo=8')
+ 'AM24'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-SPGAmmo','1','-RepairHoldFire','1','-ExtraArgs:-ini:Game:[/Script/FutureBattle.BattleTuning]:SPGAmmoCapacity=24,[/Script/FutureBattle.BattleTuning]:SPGInitialAmmo=24')
+ 'AMS2'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-SPGAmmo','1','-RepairHoldFire','1','-ExtraArgs:-ini:Game:[/Script/FutureBattle.BattleTuning]:SPGSupplyRounds=2')
+ 'AMS12'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-SPGAmmo','1','-RepairHoldFire','1','-ExtraArgs:-ini:Game:[/Script/FutureBattle.BattleTuning]:SPGSupplyRounds=12')
+ 'RAM'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-MachineRepairRate','1','-RepairHoldFire','1','-SPGAmmo','1')
+ # POS = DH + firing posture (user proposal, values by the user): 30 s set-up after stopping (config 8) and 30 s without moving after a shot; ALLW = RAM + POS.
+ 'POS'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-SPGSetup','30','-SPGStayAfterFire','30')
+ 'ALLW'=@('-AreaAllTypes','1','-AreaEnsureTypes','1','-ArtilleryFlash','1','-ArtilleryVehicleSplash','1','-RepairDepot','150','-ArtilleryHomeGap','60','-DepotHealth','400','-ArtilleryPostRisk','100','-MachineRepairRate','1','-RepairHoldFire','1','-SPGAmmo','1','-SPGSetup','30','-SPGStayAfterFire','30')
  # Front army share (2026-11-22, ROADMAP stage 5; maps H/I): FS50 / FS30 = the AI fills its front army up to half / 30% of its free infantry.
  'FS50'=@('-FrontShare','0.5')
  'FS30'=@('-FrontShare','0.3')

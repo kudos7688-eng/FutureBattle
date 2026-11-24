@@ -998,6 +998,15 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
    const bool bStill=LastVelocity.SizeSquared2D()<2500.;const bool bLow=StanceOf(ID)!=BattleStance::Stand;
    SightExperiment.Cover(!bStill?TEXT("route_walking_frames"):!StopForCombat?TEXT("route_still_no_fight_frames"):bLow?TEXT("route_still_fight_low_frames"):TEXT("route_still_fight_standing_frames"));
    if(bStill && StopForCombat && !bLow && !(Contact && Contact->bVisible))SightExperiment.Cover(TEXT("route_still_fight_standing_unseen_frames"));
+   // Why he stands still with no fight (last frame's StableMove flags; the stance gate below is this frame's): at his place at
+   // the end of the leg, waiting for room (traffic, his arrival place taken, no route yet), getting up first, or something else.
+   if(bStill && !StopForCombat)
+   {
+    const bool bGettingUp=WillMove && StanceOf(ID)!=BattleStance::Stand && BattleStance::MoveMode()<2;
+    SightExperiment.Cover(B.bArrived?TEXT("route_still_why_arrived"):B.bArrivalOccupied?TEXT("route_still_why_place_taken"):
+     B.bTrafficWait?TEXT("route_still_why_traffic"):bGettingUp?TEXT("route_still_why_getting_up"):B.StalledSince>0?TEXT("route_still_why_stalled"):
+     ID==S->LeaderUnitID?TEXT("route_still_why_other_leader"):TEXT("route_still_why_other"));
+   }
   }
   // Getting up takes time: no walking until the soldier is standing. With -BattleStanceMove=2 he walks in his stance instead
   // (crouched or crawling, at its speed below).
@@ -1106,12 +1115,14 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  if(OwnCoverWalks.Num() && OwnCoverWalks.Contains(ID) && !CoverApproaches.Contains(ID))OwnCoverWalks.Remove(ID);
  const bool Approaching=CoverApproaches.Contains(ID) && StepCoverApproach(ID,Dt,Now,OwnCoverWalks.Contains(ID)?CoverApproaches.FindChecked(ID).Target:CombatContact?TargetID:INDEX_NONE);
  if(StopForCombat || S->Order==EBattleOrder::Hold) B.bTrafficWait=false;
- const bool bDriving=!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute;
+ // Trial -BattleSPGStayAfterFire: a gun that has just fired does not drive off.
+ const bool bGunStays=GunStaysAfterFire(ID,Now);
+ const bool bDriving=!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !bGunStays;
  if(bDriving && !Approaching && FirePositions.Num())FirePositions.Remove(ID); // back on the march: the place is free again
  // -BattleContactCover: a soldier walking to cover finishes that walk before he follows the squad's path again.
  // A charging or assault-dashing soldier (BattleArms.cpp) runs his own way, not along the squad's path.
  if(bOwnWalking)StepSoldierOrder(ID,Dt,Now,Direction);
- else if(!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !(Approaching && (bContactCover || bOutsideContact || ArmsDashing(ID))))
+ else if(!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute && !bGunStays && !(Approaching && (bContactCover || bOutsideContact || ArmsDashing(ID))))
  {
   if(bWideField && bStableMovement) StableMove(ID,Dt,Now,Direction);
   else

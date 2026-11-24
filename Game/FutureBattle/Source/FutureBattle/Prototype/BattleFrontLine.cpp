@@ -329,6 +329,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_HOLD team=%d group=%d start open=%d line=%s time=%.1f"),Team,FrontID,Open,*L,Elapsed);
    }
    OldHold=H;
+   RunFrontOrderScript(Team,H,HomeCol,EnemyHomeCol);
    TMap<FIntPoint,int32> EnemyAll;for(const FVector& E:AreaIntelView(Team).Enemies)if(const FIntPoint C=BattleSectors::Cell(E);BattleSectors::Valid(C))++EnemyAll.FindOrAdd(C);
    auto Near=[&](const TMap<FIntPoint,int32>& M,int32 Y,int32 C0,int32 C1)
    {int32 N=0;for(int32 Z=FMath::Max(0,Y-1);Z<FMath::Min(Rows,Y+2);++Z)for(int32 C=FMath::Max(0,C0);C<=FMath::Min(Cols-1,C1);++C)if(const int32* V=M.Find(FrontCell(Team,C,Z)))N+=*V;return N;};
@@ -339,7 +340,11 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    TArray<uint8> InFocus;int32 TargetCol=-1;FrontPlanFocusRows(Team,InFocus,TargetCol);
    auto Smooth=[&](TArray<int32>& A)
    {
-    auto Cap=[&](int32 Y,int32 Z){int32 V=A[Z]+1;if(InFocus.Num()==Rows&&InFocus[Y]&&!InFocus[Z]&&TargetCol>=0)V=FMath::Max(V,FMath::Min(A[Z]+3,TargetCol));return V;};
+    auto Cap=[&](int32 Y,int32 Z){int32 V=A[Z]+1;if(InFocus.Num()==Rows&&InFocus[Y]&&!InFocus[Z]&&TargetCol>=0)V=FMath::Max(V,FMath::Min(A[Z]+3,TargetCol));
+     // Section orders: at the border of an advancing or falling back section the neighbouring section does not pull the rows
+     // (first matches 2026-11-24: a three-column allowance let a falling back section drag the next sections back with it).
+     if((SectionOrderOfRow(Team,Y)||SectionOrderOfRow(Team,Z))&&FrontRoleOfRow(Team,Y)!=FrontRoleOfRow(Team,Z))V=TNumericLimits<int32>::Max();
+     return V;};
     for(int32 Pass=0;Pass<Rows;++Pass)for(int32 Y=0;Y<Rows;++Y){if(Y>0)A[Y]=FMath::Min(A[Y],Cap(Y,Y-1));if(Y+1<Rows)A[Y]=FMath::Min(A[Y],Cap(Y,Y+1));}
    };
    if(const auto* Tactics=GetWorld()->GetSubsystem<UBattleSquadTactics>())
@@ -377,9 +382,18 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    const float Since=Elapsed-G->FrontStepAt;
    if(!G->bFrontDrawn&&Posted&&Since>=StepEvery)
    {
-    TArray<int32> Next=H;int32 Moved=0,Pushed=0;
-    for(int32 Y=0;Y<Rows;++Y)if(H[Y]+1<EnemyHomeCol-1&&(Reached[Y]<0||Reached[Y]>=H[Y]-RowLag))
+    TArray<int32> Next=H;int32 Moved=0,Pushed=0,Ordered=0;
+    for(int32 Y=0;Y<Rows;++Y)
     {
+     // Section orders: the player's advance / fall back move the row toward the target line, one column per step.
+     if(const TCHAR Ord=SectionOrderOfRow(Team,Y))
+     {
+      const int32 T=Area.FrontTarget.IsValidIndex(Y)?Area.FrontTarget[Y]:-1;
+      if(Ord==TEXT('A')&&T>H[Y]&&H[Y]+1<EnemyHomeCol-1&&(Reached[Y]<0||Reached[Y]>=H[Y]-RowLag)){++Next[Y];++Moved;++Ordered;}
+      else if(Ord==TEXT('B')&&H[Y]>(T>=0?FMath::Max(HomeCol,T):HomeCol)){--Next[Y];++Moved;++Ordered;} // stops on the target line
+      continue;
+     }
+     if(!(H[Y]+1<EnemyHomeCol-1&&(Reached[Y]<0||Reached[Y]>=H[Y]-RowLag)))continue;
      if(FrontRoleOfRow(Team,Y)==TEXT('H')){++FrontPlanState[Team].HoldSteps;continue;} // stage 4: a hold section does not push out
      const int32 Own=Near(OwnCount,Y,H[Y]-1,H[Y]+1),Enemy=Near(EnemyAll,Y,H[Y],H[Y]+2);
      const bool bQuiet=Hurt[Y]==0&&!(Enemy>=SwampMin&&Enemy>=Swamp*Own);
@@ -392,6 +406,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
      H=Next;G->FrontStepAt=Elapsed;
      FString L;for(int32 Y=0;Y<Rows;++Y)L+=FString::Printf(TEXT("%s%d"),Y?TEXT(","):TEXT(""),H[Y]);
      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_STEP team=%d group=%d on_post=%d/%d rows=%d pushed=%d line=%s time=%.1f"),Team,FrontID,OnPosts,Posted,Moved,Pushed,*L,Elapsed);
+     if(Ordered)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_ORDER_STEP team=%d rows=%d line=%s time=%.1f"),Team,Ordered,*L,Elapsed);
     }
    }
    // Front plan: an own point (observed) is the floor of its row - the line passes at or ahead of it and does not fall back behind it.
@@ -683,6 +698,7 @@ int32 UBattleMatch::SetDrawnFrontLine(int32 Team,const TArray<FVector>& Points)
  constexpr int32 Cols=BattleSectors::Columns,Rows=BattleSectors::Rows;
  if(Points.Num()<2)
  {
+  if(FrontSectionOrdersOn(Team))Area.FrontTarget.Reset();
   if(G->bFrontDrawn){G->bFrontDrawn=false;G->FrontStepAt=Elapsed;}
   FrontLineAt[Team]=Elapsed;
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_INPUT FrontLine team=%d handed_back time=%.1f"),Team,Elapsed);
@@ -694,7 +710,7 @@ int32 UBattleMatch::SetDrawnFrontLine(int32 Team,const TArray<FVector>& Points)
  const int32 EnemyHomeCol=FMath::Clamp(ColOf(BattleSectors::Cell(AreaHome(1-Team))),0,Cols-1);
  TArray<int32> H=G->FrontHold.Num()==Rows?G->FrontHold:FrontLine[Team].Num()==Rows?FrontLine[Team]:TArray<int32>();
  if(H.Num()!=Rows)H.Init(HomeCol+1,Rows);
- int32 Set=0;
+ int32 Set=0;TArray<int32> DrawnCol;DrawnCol.Init(-1,Rows);
  for(int32 Y=0;Y<Rows;++Y)
  {
   // Where the drawn line crosses the middle of the row (the mean of all its crossings).
@@ -707,9 +723,18 @@ int32 UBattleMatch::SetDrawnFrontLine(int32 Team,const TArray<FVector>& Points)
   }
   if(!N)continue;
   const FIntPoint C=BattleSectors::Cell(FVector(SumX/N,RowY,0.));
-  H[Y]=FMath::Clamp(ColOf(FIntPoint(FMath::Clamp(C.X,0,Cols-1),C.Y)),HomeCol,FMath::Max(HomeCol,EnemyHomeCol-1));++Set;
+  H[Y]=FMath::Clamp(ColOf(FIntPoint(FMath::Clamp(C.X,0,Cols-1),C.Y)),HomeCol,FMath::Max(HomeCol,EnemyHomeCol-1));++Set;DrawnCol[Y]=H[Y];
  }
  if(!Set)return -2;
+ if(FrontSectionOrdersOn(Team))
+ {
+  // Section orders: the drawn line is the target of the advancing / falling back sections; the front army's line does not jump.
+  if(Area.FrontTarget.Num()!=Rows)Area.FrontTarget.Init(-1,Rows);
+  FString T;
+  for(int32 Y=0;Y<Rows;++Y){if(DrawnCol[Y]>=0)Area.FrontTarget[Y]=FMath::Min(DrawnCol[Y],FMath::Max(HomeCol,EnemyHomeCol-2));T+=FString::Printf(TEXT("%s%d"),Y?TEXT(","):TEXT(""),Area.FrontTarget[Y]);}
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_INPUT FrontTarget team=%d rows=%d target=%s time=%.1f"),Team,Set,*T,Elapsed);
+  return Set;
+ }
  G->FrontHold=H;G->bFrontDrawn=true;FrontLine[Team]=H;FrontLineAt[Team]=Elapsed;
  FString L;for(int32 Y=0;Y<Rows;++Y)L+=FString::Printf(TEXT("%s%d"),Y?TEXT(","):TEXT(""),H[Y]);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_INPUT FrontLine team=%d drawn rows=%d line=%s time=%.1f"),Team,Set,*L,Elapsed);
@@ -1333,7 +1358,7 @@ void UBattleMatch::UpdateFrontRoles(int32 Team)
   }
   if(!FrontPlanFlexOn(Team)&&Now!=TEXT('F'))Now=TEXT('K'); // stage 7 without stage 4: the AI sets only focus and keep
   // Stage 7: the player's role wins (fall back never with an own point inside).
-  if(PlayerRolesOn(Team))if(const uint8 Pick=PlayerSectionRole(K))Now=Pick==1?TEXT('F'):Pick==3?TEXT('H'):Pick==4&&P.OwnMask[K]==0u?TEXT('R'):TEXT('K');
+  if(PlayerRolesOn(Team))if(const uint8 Pick=PlayerSectionRole(K))Now=Pick==1?TEXT('F'):Pick==3?TEXT('H'):Pick==5&&FrontSectionOrdersOn(Team)?TEXT('A'):Pick==6&&FrontSectionOrdersOn(Team)?TEXT('B'):Pick==4&&P.OwnMask[K]==0u?TEXT('R'):TEXT('K');
   if(Now!=Was){P.Role[K]=Now;P.RoleAt[K]=Elapsed;++P.RoleChanges;bChanged=true;}
  }
  if(bChanged||Elapsed>=P.RoleLogAt)
@@ -1402,7 +1427,7 @@ uint8 UBattleMatch::PlayerSectionRole(int32 Section) const
 
 const TCHAR* UBattleMatch::SectionRoleJa(uint8 PlayerRole)
 {
- static const TCHAR* Names[]={TEXT("AIに任せる"),TEXT("重点"),TEXT("保つ"),TEXT("保持"),TEXT("下がってよい")};
+ static const TCHAR* Names[]={TEXT("AIに任せる"),TEXT("重点"),TEXT("保つ"),TEXT("保持"),TEXT("下がってよい"),TEXT("前進（線まで）"),TEXT("後退")};
  return PlayerRole<UE_ARRAY_COUNT(Names)?Names[PlayerRole]:TEXT("?");
 }
 
@@ -1416,12 +1441,57 @@ bool UBattleMatch::CyclePlayerSectionRole(int32 Section)
  const int32 MaxFocus=FrontPlanFocus2On(0)?2:1;
  const bool bOwn=P.OwnMask.IsValidIndex(Section)&&P.OwnMask[Section]!=0u;
  uint8 Role=Area.PlayerSectionRole[Section];
- for(int32 N=0;N<5;++N){Role=uint8((Role+1)%5);if((Role==1&&Focus>=MaxFocus)||(Role==4&&bOwn))continue;break;}
+ const int32 NR=FrontSectionOrdersOn(0)?7:5; // section orders add advance and fall back
+ if(Role>=NR)Role=0;
+ for(int32 N=0;N<NR;++N){Role=uint8((Role+1)%NR);if((Role==1&&Focus>=MaxFocus)||(Role==4&&bOwn))continue;break;}
  Area.PlayerSectionRole[Section]=Role;
  // The next plan update reviews the focus at once.
  if(Area.StrategyReviewAt.Num()==2)Area.StrategyReviewAt[0]=Elapsed;
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_PLAYER_ROLE t=%.1f section=%d role=%d"),Elapsed,Section+1,int32(Role));
  LastMessage=FString::Printf(TEXT("区間%d：%s"),Section+1,SectionRoleJa(Role));
  if(Role==1&&!(P.AheadMask.IsValidIndex(Section)&&P.AheadMask[Section]!=0u))LastMessage+=TEXT("（前に拠点が見えるまで攻撃軍は向かわない）");
+ if(Role==5)LastMessage+=Area.FrontTarget.IsEmpty()?TEXT("（「前線を引く」で目標の線を引くと、その線まで1区画ずつ進む）"):TEXT("（引いた線まで1区画ずつ進む）");
+ if(Role==6)LastMessage+=TEXT("（1区画ずつ下がる。目標の線があればそこで止まり、無ければ自陣まで。自軍の拠点より後ろへは下がらない）");
  return true;
+}
+
+bool UBattleMatch::FrontSectionOrdersOn(int32 Team) const
+{
+ static const int32 On=BattleFrontValues::Arg(TEXT("BattleFrontSectionOrders="),0);
+ return On!=0&&Team==0&&PlayerRolesOn(0);
+}
+
+TCHAR UBattleMatch::SectionOrderOfRow(int32 Team,int32 Row) const
+{
+ if(!FrontSectionOrdersOn(Team))return 0;
+ const TCHAR R=FrontRoleOfRow(Team,Row);
+ return R==TEXT('A')||R==TEXT('B')?R:0;
+}
+
+void UBattleMatch::RunFrontOrderScript(int32 Team,const TArray<int32>& Hold,int32 HomeCol,int32 EnemyHomeCol)
+{
+ // Test hook -BattleFrontOrderScript=T:roles:offset (e.g. 120:5,3,6:3): once at match time T, the player's section roles (by section)
+ // and a target line offset columns ahead of the line for advancing sections and behind it for falling back ones.
+ if(FrontOrderScriptDone||!FrontSectionOrdersOn(Team))return;
+ static const FString Spec=[]{FString V;FParse::Value(FCommandLine::Get(),TEXT("BattleFrontOrderScript="),V,false);return V;}();
+ if(Spec.IsEmpty())return;
+ TArray<FString> Parts;Spec.ParseIntoArray(Parts,TEXT(":"));
+ if(Parts.Num()!=3||Elapsed<FCString::Atof(*Parts[0]))return;
+ const FFrontPlanTeam& P=FrontPlanState[Team];
+ if(P.Sections<=0||P.SectionOfRow.Num()!=Hold.Num())return;
+ FrontOrderScriptDone=true;
+ TArray<FString> Roles;Parts[1].ParseIntoArray(Roles,TEXT(","));
+ Area.PlayerSectionRole.SetNumZeroed(P.Sections);
+ for(int32 K=0;K<P.Sections&&K<Roles.Num();++K)Area.PlayerSectionRole[K]=uint8(FMath::Clamp(FCString::Atoi(*Roles[K]),0,6));
+ const int32 Off=FCString::Atoi(*Parts[2]);
+ Area.FrontTarget.Init(-1,Hold.Num());
+ FString T;
+ for(int32 Y=0;Y<Hold.Num();++Y)
+ {
+  const uint8 R=P.SectionOfRow.IsValidIndex(Y)?PlayerSectionRole(P.SectionOfRow[Y]):0;
+  if(R==5||R==6)Area.FrontTarget[Y]=FMath::Clamp(Hold[Y]+(R==5?Off:-Off),HomeCol,FMath::Max(HomeCol,EnemyHomeCol-2));
+  T+=FString::Printf(TEXT("%s%d"),Y?TEXT(","):TEXT(""),Area.FrontTarget[Y]);
+ }
+ if(Area.StrategyReviewAt.Num()==2)Area.StrategyReviewAt[0]=Elapsed;
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FRONT_ORDER_SCRIPT team=%d t=%.1f roles=%s target=%s"),Team,Elapsed,*Parts[1],*T);
 }

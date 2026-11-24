@@ -152,7 +152,15 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  if(Match->bArea && P.Action==EBattleSquadTactic::Recover && P.Reason.StartsWith(TEXT("HOME SUPPLY")))
  {
   if(Emergency&&!bMachine){Event(TEXT("HomeSupplyAbortEmergency"));SupplyTripEnd(SID,false);Retreat();return;}
-  const bool Home=FVector::Dist2D(Here,Match->AreaHome(S->Team))<=2500;
+  // Trial -BattleRepairDepot: a machine's trip also ends at the depot (where it is repaired; the other conditions below still apply).
+  const bool bDepotTrip=bMachine&&Match->DepotWorking(S->Team);
+  // Trial -BattleDepotHealth: the depot broke while the machine drove to it; drive to the home instead.
+  if(bMachine&&!bDepotTrip&&BattleTactics::RepairDepot()>0.f&&FVector::Dist2D(P.Destination,Match->RepairPoint(S->Team))<=2000.)
+  {
+   const FVector HomeAt=Match->AreaHome(S->Team);
+   if(Apply(SID,EBattleSquadTactic::Recover,EBattleOrder::Move,HomeAt+FVector((HomeAt.X>0?-1:1)*700,(SID%5-2)*600,0),TEXT("HOME SUPPLY / DEPOT BROKEN"))){Event(TEXT("HomeSupplyDepotBroken"));return;}
+  }
+  const bool Home=FVector::Dist2D(Here,Match->AreaHome(S->Team))<=2500||(bDepotTrip&&FVector::Dist2D(Here,Match->RepairPoint(S->Team))<=2500);
   const bool Manned=bNoReplenish||O.Living>=FMath::Min(S->Members.Num(),Supply.ResumeLiving)||Match->Credits[S->Team]==0;
   const bool Healed=Supply.ResumeHealthRatio<=0.f||O.Health/FullHP>=Supply.ResumeHealthRatio;
   if(Home && !bSPGEmpty && O.Armed>=FMath::CeilToInt(O.Living*.6f) && Manned && Healed)
@@ -192,7 +200,9 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
    if(!Allowed) Event(TEXT("HomeSupplyDeferredAwayLimit"));
   }
   const FVector Home=Match->AreaHome(S->Team);
-  const FVector Goal=Home+FVector((Home.X>0?-1:1)*700,(SID%5-2)*600,0);
+  FVector Goal=Home+FVector((Home.X>0?-1:1)*700,(SID%5-2)*600,0);
+  // Trial -BattleRepairDepot: a machine going for repair drives to the depot instead (spread a little like the home slots).
+  if(bRepair&&Match->DepotWorking(S->Team))Goal=Match->RepairPoint(S->Team)+FVector((SID%3-1)*600,0,0);
   if(Allowed && Apply(SID,EBattleSquadTactic::Recover,EBattleOrder::Move,Goal,TEXT("HOME SUPPLY / RETURN WITH LEADER"))){Event(TEXT("HomeSupplyReturn"));
    // Evaluation only: trip reason (all members out of ammo vs losses) and whether the squad holds an S1 home-assault slot.
    bool bBase=false;if(Match->bArea&&BattleTactics::AreaStrategy().bEnabled)Match->AreaStrategyTarget(SID,S->Team,bBase);

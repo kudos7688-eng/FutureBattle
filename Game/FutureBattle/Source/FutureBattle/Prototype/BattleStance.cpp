@@ -287,6 +287,8 @@ void UBattleLeaderRuntime::UpdateAIStance(int32 ID,double Now,bool bMoving,bool 
 {
  if(!BattleStance::Enabled(GetWorld()))return;
  const uint8 Current=StanceOf(ID);
+ // -BattleStanceSteady: the place where crouching hid his enemy is forgotten once he is 2.5 m away from it (also on the move).
+ if(const FVector* At=CrouchBlindAt.Find(ID);At && FVector::DistSquared2D(*At,Position(ID))>FMath::Square(250.))CrouchBlindAt.Remove(ID);
  // Pinned by suppression: get as low as possible, whatever the order says (own state only). With -BattleStanceMove=2 he
  // crawls on along his way (Follow lets him walk prone); before, he waited until he could stand up.
  if(IsPinned(ID,Now)){SetStance(ID,BattleStance::Prone,Now,false,bMoving&&BattleStance::MoveMode()>=2);return;}
@@ -312,10 +314,6 @@ void UBattleLeaderRuntime::UpdateAIStance(int32 ID,double Now,bool bMoving,bool 
  // -BattleNoCoverFallback: no cover and no better place found - lie down while he still sees his target.
  if(const double* T=NoCoverProneUntil.Find(ID)){if(*T>Now){SetStance(ID,BattleStance::Prone,Now);return;}NoCoverProneUntil.Remove(ID);}
  // -BattleStanceSteady: at the place where crouching hid his enemy from him he stays standing (no crouch, stand, crouch again).
- if(BattleStance::Steady())if(const FVector* At=CrouchBlindAt.Find(ID))
- {
-  if(FVector::DistSquared2D(*At,Position(ID))>FMath::Square(250.))CrouchBlindAt.Remove(ID);
-  else if(Current==BattleStance::Stand){SightExperiment.Cover(TEXT("steady_stay_standing_frames"));return;}
- }
+ if(BattleStance::Steady() && CrouchBlindAt.Contains(ID) && Current==BattleStance::Stand){SightExperiment.Cover(TEXT("steady_stay_standing_frames"));return;}
  SetStance(ID,BattleStance::Crouch,Now);
 }
