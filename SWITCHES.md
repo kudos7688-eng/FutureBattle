@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 490 種類。
+計 491 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -144,6 +144,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleCoverPriority` | Value | 1 | BattleLeaderRuntime.cpp:1829 |  |
 | `-BattleCoverStrict` | Value | 0 | BattleLeaderRuntime.cpp:1935 |  |
 | `-BattleCoverValidation` | Value | True | BattleTactics.cpp:174 |  |
+| `-BattleCutOffRoute` | Value | 0 | BattleStableMovement.cpp:373 |  |
 | `-BattleDangerRoute` | Value | 0 | BattleSectorRoute.cpp:28 |  |
 | `-BattleDeathShot` | Param | off | BattleLeaderRuntime.cpp:236 |  |
 | `-BattleDefendEngage` | Value | false | BattleGroups.cpp:50 |  |
@@ -154,7 +155,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleDisplayLOD` | Value | 1 | BattleLeaderRuntime.cpp:127, BattleWideMixedSmoke.cpp:170 |  |
 | `-BattleElite` | Value | 1 | BattleArms.cpp:43 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleEliteCost` | Value | 26 | BattleArms.cpp:45 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleEngineMoveSweep` | Value | 0 | BattleStableMovement.cpp:605 |  |
+| `-BattleEngineMoveSweep` | Value | 0 | BattleStableMovement.cpp:618 |  |
 | `-BattleExoBody` | Value | 3 | BattleExo.cpp:123 |  |
 | `-BattleExoPlaceholder` | Param | off | BattleExo.cpp:145 |  |
 | `-BattleExoShieldSuppression` | Value | 0 | BattleSuppression.cpp:83 |  |
@@ -438,7 +439,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleVerifySaveAt` | Value | 80.f | BattleSightExperiment.cpp:41 |  |
 | `-BattleWalkLook` | Value | 0 | BattleSoldierWatch.cpp:24 |  |
 | `-BattleWalkLookTeam` | Value | -1 | BattleSoldierWatch.cpp:25 |  |
-| `-BattleWaypointPass` | Value | 1 | BattleStableMovement.cpp:473 |  |
+| `-BattleWaypointPass` | Value | 1 | BattleStableMovement.cpp:486 |  |
 | `-BattleWeaponLoadouts` | Param | off | BattleSquadTrial.cpp:50 |  |
 | `-BattleWeaponOrderGate` | Value | 0 | BattleWeaponOrders.cpp:10 |  |
 | `-BattleWeaponPreview` | Value | 空文字列 | BattleWeaponPreview.cpp:19 |  |
