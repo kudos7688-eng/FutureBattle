@@ -46,7 +46,8 @@ int32 BattleArms::EliteCost(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("
 bool BattleArms::SniperEnabled(){static const bool b=IntSwitch(TEXT("BattleSniperTeam="),1)!=0;return b;}
 int32 BattleArms::AreaSniperKeep(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleAreaSniperKeep="),2),0,SniperLimit);return N;}
 int32 BattleArms::SniperCost(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleSniperCost="),14),1,200);return N;}
-int32 BattleArms::AssaultMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleArmsAssault="),2),0,2);return N;}
+// Default 1 since 2026-11-25 (user decision): the ordinary riflemen's bounds of =2 cost the side using them (BattleArmsTeam trial, map I).
+int32 BattleArms::AssaultMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleArmsAssault="),1),0,2);return N;}
 bool BattleArms::ChargeEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsCharge="),1)!=0;return b;}
 int32 BattleArms::SectorTaskMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleArmsSectorTask="),1),0,2);return N;}
 bool BattleArms::SectorTaskEnabled(){return SectorTaskMode()>0;}
