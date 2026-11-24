@@ -41,7 +41,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleAreaFocus` | Value | 1.0 | BattleTactics.cpp:102 |  |
 | `-BattleAreaFrontBalance` | Value | True | BattleTactics.cpp:97 |  |
 | `-BattleAreaFrontGain` | Value | 1.0 | BattleTactics.cpp:98 |  |
-| `-BattleAreaGroups` | Value | -1 | BattleGroups.cpp:77 |  |
+| `-BattleAreaGroups` | Value | -1 | BattleGroups.cpp:83 |  |
 | `-BattleAreaHeavyShare` | Value | -1.f | BattleTactics.cpp:109 |  |
 | `-BattleAreaHire` | Value | True | BattleTactics.cpp:71 |  |
 | `-BattleAreaHireInterval` | Value | 0.f | BattleTactics.cpp:73 |  |
@@ -200,10 +200,10 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleGrenadeRange` | Value | 3000.f | BattleArms.cpp:152 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleGrenades` | Value | 2 | BattleArms.cpp:41 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleGrenadeSquadGap` | Value | 3.f | BattleArms.cpp:161 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
-| `-BattleGroupFireSupport` | Value | -1 | BattleArtillery.cpp:436, BattleGroups.cpp:292 | -1 = on for both teams (default, user 2026-11-21) |
-| `-BattleGroupSectors` | Value | 0 | BattleGroups.cpp:567 |  |
-| `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:649 |  |
-| `-BattleGroupSupplySlot` | Value | 0 | BattleGroups.cpp:296 |  |
+| `-BattleGroupFireSupport` | Value | -1 | BattleArtillery.cpp:436, BattleGroups.cpp:298 | -1 = on for both teams (default, user 2026-11-21) |
+| `-BattleGroupSectors` | Value | 0 | BattleGroups.cpp:572 |  |
+| `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:654 |  |
+| `-BattleGroupSupplySlot` | Value | 0 | BattleGroups.cpp:75 |  |
 | `-BattleHeavyCost` | Value | 未解決 | BattleState.cpp:570 |  |
 | `-BattleHeavyDamage` | Value | 未解決 | BattleState.cpp:570 |  |
 | `-BattleHeavyHealth` | Value | 未解決 | BattleState.cpp:569 |  |

@@ -70,6 +70,12 @@ int32 BattleTactics::AllocationIndex(const UWorld* World,int32 SquadID,int32 Tea
  return FMath::Max(1,Index);
 }
 
+bool BattleTactics::GroupSupplySlot()
+{
+ static const bool bOn=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupSupplySlot="),X);return X!=0;}();
+ return bOn;
+}
+
 bool BattleTactics::AreaGroups(int32 Team)
 {
  // On by default for both teams. Only an explicit -BattleAreaGroups=1 is a trial that -BattleAreaTrialTeam limits to one team, so a
@@ -292,9 +298,8 @@ void UBattleMatch::UpdateGroups(int32 Team)
     static const int32 FireArg=[]{int32 X=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupFireSupport="),X);return X;}(); // -1 = on for both teams (default, user 2026-11-21)
     const bool bFire=FireArg<0||(FireArg!=0&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==Team));
     if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Tank&&S.SquadType!=BattleSquadType::Mortar&&S.SquadType!=BattleSquadType::AntiTank&&S.SquadType!=BattleSquadType::Supply&&!(bFire&&S.SquadType==BattleSquadType::SPGun))continue;
-    // Trial -BattleGroupSupplySlot=1 (default 0, STATUS 2026-11-25): a supply vehicle whose number falls in a home-assault slot may still join the attack group.
-    static const bool bSupplySlot=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupSupplySlot="),X);return X!=0;}();
-    bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase&&!(bSupplySlot&&S.SquadType==BattleSquadType::Supply))continue;
+    // Trial -BattleGroupSupplySlot=1 (default 0): a supply vehicle in a home-assault slot may still join the attack group.
+    bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase&&!(BattleTactics::GroupSupplySlot()&&S.SquadType==BattleSquadType::Supply))continue;
     Free.Add({P.Key,S.SquadType,FVector::DistSquared2D(R->Position(S.LeaderUnitID),Rally)});
    }
    Free.Sort([](const FFree& A,const FFree& B){return A.D!=B.D?A.D<B.D:A.SID<B.SID;});

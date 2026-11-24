@@ -162,6 +162,9 @@ namespace BattleTactics
  int32 AreaWithout(int32 Team);
  // Squad groups -BattleAreaGroups=0/1 (UBattleTuning::bAreaGroups, default 1 since 2026-11-20 by user decision; the trial team with -BattleAreaTrialTeam): the AI forms one attack group per team (BattleGroups.cpp).
  bool AreaGroups(int32 Team);
+ // Trial -BattleGroupSupplySlot=1 (default 0, STATUS 2026-11-25): a supply vehicle whose number falls in a home-assault slot may still
+ // join the AI attack group (BattleGroups.cpp) and does not take the home assault's flank route (BattleMatch.cpp, RouteStep).
+ bool GroupSupplySlot();
  // -BattleSymmetricStart=0/1 (default on for the maps with the urban rule set, E to I, since 2026-11-20 by user decision; off on
  // A/D unless UBattleTuning::bSymmetricStart): a point-symmetric start for both teams. The maps and
  // objectives are 180-degree symmetric, but (1) the east side's squads started in the same north-south rows as the west side's (now
