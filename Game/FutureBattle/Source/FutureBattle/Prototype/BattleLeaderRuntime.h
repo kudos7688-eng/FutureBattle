@@ -553,6 +553,8 @@ public:
  // Trial -BattleStanceSteady (BattleStance.h; runtime only): where crouching hid a soldier's enemy from him, and the soldiers whose
  // last peek from cover ended with no shot (they stay down SteadyHideSeconds instead of 0.8 s).
  TMap<int32,FVector> CrouchBlindAt;
+ // Evaluation only (route_arrived_*): since when every living member of a squad on its way stands at his arrival place.
+ TMap<int32,double> RouteAllArrivedSince;
  TSet<int32> QuietPeeks;
  static constexpr float SteadyHideSeconds=3.f;
  float CoverHideSeconds(int32 ID);

@@ -1006,6 +1006,20 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
     SightExperiment.Cover(B.bArrived?TEXT("route_still_why_arrived"):B.bArrivalOccupied?TEXT("route_still_why_place_taken"):
      B.bTrafficWait?TEXT("route_still_why_traffic"):bGettingUp?TEXT("route_still_why_getting_up"):B.StalledSince>0?TEXT("route_still_why_stalled"):
      ID==S->LeaderUnitID?TEXT("route_still_why_other_leader"):TEXT("route_still_why_other"));
+    // Arrived: waiting for squad mates still walking, or the whole squad is there (by order, sector mission, and for how long).
+    if(B.bArrived)
+    {
+     bool bAll=true;
+     for(int32 Mate:S->Members)if(const auto* MU=Store->Find(Mate);MU && MU->IsAlive())if(const auto* MB=Bodies.Find(Mate);MB && !MB->bArrived){bAll=false;break;}
+     if(!bAll){RouteAllArrivedSince.Remove(U->SquadID);SightExperiment.Cover(TEXT("route_arrived_mates_walking"));}
+     else
+     {
+      const double Since=RouteAllArrivedSince.FindOrAdd(U->SquadID,Now);const double Wait=Now-Since;
+      SightExperiment.Cover(S->Order==EBattleOrder::Move?TEXT("route_arrived_all_move"):S->Order==EBattleOrder::AttackMove?TEXT("route_arrived_all_attack"):TEXT("route_arrived_all_defend"));
+      if(S->bSectorMission)SightExperiment.Cover(TEXT("route_arrived_all_sector_mission"));
+      SightExperiment.Cover(Wait<10.?TEXT("route_arrived_all_wait_0_10s"):Wait<30.?TEXT("route_arrived_all_wait_10_30s"):Wait<60.?TEXT("route_arrived_all_wait_30_60s"):TEXT("route_arrived_all_wait_60s_plus"));
+     }
+    }
    }
   }
   // Getting up takes time: no walking until the soldier is standing. With -BattleStanceMove=2 he walks in his stance instead
