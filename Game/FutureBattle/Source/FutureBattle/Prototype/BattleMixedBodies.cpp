@@ -124,7 +124,7 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  CoverApproaches.Reset();FirePositions.Reset();
  ArmsBoundMemory.Reset();ArmsBoundArrived.Reset(); // where assault bounds saw their enemy and reached cover (BattleArms.cpp)
  SuppressionZeroAt.Reset();
- Stances.Reset();StanceLockedUntil.Reset();LowMoveUntil.Reset();
+ Stances.Reset();StanceLockedUntil.Reset();LowMoveUntil.Reset();CrouchBlindAt.Reset();QuietPeeks.Reset(); // -BattleStanceSteady memories
  PC->ResetMatchControl();
  const bool UseVAT=bDisplayLODEnabled;
  if(VAT)VAT->ResetBodies();

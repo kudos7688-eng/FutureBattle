@@ -58,6 +58,155 @@ bool BattleTactics::ArtilleryFlash()
  return On;
 }
 
+// Counter-battery fire (2026-11-23, user request after the subtraction showed the gun unanswered). -BattleCounterBattery=1 (default 0;
+// the trial team only with -BattleAreaTrialTeam): a self-propelled gun shoots first at the newest fresh report of enemy artillery fire
+// within its range (BATTLE_ARTILLERY_FLASH reports, so -BattleArtilleryFlash=1 is needed; observed reports only, never the true position).
+bool BattleTactics::CounterBattery(int32 Team)
+{
+ static const int32 V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCounterBattery="),X);return X;}();
+ if(V==0||!ArtilleryFlash())return false;
+ const int32 Trial=AreaStrategy().TrialTeam;
+ return Trial<0||Trial==Team;
+}
+
+// "Sometimes" counter-battery (2026-11-23, user choice after the always-on version spent the own gun on the enemy gun):
+// -BattleCounterBatteryShots=<n> (default 0 = every shell while a report is fresh): only a report of the last 15 s (the enemy gun is
+// firing now) is answered, with n shells; then the gun rests -BattleCounterBatteryRest=<s> (default 60) shooting only at soldiers.
+int32 BattleTactics::CounterBatteryShots()
+{
+ static const int32 V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCounterBatteryShots="),X);return FMath::Max(0,X);}();
+ return V;
+}
+float BattleTactics::CounterBatteryRest()
+{
+ static const float V=[]{float X=60.f;FParse::Value(FCommandLine::Get(),TEXT("BattleCounterBatteryRest="),X);return FMath::Max(0.f,X);}();
+ return V;
+}
+
+// -BattleArtilleryVehicleSplash=<0..1> (default 0 = vehicles only by a direct hit, as before): a gun shell also hurts vehicles within its
+// blast radius by this share of the soldiers' falloff (both teams; physics, not a trial-team choice).
+float BattleTactics::ArtilleryVehicleSplash()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryVehicleSplash="),X);return FMath::IsFinite(X)?FMath::Clamp(X,0.f,1.f):0.f;}();
+ return V;
+}
+
+// 2026-11-23 (user decision "1と3" after counter-battery fire hit the home behind which the enemy gun stood): two trials, both default 0.
+// -BattleRepairDepot=<m>: vehicles and exoskeleton soldiers are repaired at a depot <m> beside their home (UBattleMatch::RepairPoint)
+// instead of at the home; ammunition and replacements stay at home. -BattleArtilleryHomeGap=<m>: an artillery post (AreaArtilleryPost)
+// keeps at least <m> from the own home, on the side away from the depot.
+float BattleTactics::RepairDepot()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleRepairDepot="),X);return FMath::IsFinite(X)?FMath::Clamp(X,0.f,400.f)*100.f:0.f;}();
+ return V;
+}
+float BattleTactics::ArtilleryHomeGap()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryHomeGap="),X);return FMath::IsFinite(X)?FMath::Clamp(X,0.f,300.f)*100.f:0.f;}();
+ return V;
+}
+// The depot beside the home (the point-symmetric side: +Y for the home on +X), projected on the navigation mesh once per team; the
+// home itself without -BattleRepairDepot or when no navigable point is found.
+FVector UBattleMatch::RepairPoint(int32 Team) const
+{
+ const FVector Home=AreaHome(Team);const float Offset=BattleTactics::RepairDepot();
+ if(Offset<=0.f||Team<0||Team>1)return Home;
+ if(!bDepotPointBuilt[Team])
+ {
+  bDepotPointBuilt[Team]=true;DepotPoint[Team]=Home;
+  FVector Want=Home+FVector(0.,(Home.X>0?1.:-1.)*Offset,0.);
+  if(const auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+  {FNavLocation L;if(Nav->ProjectPointToNavigation(Want,L,FVector(2000.,2000.,5000.)))DepotPoint[Team]=L.Location;}
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_REPAIR_DEPOT team=%d home=%s depot=%s offset=%.0f"),Team,*Home.ToCompactString(),*DepotPoint[Team].ToCompactString(),Offset);
+ }
+ return DepotPoint[Team];
+}
+
+// The depot can be broken (2026-11-23, user proposal: return fire and raids that hit the depot make firing next to it a risk).
+// -BattleDepotHealth=<hp> (default 0 = it never breaks): a gun shell within its blast radius plus 3 m does the soldiers' falloff damage,
+// and every living enemy within 25 m wears it down by 4 hp/s. Broken, it repairs nothing for -BattleDepotRebuild=<s> (default 120);
+// machines then go to the home to be repaired, as without the depot. Then it is whole again.
+// SPG weaknesses (2026-11-24, user choice "修理と弾に限り"; the ammunition limit is the existing -BattleSPGAmmo=1).
+// -BattleMachineRepairRate=<hp/s> (default 0 = the supply heal): vehicles and exos are repaired at the depot or home this fast.
+// -BattleRepairHoldFire=1 (default 0): a self-propelled gun whose squad is on its trip home (HOME SUPPLY: repair or ammunition) does
+// not fire until the trip ends (it fired from the depot while being repaired, so damage cost it nothing).
+// Firing posture (2026-11-24, user proposal): -BattleSPGSetup=<s> overrides the gun's set-up after it stops (config 8 s);
+// -BattleSPGStayAfterFire=<s> (default 0): after a shot the gun cannot drive off for this long (it cannot dodge return fire or leave
+// for repair at once).
+float BattleTactics::SPGSetup()
+{
+ static const float V=[]{float X=-1.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSPGSetup="),X);return FMath::IsFinite(X)?X:-1.f;}();
+ return V;
+}
+float BattleTactics::SPGStayAfterFire()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSPGStayAfterFire="),X);return FMath::IsFinite(X)?FMath::Max(0.f,X):0.f;}();
+ return V;
+}
+bool UBattleLeaderRuntime::GunStaysAfterFire(int32 ID,double Now) const
+{
+ const float Stay=BattleTactics::SPGStayAfterFire();
+ if(Stay<=0.f||!IsSPG(ID))return false;
+ const auto* A=Artillery.Find(ID);
+ return A&&A->LastFired>=0.&&Now>=A->LastFired&&Now-A->LastFired<Stay;
+}
+float BattleTactics::MachineRepairRate()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleMachineRepairRate="),X);return FMath::IsFinite(X)?FMath::Max(0.f,X):0.f;}();
+ return V;
+}
+bool BattleTactics::RepairHoldFire()
+{
+ static const bool V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleRepairHoldFire="),X);return X==1;}();
+ return V;
+}
+float BattleTactics::DepotHealth()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleDepotHealth="),X);return FMath::IsFinite(X)?FMath::Max(0.f,X):0.f;}();
+ return RepairDepot()>0.f?V:0.f;
+}
+float BattleTactics::DepotRebuild()
+{
+ static const float V=[]{float X=120.f;FParse::Value(FCommandLine::Get(),TEXT("BattleDepotRebuild="),X);return FMath::IsFinite(X)?FMath::Max(0.f,X):120.f;}();
+ return V;
+}
+float BattleTactics::ArtilleryPostRisk()
+{
+ static const float V=[]{float X=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryPostRisk="),X);return FMath::IsFinite(X)?FMath::Max(0.f,X):0.f;}();
+ return RepairDepot()>0.f?V:0.f;
+}
+bool UBattleMatch::DepotWorking(int32 Team) const
+{
+ return BattleTactics::RepairDepot()>0.f&&Team>=0&&Team<2&&!(DepotDownUntil[Team]>=0.&&Elapsed<DepotDownUntil[Team]);
+}
+void UBattleMatch::DamageDepot(int32 Team,float Damage,const TCHAR* Cause)
+{
+ const float Health=BattleTactics::DepotHealth();
+ if(Health<=0.f||Damage<=0.f||!DepotWorking(Team))return;
+ DepotDamage[Team]+=Damage;
+ if(DepotDamage[Team]>=Health)
+ {
+  DepotDamage[Team]=0.f;DepotDownUntil[Team]=Elapsed+BattleTactics::DepotRebuild();++DepotBreaks[Team];
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_DEPOT_BROKEN team=%d cause=%s at=%.1f until=%.1f breaks=%d"),Team,Cause,Elapsed,DepotDownUntil[Team],DepotBreaks[Team]);
+ }
+}
+void UBattleMatch::UpdateDepots(float Dt)
+{
+ if(BattleTactics::DepotHealth()<=0.f||Dt<=0.f)return;
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ if(!Store||!R)return;
+ for(int32 Team=0;Team<2;++Team)
+ {
+  if(DepotDownUntil[Team]>=0.&&Elapsed>=DepotDownUntil[Team])
+  {DepotDownUntil[Team]=-1.;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_DEPOT_REBUILT team=%d at=%.1f"),Team,Elapsed);}
+  if(!DepotWorking(Team))continue;
+  const FVector Depot=RepairPoint(Team);int32 Near=0;
+  for(const auto& S:Store->GetSquads())if(S.Value.Team==1-Team)
+   for(const int32 ID:S.Value.Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive()&&FVector::DistSquared2D(R->Position(ID),Depot)<=FMath::Square(2500.))++Near;
+  if(Near>0)DamageDepot(Team,4.f*Near*Dt,TEXT("raid"));
+ }
+}
+
 bool BattleTactics::ArtilleryPosts()
 {
  static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryPosts="),V);return V==1;}();
@@ -214,6 +363,55 @@ FVector UBattleMatch::AreaArtilleryPost(int32 Team,int32 SquadID,const FVector& 
    }
   }
  }
+ // Trial -BattleArtilleryHomeGap: not within the gap of the own home (counter-battery fire at the gun would hit the home); pushed out
+ // from the home, straight sideways (away from the depot side) when the post is the home itself.
+ // Trial -BattleArtilleryPostRisk (with the depot): instead of the fixed sideways push, the post is scored. Cost in metres = the distance
+ // to the depot (a damaged gun drives there) + Risk x the chance that return fire at the gun lands on the depot: 1 within the blast
+ // radius plus 3 m of it, falling to 0 at that plus 30 m (the error of the averaged fire reports) plus the gun's spread at 60% range.
+ // Candidates: the post itself when outside the home gap, and points 0/20/40 m beyond the gap round the home (not behind it), on the
+ // navigation mesh and clear of the standoff. None found keeps the fixed push below.
+ const float PostRisk=BattleTactics::ArtilleryPostRisk();
+ bool bScored=false;
+ if(PostRisk>0.f&&S->SquadType==BattleSquadType::SPGun)
+ {
+  const FVector Home=AreaHome(Team),Depot=RepairPoint(Team);const double Gap=BattleTactics::ArtilleryHomeGap();
+  const double Safe=double(R->ArtilleryBlastRadius(true))+300.,RiskReach=Safe+3000.+R->ArtillerySpread(true,Range*.6);
+  auto Chance=[&](const FVector& P){return FMath::Clamp(1.-(FVector::Dist2D(P,Depot)-Safe)/FMath::Max(1.,RiskReach-Safe),0.,1.);};
+  auto Cost=[&](const FVector& P){return FVector::Dist2D(P,Depot)/100.+double(PostRisk)*Chance(P);};
+  const bool bPostOk=FVector::Dist2D(Post,Home)>=Gap;
+  if(!bPostOk||Chance(Post)>0.)
+  {
+   // Near the home the standoff is often not clear anywhere (the post fell back to the home): then the candidates are scored without it.
+   const bool bAnyClear=Clear(Post);
+   FVector Best=Post;double BestCost=bPostOk?Cost(Post):DBL_MAX;
+   const auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+   const double HomeSign=Home.X>0?1.:-1.;
+   for(int32 Ring=0;Ring<3;++Ring)for(int32 A=0;A<24;++A)
+   {
+    const double Angle=A*PI/12.;const FVector Dir(FMath::Cos(Angle),FMath::Sin(Angle),0.);
+    if(Dir.X*HomeSign>.2)continue; // behind the home is the map edge
+    FVector P=Home+Dir*(FMath::Max(Gap,1000.)+Ring*2000.);P.Z=Home.Z;
+    if(Nav){FNavLocation L;if(!Nav->ProjectPointToNavigation(P,L,FVector(500.,500.,5000.)))continue;P=L.Location;}
+    if(bAnyClear&&!Clear(P))continue;
+    const double C=Cost(P);if(C<BestCost){BestCost=C;Best=P;}
+   }
+   if(BestCost<DBL_MAX)
+   {
+    Post=Best;bScored=true;
+   }
+  }
+  else bScored=true;
+ }
+ if(const float Gap=BattleTactics::ArtilleryHomeGap();Gap>0.f&&!bScored)
+ {
+  const FVector Home=AreaHome(Team);
+  if(FVector::Dist2D(Post,Home)<Gap)
+  {
+   FVector Out=(Post-Home).GetSafeNormal2D();
+   if(Out.IsNearlyZero()||Out.X*Home.X>0.)Out=FVector(0.,Home.X>0?-1.:1.,0.); // behind the home is the map edge: go sideways
+   Post=Home+Out*double(Gap);Post.Z=Home.Z;
+  }
+ }
  // A post near the current mission is kept: no new order for every small change in what the team knows.
  if(S->bHasMission&&FVector::Dist2D(S->MissionDestination,Post)<2500.)return S->MissionDestination;
  return Post;
@@ -292,6 +490,30 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
  if(BattleTactics::ArtilleryPosts()&&!bSPG&&!GetWorld()->GetSubsystem<UBattleMatch>()->AtArtilleryPost(U->Team,Pos))return false;
  const double Min2=FMath::Square(double(ArtilleryMinRange(bSPG))),Max2=FMath::Square(double(ArtilleryMaxRange(bSPG)));
  const double Blast=ArtilleryBlastRadius(bSPG),Blast2=Blast*Blast;
+ // Counter-battery (-BattleCounterBattery=1): the newest fresh artillery report in range comes first; ties by shooter key.
+ const int32 CBShots=BattleTactics::CounterBatteryShots();
+ const double* CBRest=CBShots>0?CounterBatteryRestUntil.Find(ID):nullptr;
+ if(bSPG&&U->Team>=0&&U->Team<2&&BattleTactics::CounterBattery(U->Team)&&!(CBRest&&Now<*CBRest))
+  if(const auto* CM=GetWorld()->GetSubsystem<UBattleMatch>())
+  {
+   int32 BestKey=INDEX_NONE;const UBattleMatch::FFireReveal* Best=nullptr;
+   for(const auto& FR:CM->FireReveals[U->Team])
+   {
+    const auto& R=FR.Value;if(!R.bArtillery||CM->Elapsed-R.At>(CBShots>0?FMath::Min(15.,double(R.Memory)):R.Memory)||CM->Elapsed<R.At)continue;
+    const double D2=FVector::DistSquared2D(Pos,R.Position);if(D2<Min2||D2>Max2)continue;
+    if(!Best||R.At>Best->At||(R.At==Best->At&&FR.Key<BestKey)){Best=&R;BestKey=FR.Key;}
+   }
+   const FVector BestAt=Best&&Best->Count>0?Best->Sum/double(Best->Count):Best?Best->Position:FVector::ZeroVector; // the mean of the gun's repeated reports
+   if(Best&&!AllyNear(U->Team,BestAt,Blast+ArtillerySpread(bSPG,FVector::Dist2D(Pos,BestAt))))
+   {
+    Aim=BestAt;
+    if(const int32* Last=CounterBatteryTarget.Find(ID);!Last||*Last!=BestKey)
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COUNTER_BATTERY unit=%d team=%d target=%d aim=(%.0f,%.0f) age=%.1f range=%.0f reports=%d"),ID,U->Team,BestKey,Aim.X,Aim.Y,CM->Elapsed-Best->At,FVector::Dist2D(Pos,Aim),Best->Count);
+    CounterBatteryTarget.Add(ID,BestKey);++CounterBatteryAims;
+    return true;
+   }
+  }
+ CounterBatteryTarget.Remove(ID);
  // Soldiers only: the explosion does not hurt vehicles (a gun's direct hit on one is luck, not a plan).
  TArray<TPair<int32,FVector>> Soldiers;
  if(!BattleTactics::ArtilleryClustersEnabled()||!bTeamClusters)
@@ -413,6 +635,10 @@ bool UBattleLeaderRuntime::StepArtillery(int32 ID,double Now,bool bMoving,FVecto
  // Guard stale entries; restore rebases the clocks and carries elapsed setup separately.
  if(A.ReadyAt>Now+FMath::Max(0.f,T->SPGReload)+1.)A.ReadyAt=Now;
  if(A.StillSince>Now)A.StillSince=-1;
+ // Trial -BattleRepairHoldFire: no fire on the trip home (repair or ammunition); the set-up starts again after it.
+ if(bSPG&&BattleTactics::RepairHoldFire())
+  if(const auto* GunSquad=Store->FindSquad(U->SquadID);GunSquad&&GunSquad->TacticalPlan.Action==EBattleSquadTactic::Recover&&GunSquad->TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY")))
+  {A.StillSince=-1;A.SetupCredit=0;++RepairHeldShots;return false;}
  // Moving undoes the set-up (the target is kept until the next pick).
  if(bMoving){A.StillSince=-1;A.SetupCredit=0;return false;}
  if(A.StillSince<0)A.StillSince=Now;
@@ -439,7 +665,7 @@ bool UBattleLeaderRuntime::StepArtillery(int32 ID,double Now,bool bMoving,FVecto
  if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,A.TargetKey,A.Aim)){A.bHasTarget=false;A.NextPick=Now;return false;}
  Direction=(A.Aim-Position(ID)).GetSafeNormal2D();
  if(Direction.IsNearlyZero())return false;
- const float Setup=FMath::Max(0.f,bSPG?T->SPGSetupSeconds:T->MortarSetupSeconds);
+ const float Setup=FMath::Max(0.f,bSPG?(BattleTactics::SPGSetup()>=0.f?BattleTactics::SPGSetup():T->SPGSetupSeconds):T->MortarSetupSeconds);
  if(Now-A.StillSince+A.SetupCredit>=Setup)
  {
   bool bReady=false;
@@ -450,7 +676,21 @@ bool UBattleLeaderRuntime::StepArtillery(int32 ID,double Now,bool bMoving,FVecto
    bReady=Now>=A.ReadyAt&&Turret&&Turret->IsValid()&&FMath::Abs(FMath::FindDeltaAngleDegrees((*Turret)->GetComponentRotation().Yaw,Direction.Rotation().Yaw))<=3.f;
   }
   else bReady=U->Ammo>0&&U->ReloadEndTime<=0.&&Now>=U->NextShotTime;
-  if(bReady)FireArtillery(ID,A.Aim,Now);
+  if(bReady)
+  {
+   FireArtillery(ID,A.Aim,Now);
+   if(bSPG&&CounterBatteryTarget.Contains(ID))
+   {
+    ++CounterBatteryFired;
+    if(const int32 CBShots=BattleTactics::CounterBatteryShots();CBShots>0&&++CounterBatteryShots.FindOrAdd(ID)>=CBShots)
+    {
+     // The burst is spent: rest, and pick a soldier target at once.
+     CounterBatteryShots.Remove(ID);CounterBatteryRestUntil.Add(ID,Now+BattleTactics::CounterBatteryRest());++CounterBatteryRests;
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COUNTER_BATTERY_REST unit=%d team=%d shots=%d until=%.1f"),ID,U->Team,CBShots,Now+BattleTactics::CounterBatteryRest());
+     CounterBatteryTarget.Remove(ID);A.NextPick=Now;
+    }
+   }
+  }
  }
  // The mortar loads its next round from the reserve.
  if(!bSPG){const auto* After=Store->Find(ID);if(After&&After->Ammo==0&&After->Reserve>0&&After->ReloadEndTime==0)Store->StartReload(ID,Now);}
@@ -474,7 +714,7 @@ bool UBattleLeaderRuntime::FireArtillery(int32 ID,const FVector& Aim,double Now)
  if(BattleTactics::ArtilleryPosts()&&!bSPG&&!GetWorld()->GetSubsystem<UBattleMatch>()->AtArtilleryPost(U->Team,Position(ID)))return false;
  if(BattleTactics::ArtilleryClustersEnabled()&&AllyNear(U->Team,Aim,ArtilleryBlastRadius(bSPG)+ArtillerySpread(bSPG,FVector::Dist2D(Position(ID),Aim))))return false;
  auto& A=Artillery.FindOrAdd(ID);
- if(bSPG){if(Now<A.ReadyAt||!Store->UseSPGAmmo(ID))return false;A.ReadyAt=Now+FMath::Max(.5f,T->SPGReload);}
+ if(bSPG){if(Now<A.ReadyAt||!Store->UseSPGAmmo(ID))return false;A.ReadyAt=Now+FMath::Max(.5f,T->SPGReload);A.LastFired=Now;}
  else if(!Store->ConsumeShot(ID,Now,T->ShotInterval(EBattleWeapon::Mortar,false)))return false;
  U=Store->Find(ID);
  const FVector Start=Position(ID);const double Distance=FVector::Dist2D(Start,Aim);
@@ -507,10 +747,14 @@ bool UBattleLeaderRuntime::FireArtillery(int32 ID,const FVector& Aim,double Now)
     FRandomStream RevealRandom(int32(uint32(ID)*2654435761u+uint32(A.Shots)*40503u+15401u));
     auto& RevealReport=RevealMatch->FireReveals[RevealTeam].FindOrAdd(ID);
     if(BattleTactics::ObservedArmour())RevealReport.ObservedSquadType=bSPG?BattleSquadType::SPGun:BattleSquadType::Mortar;
+    const bool bRevealFresh=RevealReport.bArtillery&&RevealReport.Count>0&&RevealMatch->Elapsed-RevealReport.At<=30.;
     RevealReport.bArtillery=true;RevealReport.At=RevealMatch->Elapsed;RevealReport.Memory=30.;RevealReport.ErrorRadius=3000.f;
     const float RevealAngle=RevealRandom.FRand()*2.f*PI;
     const float RevealRadius=FMath::Sqrt(RevealRandom.FRand())*RevealReport.ErrorRadius;
     RevealReport.Position=Start+FVector(FMath::Cos(RevealAngle)*RevealRadius,FMath::Sin(RevealAngle)*RevealRadius,0);
+    // Repeated reports of one gun (within 30 s and 60 m of their mean) are averaged for counter-battery fire; used by nothing else.
+    if(bRevealFresh&&FVector::Dist2D(RevealReport.Sum/double(RevealReport.Count),RevealReport.Position)<=6000.){RevealReport.Sum+=RevealReport.Position;++RevealReport.Count;}
+    else{RevealReport.Sum=RevealReport.Position;RevealReport.Count=1;}
     RevealMatch->IntelViews[RevealTeam].At=-1;
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARTILLERY_FLASH team=%d shooter=%d type=%s observer=%d range=%.0f at=%s"),RevealTeam,ID,bSPG?TEXT("spg"):TEXT("mortar"),RevealLeader,FMath::Sqrt(RevealDistanceSquared),*RevealReport.Position.ToCompactString());
     break;
@@ -571,6 +815,12 @@ int32 UBattleLeaderRuntime::ArtilleryImpact(const FArtilleryShell& Shell)
   if(IsVehicle(B.Key))
   {
    if(Shell.bSPG&&FVector::Dist2D(P,Shell.At)<=BattleSquadType::VehicleRadius(VehicleType(B.Key))&&FMath::Abs(P.Z-Shell.At.Z)<=400.)Hits.Add(TPair<int32,float>(B.Key,MaxDamage*ArtilleryBlastTransmission(Shell.At,P)));
+   // Trial -BattleArtilleryVehicleSplash (default 0): a near miss by a gun shell hurts the vehicle by a share of the blast falloff.
+   else if(const float Splash=Shell.bSPG?BattleTactics::ArtilleryVehicleSplash():0.f;Splash>0.f)
+   {
+    const double VD=FVector::Dist(P,Shell.At);
+    if(VD<Radius){const float VDamage=float(MaxDamage*(1.0-VD/Radius))*Splash*ArtilleryBlastTransmission(Shell.At,P);if(VDamage>0.f)Hits.Add(TPair<int32,float>(B.Key,VDamage));}
+   }
    continue;
   }
   const double D=FVector::Dist(P,Shell.At);if(D>Radius)continue;
@@ -603,6 +853,17 @@ int32 UBattleLeaderRuntime::ArtilleryImpact(const FArtilleryShell& Shell)
    const float Transmission=!BattleTactics::BlastOcclusionEnabled()?1.f:
     (BattleTactics::HasTerrainLine(GetWorld(),Shell.At,Surface+(Shell.At-Surface).GetSafeNormal()*2.)?1.f:0.f);
    if(Transmission>0.f&&M->DamageBase(M->BaseActors[Enemy],Team,(Shell.bSPG?T->SPGBaseDamage:T->MortarBaseDamage)*Transmission))++ArtilleryBaseHits;
+  }
+ }
+ // Trial -BattleDepotHealth: the enemy depot within the blast radius plus 3 m takes the falloff damage.
+ if(M&&Enemy>=0&&Enemy<2&&BattleTactics::DepotHealth()>0.f&&M->DepotWorking(Enemy))
+ {
+  const double DD=FVector::Dist2D(M->RepairPoint(Enemy),Shell.At),Reach=double(Radius)+300.;
+  if(DD<Reach)
+  {
+   const float DepotHit=float(MaxDamage*(1.-DD/Reach));
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_DEPOT_HIT team=%d shooter=%d damage=%.0f distance=%.0f"),Enemy,Shell.ShooterID,DepotHit,DD);
+   M->DamageDepot(Enemy,DepotHit,Shell.bSPG?TEXT("gun"):TEXT("mortar"));
   }
  }
  const double Now=GetWorld()->GetTimeSeconds();

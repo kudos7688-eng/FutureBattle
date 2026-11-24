@@ -7,6 +7,7 @@
 #include "BattleTactics.h"
 #include "BattleMatch.h"
 #include "BattleSectors.h"
+#include "FutureBattle.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 
@@ -19,6 +20,37 @@ void UBattlePerception::Capture(TMap<int32, FBattleObserver>& OutObservers, TArr
 		for (auto& Started : Observer.Value.DetectionStarted) Started.Value -= Now;
 	}
 	for (auto& Report : OutReports) { Report.DeliveryTime -= Now; Report.Contact.LastSeenTime -= Now; }
+}
+
+void UBattlePerception::CaptureSquadKnowledge(TArray<FBattleSavedSquadContact>& OutContacts, TArray<FBattleSquadReport>& OutReports, double Now) const
+{
+	OutContacts.Reset(); OutReports = SquadReports;
+	for (const auto& Intel : SquadIntel) for (const auto& Known : Intel.Value.Known)
+	{
+		FBattleSavedSquadContact Entry; Entry.SquadID = Intel.Key; Entry.Contact = Known.Value.Contact; Entry.Contact.LastSeenTime -= Now;
+		OutContacts.Add(Entry);
+	}
+	for (auto& Report : OutReports) { Report.DeliveryTime -= Now; Report.Contact.LastSeenTime -= Now; }
+}
+
+void UBattlePerception::RestoreSquadKnowledge(const TArray<FBattleSavedSquadContact>& SavedContacts, const TArray<FBattleSquadReport>& SavedReports, double Now)
+{
+	SquadIntel.Reset(); SquadReports.Reset(); SquadReportKeys.Reset();
+	if (!SquadKnowledgeMode(0) && !SquadKnowledgeMode(1)) return;
+	// As for the soldiers' contacts: nobody sees anybody until the next update says so.
+	for (const auto& Entry : SavedContacts)
+	{
+		FBattleSquadContact Known; Known.Contact = Entry.Contact; Known.Contact.LastSeenTime += Now; Known.Contact.bVisible = false;
+		SquadIntel.FindOrAdd(Entry.SquadID).Known.Add(Known.Contact.TargetID, Known);
+	}
+	for (FBattleSquadReport Report : SavedReports)
+	{
+		Report.DeliveryTime += Now; Report.Contact.LastSeenTime += Now;
+		const FIntVector Key(Report.SourceSquadID, Report.ReceiverSquadID, Report.Contact.TargetID);
+		if (SquadReportKeys.Contains(Key)) continue;
+		SquadReportKeys.Add(Key); SquadReports.Add(Report);
+	}
+	UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_SQUAD_KNOWLEDGE_RESTORE squads=%d contacts=%d reports=%d"), SquadIntel.Num(), SavedContacts.Num(), SquadReports.Num());
 }
 
 void UBattlePerception::CaptureCrossSector(TArray<FBattleSavedCrossLook>& Out, double Now) const
@@ -41,7 +73,7 @@ void UBattlePerception::RestoreCrossSector(const TArray<FBattleSavedCrossLook>& 
 void UBattlePerception::Restore(const TMap<int32, FBattleObserver>& SavedObservers, const TArray<FBattleReport>& SavedReports, double Now)
 {
 	Observers = SavedObservers; PendingReports = SavedReports; PendingCounts.Reset();
-	// The squads' tables are not saved yet (trial): they are rebuilt from the members' own contacts at the next update.
+	// The squads' tables come back with RestoreSquadKnowledge (BattleSave.cpp); without it they are rebuilt from the members' own contacts.
 	SquadIntel.Reset(); SquadReports.Reset(); SquadReportKeys.Reset();
 	NextScanTimes.Reset(); LastScanTimes.Reset();
 	for (auto& Observer : Observers)
@@ -501,7 +533,8 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	if (Mixed && (SquadKnowledgeMode(0) || SquadKnowledgeMode(1)))
 	{
 		const auto* Store = GetWorld()->GetSubsystem<UBattleState>();
-		const double Memory = GetDefault<UBattleTuning>()->MemorySeconds;
+		// A squad remembers as long as the living member with the longest memory (recruits remember shorter, veterans longer).
+		TMap<int32, double> SquadMemory;
 		// 1. What the living members saw themselves: the newest wins (same time: the one seen now, then the lower observer ID, as UBattleSquadTactics::Observe).
 		for (auto& Intel : SquadIntel) for (auto& Known : Intel.Value.Known) { Known.Value.Contact.bVisible = false; Known.Value.SeerID = INDEX_NONE; }
 		TSet<int32> LiveSquads;
@@ -509,6 +542,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 		{
 			if (!SquadKnowledgeMode(Pair.Value.State->Team)) continue;
 			LiveSquads.Add(Pair.Value.State->SquadID);
+			{ double& Longest = SquadMemory.FindOrAdd(Pair.Value.State->SquadID); Longest = FMath::Max(Longest, static_cast<double>(Pair.Value.State->Perception.MemorySeconds)); }
 			const auto* Observer = Observers.Find(Pair.Key); if (!Observer || Observer->Contacts.IsEmpty()) continue;
 			auto& Known = SquadIntel.FindOrAdd(Pair.Value.State->SquadID).Known;
 			for (const auto& Seen : Observer->Contacts)
@@ -535,14 +569,15 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 				for (int32 Member : To->Members) if (const auto* L = Alive.Find(Member); L && FVector::DistSquared(Sender->Position, L->Position) <= FMath::Square(Sender->State->Perception.ShareRange)) { bNear = true; break; }
 			if (!bNear) { SquadReportKeys.Remove(Key); It.RemoveCurrentSwap(EAllowShrinking::No); continue; }
 			if (Now < Report.DeliveryTime) continue;
-			if (Memory > 0. && Now - Report.Contact.LastSeenTime < Memory)
+			const double HeardMemory = SquadMemory.FindRef(Report.ReceiverSquadID);
+			if (HeardMemory > 0. && Now - Report.Contact.LastSeenTime < HeardMemory)
 			{
 				auto& Known = SquadIntel.FindOrAdd(Report.ReceiverSquadID).Known;
 				const auto* Existing = Known.Find(Report.Contact.TargetID);
 				if (!Existing || (!Existing->Contact.bVisible && Existing->Contact.LastSeenTime < Report.Contact.LastSeenTime))
 				{
 					FBattleSquadContact Heard; Heard.Contact = Report.Contact; Heard.Contact.bVisible = false; Heard.Contact.bShared = true;
-					Heard.Contact.Confidence = FMath::Clamp(1.f - static_cast<float>((Now - Heard.Contact.LastSeenTime) / Memory), 0.f, 1.f);
+					Heard.Contact.Confidence = FMath::Clamp(1.f - static_cast<float>((Now - Heard.Contact.LastSeenTime) / HeardMemory), 0.f, 1.f);
 					Known.Add(Heard.Contact.TargetID, Heard);
 					++SquadReportsDelivered; if (Metrics->bRecording) ++Metrics->ReportsDelivered;
 				}
@@ -553,13 +588,14 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 		for (auto Squad = SquadIntel.CreateIterator(); Squad; ++Squad)
 		{
 			if (!LiveSquads.Contains(Squad.Key())) { Squad.RemoveCurrent(); continue; }
+			const double Kept = SquadMemory.FindRef(Squad.Key());
 			for (auto It = Squad.Value().Known.CreateIterator(); It; ++It)
 			{
 				auto& Contact = It.Value().Contact;
 				if (Contact.bVisible) continue;
 				const double Age = FMath::Max(0., Now - Contact.LastSeenTime);
-				if (Memory <= 0. || Age >= Memory) { It.RemoveCurrent(); continue; }
-				Contact.Confidence = FMath::Clamp(1.f - static_cast<float>(Age / Memory), 0.f, 1.f);
+				if (Kept <= 0. || Age >= Kept) { It.RemoveCurrent(); continue; }
+				Contact.Confidence = FMath::Clamp(1.f - static_cast<float>(Age / Kept), 0.f, 1.f);
 			}
 		}
 		// 4. Queue: a member who sees an enemy tells every other squad of his team that has a living member within his voice

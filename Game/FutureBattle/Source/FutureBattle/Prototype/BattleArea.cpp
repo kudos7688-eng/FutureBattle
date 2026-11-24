@@ -30,7 +30,7 @@ int32 UBattleMatch::AreaScore(int32 Team)const
 void UBattleMatch::InitializeArea()
 {
  BattleComposition::LogStart(); // stage 1: returns before constructing definitions when OFF
- Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();FireReveals[0].Reset();FireReveals[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();FrontSectionWish.Reset();FrontReservePosts.Reset();FrontReserveRow.Reset();FreeLastPos.Reset();FreeLastStep.Reset();FreeReversals[0]=FreeReversals[1]=0;FreeMoved[0]=FreeMoved[1]=0.;SectorCrowd[0]=SectorCrowd[1]=0;FrontLanes[0]=FrontLanes[1]=0;RoadSteps[0]=RoadSteps[1]=0;LatFront[0].Reset();LatFront[1].Reset();LatOther[0].Reset();LatOther[1].Reset();bSetupDone=bSetupBurst=false;FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
+ Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();FireReveals[0].Reset();FireReveals[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();FrontSectionWish.Reset();FrontOrderScriptDone=false;FrontReservePosts.Reset();FrontReserveRow.Reset();FreeLastPos.Reset();FreeLastStep.Reset();FreeReversals[0]=FreeReversals[1]=0;FreeMoved[0]=FreeMoved[1]=0.;SectorCrowd[0]=SectorCrowd[1]=0;FrontLanes[0]=FrontLanes[1]=0;RoadSteps[0]=RoadSteps[1]=0;LatFront[0].Reset();LatFront[1].Reset();LatOther[0].Reset();LatOther[1].Reset();bSetupDone=bSetupBurst=false;FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
  // A team knows the objectives it holds from the start (the depots of map F).
@@ -413,8 +413,18 @@ void UBattleMatch::UpdateAreaHiring()
    const int32 SniperWant=FMath::Min(BattleArms::AreaSniperKeep(),Bought/After);
    if(Type==BattleSquadType::Rifle&&HireGrade==0&&SniperWant>0&&ActiveSnipers(Team)<SniperWant){Type=BattleSquadType::Scout;HireGrade=2;}
   }
+  // Subtraction evaluation -BattleAreaEnsureTypes=1 (default 0): one of each rarely reached type is bought once (ever, lost ones are
+  // not replaced) after the first After purchases, ahead of everything but scouts, and the team saves for it instead of falling back.
+  bool bEnsured=false;
+  if(bAllTypes&&BattleTactics::AreaEnsureTypes()&&Type!=BattleSquadType::Scout&&Bought>=FMath::Max(1,GetDefault<UBattleTuning>()->AreaScoutAfterHires))
+   for(const uint8 Ensure:{BattleSquadType::SPGun,BattleSquadType::Exo,BattleSquadType::Supply})
+   {
+    if(Ensure==Without)continue;
+    bool bEver=false;for(const auto& P:Store->GetSquads())if(P.Value.Team==Team&&P.Key>StartSquadCount()&&P.Value.SquadType==Ensure){bEver=true;break;}
+    if(!bEver){Type=Ensure;bEnsured=true;break;}
+   }
   // Composition trial: an expensive type the team is far from affording (below 60% of its cost) does not hold up the plain purchases.
-  if(bComposition&&Type!=PlainType&&BattleSquadType::AreaCost(Type)>=20&&Credits[Team]-Pending<FMath::CeilToInt(BattleSquadType::AreaCost(Type)*.6f)+HireIntent.HireReserve)Type=PlainType;
+  if(!bEnsured&&bComposition&&Type!=PlainType&&BattleSquadType::AreaCost(Type)>=20&&Credits[Team]-Pending<FMath::CeilToInt(BattleSquadType::AreaCost(Type)*.6f)+HireIntent.HireReserve)Type=PlainType;
   // Stage 6 (-BattleHireDelegate): purchases through the reservation list (see HireDelegate). Elite platoons and sniper teams
   // (BattleArms.cpp) are not reserved: with the reservation list the AI buys the plain type instead.
   const int32 Delegate=HireDelegate(Team);
@@ -471,6 +481,7 @@ void UBattleMatch::UpdateArea(float Dt)
  const auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>();
  if(!bArea||Phase!=EBattleMatchPhase::Combat||!Mode||Mode->bCombatPaused||!FMath::IsFinite(Dt)||Dt<=0)return;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ UpdateDepots(Dt);
  Area.ObserveClock+=Dt;
  if(Area.ObserveClock>=.2f)
  {
@@ -541,6 +552,11 @@ void UBattleMatch::UpdateArea(float Dt)
   // A supply vehicle of the squad's side nearby with stock left gives the same refill anywhere and loses the rounds it gave.
   const int32 Car=!bHome&&!bPoint&&S->CommandStatus==EBattleCommandStatus::Active&&S->SquadType!=BattleSquadType::Supply?SupplyCarNear(S->Team,R->Position(S->LeaderUnitID)):INDEX_NONE;
   const bool bTeamSupply=Car!=INDEX_NONE;
+  // Trial -BattleRepairDepot: vehicles and exos recover health at the depot (leader within 25 m), and no longer at the home
+  // (at the home again while -BattleDepotHealth has broken the depot).
+  const bool bDepotMachine=DepotWorking(S->Team)&&(S->SquadType==BattleSquadType::Exo||R->IsVehicle(S->LeaderUnitID));
+  if(bDepotMachine&&S->CommandStatus==EBattleCommandStatus::Active&&FVector::Dist2D(R->Position(S->LeaderUnitID),RepairPoint(S->Team))<=2500.)
+   if(const float DepotHeal=BattleTactics::MachineRepairRate()>0.f?BattleTactics::MachineRepairRate():BattleTactics::Supply().HealPerSecond;DepotHeal>0.f)for(int32 ID:S->Members)Store->Heal(ID,DepotHeal*Step);
   if(!bHome&&!bPoint&&!bTeamSupply){Area.AmmoTimers.Remove(SID);continue;}
   float& AmmoTime=Area.AmmoTimers.FindOrAdd(SID);AmmoTime+=Step;
   if(AmmoTime>=10)
@@ -551,7 +567,9 @@ void UBattleMatch::UpdateArea(float Dt)
   }
   if(!bHome)continue; // a point gives ammunition only: no healing, no replacements
   // Trial -BattleSupplyHeal>0: living members (leader included) recover HP at home, up to their own maximum.
-  if(const float Heal=BattleTactics::Supply().HealPerSecond;Heal>0.f)
+  // Trial -BattleMachineRepairRate: vehicles and exos are repaired at that rate instead.
+  const bool bMachineHere=S->SquadType==BattleSquadType::Exo||R->IsVehicle(S->LeaderUnitID);
+  if(const float Heal=bMachineHere&&BattleTactics::MachineRepairRate()>0.f?BattleTactics::MachineRepairRate():BattleTactics::Supply().HealPerSecond;Heal>0.f&&!bDepotMachine)
    for(int32 ID:S->Members)Store->Heal(ID,Heal*Step);
   // Scout pairs are never replenished.
   if(BattleSquadType::Replenished(S->SquadType))

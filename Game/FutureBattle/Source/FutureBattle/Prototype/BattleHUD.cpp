@@ -1557,6 +1557,18 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
    for(double Y=Y0;Y<Y0+Size-1;Y+=StepLen)Thick(Ground(X,Y),Ground(X,FMath::Min(Y+StepLen,Y0+Size)));
    if(R+1<BattleSectors::Rows&&EdgeX(R+1)!=X){const double X1=EdgeX(R+1),Y=Y0+Size;for(double T=0;T<1;T+=.25)Thick(Ground(FMath::Lerp(X,X1,T),Y),Ground(FMath::Lerp(X,X1,T+.25),Y));}
   }
+  // Section orders: the target line the player drew (dashed, light blue).
+  if(FM->FrontSectionOrdersOn(0)&&FM->Area.FrontTarget.Num()==BattleSectors::Rows)
+  {
+   const FLinearColor TargetInk(.3f,.85f,1.f,.85f);
+   for(int32 R=0;R<BattleSectors::Rows;++R)
+   {
+    const int32 TRow=Sign>0?R:BattleSectors::Rows-1-R;const int32 TC=FM->Area.FrontTarget[TRow];if(TC<0)continue;
+    const double X=BattleSectors::Center(FM->FrontCell(0,TC,TRow)).X+Sign*Size*.5,Y0=-HY+R*Size;
+    for(double Y=Y0;Y<Y0+Size-1;Y+=StepLen*2)
+    {FVector2D SA,SB;if(Project(Ground(X,Y),SA)&&Project(Ground(X,FMath::Min(Y+StepLen,Y0+Size)),SB)&&(OnScreen(SA)||OnScreen(SB)))DrawLine(SA.X,SA.Y,SB.X,SB.Y,TargetInk,2.f);}
+   }
+  }
   // Front plan stage 7: each section's number and role at its middle row's line (the player's choice marked).
   if(FM->PlayerRolesOn(0))
   {
@@ -1568,7 +1580,7 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
     const int32 MidRow=(SecFirst+SecLast)/2;const FVector LineMid=BattleSectors::Center(FM->FrontCell(0,FM->FrontLine[0][MidRow],MidRow));
     FVector2D LabelAt;if(!Project(Ground(LineMid.X+Sign*Size*.5,LineMid.Y),LabelAt)||!OnScreen(LabelAt))continue;
     const TCHAR SecRole=LineFP.Role.IsValidIndex(SecK)?LineFP.Role[SecK]:TEXT('K');
-    const TCHAR* RoleJa=SecRole==TEXT('F')?TEXT("重点"):SecRole==TEXT('H')?TEXT("保持"):SecRole==TEXT('R')?TEXT("下がってよい"):TEXT("保つ");
+    const TCHAR* RoleJa=SecRole==TEXT('F')?TEXT("重点"):SecRole==TEXT('H')?TEXT("保持"):SecRole==TEXT('R')?TEXT("下がってよい"):SecRole==TEXT('A')?TEXT("前進"):SecRole==TEXT('B')?TEXT("後退"):TEXT("保つ");
     DrawText(FString::Printf(TEXT("区間%d %s%s"),SecK+1,RoleJa,FM->PlayerSectionRole(SecK)?TEXT("（指定）"):TEXT("")),FrontInk,LabelAt.X+6,LabelAt.Y-18,GEngine->GetSmallFont(),1.f);
    }
   }

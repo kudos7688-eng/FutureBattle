@@ -103,6 +103,17 @@ public:
  bool DamageBase(AActor* Target,int32 AttackerTeam,float Damage);
  bool CanFireAtBase(int32 UnitID,FVector& Target) const;
  FVector AreaHome(int32 Team) const;
+ // Where vehicles and exos are repaired: the home, or the depot beside it with -BattleRepairDepot (BattleArtillery.cpp). Transient cache.
+ FVector RepairPoint(int32 Team) const;
+ mutable FVector DepotPoint[2]={FVector::ZeroVector,FVector::ZeroVector};
+ mutable bool bDepotPointBuilt[2]={false,false};
+ // Trial -BattleDepotHealth (BattleArtillery.cpp): the depot's health, broken until DepotDownUntil (match Elapsed). Not saved.
+ float DepotDamage[2]={0.f,0.f};
+ double DepotDownUntil[2]={-1.,-1.};
+ int32 DepotBreaks[2]={0,0};
+ bool DepotWorking(int32 Team) const; // repairs happen at the depot (RepairDepot on and the depot not broken)
+ void DamageDepot(int32 Team,float Damage,const TCHAR* Cause);
+ void UpdateDepots(float Dt); // enemies at a depot wear it down; a broken depot is rebuilt after -BattleDepotRebuild s
  int32 ObservedOwner(int32 Team,int32 Point) const;
  int32 AreaScore(int32 Team) const;
  // War score trial (BattleWarScore.h). Earned = points + enemy losses; Score adds unspent resources; Estimate is what Observer
@@ -264,6 +275,14 @@ public:
  uint8 PlayerSectionRole(int32 Section) const;
  bool CyclePlayerSectionRole(int32 Section); // the next allowed role; LastMessage says which
  static const TCHAR* SectionRoleJa(uint8 PlayerRole);
+ // Section orders (trial -BattleFrontSectionOrders=1, default 0, needs the player roles): roles 5 advance and 6 fall back move the
+ // section's rows of the front army's line one column per front step (StepEvery) toward Area.FrontTarget. With the trial on, a line the
+ // player draws becomes that target instead of moving the whole line at once. Advance waits until the row's squads reached the line;
+ // fall back without a target behind goes on to the home column; an own point stays the floor of its row (as before).
+ bool FrontSectionOrdersOn(int32 Team) const;
+ TCHAR SectionOrderOfRow(int32 Team,int32 Row) const; // 'A' advance, 'B' fall back, 0 otherwise
+ void RunFrontOrderScript(int32 Team,const TArray<int32>& Hold,int32 HomeCol,int32 EnemyHomeCol); // test hook -BattleFrontOrderScript
+ bool FrontOrderScriptDone=false;
  // Stage 5 (Docs/design-front-strategy.md 3.1, 4; trial -BattleFrontPlanFocus2=1, default 0, needs -BattleFrontPlan=1): a second focus
  // section and attack army while the first one pushes (section push > 0, its attack group below 30% losses) and at least three free AI
  // rifle squads remain after the front army took its need.
@@ -472,7 +491,7 @@ public:
 	void UpdateIntelPurposes();
 	TMap<int32, int32> IntelPurpose;           // squad -> point it was bought to defend (transient)
 	mutable FAreaIntelView IntelViews[2];
- struct FFireReveal { uint8 ObservedSquadType=255; bool bArtillery=false; double At=0,Memory=10.; float ErrorRadius=500.f; FVector Position=FVector::ZeroVector; };
+ struct FFireReveal { uint8 ObservedSquadType=255; bool bArtillery=false; double At=0,Memory=10.; float ErrorRadius=500.f; FVector Position=FVector::ZeroVector; FVector Sum=FVector::ZeroVector; int32 Count=0; }; // Sum/Count: averaged artillery reports (counter-battery)
  // Shared gun reports, keyed by shooter unit ID; match seconds, transient, never saved.
  mutable TMap<int32,FFireReveal> FireReveals[2];
 	TMap<int32, FScoutReport> ScoutReports;

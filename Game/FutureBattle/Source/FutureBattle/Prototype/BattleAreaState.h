@@ -49,6 +49,8 @@ struct FBattleAreaState
  UPROPERTY() uint8 PlayerHireDelegate=0;
  UPROPERTY() int32 PlayerHireReserve=0;
  UPROPERTY() int32 PlayerHireDeny=0;
+ // Section orders (-BattleFrontSectionOrders=1; absent in older saves = empty): the player's target column per own row of team 0, -1 none.
+ UPROPERTY() TArray<int32> FrontTarget;
  // War score trial (BattleWarScore.h; absent in older saves = 0). Per team: score from held central points and from enemy losses,
  // each observer's estimate of the OPPONENT's point score (from last observed ownership), and the shared scoring clock.
  UPROPERTY() TArray<int32> WarPoint={0,0};
