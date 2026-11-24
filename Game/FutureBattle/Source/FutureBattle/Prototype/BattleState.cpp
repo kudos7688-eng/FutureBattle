@@ -606,7 +606,9 @@ float BattleSquadType::StillSightRange(uint8 Type)
  const auto* T=GetDefault<UBattleTuning>();
  return FMath::Clamp(BattleRanges::Get().bActive?T->ScoutSightRangeProfile:T->ScoutSightRange,0.f,60000.f);
 }
-float BattleSquadType::HealthScale(uint8 Type){if(Type==Exo)return FMath::Clamp(GetDefault<UBattleTuning>()->ExoHealthScale,.1f,20.f);if(Type==SPGun)return FMath::Clamp(GetDefault<UBattleTuning>()->SPGHealthScale,.1f,20.f);if((Type==ArmoredCar||Type==Supply))return FMath::Clamp(GetDefault<UBattleTuning>()->ACHealthScale,.1f,20.f);if(Type==Tank)return FMath::Clamp(GetDefault<UBattleTuning>()->TankHealthScale,1.f,20.f);return Type==Heavy?HeavyValues().Health:1.f;}
+// -BattleExoHealth=<scale> (default <0 = ExoHealthScale, 2026-11-25 trial): the exoskeleton soldier's health against a rifleman's.
+static float ExoTrialHealth(){static const float V=ExoTrialValue(TEXT("BattleExoHealth="));return V;}
+float BattleSquadType::HealthScale(uint8 Type){if(Type==Exo)return FMath::Clamp(ExoTrialHealth()>=0.f?ExoTrialHealth():GetDefault<UBattleTuning>()->ExoHealthScale,.1f,20.f);if(Type==SPGun)return FMath::Clamp(GetDefault<UBattleTuning>()->SPGHealthScale,.1f,20.f);if((Type==ArmoredCar||Type==Supply))return FMath::Clamp(GetDefault<UBattleTuning>()->ACHealthScale,.1f,20.f);if(Type==Tank)return FMath::Clamp(GetDefault<UBattleTuning>()->TankHealthScale,1.f,20.f);return Type==Heavy?HeavyValues().Health:1.f;}
 namespace
 {
  // Open and urban speed of a vehicle type (cm/s).

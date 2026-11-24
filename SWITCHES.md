@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 496 種類。
+計 497 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -15,7 +15,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleAICoverProbe` | Value | 0 | BattleTactics.cpp:10 |  |
 | `-BattleAimAssist` | Value | 1 | BattleController.cpp:1637 |  |
 | `-BattleAllyPass` | Value | 0 | BattleStableMovement.cpp:33 |  |
-| `-BattleArea` | Param | off | BattleLeaderRuntime.cpp:82, BattleState.cpp:582 |  |
+| `-BattleArea` | Param | off | BattleLeaderRuntime.cpp:82, BattleState.cpp:584 |  |
 | `-BattleAreaACKeep` | Value | -1（= 設定値 0） | BattleTactics.cpp:113 |  |
 | `-BattleAreaAllTypes` | Value | 0 | BattleArmourAI.cpp:80 |  |
 | `-BattleAreaATKeep` | Value | -1（= 設定値 0） | BattleTactics.cpp:111 |  |
@@ -156,13 +156,14 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleElite` | Value | 1 | BattleArms.cpp:43 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleEliteCost` | Value | 26 | BattleArms.cpp:45 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleEngineMoveSweep` | Value | 0 | BattleStableMovement.cpp:618 |  |
-| `-BattleExoArmor` | Value | -1.f | BattleState.cpp:592 | ExoTrialValue → BattleState.cpp:590（ヘルパー経由） |
+| `-BattleExoArmor` | Value | -1.f | BattleState.cpp:594 | ExoTrialValue → BattleState.cpp:592（ヘルパー経由） |
 | `-BattleExoBody` | Value | 3 | BattleExo.cpp:123 |  |
-| `-BattleExoDamage` | Value | -1.f | BattleState.cpp:593 | ExoTrialValue → BattleState.cpp:590（ヘルパー経由） |
+| `-BattleExoDamage` | Value | -1.f | BattleState.cpp:595 | ExoTrialValue → BattleState.cpp:592（ヘルパー経由） |
+| `-BattleExoHealth` | Value | -1.f | BattleState.cpp:610 | ExoTrialValue → BattleState.cpp:592（ヘルパー経由） |
 | `-BattleExoPlaceholder` | Param | off | BattleExo.cpp:145 |  |
-| `-BattleExoShield` | Value | -1.f | BattleState.cpp:594 | ExoTrialValue → BattleState.cpp:590（ヘルパー経由） |
+| `-BattleExoShield` | Value | -1.f | BattleState.cpp:596 | ExoTrialValue → BattleState.cpp:592（ヘルパー経由） |
 | `-BattleExoShieldDelay` | Value | -1.f | BattleSuppression.cpp:90 |  |
-| `-BattleExoShieldRegen` | Value | -1.f | BattleState.cpp:596 | ExoTrialValue → BattleState.cpp:590（ヘルパー経由） |
+| `-BattleExoShieldRegen` | Value | -1.f | BattleState.cpp:598 | ExoTrialValue → BattleState.cpp:592（ヘルパー経由） |
 | `-BattleExoShieldSuppression` | Value | 0 | BattleSuppression.cpp:83 |  |
 | `-BattleExoShot` | Param | off | BattleLeaderRuntime.cpp:234 |  |
 | `-BattleFastMatch` | Param | off | BattleGameMode.cpp:72, BattleLeaderRuntime.cpp:78 |  |
@@ -211,11 +212,11 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleGroupSectors` | Value | 0 | BattleGroups.cpp:572 |  |
 | `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:654 |  |
 | `-BattleGroupSupplySlot` | Value | 0 | BattleGroups.cpp:75 |  |
-| `-BattleHeavyCost` | Value | 未解決 | BattleState.cpp:570 |  |
-| `-BattleHeavyDamage` | Value | 未解決 | BattleState.cpp:570 |  |
-| `-BattleHeavyHealth` | Value | 未解決 | BattleState.cpp:569 |  |
-| `-BattleHeavyMembers` | Value | 未解決 | BattleState.cpp:569 |  |
-| `-BattleHeavySpeed` | Value | 未解決 | BattleState.cpp:570 |  |
+| `-BattleHeavyCost` | Value | 未解決 | BattleState.cpp:572 |  |
+| `-BattleHeavyDamage` | Value | 未解決 | BattleState.cpp:572 |  |
+| `-BattleHeavyHealth` | Value | 未解決 | BattleState.cpp:571 |  |
+| `-BattleHeavyMembers` | Value | 未解決 | BattleState.cpp:571 |  |
+| `-BattleHeavySpeed` | Value | 未解決 | BattleState.cpp:572 |  |
 | `-BattleHeightTest` | Param | off | BattleTerrainTest.cpp:27 |  |
 | `-BattleHireDelegate` | Value | 0 | BattleArea.cpp:216 |  |
 | `-BattleHireDelegateTeam` | Value | -1 | BattleArea.cpp:217 |  |
@@ -306,7 +307,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleReport` | Value | 空文字列 | BattleBenchmark.cpp:50 |  |
 | `-BattleReturnFire` | Value | 0 | BattleTactics.cpp:186 |  |
 | `-BattleReuseSightContext` | Value | True | BattleLeaderRuntime.cpp:108 |  |
-| `-BattleRifleMembers` | Value | 未解決 | BattleState.cpp:582 |  |
+| `-BattleRifleMembers` | Value | 未解決 | BattleState.cpp:584 |  |
 | `-BattleRoutes` | Value | -1 | BattleRoutes.cpp:20 |  |
 | `-BattleRouteTieSymmetric` | Value | 0 | BattleRoutes.cpp:46 |  |
 | `-BattleSaveReloadBoundary` | Value | 0 | BattleArtillery.cpp:266 |  |
