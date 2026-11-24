@@ -998,6 +998,15 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
    const bool bStill=LastVelocity.SizeSquared2D()<2500.;const bool bLow=StanceOf(ID)!=BattleStance::Stand;
    SightExperiment.Cover(!bStill?TEXT("route_walking_frames"):!StopForCombat?TEXT("route_still_no_fight_frames"):bLow?TEXT("route_still_fight_low_frames"):TEXT("route_still_fight_standing_frames"));
    if(bStill && StopForCombat && !bLow && !(Contact && Contact->bVisible))SightExperiment.Cover(TEXT("route_still_fight_standing_unseen_frames"));
+   // Why he stands still with no fight (last frame's StableMove flags; the stance gate below is this frame's): at his place at
+   // the end of the leg, waiting for room (traffic, his arrival place taken, no route yet), getting up first, or something else.
+   if(bStill && !StopForCombat)
+   {
+    const bool bGettingUp=WillMove && StanceOf(ID)!=BattleStance::Stand && BattleStance::MoveMode()<2;
+    SightExperiment.Cover(B.bArrived?TEXT("route_still_why_arrived"):B.bArrivalOccupied?TEXT("route_still_why_place_taken"):
+     B.bTrafficWait?TEXT("route_still_why_traffic"):bGettingUp?TEXT("route_still_why_getting_up"):B.StalledSince>0?TEXT("route_still_why_stalled"):
+     ID==S->LeaderUnitID?TEXT("route_still_why_other_leader"):TEXT("route_still_why_other"));
+   }
   }
   // Getting up takes time: no walking until the soldier is standing. With -BattleStanceMove=2 he walks in his stance instead
   // (crouched or crawling, at its speed below).
