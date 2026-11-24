@@ -745,9 +745,9 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
  if(!bTactical && Params.Key==EKeys::F && Params.Event==IE_Pressed)
   if(auto* U=Cast<ABattleUnit>(GetPawn());U && GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->ToggleSidearm(U->GetUnitID()))
   { ShowNotice(U->GetState()->bSidearmSelected?TEXT("拳銃を構えた（F で主武器）"):TEXT("主武器に戻した（F で拳銃）")); return true; }
- // G / RB: throw a hand grenade at the point under the crosshair (at most the throw distance). A soldier with no grenade outside the
- // grenade trial leaves G to its other use (ChooseDefend: pick / send a soldier).
- if(!bTactical && Params.Key==EKeys::G && Params.Event==IE_Pressed)
+ // Q / RB: throw a hand grenade at the point under the crosshair (at most the throw distance). Q has no other use in the soldier
+ // view; G stays the soldier command there (ChooseDefend, user decision 11-24).
+ if(!bTactical && Params.Key==EKeys::Q && Params.Event==IE_Pressed)
   if(auto* U=Cast<ABattleUnit>(GetPawn());U && U->GetState() && (U->GetState()->Grenades>0 || BattleArms::GrenadeCount()>0))
   {
    const auto* S=U->GetState();
@@ -1615,7 +1615,8 @@ FKey ABattleController::GamepadToKey(const FKey& Key) const
  {
   if(Key==EKeys::Gamepad_RightTrigger) return EKeys::LeftMouseButton;        // RT: fire
   if(Key==EKeys::Gamepad_LeftShoulder) return EKeys::F;                      // LB: exoskeleton weapon swap / pistol
-  if(Key==EKeys::Gamepad_RightShoulder) return EKeys::G;                     // RB: hand grenade (BattleArms.cpp)
+  if(Key==EKeys::Gamepad_RightShoulder) return EKeys::Q;                     // RB: hand grenade (BattleArms.cpp)
+  if(Key==EKeys::Gamepad_DPad_Left) return EKeys::G;                         // D-pad left: command the soldier in view
   if(Key==EKeys::Gamepad_RightThumbstick) return EKeys::V;                   // right stick: melee strike
   if(Key==EKeys::Gamepad_LeftTrigger) return EKeys::RightMouseButton;        // LT: aim (held)
   if(Key==EKeys::Gamepad_DPad_Up) return EKeys::MouseScrollUp;               // while aiming: more magnification

@@ -281,7 +281,15 @@ for source in sources:
         if scope is None:
             continue
         function, _, params = source.functions[scope]
-        parameter_names = [t[b - 1] for a, b in params if b > a]
+        # A parameter with a default value (int32 Default=0) is named by the token before '='; that value stands in when a call omits it.
+        parameter_names, parameter_defaults = [], []
+        for a, b in params:
+            if b <= a:
+                continue
+            toks = t[a:b]
+            eq = toks.index('=') if '=' in toks else -1
+            parameter_names.append(toks[eq - 1] if eq > 0 else toks[-1])
+            parameter_defaults.append(toks[eq + 1:] if eq > 0 else None)
         key_expr = t[slice(*args[1])]
         if len(key_expr) != 1 or key_expr[0] not in parameter_names:
             continue
@@ -302,6 +310,8 @@ for source in sources:
                         parameter = parameter_names.index(d[2][0])
                         if parameter < len(actuals):
                             default = resolve(source, t[slice(*actuals[parameter])], j)
+                        elif parameter_defaults[parameter]:
+                            default = resolve(source, parameter_defaults[parameter], i)
                     elif d:
                         default = resolve(source, target, i)
                 register(source, j, name, kind, default, f'{function} → {source.path.name}:{source.line(i)}（ヘルパー経由）')

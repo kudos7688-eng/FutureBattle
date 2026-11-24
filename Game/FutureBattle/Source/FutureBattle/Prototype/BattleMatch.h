@@ -337,6 +337,8 @@ public:
  // Trials -BattleATHunt / -BattleACShield (BattleATHunt.cpp). Not saved (trial state).
  struct FATHunt { int32 Team=0; int32 Target=INDEX_NONE; FVector Position=FVector::ZeroVector; double StartAt=-1.,SeenAt=-1.; };
  TMap<int32,FATHunt> ATHunts; double ATHuntClock[2]={-1.,-1.};
+ TMap<int32,double> ATFireCalls[2]; // -BattleATFire: anti-tank soldier unit ID -> when an own armoured unit last saw him
+ int64 ATFireAims=0;
  void UpdateATHunts(int32 Team);
  bool ATHuntGoal(int32 Team,int32 SquadID,FVector& Center) const;
  bool ACShieldPost(int32 Team,int32 SquadID,FVector& Post) const;

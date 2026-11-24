@@ -298,11 +298,11 @@ bool UBattleState::SetOrder(int32 ID, EBattleOrder Order, FVector Destination)
 	return true;
 }
 
-bool UBattleState::ConsumeShot(int32 ID, double Now, double Interval)
+bool UBattleState::ConsumeShot(int32 ID, double Now, double Interval, int32 Rounds)
 {
 	FBattleUnitState* State = Units.Find(ID);
 	if (!State || !State->IsAlive() || State->Ammo <= 0 || State->ReloadEndTime > 0. || Now < State->NextShotTime) return false;
-	--State->Ammo;
+	State->Ammo = FMath::Max(0, State->Ammo - FMath::Max(1, Rounds));
 	++State->ShotSequence;
 	State->NextShotTime = Now + FMath::Max(0.05, Interval);
 	return true;
