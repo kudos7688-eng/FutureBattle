@@ -35,21 +35,23 @@ namespace
  float FloatSwitch(const TCHAR* Key,float Default){float V=Default;FParse::Value(FCommandLine::Get(),Key,V);return FMath::IsFinite(V)?V:Default;}
 }
 
-bool BattleArms::SidearmsEnabled(){static const bool b=IntSwitch(TEXT("BattleSidearms="))!=0;return b;}
-int32 BattleArms::GrenadeCount(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleGrenades=")),0,10);return N;}
-bool BattleArms::MeleeEnabled(){static const bool b=IntSwitch(TEXT("BattleMelee="))!=0;return b;}
-bool BattleArms::EliteEnabled(){static const bool b=IntSwitch(TEXT("BattleElite="))!=0;return b;}
-int32 BattleArms::AreaEliteKeep(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleAreaEliteKeep=")),0,20);return N;}
+// Defaults (user decision 11-24): sidearms, 2 grenades, melee, the elite platoon and sniper team in the purchase panel, the AI keeping
+// 2 of each, assault bounds mode 2 with charges, sector-task bounds, rush watch and covering fire are on; =0 turns each off.
+bool BattleArms::SidearmsEnabled(){static const bool b=IntSwitch(TEXT("BattleSidearms="),1)!=0;return b;}
+int32 BattleArms::GrenadeCount(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleGrenades="),2),0,10);return N;}
+bool BattleArms::MeleeEnabled(){static const bool b=IntSwitch(TEXT("BattleMelee="),1)!=0;return b;}
+bool BattleArms::EliteEnabled(){static const bool b=IntSwitch(TEXT("BattleElite="),1)!=0;return b;}
+int32 BattleArms::AreaEliteKeep(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleAreaEliteKeep="),2),0,20);return N;}
 int32 BattleArms::EliteCost(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleEliteCost="),26),1,200);return N;}
-bool BattleArms::SniperEnabled(){static const bool b=IntSwitch(TEXT("BattleSniperTeam="))!=0;return b;}
-int32 BattleArms::AreaSniperKeep(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleAreaSniperKeep=")),0,SniperLimit);return N;}
+bool BattleArms::SniperEnabled(){static const bool b=IntSwitch(TEXT("BattleSniperTeam="),1)!=0;return b;}
+int32 BattleArms::AreaSniperKeep(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleAreaSniperKeep="),2),0,SniperLimit);return N;}
 int32 BattleArms::SniperCost(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleSniperCost="),14),1,200);return N;}
-int32 BattleArms::AssaultMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleArmsAssault=")),0,2);return N;}
-bool BattleArms::ChargeEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsCharge="))!=0;return b;}
-int32 BattleArms::SectorTaskMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleArmsSectorTask=")),0,2);return N;}
+int32 BattleArms::AssaultMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleArmsAssault="),2),0,2);return N;}
+bool BattleArms::ChargeEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsCharge="),1)!=0;return b;}
+int32 BattleArms::SectorTaskMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleArmsSectorTask="),1),0,2);return N;}
 bool BattleArms::SectorTaskEnabled(){return SectorTaskMode()>0;}
-bool BattleArms::RushWatchEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsRushWatch="))!=0;return b;}
-bool BattleArms::CoverFireEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsCoverFire="))!=0;return b;}
+bool BattleArms::RushWatchEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsRushWatch="),1)!=0;return b;}
+bool BattleArms::CoverFireEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsCoverFire="),1)!=0;return b;}
 bool BattleArms::SmokeEnabled(){static const bool b=FParse::Param(FCommandLine::Get(),TEXT("BattleArmsSmoke"));return b;}
 bool BattleArms::SlideEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsSlide="),1)!=0;return b;}
 bool BattleArms::ChargeFallenEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsChargeFallen="),1)!=0;return b;}
