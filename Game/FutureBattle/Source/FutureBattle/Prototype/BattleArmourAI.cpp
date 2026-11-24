@@ -197,7 +197,8 @@ int32 UBattleMatch::AreaArmourReaction(int32 Team,int32 SquadID,float DamageRati
   // A vehicle keeps out of the reach of anti-tank soldiers it knows of (it outranges and outruns them), and pulls back after a heavy hit
   // (an anti-tank round or a tank gun) even when it does not know where it came from. Other tanks are fought or avoided by the team
   // layer (AreaCarTarget), not by backing away: distance does not protect from a tank gun.
-  const double Keep=BattleRanges::Reach(EBattleWeapon::AntiTank)+FMath::Max(0.f,T->VehicleStandOffMargin);
+  const double Keep=BattleTactics::ACStandOff()>0&&S->SquadType==BattleSquadType::ArmoredCar?double(BattleTactics::ACStandOff()):
+   BattleRanges::Reach(EBattleWeapon::AntiTank)+FMath::Max(0.f,T->VehicleStandOffMargin); // trial -BattleACStandOff
   const auto& V=AreaIntelView(Team);const FVector* Threat=nullptr;double Nearest=DBL_MAX;
   for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)
   {

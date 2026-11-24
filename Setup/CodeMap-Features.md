@@ -160,7 +160,7 @@ BattleVATDisplay | 遠距離の兵を VAT で描く表示
 BattleVATMaterial | VAT 用マテリアルの作成（エディタ用。宣言は BattleVATBake.h）
 BattleVehicle | 車両の設定、操舵、砲塔、車両どうしの視認（UBattleLeaderRuntime の一部）
 BattleVehicleTactics | 車両の戦術：車両への脅威の見積もり、装甲車の行き先（UBattleMatch の一部）
-BattleATHunt | 試験切替：対戦車兵の距離、装甲車が見た対戦車兵の排除要請、装甲車が歩兵の前に出る盾（UBattleMatch の一部）
+BattleATHunt | 試験切替：対戦車兵の距離、装甲車が見た対戦車兵の排除要請と砲撃要請（目標選びは BattleArtillery の PickArtilleryAim）、装甲車が対戦車兵から離れる距離、装甲車が歩兵の前に出る盾（UBattleMatch の一部）
 BattleVehicleNavMesh | 車両専用のナビメッシュの型（歩兵用と分けるため）
 BattleViewVisibility | 視点ごとの描画の切替（T5 試験用）
 BattleWarScore | 戦果点（UBattleMatch の一部）
