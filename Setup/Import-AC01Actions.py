@@ -1,14 +1,17 @@
 """Import the exoskeleton soldier's action clips (Art/AC01_Tripo_v2/Exports/Anims/A_AC01T2_<name>.fbx, made by
 Art/AC01_Tripo_v2/Scripts/17_exo_action_clips.py) onto the shared mannequin skeleton under /Game/Art/AC01T2/Anims:
 the launcher's recoil and reload (Dual_Fire, Dual_Reload) and the rifle reload with the legs held still (OneHand_ReloadStill).
+AC01_CLIPS=<comma list> imports other clips instead, e.g. the jump and landing of 21_jump_clips.py
+(OneHand_Jump,OneHand_Land,Dual_Jump,Dual_Land).
 Run in the full editor with -ExecutePythonScript (Setup/Import-AC01Actions.ps1).
 """
 from pathlib import Path
+import os
 import unreal as u
 
 ROOT = Path(__file__).resolve().parents[1]
 DEST = '/Game/Art/AC01T2/Anims'
-CLIPS = ('Dual_Fire', 'Dual_Reload', 'OneHand_ReloadStill')
+CLIPS = tuple(c for c in os.environ.get('AC01_CLIPS', 'Dual_Fire,Dual_Reload,OneHand_ReloadStill').split(',') if c)
 tools = u.AssetToolsHelpers.get_asset_tools()
 world = u.get_editor_subsystem(u.UnrealEditorSubsystem).get_editor_world()
 u.SystemLibrary.execute_console_command(world, 'Interchange.FeatureFlags.Import.FBX 0')
