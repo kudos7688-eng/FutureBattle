@@ -6,6 +6,7 @@
 #include "BattleMetrics.h"
 #include "BattleTactics.h"
 #include "BattleMatch.h"
+#include "BattleSectors.h"
 
 void UBattlePerception::Capture(TMap<int32, FBattleObserver>& OutObservers, TArray<FBattleReport>& OutReports, double Now) const
 {
@@ -18,9 +19,28 @@ void UBattlePerception::Capture(TMap<int32, FBattleObserver>& OutObservers, TArr
 	for (auto& Report : OutReports) { Report.DeliveryTime -= Now; Report.Contact.LastSeenTime -= Now; }
 }
 
+void UBattlePerception::CaptureCrossSector(TArray<FBattleSavedCrossLook>& Out, double Now) const
+{
+	Out.Reset();
+	for (const auto& Look : CrossSectorLook) if (Look.Value > Now)
+	{
+		FBattleSavedCrossLook Entry; Entry.ObserverID = static_cast<int32>(static_cast<uint32>(Look.Key >> 32)); Entry.TargetID = static_cast<int32>(static_cast<uint32>(Look.Key)); Entry.Remaining = Look.Value - Now;
+		Out.Add(Entry);
+	}
+	Out.Sort([](const FBattleSavedCrossLook& A, const FBattleSavedCrossLook& B) { return A.ObserverID != B.ObserverID ? A.ObserverID < B.ObserverID : A.TargetID < B.TargetID; });
+}
+
+void UBattlePerception::RestoreCrossSector(const TArray<FBattleSavedCrossLook>& Saved, double Now)
+{
+	CrossSectorLook.Reset();
+	for (const auto& Entry : Saved) AllowCrossSector(Entry.ObserverID, Entry.TargetID, Now + Entry.Remaining);
+}
+
 void UBattlePerception::Restore(const TMap<int32, FBattleObserver>& SavedObservers, const TArray<FBattleReport>& SavedReports, double Now)
 {
 	Observers = SavedObservers; PendingReports = SavedReports; PendingCounts.Reset();
+	// The squads' tables are not saved yet (trial): they are rebuilt from the members' own contacts at the next update.
+	SquadIntel.Reset(); SquadReports.Reset(); SquadReportKeys.Reset();
 	NextScanTimes.Reset(); LastScanTimes.Reset();
 	for (auto& Observer : Observers)
 	{
@@ -44,6 +64,42 @@ const FBattleContact* UBattlePerception::FindContact(int32 ObserverID, int32 Tar
 {
 	const auto* Contacts = GetContacts(ObserverID);
 	return Contacts ? Contacts->Find(TargetID) : nullptr;
+}
+
+void UBattlePerception::BuildSquadKnowledge(const TArray<int32>& Members, FBattleSquadKnowledge& Out) const
+{
+	Out.ByTarget.Reset();
+	for (int32 ID : Members) if (const auto* Contacts = GetContacts(ID))
+		for (const auto& Pair : *Contacts) Out.ByTarget.FindOrAdd(Pair.Key).Add({ID, &Pair.Value});
+}
+
+int32 UBattlePerception::SquadKnowledgeMode(int32 Team)
+{
+	static const int32 Value = [] { int32 V = 0; FParse::Value(FCommandLine::Get(), TEXT("BattleSquadKnowledge="), V); return FMath::Clamp(V, 0, 1); }();
+	static const int32 Only = [] { int32 V = -1; FParse::Value(FCommandLine::Get(), TEXT("BattleSquadKnowledgeTeam="), V); return V == 0 || V == 1 ? V : -1; }();
+	return Only < 0 || Only == Team ? Value : 0;
+}
+
+const TMap<int32, FBattleSquadContact>* UBattlePerception::GetSquadContacts(int32 SquadID) const
+{
+	const auto* Intel = SquadIntel.Find(SquadID);
+	return Intel ? &Intel->Known : nullptr;
+}
+
+const FBattleSquadContact* UBattlePerception::FindSquadContact(int32 SquadID, int32 TargetID) const
+{
+	const auto* Known = GetSquadContacts(SquadID);
+	return Known ? Known->Find(TargetID) : nullptr;
+}
+
+bool UBattlePerception::Knows(int32 ObserverID, int32 SquadID, int32 TargetID, FBattleContact& Out) const
+{
+	const auto* Own = FindContact(ObserverID, TargetID);
+	const auto* Squad = FindSquadContact(SquadID, TargetID);
+	if (Own && (Own->bVisible || !Squad || Squad->Contact.LastSeenTime <= Own->LastSeenTime)) { Out = *Own; return true; }
+	if (!Squad) return false;
+	Out = Squad->Contact; Out.bVisible = false; Out.bShared = true; ++SquadKnowsHeard;
+	return true;
 }
 
 void UBattlePerception::CollectVisibleTargets(const TArray<TObjectPtr<ABattleUnit>>& Units, int32 Team, TSet<int32>& Targets) const
@@ -99,6 +155,18 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			FVector::DistSquared(Sight.Position, Candidate.Position) > FMath::Square(1200.f) &&
 			!Observer.Contacts.Contains(Candidate.State->UnitID) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID);
 	};
+	// Trial -BattleSectorSight (default 0, BattleSectorSight.cpp): rifle squad members leave enemies in another sector to the lookout.
+	TMap<int32, int32> SectorMembers;
+	if (Mixed && (UBattleLeaderRuntime::SectorSightMode(0) || UBattleLeaderRuntime::SectorSightMode(1)))
+		for (const auto& Pair : Alive) if (const int32 Role = Leader->SectorSightRole(Pair.Key)) SectorMembers.Add(Pair.Key, Role);
+	auto SkipCross = [&](const FBattleObserver& Observer, const TPair<int32, FLiveUnit>& Pair, const FLiveUnit& Candidate)
+	{
+		const int32* Role = SectorMembers.Num() ? SectorMembers.Find(Pair.Key) : nullptr;
+		return Role && UBattleLeaderRuntime::SectorSightFar(Pair.Value.Position, Candidate.Position) &&
+			!(*Role == 2 && Leader->IsVehicle(Candidate.State->UnitID)) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID) &&
+			!(CrossSectorLook.Num() && CrossSectorLook.FindRef((uint64(uint32(Pair.Key)) << 32) | uint32(Candidate.State->UnitID)) >= Now);
+	};
+	for (auto It = CrossSectorLook.CreateIterator(); It; ++It) if (It.Value() < Now) It.RemoveCurrent();
 	// One candidate of one observer's scan. Visible: -1 = test line of sight here, 0/1 = result already traced (parallel trial).
 	auto Consider = [&](FBattleObserver& Observer, const TPair<int32, FLiveUnit>& Pair, const FBattleSightContext& Sight, bool bFarPulse, TSet<int32>& InView, const FLiveUnit& Candidate, int32 Visible)
 	{
@@ -109,6 +177,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 		if (Metrics->bRecording) ++Metrics->PerceptionCandidates;
 		if (SkipFar(Observer, Sight, bFarPulse, Candidate))
 		{ if (Metrics->bRecording) ++Metrics->FarCandidatesSkipped; return; }
+		if (SkipCross(Observer, Pair, Candidate)) { ++SectorSightSkipped; return; }
 		if (Visible >= 0 ? Visible == 0 : Mixed ? !(bReuseSightContext ? (VehicleSpot2 > 0. && FVector::DistSquared(Sight.Position, Candidate.Position) > Sight.RangeSquared && Leader->IsVehicle(Candidate.State->UnitID) ? Leader->CanSeeVehicleFar(Pair.Key, Sight, Candidate.State->UnitID, Now) : Leader->CanSeeWithContext(Sight,Candidate.State->UnitID,Pair.Key)) : Leader->CanSee(Pair.Key,Candidate.State->UnitID)) : !Unit->CanSeeSnapshot(Sight, Candidate.Unit, Candidate.Position, true)) return;
 		const int32 TargetID = Candidate.State->UnitID;
 		InView.Add(TargetID);
@@ -174,6 +243,16 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	static TArray<FSightJob> Jobs; static TArray<const FLiveUnit*> JobCandidates; static TSet<int32> InView;
 	Jobs.Reset(); JobCandidates.Reset();
 	TSet<int32> UpdatedObservers;
+	// Evaluation only (-BattleSightRayStats=1): what each squad saw itself before this update's scans. Read by the counters only.
+	static const bool bRayStats = [] { int32 V = 0; FParse::Value(FCommandLine::Get(), TEXT("BattleSightRayStats="), V); return V != 0; }();
+	TMap<int32, TSet<int32>> RaySquadSeen;
+	if (bRayStats)
+	{
+		for (const auto& Pair : Alive) if (const auto* Known = Observers.Find(Pair.Key))
+			for (const auto& Contact : Known->Contacts) if (!Contact.Value.bShared && Now - Contact.Value.LastSeenTime <= .45)
+				RaySquadSeen.FindOrAdd(Pair.Value.State->SquadID).Add(Contact.Key);
+		if (const int64 Window = FMath::FloorToInt64(Now / .2); Window != RayWindow) { RayKnownPairs += RayWindowPairs.Num(); RayWindowPairs.Reset(); RayWindow = Window; }
+	}
 	{
 		FBattleScopedMetric ScanTiming(Metrics, EBattleMetricPhase::SightScan);
 		CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattleSightScan);
@@ -268,6 +347,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 					{
 						const FLiveUnit& Candidate = *JobCandidates[K]; Pre[K] = -1;
 						if (Candidate.State->Team == Job.Pair->Value.State->Team || SkipFar(Observer, Job.Sight, Job.bFarPulse, Candidate)) continue;
+						if (SkipCross(Observer, *Job.Pair, Candidate)) continue;
 						if (VehicleSpot2 > 0. && FVector::DistSquared(Job.Sight.Position, Candidate.Position) > Job.Sight.RangeSquared && Leader->IsVehicle(Candidate.State->UnitID)) continue;
 						FVector End;
 						if (!Leader->PrepareSightTrace(Job.Sight, Candidate.State->UnitID, End)) { Pre[K] = 0; continue; }
@@ -304,6 +384,20 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 							const FSightTrace& T = Traces[Pre[K] - 2];
 							if (bStats) Leader->RecordSightHit(T.Hit, Candidate.State->UnitID, T.Cycles, UBattleLeaderRuntime::SightFromPerception);
 							Visible = Leader->SightHitVisible(T.Hit, Candidate.State->UnitID) ? 1 : 0;
+							if (bRayStats)
+							{
+								const int32 RayTarget = Candidate.State->UnitID, RaySquadID = Job.Pair->Value.State->SquadID;
+								const FBattleContact* Mine = Observer.Contacts.Find(RayTarget);
+								const TSet<int32>* Mates = RaySquadSeen.Find(RaySquadID);
+								const bool bMine = Mine && !Mine->bShared && Now - Mine->LastSeenTime <= .45, bMates = Mates && Mates->Contains(RayTarget);
+								++(bMine ? RayOwn : bMates ? RaySquad : Mine ? RayShared : RayUnknown)[Visible];
+								if (bMine || bMates) RayWindowPairs.Add((uint64(uint32(RaySquadID)) << 32) | uint32(RayTarget));
+								const FIntPoint FromCell = BattleSectors::Cell(Job.Pair->Value.Position), ToCell = BattleSectors::Cell(Candidate.Position);
+								const int32 CellGap = FMath::Max(FMath::Abs(FromCell.X - ToCell.X), FMath::Abs(FromCell.Y - ToCell.Y));
+								const int32 Zone = CellGap == 0 || FVector::DistSquared2D(Job.Pair->Value.Position, Candidate.Position) <= FMath::Square(2000.) ? 0 : CellGap == 1 ? 1 : 2;
+								const auto* RaySquadState = GetWorld()->GetSubsystem<UBattleState>()->FindSquad(RaySquadID);
+								++RayZone[Zone][RaySquadState && RaySquadState->SquadType == BattleSquadType::Rifle && RaySquadState->LeaderUnitID != Job.Pair->Key ? 1 : 0][Visible];
+							}
 						}
 						Consider(Observer, *Job.Pair, Job.Sight, Job.bFarPulse, InView, Candidate, Visible);
 					}
@@ -357,6 +451,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			if (!UpdatedObservers.Contains(Source.Key)) continue;
 			const auto* SourceState = Source.Value.State;
 			if (SourceState->Perception.ShareRange <= 0.f) continue;
+			if (Mixed && SquadKnowledgeMode(SourceState->Team)) continue; // his squad reports instead (below)
 			TArray<const FBattleContact*, TInlineAllocator<32>> VisibleContacts;
 			// Contacts beyond the source's own profile range (a still scout's long sight) are not passed on by word of mouth; they travel in scout reports.
 			const double LocalRange2 = FMath::Square(SourceState->Perception.SightRange * 1.1);
@@ -398,7 +493,114 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			}
 		}
 	}
-	if (Metrics->bRecording) Metrics->PendingReportsPeak = FMath::Max(Metrics->PendingReportsPeak, static_cast<int64>(PendingReports.Num()));
+	// Trial -BattleSquadKnowledge=1: the squads' tables and the squad-to-squad reports (Docs/design-squad-knowledge.md 9.3).
+	if (Mixed && (SquadKnowledgeMode(0) || SquadKnowledgeMode(1)))
+	{
+		const auto* Store = GetWorld()->GetSubsystem<UBattleState>();
+		const double Memory = GetDefault<UBattleTuning>()->MemorySeconds;
+		// 1. What the living members saw themselves: the newest wins (same time: the one seen now, then the lower observer ID, as UBattleSquadTactics::Observe).
+		for (auto& Intel : SquadIntel) for (auto& Known : Intel.Value.Known) { Known.Value.Contact.bVisible = false; Known.Value.SeerID = INDEX_NONE; }
+		TSet<int32> LiveSquads;
+		for (const auto& Pair : Alive)
+		{
+			if (!SquadKnowledgeMode(Pair.Value.State->Team)) continue;
+			LiveSquads.Add(Pair.Value.State->SquadID);
+			const auto* Observer = Observers.Find(Pair.Key); if (!Observer || Observer->Contacts.IsEmpty()) continue;
+			auto& Known = SquadIntel.FindOrAdd(Pair.Value.State->SquadID).Known;
+			for (const auto& Seen : Observer->Contacts)
+			{
+				const FBattleContact& Own = Seen.Value;
+				if (Own.bShared) continue; // a hint (AddHint) stays with the soldier
+				auto& Entry = Known.FindOrAdd(Seen.Key);
+				const FBattleContact& Held = Entry.Contact;
+				if (Held.TargetID == INDEX_NONE || Own.LastSeenTime > Held.LastSeenTime || (Own.LastSeenTime == Held.LastSeenTime &&
+					(Held.bShared || Own.bVisible > Held.bVisible || (Own.bVisible == Held.bVisible && Own.SourceUnitID < Held.SourceUnitID))))
+				{ const bool bSeenNow = Held.TargetID != INDEX_NONE && Held.bVisible; Entry.Contact = Own; Entry.Contact.bVisible = Own.bVisible || bSeenNow; }
+				if (Own.bVisible) { Entry.Contact.bVisible = true; if (Entry.SeerID == INDEX_NONE || Pair.Key < Entry.SeerID) Entry.SeerID = Pair.Key; }
+			}
+		}
+		// 2. Reports that are due (after the members' own sightings, so that "somebody sees him now" below is this update's, not the last one's). Dropped when the soldier who saw the enemy is down or no member of the receiving squad is within his voice.
+		for (auto It = SquadReports.CreateIterator(); It; ++It)
+		{
+			const auto& Report = *It;
+			const FIntVector Key(Report.SourceSquadID, Report.ReceiverSquadID, Report.Contact.TargetID);
+			const auto* Sender = Alive.Find(Report.Contact.SourceUnitID);
+			const auto* To = Store->FindSquad(Report.ReceiverSquadID);
+			bool bNear = false;
+			if (Sender && To && Sender->State->PerceptionRevision == Report.SourceRevision)
+				for (int32 Member : To->Members) if (const auto* L = Alive.Find(Member); L && FVector::DistSquared(Sender->Position, L->Position) <= FMath::Square(Sender->State->Perception.ShareRange)) { bNear = true; break; }
+			if (!bNear) { SquadReportKeys.Remove(Key); It.RemoveCurrentSwap(EAllowShrinking::No); continue; }
+			if (Now < Report.DeliveryTime) continue;
+			if (Memory > 0. && Now - Report.Contact.LastSeenTime < Memory)
+			{
+				auto& Known = SquadIntel.FindOrAdd(Report.ReceiverSquadID).Known;
+				const auto* Existing = Known.Find(Report.Contact.TargetID);
+				if (!Existing || (!Existing->Contact.bVisible && Existing->Contact.LastSeenTime < Report.Contact.LastSeenTime))
+				{
+					FBattleSquadContact Heard; Heard.Contact = Report.Contact; Heard.Contact.bVisible = false; Heard.Contact.bShared = true;
+					Heard.Contact.Confidence = FMath::Clamp(1.f - static_cast<float>((Now - Heard.Contact.LastSeenTime) / Memory), 0.f, 1.f);
+					Known.Add(Heard.Contact.TargetID, Heard);
+					++SquadReportsDelivered; if (Metrics->bRecording) ++Metrics->ReportsDelivered;
+				}
+			}
+			SquadReportKeys.Remove(Key); It.RemoveCurrentSwap(EAllowShrinking::No);
+		}
+		// 3. Forget: a squad with no living member, and enemies nobody sees once the memory runs out (the soldiers' own rule).
+		for (auto Squad = SquadIntel.CreateIterator(); Squad; ++Squad)
+		{
+			if (!LiveSquads.Contains(Squad.Key())) { Squad.RemoveCurrent(); continue; }
+			for (auto It = Squad.Value().Known.CreateIterator(); It; ++It)
+			{
+				auto& Contact = It.Value().Contact;
+				if (Contact.bVisible) continue;
+				const double Age = FMath::Max(0., Now - Contact.LastSeenTime);
+				if (Memory <= 0. || Age >= Memory) { It.RemoveCurrent(); continue; }
+				Contact.Confidence = FMath::Clamp(1.f - static_cast<float>(Age / Memory), 0.f, 1.f);
+			}
+		}
+		// 4. Queue: a member who sees an enemy tells every other squad of his team that has a living member within his voice
+		// (ShareRange, as the soldier-to-soldier reports), one report per (squads, enemy) at a time.
+		for (const auto& Source : Alive)
+		{
+			if (!UpdatedObservers.Contains(Source.Key)) continue;
+			const auto* SourceState = Source.Value.State;
+			if (SourceState->Perception.ShareRange <= 0.f || !SquadKnowledgeMode(SourceState->Team)) continue;
+			TArray<const FBattleContact*, TInlineAllocator<32>> VisibleContacts;
+			const double LocalRange2 = FMath::Square(SourceState->Perception.SightRange * 1.1);
+			for (const auto& Contact : Observers.FindChecked(Source.Key).Contacts) if (Contact.Value.bVisible && !Contact.Value.bShared) if (BattleTactics::ObservedTactics() ? Contact.Value.bLocalShareEligible : FVector::DistSquared(Source.Value.Position, Contact.Value.LastKnownPosition) <= LocalRange2) VisibleContacts.Add(&Contact.Value);
+			if (VisibleContacts.IsEmpty()) continue;
+			const double Share2 = FMath::Square(SourceState->Perception.ShareRange);
+			TArray<const FLiveUnit*, TInlineAllocator<64>> Receivers;
+			const int32 ShareCells = FMath::CeilToInt(SourceState->Perception.ShareRange / CellSize);
+			auto Hears = [&](const FLiveUnit& R) { return R.State->Team == SourceState->Team && R.State->SquadID != SourceState->SquadID && FVector::DistSquared(Source.Value.Position, R.Position) <= Share2; };
+			if (bUseSpatialGrid && ShareCells <= 4)
+			{
+				const int32 CX = Cell(Source.Value.Position.X), CY = Cell(Source.Value.Position.Y);
+				for (int32 X = CX - ShareCells; X <= CX + ShareCells; ++X) for (int32 Y = CY - ShareCells; Y <= CY + ShareCells; ++Y)
+					if (const auto* Bucket = Grid.Find(FIntPoint(X, Y))) for (const FLiveUnit* R : *Bucket) if (Hears(*R)) Receivers.Add(R);
+				Receivers.Sort([](const FLiveUnit& A, const FLiveUnit& B) { return A.Ordinal < B.Ordinal; });
+			}
+			else for (const auto& R : Alive) if (Hears(R.Value)) Receivers.Add(&R.Value);
+			TArray<int32, TInlineAllocator<16>> ReceiverSquads;
+			for (const FLiveUnit* R : Receivers) ReceiverSquads.AddUnique(R->State->SquadID);
+			for (int32 ReceiverSquad : ReceiverSquads)
+			{
+				const auto* Theirs = GetSquadContacts(ReceiverSquad);
+				for (const FBattleContact* Contact : VisibleContacts)
+				{
+					if (const auto* Existing = Theirs ? Theirs->Find(Contact->TargetID) : nullptr; Existing && Existing->Contact.bVisible) continue;
+					const FIntVector Key(SourceState->SquadID, ReceiverSquad, Contact->TargetID);
+					if (SquadReportKeys.Contains(Key)) continue;
+					FBattleSquadReport Report;
+					Report.SourceSquadID = SourceState->SquadID; Report.ReceiverSquadID = ReceiverSquad; Report.SourceRevision = SourceState->PerceptionRevision;
+					Report.Contact = *Contact; Report.DeliveryTime = Now + SourceState->Perception.ShareDelay;
+					SquadReports.Add(Report); SquadReportKeys.Add(Key); ++SquadReportsQueued;
+				}
+			}
+		}
+		SquadReportsPeak = FMath::Max(SquadReportsPeak, static_cast<int64>(SquadReports.Num()));
+	}
+	if (Metrics->bRecording) Metrics->PendingReportsPeak = FMath::Max(Metrics->PendingReportsPeak, static_cast<int64>(PendingReports.Num() + SquadReports.Num()));
 }
 
 void UBattlePerception::RevealShooter(int32 ObserverID, int32 TargetID, double Now, float DetectionSeconds)

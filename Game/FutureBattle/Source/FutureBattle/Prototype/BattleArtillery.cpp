@@ -275,7 +275,8 @@ int32 BattleTactics::OverrideSaveReloadBoundaryForSmoke(int32 Value)
 
 bool BattleTactics::SPGAmmoEnabled()
 {
- static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSPGAmmo="),V);return V!=0;}();
+ // Default 1 since 2026-11-24 (user decision "12発・6発で既定に"): 12 rounds, 6 per 10 s supply (BattleTuning); -BattleSPGAmmo=0 restores unlimited fire.
+ static const bool On=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSPGAmmo="),V);return V!=0;}();
  return On;
 }
 

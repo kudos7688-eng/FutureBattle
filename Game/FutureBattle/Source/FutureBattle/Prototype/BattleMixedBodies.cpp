@@ -2,6 +2,7 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleSave.h"
 #include "BattleVATDisplay.h"
+#include "BattleSoldierBody.h"
 #include "BattleGameMode.h"
 #include "BattleController.h"
 #include "BattleCover.h"
@@ -28,7 +29,7 @@ bool UBattleLeaderRuntime::CreateBody(const FBattleSavedUnit& Entry,AActor* Host
   Unit->GetCharacterMovement()->AddTickPrerequisiteActor(Mode);
   B.Actor=Unit;return true;
  }
- auto* MeshAsset=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple"));
+ auto* MeshAsset=BattleSoldierBody::LoadMesh(); // Quinn, or RB01 with -BattleSoldierBody=1
  if(!MeshAsset || !IdlePose) return false;
  const auto Archetype=Manager->CreateArchetype({FBattleFollowerFragment::StaticStruct()});
  B.Entity=Manager->CreateEntity(Archetype);
@@ -47,7 +48,7 @@ bool UBattleLeaderRuntime::CreateBody(const FBattleSavedUnit& Entry,AActor* Host
  Mesh->SetRelativeRotation(FRotator(0,-90,0));if(FollowerOverlapsOff())Mesh->SetGenerateOverlapEvents(false);Mesh->RegisterComponent();Mesh->PlayAnimation(IdlePose,true);B.Mesh=Mesh;
  auto* Weapon=NewObject<UStaticMeshComponent>(Host);Host->AddInstanceComponent(Weapon);
  Weapon->SetCollisionEnabled(ECollisionEnabled::NoCollision);if(FollowerOverlapsOff())Weapon->SetGenerateOverlapEvents(false);Weapon->RegisterComponent();
- GetDefault<ABattleUnit>()->MountWeapon(Weapon,Mesh,Entry.State.Weapon,false);B.Weapon=Weapon;
+ GetDefault<ABattleUnit>()->MountWeapon(Weapon,Mesh,Entry.State.ActiveWeapon(),false);B.Weapon=Weapon;
  return true;
 }
 void UBattleLeaderRuntime::DestroyBody(FBattleLeaderBody& B)
@@ -121,6 +122,7 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  }
  // No further fallible validation after this transaction boundary.
  CoverApproaches.Reset();FirePositions.Reset();
+ ArmsBoundMemory.Reset();ArmsBoundArrived.Reset(); // where assault bounds saw their enemy and reached cover (BattleArms.cpp)
  SuppressionZeroAt.Reset();
  Stances.Reset();StanceLockedUntil.Reset();LowMoveUntil.Reset();
  PC->ResetMatchControl();
@@ -182,6 +184,14 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
   A.StillSince=E.bSettingUp?Now:-1.;A.SetupCredit=E.SetupElapsed;
   A.ReadyAt=Now+E.ReloadRemaining;A.NextPick=Now+E.PickRemaining;
   A.Shots=E.Shots;A.TargetKey=E.TargetKey;A.Aim=E.Aim;A.bHasTarget=E.bHasTarget;A.bBase=E.bBase;Artillery.Add(Pair.Key,A);
+ }
+ // Infantry arms (BattleArms.cpp): rounds in flight, and whether an elite platoon keeps the step running.
+ ArmsShells.Reset();ArmsActionUntil.Reset();ArmsIssuedUnits=-1;bArmsElite=false;
+ for(const auto& S:Squads)bArmsElite|=S.Grade>0&&S.CommandStatus==EBattleCommandStatus::Active;
+ for(const auto& E:Save->SavedArmsShells)
+ {
+  FArmsShell Shell;Shell.ShooterID=E.ShooterID;Shell.Team=E.Team;Shell.Kind=E.Kind;Shell.From=E.From;Shell.At=E.At;
+  Shell.Remaining=E.Remaining;Shell.Flight=E.Flight;ArmsShells.Add(Shell);
  }
  for(const auto& E:Save->SavedArtilleryShells)
  {

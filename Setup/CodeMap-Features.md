@@ -16,6 +16,8 @@
 | 編成AI・候補選択と貯蓄購入 | @UBattleMatch::UpdateCompositionHiring 、 @BattleComposition::Decide 、 @BattleComposition::ValidateSave | Planner/PlannerTeams は既定0。ONは不足・緊急性で選択し貯蓄／購入。CombatStateVersion=4、旧保存はPlanner無効。検査は @UBattleLeaderRuntime::RunCompositionSmoke |
 | 盾被弾制圧・群の兵種別戦力（試験） | @UBattleLeaderRuntime::NoteUnderFire 、 @UBattleState::AdvanceShields 、 @UBattleMatch::GroupPower 、 @UBattleMatch::GroupPointPower | `BattleExoShieldSuppression` / `BattleGroupStrength` は既定0。観測兵種は @UBattlePerception::Update で取得、重みはUBattleTuning |
 | 間接射撃の試験切替 | @UBattleMatch::ArtilleryHomeObserved 、 @UBattleMatch::AreaArtilleryClusters 、 @UBattleLeaderRuntime::FireArtillery 、 @UBattleLeaderRuntime::ArtilleryBlastTransmission | 自走砲弾は @UBattleState::UseSPGAmmo / @UBattleState::RefillSPGAmmo 。4切替は既定0、CombatStateVersion=3で弾数と切替を保存 |
+| 歩兵の装備（副武装・手りゅう弾・近接・精鋭小隊・新しい武器種。試験） | @UBattleLeaderRuntime::StepArms 、 @UBattleLeaderRuntime::ThrowGrenade 、 @UBattleLeaderRuntime::FireLauncherRound 、 @UBattleLeaderRuntime::MeleeStrike 、 @UBattleLeaderRuntime::UseSidearm 、 @UBattleLeaderRuntime::ArmsRoleTarget | 切替は `BattleArms`（`-BattleSidearms`・`-BattleGrenades`・`-BattleMelee`・`-BattleElite`・`-BattleAreaEliteKeep`、既定0）。武器の値は `BattleWeaponDef`、精鋭小隊は @UBattleLeaderRuntime::IssueEliteKit と `FBattleSquadState::Grade`。設計は Docs/design-infantry-arms.md |
+| 詰め寄り・突撃（歩兵の装備の続き。試験） | @UBattleLeaderRuntime::StartAssault 、 @UBattleLeaderRuntime::StartCharge 、 @UBattleLeaderRuntime::StepCharge | 切替は `-BattleArmsAssault=1/2`・`-BattleArmsCharge=1`（既定0）。どちらも `CoverApproaches` の印（`bAssault`・`bCharge`）で動き、歩きは @UBattleLeaderRuntime::StepCoverApproach 。設計は Docs/design-infantry-arms.md |
 | 正規状態・UnitID・部隊 | @UBattleState::RegisterUnit 、 @UBattleState::CreateSquad 、 @UBattleState::ApplyDamage | 構造体は `BattleState.h`（FBattleUnitState、FBattleSquadState）。調整値は同じ .h の `UBattleTuning`（ini で上書き） |
 | 兵科（歩兵・重火器・偵察・対戦車・戦車）の差 | @BattleSquadType::Members から @BattleSquadType::Weapon までの一群、 @UBattleState::SetSquadType | 射程は @BattleRanges::Get |
 | 命令（移動・攻撃移動・防御・待機） | 入力 @ABattleController::IssueOrderAt → 状態 @UBattleState::SetSquadOrder → 混成 @UBattleLeaderRuntime::IssueOrder | 委任は @UBattleState::SetSquadDelegated 、 @UBattleMatch::SetAllyDelegated |
@@ -31,12 +33,15 @@
 | 死体の姿勢（死亡アニメ・遠景VATとの切替） | @UBattleLeaderRuntime::DeathClip 、 @ABattleVATDisplay::ShowNear 、 @ABattleVATDisplay::Select | 死ぬと遠景表示から外れて死亡クリップを流し、隠れるまで遠景に戻らない。クリップの後は物理で倒れて止まる（ @BattleRagdoll::Start 、 @BattleRagdoll::Settle 。部下は @UBattleLeaderRuntime::StepBodyTimers 、隊長は @ABattleUnit::Tick ）。見た目の確認は @UBattleLeaderRuntime::RunDeathShot（Setup/Test-DeathShot.ps1） |
 | ブラインドファイア | @UBattleLeaderRuntime::BlindFireOrigin 、 @UBattleLeaderRuntime::Fire | AIの試験は @UBattleLeaderRuntime::TryAIBlindFire |
 | 遮蔽の動作（接近・のぞき撃ち） | @UBattleLeaderRuntime::RequestCoverAction 、 @UBattleLeaderRuntime::StepCoverAction | 切替は @BattleTactics::CoverActionsEnabled ほか |
+| プレイヤーの壁の遮蔽（壁に押し当てる・C） | @UBattleLeaderRuntime::StepPlayerWallCover 、 @UBattleLeaderRuntime::TryWallCover | 呼び出しは @ABattleController::PlayerTick 。中身は普通の遮蔽の動作（決まった場所なし `FreeCoverSlot`）。切替 `-BattlePlayerWallCover`（既定1、AI には効かない） |
 | 姿勢（立ち・しゃがみ） | @UBattleLeaderRuntime::SetStance 、 @UBattleLeaderRuntime::UpdateAIStance | 数値は @BattleStance::EyeOffset ほか |
 | 制圧（撃たれて動けない） | @UBattleLeaderRuntime::AddSuppression 、 @UBattleLeaderRuntime::IsPinned | 調整値は @BattleSuppression::Tuning |
 | 兵ごとの脅威と遮蔽の取り直し（個人AI段階A） | @UBattleLeaderRuntime::GatherThreats 、 @UBattleLeaderRuntime::CheckCoverThreats | 試験切替 `-BattleThreatCover`（既定0）。遮蔽を選ぶ側は @UBattleLeaderRuntime::RequestCoverAction の2段の候補 |
 | 止まった兵の見張りの向き（個人AI） | @UBattleLeaderRuntime::SoldierWatchDirection | `-BattleSoldierWatch`（既定1、11-22 ユーザー決定。=0 で切る）。`Follow` の向きの分岐で `-BattleAttackFocus` の後ろ。視野は前方120度 |
 | 歩いている兵の視線（個人AI、近い戦い） | @UBattleLeaderRuntime::WalkLookDirection 、 @UBattleLeaderRuntime::KnownEnemyDirection | 試験切替 `-BattleWalkLook`（既定0）。体は進む向きのまま、視線（`Sight` の向き、`WalkLooks`）だけを知っている敵か小隊で分けた向きへ振る。`Follow` の向きの分岐の最後。診断 `hitfov_*`（視野の外から撃たれた兵の状態）は `DiagnoseHitSight` |
 | 兵が自分で撃つ相手を選ぶ（個人AI、近い戦い） | @UBattleLeaderRuntime::OwnTarget | 試験切替 `-BattleOwnTarget=1/2`（既定0）。小隊の目標を撃てない兵が、自分で見ている交戦距離内の敵兵を撃つ（撃たれた方向の敵が先、次に近い敵）。`Follow` の `CanEngage` の直後で選び、狙いと射撃だけを変える。値2は、撃つ相手がいないとき撃たれた方向へ2秒向く（`-BattleHitFace` と同じ分岐）。数は `own_target_*` |
+| 撃ち返す兵が遮蔽に入る（個人AI） | @UBattleLeaderRuntime::OwnTargetCover | 試験切替 `-BattleOwnTargetCover=1/2`（既定0、`-BattleOwnTarget` が要る）。自分で選んだ相手を撃つ兵が、その相手に対する近くの遮蔽を頼む（`Follow` の遮蔽探しの直前で `RequestCoverAction` を、その相手を目標にして呼ぶ）。値1は歩いていない兵だけ、値2は歩いている兵も相手が50m以内なら止まって入る。近く（約6m）に無ければ、歩いていない兵は15m以内の遮蔽へ歩く（`StartCoverApproach`、`OwnCoverWalks`、数は `own_cover_walk`）。数は `own_cover_*` と `own_target_open_{standing,walking}_frames` |
+| その場のしゃがみ繰り返しを減らす（個人AI） | @BattleStance::Steady | `-BattleStanceSteady`（**既定1**、2026-11-24 ユーザー決定。`=0` で元に戻る）。開けた所で、しゃがんで敵が見えなくなり立ち上がった場所（`CrouchBlindAt`、2.5m以内）では立ったまま戦う（`UpdateAIStance`、数は `steady_stay_standing_frames`）。遮蔽の覗きが一発も撃たずに終わったら、次は0.8秒でなく3秒しゃがんで待つ（`QuietPeeks`、`CoverHideSeconds`、数は `steady_long_hide`）。評価用に、通り道の小隊の兵を歩き／戦闘なしで停止／戦闘で停止（低い・立ち・立ちで敵が見えない）に分けて数える（`route_*_frames`、`Follow`） |
 | 区画の中で兵が遮蔽を移る（個人AI段階B1） | @UBattleLeaderRuntime::StepSoldierMove 、 @UBattleLeaderRuntime::RateCoverPlace | 試験切替 `-BattleSoldierMove`（既定0）。呼び出しは @UBattleLeaderRuntime::StepCoverAction の隠れている間（1秒に1回・1フレーム4人まで） |
 | 個人AIをプレイヤーの周りだけで動かす | @UBattleLeaderRuntime::SoldierAIFocus | 試験切替 `-BattleSoldierAIFocus=<m>`（既定0＝全員）、`-BattleSoldierAIFocusAt=X,Y`。段階A（@UBattleLeaderRuntime::CheckCoverThreats ほか）とB1（@UBattleLeaderRuntime::StepSoldierMove）の入口で見る |
 | プレイヤーが兵1人に出す移動の命令（Ctrl＋クリックで選ぶ・右クリックで移動先・Hで戻す） | @UBattleLeaderRuntime::IssueSoldierOrder 、 @UBattleLeaderRuntime::StepSoldierOrder 、 @ABattleController::SelectSoldierAt 、直接操作では @ABattleController::CommandSoldierFromView （G） | 兵の状態 `bSoldierOrder`（保存される）。@UBattleLeaderRuntime::Follow の `bOwnOrder`。自動試験 `-BattleSoldierOrderTest`（@UBattleLeaderRuntime::StepSoldierOrderTest） |
@@ -46,6 +51,7 @@
 | 試合の進行・勝敗・制限時間 | @UBattleMatch::InitializeMatch 、 @UBattleMatch::Update 、 @UBattleMatch::Finish | 拠点の占領は @UBattleMatch::UpdateObjectives |
 | 雇用（旧・固定の価格） | @UBattleMatch::HireSquad 、 @UBattleMatch::CurrentSquadPrice | 実体を出すのは @UBattleLeaderRuntime::SpawnPurchasedSquad |
 | エリア戦の雇用（AI が何を雇うか） | @UBattleMatch::UpdateAreaHiring 、 @UBattleMatch::AreaHireNeed 、 @UBattleMatch::HireAreaSquad | 調整値は @BattleTactics::AreaHire |
+| プレイヤーの購入画面（B キー、2026-11-23） | @FBattleBuyPanelLayout::Make 、 @ABattleController::BuyPanelInput 、 @ABattleController::HandleBuyPanelPad 、 @ABattleHUD::DrawBuyPanel | 行を押すと @ABattleController::BuyArea （数字キーと同じ。買えなければ予約 @UBattleMatch::ReserveHire 、列を買うのは @UBattleMatch::UpdateHireQueue 、取り消しは @ABattleController::CancelReservationOfType ）。B は @ABattleController::BuyKey （エリア戦以外は支援要請）。画面の確認は `Setup/Test-BuyPanelShot.ps1` |
 | エリア戦の収入・拠点 HP | @UBattleMatch::UpdateArea （収入の支払いもここ）、 @UBattleMatch::DamageBase | 調整値は @BattleTactics::AreaIncome 。状態は `BattleAreaState.h` |
 | エリア戦の AI 戦略（どこを攻めるか） | @UBattleMatch::UpdateEnemyOrders → @UBattleMatch::UpdateTeamOrders 、 @UBattleMatch::AreaStrategyTarget 、 @UBattleMatch::AreaIntent | 調整値は @BattleTactics::AreaStrategy 。前線は @UBattleMatch::AreaFronts 。戦略層（試験、`Docs/design-strategy-layer.md`）の状況図は @UBattleMatch::BuildSituation 、集中先は @UBattleMatch::UpdateStrategy （ `FAreaIntent::FocusPoint` で S6 と攻撃群へ） |
 | 偵察・情報（見えていない区域の扱い） | @UBattleMatch::UpdateScoutReports 、 @UBattleMatch::AreaIntelView | 偵察兵の配置は @UBattleMatch::AreaScoutPost 。昇格は @UBattleLeaderRuntime::PromoteScout |
@@ -58,6 +64,7 @@
 | 保存・復元 | @UBattleMatch::SaveMatch 、 @UBattleMatch::LoadMatch 、 @UBattleMatch::CaptureSnapshot 、 @UBattleMatch::RestoreSnapshot | 検証は @UBattleSave::Validate 、 @UBattleSave::ValidateMixed 。戦術状態は @UBattleSquadTactics::CaptureSave |
 | プレイヤー経路の任意保存（S02） | @BattleTactics::SaveRoutes 、 @UBattleSave::Serialize 、 @UBattleSave::Validate | `-BattleSaveRoutes=1`（既定0）。PlayerRoutesVersion=1で最終命令・目的地・残り中継点・レーン・進行・相対期限を保存。OFF／経路なしは新規タグなし。検査は @UBattleLeaderRuntime::RunMixedSaveSmoke 内で一時切替 |
 | 表示（混成の体・遠距離 VAT） | @UBattleLeaderRuntime::CreateBody 、 @UBattleLeaderRuntime::RefreshDisplay 、 @ABattleVATDisplay::Tick | 復元時は @UBattleLeaderRuntime::RestoreMixedBodies |
+| 歩兵の体のメッシュ（Quinn／RB01、試験切替 -BattleSoldierBody） | @BattleSoldierBody::LoadMesh 、 @BattleSoldierBody::VATRoot | 隊長は @ABattleUnit::InitializeUnit 、部下は @UBattleLeaderRuntime::CreateBody 、遠景は @ABattleVATDisplay::Initialize 。RB01 の取り込みは Setup/Import-RB01.ps1、VAT は Setup/Test-VATBake.ps1 -RB01 |
 | マップの定義・配置 | `BattleFieldLayout.h`（マップごとの表 `Maps()`） | 生成は @UBattleMapCommandlet::Main （既存の手編集を `-Force` で上書きしない） |
 | 通り道（道路網に沿った移動の指示） | @UBattleMatch::RouteStep 、 @UBattleMatch::RouteFlankSide | 呼び出しは @UBattleMatch::UpdateTeamOrders 。道路網は `FMapDef::RouteNodes/RouteEdges` |
 | 高低差（丘・階段・2階。マップG） | @UBattleLeaderRuntime::TerrainStep 、 @UBattleMatch::UpdateTerrainTest | 高さの表は `BattleTerrain.h`（`FHeights::Ground`、家と丘の位置 `HousesG/HillsG`）と `FMapDef::Heights`。形は `BattleMapLayoutG.inl`。隊長はエンジンの歩行、多数兵は表に沿う。自己試験 `Test-WideSight.ps1 -Map G -HeightTest` |
@@ -78,12 +85,14 @@ BattleArmourAI | 兵種を扱うAI：効かない車両を狙わない、対戦�
 BattleArtillery | 迫撃砲と自走砲：間接射撃の目標選び、着弾、陣地の位置（UBattleLeaderRuntime と UBattleMatch の一部）
 BattleContactMovement | 停止中の味方との接触・到着地点の重なりの解消（UBattleLeaderRuntime の一部）
 BattleExo | 外骨格兵：盾の回復、副武器（肩の対戦車火器）、専用の部隊判断と軍の割り当て、見た目（AC01の体と武器＝ApplyExoSuit）
+BattleArms | 歩兵の装備：副武装（拳銃）・手りゅう弾・擲弾銃の弾・近接攻撃・衛生兵の手当て・精鋭小隊の役割と自分の目標、追加の武器種の値（UBattleLeaderRuntime の一部と BattleArms 名前空間）
 BattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド
 BattleCover | 遮蔽の場所の一覧と予約
 BattleCoverAction | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部）
 BattleBlindFire | 遮蔽の陰からのブラインドファイア（弾の出る位置・AIの試験・アニメ。UBattleLeaderRuntime の一部）
 BattleBodyAnimImport | 体のアニメーション（遮蔽・伏せ・しゃがみの向き別）の取り込みと計測（エディタ用。宣言は BattleVATBake.h）
 BattleCoverClips | 遮蔽の状態 → 遮蔽アニメの対応表（データだけ。「アセット参考資料の検討」セッション作）
+BattleBuyPanel | プレイヤーの購入画面（B キー）：兵種の一覧の配置、クリック・パッドの操作、画面の確認 `-BattleBuyPanelShot`（ABattleController の一部）
 BattleBodyAnim | 体のアニメーション：隊長の下半身と上半身の重ね・反動・被弾・死亡、部下の伏せと死亡のクリップ
 BattleCorpses | 死体の消滅（表示だけ。`-BattleCorpseLifetime=秒`、既定20、0で残す。UBattleLeaderRuntime の一部）
 BattleRagdoll | 死体が死亡クリップの後に物理で倒れて止まる（表示だけ。`-BattleRagdoll=0` でクリップの最終フレームのまま）
@@ -105,13 +114,14 @@ BattleMoveCourse | 移動の計測コース
 BattleNavigation | 目的地の補正と隊形の位置
 BattleNetwork | ネットワーク試作（GameMode、Controller、HUD）
 BattleNetworkSerialization | ネットワーク用の兵の直列化
-BattlePerception | 認識：見えた敵の記憶、保存と復元
+BattlePerception | 認識：見えた敵の記憶、保存と復元。分隊単位の知識（`-BattleSquadKnowledge=1`〔試験、既定0〕：分隊の表と分隊間の報告は `Update` の末尾、読み口は `Knows`・`FindSquadContact`・`GetSquadContacts`。段階1の表は `BuildSquadKnowledge`。`Docs/design-squad-knowledge.md`）
 BattlePhase3 | Phase3 の大規模試験経路（通常の混成とは別の処理）
 BattleRanges | 認識・交戦の距離（マップごとに決まる）
 BattleReplayData | 再生用データの型（試験専用）
 BattleSave | 保存形式、試合の保存と復元、検証
 BattleScoutReport | 偵察報告（UBattleMatch の一部）
 BattleSightVisual | 視界の目視確認用の表示（UBattleLeaderRuntime の一部）
+BattleSoldierBody | 歩兵の体のメッシュの選択（Quinn／RB01、試験切替 -BattleSoldierBody）と、それに合う遠景VATの置き場所
 BattleSquadAI | 旧全Actor経路の部隊 AI
 BattleSquadFlank | 迂回の判断（UBattleSquadTactics の一部）
 BattleSquadRetreat | 撤退の判断と適用（UBattleSquadTactics の一部。Evaluate と Apply はここ）
@@ -134,6 +144,7 @@ BattleSuppression | 制圧の値と効果
 BattleSoldierFire | 個人AI `-BattleOwnTarget`（試験切替）：小隊の目標を撃てない兵が、自分で見ている敵兵を撃つ（UBattleLeaderRuntime の一部）
 BattleSoldierWatch | 個人AI `-BattleSoldierWatch`：止まっていて撃つ相手のいない兵が、知っている最も近い敵へ、無ければ小隊で分けた前方へ向く（視野120度。UBattleLeaderRuntime の一部）
 BattleThreatCover | 個人AI段階A `-BattleThreatCover`：兵ごとの脅威（自分の目撃4秒＋撃たれた方向）、全員から隠れる遮蔽、見破られた遮蔽を出て探し直す（UBattleLeaderRuntime の一部）
+BattleWallCover | プレイヤーの壁の遮蔽 `-BattlePlayerWallCover`（既定1）：壁に押し当てる・C でその場の遮蔽に入る、低い壁はしゃがむ・高い壁は立つ、構えて身を出す、離れて出る（UBattleLeaderRuntime の一部）
 BattleSoldierMove | 個人AI段階B1 `-BattleSoldierMove`：区画の中で、隠れている兵が近くのもっと良い遮蔽を採点して自分で移る（UBattleLeaderRuntime の一部）
 BattleSoldierOrder | プレイヤーが兵1人に出す移動の命令：命令と歩き（UBattleLeaderRuntime）、Ctrl＋クリックの選択と右クリックの命令（ABattleController）、印（ABattleHUD）、自動試験 `-BattleSoldierOrderTest`
 BattleTacticalAI | 旧全Actor経路の兵の戦術行動（ABattleAIController の一部）
@@ -149,6 +160,7 @@ BattleVATDisplay | 遠距離の兵を VAT で描く表示
 BattleVATMaterial | VAT 用マテリアルの作成（エディタ用。宣言は BattleVATBake.h）
 BattleVehicle | 車両の設定、操舵、砲塔、車両どうしの視認（UBattleLeaderRuntime の一部）
 BattleVehicleTactics | 車両の戦術：車両への脅威の見積もり、装甲車の行き先（UBattleMatch の一部）
+BattleATHunt | 試験切替：対戦車兵の距離、装甲車が見た対戦車兵の排除要請、装甲車が歩兵の前に出る盾（UBattleMatch の一部）
 BattleVehicleNavMesh | 車両専用のナビメッシュの型（歩兵用と分けるため）
 BattleViewVisibility | 視点ごとの描画の切替（T5 試験用）
 BattleWarScore | 戦果点（UBattleMatch の一部）
@@ -179,3 +191,4 @@ BattleCompositionRuntime | 編成AIと観測・収入窓・既存購入実行の
 BattleCompositionState | CombatStateVersion=4で保存する編成AIの陣営状態
 BattleCompositionSave | 編成AI保存の版・陣営・時刻・参照先検証
 BattleCompositionSmoke | 編成AIの選択・貯蓄・保存往復のスモーク検査（UBattleLeaderRuntimeの一部）
+BattleSectorSight | 区画内・区画間の戦い（`-BattleSectorSight`、11-23 から既定1＝通常小隊だけ。`=2` は兵種ごとの決まり `SectorSightRole`〔試験〕、`=0` で元の動き。`Docs/design-sector-combat.md`）：区画のあるマップで、通常小隊は別の区画（20m より遠い）の敵を探す光線を隊長だけが出し、隊員は隊長が今見ている敵を発射直前の視線判定で撃つ（UBattleLeaderRuntime の一部。走査の側は `UBattlePerception::Update` の `SkipCross`）

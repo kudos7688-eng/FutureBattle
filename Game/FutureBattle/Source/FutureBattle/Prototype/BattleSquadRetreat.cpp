@@ -245,7 +245,13 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   const bool Cohesive=Joined>=FMath::CeilToInt(O.Living*.7f);
   if(P.SafeSeconds>=T->SquadRegroupSafeSeconds && P.Age>=T->SquadRegroupSafeSeconds)
   {
-   if(ReadyToReturn && Cohesive)
+   // Trial -BattleArmourWait: a tank it saw near it or near the mission point keeps the squad waiting here (BattleArmourAI.cpp).
+   if(ReadyToReturn && Cohesive && P.Action==EBattleSquadTactic::Regroup && Match->ArmourWait(SID,S->MissionDestination))
+   {
+    if(!P.Reason.StartsWith(TEXT("ARMOUR NEAR"))){P.Reason=TEXT("ARMOUR NEAR / WAIT BEHIND");Event(TEXT("ArmourWait"));}
+    P.SafeSeconds=0;
+   }
+   else if(ReadyToReturn && Cohesive)
    {
     const auto Order=S->MissionOrder; const FVector Goal=S->MissionDestination;
     // Validate the latest mission before releasing protection from the objective director.

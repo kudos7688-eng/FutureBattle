@@ -24,7 +24,7 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("MANUAL COMMAND"),TEXT("手動指揮"));M.Add(TEXT("WAITING FOR REPORT"),TEXT("報告待ち"));M.Add(TEXT("LeaderDeath"),TEXT("隊長戦死"));
   M.Add(TEXT("NO KNOWN CONTACT"),TEXT("既知の敵なし"));M.Add(TEXT("KNOWN CONTACT"),TEXT("既知の敵あり"));M.Add(TEXT("LOCAL AI"),TEXT("部隊AI"));
   M.Add(TEXT("HOME SUPPLY"),TEXT("本拠地で補給"));M.Add(TEXT("RETURN WITH LEADER"),TEXT("隊長と帰還"));M.Add(TEXT("COMPLETE"),TEXT("完了"));M.Add(TEXT("RESUME"),TEXT("任務に復帰"));
-  M.Add(TEXT("AMMO EXHAUSTED"),TEXT("弾切れ"));M.Add(TEXT("NO SAFER REACHABLE ROUTE"),TEXT("安全な経路なし"));
+  M.Add(TEXT("AMMO EXHAUSTED"),TEXT("弾切れ"));M.Add(TEXT("ARMOUR NEAR"),TEXT("戦車が近い"));M.Add(TEXT("WAIT BEHIND"),TEXT("後ろで待機"));M.Add(TEXT("NO SAFER REACHABLE ROUTE"),TEXT("安全な経路なし"));
   // One-line notices from the controller.
   M.Add(TEXT("ATTACK MOVE: right-click destination"),TEXT("攻撃移動：右クリックで目的地"));M.Add(TEXT("DEFEND: right-click center"),TEXT("防衛：右クリックで中心"));
   M.Add(TEXT("COVER RELEASED"),TEXT("遮蔽を解除"));M.Add(TEXT("Game speed: standalone only"),TEXT("速度の変更は単独起動のときだけ"));
@@ -37,7 +37,7 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("SELECT FRIENDLY SQUADS FIRST"),TEXT("先に味方の部隊を選んでください"));
   M.Add(TEXT("PRONE / X TO STAND"),TEXT("伏せ ／ Xで立つ"));M.Add(TEXT("CROUCHED / X FOR PRONE"),TEXT("しゃがみ ／ Xで伏せ"));M.Add(TEXT("STANDING / X TO CROUCH"),TEXT("立ち ／ Xでしゃがむ"));M.Add(TEXT("CHANGING STANCE"),TEXT("姿勢を変えている途中"));
   M.Add(TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("COVER / FIRE = BLIND FIRE / AIM + FIRE = PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で壁越しに撃つ ／ 構えて射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("BLIND FIRE"),TEXT("壁越し射撃"));M.Add(TEXT("NO NEARBY COVER WITH SAFE PEEK"),TEXT("近くに安全に撃てる遮蔽がない"));
-  M.Add(TEXT("AI PAUSED / practice controls freely"),TEXT("AI停止中 ／ 自由に操作を練習できます"));M.Add(TEXT("AI RESUMED"),TEXT("AI再開"));
+  M.Add(TEXT("AI PAUSED / practice controls freely"),TEXT("AI停止中 ／ 自由に操作を練習できます"));M.Add(TEXT("AI RESUMED"),TEXT("AI再開"));M.Add(TEXT("GAME PAUSED [.]"),TEXT("一時停止 [.]"));
   // Match and save messages.
   M.Add(TEXT("Player route save requires BattleSaveRoutes=1"),TEXT("経路付き保存を読むには -BattleSaveRoutes=1 が必要です"));
   M.Add(TEXT("Invalid player route extension"),TEXT("保存されたプレイヤー経路の版・件数・時計が不正です"));

@@ -213,10 +213,14 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 						const double PX=Rd.bAlongX?P:Rd.At,PY=Rd.bAlongX?Rd.At:P;
 						if(Closed(KindAt(PX+(Rd.bAlongX?0.:100.),PY+(Rd.bAlongX?100.:0.)))||Closed(KindAt(PX-(Rd.bAlongX?0.:100.),PY-(Rd.bAlongX?100.:0.))))continue;
 						const double Sg=((FMath::RoundToInt(P/5000.-.5)+FMath::RoundToInt(Rd.At/5000.))&1)?1.:-1.;
-						for(int32 Half:{-1,1})
+						// Generation 6: one lorry across half the road at each place (4.5m of the 9.4m between the walls), on alternating sides, clear of the doorways of the walls beside the road
+						// (those stand 4m to 18m and -6m to -20m along from this point). The staggered pair of generations 2-5 left a tank
+						// (vehicle agent radius 2m) no way through once the road had walls on both sides (mk7-K: no tank entered the town).
 						{
-							const double Along=P+Half*500.,Across=Rd.At-Half*Sg*200.;
-							if(Rd.bAlongX)Emit(TEXT("RoadLorry"),Along,Across,220,500,280);else Emit(TEXT("RoadLorry"),Across,Along,500,220,280);
+							// Generation 7: the lorry stands lengthwise at the side of the road (2.2m of the 9.4m, 7.1m left), so that a vehicle agent
+							// 6m wide still gets past (generation 6 left 4.9m: with the agent at 5m or 6m no tank entered the town, vw-K-n5/n6).
+							const double Along=P-100.,Across=Rd.At+Sg*350.;
+							if(Rd.bAlongX)Emit(TEXT("RoadLorry"),Along,Across,450,220,280);else Emit(TEXT("RoadLorry"),Across,Along,220,450,280);
 						}
 						++Breakers;
 					}

@@ -1,0 +1,1 @@
+TimingInsights.ExportTimerStatistics "C:/Users/nanek/Documents/FPS/FutureBattle-rb01/Setup/Benchmarks/SightTrial-20261111/fogproj-E30-r1/trace-GameThread.csv" -threads="GameThread" -sortBy=TotalInclusiveTime

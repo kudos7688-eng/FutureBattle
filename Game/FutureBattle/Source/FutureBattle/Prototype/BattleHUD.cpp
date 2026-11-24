@@ -1,4 +1,5 @@
 #include "BattleHUD.h"
+#include "BattleArms.h"
 #include "BattleSquadTactics.h"
 #include "BattleLeaderRuntime.h"
 #include "ProfilingDebugging/CsvProfiler.h"
@@ -22,6 +23,9 @@
 #include "BattleSectorView.h"
 #include "Engine/Engine.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Engine/LocalPlayer.h"
+#include "Engine/GameViewportClient.h"
+#include "SceneView.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/ScopeExit.h"
@@ -100,10 +104,10 @@ void ABattleHUD::DrawHUD()
 	{
 		DrawRect(FLinearColor(0.f, 0.f, 0.f, .55f), W * .5f - 330, 120, 660, 54);
 		Label(FString::Printf(TEXT("開始前の編成 ／ 資源 %d ／ 部隊 %d/%d"), SetupMatch->Credits[0], SetupMatch->ActiveSquads(0), BattleTactics::AreaHire().MaxActive), W * .5f - 318, 126, FLinearColor::Yellow, 1.f);
-		Label(TEXT("1〜6で部隊を購入し、前線軍・攻撃軍と命令を整えたら P で開始"), W * .5f - 318, 150, White, .85f);
+		Label(TEXT("B の購入画面で部隊を買い、前線軍・攻撃軍と命令を整えたら P で開始"), W * .5f - 318, 150, White, .85f);
 	}
 	if (const auto* SpeedPC = Cast<ABattleController>(GetOwningPlayerController()); SpeedPC && SpeedPC->IsTactical())
-		Label(FString::Printf(TEXT("速度 x%d [.]"), SpeedPC->GetGameSpeed()), W - 165, 55, SpeedPC->GetGameSpeed() > 1 ? FLinearColor::Yellow : Muted);
+		Label(SpeedPC->GetGameSpeed() == 0 ? FString(TEXT("一時停止 [.]")) : FString::Printf(TEXT("速度 x%d [.]"), SpeedPC->GetGameSpeed()), W - 165, 55, SpeedPC->GetGameSpeed() != 1 ? FLinearColor::Yellow : Muted);
 	const auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (Match->IsEnabled())
 	{
@@ -146,6 +150,24 @@ void ABattleHUD::DrawHUD()
 		else Label(TEXT("占領8秒 ／ 5秒ごとに収入+20 ／ 補給1発につき1 ／ F8 保存 ／ F9 読込"), 28, 141, Muted, .85f);
 		DrawRect(Ink, 16, 165, 560, 26);
   if(Match->bArea)Label(TEXT("本拠地：10秒で補充 ／ 兵1人につき資源1 ／ F8 保存 ／ F9 読込"),28,172,Mint,.85f);
+  // Purchase reservations (-BattleHireReserve, default 1 since 2026-11-23): the own list in order with each one's wait
+  // (Docs/design-front-strategy.md 6), only while there is one (the purchase panel shows the list too).
+  if(Match->bArea&&UBattleMatch::HireReserveOn()&&!Match->HireQueueOf(0).IsEmpty())
+  {
+   static const TCHAR* Short[]={TEXT("小銃"),TEXT("重装"),TEXT("斥候"),TEXT("対戦車"),TEXT("戦車"),TEXT("装甲車"),TEXT("迫撃砲"),TEXT("自走砲"),TEXT("外骨格"),TEXT("補給車")};
+   const TArray<int32> Mine=Match->HireQueueOf(0);
+   FString Text=FString::Printf(TEXT("予約 %d/%d"),Mine.Num(),UBattleMatch::HireQueueMax);
+   for(int32 K=0;K<Mine.Num();++K)
+   {
+    const auto& Q=Match->Area.HireQueue[Mine[K]];FString Why;const int32 B=Match->HireBlock(0,uint8(Q.Type),Why);
+    const TCHAR* Wait=B==0?TEXT("順番待ち"):Why.Contains(TEXT("resources"))?TEXT("資源待ち"):Why.Contains(TEXT("slot"))?TEXT("小隊の上限待ち"):TEXT("上限待ち");
+    Text+=FString::Printf(TEXT(" ／ %d.%s（%s %.0f秒）"),K+1,Q.Type>=0&&Q.Type<int32(UE_ARRAY_COUNT(Short))?Short[Q.Type]:TEXT("?"),Wait,Match->Elapsed-Q.At);
+   }
+   if(Mine.Num())Text+=TEXT(" ／ Backspace 取消 ／ = 先頭へ");
+   DrawRect(Ink,576,165,FMath::Min(720.f,W-592.f),26);Label(Text,588,172,Mint,.8f);
+  }
+  // The area battle's own line is drawn above; without this the large-field and support lines below were drawn over it (since 147a610).
+  else if(Match->bArea){}
   else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch)Label(TEXT("本拠地・保有拠点で補給：1発につき資源1 ／ F8 保存 ／ F9 読込 ／ 支援攻撃なし"),28,172,Mint,.85f);
   else if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("固定戦力 ／ 増援・補給・支援攻撃なし"),28,172,Mint,.85f);
 		else Label(FString::Printf(TEXT("[B] 支援攻撃 400 ／ 残り%d ／ 再装填 %.0f秒 ／ 選択部隊が知る位置へ"), 3 - Match->SupportUsed[0], Match->SupportCooldown[0]), 28, 172, Mint, .85f);
@@ -180,6 +202,25 @@ void ABattleHUD::DrawHUD()
     }
    }
    ShownStrategyFocus=Focus;ShownStrategyHolds=HoldBits;
+  }
+  // Front plan band (stage 7, -BattleFrontPlanPlayer=1): the own plan by section, the player's choices included. The enemy's is never shown.
+  if(Match->bArea&&Match->PlayerRolesOn(0))
+  {
+   const auto& BandFP=Match->FrontPlanState[0];
+   const int32 BandFocus=Match->StrategyFocusPoint(0);
+   FString BandPlan=BandFocus!=INDEX_NONE?FString::Printf(TEXT("自軍の方針：重点 → 拠点%c"),TCHAR('A'+BandFocus)):FString(TEXT("自軍の方針：重点なし"));
+   if(Match->Objectives.IsValidIndex(BandFP.Focus2))BandPlan+=FString::Printf(TEXT("・拠点%c"),TCHAR('A'+BandFP.Focus2));
+   FString BandHolds,BandBacks;
+   for(int32 BandK=0;BandK<BandFP.Role.Num();++BandK)
+   {
+    if(BandFP.Role[BandK]==TEXT('H'))BandHolds+=FString::Printf(TEXT("%s%d"),BandHolds.IsEmpty()?TEXT(""):TEXT("・"),BandK+1);
+    if(BandFP.Role[BandK]==TEXT('R'))BandBacks+=FString::Printf(TEXT("%s%d"),BandBacks.IsEmpty()?TEXT(""):TEXT("・"),BandK+1);
+   }
+   if(!BandHolds.IsEmpty())BandPlan+=FString::Printf(TEXT(" ／ 保持：区間%s"),*BandHolds);
+   if(!BandBacks.IsEmpty())BandPlan+=FString::Printf(TEXT(" ／ 下がってよい：区間%s"),*BandBacks);
+   int32 Chosen=0;for(const uint8 PickRole:Match->Area.PlayerSectionRole)Chosen+=PickRole!=0;
+   BandPlan+=Chosen?FString::Printf(TEXT(" ／ 指定 %d区間 ／ [U] 作戦方針"),Chosen):FString(TEXT(" ／ [U] 作戦方針"));
+   DrawRect(Ink,16,193,560,22);Label(BandPlan,28,196,FLinearColor(1.f,.85f,.35f),.8f);
   }
 		for (const auto& Strike : Match->Strikes)
 		{
@@ -337,7 +378,11 @@ void ABattleHUD::DrawHUD()
 	if (Focus && Focus->GetState())
 	{
 		const FBattleUnitState* S = Focus->GetState();
-		Label(FString::Printf(TEXT("%s %02d ／ 部隊%02d   HP %.0f%s   弾 %02d / %02d   %s ／ %s   再試行 %d%s"), S->bLauncherSelected && !PC->IsTactical() ? TEXT("バズーカ") : S->Weapon == EBattleWeapon::Mortar ? TEXT("迫撃砲") : S->Weapon == EBattleWeapon::AntiTank ? TEXT("対戦車火器") : S->Weapon == EBattleWeapon::SupportGun ? TEXT("支援火器") : TEXT("小銃"), S->UnitID, S->SquadID, S->HP, GetWorld()->GetSubsystem<UBattleState>()->MaxShieldOf(S->UnitID) > 0.f ? *FString::Printf(TEXT(" ＋盾 %.0f   対戦車弾 %d%s%s"), S->Shield, S->Launcher, S->LauncherWait > 0.f ? TEXT("（装填中）") : TEXT(""), PC->IsTactical() ? TEXT("") : PC->bGamepadActive ? TEXT(" [LBで切替]") : TEXT(" [Fで切替]")) : TEXT(""), S->Ammo, S->Reserve,
+		// Infantry arms (BattleArms.cpp): the elite role, the weapon in the hands (the pistol while drawn) and the grenades left.
+		FString WeaponLabel = S->bLauncherSelected && !PC->IsTactical() ? FString(TEXT("バズーカ")) : FString(BattleArms::WeaponName(S->ActiveWeapon()));
+		if (S->Kit) WeaponLabel = FString(BattleArms::KitName(S->Kit)) + TEXT("・") + WeaponLabel;
+		if (S->Grenades > 0 || S->SideAmmo + S->SideReserve > 0) WeaponLabel += FString::Printf(TEXT("（手りゅう弾 %d%s）"), S->Grenades, S->bSidearmSelected || S->SideAmmo + S->SideReserve <= 0 ? TEXT("") : PC->IsTactical() ? TEXT("・拳銃あり") : PC->bGamepadActive ? TEXT("・LBで拳銃") : TEXT("・Fで拳銃"));
+		Label(FString::Printf(TEXT("%s %02d ／ 部隊%02d   HP %.0f%s   弾 %02d / %02d   %s ／ %s   再試行 %d%s"), *WeaponLabel, S->UnitID, S->SquadID, S->HP, GetWorld()->GetSubsystem<UBattleState>()->MaxShieldOf(S->UnitID) > 0.f ? *FString::Printf(TEXT(" ＋盾 %.0f   対戦車弾 %d%s%s"), S->Shield, S->Launcher, S->LauncherWait > 0.f ? TEXT("（装填中）") : TEXT(""), PC->IsTactical() ? TEXT("") : PC->bGamepadActive ? TEXT(" [LBで切替]") : TEXT(" [Fで切替]")) : TEXT(""), S->bSidearmSelected ? S->SideAmmo : S->Ammo, S->bSidearmSelected ? S->SideReserve : S->Reserve,
 			*BattleUIText::Ja(BattleOrderName(S->Order)), *BattleUIText::Ja(BattleActionName(S->Action)), S->MoveRetries, S->ReloadEndTime > 0 ? TEXT("   装填中…") : TEXT("")), 34, PC->IsTactical()?BottomBar.SummaryY:H-112, S->Action == EBattleAction::MoveFailed ? FLinearColor::Yellow : White, 1.05f);
 		if(!Mode->bLeaderCommand)
         {
@@ -428,8 +473,8 @@ void ABattleHUD::DrawHUD()
 			for (int32 I = 0; I < FBattleCommandBarLayout::Count; ++I)
 			{
 				const auto& Button = Bar.Buttons[I];
-				const bool bUsable = I >= 6 ? (Match->bArea && BattleTactics::AreaHire().bEnabled) : bAny;
-				const bool bPending = (I == 1 && PC->PendingOrder == EBattleOrder::AttackMove) || (I == 2 && PC->PendingOrder == EBattleOrder::Defend);
+				const bool bUsable = I == 7 ? BattleFieldLayout::Of(GetWorld()).bSectors : I >= 6 ? (Match->bArea && BattleTactics::AreaHire().bEnabled) : bAny;
+				const bool bPending = (I == 1 && PC->PendingOrder == EBattleOrder::AttackMove) || (I == 2 && PC->PendingOrder == EBattleOrder::Defend) || (I == 6 && PC->IsBuyPanelOpen()) || (I == 7 && (PC->IsFrontDrawArmed() || PC->IsDrawingFrontLine()));
 				DrawRect(bPending ? FLinearColor(.45f, .4f, .1f, .98f) : bUsable ? FLinearColor(.10f, .24f, .24f, .98f) : FLinearColor(.08f, .11f, .15f, .98f), Button.Origin.X, Button.Origin.Y, Button.Width, Bar.ButtonHeight);
                 Label(Button.Caption, Button.Origin.X+8, Button.Origin.Y+5, bPending ? FLinearColor::Yellow : bUsable ? Mint : Muted, Button.Scale);
 			}
@@ -443,9 +488,9 @@ void ABattleHUD::DrawHUD()
 				Label(FString::Printf(TEXT("通り道：%s%s"), !bAny ? TEXT("―") : RouteLane < 0 ? TEXT("混在") : BattleRouteLaneName(RouteLane), PC->bGamepadActive ? TEXT("") : TEXT(" [Z]")), Bar.RouteOrigin.X + 8, Bar.RouteOrigin.Y + 5, bLit ? FLinearColor::Yellow : bAny ? Mint : Muted, .85f);
 			}
 		}
-		if (PC->bGamepadActive) Label(TEXT("右スティック：カーソル   A：選択・決定   左スティック：視点移動   LT/RT：拡大縮小   LB：全選択   ビュー：直接操作   メニュー：AI一時停止   十字→：速度"), 34, H - 53, Muted, .9f);
+		if (PC->bGamepadActive) Label(TEXT("右スティック：カーソル   A：選択・決定   左スティック：視点移動   LT/RT：拡大縮小   LB：全選択   ビュー：直接操作   メニュー：AI一時停止   十字←：購入   十字→：速度"), 34, H - 53, Muted, .9f);
 		else
-		Label(FString::Printf(TEXT("左ドラッグ：選択   Q：全選択   E/Tab：直接操作   WASD：視点移動   ホイール：拡大縮小   P：AI一時停止   F5：やり直し   F6：記憶表示   %s   %s   L：射程の円（%s）      選択中 %02d"), Match->IsEnabled() ? TEXT("1〜6：購入") : TEXT("F7：練度の切替"), BattleFieldLayout::Of(GetWorld()).bSectors ? TEXT("M：区画の格子   N：霧") : TEXT("N：霧"), ABattleController::RangeRingModeName(PC->RangeRingMode), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
+		Label(FString::Printf(TEXT("左ドラッグ：選択   Q：全選択   E/Tab：直接操作   WASD：視点移動   ホイール：拡大縮小   P：AI一時停止   F5：やり直し   F6：記憶表示   %s   %s   L：射程の円（%s）      選択中 %02d"), Match->IsEnabled() ? (Match->bArea ? TEXT("B：部隊の購入") : TEXT("1〜3：購入")) : TEXT("F7：練度の切替"), BattleFieldLayout::Of(GetWorld()).bSectors ? TEXT("M：区画の格子   N：霧") : TEXT("N：霧"), ABattleController::RangeRingModeName(PC->RangeRingMode), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
 	}
 	else
 	{
@@ -497,12 +542,83 @@ void ABattleHUD::DrawHUD()
  DrawOrderWays();
  DrawNoticeLog();
  DrawSectorPanel(PC);
+ DrawPlanPanel(PC);
+ DrawBuyPanel(PC);
  DrawGamepadMenu(PC);
+}
+
+void ABattleHUD::DrawPlanPanel(ABattleController* PC)
+{
+ if(!PC||!Canvas||!PC->IsTactical()||!PC->IsPlanPanelOpen())return;
+ const auto L=FBattlePlanPanelLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld());
+ if(L.Items.IsEmpty())return;
+ const FLinearColor Ink(.025f,.04f,.065f,.95f),Mint(.28f,.95f,.8f),Muted(.62f,.7f,.77f),White(.94f,.97f,1.f),Gold(1.f,.85f,.35f);
+ DrawRect(Ink,L.Origin.X,L.Origin.Y,L.Size.X,L.Size.Y);DrawRect(Gold,L.Origin.X,L.Origin.Y,L.Size.X,2);
+ for(const auto& I:L.Items)
+ {
+  if(I.Kind==0){DrawText(I.Text,I.Tone==4?Gold:I.Tone==5?Muted:White,I.Origin.X,I.Origin.Y,GEngine->GetSmallFont(),I.Tone==4?1.f:.8f);continue;}
+  const FLinearColor Fill=I.Tone==1?FLinearColor(.10f,.24f,.24f,.98f):I.Tone==2?FLinearColor(.25f,.08f,.08f,.98f):I.Tone==3?FLinearColor(.45f,.4f,.1f,.98f):FLinearColor(.08f,.11f,.15f,.98f);
+  DrawRect(Fill,I.Origin.X,I.Origin.Y,I.Size.X,I.Size.Y);
+  DrawText(I.Text,I.Tone==2?Muted:I.Tone==3?FLinearColor::Yellow:Mint,I.Origin.X+6,I.Origin.Y+3,GEngine->GetSmallFont(),.8f);
+ }
+}
+
+void ABattleHUD::DrawBuyPanel(ABattleController* PC)
+{
+ if(!PC||!Canvas||!PC->IsBuyPanelOpen())return;
+ const auto L=FBattleBuyPanelLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld(),PC->bGamepadActive);
+ if(L.Rows.IsEmpty())return;
+ const FLinearColor Ink(.025f,.04f,.065f,.96f),Mint(.28f,.95f,.8f),Muted(.62f,.7f,.77f),White(.94f,.97f,1.f),Gold(1.f,.85f,.35f),Wait(1.f,.66f,.32f);
+ // Text shrunk to its column when it would run into the next one.
+ auto Cell=[&](const FString& Text,FLinearColor Color,float X,float Y,float MaxWidth,float Scale)
+ {float TextWidth=0,TextHeight=0;Canvas->StrLen(GEngine->GetSmallFont(),Text,TextWidth,TextHeight);DrawText(Text,Color,X,Y,GEngine->GetSmallFont(),FMath::Min(Scale,FMath::Max(1.f,MaxWidth)/FMath::Max(1.f,TextWidth)));};
+ DrawRect(Ink,L.Origin.X,L.Origin.Y,L.Size.X,L.Size.Y);DrawRect(Gold,L.Origin.X,L.Origin.Y,L.Size.X,2);
+ Cell(L.Title,Gold,L.Origin.X+12,L.Origin.Y+9,L.Size.X-36-L.CloseSize,1.f);
+ DrawRect(FLinearColor(.08f,.11f,.15f,.98f),L.CloseOrigin.X,L.CloseOrigin.Y,L.CloseSize,L.CloseSize);
+ DrawText(TEXT("×"),Mint,L.CloseOrigin.X+7,L.CloseOrigin.Y+4,GEngine->GetSmallFont(),.9f);
+ const float X0=L.Origin.X,StateX=L.Origin.X+L.Size.X-12-L.StateWidth;
+ constexpr int32 NumCols=8;
+ const float Cols[NumCols]={X0+L.ColKey,X0+L.ColName,X0+L.ColMembers,X0+L.ColCost,X0+L.ColOwned,X0+L.ColReserved,X0+L.ColRole,StateX};
+ const float Ends[NumCols]={X0+L.ColName,X0+L.ColMembers,X0+L.ColCost,X0+L.ColOwned,X0+L.ColReserved,X0+L.ColRole,StateX,L.Origin.X+L.Size.X-12};
+ const TCHAR* Names[NumCols]={TEXT("キー"),TEXT("兵種"),TEXT("人数"),TEXT("費用"),TEXT("保有"),L.bReserve?TEXT("予約"):TEXT(""),TEXT("役割"),TEXT("状態")};
+ for(int32 C=0;C<NumCols;++C)Cell(Names[C],Muted,Cols[C],L.HeaderY,Ends[C]-Cols[C]-6,.75f);
+ // Highlight: the pad's chosen row, or the row under the mouse pointer.
+ int32 Lit=INDEX_NONE;
+ if(PC->bGamepadActive)Lit=PC->GetBuyPanelRow();
+ else if(FVector2D P;PC->GetPointerPosition(P))Lit=L.RowAt(P);
+ for(int32 I=0;I<L.Rows.Num();++I)
+ {
+  // Fill: teal = a click buys now, amber = a click reserves (-BattleHireReserve), dark = nothing can be done now.
+  const auto& R=L.Rows[I];const bool bLit=I==Lit,bOk=R.Block==0,bReservable=L.bReserve&&R.Block==1;
+  const FLinearColor Fill=bOk?(bLit?FLinearColor(.16f,.38f,.36f,.98f):FLinearColor(.10f,.24f,.24f,.98f))
+   :bReservable?(bLit?FLinearColor(.34f,.25f,.10f,.98f):FLinearColor(.20f,.15f,.07f,.98f)):(bLit?FLinearColor(.20f,.20f,.24f,.98f):FLinearColor(.07f,.09f,.12f,.98f));
+  DrawRect(Fill,R.Origin.X,R.Origin.Y,R.Size.X,R.Size.Y);
+  if(bLit)DrawRect(Gold,R.Origin.X,R.Origin.Y,3,R.Size.Y);
+  const float TY=R.Origin.Y+5;const FLinearColor Main=bOk||bReservable?White:Muted;
+  const FString Key=R.Key.IsEmpty()?FString():FString::Printf(TEXT("[%s]"),*R.Key),Reserved=R.Reserved>0?FString::Printf(TEXT("%d"),R.Reserved):FString();
+  const FString* Texts[NumCols]={&Key,&R.Name,&R.Members,&R.Cost,&R.Owned,&Reserved,&R.Role,&R.State};
+  for(int32 C=0;C<NumCols;++C)
+   Cell(*Texts[C],C==7?(bOk?Mint:bReservable?Wait:Muted):C==5?Gold:C==6?Muted:C==0?(bOk?Mint:Muted):Main,Cols[C],TY,Ends[C]-Cols[C]-6,C==1?.85f:.8f);
+ }
+ // Own reservations in order (-BattleHireReserve): a chip each with "move forward" (not on the first) and "cancel" boxes.
+ if(L.bReserve)
+ {
+  Cell(L.QueueTitle,L.Chips.IsEmpty()?Muted:Gold,L.Origin.X+12,L.QueueY,L.Size.X-24,.75f);
+  for(const auto& C:L.Chips)
+  {
+   DrawRect(C.bByAI?FLinearColor(.10f,.13f,.18f,.98f):FLinearColor(.20f,.15f,.07f,.98f),C.Origin.X,C.Origin.Y,C.Size.X,C.Size.Y);
+   Cell(C.Text,White,C.Origin.X+6,C.Origin.Y+4,C.UpOrigin.X-C.Origin.X-10,.75f);
+   if(C.Index>0){DrawRect(FLinearColor(.08f,.11f,.15f,.98f),C.UpOrigin.X,C.UpOrigin.Y,L.ButtonSize,L.ButtonSize);DrawText(TEXT("↑"),Mint,C.UpOrigin.X+5,C.UpOrigin.Y+2,GEngine->GetSmallFont(),.8f);}
+   DrawRect(FLinearColor(.08f,.11f,.15f,.98f),C.CancelOrigin.X,C.CancelOrigin.Y,L.ButtonSize,L.ButtonSize);DrawText(TEXT("×"),Mint,C.CancelOrigin.X+5,C.CancelOrigin.Y+2,GEngine->GetSmallFont(),.8f);
+  }
+ }
+ Cell(L.Footer,Muted,L.Origin.X+12,L.FooterY,L.Size.X-24,.75f);
 }
 
 void ABattleHUD::DrawGamepadMenu(ABattleController* PC)
 {
  if(!PC->IsTactical()||(!PC->bGamepadActive&&!PC->IsGamepadMenuOpen()&&!PC->IsGroundFloorPending()))return;
+ if(PC->IsBuyPanelOpen()&&!PC->IsGamepadMenuOpen())return; // the purchase panel stands where the hint is; its footer names the pad buttons
  const auto MenuBar=FBattleCommandBarLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld(),true);
  const float MenuWidth=FMath::Min(360.f,FMath::Max(1.f,float(Canvas->SizeX)-32.f));
  const float MenuRowHeight=FMath::Max(26.f,MenuBar.ButtonHeight);
@@ -692,7 +808,7 @@ void ABattleHUD::DrawSquadList()
    if(Placed) Center/=Placed;
    DrawRect(Leaders>0&&Picked==Leaders?FLinearColor(.24f,.2f,.06f):FLinearColor(.13f,.11f,.05f),Layout.Origin.X+3,Y,Layout.Width-12,Layout.RowHeight-2);
    int32 Full=0; const int32 Living=Match->GroupLiving(*G,&Full);
-   const TCHAR* Who=!G->bPlayer?TEXT("AI編成"):Match->GroupAIRun(*G)?TEXT("委任"):TEXT("手動指揮");
+   const TCHAR* Who=!G->bPlayer?TEXT("AI編成"):Match->PlayerGroupFollowsFocus(*G)?TEXT("委任・重点に連動"):G->bPlayer&&G->Kind==0&&!G->bFollowFocus&&Match->GroupAIRun(*G)?TEXT("委任・連動なし"):Match->GroupAIRun(*G)?TEXT("委任"):TEXT("手動指揮");
    DrawText(FString::Printf(TEXT("群%d　%s"),G->ID,Who),Gold,Layout.Origin.X+9,Y+4,GEngine->GetSmallFont(),1);
    DrawText(FString::Printf(TEXT("%d部隊 ／ 兵 %d/%d"),G->Squads.Num(),Living,Full),Gold,Layout.Origin.X+Layout.Width-150,Y+4,GEngine->GetSmallFont(),.85f);
    static const TCHAR* const PhaseNames[]={TEXT("集結"),TEXT("前進"),TEXT("保持")};
@@ -1239,8 +1355,11 @@ void ABattleHUD::DrawKillLog(ABattleController* PC)
    case EBattleKillKind::Artillery:return TEXT("砲撃");
    case EBattleKillKind::TankGun:return TEXT("戦車砲");
    case EBattleKillKind::Launcher:return TEXT("バズーカ");
+   case EBattleKillKind::Grenade:return N.KillerWeapon==EBattleWeapon::GrenadeLauncher?TEXT("擲弾"):TEXT("手りゅう弾");
+   case EBattleKillKind::Melee:return TEXT("近接");
    case EBattleKillKind::Shot:
     if(N.bKillerVehicle)return TEXT("車載機関銃");
+    if(N.KillerWeapon>=EBattleWeapon::Pistol)return BattleArms::WeaponName(N.KillerWeapon);
     return N.KillerWeapon==EBattleWeapon::SupportGun?TEXT("機関銃"):N.KillerWeapon==EBattleWeapon::AntiTank?TEXT("対戦車兵"):N.KillerWeapon==EBattleWeapon::Mortar?TEXT("砲"):TEXT("小銃");
    default:return TEXT("");
   }
@@ -1291,6 +1410,24 @@ namespace
  // Fog darkness by state (0 in sight, 1 explored, 2 never seen).
  constexpr float FogAlpha[3]={0.f,.52f,.74f};
  const FLinearColor FogInk(.015f,.025f,.05f);
+ // Projects many world points in one frame with one view-projection matrix. APlayerController::ProjectWorldLocationToScreen
+ // builds the projection data and the matrix again for every point (UGameplayStatics::ProjectWorldToScreen), about 1 us each,
+ // which made the fog's 4,617 cell corners on map E cost about 5 ms a frame (STATUS 11-24 5:02). Same steps and the same maths
+ // (not viewport-relative), so each screen position is the same as the engine call's.
+ struct FFieldProjector
+ {
+  const APlayerController* PC=nullptr;FMatrix ViewProjection=FMatrix::Identity;FIntRect Rect;bool bValid=false;
+  explicit FFieldProjector(const APlayerController* InPC):PC(InPC)
+  {
+   const ULocalPlayer* LP=PC?PC->GetLocalPlayer():nullptr;FSceneViewProjectionData Data;
+   if(LP&&LP->ViewportClient&&LP->GetProjectionData(LP->ViewportClient->Viewport,Data)){ViewProjection=Data.ComputeViewProjectionMatrix();Rect=Data.GetConstrainedViewRect();bValid=true;}
+  }
+  bool operator()(const FVector& World,FVector2D& Out) const
+  {
+   if(!bValid){Out=FVector2D::ZeroVector;return false;}
+   return FSceneView::ProjectWorldToScreen(World,Rect,ViewProjection,Out)&&PC->PostProcessWorldToScreen(World,Out,false);
+  }
+ };
 }
 
 void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
@@ -1314,19 +1451,31 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
    int32 ByStatus[6]={0,0,0,0,0,0};for(const auto& S:Sectors)++ByStatus[BattleSectorView::StatusOf(S)];
    UE_LOG(LogTemp,Display,TEXT("BATTLE_SECTOR_VIEW t=%.0f cells=%d in_sight=%d explored=%d cycle=%.2f sectors=%d fog=%d own=%d contested=%d enemy=%d trace=%d clear=%d"),
     T,Fog.LastSeen.Num(),InSight,Explored,Fog.CycleSeconds,Sectors.Num(),ByStatus[0],ByStatus[1],ByStatus[2],ByStatus[3],ByStatus[4],ByStatus[5]);
+   // The batched projection must give the engine's one-point positions: every fog corner both ways, the same frame.
+   {
+    const FFieldProjector Check(PC);int32 Points=0,Same=0;double MaxDiff=0;
+    for(int32 Y=0;Y<=Fog.Rows;++Y)for(int32 X=0;X<=Fog.Columns;++X)
+    {
+     const FVector2D M=Fog.CellMin(X,Y);const FVector P(M.X,M.Y,Fog.Corner(X,Y)+20);FVector2D A(-1,-1),B(-1,-1);
+     const bool bA=PC->ProjectWorldLocationToScreen(P,A),bB=Check(P,B);++Points;
+     if(bA==bB&&(!bA||A==B))++Same;if(bA&&bB)MaxDiff=FMath::Max(MaxDiff,FVector2D::Distance(A,B));
+    }
+    UE_LOG(LogTemp,Display,TEXT("BATTLE_FIELD_PROJECT t=%.0f points=%d same=%d max_diff=%.6f"),T,Points,Same,MaxDiff);
+   }
    FScreenshotRequest::RequestScreenshot(Shot+(Stage?TEXT("-90s.png"):TEXT("-40s.png")),true,false);++Stage;
   }
   if(Stage==2&&T>93.)FPlatformMisc::RequestExit(false,TEXT("BattleSectorViewShot"));
  }
  if(!Fog.IsValid()||(!PC->bShowFog&&(!bSectors||!PC->bShowSectorGrid))) return;
  const float W=Canvas->SizeX,H=Canvas->SizeY;
+ const FFieldProjector Project(PC);
  // Corners of the fog cells on the screen (false where the corner is behind the camera).
  const int32 VC=Fog.Columns+1,VR=Fog.Rows+1;
  auto& Screen=OverlayScreen;Screen.SetNumUninitialized(VC*VR,EAllowShrinking::No);auto& On=OverlayOn;On.Init(false,VC*VR);
  for(int32 Y=0;Y<VR;++Y)for(int32 X=0;X<VC;++X)
  {
   const FVector2D M=Fog.CellMin(X,Y);FVector2D S;
-  if(PC->ProjectWorldLocationToScreen(FVector(M.X,M.Y,Fog.Corner(X,Y)+20),S)){Screen[Y*VC+X]=S;On[Y*VC+X]=true;}
+  if(Project(FVector(M.X,M.Y,Fog.Corner(X,Y)+20),S)){Screen[Y*VC+X]=S;On[Y*VC+X]=true;}
  }
  auto Visible=[&](int32 X,int32 Y)
  {
@@ -1376,7 +1525,7 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
  const FLinearColor Line(.85f,.9f,1.f,.32f);
  const double Size=BattleSectors::Size,HX=BattleSectors::Columns*Size*.5,HY=BattleSectors::Rows*Size*.5;
  auto OnScreen=[&](const FVector2D& S){return S.X>=0&&S.X<=W&&S.Y>=0&&S.Y<=H;};
- auto Piece=[&](FVector A,FVector B){FVector2D SA,SB;if(PC->ProjectWorldLocationToScreen(A,SA)&&PC->ProjectWorldLocationToScreen(B,SB)&&(OnScreen(SA)||OnScreen(SB)))DrawLine(SA.X,SA.Y,SB.X,SB.Y,Line,1.f);};
+ auto Piece=[&](FVector A,FVector B){FVector2D SA,SB;if(Project(A,SA)&&Project(B,SB)&&(OnScreen(SA)||OnScreen(SB)))DrawLine(SA.X,SA.Y,SB.X,SB.Y,Line,1.f);};
  auto Ground=[&](double X,double Y){return FVector(X,Y,BattleSectorView::GroundZ(GetWorld(),X,Y)+25);};
  const double StepLen=FBattleFogGrid::Cell;
  for(int32 C=0;C<=BattleSectors::Columns;++C){const double X=-HX+C*Size;for(double Y=-HY;Y<HY-1;Y+=StepLen)Piece(Ground(X,Y),Ground(X,FMath::Min(Y+StepLen,HY)));}
@@ -1385,8 +1534,8 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
  for(int32 R=0;R<BattleSectors::Rows;++R)for(int32 C=0;C<BattleSectors::Columns;++C)
  {
   const FVector Mid=BattleSectors::Center({C,R});FVector2D A,B,S;
-  if(!PC->ProjectWorldLocationToScreen(Ground(Mid.X-Size*.5,Mid.Y-Size*.5),A)||!PC->ProjectWorldLocationToScreen(Ground(Mid.X+Size*.5,Mid.Y+Size*.5),B)||
-     !PC->ProjectWorldLocationToScreen(Ground(Mid.X,Mid.Y),S))continue;
+  if(!Project(Ground(Mid.X-Size*.5,Mid.Y-Size*.5),A)||!Project(Ground(Mid.X+Size*.5,Mid.Y+Size*.5),B)||
+     !Project(Ground(Mid.X,Mid.Y),S))continue;
   if(FVector2D::Distance(A,B)<70||!OnScreen(S))continue;
   const auto& Info=Sectors[R*BattleSectors::Columns+C];const int32 Status=BattleSectorView::StatusOf(Info);
   FString Text=BattleSectorView::SectorName({C,R});
@@ -1401,12 +1550,27 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
   const FLinearColor FrontInk(1.f,.55f,.15f,.9f);const double Sign=FM->AreaHome(0).X<0?1.:-1.;
   // By grid row (top to bottom); FrontLine is in the team's own rows, which run the other way for the team on the high X side.
   auto EdgeX=[&](int32 GridRow){const int32 Row=Sign>0?GridRow:BattleSectors::Rows-1-GridRow;return BattleSectors::Center(FM->FrontCell(0,FM->FrontLine[0][Row],Row)).X+Sign*Size*.5;};
-  auto Thick=[&](FVector A,FVector B){FVector2D SA,SB;if(PC->ProjectWorldLocationToScreen(A,SA)&&PC->ProjectWorldLocationToScreen(B,SB)&&(OnScreen(SA)||OnScreen(SB)))DrawLine(SA.X,SA.Y,SB.X,SB.Y,FrontInk,3.f);};
+  auto Thick=[&](FVector A,FVector B){FVector2D SA,SB;if(Project(A,SA)&&Project(B,SB)&&(OnScreen(SA)||OnScreen(SB)))DrawLine(SA.X,SA.Y,SB.X,SB.Y,FrontInk,3.f);};
   for(int32 R=0;R<BattleSectors::Rows;++R)
   {
    const double X=EdgeX(R),Y0=-HY+R*Size;
    for(double Y=Y0;Y<Y0+Size-1;Y+=StepLen)Thick(Ground(X,Y),Ground(X,FMath::Min(Y+StepLen,Y0+Size)));
    if(R+1<BattleSectors::Rows&&EdgeX(R+1)!=X){const double X1=EdgeX(R+1),Y=Y0+Size;for(double T=0;T<1;T+=.25)Thick(Ground(FMath::Lerp(X,X1,T),Y),Ground(FMath::Lerp(X,X1,T+.25),Y));}
+  }
+  // Front plan stage 7: each section's number and role at its middle row's line (the player's choice marked).
+  if(FM->PlayerRolesOn(0))
+  {
+   const auto& LineFP=FM->FrontPlanState[0];
+   for(int32 SecK=0;SecK<LineFP.Sections;++SecK)
+   {
+    int32 SecFirst=-1,SecLast=-1;for(int32 SR=0;SR<LineFP.SectionOfRow.Num();++SR)if(LineFP.SectionOfRow[SR]==SecK){if(SecFirst<0)SecFirst=SR;SecLast=SR;}
+    if(SecFirst<0)continue;
+    const int32 MidRow=(SecFirst+SecLast)/2;const FVector LineMid=BattleSectors::Center(FM->FrontCell(0,FM->FrontLine[0][MidRow],MidRow));
+    FVector2D LabelAt;if(!Project(Ground(LineMid.X+Sign*Size*.5,LineMid.Y),LabelAt)||!OnScreen(LabelAt))continue;
+    const TCHAR SecRole=LineFP.Role.IsValidIndex(SecK)?LineFP.Role[SecK]:TEXT('K');
+    const TCHAR* RoleJa=SecRole==TEXT('F')?TEXT("重点"):SecRole==TEXT('H')?TEXT("保持"):SecRole==TEXT('R')?TEXT("下がってよい"):TEXT("保つ");
+    DrawText(FString::Printf(TEXT("区間%d %s%s"),SecK+1,RoleJa,FM->PlayerSectionRole(SecK)?TEXT("（指定）"):TEXT("")),FrontInk,LabelAt.X+6,LabelAt.Y-18,GEngine->GetSmallFont(),1.f);
+   }
   }
  }
  // The sector under the pointer: a bright outline.
@@ -1418,7 +1582,7 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
   for(int32 E=0;E<4;++E)for(int32 K=0;K<4;++K)
   {
    const FVector2D P0=FMath::Lerp(Q[E],Q[(E+1)%4],K/4.f),P1=FMath::Lerp(Q[E],Q[(E+1)%4],(K+1)/4.f);FVector2D SA,SB;
-   if(PC->ProjectWorldLocationToScreen(Ground(P0.X,P0.Y),SA)&&PC->ProjectWorldLocationToScreen(Ground(P1.X,P1.Y),SB))DrawLine(SA.X,SA.Y,SB.X,SB.Y,Bright,2.f);
+   if(Project(Ground(P0.X,P0.Y),SA)&&Project(Ground(P1.X,P1.Y),SB))DrawLine(SA.X,SA.Y,SB.X,SB.Y,Bright,2.f);
   }
  }
 }

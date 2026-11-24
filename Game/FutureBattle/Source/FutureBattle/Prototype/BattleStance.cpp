@@ -62,11 +62,25 @@ int32 BattleStance::MoveMode()
  static const int32 Mode=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleStanceMove="),V);return FMath::Clamp(V,0,2);}();
  return Mode;
 }
+bool BattleStance::Steady()
+{
+ static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleStanceSteady="),V);return V!=0;}();
+ return bOn;
+}
 float BattleStance::MoveScale(uint8 Stance){return Stance==Prone?.25f:Stance==Crouch?.55f:1.f;}
 
 bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForce,bool bOnTheMove)
 {
- if(!BattleStance::Enabled(GetWorld()))return false;
+ // Off the stance maps (BattleStance::Enabled: map E by default) only the player's own X (not forced) crouches and lays down the
+ // directly controlled soldier (the user could not crouch on map I); forced changes such as the cover action's crouch stay off
+ // there as before, and anyone may stand up again (the soldier he leaves, below in the AI step). The player's wall cover
+ // (BattleWallCover.cpp) is his own choice: its crouch, and giving back his stance when he leaves, apply there too.
+ if(!BattleStance::Enabled(GetWorld()) && Stance!=BattleStance::Stand)
+ {
+  if(bForce && !WallCovers.Contains(ID))return false;
+  const auto* Body=Bodies.Find(ID);
+  if(!(Body && Body->Actor.IsValid() && Body->Actor->IsPlayerControlled()))return false;
+ }
  const uint8 Current=StanceOf(ID);
  if(Current==Stance||Stance>BattleStance::Prone)return false;
  if(!bForce&&Now<StanceLockedUntil.FindRef(ID))return false;
@@ -103,6 +117,8 @@ bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForc
 
 UAnimSequence* UBattleLeaderRuntime::FollowerClip(int32 ID,int32 Pose) const
 {
+ // Infantry arms (BattleArms.cpp): a strike or throw clip for a moment.
+ if(!ArmsActionUntil.IsEmpty())if(UAnimSequence* Arms=ArmsClip(ID,GetWorld()->GetTimeSeconds()))return Arms;
  // Blind fire (BattleBlindFire.cpp): the clip that raises the rifle over or around the cover, while it lasts.
  if(Pose!=2 && IsBlindFiring(ID,GetWorld()->GetTimeSeconds()))
   if(const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(ID))
@@ -285,10 +301,21 @@ void UBattleLeaderRuntime::UpdateAIStance(int32 ID,double Now,bool bMoving,bool 
  if(bLostSight)
  {
   // The remembered target is no longer visible from down here: stand up and look for a few seconds.
-  if(Current!=BattleStance::Stand&&SetStance(ID,BattleStance::Stand,Now)){StanceLockedUntil.Add(ID,Now+3.);SightExperiment.Cover(TEXT("stance_stood_to_look"));}
+  if(Current!=BattleStance::Stand&&SetStance(ID,BattleStance::Stand,Now))
+  {
+   StanceLockedUntil.Add(ID,Now+3.);SightExperiment.Cover(TEXT("stance_stood_to_look"));
+   // -BattleStanceSteady: remember where crouching hid his enemy from him.
+   if(BattleStance::Steady())CrouchBlindAt.Add(ID,Position(ID));
+  }
   return;
  }
  // -BattleNoCoverFallback: no cover and no better place found - lie down while he still sees his target.
  if(const double* T=NoCoverProneUntil.Find(ID)){if(*T>Now){SetStance(ID,BattleStance::Prone,Now);return;}NoCoverProneUntil.Remove(ID);}
+ // -BattleStanceSteady: at the place where crouching hid his enemy from him he stays standing (no crouch, stand, crouch again).
+ if(BattleStance::Steady())if(const FVector* At=CrouchBlindAt.Find(ID))
+ {
+  if(FVector::DistSquared2D(*At,Position(ID))>FMath::Square(250.))CrouchBlindAt.Remove(ID);
+  else if(Current==BattleStance::Stand){SightExperiment.Cover(TEXT("steady_stay_standing_frames"));return;}
+ }
  SetStance(ID,BattleStance::Crouch,Now);
 }

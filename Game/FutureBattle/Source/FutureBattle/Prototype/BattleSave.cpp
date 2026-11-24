@@ -1,4 +1,5 @@
 #include "BattleSave.h"
+#include "BattleArms.h"
 #include "BattleComposition.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleFieldLayout.h"
@@ -36,14 +37,16 @@ namespace
  class FSaveWithoutRoutesArchive : public FArchiveProxy
  {
  public:
-  explicit FSaveWithoutRoutesArchive(FArchive& Inner):FArchiveProxy(Inner){}
+  FSaveWithoutRoutesArchive(FArchive& Inner,bool bInNoRoutes,bool bInNoLooks):FArchiveProxy(Inner),bNoRoutes(bInNoRoutes),bNoLooks(bInNoLooks){}
   virtual bool ShouldSkipProperty(const FProperty* Property) const override
   {
    return (Property->GetOwnerStruct()==UBattleSave::StaticClass()&&
-    (Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,PlayerRoutesVersion)||
+    ((bNoRoutes&&(Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,PlayerRoutesVersion)||
      Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,SavedPlayerRoutes)||
-     Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,SavedPlayerRouteClock)))||FArchiveProxy::ShouldSkipProperty(Property);
+     Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,SavedPlayerRouteClock)))||
+     (bNoLooks&&Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,CrossSectorLooks))))||FArchiveProxy::ShouldSkipProperty(Property);
   }
+  bool bNoRoutes,bNoLooks;
  };
 	bool InRange(double Value, double Min, double Max) { return FMath::IsFinite(Value) && Value >= Min && Value <= Max; }
 	// Limit: FMapDef::SaveLimit of the map for mixed saves, 100m for the old all-actor saves.
@@ -100,8 +103,9 @@ int32 BattleTactics::OverrideSaveRoutesForSmoke(int32 Value)
 
 void UBattleSave::Serialize(FArchive& Ar)
 {
- if(Ar.IsSaving()&&Ar.IsPersistent()&&PlayerRoutesVersion==0&&SavedPlayerRoutes.IsEmpty()&&SavedPlayerRouteClock==0)
- {FSaveWithoutRoutesArchive WithoutRoutes(Ar);Super::Serialize(WithoutRoutes);}
+ const bool bNoRoutes=PlayerRoutesVersion==0&&SavedPlayerRoutes.IsEmpty()&&SavedPlayerRouteClock==0,bNoLooks=CrossSectorLooks.IsEmpty();
+ if(Ar.IsSaving()&&Ar.IsPersistent()&&(bNoRoutes||bNoLooks))
+ {FSaveWithoutRoutesArchive WithoutRoutes(Ar,bNoRoutes,bNoLooks);Super::Serialize(WithoutRoutes);}
  else Super::Serialize(Ar);
 }
 
@@ -160,7 +164,10 @@ bool UBattleSave::Validate(FString& Error) const
   const double ShotIntervalLimit=FMath::Max(double(ResourceTuning->ShotInterval(S.Weapon,true)),double(ResourceTuning->ShotInterval(S.Weapon,false)));
   const double ShotLimit=FMath::Clamp(FMath::Max(ShotIntervalLimit,double(ResourceTuning->AimSwitchDelay(180.f)))+.01,120.,86400.);
   if (!InRange(S.HP, 0, Mixed?1.e9:FMath::Clamp(double(ResourceTuning->Health),10000.,1.e9)) || !InRange(S.Ammo, 0, FMath::Clamp(ResourceTuning->Capacity(S.Weapon),1,1000000)) || !InRange(S.Reserve, 0, FMath::Clamp(ResourceTuning->ReserveFor(S.Weapon),0,1000000)) || !InRange(S.ReloadEndTime, 0, ReloadLimit) || !InRange(S.NextShotTime, 0, ShotLimit) || !BattleSaveValidation::Counter(S.ShotSequence) || !BattleSaveValidation::Counter(S.OrderRevision) || !BattleSaveValidation::Counter(S.PerceptionRevision) || !BattleSaveValidation::Counter(S.DecisionRevision) || !BattleSaveValidation::Counter(S.CoordinationRevision) || !BattleSaveValidation::Counter(S.MoveRetries)) return Fail(TEXT("Invalid unit resources or timers"));
-		if (static_cast<uint8>(S.Weapon) > static_cast<uint8>(EBattleWeapon::Mortar) || static_cast<uint8>(S.Order) > static_cast<uint8>(EBattleOrder::Defend) || static_cast<uint8>(S.Training) > 2 || !InRange(S.SpreadSkillScale, .25, 3) || !InRange(S.HireCost, 1, 1000000)) return Fail(TEXT("Invalid unit order or training"));
+		// Infantry arms (BattleArms.cpp): role, grenades, pistol rounds and relative waits.
+		if (!BattleArms::ValidKit(S.Kit) || !InRange(S.Grenades, 0, 20) || !InRange(S.SideAmmo, 0, ResourceTuning->Capacity(EBattleWeapon::Pistol)) || !InRange(S.SideReserve, 0, ResourceTuning->ReserveFor(EBattleWeapon::Pistol)) ||
+			!InRange(S.SideWait, 0, 60) || !InRange(S.GrenadeWait, 0, 60) || !InRange(S.MeleeWait, 0, 60)) return Fail(TEXT("Invalid infantry arms state"));
+		if (static_cast<uint8>(S.Weapon) > BattleLastWeapon || static_cast<uint8>(S.Order) > static_cast<uint8>(EBattleOrder::Defend) || static_cast<uint8>(S.Training) > 2 || !InRange(S.SpreadSkillScale, .25, 3) || !InRange(S.HireCost, 1, 1000000)) return Fail(TEXT("Invalid unit order or training"));
 		if (!InRange(P.SightRange, 100, 20000) || !InRange(P.FieldOfView, 1, 360) || !InRange(P.DetectionSeconds, 0, 30) || !InRange(P.MemorySeconds, 0, 120) || !InRange(P.ShareRange, 0, 20000) || !InRange(P.ShareDelay, 0, 30) || !InRange(D.ThinkSeconds, .01, 10) || !InRange(D.CoverThinkSeconds, .01, 30) || !InRange(D.CoverCandidates, 1, 100)) return Fail(TEXT("Invalid unit capabilities"));
   if(!InRange(S.Shield,0,1000)||!InRange(S.ShieldWait,0,BattleTactics::ExoShieldHitDelay())||
      !InRange(S.Launcher,0,20)||!InRange(S.LauncherWait,0,FMath::Max(.5f,GetDefault<UBattleTuning>()->ExoLauncherReload)))return Fail(TEXT("Invalid shield or launcher resources"));
@@ -239,6 +246,13 @@ bool UBattleSave::Validate(FString& Error) const
 	}
 	for (const auto& Report : Reports)
 		if (!ValidContact(Report.ReceiverID, Report.Contact) || !InRange(Report.DeliveryTime, -120, 30) || !BattleSaveValidation::Counter(Report.SourceRevision) || !BattleSaveValidation::Counter(Report.ReceiverRevision)) return Fail(TEXT("Invalid pending report"));
+	// -BattleSectorSightHit permissions: a living soldier, an enemy of his, at most the 5 s the permission lasts.
+	if (CrossSectorLooks.Num() > 1000000) return Fail(TEXT("Invalid cross-sector look"));
+	for (const auto& Look : CrossSectorLooks)
+	{
+		const auto* const* LookObserver = ByID.Find(Look.ObserverID); const auto* const* LookTarget = ByID.Find(Look.TargetID);
+		if (!LookObserver || !LookTarget || !(*LookObserver)->IsAlive() || (*LookObserver)->Team == (*LookTarget)->Team || !InRange(Look.Remaining, 0, 5.01)) return Fail(TEXT("Invalid cross-sector look"));
+	}
 	if(Mixed && !ValidateMixed(Error))return false;
 	Error.Reset(); return true;
 }
@@ -272,7 +286,7 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
    E.Avoid=G.Avoid;E.AvoidRemaining=double(G.AvoidUntil)-double(Elapsed);E.StartLiving=G.StartLiving;E.StartStrength=G.StartStrength;
    E.StallPoint=G.StallPoint;E.Stalls=G.Stalls;E.bOpened=G.bOpened;E.bArrived=G.bArrived;
    E.ArrivalAge=double(Elapsed)-double(G.ArrivedAt);E.Extensions=G.Extensions;
-   E.Kind=G.Kind;E.SurpriseRow=G.SurpriseRow;E.SurpriseBridgeStage=G.SurpriseBridgeStage;E.SurpriseBridgeLeader=G.SurpriseBridgeLeader;
+   E.Kind=G.Kind;E.bFocus2=G.bFocus2;E.bFollowFocus=G.bFollowFocus;E.SurpriseRow=G.SurpriseRow;E.SurpriseBridgeStage=G.SurpriseBridgeStage;E.SurpriseBridgeLeader=G.SurpriseBridgeLeader;
    E.SurpriseBridgeAge=double(Elapsed)-double(G.SurpriseBridgeAt);E.SurpriseNextCol=G.SurpriseNextCol;
    E.FrontHold=G.FrontHold;E.FrontGap=G.FrontGap;E.FrontNeed=G.FrontNeed;E.FrontReleaseAge=double(Elapsed)-double(G.FrontReleaseAt);E.FrontExcessAge=G.FrontExcessSince<0.f?-1.:double(Elapsed)-double(G.FrontExcessSince);E.bFrontDrawn=G.bFrontDrawn;E.FrontBackAge=double(Elapsed)-double(G.FrontBackAt);E.FrontStepAge=double(Elapsed)-double(G.FrontStepAt);
    E.SurpriseBridgeEntry=G.SurpriseBridgeEntry;E.SurpriseBridgeExit=G.SurpriseBridgeExit;E.SurpriseBridgeGoal=G.SurpriseBridgeGoal;
@@ -297,6 +311,11 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
   {
    FBattleSavedArtilleryShell E;E.ShooterID=Shell.ShooterID;E.Team=Shell.Team;E.ShooterType=Shell.ShooterType;
    E.bSPG=Shell.bSPG;E.At=Shell.At;E.Remaining=Shell.Remaining;Save->SavedArtilleryShells.Add(E);
+  }
+  for(const auto& Shell:Runtime->ArmsShells)
+  {
+   FBattleSavedArmsShell E;E.ShooterID=Shell.ShooterID;E.Team=Shell.Team;E.Kind=Shell.Kind;E.From=Shell.From;E.At=Shell.At;
+   E.Remaining=Shell.Remaining;E.Flight=Shell.Flight;Save->SavedArmsShells.Add(E);
   }
   Save->Version=bArea?3:2;Save->Area=Area;Save->MapName=UGameplayStatics::GetCurrentLevelName(GetWorld(),true);Save->Ruleset=Runtime->SnapshotMode();
   Save->BaseSightRange=GetDefault<UBattleTuning>()->EffectiveSightRange();Save->WeaponRange=GetDefault<UBattleTuning>()->EffectiveWeaponRange();Save->bRangeAware=Runtime->RangeAwareEnabled();
@@ -358,6 +377,9 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
 	GetWorld()->GetSubsystem<UBattlePerception>()->Capture(Save->Observers, Save->Reports, Now);
 	// Dead observers can remain until the next sliced perception update.
 	for (auto It = Save->Observers.CreateIterator(); It; ++It) if (!Store->Find(It.Key()) || !Store->Find(It.Key())->IsAlive() || It.Value().ProfileRevision != Store->Find(It.Key())->PerceptionRevision) It.RemoveCurrent();
+	// -BattleSectorSightHit permissions still running; one whose soldier or enemy is down by now is of no use.
+	GetWorld()->GetSubsystem<UBattlePerception>()->CaptureCrossSector(Save->CrossSectorLooks, Now);
+	Save->CrossSectorLooks.RemoveAll([Store](const FBattleSavedCrossLook& Look) { const auto* LookObserver = Store->Find(Look.ObserverID); const auto* LookTarget = Store->Find(Look.TargetID); return !LookObserver || !LookObserver->IsAlive() || !LookTarget || !LookTarget->IsAlive(); });
 	return Save;
 }
 
@@ -456,7 +478,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
    G.Avoid=E.Avoid;G.AvoidUntil=float(double(Elapsed)+E.AvoidRemaining);G.StartLiving=E.StartLiving;G.StartStrength=E.StartStrength;
    G.StallPoint=E.StallPoint;G.Stalls=E.Stalls;G.bOpened=E.bOpened;G.bArrived=E.bArrived;
    G.ArrivedAt=float(double(Elapsed)-E.ArrivalAge);G.Extensions=E.Extensions;
-   G.Kind=E.Kind;G.SurpriseRow=E.SurpriseRow;G.SurpriseBridgeStage=E.SurpriseBridgeStage;G.SurpriseBridgeLeader=E.SurpriseBridgeLeader;
+   G.Kind=E.Kind;G.bFocus2=E.bFocus2;G.bFollowFocus=E.bFollowFocus;G.SurpriseRow=E.SurpriseRow;G.SurpriseBridgeStage=E.SurpriseBridgeStage;G.SurpriseBridgeLeader=E.SurpriseBridgeLeader;
    G.SurpriseBridgeAt=float(double(Elapsed)-E.SurpriseBridgeAge);G.SurpriseNextCol=E.SurpriseNextCol;
    G.FrontHold=E.FrontHold;G.FrontGap=E.FrontGap;G.FrontNeed=E.FrontNeed;G.FrontReleaseAt=float(double(Elapsed)-E.FrontReleaseAge);G.FrontExcessSince=E.FrontExcessAge<0.?-1.f:float(double(Elapsed)-E.FrontExcessAge);G.bFrontDrawn=E.bFrontDrawn;G.FrontBackAt=float(double(Elapsed)-E.FrontBackAge);G.FrontStepAt=float(double(Elapsed)-E.FrontStepAge);
    G.SurpriseBridgeEntry=E.SurpriseBridgeEntry;G.SurpriseBridgeExit=E.SurpriseBridgeExit;G.SurpriseBridgeGoal=E.SurpriseBridgeGoal;
@@ -486,6 +508,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 		if (Unit->GetUnitID() == Save->SelectedID) PC->SetSelection(Unit);
 	}
 	GetWorld()->GetSubsystem<UBattlePerception>()->Restore(Save->Observers, Save->Reports, Now);
+	GetWorld()->GetSubsystem<UBattlePerception>()->RestoreCrossSector(Save->CrossSectorLooks, Now);
 	if(Mixed){T->RestoreSave(*Save,Now);Team->RestoreSave(*Save);DelegationClock=Save->DelegationClock;GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now);Runtime->RefreshDisplay();}
 	Mode->RefreshVisibility();
 	for (auto* Unit : Spawned) if (Unit->GetUnitID() == Save->ControlledID) { PC->ControlUnit(Unit); PC->SetControlRotation(Save->ViewRotation); break; }

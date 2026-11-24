@@ -74,6 +74,21 @@ struct FBattleSavedArtilleryShell
  UPROPERTY() float Remaining=0;
 };
 
+// Infantry arms (BattleArms.cpp, 2026-11-22): a hand grenade (Kind 0) or launcher round (1) in flight. Remaining and Flight are
+// relative seconds. Absent in older saves (none in flight).
+USTRUCT()
+struct FBattleSavedArmsShell
+{
+ GENERATED_BODY()
+ UPROPERTY() int32 ShooterID=INDEX_NONE;
+ UPROPERTY() int32 Team=0;
+ UPROPERTY() uint8 Kind=0;
+ UPROPERTY() FVector From=FVector::ZeroVector;
+ UPROPERTY() FVector At=FVector::ZeroVector;
+ UPROPERTY() float Remaining=0;
+ UPROPERTY() float Flight=0;
+};
+
 // Revision 2: group decision state, including historical roles for squads that have since left.
 // All three time fields are signed offsets from match Elapsed, NOT UWorld::TimeSeconds.
 // Keep doubles for exact round trips of float clocks; do not clamp expired deadlines or future phase starts.
@@ -105,6 +120,8 @@ struct FBattleSavedGroup
  UPROPERTY() int32 SurpriseRow=0;
  UPROPERTY() uint8 SurpriseBridgeStage=0;
  UPROPERTY() int32 SurpriseBridgeLeader=INDEX_NONE;
+ UPROPERTY() bool bFocus2=false; // front plan stage 5 (absent in older saves = false)
+ UPROPERTY() bool bFollowFocus=true; // front plan stage 7, the player's per-group switch (absent in older saves = true)
  UPROPERTY() double SurpriseBridgeAge=0;
  UPROPERTY() int32 SurpriseNextCol=-1;
  UPROPERTY() TArray<int32> FrontHold;
@@ -172,6 +189,7 @@ public:
  UPROPERTY() TMap<int32,FBattleSavedCarChoice> SavedCarChoices;
  UPROPERTY() TMap<int32,FBattleSavedArtillery> SavedArtillery;
  UPROPERTY() TArray<FBattleSavedArtilleryShell> SavedArtilleryShells;
+ UPROPERTY() TArray<FBattleSavedArmsShell> SavedArmsShells;
  UPROPERTY() FBattleAreaState Area;
  UPROPERTY() FString MapName;
  UPROPERTY() FName Ruleset;
@@ -216,6 +234,8 @@ public:
  UPROPERTY() int32 PlayerRoutesVersion=0;
  UPROPERTY() TArray<FBattleSavedPlayerRoute> SavedPlayerRoutes;
  UPROPERTY() float SavedPlayerRouteClock=0;
+ // -BattleSectorSightHit permissions still running (2026-11-24). Omitted from the tagged archive when empty; a save without it loads as none.
+ UPROPERTY() TArray<FBattleSavedCrossLook> CrossSectorLooks;
  virtual void Serialize(FArchive& Ar) override;
 	bool Validate(FString& Error) const;
  bool ValidateMixed(FString& Error) const;

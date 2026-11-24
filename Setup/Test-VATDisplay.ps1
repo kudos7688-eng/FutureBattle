@@ -4,7 +4,8 @@ param([Parameter(Mandatory=$true)][string]$OutputFolder,
  [ValidateSet('Individual','Leader')][string]$Decision='Leader',
  [ValidateSet('RTS','TPS','FPS')][string]$View='RTS',
  [ValidateSet('Open','Cross','Gate')][string]$Layout='Open',
- [int]$Seed=1,[double]$Warmup=10,[double]$Duration=60,[switch]$Stable,[switch]$NullRHI,[switch]$Capture,[switch]$Functional,[ValidateSet('A','B')][string]$Sense='A',[switch]$SenseAudit,[switch]$CpuTrace,[switch]$LightTrace,[ValidateSet(0,1)][int]$ContextReuse=0,[switch]$ContextAudit,[switch]$ContextReplay,[ValidateSet(0,1)][int]$HiddenBones=0,[switch]$BoneAudit,[ValidateSet(0,1)][int]$PerceptionGrid=0,[switch]$GridAudit,[switch]$GridFixture,[ValidateSet(0,1)][int]$AnimTasks=0,[switch]$AnimTaskAudit,[ValidateSet(0,1)][int]$DisplayLOD=0,[int]$SightRange=0,[switch]$VATAudit,[switch]$VATQuality)
+ [int]$Seed=1,[double]$Warmup=10,[double]$Duration=60,[switch]$Stable,[switch]$NullRHI,[switch]$Capture,[switch]$Functional,[ValidateSet('A','B')][string]$Sense='A',[switch]$SenseAudit,[switch]$CpuTrace,[switch]$LightTrace,[ValidateSet(0,1)][int]$ContextReuse=0,[switch]$ContextAudit,[switch]$ContextReplay,[ValidateSet(0,1)][int]$HiddenBones=0,[switch]$BoneAudit,[ValidateSet(0,1)][int]$PerceptionGrid=0,[switch]$GridAudit,[switch]$GridFixture,[ValidateSet(0,1)][int]$AnimTasks=0,[switch]$AnimTaskAudit,[ValidateSet(0,1)][int]$DisplayLOD=0,[int]$SightRange=0,[switch]$VATAudit,[switch]$VATQuality,[switch]$RB01)
+# -RB01 (2026-11-23): -BattleSoldierBody=1, the RB01 body and its own VAT set (/Game/Prototype/DisplayLODTrial_RB01).
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Get-MeasurementMachine.ps1')
 $out=[IO.Path]::GetFullPath($OutputFolder)
@@ -37,6 +38,7 @@ $args+="-BattleReduceHiddenBones=$HiddenBones"
 $args+="-BattlePerceptionGrid=$PerceptionGrid"
 $args+="-BattleReduceAnimTasks=$AnimTasks"
 $args+="-BattleDisplayLOD=$DisplayLOD"
+if($RB01){$args+='-BattleSoldierBody=1'}
 if($VATAudit){$args+=@('-P3VATAudit','-Deterministic','-FPS=30')}
 if($AnimTaskAudit) { $args+=@('-P3AnimTaskAudit','-Deterministic','-FPS=30') }
 if($GridAudit) { $args+='-P3GridAudit' }

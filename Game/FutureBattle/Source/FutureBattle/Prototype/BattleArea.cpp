@@ -1,4 +1,6 @@
 #include "BattleMatch.h"
+#include "BattleArms.h"
+#include "BattleSectors.h"
 #include "BattleComposition.h"
 #include "BattleFieldLayout.h"
 #include "BattleLeaderRuntime.h"
@@ -28,7 +30,7 @@ int32 UBattleMatch::AreaScore(int32 Team)const
 void UBattleMatch::InitializeArea()
 {
  BattleComposition::LogStart(); // stage 1: returns before constructing definitions when OFF
- Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();FireReveals[0].Reset();FireReveals[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();FrontReservePosts.Reset();FrontReserveRow.Reset();FreeLastPos.Reset();FreeLastStep.Reset();FreeReversals[0]=FreeReversals[1]=0;FreeMoved[0]=FreeMoved[1]=0.;bSetupDone=bSetupBurst=false;FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
+ Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();FireReveals[0].Reset();FireReveals[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();FrontSectionWish.Reset();FrontReservePosts.Reset();FrontReserveRow.Reset();FreeLastPos.Reset();FreeLastStep.Reset();FreeReversals[0]=FreeReversals[1]=0;FreeMoved[0]=FreeMoved[1]=0.;SectorCrowd[0]=SectorCrowd[1]=0;bSetupDone=bSetupBurst=false;FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
  // A team knows the objectives it holds from the start (the depots of map F).
@@ -76,13 +78,53 @@ int32 UBattleMatch::ActiveSquads(int32 Team)const
  int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active;
  return Count;
 }
-int32 UBattleMatch::ActiveScouts(int32 Team)const{return ActiveOfType(Team,BattleSquadType::Scout);}
+// Ordinary scout pairs only: sniper teams (scout pairs of grade 2, BattleArms.cpp) have their own count and limit.
+int32 UBattleMatch::ActiveScouts(int32 Team)const
+{
+ int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==BattleSquadType::Scout&&P.Value.Grade==0;
+ return Count;
+}
+int32 UBattleMatch::ActiveSnipers(int32 Team)const
+{
+ int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==BattleSquadType::Scout&&P.Value.Grade==2;
+ return Count;
+}
+int32 UBattleMatch::ActiveElite(int32 Team)const
+{
+ int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.Grade==1;
+ return Count;
+}
 int32 UBattleMatch::ActiveOfType(int32 Team,uint8 SquadType)const
 {
  int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==SquadType;
  return Count;
 }
-bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,uint8 SquadType)
+int32 UBattleMatch::HireBlock(int32 Team,uint8 SquadType,FString& Why,uint8 Grade) const
+{
+ auto Fail=[&Why](const TCHAR* Text,int32 Code){Why=Text;return Code;};
+ const auto& H=BattleTactics::AreaHire();
+ if(!bArea||!H.bEnabled)return Fail(TEXT("Area battle: new squads disabled"),2);
+ if(Team<0||Team>1||Phase!=EBattleMatchPhase::Combat)return Fail(TEXT("Recruitment unavailable"),2);
+ if(ActiveSquads(Team)>=BattleTactics::AreaHire().MaxActive)return Fail(TEXT("No free squad slot (active squad limit)"),1);
+ // Squad type: rifle squad (AreaSquadCost) or heavy infantry (AreaHeavyCost).
+ if(SquadType>=BattleSquadType::Count)return Fail(TEXT("Recruitment unavailable"),2);
+ // Elite platoon / sniper team (BattleArms.cpp): their own cost; sniper teams do not count against the scout pair limit, they have their own.
+ if(!BattleArms::ValidGrade(SquadType,Grade))Grade=0;
+ if(Grade==2&&ActiveSnipers(Team)>=BattleArms::SniperLimit)return Fail(TEXT("Sniper team limit reached"),1);
+ const int32 Cost=Grade==1?BattleArms::EliteCost():Grade==2?BattleArms::SniperCost():SquadType==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(SquadType);
+ if(SquadType==BattleSquadType::Scout&&Grade==0&&ActiveScouts(Team)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaScoutLimit))return Fail(TEXT("Scout pair limit reached"),1);
+ if(SquadType==BattleSquadType::AntiTank&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaATLimit))return Fail(TEXT("Anti-tank team limit reached"),1);
+ if(SquadType==BattleSquadType::Tank&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaTankLimit))return Fail(TEXT("Tank limit reached"),1);
+ if(SquadType==BattleSquadType::ArmoredCar&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaACLimit))return Fail(TEXT("Armoured car limit reached"),1);
+ if(SquadType==BattleSquadType::Mortar&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaMortarLimit))return Fail(TEXT("Mortar team limit reached"),1);
+ if(SquadType==BattleSquadType::SPGun&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaSPGLimit))return Fail(TEXT("Self-propelled gun limit reached"),1);
+ if(SquadType==BattleSquadType::Exo&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaExoLimit))return Fail(TEXT("Exoskeleton soldier limit reached"),1);
+ if(SquadType==BattleSquadType::Supply&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaSupplyLimit))return Fail(TEXT("Supply vehicle limit reached"),1);
+ if(Credits[Team]<Cost)return Fail(TEXT("Insufficient resources"),1);
+ if(GetWorld()->GetSubsystem<UBattleState>()->GetSquads().Num()>=100)return Fail(TEXT("Squad record capacity reached (100 including lost squads)"),2);
+ return 0;
+}
+bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,uint8 SquadType,uint8 Grade)
 {
  LastMessage.Reset();
  auto Fail=[this](const TCHAR* Why){LastMessage=Why;return false;};
@@ -90,23 +132,16 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(!bArea||!H.bEnabled)return Fail(TEXT("Area battle: new squads disabled"));
  if(Team<0||Team>1||Phase!=EBattleMatchPhase::Combat)return Fail(TEXT("Recruitment unavailable"));
  if(Training!=EBattleTraining::Regular)return Fail(TEXT("Area battle: regular squads only [2]"));
- if(ActiveSquads(Team)>=BattleTactics::AreaHire().MaxActive)return Fail(TEXT("No free squad slot (active squad limit)"));
- // Squad type: rifle squad (AreaSquadCost) or heavy infantry (AreaHeavyCost).
- if(SquadType>=BattleSquadType::Count)return Fail(TEXT("Recruitment unavailable"));
- const int32 Cost=SquadType==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(SquadType);
- if(SquadType==BattleSquadType::Scout&&ActiveScouts(Team)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaScoutLimit))return Fail(TEXT("Scout pair limit reached"));
- if(SquadType==BattleSquadType::AntiTank&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaATLimit))return Fail(TEXT("Anti-tank team limit reached"));
- if(SquadType==BattleSquadType::Tank&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaTankLimit))return Fail(TEXT("Tank limit reached"));
- if(SquadType==BattleSquadType::ArmoredCar&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaACLimit))return Fail(TEXT("Armoured car limit reached"));
- if(SquadType==BattleSquadType::Mortar&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaMortarLimit))return Fail(TEXT("Mortar team limit reached"));
- if(SquadType==BattleSquadType::SPGun&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaSPGLimit))return Fail(TEXT("Self-propelled gun limit reached"));
- if(SquadType==BattleSquadType::Exo&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaExoLimit))return Fail(TEXT("Exoskeleton soldier limit reached"));
- if(SquadType==BattleSquadType::Supply&&ActiveOfType(Team,SquadType)>=FMath::Max(0,GetDefault<UBattleTuning>()->AreaSupplyLimit))return Fail(TEXT("Supply vehicle limit reached"));
- if(Credits[Team]<Cost)return Fail(TEXT("Insufficient resources"));
- if(GetWorld()->GetSubsystem<UBattleState>()->GetSquads().Num()>=100)return Fail(TEXT("Squad record capacity reached (100 including lost squads)"));
+ if(!BattleArms::ValidGrade(SquadType,Grade))Grade=0;
+ // Elite platoon / sniper team (BattleArms.cpp): the player only with -BattleElite=1 / -BattleSniperTeam=1, the AI only with
+ // -BattleAreaEliteKeep=n / -BattleAreaSniperKeep=n. They are bought directly, not through the reservation list.
+ if(Grade==1&&!(bAuto?BattleArms::AreaEliteKeep()>0:BattleArms::EliteEnabled()))return Fail(TEXT("Elite platoons disabled (-BattleElite=1)"));
+ if(Grade==2&&!(bAuto?BattleArms::AreaSniperKeep()>0:BattleArms::SniperEnabled()))return Fail(TEXT("Sniper teams disabled (-BattleSniperTeam=1)"));
+ if(FString Why;HireBlock(Team,SquadType,Why,Grade)!=0){LastMessage=Why;return false;}
+ const int32 Cost=Grade==1?BattleArms::EliteCost():Grade==2?BattleArms::SniperCost():SquadType==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(SquadType);
  auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  int32 SID=INDEX_NONE;
- if(!R->SpawnPurchasedSquad(Team,EBattleTraining::Regular,LastMessage,!bAuto,&SID,SquadType))return false;
+ if(!R->SpawnPurchasedSquad(Team,EBattleTraining::Regular,LastMessage,!bAuto,&SID,SquadType,Grade))return false;
  Credits[Team]-=Cost;LastHiredSquadID=SID;
  if((CompositionTeams&(1<<Team))!=0&&CompositionState.IsValidIndex(Team))++CompositionState[Team].Purchased[SquadType];
  if(Area.HireSpent.Num()!=2)Area.HireSpent={0,0};
@@ -119,8 +154,189 @@ bool UBattleMatch::HireAreaSquad(int32 Team,EBattleTraining Training,bool bAuto,
  if(R->SightExperiment.Enabled)R->SightExperiment.HireTimes[Team].Add(Elapsed);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE team=%d squad=%d auto=%d cost=%d credits=%d cancelled_replacements=%d active=%d time=%.1f leader=%s home=%s type=%d"),
   Team,SID,bAuto?1:0,Cost,Credits[Team],Cancelled,ActiveSquads(Team),Elapsed,*R->Position(Store->FindSquad(SID)->LeaderUnitID).ToCompactString(),*AreaHome(Team).ToCompactString(),int32(SquadType));
- LastMessage=SquadType==BattleSquadType::Supply?FString::Printf(TEXT("Supply vehicle deployed / -%d resources"),Cost):SquadType==BattleSquadType::Exo?FString::Printf(TEXT("Exoskeleton soldier deployed / -%d resources"),Cost):SquadType==BattleSquadType::SPGun?FString::Printf(TEXT("Self-propelled gun deployed / -%d resources"),Cost):SquadType==BattleSquadType::Mortar?FString::Printf(TEXT("Mortar team deployed / -%d resources"),Cost):SquadType==BattleSquadType::ArmoredCar?FString::Printf(TEXT("Armoured car deployed / -%d resources"),Cost):SquadType==BattleSquadType::Tank?FString::Printf(TEXT("Tank deployed / -%d resources"),Cost):SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
+ LastMessage=Grade==2?FString::Printf(TEXT("Sniper team deployed / -%d resources"),Cost):Grade==1?FString::Printf(TEXT("Elite platoon deployed / -%d resources"),Cost):SquadType==BattleSquadType::Supply?FString::Printf(TEXT("Supply vehicle deployed / -%d resources"),Cost):SquadType==BattleSquadType::Exo?FString::Printf(TEXT("Exoskeleton soldier deployed / -%d resources"),Cost):SquadType==BattleSquadType::SPGun?FString::Printf(TEXT("Self-propelled gun deployed / -%d resources"),Cost):SquadType==BattleSquadType::Mortar?FString::Printf(TEXT("Mortar team deployed / -%d resources"),Cost):SquadType==BattleSquadType::ArmoredCar?FString::Printf(TEXT("Armoured car deployed / -%d resources"),Cost):SquadType==BattleSquadType::Tank?FString::Printf(TEXT("Tank deployed / -%d resources"),Cost):SquadType==BattleSquadType::AntiTank?FString::Printf(TEXT("Anti-tank team deployed / -%d resources"),Cost):SquadType==BattleSquadType::Scout?FString::Printf(TEXT("Scout pair deployed / -%d resources"),Cost):SquadType==BattleSquadType::Heavy?FString::Printf(TEXT("Heavy infantry deployed / -%d resources"),Cost):FString::Printf(TEXT("New squad deployed / -%d resources"),Cost);
  return true;
+}
+// ---- Purchase reservations (Docs/design-front-strategy.md 5.1) ----
+bool UBattleMatch::HireReserveOn(){static const int32 V=[]{int32 X=1;FParse::Value(FCommandLine::Get(),TEXT("BattleHireReserve="),X);return X;}();return V!=0;}
+static const TCHAR* HireWaitTag(const FString& Why){return Why.Contains(TEXT("resources"))?TEXT("credits"):Why.Contains(TEXT("slot"))?TEXT("slot"):Why.Contains(TEXT("limit"))?TEXT("type"):TEXT("other");}
+TArray<int32> UBattleMatch::HireQueueOf(int32 Team) const
+{
+ TArray<int32> Out;for(int32 I=0;I<Area.HireQueue.Num();++I)if(Area.HireQueue[I].Team==Team)Out.Add(I);
+ return Out;
+}
+int32 UBattleMatch::HireStarved(int32 Team) const
+{
+ for(const int32 I:HireQueueOf(Team))
+ {
+  const auto& Q=Area.HireQueue[I];if(Elapsed-Q.At<=120.f)continue;
+  FString Why;if(HireBlock(Team,uint8(Q.Type),Why)==1&&Why.Contains(TEXT("resources")))return I;
+ }
+ return -1;
+}
+int32 UBattleMatch::ReserveHire(int32 Team,uint8 SquadType,bool bByAI,int32 Dest)
+{
+ LastMessage.Reset();
+ FString Why;const int32 Block=HireBlock(Team,SquadType,Why);
+ if(Block==2){LastMessage=Why;return 0;}
+ const TArray<int32> Mine=HireQueueOf(Team);
+ bool bAhead=false;for(const int32 I:Mine)bAhead|=Area.HireQueue[I].Type==SquadType;
+ if(Block==0&&!bAhead&&HireStarved(Team)<0)
+ {
+  if(!HireAreaSquad(Team,EBattleTraining::Regular,bByAI,SquadType))return 0;
+  ApplyHireDest(Team,LastHiredSquadID,Dest);return 1;
+ }
+ if(Mine.Num()>=HireQueueMax){LastMessage=TEXT("Reservation list full (12)");return 0;}
+ FBattleHireReservation Q;Q.Team=Team;Q.Type=SquadType;Q.Dest=Dest;Q.At=Elapsed;Q.bByAI=bByAI;Area.HireQueue.Add(Q);
+ if(Block==0)Why=bAhead?TEXT("same type ahead"):TEXT("starved reservation ahead");
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HIRE_RESERVE team=%d t=%.1f op=add type=%d dest=%d by=%s wait=%s queue=%d"),Team,Elapsed,int32(SquadType),Dest,bByAI?TEXT("AI"):TEXT("player"),Block==0?TEXT("order"):HireWaitTag(Why),Mine.Num()+1);
+ LastMessage=FString::Printf(TEXT("Reserved (%s)"),*Why);
+ return 2;
+}
+bool UBattleMatch::CancelHire(int32 Team,int32 Index)
+{
+ const TArray<int32> Mine=HireQueueOf(Team);if(Mine.IsEmpty())return false;
+ if(Index<0)Index=Mine.Num()-1;if(!Mine.IsValidIndex(Index))return false;
+ const FBattleHireReservation Q=Area.HireQueue[Mine[Index]];Area.HireQueue.RemoveAt(Mine[Index]);
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HIRE_RESERVE team=%d t=%.1f op=cancel type=%d dest=%d by=%s waited=%.1f queue=%d"),Team,Elapsed,Q.Type,Q.Dest,Q.bByAI?TEXT("AI"):TEXT("player"),Elapsed-Q.At,Mine.Num()-1);
+ return true;
+}
+bool UBattleMatch::MoveHire(int32 Team,int32 Index,int32 Delta)
+{
+ const TArray<int32> Mine=HireQueueOf(Team);if(Mine.IsEmpty())return false;
+ if(Index<0)Index=Mine.Num()-1;
+ const int32 To=FMath::Clamp(Index+Delta,0,Mine.Num()-1);if(!Mine.IsValidIndex(Index)||To==Index)return false;
+ // Rotate the team's entries between the two positions; other teams' entries keep their slots.
+ const int32 Step=To>Index?1:-1;
+ for(int32 I=Index;I!=To;I+=Step)Area.HireQueue.Swap(Mine[I],Mine[I+Step]);
+ return true;
+}
+int32 UBattleMatch::HireDelegate(int32 Team) const
+{
+ static const int32 Level=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleHireDelegate="),X);return FMath::Clamp(X,0,2);}();
+ static const int32 Only=[]{int32 X=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleHireDelegateTeam="),X);return X;}();
+ if(PlayerDelegating(Team))return Area.PlayerHireDelegate; // stage 7: the player's own choice
+ return Only<0||Only==Team?Level:0;
+}
+bool UBattleMatch::PlayerDelegating(int32 Team) const
+{
+ if(Team!=0||!HireReserveOn()||Area.PlayerHireDelegate==0)return false;
+ const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ return R&&!R->SightExperiment.Enabled;
+}
+void UBattleMatch::SetPlayerHiring(int32 Delegate,int32 Reserve,int32 Deny)
+{
+ Area.PlayerHireDelegate=uint8(FMath::Clamp(Delegate,0,2));
+ Area.PlayerHireReserve=FMath::Clamp(Reserve,0,PlayerHireReserveMax);
+ Area.PlayerHireDeny=Deny&((1<<BattleSquadType::Count)-1);
+ // A manual player keeps only the own reservations: the AI's waiting ones are cancelled.
+ if(Area.PlayerHireDelegate==0)for(int32 I=Area.HireQueue.Num()-1;I>=0;--I)if(Area.HireQueue[I].Team==0&&Area.HireQueue[I].bByAI)Area.HireQueue.RemoveAt(I);
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HIRE_DELEGATE_PLAYER t=%.1f level=%d reserve=%d deny=%d"),Elapsed,int32(Area.PlayerHireDelegate),Area.PlayerHireReserve,Area.PlayerHireDeny);
+}
+int32 UBattleMatch::RefillShort(int32 Team) const
+{
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();if(!Store)return 0;
+ const int32 AttackWant=FMath::Clamp(GetDefault<UBattleTuning>()->GroupRifleSquads,2,6);
+ int32 Want=0,Have=0;bool bAttack=false;
+ for(const auto& P:Groups)
+ {
+  const auto& G=P.Value;if(G.Team!=Team||(G.bPlayer&&!PlayerDelegating(Team)))continue;
+  if(G.Kind==1){Want+=G.FrontNeed;Have+=G.Squads.Num();}
+  else if(G.Kind==0&&!G.bFocus2&&!bAttack)
+  {
+   bAttack=true;Want+=AttackWant;
+   for(int32 SID:G.Squads)if(const auto* S=Store->FindSquad(SID))Have+=S->SquadType==BattleSquadType::Rifle;
+  }
+ }
+ if(!bAttack)Want+=AttackWant;
+ for(const auto& P:Store->GetSquads())
+ {
+  const auto& S=P.Value;
+  if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||GroupOf(P.Key)!=INDEX_NONE)continue;
+  if(S.SquadType==BattleSquadType::Rifle||S.SquadType==BattleSquadType::Heavy)++Have;
+ }
+ return Want-Have;
+}
+TArray<int32> UBattleMatch::HireDestChoices(int32 Team) const
+{
+ TArray<int32> Out={-1};
+ if(Team!=0)return Out;
+ if(PlayerRolesOn(0))for(int32 K=0;K<FrontPlanState[0].Sections;++K)Out.Add(K);
+ TArray<int32> IDs;for(const auto& P:Groups)if(P.Value.Team==0&&(P.Value.Kind==1||(P.Value.Kind==0&&P.Value.bPlayer)))IDs.Add(P.Key);
+ IDs.Sort();for(const int32 ID:IDs)Out.Add(HireDestGroup+ID);
+ Out.Add(HireDestReserve);
+ return Out;
+}
+bool UBattleMatch::CycleHireDest(int32 Team,int32 Index)
+{
+ const TArray<int32> Mine=HireQueueOf(Team);if(!Mine.IsValidIndex(Index))return false;
+ int32& Dest=Area.HireQueue[Mine[Index]].Dest;
+ const TArray<int32> Choices=HireDestChoices(Team);
+ const int32 At=Choices.Find(Dest);
+ Dest=Choices[At==INDEX_NONE?0:(At+1)%Choices.Num()];
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HIRE_RESERVE team=%d t=%.1f op=dest index=%d dest=%d"),Team,Elapsed,Index,Dest);
+ return true;
+}
+FString UBattleMatch::HireDestJa(int32 Dest) const
+{
+ if(Dest<0)return TEXT("指定なし");
+ if(Dest==HireDestReserve)return TEXT("予備");
+ if(Dest>=HireDestGroup)
+ {
+  const auto* G=Groups.Find(Dest-HireDestGroup);
+  if(!G)return FString::Printf(TEXT("群%d（なし）"),Dest-HireDestGroup);
+  return G->Kind==1?FString(TEXT("前線軍")):FString::Printf(TEXT("群%d"),G->ID);
+ }
+ return FString::Printf(TEXT("区間%d"),Dest+1);
+}
+void UBattleMatch::ApplyHireDest(int32 Team,int32 SquadID,int32 Dest)
+{
+ // Own team only (the armies of team 0 are the player's); the AI's reservations carry no destination.
+ if(Team!=0||Dest<0||SquadID==INDEX_NONE)return;
+ bool bDone=false;
+ if(Dest==HireDestReserve)bDone=AssignArmy(SquadID,0);
+ else if(Dest>=HireDestGroup)
+ {
+  if(const auto* G=Groups.Find(Dest-HireDestGroup);G&&G->Team==0)bDone=G->Kind==1?AssignArmy(SquadID,1):G->Kind==0?AssignArmy(SquadID,2,G->ID):false;
+ }
+ else if(Dest<BattleSectors::Rows)
+ {
+  bDone=AssignArmy(SquadID,1);
+  if(bDone&&PlayerRolesOn(0))FrontSectionWish.Add(SquadID,Dest);
+ }
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HIRE_DEST team=%d t=%.1f squad=%d dest=%d done=%d"),Team,Elapsed,SquadID,Dest,bDone?1:0);
+}
+void UBattleMatch::UpdateHireQueue()
+{
+ if(!bArea||Area.HireQueue.IsEmpty())return;
+ const int32 Sec=FMath::FloorToInt(Elapsed);if(Sec==HireQueueSecond)return;
+ HireQueueSecond=Sec;
+ for(int32 Team=0;Team<2;++Team)
+ {
+  const int32 Starved=HireStarved(Team);
+  uint32 Seen=0;
+  for(int32 I=0;I<Area.HireQueue.Num();++I)
+  {
+   const FBattleHireReservation Q=Area.HireQueue[I];if(Q.Team!=Team)continue;
+   const uint32 Bit=1u<<FMath::Clamp(Q.Type,0,31);if(Seen&Bit)continue; // the same type keeps its order
+   Seen|=Bit;
+   if(Starved>=0&&I!=Starved)continue;
+   FString Why;const int32 Block=HireBlock(Team,uint8(Q.Type),Why);
+   if(Block==2)
+   {
+    Area.HireQueue.RemoveAt(I--);
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HIRE_RESERVE team=%d t=%.1f op=drop type=%d why=%s"),Team,Elapsed,Q.Type,*Why);
+    continue;
+   }
+   if(Block!=0)continue;
+   Area.HireQueue.RemoveAt(I);
+   if(!HireAreaSquad(Team,EBattleTraining::Regular,Q.bByAI,uint8(Q.Type))){Area.HireQueue.Insert(Q,I);continue;}
+   ++HireQueueBought[Team];HireQueueBoughtType[Team]=Q.Type;HireQueueBoughtByAI[Team]=Q.bByAI;
+   ApplyHireDest(Team,LastHiredSquadID,Q.Dest);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HIRE_RESERVE team=%d t=%.1f op=buy type=%d dest=%d by=%s waited=%.1f squad=%d queue=%d"),Team,Elapsed,Q.Type,Q.Dest,Q.bByAI?TEXT("AI"):TEXT("player"),Elapsed-Q.At,LastHiredSquadID,HireQueueOf(Team).Num());
+   break;
+  }
+ }
 }
 bool UBattleMatch::SetupPhase(){static const int32 V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSetupPhase="),X);return X;}();return V!=0;}
 bool UBattleMatch::OrderSync(){static const int32 V=[]{int32 X=1;FParse::Value(FCommandLine::Get(),TEXT("BattleOrderSync="),X);return X;}();return V!=0;} // default on (user decision 2026-11-22)
@@ -133,11 +349,12 @@ void UBattleMatch::UpdateAreaHiring()
  UpdateIntelPurposes();
  for(int32 Team=0;Team<2;++Team)
  {
-  if(Team==0&&!R->SightExperiment.Enabled)continue; // The player's resources are spent only by the player.
-  if((CompositionTeams&(1<<Team))!=0){UpdateCompositionHiring(Team);continue;}
+  // The player's resources are spent only by the player, or by the AI as far as the player delegated it (stage 7).
+  if(Team==0&&!R->SightExperiment.Enabled&&!PlayerDelegating(0))continue;
+  if((CompositionTeams&(1<<Team))!=0&&!PlayerDelegating(Team)){UpdateCompositionHiring(Team);continue;}
   int32 Pending=0;for(const auto& Q:Area.Replacements)Pending+=Store->Find(Q.Key)->Team==Team;
   // Squad type by the intent's heavy share: heavy infantry while the team's bought heavy squads are below that share of its purchases.
-  FAreaIntent HireIntent=AreaIntent(Team); uint8 Type=BattleSquadType::Rifle;
+  FAreaIntent HireIntent=AreaIntent(Team); uint8 Type=BattleSquadType::Rifle; uint8 HireGrade=0;
   int32 Bought=0,Heavy=0;for(const auto& P:Store->GetSquads())if(P.Value.Team==Team){Bought+=P.Key>StartSquadCount();Heavy+=P.Value.SquadType==BattleSquadType::Heavy;}
   // Subtraction evaluation (Docs/design-subtraction-eval.md, trials default 0): -BattleAreaAllTypes=1 gives BOTH teams the all-types mix
   // (the composition schedule below plus heavy share 0.2, two scout pairs, one exoskeleton soldier, one supply vehicle; command-line
@@ -189,6 +406,12 @@ void UBattleMatch::UpdateAreaHiring()
    // Supply vehicles (trial -BattleAreaSupplyKeep, default AreaSupplyKeep 0; BattleSupplyCar.cpp): the same pacing, after everything else.
    const int32 SupplyWant=FMath::Min(HireIntent.SupplyKeep,Bought/After);
    if(Type==BattleSquadType::Rifle&&SupplyWant>0&&ActiveOfType(Team,BattleSquadType::Supply)<SupplyWant)Type=BattleSquadType::Supply;
+   // Elite platoons (trial -BattleAreaEliteKeep=n, default 0; BattleArms.cpp): the same pacing, in place of a rifle squad.
+   const int32 EliteWant=FMath::Min(BattleArms::AreaEliteKeep(),Bought/After);
+   if(Type==BattleSquadType::Rifle&&EliteWant>0&&ActiveElite(Team)<EliteWant)HireGrade=1;
+   // Sniper teams (trial -BattleAreaSniperKeep=n, default 0): the same pacing, a scout pair of grade 2 in place of a rifle squad.
+   const int32 SniperWant=FMath::Min(BattleArms::AreaSniperKeep(),Bought/After);
+   if(Type==BattleSquadType::Rifle&&HireGrade==0&&SniperWant>0&&ActiveSnipers(Team)<SniperWant){Type=BattleSquadType::Scout;HireGrade=2;}
   }
   // Subtraction evaluation -BattleAreaEnsureTypes=1 (default 0): one of each rarely reached type is bought once (ever, lost ones are
   // not replaced) after the first After purchases, ahead of everything but scouts, and the team saves for it instead of falling back.
@@ -202,8 +425,29 @@ void UBattleMatch::UpdateAreaHiring()
    }
   // Composition trial: an expensive type the team is far from affording (below 60% of its cost) does not hold up the plain purchases.
   if(!bEnsured&&bComposition&&Type!=PlainType&&BattleSquadType::AreaCost(Type)>=20&&Credits[Team]-Pending<FMath::CeilToInt(BattleSquadType::AreaCost(Type)*.6f)+HireIntent.HireReserve)Type=PlainType;
-  const int32 TypeCost=Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
-  if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=BattleTactics::AreaHire().MaxActive)continue;
+  // Stage 6 (-BattleHireDelegate): purchases through the reservation list (see HireDelegate). Elite platoons and sniper teams
+  // (BattleArms.cpp) are not reserved: with the reservation list the AI buys the plain type instead.
+  const int32 Delegate=HireDelegate(Team);
+  if(Delegate>0&&HireGrade>0){HireGrade=0;Type=PlainType;}
+  if(!BattleArms::ValidGrade(Type,HireGrade))HireGrade=0;
+  const int32 TypeCost=HireGrade==1?BattleArms::EliteCost():HireGrade==2?BattleArms::SniperCost():Type==BattleSquadType::Rifle?H.Cost:BattleSquadType::AreaCost(Type);
+  if(Delegate==1)Type=PlainType;
+  // Stage 7: a type the player does not let the AI buy falls back to the plain type (all), or no purchase.
+  bool bDenied=false;
+  if(PlayerDelegating(Team)&&((Area.PlayerHireDeny>>Type)&1)){if(Delegate==2&&!((Area.PlayerHireDeny>>PlainType)&1))Type=PlainType;else bDenied=true;}
+  if(Delegate>0)
+  {
+   const int32 Short=bDenied?0:Delegate==1?RefillShort(Team):1;
+   const TArray<int32> MineQ=HireQueueOf(Team);int32 AIAt=-1;
+   for(int32 K=0;K<MineQ.Num()&&AIAt<0;++K)if(Area.HireQueue[MineQ[K]].bByAI)AIAt=K;
+   if(AIAt>=0)
+   {
+    if(Short>0&&Area.HireQueue[MineQ[AIAt]].Type==Type)continue; // still wanted: it waits
+    CancelHire(Team,AIAt);
+   }
+   if(Short<=0||Credits[Team]-Pending<(PlayerDelegating(Team)?Area.PlayerHireReserve:HireIntent.HireReserve))continue;
+  }
+  else if(Credits[Team]-Pending<TypeCost+HireIntent.HireReserve||ActiveSquads(Team)>=BattleTactics::AreaHire().MaxActive)continue;
   // Pacing (own clock and own purchase history only): spacing between purchases and no purchases near the time limit,
   // where a squad costs score (15 resources for 10 living) and has little time to take a point.
   if(H.Stop>0&&Elapsed>=MatchTimeLimit()-H.Stop)continue;
@@ -215,7 +459,7 @@ void UBattleMatch::UpdateAreaHiring()
   const int32 IntelNeed=!bPurpose&&Type!=BattleSquadType::Scout&&AreaIntelOn(Team)?AreaIntelThreat(Team):-1;
   if(bPurpose&&(Need=AreaHireNeed(Team))<0)continue;
   const FString Message=LastMessage;LastHiredSquadID=INDEX_NONE;
-  if(HireAreaSquad(Team,EBattleTraining::Regular,true,Type)&&bPurpose&&LastHiredSquadID!=INDEX_NONE){Area.HirePurpose.Add(LastHiredSquadID,Need);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE_PURPOSE team=%d squad=%d purpose=%d time=%.1f"),Team,LastHiredSquadID,Need,Elapsed);}
+  if((Delegate>0?ReserveHire(Team,Type,true)==1:HireAreaSquad(Team,EBattleTraining::Regular,true,Type,HireGrade))&&bPurpose&&LastHiredSquadID!=INDEX_NONE){Area.HirePurpose.Add(LastHiredSquadID,Need);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE_PURPOSE team=%d squad=%d purpose=%d time=%.1f"),Team,LastHiredSquadID,Need,Elapsed);}
   else if(IntelNeed>=0&&LastHiredSquadID!=INDEX_NONE&&Store->FindSquad(LastHiredSquadID)){IntelPurpose.Add(LastHiredSquadID,IntelNeed);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_INTEL_HIRE team=%d squad=%d point=%d time=%.1f"),Team,LastHiredSquadID,IntelNeed,Elapsed);}
   // Strategy layer S4 (BattleStrategy.cpp, -BattleStrategy=4): a rifle squad bought while the team has a focus reinforces it; its mission
   // follows the focus when the plan changes (UpdateStrategy).
@@ -317,7 +561,7 @@ void UBattleMatch::UpdateArea(float Dt)
   float& AmmoTime=Area.AmmoTimers.FindOrAdd(SID);AmmoTime+=Step;
   if(AmmoTime>=10)
   {
-   AmmoTime=0;int32 Rounds=0;for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive()){Rounds+=Store->AddReserve(ID,GetDefault<UBattleTuning>()->ReserveAmmo);Store->RefillLauncher(ID);Rounds+=Store->RefillSPGAmmo(ID);}
+   AmmoTime=0;int32 Rounds=0;for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive()){Rounds+=Store->AddReserve(ID,GetDefault<UBattleTuning>()->ReserveAmmo);Store->RefillLauncher(ID);Rounds+=Store->RefillSPGAmmo(ID);Rounds+=Store->RefillArms(ID);}
    if(bPoint&&Rounds>0)UE_LOG(LogFutureBattle,Display,TEXT("AREA_POINT_SUPPLY time=%.0f squad=%d team=%d rounds=%d"),Elapsed,SID,S->Team,Rounds);
    if(bTeamSupply&&Rounds>0){SpendSupply(Car,Rounds);UE_LOG(LogFutureBattle,Display,TEXT("AREA_TEAM_SUPPLY time=%.0f squad=%d team=%d rounds=%d car=%d stock=%d"),Elapsed,SID,S->Team,Rounds,Car,SupplyStockOf(Car));}
   }

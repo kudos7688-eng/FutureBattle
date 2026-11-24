@@ -1,4 +1,5 @@
 #include "BattleController.h"
+#include "BattleArms.h"
 #include "BattleAudio.h"
 #include "BattleEffects.h"
 #include "BattleFXCheck.h"
@@ -14,6 +15,8 @@
 #include "BattleUnit.h"
 #include "BattleGameMode.h"
 #include "BattleMatch.h"
+#include "BattleSectors.h"
+#include "BattleSectorView.h"
 #include "BattlePerception.h"
 #include "BattleNavigation.h"
 #include "Camera/CameraComponent.h"
@@ -37,21 +40,18 @@
 
 FBattleCommandBarLayout FBattleCommandBarLayout::Make(FVector2D View,const UWorld* World,bool bPad)
 {
- static const TCHAR* const KeyNames[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("小隊を購入 [2]"), TEXT("重装歩兵 [3]"), TEXT("偵察組 [4]"), TEXT("対戦車班 [5]"), TEXT("戦車 [6]"), TEXT("装甲車 [7]"), TEXT("迫撃砲班 [8]"), TEXT("自走砲 [9]"), TEXT("外骨格 [0]"), TEXT("補給車 [-]") };
- static const TCHAR* const PadNames[] = { TEXT("移動 [X]"), TEXT("攻撃移動 [Y]"), TEXT("防衛 [RB]"), TEXT("停止 [B]"), TEXT("手動指揮 [十字↑]"), TEXT("AIに委任 [十字↓]"), TEXT("小隊を購入 [十字←]"), TEXT("重装歩兵 [Aでクリック]"), TEXT("偵察組 [Aでクリック]"), TEXT("対戦車班 [Aでクリック]"), TEXT("戦車 [Aでクリック]"), TEXT("装甲車 [Aでクリック]"), TEXT("迫撃砲班 [Aでクリック]"), TEXT("自走砲 [Aでクリック]"), TEXT("外骨格 [Aでクリック]"), TEXT("補給車 [Aでクリック]") };
+ static const TCHAR* const KeyNames[] = { TEXT("移動 [右クリック]"), TEXT("攻撃移動 [T]"), TEXT("防衛 [G]"), TEXT("停止 [H]"), TEXT("手動指揮 [K]"), TEXT("AIに委任 [J]"), TEXT("部隊を購入 [B]"), TEXT("前線を引く") };
+ static const TCHAR* const PadNames[] = { TEXT("移動 [X]"), TEXT("攻撃移動 [Y]"), TEXT("防衛 [RB]"), TEXT("停止 [B]"), TEXT("手動指揮 [十字↑]"), TEXT("AIに委任 [十字↓]"), TEXT("部隊を購入 [十字←]"), TEXT("前線を引く") };
  static_assert(UE_ARRAY_COUNT(KeyNames) == FBattleCommandBarLayout::Count && UE_ARRAY_COUNT(PadNames) == FBattleCommandBarLayout::Count, "one label per command button");
  FBattleCommandBarLayout Layout;
  const float Left=34.f, Right=FMath::Max(Left+1.f,float(View.X)-34.f), Available=Right-Left;
  const bool bSectors=World&&BattleFieldLayout::Of(World).bSectors;
- const bool bGunCost=BattleTactics::ArtilleryPosts()||FCString::Strifind(FCommandLine::Get(),TEXT("BattleAreaSPGCost="))!=nullptr;
  float CursorX=Left, CursorY=0;
  for(int32 Index=0;Index<Count;++Index)
  {
   FString Captions[2]={KeyNames[Index],PadNames[Index]};
   if(bSectors&&(Index==1||Index==2))
   {Captions[0]=Index==1?TEXT("区画制圧 [T]"):TEXT("区画維持 [G]");Captions[1]=Index==1?TEXT("区画制圧 [Y]"):TEXT("区画維持 [RB]");}
-  if(Index==13&&bGunCost)
-  {Captions[0]=FString::Printf(TEXT("自走砲 %d [9]"),BattleSquadType::AreaCost(BattleSquadType::SPGun));Captions[1]=FString::Printf(TEXT("自走砲 %d [A]"),BattleSquadType::AreaCost(BattleSquadType::SPGun));}
   float MaxWidth=0, MaxHeight=0;
   for(const FString& Caption:Captions)
   {float TextWidth=0,TextHeight=0;UCanvas::StrLen(GEngine->GetSmallFont(),Caption,TextWidth,TextHeight,false,nullptr);MaxWidth=FMath::Max(MaxWidth,TextWidth);MaxHeight=FMath::Max(MaxHeight,TextHeight);}
@@ -119,6 +119,7 @@ void ABattleController::SetupInputComponent()
 	{
 		UInputAction* Action = NewObject<UInputAction>(this, Name);
 		Action->ValueType = Type;
+		Action->bTriggerWhenPaused = true; // the game-speed pause (CycleGameSpeed) keeps the camera, orders and menus working
 		Actions.Add(Action);
 		Mapping->MapKey(Action, Key);
 		return Action;
@@ -167,10 +168,13 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("HireSPGun"), EKeys::Nine, &ABattleController::HireSPGun);
 	Button(TEXT("HireExo"), EKeys::Zero, &ABattleController::HireExo);
 	Button(TEXT("HireSupply"), EKeys::Hyphen, &ABattleController::HireSupply);
+	Button(TEXT("CancelReservation"), EKeys::BackSpace, &ABattleController::CancelNewestReservation);
+	Button(TEXT("ReservationToFront"), EKeys::Equals, &ABattleController::NewestReservationToFront);
+	Button(TEXT("PlanPanel"), EKeys::U, &ABattleController::TogglePlanPanel);
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
 	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
 	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
-	Button(TEXT("RequestSupport"), EKeys::B, &ABattleController::RequestSupport);
+	Button(TEXT("BuyKey"), EKeys::B, &ABattleController::BuyKey); // area battle: purchase panel; otherwise the support request
 	Button(TEXT("Reload"), EKeys::R, &ABattleController::Reload);
 	Button(TEXT("ToggleCombat"), EKeys::P, &ABattleController::ToggleCombat);
 	Button(TEXT("GameSpeed"), EKeys::Period, &ABattleController::CycleGameSpeed);
@@ -195,7 +199,7 @@ void ABattleController::Forward(const FInputActionValue& Value)
 		P.X = FMath::Clamp(P.X,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
 	else if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
-		if (Unit->IsAlive()){if(FMath::Abs(Axis)>.01f)GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->CancelCoverAction(Unit->GetUnitID());Unit->AddMovementInput(FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::X), Axis);}
+		if (Unit->IsAlive()){const FVector Way=FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::X);auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(FMath::Abs(Axis)>.01f && !R->IsWallCover(Unit->GetUnitID()))R->CancelCoverAction(Unit->GetUnitID());DirectMoveInput+=Way*Axis;Unit->AddMovementInput(Way, Axis);} // wall cover decides itself in PlayerTick (StepPlayerWallCover)
 }
 
 void ABattleController::Right(const FInputActionValue& Value)
@@ -208,7 +212,7 @@ void ABattleController::Right(const FInputActionValue& Value)
 		P.Y = FMath::Clamp(P.Y,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
 	else if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
-		if (Unit->IsAlive()){if(FMath::Abs(Axis)>.01f)GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->CancelCoverAction(Unit->GetUnitID());Unit->AddMovementInput(FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::Y), Axis);}
+		if (Unit->IsAlive()){const FVector Way=FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::Y);auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(FMath::Abs(Axis)>.01f && !R->IsWallCover(Unit->GetUnitID()))R->CancelCoverAction(Unit->GetUnitID());DirectMoveInput+=Way*Axis;Unit->AddMovementInput(Way, Axis);} // wall cover decides itself in PlayerTick (StepPlayerWallCover)
 }
 
 // Aim / scope: the look speed drops with the magnification, so the picture moves at the same speed on screen.
@@ -235,7 +239,8 @@ void ABattleController::HireTraining(EBattleTraining Training)
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled()) return;
 	// Area battle: key 3 buys heavy infantry (squad type 1); key 2 the rifle squad.
-	if (Match->bArea && Training == EBattleTraining::Veteran) { Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Heavy); ShowNotice(Match->LastMessage); return; }
+	if (Match->bArea && Training == EBattleTraining::Veteran) { BuyArea(BattleSquadType::Heavy); return; }
+	if (Match->bArea && Training == EBattleTraining::Regular && UBattleMatch::HireReserveOn()) { BuyArea(BattleSquadType::Rifle); return; }
 	Match->HireSquad(0, Training); ShowNotice(Match->LastMessage);
 }
 void ABattleController::HireRecruit() { HireTraining(EBattleTraining::Recruit); }
@@ -246,7 +251,183 @@ void ABattleController::HireScout()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Scout); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::Scout);
+}
+// ---- Purchase reservations (Docs/design-front-strategy.md 5.1 and 6; -BattleHireReserve=1, default 0) ----
+static const TCHAR* ReservationTypeJa(int32 Type)
+{
+ static const TCHAR* Names[]={TEXT("小銃小隊"),TEXT("重装歩兵"),TEXT("斥候"),TEXT("対戦車班"),TEXT("戦車"),TEXT("装甲車"),TEXT("迫撃砲班"),TEXT("自走砲"),TEXT("強化外骨格兵"),TEXT("補給車")};
+ return Type>=0&&Type<int32(UE_ARRAY_COUNT(Names))?Names[Type]:TEXT("部隊");
+}
+void ABattleController::BuyArea(uint8 SquadType,uint8 Grade)
+{
+	if (Grade == 1) { HireElite(); return; }
+	if (Grade == 2) { HireSniper(); return; }
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!UBattleMatch::HireReserveOn()) { Match->HireAreaSquad(0, EBattleTraining::Regular, false, SquadType); ShowNotice(Match->LastMessage); return; }
+	const int32 Result = Match->ReserveHire(0, SquadType, false);
+	if (Result != 2) { ShowNotice(Match->LastMessage); return; }
+	// Why it waits (resources short by n, a limit, the same type ahead ...) from ReserveHire's message; it is bought automatically later.
+	ShowNotice(FString::Printf(TEXT("予約しました：%s（%s）／ 予約 %d/%d ／ 買えるようになると自動で配備 ／ 取り消しは購入画面で右クリック・Backspace"), ReservationTypeJa(SquadType), *FBattleBuyPanelLayout::WaitText(Match, SquadType, Match->LastMessage), Match->HireQueueOf(0).Num(), UBattleMatch::HireQueueMax));
+}
+void ABattleController::CancelNewestReservation()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!UBattleMatch::HireReserveOn() || !bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	const TArray<int32> Mine = Match->HireQueueOf(0);
+	if (Mine.IsEmpty()) { ShowNotice(TEXT("取り消す予約はありません")); return; }
+	const int32 Type = Match->Area.HireQueue[Mine.Last()].Type;
+	Match->CancelHire(0, -1);
+	ShowNotice(FString::Printf(TEXT("予約を取り消しました：%s ／ 予約 %d/%d"), ReservationTypeJa(Type), Mine.Num() - 1, UBattleMatch::HireQueueMax));
+}
+void ABattleController::NewestReservationToFront()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!UBattleMatch::HireReserveOn() || !bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	const TArray<int32> Mine = Match->HireQueueOf(0);
+	if (Mine.Num() < 2) { ShowNotice(TEXT("並べ替える予約がありません")); return; }
+	const int32 Type = Match->Area.HireQueue[Mine.Last()].Type;
+	Match->MoveHire(0, -1, -Mine.Num());
+	ShowNotice(FString::Printf(TEXT("予約を先頭へ移しました：%s"), ReservationTypeJa(Type)));
+}
+// ---- Plan panel (front plan stage 7, Docs/design-front-strategy.md 6) ----
+static const TCHAR* PlanTypeJa(int32 Type)
+{
+ static const TCHAR* Names[]={TEXT("小銃"),TEXT("重装"),TEXT("斥候"),TEXT("対戦車"),TEXT("戦車"),TEXT("装甲車"),TEXT("迫撃砲"),TEXT("自走砲"),TEXT("外骨格"),TEXT("補給車")};
+ return Type>=0&&Type<UE_ARRAY_COUNT(Names)?Names[Type]:TEXT("?");
+}
+static const TCHAR* PlanRoleJa(TCHAR Role)
+{
+ return Role==TEXT('F')?TEXT("重点"):Role==TEXT('H')?TEXT("保持"):Role==TEXT('R')?TEXT("下がってよい"):TEXT("保つ");
+}
+FBattlePlanPanelLayout FBattlePlanPanelLayout::Make(FVector2D View,const UWorld* World)
+{
+ FBattlePlanPanelLayout L;
+ const auto* M=World?World->GetSubsystem<UBattleMatch>():nullptr;
+ if(!M||!M->bArea||(!M->PlayerRolesOn(0)&&!UBattleMatch::HireReserveOn()))return L;
+ L.Size.X=FMath::Min(620.f,float(View.X)-32.f);L.Origin=FVector2D(FMath::Max(16.f,(float(View.X)-L.Size.X)*.5f),230.f);
+ constexpr float Row=24.f;
+ const float X0=L.Origin.X+12,Right=L.Origin.X+L.Size.X-12;float Y=L.Origin.Y+8;
+ auto Text=[&](FString S,float X,uint8 Tone){FItem I;I.Origin=FVector2D(X,Y+3);I.Text=MoveTemp(S);I.Tone=Tone;L.Items.Add(MoveTemp(I));};
+ auto Btn=[&](uint8 Kind,int32 Index,FString S,float X,float Width,uint8 Tone){FItem I;I.Origin=FVector2D(X,Y);I.Size=FVector2D(Width,Row-3);I.Kind=Kind;I.Index=Index;I.Text=MoveTemp(S);I.Tone=Tone;L.Items.Add(MoveTemp(I));};
+ Text(TEXT("作戦方針 ／ U で閉じる"),X0,4);Btn(8,0,TEXT("×"),Right-26,26,0);Y+=Row+4;
+ if(M->PlayerRolesOn(0))
+ {
+  // Sections of the own front line: where (the line's sector names in the first and last row), the observed points inside and
+  // ahead, the role now (the player's or the AI's) and the player's choice as a button.
+  const auto& P=M->FrontPlanState[0];
+  Text(TEXT("前線の区間：右のボタンで役割を切り替え（指定の無い区間は AI が決める）"),X0,0);Y+=Row;
+  if(P.Sections<=0){Text(TEXT("まだありません（戦闘が始まると決まる）"),X0+8,5);Y+=Row;}
+  for(int32 K=0;K<P.Sections;++K)
+  {
+   int32 First=-1,Last=-1;for(int32 R=0;R<P.SectionOfRow.Num();++R)if(P.SectionOfRow[R]==K){if(First<0)First=R;Last=R;}
+   FString Where;
+   if(First>=0&&M->FrontLine[0].Num()==BattleSectors::Rows)
+    Where=FString::Printf(TEXT("%s〜%s"),*BattleSectorView::SectorName(M->FrontCell(0,M->FrontLine[0][First],First)),*BattleSectorView::SectorName(M->FrontCell(0,M->FrontLine[0][Last],Last)));
+   FString Own,Ahead;
+   for(int32 I=0;I<M->Objectives.Num()&&I<32;++I)
+   {
+    if(P.OwnMask.IsValidIndex(K)&&((P.OwnMask[K]>>I)&1u))Own.AppendChar(TCHAR('A'+I));
+    if(P.AheadMask.IsValidIndex(K)&&((P.AheadMask[K]>>I)&1u))Ahead.AppendChar(TCHAR('A'+I));
+   }
+   Text(FString::Printf(TEXT("区間%d %s ／ 自軍の拠点 %s ／ 前の拠点 %s ／ 今：%s"),K+1,*Where,Own.IsEmpty()?TEXT("なし"):*Own,Ahead.IsEmpty()?TEXT("なし"):*Ahead,
+    PlanRoleJa(P.Role.IsValidIndex(K)?P.Role[K]:TEXT('K'))),X0+8,0);
+   const uint8 Pick=M->PlayerSectionRole(K);
+   Btn(1,K,FString::Printf(TEXT("指定：%s"),UBattleMatch::SectionRoleJa(Pick)),Right-150,150,Pick?3:0);
+   Y+=Row;
+  }
+  Y+=4;
+  // The player's attack groups: a delegated group (J) with the switch on goes for the focus; manual command keeps the player's orders.
+  TArray<int32> Own;for(const auto& G:M->Groups)if(G.Value.Team==0&&G.Value.bPlayer&&G.Value.Kind==0)Own.Add(G.Key);
+  Own.Sort();
+  if(!Own.IsEmpty()){Text(TEXT("攻撃群：重点への連動（委任している群だけが重点へ向かう）"),X0,0);Y+=Row;}
+  for(const int32 ID:Own)
+  {
+   const auto& G=M->Groups[ID];
+   const bool bAI=M->GroupAIRun(G);const int32 F=M->GroupFocusPoint(G);
+   Text(FString::Printf(TEXT("群%d ／ %s ／ 目標 %s%s"),ID,bAI?TEXT("委任"):TEXT("手動指揮"),M->Objectives.IsValidIndex(G.Objective)?*FString::Printf(TEXT("拠点%c"),TCHAR('A'+G.Objective)):TEXT("なし"),
+    M->PlayerGroupFollowsFocus(G)&&M->Objectives.IsValidIndex(F)?*FString::Printf(TEXT(" ／ 重点 拠点%c"),TCHAR('A'+F)):TEXT("")),X0+8,0);
+   Btn(10,ID,G.bFollowFocus?TEXT("重点に連動する"):TEXT("重点に連動しない"),Right-150,150,G.bFollowFocus?3:0);
+   Y+=Row;
+  }
+  if(!Own.IsEmpty())Y+=4;
+ }
+ if(UBattleMatch::HireReserveOn())
+ {
+  const TArray<int32> Mine=M->HireQueueOf(0);
+  Text(FString::Printf(TEXT("購入予約 %d/%d（購入キーで追加 ／ 行き先は押して切り替え ／ ↑ 一つ前へ ／ × 取り消し）"),Mine.Num(),UBattleMatch::HireQueueMax),X0,0);Y+=Row;
+  for(int32 K=0;K<Mine.Num();++K)
+  {
+   const auto& Q=M->Area.HireQueue[Mine[K]];FString Why;const int32 B=M->HireBlock(0,uint8(Q.Type),Why);
+   const TCHAR* Wait=B==0?TEXT("順番待ち"):Why.Contains(TEXT("resources"))?TEXT("資源待ち"):Why.Contains(TEXT("slot"))?TEXT("小隊の上限待ち"):TEXT("上限待ち");
+   Text(FString::Printf(TEXT("%d. %s ／ %s ／ %.0f秒%s"),K+1,PlanTypeJa(Q.Type),Wait,M->Elapsed-Q.At,Q.bByAI?TEXT(" ／ AIの予約"):TEXT("")),X0+8,0);
+   Btn(9,K,FString::Printf(TEXT("行き先：%s"),*M->HireDestJa(Q.Dest)),Right-200,132,Q.Dest>=0?3:0);
+   if(K>0)Btn(2,K,TEXT("↑"),Right-62,28,0);
+   Btn(3,K,TEXT("×"),Right-28,28,0);
+   Y+=Row;
+  }
+  Y+=4;
+  static const TCHAR* DelegateJa[]={TEXT("手動"),TEXT("補充だけ委任"),TEXT("全部委任")};
+  const int32 D=FMath::Min<int32>(M->Area.PlayerHireDelegate,2);
+  Text(TEXT("雇用の委任"),X0,0);Btn(4,0,DelegateJa[D],X0+100,140,D?3:0);
+  Text(TEXT("AI が残す資源"),X0+270,0);Btn(5,0,TEXT("−"),X0+390,26,0);Text(FString::Printf(TEXT("%d"),M->Area.PlayerHireReserve),X0+424,0);Btn(6,0,TEXT("＋"),X0+470,26,0);
+  Y+=Row;
+  Text(TEXT("委任のとき AI が買ってよい兵種（押すと切り替え）"),X0,5);Y+=Row;
+  float BX=X0;
+  for(int32 T=0;T<BattleSquadType::Count;++T)
+  {
+   if(BX+56>Right){BX=X0;Y+=Row;}
+   Btn(7,T,PlanTypeJa(T),BX,54,((M->Area.PlayerHireDeny>>T)&1)?2:1);BX+=58;
+  }
+  Y+=Row;
+ }
+ L.Size.Y=Y-L.Origin.Y+6;
+ return L;
+}
+void ABattleController::TogglePlanPanel()
+{
+ auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ if(!bTactical||!Match->IsEnabled()||!Match->bArea)return;
+ if(!bPlanPanel&&!Match->PlayerRolesOn(0)&&!UBattleMatch::HireReserveOn())
+ {ShowNotice(TEXT("作戦方針は、前線の区間の指定（試験切替）か購入予約（試験切替）が有効なときに使えます"));return;}
+ bPlanPanel=!bPlanPanel;
+ if(bPlanPanel)bBuyPanel=false; // one panel at a time
+}
+bool ABattleController::PlanPanelInput(const FInputKeyEventArgs& Params)
+{
+ const bool bMouse=Params.Key==EKeys::LeftMouseButton||Params.Key==EKeys::RightMouseButton||Params.Key==EKeys::MouseScrollUp||Params.Key==EKeys::MouseScrollDown;
+ if(!bMouse)return false;
+ if(Params.Key==EKeys::LeftMouseButton&&Params.Event==IE_Released&&bPlanPress){bPlanPress=false;bTriggerHeld=false;return true;}
+ if(!bPlanPanel)return false;
+ FVector2D P;int32 ViewW,ViewH;GetViewportSize(ViewW,ViewH);
+ if(!GetPointerPosition(P))return false;
+ const auto L=FBattlePlanPanelLayout::Make(FVector2D(ViewW,ViewH),GetWorld());
+ if(!L.Contains(P))return false;
+ if(Params.Key!=EKeys::LeftMouseButton||Params.Event!=IE_Pressed)return true;
+ bPlanPress=true;bTriggerHeld=false;
+ const int32 Hit=L.ItemAt(P);if(Hit==INDEX_NONE)return true;
+ auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();const auto& It=L.Items[Hit];
+ const int32 D=Match->Area.PlayerHireDelegate,Reserve=Match->Area.PlayerHireReserve,Deny=Match->Area.PlayerHireDeny;
+ switch(It.Kind)
+ {
+ case 1: Match->CyclePlayerSectionRole(It.Index);ShowNotice(Match->LastMessage);break;
+ case 2: Match->MoveHire(0,It.Index,-1);break;
+ case 3: Match->CancelHire(0,It.Index);break;
+ case 4:
+  Match->SetPlayerHiring((D+1)%3,Reserve,Deny);
+  ShowNotice(Match->Area.PlayerHireDelegate==0?TEXT("雇用：手動（AI は買わない）"):Match->Area.PlayerHireDelegate==1?TEXT("雇用：補充だけ委任（足りない小銃・重装を AI が予約）"):TEXT("雇用：全部委任（兵種も AI が決めて予約）"));
+  break;
+ case 5: case 6: Match->SetPlayerHiring(D,Reserve+(It.Kind==6?1:-1)*UBattleMatch::PlayerHireReserveStep,Deny);break;
+ case 7: Match->SetPlayerHiring(D,Reserve,Deny^(1<<It.Index));break;
+ case 8: bPlanPanel=false;break;
+ case 9: Match->CycleHireDest(0,It.Index);break;
+ case 10:
+  if(const auto* G=Match->Groups.Find(It.Index);G&&Match->SetGroupFollowFocus(It.Index,!G->bFollowFocus))
+   ShowNotice(FString::Printf(TEXT("群%d：%s"),It.Index,Match->Groups[It.Index].bFollowFocus?TEXT("委任中は重点へ向かう"):TEXT("重点に連動しない（委任中は近い拠点から攻める）")));
+  break;
+ default: break;
+ }
+ return true;
 }
 void ABattleController::StartMatch()
 {
@@ -475,6 +656,7 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
  if(Params.Key.IsGamepadKey()) bGamepadActive=true;
  else if(Params.Key.IsMouseButton()||!Params.Key.IsAnalog()) bGamepadActive=false;
  if(HandleGamepadMenu(Params))return true;
+ if(HandleBuyPanelPad(Params))return true;
  FInputKeyEventArgs Logical=Params;
  if(Params.Key.IsGamepadKey())
  {
@@ -528,7 +710,7 @@ void ABattleController::CancelPlayerInput(bool bGamepadOnly)
  if(!bGamepadOnly||Released.Contains(EKeys::SpaceBar))
   if(auto* Controlled=Cast<ABattleUnit>(GetPawn()))Controlled->StopJumping();
  if(!bGamepadOnly||Released.Contains(EKeys::LeftMouseButton))
- {bTriggerHeld=false;DelegationPress=INDEX_NONE;bSquadListPress=false;bMinimapPress=false;PressedSquadID=INDEX_NONE;}
+ {bTriggerHeld=false;DelegationPress=INDEX_NONE;bSquadListPress=false;bMinimapPress=false;bBuyPress=false;PressedSquadID=INDEX_NONE;}
  if(!bGamepadOnly||Released.Contains(EKeys::RightMouseButton))
  {bAimHeld=false;bPathDraw=false;DrawnPath.Reset();DrawnLength=0;}
 }
@@ -541,14 +723,14 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
  { bAimHeld=Params.Event==IE_Pressed; return true; }
  if(!bTactical && bAimHeld && (Params.Key==EKeys::MouseScrollUp||Params.Key==EKeys::MouseScrollDown))
  { if(Params.Event==IE_Pressed) AimLevel=FMath::Clamp(AimLevel+(Params.Key==EKeys::MouseScrollUp?1:-1),1,3); return true; }
- // Stances (map E): X cycles stand -> crouch -> prone for the directly controlled soldier.
+ // Stances: X cycles stand -> crouch -> prone for the directly controlled soldier, on every map (the AI uses stances on map E).
  if(!bTactical && Params.Key==EKeys::X && Params.Event==IE_Pressed)
   if(auto* U=Cast<ABattleUnit>(GetPawn()))
-   if(auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();R->IsEnabled()&&BattleStance::Enabled(GetWorld()))
+   if(auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();R->IsEnabled())
    {
     const uint8 Next=(R->StanceOf(U->GetUnitID())+1)%3;
-    if(R->SetStance(U->GetUnitID(),Next,GetWorld()->GetTimeSeconds()))ShowNotice(Next==BattleStance::Prone?TEXT("PRONE / X TO STAND"):Next==BattleStance::Crouch?TEXT("CROUCHED / X FOR PRONE"):TEXT("STANDING / X TO CROUCH"));
-    else ShowNotice(TEXT("CHANGING STANCE")); // the last change still takes time (0.5 s, 1.2 s to or from prone)
+    if(R->SetStance(U->GetUnitID(),Next,GetWorld()->GetTimeSeconds()))ShowNotice(Next==BattleStance::Prone?TEXT("伏せ（X で立つ）"):Next==BattleStance::Crouch?TEXT("しゃがみ（X で伏せる）"):TEXT("立ち（X でしゃがむ）"));
+    else ShowNotice(TEXT("姿勢を変えています")); // the last change still takes time (0.5 s, 1.2 s to or from prone)
     return true;
    }
  // F / LB swaps the hand and back mounts. Primary fire uses the equipped weapon.
@@ -559,16 +741,48 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
    ShowNotice(U->GetState()->bLauncherSelected ? TEXT("LAUNCHER EQUIPPED") : TEXT("RIFLE EQUIPPED"));
    return true;
   }
+ // Infantry arms (BattleArms.cpp). F / LB also draws or puts away the pistol of a soldier who carries one.
+ if(!bTactical && Params.Key==EKeys::F && Params.Event==IE_Pressed)
+  if(auto* U=Cast<ABattleUnit>(GetPawn());U && GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->ToggleSidearm(U->GetUnitID()))
+  { ShowNotice(U->GetState()->bSidearmSelected?TEXT("拳銃を構えた（F で主武器）"):TEXT("主武器に戻した（F で拳銃）")); return true; }
+ // G / RB: throw a hand grenade at the point under the crosshair (at most the throw distance). A soldier with no grenade outside the
+ // grenade trial leaves G to its other use (ChooseDefend: pick / send a soldier).
+ if(!bTactical && Params.Key==EKeys::G && Params.Event==IE_Pressed)
+  if(auto* U=Cast<ABattleUnit>(GetPawn());U && U->GetState() && (U->GetState()->Grenades>0 || BattleArms::GrenadeCount()>0))
+  {
+   const auto* S=U->GetState();
+   if(!S||S->Grenades<=0){ShowNotice(TEXT("手りゅう弾がない"));return true;}
+   FVector Eye;FRotator View;GetPlayerViewPoint(Eye,View);
+   const FVector Far=Eye+View.Vector()*BattleArms::Grenade().MaxRange*1.2f;
+   FHitResult Hit;FCollisionQueryParams Query(SCENE_QUERY_STAT(BattleGrenadeAim),false,U);
+   const FVector Point=GetWorld()->LineTraceSingleByChannel(Hit,Eye,Far,ECC_Visibility,Query)?FVector(Hit.ImpactPoint):Far;
+   const bool bThrown=GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->ThrowGrenade(U->GetUnitID(),Point,GetWorld()->GetTimeSeconds(),true);
+   ShowNotice(bThrown?FString::Printf(TEXT("手りゅう弾を投げた（残り %d）"),U->GetState()->Grenades):FString(TEXT("投げられない（障害物か待ち時間）")));
+   return true;
+  }
+ // V / right stick: strike the enemy in front within reach (-BattleMelee=1, or a soldier of an elite platoon); otherwise V keeps
+ // its other use.
+ if(!bTactical && Params.Key==EKeys::V && Params.Event==IE_Pressed)
+  if(auto* U=Cast<ABattleUnit>(GetPawn());U && U->GetState() && (BattleArms::MeleeEnabled() || U->GetState()->Kit!=0))
+  {
+   if(!GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->MeleeStrike(U->GetUnitID(),GetWorld()->GetTimeSeconds(),true))ShowNotice(TEXT("届く所に敵がいない"));
+   return true;
+  }
  if(!bTactical && Params.Key==EKeys::C && Params.Event==IE_Pressed)
  {
   if(auto* U=Cast<ABattleUnit>(GetPawn()))
   {
    auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
    if(U->GetState()->CoverPhase){R->CancelCoverAction(U->GetUnitID());ShowNotice(TEXT("COVER RELEASED"));}
-   else ShowNotice(R->RequestCoverAction(U->GetUnitID(),U->GetActorLocation()+GetControlRotation().Vector()*5000)?(BattleBlindFire::PlayerEnabled()?TEXT("COVER / FIRE = BLIND FIRE / AIM + FIRE = PEEK / C OR MOVE TO RELEASE"):TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE")):TEXT("NO NEARBY COVER WITH SAFE PEEK"));
+   // The wall in front first (wall cover, BattleWallCover.cpp), then the nearby cover places as before.
+   else if(R->TryWallCover(U->GetUnitID(),GetControlRotation().Vector(),GetWorld()->GetTimeSeconds()))ShowWallCoverNotice(U->GetUnitID());
+   else ShowNotice(R->RequestCoverAction(U->GetUnitID(),U->GetActorLocation()+GetControlRotation().Vector()*5000)?(BattleBlindFire::PlayerEnabled()?TEXT("COVER / FIRE = BLIND FIRE / AIM + FIRE = PEEK / C OR MOVE TO RELEASE"):TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE")):
+    UBattleLeaderRuntime::PlayerWallCoverEnabled()?TEXT("近くに遮蔽がない（壁に向かって歩くと隠れる）"):TEXT("NO NEARBY COVER WITH SAFE PEEK"));
    return true;
   }
  }
+ if(bTactical&&PlanPanelInput(Params))return true;
+ if(bTactical&&BuyPanelInput(Params))return true;
 	FVector2D Pointer;
  // The squad list is drawn after delegation, so its whole panel owns the overlap.
 	const bool OverDelegation = GetPointerPosition(Pointer) && !SquadPanelAtPointer() && DelegationPanelAt(Pointer);
@@ -951,6 +1165,17 @@ void ABattleController::ToggleCombat()
 	}
 }
 void ABattleController::ShowNotice(const FString& Text) { Notice = Text; NoticeUntil = GetWorld()->GetTimeSeconds() + 3.; }
+void ABattleController::ShowWallCoverNotice(int32 UnitID)
+{
+ const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(UnitID);
+ if(!U || !R->IsWallCover(UnitID))return;
+ // Low wall: the peek point is the anchor (stand up over it). High wall: an edge to lean out past, or none.
+ const bool bLow=FVector::Dist2D(U->CoverAnchor,U->CoverPeek)<1.;
+ const bool bEdge=!bLow && FVector::Dist2D(U->CoverAnchor,U->CoverPeek)<200.;
+ ShowNotice(bLow?TEXT("壁の陰にしゃがんだ（構える：立って撃つ／撃つ：壁越し射撃／離れる・C：出る）"):
+  bEdge?TEXT("壁の角に付いた（構える：角から身を出す／撃つ：壁越し射撃／離れる・C：出る）"):TEXT("壁に付いた（撃つと遮蔽を出る／離れる・C：出る）"));
+}
 void ABattleController::BattleVerify() { if (ABattleGameMode* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>()) Mode->RunSmokeTest(); }
 
 void ABattleController::PlayerTick(float DeltaTime)
@@ -961,6 +1186,7 @@ void ABattleController::PlayerTick(float DeltaTime)
 	UpdateGamepad(DeltaTime);
 	UpdatePathDraw();
 	UpdateVault(DeltaTime);
+	UpdateBuyPanel();
 	// Shift + moving the pointer over the squad list adds every squad passed over to the selection (user request 2026-11-21).
 	if (bTactical && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift)) && SquadPanelAtPointer())
 	{
@@ -975,7 +1201,13 @@ void ABattleController::PlayerTick(float DeltaTime)
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
 	{
 		Unit->SetAimLevel(bAimHeld && Unit->IsAlive() ? AimLevel : 0);
-		Unit->SetSprinting(!bAimHeld && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift) || IsInputKeyDown(EKeys::Gamepad_LeftThumbstick)));
+		const bool bSprintKey = !bAimHeld && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift) || IsInputKeyDown(EKeys::Gamepad_LeftThumbstick));
+		Unit->SetSprinting(bSprintKey);
+		// Wall cover (BattleWallCover.cpp, user 11-24): pressing against a wall takes cover there; moving off it leaves.
+		if (Unit->IsAlive() && !bTactical)
+			if (auto* R = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); R->IsEnabled() && R->StepPlayerWallCover(Unit->GetUnitID(), DirectMoveInput, bAimHeld, bSprintKey, DeltaTime, GetWorld()->GetTimeSeconds()) == 1)
+				ShowWallCoverNotice(Unit->GetUnitID());
+		DirectMoveInput = FVector::ZeroVector;
 		if (Unit->IsAlive()) UpdatePlayerAmmo(Unit);
 		if (!Unit->IsAlive()) { if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled()) OnLeaderUnitDied(Unit->GetUnitID()); else { EnterTactical(); ShowNotice(TEXT("UNIT DOWN / select another ally")); } }
 		else if (bTriggerHeld)
@@ -1090,15 +1322,22 @@ void ABattleController::CycleGameSpeed()
 {
 	if (GetNetMode() != NM_Standalone) { ShowNotice(TEXT("Game speed: standalone only")); return; }
 	if (!bTactical) { ShowNotice(TEXT("Game speed: tactical view only (direct control runs at x1)")); return; }
-	GameSpeed = GameSpeed == 1 ? 2 : GameSpeed == 2 ? 4 : 1;
+	// x1 -> x2 -> x4 -> paused (0) -> x1 (user request 2026-11-24: a pause inside the speed steps).
+	GameSpeed = GameSpeed == 1 ? 2 : GameSpeed == 2 ? 4 : GameSpeed == 4 ? 0 : 1;
 	ApplyGameSpeed();
-	ShowNotice(FString::Printf(TEXT("GAME SPEED x%d [.]"), GameSpeed));
+	ShowNotice(GameSpeed == 0 ? FString(TEXT("GAME PAUSED [.]")) : FString::Printf(TEXT("GAME SPEED x%d [.]"), GameSpeed));
 }
 
 void ABattleController::ApplyGameSpeed()
 {
 	// Simulation steps scale with the world delta, so AI, movement and timers all run faster together.
-	if (GetNetMode() == NM_Standalone) UGameplayStatics::SetGlobalTimeDilation(GetWorld(), bTactical ? float(GameSpeed) : 1.f);
+	if (GetNetMode() != NM_Standalone) return;
+	// Speed 0 is a real game pause: the world stops, the controller keeps its full tick (camera, selection, orders, gamepad).
+	// Direct control always runs at x1, so taking a soldier lifts the pause; returning to the tactical view pauses again.
+	const bool bPause = bTactical && GameSpeed == 0;
+	bShouldPerformFullTickWhenPaused = true;
+	UGameplayStatics::SetGlobalTimeDilation(GetWorld(), bTactical && GameSpeed > 0 ? float(GameSpeed) : 1.f);
+	if (UGameplayStatics::IsGamePaused(GetWorld()) != bPause) UGameplayStatics::SetGamePaused(GetWorld(), bPause);
 }
 
 // ---- Notification log (command UI). Only what the player's side observes: own home HP, observed point owners, own squads,
@@ -1295,16 +1534,14 @@ void ABattleController::PressCommandButton(int32 Index)
  case 3: HoldSelected(); break;
  case 4: TakeCommandSelected(); break;
  case 5: DelegateSelected(); break;
- case 6: HireRegular(); break;
- case 7: HireVeteran(); break; // area battle: heavy infantry
- case 8: HireScout(); break; // area battle: scout pair
- case 9: HireAntiTank(); break; // area battle: anti-tank team
- case 10: HireTank(); break; // area battle: tank
- case 11: HireArmoredCar(); break; // area battle: armoured car
- case 12: HireMortar(); break; // area battle: mortar team
- case 13: HireSPGun(); break; // area battle: self-propelled gun
- case 14: HireExo(); break; // area battle: armoured exoskeleton soldier
- case 15: HireSupply(); break; // area battle: supply vehicle
+ case 6: { auto* Match=GetWorld()->GetSubsystem<UBattleMatch>(); if(Match->bArea) ToggleBuyPanel(); else HireRegular(); } break; // purchase panel (the old match: a squad)
+ // The next right drag draws the front line, without Ctrl (BattlePlayerPath.cpp); a second press takes it back.
+ case 7:
+  if(!BattleFieldLayout::Of(GetWorld()).bSectors){ShowNotice(TEXT("前線は区画のあるマップだけです"));break;}
+  bFrontDrawArmed=!bFrontDrawArmed;
+  ShowNotice(bFrontDrawArmed?TEXT("前線：右ドラッグで左右に引く／右クリックだけで前線軍に任せる"):TEXT("前線を引くのをやめました"));
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_INPUT FrontDrawArmed=%d"),bFrontDrawArmed?1:0);
+  break;
  default: break;
  }
 }
@@ -1370,14 +1607,16 @@ FKey ABattleController::GamepadToKey(const FKey& Key) const
   if(Key==EKeys::Gamepad_Special_Left) return EKeys::E;                      // View: control the selected leader
   if(Key==EKeys::Gamepad_DPad_Up) return EKeys::K;                           // manual command
   if(Key==EKeys::Gamepad_DPad_Down) return EKeys::J;                         // delegate to AI
-  if(Key==EKeys::Gamepad_DPad_Left) return EKeys::Two;                       // buy a squad
+  if(Key==EKeys::Gamepad_DPad_Left) return EKeys::B;                         // purchase panel (old match: support request)
   if(Key==EKeys::Gamepad_DPad_Right) return EKeys::Period;                   // game speed
   if(Key==EKeys::Gamepad_RightThumbstick) return EKeys::Enter;               // start the match
  }
  else
  {
   if(Key==EKeys::Gamepad_RightTrigger) return EKeys::LeftMouseButton;        // RT: fire
-  if(Key==EKeys::Gamepad_LeftShoulder) return EKeys::F;                      // LB: exoskeleton weapon swap
+  if(Key==EKeys::Gamepad_LeftShoulder) return EKeys::F;                      // LB: exoskeleton weapon swap / pistol
+  if(Key==EKeys::Gamepad_RightShoulder) return EKeys::G;                     // RB: hand grenade (BattleArms.cpp)
+  if(Key==EKeys::Gamepad_RightThumbstick) return EKeys::V;                   // right stick: melee strike
   if(Key==EKeys::Gamepad_LeftTrigger) return EKeys::RightMouseButton;        // LT: aim (held)
   if(Key==EKeys::Gamepad_DPad_Up) return EKeys::MouseScrollUp;               // while aiming: more magnification
   if(Key==EKeys::Gamepad_DPad_Down) return EKeys::MouseScrollDown;           // while aiming: less
@@ -1453,47 +1692,63 @@ void ABattleController::HireAntiTank()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::AntiTank); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::AntiTank);
 }
 // Area battle: key 6 buys a tank (squad type 4, at most AreaTankLimit per team).
 void ABattleController::HireTank()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Tank); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::Tank);
 }
 // Area battle: key 7 buys an armoured car (squad type 5, at most AreaACLimit per team).
 void ABattleController::HireArmoredCar()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::ArmoredCar); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::ArmoredCar);
 }
 // Area battle: key 8 buys a mortar team (squad type 6, at most AreaMortarLimit per team).
 void ABattleController::HireMortar()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Mortar); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::Mortar);
+}
+// Area battle: the purchase panel's elite platoon row buys an elite platoon (a rifle squad with roles; -BattleElite=1, cost BattleArms::EliteCost; BattleArms.cpp).
+void ABattleController::HireElite()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Rifle, 1);
+	ShowNotice(Match->LastMessage.StartsWith(TEXT("Elite platoon deployed")) ? FString::Printf(TEXT("精鋭小隊を雇った（-%d 資源）"), BattleArms::EliteCost()) : Match->LastMessage);
+}
+// Area battle: the purchase panel's sniper team row buys a sniper team (a scout pair: sniper and spotter; -BattleSniperTeam=1, cost BattleArms::SniperCost).
+void ABattleController::HireSniper()
+{
+	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
+	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
+	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Scout, 2);
+	ShowNotice(Match->LastMessage.StartsWith(TEXT("Sniper team deployed")) ? FString::Printf(TEXT("狙撃班を雇った（-%d 資源）"), BattleArms::SniperCost()) : Match->LastMessage);
 }
 // Area battle: the - key buys a supply vehicle (squad type 9, at most AreaSupplyLimit per team; BattleSupplyCar.cpp).
 void ABattleController::HireSupply()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Supply); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::Supply);
 }
 // Area battle: key 0 buys an armoured exoskeleton soldier (squad type 8, at most AreaExoLimit per team).
 void ABattleController::HireExo()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::Exo); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::Exo);
 }
 // Area battle: key 9 buys a self-propelled gun (squad type 7, at most AreaSPGLimit per team).
 void ABattleController::HireSPGun()
 {
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
-	Match->HireAreaSquad(0, EBattleTraining::Regular, false, BattleSquadType::SPGun); ShowNotice(Match->LastMessage);
+	BuyArea(BattleSquadType::SPGun);
 }

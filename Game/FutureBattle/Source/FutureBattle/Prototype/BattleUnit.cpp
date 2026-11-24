@@ -1,4 +1,5 @@
 #include "BattleUnit.h"
+#include "UObject/StrongObjectPtr.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleMuzzleFlash.h"
 #include "BattleAudio.h"
@@ -12,6 +13,7 @@
 #include "BattleStance.h"
 #include "BattleBlindFire.h"
 #include "BattleBodyAnim.h"
+#include "BattleSoldierBody.h"
 #include "BattleSquadAI.h"
 #include "BattleMetrics.h"
 #include "BattleMatch.h"
@@ -98,10 +100,12 @@ void ABattleUnit::InitializeUnit(int32 ID)
 		TeamLabel->SetText(FText::FromString(FString::Printf(TEXT("%s %02d"), S->Team == 0 ? TEXT("ALLY") : TEXT("HOSTILE"), ID)));
 		TeamLabel->SetTextRenderColor(S->Team == 0 ? FColor(75, 230, 195) : FColor(255, 90, 70));
 	}
+	// Trial -BattleSoldierBody=1 (BattleSoldierBody.h): the RB01 body on the same skeleton. The exo look replaces it afterwards.
+	if (BattleSoldierBody::Version() == 1) GetMesh()->SetSkeletalMesh(BattleSoldierBody::LoadMesh());
 	FString TrialVariant;
 	bWeaponVisuals = !FParse::Param(FCommandLine::Get(), TEXT("BattleLegacyWeaponVisuals"));
 	bTrialPose = FParse::Value(FCommandLine::Get(), TEXT("BattleSquadTrial="), TrialVariant);
-	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, GetMesh(), GetState()->Weapon, false);
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, GetMesh(), GetState()->ActiveWeapon(), false);
 	// Body animation (BattleBodyAnim.h; -BattleBodyAnim=0 keeps the single whole-body clip).
 	if (bWeaponVisuals && !bTrialPose && BattleBodyAnim::Enabled() && BattleBodyAnim::Get(BattleBodyAnim::EClip::StandIdle))
 	{
@@ -118,7 +122,8 @@ const FBattleUnitState* ABattleUnit::GetState() const
 }
 
 bool ABattleUnit::IsAlive() const { const auto* S = GetState(); return S && S->IsAlive(); }
-FVector ABattleUnit::EyePosition() const { return GetActorLocation() + FVector(0, 0, 60); }
+// The eye sinks with the stance (BattleStance::EyeOffset, as the runtime's sight and shots); the capsule keeps its height.
+FVector ABattleUnit::EyePosition() const { return GetActorLocation() + FVector(0, 0, BattleStance::EyeOffset(VisualStance)); }
 
 // Closer than this to the eye the rear camera is inside the head or the chest.
 static constexpr float CameraInBodyDistance = 70.f;
@@ -184,6 +189,9 @@ void ABattleUnit::GetPlayerShot(FVector& Start, FVector& Direction)
 {
 	// Keep the shot at the soldier's eye: the rear camera must never fire around cover.
 	Start = FirstPersonCamera->GetComponentLocation();
+	// While the camera is still sinking after a stance change, the shot already leaves no higher than the new eye (the
+	// enemy's sight of him has changed at once), so getting down never fires over a wall that now hides him.
+	Start.Z = FMath::Min(Start.Z, GetActorLocation().Z + 65.f + BattleStance::EyeOffset(VisualStance) - BattleStance::EyeOffset(BattleStance::Stand));
 	Direction = GetControlRotation().Vector();
 	if (!bThirdPersonView) return;
 	FMinimalViewInfo View; CalcCamera(0.f, View);
@@ -206,6 +214,12 @@ void ABattleUnit::Tick(float DeltaTime)
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattleUnitTick);
 	Super::Tick(DeltaTime);
 	if (AimLevel || AimZoom > 1.f || ScopeAlpha > 0.f) UpdateAimView();
+	// Stances: the camera (view, held rifle and the player's shot start) sinks with the body over about the stance change.
+	{
+		const float Target = BattleStance::EyeOffset(VisualStance) - BattleStance::EyeOffset(BattleStance::Stand);
+		const float Drop = FMath::FInterpConstantTo(CameraStanceDrop, Target, DeltaTime, 120.f);
+		if (Drop != CameraStanceDrop) { FirstPersonCamera->AddRelativeLocation(FVector(0, 0, Drop - CameraStanceDrop)); CameraStanceDrop = Drop; }
+	}
 	if (const auto* State = GetState())
 	{
 		if (State->IsAlive()) GetWorld()->GetSubsystem<UBattleState>()->UpdateAim(UnitID, GetWorld()->GetTimeSeconds(), GetVelocity().Size2D(), GetBaseAimRotation().Vector(), GetCharacterMovement()->IsMovingOnGround());
@@ -313,7 +327,7 @@ void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequenc
 	CurrentPose = nullptr;
 	if (!Idle)
 	{
-		LookFire = LookReload = LookSequenceFirst = LookSequenceThen = nullptr;
+		LookFire = LookReload = LookSequenceFirst = LookSequenceThen = LookJump = LookLand = nullptr;
 		// The look is gone and UpdateLookTilt no longer runs: drop its lean so the plain body stands upright.
 		LookVelShown = LookShotVelocity = FVector::ZeroVector;
 		if (!MeshTiltShown.Equals(FQuat::Identity, 1.e-4f))
@@ -323,7 +337,18 @@ void ABattleUnit::SetLook(UAnimSequence* Idle, UAnimSequence* Move, UAnimSequenc
 		}
 	}
 	const bool bFirstPerson = IsPlayerControlled() && !bThirdPersonView;
-	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->ActiveWeapon(), bFirstPerson);
+}
+
+void ABattleUnit::RemountWeapon()
+{
+	const bool bFirstPerson = IsPlayerControlled() && !bThirdPersonView;
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->ActiveWeapon(), bFirstPerson);
+}
+
+void ABattleUnit::PlayArmsClip(UAnimSequence* Clip)
+{
+	if (auto* Body = Cast<UBattleBodyAnimInstance>(GetMesh()->GetAnimInstance()); Body && Clip) Body->PlayOverlay(Clip, 1.f);
 }
 
 float ABattleUnit::PlayLookSequence(UAnimSequence* First, UAnimSequence* Then, double Time)
@@ -360,10 +385,24 @@ void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Pare
 		return;
 	}
 	// No anti-tank or mortar model yet: the support gun model, larger.
-	const bool Support = Weapon == EBattleWeapon::SupportGun || Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar;
-	Model->SetStaticMesh(Support ? SupportModel : CarbineModel);
+	const bool Support = Weapon == EBattleWeapon::SupportGun || Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar || Weapon == EBattleWeapon::Shotgun;
+	// Weapons added 2026-11-22 (BattleArms.cpp) use existing models: the exoskeleton's rifle for the marksman rifle and its launcher,
+	// smaller, for the grenade launcher; the carbine model shortened for the pistol and SMG, the support model shortened for the shotgun.
+	static TStrongObjectPtr<UStaticMesh> AC01Rifle, AC01Launcher; static bool bAC01Loaded = false;
+	if (!bAC01Loaded && (Weapon == EBattleWeapon::Marksman || Weapon == EBattleWeapon::Sniper || Weapon == EBattleWeapon::GrenadeLauncher))
+	{
+		bAC01Loaded = true;
+		AC01Rifle.Reset(LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Rifle.SM_AC01_Rifle"), nullptr, LOAD_NoWarn));
+		AC01Launcher.Reset(LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Launcher.SM_AC01_Launcher"), nullptr, LOAD_NoWarn));
+	}
+	UStaticMesh* Own = Weapon == EBattleWeapon::Marksman || Weapon == EBattleWeapon::Sniper ? AC01Rifle.Get() : Weapon == EBattleWeapon::GrenadeLauncher ? AC01Launcher.Get() : nullptr;
+	Model->SetStaticMesh(Own ? Own : Support ? SupportModel.Get() : CarbineModel.Get());
 	Model->AttachToComponent(Parent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, bFirstPerson ? NAME_None : FName(TEXT("hand_r")));
-	Model->SetRelativeScale3D(FVector(Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar ? 1.35 : Support ? 1.0 : .62));
+	const double Scale = Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar ? 1.35 : Weapon == EBattleWeapon::Shotgun ? .7 :
+		Weapon == EBattleWeapon::Pistol ? .3 : Weapon == EBattleWeapon::SMG ? .45 : Weapon == EBattleWeapon::Marksman ? (Own ? .85 : .8) :
+		Weapon == EBattleWeapon::GrenadeLauncher ? (Own ? .55 : .8) : Weapon == EBattleWeapon::Sniper ? (Own ? 1.0 : .7) : Support ? 1.0 : .62;
+	// The sniper rifle: the same rifle model with a longer barrel (the models point along their local -Y).
+	Model->SetRelativeScale3D(Weapon == EBattleWeapon::Sniper ? FVector(Scale, Scale * 1.3, Scale) : FVector(Scale));
 	Model->SetRelativeRotation(FRotator(0,90,0));
 	Model->SetRelativeLocation(FVector(47,15,-16));
 	if (!bFirstPerson)
@@ -474,11 +513,23 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 		SetMeshLean(Lean, GetWorld()->GetDeltaSeconds());
 	}
 	// Lower body: a stance change plays its transition once, then the idle or the walk in the direction of travel.
+	// Cross-fade of the walks of a crouch or crawl, and of a stance change on the move (the ordinary 0.2 s cut them short).
+	constexpr float StanceBlendSeconds = .35f;
 	if (VisualStance != BodyStance)
 	{
-		TransitionClip = Transition(BodyStance, VisualStance);
-		TransitionUntil = TransitionClip ? Now + TransitionClip->GetPlayLength() : 0.;
-		TransitionRate = 1.f;
+		// User 11-24: changing stance on the move looked unnatural (the clip played in place while the body slid on).
+		// A crouch or stand-up on the move cross-fades straight into the walk of the new stance (StanceBlendSeconds); lying down
+		// and getting up from prone play their clip, and the player does not walk meanwhile (SetSprinting). The player's own
+		// change ends within the rule's stance lock (0.5 s, 1.2 s to or from prone; UBattleLeaderRuntime::SetStance), so the
+		// body is ready when the next change is allowed. Display only.
+		const bool bProne = BodyStance == BattleStance::Prone || VisualStance == BattleStance::Prone;
+		const bool bMoving = GetVelocity().SizeSquared2D() > 400.;
+		TransitionClip = bMoving && !bProne ? nullptr : Transition(BodyStance, VisualStance);
+		// On the move a prone change keeps the hurried clip below (MovingTransitionSeconds); from standing still the player waits.
+		TransitionRate = TransitionClip && IsPlayerControlled() && !bMoving ? FMath::Max(1.f, float(TransitionClip->GetPlayLength() / (bProne ? 1.2 : .5))) : 1.f;
+		TransitionUntil = TransitionClip ? Now + TransitionClip->GetPlayLength() / TransitionRate : 0.;
+		bTransitionProne = TransitionClip && bProne && !bMoving;
+		StanceBlendUntil = TransitionClip ? 0. : Now + StanceBlendSeconds;
 		BodyStance = VisualStance;
 	}
 	// Cover clips (BattleCoverClips.h): hidden and firing poses of the cover action, with a one-shot between phases. The table
@@ -486,7 +537,7 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	if (S.CoverPhase != ShownCoverPhase)
 	{
 		using namespace BattleCoverClips;
-		if (!ShownCoverPhase && S.CoverPhase) CoverClipSet = CoverSet(GetWorld(), S, GetActorForwardVector());
+		if (!ShownCoverPhase && S.CoverPhase) CoverClipSet = CoverSet(GetWorld(), S, Leaders ? Leaders->CoverFacing(UnitID, GetActorForwardVector()) : GetActorForwardVector());
 		const TCHAR* Shot = nullptr; float ShotYaw = 0.f;
 		if (S.CoverPhase == 2 && ShownCoverPhase == 1) { Shot = CoverClipSet.Enter; ShotYaw = YawOffset(2); }
 		else if (S.CoverPhase == 4) { Shot = CoverClipSet.ToAim; ShotYaw = YawOffset(4); }
@@ -514,6 +565,8 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 		else if (S.CoverPhase == 4) { CoverBase = CoverClip(CoverClipSet.Aim); Yaw = BattleCoverClips::YawOffset(4); }
 		if (CoverBase)
 		{
+			// The player's wall cover (BattleWallCover.cpp): the hidden pose stays against the wall while the camera turns the body.
+			if (S.CoverPhase != 4 && !Blind && Leaders) Yaw += Leaders->WallCoverYaw(UnitID, GetActorForwardVector());
 			SetMeshYaw(Yaw);
 			// Over the top: the hands lift the rifle above the cover (two-bone IK) while the body stays crouched behind it.
 			// Target: 12 cm over the measured cover top, 30 cm ahead of the body toward the shot (display only).
@@ -542,6 +595,10 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	// Getting up on the move (moving stands the soldier up): the rest of the transition plays fast enough to end within
 	// MovingTransitionSeconds instead of sliding along the ground at its own speed.
 	const double Hurry = MovingTransitionSeconds(TransitionClip.Get());
+	// Walking off in the middle of a crouch or stand-up: it blends into the walk at once instead of sliding through the clip.
+	// (MovingTransitionSeconds is 0.4 s for those, 0.6 s for the prone ones.)
+	if (TransitionClip && Now < TransitionUntil && Hurry < .5 && Local.SizeSquared2D() > 400.)
+	{ TransitionUntil = Now; StanceBlendUntil = Now + StanceBlendSeconds; }
 	if (TransitionClip && Now < TransitionUntil && TransitionRate == 1.f && Local.SizeSquared2D() > 400. && TransitionUntil - Now > Hurry)
 	{
 		TransitionRate = float((TransitionUntil - Now) / Hurry);
@@ -555,7 +612,8 @@ void ABattleUnit::UpdateBodyAnim(UBattleBodyAnimInstance& Body, const FBattleUni
 	UAnimSequence* Walk = Locomotion(VisualStance, Local, bRun);
 	// Walking crouched or prone (-BattleStanceMove): the steps keep pace with the body (rate from the clip's own ground speed).
 	const float WalkRate = VisualStance != BattleStance::Stand && Local.SizeSquared2D() > 400. ? MatchRate(Walk, float(Local.Size2D())) : 1.f;
-	Body.SetBase(bTransition ? TransitionClip.Get() : Walk, !bTransition, bTransition ? TransitionRate : WalkRate);
+	const float Fade = !bTransition && (VisualStance != BattleStance::Stand || Now < StanceBlendUntil) ? StanceBlendSeconds : -1.f;
+	Body.SetBase(bTransition ? TransitionClip.Get() : Walk, !bTransition, bTransition ? TransitionRate : WalkRate, Fade);
 	// Upper body: reload (synced to the reload timer), blind fire, otherwise the aim pose at the weapon's pitch.
 	const float Duration = GetDefault<UBattleTuning>()->ReloadTime(S.Weapon);
 	const bool bProne = VisualStance == BattleStance::Prone;
@@ -620,12 +678,18 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 		// Action clips (SetLookActions, PlayLookSequence), standing only, moving or not (the glide keeps the feet still too):
 		// a running sequence (the launcher's recoil, then its reload), else the reload paced by the reload timer, else the recoil
 		// of the last shot, from its start at every shot. Each starts and ends on the idle's first frame.
+		// Jump (SetLookJump): the take-off and the landing are noted in any stance; the clips show standing only.
+		const bool bAir = LookJump && !GetCharacterMovement()->IsMovingOnGround();
+		if (bAir && LookAirStart < 0.) LookAirStart = Now;
+		if (!bAir && LookAirStart >= 0.) { if (Now - LookAirStart >= LookLandAfter) LookLandStart = Now; LookAirStart = -1.; }
 		if (VisualStance == BattleStance::Stand && !bLookTransition)
 		{
 			const double Since = Now - LookSequenceStart;
 			const float First = LookSequenceFirst ? LookSequenceFirst->GetPlayLength() : 0.f;
 			const float Then = LookSequenceThen ? LookSequenceThen->GetPlayLength() : 0.f;
-			if (LookSequenceFirst && Since >= 0. && Since < First) { Pose = LookSequenceFirst; ActionAt = Since; bAction = true; }
+			if (bAir) { Pose = LookJump; bAction = true; ActionAt = FMath::Min(Now - LookAirStart, double(LookJump->GetPlayLength()) - .034); }
+			else if (LookLand && Now - LookLandStart < LookLand->GetPlayLength()) { Pose = LookLand; bAction = true; ActionAt = Now - LookLandStart; }
+			else if (LookSequenceFirst && Since >= 0. && Since < First) { Pose = LookSequenceFirst; ActionAt = Since; bAction = true; }
 			else if (LookSequenceThen && Since >= First && Since < First + Then) { Pose = LookSequenceThen; ActionAt = Since - First; bAction = true; }
 			else if (Reloading && LookReload)
 			{
@@ -674,7 +738,10 @@ void ABattleUnit::SetSprinting(bool bRequested)
  // -BattleStanceMove (default 1): crouched or prone, the directly controlled soldier walks at that stance's share of his speed
  // (called every frame of direct control, so a stance change takes effect at once).
  const float Low = bDirectAvoidanceOverride && IsAlive() && BattleStance::MoveMode() >= 1 ? BattleStance::MoveScale(VisualStance) : 1.f;
- const float Scale = bSprint ? 1.6f : Low;
+ // Lying down or getting up from prone (user 11-24: walking during it slid the body): no walking until the clip has played
+ // (UpdateBodyAnim; at most the 1.2 s stance lock).
+ const bool bHold = bDirectAvoidanceOverride && IsAlive() && bTransitionProne && TransitionClip && GetWorld()->GetTimeSeconds() < TransitionUntil;
+ const float Scale = bHold ? 0.f : bSprint ? 1.6f : Low;
  if (Scale != 1.f && (WalkSpeedBeforeSprint > 0.f || Movement->MaxWalkSpeed > 0.f))
  {
   if (WalkSpeedBeforeSprint == 0.f) WalkSpeedBeforeSprint = Movement->MaxWalkSpeed;
@@ -723,7 +790,7 @@ void ABattleUnit::SetDirectControl(bool bDirect)
 	const bool bFirstPerson = bDirect && !bThirdPersonView;
 	AimLevel = 0; AimZoom = 1.f; ScopeAlpha = 0.f; bScopeHidden = false; Rifle->SetOwnerNoSee(false);
 	GetMesh()->SetOwnerNoSee(bFirstPerson);
-	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->Weapon, bFirstPerson);
+	if (bWeaponVisuals && GetState()) MountWeapon(Rifle, bFirstPerson ? static_cast<USceneComponent*>(FirstPersonCamera) : GetMesh(), GetState()->ActiveWeapon(), bFirstPerson);
 	TeamLabel->SetVisibility(false);
 }
 

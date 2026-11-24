@@ -464,7 +464,10 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
  {
   ABattleUnit* A=Actor(1);
   const uint8 Want=SmokeStage==24?BattleStance::Crouch:BattleStance::Prone;
-  if(BayStart<0.){Stances.Add(1,Want);A->VisualStance=Want;BayStart=Now;SmokeMuzzleMax=0.f;SmokeMuzzleFrames=0;SmokeShots=0;SmokeHead=-1.f;SmokeDir=OpenWay(A);}
+  // Rendered run: these two stages are photographed from the player's own eye (the view before is restored after them).
+  static TWeakObjectPtr<AActor> ViewBefore;
+  if(BayStart<0.){Stances.Add(1,Want);A->VisualStance=Want;BayStart=Now;SmokeMuzzleMax=0.f;SmokeMuzzleFrames=0;SmokeShots=0;SmokeHead=-1.f;SmokeDir=OpenWay(A);
+   if(PC&&!BodyShotPrefix().IsEmpty()){if(SmokeStage==24)ViewBefore=PC->GetViewTarget();PC->SetViewTarget(A);}}
   A->AddMovementInput(SmokeDir,1.f);
   const auto* Body=Cast<UBattleBodyAnimInstance>(A->GetMesh()->GetAnimInstance());
   const FVector Local=A->GetActorRotation().UnrotateVector(A->GetVelocity());
@@ -489,10 +492,80 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    int32(Want),StanceOf(1)==Want && A->VisualStance==Want?1:0,Cap,Expected,SmokeMuzzleMax,SmokeMuzzleFrames,SmokeShots,Base?*Base->GetName():TEXT("none"),Ground,Rate);
   Check(StanceOf(1)==Want && A->VisualStance==Want && FMath::Abs(Cap-Expected)<1.f && SmokeMuzzleMax>Expected*.8f && SmokeMuzzleMax<Expected*1.05f && SmokeMuzzleFrames>=10 && SmokeShots==0,
    Want==BattleStance::Crouch?TEXT("the player walks crouched at the crouched speed with the crouched walk"):TEXT("the player crawls prone at the prone speed with the prone crawl"));
+  // His view and his shot sink with the stance (they stayed at standing height before 2026-11-24).
+  {
+   FVector ShotStart,ShotDir;A->GetPlayerShot(ShotStart,ShotDir);
+   const float Camera=float(A->FirstPersonCamera->GetComponentLocation().Z-A->GetActorLocation().Z),Shot=float(ShotStart.Z-A->GetActorLocation().Z);
+   const float Want65=65.f+BattleStance::EyeOffset(Want)-BattleStance::EyeOffset(BattleStance::Stand);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STANCE_EYE stance=%d camera=%.1f shot=%.1f expected=%.1f eye=%.1f"),int32(Want),Camera,Shot,Want65,float(A->EyePosition().Z-A->GetActorLocation().Z));
+   Check(FMath::Abs(Camera-Want65)<1.f&&FMath::Abs(Shot-Want65)<1.f,TEXT("the player's camera and shot start sink to the stance's eye height"));
+   if(PC&&!BodyShotPrefix().IsEmpty())FScreenshotRequest::RequestScreenshot(FPaths::ChangeExtension(BodyShotPrefix(),TEXT(""))+(Want==BattleStance::Crouch?TEXT("-eye-crouch.png"):TEXT("-eye-prone.png")),true,false);
+   // The view goes back a moment later (the picture is taken at the end of a later frame).
+   if(PC&&SmokeStage==25&&ViewBefore.IsValid()){FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,FTimerDelegate::CreateWeakLambda(PC,[PC]{if(ViewBefore.IsValid())PC->SetViewTarget(ViewBefore.Get());}),.3f,false);}
+  }
   if(SmokeStage==24){SmokeStage=25;BayStart=-1.;Later(.001f);return;}
   // Standing again: the full walking speed comes back.
   Stances.Remove(1);A->VisualStance=BattleStance::Stand;A->SetSprinting(false);
   Check(FMath::Abs(A->GetCharacterMovement()->MaxWalkSpeed-Walk)<1.f,TEXT("standing up restores the player's walking speed"));
+ }
+ // Wall cover of the player (BattleWallCover.cpp, user 11-24), at the cover object beside his first anchor (both runs): C facing
+ // it or pressing against it takes cover right there, aiming over a low wall stands him up, moving off gives back his stance.
+ // This map has no stances: the wall cover's crouch must apply there too.
+ {
+  static FVector WallSpot,WallNormal;
+  ABattleUnit* A=Actor(1);
+  if(SmokeStage<30)
+  {
+   const FVector Anchor=Store->Find(1)->CoverAnchor;
+   CancelCoverAction(1);if(PC)PC->ControlUnit(A);
+   // The nearest wall face around the anchor at the height of a crouched soldier's top.
+   float Best=1.e9f;WallNormal=FVector::ZeroVector;
+   const FCollisionQueryParams Params(NAME_None,false,A);
+   for(int32 I=0;I<16;++I)
+   {
+    const FVector Way=FRotator(0,I*22.5f,0).Vector(),From=Anchor+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch));
+    FHitResult Hit;
+    if(GetWorld()->LineTraceSingleByObjectType(Hit,From,From+Way*250.f,FCollisionObjectQueryParams(ECC_WorldStatic),Params) && FMath::Abs(Hit.ImpactNormal.Z)<.4f && Hit.Distance<Best)
+    {Best=Hit.Distance;WallNormal=FVector(Hit.ImpactNormal.X,Hit.ImpactNormal.Y,0).GetSafeNormal();WallSpot=FVector(Hit.ImpactPoint.X,Hit.ImpactPoint.Y,Anchor.Z)+WallNormal*48.f;}
+   }
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WALL_COVER_SMOKE wall_cm=%.0f normal=%s spot=%s"),Best,*WallNormal.ToCompactString(),*WallSpot.ToCompactString());
+   Check(!WallNormal.IsNearlyZero(),TEXT("a wall is found beside the first cover anchor"));
+   Place(1,WallSpot);if(PC)PC->SetControlRotation((-WallNormal).Rotation());
+   SmokeStage=31;Later(.3f);return;
+  }
+  if(SmokeStage==31)
+  {
+   Check(!TryWallCover(1,WallNormal,Now),TEXT("no wall in that direction: no wall cover"));
+   Check(TryWallCover(1,-WallNormal,Now) && IsWallCover(1) && Store->Find(1)->CoverSlot==FreeCoverSlot && FVector::Dist2D(Store->Find(1)->CoverAnchor,Position(1))<1.,TEXT("C facing a wall takes cover right where he stands"));
+   SmokeStage=32;Later(.3f);return;
+  }
+  if(SmokeStage==32)
+  {
+   const auto* U=Store->Find(1);const bool bHigh=WallCovers.Contains(1) && WallCovers.FindChecked(1).bHigh;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WALL_COVER_SMOKE phase=%d high=%d stance=%d peek_cm=%.0f"),U->CoverPhase,bHigh?1:0,StanceOf(1),FVector::Dist2D(U->CoverAnchor,U->CoverPeek));
+   Check(U->CoverPhase==2 && FVector::Dist2D(Position(1),U->CoverAnchor)<40,TEXT("wall cover hides him at the wall"));
+   Check(StanceOf(1)==(bHigh?BattleStance::Stand:BattleStance::Crouch),TEXT("he crouches behind a low wall and stands at a high one (also off the stance maps)"));
+   StepPlayerWallCover(1,-WallNormal,false,false,.016f,Now);
+   Check(U->CoverPhase==2 && IsWallCover(1),TEXT("pressing on into the wall keeps the wall cover"));
+   if(!bHigh){StepPlayerWallCover(1,FVector::ZeroVector,true,false,.016f,Now);SmokeStage=33;Later(.3f);return;}
+   SmokeStage=34;Later(.001f);return;
+  }
+  if(SmokeStage==33)
+  {
+   Check(Store->Find(1)->CoverPhase==4 && StanceOf(1)==BattleStance::Stand,TEXT("aiming behind a low wall stands him up to fire over it"));
+   SmokeStage=34;Later(.001f);return;
+  }
+  if(SmokeStage==34)
+  {
+   Check(StepPlayerWallCover(1,WallNormal,false,false,.016f,Now)==2 && Store->Find(1)->CoverPhase==0 && !IsWallCover(1) && StanceOf(1)==BattleStance::Stand,TEXT("moving off the wall leaves the cover and gives back his stance"));
+   Place(1,WallSpot);SmokeStage=35;Later(.3f);return;
+  }
+  if(SmokeStage==35)
+  {
+   uint8 Took=0;for(int32 I=0;I<5 && Took!=1;++I)Took=StepPlayerWallCover(1,-WallNormal,false,false,.1f,Now);
+   Check(Took==1 && IsWallCover(1) && Store->Find(1)->CoverPhase!=0,TEXT("pressing against a wall for 0.3 s takes cover"));
+   CancelCoverAction(1);SmokeStage=36;
+  }
  }
  if(BodyShotPrefix().IsEmpty())CancelCoverAction(1);
  Check(Store->Find(1)->CoverPhase==0,TEXT("explicit release clears cover action"));

@@ -33,6 +33,10 @@ public:
 	ABattleUnit(const FObjectInitializer& Init = FObjectInitializer::Get());
 	void InitializeUnit(int32 ID);
 	void MountWeapon(UStaticMeshComponent* Model, USceneComponent* Parent, EBattleWeapon Weapon, bool bFirstPerson) const;
+	// Infantry arms (BattleArms.cpp): mount the weapon in the hands again (the pistol while drawn), and play a strike or throw clip
+	// once on the body (display only).
+	void RemountWeapon();
+	void PlayArmsClip(class UAnimSequence* Clip);
 	bool HasWeaponVisuals() const { return bWeaponVisuals; }
 	// Display only: where a tracer starts. The muzzle of a visible weapon model, else a point ahead of the eye the shot is traced from.
 	static FVector TracerStart(const UStaticMeshComponent* Model, const FVector& Eye, const FVector& Direction);
@@ -80,6 +84,9 @@ public:
 	// The look's action clips (UBattleLeaderRuntime::ApplyExoSuit, with each SetLook; either may be null): Fire from its start at
 	// every shot, Reload while the weapon reloads (paced by the reload timer). Shown standing only: the clips stand on the spot.
 	void SetLookActions(UAnimSequence* Fire, UAnimSequence* Reload) { LookFire = Fire; LookReload = Reload; }
+	// The look's jump (either may be null): Jump plays once from the take-off while off the ground (held on its last frame in a
+	// longer fall), Land once on touching down after at least LookLandAfter seconds in the air. Standing only.
+	void SetLookJump(UAnimSequence* Jump, UAnimSequence* Land) { LookJump = Jump; LookLand = Land; }
 	// Plays First and then Then (may be null) from Time over the look's other clips, standing only (the launcher's recoil and
 	// reload); returns how long the two last. A null First stops the sequence. IsPlayingLookSequence: one is still running.
 	float PlayLookSequence(UAnimSequence* First, UAnimSequence* Then, double Time);
@@ -104,9 +111,12 @@ private:
 	void UpdateBodyAnim(class UBattleBodyAnimInstance& Body, const FBattleUnitState& S);
 	class UBattleBodyAnimInstance* BodyAnim() const;
 	uint8 BodyStance = 0;
+	float CameraStanceDrop = 0.f; // how far the camera has sunk below its standing height (Tick, BattleStance::EyeOffset)
 	UPROPERTY() TObjectPtr<UAnimSequence> TransitionClip;
 	double TransitionUntil = 0., ShownShot = -10.;
 	float TransitionRate = 1.f; // above 1 once a stance transition is hurried on the move (BattleBodyAnim::MovingTransitionSeconds)
+	bool bTransitionProne = false; // the transition lies down or gets up from prone: the player does not walk while it plays (SetSprinting)
+	double StanceBlendUntil = 0.;  // a crouch or stand-up on the move blends into the new walk instead of playing its clip
 	float ShownHP = -1.f;
 	// Cover clips (BattleCoverClips.h): the set picked when the cover action starts, the one-shot between phases, mesh yaw.
 	uint8 ShownCoverPhase = 0;
@@ -136,6 +146,10 @@ private:
 	UPROPERTY() TObjectPtr<UAnimSequence> LookSequenceFirst;
 	UPROPERTY() TObjectPtr<UAnimSequence> LookSequenceThen;
 	double LookSequenceStart = -10., LookShotShown = -10.;
+	UPROPERTY() TObjectPtr<UAnimSequence> LookJump;
+	UPROPERTY() TObjectPtr<UAnimSequence> LookLand;
+	double LookAirStart = -1., LookLandStart = -10.; // take-off time while in the air (-1 on the ground), last landing
+	static constexpr double LookLandAfter = .25;
 	UPROPERTY() int32 UnitID = INDEX_NONE;
 	bool bDeathApplied = false;
 	// Corpse fall (BattleRagdoll): 0 until the death clip ends at RagdollAt, 1 falling until RagdollAt, 2 done.
