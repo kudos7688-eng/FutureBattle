@@ -260,7 +260,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    auto& G=Groups[FrontID];
    for(int32 SID:Pick){G.Squads.Add(SID);SquadGroup.Add(SID,FrontID);}
    G.Squads.Sort();
-   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_JOIN group=%d team=%d joined=%d squads=%d time=%.1f"),FrontID,Team,Pick.Num(),G.Squads.Num(),Elapsed);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_JOIN group=%d team=%d joined=%d squads=%d time=%.1f ids=%s"),FrontID,Team,Pick.Num(),G.Squads.Num(),Elapsed,*FString::JoinBy(Pick,TEXT(","),[](int32 I){return FString::FromInt(I);}));
   }
  }
  // 5b. Squads above the line's need go back unassigned as a reserve (user proposal 2026-11-22: count the squads the line needs, keep
