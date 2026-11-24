@@ -583,7 +583,16 @@ int32 BattleSquadType::RifleMembers(){static const int32 N=[]{const TCHAR* C=FCo
 int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:Type==Scout?2:Type==AntiTank?4:Type==Mortar?3:Type==Exo||IsVehicle(Type)?1:RifleMembers();}
 bool BattleSquadType::Replenished(uint8 Type){return Type!=Scout&&Type!=Exo;}
 bool BattleSquadType::LeaderHandover(uint8 Type){return Type==Scout;}
-float BattleSquadType::ShieldMax(uint8 Type){return Type==Exo?FMath::Clamp(GetDefault<UBattleTuning>()->ExoShield,0.f,1000.f):0.f;}
+// Trials (2026-11-25, Codex lane, roadmap stage 3 "exoskeleton values"): -BattleExoArmor=<x> (small-arms share, default <0 = ExoArmorSmallArms),
+// -BattleExoDamage=<x> (main gun damage scale, default <0 = ExoDamageScale), -BattleExoShield=<points> (default <0 = ExoShield).
+static float ExoTrialValue(const TCHAR* Key)
+{
+ float V=-1.f;FParse::Value(FCommandLine::Get(),Key,V);return FMath::IsFinite(V)?V:-1.f;
+}
+static float ExoTrialArmor(){static const float V=ExoTrialValue(TEXT("BattleExoArmor="));return V;}
+static float ExoTrialDamage(){static const float V=ExoTrialValue(TEXT("BattleExoDamage="));return V;}
+static float ExoTrialShield(){static const float V=ExoTrialValue(TEXT("BattleExoShield="));return V;}
+float BattleSquadType::ShieldMax(uint8 Type){return Type==Exo?FMath::Clamp(ExoTrialShield()>=0.f?ExoTrialShield():GetDefault<UBattleTuning>()->ExoShield,0.f,1000.f):0.f;}
 int32 BattleSquadType::LauncherRounds(uint8 Type){return Type==Exo?FMath::Clamp(GetDefault<UBattleTuning>()->ExoLauncherRounds,0,20):0;}
 int32 BattleSquadType::ScoreCount(uint8 Type){return Type==Exo?FMath::Clamp(GetDefault<UBattleTuning>()->ExoScoreCount,1,20):1;}
 float BattleSquadType::StillSightRange(uint8 Type)
@@ -605,7 +614,7 @@ bool BattleSquadType::IsVehicle(uint8 Type){return Type==Tank||Type==ArmoredCar|
 float BattleSquadType::VehicleTurnRate(uint8 Type){const auto* T=GetDefault<UBattleTuning>();return FMath::Max(1.f,Type==SPGun?T->SPGTurnRate:(Type==ArmoredCar||Type==Supply)?T->ACTurnRate:T->TankTurnRate);}
 float BattleSquadType::VehicleFieldOfView(uint8 Type){const auto* T=GetDefault<UBattleTuning>();return FMath::Clamp(Type==SPGun?T->SPGFieldOfView:(Type==ArmoredCar||Type==Supply)?T->ACFieldOfView:T->TankFieldOfView,1.f,360.f);}
 float BattleSquadType::VehicleRadius(uint8 Type){const auto* T=GetDefault<UBattleTuning>();return FMath::Max(50.f,Type==SPGun?T->SPGRadius:(Type==ArmoredCar||Type==Supply)?T->ACRadius:T->TankRadius);}
-float BattleSquadType::ArmorSmallArms(uint8 Type){return Type==Tank?0.f:(Type==ArmoredCar||Type==Supply)?FMath::Clamp(GetDefault<UBattleTuning>()->ACArmorSmallArms,0.f,1.f):Type==SPGun?FMath::Clamp(GetDefault<UBattleTuning>()->SPGArmorSmallArms,0.f,1.f):Type==Exo?FMath::Clamp(GetDefault<UBattleTuning>()->ExoArmorSmallArms,0.f,1.f):1.f;}
+float BattleSquadType::ArmorSmallArms(uint8 Type){return Type==Tank?0.f:(Type==ArmoredCar||Type==Supply)?FMath::Clamp(GetDefault<UBattleTuning>()->ACArmorSmallArms,0.f,1.f):Type==SPGun?FMath::Clamp(GetDefault<UBattleTuning>()->SPGArmorSmallArms,0.f,1.f):Type==Exo?FMath::Clamp(ExoTrialArmor()>=0.f?ExoTrialArmor():GetDefault<UBattleTuning>()->ExoArmorSmallArms,0.f,1.f):1.f;}
 bool BattleSquadType::HasMainGun(uint8 Type){return Type==Tank;}
 bool BattleSquadType::IsArtillery(uint8 Type){return Type==Mortar||Type==SPGun;}
 float BattleSquadType::SpeedAt(uint8 Type,const UWorld* World,const FVector& P)
@@ -616,7 +625,7 @@ float BattleSquadType::SpeedAt(uint8 Type,const UWorld* World,const FVector& P)
  const float Open=VehicleOpenSpeed(Type),Urban=VehicleUrbanSpeed(Type);
  return FMath::Max(.1f,City?Urban:Open)/FMath::Max(1.f,T->MoveSpeed);
 }
-float BattleSquadType::DamageScale(uint8 Type){if(Type==Exo)return FMath::Clamp(GetDefault<UBattleTuning>()->ExoDamageScale,.1f,10.f);return Type==Heavy?HeavyValues().Damage:1.f;}
+float BattleSquadType::DamageScale(uint8 Type){if(Type==Exo)return FMath::Clamp(ExoTrialDamage()>=0.f?ExoTrialDamage():GetDefault<UBattleTuning>()->ExoDamageScale,.1f,10.f);return Type==Heavy?HeavyValues().Damage:1.f;}
 int32 BattleSquadType::AreaCost(uint8 Type){if(Type==Supply)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaSupplyCost,1,200);if(Type==Exo)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaExoCost,1,200);if(Type==SPGun)return BattleTactics::AreaSPGCost();if(Type==Mortar)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaMortarCost,1,100);if(Type==ArmoredCar)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaACCost,1,200);if(Type==Tank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaTankCost,1,200);if(Type==AntiTank)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaATCost,1,100);if(Type==Scout)return FMath::Clamp(GetDefault<UBattleTuning>()->AreaScoutCost,1,100);return Type==Heavy?HeavyValues().Cost:FMath::Clamp(GetDefault<UBattleTuning>()->AreaSquadCost,1,100);}
 EBattleWeapon BattleSquadType::Weapon(uint8 Type,int32 Slot){if(IsVehicle(Type))return EBattleWeapon::SupportGun; // the machine gun (a tank's main gun is separate)
  if(Type==AntiTank)return Slot==1||Slot==2?EBattleWeapon::AntiTank:EBattleWeapon::Carbine;
