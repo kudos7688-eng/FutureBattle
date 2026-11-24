@@ -56,6 +56,7 @@ bool BattleArms::SmokeEnabled(){static const bool b=FParse::Param(FCommandLine::
 bool BattleArms::SlideEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsSlide="),1)!=0;return b;}
 bool BattleArms::ChargeFallenEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsChargeFallen="),1)!=0;return b;}
 bool BattleArms::ChargeSlideEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsChargeSlide="),1)!=0;return b;}
+bool BattleArms::ForTeam(int32 Team){static const int32 T=IntSwitch(TEXT("BattleArmsTeam="),-1);return T<0||T==Team;}
 bool BattleArms::AnyTrial(){return SidearmsEnabled()||GrenadeCount()>0||MeleeEnabled()||EliteEnabled()||AreaEliteKeep()>0||SniperEnabled()||AreaSniperKeep()>0||AssaultMode()>0||ChargeEnabled()||SectorTaskEnabled()||RushWatchEnabled()||CoverFireEnabled()||SmokeEnabled();}
 
 uint8 BattleArms::EliteKit(int32 Slot)
@@ -189,6 +190,7 @@ void UBattleLeaderRuntime::IssueArms(int32 ID)
  const auto* S=Store->FindSquad(U->SquadID);
  // Foot soldiers only: vehicles and the exoskeleton soldier carry their own weapons.
  if(!S||BattleSquadType::IsVehicle(S->SquadType)||S->SquadType==BattleSquadType::Exo)return;
+ if(!BattleArms::ForTeam(S->Team)){SightExperiment.Cover(TEXT("arms_team_not_issued"));return;}
  if(BattleArms::SidearmsEnabled()&&U->Weapon!=EBattleWeapon::Pistol){const auto* P=BattleWeaponDef(EBattleWeapon::Pistol);U->SideAmmo=P->Magazine;U->SideReserve=P->Reserve;}
  U->Grenades=FMath::Max(U->Grenades,BattleArms::GrenadeCount());
 }
@@ -213,7 +215,7 @@ void UBattleLeaderRuntime::IssueEliteKit(int32 ID,int32 Slot,uint8 Grade)
 int32 UBattleState::RefillArms(int32 ID)
 {
  auto* U=Units.Find(ID);if(!U||!U->IsAlive()||!U->bArmsIssued)return 0;
- const auto* S=Squads.Find(U->SquadID);if(!S||BattleSquadType::IsVehicle(S->SquadType)||S->SquadType==BattleSquadType::Exo)return 0;
+ const auto* S=Squads.Find(U->SquadID);if(!S||BattleSquadType::IsVehicle(S->SquadType)||S->SquadType==BattleSquadType::Exo||(!U->Kit&&!BattleArms::ForTeam(S->Team)))return 0;
  const int32 Want=U->Kit?BattleArms::KitGrenades(U->Kit):BattleArms::GrenadeCount();
  int32 Added=FMath::Max(0,Want-U->Grenades);U->Grenades+=Added;
  if(U->Kit||BattleArms::SidearmsEnabled())
@@ -263,7 +265,7 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
   ArmsNextMelee=Now+.25;
   const bool bAll=BattleArms::MeleeEnabled();const float Reach=BattleArms::Melee().Reach+60.f;
   TArray<int32> IDs;
-  for(const auto& B:Bodies)if(const auto* U=Store->Find(B.Key);U&&U->IsAlive()&&U->MeleeWait<=0.f&&U->Action!=EBattleAction::DirectControl&&(bAll||U->Kit!=0||ArmsCharging(B.Key))&&!IsVehicle(B.Key))IDs.Add(B.Key);
+  for(const auto& B:Bodies)if(const auto* U=Store->Find(B.Key);U&&U->IsAlive()&&U->MeleeWait<=0.f&&U->Action!=EBattleAction::DirectControl&&((bAll&&BattleArms::ForTeam(U->Team))||U->Kit!=0||ArmsCharging(B.Key))&&!IsVehicle(B.Key))IDs.Add(B.Key);
   IDs.Sort();
   for(int32 ID:IDs)
   {
@@ -303,7 +305,7 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
    const auto* S=Store->FindSquad(U->SquadID);const auto* P=Plans.Find(U->SquadID);
    if(!S||!P||S->CommandStatus!=EBattleCommandStatus::Active||S->Order==EBattleOrder::Move||P->TargetID==INDEX_NONE||S->SquadType==BattleSquadType::Exo)continue;
    const bool bRole=U->Kit==BattleArms::KitBreacher||U->Kit==BattleArms::KitAssault||U->Kit==BattleArms::KitRifleman;
-   const bool bPlain=BattleArms::AssaultMode()>=2&&S->Grade==0&&S->SquadType==BattleSquadType::Rifle&&S->LeaderUnitID!=ID&&U->Weapon==EBattleWeapon::Carbine;
+   const bool bPlain=BattleArms::AssaultMode()>=2&&BattleArms::ForTeam(S->Team)&&S->Grade==0&&S->SquadType==BattleSquadType::Rifle&&S->LeaderUnitID!=ID&&U->Weapon==EBattleWeapon::Carbine;
    if(!bRole&&!bPlain)continue;
    int32 Charging=0;for(int32 Member:S->Members)if(const auto* M=Store->Find(Member);M&&M->IsAlive()&&ArmsCharging(Member))++Charging;
    if(Charging>=Ch.SquadMax)continue;
@@ -373,7 +375,7 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
    !CoverApproaches.Contains(ID)&&Now>=ArmsAssaultNext.FindRef(ID))
   {
    const bool bRole=U->Kit==BattleArms::KitBreacher||U->Kit==BattleArms::KitAssault||U->Kit==BattleArms::KitRifleman;
-   const bool bPlain=DashMode>=2&&S->Grade==0&&S->SquadType==BattleSquadType::Rifle&&U->Grenades>0&&S->LeaderUnitID!=ID;
+   const bool bPlain=DashMode>=2&&BattleArms::ForTeam(S->Team)&&S->Grade==0&&S->SquadType==BattleSquadType::Rifle&&U->Grenades>0&&S->LeaderUnitID!=ID;
    if(bRole||bPlain)
    {
     int32 Living=0,Dashing=0;

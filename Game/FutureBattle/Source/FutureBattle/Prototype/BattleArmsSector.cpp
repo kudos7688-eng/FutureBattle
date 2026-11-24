@@ -110,7 +110,7 @@ void UBattleLeaderRuntime::StepArmsRush(double Now)
 	for (auto It = ArmsRushSamples.CreateIterator(); It; ++It) if (Now - It.Value().Time > 3.) It.RemoveCurrent();
 	TArray<int32> SIDs;
 	for (const auto& P : Store->GetSquads())
-		if (P.Value.CommandStatus == EBattleCommandStatus::Active && ArmsDefending(P.Value) && !BattleSquadType::IsVehicle(P.Value.SquadType)) SIDs.Add(P.Key);
+		if (P.Value.CommandStatus == EBattleCommandStatus::Active && ArmsDefending(P.Value) && !BattleSquadType::IsVehicle(P.Value.SquadType) && BattleArms::ForTeam(P.Value.Team)) SIDs.Add(P.Key);
 	SIDs.Sort();
 	const auto& Ch = BattleArms::Charge();
 	for (int32 SID : SIDs)

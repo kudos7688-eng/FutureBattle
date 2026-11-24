@@ -408,10 +408,10 @@ void UBattleMatch::UpdateAreaHiring()
    const int32 SupplyWant=bSupplyEarly?(Bought>=After?HireIntent.SupplyKeep:0):FMath::Min(HireIntent.SupplyKeep,Bought/After);
    if((Type==BattleSquadType::Rifle||(bSupplyEarly&&Type!=BattleSquadType::Scout))&&SupplyWant>0&&ActiveOfType(Team,BattleSquadType::Supply)<SupplyWant)Type=BattleSquadType::Supply;
    // Elite platoons (trial -BattleAreaEliteKeep=n, default 0; BattleArms.cpp): the same pacing, in place of a rifle squad.
-   const int32 EliteWant=FMath::Min(BattleArms::AreaEliteKeep(),Bought/After);
+   const int32 EliteWant=BattleArms::ForTeam(Team)?FMath::Min(BattleArms::AreaEliteKeep(),Bought/After):0;
    if(Type==BattleSquadType::Rifle&&EliteWant>0&&ActiveElite(Team)<EliteWant)HireGrade=1;
    // Sniper teams (trial -BattleAreaSniperKeep=n, default 0): the same pacing, a scout pair of grade 2 in place of a rifle squad.
-   const int32 SniperWant=FMath::Min(BattleArms::AreaSniperKeep(),Bought/After);
+   const int32 SniperWant=BattleArms::ForTeam(Team)?FMath::Min(BattleArms::AreaSniperKeep(),Bought/After):0;
    if(Type==BattleSquadType::Rifle&&HireGrade==0&&SniperWant>0&&ActiveSnipers(Team)<SniperWant){Type=BattleSquadType::Scout;HireGrade=2;}
   }
   // Subtraction evaluation -BattleAreaEnsureTypes=1 (default 0): one of each rarely reached type is bought once (ever, lost ones are
