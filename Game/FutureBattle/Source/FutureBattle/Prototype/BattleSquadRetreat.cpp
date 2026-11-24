@@ -130,6 +130,12 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  const float ShieldRatio=ExoUnit&&ExoShieldMax>0.f?ExoUnit->Shield/ExoShieldMax:1.f;
  const auto* SPGUnit=BattleTactics::SPGAmmoEnabled()&&S->SquadType==BattleSquadType::SPGun?Store->Find(S->LeaderUnitID):nullptr;
  const bool bSPGEmpty=SPGUnit&&SPGUnit->SPGAmmo==0;
+ // Trial -BattleSupplyAmmoShare (BattleTactics.h): the squad's own reserve rounds against its living members' full reserve.
+ int32 OwnRounds=0,OwnFull=0;
+ if(BattleTactics::SupplyAmmoShare()>0.f&&!bMachine)for(int32 ID:S->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())
+ {OwnRounds+=U->Reserve;OwnFull+=T->ReserveFor(U->Weapon);}
+ const bool bLowAmmo=OwnFull>0&&OwnRounds<=OwnFull*BattleTactics::SupplyAmmoShare();
+ const bool bAmmoBack=OwnFull==0||OwnRounds>=OwnFull*.9f;
  bool bRepair=Match->bArea&&bMachine&&Supply.HealPerSecond>0.f&&O.Health/FullHP<GetDefault<UBattleTuning>()->VehicleRepairRatio;
  // Field supply (BattleSupplyCar.cpp): a squad on its way to a supply vehicle of its team, refilled there (UBattleMatch::UpdateArea),
  // resumes its mission once most of its members have ammunition again. Without a vehicle with stock in reach it stops the trip
@@ -139,7 +145,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   if(Emergency){Event(TEXT("FieldSupplyAbortEmergency"));Retreat();return;}
   FVector Car;int32 CarID=INDEX_NONE;
   if(!Match->FieldSupplyPoint(SID,Car,&CarID)){Event(TEXT("FieldSupplyLost"));Store->CancelSquadTacticalPlan(SID,TEXT("FIELD SUPPLY / NO VEHICLE"));return;}
-  if(O.Armed>=FMath::CeilToInt(O.Living*.9f))
+  if(O.Armed>=FMath::CeilToInt(O.Living*.9f)&&bAmmoBack)
   {
    const auto Order=S->MissionOrder;const FVector Goal=S->MissionDestination;
    if(Runtime->IssueOrder(SID,Order,Goal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("FIELD SUPPLY COMPLETE / RESUME"));Runtime->IssueOrder(SID,Order,Goal,true);Event(TEXT("FieldSupplyResume"));}
@@ -163,7 +169,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   const bool Home=FVector::Dist2D(Here,Match->AreaHome(S->Team))<=2500||(bDepotTrip&&FVector::Dist2D(Here,Match->RepairPoint(S->Team))<=2500);
   const bool Manned=bNoReplenish||O.Living>=FMath::Min(S->Members.Num(),Supply.ResumeLiving)||Match->Credits[S->Team]==0;
   const bool Healed=Supply.ResumeHealthRatio<=0.f||O.Health/FullHP>=Supply.ResumeHealthRatio;
-  if(Home && !bSPGEmpty && O.Armed>=FMath::CeilToInt(O.Living*.6f) && Manned && Healed)
+  if(Home && !bSPGEmpty && O.Armed>=FMath::CeilToInt(O.Living*.6f) && bAmmoBack && Manned && Healed)
   {
    const auto Order=S->MissionOrder;const FVector Goal=S->MissionDestination;
    if(Runtime->IssueOrder(SID,Order,Goal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("HOME SUPPLY COMPLETE / RESUME"));Runtime->IssueOrder(SID,Order,Goal,true);Event(TEXT("HomeSupplyResume"));SupplyTripEnd(SID,true);}
@@ -181,17 +187,17 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  }
  // Field supply: half or more of the living members out of ammunition (losses that need replacements still go home) and a supply
  // vehicle of the team with stock within FieldSupplyRange: drive to it instead of home.
- if(Match->bArea && !bMachine && !bNoReplenish && Threats==0 && O.RecentDamage==0 && !(O.Living<=ReturnLiving&&Match->Credits[S->Team]>0) && O.Armed<=O.Living/2 &&
+ if(Match->bArea && !bMachine && !bNoReplenish && Threats==0 && O.RecentDamage==0 && !(O.Living<=ReturnLiving&&Match->Credits[S->Team]>0) && (O.Armed<=O.Living/2||bLowAmmo) &&
     P.Action!=EBattleSquadTactic::Retreat && P.Action!=EBattleSquadTactic::Support && P.Action!=EBattleSquadTactic::Flank && P.Action!=EBattleSquadTactic::Recover)
  {
   FVector Car;
   if(Match->FieldSupplyPoint(SID,Car)&&Apply(SID,EBattleSquadTactic::Recover,EBattleOrder::Move,Car,TEXT("FIELD SUPPLY / TO SUPPLY VEHICLE"))){Event(TEXT("FieldSupplyGo"));return;}
  }
- if(bRepair || (Match->bArea && Threats==0 && O.RecentDamage==0 && ((O.Living<=ReturnLiving&&Match->Credits[S->Team]>0)||O.Armed==0||bSPGEmpty) && P.Action!=EBattleSquadTactic::Retreat && P.Action!=EBattleSquadTactic::Support && P.Action!=EBattleSquadTactic::Flank))
+ if(bRepair || (Match->bArea && Threats==0 && O.RecentDamage==0 && ((O.Living<=ReturnLiving&&Match->Credits[S->Team]>0)||O.Armed==0||bLowAmmo||bSPGEmpty) && P.Action!=EBattleSquadTactic::Retreat && P.Action!=EBattleSquadTactic::Support && P.Action!=EBattleSquadTactic::Flank))
  {
   // Trial -BattleSupplyAwayRatio<1: keep most of the team on the line; only own-team plan state is read.
   bool Allowed=true;
-  if(Supply.AwayRatio<1.f && O.Armed>0&&!bSPGEmpty)
+  if(Supply.AwayRatio<1.f && O.Armed>0&&!bLowAmmo&&!bSPGEmpty)
   {
    int32 Active=0,Away=0;
    for(const auto& Other:Store->GetSquads()) if(Other.Value.Team==S->Team && Other.Value.CommandStatus==EBattleCommandStatus::Active)
@@ -207,7 +213,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
    // Evaluation only: trip reason (all members out of ammo vs losses) and whether the squad holds an S1 home-assault slot.
    bool bBase=false;if(Match->bArea&&BattleTactics::AreaStrategy().bEnabled)Match->AreaStrategyTarget(SID,S->Team,bBase);
    if(bRepair)Event(TEXT("HomeSupplyReturnVehicleRepair"));
-   if(O.Armed==0)Event(TEXT("HomeSupplyReturnAmmo"));if(bBase){Event(TEXT("HomeSupplyReturnBaseAssault"));if(O.Armed==0)Event(TEXT("HomeSupplyReturnBaseAssaultAmmo"));}
+   if(O.Armed==0||bLowAmmo)Event(TEXT("HomeSupplyReturnAmmo"));if(bLowAmmo&&O.Armed>0)Event(TEXT("HomeSupplyReturnLowAmmo"));if(bBase){Event(TEXT("HomeSupplyReturnBaseAssault"));if(O.Armed==0)Event(TEXT("HomeSupplyReturnBaseAssaultAmmo"));}
    SupplyTripBegin(SID);return;}
  }
  if(P.Action==EBattleSquadTactic::Retreat)

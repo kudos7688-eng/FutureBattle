@@ -25,6 +25,7 @@ struct FBattleWeaponDef
  float EngageScale=1.f,EngageCap=0.f,ReachScale=1.f,ReachCap=0.f,SuppressionScale=1.f;
 };
 const FBattleWeaponDef* BattleWeaponDef(EBattleWeapon W);
+namespace BattleTactics { int32 CarbineReserve(); } // trial -BattleCarbineReserve (BattleTactics.h); -1 = UBattleTuning::ReserveAmmo
 
 inline EBattleWeapon WeaponForSlot(int32 Slot)
 {
@@ -365,7 +366,7 @@ public:
 	float ReloadTime(EBattleWeapon W) const { if (const auto* D = BattleWeaponDef(W)) return D->Reload; return W == EBattleWeapon::Mortar ? MortarReloadSeconds : W == EBattleWeapon::AntiTank ? ATReloadSeconds : W == EBattleWeapon::SupportGun ? SupportReloadSeconds : ReloadSeconds; }
 	// Soldiers hand reserve rounds only to a weapon of the same kind.
 	static int32 AmmoKind(EBattleWeapon W) { if (const auto* D = BattleWeaponDef(W)) return D->AmmoKind; return W == EBattleWeapon::Mortar ? 2 : W == EBattleWeapon::AntiTank ? 1 : 0; }
-	int32 ReserveFor(EBattleWeapon W) const { if (const auto* D = BattleWeaponDef(W)) return D->Reserve; return W == EBattleWeapon::Mortar ? MortarReserve : W == EBattleWeapon::AntiTank ? ATReserve : ReserveAmmo; }
+	int32 ReserveFor(EBattleWeapon W) const { if (const auto* D = BattleWeaponDef(W)) return D->Reserve; return W == EBattleWeapon::Mortar ? MortarReserve : W == EBattleWeapon::AntiTank ? ATReserve : W == EBattleWeapon::Carbine && BattleTactics::CarbineReserve() >= 0 ? BattleTactics::CarbineReserve() : ReserveAmmo; }
 	float ShotInterval(EBattleWeapon W, bool bPlayer) const
 	{
 		if (const auto* D = BattleWeaponDef(W)) return bPlayer ? D->PlayerInterval : D->AIInterval;
@@ -833,7 +834,7 @@ public:
 	bool SetTrainingPreset(int32 ID, EBattleTraining Training);
 	const FBattleUnitState* Find(int32 ID) const { return Units.Find(ID); }
 	bool SetOrder(int32 ID, EBattleOrder Order, FVector Destination);
-	bool ConsumeShot(int32 ID, double Now, double Interval);
+	bool ConsumeShot(int32 ID, double Now, double Interval, int32 Rounds = 1); // Rounds: rounds one shot uses (trial -BattleCarbineShotRounds), at most what is loaded
 	bool StartReload(int32 ID, double Now);
 	void AdvanceReloads(double Now);
 	// Exoskeleton shields and launchers: counts down the pause after a hit, then refills the shield; counts down the launcher's load.

@@ -387,7 +387,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  if((CompositionTeams&(1<<Team))!=0)UpdateCompositionPurposes(Team);
  UpdateGroups(Team);
  if(bArea&&BattleTactics::ArtilleryPosts())UpdateArtilleryRaids(Team);
- if(bArea&&BattleTactics::ATHunt())UpdateATHunts(Team);
+ if(bArea&&(BattleTactics::ATHunt()||BattleTactics::ATFire()))UpdateATHunts(Team);
  // Routes (map F): what the team sees now, gathered once for all its squads.
  const bool bRoutes=bStrategy&&RoutesOn();TArray<FVector> RouteEnemies;if(bRoutes)RouteEnemies=RouteKnownEnemies(Team);
 	for (const auto& Pair : Store->GetSquads()) if (Pair.Value.Team == Team)
@@ -495,7 +495,13 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     const FVector P=Runtime->Position(Pair.Value.LeaderUnitID);
     // The player's route choice for the squad comes before the AI's own (empty map in matches without a player's choice).
     const bool bChosen=!PlayerRoutes.IsEmpty()&&PlayerRouteLane(Pair.Key)!=0;
-    const FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies);
+    FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies);
+    // Trial -BattleSectorNoRoad=1 (default 0; user test play 2026-11-24: the attack group was shot together at the central crossroads,
+    // the front gathered in the centre with nobody on the flanks; on the sector maps the roads funnelled every distant AI order through
+    // the junctions of the avenue before the group's sectors and the front's posts). On maps with sectors AI infantry goes straight to
+    // its goal (sector by sector, as the sector layer moves it); vehicles keep the roads, and a route the player chose is kept.
+    static const bool bNoRoad=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorNoRoad="),V);return V!=0;}();
+    if(bNoRoad&&!bChosen&&BattleFieldLayout::Of(GetWorld()).bSectors&&!Runtime->IsVehicle(Pair.Value.LeaderUnitID))Step=Center;
     // -BattlePinnedFlank: a pinned AI sector squad first takes a sector beside the threat.
     static const bool bSectorAIOn=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
     FVector PinStage;
@@ -515,7 +521,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
      static const bool bSectorAI=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
      if(SectorRouteOn()&&bSectorAI&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&!Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&SectorStage(Pair.Value,P,Step,Center,RouteEnemies,Stage))
      {Center=Stage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
-     else if(!Step.Equals(Center,1)){bRoadWaypoint=true;Center=Step;if(Order==EBattleOrder::Defend)Order=EBattleOrder::AttackMove;}
+     else if(!Step.Equals(Center,1)){bRoadWaypoint=true;Center=Step;if(!Runtime->IsVehicle(Pair.Value.LeaderUnitID))++RoadSteps[Team]; /* log only (road=) */if(Order==EBattleOrder::Defend)Order=EBattleOrder::AttackMove;}
     }
    }
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())
@@ -524,7 +530,14 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
    if(S.CommandStatus!=EBattleCommandStatus::Active) continue;
    // A tank keeps the goal it was given even when it drives only to the end of a partial route (SameVehicleMission).
    static const bool EnableSectorAI=[](){int32 V=0; FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
-   const bool Sector=!bRaidDuty && !bMortarPost && EnableSectorAI && !bSurpriseBridge && !bRoadWaypoint && BattleFieldLayout::Of(GetWorld()).bSectors && (bSectorStage || !BaseAssault) && !Purpose && !Leader->IsVehicle(S.LeaderUnitID)
+   // Trial -BattleFrontPostSector=1 (default 0; user test play 2026-11-24, "the front gathers in the centre, nobody on the flanks"): the
+   // posts were spread across the map, but only a quarter of the front army's squads stood on theirs and six in ten were in the four
+   // middle rows - walking out from the home in the middle, each stopped to fight what it met on the way (an AI order without sectors
+   // halts at contact). A front army squad's post becomes a sector mission, so it fires on the move until it is inside its post's sector
+   // (-BattleSectorMoveFire, on for map I), as the whole AI does with -BattleSectorAI=1.
+   static const bool bFrontPostSector=[](){int32 V=0; FParse::Value(FCommandLine::Get(),TEXT("BattleFrontPostSector="),V);return V!=0;}();
+   const bool bSectorAIHere=EnableSectorAI || (bFrontPostSector && FrontPosts.Contains(Pair.Key) && [&]{const auto* FG=Groups.Find(GroupOf(Pair.Key));return FG&&FG->Kind==1;}());
+   const bool Sector=!bRaidDuty && !bMortarPost && bSectorAIHere && !bSurpriseBridge && !bRoadWaypoint && BattleFieldLayout::Of(GetWorld()).bSectors && (bSectorStage || !BaseAssault) && !Purpose && !Leader->IsVehicle(S.LeaderUnitID)
       && (Order==EBattleOrder::AttackMove || Order==EBattleOrder::Defend) && BattleSectors::Valid(BattleSectors::Cell(Center));
    if(Sector)Center=BattleSectors::Center(BattleSectors::Cell(Center));
    if(!S.bHasMission || S.bSectorMission!=Sector || S.MissionOrder!=Order || !(Sector?BattleSectors::Cell(S.MissionDestination)==BattleSectors::Cell(Center):S.MissionDestination.Equals(Center,20))) if(!Leader->SameVehicleMission(Pair.Key,Order,Center)) Leader->IssueOrder(Pair.Key,Order,Center,true,Sector);

@@ -205,7 +205,8 @@ int32 UBattleMatch::AreaArmourReaction(int32 Team,int32 SquadID,float DamageRati
   // A vehicle keeps out of the reach of anti-tank soldiers it knows of (it outranges and outruns them), and pulls back after a heavy hit
   // (an anti-tank round or a tank gun) even when it does not know where it came from. Other tanks are fought or avoided by the team
   // layer (AreaCarTarget), not by backing away: distance does not protect from a tank gun.
-  const double Keep=BattleRanges::Reach(EBattleWeapon::AntiTank)+FMath::Max(0.f,T->VehicleStandOffMargin);
+  const double Keep=BattleTactics::ACStandOff()>0&&S->SquadType==BattleSquadType::ArmoredCar?double(BattleTactics::ACStandOff()):
+   BattleRanges::Reach(EBattleWeapon::AntiTank)+FMath::Max(0.f,T->VehicleStandOffMargin); // trial -BattleACStandOff
   const auto& V=AreaIntelView(Team);const FVector* Threat=nullptr;double Nearest=DBL_MAX;
   for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)
   {
@@ -300,8 +301,9 @@ bool UBattleMatch::ArmourWait(int32 SquadID,const FVector& Goal) const
  const FVector Here=R->Position(S->LeaderUnitID);const double Now=GetWorld()->GetTimeSeconds();
  for(int32 ID:S->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())if(const auto* Contacts=Sense->GetContacts(ID))
   for(const auto& C:*Contacts)
-   if(!C.Value.bShared&&Now-C.Value.LastSeenTime<=ArmourWaitMemory&&(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(C.Value.ObservedSquadType):R->IsVehicle(C.Key))
-      &&BattleSquadType::ArmorSmallArms(BattleTactics::ObservedArmour()?C.Value.ObservedSquadType:R->VehicleType(C.Key))<=0.f
+   // The type seen (recorded by BattlePerception.cpp while this switch is on), never the unit's true type (Codex review 2026-11-24).
+   if(!C.Value.bShared&&Now-C.Value.LastSeenTime<=ArmourWaitMemory&&BattleSquadType::IsVehicle(C.Value.ObservedSquadType)
+      &&BattleSquadType::ArmorSmallArms(C.Value.ObservedSquadType)<=0.f
       &&(FVector::Dist2D(Here,C.Value.LastKnownPosition)<=Fear||FVector::Dist2D(Goal,C.Value.LastKnownPosition)<=Fear))
     return true;
  return false;

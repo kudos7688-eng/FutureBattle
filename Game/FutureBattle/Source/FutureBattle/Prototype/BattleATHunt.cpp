@@ -24,6 +24,18 @@ int32 BattleTactics::ATHunt()
  return On;
 }
 
+bool BattleTactics::ATFire()
+{
+ static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleATFire="),V);return V==1;}();
+ return On;
+}
+
+int32 BattleTactics::ACStandOff()
+{
+ static const int32 Keep=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleACStandOff="),V);return V>0?FMath::Clamp(V,2000,60000):0;}();
+ return Keep;
+}
+
 bool BattleTactics::ACShield()
 {
  static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleACShield="),V);return V==1;}();
@@ -35,8 +47,10 @@ void UBattleMatch::UpdateATHunts(int32 Team)
  // Trial -BattleATHunt: an armoured unit (armoured car or tank) that sees an enemy anti-tank soldier itself (its own visible contact,
  // not a shared report) within 400 m asks the nearest one or two free rifle / heavy squads within 500 m of that soldier to attack it.
  // A hunt ends when the soldier is dead, unseen by the team for 20 s, after 60 s, or when the squad is no longer active.
- if(!bArea||!BattleTactics::ATHunt()||Team<0||Team>1)return;
- if(Elapsed<ATHuntClock[Team])ATHunts.Reset();
+ if(!bArea||(!BattleTactics::ATHunt()&&!BattleTactics::ATFire())||Team<0||Team>1)return;
+ if(Elapsed<ATHuntClock[Team]){ATHunts.Reset();ATFireCalls[0].Reset();ATFireCalls[1].Reset();}
+ // -BattleATFire: a call lapses 10 s after the last own armoured sighting.
+ for(auto It=ATFireCalls[Team].CreateIterator();It;++It)if(Elapsed-It.Value()>10.)It.RemoveCurrent();
  ATHuntClock[Team]=Elapsed;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const auto* Perception=GetWorld()->GetSubsystem<UBattlePerception>();
@@ -72,9 +86,15 @@ void UBattleMatch::UpdateATHunts(int32 Team)
   for(int32 EnemyID:ContactKeys)
   {
    const auto& Contact=(*Contacts)[EnemyID];
-   if(!Contact.bVisible||Contact.bShared||Hunted.Contains(EnemyID))continue;
+   if(!Contact.bVisible||Contact.bShared)continue;
    const auto* Enemy=Store->Find(EnemyID);if(!Enemy||!Enemy->IsAlive()||Enemy->Team==Team||!Enemy->CarriesAntiTank())continue;
    const FVector EnemyAt=Contact.LastKnownPosition;if(FVector::DistSquared2D(ArmourAt,EnemyAt)>FMath::Square(40000.))continue;
+   if(BattleTactics::ATFire())
+   {
+    if(!ATFireCalls[Team].Contains(EnemyID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AT_FIRE_CALL team=%d target=%d requester=%d"),Team,EnemyID,ArmourID);
+    ATFireCalls[Team].Add(EnemyID,Elapsed);
+   }
+   if(!BattleTactics::ATHunt()||Hunted.Contains(EnemyID))continue;
    struct FPick{double Distance;int32 SquadID;};TArray<FPick> Picks;
    for(int32 CandidateID:SquadKeys)
    {

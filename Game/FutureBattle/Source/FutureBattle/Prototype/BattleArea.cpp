@@ -30,7 +30,7 @@ int32 UBattleMatch::AreaScore(int32 Team)const
 void UBattleMatch::InitializeArea()
 {
  BattleComposition::LogStart(); // stage 1: returns before constructing definitions when OFF
- Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();FireReveals[0].Reset();FireReveals[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();FrontSectionWish.Reset();FrontOrderScriptDone=false;FrontReservePosts.Reset();FrontReserveRow.Reset();FreeLastPos.Reset();FreeLastStep.Reset();FreeReversals[0]=FreeReversals[1]=0;FreeMoved[0]=FreeMoved[1]=0.;SectorCrowd[0]=SectorCrowd[1]=0;bSetupDone=bSetupBurst=false;FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
+ Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();FireReveals[0].Reset();FireReveals[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();FrontSectionWish.Reset();FrontOrderScriptDone=false;FrontReservePosts.Reset();FrontReserveRow.Reset();FreeLastPos.Reset();FreeLastStep.Reset();FreeReversals[0]=FreeReversals[1]=0;FreeMoved[0]=FreeMoved[1]=0.;SectorCrowd[0]=SectorCrowd[1]=0;FrontLanes[0]=FrontLanes[1]=0;RoadSteps[0]=RoadSteps[1]=0;LatFront[0].Reset();LatFront[1].Reset();LatOther[0].Reset();LatOther[1].Reset();bSetupDone=bSetupBurst=false;FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
  // A team knows the objectives it holds from the start (the depots of map F).
@@ -404,8 +404,9 @@ void UBattleMatch::UpdateAreaHiring()
    const int32 ExoWant=bExoEarly?(Bought>=After?HireIntent.ExoKeep:0):FMath::Min(HireIntent.ExoKeep,Bought/After);
    if((Type==BattleSquadType::Rifle||(bExoEarly&&Type!=BattleSquadType::Scout))&&ExoWant>0&&ActiveOfType(Team,BattleSquadType::Exo)<ExoWant)Type=BattleSquadType::Exo;
    // Supply vehicles (trial -BattleAreaSupplyKeep, default AreaSupplyKeep 0; BattleSupplyCar.cpp): the same pacing, after everything else.
-   const int32 SupplyWant=FMath::Min(HireIntent.SupplyKeep,Bought/After);
-   if(Type==BattleSquadType::Rifle&&SupplyWant>0&&ActiveOfType(Team,BattleSquadType::Supply)<SupplyWant)Type=BattleSquadType::Supply;
+   static const bool bSupplyEarly=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaSupplyEarly="),V);return V==1;}();
+   const int32 SupplyWant=bSupplyEarly?(Bought>=After?HireIntent.SupplyKeep:0):FMath::Min(HireIntent.SupplyKeep,Bought/After);
+   if((Type==BattleSquadType::Rifle||(bSupplyEarly&&Type!=BattleSquadType::Scout))&&SupplyWant>0&&ActiveOfType(Team,BattleSquadType::Supply)<SupplyWant)Type=BattleSquadType::Supply;
    // Elite platoons (trial -BattleAreaEliteKeep=n, default 0; BattleArms.cpp): the same pacing, in place of a rifle squad.
    const int32 EliteWant=FMath::Min(BattleArms::AreaEliteKeep(),Bought/After);
    if(Type==BattleSquadType::Rifle&&EliteWant>0&&ActiveElite(Team)<EliteWant)HireGrade=1;

@@ -383,7 +383,10 @@ void UBattleMatch::UpdateGroups(int32 Team)
    // The supply vehicle keeps its own place (BattleSupplyCar.cpp) and does not hold the group up either.
    if(S->SquadType==BattleSquadType::Supply)continue;
    const FVector P=R->Position(S->LeaderUnitID);++Present;Center+=P;
-   Ready+=FVector::Dist2D(P,G->Rally)<=FMath::Max(500.f,T->GroupRallyRadius);
+   // Trial -BattleGroupSectors: a squad gathers in the sector the group gave it (Codex review 2026-11-24: by the rally point alone, the
+   // squads in the sectors beside it, 50 m or more away, never counted as gathered and the group waited for the time limit).
+   FVector RallyAt=G->Rally;GroupSectorPost(*G,Team,SID,G->Rally,true,false,RallyAt);
+   Ready+=FVector::Dist2D(P,RallyAt)<=FMath::Max(500.f,T->GroupRallyRadius);
   }
   if(Present)Center/=Present;
   // Stage 3: what the group decides as a whole. Own squads' numbers, observed ownership, known enemies (AreaIntelView).
@@ -579,7 +582,9 @@ bool UBattleMatch::GroupSectorPost(const FBattleGroup& G,int32 Team,int32 SquadI
  Members.Sort();
  const int32 Index=Members.Find(SquadID);if(Index==INDEX_NONE)return false;
  const FVector Advance=(AreaHome(1-Team)-AreaHome(Team)).GetSafeNormal2D();
- TSet<FIntPoint> Posted;for(const auto& P:FrontPosts)Posted.Add(BattleSectors::Cell(P.Value));
+ // Own front posts only (Codex review 2026-11-24: FrontPosts holds both teams, and the enemy's planned posts are not observed).
+ const auto* PostStore=GetWorld()->GetSubsystem<UBattleState>();
+ TSet<FIntPoint> Posted;for(const auto& P:FrontPosts)if(const auto* PS=PostStore->FindSquad(P.Key);PS&&PS->Team==Team)Posted.Add(BattleSectors::Cell(P.Value));
  struct FCand{FIntPoint Cell;double Score;};TArray<FCand> Cands;
  for(int32 DX=-1;DX<=1;++DX)for(int32 DY=-1;DY<=1;++DY)
  {

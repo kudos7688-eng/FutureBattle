@@ -296,7 +296,7 @@ public:
  TMap<int32,FVector> FrontReservePosts; // reserve squad -> the sector centre it waits at
  TMap<int32,int32> FrontReserveRow; // reserve squad -> its row (the team's own row order), kept while it stays in the reserve
  // Measurement of the free squads' moves (log only, BATTLE_FRONT_LINE free_rev/free_moved_m; transient): last leader position and 2 s step.
- TMap<int32,FVector> FreeLastPos,FreeLastStep; int32 FreeReversals[2]={0,0}; double FreeMoved[2]={0.,0.}; int32 SectorCrowd[2]={0,0}; /* summed extra squads per shared sector at each update */
+ TMap<int32,FVector> FreeLastPos,FreeLastStep; int32 FreeReversals[2]={0,0}; double FreeMoved[2]={0.,0.}; int32 SectorCrowd[2]={0,0}; int32 FrontLanes[2]={0,0}; int32 RoadSteps[2]={0,0}; TArray<int32> LatFront[2],LatOther[2]; /* log only: infantry squads per row across the map, summed per update */ /* summed extra squads per shared sector at each update */
  float MatchTimeLimit() const;
  // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;
@@ -337,6 +337,8 @@ public:
  // Trials -BattleATHunt / -BattleACShield (BattleATHunt.cpp). Not saved (trial state).
  struct FATHunt { int32 Team=0; int32 Target=INDEX_NONE; FVector Position=FVector::ZeroVector; double StartAt=-1.,SeenAt=-1.; };
  TMap<int32,FATHunt> ATHunts; double ATHuntClock[2]={-1.,-1.};
+ TMap<int32,double> ATFireCalls[2]; // -BattleATFire: anti-tank soldier unit ID -> when an own armoured unit last saw him
+ int64 ATFireAims=0;
  void UpdateATHunts(int32 Team);
  bool ATHuntGoal(int32 Team,int32 SquadID,FVector& Center) const;
  bool ACShieldPost(int32 Team,int32 SquadID,FVector& Post) const;

@@ -590,6 +590,19 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
    else if(G->Kind!=1&&FVector::DistSquared2D(C.At,G->Rally)<=FMath::Square(RallyRadius))C.Score+=RallyBonus;
   }
  }
+ // Trial -BattleATFire (BattleATHunt.cpp): an anti-tank soldier an own armoured unit saw within the last 10 s, at the position the
+ // team knows, comes before every cluster (a single soldier is enough).
+ constexpr double ATFireScore=1.e4;
+ if(BattleTactics::ATFire())if(const auto* FM=GetWorld()->GetSubsystem<UBattleMatch>();FM&&FM->bArea&&(U->Team==0||U->Team==1))
+ {
+  TArray<int32> CallKeys;FM->ATFireCalls[U->Team].GetKeys(CallKeys);CallKeys.Sort();
+  for(int32 Key:CallKeys)
+  {
+   const FVector* At=Known.Find(Key);if(!At)continue;const double D2=FVector::DistSquared2D(Pos,*At);if(D2<Min2||D2>Max2)continue;
+   if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,Key,*At))continue;
+   Candidates.Add({Key,*At,ATFireScore-FMath::Sqrt(D2)/1.e6});
+  }
+ }
  Candidates.Sort([](const FCandidate& A,const FCandidate& B){return A.Score!=B.Score?A.Score>B.Score:A.Key<B.Key;});
  // Never where the blast plus the landing spread may reach an own unit.
  const int32 Selected=FirstSafeArtillery(Candidates,BattleTactics::ArtilleryClustersEnabled(),[&](const FCandidate& C)
@@ -600,6 +613,7 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
  if(Selected!=INDEX_NONE)
  {
   const auto& C=Candidates[Selected];Aim=C.At;if(TargetKey)*TargetKey=C.Key;
+  if(C.Score>=ATFireScore*.5)if(auto* FM=GetWorld()->GetSubsystem<UBattleMatch>()){++FM->ATFireAims;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AT_FIRE unit=%d target=%d aim=(%.0f,%.0f) spg=%d"),ID,C.Key,Aim.X,Aim.Y,bSPG?1:0);}
   if(C.Helped!=INDEX_NONE)
   {
    ++ArtilleryGroupAims;

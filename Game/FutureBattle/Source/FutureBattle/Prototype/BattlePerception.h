@@ -53,8 +53,6 @@ struct FBattleSquadKnowledge
 };
 
 // Squad knowledge, stage 2 (trial -BattleSquadKnowledge=1, default 0; Docs/design-squad-knowledge.md section 9).
-// One enemy known to a squad. Contact holds the newest information: bVisible = a living member sees him now,
-// bShared = the newest information came from another squad's report.
 // Saved form of one -BattleSectorSightHit permission (CrossSectorLook): the time left, as the other perception times are saved.
 USTRUCT()
 struct FBattleSavedCrossLook
@@ -65,6 +63,8 @@ struct FBattleSavedCrossLook
 	UPROPERTY() double Remaining = 0.;
 };
 
+// One enemy known to a squad. Contact holds the newest information: bVisible = a living member sees him now,
+// bShared = the newest information came from another squad's report.
 USTRUCT()
 struct FBattleSquadContact
 {
@@ -88,6 +88,15 @@ struct FBattleSquadReport
 	UPROPERTY() int32 ReceiverSquadID = INDEX_NONE;
 	UPROPERTY() int32 SourceRevision = 0;
 	UPROPERTY() double DeliveryTime = 0.;
+	UPROPERTY() FBattleContact Contact;
+};
+
+// Saved form of one entry of a squad's table (-BattleSquadKnowledge=1): the time is saved as the age, as for the soldiers' contacts.
+USTRUCT()
+struct FBattleSavedSquadContact
+{
+	GENERATED_BODY()
+	UPROPERTY() int32 SquadID = INDEX_NONE;
 	UPROPERTY() FBattleContact Contact;
 };
 
@@ -116,6 +125,9 @@ public:
 	TMap<uint64, double> CrossSectorLook;
 	// Save and load of those permissions (BattleSave.cpp). Restore replaces the whole table, so nothing of the session before a load stays.
 	void CaptureCrossSector(TArray<FBattleSavedCrossLook>& Out, double Now) const;
+	// Save and load of the squads' tables and the squad-to-squad reports on their way (-BattleSquadKnowledge=1). A load with the switch off drops them.
+	void CaptureSquadKnowledge(TArray<FBattleSavedSquadContact>& OutContacts, TArray<FBattleSquadReport>& OutReports, double Now) const;
+	void RestoreSquadKnowledge(const TArray<FBattleSavedSquadContact>& SavedContacts, const TArray<FBattleSquadReport>& SavedReports, double Now);
 	void RestoreCrossSector(const TArray<FBattleSavedCrossLook>& Saved, double Now);
 	double CrossSectorUntil(int32 ObserverID, int32 TargetID) const { return CrossSectorLook.FindRef((uint64(uint32(ObserverID)) << 32) | uint32(TargetID)); }
 	bool bSlowUnknownFar = false; // Diagnostic only: unknown targets beyond 1200cm on alternate visits.

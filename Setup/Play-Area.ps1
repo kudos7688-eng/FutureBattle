@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(-1,0,1)][int]$StanceSteady=-1,[ValidateSet(0,1)][int]$ArrivalReady=0,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[switch]$SectionOrders,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(-1,0,1)][int]$StanceSteady=-1,[ValidateSet(0,1)][int]$ArrivalReady=0,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[switch]$SectionOrders,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms,[switch]$SquadKnowledge)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
@@ -26,6 +26,8 @@ if ($StanceSteady -ge 0) { $extra += "-BattleStanceSteady=$StanceSteady" }
 # -ArrivalReady 1: a soldier at his arrival place while his squad is still on its way crouches instead of standing.
 if ($ArrivalReady -gt 0) { $extra += "-BattleArrivalReady=$ArrivalReady" }
 if ($WalkLook -gt 0) { $extra += "-BattleWalkLook=$WalkLook" }
+# Squad knowledge stage 2 (Docs/design-squad-knowledge.md; trial, default 0): both teams keep what they know per squad.
+if ($SquadKnowledge) { $extra += '-BattleSquadKnowledge=1' }
 # Front plan stage 7 (Docs/design-front-strategy.md 6; trials, default 0): the player's team plans by sections of its front line; U opens the
 # plan panel (section roles, purchase reservations, hiring delegation), the top bar shows the own plan. Team 0 only; second focus allowed.
 if ($SectionOrders) { $FrontPlanPlayer=$true; $extra += @('-BattleFrontSectionOrders=1') }
@@ -52,16 +54,18 @@ if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J' -or $Map -eq 'K') {
     $extra += '-BattleArmourWait=1'
     # A group gives its squads one sector each around its rally and its point, from the side first (trial, user 2026-11-23).
     $extra += '-BattleGroupSectors=1'
-    if ($SectorAI) { $extra += '-BattleSectorAI=1' }
+    # AI orders as sector missions (move by sectors, fire on the move into the sector), as Test-WideSight.ps1 measures them by default
+    # (-SectorAI 1). Before 2026-11-24 the play passed it only with -SectorAI, so the play's AI differed from the measured one (user decision).
+    $extra += '-BattleSectorAI=1'
     # Sector AI trials (default off in matches): fire back when shot, sector route, flank and front stages, pass a crowded corner,
     # fire on the move until inside the sector (no stop: -BattleSquadCoverCheck and -BattleBounding left out, user 11-20), line up
     # along cover walls, flank when pinned, face the known enemy on arrival, march through cover, cover must hide 3 of 5 body
     # samples and no standing in the open, soldiers do not block each other's sight, cover faces where shots came from (user 11-20).
     if ($SectorTrials) { $extra += @('-BattleSectorContact=1','-BattleSectorRoute=1','-BattleSectorFlank=1','-BattleSectorFront=1','-BattleWaypointPass=1','-BattleSectorMoveFire=1','-BattleCoverHuddle=1','-BattlePinnedFlank=1','-BattleArrivalThreat=1','-BattleSectorCoverRoute=1','-BattleCoverStrict=1','-BattleSightTeamMask=1','-BattleShotDirection=1','-BattleDangerRoute=1','-BattleCloseIn=1','-BattleSectorCoverWalk=1','-BattleUnderFireCover=1','-BattleNoCoverFallback=1','-BattleCoverPriority=1') }
 }
-# Infantry arms trial (Docs/design-infantry-arms.md, default off): pistols, 2 hand grenades and melee for every foot soldier,
-# elite platoons and sniper teams (rows of the purchase panel) for the player, one of each kept by the AI (G grenade, V strike, F pistol in direct control).
-if ($Arms) { $extra += @('-BattleSidearms=1','-BattleGrenades=2','-BattleMelee=1','-BattleElite=1','-BattleAreaEliteKeep=1','-BattleSniperTeam=1','-BattleAreaSniperKeep=1','-BattleArmsAssault=1','-BattleArmsCharge=1') }
+# Infantry arms (Docs/design-infantry-arms.md): on by default since 2026-11-24 (user decision) - pistols, 2 hand grenades, melee,
+# elite platoons and sniper teams, AI assault bounds and charges, sector-task bounds, rush watch, covering fire. -Arms is kept
+# for old shortcuts and adds nothing (Q grenade, V strike, F pistol in direct control).
 # Player matches start with the AI running (user request 2026-11-23); tests leave this out and start paused. -Setup starts running too (user 2026-11-24).
 $extra += '-BattleStartRunning'
 $editor = 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe'
