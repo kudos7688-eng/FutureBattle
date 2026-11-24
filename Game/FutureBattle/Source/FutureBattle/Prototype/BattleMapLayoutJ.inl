@@ -410,7 +410,15 @@
 				SidesK[3].Line=-SidesK[3].Line;SidesK[3].In=1.;const double D0=-SidesK[3].Door[0];SidesK[3].Door[0]=-SidesK[3].Door[1];SidesK[3].Door[1]=D0;
 				Swap(SidesK[3].bBlind[0],SidesK[3].bBlind[1]);
 			}
-			// The pieces of the lane from doorway Ix of a side to the hub; false when a tall piece or another blind is in the way.
+			// The blind walls on this sector's side of its four borders (14m x 0.6m, 4.6m inside the wall; BorderJ below builds them
+			// after the content, so the lane has to keep clear of them: a lane from one side can run past the blind of another).
+			TArray<FBox2D> BlindK;
+			for(const FSideK& Sd:SidesK)if(Sd.bOk)for(int32 Bi=0;Bi<2;++Bi)if(Sd.bBlind[Bi])
+			{
+				const double Bc=Sd.Line+Sd.In*460.;
+				BlindK.Add(Sd.bAlongX?FBox2D(FVector2D(Sd.Door[Bi]-700.,Bc-30.),FVector2D(Sd.Door[Bi]+700.,Bc+30.)):FBox2D(FVector2D(Bc-30.,Sd.Door[Bi]-700.),FVector2D(Bc+30.,Sd.Door[Bi]+700.)));
+			}
+			// The pieces of the lane from doorway Ix of a side to the hub; false when a tall piece or a blind is in the way.
 			auto LaneOfK=[&](const FSideK& Sd,int32 Ix,double HubX,double HubY,TArray<FBox2D>& Out)
 			{
 				const double HubA=Sd.bAlongX?HubX:HubY,HubC=Sd.bAlongX?HubY:HubX,Dr=Sd.Door[Ix],Wd=175.;
@@ -425,6 +433,7 @@
 				Add(Ea-Wd,Ea+Wd,Sd.Line+Sd.In*40.,HubC+Sd.In*Wd);
 				Add(Ea+(HubA>=Ea?-Wd:Wd),HubA+(HubA>=Ea?Wd:-Wd),HubC-Wd,HubC+Wd);
 				for(const FBox2D& Ln:Out)for(const FBox2D& Bg:BigK)if(Ln.Intersect(Bg))return false;
+				for(const FBox2D& Ln:Out)for(const FBox2D& Bl:BlindK)if(Ln.Intersect(Bl))return false;
 				return true;
 			};
 			const bool bObjectiveK=Kx==TEXT('O')||Kx==TEXT('D');
