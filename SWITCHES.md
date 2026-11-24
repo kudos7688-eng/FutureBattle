@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 497 種類。
+計 498 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -80,15 +80,16 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleArmourAITeam` | Value | -1 | BattleArmourAI.cpp:63 |  |
 | `-BattleArmourSectorGate` | Value | 0 | BattleWeaponOrders.cpp:16 |  |
 | `-BattleArmourWait` | Value | 0 | BattleArmourAI.cpp:298, BattlePerception.cpp:156 |  |
-| `-BattleArmsAssault` | Value | 2 | BattleArms.cpp:49 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleArmsCharge` | Value | 1 | BattleArms.cpp:50 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleArmsChargeFallen` | Value | 1 | BattleArms.cpp:57 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleArmsChargeSlide` | Value | 1 | BattleArms.cpp:58 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleArmsCoverFire` | Value | 1 | BattleArms.cpp:54 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleArmsRushWatch` | Value | 1 | BattleArms.cpp:53 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleArmsSectorTask` | Value | 1 | BattleArms.cpp:51 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleArmsSlide` | Value | 1 | BattleArms.cpp:56 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleArmsSmoke` | Param | off | BattleArms.cpp:55 |  |
+| `-BattleArmsAssault` | Value | 1 | BattleArms.cpp:50 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
+| `-BattleArmsCharge` | Value | 1 | BattleArms.cpp:51 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
+| `-BattleArmsChargeFallen` | Value | 1 | BattleArms.cpp:58 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
+| `-BattleArmsChargeSlide` | Value | 1 | BattleArms.cpp:59 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
+| `-BattleArmsCoverFire` | Value | 1 | BattleArms.cpp:55 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
+| `-BattleArmsRushWatch` | Value | 1 | BattleArms.cpp:54 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
+| `-BattleArmsSectorTask` | Value | 1 | BattleArms.cpp:52 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
+| `-BattleArmsSlide` | Value | 1 | BattleArms.cpp:57 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
+| `-BattleArmsSmoke` | Param | off | BattleArms.cpp:56 |  |
+| `-BattleArmsTeam` | Value | -1 | BattleArms.cpp:60 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleArrivalReady` | Value | 0 | BattleStance.cpp:72 |  |
 | `-BattleArrivalThreat` | Value | -1 | BattleLeaderRuntime.cpp:1930 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleArrivalWalk` | Value | 1 | BattleLeaderRuntime.cpp:1715 |  |
@@ -203,11 +204,11 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleFrontSquads` | Value | 4 | BattleFrontLine.cpp:229 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFX` | Value | 1 | BattleEffects.cpp:35 |  |
 | `-BattleFXCheck` | Param | off | BattleFXCheck.cpp:186 |  |
-| `-BattleGrenadeDamage` | Value | 90.f | BattleArms.cpp:151 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
-| `-BattleGrenadeRadius` | Value | 500.f | BattleArms.cpp:151 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
-| `-BattleGrenadeRange` | Value | 3000.f | BattleArms.cpp:152 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleGrenadeDamage` | Value | 90.f | BattleArms.cpp:153 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleGrenadeRadius` | Value | 500.f | BattleArms.cpp:153 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleGrenadeRange` | Value | 3000.f | BattleArms.cpp:154 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleGrenades` | Value | 2 | BattleArms.cpp:41 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleGrenadeSquadGap` | Value | 3.f | BattleArms.cpp:161 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleGrenadeSquadGap` | Value | 3.f | BattleArms.cpp:163 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleGroupFireSupport` | Value | -1 | BattleArtillery.cpp:436, BattleGroups.cpp:298 | -1 = on for both teams (default, user 2026-11-21) |
 | `-BattleGroupSectors` | Value | 0 | BattleGroups.cpp:572 |  |
 | `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:654 |  |
@@ -228,7 +229,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleHitReveal` | Value | 0 | BattleLeaderRuntime.cpp:1745 |  |
 | `-BattleKillLog` | Value | 1 | BattleHUD.cpp:1341 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
-| `-BattleLauncherDamage` | Value | 60.f | BattleArms.cpp:158 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleLauncherDamage` | Value | 60.f | BattleArms.cpp:160 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleLeaderCommand` | Value | 0 | BattleGameMode.cpp:54 |  |
 | `-BattleLeaderGuard` | Value | 0 | BattleTactics.cpp:16 |  |
 | `-BattleLeaderHealth` | Value | 3.0 | BattleTactics.cpp:23 |  |
@@ -244,9 +245,9 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleMatchReport` | Value | 空文字列 | BattleMatchSoak.cpp:56 |  |
 | `-BattleMatchScenario` | Value | 0 | BattleMatchSoak.cpp:18 |  |
 | `-BattleMatchSoak` | Param | off | BattleMatchSoak.cpp:14 |  |
-| `-BattleMedicRate` | Value | 4.f | BattleArms.cpp:170 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleMedicRate` | Value | 4.f | BattleArms.cpp:172 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleMelee` | Value | 1 | BattleArms.cpp:42 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleMeleeDamage` | Value | 60.f | BattleArms.cpp:164 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleMeleeDamage` | Value | 60.f | BattleArms.cpp:166 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleMixedFastMatch` | Param | off | BattleLeaderRuntime.cpp:81 |  |
 | `-BattleMixedFastSmoke` | Param | off | BattleLeaderRuntime.cpp:228 |  |
 | `-BattleMixedSaveSmoke` | Param | off | BattleArtillery.cpp:272, BattleLeaderRuntime.cpp:230, BattleMixedBodies.cpp:115, BattleSave.cpp:101 |  |

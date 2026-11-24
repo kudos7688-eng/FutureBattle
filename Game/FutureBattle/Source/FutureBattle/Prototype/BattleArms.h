@@ -34,6 +34,9 @@ namespace BattleArms
  bool CoverFireEnabled();  // -BattleArmsCoverFire=1: covering fire for assault bounds from squads within 60 m (BattleArmsSector.cpp)
  bool SmokeEnabled();     // -BattleArmsSmoke: the self-test (UBattleLeaderRuntime::RunArmsSmoke)
  bool AnyTrial();         // any of the switches above
+ bool ForTeam(int32 Team); // -BattleArmsTeam=0/1 (one-sided trial, default -1 both; 2 neither, its baseline): only that team issues pistols and grenades, hires
+                          // elite platoons and sniper teams, strikes, and has ordinary riflemen bound and charge, watch for rushes
+                          // and give covering fire; the other team plays as with all of them =0. Not part of AnyTrial.
  bool SlideEnabled();     // -BattleArmsSlide=0 (evaluation, default 1): assault dashes neither slide along what they hit nor give up
                           // after 2 s without getting closer (StepCoverApproach), as before 11-22 20:45. Not part of AnyTrial.
  bool ChargeFallenEnabled(); // -BattleArmsChargeFallen=0 (evaluation, default 1): a charge goes on to the enemy's last seen place after
