@@ -576,6 +576,14 @@
 - 削除した一覧は残していない（対象の条件は上のとおり）。
 - **追記（22時55分、ユーザー指示）**：`Setup\Benchmarks\BuildSnapshots` のうち **11月20日以前の凍結ビルド（103個）は中身（DLLなど）を消した**（6.1GB、空き137.9GB）。`manifest.json` と `source.zip` は残してあるので、何から作ったかは追えるが、そのビルドでの再実行はできない（必要なら `source.zip` から作り直す）。11月21日以降の18個（`sectormove-r12`〜`r20`、`stage1-*`、`main-*`、`teammask-379936d`、`composition-0b122ab`、`pointsupply-b2d2d7b`、`sectorsight-bf16b78`）はそのまま。消した時点でこれらを使っている実行中のプロセスは無かった。
 
+## 2026-11-24 11時50分 Claude（実装計画ロードマップ）：ブランチ `ensure` を main へ取り込んだ（ユーザー指示、803443c）。自走砲の弱点・整備拠点の試験切替はすべて既定0のまま
+
+- 入ったもの（どれも既定0、SWITCHES.md に載る）：`-BattleAreaEnsureTypes`（全兵種を必ず1回買う）、`-BattleCounterBattery`・`-BattleCounterBatteryShots`・`-BattleCounterBatteryRest`（撃ち返し）、`-BattleArtilleryVehicleSplash`、`-BattleRepairDepot`・`-BattleArtilleryHomeGap`、`-BattleDepotHealth`・`-BattleDepotRebuild`・`-BattleArtilleryPostRisk`（整備拠点を壊せる・構える場所の損得）、`-BattleMachineRepairRate`・`-BattleRepairHoldFire`、`-BattleSPGSetup`・`-BattleSPGStayAfterFire`（射撃体勢）。`Run-EconomyMatrix.ps1` の条件（DG〜ALLW、AM4〜AMS12）と `Test-WideSight.ps1` の引数も入った。
+- 衝突は ensure 側で直した（f299bc3）：購入の処理は「全兵種を必ず買う」ときの飛ばしと main の購入の予約（`-BattleHireDelegate`）を両方、移動の処理は「撃った後は動かない」と main のダッシュ（`ArmsDashing`）を両方残した。`Test-WideSight.ps1` の引数は両方を合わせた。
+- **直したこと**：ensure の 0ce5177 に、main で未追跡の死亡アニメの素材（`Content/Deaths`、36ファイル）を誤って入れていた。ba0fc7d で追跡を外してから取り込んだので、main の未追跡の素材には触れていない（持ち主のセッションは未確認）。
+- **検証**：main の Build-Editor・Test-Battle（failures=0）・Test-Area（failures=0）。マップI 種7 の全兵種 `ALL` 1試合（凍結ビルド `main-803443c`）で合格、自走砲は出ず、整備拠点・撃ち返しのログも出ない。
+- ensure の作業用コピー `FutureBattle-ensure` は残している（結果は main へ写し済み）。
+
 ## 2026-11-24 10時20分 Claude（実装計画ロードマップ）：`-BattleSPGAmmo` を既定1にした（ユーザー決定「12発・6発で既定に」）。自走砲は弾12発、本拠地25m以内で10秒ごとに6発補給（`BattleTuning` の値のまま）。`-BattleSPGAmmo=0` で元の撃ち放題に戻る
 
 - 変えたのは `BattleArtillery.cpp` の既定値だけ。08時35分の測定で一緒に入れていた `-BattleRepairHoldFire`（ensure ブランチ）は既定にしていない（単独ではほぼ差が無かった）。
