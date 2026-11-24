@@ -236,6 +236,9 @@ public:
  UPROPERTY() float SavedPlayerRouteClock=0;
  // -BattleSectorSightHit permissions still running (2026-11-24). Omitted from the tagged archive when empty; a save without it loads as none.
  UPROPERTY() TArray<FBattleSavedCrossLook> CrossSectorLooks;
+ // -BattleSquadKnowledge=1: the squads' tables and the squad-to-squad reports on their way (2026-11-24). Omitted when both are empty.
+ UPROPERTY() TArray<FBattleSavedSquadContact> SquadContacts;
+ UPROPERTY() TArray<FBattleSquadReport> SquadReports;
  virtual void Serialize(FArchive& Ar) override;
 	bool Validate(FString& Error) const;
  bool ValidateMixed(FString& Error) const;

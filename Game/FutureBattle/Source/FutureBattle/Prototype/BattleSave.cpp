@@ -37,16 +37,17 @@ namespace
  class FSaveWithoutRoutesArchive : public FArchiveProxy
  {
  public:
-  FSaveWithoutRoutesArchive(FArchive& Inner,bool bInNoRoutes,bool bInNoLooks):FArchiveProxy(Inner),bNoRoutes(bInNoRoutes),bNoLooks(bInNoLooks){}
+  FSaveWithoutRoutesArchive(FArchive& Inner,bool bInNoRoutes,bool bInNoLooks,bool bInNoSquads):FArchiveProxy(Inner),bNoRoutes(bInNoRoutes),bNoLooks(bInNoLooks),bNoSquads(bInNoSquads){}
   virtual bool ShouldSkipProperty(const FProperty* Property) const override
   {
    return (Property->GetOwnerStruct()==UBattleSave::StaticClass()&&
     ((bNoRoutes&&(Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,PlayerRoutesVersion)||
      Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,SavedPlayerRoutes)||
      Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,SavedPlayerRouteClock)))||
-     (bNoLooks&&Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,CrossSectorLooks))))||FArchiveProxy::ShouldSkipProperty(Property);
+     (bNoLooks&&Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,CrossSectorLooks))||
+     (bNoSquads&&(Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,SquadContacts)||Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,SquadReports)))))||FArchiveProxy::ShouldSkipProperty(Property);
   }
-  bool bNoRoutes,bNoLooks;
+  bool bNoRoutes,bNoLooks,bNoSquads;
  };
 	bool InRange(double Value, double Min, double Max) { return FMath::IsFinite(Value) && Value >= Min && Value <= Max; }
 	// Limit: FMapDef::SaveLimit of the map for mixed saves, 100m for the old all-actor saves.
@@ -103,9 +104,9 @@ int32 BattleTactics::OverrideSaveRoutesForSmoke(int32 Value)
 
 void UBattleSave::Serialize(FArchive& Ar)
 {
- const bool bNoRoutes=PlayerRoutesVersion==0&&SavedPlayerRoutes.IsEmpty()&&SavedPlayerRouteClock==0,bNoLooks=CrossSectorLooks.IsEmpty();
- if(Ar.IsSaving()&&Ar.IsPersistent()&&(bNoRoutes||bNoLooks))
- {FSaveWithoutRoutesArchive WithoutRoutes(Ar,bNoRoutes,bNoLooks);Super::Serialize(WithoutRoutes);}
+ const bool bNoRoutes=PlayerRoutesVersion==0&&SavedPlayerRoutes.IsEmpty()&&SavedPlayerRouteClock==0,bNoLooks=CrossSectorLooks.IsEmpty(),bNoSquads=SquadContacts.IsEmpty()&&SquadReports.IsEmpty();
+ if(Ar.IsSaving()&&Ar.IsPersistent()&&(bNoRoutes||bNoLooks||bNoSquads))
+ {FSaveWithoutRoutesArchive WithoutRoutes(Ar,bNoRoutes,bNoLooks,bNoSquads);Super::Serialize(WithoutRoutes);}
  else Super::Serialize(Ar);
 }
 
@@ -246,6 +247,22 @@ bool UBattleSave::Validate(FString& Error) const
 	}
 	for (const auto& Report : Reports)
 		if (!ValidContact(Report.ReceiverID, Report.Contact) || !InRange(Report.DeliveryTime, -120, 30) || !BattleSaveValidation::Counter(Report.SourceRevision) || !BattleSaveValidation::Counter(Report.ReceiverRevision)) return Fail(TEXT("Invalid pending report"));
+	// -BattleSquadKnowledge=1: a squad's known enemies and the squad-to-squad reports on their way, by the rules of the soldiers' contacts and reports.
+	if (SquadContacts.Num() > 1000000 || SquadReports.Num() > 1000000) return Fail(TEXT("Invalid squad knowledge"));
+	if (!SquadContacts.IsEmpty() || !SquadReports.IsEmpty())
+	{
+		TMap<int32, int32> SquadTeams; for (const auto& SavedSquad : Squads) SquadTeams.Add(SavedSquad.SquadID, SavedSquad.Team);
+		auto ValidSquadContact = [&](int32 KnowingSquad, const FBattleContact& C)
+		{
+			const int32* KnowingTeam = SquadTeams.Find(KnowingSquad); const auto* const* KnownSource = ByID.Find(C.SourceUnitID); const auto* const* KnownTarget = ByID.Find(C.TargetID);
+			return KnowingTeam && BattleSaveValidation::Contact(C, *KnowingTeam, KnownSource ? *KnownSource : nullptr, KnownTarget ? *KnownTarget : nullptr,
+				Mixed ? BattleFieldLayout::ByName(MapName).SaveLimit : FVector2D(10000, 10000));
+		};
+		for (const auto& SquadContact : SquadContacts) if (!ValidSquadContact(SquadContact.SquadID, SquadContact.Contact)) return Fail(TEXT("Invalid squad knowledge"));
+		for (const auto& SquadReport : SquadReports)
+			if (SquadReport.SourceSquadID == SquadReport.ReceiverSquadID || !SquadTeams.Contains(SquadReport.SourceSquadID) || !ValidSquadContact(SquadReport.ReceiverSquadID, SquadReport.Contact) ||
+				!InRange(SquadReport.DeliveryTime, -120, 30) || !BattleSaveValidation::Counter(SquadReport.SourceRevision)) return Fail(TEXT("Invalid squad report"));
+	}
 	// -BattleSectorSightHit permissions: a living soldier, an enemy of his, at most the 5 s the permission lasts.
 	if (CrossSectorLooks.Num() > 1000000) return Fail(TEXT("Invalid cross-sector look"));
 	for (const auto& Look : CrossSectorLooks)
@@ -377,6 +394,10 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
 	GetWorld()->GetSubsystem<UBattlePerception>()->Capture(Save->Observers, Save->Reports, Now);
 	// Dead observers can remain until the next sliced perception update.
 	for (auto It = Save->Observers.CreateIterator(); It; ++It) if (!Store->Find(It.Key()) || !Store->Find(It.Key())->IsAlive() || It.Value().ProfileRevision != Store->Find(It.Key())->PerceptionRevision) It.RemoveCurrent();
+	// -BattleSquadKnowledge=1: the squads' tables and reports; an entry about a soldier the state no longer holds cannot be checked on load.
+	GetWorld()->GetSubsystem<UBattlePerception>()->CaptureSquadKnowledge(Save->SquadContacts, Save->SquadReports, Now);
+	Save->SquadContacts.RemoveAll([Store](const FBattleSavedSquadContact& Known) { return !Store->FindSquad(Known.SquadID) || !Store->Find(Known.Contact.SourceUnitID) || !Store->Find(Known.Contact.TargetID); });
+	Save->SquadReports.RemoveAll([Store](const FBattleSquadReport& Sent) { return !Store->FindSquad(Sent.SourceSquadID) || !Store->FindSquad(Sent.ReceiverSquadID) || !Store->Find(Sent.Contact.SourceUnitID) || !Store->Find(Sent.Contact.TargetID); });
 	// -BattleSectorSightHit permissions still running; one whose soldier or enemy is down by now is of no use.
 	GetWorld()->GetSubsystem<UBattlePerception>()->CaptureCrossSector(Save->CrossSectorLooks, Now);
 	Save->CrossSectorLooks.RemoveAll([Store](const FBattleSavedCrossLook& Look) { const auto* LookObserver = Store->Find(Look.ObserverID); const auto* LookTarget = Store->Find(Look.TargetID); return !LookObserver || !LookObserver->IsAlive() || !LookTarget || !LookTarget->IsAlive(); });
@@ -509,6 +530,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 	}
 	GetWorld()->GetSubsystem<UBattlePerception>()->Restore(Save->Observers, Save->Reports, Now);
 	GetWorld()->GetSubsystem<UBattlePerception>()->RestoreCrossSector(Save->CrossSectorLooks, Now);
+	GetWorld()->GetSubsystem<UBattlePerception>()->RestoreSquadKnowledge(Save->SquadContacts, Save->SquadReports, Now);
 	if(Mixed){T->RestoreSave(*Save,Now);Team->RestoreSave(*Save);DelegationClock=Save->DelegationClock;GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now);Runtime->RefreshDisplay();}
 	Mode->RefreshVisibility();
 	for (auto* Unit : Spawned) if (Unit->GetUnitID() == Save->ControlledID) { PC->ControlUnit(Unit); PC->SetControlRotation(Save->ViewRotation); break; }

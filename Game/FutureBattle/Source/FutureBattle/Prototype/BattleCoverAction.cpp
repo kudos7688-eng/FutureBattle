@@ -356,9 +356,10 @@ bool UBattleLeaderRuntime::StartFirePosition(int32 ID,FVector Threat,int32 Targe
  Diag.Cover(Places.Num()?TEXT("fire_position_blocked"):TEXT("fire_position_none"));return false;
 }
 
-// Trial -BattleSquadKnowledgeCover=0 (default 1; 2026-11-24): with -BattleSquadKnowledge=1 a cover action still judges its target by the
-// soldier's own contact, as without the squad table (does a member who cannot see the target stay in his cover action too long?).
-static bool SquadKnowledgeCover(){static const bool On=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSquadKnowledgeCover="),V);return V!=0;}();return On;}
+// -BattleSquadKnowledgeCover (default 0 since 2026-11-24): with -BattleSquadKnowledge=1 a cover action still judges its target by the soldier's
+// own contact, as without the squad table. =1: by the squad's table - members who could not see the target stayed in their cover actions,
+// fewer fired at once (map J: shooters per burst on a leader 2.69 -> 2.37; with 0 2.59, kills +15% in 4 of 4 pairs).
+static bool SquadKnowledgeCover(){static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSquadKnowledgeCover="),V);return V!=0;}();return On;}
 
 bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 Target)
 {

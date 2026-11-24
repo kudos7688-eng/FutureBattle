@@ -229,7 +229,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleMeleeDamage` | Value | 60.f | BattleArms.cpp:158 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleMixedFastMatch` | Param | off | BattleLeaderRuntime.cpp:81 |  |
 | `-BattleMixedFastSmoke` | Param | off | BattleLeaderRuntime.cpp:228 |  |
-| `-BattleMixedSaveSmoke` | Param | off | BattleArtillery.cpp:272, BattleLeaderRuntime.cpp:230, BattleMixedBodies.cpp:115, BattleSave.cpp:100 |  |
+| `-BattleMixedSaveSmoke` | Param | off | BattleArtillery.cpp:272, BattleLeaderRuntime.cpp:230, BattleMixedBodies.cpp:115, BattleSave.cpp:101 |  |
 | `-BattleMoveCourse` | Value | 空文字列 | BattleBenchmark.cpp:37 |  |
 | `-BattleMovementScene` | Value | -1 | BattleLeaderRuntime.cpp:93 |  |
 | `-BattleMovementTrial` | Param | off | BattleLeaderRuntime.cpp:92 |  |
@@ -291,7 +291,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleRoutes` | Value | -1 | BattleRoutes.cpp:20 |  |
 | `-BattleRouteTieSymmetric` | Value | 0 | BattleRoutes.cpp:46 |  |
 | `-BattleSaveReloadBoundary` | Value | 0 | BattleArtillery.cpp:266 |  |
-| `-BattleSaveRoutes` | Value | 0 | BattleSave.cpp:93 |  |
+| `-BattleSaveRoutes` | Value | 0 | BattleSave.cpp:94 |  |
 | `-BattleScaleScreenshot` | Value | 空文字列 | BattleLargeFieldTest.cpp:19, BattleScaleSmoke.cpp:17 |  |
 | `-BattleScaleSmoke` | Param | off | BattleGameMode.cpp:147 |  |
 | `-BattleScaleUnits` | Value | 0（BattleController.cpp:103） / 20（BattleGameMode.cpp:79） | BattleController.cpp:103, BattleGameMode.cpp:79 |  |
@@ -325,10 +325,10 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSidearms` | Value | 0 | BattleArms.cpp:38 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleSightExperiment` | Value | 未解決 | BattleLeaderRuntime.cpp:84 |  |
 | `-BattleSightHitStats` | Value | 0 | BattleLeaderRuntime.cpp:400 |  |
-| `-BattleSightPairReuse` | Value | 0 | BattleLeaderRuntime.cpp:360, BattlePerception.cpp:239 |  |
-| `-BattleSightParallel` | Value | 1 | BattlePerception.cpp:238 |  |
+| `-BattleSightPairReuse` | Value | 0 | BattleLeaderRuntime.cpp:360, BattlePerception.cpp:271 |  |
+| `-BattleSightParallel` | Value | 1 | BattlePerception.cpp:270 |  |
 | `-BattleSightRange` | Value | 空文字列 | BattleState.cpp:19 |  |
-| `-BattleSightRayStats` | Value | 0 | BattlePerception.cpp:247 |  |
+| `-BattleSightRayStats` | Value | 0 | BattlePerception.cpp:279 |  |
 | `-BattleSightScanInterval` | Value | .4 | BattleLeaderRuntime.cpp:119 |  |
 | `-BattleSightScanNear` | Value | 1.e7 | BattleLeaderRuntime.cpp:119 |  |
 | `-BattleSightSlowFar` | Value | 0 | BattleLeaderRuntime.cpp:116 |  |
@@ -357,9 +357,9 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSquadCoverCheck` | Value | 0 | BattleLeaderRuntime.cpp:1701 |  |
 | `-BattleSquadFlank` | Value | 1 | BattleSquadTactics.cpp:22 |  |
 | `-BattleSquadIcons` | Value | 1 | BattleHUD.cpp:294, BattleHUD.cpp:1086 |  |
-| `-BattleSquadKnowledge` | Value | 0 | BattlePerception.cpp:78 |  |
-| `-BattleSquadKnowledgeCover` | Value | 1 | BattleCoverAction.cpp:361 |  |
-| `-BattleSquadKnowledgeTeam` | Value | -1 | BattlePerception.cpp:79 |  |
+| `-BattleSquadKnowledge` | Value | 0 | BattlePerception.cpp:110 |  |
+| `-BattleSquadKnowledgeCover` | Value | 0 | BattleCoverAction.cpp:362 |  |
+| `-BattleSquadKnowledgeTeam` | Value | -1 | BattlePerception.cpp:111 |  |
 | `-BattleSquadST2` | Value | 1 | BattleSquadTactics.cpp:21 |  |
 | `-BattleSquadTactics` | Value | 1 | BattleSquadTactics.cpp:17 |  |
 | `-BattleSquadTrial` | Value | 空文字列 | BattleGameMode.cpp:64, BattleUnit.cpp:107 |  |
@@ -419,7 +419,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleVehicleHitCover` | Strifind/Value | 0 | BattleAreaSmoke.cpp:496, BattleArtillery.cpp:45 |  |
 | `-BattleVehicleOrderHere` | Value | 0 | BattleArtillery.cpp:39 |  |
 | `-BattleVehicleRoadGoal` | Value | 0 | BattleLeaderRuntime.cpp:577 |  |
-| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:524, BattleSightExperiment.cpp:42 |  |
+| `-BattleVerifyMixedSave` | Param | off | BattleSave.cpp:546, BattleSightExperiment.cpp:42 |  |
 | `-BattleVerifySaveAt` | Value | 80.f | BattleSightExperiment.cpp:41 |  |
 | `-BattleWalkLook` | Value | 0 | BattleSoldierWatch.cpp:24 |  |
 | `-BattleWalkLookTeam` | Value | -1 | BattleSoldierWatch.cpp:25 |  |

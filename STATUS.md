@@ -31,6 +31,16 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-24 12時10分 Claude（観測ルールの相談）：分隊単位の知識 段階2（`-BattleSquadKnowledge=1`、既定0のまま）を続けた。遮蔽は兵自身の判断・記憶の長さ・セーブを入れ、片側比較はプラス（マップI 撃破 +35%、マップJ +8%）、報告は約1/15〜1/20
+
+- 変更：`-BattleSquadKnowledgeCover` 既定0（`BattleCoverAction.cpp`）、分隊の記憶の長さ＝隊員の最長（`BattlePerception.cpp`）、段階2のセーブ（`UBattleSave::SquadContacts`・`SquadReports`、`CaptureSquadKnowledge`・`RestoreSquadKnowledge`、検査つき）。`SWITCHES.md`・CODEMAP 作り直し。
+- 検証：ビルド、`Test-Battle` failures=0、`Test-MixedSave` 144件合格、段階2ありの保存往復つきの試合（マップJ・マップA）合格。凍結ビルド `obs-s2c`。
+- 片側（切替1の側、基準との差）：マップJ 与えた損害 +14%・撃破 +8%・戦死 +3%・得点差 −5。マップI 与えた損害 +38%・撃破 +35%・戦死 −2%・得点差 +208。
+- 両軍（合計）：マップJ 与えた損害 +9%・撃破 +10%・戦死 +8%・得点 −5%。マップI 与えた損害 +16%・撃破 +13%・戦死 +7%・得点 −14%。前進は進む（進み具合 0.78 → 0.87、0.63 → 0.83）。
+- 負荷：届いた報告 49万 → 2.5万件（J）、152万 → 9.9万件（I）。AI全体はマップJ 変わらず、マップI 1.60 → 1.51 ms。
+- 制限：各4組。切替0が前のビルドと同じ結果かは、main が進んだため比べられていない。画面での確認なし。Codex 指摘3（敵の生死）は未対応。くわしくは `Docs/design-squad-knowledge.md` 9.0。
+- 次の一手：ユーザーの判断待ち（段階2を既定にするか）。既定にする前に、切替0の一致確認と seed の追加、画面での確認。
+
 ## 2026-11-24 11時25分 Claude（ロードマップに従う改善活動）：区間ごとの前進・後退を入れた（`-BattleFrontSectionOrders=1`、既定0、既定の試合は不変。main 9ca0a39）
 
 - **依頼**：ユーザーの「前線ごとに保持、ラインを引いた区画まで前進、後退を入れる」→「実装する」。設計は `Docs/design-front-strategy.md` 段階7の後の注。
