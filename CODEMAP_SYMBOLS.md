@@ -38,7 +38,7 @@
 - `BattleCorpses.cpp`: CorpseSteps:27, UBattleLeaderRuntime::CorpseLifetime:33, UBattleLeaderRuntime::AddCorpse:39, UBattleLeaderRuntime::StepCorpses:46, UBattleLeaderRuntime::HideCorpse:73, UBattleLeaderRuntime::DeathClip:84
 - `BattleCover.h`: UBattleCover::IsBuilt:27, UBattleCover::ResetReservations:33
 - `BattleCover.cpp`: UBattleCover::BuildSlots:27, UBattleCover::BuildSlotIndex:80, UBattleCover::AuditSymmetry:102, UBattleCover::PrebuildSlots:190, UBattleCover::NearbySlots:202, UBattleCover::Owner:225, UBattleCover::IsAvailable:233, UBattleCover::Reserve:253, UBattleCover::Release:268
-- `BattleCoverAction.cpp`: UBattleLeaderRuntime::CancelCoverAction:30, UBattleLeaderRuntime::EndPeekDiag:54, UBattleLeaderRuntime::CoverHideSeconds:64, UBattleLeaderRuntime::CoverLineClear:71, UBattleLeaderRuntime::RevalidatePeek:79, UBattleLeaderRuntime::RequestCoverAction:98, UBattleLeaderRuntime::ContactFirePoint:181, UBattleLeaderRuntime::SquadCanHide:206, UBattleLeaderRuntime::StartHuddle:235, UBattleLeaderRuntime::StartCoverApproach:266, UBattleLeaderRuntime::StartFirePosition:309, UBattleLeaderRuntime::StepCoverApproach:358, UBattleLeaderRuntime::StepCoverAction:498
+- `BattleCoverAction.cpp`: UBattleLeaderRuntime::CancelCoverAction:30, UBattleLeaderRuntime::EndPeekDiag:54, UBattleLeaderRuntime::CoverHideSeconds:64, UBattleLeaderRuntime::CoverLineClear:71, UBattleLeaderRuntime::RevalidatePeek:79, UBattleLeaderRuntime::RequestCoverAction:98, UBattleLeaderRuntime::ContactFirePoint:181, UBattleLeaderRuntime::SquadCanHide:206, UBattleLeaderRuntime::StartHuddle:235, UBattleLeaderRuntime::StartCoverApproach:266, UBattleLeaderRuntime::StartFirePosition:309, UBattleLeaderRuntime::StepCoverApproach:362, UBattleLeaderRuntime::StepCoverAction:502
 - `BattleCoverActionSmoke.cpp`: FootHeights:27, OpenWay:35, UBattleLeaderRuntime::RunCoverActionSmoke:45
 - `BattleDeathShot.cpp`: UBattleLeaderRuntime::RunDeathShot:22
 - `BattleDelegationSmoke.cpp`: ABattleGameMode::RunDelegationSmokeTest:16
@@ -100,8 +100,8 @@
 - `BattleNetworkSerialization.cpp`: FBattleNetUnit::NetSerialize:4
 - `BattleObjectiveSmoke.cpp`: ABattleGameMode::RunObjectiveSmokeTest:8
 - `BattleOrderSmoke.cpp`: ABattleGameMode::CompleteSmokeTest:10, ABattleGameMode::RunOrderSmokeTest:19
-- `BattlePerception.h`: UBattlePerception::AllowCrossSector:105, UBattlePerception::Reset:129
-- `BattlePerception.cpp`: UBattlePerception::Capture:11, UBattlePerception::Restore:22, UBattlePerception::GetContacts:40, UBattlePerception::FindContact:46, UBattlePerception::BuildSquadKnowledge:52, UBattlePerception::SquadKnowledgeMode:59, UBattlePerception::GetSquadContacts:66, UBattlePerception::FindSquadContact:72, UBattlePerception::Knows:78, UBattlePerception::CollectVisibleTargets:88, UBattlePerception::Update:97, UBattlePerception::RevealShooter:589, UBattlePerception::AddHint:598
+- `BattlePerception.h`: UBattlePerception::AllowCrossSector:115, UBattlePerception::CrossSectorUntil:120, UBattlePerception::Reset:143
+- `BattlePerception.cpp`: UBattlePerception::Capture:11, UBattlePerception::CaptureCrossSector:22, UBattlePerception::RestoreCrossSector:33, UBattlePerception::Restore:39, UBattlePerception::GetContacts:57, UBattlePerception::FindContact:63, UBattlePerception::BuildSquadKnowledge:69, UBattlePerception::SquadKnowledgeMode:76, UBattlePerception::GetSquadContacts:83, UBattlePerception::FindSquadContact:89, UBattlePerception::Knows:95, UBattlePerception::CollectVisibleTargets:105, UBattlePerception::Update:114, UBattlePerception::RevealShooter:606, UBattlePerception::AddHint:615
 - `BattlePerceptionOptimizationSmoke.cpp`: ABattleGameMode::RunPerceptionOptimizationSmokeTest:43
 - `BattlePerceptionSmoke.cpp`: ABattleGameMode::RunPerceptionSmokeTest:10
 - `BattlePhase3.h`: UBattleMixedAvoidance::Publish:18
@@ -114,7 +114,7 @@
 - `BattleRenderDiagnostic.cpp`: UBattleSquadTrial::ConfigureT5Diagnostic:34, UBattleSquadTrial::SelectT5Diagnostic:94, UBattleSquadTrial::BeginT5Diagnostic:110, UBattleSquadTrial::FilterT5Diagnostic:138, UBattleSquadTrial::EndT5Diagnostic:162
 - `BattleRoutes.cpp`: UBattleMatch::RoutesOn:17, UBattleMatch::RouteKnownEnemies:24, UBattleMatch::RouteFlankSide:36, UBattleMatch::RouteStep:56
 - `BattleSave.h`: BattleSaveValidation::Counter:19
-- `BattleSave.cpp`: BattleSaveValidation::Contact:55, BattleSaveValidation::Decode:64, BattleSaveValidation::Decode:69, BattleSaveValidation::ClockLimit:77, BattleSaveValidation::Decode:83, BattleTactics::SaveRoutes:89, BattleTactics::OverrideSaveRoutesForSmoke:95, UBattleSave::Serialize:102, UBattleSave::Validate:109, UBattleMatch::CaptureSnapshot:250, UBattleMatch::RestoreSnapshot:373, UBattleMatch::SaveMatch:525, UBattleMatch::LoadMatch:537
+- `BattleSave.cpp`: BattleSaveValidation::Contact:57, BattleSaveValidation::Decode:66, BattleSaveValidation::Decode:71, BattleSaveValidation::ClockLimit:79, BattleSaveValidation::Decode:85, BattleTactics::SaveRoutes:91, BattleTactics::OverrideSaveRoutesForSmoke:97, UBattleSave::Serialize:104, UBattleSave::Validate:112, UBattleMatch::CaptureSnapshot:260, UBattleMatch::RestoreSnapshot:386, UBattleMatch::SaveMatch:539, UBattleMatch::LoadMatch:551
 - `BattleSaveSmoke.cpp`: ABattleGameMode::RunSaveSmokeTest:12
 - `BattleScaleSmoke.cpp`: ABattleGameMode::RunScaleSmokeTest:10
 - `BattleScopeShot.cpp`: UBattleLeaderRuntime::RunScopeShot:15

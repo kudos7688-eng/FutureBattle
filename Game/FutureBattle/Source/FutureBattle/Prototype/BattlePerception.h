@@ -55,6 +55,16 @@ struct FBattleSquadKnowledge
 // Squad knowledge, stage 2 (trial -BattleSquadKnowledge=1, default 0; Docs/design-squad-knowledge.md section 9).
 // One enemy known to a squad. Contact holds the newest information: bVisible = a living member sees him now,
 // bShared = the newest information came from another squad's report.
+// Saved form of one -BattleSectorSightHit permission (CrossSectorLook): the time left, as the other perception times are saved.
+USTRUCT()
+struct FBattleSavedCrossLook
+{
+	GENERATED_BODY()
+	UPROPERTY() int32 ObserverID = INDEX_NONE;
+	UPROPERTY() int32 TargetID = INDEX_NONE;
+	UPROPERTY() double Remaining = 0.;
+};
+
 USTRUCT()
 struct FBattleSquadContact
 {
@@ -101,9 +111,13 @@ public:
 	// [zone][role][seen]: zone 0 = same sector or within 20 m, 1 = neighbouring sector, 2 = farther; role 1 = rifle squad member who is not the leader.
 	int64 RayZone[3][2][2] = {};
 	int64 SectorSightSkipped = 0; // -BattleSectorSight: cross-sector candidates a rifle squad member left to his lookout
-	// Trial -BattleSectorSightHit: until the given time the observer scans for this cross-sector enemy himself (he was hit by him). Not saved.
+	// Trial -BattleSectorSightHit: until the given time the observer scans for this cross-sector enemy himself (he was hit by him). Saved as time left.
 	void AllowCrossSector(int32 ObserverID, int32 TargetID, double Until) { double& Held = CrossSectorLook.FindOrAdd((uint64(uint32(ObserverID)) << 32) | uint32(TargetID)); Held = FMath::Max(Held, Until); }
 	TMap<uint64, double> CrossSectorLook;
+	// Save and load of those permissions (BattleSave.cpp). Restore replaces the whole table, so nothing of the session before a load stays.
+	void CaptureCrossSector(TArray<FBattleSavedCrossLook>& Out, double Now) const;
+	void RestoreCrossSector(const TArray<FBattleSavedCrossLook>& Saved, double Now);
+	double CrossSectorUntil(int32 ObserverID, int32 TargetID) const { return CrossSectorLook.FindRef((uint64(uint32(ObserverID)) << 32) | uint32(TargetID)); }
 	bool bSlowUnknownFar = false; // Diagnostic only: unknown targets beyond 1200cm on alternate visits.
 	void Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double Now, int32 Slice = 0, int32 SliceCount = 1);
 	const TMap<int32, FBattleContact>* GetContacts(int32 ObserverID) const;

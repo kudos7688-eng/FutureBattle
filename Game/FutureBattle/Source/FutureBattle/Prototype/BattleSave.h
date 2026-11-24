@@ -234,6 +234,8 @@ public:
  UPROPERTY() int32 PlayerRoutesVersion=0;
  UPROPERTY() TArray<FBattleSavedPlayerRoute> SavedPlayerRoutes;
  UPROPERTY() float SavedPlayerRouteClock=0;
+ // -BattleSectorSightHit permissions still running (2026-11-24). Omitted from the tagged archive when empty; a save without it loads as none.
+ UPROPERTY() TArray<FBattleSavedCrossLook> CrossSectorLooks;
  virtual void Serialize(FArchive& Ar) override;
 	bool Validate(FString& Error) const;
  bool ValidateMixed(FString& Error) const;

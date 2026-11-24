@@ -31,6 +31,15 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-24 10時45分 Claude（観測ルールの相談）：Codex のレビュー（高2・中4）を受けて、区画視界の例外の許可をセーブに入れた。段階2は遮蔽の行動を兵自身の判断に戻す切替を足し、集中射撃がほぼ基準に戻ることを確かめた
+
+- 変更：`UBattleSave::CrossSectorLooks`（例外の許可を残り時間で保存、検査つき。`BattleSave.h/.cpp`、`BattlePerception.h/.cpp` の `CaptureCrossSector`・`RestoreCrossSector`、`BattleSaveSmoke.cpp`）。段階2：報告の受け取りを隊員の情報のまとめの後に移した、試験切替 `-BattleSquadKnowledgeCover`（既定1、`BattleCoverAction.cpp`）。`SWITCHES.md`・CODEMAP 作り直し。
+- 検証：ビルド、`Test-Battle` failures=0、`Test-MixedSave` 144件合格、保存往復つきの試合（マップJ・マップA）合格。既定の試合は `obs-hitdef-J-s7` と IDENTICAL。凍結ビルド `obs-skc`。
+- 段階2の片側比較（マップJ 4組、基準との差、切替1の側）：段階2 与えた損害 +6%・撃破 +6%・戦死 −2%・得点差 −154（残した資源 −122）。遮蔽を兵自身の判断に戻すと 与えた損害 +9%（4/4）・撃破 +15%（4/4）・戦死 −2%・得点差 −50（残した資源 −32）。隊長への集中射撃に加わる人数 2.69 → 2.37 → 2.59。
+- Codex の指摘の扱い：1（許可の保存）と 5（報告の順番）は対応。2（段階2の保存）・3（敵の生死を見ている）・6（分隊の記憶の長さ）は段階2を続ける時に対応。4（送る兵の選び方）は既存と同じ扱いでそのまま。くわしくは `Docs/design-squad-knowledge.md` 9.0、`Docs/design-sector-combat.md` 7.6。
+- 制限：各4試合。画面での確認なし。段階2は既定0のまま。
+- 次の一手：ユーザーの判断待ち（段階2を「遮蔽は兵自身の判断」の形で続けるか）。
+
 ## 2026-11-24 09時45分 Claude（AC01）：外骨格兵 AC01 に塗装（白・黒の二色とチーム色）とジャンプ・着地の動きを入れて main へ（ユーザー依頼「材質と模様から」「ジャンプモーションも追加して」「色を調整して」）
 
 - **塗装**：
