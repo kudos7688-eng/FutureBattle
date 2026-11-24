@@ -564,6 +564,8 @@ bool UBattleLeaderRuntime::StepCharge(int32 ID,float Dt,double Now)
  if(!U||!U->IsAlive())End=TEXT("arms_charge_end_died");
  else if(!S||S->CommandStatus!=EBattleCommandStatus::Active||S->Order==EBattleOrder::Move)End=TEXT("arms_charge_end_order");
  else if(!Contact)End=TEXT("arms_charge_end_lost");
+ // -BattleArmsSectorTask: a defender's charge ends when the enemy he runs at is seen outside the squad's defended area.
+ else if(BattleArms::SectorTaskEnabled()&&S->Order!=EBattleOrder::AttackMove&&!ArmsInDefendedArea(*S,Contact->LastKnownPosition))End=TEXT("arms_charge_end_left_area");
  else if(A->bReached&&Now-Contact->LastSeenTime>1.)End=TEXT("arms_charge_end_done");
  else if(Now>A->Until)End=TEXT("arms_charge_end_timeout");
  // He saw the enemy fall: down while he had him in his own sight within the last second (user decision 11-23: stop when the enemy is

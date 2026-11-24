@@ -282,7 +282,17 @@ void UBattleLeaderRuntime::StepArmsCoverCalls(double Now)
 		// The bounder's own sighting moves the point.
 		if (Sense) if (const auto* C = Sense->FindContact(It.Key(), It.Value().Target); C && C->bVisible && !C->bShared) It.Value().At = C->LastKnownPosition;
 	}
-	for (auto It = ArmsCoverFire.CreateIterator(); It; ++It) if (Now > It.Value().Until || !ArmsCoverCalls.Contains(It.Value().Bounder)) It.RemoveCurrent();
+	// A supporter drops out when the call ends, or he is down, his squad is ordered to move (or out of command), or the point is out of
+	// his weapon's reach after he moved. The line to the point is checked only when he is picked.
+	for (auto It = ArmsCoverFire.CreateIterator(); It; ++It)
+	{
+		const FArmsCoverCall* Call = ArmsCoverCalls.Find(It.Value().Bounder);
+		const auto* U = Store->Find(It.Key());
+		const auto* S = U ? Store->FindSquad(U->SquadID) : nullptr;
+		if (Now > It.Value().Until || !Call || !U || !U->IsAlive() || !S || S->CommandStatus != EBattleCommandStatus::Active || S->Order == EBattleOrder::Move
+			|| !Bodies.Contains(It.Key()) || FVector::Dist2D(Position(It.Key()), Call->At) > BattleRanges::Engage(U->ActiveWeapon()))
+			It.RemoveCurrent();
+	}
 	if (ArmsCoverCalls.IsEmpty()) return;
 	TArray<int32> Bounders;
 	ArmsCoverCalls.GetKeys(Bounders);
