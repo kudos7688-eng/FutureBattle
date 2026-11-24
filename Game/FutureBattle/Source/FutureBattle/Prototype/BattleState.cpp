@@ -389,6 +389,8 @@ float UBattleState::MaxShieldOf(int32 UnitID) const
  return S?BattleSquadType::ShieldMax(S->SquadType):0.f;
 }
 
+static float ExoTrialRegen(); // -BattleExoShieldRegen (defined with the other exoskeleton trials below)
+
 void UBattleState::AdvanceShields(float DeltaSeconds)
 {
  if(!bShields||DeltaSeconds<=0.f)return;
