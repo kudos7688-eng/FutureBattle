@@ -207,27 +207,34 @@ int32 UBattleMatch::AreaArmourReaction(int32 Team,int32 SquadID,float DamageRati
   // layer (AreaCarTarget), not by backing away: distance does not protect from a tank gun.
   const double Keep=BattleTactics::ACStandOff()>0&&S->SquadType==BattleSquadType::ArmoredCar?double(BattleTactics::ACStandOff()):
    BattleRanges::Reach(EBattleWeapon::AntiTank)+FMath::Max(0.f,T->VehicleStandOffMargin); // trial -BattleACStandOff
-  const auto& V=AreaIntelView(Team);const FVector* Threat=nullptr;double Nearest=DBL_MAX;
+  // Trial -BattleACTankStandOff (default 0): an armoured car also keeps that far from known enemy main guns (tank, self-propelled gun).
+  const double TankKeep=S->SquadType==BattleSquadType::ArmoredCar?double(BattleTactics::ACTankStandOff()):0.;
+  const auto& V=AreaIntelView(Team);const FVector* Threat=nullptr;double Nearest=DBL_MAX,ThreatKeep=Keep;
   for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)
   {
-   const int32 Key=V.EnemyKeys[I];
+   const int32 Key=V.EnemyKeys[I];double ThisKeep=Keep;
    if(BattleTactics::ObservedArmour())
    {
     const uint8 ThreatType=V.ObservedType(Key);
-    if((ThreatType!=BattleSquadType::AntiTank&&ThreatType!=BattleSquadType::Exo)||!V.RecentArmourObservation(Key,Elapsed,FMath::Max(1.f,T->VehicleMemory)))continue;
+    if(!V.RecentArmourObservation(Key,Elapsed,FMath::Max(1.f,T->VehicleMemory)))continue;
+    if(TankKeep>0&&BattleSquadType::HasMainGun(ThreatType))ThisKeep=TankKeep;
+    else if(ThreatType!=BattleSquadType::AntiTank&&ThreatType!=BattleSquadType::Exo)continue;
    }
    else
    {
-    const auto* U=Key>0?Store->Find(Key):nullptr;if(!U||!U->IsAlive()||!U->CarriesAntiTank())continue;
+    const auto* U=Key>0?Store->Find(Key):nullptr;if(!U||!U->IsAlive())continue;
+    if(TankKeep>0&&R->HasMainGun(Key))ThisKeep=TankKeep;
+    else if(!U->CarriesAntiTank())continue;
    }
-   const double D=FVector::Dist2D(Here,V.Enemies[I]);if(D<=Keep&&D<Nearest){Nearest=D;Threat=&V.Enemies[I];}
+   const double D=FVector::Dist2D(Here,V.Enemies[I]);if(D<=ThisKeep&&ThisKeep-D>ThreatKeep-Nearest){Nearest=D;ThreatKeep=ThisKeep;Threat=&V.Enemies[I];}
   }
   const bool bShock=DamageRatio>=FMath::Max(.01f,T->VehicleShockRatio);
   if(!Threat&&!bShock)return 0;
   if(BattleTactics::ACShield()&&S->SquadType==BattleSquadType::ArmoredCar&&!bShock)return 0; // trial: holds, the infantry hunts the soldier
   const FVector ToHome=(Home-Here).GetSafeNormal2D();
   FVector Away=Threat?((Here-*Threat).GetSafeNormal2D()+ToHome*.5).GetSafeNormal2D():ToHome;if(Away.IsNearlyZero())Away=ToHome;
-  const double Distance=Threat?FMath::Max(2000.,Keep+2000.-Nearest):10000.;
+  const double Distance=Threat?FMath::Max(2000.,ThreatKeep+2000.-Nearest):10000.;
+  if(Threat&&TankKeep>0&&ThreatKeep==TankKeep)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AC_TANK_KEEP team=%d squad=%d distance=%.0f"),Team,SquadID,Nearest);
   auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());const ANavigationData* Data=R->NavFor(S->LeaderUnitID);
   if(!Nav||Away.IsNearlyZero())return 0;
   if(!Threat&&bShock&&BattleTactics::VehicleHitCover())
