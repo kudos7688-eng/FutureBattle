@@ -530,7 +530,14 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
    if(S.CommandStatus!=EBattleCommandStatus::Active) continue;
    // A tank keeps the goal it was given even when it drives only to the end of a partial route (SameVehicleMission).
    static const bool EnableSectorAI=[](){int32 V=0; FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
-   const bool Sector=!bRaidDuty && !bMortarPost && EnableSectorAI && !bSurpriseBridge && !bRoadWaypoint && BattleFieldLayout::Of(GetWorld()).bSectors && (bSectorStage || !BaseAssault) && !Purpose && !Leader->IsVehicle(S.LeaderUnitID)
+   // Trial -BattleFrontPostSector=1 (default 0; user test play 2026-11-24, "the front gathers in the centre, nobody on the flanks"): the
+   // posts were spread across the map, but only a quarter of the front army's squads stood on theirs and six in ten were in the four
+   // middle rows - walking out from the home in the middle, each stopped to fight what it met on the way (an AI order without sectors
+   // halts at contact). A front army squad's post becomes a sector mission, so it fires on the move until it is inside its post's sector
+   // (-BattleSectorMoveFire, on for map I), as the whole AI does with -BattleSectorAI=1.
+   static const bool bFrontPostSector=[](){int32 V=0; FParse::Value(FCommandLine::Get(),TEXT("BattleFrontPostSector="),V);return V!=0;}();
+   const bool bSectorAIHere=EnableSectorAI || (bFrontPostSector && FrontPosts.Contains(Pair.Key) && [&]{const auto* FG=Groups.Find(GroupOf(Pair.Key));return FG&&FG->Kind==1;}());
+   const bool Sector=!bRaidDuty && !bMortarPost && bSectorAIHere && !bSurpriseBridge && !bRoadWaypoint && BattleFieldLayout::Of(GetWorld()).bSectors && (bSectorStage || !BaseAssault) && !Purpose && !Leader->IsVehicle(S.LeaderUnitID)
       && (Order==EBattleOrder::AttackMove || Order==EBattleOrder::Defend) && BattleSectors::Valid(BattleSectors::Cell(Center));
    if(Sector)Center=BattleSectors::Center(BattleSectors::Cell(Center));
    if(!S.bHasMission || S.bSectorMission!=Sector || S.MissionOrder!=Order || !(Sector?BattleSectors::Cell(S.MissionDestination)==BattleSectors::Cell(Center):S.MissionDestination.Equals(Center,20))) if(!Leader->SameVehicleMission(Pair.Key,Order,Center)) Leader->IssueOrder(Pair.Key,Order,Center,true,Sector);
