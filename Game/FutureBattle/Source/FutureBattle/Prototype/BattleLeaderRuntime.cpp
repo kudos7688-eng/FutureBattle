@@ -1410,6 +1410,14 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
     if(ShooterSquad && ShooterSquad->SquadType<BattleSquadType::Count && U->Team>=0 && U->Team<2){E.TypeDamage[U->Team][ShooterSquad->SquadType]+=Dealt;E.TypeKills[U->Team][ShooterSquad->SquadType]+=Killed;}
     if(VictimSquadState && VictimSquadState->SquadType<BattleSquadType::Count && VictimTeam>=0 && VictimTeam<2){E.TypeTaken[VictimTeam][VictimSquadState->SquadType]+=Dealt;E.TypeDeaths[VictimTeam][VictimSquadState->SquadType]+=Killed;} }
   (VictimLeader?E.LeaderHits:E.FollowerHits)[VictimTeam]++;
+  // Evaluation only (11-24, why one side kills fewer leaders): every hit on a leader with who fired it. own=1: the shooter sees the leader himself now.
+  if(VictimLeader)
+  {
+   const auto* HitShooterSquad=Store->FindSquad(U->SquadID);const auto* HitOwn=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,Victim);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_LEADER_HIT t=%.2f victim=%d squad=%d team=%d hp=%.0f dmg=%.0f killed=%d living=%d rank=%d shooter=%d shooter_squad=%d shooter_type=%d weapon=%d dist=%.0f own=%d shooter_leader=%d"),
+    GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed,Victim,VictimSquad,VictimTeam,BeforeHP,FMath::Min(BeforeHP,ShotDmg*ArmorScale(Victim,W)),Killed?1:0,SquadLiving,LeaderRank,ID,U->SquadID,
+    HitShooterSquad?int32(HitShooterSquad->SquadType):-1,int32(W),FVector::Dist2D(Position(Victim),Start),HitOwn&&HitOwn->bVisible&&!HitOwn->bShared?1:0,HitShooterSquad&&HitShooterSquad->LeaderUnitID==ID?1:0);
+  }
   E.Cover(HitKeys[VictimCoverState]);if(Killed)E.Cover(DeathKeys[VictimCoverState]);
   // Evaluation only: what a soldier hit outside cover was doing (walking, shooting, other), and for a sector squad whether
   // he was still on the way or already inside the sector (where moving hits come from; 11-20).
