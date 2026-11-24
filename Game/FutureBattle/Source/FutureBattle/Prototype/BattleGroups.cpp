@@ -233,7 +233,7 @@ int32 UBattleMatch::FormGroup(int32 Team,const TArray<int32>& Squads,bool bPlaye
  G.Objective=bArea&&!Objectives.IsEmpty()?GroupFocus(Team,AreaHome(Team)):INDEX_NONE;
  G.Rally=G.Objective!=INDEX_NONE?GroupRally(Team,G.Objective):Center;G.Phase=0;G.PhaseAt=Elapsed;
  for(int32 SID:G.Squads)SquadGroup.Add(SID,G.ID);
- UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_FORM group=%d team=%d player=%d squads=%d objective=%d rally=%s time=%.1f"),G.ID,Team,bPlayer?1:0,G.Squads.Num(),G.Objective,*G.Rally.ToCompactString(),Elapsed);
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_FORM group=%d team=%d player=%d squads=%d objective=%d rally=%s time=%.1f ids=%s"),G.ID,Team,bPlayer?1:0,G.Squads.Num(),G.Objective,*G.Rally.ToCompactString(),Elapsed,*FString::JoinBy(G.Squads,TEXT(","),[](int32 I){return FString::FromInt(I);}));
  const int32 ID=G.ID;Groups.Add(ID,MoveTemp(G));
  return ID;
 }
@@ -315,7 +315,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
     auto& G=Groups[AIGroup];
     for(int32 SID:Pick){G.Squads.Add(SID);SquadGroup.Add(SID,AIGroup);}
     G.Squads.Sort();
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_JOIN group=%d team=%d joined=%d squads=%d time=%.1f"),AIGroup,Team,Pick.Num(),G.Squads.Num(),Elapsed);
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_JOIN group=%d team=%d joined=%d squads=%d time=%.1f ids=%s"),AIGroup,Team,Pick.Num(),G.Squads.Num(),Elapsed,*FString::JoinBy(Pick,TEXT(","),[](int32 I){return FString::FromInt(I);}));
    }
   }
  }

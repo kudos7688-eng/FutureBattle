@@ -4,12 +4,13 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 487 種類。
+計 488 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
-| `-BattleACShield` | Value | 0 | BattleATHunt.cpp:41 |  |
+| `-BattleACShield` | Value | 0 | BattleATHunt.cpp:47 |  |
 | `-BattleACStandOff` | Value | 0 | BattleATHunt.cpp:35 |  |
+| `-BattleACTankStandOff` | Value | 0 | BattleATHunt.cpp:41 |  |
 | `-BattleAIBlindFire` | Value | 0 | BattleBlindFire.cpp:27 | Switch → BattleBlindFire.cpp:14（ヘルパー経由） |
 | `-BattleAICoverProbe` | Value | 0 | BattleTactics.cpp:10 |  |
 | `-BattleAimAssist` | Value | 1 | BattleController.cpp:1637 |  |
@@ -78,7 +79,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleArmourAI` | Value | true | BattleArmourAI.cpp:62 |  |
 | `-BattleArmourAITeam` | Value | -1 | BattleArmourAI.cpp:63 |  |
 | `-BattleArmourSectorGate` | Value | 0 | BattleWeaponOrders.cpp:16 |  |
-| `-BattleArmourWait` | Value | 0 | BattleArmourAI.cpp:291, BattlePerception.cpp:156 |  |
+| `-BattleArmourWait` | Value | 0 | BattleArmourAI.cpp:298, BattlePerception.cpp:156 |  |
 | `-BattleArmsAssault` | Value | 2 | BattleArms.cpp:49 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleArmsCharge` | Value | 1 | BattleArms.cpp:50 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleArmsChargeFallen` | Value | 1 | BattleArms.cpp:57 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
@@ -117,7 +118,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleBlindFireSpread` | Value | 4.f | BattleBlindFire.cpp:30 |  |
 | `-BattleBodyAnim` | Value | 1 | BattleBodyAnim.cpp:59 |  |
 | `-BattleBounding` | Value | 0 | BattleLeaderRuntime.cpp:1730 |  |
-| `-BattleBuyPanelShot` | Value | 空文字列 | BattleBuyPanel.cpp:243 |  |
+| `-BattleBuyPanelShot` | Value | 空文字列 | BattleBuyPanel.cpp:244 |  |
 | `-BattleCarbineReserve` | Value | -1 | BattleTactics.cpp:39 |  |
 | `-BattleCarbineShotRounds` | Value | 1 | BattleTactics.cpp:29 |  |
 | `-BattleCloseIn` | Value | 0 | BattleLeaderRuntime.cpp:1844 |  |

@@ -237,12 +237,15 @@ bool ABattleController::HandleBuyPanelPad(const FInputKeyEventArgs& Params)
 // opened (screenshot <prefix>-open.png) and the first row that can be bought is bought through it (<prefix>-bought.png). With reservations
 // (-BattleHireReserve, default 1) the own resources are then set low (test only) and a tank is reserved through the panel
 // (<prefix>-reserved.png); resources back and the match running, the queue buys it with its notice (<prefix>-reserve-bought.png).
+// The elite platoon and sniper team rows (when shown) are then bought through the panel (<prefix>-elite.png, <prefix>-sniper.png).
 // Then the pad's D-pad down moves the highlight and its B closes the panel. BATTLE_BUY_PANEL_SHOT lines, then quit.
 static void UpdateBuyPanelShot(ABattleController* PC)
 {
  static const FString Prefix=[]{FString P;FParse::Value(FCommandLine::Get(),TEXT("BattleBuyPanelShot="),P);return P;}();
  if(Prefix.IsEmpty())return;
  static int32 Stage=0,TankRow=INDEX_NONE,TanksBefore=0,BoughtBefore=0,CreditsBack=0;static double Next=0.;
+ // The graded rows (elite platoon / sniper team, when shown) are bought after the reservation stages.
+ const int32 GradedStage=BattleArms::EliteEnabled()?11:BattleArms::SniperEnabled()?13:8;
  UWorld* World=PC->GetWorld();auto* Match=World->GetSubsystem<UBattleMatch>();
  const double T=World->GetTimeSeconds();
  int32 W=0,H=0;PC->GetViewportSize(W,H);
@@ -269,7 +272,7 @@ static void UpdateBuyPanelShot(ABattleController* PC)
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BUY_PANEL_SHOT stage=buy t=%.1f row=%d type=%d bought=%d credits=%d->%d active=%d->%d open=%d pad_labels=%d"),T,Row,Row>=0?int32(L.Rows[Row].Type):-1,bBought?1:0,Credits,Match->Credits[0],Active,Match->ActiveSquads(0),PC->IsBuyPanelOpen()?1:0,PC->bGamepadActive?1:0);
   Stage=3;Next=T+.6;
  }
- else if(Stage==3&&T>=Next){FScreenshotRequest::RequestScreenshot(Prefix+TEXT("-bought.png"),true,false);Stage=UBattleMatch::HireReserveOn()?4:8;Next=T+1.;}
+ else if(Stage==3&&T>=Next){FScreenshotRequest::RequestScreenshot(Prefix+TEXT("-bought.png"),true,false);Stage=UBattleMatch::HireReserveOn()?4:GradedStage;Next=T+1.;}
  else if(Stage==4&&T>=Next)
  {
   // Reserve a tank with too few resources (test only: the own resources are lowered here and given back in stage 6).
@@ -300,7 +303,29 @@ static void UpdateBuyPanelShot(ABattleController* PC)
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BUY_PANEL_SHOT stage=reservebuy t=%.1f bought=%d queued=%d tanks=%d->%d bought_count=%d->%d notice=\"%s\""),T,bBought?1:0,Match->HireQueueOf(0).Num(),
    TanksBefore,Match->ActiveOfType(0,BattleSquadType::Tank),BoughtBefore,Match->HireQueueBought[0],*PC->Notice);
   FScreenshotRequest::RequestScreenshot(Prefix+TEXT("-reserve-bought.png"),true,false);
-  Stage=8;Next=T+1.;
+  Stage=GradedStage;Next=T+1.;
+ }
+ else if((Stage==11||Stage==13)&&T>=Next)
+ {
+  // The elite platoon (stage 11) and sniper team (13) rows: the row under its centre (the mouse hit test) is bought through the panel
+  // with enough resources (test only), and one squad of that grade appears. Pictures <prefix>-elite.png / -sniper.png.
+  const uint8 Grade=Stage==11?1:2;const uint8 Type=Grade==1?BattleSquadType::Rifle:BattleSquadType::Scout;
+  Match->Credits[0]=FMath::Max(Match->Credits[0],(Grade==1?BattleArms::EliteCost():BattleArms::SniperCost())+5);
+  const auto L=FBattleBuyPanelLayout::Make(FVector2D(W,H),World);
+  int32 Row=INDEX_NONE;for(int32 I=0;I<L.Rows.Num();++I)if(L.Rows[I].Grade==Grade)Row=I;
+  const int32 Hit=Row>=0?L.RowAt(L.Rows[Row].Origin+L.Rows[Row].Size*.5f):INDEX_NONE;
+  auto Count=[&]{int32 C=0;for(const auto& P:World->GetSubsystem<UBattleState>()->GetSquads())C+=P.Value.Team==0&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==Type&&P.Value.Grade==Grade;return C;};
+  const int32 Before=Count(),Credits=Match->Credits[0];
+  const bool bCalled=Hit>=0&&Hit==Row&&PC->BuyFromPanel(Hit);
+  const int32 After=Count();
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_BUY_PANEL_SHOT stage=%s t=%.1f row=%d hit=%d called=%d bought=%d squads=%d->%d credits=%d->%d state=\"%s\" notice=\"%s\""),Grade==1?TEXT("elite"):TEXT("sniper"),T,Row,Hit==Row&&Row>=0?1:0,bCalled?1:0,
+   After==Before+1&&Match->Credits[0]<Credits?1:0,Before,After,Credits,Match->Credits[0],L.Rows.IsValidIndex(Row)?*L.Rows[Row].State:TEXT(""),*PC->Notice);
+  Stage=Stage+1;Next=T+.6;
+ }
+ else if((Stage==12||Stage==14)&&T>=Next)
+ {
+  FScreenshotRequest::RequestScreenshot(Prefix+(Stage==12?TEXT("-elite.png"):TEXT("-sniper.png")),true,false);
+  Stage=Stage==12&&BattleArms::SniperEnabled()?13:8;Next=T+1.;
  }
  else if(Stage==8&&T>=Next)
  {
