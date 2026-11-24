@@ -84,7 +84,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleArmsSmoke` | Param | off | BattleArms.cpp:49 |  |
 | `-BattleArrivalThreat` | Value | -1 | BattleLeaderRuntime.cpp:1895 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleArrivalWalk` | Value | 1 | BattleLeaderRuntime.cpp:1680 |  |
-| `-BattleArtilleryClusters` | Value | 0 | BattleArtillery.cpp:141 |  |
+| `-BattleArtilleryClusters` | Value | 0 | BattleArtillery.cpp:142 |  |
 | `-BattleArtilleryFlash` | Strifind/Value | 0 | BattleAreaSmoke.cpp:499, BattleArtillery.cpp:57 |  |
 | `-BattleArtilleryObserved` | Value | 0 | BattleArtillery.cpp:33 |  |
 | `-BattleArtilleryPosts` | Strifind/Value | 0 | BattleAreaSmoke.cpp:498, BattleArtillery.cpp:63 |  |
@@ -98,7 +98,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleAttackFocus` | Value | 1 | BattleLeaderRuntime.cpp:1841 |  |
 | `-BattleBenchmark` | Param | off | BattleBenchmark.cpp:28, BattleController.cpp:104, BattleLeaderRuntime.cpp:78 |  |
 | `-BattleBenchmarkFPS` | Param | off | BattleBenchmark.cpp:120, BattleBenchmark.cpp:154 |  |
-| `-BattleBlastOcclusion` | Value | 0 | BattleArtillery.cpp:135 |  |
+| `-BattleBlastOcclusion` | Value | 0 | BattleArtillery.cpp:136 |  |
 | `-BattleBlindFire` | Value | 1 | BattleBlindFire.cpp:26 | Switch → BattleBlindFire.cpp:14（ヘルパー経由） |
 | `-BattleBlindFireClipSide` | Value | "AS_CoverLo_AimR" | BattleBlindFire.cpp:44 |  |
 | `-BattleBlindFireClipTop` | Value | "AS_CoverLo_AimU_down" | BattleBlindFire.cpp:44 |  |
@@ -178,7 +178,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleGrenadeRange` | Value | 3000.f | BattleArms.cpp:146 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleGrenades` | Value | 0 | BattleArms.cpp:39 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleGrenadeSquadGap` | Value | 3.f | BattleArms.cpp:155 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
-| `-BattleGroupFireSupport` | Value | -1 | BattleArtillery.cpp:237, BattleGroups.cpp:292 | -1 = on for both teams (default, user 2026-11-21) |
+| `-BattleGroupFireSupport` | Value | -1 | BattleArtillery.cpp:238, BattleGroups.cpp:292 | -1 = on for both teams (default, user 2026-11-21) |
 | `-BattleGroupSectors` | Value | 0 | BattleGroups.cpp:562 |  |
 | `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:642 |  |
 | `-BattleHeavyCost` | Value | 未解決 | BattleState.cpp:570 |  |
@@ -335,7 +335,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSoldierOrderTest` | Param | off | BattleSoldierOrder.cpp:247 |  |
 | `-BattleSoldierWatch` | Value | 1 | BattleSoldierWatch.cpp:17 |  |
 | `-BattleSoldierWatchTeam` | Value | -1 | BattleSoldierWatch.cpp:18 |  |
-| `-BattleSPGAmmo` | Value | 0 | BattleArtillery.cpp:129 |  |
+| `-BattleSPGAmmo` | Value | 1 | BattleArtillery.cpp:130 |  |
 | `-BattleSPGRange` | Strifind/Value | 100000.f | BattleAreaSmoke.cpp:500, BattleArtillery.cpp:101 |  |
 | `-BattleSplitDecisions` | Param | off | BattleBenchmark.cpp:35 |  |
 | `-BattleSquadCoverCheck` | Value | 0 | BattleLeaderRuntime.cpp:1690 |  |

@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（172 モジュール、46145 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（172 モジュール、46181 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -23,7 +23,7 @@
 |---|---|---|
 | 編成AI・候補選択と貯蓄購入 | `UBattleMatch::UpdateCompositionHiring` (BattleCompositionRuntime.cpp:93) 、 `BattleComposition::Decide` (BattleCompositionPlanner.cpp:13) 、 `BattleComposition::ValidateSave` (BattleCompositionSave.cpp:5) | Planner/PlannerTeams は既定0。ONは不足・緊急性で選択し貯蓄／購入。CombatStateVersion=4、旧保存はPlanner無効。検査は `UBattleLeaderRuntime::RunCompositionSmoke` (BattleCompositionSmoke.cpp:11) |
 | 盾被弾制圧・群の兵種別戦力（試験） | `UBattleLeaderRuntime::NoteUnderFire` (BattleLeaderRuntime.cpp:1919) 、 `UBattleState::AdvanceShields` (BattleState.cpp:392) 、 `UBattleMatch::GroupPower` (BattleGroups.cpp:670) 、 `UBattleMatch::GroupPointPower` (BattleGroups.cpp:678) | `BattleExoShieldSuppression` / `BattleGroupStrength` は既定0。観測兵種は `UBattlePerception::Update` (BattlePerception.cpp:97) で取得、重みはUBattleTuning |
-| 間接射撃の試験切替 | `UBattleMatch::ArtilleryHomeObserved` (BattleAreaIntel.cpp:105) 、 `UBattleMatch::AreaArtilleryClusters` (BattleArtillery.cpp:270) 、 `UBattleLeaderRuntime::FireArtillery` (BattleArtillery.cpp:459) 、 `UBattleLeaderRuntime::ArtilleryBlastTransmission` (BattleArtillery.cpp:549) | 自走砲弾は `UBattleState::UseSPGAmmo` (BattleState.cpp:652) / `UBattleState::RefillSPGAmmo` (BattleState.cpp:660) 。4切替は既定0、CombatStateVersion=3で弾数と切替を保存 |
+| 間接射撃の試験切替 | `UBattleMatch::ArtilleryHomeObserved` (BattleAreaIntel.cpp:105) 、 `UBattleMatch::AreaArtilleryClusters` (BattleArtillery.cpp:271) 、 `UBattleLeaderRuntime::FireArtillery` (BattleArtillery.cpp:460) 、 `UBattleLeaderRuntime::ArtilleryBlastTransmission` (BattleArtillery.cpp:550) | 自走砲弾は `UBattleState::UseSPGAmmo` (BattleState.cpp:652) / `UBattleState::RefillSPGAmmo` (BattleState.cpp:660) 。4切替は既定0、CombatStateVersion=3で弾数と切替を保存 |
 | 歩兵の装備（副武装・手りゅう弾・近接・精鋭小隊・新しい武器種。試験） | `UBattleLeaderRuntime::StepArms` (BattleArms.cpp:218) 、 `UBattleLeaderRuntime::ThrowGrenade` (BattleArms.cpp:637) 、 `UBattleLeaderRuntime::FireLauncherRound` (BattleArms.cpp:663) 、 `UBattleLeaderRuntime::MeleeStrike` (BattleArms.cpp:745) 、 `UBattleLeaderRuntime::UseSidearm` (BattleArms.cpp:796) 、 `UBattleLeaderRuntime::ArmsRoleTarget` (BattleArms.cpp:815) | 切替は `BattleArms`（`-BattleSidearms`・`-BattleGrenades`・`-BattleMelee`・`-BattleElite`・`-BattleAreaEliteKeep`、既定0）。武器の値は `BattleWeaponDef`、精鋭小隊は `UBattleLeaderRuntime::IssueEliteKit` (BattleArms.cpp:190) と `FBattleSquadState::Grade`。設計は Docs/design-infantry-arms.md |
 | 詰め寄り・突撃（歩兵の装備の続き。試験） | `UBattleLeaderRuntime::StartAssault` (BattleArms.cpp:419) 、 `UBattleLeaderRuntime::StartCharge` (BattleArms.cpp:456) 、 `UBattleLeaderRuntime::StepCharge` (BattleArms.cpp:530) | 切替は `-BattleArmsAssault=1/2`・`-BattleArmsCharge=1`（既定0）。どちらも `CoverApproaches` の印（`bAssault`・`bCharge`）で動き、歩きは `UBattleLeaderRuntime::StepCoverApproach` (BattleCoverAction.cpp:358) 。設計は Docs/design-infantry-arms.md |
 | 正規状態・UnitID・部隊 | `UBattleState::RegisterUnit` (BattleState.cpp:99) 、 `UBattleState::CreateSquad` (BattleState.cpp:168) 、 `UBattleState::ApplyDamage` (BattleState.cpp:437) | 構造体は `BattleState.h`（FBattleUnitState、FBattleSquadState）。調整値は同じ .h の `UBattleTuning`（ini で上書き） |
@@ -36,7 +36,7 @@
 | 移動・経路・混雑 | `UBattleLeaderRuntime::StableMove` (BattleStableMovement.cpp:408) 、 `UBattleLeaderRuntime::BuildMovementPlan` (BattleStableMovement.cpp:62) | 到着地点の重なりは `UBattleLeaderRuntime::ReassignOccupiedArrival` (BattleContactMovement.cpp:16) 。目的地の補正は `BattleNavigation::ResolveGoal` (BattleNavigation.cpp:7) |
 | 遮蔽（場所の予約） | `UBattleCover::BuildSlots` (BattleCover.cpp:27) 、 `UBattleCover::Reserve` (BattleCover.cpp:253) | 露出の計算は `BattleTactics::ExposureAt` (BattleTactics.cpp:243) |
 | 体のアニメーション | `ABattleUnit::UpdateBodyAnim` (BattleUnit.cpp:499) 、 `FBattleBodyAnimProxy::Evaluate` (BattleBodyAnim.cpp:228) | 部下は `UBattleLeaderRuntime::FollowerClip` (BattleStance.cpp:118) 、 `UBattleLeaderRuntime::StepBodyTimers` (BattleStance.cpp:147) |
-| 効果音・エフェクト（表示と音だけ） | `BattleAudio::Shot` (BattleAudio.cpp:199) 、 `BattleAudio::Explosion` (BattleAudio.cpp:245) 、 `BattleAudio::TickPlayer` (BattleAudio.cpp:302) 、 `BattleEffects::Explosion` (BattleEffects.cpp:92) | 呼び出しは `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:1263) （射撃・着弾・かすめる弾）、 `UBattleLeaderRuntime::Explode` (BattleAntiTank.cpp:8) （対戦車弾・戦車砲弾・外骨格兵の発射筒の爆発）、 `UBattleLeaderRuntime::FireArtillery` (BattleArtillery.cpp:459) ・ `UBattleLeaderRuntime::StepArtilleryShells` (BattleArtillery.cpp:533) ・ `UBattleLeaderRuntime::ArtilleryImpact` (BattleArtillery.cpp:559) （砲撃）、 `ABattleController::PlayerTick` (BattleController.cpp:1181) （作戦画面の聞く位置・装填/構え/スコープ・拠点と勝敗の合図）。`-BattleSFX=0`／`-BattleFX=0` で止まる。素材と出典は `Docs/ASSET_SOURCES_AUDIO_FX.md` |
+| 効果音・エフェクト（表示と音だけ） | `BattleAudio::Shot` (BattleAudio.cpp:199) 、 `BattleAudio::Explosion` (BattleAudio.cpp:245) 、 `BattleAudio::TickPlayer` (BattleAudio.cpp:302) 、 `BattleEffects::Explosion` (BattleEffects.cpp:92) | 呼び出しは `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:1263) （射撃・着弾・かすめる弾）、 `UBattleLeaderRuntime::Explode` (BattleAntiTank.cpp:8) （対戦車弾・戦車砲弾・外骨格兵の発射筒の爆発）、 `UBattleLeaderRuntime::FireArtillery` (BattleArtillery.cpp:460) ・ `UBattleLeaderRuntime::StepArtilleryShells` (BattleArtillery.cpp:534) ・ `UBattleLeaderRuntime::ArtilleryImpact` (BattleArtillery.cpp:560) （砲撃）、 `ABattleController::PlayerTick` (BattleController.cpp:1181) （作戦画面の聞く位置・装填/構え/スコープ・拠点と勝敗の合図）。`-BattleSFX=0`／`-BattleFX=0` で止まる。素材と出典は `Docs/ASSET_SOURCES_AUDIO_FX.md` |
 | 死体の消滅（表示だけ） | `UBattleLeaderRuntime::StepCorpses` (BattleCorpses.cpp:46) 、 `UBattleLeaderRuntime::HideCorpse` (BattleCorpses.cpp:73) | 登録は OnDeath の `UBattleLeaderRuntime::AddCorpse` (BattleCorpses.cpp:39) |
 | 死体の姿勢（死亡アニメ・遠景VATとの切替） | `UBattleLeaderRuntime::DeathClip` (BattleCorpses.cpp:84) 、 `ABattleVATDisplay::ShowNear` (BattleVATDisplay.cpp:248) 、 `ABattleVATDisplay::Select` (BattleVATDisplay.cpp:328) | 死ぬと遠景表示から外れて死亡クリップを流し、隠れるまで遠景に戻らない。クリップの後は物理で倒れて止まる（ `BattleRagdoll::Start` (BattleRagdoll.cpp:13) 、 `BattleRagdoll::Settle` (BattleRagdoll.cpp:36) 。部下は `UBattleLeaderRuntime::StepBodyTimers` (BattleStance.cpp:147) 、隊長は `ABattleUnit::Tick` (BattleUnit.cpp:212) ）。見た目の確認は `UBattleLeaderRuntime::RunDeathShot` (BattleDeathShot.cpp:22)（Setup/Test-DeathShot.ps1） |
 | ブラインドファイア | `UBattleLeaderRuntime::BlindFireOrigin` (BattleBlindFire.cpp:53) 、 `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:1263) | AIの試験は `UBattleLeaderRuntime::TryAIBlindFire` (BattleBlindFire.cpp:137) |
@@ -98,7 +98,7 @@
 | `BattleAreaState` | .h | 77 | FBattleHireReservation, FBattleAreaState | エリア戦の保存される状態（拠点 HP、収入、観測） |
 | `BattleArmourAI` | .cpp | 378 |  | 兵種を扱うAI：効かない車両を狙わない、対戦車兵の弾の温存、知っている敵車両、戦車の待機位置、兵種の構成（UBattleLeaderRuntime と UBattleMatch の一部） |
 | `BattleArms` | .h/.cpp | 78 + 967 | BattleArms | 歩兵の装備：副武装（拳銃）・手りゅう弾・擲弾銃の弾・近接攻撃・衛生兵の手当て・精鋭小隊の役割と自分の目標、追加の武器種の値（UBattleLeaderRuntime の一部と BattleArms 名前空間） |
-| `BattleArtillery` | .cpp | 986 |  | 迫撃砲と自走砲：間接射撃の目標選び、着弾、陣地の位置（UBattleLeaderRuntime と UBattleMatch の一部） |
+| `BattleArtillery` | .cpp | 987 |  | 迫撃砲と自走砲：間接射撃の目標選び、着弾、陣地の位置（UBattleLeaderRuntime と UBattleMatch の一部） |
 | `BattleAudio` | .h/.cpp | 37 + 365 | BattleAudio | 効果音（音だけ。銃声・着弾・かすめる弾・爆発・発射・砲弾の飛来・装填/構え・拠点と勝敗の合図。素材は Docs/ASSET_SOURCES_AUDIO_FX.md。`-BattleSFX=0` で止まる） |
 | `BattleBlindFire` | .h/.cpp | 47 + 145 | BattleBlindFire | 遮蔽の陰からのブラインドファイア（弾の出る位置・AIの試験・アニメ。UBattleLeaderRuntime の一部） |
 | `BattleBodyAnim` | .h/.cpp | 129 + 371 | BattleBodyAnim, EClip, FBattleBodyLayer, FBattleBodyAnimProxy, UBattleBodyAnimInstance | 体のアニメーション：隊長の下半身と上半身の重ね・反動・被弾・死亡、部下の伏せと死亡のクリップ |
@@ -116,7 +116,7 @@
 | `BattleCoverAction` | .cpp | 633 |  | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部） |
 | `BattleCoverClips` | .h | 79 | BattleCoverClips, FSet | 遮蔽の状態 → 遮蔽アニメの対応表（データだけ。「アセット参考資料の検討」セッション作） |
 | `BattleEffects` | .h/.cpp | 19 + 103 | BattleEffects | 爆発の効果（表示だけ。Lyra の Niagara。`-BattleFX=0` で止まる。着弾の効果は未実装） |
-| `BattleExo` | .cpp | 426 |  | 外骨格兵：盾の回復、副武器（肩の対戦車火器）、専用の部隊判断と軍の割り当て、見た目（AC01の体と武器＝ApplyExoSuit） |
+| `BattleExo` | .cpp | 436 |  | 外骨格兵：盾の回復、副武器（肩の対戦車火器）、専用の部隊判断と軍の割り当て、見た目（AC01の体と武器＝ApplyExoSuit） |
 | `BattleFXCheck` | .h/.cpp | 15 + 221 | BattleFXCheck | 効果音・エフェクトの確認（試験だけ。`-BattleFXCheck`、Setup/Test-SoundFX.ps1。止めた戦闘の前で爆発を撮影し、続けて射撃・着弾・爆発・発射・合図の音を出して、スピーカーを鳴らさずに音の混ざりを WAV に録る） |
 | `BattleFieldLayout` | .h | 332 | BattleFieldLayout, FMapDef | マップごとの定義（広さ、拠点、試合時間）を1つの表にまとめたもの |
 | `BattleFieldReplay` | .cpp | 206 |  | 広域試験の記録と再生（UBattleSquadTrial の一部） |
@@ -130,7 +130,7 @@
 | `BattleMapI` | .h | 112 | BattleMapI | マップI（区画を前提にした設計）の表：50mの区画 20×14 の種類 `Kind`、道路 `Roads`、川・橋・浅瀬の位置、家 `Houses`・丘 `Hills`、高さの表 `MakeHeights`、拠点 `Objectives`。配置は `BattleMapLayoutI.inl`（生成と共有） |
 | `BattleMapJ` | .h | 143 | BattleMapJ, FMirror | マップJ（11-22、`Docs/design-map-j-terrain.md`）の区画の表：山 `M`（通れない・見通しを遮る）・湖 `L`（通れない）と、ビル・集合住宅・教会・工場・廃墟・駐車場・公園・商店の区画。区画ごとの配置の候補と8通りの向き（`Variant`／`Mirror`）、入れる家の位置（`HouseOf`）、拠点・丘・道。配置は `BattleMapLayoutJ.inl`、生成は `BattleMapCommandlet`（`-WideField=J`、`Setup/Initialize-MapJ.ps1`） |
 | `BattleMapK` | .h | 119 | BattleMapK | マップK（11-22、`Docs/design-map-k.md`）の区画の表：密な小さい市街地（街は列4〜15・行3〜10、外側は山）、道 `Roads`、拠点6つ、入れる家 `HouseOf`。配置はマップJ の `BattleMapLayoutJ.inl` を名前空間だけ差し替えて使い、K だけの高い塀・追加の遮蔽は `bDenseCover`、道のトラックは `BattleMapCommandlet`（`-WideField=K`、`Setup/Initialize-MapK.ps1`、区画図 `Setup/Export-MapK.py`） |
-| `BattleMapStats` | .cpp | 186 |  | マップの統計（区域ごとの見通し・遮蔽、経路の長さ）を JSON に書き出す。試合は行わない（UBattleLeaderRuntime の一部） |
+| `BattleMapStats` | .cpp | 190 |  | マップの統計（区域ごとの見通し・遮蔽、経路の長さ）を JSON に書き出す。試合は行わない（UBattleLeaderRuntime の一部） |
 | `BattleMatch` | .h/.cpp | 604 + 576 | FAreaIntent, FBattleObjective, FBattleStrike, FPlayerRoute, UBattleMatch, FFrontPlanTeam, FGroupStrength | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗 |
 | `BattleMetrics` | .h/.cpp | 65 + 142 | FBattleMetricFrame, UBattleMetrics, FBattleScopedMetric | 計測値の記録（1フレームの時間、判断の回数） |
 | `BattleMixedBodies` | .cpp | 207 |  | 混成の兵の体の生成・破棄・復元（UBattleLeaderRuntime の一部） |
@@ -183,7 +183,7 @@
 | `BattleTerrain` | .h | 189 | BattleTerrain, FHeightPatch, FHeights, FHouseShape | 地面の高さの表（マップG）：丘・階段・2階の矩形と、その場所の高さを返す `FHeights::Ground`。家と丘の位置（`HousesG/HillsG`）は生成と共通 |
 | `BattleThreatCover` | .cpp | 270 |  | 個人AI段階A `-BattleThreatCover`：兵ごとの脅威（自分の目撃4秒＋撃たれた方向）、全員から隠れる遮蔽、見破られた遮蔽を出て探し直す（UBattleLeaderRuntime の一部） |
 | `BattleUIText` | .h/.cpp | 13 + 174 | BattleUIText | 画面の文言の日本語化 |
-| `BattleUnit` | .h/.cpp | 213 + 855 | FBattleSightContext, ABattleUnit, ABattleAIController | 兵の Actor（表示と直接操作。正規状態は BattleState 側） |
+| `BattleUnit` | .h/.cpp | 220 + 861 | FBattleSightContext, ABattleUnit, ABattleAIController | 兵の Actor（表示と直接操作。正規状態は BattleState 側） |
 | `BattleVATBake` | .h/.cpp | 9 + 200 |  | VAT の焼き込み・検証・修復（エディタ用） |
 | `BattleVATData` | .h | 40 | FBattleVATClip, FBattleVATMesh, UBattleVATData | VAT のデータ型 |
 | `BattleVATDisplay` | .h/.cpp | 99 + 468 | UBattleVATSkeletalMeshComponent, FBattleVATEntry, ABattleVATDisplay | 遠距離の兵を VAT で描く表示 |
@@ -215,7 +215,7 @@
 | `BattleDeathShot` | .cpp | 123 |  | Death look check (2026-11-21): -BattleDeathShot -BattleArea -BattleWideScreens=<prefix> on a wide mixed map. |
 | `BattleDelegationSmoke` | .cpp | 122 |  |  |
 | `BattleDisplayLODTrial` | .cpp | 83 |  |  |
-| `BattleExoShot` | .cpp | 113 |  | Exoskeleton look check (2026-11-18): -BattleExoShot -BattleArea -BattleWideScreens=<prefix> on a wide mixed map. |
+| `BattleExoShot` | .cpp | 121 |  | Exoskeleton look check (2026-11-18): -BattleExoShot -BattleArea -BattleWideScreens=<prefix> on a wide mixed map. |
 | `BattleFieldTrial` | .cpp | 430 |  |  |
 | `BattleFieldViewTrial` | .cpp | 248 |  |  |
 | `BattleFlankBayTrial` | .cpp | 68 |  |  |

@@ -485,6 +485,13 @@
 - 削除した一覧は残していない（対象の条件は上のとおり）。
 - **追記（22時55分、ユーザー指示）**：`Setup\Benchmarks\BuildSnapshots` のうち **11月20日以前の凍結ビルド（103個）は中身（DLLなど）を消した**（6.1GB、空き137.9GB）。`manifest.json` と `source.zip` は残してあるので、何から作ったかは追えるが、そのビルドでの再実行はできない（必要なら `source.zip` から作り直す）。11月21日以降の18個（`sectormove-r12`〜`r20`、`stage1-*`、`main-*`、`teammask-379936d`、`composition-0b122ab`、`pointsupply-b2d2d7b`、`sectorsight-bf16b78`）はそのまま。消した時点でこれらを使っている実行中のプロセスは無かった。
 
+## 2026-11-24 10時20分 Claude（実装計画ロードマップ）：`-BattleSPGAmmo` を既定1にした（ユーザー決定「12発・6発で既定に」）。自走砲は弾12発、本拠地25m以内で10秒ごとに6発補給（`BattleTuning` の値のまま）。`-BattleSPGAmmo=0` で元の撃ち放題に戻る
+
+- 変えたのは `BattleArtillery.cpp` の既定値だけ。08時35分の測定で一緒に入れていた `-BattleRepairHoldFire`（ensure ブランチ）は既定にしていない（単独ではほぼ差が無かった）。
+- **検証**：main の Build-Editor・Test-Battle（failures=0）・Test-Area（failures=0。自走砲の弾の検査8つが既定で走って合格：最後の1発と弾切れ、弾切れで撃てない、補給の量と上限、保存と復元）。
+- **既定の試合は変わらない見込み**：main では AI が自走砲を買わない（マップI 種7 の全兵種 `ALL`、`-AreaSPGKeep 1` を足しても0両）。必ず買わせる `-AreaEnsureTypes` は ensure ブランチにしかない。つまり、この既定が効くのはプレイヤーが自走砲を買ったときと、ensure を取り込んだ後。
+- **保存の注意**：弾の切替は保存の `ArtilleryTrialFlags` の 2 に入っていて、読み込み時に今の切替と違うと断る（`Indirect-fire trial configuration does not match`、BattleSave.cpp:398）。**今日より前に作った混成の保存（版3以降）は、そのままでは読めない**。`-BattleSPGAmmo=0` を付けて起動すれば読める。版2以前の古い保存だけは、自走砲の弾を初期値（12）にして読む（既存の移し替え）。
+
 ## 2026-11-24 08時35分 Claude（実装計画ロードマップ）：自走砲の弾の数と補給の速さを振った（ユーザー指示）。効くのは補給の速さのほうで、弾の数は 4〜12発でほぼ同じ。24発でも撃破は元の81に戻らず60（ブランチ `ensure`、ビルドは `ensure-d99404b` のまま、設定値を起動引数で上書き）
 
 - **方法**：条件 AM（05時45分の項：弾の限り＋補給・修理に戻ると決めたら撃たない、DH に足して両チーム）の `SPGAmmoCapacity`・`SPGInitialAmmo`（既定12）と `SPGSupplyRounds`（既定 10秒ごとに6発）を、`-ExtraArgs:-ini:Game:[/Script/FutureBattle.BattleTuning]:SPGAmmoCapacity=4,...` で上書きした（`Run-EconomyMatrix.ps1` の AM4・AM8・AM24・AMS2・AMS12）。マップ I・J、seed 7・19、左右入れ替えで各8組、30FPS。流す前に AM4・AMS2 を1試合ずつ流し、同じ試合で自走砲の発射が 79→34 に減ることを確かめた（上書きが効いている）。
