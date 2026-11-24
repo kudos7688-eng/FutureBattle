@@ -7,6 +7,8 @@
 #include "BattleTactics.h"
 #include "BattleMatch.h"
 #include "BattleSectors.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 void UBattlePerception::Capture(TMap<int32, FBattleObserver>& OutObservers, TArray<FBattleReport>& OutReports, double Now) const
 {
@@ -101,7 +103,9 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattlePerception);
 	if (Metrics->bRecording) ++Metrics->PerceptionUpdates;
 	// -BattleAreaCompositionPlanner reads the identified squad type too (review 2026-11-21 F01): record it when either consumer is on.
-	const bool bGroupRecordsType = BattleTactics::GroupStrengthEnabled();
+	// -BattleArmourWait=1 (BattleArmourAI.cpp) judges remembered armour by the type seen, not the unit's true type (Codex review 2026-11-24).
+	static const bool bArmourWaitRecordsType=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArmourWait="),V);return V!=0;}();
+	const bool bGroupRecordsType = BattleTactics::GroupStrengthEnabled()||bArmourWaitRecordsType;
  const auto* CompositionMatch=GetWorld()->GetSubsystem<UBattleMatch>();
  const int32 ObserverCompositionTeams=CompositionMatch?CompositionMatch->CompositionTeams:0;
 	// Cache immutable values for this synchronous update, not between sensor ticks.

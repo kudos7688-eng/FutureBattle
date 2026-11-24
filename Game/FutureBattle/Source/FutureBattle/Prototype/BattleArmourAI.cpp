@@ -292,8 +292,9 @@ bool UBattleMatch::ArmourWait(int32 SquadID,const FVector& Goal) const
  const FVector Here=R->Position(S->LeaderUnitID);const double Now=GetWorld()->GetTimeSeconds();
  for(int32 ID:S->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())if(const auto* Contacts=Sense->GetContacts(ID))
   for(const auto& C:*Contacts)
-   if(!C.Value.bShared&&Now-C.Value.LastSeenTime<=ArmourWaitMemory&&(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(C.Value.ObservedSquadType):R->IsVehicle(C.Key))
-      &&BattleSquadType::ArmorSmallArms(BattleTactics::ObservedArmour()?C.Value.ObservedSquadType:R->VehicleType(C.Key))<=0.f
+   // The type seen (recorded by BattlePerception.cpp while this switch is on), never the unit's true type (Codex review 2026-11-24).
+   if(!C.Value.bShared&&Now-C.Value.LastSeenTime<=ArmourWaitMemory&&BattleSquadType::IsVehicle(C.Value.ObservedSquadType)
+      &&BattleSquadType::ArmorSmallArms(C.Value.ObservedSquadType)<=0.f
       &&(FVector::Dist2D(Here,C.Value.LastKnownPosition)<=Fear||FVector::Dist2D(Goal,C.Value.LastKnownPosition)<=Fear))
     return true;
  return false;
