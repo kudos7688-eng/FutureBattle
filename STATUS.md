@@ -31,6 +31,25 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-24 12時35分 Claude（武器と高級小隊）：歩兵の武器一式・精鋭小隊と狙撃班・AIの躍進と突撃・区画の任務の3つを既定にした（ユーザー決定）。arms を main へ取り込んだ（fc19e68）
+- **既定にしたもの**（どれも `=0` で切れる）：
+  - 武器：`-BattleSidearms=1`、`-BattleGrenades=2`、`-BattleMelee=1`。
+  - 購入：`-BattleElite=1`、`-BattleSniperTeam=1`（購入画面の行）。AI はそれぞれ2つまで買う（`-BattleAreaEliteKeep=2`、`-BattleAreaSniperKeep=2`）。
+  - AI の躍進・突撃：`-BattleArmsAssault=2`、`-BattleArmsCharge=1`（滑り・倒れたら止めるはもともと既定1）。
+  - 区画の任務：`-BattleArmsSectorTask=1`、`-BattleArmsRushWatch=1`、`-BattleArmsCoverFire=1`。
+- **キー**（ユーザー決定）：一人称の手りゅう弾は G から **Q**（パッドは RB）へ移した。G は兵1人への命令のまま（パッドは十字←を足した）。武器の表示に「Qで投げる」と出る。
+- **ほか**：
+  - `Setup/Export-Switches.py` が、ヘルパー関数の既定の引数（`int32 Default=0`）を読めず、BattleArms の切替の既定値を0と出していた。直したので、SWITCHES.md の値は正しい（例：`-BattleEliteCost` 26、`-BattleArmsSlide` 1）。
+  - `Play-Area.ps1 -Arms` は何も足さないようにした（古いショートカット用に残した）。
+  - PROTOTYPE.md に「歩兵の武器」の行を足した。
+- **検証**：
+  - arms：ビルド成功、Test-Battle 合格。既定のマップI 種7（`arms22-I-default-s7`）は、切替を全部書いた試合（`arms21-I-on2-s7`）と IDENTICAL で、セーブ往復も合格。
+  - main（取り込み後）：ビルド成功、Test-Battle 合格。既定のマップI 種7（`main-arms-default-I-s7`）は失敗0、躍進1347、援護の弾1.2万、セーブ往復も合格。
+- **制限**：
+  - 勝ち負けへの効果は、両軍とも同じ切替の比較しかしていない（片側試験はまだ）。
+  - **既定の試合の結果は、この取り込みで変わった**。ほかの作業が「元の結果」として使っている基準の試合は取り直しが要る。
+  - 購入画面で精鋭小隊・狙撃班の行を押す操作は、まだ実際の画面で確かめていない。
+
 ## 2026-11-24 12時30分 Claude（Codex委任）：砲撃支援・対戦車兵の撃ち始め75m・装甲車の離れる距離150m。装甲車の撃破+1・損失+3でプラスにならず、既定0
 
 - ユーザー提案：小隊の排除要請に加えて砲撃支援を頼み、対戦車兵の撃ち始めを75m、装甲車が対戦車兵から離れる距離を150mにする。新しい切替 `-BattleATFire=1`（装甲車か戦車が自分の目で見た対戦車兵に、味方の迫撃砲・自走砲が集団より先に撃つ。1人でも撃つ。味方が近い所には撃たない。見てから10秒で消える）と `-BattleACStandOff=<cm>`（装甲車だけ、離れる距離。既定0＝対戦車兵器の届く距離＋30m）を足した。撃ち始め75mは `-BattleATRange=10000`（届く100m、撃ち始めはその3/4）。盾は入れていない（盾は離れないので150mと両立しない）。今の main（e3898ec）で Build 成功、`Test-Battle` failures=0。元の結果も同じビルドで取り直した。マップI・H、seed 7・19、30FPS、両軍（出力 `ath5-*`）。
