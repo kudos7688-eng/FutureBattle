@@ -89,7 +89,8 @@ void ABattleController::EndPathDraw()
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_INPUT FrontDraw points=%d result=%d"),Drawn.Num(),Rows);
   // The tactical camera looks toward +X, so rows run up and down the screen and a front line is drawn left to right
   // (test play 2026-11-22: the old hint said "vertically", which crosses no row).
-  ShowNotice(Rows>0?FString::Printf(TEXT("前線を引きました（%d行）。Ctrl+右クリックで前線軍に任せます"),Rows)
+  ShowNotice(Rows>0&&GetWorld()->GetSubsystem<UBattleMatch>()->FrontSectionOrdersOn(0)?FString::Printf(TEXT("目標の線を引きました（%d行）。作戦方針（U）で「前進」「後退」にした区間がこの線へ動きます"),Rows)
+   :Rows>0?FString::Printf(TEXT("前線を引きました（%d行）。Ctrl+右クリックで前線軍に任せます"),Rows)
    :Rows==0?FString(TEXT("前線を前線軍に任せました")):Rows==-2?FString(TEXT("前線は敵陣に向かって横切るように（左右に）引いてください"))
    :FString(TEXT("前線軍がありません（部隊を前線軍タブへ入れてください）")));
   return;

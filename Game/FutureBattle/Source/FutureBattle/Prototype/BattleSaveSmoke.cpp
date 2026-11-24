@@ -29,6 +29,7 @@ void ABattleGameMode::RunSaveSmokeTest()
 	Observer.Contacts.Add(EnemyID, Contact); Known.Add(ID, Observer);
 	FBattleReport Report; Report.ReceiverID = FriendID; Report.SourceRevision = A->GetState()->PerceptionRevision; Report.ReceiverRevision = Units[1]->GetState()->PerceptionRevision; Report.DeliveryTime = .5; Report.Contact = Contact;
 	Perception->Restore(Known, { Report }, Now);
+	Perception->RestoreCrossSector({}, Now); Perception->AllowCrossSector(ID, EnemyID, Now + 3.); // a -BattleSectorSightHit permission with 3 s left
 	auto* Save = Match->CaptureSnapshot(); FString Error;
 	CheckSmoke(Save && Save->Validate(Error), *FString::Printf(TEXT("Live match snapshot validates before serialization (%s)"), *Error));
 	if (!Save || !Save->Validate(Error)) { CompleteSmokeTest(); return; }
@@ -57,7 +58,12 @@ void ABattleGameMode::RunSaveSmokeTest()
 	CheckSmoke(Rejected == 8, TEXT("Eight corrupt snapshots reject atomically without changing actors control resources or match ID"));
 	CheckSmoke(Match->SaveMatch(TEXT("FutureBattleSmokeOnly")), TEXT("Dedicated smoke save slot writes successfully without touching the player quicksave"));
 	Match->Credits[0] = 1; Match->Score[0] = 0; Store->ApplyDamage(ID, 1, 10); PC->EnterTactical();
+	Perception->AllowCrossSector(FriendID, EnemyID, GetWorld()->GetTimeSeconds() + 100.); // given after the save: must not survive the load
 	CheckSmoke(Match->LoadMatch(TEXT("FutureBattleSmokeOnly")), TEXT("Disk save reload restores a validated match"));
+	{
+		const double LookLeft = Perception->CrossSectorUntil(ID, EnemyID) - GetWorld()->GetTimeSeconds();
+		CheckSmoke(LookLeft > 0. && LookLeft <= 3.01 && Perception->CrossSectorUntil(FriendID, EnemyID) == 0., TEXT("Cross-sector look permission keeps its time left through a disk reload and a later one is dropped"));
+	}
 	CheckSmoke(Units[4]->GetState()->Weapon == EBattleWeapon::SupportGun && Units[4]->Rifle->GetStaticMesh()->GetName() == TEXT("SM_Support"), TEXT("Disk load re-equips saved support weapon on replacement actor"));
 	auto* Restored = Cast<ABattleUnit>(PC->GetPawn());
 	CheckSmoke(Restored && Restored != A && Restored->GetUnitID() == ID && Restored->GetState()->HP == Before.HP && Restored->GetState()->Ammo == Before.Ammo && Restored->GetState()->Reserve == Before.Reserve && Restored->GetState()->Training == Before.Training,

@@ -356,6 +356,10 @@ bool UBattleLeaderRuntime::StartFirePosition(int32 ID,FVector Threat,int32 Targe
  Diag.Cover(Places.Num()?TEXT("fire_position_blocked"):TEXT("fire_position_none"));return false;
 }
 
+// Trial -BattleSquadKnowledgeCover=0 (default 1; 2026-11-24): with -BattleSquadKnowledge=1 a cover action still judges its target by the
+// soldier's own contact, as without the squad table (does a member who cannot see the target stay in his cover action too long?).
+static bool SquadKnowledgeCover(){static const bool On=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSquadKnowledgeCover="),V);return V!=0;}();return On;}
+
 bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 Target)
 {
  auto* A=CoverApproaches.Find(ID);if(!A)return false;
@@ -365,7 +369,7 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);
  const bool bContactCover=U && BattleTactics::ContactCover(U->Team);
  FBattleContact KnownOfTarget;
- const auto* Contact=U&&GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,U->SquadID,A->Target,KnownOfTarget)?&KnownOfTarget:GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,A->Target);
+ const auto* Contact=U&&SquadKnowledgeCover()&&GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,U->SquadID,A->Target,KnownOfTarget)?&KnownOfTarget:GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,A->Target);
  const FVector Pos=Position(ID);const TCHAR* End=nullptr;
  if(!U || !U->IsAlive())End=TEXT("approach_cancel_died");
  // An assault dash (BattleArms.cpp) survives a re-issued order while the squad still fights where it is (not a move order).
@@ -515,7 +519,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  const bool bWalkingToPlace=U->CoverPhase==1 && U->SoldierMoveUntil>0 && Now<U->SoldierMoveUntil;
  if(bWalkingToPlace)U->CoverSeconds=3.f;
  FBattleContact KnownOfTarget;
- const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,U->SquadID,U->CoverTargetID,KnownOfTarget)?&KnownOfTarget:nullptr;
+ const auto* Contact=!SquadKnowledgeCover()?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,U->CoverTargetID):GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,U->SquadID,U->CoverTargetID,KnownOfTarget)?&KnownOfTarget:nullptr;
  // The walk to a place he chose (stage A relocation, B1) is finished even when the contact goes stale or out of range on the
  // way, and even when the contact is forgotten: stopping halfway would leave him in the open. Once there, the usual rules apply.
  if(!Player && !bWalkingToPlace && (!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds))){Diag.Cover(U->CoverPhase==1?TEXT("cancel_contact_stale_entering"):TEXT("cancel_contact_stale_in_cover"));CancelCoverAction(ID);return false;}

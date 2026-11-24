@@ -37,14 +37,16 @@ namespace
  class FSaveWithoutRoutesArchive : public FArchiveProxy
  {
  public:
-  explicit FSaveWithoutRoutesArchive(FArchive& Inner):FArchiveProxy(Inner){}
+  FSaveWithoutRoutesArchive(FArchive& Inner,bool bInNoRoutes,bool bInNoLooks):FArchiveProxy(Inner),bNoRoutes(bInNoRoutes),bNoLooks(bInNoLooks){}
   virtual bool ShouldSkipProperty(const FProperty* Property) const override
   {
    return (Property->GetOwnerStruct()==UBattleSave::StaticClass()&&
-    (Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,PlayerRoutesVersion)||
+    ((bNoRoutes&&(Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,PlayerRoutesVersion)||
      Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,SavedPlayerRoutes)||
-     Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,SavedPlayerRouteClock)))||FArchiveProxy::ShouldSkipProperty(Property);
+     Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,SavedPlayerRouteClock)))||
+     (bNoLooks&&Property->GetFName()==GET_MEMBER_NAME_CHECKED(UBattleSave,CrossSectorLooks))))||FArchiveProxy::ShouldSkipProperty(Property);
   }
+  bool bNoRoutes,bNoLooks;
  };
 	bool InRange(double Value, double Min, double Max) { return FMath::IsFinite(Value) && Value >= Min && Value <= Max; }
 	// Limit: FMapDef::SaveLimit of the map for mixed saves, 100m for the old all-actor saves.
@@ -101,8 +103,9 @@ int32 BattleTactics::OverrideSaveRoutesForSmoke(int32 Value)
 
 void UBattleSave::Serialize(FArchive& Ar)
 {
- if(Ar.IsSaving()&&Ar.IsPersistent()&&PlayerRoutesVersion==0&&SavedPlayerRoutes.IsEmpty()&&SavedPlayerRouteClock==0)
- {FSaveWithoutRoutesArchive WithoutRoutes(Ar);Super::Serialize(WithoutRoutes);}
+ const bool bNoRoutes=PlayerRoutesVersion==0&&SavedPlayerRoutes.IsEmpty()&&SavedPlayerRouteClock==0,bNoLooks=CrossSectorLooks.IsEmpty();
+ if(Ar.IsSaving()&&Ar.IsPersistent()&&(bNoRoutes||bNoLooks))
+ {FSaveWithoutRoutesArchive WithoutRoutes(Ar,bNoRoutes,bNoLooks);Super::Serialize(WithoutRoutes);}
  else Super::Serialize(Ar);
 }
 
@@ -243,6 +246,13 @@ bool UBattleSave::Validate(FString& Error) const
 	}
 	for (const auto& Report : Reports)
 		if (!ValidContact(Report.ReceiverID, Report.Contact) || !InRange(Report.DeliveryTime, -120, 30) || !BattleSaveValidation::Counter(Report.SourceRevision) || !BattleSaveValidation::Counter(Report.ReceiverRevision)) return Fail(TEXT("Invalid pending report"));
+	// -BattleSectorSightHit permissions: a living soldier, an enemy of his, at most the 5 s the permission lasts.
+	if (CrossSectorLooks.Num() > 1000000) return Fail(TEXT("Invalid cross-sector look"));
+	for (const auto& Look : CrossSectorLooks)
+	{
+		const auto* const* LookObserver = ByID.Find(Look.ObserverID); const auto* const* LookTarget = ByID.Find(Look.TargetID);
+		if (!LookObserver || !LookTarget || !(*LookObserver)->IsAlive() || (*LookObserver)->Team == (*LookTarget)->Team || !InRange(Look.Remaining, 0, 5.01)) return Fail(TEXT("Invalid cross-sector look"));
+	}
 	if(Mixed && !ValidateMixed(Error))return false;
 	Error.Reset(); return true;
 }
@@ -367,6 +377,9 @@ UBattleSave* UBattleMatch::CaptureSnapshot() const
 	GetWorld()->GetSubsystem<UBattlePerception>()->Capture(Save->Observers, Save->Reports, Now);
 	// Dead observers can remain until the next sliced perception update.
 	for (auto It = Save->Observers.CreateIterator(); It; ++It) if (!Store->Find(It.Key()) || !Store->Find(It.Key())->IsAlive() || It.Value().ProfileRevision != Store->Find(It.Key())->PerceptionRevision) It.RemoveCurrent();
+	// -BattleSectorSightHit permissions still running; one whose soldier or enemy is down by now is of no use.
+	GetWorld()->GetSubsystem<UBattlePerception>()->CaptureCrossSector(Save->CrossSectorLooks, Now);
+	Save->CrossSectorLooks.RemoveAll([Store](const FBattleSavedCrossLook& Look) { const auto* LookObserver = Store->Find(Look.ObserverID); const auto* LookTarget = Store->Find(Look.TargetID); return !LookObserver || !LookObserver->IsAlive() || !LookTarget || !LookTarget->IsAlive(); });
 	return Save;
 }
 
@@ -495,6 +508,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
 		if (Unit->GetUnitID() == Save->SelectedID) PC->SetSelection(Unit);
 	}
 	GetWorld()->GetSubsystem<UBattlePerception>()->Restore(Save->Observers, Save->Reports, Now);
+	GetWorld()->GetSubsystem<UBattlePerception>()->RestoreCrossSector(Save->CrossSectorLooks, Now);
 	if(Mixed){T->RestoreSave(*Save,Now);Team->RestoreSave(*Save);DelegationClock=Save->DelegationClock;GetWorld()->GetSubsystem<UBattlePerception>()->Update(Mode->Units,Now);Runtime->RefreshDisplay();}
 	Mode->RefreshVisibility();
 	for (auto* Unit : Spawned) if (Unit->GetUnitID() == Save->ControlledID) { PC->ControlUnit(Unit); PC->SetControlRotation(Save->ViewRotation); break; }
