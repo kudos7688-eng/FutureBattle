@@ -31,6 +31,7 @@ void UBattleLeaderRuntime::CancelCoverAction(int32 ID)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);if(!U)return;
  if(U->CoverPhase==4)EndPeekDiag(ID,U->IsAlive()?TEXT("cancel"):TEXT("died"));
+ QuietPeeks.Remove(ID); // -BattleStanceSteady: the 3 s hide after an empty peek is for the same cover action only
  if(U->CoverPhase){GetWorld()->GetSubsystem<UBattleCover>()->Release(ID);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVER_RELEASE unit=%d phase=%d position=%s remaining=%.2f revision=%d/%d"),ID,U->CoverPhase,*Position(ID).ToCompactString(),U->CoverSeconds,U->OrderRevision,U->CoverOrderRevision);}
  U->CoverPhase=0;U->CoverSeconds=0;U->CoverTargetID=INDEX_NONE;U->CoverSlot=INDEX_NONE;U->SoldierMoveUntil=0;U->CoverFirstBreak=0;RelocateWaiting.Remove(ID);
  // A near follower showing a cover clip returns to his ordinary clip and facing.
