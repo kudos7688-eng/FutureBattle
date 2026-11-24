@@ -89,7 +89,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleArmsSectorTask` | Value | 1 | BattleArms.cpp:52 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleArmsSlide` | Value | 1 | BattleArms.cpp:57 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleArmsSmoke` | Param | off | BattleArms.cpp:56 |  |
-| `-BattleArmsTeam` | Value | -1 | BattleArms.cpp:61 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
+| `-BattleArmsTeam` | Value | -1 | BattleArms.cpp:62 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleArrivalThreat` | Value | -1 | BattleLeaderRuntime.cpp:1912 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleArrivalWalk` | Value | 1 | BattleLeaderRuntime.cpp:1697 |  |
 | `-BattleArtilleryClusters` | Value | 0 | BattleArtillery.cpp:291 |  |
@@ -195,11 +195,11 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleFrontSquads` | Value | 4 | BattleFrontLine.cpp:229 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFX` | Value | 1 | BattleEffects.cpp:35 |  |
 | `-BattleFXCheck` | Param | off | BattleFXCheck.cpp:186 |  |
-| `-BattleGrenadeDamage` | Value | 90.f | BattleArms.cpp:154 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
-| `-BattleGrenadeRadius` | Value | 500.f | BattleArms.cpp:154 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
-| `-BattleGrenadeRange` | Value | 3000.f | BattleArms.cpp:155 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleGrenadeDamage` | Value | 90.f | BattleArms.cpp:155 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleGrenadeRadius` | Value | 500.f | BattleArms.cpp:155 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleGrenadeRange` | Value | 3000.f | BattleArms.cpp:156 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleGrenades` | Value | 2 | BattleArms.cpp:41 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleGrenadeSquadGap` | Value | 3.f | BattleArms.cpp:164 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleGrenadeSquadGap` | Value | 3.f | BattleArms.cpp:165 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleGroupFireSupport` | Value | -1 | BattleArtillery.cpp:436, BattleGroups.cpp:292 | -1 = on for both teams (default, user 2026-11-21) |
 | `-BattleGroupSectors` | Value | 0 | BattleGroups.cpp:565 |  |
 | `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:647 |  |
@@ -219,7 +219,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleHitReveal` | Value | 0 | BattleLeaderRuntime.cpp:1727 |  |
 | `-BattleKillLog` | Value | 1 | BattleHUD.cpp:1341 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
-| `-BattleLauncherDamage` | Value | 60.f | BattleArms.cpp:161 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleLauncherDamage` | Value | 60.f | BattleArms.cpp:162 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleLeaderCommand` | Value | 0 | BattleGameMode.cpp:54 |  |
 | `-BattleLeaderGuard` | Value | 0 | BattleTactics.cpp:16 |  |
 | `-BattleLeaderHealth` | Value | 3.0 | BattleTactics.cpp:23 |  |
@@ -235,9 +235,9 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleMatchReport` | Value | 空文字列 | BattleMatchSoak.cpp:56 |  |
 | `-BattleMatchScenario` | Value | 0 | BattleMatchSoak.cpp:18 |  |
 | `-BattleMatchSoak` | Param | off | BattleMatchSoak.cpp:14 |  |
-| `-BattleMedicRate` | Value | 4.f | BattleArms.cpp:173 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleMedicRate` | Value | 4.f | BattleArms.cpp:174 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleMelee` | Value | 1 | BattleArms.cpp:42 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
-| `-BattleMeleeDamage` | Value | 60.f | BattleArms.cpp:167 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
+| `-BattleMeleeDamage` | Value | 60.f | BattleArms.cpp:168 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleMixedFastMatch` | Param | off | BattleLeaderRuntime.cpp:81 |  |
 | `-BattleMixedFastSmoke` | Param | off | BattleLeaderRuntime.cpp:228 |  |
 | `-BattleMixedSaveSmoke` | Param | off | BattleArtillery.cpp:272, BattleLeaderRuntime.cpp:230, BattleMixedBodies.cpp:115, BattleSave.cpp:101 |  |

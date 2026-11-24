@@ -57,7 +57,8 @@ bool BattleArms::SmokeEnabled(){static const bool b=FParse::Param(FCommandLine::
 bool BattleArms::SlideEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsSlide="),1)!=0;return b;}
 bool BattleArms::ChargeFallenEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsChargeFallen="),1)!=0;return b;}
 bool BattleArms::ChargeSlideEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsChargeSlide="),1)!=0;return b;}
-bool BattleArms::HoldFireEnabled(){static const bool b=IntSwitch(TEXT("BattleArmsHoldFire="),0)!=0;return b;}
+int32 BattleArms::HoldFireMode(){static const int32 N=FMath::Clamp(IntSwitch(TEXT("BattleArmsHoldFire="),0),0,2);return N;}
+bool BattleArms::HoldFireEnabled(){return HoldFireMode()==1;}
 bool BattleArms::ForTeam(int32 Team){static const int32 T=IntSwitch(TEXT("BattleArmsTeam="),-1);return T<0||T==Team;}
 bool BattleArms::AnyTrial(){return SidearmsEnabled()||GrenadeCount()>0||MeleeEnabled()||EliteEnabled()||AreaEliteKeep()>0||SniperEnabled()||AreaSniperKeep()>0||AssaultMode()>0||ChargeEnabled()||SectorTaskEnabled()||RushWatchEnabled()||CoverFireEnabled()||SmokeEnabled();}
 
@@ -383,18 +384,20 @@ void UBattleLeaderRuntime::StepArms(float Dt,double Now)
     int32 Living=0,Dashing=0;
     for(int32 Member:S->Members)if(const auto* M=Store->Find(Member);M&&M->IsAlive()){++Living;if(const auto* A=CoverApproaches.Find(Member);A&&A->bAssault)++Dashing;}
     const auto* Contacts=Sense->GetContacts(ID);const FVector Pos=Position(ID);
-    int32 Best=INDEX_NONE;double BestD=15000.;FVector BestAt=FVector::ZeroVector;
+    int32 Best=INDEX_NONE;double BestD=15000.;FVector BestAt=FVector::ZeroVector;bool bUnseenSkipped=false;
     if(Contacts&&Dashing<(bRole?2:1))for(const auto& C:*Contacts)
     {
      if(Now-C.Value.LastSeenTime>3.||(BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(C.Value.ObservedSquadType):IsVehicle(C.Key)))continue;
      const double D=FVector::Dist2D(Pos,C.Value.LastKnownPosition);if(D<=BattleArms::Grenade().MaxRange||D>=BestD)continue;
+     if(BattleArms::HoldFireMode()==2&&!(C.Value.bVisible&&!C.Value.bShared)){bUnseenSkipped=true;continue;}
      int32 Around=0;for(const auto& O:*Contacts)Around+=Now-O.Value.LastSeenTime<=3.&&FVector::DistSquared2D(O.Value.LastKnownPosition,C.Value.LastKnownPosition)<=FMath::Square(1500.);
      if(Around*2>Living)continue;
      Best=C.Key;BestD=D;BestAt=C.Value.LastKnownPosition;
     }
     // -BattleArmsHoldFire: hold and fire rather than bound while hit within 5 s, or while he sees the target himself within his
     // weapon's engage range (he can already fight it from here); a held soldier does not bound to a remembered place either.
-    bool bHeld=false;
+    bool bHeld=BattleArms::HoldFireMode()==2; // =2: no bound to a remembered place either
+    if(Best==INDEX_NONE&&bUnseenSkipped)SightExperiment.Cover(TEXT("arms_hold_unseen"));
     if(Best!=INDEX_NONE&&BattleArms::HoldFireEnabled())
     {
      const double* Hit=ArmsHitAt.Find(ID);const bool bHit=Hit&&Now-*Hit<=5.;
