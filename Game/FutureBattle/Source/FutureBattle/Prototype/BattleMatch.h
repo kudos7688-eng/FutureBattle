@@ -139,6 +139,14 @@ public:
  // Why a purchase cannot happen now: 0 = it can, 1 = it can later (resources, squad slots, type limit: a reservation waits),
  // 2 = not in this state (disabled, not in combat, bad type, 100 squad records). Why gets HireAreaSquad's message.
  int32 HireBlock(int32 Team,uint8 SquadType,FString& Why,uint8 Grade=0) const; // Grade 1 elite platoon, 2 sniper team (BattleArms.cpp)
+ int32 HireCost(uint8 SquadType,uint8 Grade=0) const;
+ // Replenishments queued for the team (each reserves one resource; HireAreaSquad cancels those the rest cannot cover).
+ int32 PendingReplacements(int32 Team) const;
+ // B03 (Docs/review-2026-11-25): the resources the AI leaves unspent (the player's delegation setting, else the intent's HireReserve) and
+ // whether an AI purchase of Cost keeps them. Checked for every AI purchase, also delegated ones and AI reservations when they are bought;
+ // the player's own purchases and reservations are not limited by it.
+ int32 AIHireKeep(int32 Team) const;
+ bool AIHireAffordable(int32 Team,int32 Cost) const;
  // Buys now when nothing of the same type waits ahead and nothing is starved (as a plain purchase); otherwise queues.
  // Returns 0 refused (LastMessage says why), 1 bought, 2 queued.
  int32 ReserveHire(int32 Team,uint8 SquadType,bool bByAI,int32 Dest=-1);
