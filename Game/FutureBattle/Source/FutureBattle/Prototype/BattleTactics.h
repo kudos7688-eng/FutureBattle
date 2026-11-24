@@ -21,6 +21,18 @@ namespace BattleTactics
  int32 ArtilleryTrialFlags();
  bool ArtilleryObservedEnabled();
  bool SPGAmmoEnabled();
+ // Ammunition trial, stage 1 (2026-11-24, STATUS "弾薬と補給"). -BattleCarbineShotRounds=n (default 1, 1..10): one shot of an AI
+ // soldier's carbine uses n rounds (a burst counted as one shot; damage, spread and the time between shots are unchanged; the
+ // player's own shots stay at 1). -BattleCarbineReserve=n (default -1 = UBattleTuning::ReserveAmmo, 0..1000): reserve rounds a
+ // carbine carries. Other weapons are unchanged.
+ int32 CarbineShotRounds();
+ int32 CarbineReserve();
+ // Stage 2: -BattleSupplyAmmoShare=x (default 0 = off, 0..0.9): an infantry squad whose living members together hold x or less of
+ // their full reserve (loaded rounds are not counted, so a refilled squad is never low) goes for ammunition (a supply vehicle in
+ // reach, else home), instead of only when half or all of them are empty; it resumes with 0.9 of the reserve or more. Own squad
+ // state only (BattleSquadRetreat.cpp). -BattleAreaSupplyEarly=1 (default 0): the AI buys its supply vehicles (-BattleAreaSupplyKeep)
+ // right after its first purchases and before the other special types, instead of last (BattleArea.cpp).
+ float SupplyAmmoShare();
  // Trial -BattleVehicleOrderHere=1 (default 0): a vehicle order to where the vehicle already stands is accepted as arrived (no route needed).
  bool VehicleOrderHere();
  bool ArtilleryPosts(); // Trial -BattleArtilleryPosts=1 (default 0): public mortar posts and raids.

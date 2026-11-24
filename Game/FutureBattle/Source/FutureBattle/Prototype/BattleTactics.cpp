@@ -24,6 +24,22 @@ float BattleTactics::LeaderHealthMultiplier()
  return Multiplier;
 }
 
+int32 BattleTactics::CarbineShotRounds()
+{
+ static const int32 Rounds=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCarbineShotRounds="),Value);return FMath::Clamp(Value,1,10);}();
+ return Rounds;
+}
+float BattleTactics::SupplyAmmoShare()
+{
+ static const float Share=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyAmmoShare="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,.9f):0.f;}();
+ return Share;
+}
+int32 BattleTactics::CarbineReserve()
+{
+ static const int32 Reserve=[](){int32 Value=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleCarbineReserve="),Value);return Value<0?-1:FMath::Min(Value,1000);}();
+ return Reserve;
+}
+
 const BattleTactics::FSupplyTuning& BattleTactics::Supply()
 {
  static const FSupplyTuning Value=[]()

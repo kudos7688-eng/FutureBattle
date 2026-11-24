@@ -1324,7 +1324,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   return FireExoLauncher(ID,Start+Direction.GetSafeNormal()*BattleRanges::Reach(EBattleWeapon::AntiTank),Now);
  Store->UpdateAim(ID,Now,Actor(ID)?Actor(ID)->GetVelocity().Size2D():Bodies.FindChecked(ID).Velocity.Size2D(),Direction,Actor(ID)?Actor(ID)->GetCharacterMovement()->IsMovingOnGround():true);
  if(ABattleUnit* Shooter=Actor(ID);Shooter && !bPlayerShot)Shooter->NoteDisplayAim(Direction,Now);
- if(bSide?!BattleArms::ConsumeSidearmShot(Store->Units.FindChecked(ID),Now,T->ShotInterval(W,bPlayerShot)):!Store->ConsumeShot(ID,Now,T->ShotInterval(W,bPlayerShot))) return false;
+ if(bSide?!BattleArms::ConsumeSidearmShot(Store->Units.FindChecked(ID),Now,T->ShotInterval(W,bPlayerShot)):!Store->ConsumeShot(ID,Now,T->ShotInterval(W,bPlayerShot),!bPlayerShot&&W==EBattleWeapon::Carbine?BattleTactics::CarbineShotRounds():1)) return false;
  if(bSide)SightExperiment.Cover(bPlayerShot?TEXT("arms_sidearm_shots_player"):TEXT("arms_sidearm_shots"));
  if(SightExperiment.Started)
  {
