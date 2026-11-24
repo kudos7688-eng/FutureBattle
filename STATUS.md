@@ -31,6 +31,12 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-25 04時03分 Claude（個人AI）：着いた兵がしゃがんで待つ試験切替 `-BattleArrivalReady=1` を main へ統合した（既定0、ユーザーの指示）
+
+- **統合**：soldierai を main へ早送り（0412a46）、push 済み。Build-Editor 成功、Test-Battle 合格（failures=0）。既定0なので既定の試合は変わらない。結果は 2026-11-24 16時00分 の項目（戦死 +13・+12、しゃがみの回数 約+20%）。
+- **試遊**：`Play-Area.ps1 -Map I -ArrivalReady 1`。デスクトップに「FutureBattle 着いた兵がしゃがんで待つ マップI」を置いた。
+- **次の一手**：ユーザーの試遊と、既定にするかの判断。
+
 ## 2026-11-25 Claude（Codex委任）：装甲車の改善はユーザーの判断でここで止める
 
 - 11-23〜24 に試した装甲車の切替は、どれも既定0のまま main にある：`-BattleATRange`（対戦車兵器の届く距離、撃ち始めは3/4）、`-BattleATHunt=1|2`（装甲車が見た対戦車兵を小銃・重歩兵が攻撃。2 は見失っても最後の位置まで）、`-BattleACShield`（装甲車が攻撃中の歩兵の40m前）、`-BattleATFire`（装甲車が見た対戦車兵に迫撃砲・自走砲が撃つ）、`-BattleACStandOff`（装甲車が対戦車兵から離れる距離）、`-BattleACTankStandOff`（装甲車が敵の主砲から離れる距離）。
