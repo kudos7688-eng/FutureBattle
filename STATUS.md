@@ -31,6 +31,15 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-24 09時00分 Claude（観測ルールの相談）：区画視界の例外 `-BattleSectorSightHit` を既定1にした（ユーザー決定）。撃たれた兵は、撃ってきた別区画の敵を5秒間自分でも探す。**既定の試合結果が変わるので、これより前の基準の試合とは比べない**
+
+- 変更：`BattleSectorSight.cpp` の既定 0 → 1（`=0` で切、`=2` は分隊の全員）。評価用のログ `BATTLE_LEADER_HIT`（隊長への命中ごと、`BattleLeaderRuntime.cpp`。結果は変えない）。`SWITCHES.md`・CODEMAP 作り直し。
+- 検証：ビルド、`Test-Battle` failures=0。既定は `obs-both-hit1-J-s7` と、`=0` は `obs-lh-off-J-s7` と IDENTICAL。凍結ビルド `obs-hitdef`。
+- 両軍とも区画視界ありのマップJ 4試合（両軍の合計、例外なし → `=1` → `=2`）：与えた損害 53129 → 52718 → 56275、撃破 334 → 309 → 334、戦死 292 → 263 → 291、AIの負荷 1.24 → 1.23 → 1.29 ms。戦闘や戦死が大きく増えることはなかった。表は `Docs/design-sector-combat.md` 7.5。
+- 段階2（分隊単位の知識）で倒す隊長が減る件：隊長への集中射撃が小さく散っていた（1回に加わる人数 2.7 → 2.3、1回の損害 −22%）。遮蔽の行動を続ける隊員が増えて同時に撃つ人数が減る、という見立て（未検証）。`Docs/design-squad-knowledge.md` 9.0。
+- 制限：各4試合（段階2は2組）。画面での確認なし。
+- 次の一手：段階2の遮蔽の行動の2か所を兵自身の接触に戻して比べる（ユーザーの判断待ち）。
+
 ## 2026-11-24 07時55分 Claude（RB01一般兵）：作戦画面の霧の表示を軽くした（main e604552、表示のみ）。描画ありマップEの1フレームは 18.41→13.79ms（霧の表示 5.81→1.24ms）。画面の位置は全点で同じ。試合は390秒から分かれたが、同じビルドの2本も同じ所で分かれるので、この変更のせいではない
 
 - **変更**：`BattleHUD.cpp` の `DrawFieldOverlay`（霧のマスの角・区画名・太い枠・名札・ホバーの枠）で、点ごとの `PC->ProjectWorldLocationToScreen` をやめた。代わりに、1フレームに1回だけビュー・射影の行列を作り、エンジンと同じ式（`FSceneView::ProjectWorldToScreen` ＋ `PostProcessWorldToScreen`）で投影する `FFieldProjector` を使う。ほかの HUD（兵種アイコンなど）は変えていない。表示だけの変更なので試験切替はない。rb01 の e43d12d を main へ取り込んだ（e604552。ぶつかった CODEMAP は作り直した）。rb01・main ともビルドと `Test-Battle` は合格（failures=0）、GitHub に push 済み。
