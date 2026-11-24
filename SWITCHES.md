@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 494 種類。
+計 496 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -161,6 +161,8 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleExoDamage` | Value | -1.f | BattleState.cpp:593 | ExoTrialValue → BattleState.cpp:590（ヘルパー経由） |
 | `-BattleExoPlaceholder` | Param | off | BattleExo.cpp:145 |  |
 | `-BattleExoShield` | Value | -1.f | BattleState.cpp:594 | ExoTrialValue → BattleState.cpp:590（ヘルパー経由） |
+| `-BattleExoShieldDelay` | Value | -1.f | BattleSuppression.cpp:90 |  |
+| `-BattleExoShieldRegen` | Value | -1.f | BattleState.cpp:596 | ExoTrialValue → BattleState.cpp:590（ヘルパー経由） |
 | `-BattleExoShieldSuppression` | Value | 0 | BattleSuppression.cpp:83 |  |
 | `-BattleExoShot` | Param | off | BattleLeaderRuntime.cpp:234 |  |
 | `-BattleFastMatch` | Param | off | BattleGameMode.cpp:72, BattleLeaderRuntime.cpp:78 |  |

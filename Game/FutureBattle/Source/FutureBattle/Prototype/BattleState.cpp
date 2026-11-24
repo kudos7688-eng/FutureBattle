@@ -392,7 +392,7 @@ float UBattleState::MaxShieldOf(int32 UnitID) const
 void UBattleState::AdvanceShields(float DeltaSeconds)
 {
  if(!bShields||DeltaSeconds<=0.f)return;
- const float Regen=FMath::Max(0.f,GetDefault<UBattleTuning>()->ExoShieldRegen);
+ const float Regen=FMath::Max(0.f,ExoTrialRegen()>=0.f?ExoTrialRegen():GetDefault<UBattleTuning>()->ExoShieldRegen);
  for(const auto& P:Squads)
  {
   const float Max=BattleSquadType::ShieldMax(P.Value.SquadType);if(Max<=0.f)continue;
@@ -592,6 +592,8 @@ static float ExoTrialValue(const TCHAR* Key)
 static float ExoTrialArmor(){static const float V=ExoTrialValue(TEXT("BattleExoArmor="));return V;}
 static float ExoTrialDamage(){static const float V=ExoTrialValue(TEXT("BattleExoDamage="));return V;}
 static float ExoTrialShield(){static const float V=ExoTrialValue(TEXT("BattleExoShield="));return V;}
+// -BattleExoShieldRegen=<points/s> (default <0 = ExoShieldRegen); the wait after a hit is -BattleExoShieldDelay (BattleSuppression.cpp).
+static float ExoTrialRegen(){static const float V=ExoTrialValue(TEXT("BattleExoShieldRegen="));return V;}
 float BattleSquadType::ShieldMax(uint8 Type){return Type==Exo?FMath::Clamp(ExoTrialShield()>=0.f?ExoTrialShield():GetDefault<UBattleTuning>()->ExoShield,0.f,1000.f):0.f;}
 int32 BattleSquadType::LauncherRounds(uint8 Type){return Type==Exo?FMath::Clamp(GetDefault<UBattleTuning>()->ExoLauncherRounds,0,20):0;}
 int32 BattleSquadType::ScoreCount(uint8 Type){return Type==Exo?FMath::Clamp(GetDefault<UBattleTuning>()->ExoScoreCount,1,20):1;}

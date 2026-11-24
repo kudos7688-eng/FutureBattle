@@ -86,7 +86,9 @@ bool BattleTactics::ExoShieldSuppressionEnabled()
 float BattleTactics::ExoShieldHitDelay()
 {
  const auto* T=GetDefault<UBattleTuning>();
- if(!ExoShieldSuppressionEnabled())return FMath::Max(0.f,T->ExoShieldDelay);
+ // Trial -BattleExoShieldDelay=<s> (default <0 = ExoShieldDelay, 2026-11-25): seconds after a hit before the shield refills.
+ static const float TrialDelay=[]{float V=-1.f;FParse::Value(FCommandLine::Get(),TEXT("BattleExoShieldDelay="),V);return FMath::IsFinite(V)?V:-1.f;}();
+ if(!ExoShieldSuppressionEnabled())return FMath::Max(0.f,TrialDelay>=0.f?TrialDelay:T->ExoShieldDelay);
  const float V=T->ExoShieldSuppressionDelay;
  return FMath::IsFinite(V)?FMath::Max(0.f,V):5.f;
 }
