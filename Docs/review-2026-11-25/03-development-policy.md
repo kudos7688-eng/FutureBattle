@@ -57,3 +57,9 @@ Claude がコードを読んで確かめた指摘：B01・B03・B04・B06・B07�
 6. B10 の方式を決めて単独で検証する。
 7. 区切りごとにビルド・専用の試験・回帰（`Test-Battle`）を行い、発動の証拠と結果を記録する。
 8. テストプレイの項目と削除の候補をユーザーへ渡す。Observed 系の既定化と Bounding の修理は次の週に判断する。
+
+## 5. ユーザーの決定（2026-11-25）
+
+1. **切替なしで直してよい範囲：案のとおり**。正しい動作を勝敗と関係なく決められるもの（明示された契約への違反、保存する値の欠落）は切替なしで直す。複数の正しい動作から1つを選ぶ変更（処理順など）と、戦術・知覚のルールの変更は今までどおり既定0の切替で評価する。
+2. **削除の候補は全部削除**：`-BattleVATFarLight`、`-BattleSectorNoRoad`、旧 `-BattleStrategy=2/3/4` と `-BattleStrategyPass`、`Setup/Test-WideSight.ps1` の `BattleFollowSightParallel` 引数、`LeaderAbilityScale`。（`LeaderAbilityScale` は反射・既存のセーブとの互換を確かめてから。旧 Strategy は旧結果を再現できるコミットを STATUS に書いてから。削除後は `Setup/Export-Switches.py` で SWITCHES.md を作り直す。）
+3. **`-BattleSectorSight=1` は既定のまま**。
