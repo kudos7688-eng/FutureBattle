@@ -911,7 +911,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const int32 SquadTargetID=bArmourAI && U->Weapon==EBattleWeapon::AntiTank && P->ArmourTargetID!=INDEX_NONE ? P->ArmourTargetID : P->TargetID;
  // Elite platoon roles (BattleArms.cpp): the marksman and the close weapons may pick their own visible target; a charging soldier
  // fires at the enemy he runs at.
- const int32 TargetID=(U->Kit||ArmsCharging(ID))?ArmsRoleTarget(ID,SquadTargetID):SquadTargetID;
+ int32 TargetID=(U->Kit||ArmsCharging(ID))?ArmsRoleTarget(ID,SquadTargetID):SquadTargetID;
+ // -BattleArmsRushWatch (BattleArmsSector.cpp): a defender fires first at an enemy he sees rushing his squad's place.
+ if(ArmsRushers.Num()&&!bVehicleBody&&!ArmsCharging(ID))TargetID=ArmsRushTarget(ID,TargetID,Now);
  const auto* ArmourContact=BattleTactics::ObservedArmour()?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,TargetID):nullptr;
  const bool bSaveRounds=bArmourAI && bArea && U->Weapon==EBattleWeapon::AntiTank && TargetID!=INDEX_NONE && !(BattleTactics::ObservedArmour()?(ArmourContact&&BattleSquadType::IsVehicle(ArmourContact->ObservedSquadType)):IsVehicle(TargetID)) &&
   U->Ammo+U->Reserve<=GetDefault<UBattleTuning>()->ATKeepRounds && GetWorld()->GetSubsystem<UBattleMatch>()->KnownEnemyVehicles(U->Team)>0;
@@ -1186,7 +1188,10 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  FVector BaseTarget;const bool BaseEngage=!CanEngage&&!bOwnEngage&&S->Order!=EBattleOrder::Move&&GetWorld()->GetSubsystem<UBattleMatch>()->CanFireAtBase(ID,BaseTarget);
  // Stances: fire from the current eye height, and aim at the height the visible target presents.
  const FVector Muzzle(0,0,BattleStance::EyeOffset(StanceOf(ID)));
+ // -BattleArmsCoverFire (BattleArmsSector.cpp): with nothing of his own to fire at he fires at the point a bounding soldier called.
+ FVector CoverFirePoint;const bool bCoverFire=!BaseEngage&&!CanEngage&&!bOwnEngage&&ArmsCoverFire.Num()&&!bVehicleBody&&!bArtilleryAim&&ArmsCoverFireAt(ID,Now,CoverFirePoint);
  if(BaseEngage)Direction=(BaseTarget-(Pos+Muzzle)).GetSafeNormal();
+ else if(bCoverFire)Direction=(CoverFirePoint-(Pos+Muzzle)).GetSafeNormal();
  else if(CanEngage || bOwnEngage)
  {
   // The squad's target, or under -BattleOwnTarget his own.
@@ -1267,9 +1272,10 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  // Sidearm (BattleArms.cpp): while the primary cannot fire and the target is close, the pistol fires instead.
  const bool bSidearm=(U->SideAmmo+U->SideReserve>0||U->bSidearmSelected)&&UseSidearm(ID,CanEngage?TargetID:INDEX_NONE,Now);
  if(BaseEngage)Fire(ID,Pos+Muzzle,Direction,false);
+ if(bCoverFire){if(U->Ammo==0)Store->StartReload(ID,Now);else{bArmsCoverShot=true;if(Fire(ID,Pos+Muzzle,Direction,false))SightExperiment.Cover(TEXT("arms_cover_fire_shots"));bArmsCoverShot=false;}}
  if(CanEngage) { if(bSidearm) Fire(ID,Pos+Muzzle,Direction,false); else if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false) && S->TacticalPlan.Action==EBattleSquadTactic::Support) GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(S->SquadID,TargetID); }
  else if(bOwnEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false)) SightExperiment.Cover(TEXT("own_target_shots")); }
- Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:((BattleTactics::ObservedTactics()?ObservedEngage:CanEngage)||bOwnEngage)?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
+ Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:((BattleTactics::ObservedTactics()?ObservedEngage:CanEngage)||bOwnEngage||bCoverFire)?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
 }
 bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot)
 {

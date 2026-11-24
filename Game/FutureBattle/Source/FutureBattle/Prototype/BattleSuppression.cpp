@@ -36,19 +36,20 @@ float UBattleLeaderRuntime::Suppression(int32 ID,double Now) const
 bool UBattleLeaderRuntime::IsPinned(int32 ID,double Now) const
 {
  const auto& T=BattleSuppression::Tuning();
- return (T.bEnabled||ExoSuppressionApplies(ID)) && Suppression(ID,Now)>=T.PinLevel;
+ return (T.bEnabled||ExoSuppressionApplies(ID)||ArmsCoverSuppressed(ID)) && Suppression(ID,Now)>=T.PinLevel;
 }
 
 float UBattleLeaderRuntime::SuppressionSpreadScale(int32 ID,double Now) const
 {
  const auto& T=BattleSuppression::Tuning();
- return (T.bEnabled||ExoSuppressionApplies(ID))?1.f+T.SpreadScale*Suppression(ID,Now):1.f;
+ return (T.bEnabled||ExoSuppressionApplies(ID)||ArmsCoverSuppressed(ID))?1.f+T.SpreadScale*Suppression(ID,Now):1.f;
 }
 
 void UBattleLeaderRuntime::AddSuppression(int32 ID,float Amount,double Now)
 {
  const auto& T=BattleSuppression::Tuning();
- if((!T.bEnabled&&!ExoSuppressionApplies(ID)) || Amount<=0)return;
+ if((!T.bEnabled&&!ExoSuppressionApplies(ID)&&!bArmsCoverShot) || Amount<=0)return;
+ if(bArmsCoverShot)SightExperiment.Cover(TEXT("arms_cover_fire_suppress_events"));
  // Legacy immunity is preserved unless the shield-suppression trial is explicitly enabled.
  if(!BattleTactics::ExoShieldSuppressionEnabled())
  if(const auto* Store=GetWorld()->GetSubsystem<UBattleState>();Store->HasShields())if(const auto* U=Store->Find(ID);U&&U->Shield>0.f)return;
@@ -61,7 +62,8 @@ void UBattleLeaderRuntime::AddSuppression(int32 ID,float Amount,double Now)
 void UBattleLeaderRuntime::SuppressNear(int32 ShooterTeam,FVector Start,FVector End,double Now,float Scale)
 {
  const auto& T=BattleSuppression::Tuning();
- if(!T.bEnabled&&!BattleTactics::ExoShieldSuppressionEnabled())return;
+ // Covering fire (-BattleArmsCoverFire, BattleArmsSector.cpp) suppresses even with this trial off.
+ if(!T.bEnabled&&!BattleTactics::ExoShieldSuppressionEnabled()&&!bArmsCoverShot)return;
  // Physical effect of the bullet path, like damage: it uses true positions and is not an AI decision input.
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();FBox Bounds(ForceInit);Bounds+=Start;Bounds+=End;
  const FBox Reach=Bounds.ExpandBy(T.Radius+40.f);

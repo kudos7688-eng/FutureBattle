@@ -175,6 +175,8 @@ public:
  // Only differs from the old rule where the range profile separates reach from engagement (map E).
  // One-team trials (-BattleAreaTrialTeam=t, 2026-11-17): only that team's soldiers return fire.
  bool ExoSuppressionApplies(int32 ID) const;
+ // Covering fire suppression (-BattleArmsCoverFire): with -BattleSuppression off only covering fire and exoskeleton hits set levels.
+ bool ArmsCoverSuppressed(int32 ID) const;
  void NoteUnderFire(int32 ID);
  bool UnderFire(int32 ID) const {const double* T=UnderFireUntil.Find(ID);return T&&*T>GetWorld()->GetTimeSeconds();}
  TMap<int32,double> UnderFireUntil;
@@ -257,7 +259,7 @@ public:
  // enemy within 150 m, so grenades, close weapons and strikes come within reach. Runtime only, like the other cover approaches.
  // A bound runs on to its cover with the enemy lost; ArmsBoundMemory keeps where the bound's enemy was seen last, and with no enemy
  // known the next bound heads there (for 30 s after that sighting). Cleared on restore with the cover approaches.
- bool StartAssault(int32 ID,int32 Target,const FVector& TargetAt,double Now);
+ bool StartAssault(int32 ID,int32 Target,const FVector& TargetAt,double Now,bool bInArea=false); // bInArea: a defender's bound, within 20 m inside its defended area
  TMap<int32,double> ArmsAssaultNext;
  // Charge (-BattleArmsCharge=1, BattleArms.cpp): an assault role runs at an enemy he sees within 12 m (after an assault bound, one
  // known within 30 m), fires at him on the way and strikes him at arm's length. A cover approach with bCharge whose goal follows the
@@ -269,6 +271,25 @@ public:
  struct FArmsBoundMemory{int32 Target=INDEX_NONE;FVector At=FVector::ZeroVector;double SeenAt=-1.e9;};
  TMap<int32,FArmsBoundMemory> ArmsBoundMemory;
  TMap<int32,double> ArmsChargeNext,ArmsBoundArrived;double ArmsNextCharge=0;
+ // Sector tasks (BattleArmsSector.cpp, -BattleArmsSectorTask / -BattleArmsRushWatch / -BattleArmsCoverFire). Runtime only, cleared on
+ // restore. ArmsRushSamples: a defending squad's last sighting of an enemy (key squad << 32 | enemy); ArmsRushers: per squad, the
+ // enemies seen closing on its place at 3 m/s or more (kept 3 s); ArmsCoverCalls: per bounder, the point to fire at; ArmsCoverFire:
+ // per supporter, whose call he answers until when. bArmsCoverShot: the shot being fired is covering fire (it suppresses).
+ struct FArmsRushSample{FVector At=FVector::ZeroVector;double Time=0;};
+ struct FArmsRusher{FVector At=FVector::ZeroVector,Vel=FVector::ZeroVector;double Seen=-1.e9;int32 Watchers=0;};
+ struct FArmsCoverCall{int32 Team=0,Target=INDEX_NONE;FVector At=FVector::ZeroVector,From=FVector::ZeroVector;double Until=0;};
+ struct FArmsCoverFire{int32 Bounder=INDEX_NONE;double Until=0;};
+ TMap<uint64,FArmsRushSample> ArmsRushSamples;TMap<int32,TMap<int32,FArmsRusher>> ArmsRushers;TMap<int32,double> ArmsRetreatNext;
+ TMap<int32,FArmsCoverCall> ArmsCoverCalls;TMap<int32,FArmsCoverFire> ArmsCoverFire;double ArmsNextRush=0;bool bArmsCoverShot=false;
+ bool ArmsDefending(const FBattleSquadState& S) const;
+ bool ArmsInDefendedArea(const FBattleSquadState& S,const FVector& At) const;
+ int32 ArmsRushTarget(int32 ID,int32 Current,double Now);
+ bool StartArmsRetreat(int32 ID,int32 Threat,const FVector& ThreatAt,double Now);
+ void StepArmsRush(double Now);
+ bool ArmsRushGrenade(int32 ID,double Now);
+ void AddArmsCoverCall(int32 Bounder,int32 Target,const FVector& TargetAt,const FVector& From,double Seconds,double Now);
+ void StepArmsCoverCalls(double Now);
+ bool ArmsCoverFireAt(int32 ID,double Now,FVector& At) const;
  int32 ArmsBlockedLogs=0,ArmsTimeoutLogs=0,ArmsStuckLogs=0,ArmsNoStrikeLogs=0; // evaluation: BATTLE_ARMS_CHARGE_BLOCKED (at most 300) / BATTLE_ARMS_ASSAULT_TIMEOUT / BATTLE_ARMS_ASSAULT_STUCK / BATTLE_ARMS_CHARGE_NOSTRIKE (200 each) lines
  void RunArmsSmoke(double Now); // -BattleArmsSmoke (with -BattleElite=1): BATTLE_ARMS_SMOKE_RESULT failures=N, once after the start
  bool bArmsSmokeDone=false;
@@ -441,7 +462,7 @@ public:
  // spent in a cover action (CoverWaits) instead of walking; bHeld: his last step did not move him; Slid: bit 1 he slid along a body,
  // bit 2 along a wall. Best / Stuck: his closest distance to the cover so far and the walking time since he last got closer (he gives
  // up after FCharge::StuckSeconds); SlideSide: the side he goes round a body he hits straight on (+1 / -1, kept for the dash).
- struct FCoverApproach{FVector Goal=FVector::ZeroVector,Via=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0,Best=-1.;float Stuck=0.f;bool bKeptTargetChange=false,bFree=false,bStandUp=false,bFallback=false,bAssault=false,bCharge=false,bReached=false,bLost=false,bVia=false;
+ struct FCoverApproach{FVector Goal=FVector::ZeroVector,Via=FVector::ZeroVector;int32 Slot=INDEX_NONE,Target=INDEX_NONE,Revision=0;double Until=0,Best=-1.;float Stuck=0.f;bool bKeptTargetChange=false,bFree=false,bStandUp=false,bFallback=false,bAssault=false,bRetreat=false,bCharge=false,bReached=false,bLost=false,bVia=false;
   int32 Steps=0,Moved=0,Blocked=0,StanceWaits=0,CoverWaits=0,SlideSide=0,Slid=0;bool bBlockPawn=false,bBlockStart=false,bHeld=false;FName Block;
   // Evaluation of a charge that reached the enemy (StepCharge): bStruck after any strike during it; otherwise NoStrike is why he could
   // not strike at the last step (BATTLE_ARMS_CHARGE_NOSTRIKE), with the true distance and the error of the known position.
