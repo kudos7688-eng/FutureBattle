@@ -1,4 +1,5 @@
 #include "BattleCover.h"
+#include "BattleTactics.h"
 #include "BattleState.h"
 #include "BattleGameMode.h"
 #include "BattleUnit.h"
@@ -72,6 +73,21 @@ void UBattleCover::BuildSlots(bool bForce)
 					for (int32 Index : *Near) if (FVector::DistSquared2D(Slots[Index], NavPoint.Location) < FMath::Square(100.f)) { bNear = true; break; }
 			if (!bNear) SlotGrid.FindOrAdd(C).Add(Slots.Add(NavPoint.Location));
 		}
+	}
+	// Trial -BattleCoverSlotsMirror=1 (2026-11-25, default 0; map K west/east divergence, STATUS 11-25): a place is dropped when
+	// another lies within 1 m, so which of two near places stays depends on the order the pieces are walked, and on map K one
+	// place in five has no image within 30 cm on the other half (BATTLE_SYMMETRY no_partner_30cm 2101 / 2057 of 10300): mirror
+	// squads then take other arrival places from the first order on. With the switch, on a symmetric-start map, the places of
+	// the east half (x > 0) are replaced by the images (-x, -y) of the places of the west half.
+	static const bool bSlotsMirror = [] { int32 V = 0; FParse::Value(FCommandLine::Get(), TEXT("BattleCoverSlotsMirror="), V); return V != 0; }();
+	if (bSlotsMirror && BattleTactics::SymmetricStart(GetWorld()))
+	{
+		TArray<FVector> WestSlots;
+		for (const FVector& WestSlot : Slots) if (WestSlot.X < 0.) WestSlots.Add(WestSlot);
+		const int32 Before = Slots.Num();
+		Slots = WestSlots;
+		for (const FVector& WestSlot : WestSlots) Slots.Add(FVector(-WestSlot.X, -WestSlot.Y, WestSlot.Z));
+		UE_LOG(LogTemp, Display, TEXT("BATTLE_COVER_MIRROR slots=%d before=%d west=%d"), Slots.Num(), Before, WestSlots.Num());
 	}
 	BuildSlotIndex();
 	if (FParse::Param(FCommandLine::Get(), TEXT("BattleSymmetryAudit"))) AuditSymmetry();

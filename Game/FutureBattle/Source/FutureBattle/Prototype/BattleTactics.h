@@ -173,6 +173,8 @@ namespace BattleTactics
  bool SymmetricStart(const class UWorld* World);
  // The number that picks a squad's allocation slot: the squad ID, or with the symmetric start its number within its own team.
  int32 AllocationIndex(const class UWorld* World,int32 SquadID,int32 Team);
+ int32 PhaseIndex(const class UWorld* World,int32 SquadID,int32 Team);
+ bool MoveTraceSquad(int32 SquadID);
  // Trial -BattleDefendEngage=0/1 (UBattleTuning::bDefendEngage, default 0; the trial team with -BattleAreaTrialTeam): defending squads target enemies within weapon range, not only within DefenseRadius of the defended place.
  bool DefendEngage(int32 Team);
 	// SpreadScale: extra multiplier from runtime effects (suppression trial); 1 = none.

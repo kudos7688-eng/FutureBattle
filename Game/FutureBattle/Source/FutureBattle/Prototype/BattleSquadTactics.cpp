@@ -123,7 +123,7 @@ void UBattleSquadTactics::Step(float DeltaSeconds)
   if (bManaged && !Squad.TacticalPlan.bAutonomous) Store->AdvanceSquadTacticalPlan(Squad.SquadID, DeltaSeconds);
   if (!bManaged && !bObserve) { Samples.Remove(Pair.Key); continue; }
   double* Due = NextSample.Find(Pair.Key);
-  if (!Due) Due = &NextSample.Add(Pair.Key, ActiveSeconds + (Pair.Key % 10) * .1);
+  if (!Due) Due = &NextSample.Add(Pair.Key, ActiveSeconds + (BattleTactics::PhaseIndex(GetWorld(),Pair.Key,Squad.Team) % 10) * .1);
   if (ActiveSeconds < *Due) continue;
   const float SampleDt=Samples.Contains(Pair.Key)?float(ActiveSeconds-Samples.FindChecked(Pair.Key).SampleTime):0.f;
   *Due = ActiveSeconds + 1.;

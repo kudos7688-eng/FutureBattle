@@ -70,6 +70,25 @@ int32 BattleTactics::AllocationIndex(const UWorld* World,int32 SquadID,int32 Tea
  return FMath::Max(1,Index);
 }
 
+// Trial -BattleThinkSymmetric=1 (2026-11-25, default 0; map K west/east divergence, STATUS 11-25): the time of a squad's first
+// plan (0.05s x ID%10) and of its tactical sample (0.1s x ID%10) came from the squad ID, and the mirror squad of the other team
+// has ID+25: its phase is half a cycle off, so it thinks and replans at other moments (map K seed 7: squads 14 and 39 part in
+// the first frames of the match). With the switch both use the squad's number within its team.
+int32 BattleTactics::PhaseIndex(const UWorld* World,int32 SquadID,int32 Team)
+{
+ static const bool bOn=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleThinkSymmetric="),X);return X!=0;}();
+ return bOn?AllocationIndex(World,SquadID,Team):SquadID;
+}
+
+// Diagnosis -BattleMoveTrace=<squad>,<squad>,... (2026-11-25, default none; records only): the path, the member routes and, in
+// the first seconds of the match, every step of the named squads (BATTLE_MOVE_TRACE_PATH / _ROUTE / _STEP), to compare a squad
+// with its mirror squad of the other team.
+bool BattleTactics::MoveTraceSquad(int32 SquadID)
+{
+ static const TSet<int32> Squads=[]{TSet<int32> V;FString Text;if(FParse::Value(FCommandLine::Get(),TEXT("BattleMoveTrace="),Text,false)){TArray<FString> Parts;Text.ParseIntoArray(Parts,TEXT(","));for(const FString& Part:Parts)V.Add(FCString::Atoi(*Part));}return V;}();
+ return Squads.Contains(SquadID);
+}
+
 bool BattleTactics::GroupSupplySlot()
 {
  static const bool bOn=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupSupplySlot="),X);return X!=0;}();

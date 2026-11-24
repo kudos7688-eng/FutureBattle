@@ -378,6 +378,12 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
      TArray<FVector> OwnRoute;for(const auto& OwnPoint:OwnPath->PathPoints)OwnRoute.Add(OwnPoint);
      Route=MoveTemp(OwnRoute);B->Waypoint=1;SightExperiment.Cover(TEXT("move_cutoff_route"));
     }
+  if(BattleTactics::MoveTraceSquad(SID))
+  {
+   FString TraceRoute;for(int32 TraceI=0;TraceI<Route.Num()&&TraceI<5;++TraceI)TraceRoute+=FString::Printf(TEXT(" (%.1f,%.1f)"),Route[TraceI].X,Route[TraceI].Y);
+   const FVector* TraceGoal=P.ArrivalGoals.Find(ID);
+   UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_TRACE_ROUTE squad=%d unit=%d new=%d wp=%d/%d pos=(%.1f,%.1f) goal=(%.1f,%.1f) route:%s"),SID,ID,NewOrder?1:0,B->Waypoint,Route.Num(),Position(ID).X,Position(ID).Y,TraceGoal?TraceGoal->X:0.,TraceGoal?TraceGoal->Y:0.,*TraceRoute);
+  }
  }
 }
 
@@ -584,6 +590,8 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  if(AllyPassOn()&&!bAllyPass&&B.bContactWaiting&&Now-B.LastProgressTime>3)
  {BeginAllyPass(ID,Now);B.bContactWaiting=false;Scale=1;Separation=FVector::ZeroVector;D=(Way-Pos).GetSafeNormal2D();}
  Direction=LimitedSteering(D,Separation,GetDefault<UBattleTuning>()->WideAvoidanceMaxSide);
+ if(BattleTactics::MoveTraceSquad(U->SquadID))if(const auto* TraceMatch=GetWorld()->GetSubsystem<UBattleMatch>();TraceMatch&&TraceMatch->Elapsed<4.f)
+  UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_TRACE_STEP unit=%d t=%.3f pos=(%.1f,%.1f) wp=%d way=(%.1f,%.1f) d=(%.3f,%.3f) scale=%.3f blocker=%d passing=%d sep=(%.3f,%.3f) dir=(%.3f,%.3f)"),ID,TraceMatch->Elapsed,Pos.X,Pos.Y,B.Waypoint,Way.X,Way.Y,D.X,D.Y,Scale,Blocker,B.PassingID,Separation.X,Separation.Y,Direction.X,Direction.Y);
  B.bTrafficWait=Scale<.15f;
  // Heavy infantry moves slower (squad type speed scale); rifle squads keep the configured speed.
  const float TypeSpeed=S?BattleSquadType::SpeedAt(S->SquadType,GetWorld(),Pos):1.f;
