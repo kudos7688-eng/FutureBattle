@@ -33,7 +33,7 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
-## 2026-11-25 09時10分 Claude（契約の修理）：ユーザーの決定3つと今後の方針を記録し、要約・ROADMAP・前線戦略の設計の食い違いを直した（文書のみ）
+## 2026-11-25 08時45分 Claude（契約の修理）：ユーザーの決定3つと今後の方針を記録し、要約・ROADMAP・前線戦略の設計の食い違いを直した（文書のみ）
 
 - 方針：`Docs/review-2026-11-25/03-development-policy.md`（Codex の main 672c929 のレビューと協議）。B03・B06 の直し方の設計は同じフォルダの `04-b03-b06-design-and-doc-fixes.md`。
 - ユーザーの決定（11-25）：(1) 正しい動作を勝敗と関係なく決められるもの（明示された契約への違反、保存する値の欠落）は**切替なしで直す**。処理順などの選択と、戦術・知覚のルールの変更は既定0の切替で評価する（`AGENTS.md`・ROADMAP「採否の決め方」に追記）。(2) 削除の候補5件は全部削除（`-BattleVATFarLight`、`-BattleSectorNoRoad`、旧 `-BattleStrategy=2/3/4` と `-BattleStrategyPass`、`Test-WideSight.ps1` の `BattleFollowSightParallel` 引数、`LeaderAbilityScale`）。(3) `-BattleSectorSight=1` は既定のまま。
