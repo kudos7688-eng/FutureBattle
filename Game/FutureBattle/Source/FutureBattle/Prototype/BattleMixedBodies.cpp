@@ -2,6 +2,7 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleSave.h"
 #include "BattleVATDisplay.h"
+#include "BattleSoldierBody.h"
 #include "BattleGameMode.h"
 #include "BattleController.h"
 #include "BattleCover.h"
@@ -28,7 +29,7 @@ bool UBattleLeaderRuntime::CreateBody(const FBattleSavedUnit& Entry,AActor* Host
   Unit->GetCharacterMovement()->AddTickPrerequisiteActor(Mode);
   B.Actor=Unit;return true;
  }
- auto* MeshAsset=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple"));
+ auto* MeshAsset=BattleSoldierBody::LoadMesh(); // Quinn, or RB01 with -BattleSoldierBody=1
  if(!MeshAsset || !IdlePose) return false;
  const auto Archetype=Manager->CreateArchetype({FBattleFollowerFragment::StaticStruct()});
  B.Entity=Manager->CreateEntity(Archetype);

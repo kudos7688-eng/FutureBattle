@@ -21,6 +21,23 @@ void UBattlePerception::Capture(TMap<int32, FBattleObserver>& OutObservers, TArr
 	for (auto& Report : OutReports) { Report.DeliveryTime -= Now; Report.Contact.LastSeenTime -= Now; }
 }
 
+void UBattlePerception::CaptureCrossSector(TArray<FBattleSavedCrossLook>& Out, double Now) const
+{
+	Out.Reset();
+	for (const auto& Look : CrossSectorLook) if (Look.Value > Now)
+	{
+		FBattleSavedCrossLook Entry; Entry.ObserverID = static_cast<int32>(static_cast<uint32>(Look.Key >> 32)); Entry.TargetID = static_cast<int32>(static_cast<uint32>(Look.Key)); Entry.Remaining = Look.Value - Now;
+		Out.Add(Entry);
+	}
+	Out.Sort([](const FBattleSavedCrossLook& A, const FBattleSavedCrossLook& B) { return A.ObserverID != B.ObserverID ? A.ObserverID < B.ObserverID : A.TargetID < B.TargetID; });
+}
+
+void UBattlePerception::RestoreCrossSector(const TArray<FBattleSavedCrossLook>& Saved, double Now)
+{
+	CrossSectorLook.Reset();
+	for (const auto& Entry : Saved) AllowCrossSector(Entry.ObserverID, Entry.TargetID, Now + Entry.Remaining);
+}
+
 void UBattlePerception::Restore(const TMap<int32, FBattleObserver>& SavedObservers, const TArray<FBattleReport>& SavedReports, double Now)
 {
 	Observers = SavedObservers; PendingReports = SavedReports; PendingCounts.Reset();
@@ -150,8 +167,10 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	{
 		const int32* Role = SectorMembers.Num() ? SectorMembers.Find(Pair.Key) : nullptr;
 		return Role && UBattleLeaderRuntime::SectorSightFar(Pair.Value.Position, Candidate.Position) &&
-			!(*Role == 2 && Leader->IsVehicle(Candidate.State->UnitID)) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID);
+			!(*Role == 2 && Leader->IsVehicle(Candidate.State->UnitID)) && !Observer.DetectionStarted.Contains(Candidate.State->UnitID) &&
+			!(CrossSectorLook.Num() && CrossSectorLook.FindRef((uint64(uint32(Pair.Key)) << 32) | uint32(Candidate.State->UnitID)) >= Now);
 	};
+	for (auto It = CrossSectorLook.CreateIterator(); It; ++It) if (It.Value() < Now) It.RemoveCurrent();
 	// One candidate of one observer's scan. Visible: -1 = test line of sight here, 0/1 = result already traced (parallel trial).
 	auto Consider = [&](FBattleObserver& Observer, const TPair<int32, FLiveUnit>& Pair, const FBattleSightContext& Sight, bool bFarPulse, TSet<int32>& InView, const FLiveUnit& Candidate, int32 Visible)
 	{
@@ -483,7 +502,28 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	{
 		const auto* Store = GetWorld()->GetSubsystem<UBattleState>();
 		const double Memory = GetDefault<UBattleTuning>()->MemorySeconds;
-		// 1. Reports that are due. Dropped when the soldier who saw the enemy is down or no member of the receiving squad is within his voice.
+		// 1. What the living members saw themselves: the newest wins (same time: the one seen now, then the lower observer ID, as UBattleSquadTactics::Observe).
+		for (auto& Intel : SquadIntel) for (auto& Known : Intel.Value.Known) { Known.Value.Contact.bVisible = false; Known.Value.SeerID = INDEX_NONE; }
+		TSet<int32> LiveSquads;
+		for (const auto& Pair : Alive)
+		{
+			if (!SquadKnowledgeMode(Pair.Value.State->Team)) continue;
+			LiveSquads.Add(Pair.Value.State->SquadID);
+			const auto* Observer = Observers.Find(Pair.Key); if (!Observer || Observer->Contacts.IsEmpty()) continue;
+			auto& Known = SquadIntel.FindOrAdd(Pair.Value.State->SquadID).Known;
+			for (const auto& Seen : Observer->Contacts)
+			{
+				const FBattleContact& Own = Seen.Value;
+				if (Own.bShared) continue; // a hint (AddHint) stays with the soldier
+				auto& Entry = Known.FindOrAdd(Seen.Key);
+				const FBattleContact& Held = Entry.Contact;
+				if (Held.TargetID == INDEX_NONE || Own.LastSeenTime > Held.LastSeenTime || (Own.LastSeenTime == Held.LastSeenTime &&
+					(Held.bShared || Own.bVisible > Held.bVisible || (Own.bVisible == Held.bVisible && Own.SourceUnitID < Held.SourceUnitID))))
+				{ const bool bSeenNow = Held.TargetID != INDEX_NONE && Held.bVisible; Entry.Contact = Own; Entry.Contact.bVisible = Own.bVisible || bSeenNow; }
+				if (Own.bVisible) { Entry.Contact.bVisible = true; if (Entry.SeerID == INDEX_NONE || Pair.Key < Entry.SeerID) Entry.SeerID = Pair.Key; }
+			}
+		}
+		// 2. Reports that are due (after the members' own sightings, so that "somebody sees him now" below is this update's, not the last one's). Dropped when the soldier who saw the enemy is down or no member of the receiving squad is within his voice.
 		for (auto It = SquadReports.CreateIterator(); It; ++It)
 		{
 			const auto& Report = *It;
@@ -508,27 +548,6 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 				}
 			}
 			SquadReportKeys.Remove(Key); It.RemoveCurrentSwap(EAllowShrinking::No);
-		}
-		// 2. What the living members saw themselves: the newest wins (same time: the one seen now, then the lower observer ID, as UBattleSquadTactics::Observe).
-		for (auto& Intel : SquadIntel) for (auto& Known : Intel.Value.Known) { Known.Value.Contact.bVisible = false; Known.Value.SeerID = INDEX_NONE; }
-		TSet<int32> LiveSquads;
-		for (const auto& Pair : Alive)
-		{
-			if (!SquadKnowledgeMode(Pair.Value.State->Team)) continue;
-			LiveSquads.Add(Pair.Value.State->SquadID);
-			const auto* Observer = Observers.Find(Pair.Key); if (!Observer || Observer->Contacts.IsEmpty()) continue;
-			auto& Known = SquadIntel.FindOrAdd(Pair.Value.State->SquadID).Known;
-			for (const auto& Seen : Observer->Contacts)
-			{
-				const FBattleContact& Own = Seen.Value;
-				if (Own.bShared) continue; // a hint (AddHint) stays with the soldier
-				auto& Entry = Known.FindOrAdd(Seen.Key);
-				const FBattleContact& Held = Entry.Contact;
-				if (Held.TargetID == INDEX_NONE || Own.LastSeenTime > Held.LastSeenTime || (Own.LastSeenTime == Held.LastSeenTime &&
-					(Held.bShared || Own.bVisible > Held.bVisible || (Own.bVisible == Held.bVisible && Own.SourceUnitID < Held.SourceUnitID))))
-				{ const bool bSeenNow = Held.TargetID != INDEX_NONE && Held.bVisible; Entry.Contact = Own; Entry.Contact.bVisible = Own.bVisible || bSeenNow; }
-				if (Own.bVisible) { Entry.Contact.bVisible = true; if (Entry.SeerID == INDEX_NONE || Pair.Key < Entry.SeerID) Entry.SeerID = Pair.Key; }
-			}
 		}
 		// 3. Forget: a squad with no living member, and enemies nobody sees once the memory runs out (the soldiers' own rule).
 		for (auto Squad = SquadIntel.CreateIterator(); Squad; ++Squad)

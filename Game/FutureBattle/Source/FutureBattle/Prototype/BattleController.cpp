@@ -199,7 +199,7 @@ void ABattleController::Forward(const FInputActionValue& Value)
 		P.X = FMath::Clamp(P.X,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
 	else if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
-		if (Unit->IsAlive()){if(FMath::Abs(Axis)>.01f)GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->CancelCoverAction(Unit->GetUnitID());Unit->AddMovementInput(FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::X), Axis);}
+		if (Unit->IsAlive()){const FVector Way=FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::X);auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(FMath::Abs(Axis)>.01f && !R->IsWallCover(Unit->GetUnitID()))R->CancelCoverAction(Unit->GetUnitID());DirectMoveInput+=Way*Axis;Unit->AddMovementInput(Way, Axis);} // wall cover decides itself in PlayerTick (StepPlayerWallCover)
 }
 
 void ABattleController::Right(const FInputActionValue& Value)
@@ -212,7 +212,7 @@ void ABattleController::Right(const FInputActionValue& Value)
 		P.Y = FMath::Clamp(P.Y,-Limit,Limit); TacticalPawn->SetActorLocation(P);
 	}
 	else if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
-		if (Unit->IsAlive()){if(FMath::Abs(Axis)>.01f)GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->CancelCoverAction(Unit->GetUnitID());Unit->AddMovementInput(FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::Y), Axis);}
+		if (Unit->IsAlive()){const FVector Way=FRotationMatrix(FRotator(0, GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::Y);auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(FMath::Abs(Axis)>.01f && !R->IsWallCover(Unit->GetUnitID()))R->CancelCoverAction(Unit->GetUnitID());DirectMoveInput+=Way*Axis;Unit->AddMovementInput(Way, Axis);} // wall cover decides itself in PlayerTick (StepPlayerWallCover)
 }
 
 // Aim / scope: the look speed drops with the magnification, so the picture moves at the same speed on screen.
@@ -774,7 +774,10 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
   {
    auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
    if(U->GetState()->CoverPhase){R->CancelCoverAction(U->GetUnitID());ShowNotice(TEXT("COVER RELEASED"));}
-   else ShowNotice(R->RequestCoverAction(U->GetUnitID(),U->GetActorLocation()+GetControlRotation().Vector()*5000)?(BattleBlindFire::PlayerEnabled()?TEXT("COVER / FIRE = BLIND FIRE / AIM + FIRE = PEEK / C OR MOVE TO RELEASE"):TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE")):TEXT("NO NEARBY COVER WITH SAFE PEEK"));
+   // The wall in front first (wall cover, BattleWallCover.cpp), then the nearby cover places as before.
+   else if(R->TryWallCover(U->GetUnitID(),GetControlRotation().Vector(),GetWorld()->GetTimeSeconds()))ShowWallCoverNotice(U->GetUnitID());
+   else ShowNotice(R->RequestCoverAction(U->GetUnitID(),U->GetActorLocation()+GetControlRotation().Vector()*5000)?(BattleBlindFire::PlayerEnabled()?TEXT("COVER / FIRE = BLIND FIRE / AIM + FIRE = PEEK / C OR MOVE TO RELEASE"):TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE")):
+    UBattleLeaderRuntime::PlayerWallCoverEnabled()?TEXT("近くに遮蔽がない（壁に向かって歩くと隠れる）"):TEXT("NO NEARBY COVER WITH SAFE PEEK"));
    return true;
   }
  }
@@ -1162,6 +1165,17 @@ void ABattleController::ToggleCombat()
 	}
 }
 void ABattleController::ShowNotice(const FString& Text) { Notice = Text; NoticeUntil = GetWorld()->GetTimeSeconds() + 3.; }
+void ABattleController::ShowWallCoverNotice(int32 UnitID)
+{
+ const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ const auto* U=GetWorld()->GetSubsystem<UBattleState>()->Find(UnitID);
+ if(!U || !R->IsWallCover(UnitID))return;
+ // Low wall: the peek point is the anchor (stand up over it). High wall: an edge to lean out past, or none.
+ const bool bLow=FVector::Dist2D(U->CoverAnchor,U->CoverPeek)<1.;
+ const bool bEdge=!bLow && FVector::Dist2D(U->CoverAnchor,U->CoverPeek)<200.;
+ ShowNotice(bLow?TEXT("壁の陰にしゃがんだ（構える：立って撃つ／撃つ：壁越し射撃／離れる・C：出る）"):
+  bEdge?TEXT("壁の角に付いた（構える：角から身を出す／撃つ：壁越し射撃／離れる・C：出る）"):TEXT("壁に付いた（撃つと遮蔽を出る／離れる・C：出る）"));
+}
 void ABattleController::BattleVerify() { if (ABattleGameMode* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>()) Mode->RunSmokeTest(); }
 
 void ABattleController::PlayerTick(float DeltaTime)
@@ -1187,7 +1201,13 @@ void ABattleController::PlayerTick(float DeltaTime)
 	if (ABattleUnit* Unit = Cast<ABattleUnit>(GetPawn()))
 	{
 		Unit->SetAimLevel(bAimHeld && Unit->IsAlive() ? AimLevel : 0);
-		Unit->SetSprinting(!bAimHeld && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift) || IsInputKeyDown(EKeys::Gamepad_LeftThumbstick)));
+		const bool bSprintKey = !bAimHeld && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift) || IsInputKeyDown(EKeys::Gamepad_LeftThumbstick));
+		Unit->SetSprinting(bSprintKey);
+		// Wall cover (BattleWallCover.cpp, user 11-24): pressing against a wall takes cover there; moving off it leaves.
+		if (Unit->IsAlive() && !bTactical)
+			if (auto* R = GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); R->IsEnabled() && R->StepPlayerWallCover(Unit->GetUnitID(), DirectMoveInput, bAimHeld, bSprintKey, DeltaTime, GetWorld()->GetTimeSeconds()) == 1)
+				ShowWallCoverNotice(Unit->GetUnitID());
+		DirectMoveInput = FVector::ZeroVector;
 		if (Unit->IsAlive()) UpdatePlayerAmmo(Unit);
 		if (!Unit->IsAlive()) { if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled()) OnLeaderUnitDied(Unit->GetUnitID()); else { EnterTactical(); ShowNotice(TEXT("UNIT DOWN / select another ally")); } }
 		else if (bTriggerHeld)

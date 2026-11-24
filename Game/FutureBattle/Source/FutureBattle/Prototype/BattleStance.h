@@ -34,5 +34,12 @@ namespace BattleStance
  //     MoveScale of his stance.
  // Heights, sight, hits and spread follow the stance as when standing still (a crouched walker hides behind a 1.2 m wall).
  int32 MoveMode();
+ // -BattleStanceSteady=1 (default 1 since 2026-11-24 04:40, user decision after a play test: "relatively improved"; =0 restores
+ // the old behaviour. 2026-11-23, user: soldiers crouch and stand again and again on the spot, which looks
+ // bad). Two sources of that (map I default match: 19,800 crouches in 15 min): (1) in the open, a soldier crouched, lost his
+ // enemy from the lower eye, stood up to look, saw him and crouched again (9,350 "stood to look"); with the trial, once crouching
+ // hid his enemy at a place he stays standing there (within 2.5 m). (2) Behind cover, he stood up to peek every 0.8 s hidden,
+ // and 72% of the peeks ended with no shot (no enemy seen); with the trial, after a peek with no shot he stays down 3 s.
+ bool Steady();
  float MoveScale(uint8 Stance);    // 1 / 0.55 / 0.25 of the walking speed
 }

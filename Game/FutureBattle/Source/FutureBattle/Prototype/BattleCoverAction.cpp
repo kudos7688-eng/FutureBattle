@@ -41,6 +41,14 @@ void UBattleLeaderRuntime::CancelCoverAction(int32 ID)
   B->Mesh->SetRelativeLocation(FVector(0,0,-90));
   if(U->IsAlive()){B->Mesh->SetRelativeRotation(FRotator(0,-90,0));RefreshFollowerPose(ID);}
  }
+ // Wall cover (BattleWallCover.cpp): leaving gives back the stance he had before (still registered, so it applies off the
+ // stance maps too).
+ if(const FWallCover* W=WallCovers.Find(ID))
+ {
+  if(U->IsAlive())SetStance(ID,W->PrevStance,GetWorld()->GetTimeSeconds(),true);
+  WallCovers.Remove(ID);
+ }
+ WallPushSeconds.Remove(ID);
 }
 
 void UBattleLeaderRuntime::EndPeekDiag(int32 ID,const TCHAR* Cause)
@@ -48,6 +56,16 @@ void UBattleLeaderRuntime::EndPeekDiag(int32 ID,const TCHAR* Cause)
  int32 Shots=0;if(!CoverPeekShots.RemoveAndCopyValue(ID,Shots))return;
  SightExperiment.Cover(*FString::Printf(TEXT("peek_end_%s"),Cause));
  SightExperiment.Cover(Shots<=0?TEXT("peek_end_shots_0"):Shots==1?TEXT("peek_end_shots_1"):TEXT("peek_end_shots_2plus"));
+ if(BattleStance::Steady()){if(Shots<=0)QuietPeeks.Add(ID);else QuietPeeks.Remove(ID);}
+}
+
+// How long a soldier who reached his hidden place stays down before he stands up to peek: 0.8 s, or with -BattleStanceSteady
+// SteadyHideSeconds after a peek with no shot.
+float UBattleLeaderRuntime::CoverHideSeconds(int32 ID)
+{
+ if(!BattleStance::Steady() || !QuietPeeks.Remove(ID))return .8f;
+ SightExperiment.Cover(TEXT("steady_long_hide"));
+ return SteadyHideSeconds;
 }
 
 bool UBattleLeaderRuntime::CoverLineClear(int32 ID,FVector From,FVector Threat) const
@@ -337,6 +355,10 @@ bool UBattleLeaderRuntime::StartFirePosition(int32 ID,FVector Threat,int32 Targe
  Diag.Cover(Places.Num()?TEXT("fire_position_blocked"):TEXT("fire_position_none"));return false;
 }
 
+// Trial -BattleSquadKnowledgeCover=0 (default 1; 2026-11-24): with -BattleSquadKnowledge=1 a cover action still judges its target by the
+// soldier's own contact, as without the squad table (does a member who cannot see the target stay in his cover action too long?).
+static bool SquadKnowledgeCover(){static const bool On=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSquadKnowledgeCover="),V);return V!=0;}();return On;}
+
 bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 Target)
 {
  auto* A=CoverApproaches.Find(ID);if(!A)return false;
@@ -346,7 +368,7 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);
  const bool bContactCover=U && BattleTactics::ContactCover(U->Team);
  FBattleContact KnownOfTarget;
- const auto* Contact=U&&GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,U->SquadID,A->Target,KnownOfTarget)?&KnownOfTarget:GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,A->Target);
+ const auto* Contact=U&&SquadKnowledgeCover()&&GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,U->SquadID,A->Target,KnownOfTarget)?&KnownOfTarget:GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,A->Target);
  const FVector Pos=Position(ID);const TCHAR* End=nullptr;
  if(!U || !U->IsAlive())End=TEXT("approach_cancel_died");
  // An assault dash (BattleArms.cpp) survives a re-issued order while the squad still fights where it is (not a move order).
@@ -496,7 +518,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  const bool bWalkingToPlace=U->CoverPhase==1 && U->SoldierMoveUntil>0 && Now<U->SoldierMoveUntil;
  if(bWalkingToPlace)U->CoverSeconds=3.f;
  FBattleContact KnownOfTarget;
- const auto* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,U->SquadID,U->CoverTargetID,KnownOfTarget)?&KnownOfTarget:nullptr;
+ const auto* Contact=!SquadKnowledgeCover()?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,U->CoverTargetID):GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,U->SquadID,U->CoverTargetID,KnownOfTarget)?&KnownOfTarget:nullptr;
  // The walk to a place he chose (stage A relocation, B1) is finished even when the contact goes stale or out of range on the
  // way, and even when the contact is forgotten: stopping halfway would leave him in the open. Once there, the usual rules apply.
  if(!Player && !bWalkingToPlace && (!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds))){Diag.Cover(U->CoverPhase==1?TEXT("cancel_contact_stale_entering"):TEXT("cancel_contact_stale_in_cover"));CancelCoverAction(ID);return false;}
@@ -534,7 +556,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
   const FVector Goal=U->CoverPhase==1?U->CoverAnchor:U->CoverPeek;
   const FVector Before=Position(ID),D=(Goal-Before).GetSafeNormal2D();
   if(FVector::Dist2D(Before,Goal)<40)
-  {U->CoverPhase=U->CoverPhase==1?2:4;U->CoverSeconds=U->CoverPhase==2?.8f:AIPeekFire?FMath::Clamp(GetDefault<UBattleTuning>()->AICoverPeekSeconds,.1f,3.f):1.2f;if(U->CoverPhase==4 && !Player)
+  {U->CoverPhase=U->CoverPhase==1?2:4;U->CoverSeconds=U->CoverPhase==2?CoverHideSeconds(ID):AIPeekFire?FMath::Clamp(GetDefault<UBattleTuning>()->AICoverPeekSeconds,.1f,3.f):1.2f;if(U->CoverPhase==4 && !Player)
    {
     CoverPeekShots.Add(ID,0);
     // Evaluation only: what the AI knew and whether its weapon was ready when it reached the peek point.
@@ -605,6 +627,11 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  // Stances: crouch while hidden behind cover, stand to move and to fire from the peek point.
  // (Direct control too: behind low cover the player is only hidden while crouched.) For the player only when the phase changes:
  // between changes his own X wins (and a soldier he takes over in the middle of a cover action keeps his stance).
- if(!Player || U->CoverPhase!=PhaseAtStart)SetStance(ID,U->CoverPhase==2?BattleStance::Crouch:BattleStance::Stand,Now,true);
+ // Wall cover at a high wall (BattleWallCover.cpp): he stands against it while hidden too.
+ if(!Player || U->CoverPhase!=PhaseAtStart)
+ {
+  const FWallCover* Wall=WallCovers.Find(ID);
+  SetStance(ID,U->CoverPhase==2 && !(Wall && Wall->bHigh)?BattleStance::Crouch:BattleStance::Stand,Now,true);
+ }
  return true;
 }

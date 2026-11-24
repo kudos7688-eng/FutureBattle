@@ -1,0 +1,50 @@
+﻿{
+    "dll":  "4F140FC71D2DBE7CAAA3D6D9140091A5EA04CD636C5495C7598574423CACB1DA",
+    "arguments":  [
+                      "\"C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Game\\FutureBattle\\FutureBattle.uproject\"",
+                      "/Game/Prototype/Lvl_BattleWide_E",
+                      "-game",
+                      "-unattended",
+                      "-nosound",
+                      "-nosplash",
+                      "-BattleWideMixed",
+                      "-BattleArea",
+                      "-BattleExoShot",
+                      "-BattleStances=1",
+                      "-RenderOffscreen",
+                      "-ForceRes",
+                      "-ResX=1280",
+                      "-ResY=720",
+                      "-BattleWideScreens=\"C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Setup\\Benchmarks\\ExoShot-20261118\\paint-main-r2\\shot\"",
+                      "-abslog=\"C:\\Users\\nanek\\Documents\\FPS\\FutureBattle\\Setup\\Benchmarks\\ExoShot-20261118\\paint-main-r2\\run.log\""
+                  ],
+    "machine":  {
+                    "schema_version":  1,
+                    "captured_at_utc":  "2026-11-24T00:32:33.8833613Z",
+                    "gpus":  [
+                                 {
+                                     "name":  "NVIDIA GeForce RTX 5070 Ti",
+                                     "pnp_device_id":  "PCI\\VEN_10DE\u0026DEV_2C05\u0026SUBSYS_143D196E\u0026REV_A1\\4\u00267BE56FF\u00260\u00260008",
+                                     "driver_version":  "32.0.16.2101",
+                                     "vram_bytes":  17094934528,
+                                     "vram_source":  "Registry HardwareInformation.qwMemorySize",
+                                     "vram_note":  null,
+                                     "cim_adapter_ram_bytes":  4293918720
+                                 }
+                             ],
+                    "cpus":  [
+                                 {
+                                     "name":  "Intel(R) Core(TM) i7-14700KF",
+                                     "cores":  20,
+                                     "logical_processors":  28
+                                 }
+                             ],
+                    "memory_bytes":  68523167744,
+                    "os":  {
+                               "name":  "Microsoft Windows 11 Pro",
+                               "version":  "10.0.26300",
+                               "build_number":  "26300",
+                               "architecture":  "64-bit"
+                           }
+                }
+}

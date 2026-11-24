@@ -164,11 +164,11 @@ BattleCoverClips::FSet BattleBodyAnim::CoverSet(UWorld* World,const FBattleUnitS
  return BattleCoverClips::Pick(BattleCoverClips::HeightOf(Side,bBlocked),Side);
 }
 
-void UBattleBodyAnimInstance::SetBase(UAnimSequence* Clip,bool bLoop,float Rate)
+void UBattleBodyAnimInstance::SetBase(UAnimSequence* Clip,bool bLoop,float Rate,float Fade)
 {
  BaseRate=FMath::Max(0.f,Rate);
  if(Clip==BaseClip){bBaseLoop=bLoop;return;}
- if(BaseClip){PreviousClip=BaseClip;PreviousTime=BaseTime;bPreviousLoop=bBaseLoop;PreviousWeight=1.f;}
+ if(BaseClip){PreviousClip=BaseClip;PreviousTime=BaseTime;bPreviousLoop=bBaseLoop;PreviousWeight=1.f;FadeSeconds=Fade>0.f?Fade:CrossFadeSeconds;}
  BaseClip=Clip;BaseTime=0.f;bBaseLoop=bLoop;
 }
 
@@ -199,7 +199,7 @@ void UBattleBodyAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
   Time=bLoop?FMath::Fmod(Time,Length):FMath::Min(Time,Length);
  };
  Advance(BaseClip,BaseTime,bBaseLoop,BaseRate);
- if(PreviousWeight>0.f){Advance(PreviousClip,PreviousTime,bPreviousLoop);PreviousWeight=FMath::Max(0.f,PreviousWeight-DeltaSeconds/CrossFadeSeconds);}
+ if(PreviousWeight>0.f){Advance(PreviousClip,PreviousTime,bPreviousLoop);PreviousWeight=FMath::Max(0.f,PreviousWeight-DeltaSeconds/FMath::Max(.01f,FadeSeconds));}
  if(!bUpperDriven)Advance(UpperClip,UpperTime,true);
  if(OverlayClip)
  {

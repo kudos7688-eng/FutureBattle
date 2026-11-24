@@ -91,7 +91,7 @@ static void FitExoInnerFrame(ABattleUnit* Unit)
 // Load each carry pose with its matching right-hand mount; the other prop follows the upper spine.
 struct FExoCarryPose
 {
- TStrongObjectPtr<UAnimSequence> Idle,Move,CrouchIdle,CrouchMove,Fire,Reload;
+ TStrongObjectPtr<UAnimSequence> Idle,Move,CrouchIdle,CrouchMove,Fire,Reload,Jump,Land;
  // Fire/Reload: the recoil of each shot and the reload of the weapon in the right hand (ABattleUnit::SetLookActions), if any.
  void Load(const TCHAR* Family,const TCHAR* FireName=nullptr,const TCHAR* ReloadName=nullptr)
  {
@@ -105,6 +105,8 @@ struct FExoCarryPose
   CrouchIdle.Reset(Clip(TEXT("Crouch_Idle")));CrouchMove.Reset(Clip(TEXT("Crouch_Walk_Fwd")));
   if(FireName)Fire.Reset(Clip(FireName));
   if(ReloadName)Reload.Reset(Clip(ReloadName));
+  // The jump and the landing (Art/AC01_Tripo_v2/Scripts/21_jump_clips.py, ABattleUnit::SetLookJump), if imported.
+  Jump.Reset(Clip(TEXT("Jump")));Land.Reset(Clip(TEXT("Land")));
  }
 };
 
@@ -130,8 +132,9 @@ FExoAssets& ExoAssets()
   X.Rifle.Reset(LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Rifle.SM_AC01_Rifle"),nullptr,LOAD_NoWarn));
   X.Launcher.Reset(LoadObject<UStaticMesh>(nullptr,TEXT("/Game/Art/AC01T2/Weapons/SM_AC01_Launcher.SM_AC01_Launcher"),nullptr,LOAD_NoWarn));
   X.bOk=X.Suit.IsValid()&&X.Primary.Idle.IsValid()&&X.Primary.Move.IsValid()&&X.Secondary.Idle.IsValid()&&X.Secondary.Move.IsValid()&&X.Rifle.IsValid()&&X.Launcher.IsValid();
-  UE_LOG(LogFutureBattle,Display,TEXT("EXO_SUIT assets=%d body=%s move=%s,%s actions=rifle%d%d,launcher%d%d"),X.bOk,X.Suit.IsValid()?*X.Suit->GetName():TEXT("none"),X.Primary.Move.IsValid()?*X.Primary.Move->GetName():TEXT("none"),X.Secondary.Move.IsValid()?*X.Secondary.Move->GetName():TEXT("none"),
-   X.Primary.Fire.IsValid(),X.Primary.Reload.IsValid(),X.LauncherFire.IsValid(),X.LauncherReload.IsValid());
+  UE_LOG(LogFutureBattle,Display,TEXT("EXO_SUIT assets=%d body=%s move=%s,%s actions=rifle%d%d,launcher%d%d jump=%d%d%d%d"),X.bOk,X.Suit.IsValid()?*X.Suit->GetName():TEXT("none"),X.Primary.Move.IsValid()?*X.Primary.Move->GetName():TEXT("none"),X.Secondary.Move.IsValid()?*X.Secondary.Move->GetName():TEXT("none"),
+   X.Primary.Fire.IsValid(),X.Primary.Reload.IsValid(),X.LauncherFire.IsValid(),X.LauncherReload.IsValid(),
+   X.Primary.Jump.IsValid(),X.Primary.Land.IsValid(),X.Secondary.Jump.IsValid(),X.Secondary.Land.IsValid());
  }
  return X;
 }
@@ -152,7 +155,13 @@ bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
  {
   Body->SetSkeletalMesh(X.Suit.Get());
   FitExoInnerFrame(A);
-  if(auto* Paint=Body->CreateDynamicMaterialInstance(0))Paint->SetVectorParameterValue(TEXT("VisorColor"),U->Team==0?FLinearColor(.25f,2.2f,4.f):FLinearColor(4.f,.35f,.25f));
+  // Team colours (M_AC01T3, Setup/Import-AC01T3.py): the visor glow, the armour paint and the accent (shoulders, helmet stripe, knees).
+  if(auto* Paint=Body->CreateDynamicMaterialInstance(0))
+  {
+   Paint->SetVectorParameterValue(TEXT("VisorColor"),U->Team==0?FLinearColor(.25f,2.2f,4.f):FLinearColor(4.f,.35f,.25f));
+   Paint->SetVectorParameterValue(TEXT("PaintColor"),U->Team==0?FLinearColor(.3f,.32f,.35f):FLinearColor(.28f,.21f,.11f));
+   Paint->SetVectorParameterValue(TEXT("AccentColor"),U->Team==0?FLinearColor(.05f,.2f,.5f):FLinearColor(.5f,.06f,.04f));
+  }
   Back=NewObject<UStaticMeshComponent>(A);Back->SetupAttachment(Body,TEXT("spine_05"));
   Back->SetCollisionEnabled(ECollisionEnabled::NoCollision);Back->SetCanEverAffectNavigation(false);
   Back->RegisterComponent();A->AddInstanceComponent(Back);
@@ -164,6 +173,7 @@ bool UBattleLeaderRuntime::ApplyExoSuit(int32 ID)
  const FTransform Grip(FRotationMatrix::MakeFromYZ(-Barrel,FVector::UpVector).ToQuat(),Palm);
  A->SetLook(Pose.Idle.Get(),Pose.Move.Get(),Pose.CrouchIdle.Get(),Pose.CrouchMove.Get(),Launcher?X.Launcher.Get():X.Rifle.Get(),TEXT("hand_r"),Grip.GetRelativeTransform(Hand));
  A->SetLookActions(Pose.Fire.Get(),Pose.Reload.Get());
+ A->SetLookJump(Pose.Jump.Get(),Pose.Land.Get());
  const FTransform Spine=ExoClipBone(Pose.Idle.Get(),TEXT("spine_05"));
  // The carried weapon lies against the back plate (component space: +X is the suit's left, -Y its back), not floating behind it.
  // Launcher: nearly upright along the back, muzzle up past the left shoulder, 15 degrees from upright and 10 cm to the left, leaning

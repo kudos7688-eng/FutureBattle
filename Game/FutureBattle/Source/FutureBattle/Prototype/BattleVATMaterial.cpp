@@ -1,6 +1,7 @@
 #include "BattleVATBake.h"
 #if WITH_EDITOR
 #include "BattleVATData.h"
+#include "BattleSoldierBody.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "Materials/Material.h"
@@ -66,7 +67,8 @@ void Modify(UMaterial* M,const FBattleVATMesh& V)
 int32 BuildBattleVATMaterials()
 {
  using namespace BattleVATMaterial;
- auto* Data=LoadObject<UBattleVATData>(nullptr,TEXT("/Game/Prototype/DisplayLODTrial/DA_BattleVAT"));if(!Data)return 30;
+ const FString Root=BattleSoldierBody::VATRoot(); // Quinn's folder, or RB01's with -BattleSoldierBody=1
+ auto* Data=LoadObject<UBattleVATData>(nullptr,*(Root+TEXT("DA_BattleVAT")));if(!Data)return 30;
  TArray<UObject*> Outputs;
  for(int32 Index=0;Index<Data->Meshes.Num();++Index)
  {
@@ -74,7 +76,7 @@ int32 BuildBattleVATMaterials()
   TFunction<UMaterialInterface*(UMaterialInterface*)> Clone=[&](UMaterialInterface* Original)->UMaterialInterface*
   {
    if(auto* Found=Copies.Find(Original))return *Found;
-   const FString Name=FString::Printf(TEXT("VAT%d_%s"),Index,*Original->GetName());const FString Path=TEXT("/Game/Prototype/DisplayLODTrial/")+Name;
+   const FString Name=FString::Printf(TEXT("VAT%d_%s"),Index,*Original->GetName());const FString Path=Root+Name;
    if(FPackageName::DoesPackageExist(Path))return nullptr;
    auto* Copy=DuplicateObject<UMaterialInterface>(Original,CreatePackage(*Path),*Name);Copies.Add(Original,Copy);
    if(auto* MI=Cast<UMaterialInstanceConstant>(Copy))
@@ -98,7 +100,7 @@ int32 BuildBattleVATMaterials()
 }
 int32 RepairBattleVATMetadata()
 {
- auto* D=LoadObject<UBattleVATData>(nullptr,TEXT("/Game/Prototype/DisplayLODTrial/DA_BattleVAT"));if(!D)return 41;
+ auto* D=LoadObject<UBattleVATData>(nullptr,*(BattleSoldierBody::VATRoot()+TEXT("DA_BattleVAT")));if(!D)return 41;
  TSet<UObject*> Outputs;Outputs.Add(D);
  for(auto& V:D->Meshes)
  {

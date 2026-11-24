@@ -4,6 +4,7 @@
 #include "BattleAudio.h"
 #include "BattleFollowerBones.h"
 #include "BattleVATDisplay.h"
+#include "BattleSoldierBody.h"
 #include "BattlePhase3.h"
 #include "BattleGameMode.h"
 #include "BattleFieldLayout.h"
@@ -135,7 +136,7 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
  const auto Archetype=Manager->CreateArchetype({FBattleFollowerFragment::StaticStruct()});
  DisplayHost=GetWorld()->SpawnActor<AActor>();
  auto* Root=NewObject<USceneComponent>(DisplayHost); DisplayHost->SetRootComponent(Root); DisplayHost->AddInstanceComponent(Root); Root->RegisterComponent();
- auto* MeshAsset=LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple"));
+ auto* MeshAsset=BattleSoldierBody::LoadMesh(); // Quinn, or RB01 with -BattleSoldierBody=1
  auto* Idle=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/Characters/Mannequins/Anims/Rifle/MF_Rifle_Idle_ADS"));
  IdlePose=Idle;
  WalkPose=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/Characters/Mannequins/Anims/Rifle/Walk/MF_Rifle_Walk_Fwd"));
@@ -500,7 +501,7 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
  CancelCoverAction(ID);ClearSoldierOrder(ID,TEXT("died"));
  VehicleIDs.Remove(ID); // a destroyed vehicle is a wreck: no armour or spotting rules
  // Stances are for the living: restore the normal body shape before the death pose is applied.
- SetStance(ID,BattleStance::Stand,GetWorld()->GetTimeSeconds(),true);Stances.Remove(ID);StanceLockedUntil.Remove(ID);LowMoveUntil.Remove(ID);NoCoverProneUntil.Remove(ID);CoverProbeFailedAt.Remove(ID);
+ SetStance(ID,BattleStance::Stand,GetWorld()->GetTimeSeconds(),true);Stances.Remove(ID);StanceLockedUntil.Remove(ID);LowMoveUntil.Remove(ID);NoCoverProneUntil.Remove(ID);CrouchBlindAt.Remove(ID);QuietPeeks.Remove(ID);CoverProbeFailedAt.Remove(ID);
  if(Phase3 && Phase3->bEnabled) Phase3->OnDeath(ID);
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U) return;
  // War score trial: every loss (shot or stopped by the leader's death) scores for the other team.
@@ -899,7 +900,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   return;
  }
  const auto* S=Store->FindSquad(U->SquadID); auto* P=Plans.Find(U->SquadID); if(!P || S->CommandStatus!=EBattleCommandStatus::Active) return;
- FVector Pos=Position(ID), Direction=Forward(ID); B.Velocity=FVector::ZeroVector;
+ FVector Pos=Position(ID), Direction=Forward(ID); const FVector LastVelocity=B.Velocity; B.Velocity=FVector::ZeroVector;
  // The player's order to this soldier (BattleSoldierOrder.cpp): his own place instead of the squad's movement.
  const bool bOwnOrder=U->bSoldierOrder && SoldierOrderActive(ID);
  const bool bOwnWalking=bOwnOrder && FVector::DistSquared2D(Pos,U->SoldierGoal)>FMath::Square(100.);
@@ -928,6 +929,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   (S->TacticalPlan.Action!=EBattleSquadTactic::Support || TargetID==S->TacticalPlan.SupportTarget);
  const bool CanEngage=ObservedEngage&&CanSee(ID,TargetID);
  if(CanEngage && Contact->SourceUnitID!=ID && SectorSightMember(ID))SightExperiment.Cover(TEXT("sector_sight_member_engage_frames"));
+ if(CanEngage && Contact->SourceUnitID==ID && SectorSightMember(ID) && SectorSightFar(Pos,Contact->LastKnownPosition))SightExperiment.Cover(TEXT("sector_sight_member_own_cross_engage_frames"));
  // Trial -BattleOwnTarget (default 0, BattleSoldierFire.cpp): he cannot fire at the squad's target - he fires at an enemy he
  // sees himself within the engagement distance. Only his aim and his fire: the squad's target, movement and cover stay.
  bool bOwnAtShooter=false;
@@ -989,6 +991,14 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   // Trial -BattleStanceMove=2: a threat is being under fire or seeing any enemy himself (a Move order has no squad target).
   const bool bThreat=BattleStance::MoveMode()>=2 && WillMove && (UnderFire(ID) || (Contact && Contact->bVisible && !Contact->bShared) || SeesEnemy(ID));
   UpdateAIStance(ID,Now,WillMove,StopForCombat,LostSight,bThreat);
+  // Evaluation (route_*_frames): soldiers of a squad on its way (not holding, not in a cover action) - walking, or standing still
+  // (last frame's speed under 0.5 m/s): for no fight, or stopped for a fight standing or low, and standing with no enemy in sight.
+  if(SightExperiment.Enabled && bOnRoute && !bOwnOrder && S->Order!=EBattleOrder::Hold && !U->CoverPhase && !CoverApproaches.Contains(ID))
+  {
+   const bool bStill=LastVelocity.SizeSquared2D()<2500.;const bool bLow=StanceOf(ID)!=BattleStance::Stand;
+   SightExperiment.Cover(!bStill?TEXT("route_walking_frames"):!StopForCombat?TEXT("route_still_no_fight_frames"):bLow?TEXT("route_still_fight_low_frames"):TEXT("route_still_fight_standing_frames"));
+   if(bStill && StopForCombat && !bLow && !(Contact && Contact->bVisible))SightExperiment.Cover(TEXT("route_still_fight_standing_unseen_frames"));
+  }
   // Getting up takes time: no walking until the soldier is standing. With -BattleStanceMove=2 he walks in his stance instead
   // (crouched or crawling, at its speed below).
   if(WillMove && StanceOf(ID)!=BattleStance::Stand && BattleStance::MoveMode()<2)
@@ -1284,6 +1294,9 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
    if(BattleBlindFire::IsOverTop(*U))BlindFireTop.Add(ID,BattleBlindFire::CoverTop(GetWorld(),Origin,Position(ID)));
    else BlindFireSide.Add(ID,Origin);
   }
+  // Wall cover in the middle of a high wall (no edge to lean out past, BattleWallCover.cpp): the shot leaves the cover and is
+  // fired as an ordinary one.
+  else if(bPlayerShot && WallCovers.Contains(ID) && !WallCovers.FindChecked(ID).bPeek)CancelCoverAction(ID);
   else
   {
    if(bPlayerShot && U->CoverPhase==2){auto& Cover=Store->Units.FindChecked(ID);Cover.CoverPhase=3;Cover.CoverSeconds=3;}
@@ -1397,6 +1410,14 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
     if(ShooterSquad && ShooterSquad->SquadType<BattleSquadType::Count && U->Team>=0 && U->Team<2){E.TypeDamage[U->Team][ShooterSquad->SquadType]+=Dealt;E.TypeKills[U->Team][ShooterSquad->SquadType]+=Killed;}
     if(VictimSquadState && VictimSquadState->SquadType<BattleSquadType::Count && VictimTeam>=0 && VictimTeam<2){E.TypeTaken[VictimTeam][VictimSquadState->SquadType]+=Dealt;E.TypeDeaths[VictimTeam][VictimSquadState->SquadType]+=Killed;} }
   (VictimLeader?E.LeaderHits:E.FollowerHits)[VictimTeam]++;
+  // Evaluation only (11-24, why one side kills fewer leaders): every hit on a leader with who fired it. own=1: the shooter sees the leader himself now.
+  if(VictimLeader)
+  {
+   const auto* HitShooterSquad=Store->FindSquad(U->SquadID);const auto* HitOwn=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,Victim);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_LEADER_HIT t=%.2f victim=%d squad=%d team=%d hp=%.0f dmg=%.0f killed=%d living=%d rank=%d shooter=%d shooter_squad=%d shooter_type=%d weapon=%d dist=%.0f own=%d shooter_leader=%d"),
+    GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed,Victim,VictimSquad,VictimTeam,BeforeHP,FMath::Min(BeforeHP,ShotDmg*ArmorScale(Victim,W)),Killed?1:0,SquadLiving,LeaderRank,ID,U->SquadID,
+    HitShooterSquad?int32(HitShooterSquad->SquadType):-1,int32(W),FVector::Dist2D(Position(Victim),Start),HitOwn&&HitOwn->bVisible&&!HitOwn->bShared?1:0,HitShooterSquad&&HitShooterSquad->LeaderUnitID==ID?1:0);
+  }
   E.Cover(HitKeys[VictimCoverState]);if(Killed)E.Cover(DeathKeys[VictimCoverState]);
   // Evaluation only: what a soldier hit outside cover was doing (walking, shooting, other), and for a sector squad whether
   // he was still on the way or already inside the sector (where moving hits come from; 11-20).
@@ -1903,6 +1924,17 @@ void UBattleLeaderRuntime::NoteUnderFire(int32 ID)
  if(ShotDirectionEnabled() || ThreatCoverEnabled(0) || ThreatCoverEnabled(1) || SoldierMoveEnabled(0) || SoldierMoveEnabled(1) || OwnTargetMode(0) || OwnTargetMode(1) || UnderFireCoverEnabled() || CoverPriorityEnabled() || HitFaceEnabled() || (BattleTactics::VehicleHitCover()&&IsVehicle(ID))){FVector From;if(GetWorld()->GetSubsystem<UBattleState>()->PendingHitSource(From))ShotFrom.Add(ID,TPair<FVector,double>(From,GetWorld()->GetTimeSeconds()));}
  if(SectorContactEnabled() || SectorMoveFireEnabled() || !SectorFireBack.IsEmpty())SectorHitUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);
  if(SightExperiment.Enabled)if(const int32 Shooter=GetWorld()->GetSubsystem<UBattleState>()->PendingHitShooter();Shooter!=INDEX_NONE)DiagnoseHitSight(ID,Shooter);
+ if(const int32 HitLook=SectorSightHitMode())
+ {
+  const auto* HitStore=GetWorld()->GetSubsystem<UBattleState>();const auto* Victim=HitStore->Find(ID);const int32 HitBy=HitStore->PendingHitShooter();
+  if(Victim && HitBy!=INDEX_NONE && SectorSightMode(Victim->Team))
+  {
+   auto* HitSense=GetWorld()->GetSubsystem<UBattlePerception>();const double Until=GetWorld()->GetTimeSeconds()+5.;int32 Lookers=0;
+   if(HitLook>=2){if(const auto* HitSquad=HitStore->FindSquad(Victim->SquadID))for(int32 Mate:HitSquad->Members)if(SectorSightRole(Mate)){HitSense->AllowCrossSector(Mate,HitBy,Until);++Lookers;}}
+   else if(SectorSightRole(ID)){HitSense->AllowCrossSector(ID,HitBy,Until);++Lookers;}
+   if(Lookers)SightExperiment.Cover(TEXT("sector_sight_hit_looks"));
+  }
+ }
  if(HitRevealEnabled()){const auto* Store=GetWorld()->GetSubsystem<UBattleState>();FVector From;const int32 Shooter=Store->PendingHitShooter();
   if(Shooter!=INDEX_NONE && Store->PendingHitSource(From))RevealShooter(ID,Shooter,From);}
  if(!BattleTactics::ReturnFireEnabled())return;
