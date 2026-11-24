@@ -173,6 +173,10 @@ void UBattleLeaderRuntime::RunMapStats()
    {
     O->SetNumberField(TEXT("vehicle_m"),Round1(Result.Path->GetLength()/100.));
     O->SetNumberField(TEXT("vehicle_stops_short_m"),Round1(FVector::Dist2D(Result.Path->GetPathPoints().Last().Location,Goal.Value)/100.));
+    // Where the goal was put on the vehicle mesh and where the route ends (a goal on a patch not joined to the roads gives a partial route).
+    const FVector EndAt=Result.Path->GetPathPoints().Last().Location;
+    O->SetNumberField(TEXT("vehicle_goal_x_m"),Round1((bGoalOnNav?To.Location.X:Goal.Value.X)/100.));O->SetNumberField(TEXT("vehicle_goal_y_m"),Round1((bGoalOnNav?To.Location.Y:Goal.Value.Y)/100.));
+    O->SetNumberField(TEXT("vehicle_end_x_m"),Round1(EndAt.X/100.));O->SetNumberField(TEXT("vehicle_end_y_m"),Round1(EndAt.Y/100.));
    }
   }
   RouteRows.Add(MakeShared<FJsonValueObject>(O));
