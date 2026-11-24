@@ -341,8 +341,9 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
    auto Smooth=[&](TArray<int32>& A)
    {
     auto Cap=[&](int32 Y,int32 Z){int32 V=A[Z]+1;if(InFocus.Num()==Rows&&InFocus[Y]&&!InFocus[Z]&&TargetCol>=0)V=FMath::Max(V,FMath::Min(A[Z]+3,TargetCol));
-     // Section orders: at the border of an advancing or falling back section the rows may differ by three columns.
-     if((SectionOrderOfRow(Team,Y)||SectionOrderOfRow(Team,Z))&&FrontRoleOfRow(Team,Y)!=FrontRoleOfRow(Team,Z))V=FMath::Max(V,A[Z]+3);
+     // Section orders: at the border of an advancing or falling back section the neighbouring section does not pull the rows
+     // (first matches 2026-11-24: a three-column allowance let a falling back section drag the next sections back with it).
+     if((SectionOrderOfRow(Team,Y)||SectionOrderOfRow(Team,Z))&&FrontRoleOfRow(Team,Y)!=FrontRoleOfRow(Team,Z))V=TNumericLimits<int32>::Max();
      return V;};
     for(int32 Pass=0;Pass<Rows;++Pass)for(int32 Y=0;Y<Rows;++Y){if(Y>0)A[Y]=FMath::Min(A[Y],Cap(Y,Y-1));if(Y+1<Rows)A[Y]=FMath::Min(A[Y],Cap(Y,Y+1));}
    };
@@ -389,7 +390,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
      {
       const int32 T=Area.FrontTarget.IsValidIndex(Y)?Area.FrontTarget[Y]:-1;
       if(Ord==TEXT('A')&&T>H[Y]&&H[Y]+1<EnemyHomeCol-1&&(Reached[Y]<0||Reached[Y]>=H[Y]-RowLag)){++Next[Y];++Moved;++Ordered;}
-      else if(Ord==TEXT('B')&&H[Y]>(T>=0&&T<H[Y]?FMath::Max(HomeCol,T):HomeCol)){--Next[Y];++Moved;++Ordered;}
+      else if(Ord==TEXT('B')&&H[Y]>(T>=0?FMath::Max(HomeCol,T):HomeCol)){--Next[Y];++Moved;++Ordered;} // stops on the target line
       continue;
      }
      if(!(H[Y]+1<EnemyHomeCol-1&&(Reached[Y]<0||Reached[Y]>=H[Y]-RowLag)))continue;
@@ -1450,7 +1451,7 @@ bool UBattleMatch::CyclePlayerSectionRole(int32 Section)
  LastMessage=FString::Printf(TEXT("区間%d：%s"),Section+1,SectionRoleJa(Role));
  if(Role==1&&!(P.AheadMask.IsValidIndex(Section)&&P.AheadMask[Section]!=0u))LastMessage+=TEXT("（前に拠点が見えるまで攻撃軍は向かわない）");
  if(Role==5)LastMessage+=Area.FrontTarget.IsEmpty()?TEXT("（「前線を引く」で目標の線を引くと、その線まで1区画ずつ進む）"):TEXT("（引いた線まで1区画ずつ進む）");
- if(Role==6)LastMessage+=TEXT("（1区画ずつ下がる。引いた線が後ろならそこで止まる。自軍の拠点より後ろへは下がらない）");
+ if(Role==6)LastMessage+=TEXT("（1区画ずつ下がる。目標の線があればそこで止まり、無ければ自陣まで。自軍の拠点より後ろへは下がらない）");
  return true;
 }
 
