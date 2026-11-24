@@ -796,6 +796,15 @@ struct FBattleHitNotice
 	bool bKnown = false;
 };
 
+// A squad's mission (the intent a temporary plan returns to): the FBattleSquadState Mission* fields read together (B06).
+struct FBattleMission
+{
+ EBattleOrder Order=EBattleOrder::Hold;
+ FVector Goal=FVector::ZeroVector;
+ bool bSector=false;
+ int32 Revision=0;
+};
+
 UCLASS()
 class UBattleState : public UWorldSubsystem
 {
@@ -823,6 +832,7 @@ public:
  bool SetSquadTacticalPlan(int32 ID, EBattleSquadTactic Action, EBattleOrder Order, FVector Destination,
   const TMap<int32, FVector>& Goals, float Lifetime, const FString& Reason);
  void CancelSquadTacticalPlan(int32 ID, const FString& Reason);
+ bool MissionOf(int32 ID, FBattleMission& Out) const; // false without a mission
  void AdvanceSquadTacticalPlan(int32 ID, float DeltaSeconds);
 	void SetAction(int32 ID, EBattleAction Action);
 	void SetMoveRetries(int32 ID, int32 Retries);

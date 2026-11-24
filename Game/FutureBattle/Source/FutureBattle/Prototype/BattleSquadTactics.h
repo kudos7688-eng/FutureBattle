@@ -76,6 +76,8 @@ private:
  void EvaluateFlank(int32 SquadID, const FBattleSquadObservation& Sample);
  bool RetreatGoal(const FBattleSquadState& Squad, const FBattleSquadObservation& Sample, FVector& Goal);
  bool Apply(int32 SquadID, EBattleSquadTactic Action, EBattleOrder Order, FVector Goal, const FString& Reason);
+ // B06: end a temporary plan and go back to the squad's current mission (order, goal and sector flag). BattleSquadRetreat.cpp.
+ bool ResumeMission(int32 SquadID, const TCHAR* Reason, const TCHAR* EventName);
  bool bEnabled = true, bObserve = false;
  bool bST2 = true;
  bool bFlank = true;
