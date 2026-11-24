@@ -31,6 +31,11 @@
 
 古い項目：11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-25 07時57分 Claude（Codex委任）：外骨格兵の値の見直しはユーザーの判断でここで止める
+
+- 外骨格兵の試験切替（`-BattleExoArmor`・`-BattleExoDamage`・`-BattleExoShield`・`-BattleExoShieldRegen`・`-BattleExoShieldDelay`・`-BattleExoHealth`）は残す。どれも既定は今の値のまま。
+- 分かったこと：値を下げても損失はほぼ0のまま（撃破は最大−35%）。外骨格兵が撃たれない使われ方（速い予備、`UBattleMatch::AreaExoTarget`）は調べていない。再開するならそこから。
+
 ## 2026-11-25 06時55分 Claude（Codex委任）：外骨格兵の体力を小銃兵と同じ（2倍→1倍）にしても、1台も倒されない。値を下げる方向はここまで。既定は今の値のまま
 
 - **試験切替**：`-BattleExoHealth=<倍率>`（小銃兵の体力に対する倍率、設定 2、`BattleState.cpp`）を足した。
