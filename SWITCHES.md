@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 488 種類。
+計 489 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -201,8 +201,9 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleGrenades` | Value | 2 | BattleArms.cpp:41 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleGrenadeSquadGap` | Value | 3.f | BattleArms.cpp:161 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleGroupFireSupport` | Value | -1 | BattleArtillery.cpp:436, BattleGroups.cpp:292 | -1 = on for both teams (default, user 2026-11-21) |
-| `-BattleGroupSectors` | Value | 0 | BattleGroups.cpp:565 |  |
-| `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:647 |  |
+| `-BattleGroupSectors` | Value | 0 | BattleGroups.cpp:567 |  |
+| `-BattleGroupStrength` | Value | 0 | BattleGroups.cpp:649 |  |
+| `-BattleGroupSupplySlot` | Value | 0 | BattleGroups.cpp:296 |  |
 | `-BattleHeavyCost` | Value | 未解決 | BattleState.cpp:570 |  |
 | `-BattleHeavyDamage` | Value | 未解決 | BattleState.cpp:570 |  |
 | `-BattleHeavyHealth` | Value | 未解決 | BattleState.cpp:569 |  |
