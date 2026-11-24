@@ -32,8 +32,11 @@ $pad=$lines|Where-Object{$_ -match 'stage=pad' -and $_ -match 'moved=1' -and $_ 
 $reserveOn=[bool]($lines|Where-Object{$_ -match 'stage=open' -and $_ -match 'reserve=1'})
 $reserve=$lines|Where-Object{$_ -match 'stage=reserve ' -and $_ -match 'called=1' -and $_ -match 'chip_hits=1' -and $_ -match 'fits=1' -and $_ -match 'reserved_in_row=1'}
 $reserveBuy=$lines|Where-Object{$_ -match 'stage=reservebuy' -and $_ -match 'bought=1' -and $_ -match 'queued=0'}
-$reserveOk=if($reserveOn){$lines.Count -eq 5 -and $reserve -and $reserveBuy -and (Test-Path "$shot-reserved.png") -and (Test-Path "$shot-reserve-bought.png")}else{$lines.Count -eq 3}
-$ok=$reserveOk -and $open -and $buy -and $pad -and (Test-Path "$shot-open.png") -and (Test-Path "$shot-bought.png") -and $t -notmatch 'Fatal error:|Assertion failed:'
+# The elite platoon and sniper team rows (shown by default since 2026-11-24; -BattleElite=0 / -BattleSniperTeam=0 hide them): one line each, bought through its row.
+$graded=@($lines|Where-Object{$_ -match 'stage=(elite|sniper) '})
+$gradedOk=@($graded|Where-Object{$_ -match 'hit=1' -and $_ -match 'bought=1'}).Count -eq $graded.Count -and @($graded|ForEach-Object{if($_ -match 'stage=(\w+)'){$Matches[1]}}|Where-Object{!(Test-Path "$shot-$_.png")}).Count -eq 0
+$reserveOk=if($reserveOn){$lines.Count -eq 5+$graded.Count -and $reserve -and $reserveBuy -and (Test-Path "$shot-reserved.png") -and (Test-Path "$shot-reserve-bought.png")}else{$lines.Count -eq 3+$graded.Count}
+$ok=$reserveOk -and $gradedOk -and $open -and $buy -and $pad -and (Test-Path "$shot-open.png") -and (Test-Path "$shot-bought.png") -and $t -notmatch 'Fatal error:|Assertion failed:'
 @{passed=[bool]$ok;exitCode=$p.ExitCode;map=$Map;resolution="${ResX}x${ResY}"}|ConvertTo-Json|Set-Content (Join-Path $out 'result.json') -Encoding utf8
 $lines
 if(!$ok){throw "Purchase panel shot failed: $log"}
