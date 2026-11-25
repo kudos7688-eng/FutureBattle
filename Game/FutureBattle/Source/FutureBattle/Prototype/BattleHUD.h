@@ -13,6 +13,7 @@ public:
 	virtual void DrawHUD() override;
 private:
  void DrawGamepadMenu(class ABattleController* PC);
+ void DrawQuitMenu(class ABattleController* PC); // quit button and its confirmation (BattleQuitMenu.cpp, 2026-11-25)
  void DrawPlanPanel(class ABattleController* PC); // front plan stage 7 (U)
  void DrawBuyPanel(class ABattleController* PC); // purchase panel (B, 2026-11-23; layout FBattleBuyPanelLayout)
  void DrawSquadList();

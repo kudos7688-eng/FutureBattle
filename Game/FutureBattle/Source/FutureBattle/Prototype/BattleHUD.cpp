@@ -98,7 +98,7 @@ void ABattleHUD::DrawHUD()
 	const auto* Controlled=Cast<ABattleUnit>(PC->GetPawn());
 	Label(PC->IsTactical() ? TEXT("作戦指揮") : Controlled && !Controlled->UsesThirdPersonView() ? TEXT("直接操作（一人称）") : TEXT("直接操作（三人称）"), W * .4f, 30, Mint, 1.2f);
 	Label(FString::Printf(TEXT("味方 %02d ／ 敵 %02d ／ 発見中 %02d"), Allies, Enemies, Spotted), W * .4f, 54, White, .9f);
-	Label(Mode->bCombatPaused ? TEXT("AI停止中 [P]") : TEXT("AI稼働中 [P]"), W - 165, 35, Mode->bCombatPaused ? FLinearColor::Yellow : Muted);
+	// AI pause and speed are toolbar buttons since 2026-11-25 (DrawQuitMenu).
 	// Setup before the start (-BattleSetupPhase=1, user decision 2026-11-22): the match waits paused at 0 s for the player's purchases and orders.
 	if (const auto* SetupMatch = GetWorld()->GetSubsystem<UBattleMatch>(); SetupMatch && SetupMatch->bArea && UBattleMatch::SetupPhase() && Mode->bCombatPaused && SetupMatch->Elapsed <= 0.f)
 	{
@@ -106,8 +106,6 @@ void ABattleHUD::DrawHUD()
 		Label(FString::Printf(TEXT("開始前の編成 ／ 資源 %d ／ 部隊 %d/%d"), SetupMatch->Credits[0], SetupMatch->ActiveSquads(0), BattleTactics::AreaHire().MaxActive), W * .5f - 318, 126, FLinearColor::Yellow, 1.f);
 		Label(TEXT("B の購入画面で部隊を買い、前線軍・攻撃軍と命令を整えたら P で開始"), W * .5f - 318, 150, White, .85f);
 	}
-	if (const auto* SpeedPC = Cast<ABattleController>(GetOwningPlayerController()); SpeedPC && SpeedPC->IsTactical())
-		Label(SpeedPC->GetGameSpeed() == 0 ? FString(TEXT("一時停止 [.]")) : FString::Printf(TEXT("速度 x%d [.]"), SpeedPC->GetGameSpeed()), W - 165, 55, SpeedPC->GetGameSpeed() != 1 ? FLinearColor::Yellow : Muted);
 	const auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (Match->IsEnabled())
 	{
@@ -513,6 +511,52 @@ void ABattleHUD::DrawHUD()
  DrawPlanPanel(PC);
  DrawBuyPanel(PC);
  DrawGamepadMenu(PC);
+ DrawQuitMenu(PC);
+}
+
+void ABattleHUD::DrawQuitMenu(ABattleController* PC)
+{
+ // Top bar toolbar (clickable in the tactical view) and, when open, the quit confirmation panel over everything.
+ if(!PC||!Canvas)return;
+ const auto L=FBattleQuitLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY));
+ const FLinearColor Ink(.025f,.04f,.065f,.96f),Plain(.08f,.11f,.15f,.98f),Lit(.14f,.2f,.26f,.98f),Mint(.28f,.95f,.8f),White(.94f,.97f,1.f),Gold(1.f,.85f,.35f),Red(.45f,.09f,.08f,.98f),RedLit(.62f,.14f,.12f,.98f);
+ FVector2D P;const bool bPointer=PC->GetPointerPosition(P);
+ auto Button=[&](FVector2D O,FVector2D S,const FString& Text,FLinearColor Fill,FLinearColor FillLit,FLinearColor Color,float Scale)
+ {
+  DrawRect(bPointer&&FBattleQuitLayout::In(P,O,S)?FillLit:Fill,O.X,O.Y,S.X,S.Y);
+  float TW=0,TH=0;Canvas->StrLen(GEngine->GetSmallFont(),Text,TW,TH);
+  DrawText(Text,Color,O.X+(S.X-TW*Scale)*.5f,O.Y+(S.Y-TH*Scale)*.5f,GEngine->GetSmallFont(),Scale);
+ };
+ // Toolbar: each button names its key; a state that is not the usual one is yellow.
+ const auto* GameMode=GetWorld()->GetAuthGameMode<ABattleGameMode>();
+ for(const auto& Tool:L.Tools)
+ {
+  FString Text;bool bOn=false;
+  switch(Tool.Id)
+  {
+  case FBattleQuitLayout::AIPause: bOn=GameMode&&GameMode->bCombatPaused;Text=bOn?TEXT("AI停止中 [P]"):TEXT("AI稼働中 [P]");break;
+  case FBattleQuitLayout::Speed: bOn=PC->GetGameSpeed()!=1;Text=PC->GetGameSpeed()==0?FString(TEXT("一時停止 [.]")):FString::Printf(TEXT("速度 x%d [.]"),PC->GetGameSpeed());break;
+  case FBattleQuitLayout::Save: Text=TEXT("保存 [F8]");break;
+  case FBattleQuitLayout::Load: Text=TEXT("読込 [F9]");break;
+  case FBattleQuitLayout::Quit: Text=TEXT("終了 [Esc]");break;
+  case FBattleQuitLayout::SelectAll: Text=TEXT("全選択 [Q]");break;
+  case FBattleQuitLayout::Control: Text=PC->IsTactical()?TEXT("直接操作 [E]"):TEXT("作戦画面 [Tab]");break;
+  case FBattleQuitLayout::Grid: bOn=!PC->bShowSectorGrid;Text=PC->bShowSectorGrid?TEXT("格子 表示 [M]"):TEXT("格子 なし [M]");break;
+  case FBattleQuitLayout::Fog: bOn=!PC->bShowFog;Text=PC->bShowFog?TEXT("霧 表示 [N]"):TEXT("霧 なし [N]");break;
+  case FBattleQuitLayout::Ranges: Text=TEXT("射程の円 [L]");break;
+  case FBattleQuitLayout::Plan: bOn=PC->IsPlanPanelOpen();Text=TEXT("作戦方針 [U]");break;
+  default: break;
+  }
+  float TW=0,TH=0;Canvas->StrLen(GEngine->GetSmallFont(),Text,TW,TH);
+  Button(Tool.Origin,Tool.Size,Text,Plain,Lit,bOn?FLinearColor::Yellow:White,FMath::Min(.8f,(Tool.Size.X-8.f)/FMath::Max(1.f,TW)));
+ }
+ if(!PC->IsQuitMenuOpen())return;
+ DrawRect(FLinearColor(0,0,0,.45f),0,0,Canvas->SizeX,Canvas->SizeY);
+ DrawRect(Ink,L.Panel.X,L.Panel.Y,L.PanelSize.X,L.PanelSize.Y);DrawRect(Gold,L.Panel.X,L.Panel.Y,L.PanelSize.X,2);
+ DrawText(TEXT("ゲームを終了しますか？"),Gold,L.Panel.X+30,L.Panel.Y+22,GEngine->GetSmallFont(),1.1f);
+ DrawText(TEXT("保存していない進行は失われます（F8 で保存）"),White,L.Panel.X+30,L.Panel.Y+54,GEngine->GetSmallFont(),.8f);
+ Button(L.QuitChoice,L.ChoiceSize,PC->bGamepadActive?TEXT("終了する [A]"):TEXT("終了する [Enter]"),Red,RedLit,White,.95f);
+ Button(L.Back,L.ChoiceSize,PC->bGamepadActive?TEXT("戻る [B]"):TEXT("戻る [Esc]"),Plain,Lit,Mint,.95f);
 }
 
 void ABattleHUD::DrawPlanPanel(ABattleController* PC)

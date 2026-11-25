@@ -217,8 +217,8 @@ void ABattleController::Right(const FInputActionValue& Value)
 
 // Aim / scope: the look speed drops with the magnification, so the picture moves at the same speed on screen.
 float ABattleController::ViewMagnification() const { const auto* Unit = Cast<ABattleUnit>(GetPawn()); return Unit ? FMath::Max(1.f, Unit->AimMagnification()) : 1.f; }
-void ABattleController::LookYaw(const FInputActionValue& Value) { if (!bTactical) AddYawInput(Value.Get<float>() * .8f / ViewMagnification()); }
-void ABattleController::LookPitch(const FInputActionValue& Value) { if (!bTactical) AddPitchInput(-Value.Get<float>() * .8f / ViewMagnification()); }
+void ABattleController::LookYaw(const FInputActionValue& Value) { if (!bTactical && !bQuitMenu) AddYawInput(Value.Get<float>() * .8f / ViewMagnification()); }
+void ABattleController::LookPitch(const FInputActionValue& Value) { if (!bTactical && !bQuitMenu) AddPitchInput(-Value.Get<float>() * .8f / ViewMagnification()); }
 
 void ABattleController::CycleTrainingSelected()
 {
@@ -655,6 +655,7 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 {
  if(Params.Key.IsGamepadKey()) bGamepadActive=true;
  else if(Params.Key.IsMouseButton()||!Params.Key.IsAnalog()) bGamepadActive=false;
+ if(HandleQuitMenu(Params))return true; // quit confirmation (BattleQuitMenu.cpp) before every other handler
  if(HandleGamepadMenu(Params))return true;
  if(HandleBuyPanelPad(Params))return true;
  FInputKeyEventArgs Logical=Params;

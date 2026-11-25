@@ -53,6 +53,7 @@
 | 雇用（旧・固定の価格） | @UBattleMatch::HireSquad 、 @UBattleMatch::CurrentSquadPrice | 実体を出すのは @UBattleLeaderRuntime::SpawnPurchasedSquad |
 | エリア戦の雇用（AI が何を雇うか） | @UBattleMatch::UpdateAreaHiring 、 @UBattleMatch::AreaHireNeed 、 @UBattleMatch::HireAreaSquad | 調整値は @BattleTactics::AreaHire |
 | プレイヤーの購入画面（B キー、2026-11-23） | @FBattleBuyPanelLayout::Make 、 @ABattleController::BuyPanelInput 、 @ABattleController::HandleBuyPanelPad 、 @ABattleHUD::DrawBuyPanel | 行を押すと @ABattleController::BuyArea （数字キーと同じ。買えなければ予約 @UBattleMatch::ReserveHire 、列を買うのは @UBattleMatch::UpdateHireQueue 、取り消しは @ABattleController::CancelReservationOfType ）。B は @ABattleController::BuyKey （エリア戦以外は支援要請）。画面の確認は `Setup/Test-BuyPanelShot.ps1` |
+| 上部バーのボタン列と終了の確認（Esc・F10、2026-11-25） | @FBattleQuitLayout::Make 、 @ABattleController::HandleQuitMenu （ @ABattleController::InputKey の最初）、 @ABattleHUD::DrawQuitMenu | ボタンの動作は @ABattleController::RunTopTool （キーと同じ関数）。終了は @ABattleController::QuitGameNow 。画面の確認は `Setup/Test-QuitMenuShot.ps1` |
 | エリア戦の収入・拠点 HP | @UBattleMatch::UpdateArea （収入の支払いもここ）、 @UBattleMatch::DamageBase | 調整値は @BattleTactics::AreaIncome 。状態は `BattleAreaState.h` |
 | エリア戦の AI 戦略（どこを攻めるか） | @UBattleMatch::UpdateEnemyOrders → @UBattleMatch::UpdateTeamOrders 、 @UBattleMatch::AreaStrategyTarget 、 @UBattleMatch::AreaIntent | 調整値は @BattleTactics::AreaStrategy 。前線は @UBattleMatch::AreaFronts 。戦略層の状況図（`Docs/design-strategy-layer.md`）は @UBattleMatch::BuildSituation 。集中先は前線の計画が決め @UBattleMatch::StrategyFocusPoint で読む（ `FAreaIntent::FocusPoint` で S6 と攻撃群へ。旧 S2〜S4 は 11-25 に削除） |
 | 偵察・情報（見えていない区域の扱い） | @UBattleMatch::UpdateScoutReports 、 @UBattleMatch::AreaIntelView | 偵察兵の配置は @UBattleMatch::AreaScoutPost 。昇格は @UBattleLeaderRuntime::PromoteScout |
@@ -95,6 +96,7 @@ BattleBlindFire | 遮蔽の陰からのブラインドファイア（弾の出�
 BattleBodyAnimImport | 体のアニメーション（遮蔽・伏せ・しゃがみの向き別）の取り込みと計測（エディタ用。宣言は BattleVATBake.h）
 BattleCoverClips | 遮蔽の状態 → 遮蔽アニメの対応表（データだけ。「アセット参考資料の検討」セッション作）
 BattleBuyPanel | プレイヤーの購入画面（B キー）：兵種の一覧の配置、クリック・パッドの操作、画面の確認 `-BattleBuyPanelShot`（ABattleController の一部）
+BattleQuitMenu | 上部バーのボタン列（主なキーと同じ操作）と終了の確認画面（Esc・F10）の配置と操作（ABattleController の一部）
 BattleBodyAnim | 体のアニメーション：隊長の下半身と上半身の重ね・反動・被弾・死亡、部下の伏せと死亡のクリップ
 BattleCorpses | 死体の消滅（表示だけ。`-BattleCorpseLifetime=秒`、既定20、0で残す。UBattleLeaderRuntime の一部）
 BattleRagdoll | 死体が死亡クリップの後に物理で倒れて止まる（表示だけ。`-BattleRagdoll=0` でクリップの最終フレームのまま）
