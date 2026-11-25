@@ -113,6 +113,11 @@ struct FBattleLeaderBody
  double EscapeUntil=0, NextEscapeProbe=0;
  // Map E: earliest time this member may ask for a route of his own again after being cut off from the shared corridor.
  double NextOwnPath=0;
+ // B05 (-BattleCutOffRoute=2): the corridor of this member is a complete route of his own (StableMove), built under this squad
+ // order and destination to this arrival place. A squad replan keeps it while those hold. Rebuilt on demand (not saved).
+ // Trial -BattleMoveProgress=1: progress is getting 40cm closer to the current route point (ProgressWay), not any 40cm.
+ FVector ProgressWay=FVector::ZeroVector; double ProgressWayDist=1.e30;
+ bool bOwnRoute=false, bOwnRouteWanted=false; int32 OwnRouteQueries=0; uint8 OwnRouteOrder=0; FVector OwnRouteDestination=FVector::ZeroVector, OwnRouteGoal=FVector::ZeroVector;
  FVector EscapeWaypoint=FVector::ZeroVector;
  TArray<FVector> ContactRoute;
  double NextContactProbe=0, ContactRouteUntil=0, NextArrivalProbe=0;
@@ -307,6 +312,10 @@ public:
  bool bArmsSmokeDone=false;
  void RunMissionResumeSmoke(); // -BattleMissionResumeSmoke (B06): BATTLE_MISSION_RESUME_SMOKE_RESULT failures=N, once after the start
  bool bMissionResumeSmokeDone=false;
+ void StepOwnRouteSmoke(double Now); // -BattleOwnRouteSmoke (B05): result then exits
+ void InitializeBaseGarrison();
+ void StepBaseGarrisonSmoke(double Now);
+ bool bBaseGarrisonSmokeDone=false; // test-only latch, never a match decision
  double ArmsNextPick=0,ArmsNextMelee=0,ArmsNextHeal=0;int32 ArmsIssuedUnits=-1;bool bArmsElite=false;
  TMap<int32,double> ArmsActionUntil;TMap<int32,uint8> ArmsActionKind;
  TArray<TWeakObjectPtr<class UStaticMeshComponent>> ArmsShellMeshes;

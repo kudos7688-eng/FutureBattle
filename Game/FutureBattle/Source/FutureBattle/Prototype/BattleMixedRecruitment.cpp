@@ -2,6 +2,7 @@
 #include "BattleArms.h"
 #include "BattleSave.h"
 #include "BattleMatch.h"
+#include "BattleTactics.h"
 #include "BattleFieldLayout.h"
 #include "BattleGameMode.h"
 #include "BattleController.h"
@@ -14,6 +15,7 @@ bool UBattleLeaderRuntime::ReplaceFollower(int32 DeadID)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Old=Store->Find(DeadID);
  const auto* S=Old?Store->FindSquad(Old->SquadID):nullptr;
+ if(BattleTactics::BaseGarrison()&&S&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(S->SquadID))return false;
  if(!bArea||!Old||Old->IsAlive()||Old->bRetired||Old->bActorRepresentation||!S||!BattleSquadType::Replenished(S->SquadType)||S->CommandStatus!=EBattleCommandStatus::Active||Store->GetUnits().Num()>=BattleRosterLimits::Area)return false;
  const auto Weapon=Old->Weapon;const auto Training=Old->Training;const int32 Team=Old->Team,SID=S->SquadID;
  const uint8 Kit=Old->Kit; // elite platoon role (BattleArms.cpp): the replacement takes it over

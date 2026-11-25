@@ -189,6 +189,11 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
  if(Match->bArea)
  {
   Root->SetNumberField(TEXT("ally_resources"),Match->Credits[0]);Root->SetNumberField(TEXT("enemy_resources"),Match->Credits[1]);
+  if(BattleTactics::BaseGarrison())for(int32 GarrisonTeam=0;GarrisonTeam<2;++GarrisonTeam)
+  {
+   Root->SetNumberField(GarrisonTeam?TEXT("enemy_garrison_living"):TEXT("ally_garrison_living"),Match->GarrisonLiving(GarrisonTeam));
+   Root->SetNumberField(GarrisonTeam?TEXT("enemy_garrison_held_seconds"):TEXT("ally_garrison_held_seconds"),Match->Area.GarrisonHeld[GarrisonTeam]);
+  }
   Root->SetNumberField(TEXT("ally_base_hp"),Match->Area.BaseHP[0]);Root->SetNumberField(TEXT("enemy_base_hp"),Match->Area.BaseHP[1]);
   Root->SetNumberField(TEXT("pending_replacements"),Match->Area.Replacements.Num());
   int32 Retired=0;for(const auto& U:Store->GetUnits())Retired+=U.Value.bRetired;Root->SetNumberField(TEXT("completed_replacements"),Retired);

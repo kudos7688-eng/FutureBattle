@@ -132,6 +132,7 @@ BattleSquadAI | 旧全Actor経路の部隊 AI
 BattleSquadFlank | 迂回の判断（UBattleSquadTactics の一部）
 BattleSquadRetreat | 撤退の判断と適用（UBattleSquadTactics の一部。Evaluate と Apply はここ）
 BattleSupplyCar | 補給車（兵種9）：積んだ弾・本拠地での積み直し・AIの命令（群の役割5、拠点の後ろ）・弾の少ない部隊の行き先（UBattleMatch の一部）
+BattleBaseGarrison | 基地の守備隊（試験 `-BattleBaseGarrison=1`、既定0、`Docs/design-base-garrison.md`）：開幕に両軍の本拠地へ専属の小銃小隊2個（`Area.HirePurpose`=102、`IsBaseGarrison`）、基地の範囲に生きた守備隊が居なくなり相手の歩兵が占領し続けると負け（`UpdateBaseGarrison`）。固定場面は BattleBaseGarrisonSmoke
 BattleFrontLine | 前線・前線維持群 `-BattleFrontLine`・奇襲群 `-BattleSurpriseGroup`（区画のあるマップ）：区画の行ごとの前線の列（自軍の兵・観測した拠点・知っている敵、隣の行と1列以内）、維持群の帯と維持する区画、押し上げ、奇襲群（装甲優先・端の行を進んで敵本拠地へ）（UBattleMatch の一部。表示は ABattleHUD::DrawFieldOverlay）
 BattleSquadSupport | 援護の受け渡し（UBattleSquadTactics の一部）
 BattleSquadTactics | 部隊の戦術の土台：観測、毎フレームの更新、記録

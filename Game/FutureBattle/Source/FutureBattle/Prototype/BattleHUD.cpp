@@ -146,6 +146,8 @@ void ABattleHUD::DrawHUD()
   }
   else if (BattleFieldLayout::IsLarge(GetWorld())) Label(FString::Printf(TEXT("占領8秒 ／ 毎秒1点 ／ 先に100点 ／ 制限 %.0f秒"),Limit),28,141,Muted,.85f);
 		else Label(TEXT("占領8秒 ／ 5秒ごとに収入+20 ／ 補給1発につき1 ／ F8 保存 ／ F9 読込"), 28, 141, Muted, .85f);
+  if(Match->bArea&&BattleTactics::BaseGarrison())
+  {DrawRect(Ink,576,165,520,26);Label(FString::Printf(TEXT("守備隊 残り%d人 ／ 敵の占領 %.0f/%.0f秒"),Match->GarrisonLiving(0),Match->Area.GarrisonHeld[0],BattleTactics::BaseGarrisonSeconds()),588,172,Mint,.85f);}
 		DrawRect(Ink, 16, 165, 560, 26);
   if(Match->bArea)Label(TEXT("本拠地：10秒で補充 ／ 兵1人につき資源1 ／ F8 保存 ／ F9 読込"),28,172,Mint,.85f);
   // Purchase reservations (-BattleHireReserve, default 1 since 2026-11-23): the own list in order with each one's wait

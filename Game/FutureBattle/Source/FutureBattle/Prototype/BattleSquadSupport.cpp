@@ -1,10 +1,13 @@
 #include "BattleSquadTactics.h"
+#include "BattleTactics.h"
+#include "BattleMatch.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
 #include "FutureBattle.h"
 
 bool UBattleSquadTactics::CanSupport(int32 SID,int32 Target) const
 {
+ if(BattleTactics::BaseGarrison()&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID))return false;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID);
  if(!S || S->CommandStatus!=EBattleCommandStatus::Active || (S->Team==0 && !S->bPlayerDelegated)) return false;
  const auto O=Observe(*S); const auto* T=GetDefault<UBattleTuning>();
@@ -26,6 +29,7 @@ bool UBattleSquadTactics::CanSupport(int32 SID,int32 Target) const
 
 bool UBattleSquadTactics::CanMaintainSupport(int32 SID,int32 Target) const
 {
+ if(BattleTactics::BaseGarrison()&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID))return false;
  if(CanSupport(SID,Target)) return true;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* S=Store->FindSquad(SID);
  if(!bCoordination || !S || S->CommandStatus!=EBattleCommandStatus::Active || (S->Team==0&&!S->bPlayerDelegated))return false;
@@ -70,6 +74,7 @@ bool UBattleSquadTactics::TryReplaceFlankSupport(int32 SID)
 
 bool UBattleSquadTactics::AcceptSupport(int32 SID,int32 OtherID,int32 Target)
 {
+ if(BattleTactics::BaseGarrison()&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID))return false;
  const auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>();
  auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  auto* S=Store->Squads.Find(SID); const auto* Other=Store->FindSquad(OtherID);

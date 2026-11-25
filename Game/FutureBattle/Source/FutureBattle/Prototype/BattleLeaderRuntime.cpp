@@ -489,7 +489,13 @@ void UBattleLeaderRuntime::LogSightHitStats(const TCHAR* Why) const
  Top(SightHitClasses,TEXT("BATTLE_SIGHT_HITS_CLASS"),20);Top(SightHitTags,TEXT("BATTLE_SIGHT_HITS_TAG"),20);Top(SightHitActors,TEXT("BATTLE_SIGHT_HITS_ACTOR"),40);
 }
 bool UBattleLeaderRuntime::CanSelectLeader(int32 ID) const { return Actor(ID) && GetWorld()->GetSubsystem<UBattleState>()->CanSelectLeader(ID); }
-bool UBattleLeaderRuntime::CanControlLeader(int32 ID) const { return CanSelectLeader(ID) && Mode && !Mode->bBattleEnded; }
+// Base garrison (-BattleBaseGarrison): orders only, no direct control (user decision 2026-11-25); the leader stays selectable.
+bool UBattleLeaderRuntime::CanControlLeader(int32 ID) const
+{
+ if(!CanSelectLeader(ID) || !Mode || Mode->bBattleEnded)return false;
+ if(BattleTactics::BaseGarrison()){const auto* GarrisonUnit=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);if(GarrisonUnit&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(GarrisonUnit->SquadID))return false;}
+ return true;
+}
 const TArray<FBattleSquadSummary>& UBattleLeaderRuntime::Summaries()
 {
  if(bSummaryDirty)
@@ -551,7 +557,7 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID);
  if(!Mode || Mode->bBattleEnded || !S || S->CommandStatus!=EBattleCommandStatus::Active || Goal.ContainsNaN()) return false;
  const FVector AskedGoal=Goal;
- if(!bMissionUpdate)SectorFireBack.Remove(SID);
+ if(!bMissionUpdate&&(!BattleTactics::BaseGarrison()||!GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID)))SectorFireBack.Remove(SID);
  if(bSector)
  {
   const FIntPoint Cell=BattleSectors::Cell(Goal);
@@ -559,7 +565,17 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
   Goal=BattleSectors::Center(Cell);
   BattleFieldLayout::Of(GetWorld()).Heights.Ground(Goal.X,Goal.Y,0,Goal.Z,nullptr,1.e9);
  }
- if(bWideField && Order!=EBattleOrder::Hold)
+ // Version 1 constrains destinations only.
+ const bool bGarrisonOrder=BattleTactics::BaseGarrison()&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID);
+ FVector GarrisonHome=FVector::ZeroVector;
+ if(bGarrisonOrder)
+ {
+  GarrisonHome=GetWorld()->GetSubsystem<UBattleMatch>()->AreaHome(S->Team);
+  const FVector Offset=Goal-GarrisonHome;const double Radius=BattleTactics::BaseGarrisonRadius();
+  if(Offset.Size2D()>Radius){const FVector Edge=GarrisonHome+Offset.GetSafeNormal2D()*Radius;Goal.X=Edge.X;Goal.Y=Edge.Y;}
+  bSector=false; // A sector centre may lie outside the base; retain the clamped point mission.
+ }
+ if(bWideField && (Order!=EBattleOrder::Hold||bGarrisonOrder))
  {
   // A goal under a hill (given at height 0) is the place on the hill above it (map I: hills above the projection's reach).
   BattleFieldLayout::Of(GetWorld()).Heights.Lift(Goal);
@@ -582,7 +598,24 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
    static const int32 RoadGoal=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleVehicleRoadGoal="),V);return V;}();
    if(RoadGoal>0)for(double Reach:{1500.,3000.,6000.})if(Nav->ProjectPointToNavigation(Goal,Projected,FVector(Reach,Reach,400),VehicleNav)){Projectable=true;SightExperiment.Cover(TEXT("vehicle_goal_moved"));break;}
   }
+  if(bGarrisonOrder)
+  {
+   // Search inward when the circle edge is blocked or projects outside; never commit a refused order.
+   Projectable=false;
+   if(Nav)for(double GarrisonScale:{1.,.9,.75,.5,.25,0.})
+   {
+    FVector GarrisonCandidate=GarrisonHome+(Goal-GarrisonHome)*GarrisonScale;
+    BattleFieldLayout::Of(GetWorld()).Heights.Lift(GarrisonCandidate);
+    FNavLocation GarrisonProjection;
+    if(!Nav->ProjectPointToNavigation(GarrisonCandidate,GarrisonProjection,FVector(100,100,400))||
+       FVector::Dist2D(GarrisonProjection.Location,GarrisonHome)>BattleTactics::BaseGarrisonRadius())continue;
+    auto* GarrisonPath=Nav->FindPathToLocationSynchronously(GetWorld(),Position(S->LeaderUnitID),GarrisonProjection.Location);
+    if(!GarrisonPath||!GarrisonPath->IsValid()||GarrisonPath->IsPartial())continue;
+    Projected=GarrisonProjection;Projectable=true;break;
+   }
+  }
   if(!Projectable){if(VehicleNav||NavFor(S->LeaderUnitID)!=nullptr||IsVehicle(S->LeaderUnitID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_ORDER_FAIL squad=%d reason=project nav=%s goal=%s"),SID,VehicleNav?*VehicleNav->GetName():TEXT("none"),*Goal.ToCompactString());Refuse();return false;}
+  if(bGarrisonOrder&&FVector::Dist2D(Projected.Location,GarrisonHome)>BattleTactics::BaseGarrisonRadius())return false;
   auto* Route=Nav->FindPathToLocationSynchronously(GetWorld(),Position(S->LeaderUnitID),Projected.Location,VehicleContext);
   // A tank whose goal lies where it cannot fit (the narrow streets of map E) drives to the end of the partial route instead.
   const bool VehiclePartial=VehicleNav&&Route&&Route->IsValid()&&Route->IsPartial()&&Route->PathPoints.Num()>1;
@@ -620,6 +653,7 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
  const bool OK=Store->SetSquadOrder(SID,Order,Goal,Goals,bMissionUpdate,bSector);
  if(OK)
  {
+  if(bGarrisonOrder&&!bMissionUpdate)SectorFireBack.Remove(SID);
   if(S->OrderRevision!=Revision) { auto& P=Plans.FindOrAdd(SID); P.bReplan=true; P.NextThink=0; }
   if(bWideField && !bMissionUpdate && S->Team==0) Store->SetSquadDelegated(SID,false);
   if(IsVehicle(S->LeaderUnitID)){auto& V=VehicleOrders.FindOrAdd(SID);V.Requested=AskedGoal;V.MissionRevision=S->MissionRevision;V.RetryAt=0;}
@@ -1504,7 +1538,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  // An anti-tank round hits for ATDamage (and ATBaseDamage on an enemy home); its explosion follows below.
  const bool bAT=W==EBattleWeapon::AntiTank;
  const float ShotDmg=bAT?T->ATDamage:[&]{const auto* SS=Store->FindSquad(U->SquadID);return T->ShotDamage*BattleSquadType::DamageScale(SS?SS->SquadType:0)*BattleArms::DamageAt(W,FVector::Dist(Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End));}();
- if(bArea && !bShownPartHit)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,bAT?T->ATBaseDamage:ShotDmg);
+ if(bArea && !bShownPartHit)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,bAT?T->ATBaseDamage:ShotDmg*BattleTactics::BaseRifleDamage());
  if(SightExperiment.Started && Victim>0) ++SightExperiment.Hits;
  const auto* BeforeVictim=Store->Find(Victim);
  const float BeforeHP=BeforeVictim?BeforeVictim->HP:0;
@@ -1682,6 +1716,7 @@ void UBattleLeaderRuntime::Step(float Dt)
  if(!bEnabled) return;
  // Named CPU trace scopes (Unreal Insights, -trace=cpu): free when no trace is recording.
  TRACE_CPUPROFILER_EVENT_SCOPE(BattleRuntimeStep);
+ if(BattleTactics::BaseGarrison()&&bArea&&FParse::Param(FCommandLine::Get(),TEXT("BattleBaseGarrisonSmoke"))){StepBaseGarrisonSmoke(GetWorld()->GetTimeSeconds());return;}
  if(SightExperiment.Enabled) { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightExperiment); StepSightExperiment(Dt); }
  StepSoldierOrderTest();
  // After the previous frame's facing and poses; also on the Phase3 path (it returns before the body timers).
@@ -1748,6 +1783,9 @@ void UBattleLeaderRuntime::Step(float Dt)
   // Self-test -BattleMissionResumeSmoke (B06, BattleSquadRetreatSmoke.cpp): once, 3 s into the combat. Changes the match (test runs only).
   static const bool bResumeSmoke=FParse::Param(FCommandLine::Get(),TEXT("BattleMissionResumeSmoke"));
   if(bResumeSmoke && bWideField && !bMissionResumeSmokeDone && Now>=Mode->CombatStartsAt+3.){bMissionResumeSmokeDone=true;RunMissionResumeSmoke();}
+  // Self-test -BattleOwnRouteSmoke (B05, BattleOwnRouteSmoke.cpp): from 3 s into the combat. Changes the match (test runs only).
+  static const bool bOwnRouteSmoke=FParse::Param(FCommandLine::Get(),TEXT("BattleOwnRouteSmoke"));
+  if(bOwnRouteSmoke && bWideField && bStableMovement)StepOwnRouteSmoke(Now);
  }
  int32 Living[2]={0,0}; for(const auto& U:Store->GetUnits()) if(U.Value.IsAlive()) ++Living[U.Value.Team];
  if(!bArea && !Mode->bBattleEnded && (!Living[0] || !Living[1]))

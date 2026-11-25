@@ -85,6 +85,17 @@ bool UBattleLeaderRuntime::ClearMovementSegment(FVector A,FVector B) const
  return !GetWorld()->SweepTestByObjectType(A,B,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,75));
 }
 
+// -BattleCutOffRoute (default 0): 1 = a member who cannot walk straight to his corridor point gets a route of his own inside
+// the squad replan (synchronous query, outside the two-per-frame budget; 2026-11-25 map lane). 2 = B05 (Docs/review-2026-11-25):
+// a member's own route (StableMove, two queries per frame) is an execution state of its own that a squad replan keeps. It is
+// dropped when the squad's order or destination changes, when the member dies or loses his arrival place, and when a new query
+// for it fails or is partial; a changed arrival place is asked for again through the same budget on the last leg.
+// 3 = 2, and (a) when only the destination moved on (same order) a cut-off member keeps the walked-to part of his own route
+// and joins the new arrival place from the first remaining point that has a straight swept walk to it (no path query);
+// a marked member who is no longer behind the wall when his turn in the budget comes is not given a route.
+static int32 CutOffRouteMode()
+{static const int32 Mode=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCutOffRoute="),V);return V;}();return Mode;}
+
 void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID); auto& P=Plans.FindChecked(SID);
@@ -385,6 +396,22 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    Swap(P.ArrivalGoals[S->LeaderUnitID],P.ArrivalGoals[ClosestID]);
   }
  }
+ // B05: own routes that outlive this replan (mode 2), and the count of those a replan throws away (every mode; counters only).
+ struct FKeptRoute{TArray<FVector> Points;int32 Waypoint=1;};
+ TMap<int32,FKeptRoute> KeptRoutes,JoinRoutes;
+ for(int32 KeepID:S->Members) if(auto* KeepBody=Bodies.Find(KeepID);KeepBody && KeepBody->bOwnRoute)
+ {
+  const auto* KeepUnit=Store->Find(KeepID);const auto* OldRoute=P.Corridors.Find(KeepID);
+  const bool bSameOrder=KeepBody->OwnRouteOrder==uint8(S->Order) && KeepBody->OwnRouteDestination.Equals(S->Destination,1.);
+  const bool bUsable=KeepUnit && KeepUnit->IsAlive() && OldRoute && KeepBody->Waypoint>=1 && OldRoute->IsValidIndex(KeepBody->Waypoint) && P.ArrivalGoals.Contains(KeepID);
+  if(CutOffRouteMode()>=2 && bSameOrder && bUsable)
+  {FKeptRoute Kept;Kept.Points=*OldRoute;Kept.Waypoint=KeepBody->Waypoint;KeptRoutes.Add(KeepID,MoveTemp(Kept));SightExperiment.Cover(TEXT("move_own_route_kept"));}
+  else
+  {
+   if(CutOffRouteMode()>=3 && bUsable && KeepBody->OwnRouteOrder==uint8(S->Order)){FKeptRoute Old;Old.Points=*OldRoute;Old.Waypoint=KeepBody->Waypoint;JoinRoutes.Add(KeepID,MoveTemp(Old));}
+   KeepBody->bOwnRoute=false;SightExperiment.Cover(!bSameOrder?TEXT("move_own_route_dropped_order"):!bUsable?TEXT("move_own_route_dropped_unusable"):TEXT("move_own_route_lost_replan"));
+  }
+ }
  P.Corridors.Reset();
  P.bNarrowCorridor=false;
  for(int32 I=1;I<P.Path.Num();++I)
@@ -433,8 +460,27 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   // straight at its next point and presses against the wall. StableMove gives him a route of his own after 2s, but the squad
   // replan that the pressing itself asks for (4s) resets every corridor here and sends him back to the wall. With the switch a
   // member on foot who cannot walk straight to his corridor point gets his own route to his arrival place at once.
-  static const bool bCutOffRoute=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCutOffRoute="),V);return V!=0;}();
-  if(bCutOffRoute && Nav && BattleFieldLayout::IsUrban(GetWorld()) && !NavFor(ID) && Route.IsValidIndex(B->Waypoint) && !ClearMovementSegment(Position(ID),Route[B->Waypoint]))
+  B->bOwnRouteWanted=false;B->ProgressWayDist=1.e30; // -BattleMoveProgress: a new plan measures progress afresh
+  if(FKeptRoute* KeptRoute=KeptRoutes.Find(ID)) {B->Waypoint=KeptRoute->Waypoint;Route=MoveTemp(KeptRoute->Points);}
+  // Mode 2: a member on foot who cannot walk straight to his corridor point is cut off by a wall. He does not wait for the 2 s
+  // stall (side steps along the wall count as progress and keep resetting it: no own route in 56 s in the fixed scene);
+  // StableMove asks for his route through its two-per-frame budget.
+  else if(CutOffRouteMode()>=2 && Nav && BattleFieldLayout::IsUrban(GetWorld()) && !NavFor(ID) && Route.IsValidIndex(B->Waypoint) && P.ArrivalGoals.Contains(ID) && !ClearMovementSegment(Position(ID),Route[B->Waypoint]))
+  {
+   // Mode 3 (a): the destination moved on. Up to eight remaining points of the old own route are tried for a straight walk to the new place.
+   int32 JoinAt=INDEX_NONE;FKeptRoute* JoinRoute=JoinRoutes.Find(ID);const FVector JoinGoal=P.ArrivalGoals.FindChecked(ID);
+   if(JoinRoute)for(int32 JoinI=JoinRoute->Waypoint;JoinI<JoinRoute->Points.Num()&&JoinI<JoinRoute->Waypoint+8;++JoinI)
+    if(ClearMovementSegment(JoinRoute->Points[JoinI],JoinGoal)){JoinAt=JoinI;break;}
+   // Pushed off the old leg meanwhile: the old route no longer starts where he stands.
+   if(JoinAt!=INDEX_NONE && !ClearMovementSegment(Position(ID),JoinRoute->Points[JoinRoute->Waypoint]))JoinAt=INDEX_NONE;
+   if(JoinAt!=INDEX_NONE)
+   {
+    JoinRoute->Points.SetNum(JoinAt+1);JoinRoute->Points.Add(JoinGoal);B->Waypoint=JoinRoute->Waypoint;Route=MoveTemp(JoinRoute->Points);
+    B->bOwnRoute=true;B->OwnRouteOrder=uint8(S->Order);B->OwnRouteDestination=S->Destination;B->OwnRouteGoal=JoinGoal;SightExperiment.Cover(TEXT("move_own_route_joined"));
+   }
+   else{B->bOwnRouteWanted=true;SightExperiment.Cover(TEXT("move_own_route_wanted"));if(JoinRoute)SightExperiment.Cover(TEXT("move_own_route_join_failed"));}
+  }
+  else if(CutOffRouteMode()==1 && Nav && BattleFieldLayout::IsUrban(GetWorld()) && !NavFor(ID) && Route.IsValidIndex(B->Waypoint) && !ClearMovementSegment(Position(ID),Route[B->Waypoint]))
    if(const FVector* OwnGoal=P.ArrivalGoals.Find(ID))
     if(auto* OwnPath=Nav->FindPathToLocationSynchronously(GetWorld(),Position(ID),*OwnGoal);OwnPath && OwnPath->IsValid() && !OwnPath->IsPartial() && OwnPath->PathPoints.Num()>1)
     {
@@ -722,17 +768,36 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity); F.Position=B.Capsule->GetComponentLocation();
   B.Velocity=(F.Position-Before)/FMath::Max(Dt,.001f);
  }
- if(FVector::Dist2D(Pos,B.LastProgressPosition)>40) {B.LastProgressPosition=Pos;B.LastProgressTime=Now;B.StalledSince=0;}
+ // Trial -BattleMoveProgress=1 (2026-11-25, default 0; B05 follow-up): progress is getting 40cm closer to the current route point
+ // (or a new route point), not any 40cm. The side steps along a wall (escape probe, 120cm) counted as progress, so a member
+ // pressed against a wall never reached the 2 s without progress that gives him a route of his own (fixed scene: none in 56 s).
+ static const bool bWayProgress=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleMoveProgress="),V);return V!=0;}();
+ if(bWayProgress)
+ {
+  // Measured against the fixed route point (the steering target Way moves in narrow corridors and at the last leg). While he passes
+  // an ally, follows a contact detour or walks through allies, any 40cm still counts: those moves lead away from the point on purpose.
+  const FVector RoutePoint=(*Route)[B.Waypoint];const double ToWay=FVector::Dist2D(Pos,RoutePoint);
+  const bool bDetour=B.PassingID!=INDEX_NONE || !B.ContactRoute.IsEmpty() || bAllyPass;
+  const bool bSamePoint=RoutePoint.Equals(B.ProgressWay,1.);
+  if(!bSamePoint || ToWay<B.ProgressWayDist-40. || (bDetour && FVector::Dist2D(Pos,B.LastProgressPosition)>40))
+  {B.ProgressWay=RoutePoint;B.ProgressWayDist=bSamePoint?FMath::Min(ToWay,B.ProgressWayDist):ToWay;B.LastProgressPosition=Pos;B.LastProgressTime=Now;B.StalledSince=0;}
+  else if(Now-B.LastProgressTime>1) {B.StalledSince=B.LastProgressTime;B.bTrafficWait=true;}
+ }
+ else if(FVector::Dist2D(Pos,B.LastProgressPosition)>40) {B.LastProgressPosition=Pos;B.LastProgressTime=Now;B.StalledSince=0;}
  else if(Now-B.LastProgressTime>1) {B.StalledSince=B.LastProgressTime;B.bTrafficWait=true;}
  // Map E: a member cut off from the shared corridor by walls gets a route of his own to his arrival spot, instead of
  // waiting for a squad replan that starts from the squad centre and does not help him. At most two such queries per frame.
- if(BattleFieldLayout::IsUrban(GetWorld()) && Now-B.LastProgressTime>2 && Now>=B.NextOwnPath && !ClearMovementSegment(Pos,Way))
+ // B05 (mode 2): an own route kept through replans ends at the place it was built for; when the member's arrival place has moved
+ // since and cannot be walked to straight from the last leg, ask again (same budget, same 3 s spacing).
+ if(CutOffRouteMode()>=3 && B.bOwnRouteWanted && Now>=B.NextOwnPath && ClearMovementSegment(Pos,Way)){B.bOwnRouteWanted=false;SightExperiment.Cover(TEXT("move_own_route_wanted_cleared"));}
+ const bool bOwnGoalMoved=CutOffRouteMode()>=2 && B.bOwnRoute && Now>=B.NextOwnPath && Final && !Goal->Equals(B.OwnRouteGoal,50.) && !ClearMovementSegment(Pos,*Goal);
+ if(BattleFieldLayout::IsUrban(GetWorld()) && Now>=B.NextOwnPath && (bOwnGoalMoved || B.bOwnRouteWanted || (Now-B.LastProgressTime>2 && !ClearMovementSegment(Pos,Way))))
  {
   static uint64 QueryFrame=0; static int32 QueriesThisFrame=0;
   if(QueryFrame!=GFrameCounter) {QueryFrame=GFrameCounter;QueriesThisFrame=0;}
   if(QueriesThisFrame<2)
   {
-   ++QueriesThisFrame; B.NextOwnPath=Now+3;
+   ++QueriesThisFrame; ++B.OwnRouteQueries; B.NextOwnPath=Now+3; B.bOwnRouteWanted=false;
    auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
    auto* Own=Nav?Nav->FindPathToLocationSynchronously(GetWorld(),Pos,*Goal,NavFor(ID)?Actor(ID):nullptr):nullptr;
    if(Own && Own->IsValid() && Own->PathPoints.Num()>1)
@@ -740,13 +805,22 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
     TArray<FVector> OwnRoute; for(const auto& Point:Own->PathPoints) OwnRoute.Add(Point);
     P.Corridors.Add(ID,MoveTemp(OwnRoute)); B.Waypoint=1; B.LastProgressTime=Now; B.StalledSince=0;
     SightExperiment.Cover(TEXT("move_own_route"));
+    if(bOwnGoalMoved)SightExperiment.Cover(TEXT("move_own_route_goal_requery"));
+    // B05: a complete route is the member's own execution state (a partial one ends short of his place and is not kept).
+    B.bOwnRoute=!Own->IsPartial() && S;
+    if(B.bOwnRoute){B.OwnRouteOrder=uint8(S->Order);B.OwnRouteDestination=S->Destination;B.OwnRouteGoal=*Goal;}
+    // A partial answer for a moved arrival place would leave him at its end with nothing asking again: back to the squad plan.
+    else if(bOwnGoalMoved){P.bReplan=true;SightExperiment.Cover(TEXT("move_own_route_goal_replan"));}
     return true;
    }
+   if(B.bOwnRoute){B.bOwnRoute=false;SightExperiment.Cover(TEXT("move_own_route_dropped_no_path"));}
+   if(bOwnGoalMoved){P.bReplan=true;SightExperiment.Cover(TEXT("move_own_route_goal_replan"));}
   }
+  else SightExperiment.Cover(TEXT("move_own_route_budget_wait"));
  }
  // Congestion is not a navigation failure: do not reset all ten paths every two seconds.
  if(B.StalledSince>0 && Now-B.LastProgressTime>4 && !ClearMovementSegment(Pos,Way) && Now>=P.NextPath)
- {P.bReplan=true;P.NextPath=Now+1;B.LastProgressTime=Now;}
+ {P.bReplan=true;P.NextPath=Now+1;B.LastProgressTime=Now;SightExperiment.Cover(TEXT("move_stall_replan"));}
  return true;
 }
 

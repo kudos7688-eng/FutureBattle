@@ -171,7 +171,7 @@ void UBattleMatch::Update(float DeltaSeconds)
 	UpdateObjectives(DeltaSeconds);
  if(bArea)
  {
-  UpdateArea(DeltaSeconds);UpdateSituationLog();UpdateHireQueue();DirectorClock+=DeltaSeconds;
+  UpdateArea(DeltaSeconds);if(BattleTactics::BaseGarrison()&&Phase!=EBattleMatchPhase::Combat)return;UpdateSituationLog();UpdateHireQueue();DirectorClock+=DeltaSeconds;
   if(DirectorClock>=5)
   {
    DirectorClock=0;
@@ -392,6 +392,14 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  TArray<int32> RouteLoad; // -BattleRouteLoad: squads of this team already sent over each road section in this round
 	for (const auto& Pair : Store->GetSquads()) if (Pair.Value.Team == Team)
 	{
+  if(BattleTactics::BaseGarrison()&&IsBaseGarrison(Pair.Key))
+  {
+   const auto& Guard=Pair.Value;
+   if(Guard.CommandStatus==EBattleCommandStatus::Active&&(Team!=0||Guard.bPlayerDelegated)&&
+      (!Guard.bHasMission||Guard.MissionOrder!=EBattleOrder::Defend||FVector::Dist2D(Guard.MissionDestination,AreaHome(Team))>BattleTactics::BaseGarrisonRadius()))
+    GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IssueOrder(Pair.Key,EBattleOrder::Defend,AreaHome(Team),true);
+   continue;
+  }
 		// Public objective status only; never use an unseen enemy's location.
   bool bStrategyBase=false;
 		int32 Target = bStrategy ? AreaStrategyTarget(Pair.Key,Team,bStrategyBase) : ChooseObjective(Group, Team);
