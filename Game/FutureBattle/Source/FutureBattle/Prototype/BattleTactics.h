@@ -36,6 +36,16 @@ namespace BattleTactics
  int32 BurstFire();
  float BurstPause();
  int32 CoverPeekShots();
+ // Contact trial (2026-11-25, STATUS "弾薬と補給": 95% of a rifleman's time has no target and no enemy in sight; the only team help
+ // was covering a retreating or flanking squad from where one stands). -BattleJoinFight=1 (default 0): an AI rifle squad on its
+ // mission with no enemy of its own walks to a squad of its team that holds a firing position against an enemy it sees (plan
+ // Engage), within -BattleJoinFightRange=cm (default 15000, 2000..60000) leader to leader, at most -BattleJoinFightMax=n (default 2,
+ // 1..8) squads per fighting squad. It goes back to its mission when that squad has stopped fighting for 10 s or after 60 s; with an
+ // enemy of its own in sight it fights as usual. Own team's squads and plans only. Who joined whom is not saved (a joining squad
+ // goes back to its mission after a load). BattleSquadRetreat.cpp (Evaluate).
+ bool JoinFight();
+ float JoinFightRange();
+ int32 JoinFightMax();
  // Stage 2: -BattleSupplyAmmoShare=x (default 0 = off, 0..0.9): an infantry squad whose living members together hold x or less of
  // their full reserve (loaded rounds are not counted, so a refilled squad is never low) goes for ammunition (a supply vehicle in
  // reach, else home), instead of only when half or all of them are empty; it resumes with 0.9 of the reserve or more. Own squad
