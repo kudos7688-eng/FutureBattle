@@ -1667,6 +1667,9 @@ void UBattleLeaderRuntime::Step(float Dt)
   // Self-test -BattleMissionResumeSmoke (B06, BattleSquadRetreatSmoke.cpp): once, 3 s into the combat. Changes the match (test runs only).
   static const bool bResumeSmoke=FParse::Param(FCommandLine::Get(),TEXT("BattleMissionResumeSmoke"));
   if(bResumeSmoke && bWideField && !bMissionResumeSmokeDone && Now>=Mode->CombatStartsAt+3.){bMissionResumeSmokeDone=true;RunMissionResumeSmoke();}
+  // Self-test -BattleOwnRouteSmoke (B05, BattleOwnRouteSmoke.cpp): from 3 s into the combat. Changes the match (test runs only).
+  static const bool bOwnRouteSmoke=FParse::Param(FCommandLine::Get(),TEXT("BattleOwnRouteSmoke"));
+  if(bOwnRouteSmoke && bWideField && bStableMovement)StepOwnRouteSmoke(Now);
  }
  int32 Living[2]={0,0}; for(const auto& U:Store->GetUnits()) if(U.Value.IsAlive()) ++Living[U.Value.Team];
  if(!bArea && !Mode->bBattleEnded && (!Living[0] || !Living[1]))
