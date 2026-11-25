@@ -483,11 +483,6 @@ void UBattleMatch::UpdateAreaHiring()
   const FString Message=LastMessage;LastHiredSquadID=INDEX_NONE;
   if((Delegate>0?ReserveHire(Team,Type,true)==1:HireAreaSquad(Team,EBattleTraining::Regular,true,Type,HireGrade))&&bPurpose&&LastHiredSquadID!=INDEX_NONE){Area.HirePurpose.Add(LastHiredSquadID,Need);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE_PURPOSE team=%d squad=%d purpose=%d time=%.1f"),Team,LastHiredSquadID,Need,Elapsed);}
   else if(IntelNeed>=0&&LastHiredSquadID!=INDEX_NONE&&Store->FindSquad(LastHiredSquadID)){IntelPurpose.Add(LastHiredSquadID,IntelNeed);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_INTEL_HIRE team=%d squad=%d point=%d time=%.1f"),Team,LastHiredSquadID,IntelNeed,Elapsed);}
-  // Strategy layer S4 (BattleStrategy.cpp, -BattleStrategy=4): a rifle squad bought while the team has a focus reinforces it; its mission
-  // follows the focus when the plan changes (UpdateStrategy).
-  else if(LastHiredSquadID!=INDEX_NONE&&Type==BattleSquadType::Rifle&&StrategyOn(Team,4)&&Store->FindSquad(LastHiredSquadID))
-   if(const int32 Focus=StrategyFocusPoint(Team);Focus!=INDEX_NONE&&ObservedOwner(Team,Focus)!=Team)
-   {Area.HirePurpose.Add(LastHiredSquadID,Focus);Area.StrategyHired.Add(LastHiredSquadID);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STRATEGY_HIRE team=%d squad=%d focus=%d time=%.1f"),Team,LastHiredSquadID,Focus,Elapsed);}
   LastMessage=Message;
  }
 }
@@ -674,10 +669,8 @@ FAreaIntent UBattleMatch::AreaIntent(int32 Team) const
   const bool bHoldPhase=(S.Plan==1&&I.Phase>=2)||(S.Plan==2&&I.Phase==2);
   I.HeavyShare=FMath::Clamp(I.HeavyShare*(bHoldPhase?1.5f:.5f),0.f,.8f);
  }
- // Strategy layer S2 (BattleStrategy.cpp): the team's focus objective, chosen once per order update (-1 without -BattleStrategy>=2).
+ // The team's focus objective from the front plan (BattleFrontLine.cpp; -1 without -BattleFrontPlan).
  I.FocusPoint=StrategyFocusPoint(Team);
- // Stage S3: a held point weighs twice in the S1 spread (BattleStrategyValues::HoldWeight).
- for(int32 Pt=0;Pt<Objectives.Num()&&Pt<FAreaIntent::MaxObjectives;++Pt)if(StrategyHolds(Team,Pt))I.PointWeight[Pt]*=2.f;
  ApplyDepotWeights(Team,bTrial,I);
  return I;
 }

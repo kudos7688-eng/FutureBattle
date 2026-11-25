@@ -245,7 +245,6 @@ struct FBattleUnitState
 	UPROPERTY() bool bActorRepresentation = true;
  UPROPERTY() bool bRetired=false;
 	UPROPERTY() FName UnitArchetypeID = TEXT("Regular");
-	UPROPERTY() float LeaderAbilityScale = 1.f;
 	UPROPERTY() FName DeathCause;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) int32 Team = 0;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) int32 SquadID = INDEX_NONE;
