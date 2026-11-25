@@ -294,6 +294,15 @@
 - **制限**：到着の数は割り当ての回数。片側だけに入れた試合はしていない。性能（光線の増加：値2は step を調べるスロットごとに投影4・Sweep 4・線24まで）は測っていない。
 - **次の一手（ユーザーの判断）**：(1) この方向（撃てる遮蔽に限る）を続けるなら、試合より先に固定場面で「覗いても0発」の理由を分ける（上の Codex の (1)）。(2) 0発の多くは壁の形より知覚（自分で敵を見つけない、`peek_end_blind`）の側の見込み（掲示板 C23 12:38、未検証）。(3) 値1・2を試遊で見たいときは `-BattleCoverFirePoint=1`／`=2` を付ける。
 
+## 2026-11-25 19時25分 Claude（移動の詰まり）：本日の作業を停止（ユーザー指示「今日の作業は終了」）。止めた時点の状態
+
+- **main に入っているもの**（c1a0af0、push 済み）：`-BattleCutOffRoute=2/3`・`-BattleMoveProgress`・`-BattleBaseRifleDamage`・`-BattleBaseGarrison`（守備隊 第1版）。すべて既定0。
+- **`movestall` の先頭 20be192**（main 未取り込み、ビルド・試験済み）：守備隊 第2版（移動の境界、固定場面35項目）。
+- **`movestall` の作業ツリーに未コミットで残っているもの**：Codex の**書きかけ**（`-BattleHireDelay`／`-BattleBaseSpawnBlock`、16ファイルの変更＋新しい `BattleHireDelay.cpp`・`BattleHireDelaySmoke.cpp`）。Codex のタスクは静的な見直しの途中で止めた。**未ビルド・未試験・未レビュー**。`Setup/Test-HireDelay.ps1` はまだ無い可能性がある。コミットしていない。
+- ロック・試合の枠は持っていない。予約した再開は無い。掲示板の C（購入の待ち時間）の登録は開いたまま。
+- **再開の最初の一歩**：`FutureBattle-movestall` で `git status --short -uno` と `git diff --stat` を見て書きかけの範囲を確かめる → Codex に続き（残りと自己点検）を頼むか、差分を読んで足りない所を埋める → ロックを取ってビルド → `Test-Battle`・`Test-Area`・`Test-BaseGarrison`・`Test-HireDelay` → 切替なしの試合が 20be192 と一致するか（凍結 `movestall-garrison2-1855` の `bg3-K-base-s7` と比べる）。そのあと精鋭の本拠地攻撃（設計メモ 7章。「基地を見た」の覚え方と群からの離脱は実装前にユーザーへ相談）。
+- **未確認のまま残っていること**：第2版で切替なしの試合の一致、第2版の Codex レビュー、守備隊ありの試合で東の本拠地が480まで減った原因と止まり573の原因、占領での決着（試合では一度も起きていない）、画面の表示の実画面確認。
+
 ## 2026-11-25 19時05分 Claude（移動の詰まり）：守備隊 第2版（移動の境界、`movestall` 20be192、main 未取り込み）。新しい既定（`-BattleRoutePassed=1`）で3条件を1本ずつ取り直し
 
 - **第2版**（Codex 実装、私がビルド・試験・1か所修正）：守備隊の兵は到着位置・遮蔽・遮蔽への接近・躍進・1歩ごとの移動・プレイヤーの経路命令のどれでも基地の円を出ない（共通の判定 `GarrisonKeepsInside`）。命令の行き先に通しの経路が無いときは基地の中心寄りへ寄せる（1命令あたり追加の探索は最大5回、毎フレームではない）。固定場面 `Test-BaseGarrison.ps1` は35項目。ビルド成功、`Test-Battle`・`Test-Area`・`Test-OwnRoute`・`Test-BaseGarrison` failures=0。切替なしの試合の一致は第2版では未実測（第1版は IDENTICAL）。Codex の別のレビューは未実施。
