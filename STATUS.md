@@ -205,6 +205,12 @@
 - **制限**：到着の数は割り当ての回数。片側だけに入れた試合はしていない。性能（光線の増加：値2は step を調べるスロットごとに投影4・Sweep 4・線24まで）は測っていない。
 - **次の一手（ユーザーの判断）**：(1) この方向（撃てる遮蔽に限る）を続けるなら、試合より先に固定場面で「覗いても0発」の理由を分ける（上の Codex の (1)）。(2) 0発の多くは壁の形より知覚（自分で敵を見つけない、`peek_end_blind`）の側の見込み（掲示板 C23 12:38、未検証）。(3) 値1・2を試遊で見たいときは `-BattleCoverFirePoint=1`／`=2` を付ける。
 
+## 2026-11-25 18時25分 Claude（移動の詰まり）：`movestall` を main に取り込み（c1a0af0、ユーザー指示、18時の回）。既定の試合は取り込みの前後で一致
+
+- **入ったもの**（どれも既定0＝今のまま）：`-BattleCutOffRoute=2/3`・`-BattleMoveProgress`（B05、値3と MoveProgress は効かなかったが消さずに入れた）、`-BattleBaseRifleDamage`、`-BattleBaseGarrison`（守備隊 第1版）、固定場面 `Setup/Test-OwnRoute.ps1`・`Setup/Test-BaseGarrison.ps1`。衝突は自動生成の3ファイルだけ（作り直し）。
+- **検証**：取り込んだ main でビルド成功、`Test-Battle`・`Test-Area`・`Test-OwnRoute`・`Test-BaseGarrison` failures=0。既定の試合（マップK seed 7、30FPS、凍結ビルド）を取り込み前（236c505、別の作業ツリーでビルド）と取り込み後（c1a0af0）で1本ずつ：得点 686:726・射撃 1637・射撃距離の列まで一致。`Compare-MatchResults` の差は `cover_diagnostics` だけで、中身は新しい記録の計数5つ（`move_own_route_*`・`move_stall_replan`）が増えただけ、既にあった計数は全部同じ。結果 `Setup/Benchmarks/SightTrial-20261111/mg2-K-pre-s7b`・`mg2-K-post-s7`。これで「切替なしなら B05 を入れる前と同じ」も試合で確かめた（今まで未実測）。
+- **未取り込み**：守備隊の第2版（移動の境界、Codex 実装済み・未ビルド）は `movestall` の作業ツリーに未コミットで残っている。
+
 ## 2026-11-25 17時50分 Claude（移動の詰まり）：基地の守備隊 第1版 `-BattleBaseGarrison=1`（既定0、`movestall` の先頭、main 未取り込み）。固定場面20項目合格、切替なしは試合が一致、切替ありは1試合で作動
 
 - **ユーザーの決定（追加）**：守備隊は命令だけ（直接操作なし）。占領の時計は守る側の画面に出してよい。購入から出現までは常に時間を置く（取り消せる・全額戻る）。占領されかけの基地では出現を待たせる。精鋭の本拠地攻撃は敵の基地が見つかってから（`Docs/design-base-garrison.md` 5〜7章）。
