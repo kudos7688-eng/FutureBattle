@@ -4,7 +4,7 @@
 
 ## 要約（作業系統ごと。行は各系統が更新する。2026-11-22 17時に重複行を整理）
 
-**11-25：Codex レビューと今後の方針は `Docs/review-2026-11-25/03-development-policy.md`。新しい試験切替より先に、契約の修理（B03→B06→B01/B02→B04→B10）と評価の決まりの整理を行う（系統「契約の修理」、ワークツリー `FutureBattle-contract`）。B03・B06・削除5件は main 42d0333 に入った（既定の試合はマップI だけ B06 で変わる）。次は B01/B02。**
+**11-25：Codex レビューと今後の方針は `Docs/review-2026-11-25/03-development-policy.md`。新しい試験切替より先に、契約の修理（B03→B06→B01/B02→B04→B10）と評価の決まりの整理を行う（系統「契約の修理」、ワークツリー `FutureBattle-contract`）。B03・B06・削除5件は main 42d0333 に入った（既定の試合はマップI だけ B06 で変わる）。~~次は B01/B02。~~ 一戦中のセーブ・ロードは削除した（ユーザー決定、main 9997b7a、18時の回）ので、保存の修理 B01/B02/B04/B10 は不要になった。**
 
 | 作業系統 | 今の状態 | ユーザーの判断待ち・未対応 |
 |---|---|---|
@@ -31,10 +31,31 @@
 | 一般兵の体 RB01（`rb01` ブランチ、`FutureBattle-rb01`） | **11-23 23時15分（4a5d3b9）**：ユーザーの三面図から Tripo で作ったロボット RB01 を、一般兵（隊長・Mass の部下・遠くの VAT）の体にする試験切替 `-BattleSoldierBody=1`（既定0）。回帰合格、近景・遠景の画面を確認。**11-24 1時：描画ありのマップEで Quinn と1フレームの時間は同じ（平均 42.85 → 42.67ms、試合は IDENTICAL、3c500ef。PCが遅い状態での比較）**。**11-24 4時50分：main へ取り込んだ（55bc154、既定0のまま、push 済み）** | 既定にするかはユーザー判断。GPU の時間は未計測 |
 | 地形（起伏、`terrain` ブランチ、`FutureBattle-terrain`） | **11-25 10時50分 main へ（294955e）**：地面全体を2.5m 格子の高さにする仕組み（`BattleTerrain::FHeightField`、格子が空の A〜K は以前と同じ計算）と、**マップL**（マップI の区画・道・川・家・拠点・規則に起伏を付けた地図。小丘6m・尾根10m の滑らかな丘、川沿いの浅い谷、街のゆるい高まり、本拠地は平地、家と倉庫は平らな土台。坂は平均5%・最大30%）。遊び方：`Play-Area.ps1 -Map L`（デスクトップ「FutureBattle 起伏の地形 マップL」）。設計 `Docs/design-terrain-field.md` | 実際に遊んでの確認（見た目・作戦画面のカメラ・坂での操作）はユーザー。既存のマップ（I・J・K）に起伏を入れるか、L の起伏を強める・弱めるかはユーザー判断。AI が高所・反斜面を選ぶ判断は無い（`Docs/design-height-tactics.md` 3.3〜3.5 が次の候補）。**11-25 14時40分 高所の判断（既定0の切替2つ、terrain e9184ca、main へは未取り込み）**：`-BattleHeightSlots=1`（区画に着くとき敵側より1.5m 以上高い遮蔽を先に使う）・`-BattleHeightSector=1`（前線の持ち場の区画を、敵側より高いほど選ぶ）。マップL の2シードで両方とも働くが、高所からの射撃の割合はシードで向きが割れ、既定にする根拠は無い。片軍だけ ON の片側試験に進むかはユーザー判断 |
 | 壁の遮蔽判定（`coverlean` ブランチ、`FutureBattle-coverlean`） | **11-25**：ユーザーの指摘「何もない壁は遮蔽ではない」を Codex の調査で確認（到着地点・接近は撃てるかを見ずに壁を選ぶ）。試験切替 `-BattleCoverFirePoint=1`（既定0、AI の撃つための遮蔽を低い遮蔽の上越しか壁の端の横100〜120cmに限る、到着は撃てる遮蔽→隠れるだけの壁→開けた所）と固定場面 `Test-CoverFirePoint`（6/6 合格）。値2（接触時に over/lean が無いときだけ端まで約4m の壁の step）は v1 の弱点を半分直したが、遮蔽なしの被弾が3組で基準より多く、勝ち負け・損害の向きもそろわない（各4組）。**15時05分 main へ（値1・2とも既定0、既定の試合は不変）** | 既定にはできない。続けるなら、試合より先に「覗いても0発」の理由（歩き・自分の目撃・撃つ待ち）を固定場面で分ける。試遊は `-BattleCoverFirePoint=1`／`=2` |
+| 一戦中のセーブ・ロード（`nosave` ブランチ、`FutureBattle-nosave`） | **11-25 18時30分 main へ（9997b7a）：削除した**（ユーザー決定「一戦中にセーブロードはいらない」、掲示板 C28）。F8/F9・ツールバーの保存/読込・パッドの群メニューの項目・`BattleSave` と各機能の保存/復元・評価の往復保存・保存の自己試験 206 件を削除。通常の試合は不変（前後の凍結ビルドでマップI seed 7・マップK seed 43 が IDENTICAL） | 往復保存が無くなったので、18時の回より前の評価の結果とは比べない（MEASURE.md）。新しい機能に保存・復元の対応は要らない（AGENTS.md） |
 
 **いま誰が何を調べているか・各系統がわかったこと**は調査の掲示板で引く：`python -I Setup/Board.py status`／`find <語>`（`Docs/design-investigation-board.md`）。
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
+
+## 2026-11-25 18時28分 Claude（セーブ削除）：【ユーザー決定】一戦中のセーブ・ロードを削除した（main 9997b7a、18時の回）
+
+- 変更範囲：
+  - 操作：F8/F9、作戦画面のツールバーの「保存」「読込」（終了は右端のまま7列）、パッドの群メニューの保存/読込（4行に）、HUD の案内文。終了の確認文は「終了すると、この試合の進行は失われます」。
+  - 本体：`BattleSave.h/.cpp`、`BattleMixedSaveValidation.cpp`、`BattleTacticsSave.cpp`、`BattleCompositionSave.cpp` と、各機能の保存・復元（試合・知覚・小隊戦術・チームAI・編成・VAT 表示など）。兵を作るときの初期値は `FBattleBodyInit` に替えた。
+  - 評価：Test-WideSight などの往復保存（`-BattleVerifyMixedSave`）を削除。`mixed_save_round_trip_verified` は常に false。`-RoundTripSave` を渡すと止まる。`-NoRoundTripSave` は何もしない引数として残した。往復保存ありの古い結果が入った tag を再開しようとすると止まる。長時間試験（soak）の20秒の保存も削除。
+  - 削除した切替：`-BattleMixedSaveSmoke`、`-BattleVerifyMixedSave`、`-BattleVerifySaveAt=`、`-BattleSaveRoutes=`、`-BattleSaveReloadBoundary=`。
+  - 試験：保存の確認 206 件を削除（一覧は `Docs/nosave-removed-checks.md`）。保存なしで確かめられる2つ（小隊戦術で最後の1人が戦死したときの扱い、MixedFast の部下の装填）は作り直した。目標の自己試験は、削除した保存の試験を経ずに支援の試験へ直接つなぐ（10692ca）。`Setup/Test-MixedSave.ps1` は削除。
+  - 文書：AGENTS の「保存の決まり」を「一戦中のセーブ・ロードは無い」に置き換えた。MEASURE・HANDOFF・PROTOTYPE・ROADMAP（B01/B02/B04/B10 を不要に）・方針の文書（`Docs/review-2026-11-25/03-development-policy.md`）・試験の地図・テストプレイの手順（段階7 を削除）を直した。CODEMAP・SWITCHES は作り直した。
+- 18時の回の取り込み：main の基地守備隊（movestall）と ArriveWatch が保存の検査・復元に足した行は、保存と一緒に削除した（守備隊の本体には触れていない）。HUD の守備隊の行は F8/F9 の案内を除いて残した。
+- 検証：
+  - 結果が変わらないこと：削除前 f6162d5 と削除後 2926da8 の凍結ビルドを、30 FPS・評価の標準引数（往復保存なし）で比べた。マップI seed 7（勝者0、得点 691/470、発砲 16,903）とマップK seed 43（発砲 1,415）が、ともに `Compare-MatchResults.py` で IDENTICAL。18時の回で入った main の新しい変更は、この比較に含まれていない（消したのは保存とロードのときだけ動く行）。
+  - nosave で：Test-Battle failures=0。Test-Area、Test-MixedFast（描画ありで購入画面の撮影も）、Test-CoverActions、Test-FastMatch、Delegation（small・wide720・wide1080・integration）、Test-QuitMenuShot（画面を目で確認）も合格。
+  - 取り込み後の main 9997b7a：`Build-Editor.ps1` 成功、`Test-Battle.ps1` failures=0（193件 PASS、`Battle-Smoke-20261125-182558.log`）。
+- 制限：
+  - 作業ツリーの凍結ビルドには `Project/Saved/Config/WindowsEditor` が無く、試合がすぐ落ちた。main の ini 4つを前後の両方へ同じように写して回した。
+  - Test-SquadTactics の2件の失敗は削除の前からある（試験が 11-19 の仕様に追いついていない）。別のセッションが `squadtest`（242f0b6）で試験だけを直し、この後に取り込む。
+  - 往復保存が無くなったので、評価の結果（result.json の項目・soak の合格条件）は18時の回より前と比べない。
+- 次の一手：この系統はなし。試合数の統制の系統が、取り込み後の main で共用の基準を回す。
 
 ## 2026-11-25 18時24分 Claude（マップ）：【既定の変更・ユーザー決定「既定にする」】`-BattleRoutePassed` を既定1に（main 15d6b3b、18時の回）。小隊が通過した交差点へ戻されて本拠の前を往復する不具合が消える。**既定の試合の結果が変わるので、全レーンの基準は取り直し**
 
