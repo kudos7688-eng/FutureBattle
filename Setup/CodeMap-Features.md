@@ -90,7 +90,8 @@ BattleArms | 歩兵の装備：副武装（拳銃）・手りゅう弾・擲弾�
 BattleArmsSector | 区画の任務と歩兵の装備（試験、既定0）：躍進は攻める任務だけ `-BattleArmsSectorTask`、守る側が走り込みを見つけて迎え撃つ・手りゅう弾・下がる・逆襲 `-BattleArmsRushWatch`、躍進への周りの小隊の援護射撃（制圧が効く） `-BattleArmsCoverFire`
 BattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド
 BattleCover | 遮蔽の場所の一覧と予約
-BattleCoverAction | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部）
+BattleCoverAction | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部）。撃てる遮蔽の判定 `UBattleLeaderRuntime::CoverFirePoint`（over/lean）と値2の step `CoverStepFirePoint`（試験 `-BattleCoverFirePoint`、既定0）
+BattleCoverFire | 区画の到着地点が撃てる遮蔽か（over/lean）の判定 `BattleCoverFire::ArrivalFirePoint` の公開（中身は BattleStableMovement.cpp、試験 `-BattleCoverFirePoint`）
 BattleBlindFire | 遮蔽の陰からのブラインドファイア（弾の出る位置・AIの試験・アニメ。UBattleLeaderRuntime の一部）
 BattleBodyAnimImport | 体のアニメーション（遮蔽・伏せ・しゃがみの向き別）の取り込みと計測（エディタ用。宣言は BattleVATBake.h）
 BattleCoverClips | 遮蔽の状態 → 遮蔽アニメの対応表（データだけ。「アセット参考資料の検討」セッション作）
@@ -128,6 +129,7 @@ BattleSquadAI | 旧全Actor経路の部隊 AI
 BattleSquadFlank | 迂回の判断（UBattleSquadTactics の一部）
 BattleSquadRetreat | 撤退の判断と適用（UBattleSquadTactics の一部。Evaluate と Apply はここ）
 BattleSupplyCar | 補給車（兵種9）：積んだ弾・本拠地での積み直し・AIの命令（群の役割5、拠点の後ろ）・弾の少ない部隊の行き先（UBattleMatch の一部）
+BattleBaseGarrison | 基地の守備隊（試験 `-BattleBaseGarrison=1`、既定0、`Docs/design-base-garrison.md`）：開幕に両軍の本拠地へ専属の小銃小隊2個（`Area.HirePurpose`=102、`IsBaseGarrison`）、基地の範囲に生きた守備隊が居なくなり相手の歩兵が占領し続けると負け（`UpdateBaseGarrison`）。固定場面は BattleBaseGarrisonSmoke
 BattleFrontLine | 前線・前線維持群 `-BattleFrontLine`・奇襲群 `-BattleSurpriseGroup`（区画のあるマップ）：区画の行ごとの前線の列（自軍の兵・観測した拠点・知っている敵、隣の行と1列以内）、維持群の帯と維持する区画、押し上げ、奇襲群（装甲優先・端の行を進んで敵本拠地へ）（UBattleMatch の一部。表示は ABattleHUD::DrawFieldOverlay）
 BattleSquadSupport | 援護の受け渡し（UBattleSquadTactics の一部）
 BattleSquadTactics | 部隊の戦術の土台：観測、毎フレームの更新、記録

@@ -119,6 +119,11 @@ struct FBattleLeaderBody
  double EscapeUntil=0, NextEscapeProbe=0;
  // Map E: earliest time this member may ask for a route of his own again after being cut off from the shared corridor.
  double NextOwnPath=0;
+ // B05 (-BattleCutOffRoute=2): the corridor of this member is a complete route of his own (StableMove), built under this squad
+ // order and destination to this arrival place. A squad replan keeps it while those hold. Rebuilt on demand (not saved).
+ // Trial -BattleMoveProgress=1: progress is getting 40cm closer to the current route point (ProgressWay), not any 40cm.
+ FVector ProgressWay=FVector::ZeroVector; double ProgressWayDist=1.e30;
+ bool bOwnRoute=false, bOwnRouteWanted=false; int32 OwnRouteQueries=0; uint8 OwnRouteOrder=0; FVector OwnRouteDestination=FVector::ZeroVector, OwnRouteGoal=FVector::ZeroVector;
  FVector EscapeWaypoint=FVector::ZeroVector;
  TArray<FVector> ContactRoute;
  double NextContactProbe=0, ContactRouteUntil=0, NextArrivalProbe=0;
@@ -130,6 +135,14 @@ struct FBattleLeaderBody
  int32 Waypoint=1, Pose=0;
  FBattleAnimTasks AnimTasks;
 };
+// 2026-11-25: authored doorway-to-hub routes, read once from this world.
+struct FBattleSectorLane
+{
+ FIntPoint Cell;
+ TArray<FVector> Points;
+ double Length=0.;
+};
+
 struct FBattleLeaderPlan
 {
  int32 OrderRevision=INDEX_NONE, TargetID=INDEX_NONE;
@@ -156,6 +169,10 @@ struct FBattleLeaderPlan
  // Trial -BattleCloseIn=1: in its sector, fighting a target over 90 m away for 8 s while at least even (the -BattleSquadCoverCheck
  // count) = too far (the AI order loop then moves the squad one sector closer, UBattleMatch::CloseInStage).
  double FarSince=0,FarCheckAt=0;bool bCloseIn=false;FVector CloseInAt=FVector::ZeroVector;
+ // Trial -BattleSectorLanes=1 (2026-11-25, default 0): keep the entry lane across replans of the same order.
+ int32 LaneIndex=INDEX_NONE;
+ int32 LaneRevision=INDEX_NONE;
+ FVector LaneGoal=FVector::ZeroVector;
  TArray<FVector> Path;
  FVector Center=FVector::ZeroVector;
  TMap<int32,FVector> ArrivalGoals;
@@ -301,6 +318,10 @@ public:
  bool bArmsSmokeDone=false;
  void RunMissionResumeSmoke(); // -BattleMissionResumeSmoke (B06): BATTLE_MISSION_RESUME_SMOKE_RESULT failures=N, once after the start
  bool bMissionResumeSmokeDone=false;
+ void StepOwnRouteSmoke(double Now); // -BattleOwnRouteSmoke (B05): result then exits
+ void InitializeBaseGarrison();
+ void StepBaseGarrisonSmoke(double Now);
+ bool bBaseGarrisonSmokeDone=false; // test-only latch, never a match decision
  double ArmsNextPick=0,ArmsNextMelee=0,ArmsNextHeal=0;int32 ArmsIssuedUnits=-1;bool bArmsElite=false;
  TMap<int32,double> ArmsActionUntil;TMap<int32,uint8> ArmsActionKind;
  TArray<TWeakObjectPtr<class UStaticMeshComponent>> ArmsShellMeshes;
@@ -559,6 +580,8 @@ public:
  bool CoverLineClear(int32 ID,FVector From,FVector Threat) const;
  // Re-picks a peek point beside the cover anchor with a clear line to Threat; false keeps the soldier hidden.
  bool RevalidatePeek(int32 ID,FVector Threat);
+ bool CoverStepFirePoint(FVector Anchor,FVector Threat,FVector Lateral,FVector Facing,float Hidden,FVector& OutPeek);
+ bool CoverFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& OutPeek,uint8& OutKind,uint8 AllowedKinds=3,bool bPeekLine=false);
  // Suppression trial (-BattleSuppression=1, see BattleSuppression.h). Runtime only: time at which each unit's level decays to zero.
  TMap<int32,double> SuppressionZeroAt;
  float Suppression(int32 ID,double Now) const;
@@ -887,6 +910,7 @@ public:
  FVector FlankSmokeGoal=FVector::ZeroVector;
  void RunMovementTrial();
  void RunContactTrial();
+ void RunCoverFirePointTrial();
  void RunSightTrial();
  void RunWeaponRangeTrial();
  void RunWideMapAudit();
@@ -944,6 +968,12 @@ private:
  TSharedPtr<FMassEntityManager> Manager;
  TMap<int32,FBattleLeaderBody> Bodies;
  TMap<int32,FBattleLeaderPlan> Plans;
+ TArray<FBattleSectorLane> SectorLanes;
+ TMap<FIntPoint,TArray<int32>> SectorLaneIndex;
+ bool bSectorLanesRead=false;
+ static bool SectorLanesEnabled();
+ void ReadSectorLanes();
+ void ApplySectorLane(int32 SquadID,const FVector& Origin,const FVector& From,const FVector& To,class UNavigationSystemV1& Navigation);
  bool ObservedAvoidancePosition(int32 ObserverID,int32 OtherID,FVector& OutPosition) const;
  void BuildObservedAvoidance(int32 ObserverID,TMap<FIntPoint,int32>& OutGrid,TArray<TArray<int32>>& OutBuckets,TMap<int32,FVector>& OutPositions) const;
  TMap<FIntPoint,int32> AvoidanceGrid;

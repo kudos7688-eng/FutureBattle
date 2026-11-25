@@ -95,6 +95,9 @@ public:
  UPROPERTY() FBattleAreaState Area;
  UPROPERTY() TArray<TObjectPtr<AActor>> BaseActors;
  void InitializeArea();
+ bool IsBaseGarrison(int32 SquadID) const;
+ int32 GarrisonLiving(int32 Team,bool bInsideOnly=false) const;
+ void UpdateBaseGarrison(float Dt);
  void UpdateArea(float Dt);
  bool AreaVisible(int32 Observer,FVector Point,AActor* Target=nullptr) const;
  bool DamageBase(AActor* Target,int32 AttackerTeam,float Damage);
@@ -237,6 +240,11 @@ public:
  bool RaidSneaking(int32 SquadID) const; // Trial -BattleArtilleryRaidSneak: an artillery raid squad still farther than the sneak radius from its target.
  float SurpriseNextAt[2]={0.f,0.f},SurpriseSkipLogAt[2]={0.f,0.f};
  TMap<int32,FVector> FrontPosts; // squad of a front-holding group -> the sector centre it holds (transient)
+ // Trial -BattleArriveWatch (BattleTactics.h): squad -> the mission (its revision) it keeps, since when, and until when (-1: not
+ // yet at the destination). Transient. ArriveWatchHolds: true while the squad is to keep its mission.
+ struct FArriveWatch{int32 Revision=0;float Start=0.f,Until=-1.f;};
+ TMap<int32,FArriveWatch> ArriveWatches;
+ bool ArriveWatchHolds(const FBattleSquadState& Squad,const FVector& LeaderAt);
  // Reservation destinations (stage 7, Docs/design-front-strategy.md 5.1): a bought squad sent to a front section waits here for its first
  // post, which then prefers that section's rows (squad -> section).
  TMap<int32,int32> FrontSectionWish;
@@ -551,7 +559,11 @@ public:
 	bool RoutesOn() const;
 	TArray<FVector> RouteKnownEnemies(int32 Team) const;
 	int32 RouteFlankSide(const FVector& From, const FVector& OwnHome, const TArray<FVector>& KnownEnemies, int32 SquadID) const;
-	FVector RouteStep(const FVector& From, const FVector& Goal, int32 FlankSide, const TArray<FVector>& KnownEnemies) const;
+	FVector RouteStep(const FVector& From, const FVector& Goal, int32 FlankSide, const TArray<FVector>& KnownEnemies, TArray<int32>* Load = nullptr, int32 SquadID = INDEX_NONE) const;
+	// -BattleRouteLoad: the junctions a squad was sent along, kept until its goal changes.
+	struct FRouteCommit { FVector Goal = FVector::ZeroVector; int32 FlankSide = 0; int32 Passed = INDEX_NONE; TArray<int32> Nodes; };
+	mutable TMap<int32, FRouteCommit> RouteCommits;
+	mutable TMap<int32, FRouteCommit> RouteSeen; // -BattleRouteLog: the way last chosen, to record a change of way on the road
 	// Sector routes (BattleSectorRoute.cpp, trial -BattleSectorRoute=1): the sector beside the next junction an AI squad stops in.
 	static bool SectorRouteOn();
 	static bool SectorFlankOn(); // -BattleSectorFlank=1: stops beside the known enemy's front near the goal

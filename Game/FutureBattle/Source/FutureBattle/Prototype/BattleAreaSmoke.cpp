@@ -173,6 +173,9 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   Check(M->CanFireAtBase(Lead(2),Target),TEXT("own line of sight and weapon range permit base engagement"));
   auto* Shooter=const_cast<FBattleUnitState*>(Store->Find(Lead(2)));Shooter->NextShotTime=0;
   Check(Fire(Lead(2),Position(Lead(2))+FVector(0,0,60),(M->BaseActors[1]->GetActorLocation()-(Position(Lead(2))+FVector(0,0,60))).GetSafeNormal(),true)&&M->Area.BaseHP[1]<1000,TEXT("shared player and AI shot path damages physical enemy base"));
+  // -BattleBaseRifleDamage: the same shot does the scaled damage (1x = ShotDamage or more by squad type and range).
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_SMOKE_BASE_SHOT damage=%.2f scale=%.2f"),1000.f-M->Area.BaseHP[1],BattleTactics::BaseRifleDamage());
+  Check(BattleTactics::BaseRifleDamage()>=1.f||FMath::IsNearlyEqual(1000.f-M->Area.BaseHP[1],GetDefault<UBattleTuning>()->ShotDamage*BattleTactics::BaseRifleDamage(),.01f),TEXT("small-arms damage to the enemy base follows -BattleBaseRifleDamage"));
   Check(!M->DamageBase(M->BaseActors[0],0,100),TEXT("friendly base cannot be damaged"));
   // New-squad hiring (squad 1 lost its leader above, so team 0 has one free slot).
   {

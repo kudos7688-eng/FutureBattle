@@ -63,11 +63,37 @@ bool BattleTactics::SymmetricStart(const UWorld* World)
 
 int32 BattleTactics::AllocationIndex(const UWorld* World,int32 SquadID,int32 Team)
 {
- if(!World||!SymmetricStart(World))return SquadID;
+ if(!World)return SquadID;
+ if(!SymmetricStart(World))
+ {
+  if(!BaseGarrison())return SquadID;
+  int32 Removed=0;const auto* Match=World->GetSubsystem<UBattleMatch>();
+  for(const auto& P:World->GetSubsystem<UBattleState>()->GetSquads())Removed+=P.Key<=SquadID&&Match->IsBaseGarrison(P.Key);
+  return SquadID-Removed;
+ }
  // The squad's number within its team (squads of the team with a lower or equal ID; IDs are never reused, so it never changes).
  int32 Index=0;
- for(const auto& P:World->GetSubsystem<UBattleState>()->GetSquads())Index+=P.Value.Team==Team&&P.Key<=SquadID;
+ for(const auto& P:World->GetSubsystem<UBattleState>()->GetSquads())Index+=P.Value.Team==Team&&P.Key<=SquadID&&(!BaseGarrison()||!World->GetSubsystem<UBattleMatch>()->IsBaseGarrison(P.Key));
  return FMath::Max(1,Index);
+}
+
+// Trial -BattleThinkSymmetric=1 (2026-11-25, default 0; map K west/east divergence, STATUS 11-25): the time of a squad's first
+// plan (0.05s x ID%10) and of its tactical sample (0.1s x ID%10) came from the squad ID, and the mirror squad of the other team
+// has ID+25: its phase is half a cycle off, so it thinks and replans at other moments (map K seed 7: squads 14 and 39 part in
+// the first frames of the match). With the switch both use the squad's number within its team.
+int32 BattleTactics::PhaseIndex(const UWorld* World,int32 SquadID,int32 Team)
+{
+ static const bool bOn=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleThinkSymmetric="),X);return X!=0;}();
+ return bOn?AllocationIndex(World,SquadID,Team):SquadID;
+}
+
+// Diagnosis -BattleMoveTrace=<squad>,<squad>,... (2026-11-25, default none; records only): the path, the member routes and, in
+// the first seconds of the match, every step of the named squads (BATTLE_MOVE_TRACE_PATH / _ROUTE / _STEP), to compare a squad
+// with its mirror squad of the other team.
+bool BattleTactics::MoveTraceSquad(int32 SquadID)
+{
+ static const TSet<int32> Squads=[]{TSet<int32> V;FString Text;if(FParse::Value(FCommandLine::Get(),TEXT("BattleMoveTrace="),Text,false)){TArray<FString> Parts;Text.ParseIntoArray(Parts,TEXT(","));for(const FString& Part:Parts)V.Add(FCString::Atoi(*Part));}return V;}();
+ return Squads.Contains(SquadID);
 }
 
 bool BattleTactics::GroupSupplySlot()
@@ -187,7 +213,7 @@ int32 UBattleMatch::ArmyOf(int32 SquadID) const
 bool UBattleMatch::AssignArmy(int32 SquadID,int32 Army,int32 TargetGroup)
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* S=Store?Store->FindSquad(SquadID):nullptr;
- if(!S||S->Team!=0||S->CommandStatus!=EBattleCommandStatus::Active||Army<0||Army>2)return false;
+ if((BattleTactics::BaseGarrison()&&IsBaseGarrison(SquadID))||!S||S->Team!=0||S->CommandStatus!=EBattleCommandStatus::Active||Army<0||Army>2)return false;
  ArmyPinned.Add(SquadID);
  if(Army!=0&&ArmyOf(SquadID)==Army&&(TargetGroup==INDEX_NONE||TargetGroup==GroupOf(SquadID)))return true;
  if(const int32 Old=GroupOf(SquadID);Old!=INDEX_NONE)
@@ -226,7 +252,7 @@ int32 UBattleMatch::FormGroup(int32 Team,const TArray<int32>& Squads,bool bPlaye
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  if(!Store||!R||Team<0||Team>1)return INDEX_NONE;
  FBattleGroup G;G.Team=Team;G.bPlayer=bPlayer;
- for(int32 SID:Squads)if(const auto* S=Store->FindSquad(SID);S&&S->Team==Team&&S->CommandStatus==EBattleCommandStatus::Active)G.Squads.AddUnique(SID);
+ for(int32 SID:Squads)if(const auto* S=Store->FindSquad(SID);S&&S->Team==Team&&S->CommandStatus==EBattleCommandStatus::Active&&(!BattleTactics::BaseGarrison()||!IsBaseGarrison(SID)))G.Squads.AddUnique(SID);
  if(G.Squads.Num()<(bPlayer?1:2))return INDEX_NONE;
  G.Squads.Sort();
  // A squad belongs to one group: leaving an old group may end it.
@@ -292,6 +318,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
    for(const auto& P:Store->GetSquads())
    {
     const auto& S=P.Value;
+    if(BattleTactics::BaseGarrison()&&IsBaseGarrison(P.Key))continue;
     if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(P.Key)!=INDEX_NONE)continue;
     if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key)||ArmyPinned.Contains(P.Key)||(BattleTactics::ArtilleryPosts()&&ArtilleryRaids.Contains(P.Key)))continue;
     // Group fire support (trial -BattleGroupFireSupport=1): the AI attack group also takes one self-propelled gun.

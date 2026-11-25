@@ -31,6 +31,7 @@ void UBattleSquadTactics::Reset()
 {
  ActiveSeconds = 0; NextDump = 5; NextSample.Reset(); Samples.Reset(); Events.Reset(); ActionSeconds.Reset();
  SupplyTripStart.Reset(); SupplyTripSeconds.Reset(); JoinFights.Reset();
+ SeekEnemies.Reset(); SeekEnded.Reset(); KnownSpots[0].Reset(); KnownSpots[1].Reset(); KnownSpotsAt[0]=KnownSpotsAt[1]=-100.;
  GetWorld()->GetSubsystem<UBattleTeamAI>()->Reset();
  DamageHistory.Reset(); TotalStepMs = MaxStepMs = 0; StepCount = 0;
 }
@@ -119,11 +120,11 @@ void UBattleSquadTactics::Step(float DeltaSeconds)
  {
   const auto& Squad = Pair.Value;
   if (Squad.CommandStatus != EBattleCommandStatus::Legacy && !(Wide && Squad.CommandStatus==EBattleCommandStatus::Active)) continue;
-  const bool bManaged = bEnabled && Match->IsEnabled() && (Squad.Team == 1 || Squad.bPlayerDelegated);
+  const bool bManaged = (!BattleTactics::BaseGarrison()||!Match->IsBaseGarrison(Pair.Key)) && bEnabled && Match->IsEnabled() && (Squad.Team == 1 || Squad.bPlayerDelegated);
   if (bManaged && !Squad.TacticalPlan.bAutonomous) Store->AdvanceSquadTacticalPlan(Squad.SquadID, DeltaSeconds);
   if (!bManaged && !bObserve) { Samples.Remove(Pair.Key); continue; }
   double* Due = NextSample.Find(Pair.Key);
-  if (!Due) Due = &NextSample.Add(Pair.Key, ActiveSeconds + (Pair.Key % 10) * .1);
+  if (!Due) Due = &NextSample.Add(Pair.Key, ActiveSeconds + (BattleTactics::PhaseIndex(GetWorld(),Pair.Key,Squad.Team) % 10) * .1);
   if (ActiveSeconds < *Due) continue;
   const float SampleDt=Samples.Contains(Pair.Key)?float(ActiveSeconds-Samples.FindChecked(Pair.Key).SampleTime):0.f;
   *Due = ActiveSeconds + 1.;

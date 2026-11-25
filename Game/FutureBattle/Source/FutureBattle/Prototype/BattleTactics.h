@@ -45,6 +45,30 @@ namespace BattleTactics
  bool JoinFight();
  float JoinFightRange();
  int32 JoinFightMax();
+ // Contact trial, user 2026-11-25 ("share the enemy's place across the team", STATUS "弾薬と補給" 14:10/16:00: an enemy is within
+ // 200 m for 74% of the time without one in sight; a sighting reaches only soldiers within ShareRange, 16 m, and the team's view
+ // serves the front line and the groups, never a squad's own way). -BattleSeekKnown=1|2 (default 0): the team remembers for
+ // -BattleSeekKnownSeconds=s (default 30, 5..180) each 50 m square in which one of its soldiers saw enemy infantry himself (no
+ // vehicles, no scout long sight, no reports; the place last seen there, no true positions). An AI rifle squad on its mission with
+ // no enemy of its own attack-moves to the nearest such place within -BattleSeekKnownRange=cm (default 20000, 2000..60000), at most
+ // -BattleSeekKnownMax=n (default 2, 1..8) squads per square. With an enemy in its own sight it fights as usual; 10 s at the place
+ // with none, or 90 s, and it goes back to its mission. 1: squads outside the groups only. 2: also squads of front-holding groups
+ // (attack and surprise groups never). Not saved. BattleSquadRetreat.cpp (Evaluate, RefreshKnownSpots).
+ // Contact trial, user 2026-11-25 ("once spotted, know its true place for some seconds"; an exception to the rule that decisions
+ // read observed information only, limited to this). -BattleSpotTrack=s (default 0 = off, 0..30): for s seconds after a soldier
+ // loses sight of an enemy he saw himself, his contact also holds where that enemy is now (FBattleContact::TrackedPosition,
+ // refreshed at his perception scans, so it may be one scan old; no longer than his memory of the contact, 5 s by default,
+ // see -BattleMemorySeconds). Read through FBattleContact::MoveAt() only where a soldier or squad decides where to look, walk, take cover or
+ // fall back: the watch and walking look (BattleSoldierWatch.cpp), the choice of cover (BattleThreatCover.cpp, Follow), the
+ // retreat goal and the safety of a flank route (BattleSquadRetreat.cpp, BattleSquadFlank.cpp), the facing on a flank move, and
+ // the team's places for -BattleSeekKnown. LastKnownPosition is untouched: everything that fires or throws at a remembered place
+ // (grenades, covering fire, suppressing fire, blind fire, guns) and the player's map read that, so nothing is shot at a tracked
+ // place. Not reported to other soldiers, not saved.
+ float SpotTrack();
+ int32 SeekKnown();
+ float SeekKnownSeconds();
+ float SeekKnownRange();
+ int32 SeekKnownMax();
  // Contact trial, user 2026-11-25. -BattleMemorySeconds=s (default 0 = UBattleTuning::MemorySeconds, 5 s; 1..120): how long a soldier
  // keeps an enemy he no longer sees (before the recruit/veteran factor). The 5 s caps inside the cover actions stay.
  // -BattleSuppressFire=s (default 0 = off, 0..60): a soldier who stands still and has lost sight of the squad's target keeps firing
@@ -52,12 +76,30 @@ namespace BattleTactics
  // the way clear of walls. The shots suppress like covering fire. BattleLeaderRuntime.cpp (Follow).
  float MemorySeconds();
  float SuppressFire();
+ // Contact trial, user 2026-11-25 (STATUS "弾薬と補給" 14:10: 56% of the time without an enemy in sight is walking on an attack-move
+ // mission short of its destination; missions change about 1.5 times a minute per squad, so a squad that arrives walks on at once).
+ // -BattleArriveWatch=s (default 0 = off, 0..60): an AI rifle squad on an attack-move mission keeps that mission from 65 m before
+ // its destination (a road waypoint is replaced by the next at 60 m, BattleRoutes.cpp) until s seconds after its leader came within
+ // 15 m of it (a sector mission: from entering the sector, for s seconds), so it walks in, stands and watches there (the watch of
+ // standing soldiers, -BattleSoldierWatch) before it is given the next mission. Walking in takes at most 30 s. Once per mission;
+ // only while the squad follows its mission (not while it fights, retreats or resupplies). Orders that pass at once: any order
+ // that is not an attack-move, the home defence, a group gathering, artillery raids and their screens, anti-tank hunts, mortar
+ // posts, surprise bridge legs; no vehicles or other squad types. A front post that moves back is taken up to s seconds late.
+ // Not saved (after a load a squad at its destination watches once more). BattleMatch.cpp (UpdateTeamOrders, ArriveWatchHolds).
+ float ArriveWatch();
  // Stage 2: -BattleSupplyAmmoShare=x (default 0 = off, 0..0.9): an infantry squad whose living members together hold x or less of
  // their full reserve (loaded rounds are not counted, so a refilled squad is never low) goes for ammunition (a supply vehicle in
  // reach, else home), instead of only when half or all of them are empty; it resumes with 0.9 of the reserve or more. Own squad
  // state only (BattleSquadRetreat.cpp). -BattleAreaSupplyEarly=1 (default 0): the AI buys its supply vehicles (-BattleAreaSupplyKeep)
  // right after its first purchases and before the other special types, instead of last (BattleArea.cpp).
  float SupplyAmmoShare();
+ // Trial -BattleBaseRifleDamage=x (default 0 = unchanged, 0.01..1): small-arms shots do x of their damage to an enemy home base
+ // (anti-tank rounds, tank guns and shells keep their own base damage).
+ float BaseRifleDamage();
+ bool BaseGarrison();
+ constexpr int32 BaseGarrisonSquads=2;
+ float BaseGarrisonRadius();
+ float BaseGarrisonSeconds();
  // Trial -BattleVehicleOrderHere=1 (default 0): a vehicle order to where the vehicle already stands is accepted as arrived (no route needed).
  bool VehicleOrderHere();
  bool ArtilleryPosts(); // Trial -BattleArtilleryPosts=1 (default 0): public mortar posts and raids.
@@ -101,6 +143,8 @@ namespace BattleTactics
  bool ArmourSectorGateEnabled(); // trial, default 0: armour priority within Think's accepted candidate set
  bool OrderAllowsTarget(const FBattleSquadState& Squad,int32 TargetID,const FVector& KnownPosition);
  bool CoverActionsEnabled();
+ int32 CoverFirePointLevel();
+ bool CoverFirePointEnabled();
  // Trial switch -BattleAICoverProbe=1: per-frame AI cover probe budget and wider AI search instead of one shared probe per interval.
  bool AICoverProbeBudgetEnabled();
  // Trial switch -BattleCoverApproach=1: an engaged AI soldier with no cover nearby walks to a hidden cover slot within a wider radius.
@@ -192,6 +236,8 @@ namespace BattleTactics
  bool SymmetricStart(const class UWorld* World);
  // The number that picks a squad's allocation slot: the squad ID, or with the symmetric start its number within its own team.
  int32 AllocationIndex(const class UWorld* World,int32 SquadID,int32 Team);
+ int32 PhaseIndex(const class UWorld* World,int32 SquadID,int32 Team);
+ bool MoveTraceSquad(int32 SquadID);
  // Trial -BattleDefendEngage=0/1 (UBattleTuning::bDefendEngage, default 0; the trial team with -BattleAreaTrialTeam): defending squads target enemies within weapon range, not only within DefenseRadius of the defended place.
  bool DefendEngage(int32 Team);
 	// SpreadScale: extra multiplier from runtime effects (suppression trial); 1 = none.

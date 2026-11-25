@@ -232,6 +232,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  // The reserve (6c) is these squads too.
  auto IsFree=[&](int32 SID,const auto& S)
  {
+  if(BattleTactics::BaseGarrison()&&IsBaseGarrison(SID))return false;
   if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(SID)!=INDEX_NONE)return false;
   if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Heavy)return false;
   if(Area.HirePurpose.Contains(SID)||IntelPurpose.Contains(SID)||ArmyPinned.Contains(SID))return false;

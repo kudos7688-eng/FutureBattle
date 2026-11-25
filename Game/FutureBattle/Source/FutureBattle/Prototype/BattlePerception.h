@@ -19,6 +19,11 @@ struct FBattleContact
 	UPROPERTY() bool bShared = false;
  bool bLongRangeObservation = true; // Unknown provenance stays restricted until a fresh sensor observation; copied with reports.
  bool bLocalShareEligible = false; // Measured at acquisition, not from the sender's later position.
+ // Trial -BattleSpotTrack (BattleTactics.h): where the enemy is now, for some seconds after its observer lost sight of it; for
+ // looking, walking and cover only (MoveAt), never to fire at. Not saved, not copied to reports or the squad table.
+ bool bTracked = false;
+ FVector TrackedPosition = FVector::ZeroVector;
+ const FVector& MoveAt() const { return bTracked ? TrackedPosition : LastKnownPosition; }
 };
 
 USTRUCT()

@@ -30,7 +30,7 @@ void UBattlePerception::Restore(const TMap<int32, FBattleObserver>& SavedObserve
 	NextScanTimes.Reset(); LastScanTimes.Reset();
 	for (auto& Observer : Observers)
 	{
-		for (auto& Contact : Observer.Value.Contacts) { Contact.Value.LastSeenTime += Now; Contact.Value.bVisible = false; }
+		for (auto& Contact : Observer.Value.Contacts) { Contact.Value.LastSeenTime += Now; Contact.Value.bVisible = false; Contact.Value.bTracked = false; }
 		for (auto& Started : Observer.Value.DetectionStarted) Started.Value += Now;
 	}
 	for (auto& Report : PendingReports)
@@ -84,7 +84,7 @@ bool UBattlePerception::Knows(int32 ObserverID, int32 SquadID, int32 TargetID, F
 	const auto* Squad = FindSquadContact(SquadID, TargetID);
 	if (Own && (Own->bVisible || !Squad || Squad->Contact.LastSeenTime <= Own->LastSeenTime)) { Out = *Own; return true; }
 	if (!Squad) return false;
-	Out = Squad->Contact; Out.bVisible = false; Out.bShared = true; ++SquadKnowsHeard;
+	Out = Squad->Contact; Out.bVisible = false; Out.bShared = true; Out.bTracked = false; ++SquadKnowsHeard;
 	return true;
 }
 
@@ -204,7 +204,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
   }
 		Contact.LastKnownPosition = Candidate.Position;
 		Contact.LastSeenTime = Now; Contact.Confidence = 1.f; Contact.bVisible = true;
-		Contact.SourceUnitID = Pair.Key; Contact.bShared = false;
+		Contact.SourceUnitID = Pair.Key; Contact.bShared = false; Contact.bTracked = false;
 	};
 	// End of one observer's scan: forget detections out of view and age unseen contacts.
 	auto Forget = [&](FBattleObserver& Observer, const auto& Profile, const TSet<int32>& InView)
@@ -217,6 +217,11 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			const double Age = FMath::Max(0., Now - Contact.LastSeenTime);
 			// Do not consult an unseen target's current position or health to update memory.
 			if (Profile.MemorySeconds <= 0.f || Age >= Profile.MemorySeconds) { It.RemoveCurrent(); continue; }
+			// Trial -BattleSpotTrack (BattleTactics.h, default 0): an enemy he saw himself and still remembers is followed for some
+			// seconds (TrackedPosition only, read by MoveAt; the memory above and LastKnownPosition are as before).
+			Contact.bTracked = false;
+			if (const float Track = BattleTactics::SpotTrack(); Track > 0.f && !Contact.bShared && Age <= Track)
+				if (const auto* Live = Alive.Find(Contact.TargetID)) { Contact.TrackedPosition = Live->Position; Contact.bTracked = true; if (Mixed) Leader->SightExperiment.Cover(TEXT("spot_track_updates")); }
 			Contact.Confidence = FMath::Clamp(1.f - static_cast<float>(Age / Profile.MemorySeconds), 0.f, 1.f);
 		}
 	};
@@ -421,7 +426,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 				const auto* Existing = Contacts.Find(Report.Contact.TargetID);
 				if (!Existing || (!Existing->bVisible && Existing->LastSeenTime < Report.Contact.LastSeenTime))
 				{
-					FBattleContact Copy = Report.Contact; Copy.bVisible = false; Copy.bShared = true;
+					FBattleContact Copy = Report.Contact; Copy.bVisible = false; Copy.bShared = true; Copy.bTracked = false;
 					Copy.Confidence = FMath::Clamp(1.f - static_cast<float>((Now - Copy.LastSeenTime) / Memory), 0.f, 1.f);
 					Contacts.Add(Copy.TargetID, Copy);
      if(Metrics->bRecording) ++Metrics->ReportsDelivered;
@@ -505,7 +510,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 				const FBattleContact& Held = Entry.Contact;
 				if (Held.TargetID == INDEX_NONE || Own.LastSeenTime > Held.LastSeenTime || (Own.LastSeenTime == Held.LastSeenTime &&
 					(Held.bShared || Own.bVisible > Held.bVisible || (Own.bVisible == Held.bVisible && Own.SourceUnitID < Held.SourceUnitID))))
-				{ const bool bSeenNow = Held.TargetID != INDEX_NONE && Held.bVisible; Entry.Contact = Own; Entry.Contact.bVisible = Own.bVisible || bSeenNow; }
+				{ const bool bSeenNow = Held.TargetID != INDEX_NONE && Held.bVisible; Entry.Contact = Own; Entry.Contact.bTracked = false; Entry.Contact.bVisible = Own.bVisible || bSeenNow; }
 				if (Own.bVisible) { Entry.Contact.bVisible = true; if (Entry.SeerID == INDEX_NONE || Pair.Key < Entry.SeerID) Entry.SeerID = Pair.Key; }
 			}
 		}
