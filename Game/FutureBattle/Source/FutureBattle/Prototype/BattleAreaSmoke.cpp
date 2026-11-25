@@ -433,28 +433,30 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      {
       const uint8 WasDelegate=M->Area.PlayerHireDelegate;const int32 WasKeep=M->Area.PlayerHireReserve;
       M->Area.PlayerHireDelegate=2;M->Area.PlayerHireReserve=20;
+      // Resources set here go through the income record so that the conservation law the save checks below verify still holds.
+      const int32 KeepC0=M->Credits[0];auto SetC=[M](int32 V){M->Area.Income[0]+=V-M->Credits[0];M->Credits[0]=V;};
       const int32 Pend=M->PendingReplacements(0),RCost=M->HireCost(BattleSquadType::Rifle),Active0=M->ActiveSquads(0);
-      M->Credits[0]=Pend+20;
+      SetC(Pend+20);
       const bool KeepQueued=M->PlayerDelegating(0)&&M->ReserveHire(0,BattleSquadType::Rifle,true)==2&&M->Credits[0]==Pend+20&&M->HireQueueOf(0).Num()==1&&M->ActiveSquads(0)==Active0;
       M->HireQueueSecond=-1;M->UpdateHireQueue();
       const bool KeepWaits=M->HireQueueOf(0).Num()==1&&M->Credits[0]==Pend+20;
       Check(KeepQueued&&KeepWaits,TEXT("B03: a delegated AI purchase that would spend the kept resources waits as a reservation"));
-      M->Credits[0]=Pend+20+RCost;M->HireQueueSecond=-1;M->UpdateHireQueue();
+      SetC(Pend+20+RCost);M->HireQueueSecond=-1;M->UpdateHireQueue();
       const bool KeepBought=M->HireQueueOf(0).IsEmpty()&&M->ActiveSquads(0)==Active0+1&&M->Credits[0]-M->PendingReplacements(0)>=20;
       Check(KeepBought,TEXT("B03: the AI reservation buys once cost + kept resources are there and leaves the kept resources"));
-      M->Credits[0]=M->PendingReplacements(0)+20+RCost;
+      SetC(M->PendingReplacements(0)+20+RCost);
       const bool Bought2=M->ReserveHire(0,BattleSquadType::Rifle,true)==1; // affordable: bought at once
-      M->Credits[0]=M->PendingReplacements(0)+10;M->Area.PlayerHireReserve=0;
+      SetC(M->PendingReplacements(0)+10);M->Area.PlayerHireReserve=0;
       const bool Queued3=M->ReserveHire(0,BattleSquadType::Heavy,true)==2; // short of the heavy cost: waits for resources
-      M->Credits[0]=M->PendingReplacements(0)+M->HireCost(BattleSquadType::Heavy)+5;M->Area.PlayerHireReserve=40;M->HireQueueSecond=-1;M->UpdateHireQueue();
+      SetC(M->PendingReplacements(0)+M->HireCost(BattleSquadType::Heavy)+5);M->Area.PlayerHireReserve=40;M->HireQueueSecond=-1;M->UpdateHireQueue();
       const bool Held=M->HireQueueOf(0).Num()==1;
       M->Area.PlayerHireReserve=0;M->HireQueueSecond=-1;M->UpdateHireQueue();
       const bool Released=M->HireQueueOf(0).IsEmpty()&&M->Credits[0]-M->PendingReplacements(0)==5;
       Check(Bought2&&Queued3&&Held&&Released,TEXT("B03: raising the kept resources after reserving holds the AI reservation, lowering it buys"));
-      M->Area.PlayerHireReserve=20;M->Credits[0]=M->PendingReplacements(0)+RCost;const int32 Active1=M->ActiveSquads(0);
+      M->Area.PlayerHireReserve=20;SetC(M->PendingReplacements(0)+RCost);const int32 Active1=M->ActiveSquads(0);
       const bool PlayerBuys=M->ReserveHire(0,BattleSquadType::Rifle,false)==1&&M->ActiveSquads(0)==Active1+1;
       Check(PlayerBuys,TEXT("B03: the player's own purchase is not limited by the AI's kept resources"));
-      M->Area.HireQueue.Reset();M->Area.PlayerHireDelegate=WasDelegate;M->Area.PlayerHireReserve=WasKeep;M->Credits[0]=CR;
+      M->Area.HireQueue.Reset();M->Area.PlayerHireDelegate=WasDelegate;M->Area.PlayerHireReserve=WasKeep;SetC(KeepC0);
      }
     }
     // Performance: a far tank's line of sight is traced once per TankSightReuse seconds per observer (range and view each scan);
