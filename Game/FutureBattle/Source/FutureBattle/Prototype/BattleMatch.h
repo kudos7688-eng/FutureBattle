@@ -242,6 +242,11 @@ public:
  void ClampFrontTimers();
  float SurpriseNextAt[2]={0.f,0.f},SurpriseSkipLogAt[2]={0.f,0.f};
  TMap<int32,FVector> FrontPosts; // squad of a front-holding group -> the sector centre it holds (transient)
+ // Trial -BattleArriveWatch (BattleTactics.h): squad -> the mission (its revision) it keeps, since when, and until when (-1: not
+ // yet at the destination). Transient. ArriveWatchHolds: true while the squad is to keep its mission.
+ struct FArriveWatch{int32 Revision=0;float Start=0.f,Until=-1.f;};
+ TMap<int32,FArriveWatch> ArriveWatches;
+ bool ArriveWatchHolds(const FBattleSquadState& Squad,const FVector& LeaderAt);
  // Reservation destinations (stage 7, Docs/design-front-strategy.md 5.1): a bought squad sent to a front section waits here for its first
  // post, which then prefers that section's rows (squad -> section; transient: after a restore before the first post it takes any post).
  TMap<int32,int32> FrontSectionWish;

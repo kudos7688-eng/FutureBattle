@@ -533,6 +533,13 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
    const bool Sector=!bRaidDuty && !bMortarPost && bSectorAIHere && !bSurpriseBridge && !bRoadWaypoint && BattleFieldLayout::Of(GetWorld()).bSectors && (bSectorStage || !BaseAssault) && !Purpose && !Leader->IsVehicle(S.LeaderUnitID)
       && (Order==EBattleOrder::AttackMove || Order==EBattleOrder::Defend) && BattleSectors::Valid(BattleSectors::Cell(Center));
    if(Sector)Center=BattleSectors::Center(BattleSectors::Cell(Center));
+   // Trial -BattleArriveWatch (BattleTactics.h): arrived at its attack-move destination, it keeps the mission for a while.
+   if(BattleTactics::ArriveWatch()>0.f)
+   {
+    const auto* WatchGroup=Groups.Find(GroupOf(Pair.Key));
+    if(bRaidDuty || bMortarPost || bSurpriseBridge || bHomeDefence || Order!=EBattleOrder::AttackMove || (WatchGroup && WatchGroup->Phase==0) || Leader->IsVehicle(S.LeaderUnitID))ArriveWatches.Remove(Pair.Key);
+    else if(ArriveWatchHolds(S,Leader->Position(S.LeaderUnitID)))continue;
+   }
    if(!S.bHasMission || S.bSectorMission!=Sector || S.MissionOrder!=Order || !(Sector?BattleSectors::Cell(S.MissionDestination)==BattleSectors::Cell(Center):S.MissionDestination.Equals(Center,20))) if(!Leader->SameVehicleMission(Pair.Key,Order,Center)) Leader->IssueOrder(Pair.Key,Order,Center,true,Sector);
    continue;
   }
@@ -569,6 +576,33 @@ int32 UBattleMatch::Resupply(int32 UnitID, int32 RequestedRounds)
 	Credits[S->Team] -= Added; return Added;
 }
 
+bool UBattleMatch::ArriveWatchHolds(const FBattleSquadState& Squad,const FVector& LeaderAt)
+{
+ // Only while the squad follows its attack-move mission (fighting, retreating or resupplying it is elsewhere; back on the mission
+ // it watches again).
+ if(Squad.SquadType!=BattleSquadType::Rifle || !Squad.bHasMission || Squad.MissionOrder!=EBattleOrder::AttackMove || Squad.TacticalPlan.Action!=EBattleSquadTactic::Mission)
+ {ArriveWatches.Remove(Squad.SquadID);return false;}
+ // Arrived: the leader within 15 m of the destination; in a sector mission, inside the sector. Near: within 65 m (a road waypoint
+ // is replaced by the next one at 60 m).
+ const double D2=FVector::DistSquared2D(LeaderAt,Squad.MissionDestination);
+ const bool bThere=Squad.bSectorMission?BattleSectors::Cell(LeaderAt)==BattleSectors::Cell(Squad.MissionDestination):D2<=FMath::Square(1500.);
+ auto* W=ArriveWatches.Find(Squad.SquadID);
+ // Another mission (the next one, or a player's order in between): its own watch. A clock that ran back: a new start.
+ if(W && (W->Revision!=Squad.MissionRevision || Elapsed<W->Start)){ArriveWatches.Remove(Squad.SquadID);W=nullptr;}
+ if(!W)
+ {
+  if(!bThere && (Squad.bSectorMission || D2>FMath::Square(6500.)))return false;
+  FArriveWatch Watch;Watch.Revision=Squad.MissionRevision;Watch.Start=Elapsed;W=&ArriveWatches.Add(Squad.SquadID,Watch);
+ }
+ if(W->Until<0.f)
+ {
+  // Walking in: at most 30 s (a destination its leader cannot reach), then the next mission.
+  if(!bThere && Elapsed-W->Start<30.f)return true;
+  W->Until=bThere?Elapsed+BattleTactics::ArriveWatch():Elapsed;
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARRIVE_WATCH t=%.0f squad=%d team=%d sector=%d arrived=%d walk_in=%.0f until=%.0f"),Elapsed,Squad.SquadID,Squad.Team,Squad.bSectorMission?1:0,bThere?1:0,Elapsed-W->Start,W->Until);
+ }
+ return Elapsed<W->Until;
+}
 void UBattleMatch::Finish(int32 WinningTeam, const FString& Reason)
 {
 	if (Phase != EBattleMatchPhase::Combat) return;

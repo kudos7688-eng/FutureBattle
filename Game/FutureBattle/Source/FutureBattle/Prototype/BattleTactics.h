@@ -53,6 +53,17 @@ namespace BattleTactics
  // the way clear of walls. The shots suppress like covering fire. BattleLeaderRuntime.cpp (Follow).
  float MemorySeconds();
  float SuppressFire();
+ // Contact trial, user 2026-11-25 (STATUS "弾薬と補給" 14:10: 56% of the time without an enemy in sight is walking on an attack-move
+ // mission short of its destination; missions change about 1.5 times a minute per squad, so a squad that arrives walks on at once).
+ // -BattleArriveWatch=s (default 0 = off, 0..60): an AI rifle squad on an attack-move mission keeps that mission from 65 m before
+ // its destination (a road waypoint is replaced by the next at 60 m, BattleRoutes.cpp) until s seconds after its leader came within
+ // 15 m of it (a sector mission: from entering the sector, for s seconds), so it walks in, stands and watches there (the watch of
+ // standing soldiers, -BattleSoldierWatch) before it is given the next mission. Walking in takes at most 30 s. Once per mission;
+ // only while the squad follows its mission (not while it fights, retreats or resupplies). Orders that pass at once: any order
+ // that is not an attack-move, the home defence, a group gathering, artillery raids and their screens, anti-tank hunts, mortar
+ // posts, surprise bridge legs; no vehicles or other squad types. A front post that moves back is taken up to s seconds late.
+ // Not saved (after a load a squad at its destination watches once more). BattleMatch.cpp (UpdateTeamOrders, ArriveWatchHolds).
+ float ArriveWatch();
  // Stage 2: -BattleSupplyAmmoShare=x (default 0 = off, 0..0.9): an infantry squad whose living members together hold x or less of
  // their full reserve (loaded rounds are not counted, so a refilled squad is never low) goes for ammunition (a supply vehicle in
  // reach, else home), instead of only when half or all of them are empty; it resumes with 0.9 of the reserve or more. Own squad

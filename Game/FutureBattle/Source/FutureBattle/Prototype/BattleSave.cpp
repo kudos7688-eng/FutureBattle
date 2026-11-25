@@ -476,6 +476,7 @@ bool UBattleMatch::RestoreSnapshot(const UBattleSave* Save)
  // Legacy saves still discard route choices and leave the old update clock unchanged.
  if(Save->PlayerRoutesVersion==1){PlayerRoutes=MoveTemp(StagedPlayerRoutes);PlayerRouteClock=Save->SavedPlayerRouteClock;}
  else PlayerRoutes.Reset();
+ ArriveWatches.Reset(); // trial -BattleArriveWatch: not saved
 	MatchID = Save->MatchID; Phase = static_cast<EBattleMatchPhase>(Save->Phase); Credits[0] = Save->AllyCredits; Credits[1] = Save->EnemyCredits;
 	Score[0] = Save->AllyScore; Score[1] = Save->EnemyScore; Elapsed = Save->Elapsed; DirectorClock = Save->DirectorClock; SupplyClock = Save->SupplyClock;
 	Objectives = Save->Objectives; Winner = Save->Winner;

@@ -29,6 +29,11 @@ float BattleTactics::MemorySeconds()
  static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleMemorySeconds="),Value);return FMath::IsFinite(Value)&&Value>0.f?FMath::Clamp(Value,1.f,120.f):0.f;}();
  return Seconds;
 }
+float BattleTactics::ArriveWatch()
+{
+ static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleArriveWatch="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,60.f):0.f;}();
+ return Seconds;
+}
 float BattleTactics::SuppressFire()
 {
  static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSuppressFire="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,60.f):0.f;}();
