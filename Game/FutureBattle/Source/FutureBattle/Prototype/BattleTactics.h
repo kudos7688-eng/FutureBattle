@@ -46,6 +46,13 @@ namespace BattleTactics
  bool JoinFight();
  float JoinFightRange();
  int32 JoinFightMax();
+ // Contact trial, user 2026-11-25. -BattleMemorySeconds=s (default 0 = UBattleTuning::MemorySeconds, 5 s; 1..120): how long a soldier
+ // keeps an enemy he no longer sees (before the recruit/veteran factor). The 5 s caps inside the cover actions stay.
+ // -BattleSuppressFire=s (default 0 = off, 0..60): a soldier who stands still and has lost sight of the squad's target keeps firing
+ // at where he last saw it himself (not a report) for s seconds, within his weapon's engagement distance and with at least 60% of
+ // the way clear of walls. The shots suppress like covering fire. BattleLeaderRuntime.cpp (Follow).
+ float MemorySeconds();
+ float SuppressFire();
  // Stage 2: -BattleSupplyAmmoShare=x (default 0 = off, 0..0.9): an infantry squad whose living members together hold x or less of
  // their full reserve (loaded rounds are not counted, so a refilled squad is never low) goes for ammunition (a supply vehicle in
  // reach, else home), instead of only when half or all of them are empty; it resumes with 0.9 of the reserve or more. Own squad
