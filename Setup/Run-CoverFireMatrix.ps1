@@ -10,7 +10,7 @@ $conds=[ordered]@{V0=@('-CoverValidation','0');FV0=@('-CoverFire','1','-CoverVal
 $jobs=New-Object System.Collections.Generic.List[object]
 foreach($seed in 7,19,43){foreach($map in 'D','A'){foreach($swap in $false,$true){foreach($c in $conds.Keys){if($Only.Count -and $c -notin $Only){continue}
  $name="$Prefix-$map-s$seed$(if($swap){'-swap'})-$c-$Suffix"
- $a=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'Test-WideSight.ps1'),'-Map',$map,'-OutputName',$name,'-SightRange','10000','-WeaponRange','5000','-Area','-Experiment','-RoundTripSave','-CoverActions','1','-FlankCoordination','1','-ObserveTactics','-Seed',"$seed",'-BehaviorConcurrency',"$Parallel",'-FrozenBuild',$Frozen)+$conds[$c]
+ $a=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'Test-WideSight.ps1'),'-Map',$map,'-OutputName',$name,'-SightRange','10000','-WeaponRange','5000','-Area','-Experiment','-CoverActions','1','-FlankCoordination','1','-ObserveTactics','-Seed',"$seed",'-BehaviorConcurrency',"$Parallel",'-FrozenBuild',$Frozen)+$conds[$c]
  if($swap){$a+='-Swap'}
  $jobs.Add(@{name=$name;args=$a})}}}}
 $running=@{}; $i=0; $log=Join-Path $PSScriptRoot "Benchmarks/SightTrial-20261111/$Prefix-matrix-$Suffix.txt"

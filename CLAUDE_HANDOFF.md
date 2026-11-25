@@ -21,7 +21,7 @@ STATUS/ROADMAP/PROTOTYPEは追記型で、古い「未実装」「既定OFF」�
 
 - UE 5.8.4の環境と20体試作は完成済み。工程1〜8の試作実装と最終area-r6検証が完了。認識100m、射程50m（訓練倍率あり）。
 - 混成広域は隊長Actor＋Mass部下、500体では50 Actor＋450 Mass。Mass部下の遠距離VATは通常ON。旧全Actor・隔離隊長・Phase3とは処理/試験条件を区別する。
-- RTS/TPS操作、AI委任、撤退・集合・援護・迂回、混成保存、混成FastMatch、1エリア戦の補充/勝敗が実装されている。
+- RTS/TPS操作、AI委任、撤退・集合・援護・迂回、混成FastMatch、1エリア戦の補充/勝敗が実装されている。一戦中のセーブ・ロード（混成保存）は 2026-11-25 のユーザー決定で削除した。
 - area-r6は基本210、Area24、混成Fast15、混成保存35が成功。A/B×陣営入替4戦＋描画B1戦が600秒完走。これは当該ビルドの記録で、以後の変更の合格を保証しない。[最終報告](Setup/Benchmarks/SightTrial-20261111/report-area-final.md)。
 - **flank-effect-r1比較は本書作成時に実行中であることをプロセスで確認した。** 従来/緩和/片軍のみ迂回×A/B×seed7/19/43×配置入替の48戦。予備4戦の結果を全体結論にしない。
 - 次の承認済み工程は、現行比較の終了・集計・証拠固定後に「方向性のある遮蔽と短い側方経路」の局所検証。その後にカバー動作/照準切替、連携改善、全体マップ拡張という順序。現行A/Bを保持した別環境で段階的に進める。
@@ -73,7 +73,6 @@ Test-Battleは通常NullRHIで実行し、`Setup/Battle-Smoke-日時.log`へ記�
 |変更対象|主な専用試験（Setup配下）|
 |---|---|
 |Area補充・資源・本拠地・勝敗|`Test-Area.ps1`|
-|混成保存・読込|`Test-MixedSave.ps1`|
 |混成購入・予算|`Test-MixedFast.ps1`|
 |混成広域全般|`Test-WideMixed.ps1`|
 |共有移動・衝突・到着予約|`Test-MovementStability.ps1`、`Test-ContactMovement.ps1`|
@@ -81,17 +80,16 @@ Test-Battleは通常NullRHIで実行し、`Setup/Battle-Smoke-日時.log`へ記�
 |直接操作・敵表示・回避|`Test-TPSControl.ps1`、`Test-TPSVisibility.ps1`、`Test-TPSAvoidance.ps1`|
 |隊長/Mass・VAT|`Test-LeaderCommand.ps1`、`Test-LeaderPhase3.ps1`、`Test-VATDisplay.ps1`（条件を確認）|
 
-例：Area/保存を変更した場合の描画回帰。各コマンドの終了を確認して順に実行する。
+例：Areaを変更した場合の描画回帰。
 
 ```powershell
 $runName = 'claude-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
 .\Setup\Test-Area.ps1 -OutputName $runName -Rendered
-.\Setup\Test-MixedSave.ps1 -OutputName $runName -Rendered
 ```
 
 Areaの成功ログは `BATTLE_AREA_RESULT failures=0`。他試験は各スクリプトが要求する結果行・FAIL不在・画像・result.jsonを確認する。`-Rendered`は通常オフスクリーン描画で、表示された窓を手動操作する試験とは異なる。画像が生成されたことと目視確認済みを区別する。Claude側で画像を開けない場合はその検証を未実施として記録する。NullRHI合格から描画品質やGPU性能を推定しない。
 
-一戦通しの確認と固定機構試験も分ける。通常A/Bの双方、配置入替、複数seed、必要な途中保存を変更範囲に合わせて選ぶ。旧全ActorやPhase3の合格を混成Areaの合格として代用しない。
+一戦通しの確認と固定機構試験も分ける。通常A/Bの双方、配置入替、複数seedを変更範囲に合わせて選ぶ。旧全ActorやPhase3の合格を混成Areaの合格として代用しない。
 
 ## 6. 手動起動と操作
 
@@ -105,14 +103,7 @@ Areaの成功ログは `BATTLE_AREA_RESULT failures=0`。他試験は各スク�
 
 AreaはQで全選択→JでAI委任→Pで開始。RTSはWASD/ホイール、右クリック移動、T→右クリック攻撃移動、G→右クリック防衛、H停止。Eで選択隊長をTPS操作し、TabでRTSへ戻る。TPSはWASD/マウス/左クリック射撃/Rリロード。Kで手動指揮に戻す。混成Fastは1/2/3で購入、Enterで開始。
 
-F8保存/F9読込。同じモード/マップ/認識・射程/戦術条件から使う。各スロットは再保存時に上書きされる。
-
-|モード|保存スロット|
-|---|---|
-|旧全Actor|FutureBattleQuick01|
-|固定混成|FutureBattleMixedQuick02|
-|混成FastMatch|FutureBattleMixedFastQuick02|
-|Area|FutureBattleAreaQuick03|
+一戦中のセーブ・ロード（旧 F8 保存／F9 読込）は無い（2026-11-25 に削除）。
 
 ## 7. コードの入口
 
@@ -128,8 +119,7 @@ F8保存/F9読込。同じモード/マップ/認識・射程/戦術条件から
 |BattleStableMovement、BattleContactMovement|共有移動、混雑・接触|
 |BattleCover、BattleFieldLayout、BattleMapCommandlet|遮蔽、配置、マップ生成。既存手編集資産を保持|
 |BattleArea、BattleAreaState、BattleMixedRecruitment、BattleMatch|Areaと補充、試合/経済|
-|BattleSave、BattleTacticsSave、BattleMixedSaveValidation|保存形式、戦術状態、復元検証|
-|BattleVATDisplay|VAT描画と復元時の表示登録|
+|BattleVATDisplay|VAT描画と表示登録|
 |各 *Smoke.cpp / *Trial.cpp|専用試験・計測用fixture|
 
 調整値は `Game/FutureBattle/Config/DefaultGame.ini` 等。保存済み画質設定も結果に影響するため、Default設定だけを条件としない。既存資産を再生成する `-Force` を安易に使わない。

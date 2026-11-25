@@ -22,58 +22,10 @@ void UBattlePerception::Capture(TMap<int32, FBattleObserver>& OutObservers, TArr
 	for (auto& Report : OutReports) { Report.DeliveryTime -= Now; Report.Contact.LastSeenTime -= Now; }
 }
 
-void UBattlePerception::CaptureSquadKnowledge(TArray<FBattleSavedSquadContact>& OutContacts, TArray<FBattleSquadReport>& OutReports, double Now) const
-{
-	OutContacts.Reset(); OutReports = SquadReports;
-	for (const auto& Intel : SquadIntel) for (const auto& Known : Intel.Value.Known)
-	{
-		FBattleSavedSquadContact Entry; Entry.SquadID = Intel.Key; Entry.Contact = Known.Value.Contact; Entry.Contact.LastSeenTime -= Now;
-		OutContacts.Add(Entry);
-	}
-	for (auto& Report : OutReports) { Report.DeliveryTime -= Now; Report.Contact.LastSeenTime -= Now; }
-}
-
-void UBattlePerception::RestoreSquadKnowledge(const TArray<FBattleSavedSquadContact>& SavedContacts, const TArray<FBattleSquadReport>& SavedReports, double Now)
-{
-	SquadIntel.Reset(); SquadReports.Reset(); SquadReportKeys.Reset();
-	if (!SquadKnowledgeMode(0) && !SquadKnowledgeMode(1)) return;
-	// As for the soldiers' contacts: nobody sees anybody until the next update says so.
-	for (const auto& Entry : SavedContacts)
-	{
-		FBattleSquadContact Known; Known.Contact = Entry.Contact; Known.Contact.LastSeenTime += Now; Known.Contact.bVisible = false; Known.Contact.bTracked = false;
-		SquadIntel.FindOrAdd(Entry.SquadID).Known.Add(Known.Contact.TargetID, Known);
-	}
-	for (FBattleSquadReport Report : SavedReports)
-	{
-		Report.DeliveryTime += Now; Report.Contact.LastSeenTime += Now;
-		const FIntVector Key(Report.SourceSquadID, Report.ReceiverSquadID, Report.Contact.TargetID);
-		if (SquadReportKeys.Contains(Key)) continue;
-		SquadReportKeys.Add(Key); SquadReports.Add(Report);
-	}
-	UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_SQUAD_KNOWLEDGE_RESTORE squads=%d contacts=%d reports=%d"), SquadIntel.Num(), SavedContacts.Num(), SquadReports.Num());
-}
-
-void UBattlePerception::CaptureCrossSector(TArray<FBattleSavedCrossLook>& Out, double Now) const
-{
-	Out.Reset();
-	for (const auto& Look : CrossSectorLook) if (Look.Value > Now)
-	{
-		FBattleSavedCrossLook Entry; Entry.ObserverID = static_cast<int32>(static_cast<uint32>(Look.Key >> 32)); Entry.TargetID = static_cast<int32>(static_cast<uint32>(Look.Key)); Entry.Remaining = Look.Value - Now;
-		Out.Add(Entry);
-	}
-	Out.Sort([](const FBattleSavedCrossLook& A, const FBattleSavedCrossLook& B) { return A.ObserverID != B.ObserverID ? A.ObserverID < B.ObserverID : A.TargetID < B.TargetID; });
-}
-
-void UBattlePerception::RestoreCrossSector(const TArray<FBattleSavedCrossLook>& Saved, double Now)
-{
-	CrossSectorLook.Reset();
-	for (const auto& Entry : Saved) AllowCrossSector(Entry.ObserverID, Entry.TargetID, Now + Entry.Remaining);
-}
-
 void UBattlePerception::Restore(const TMap<int32, FBattleObserver>& SavedObservers, const TArray<FBattleReport>& SavedReports, double Now)
 {
 	Observers = SavedObservers; PendingReports = SavedReports; PendingCounts.Reset();
-	// The squads' tables come back with RestoreSquadKnowledge (BattleSave.cpp); without it they are rebuilt from the members' own contacts.
+	// Fixture contacts rebuild the squads' tables from the members' own contacts.
 	SquadIntel.Reset(); SquadReports.Reset(); SquadReportKeys.Reset();
 	NextScanTimes.Reset(); LastScanTimes.Reset();
 	for (auto& Observer : Observers)

@@ -172,8 +172,6 @@ void ABattleController::SetupInputComponent()
 	Button(TEXT("ReservationToFront"), EKeys::Equals, &ABattleController::NewestReservationToFront);
 	Button(TEXT("PlanPanel"), EKeys::U, &ABattleController::TogglePlanPanel);
 	Button(TEXT("StartMatch"), EKeys::Enter, &ABattleController::StartMatch);
-	Button(TEXT("SaveMatch"), EKeys::F8, &ABattleController::SaveMatch);
-	Button(TEXT("LoadMatch"), EKeys::F9, &ABattleController::LoadMatch);
 	Button(TEXT("BuyKey"), EKeys::B, &ABattleController::BuyKey); // area battle: purchase panel; otherwise the support request
 	Button(TEXT("Reload"), EKeys::R, &ABattleController::Reload);
 	Button(TEXT("ToggleCombat"), EKeys::P, &ABattleController::ToggleCombat);
@@ -435,28 +433,6 @@ void ABattleController::StartMatch()
 	if (Match->IsEnabled()) { Match->StartCombat(); ShowNotice(Match->LastMessage); }
 }
 
-void ABattleController::SaveMatch()
-{
- if(const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); R->IsEnabled()&&!R->IsWideField()) { ShowNotice(TEXT("この部隊構成の保存は未対応です")); return; }
-	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
-	if (Match->IsEnabled())
- {
-  const bool Saved=Match->SaveMatch(QuickSaveSlot);
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SAVE_UI success=%d message=%s"),Saved?1:0,*Match->LastMessage);
-  ShowNotice(BattleUIText::SaveResult(Saved,false,Match->LastMessage));
- }
-}
-void ABattleController::LoadMatch()
-{
- if(const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); R->IsEnabled()&&!R->IsWideField()) { ShowNotice(TEXT("この部隊構成の読込は未対応です")); return; }
-	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
-	if (Match->IsEnabled())
- {
-  const bool Loaded=Match->LoadMatch(QuickSaveSlot);
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_LOAD_UI success=%d message=%s"),Loaded?1:0,*Match->LastMessage);
-  ShowNotice(BattleUIText::SaveResult(Loaded,true,Match->LastMessage));
- }
-}
 void ABattleController::ResetMatchControl()
 {
 	EnterTactical(); Selected.Reset(); LastControlled = nullptr; bTriggerHeld = false; PendingOrder = EBattleOrder::Move;
@@ -1559,7 +1535,7 @@ void ABattleController::PressCommandButton(int32 Index)
 bool ABattleController::HandleGamepadMenu(const FInputKeyEventArgs& Params)
 {
  if(!Params.Key.IsGamepadKey()||Params.Key.IsAnalog())return false;
- // Keep ownership through release, including after confirmation, load or a keyboard mode switch.
+ // Keep ownership through release, including after confirmation or a keyboard mode switch.
  if(GamepadMenuKeys.Contains(Params.Key))
  {if(Params.Event==IE_Released)GamepadMenuKeys.Remove(Params.Key);return true;}
  if(!bTactical)return false;
@@ -1578,8 +1554,8 @@ bool ABattleController::HandleGamepadMenu(const FInputKeyEventArgs& Params)
   }
   return true;
  }
- if(Params.Key==EKeys::Gamepad_DPad_Up)GamepadMenuRow=(GamepadMenuRow+5)%6;
- else if(Params.Key==EKeys::Gamepad_DPad_Down)GamepadMenuRow=(GamepadMenuRow+1)%6;
+ if(Params.Key==EKeys::Gamepad_DPad_Up)GamepadMenuRow=(GamepadMenuRow+3)%4;
+ else if(Params.Key==EKeys::Gamepad_DPad_Down)GamepadMenuRow=(GamepadMenuRow+1)%4;
  else if(Params.Key==EKeys::Gamepad_FaceButton_Right)bGamepadMenuOpen=false;
  else if(Params.Key==EKeys::Gamepad_FaceButton_Bottom)ConfirmGamepadMenu();
  return true;
@@ -1592,9 +1568,7 @@ void ABattleController::ConfirmGamepadMenu()
  {
  case 0: FormGroupSelected();break;
  case 1: SelectGroupSelected();break;
- case 2: SaveMatch();break;
- case 3: LoadMatch();break;
- case 4:
+ case 2:
   bGroundFloorPending=!bGroundFloorPending;
   ShowNotice(bGroundFloorPending?TEXT("次の地点・道筋命令：1階を指定"):TEXT("1階指定を解除"));break;
  default: break;

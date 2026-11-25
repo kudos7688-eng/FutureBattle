@@ -56,7 +56,7 @@ private:
 	int32 BenchmarkAdjustedSquads = 0;
 	void UpdateBenchmark();
 	void UpdateMatchSoak();
-	bool bMatchSoakSaved = false, bMatchSoakComplete = false;
+	bool bMatchSoakComplete = false;
 	float MatchSoakNextOrder = 0;
 	bool bSmokeMode = false;
 	int32 SmokeFailures = 0;
@@ -73,7 +73,6 @@ private:
 	void RunAbilitySmokeTest();
 	void RunMatchSmokeTest();
 	void RunObjectiveSmokeTest();
-	void RunSaveSmokeTest();
 	void RunSupportSmokeTest();
 	void RunScaleSmokeTest();
 	int32 ScaleSmokeStage = 0, ScaleSmokeAmmo = 0, ScaleSmokeReserve = 0;

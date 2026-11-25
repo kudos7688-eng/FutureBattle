@@ -38,29 +38,12 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("PRONE / X TO STAND"),TEXT("伏せ ／ Xで立つ"));M.Add(TEXT("CROUCHED / X FOR PRONE"),TEXT("しゃがみ ／ Xで伏せ"));M.Add(TEXT("STANDING / X TO CROUCH"),TEXT("立ち ／ Xでしゃがむ"));M.Add(TEXT("CHANGING STANCE"),TEXT("姿勢を変えている途中"));
   M.Add(TEXT("COVER / FIRE TO PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("COVER / FIRE = BLIND FIRE / AIM + FIRE = PEEK / C OR MOVE TO RELEASE"),TEXT("遮蔽中 ／ 射撃で壁越しに撃つ ／ 構えて射撃で身を出す ／ Cか移動で解除"));M.Add(TEXT("BLIND FIRE"),TEXT("壁越し射撃"));M.Add(TEXT("NO NEARBY COVER WITH SAFE PEEK"),TEXT("近くに安全に撃てる遮蔽がない"));
   M.Add(TEXT("AI PAUSED / practice controls freely"),TEXT("AI停止中 ／ 自由に操作を練習できます"));M.Add(TEXT("AI RESUMED"),TEXT("AI再開"));M.Add(TEXT("GAME PAUSED [.]"),TEXT("一時停止 [.]"));
-  // Match and save messages.
-  M.Add(TEXT("Player route save requires BattleSaveRoutes=1"),TEXT("経路付き保存を読むには -BattleSaveRoutes=1 が必要です"));
-  M.Add(TEXT("Invalid player route extension"),TEXT("保存されたプレイヤー経路の版・件数・時計が不正です"));
-  M.Add(TEXT("Invalid player route squad"),TEXT("保存されたプレイヤー経路の部隊が不正です"));
-  M.Add(TEXT("Invalid player route state"),TEXT("保存されたプレイヤー経路の命令・座標・期限が不正です"));
-  M.Add(TEXT("Invalid player route waypoint"),TEXT("保存されたプレイヤー経路の中継点が不正です"));
+  // Match messages.
   M.Add(TEXT("LAUNCHER EQUIPPED"),TEXT("対戦車火器を装備"));
   M.Add(TEXT("RIFLE EQUIPPED"),TEXT("ライフルを装備"));
   M.Add(TEXT("Invalid training price"),TEXT("練度の購入価格が不正です"));
   M.Add(TEXT("Match roster capacity reached (1000 including losses)"),TEXT("兵の記録数が上限に達しました（損失を含めて1000人）"));
   M.Add(TEXT("Match roster capacity reached (500 including losses)"),TEXT("兵の記録数が上限に達しました（損失を含めて500人）"));
-  M.Add(TEXT("Could not write save file"),TEXT("保存ファイルを書き込めませんでした"));
-  M.Add(TEXT("Indirect-fire trial configuration does not match"),TEXT("保存時と間接射撃の設定が違います"));
-  M.Add(TEXT("Strength/shield trial configuration does not match"),TEXT("保存時と戦力・盾の設定が違います"));
-  M.Add(TEXT("Composition planner configuration does not match"),TEXT("保存時と編成計画の設定が違います"));
-  M.Add(TEXT("Composition saving price does not match definitions"),TEXT("保存された購入予定額が現在の定義と一致しません"));
-  M.Add(TEXT("Mixed snapshot required"),TEXT("混成モードの保存データが必要です"));
-  M.Add(TEXT("Player or game mode unavailable; restore aborted"),TEXT("操作担当またはゲームモードが利用できず読込を中止しました"));
-  M.Add(TEXT("Navigation unavailable; restore aborted"),TEXT("経路が利用できず読込を中止しました"));
-  M.Add(TEXT("Saved route unreachable; restore aborted"),TEXT("保存された経路を通れず読込を中止しました"));
-  M.Add(TEXT("Could not stage body host; restore aborted"),TEXT("表示の土台を準備できず読込を中止しました"));
-  M.Add(TEXT("Could not stage representations; restore aborted"),TEXT("兵の表示を準備できず読込を中止しました"));
-  M.Add(TEXT("Restore failed while creating units"),TEXT("兵の生成中に読込に失敗しました"));
   M.Add(TEXT("RECRUIT"),TEXT("新兵"));
   M.Add(TEXT("REGULAR"),TEXT("正規兵"));
   M.Add(TEXT("VETERAN"),TEXT("熟練兵"));
@@ -79,16 +62,13 @@ const TMap<FString,FString>& Words()
   M.Add(TEXT("LAUNCHER EMPTY / REFILL AT HOME"),TEXT("対戦車弾なし ／ 本拠地で補充"));M.Add(TEXT("LAUNCHER LOADING"),TEXT("対戦車火器を装填中"));
   M.Add(TEXT("Exoskeleton soldier limit reached"),TEXT("外骨格兵の上限に達しました"));
   M.Add(TEXT("Supply vehicle limit reached"),TEXT("補給車の上限に達しました"));
-  M.Add(TEXT("Match restored"),TEXT("試合を読み込みました"));M.Add(TEXT("Match saved [F9 to load]"),TEXT("試合を保存しました [F9で読込]"));
   M.Add(TEXT("Mixed recruitment unavailable"),TEXT("購入できません"));M.Add(TEXT("Navigation unavailable"),TEXT("経路がありません"));
-  M.Add(TEXT("No compatible save found"),TEXT("使える保存データがありません"));M.Add(TEXT("No free squad slot (active squad limit)"),TEXT("部隊の空きがありません（稼働部隊の上限）"));
+  M.Add(TEXT("No free squad slot (active squad limit)"),TEXT("部隊の空きがありません（稼働部隊の上限）"));
   M.Add(TEXT("No reliable known enemy position / scout or receive a report"),TEXT("確かな敵の位置がありません ／ 偵察するか報告を待ってください"));
   M.Add(TEXT("Recruitment unavailable"),TEXT("今は購入できません"));M.Add(TEXT("Representation staging failed; purchase retained"),TEXT("表示の準備に失敗（購入は有効）"));
-  M.Add(TEXT("Save mode, map or rule configuration does not match"),TEXT("保存時とモード・マップ・規則が違います"));
   M.Add(TEXT("Squad record capacity reached (100 including lost squads)"),TEXT("部隊記録の上限に達しました（失った部隊を含めて100）"));
   M.Add(TEXT("Support rearming (20s)"),TEXT("支援攻撃の再装填中（20秒）"));M.Add(TEXT("Support requested / impact in 3s / -400 credits"),TEXT("支援攻撃を要請 ／ 3秒後に着弾 ／ 資源 -400"));
   M.Add(TEXT("Support requires 400 credits"),TEXT("支援攻撃には資源400が必要です"));M.Add(TEXT("Support unavailable"),TEXT("支援攻撃は使えません"));
-  M.Add(TEXT("Unsupported save mode or slot"),TEXT("この保存先・モードには対応していません"));M.Add(TEXT("Unsupported or invalid match header"),TEXT("保存データの形式が不正です"));
   return M;
  }();
  return Map;
@@ -159,16 +139,4 @@ static FString JaUncached(const FString& Text)
   if(bAny) return FString::Join(Parts,TEXT(" ／ "));
  }
  return Text;
-}
-
-FString BattleUIText::SaveResult(bool bSuccess,bool bLoading,const FString& Detail)
-{
- if(Detail==TEXT("Save file exceeds size limit"))return TEXT("保存ファイルがサイズ上限（1 GiB）を超えています");
- if(Detail==TEXT("Weapon or health inconsistent with squad type"))return TEXT("保存された武器または耐久値が兵種と一致しません");
- if(bSuccess)return bLoading?TEXT("試合を読み込みました（道筋の最終命令・複数選択・作戦カメラは復元対象外）"):
-  TEXT("試合を保存しました [F9で読込]（道筋の最終命令・複数選択・作戦カメラは保存対象外）");
- const FString Translated=Ja(Detail);
- if(!Translated.IsEmpty() && Translated!=Detail)return Translated;
- return bLoading?TEXT("読込に失敗しました。詳しい理由はログを確認してください"):
-  TEXT("保存に失敗しました。詳しい理由はログを確認してください");
 }

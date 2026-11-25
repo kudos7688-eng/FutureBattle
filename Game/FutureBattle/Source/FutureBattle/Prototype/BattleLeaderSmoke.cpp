@@ -30,7 +30,6 @@ void UBattleLeaderRuntime::RunSmoke()
   const auto SmallList=FBattleSquadListLayout::Make(FVector2D(1280,720),GetWorld());
   const auto SmallBar=FBattleCommandBarLayout::Make(FVector2D(1280,720),GetWorld());
   Check(SmallList.VisibleRows>0 && SmallList.VisibleRows<Layout.VisibleRows && SmallList.Origin.Y+SmallList.Height<=SmallBar.PanelTop && SmallList.Header+SmallList.VisibleRows*SmallList.RowHeight<=SmallList.Height,TEXT("list resize fits above wrapped command bar at 720p"));
-  Check(!GetWorld()->GetSubsystem<UBattleMatch>()->SaveMatch(TEXT("LeaderUnsupported")),TEXT("unsupported save is rejected"));
   SmokePosition=Position(2); IssueOrder(1,EBattleOrder::Move,SmokePosition+FVector(650,0,0));
   Mode->bCombatPaused=false; Mode->CombatStartsAt=0;
   FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSmoke,4.f,false); return;

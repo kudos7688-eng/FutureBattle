@@ -13,17 +13,23 @@
 #include "BattleLeaderRuntime.generated.h"
 
 class ABattleGameMode;
-class UBattleSave;
-struct FBattleSavedUnit;
+// Parameters used to stage a body before canonical IDs are allocated.
+struct FBattleBodyInit
+{
+ FBattleUnitState State;
+ FVector Position=FVector::ZeroVector;
+ FRotator Rotation=FRotator::ZeroRotator;
+};
+
 class UCapsuleComponent;
 class USkeletalMeshComponent;
 class UStaticMeshComponent;
 
 // Stage A: a cover place a soldier left because it was seen into. The place is kept by position (slot numbers follow the
-// order the places were built in), so it means the same place after a load, also before the places are built again.
+// order the places were built in).
 struct FBattleBrokenCover
 {
- int32 Slot=INDEX_NONE; // as numbered when he left it (for saves and logs)
+ int32 Slot=INDEX_NONE; // as numbered when he left it (for logs)
  FVector At=FVector::ZeroVector;
  double Until=0;
 };
@@ -171,7 +177,7 @@ struct FBattleLeaderPlan
  FVector Center=FVector::ZeroVector;
  TMap<int32,FVector> ArrivalGoals;
  // Map E cover arrival: a member's own short route from the end of the shared path to a cover slot that the
- // destination cannot reach in a straight line. Rebuilt on demand (not saved).
+ // destination cannot reach in a straight line. Rebuilt on demand.
  TMap<int32,TArray<FVector>> ArrivalTails;
  TMap<int32,TArray<FVector>> Corridors;
  int32 PathRequests=0, ArrivalReassignments=0, ContactProbes=0;
@@ -227,7 +233,7 @@ public:
  // Anti-tank explosion at a point: enemies of the shooter within ATSplashRadius lose up to ATSplashDamage (falling off to zero at the edge).
  // Radius/Damage below zero: the anti-tank values (the tank gun passes its own).
  int32 Explode(int32 ShooterID,FVector At,int32 ExcludeID,float Radius=-1.f,float Damage=-1.f);
- // Vehicles (tanks, squad type 4; armoured cars, type 5): living vehicle IDs (refreshed on purchase, restore and death), their bodies, armour and steering.
+ // Vehicles (tanks, squad type 4; armoured cars, type 5): living vehicle IDs (refreshed on purchase and death), their bodies, armour and steering.
  TSet<int32> VehicleIDs;
  TMap<int32,TWeakObjectPtr<USceneComponent>> Turrets;
  bool IsVehicle(int32 ID) const {return VehicleIDs.Num()>0&&VehicleIDs.Contains(ID);}
@@ -249,7 +255,7 @@ public:
  bool ApplyExoSuit(int32 ID);
  TMap<int32,FExoLook> ExoLooks;
  void UpdateExoLooks();
- // Infantry arms (BattleArms.cpp, 2026-11-22; Docs/design-infantry-arms.md): hand grenades and launcher rounds in flight (saved),
+ // Infantry arms (BattleArms.cpp, 2026-11-22; Docs/design-infantry-arms.md): hand grenades and launcher rounds in flight,
  // the per-frame step (equipment, timers, landings, AI throws/strikes/healing), the shared actions of the player and the AI,
  // and the elite platoon's role targets. Runs only while a trial switch is on, an elite platoon exists or a round is in flight.
  struct FArmsShell{int32 ShooterID=INDEX_NONE,Team=0;uint8 Kind=0;FVector From=FVector::ZeroVector,At=FVector::ZeroVector;float Remaining=0,Flight=0;}; // Kind 0 hand grenade, 1 launcher round
@@ -275,7 +281,7 @@ public:
  // Close-quarters assault (-BattleArmsAssault=1/2, BattleArms.cpp): bounds from cover to cover (at most 40 m each) toward a known
  // enemy within 150 m, so grenades, close weapons and strikes come within reach. Runtime only, like the other cover approaches.
  // A bound runs on to its cover with the enemy lost; ArmsBoundMemory keeps where the bound's enemy was seen last, and with no enemy
- // known the next bound heads there (for 30 s after that sighting). Cleared on restore with the cover approaches.
+ // known the next bound heads there (for 30 s after that sighting).
  bool StartAssault(int32 ID,int32 Target,const FVector& TargetAt,double Now,bool bInArea=false); // bInArea: a defender's bound, within 20 m inside its defended area
  TMap<int32,double> ArmsAssaultNext;
  // Charge (-BattleArmsCharge=1, BattleArms.cpp): an assault role runs at an enemy he sees within 12 m (after an assault bound, one
@@ -288,8 +294,8 @@ public:
  struct FArmsBoundMemory{int32 Target=INDEX_NONE;FVector At=FVector::ZeroVector;double SeenAt=-1.e9;};
  TMap<int32,FArmsBoundMemory> ArmsBoundMemory;
  TMap<int32,double> ArmsChargeNext,ArmsBoundArrived;double ArmsNextCharge=0;
- // Sector tasks (BattleArmsSector.cpp, -BattleArmsSectorTask / -BattleArmsRushWatch / -BattleArmsCoverFire). Runtime only, cleared on
- // restore. ArmsRushSamples: a defending squad's last sighting of an enemy (key squad << 32 | enemy); ArmsRushers: per squad, the
+ // Sector tasks (BattleArmsSector.cpp, -BattleArmsSectorTask / -BattleArmsRushWatch / -BattleArmsCoverFire). Runtime only.
+ // ArmsRushSamples: a defending squad's last sighting of an enemy (key squad << 32 | enemy); ArmsRushers: per squad, the
  // enemies seen closing on its place at 3 m/s or more (kept 3 s); ArmsCoverCalls: per bounder, the point to fire at; ArmsCoverFire:
  // per supporter, whose call he answers until when. bArmsCoverShot: the shot being fired is covering fire (it suppresses).
  struct FArmsRushSample{FVector At=FVector::ZeroVector;double Time=0;};
@@ -343,7 +349,7 @@ public:
  struct FVehicleOrder{FVector Requested=FVector::ZeroVector;int32 MissionRevision=-1;FVector Refused=FVector(1.e9);double RetryAt=0;};
  TMap<int32,FVehicleOrder> VehicleOrders;
  bool SameVehicleMission(int32 SquadID,EBattleOrder Order,const FVector& Goal) const;
- // Tank main gun (stage 2): picked target and reload per tank (not saved: a restored tank's gun is loaded).
+ // Tank main gun (stage 2): picked target and reload per tank.
  struct FTankGun{double ReadyAt=0,NextPick=0;int32 TargetKey=INDEX_NONE,Shots=0;FVector Aim=FVector::ZeroVector;bool bHasTarget=false,bBase=false;};
  TMap<int32,FTankGun> TankGuns;
  float TankGunEngage() const;
@@ -356,8 +362,8 @@ public:
  bool TankGunHit(int32 ID,int32 VictimID); // a direct hit's damage (TankGunDamage, armour pierced)
  int64 TankGunShots=0,TankGunHits=0,TankGunKills=0,TankGunVehicleHits=0,TankGunBaseHits=0,TankGunPicks=0;double TankGunMs=0;
  // Indirect fire (BattleArtillery.cpp, stage 1 2026-11-18): the mortar gunner (weapon Mortar) and the self-propelled gun (squad type 7).
- // Saved by combat extension 1. SetupCredit carries elapsed setup across a new world clock without a negative StillSince sentinel.
- struct FArtillery{double StillSince=-1,ReadyAt=0,NextPick=0,SetupCredit=0,LastFired=-1; // LastFired: not saved (-BattleSPGStayAfterFire)
+ // SetupCredit contributes to the elapsed setup used by the firing decision.
+ struct FArtillery{double StillSince=-1,ReadyAt=0,NextPick=0,SetupCredit=0,LastFired=-1; // LastFired: -BattleSPGStayAfterFire
  int32 Shots=0,TargetKey=INDEX_NONE;FVector Aim=FVector::ZeroVector;bool bHasTarget=false,bBase=false;};
  struct FArtilleryShell{int32 ShooterID=INDEX_NONE,Team=0;uint8 ShooterType=0;bool bSPG=false;FVector At=FVector::ZeroVector;float Remaining=0;};
  TMap<int32,FArtillery> Artillery;
@@ -376,12 +382,12 @@ public:
  // Picks an aim point from Known (unit key -> known position): a cluster of at least ArtilleryMinCluster soldiers within range and no
  // own unit within the blast radius plus spread (bFriendlyHeld: a candidate was refused for that). Then the enemy home if seen.
  bool PickArtilleryAim(int32 ID,const TMap<int32,FVector>& Known,FVector& Aim,bool& bBase,bool& bFriendlyHeld,int32* TargetKey=nullptr,bool bTeamClusters=false,double Now=0.,const TMap<int32,uint8>* KnownTypes=nullptr);
- TMap<int32,int32> ArtillerySupportSquad; // group fire support: the own squad each gun last fired for (log on change; not saved)
+ TMap<int32,int32> ArtillerySupportSquad; // group fire support: the own squad each gun last fired for (log on change)
  int64 ArtilleryGroupAims=0;
- TMap<int32,int32> CounterBatteryTarget; // -BattleCounterBattery: the enemy shooter each gun last aimed at (log on change; not saved)
+ TMap<int32,int32> CounterBatteryTarget; // -BattleCounterBattery: the enemy shooter each gun last aimed at (log on change)
  int64 CounterBatteryAims=0;
- TMap<int32,int32> CounterBatteryShots; // -BattleCounterBatteryShots: counter-battery shells fired in the current burst (not saved)
- TMap<int32,double> CounterBatteryRestUntil; // ... and the time the gun shoots only at soldiers until (not saved)
+ TMap<int32,int32> CounterBatteryShots; // -BattleCounterBatteryShots: counter-battery shells fired in the current burst
+ TMap<int32,double> CounterBatteryRestUntil; // ... and the time the gun shoots only at soldiers until
  int64 CounterBatteryFired=0,CounterBatteryRests=0;
  int64 RepairHeldShots=0; // -BattleRepairHoldFire: artillery steps skipped on the trip home
  bool AllyNear(int32 Team,const FVector& At,double Radius) const;
@@ -396,10 +402,8 @@ public:
  mutable int64 TankSightTraces=0,TankSightReused=0,TankOrderSkips=0;mutable double TankSightMs=0;int32 TankOrders=0;double TankOrderMs=0;
  // MixedFast or Area. bSelect selects a new team-0 leader (player purchase); OutSquadID receives the new squad.
  bool SpawnPurchasedSquad(int32 Team,EBattleTraining Training,FString& Error,bool bSelect=true,int32* OutSquadID=nullptr,uint8 SquadType=0,uint8 Grade=0); // Grade 1: elite platoon (rifle squads only, BattleArms.cpp)
- bool CreateBody(const FBattleSavedUnit& Entry,AActor* Host,FBattleLeaderBody& Body);
+ bool CreateBody(const FBattleBodyInit& Entry,AActor* Host,FBattleLeaderBody& Body);
  void DestroyBody(FBattleLeaderBody& Body);
- bool RestoreMixedBodies(const UBattleSave* Save,FString& Error);
- void RunMixedSaveSmoke();
  void RunMixedFastSmoke();
  void RunAreaSmoke();
  void RunCompositionSmoke();
@@ -476,7 +480,7 @@ public:
  uint64 PriorityProbeFrame=0;int32 PriorityProbesThisFrame=0;TMap<int32,double> CoverProbeFailedAt;
  // Set by every StartFirePosition call: false only because the soldier is already out of sight crouched where he is.
  bool bFirePositionHereGood=false;
- // Trial -BattleCoverApproach: runtime-only walk toward a hidden cover slot (not saved; cleared on restore).
+ // Trial -BattleCoverApproach: runtime-only walk toward a hidden cover slot.
  // bAssault (BattleArms.cpp, -BattleArmsAssault): a dash to cover close to the enemy; on arrival the soldier takes that cover.
  // bCharge (BattleArms.cpp, -BattleArmsCharge): a run at a seen enemy; the goal follows him and StepCharge moves the soldier. With
  // bVia he first walks to Via, a step aside from where the straight way was blocked (StartCharge).
@@ -497,10 +501,9 @@ public:
  // -BattleContactCover: where a soldier settled after walking to a firing position that is not a cover slot (runtime only, evaluation).
  TMap<int32,FVector> FirePositions;
  TMap<int32,FCoverApproach> CoverApproaches;
- // -BattleCoverFire: shots fired during the current AI peek (runtime only; a restored peek starts from zero).
+ // -BattleCoverFire: shots fired during the current AI peek.
  TMap<int32,int32> CoverPeekShots;
  // Trial -BattleBurstFire (BattleTactics.h): rounds left in the burst an AI soldier is firing and when he fired its last round.
- // Not saved; emptied on a restore (BattleMixedBodies.cpp), so a loaded match starts new bursts.
  TMap<int32,TPair<int32,double>> BurstLeft;
  // Blind fire (2026-11-19, user request; BattleBlindFire.cpp): a soldier hidden behind cover (CoverPhase 2) fires over a low
  // cover or around the edge of a wide one without leaving it. The player does it by firing without aiming (aiming and firing
@@ -590,7 +593,7 @@ public:
  // Stances (BattleStance.h; map E default). Runtime only: 0 stand, 1 crouch, 2 prone, and the earliest time each may change again.
  TMap<int32,uint8> Stances;
  TMap<int32,double> StanceLockedUntil;
- // Wall cover (BattleWallCover.cpp). Runtime only: a loaded battle keeps the cover action as a free place.
+ // Wall cover (BattleWallCover.cpp). Runtime only.
  struct FWallCover {FVector Normal=FVector::ZeroVector;uint8 PrevStance=0;bool bHigh=false;bool bPeek=false;};
  TMap<int32,FWallCover> WallCovers;
  TMap<int32,float> WallPushSeconds;
@@ -653,7 +656,7 @@ public:
  bool SoldierOrderActive(int32 ID);
  void StepSoldierOrder(int32 ID,float Dt,double Now,FVector& Direction);
  struct FSoldierPath{TArray<FVector> Points;int32 Next=1;};
- TMap<int32,FSoldierPath> SoldierPaths; // cache only; rebuilt from the saved goal (stall time and repaths are unit state)
+ TMap<int32,FSoldierPath> SoldierPaths; // cache only; rebuilt from the unit goal (stall time and repaths are unit state)
  void StepSoldierOrderTest();
  struct FSoldierOrderTest{int32 Stage=0,Unit=INDEX_NONE,Squad=INDEX_NONE,Failures=0;FVector Goal=FVector::ZeroVector;double Since=0,Arrived=0,ShotAt=0;int32 Shot=0;FString EndWhy;} SoldierTest;
  // Trial -BattleSectorMove=1 (2026-11-20, default 0; Play-Area turns it on for maps with sectors): the player's plain move click
@@ -723,7 +726,7 @@ public:
  // nothing to fire at (not in a cover action, not a vehicle, not under direct control) faces the squad's target when he knows
  // where it is, else the nearest enemy he sees, else the nearest he knows of (memory and reports still held; both within his
  // weapon's reach), else his share of the ground ahead (toward the enemy's home, or 70 degrees to either side by his place in the
- // squad). Not before his first perception scan (match start or a load). Sight has a 120-degree forward field of view.
+ // squad). Not before his first perception scan (match start). Sight has a 120-degree forward field of view.
  // BattleSoldierWatch.cpp; counts watch_{target,seen,contact,sector}_frames.
  static bool SoldierWatchEnabled(int32 Team);
  bool SoldierWatchDirection(int32 ID,int32 TargetID,const FVector& Pos,double Now,FVector& Out);
@@ -732,8 +735,7 @@ public:
  // fire at keeps his body along his way and turns his head - only his view (Sight) changes. He looks at the enemy he knows of
  // within his sight (KnownEnemyDirection), else to his share of the ground around the squad's way by his place in the squad
  // (ahead, 50 and 100 degrees to either side). =2: the members who look ahead keep looking ahead. WalkLooks holds his view
- // from one Follow to the end of the next (so his own sight checks there use it; dropped there unless he takes the look again,
- // and on a load; not saved: after a load it comes back with his next Follow after his first scan). BattleSoldierWatch.cpp; counts walk_look_{ahead,side,target,seen,contact}_frames.
+ // from one Follow to the end of the next (so his own sight checks there use it; dropped there unless he takes the look again). BattleSoldierWatch.cpp; counts walk_look_{ahead,side,target,seen,contact}_frames.
  static int32 WalkLookMode(int32 Team);
  bool WalkLookDirection(int32 ID,int32 TargetID,const FVector& Pos,const FVector& Way,double Now,FVector& Out);
  TMap<int32,FVector> WalkLooks;
@@ -741,13 +743,13 @@ public:
  // squad's target (none, unknown to him, out of his sight or of the distance) fires at an enemy soldier he sees himself within
  // the engagement distance - the one in the direction he was just hit from first, else the nearest. =2: hit with nothing to
  // fire at, he also turns toward where the shot came from for 2 s (as -BattleHitFace). Only his aim, fire and that turn
- // change (the squad's target, movement and cover do not); nothing is saved. BattleSoldierFire.cpp; counts
+ // change (the squad's target, movement and cover do not). BattleSoldierFire.cpp; counts
  // own_target_{frames,shots,at_shooter_frames,no_squad_target_frames,squad_target_unseen_frames,hit_turn_frames}.
  static int32 OwnTargetMode(int32 Team);
  // Trial -BattleOwnTargetCover=1/2 (default 0): firing at his own target, he takes cover near by against it (=2: also when
  // walking and that enemy is within 50 m). Counts own_cover_{requests,taken,taken_walking,none} and own_target_open_{standing,walking}_frames.
  static int32 OwnTargetCover(int32 Team);
- // Soldiers walking to cover against their own target (not saved: after a load such a walk ends by the squad's target rules).
+ // Soldiers walking to cover against their own target.
  TSet<int32> OwnCoverWalks;
  int32 OwnTarget(int32 ID,const FVector& Pos,double Now,bool& bAtShooter) const;
  void RevealShooter(int32 VictimID,int32 ShooterID,const FVector& From);
@@ -859,7 +861,7 @@ public:
  int32 ExposingEnemy(int32 ID,FVector Anchor,double Now) const; // BattleThreatCover.cpp
  uint64 RelocateFrame=0;int32 RelocatesThisFrame=0;
  // Soldiers who found the search budget full, with whether other threats saw in: on the next frame they search again with
- // the break already confirmed (no new check). Not saved: after a load they wait for their own phase, as before.
+ // the break already confirmed (no new check).
  TMap<int32,bool> RelocateWaiting;
  bool BrokenCoverSlot(int32 ID,int32 Slot,double Now) const; // BattleThreatCover.cpp
  void MarkBrokenCover(int32 ID,int32 Slot,double Until);
@@ -940,7 +942,6 @@ private:
  bool bEnabled=false, bSummaryDirty=true, bReduceHiddenBones=false, bReduceAnimTasks=false;
  bool bWideField=false;
  bool bDisplayLODEnabled=true;
- int32 RestoreStageFailureAfter=INDEX_NONE; // Exercised only by BattleMixedSaveSmoke / BattleAreaSmoke.
  bool bRangeAwareCombat=true; // BattleRangeAware=0 retains the legacy trial baseline.
  bool bStableMovement=true, bMovementTrial=false, bContactTrial=false, bContactAvoidance=true;
  bool ContactBlockersHeld=true, ContactWaitObserved=false, ContactReleased=false;

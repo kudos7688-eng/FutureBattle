@@ -9,7 +9,7 @@ class UWorld;
 // Shared tactical effect: weapon spread shrinks when crouched or prone (AI and direct control alike).
 // AI cognition: stand while moving, crouch when stopped in combat, stand up for a few seconds when the target is lost from
 // the lower eye height, go prone when pinned by suppression. Visuals are a placeholder (the body is squashed vertically).
-// Runtime only: not saved, a loaded battle starts standing.
+// Runtime stance state.
 namespace BattleStance
 {
  enum : uint8 { Stand=0, Crouch=1, Prone=2 };

@@ -62,7 +62,6 @@ public:
  // A dying follower leaves the far display for good: the far display has no death clips (call before Freeze).
  void ShowNear(int32 ID);
  void RemoveUnit(int32 ID);
- void ResetBodies();
  void Advance(int32 ID,float Dt);
  int64 StatAnimTicks=0,StatAnimEvals=0;
  float AnimDemand=0;

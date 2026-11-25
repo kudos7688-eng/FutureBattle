@@ -57,7 +57,6 @@ private:
  bool HoveredSector(class ABattleController* PC, FIntPoint& Out) const;
  void DrawMinimapOverlay(class ABattleController* PC, const struct FBattleMinimapLayout& Map);
  FBattleFogGrid Fog;
- uint64 FogRestoreGeneration=0;
  TArray<FBattleSectorInfo> Sectors;
  // Contact pointers exist only during DrawHUD; every frame rebuilds the snapshot in source order.
  TMap<int32,const FBattleContact*> FrameContacts;
