@@ -17,6 +17,8 @@
 // sector to the defender's first observation there, once per order; hot_defender_unobserved: orders that ended first), hot_select_us (time spent here). BATTLE_HOT_SECTORS every 10 s.
 #include "BattleLeaderRuntime.h"
 #include "BattleController.h"
+#include "BattleCover.h"
+#include "BattleGameMode.h"
 #include "BattleFieldLayout.h"
 #include "BattleMatch.h"
 #include "BattlePerception.h"
@@ -57,6 +59,38 @@ void UBattleLeaderRuntime::NoteHotObserved(int32 Team,const FVector& At,double N
  const FIntPoint C=BattleSectors::Cell(At);if(BattleSectors::Valid(C))HotObserved[Team].Add(Key(C),Now);
 }
 
+void UBattleLeaderRuntime::HotPlayerCells(const FVector& At,TSet<int32>& Out)
+{
+ const FIntPoint C0=BattleSectors::Cell(At);
+ for(int32 DX=-1;DX<=1;++DX)for(int32 DY=-1;DY<=1;++DY)
+ {
+  const FIntPoint C(C0.X+DX,C0.Y+DY);if(!BattleSectors::Valid(C))continue;
+  const FVector Mid=BattleSectors::Center(C);const double Half=BattleSectors::Size*.5;
+  const double Dx=FMath::Max(0.,FMath::Abs(At.X-Mid.X)-Half),Dy=FMath::Max(0.,FMath::Abs(At.Y-Mid.Y)-Half);
+  if(Dx*Dx+Dy*Dy<=PlayerRadius*PlayerRadius)Out.Add(Key(C));
+ }
+}
+
+TArray<int32> UBattleLeaderRuntime::HotAttackOrder(const TArray<int32>& Team0,const TArray<int32>& Team1)
+{
+ TArray<int32> Order;const TArray<int32>* By[2]={&Team0,&Team1};
+ for(int32 I=0;I<FMath::Max(Team0.Num(),Team1.Num());++I)for(int32 T=0;T<2;++T)if(I<By[T]->Num())Order.Add((*By[T])[I]);
+ return Order;
+}
+
+bool UBattleLeaderRuntime::HotTeamDetailed(const FHotSector& S,int32 Team,uint8 AttackBits,bool bObserved)
+{
+ // The player's team in his sectors; the attackers of an order on the sector; everyone else (a defender) only once observed.
+ return (S.Source==1&&Team==S.PlayerTeam)||(AttackBits&(1<<Team))!=0||bObserved;
+}
+
+bool UBattleLeaderRuntime::HotAttackAdd(TMap<int32,uint8>& Attack,int32 K,int32 Team)
+{
+ // A new sector only while fewer than AttackMax are listed; a listed one takes another attacking team at any time.
+ if(!Attack.Contains(K)&&Attack.Num()>=AttackMax)return false;
+ Attack.FindOrAdd(K)|=uint8(1<<Team);return true;
+}
+
 bool UBattleLeaderRuntime::IsHotSector(int32 Team,const FVector& At) const
 {
  if(Team<0||Team>1)return false;
@@ -65,6 +99,7 @@ bool UBattleLeaderRuntime::IsHotSector(int32 Team,const FVector& At) const
 
 void UBattleLeaderRuntime::StepHotSectors(double Now)
 {
+ if(DefendSmokeEnabled()&&!bDefendSmokeDone&&Mode&&Now>=Mode->CombatStartsAt+3.){bDefendSmokeDone=true;RunDefendSmoke(Now);}
  if(!HotSectorsEnabled()||!BattleFieldLayout::Of(GetWorld()).bSectors||Now<HotNext)return;
  HotNext=Now+1.;
  const double T0=FPlatformTime::Seconds();
@@ -85,14 +120,7 @@ void UBattleLeaderRuntime::StepHotSectors(double Now)
  TSet<int32> Player;int32 PlayerTeam=INDEX_NONE;
  if(auto* PC=GetWorld()->GetFirstPlayerController())if(const auto* Pawn=Cast<ABattleUnit>(PC->GetPawn()))if(const auto* U=Store->Find(Pawn->GetUnitID());U&&U->IsAlive())
  {
-  PlayerTeam=U->Team;const FVector P=Pawn->GetActorLocation();const FIntPoint C0=BattleSectors::Cell(P);
-  for(int32 DX=-1;DX<=1;++DX)for(int32 DY=-1;DY<=1;++DY)
-  {
-   const FIntPoint C(C0.X+DX,C0.Y+DY);if(!BattleSectors::Valid(C))continue;
-   const FVector Mid=BattleSectors::Center(C);const double Half=BattleSectors::Size*.5;
-   const double Dx=FMath::Max(0.,FMath::Abs(P.X-Mid.X)-Half),Dy=FMath::Max(0.,FMath::Abs(P.Y-Mid.Y)-Half);
-   if(Dx*Dx+Dy*Dy<=PlayerRadius*PlayerRadius)Player.Add(Key(C));
-  }
+  PlayerTeam=U->Team;HotPlayerCells(Pawn->GetActorLocation(),Player);
  }
  // 2 Attack orders (earliest group first).
  TMap<int32,uint8> Attack; // sector -> attacking teams (a bit per team)
@@ -102,7 +130,7 @@ void UBattleLeaderRuntime::StepHotSectors(double Now)
   TArray<int32> ByTeam[2];
   {TArray<int32> GIDs;Match->Groups.GetKeys(GIDs);GIDs.Sort();
    for(int32 GID:GIDs){const auto& G=Match->Groups[GID];if((G.Kind==0||G.Kind==2)&&G.Phase==1&&Match->Objectives.IsValidIndex(G.Objective)&&G.Team>=0&&G.Team<=1)ByTeam[G.Team].Add(GID);}}
-  TArray<int32> Order;for(int32 I=0;I<FMath::Max(ByTeam[0].Num(),ByTeam[1].Num());++I)for(int32 T=0;T<2;++T)if(I<ByTeam[T].Num())Order.Add(ByTeam[T][I]);
+  const TArray<int32> Order=HotAttackOrder(ByTeam[0],ByTeam[1]);
   for(int32 GID:Order)
   {
    const auto& G=Match->Groups[GID];
@@ -127,8 +155,7 @@ void UBattleLeaderRuntime::StepHotSectors(double Now)
    for(const FIntPoint& C:Cells)
    {
     if(!BattleSectors::Valid(C))continue;const int32 K=Key(C);
-    if(!Attack.Contains(K)&&Attack.Num()>=AttackMax)continue;
-    Attack.FindOrAdd(K)|=uint8(1<<G.Team);
+    if(!HotAttackAdd(Attack,K,G.Team))continue;
     const int32 DefKey=K*2+(1-G.Team);if(!HotAttackSince.Contains(DefKey))HotAttackSince.Add(DefKey,Now);
    }
   }
@@ -190,7 +217,7 @@ void UBattleLeaderRuntime::StepHotSectors(double Now)
  {
   auto& S=P.Value;
   for(int32 Team=0;Team<2;++Team)
-   S.bTeam[Team]=(S.Source==1&&Team==S.PlayerTeam)||((Attack.FindRef(P.Key)&(1<<Team))!=0)||Observed(Team,P.Key); // any source: the attackers of an order on it
+   S.bTeam[Team]=HotTeamDetailed(S,Team,Attack.FindRef(P.Key),Observed(Team,P.Key));
   ++BySource[S.Source];TeamSectors+=int32(S.bTeam[0])+int32(S.bTeam[1]);
  }
  Add(SightExperiment,TEXT("hot_seconds_player"),BySource[1]);Add(SightExperiment,TEXT("hot_seconds_attack"),BySource[2]);
@@ -203,4 +230,131 @@ void UBattleLeaderRuntime::StepHotSectors(double Now)
   for(int32 K:Keys){const auto& S=HotSectors[K];const FIntPoint C=CellOf(K);List+=FString::Printf(TEXT(" %d,%d:%d%s%s"),C.X,C.Y,S.Source,S.bTeam[0]?TEXT("a"):TEXT(""),S.bTeam[1]?TEXT("b"):TEXT(""));}
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HOT_SECTORS t=%.0f player=%d attack=%d heat=%d team_sectors=%d list=%s"),Now,BySource[1],BySource[2],BySource[3],TeamSectors,*List);
  }
+}
+
+bool UBattleLeaderRuntime::DefendSmokeEnabled()
+{
+ static const bool b=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleDefendSmoke="),V);return V!=0;}();
+ return b;
+}
+
+// Fixed-scene self-test (2026-11-25, the allocation note: test the boundaries on a small fixed scene before any seed comparison;
+// Codex review of the first version applied). It checks the pieces of the hot-sector choice and one defensive placement on the
+// real map cover; it does not judge strength. All hot-sector state and the diagnostic counters are saved first and restored at the
+// end, so the match goes on as without the test (log lines stay).
+//  H1 the player's circle: from a sector centre it touches all 9 sectors around, from a sector corner the 4 that meet there.
+//  H2 the defender is not detailed before it observed: the attackers of an order are, the other team only once observed; in the
+//     player's sectors the player's team is, the other team only once observed; in a contact sector only an observing team.
+//  H3 the shared attack limit: the teams take turns; at most 6 sectors; a listed sector takes the other attacking team.
+//  H4 the linger is 10 s: a player sector (no pawn refreshes it) is kept with the player's team detailed just before it runs out
+//     and leaves just after (other sources cleared, so nothing else can list it again).
+//  D1 placement: a team-0 rifle squad (6 or more living) holding the sector with the most cover slots, facing the enemy home.
+//     Every living member gets the candidates in some order, each once; 3 teams; the same input gives the same orders. Both his
+//     order and the plain nearest-first order go through the same greedy allocation (a taken slot within 1.9 m is skipped):
+//     the spread allocation stands wider across than the plain one, and at least 6 m from the leftmost to the rightmost soldier.
+void UBattleLeaderRuntime::RunDefendSmoke(double Now)
+{
+ int32 Failures=0;
+ auto Check=[&](bool bOk,const TCHAR* What){UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_DEFEND_SMOKE %s %s"),bOk?TEXT("PASS"):TEXT("FAIL"),What);if(!bOk)++Failures;};
+ // Saved state (restored at the end).
+ const auto SavedSectors=HotSectors;const auto SavedHeat=HotHeat;const auto SavedObs0=HotObserved[0];const auto SavedObs1=HotObserved[1];
+ const auto SavedSince=HotAttackSince;const auto SavedAlive=HotAlive;const double SavedNext=HotNext,SavedNextLog=HotNextLog;
+ const auto SavedDiag=SightExperiment.CoverDiag;
+ // H1
+ {
+  TSet<int32> Mid,Corner;const FIntPoint C(10,7);
+  HotPlayerCells(BattleSectors::Center(C),Mid);
+  HotPlayerCells(BattleSectors::Center(C)-FVector(BattleSectors::Size*.5,BattleSectors::Size*.5,0),Corner);
+  Check(Mid.Num()==9,TEXT("H1 player circle from a sector centre touches 9 sectors"));
+  Check(Corner.Num()==4,TEXT("H1 player circle from a sector corner touches 4 sectors"));
+ }
+ // H2
+ {
+  FHotSector A;A.Source=2;A.Attackers=1; // team 0 attacks the sector
+  Check(HotTeamDetailed(A,0,1,false),TEXT("H2 attackers detailed at once"));
+  Check(!HotTeamDetailed(A,1,1,false),TEXT("H2 defender not detailed before it observed"));
+  Check(HotTeamDetailed(A,1,1,true),TEXT("H2 defender detailed once it observed"));
+  FHotSector P;P.Source=1;P.PlayerTeam=0;
+  Check(HotTeamDetailed(P,0,0,false)&&!HotTeamDetailed(P,1,0,false)&&HotTeamDetailed(P,1,0,true),TEXT("H2 player sector: player's team, the other team once observed"));
+  FHotSector H;H.Source=3;
+  Check(!HotTeamDetailed(H,0,0,false)&&HotTeamDetailed(H,0,0,true),TEXT("H2 contact sector: only once observed"));
+ }
+ // H3
+ {
+  Check(HotAttackOrder({1,2,3},{10})==TArray<int32>({1,10,2,3}),TEXT("H3 the teams take turns for the shared limit"));
+  TMap<int32,uint8> Attack;int32 Added=0;
+  for(int32 K=0;K<8;++K)Added+=HotAttackAdd(Attack,K,K%2)?1:0;
+  Check(Added==AttackMax&&Attack.Num()==AttackMax,TEXT("H3 at most 6 attack-order sectors"));
+  Check(HotAttackAdd(Attack,0,1)&&Attack[0]==3,TEXT("H3 a listed sector takes the other attacking team when the list is full"));
+ }
+ // H4
+ {
+  HotSectors.Reset();HotHeat.Reset();HotObserved[0].Reset();HotObserved[1].Reset();HotAttackSince.Reset();
+  Check(FMath::IsNearlyEqual(Linger,10.),TEXT("H4 the linger is 10 s"));
+  const int32 K=Key(FIntPoint(1,1));
+  FHotSector P;P.Source=1;P.PlayerTeam=0;P.Since=Now;P.Until=Now+Linger;HotSectors.Add(K,P); // as registered at Now
+  HotNext=0;StepHotSectors(Now+Linger-.5);
+  const FHotSector* In=HotSectors.Find(K);
+  Check(In&&In->Source==1&&In->bTeam[0],TEXT("H4 player sector kept with the player's team just before the linger runs out"));
+  HotNext=0;StepHotSectors(Now+Linger+.5);
+  const FHotSector* Out=HotSectors.Find(K);
+  Check(!Out||Out->Source!=1,TEXT("H4 player sector leaves just after the linger"));
+ }
+ // D1
+ {
+  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* Cover=GetWorld()->GetSubsystem<UBattleCover>();auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+  Cover->BuildSlots();
+  TMap<int32,int32> PerCell;for(const FVector& At:Cover->GetSlots()){const FIntPoint C=BattleSectors::Cell(At);if(BattleSectors::Valid(C))++PerCell.FindOrAdd(Key(C));}
+  int32 BestCell=INDEX_NONE,BestN=0;for(const auto& P:PerCell)if(P.Value>BestN||(P.Value==BestN&&P.Key<BestCell)){BestN=P.Value;BestCell=P.Key;}
+  const FBattleSquadState* Squad=nullptr;
+  {
+   TArray<int32> SIDs;Store->GetSquads().GetKeys(SIDs);SIDs.Sort();
+   for(int32 SID:SIDs)
+   {
+    const auto* S=Store->FindSquad(SID);if(!S||S->Team!=0||S->SquadType!=BattleSquadType::Rifle||S->CommandStatus!=EBattleCommandStatus::Active)continue;
+    int32 Living=0;for(int32 ID:S->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive()&&Bodies.Contains(ID))++Living;
+    if(Living>=6){Squad=S;break;}
+   }
+  }
+  Check(BestCell!=INDEX_NONE&&BestN>=12,TEXT("D1 a sector with at least 12 cover slots"));
+  Check(Squad!=nullptr,TEXT("D1 a team-0 rifle squad with 6 living"));
+  if(BestCell!=INDEX_NONE&&Squad&&Match)
+  {
+   const FIntPoint Cell=CellOf(BestCell);const FVector Mid=BattleSectors::Center(Cell);
+   FBattleSquadState S=*Squad;S.Destination=Mid;S.Order=EBattleOrder::Defend;S.bSectorMission=true;
+   const FVector Forward=(Match->AreaHome(1)-Mid).GetSafeNormal2D();const FVector Right(-Forward.Y,Forward.X,0);
+   TArray<FVector> Candidates;
+   for(int32 Slot:Cover->NearbySlots(Mid,3600.f,256)){const FVector At=Cover->GetSlots()[Slot];if(BattleSectors::Cell(At)==Cell)Candidates.Add(At);}
+   TMap<int32,TArray<FVector>> Order,Again;
+   const int32 Teams3=SightExperiment.CoverDiag.FindRef(FName(TEXT("defend_spread_teams_3")));
+   PlanDefendSpread(S,Forward,Right,Candidates,Order);
+   const bool bThree=!SightExperiment.Enabled||SightExperiment.CoverDiag.FindRef(FName(TEXT("defend_spread_teams_3")))==Teams3+1;
+   PlanDefendSpread(S,Forward,Right,Candidates,Again);
+   TArray<int32> Living;for(int32 ID:S.Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())Living.Add(ID);
+   auto Less=[](const FVector& A,const FVector& B){return A.X!=B.X?A.X<B.X:A.Y!=B.Y?A.Y<B.Y:A.Z<B.Z;};
+   TArray<FVector> Sorted=Candidates;Sorted.Sort(Less);
+   bool bPerm=Order.Num()==Living.Num();
+   for(int32 ID:Living){const auto* O=Order.Find(ID);if(!O){bPerm=false;continue;}TArray<FVector> X=*O;X.Sort(Less);bPerm&=X==Sorted;}
+   Check(bPerm,TEXT("D1 every living member gets every candidate exactly once"));
+   Check(Living.Num()>=6&&bThree,TEXT("D1 three teams for 6 or more living"));
+   Check(Order.OrderIndependentCompareEqual(Again),TEXT("D1 the same input gives the same orders"));
+   if(bPerm&&Living.Num()>=2)
+   {
+    // The same greedy allocation for both orders.
+    auto Allocate=[&](TFunctionRef<const TArray<FVector>&(int32)> OrderOf){TArray<FVector> Taken;for(int32 ID:Living)for(const FVector& At:OrderOf(ID)){bool bTaken=false;for(const FVector& T:Taken)if(FVector::DistSquared2D(T,At)<FMath::Square(190.)){bTaken=true;break;}if(!bTaken){Taken.Add(At);break;}}return Taken;};
+    TArray<FVector> Plain=Candidates;Plain.Sort([&](const FVector& A,const FVector& B){const double DA=FVector::DistSquared2D(A,Mid),DB=FVector::DistSquared2D(B,Mid);return DA!=DB?DA<DB:A.X!=B.X?A.X<B.X:A.Y<B.Y;});
+    const TArray<FVector> Spread=Allocate([&](int32 ID)->const TArray<FVector>&{return Order[ID];});
+    const TArray<FVector> Near=Allocate([&](int32)->const TArray<FVector>&{return Plain;});
+    auto Width=[&](const TArray<FVector>& G){double Lo=DBL_MAX,Hi=-DBL_MAX;for(const FVector& V:G){const double L=FVector::DotProduct(V-Mid,Right);Lo=FMath::Min(Lo,L);Hi=FMath::Max(Hi,L);}return G.Num()?Hi-Lo:0.;};
+    const double WS=Width(Spread),WP=Width(Near);
+    Check(Spread.Num()==Living.Num(),TEXT("D1 the spread allocation places every member"));
+    Check(WS>=600.,TEXT("D1 the spread allocation is at least 6 m across"));
+    Check(WS>WP,TEXT("D1 the spread allocation stands wider across than the nearest-first one"));
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_DEFEND_SMOKE scene sector=%d,%d slots=%d candidates=%d members=%d width_spread_cm=%.0f width_plain_cm=%.0f"),Cell.X,Cell.Y,BestN,Candidates.Num(),Living.Num(),WS,WP);
+   }
+  }
+ }
+ HotSectors=SavedSectors;HotHeat=SavedHeat;HotObserved[0]=SavedObs0;HotObserved[1]=SavedObs1;HotAttackSince=SavedSince;HotAlive=SavedAlive;
+ HotNext=SavedNext;HotNextLog=SavedNextLog;SightExperiment.CoverDiag=SavedDiag;
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_DEFEND_SMOKE_RESULT failures=%d"),Failures);
 }

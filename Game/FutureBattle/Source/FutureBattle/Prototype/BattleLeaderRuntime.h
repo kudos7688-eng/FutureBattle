@@ -289,6 +289,16 @@ public:
  void NoteHotEvent(const FVector& At,float Points);
  void NoteHotObserved(int32 Team,const FVector& At,double Now);
  bool IsHotSector(int32 Team,const FVector& At) const; // that team's squads in the sector at At are detailed
+ // Pieces of the choice, shared with the self-test (BattleHotSectors.cpp).
+ static void HotPlayerCells(const FVector& At,TSet<int32>& Out);              // the sectors a 40 m circle around At touches
+ static TArray<int32> HotAttackOrder(const TArray<int32>& Team0,const TArray<int32>& Team1); // the teams' groups taking turns
+ static bool HotTeamDetailed(const FHotSector& S,int32 Team,uint8 AttackBits,bool bObserved);
+ static bool HotAttackAdd(TMap<int32,uint8>& Attack,int32 Key,int32 Team); // one attack-order sector under the shared limit
+ // Fixed-scene self-test -BattleDefendSmoke=1 (with -BattleHotSectors=1, maps with sectors): BATTLE_DEFEND_SMOKE_RESULT failures=N, once
+ // 3 s after the combat starts (Setup/Test-DefendSmoke.ps1).
+ static bool DefendSmokeEnabled();
+ void RunDefendSmoke(double Now);
+ bool bDefendSmokeDone=false;
  TMap<int32,FHotSector> HotSectors;TMap<int32,FHotHeat> HotHeat;TMap<int32,double> HotObserved[2];TMap<int32,double> HotAttackSince;TSet<int32> HotAlive;double HotNext=0,HotNextLog=0;
  // Sector tasks (BattleArmsSector.cpp, -BattleArmsSectorTask / -BattleArmsRushWatch / -BattleArmsCoverFire). Runtime only, cleared on
  // restore. ArmsRushSamples: a defending squad's last sighting of an enemy (key squad << 32 | enemy); ArmsRushers: per squad, the

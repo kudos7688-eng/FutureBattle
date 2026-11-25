@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 501 種類。
+計 502 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -150,6 +150,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleDangerRoute` | Value | 0 | BattleSectorRoute.cpp:28 |  |
 | `-BattleDeathShot` | Param | off | BattleLeaderRuntime.cpp:236 |  |
 | `-BattleDefendEngage` | Value | false | BattleGroups.cpp:50 |  |
+| `-BattleDefendSmoke` | Value | 0 | BattleHotSectors.cpp:237 |  |
 | `-BattleDefendSpread` | Value | 0 | BattleDefendSpread.cpp:28 |  |
 | `-BattleDelegationScreens` | Value | 空文字列 | BattleDelegationSmoke.cpp:90 |  |
 | `-BattleDepotHealth` | Value | 0.f | BattleArtillery.cpp:165 |  |
@@ -229,7 +230,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleHitDirection` | Value | 1 | BattleHUD.cpp:1236 |  |
 | `-BattleHitFace` | Value | 0 | BattleLeaderRuntime.cpp:1769 |  |
 | `-BattleHitReveal` | Value | 0 | BattleLeaderRuntime.cpp:1774 |  |
-| `-BattleHotSectors` | Value | 0 | BattleHotSectors.cpp:41 |  |
+| `-BattleHotSectors` | Value | 0 | BattleHotSectors.cpp:43 |  |
 | `-BattleKillLog` | Value | 1 | BattleHUD.cpp:1341 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
 | `-BattleLauncherDamage` | Value | 60.f | BattleArms.cpp:162 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
