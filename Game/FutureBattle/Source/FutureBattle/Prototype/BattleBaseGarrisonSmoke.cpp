@@ -48,6 +48,7 @@ void UBattleLeaderRuntime::StepBaseGarrisonSmoke(double Now)
   if(IssueOrder(GuardSquad,EBattleOrder::Defend,Asked))Clamped=FVector::Dist2D(Store->FindSquad(GuardSquad)->Destination,Home)<=Radius;
  }
  Check(Clamped,TEXT("outside order clamps to navigable point inside base"));
+ Check(CanSelectLeader(Store->FindSquad(GuardSquad)->LeaderUnitID)&&!CanControlLeader(Store->FindSquad(GuardSquad)->LeaderUnitID),TEXT("garrison leader takes orders but no direct control"));
  const auto* GuardState=Store->FindSquad(GuardSquad);const FVector Manual=GuardState->MissionDestination;
  Match->UpdateTeamOrders(0);Check(Store->FindSquad(GuardSquad)->MissionDestination.Equals(Manual),TEXT("player order survives allocation"));
  Check(!Match->AssignArmy(GuardSquad,1)&&Match->FormGroup(0,{GuardSquad},true)==INDEX_NONE,TEXT("manual groups reject garrison"));

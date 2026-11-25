@@ -70,9 +70,10 @@ void UBattleMatch::UpdateBaseGarrison(float Dt)
  float Before[2]={Area.GarrisonHeld[0],Area.GarrisonHeld[1]};bool Done[2]={false,false};
  for(int32 Team=0;Team<2;++Team)
  {
+  // The other team's own garrison never counts as an occupier (it belongs to its base).
   bool Occupied=false;
   for(const auto& Entry:Store->GetUnits())if(Entry.Value.Team==1-Team&&Entry.Value.IsAlive())
-   if(const auto* Squad=Store->FindSquad(Entry.Value.SquadID);Squad&&!BattleSquadType::IsVehicle(Squad->SquadType)&&
+   if(const auto* Squad=Store->FindSquad(Entry.Value.SquadID);Squad&&!BattleSquadType::IsVehicle(Squad->SquadType)&&!IsBaseGarrison(Squad->SquadID)&&
       FVector::Dist2D(Runtime->Position(Entry.Key),AreaHome(Team))<=BattleTactics::BaseGarrisonRadius()){Occupied=true;break;}
   float& Held=Area.GarrisonHeld[Team];
   if(!Occupied)

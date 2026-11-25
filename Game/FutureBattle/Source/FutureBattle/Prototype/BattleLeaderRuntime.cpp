@@ -484,7 +484,13 @@ void UBattleLeaderRuntime::LogSightHitStats(const TCHAR* Why) const
  Top(SightHitClasses,TEXT("BATTLE_SIGHT_HITS_CLASS"),20);Top(SightHitTags,TEXT("BATTLE_SIGHT_HITS_TAG"),20);Top(SightHitActors,TEXT("BATTLE_SIGHT_HITS_ACTOR"),40);
 }
 bool UBattleLeaderRuntime::CanSelectLeader(int32 ID) const { return Actor(ID) && GetWorld()->GetSubsystem<UBattleState>()->CanSelectLeader(ID); }
-bool UBattleLeaderRuntime::CanControlLeader(int32 ID) const { return CanSelectLeader(ID) && Mode && !Mode->bBattleEnded; }
+// Base garrison (-BattleBaseGarrison): orders only, no direct control (user decision 2026-11-25); the leader stays selectable.
+bool UBattleLeaderRuntime::CanControlLeader(int32 ID) const
+{
+ if(!CanSelectLeader(ID) || !Mode || Mode->bBattleEnded)return false;
+ if(BattleTactics::BaseGarrison()){const auto* GarrisonUnit=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);if(GarrisonUnit&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(GarrisonUnit->SquadID))return false;}
+ return true;
+}
 const TArray<FBattleSquadSummary>& UBattleLeaderRuntime::Summaries()
 {
  if(bSummaryDirty)
