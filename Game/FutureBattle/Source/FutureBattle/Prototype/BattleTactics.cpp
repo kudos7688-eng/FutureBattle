@@ -24,6 +24,21 @@ float BattleTactics::LeaderHealthMultiplier()
  return Multiplier;
 }
 
+bool BattleTactics::JoinFight()
+{
+ static const bool bOn=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleJoinFight="),Value);return Value!=0;}();
+ return bOn;
+}
+float BattleTactics::JoinFightRange()
+{
+ static const float Range=[](){float Value=15000.f;FParse::Value(FCommandLine::Get(),TEXT("BattleJoinFightRange="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,2000.f,60000.f):15000.f;}();
+ return Range;
+}
+int32 BattleTactics::JoinFightMax()
+{
+ static const int32 Max=[](){int32 Value=2;FParse::Value(FCommandLine::Get(),TEXT("BattleJoinFightMax="),Value);return FMath::Clamp(Value,1,8);}();
+ return Max;
+}
 int32 BattleTactics::BurstFire()
 {
  static const int32 Rounds=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleBurstFire="),Value);return Value<2?0:FMath::Min(Value,10);}();
