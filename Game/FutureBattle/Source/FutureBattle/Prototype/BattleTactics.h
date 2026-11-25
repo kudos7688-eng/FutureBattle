@@ -31,7 +31,7 @@ namespace BattleTactics
  // off, 2..10): an AI soldier's carbine fires bursts of n rounds at the player's interval (UBattleTuning::ShotInterval for the
  // player), then holds for -BattleBurstPause=s (default 1.0, 0.2..5; from the
  // burst's last round to the next burst's first). Each round is a real shot (damage, spread, one round of
- // ammunition). The count within a burst is not saved (a new burst after a load).
+ // ammunition).
  // -BattleCoverPeekShots=n (default 0 = UBattleTuning::AICoverShotsPerPeek, 1..30): shots after which an AI peek out of cover ends.
  int32 BurstFire();
  float BurstPause();
@@ -41,8 +41,7 @@ namespace BattleTactics
  // mission with no enemy of its own walks to a squad of its team that holds a firing position against an enemy it sees (plan
  // Engage), within -BattleJoinFightRange=cm (default 15000, 2000..60000) leader to leader, at most -BattleJoinFightMax=n (default 2,
  // 1..8) squads per fighting squad. It goes back to its mission when that squad has stopped fighting for 10 s or after 60 s; with an
- // enemy of its own in sight it fights as usual. Own team's squads and plans only. Who joined whom is not saved (a joining squad
- // goes back to its mission after a load). BattleSquadRetreat.cpp (Evaluate).
+ // enemy of its own in sight it fights as usual. Own team's squads and plans only. BattleSquadRetreat.cpp (Evaluate).
  bool JoinFight();
  float JoinFightRange();
  int32 JoinFightMax();
@@ -89,10 +88,6 @@ namespace BattleTactics
  int32 ACStandOff(); // Trial -BattleACStandOff=<cm> (default 0 = anti-tank reach + VehicleStandOffMargin): how far an armoured car keeps from known anti-tank soldiers.
  int32 ACTankStandOff(); // Trial -BattleACTankStandOff=<cm> (default 0 = off): an armoured car also keeps this far from known enemy tanks / guns (BattleATHunt.cpp).
  bool ACShield(); // Trial -BattleACShield=1 (default 0): an armoured car goes ahead of attacking infantry and holds against anti-tank soldiers.
- bool SaveReloadBoundary(); // Trial -BattleSaveReloadBoundary=1 (default 0): finish due reloads on the save copy.
- int32 OverrideSaveReloadBoundaryForSmoke(int32 Value); // Smoke only; -1 restores command-line policy.
- bool SaveRoutes(); // Trial -BattleSaveRoutes=1 (default 0): persist player route orders and lane choices.
- int32 OverrideSaveRoutesForSmoke(int32 Value); // -1 restores command-line policy; returns previous override. Smoke only.
  bool BlastOcclusionEnabled();
  bool ArtilleryClustersEnabled();
  bool WeaponOrderGateEnabled(); // trial, default 0: apply mission permissions to launchers and artillery
@@ -127,23 +122,21 @@ namespace BattleTactics
  bool LeaderGuardEnabled();
  // Squad leaders start with N times Health: UBattleTuning::LeaderHealthMultiplier (default 3), overridden by -BattleLeaderHealth=N (1..10).
  float LeaderHealthMultiplier();
- // Bits added to the mixed-save rule check so saves only load under the same leader multiplier.
- int32 LeaderHealthSaveBits();
  // Area home supply cycle: UBattleTuning::Supply* overridden by -BattleSupplyReturnLiving= / -BattleSupplyResumeLiving= /
- // -BattleSupplyAwayRatio= / -BattleSupplyHeal= / -BattleSupplyResumeHealth= (trials only; not part of the save check).
+ // -BattleSupplyAwayRatio= / -BattleSupplyHeal= / -BattleSupplyResumeHealth= (trials only).
  struct FSupplyTuning { int32 ReturnLiving=8, ResumeLiving=10; float AwayRatio=1.f, HealPerSecond=0.f, ResumeHealthRatio=0.f; bool bPointAmmo=false; float PointRadius=2500.f; };
  const FSupplyTuning& Supply();
  // Area new-squad hiring: UBattleTuning::bAreaHire/AreaSquadCost/AreaHireReserve; -BattleAreaHire=0/1 overrides.
- // MaxActive = UBattleTuning::AreaMaxActiveSquads (default 30 since 2026-11-20, was 25), -BattleAreaMaxSquads=N (1..100) overrides; the save check uses it.
+ // MaxActive = UBattleTuning::AreaMaxActiveSquads (default 30 since 2026-11-20, was 25), -BattleAreaMaxSquads=N (1..100) overrides.
  // AI pacing: Interval between a team's AI purchases and Stop = no AI purchase in the last N seconds
- // (-BattleAreaHireReserve= / -BattleAreaHireInterval= / -BattleAreaHireStop= override; not part of the save check).
+ // (-BattleAreaHireReserve= / -BattleAreaHireInterval= / -BattleAreaHireStop= override).
  // P1 trial -BattleAreaHirePurpose=1 (default OFF; -BattleAreaHirePurposeFront=N, default 10): the AI buys only for an observed need
  // (own home hit in the last 30 s or enemies seen within 150 m of it, a point with fewer than N own soldiers within 100 m, or the
  // enemy home seen at or below 500 HP) and gives the new squad that mission; otherwise it keeps its resources.
  struct FAreaHireTuning { bool bEnabled=true; int32 Cost=15, Reserve=10, MaxActive=25; float Interval=0.f, Stop=0.f; bool bPurpose=false; int32 PurposeFront=10; };
  const FAreaHireTuning& AreaHire();
  // Area income: UBattleTuning::bAreaIncome/AreaIncomeSeconds/AreaBaseIncome/AreaPointIncome; -BattleAreaIncome=0/1 overrides.
- // Trials (not part of the save check): -BattleAreaIncomeBase= / -BattleAreaIncomePerPoint= override the amounts; -BattleAreaIncomeRamp=r
+ // Trials: -BattleAreaIncomeBase= / -BattleAreaIncomePerPoint= override the amounts; -BattleAreaIncomeRamp=r
   // multiplies each payment by 1+r*elapsed minutes (rounded); -BattleAreaStartCredits= replaces the 100 starting resources.
  // Map E: UBattleTuning::AreaBaseIncomeUrban / AreaPointIncomeUrban (-1 = same as A-D), -BattleAreaIncomeUrbanBase= / -BattleAreaIncomeUrbanPerPoint=.
  struct FAreaIncomeTuning { bool bEnabled=true; float Seconds=20.f; int32 Base=1, PerPoint=1; int32 UrbanBase=-1, UrbanPerPoint=-1; float Ramp=0.f; int32 StartCredits=100;

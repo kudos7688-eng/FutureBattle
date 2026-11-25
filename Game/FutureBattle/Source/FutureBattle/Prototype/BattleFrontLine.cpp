@@ -822,7 +822,6 @@ namespace BattleSurpriseRoute
 
 bool UBattleMatch::UpdateSurpriseBridge(FBattleGroup& G,const FVector& Lead)
 {
- // Groups survive RestoreSnapshot in the same match. These fields, like Rally, are untouched by a same-time save round trip.
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  // The guide: the living squad nearest the lead, armour not in Recover first (Codex review 2026-11-21: a guide in Recover drove the
  // bridge legs from behind the river).
@@ -1060,27 +1059,6 @@ bool UBattleMatch::SurpriseMoving(int32 SquadID) const
 {
  const int32 ID=GroupOf(SquadID);if(ID==INDEX_NONE)return false;
  const FBattleGroup* G=Groups.Find(ID);return G&&G->Kind==2&&G->Phase==1;
-}
-
-void UBattleMatch::ClampFrontTimers()
-{
- // A no-op for the standard save round trip (saved and loaded at the same time); after loading an earlier save the timers set later
- // in the abandoned run would otherwise stall the front line and the surprise group (Codex review 2026-11-21).
- for(int32 T=0;T<2;++T)
- {
-  FrontLineAt[T]=FMath::Min(FrontLineAt[T],Elapsed+BattleFrontValues::Interval);
-  FrontLineLogAt[T]=FMath::Min(FrontLineLogAt[T],Elapsed+BattleFrontValues::LogInterval);
-  SurpriseNextAt[T]=FMath::Min(SurpriseNextAt[T],Elapsed+BattleSurpriseValues::Interval);
- }
- for(auto& P:Groups)if(P.Value.Kind==1){P.Value.FrontStepAt=FMath::Min(P.Value.FrontStepAt,Elapsed);P.Value.FrontBackAt=FMath::Min(P.Value.FrontBackAt,Elapsed);P.Value.FrontReleaseAt=FMath::Min(P.Value.FrontReleaseAt,Elapsed);P.Value.FrontExcessSince=FMath::Min(P.Value.FrontExcessSince,Elapsed);}
- for(auto& P:Groups)if(P.Value.Kind==2)
- {
-  auto& G=P.Value;
-  G.SurpriseEndAt=FMath::Min(G.SurpriseEndAt,Elapsed+BattleSurpriseValues::AssembleMax+BattleSurpriseValues::Max);
-  G.SurpriseLogAt=FMath::Min(G.SurpriseLogAt,Elapsed+30.f);
-  if(G.SurpriseWaitAt>Elapsed)G.SurpriseWaitAt=-1.f;
-  G.PhaseAt=FMath::Min(G.PhaseAt,Elapsed);
- }
 }
 
 // ---- Front plan, stage 1: sections and their log (Docs/design-front-strategy.md 2.2 and 7; trial -BattleFrontPlanLog=1, default 0) ----

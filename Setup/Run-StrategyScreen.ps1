@@ -24,7 +24,7 @@ param(
  [ValidateRange(10,120)][int]$ConfirmFps=60,   # confirmation rate for the conditions that pass screening
  [switch]$NoConfirm,
  [double]$SeedSd=60,   # floor for the per-seed gain spread (map E screens e1/e2 of 2026-11-17: sample sd 8-54 per seed)
- [switch]$NoRoundTripSave,
+ [switch]$NoRoundTripSave, # 11-25 から往復保存は無い（互換引数・何もしない）
  [switch]$NoReuse,   # 2026-11-18: identical matches (e.g. the baseline of an earlier screen on the same build) are reused unless set
  [ValidateRange(1,16)][int]$Concurrency=12,
  [string[]]$Maps=@('D','A'),   # 2026-11-17: map E screens pass -Maps E
@@ -70,7 +70,7 @@ function Invoke-Pool($specs){
  $jobs|ForEach-Object{$_.WaitForExit()}
 }
 function Invoke-Screen([string[]]$Candidates,[int]$PhaseFps,[string]$RunTag){
- $common=@{FrozenBuild=$FrozenBuild;Fps=$PhaseFps;NoRoundTripSave=$NoRoundTripSave;Concurrency=$Concurrency;Maps=$Maps;NoReuse=$NoReuse;PlanOnly=$true}
+ $common=@{FrozenBuild=$FrozenBuild;Fps=$PhaseFps;Concurrency=$Concurrency;Maps=$Maps;NoReuse=$NoReuse;PlanOnly=$true}
  $gains=@{};foreach($c in $Candidates){$gains[$c]=@()}
  $alive=@($Candidates);$passed=@();$i=0
  while($alive.Count -and $i -lt $allSeeds.Count){

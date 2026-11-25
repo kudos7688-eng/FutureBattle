@@ -1,7 +1,6 @@
 #include "BattleGameMode.h"
 #include "BattleSquadTactics.h"
 #include "BattleMatch.h"
-#include "BattleSave.h"
 #include "BattleController.h"
 #include "BattleUnit.h"
 #include "BattleFieldLayout.h"
@@ -50,7 +49,6 @@ void ABattleGameMode::RunSquadTacticsSmokeTest()
   CheckSmoke(PC->GetPawn() == A && A->GetState()->Action == EBattleAction::DirectControl && A->GetState()->HP == Before.HP && A->GetState()->Ammo == Before.Ammo, TEXT("Tactical step preserves player control and resources"));
   PC->EnterTactical();
   CheckSmoke(Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Retreat, TEXT("TPS RTS switch preserves squad plan"));
-  CheckSmoke(Match->CaptureSnapshot() == nullptr, TEXT("ST1 refuses unsupported active-plan snapshot rather than dropping it"));
   bCombatPaused = false; Tactics->Step(3); bCombatPaused = true;
   CheckSmoke(Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Mission && Store->FindSquad(SID)->Order == EBattleOrder::AttackMove, TEXT("Expired plan resumes latest mission"));
   Store->SetSquadTacticalPlan(SID, EBattleSquadTactic::Support, EBattleOrder::Hold, Origin, Goals, 3, TEXT("FIXTURE SUPPORT"));
@@ -94,32 +92,6 @@ void ABattleGameMode::RunSquadTacticsSmokeTest()
  Perception->Restore(Observers, {}, GetWorld()->GetTimeSeconds());
  CheckSmoke(Tactics->Observe(*Store->FindSquad(SID)).Contacts.IsEmpty(), TEXT("Expired observations cannot become current tactical threats"));
  Perception->Reset();
- if (!BattleFieldLayout::IsLarge(GetWorld()))
- {
-  auto* Save = Match->CaptureSnapshot(); FString Error; TArray<uint8> Bytes;
-  CheckSmoke(Save && Save->Validate(Error), *FString::Printf(TEXT("Mission snapshot validates: %s"), *Error));
-  auto* Decoded = Save && UGameplayStatics::SaveGameToMemory(Save, Bytes) ? Cast<UBattleSave>(BattleSaveValidation::Decode(Bytes)) : nullptr;
-  CheckSmoke(Decoded && Decoded->Validate(Error) && Match->RestoreSnapshot(Decoded) && Store->FindSquad(SID)->bHasMission, TEXT("Mission survives real binary save and world restore"));
-  A = FindUnitByID(AID); PC->SetSelection(A);
-  auto* Old = Match->CaptureSnapshot();
-  if (Old) for (auto& Squad : Old->Squads) { Squad.bHasMission = false; Squad.MissionGoals.Reset(); }
-  CheckSmoke(Old && Match->RestoreSnapshot(Old) && Store->FindSquad(SID)->bHasMission, TEXT("Legacy missing mission fields migrate from stored own orders"));
-  A = FindUnitByID(AID); PC->SetSelection(A);
-  auto* Invalid = Match->CaptureSnapshot();
-  if (Invalid) Invalid->Squads[0].MissionGoals.Add(999999, FVector::ZeroVector);
-  const int32 Rev = Store->FindSquad(SID)->OrderRevision;
-  CheckSmoke(Invalid && !Match->RestoreSnapshot(Invalid) && Store->FindSquad(SID)->OrderRevision == Rev, TEXT("Invalid mission save is rejected before world mutation"));
-  if (Tactics->IsEnabled())
-  {
-   auto* BeforeDeath = Match->CaptureSnapshot(); PC->DelegateSelected();
-   Store->SetSquadTacticalPlan(SID, EBattleSquadTactic::Support, EBattleOrder::Hold, Origin, Goals, 3, TEXT("DEATH FIXTURE"));
-   for (int32 ID : Store->FindSquad(SID)->Members) Store->ApplyDamage(ID, 1, 10000);
-   CheckSmoke(Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Mission && Tactics->Observe(*Store->FindSquad(SID)).Living == 0, TEXT("Last member death cancels tactical authority immediately"));
-   CheckSmoke(Tactics->Observe(*Store->FindSquad(SID)).RecentDamage > 0, TEXT("Recent own damage is recorded without enemy state access"));
-   CheckSmoke(BeforeDeath && Match->RestoreSnapshot(BeforeDeath), TEXT("Death fixture restores clean live match"));
-   A = FindUnitByID(AID); PC->SetSelection(A);
-  }
- }
  // Live observation is explicitly separate from the synthetic command/knowledge checks above.
  Tactics->Reset(); PC->SelectAll(); PC->DelegateSelected(); PC->SetSelection(A);
  bCombatPaused = false; CombatStartsAt = 0; Match->DelegationClock = 5;

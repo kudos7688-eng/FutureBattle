@@ -26,7 +26,7 @@ $compositionManifest | Add-Member -NotePropertyName compositionResolvedLog -Note
 $compositionManifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $out 'manifest.json') -Encoding utf8
 $pass=$p.ExitCode -eq 0 -and $t -match 'BATTLE_AREA_RESULT failures=0' -and $t -notmatch 'BATTLE_AREA_CHECK FAIL|Fatal error:|Assertion failed:'
 @{passed=$pass;exitCode=$p.ExitCode;dll=(Get-FileHash $dll).Hash;checks=([regex]::Matches($t,'BATTLE_AREA_CHECK PASS')).Count}|ConvertTo-Json|Set-Content (Join-Path $out 'result.json')
-$t -split "`n"|Where-Object{$_ -match 'BATTLE_AREA|MIXED_SAVE_'}|Write-Output
+$t -split "`n"|Where-Object{$_ -match 'BATTLE_AREA'}|Write-Output
 if(!$pass){throw "Test failed: $log"}
 if($Rendered -and !(Test-Path (Join-Path $out 'screen-restored.png'))){throw 'Missing restored screen'}
 

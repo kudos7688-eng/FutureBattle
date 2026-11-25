@@ -38,9 +38,6 @@ void ABattleHUD::DrawHUD()
 	ABattleController* PC = Cast<ABattleController>(PlayerOwner);
 	ABattleGameMode* Mode = GetWorld()->GetAuthGameMode<ABattleGameMode>();
 	if (!Canvas || !PC || !Mode) return;
- const auto* HUDMatch=GetWorld()->GetSubsystem<UBattleMatch>();
- if(FogRestoreGeneration!=HUDMatch->RestoreGeneration)
- {Fog.Reset(GetWorld());Sectors.Reset();FogRestoreGeneration=HUDMatch->RestoreGeneration;}
 	const float W = Canvas->SizeX, H = Canvas->SizeY;
  const auto BottomBar=FBattleCommandBarLayout::Make(FVector2D(W,H),GetWorld(),PC->bGamepadActive);
  const float PanelTop=PC->IsTactical()?BottomBar.PanelTop:H-128.f;
@@ -145,9 +142,9 @@ void ABattleHUD::DrawHUD()
    Label(TEXT("＋ 生存・資源は不明"),588,141,Muted,.85f);
   }
   else if (BattleFieldLayout::IsLarge(GetWorld())) Label(FString::Printf(TEXT("占領8秒 ／ 毎秒1点 ／ 先に100点 ／ 制限 %.0f秒"),Limit),28,141,Muted,.85f);
-		else Label(TEXT("占領8秒 ／ 5秒ごとに収入+20 ／ 補給1発につき1 ／ F8 保存 ／ F9 読込"), 28, 141, Muted, .85f);
+		else Label(TEXT("占領8秒 ／ 5秒ごとに収入+20 ／ 補給1発につき1"), 28, 141, Muted, .85f);
 		DrawRect(Ink, 16, 165, 560, 26);
-  if(Match->bArea)Label(TEXT("本拠地：10秒で補充 ／ 兵1人につき資源1 ／ F8 保存 ／ F9 読込"),28,172,Mint,.85f);
+  if(Match->bArea)Label(TEXT("本拠地：10秒で補充 ／ 兵1人につき資源1"),28,172,Mint,.85f);
   // Purchase reservations (-BattleHireReserve, default 1 since 2026-11-23): the own list in order with each one's wait
   // (Docs/design-front-strategy.md 6), only while there is one (the purchase panel shows the list too).
   if(Match->bArea&&UBattleMatch::HireReserveOn()&&!Match->HireQueueOf(0).IsEmpty())
@@ -166,7 +163,7 @@ void ABattleHUD::DrawHUD()
   }
   // The area battle's own line is drawn above; without this the large-field and support lines below were drawn over it (since 147a610).
   else if(Match->bArea){}
-  else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch)Label(TEXT("本拠地・保有拠点で補給：1発につき資源1 ／ F8 保存 ／ F9 読込 ／ 支援攻撃なし"),28,172,Mint,.85f);
+  else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch)Label(TEXT("本拠地・保有拠点で補給：1発につき資源1 ／ 支援攻撃なし"),28,172,Mint,.85f);
   else if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("固定戦力 ／ 増援・補給・支援攻撃なし"),28,172,Mint,.85f);
 		else Label(FString::Printf(TEXT("[B] 支援攻撃 400 ／ 残り%d ／ 再装填 %.0f秒 ／ 選択部隊が知る位置へ"), 3 - Match->SupportUsed[0], Match->SupportCooldown[0]), 28, 172, Mint, .85f);
   // Front plan band (stage 7, -BattleFrontPlanPlayer=1): the own plan by section, the player's choices included. The enemy's is never shown.
@@ -536,8 +533,6 @@ void ABattleHUD::DrawQuitMenu(ABattleController* PC)
   {
   case FBattleQuitLayout::AIPause: bOn=GameMode&&GameMode->bCombatPaused;Text=bOn?TEXT("AI停止中 [P]"):TEXT("AI稼働中 [P]");break;
   case FBattleQuitLayout::Speed: bOn=PC->GetGameSpeed()!=1;Text=PC->GetGameSpeed()==0?FString(TEXT("一時停止 [.]")):FString::Printf(TEXT("速度 x%d [.]"),PC->GetGameSpeed());break;
-  case FBattleQuitLayout::Save: Text=TEXT("保存 [F8]");break;
-  case FBattleQuitLayout::Load: Text=TEXT("読込 [F9]");break;
   case FBattleQuitLayout::Quit: Text=TEXT("終了 [Esc]");break;
   case FBattleQuitLayout::SelectAll: Text=TEXT("全選択 [Q]");break;
   case FBattleQuitLayout::Control: Text=PC->IsTactical()?TEXT("直接操作 [E]"):TEXT("作戦画面 [Tab]");break;
@@ -556,7 +551,7 @@ void ABattleHUD::DrawQuitMenu(ABattleController* PC)
  DrawRect(FLinearColor(0,0,0,.45f),0,0,Canvas->SizeX,Canvas->SizeY);
  DrawRect(Ink,L.Panel.X,L.Panel.Y,L.PanelSize.X,L.PanelSize.Y);DrawRect(Gold,L.Panel.X,L.Panel.Y,L.PanelSize.X,2);
  DrawText(TEXT("ゲームを終了しますか？"),Gold,L.Panel.X+30,L.Panel.Y+22,GEngine->GetSmallFont(),1.1f);
- DrawText(TEXT("保存していない進行は失われます（F8 で保存）"),White,L.Panel.X+30,L.Panel.Y+54,GEngine->GetSmallFont(),.8f);
+ DrawText(TEXT("終了すると、この試合の進行は失われます"),White,L.Panel.X+30,L.Panel.Y+54,GEngine->GetSmallFont(),.8f);
  Button(L.QuitChoice,L.ChoiceSize,PC->bGamepadActive?TEXT("終了する [A]"):TEXT("終了する [Enter]"),Red,RedLit,White,.95f);
  Button(L.Back,L.ChoiceSize,PC->bGamepadActive?TEXT("戻る [B]"):TEXT("戻る [Esc]"),Plain,Lit,Mint,.95f);
 }
@@ -636,7 +631,7 @@ void ABattleHUD::DrawGamepadMenu(ABattleController* PC)
  const auto MenuBar=FBattleCommandBarLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld(),true);
  const float MenuWidth=FMath::Min(360.f,FMath::Max(1.f,float(Canvas->SizeX)-32.f));
  const float MenuRowHeight=FMath::Max(26.f,MenuBar.ButtonHeight);
- const float MenuHeight=PC->IsGamepadMenuOpen()?MenuRowHeight*8.f+16.f:MenuRowHeight+12.f;
+ const float MenuHeight=PC->IsGamepadMenuOpen()?MenuRowHeight*6.f+16.f:MenuRowHeight+12.f;
  const float MenuX=(float(Canvas->SizeX)-MenuWidth)*.5f, MenuY=FMath::Max(16.f,MenuBar.PanelTop-MenuHeight-8.f);
  const FLinearColor MenuInk(.025f,.04f,.065f,.98f),MenuMint(.28f,.95f,.8f),MenuWhite(.94f,.97f,1.f);
  DrawRect(MenuInk,MenuX,MenuY,MenuWidth,MenuHeight);
@@ -649,10 +644,10 @@ void ABattleHUD::DrawGamepadMenu(ABattleController* PC)
  };
  if(!PC->IsGamepadMenuOpen())
  {
-  MenuLabel(PC->IsGroundFloorPending()?TEXT("次の命令：1階 ／ 左スティック押込：メニュー"):TEXT("左スティック押込：群・保存メニュー"),MenuY+6.f,MenuMint);return;
+  MenuLabel(PC->IsGroundFloorPending()?TEXT("次の命令：1階 ／ 左スティック押込：メニュー"):TEXT("左スティック押込：群メニュー"),MenuY+6.f,MenuMint);return;
  }
  MenuLabel(TEXT("作戦メニュー ／ 左スティック押込で閉じる"),MenuY+6.f,MenuMint);
- const FString MenuEntries[]={TEXT("群を編成／解散 (F)"),TEXT("群を選択 (V)"),TEXT("クイック保存 (F8)"),TEXT("クイック読込 (F9)"),
+ const FString MenuEntries[]={TEXT("群を編成／解散 (F)"),TEXT("群を選択 (V)"),
   PC->IsGroundFloorPending()?TEXT("1階を指定：入（次の命令／Alt）"):TEXT("1階を指定：切（次の命令／Alt）"),TEXT("閉じる")};
  for(int32 MenuIndex=0;MenuIndex<UE_ARRAY_COUNT(MenuEntries);++MenuIndex)
  {
@@ -661,7 +656,7 @@ void ABattleHUD::DrawGamepadMenu(ABattleController* PC)
   if(bMenuSelected)DrawRect(FLinearColor(.10f,.24f,.24f,.98f),MenuX+6.f,MenuEntryY,MenuWidth-12.f,MenuRowHeight-2.f);
   MenuLabel(MenuEntries[MenuIndex],MenuEntryY+4.f,bMenuSelected?MenuMint:MenuWhite);
  }
- MenuLabel(TEXT("十字↑↓：選択  A：決定  B：閉じる"),MenuY+8.f+MenuRowHeight*7.f,MenuWhite);
+ MenuLabel(TEXT("十字↑↓：選択  A：決定  B：閉じる"),MenuY+8.f+MenuRowHeight*5.f,MenuWhite);
 }
 
 void ABattleHUD::DrawMinimap()

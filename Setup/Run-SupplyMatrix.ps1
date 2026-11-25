@@ -31,7 +31,7 @@ foreach($r in $runs){
  $name="supply-$c-$map-s$seed"+($(if($swap){'-swap'}else{''}))+"-$Tag"
  if(Test-Path "Benchmarks/SightTrial-20261111/$name"){ $skipped++; continue }
  $pa=@('-NoProfile','-ExecutionPolicy','Bypass','-File','.\Test-WideSight.ps1','-Map',$map,'-OutputName',$name,'-Seed',"$seed",
-  '-AICoverProbe','0','-LeaderGuard','0','-SightRange','10000','-WeaponRange','5000','-Area','-Experiment','-RoundTripSave',
+  '-AICoverProbe','0','-LeaderGuard','0','-SightRange','10000','-WeaponRange','5000','-Area','-Experiment',
   '-CoverActions','1','-FlankCoordination','1','-ObserveTactics','-BehaviorConcurrency',"$Concurrency",'-FrozenBuild',$frozen)+$supply[$c]
  if($swap){$pa+='-Swap'}
  while(@($jobs|Where-Object{!$_.HasExited}).Count -ge $Concurrency){Start-Sleep 5}

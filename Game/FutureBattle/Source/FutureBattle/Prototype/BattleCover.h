@@ -36,7 +36,7 @@ private:
 	bool bBuilt = false;
 	UPROPERTY() TArray<FVector> Slots;
 	UPROPERTY() TMap<int32, FBattleCoverReservation> Reservations;
-	// Derived only; restore rebuilds reservations through Reserve in the original caller order.
+	// Derived from reservations made through Reserve.
 	TMap<int32, int32> UnitToSlot;
 	TMap<FIntPoint, TArray<int32>> SlotCells;
 	TArray<TArray<int32>> ConflictSlots;

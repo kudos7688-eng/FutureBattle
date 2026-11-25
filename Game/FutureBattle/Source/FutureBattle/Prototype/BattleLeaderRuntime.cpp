@@ -227,8 +227,6 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunFlankBayTrial,4.f,false);}
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleMixedFastSmoke")))
   {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunMixedFastSmoke,4.f,false);}
-  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleMixedSaveSmoke")))
-  { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunMixedSaveSmoke,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleWeaponTrial")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWeaponRangeTrial,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleExoShot")))

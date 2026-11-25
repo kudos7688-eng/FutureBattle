@@ -64,6 +64,5 @@ void ABattleGameMode::RunObjectiveSmokeTest()
 	GetWorldTimerManager().SetTimer(Timer, FTimerDelegate::CreateWeakLambda(this, [this, Match]()
 	{
 		CheckSmoke(Match->Phase == EBattleMatchPhase::Finished && Match->Winner == INDEX_NONE && bBattleEnded, TEXT("Real world tick ends an equal-score match as a draw at the time limit"));
-		RunSaveSmokeTest();
 	}), .3f, false);
 }

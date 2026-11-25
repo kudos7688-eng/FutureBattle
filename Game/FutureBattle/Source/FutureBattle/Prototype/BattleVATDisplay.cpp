@@ -200,14 +200,6 @@ bool ABattleVATDisplay::Initialize(UBattleLeaderRuntime* InRuntime)
 #endif
  UE_LOG(LogTemp,Display,TEXT("VAT_DISPLAY enabled=1 followers=%d scope=mass_followers groups=%d max_instances=250 ray_wpo=%d ray_simulation_count=%d"),Entries.Num(),Groups.Num(),IConsoleManager::Get().FindConsoleVariable(TEXT("r.RayTracing.Geometry.InstancedStaticMeshes.EvaluateWPO"))->GetInt(),IConsoleManager::Get().FindConsoleVariable(TEXT("r.RayTracing.Geometry.InstancedStaticMeshes.SimulationCount"))->GetInt());return true;
 }
-void ABattleVATDisplay::ResetBodies()
-{
- // Loading can occur inside a GameMode tick task. Keep the existing owner of
- // render CVars; restarting PrepareRendering would recursively drain that queue.
- for(const auto& Pair:Entries)if(Pair.Value.Body.IsValid())RemoveTickPrerequisiteComponent(Pair.Value.Body.Get());
- Entries.Reset();
- for(auto& G:Groups)if(G)G->DestroyComponent();Groups.Reset();
-}
 void ABattleVATDisplay::RemoveUnit(int32 ID)
 {
  if(auto* E=Entries.Find(ID))

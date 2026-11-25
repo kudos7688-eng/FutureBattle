@@ -1,4 +1,4 @@
-// Top bar toolbar and quit menu (2026-11-25, user request). The top bar holds a button for each main key (AI pause, speed, save, load,
+// Top bar toolbar and quit menu (2026-11-25, user request). The top bar holds a button for each main key (AI pause, speed,
 // quit, select all, form / select group, direct control / tactical view, grid, fog, ranges, plan panel); a left click runs the same action as the key, so a
 // remote session needs no awkward keys. Quit (its button, Esc or F10) opens a confirmation panel; its quit button, Enter, Y or pad A ends
 // the game; its back button, Esc, F10 or pad B closes it. Drawn by ABattleHUD::DrawQuitMenu.
@@ -20,8 +20,9 @@ FBattleQuitLayout FBattleQuitLayout::Make(FVector2D View)
  constexpr int32 Columns=7;constexpr float Gap=6.f,RowH=27.f;
  const float Left=FMath::Max(float(View.X)*.4f+260.f,300.f),Right=float(View.X)-24.f;
  const float Width=FMath::Max(40.f,(Right-Left-Gap*(Columns-1))/Columns);
- // Row 1: AI pause, speed, save, load, plan, (gap), quit at the far right; row 2: select all, form group, select group, control, grid, fog, ranges.
- const uint8 Rows[2][Columns]={{AIPause,Speed,Save,Load,Plan,ToolCount,Quit},{SelectAll,FormGroup,SelectGroup,Control,Grid,Fog,Ranges}};
+ // Row 1: AI pause, speed, plan, (gap), quit at the far right; row 2: select all, form group, select group, control, grid, fog, ranges.
+ // (Save and load sat between speed and plan until they were removed on 2026-11-25.)
+ const uint8 Rows[2][Columns]={{AIPause,Speed,Plan,ToolCount,ToolCount,ToolCount,Quit},{SelectAll,FormGroup,SelectGroup,Control,Grid,Fog,Ranges}};
  for(int32 R=0;R<2;++R)for(int32 C=0;C<Columns;++C)if(Rows[R][C]!=ToolCount)
  {FTool T;T.Id=Rows[R][C];T.Origin=FVector2D(Left+C*(Width+Gap),20.f+R*(RowH+4.f));T.Size=FVector2D(Width,RowH);L.Tools.Add(T);}
  L.PanelSize=FVector2D(440,170);L.Panel=(View-L.PanelSize)*.5f;
@@ -61,8 +62,6 @@ void ABattleController::RunTopTool(int32 Id)
  {
  case FBattleQuitLayout::AIPause: ToggleCombat();break;
  case FBattleQuitLayout::Speed: CycleGameSpeed();break;
- case FBattleQuitLayout::Save: SaveMatch();break;
- case FBattleQuitLayout::Load: LoadMatch();break;
  case FBattleQuitLayout::Quit: SetQuitMenu(true);break;
  case FBattleQuitLayout::SelectAll: SelectAll();break;
  case FBattleQuitLayout::Control: ToggleMode();break;

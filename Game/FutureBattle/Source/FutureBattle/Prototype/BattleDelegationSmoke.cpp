@@ -1,7 +1,6 @@
 #include "BattleGameMode.h"
 #include "BattleController.h"
 #include "BattleMatch.h"
-#include "BattleSave.h"
 #include "BattleUnit.h"
 #include "BattleFieldLayout.h"
 #include "Engine/GameViewportClient.h"
@@ -72,17 +71,6 @@ void ABattleGameMode::RunDelegationSmokeTest()
 	PC->SetSelection(nullptr); PC->DelegateSelected(); PC->GetDelegationCounts(Manual, Automatic);
 	CheckSmoke(Manual == 0 && Automatic == 0, TEXT("Empty selection does not delegate any squads"));
 	PC->SetSelection(A); PC->DelegateSelected();
-	if (!BattleFieldLayout::IsLarge(GetWorld()))
-	{
-		auto* Save = Match->CaptureSnapshot(); TArray<uint8> Bytes;
-		const bool bSaved = Save && UGameplayStatics::SaveGameToMemory(Save, Bytes);
-		auto* Decoded = bSaved ? Cast<UBattleSave>(BattleSaveValidation::Decode(Bytes)) : nullptr;
-		FString Error;
-		CheckSmoke(Decoded && Decoded->Validate(Error), *FString::Printf(TEXT("Delegation snapshot serializes and validates (%s)"), *Error));
-		const bool bRestored = Decoded && Match->RestoreSnapshot(Decoded);
-		CheckSmoke(bRestored && Store->FindSquad(SA)->bPlayerDelegated && !Store->FindSquad(SB)->bPlayerDelegated, TEXT("Snapshot restore preserves per-squad command ownership"));
-		A = FindUnitByID(AID); PC->SetSelection(A);
-	}
 	Match->Phase = EBattleMatchPhase::Finished;
 	CheckSmoke(!PC->CanShowDelegation() && !Match->SetAllyDelegated(SA, false), TEXT("Finished battle rejects command-mode changes"));
 	Match->Phase = EBattleMatchPhase::Combat;

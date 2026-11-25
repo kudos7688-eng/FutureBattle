@@ -179,12 +179,6 @@ const BattleTactics::FAreaIncomeTuning& BattleTactics::AreaIncome()
  return Value;
 }
 
-int32 BattleTactics::LeaderHealthSaveBits()
-{
- // 0 for the former x1 rule, so saves made before the multiplier existed load only under x1.
- return FMath::Clamp(FMath::RoundToInt(LeaderHealthMultiplier()*10.f)-10,0,90)<<9;
-}
-
 bool BattleTactics::ReacquireGraceEnabled()
 {
  // Config default (UBattleTuning::bReacquireGrace, adopted ON 2026-11-13); -BattleReacquireGrace=0/1 overrides for trials.

@@ -113,17 +113,6 @@ void ABattleGameMode::RunPerceptionSmokeTest()
 	Store->SetPerceptionProfile(A->GetUnitID(), Short); Sense->Update(Fixture, T + 31.1);
 	CheckSmoke(!Contact(A) && !Contact(B), TEXT("Capability revision clears old contacts and cancels pending outgoing reports"));
 	Store->SetPerceptionProfile(A->GetUnitID(), Profile);
-	Sense->Reset(); Sense->Update(Fixture, T + 32.); Sense->Update(Fixture, T + 32.5);
-	TMap<int32, FBattleObserver> SavedObservers; TArray<FBattleReport> SavedReports;
-	Sense->Capture(SavedObservers, SavedReports, T + 32.5); Sense->Restore(SavedObservers, SavedReports, T + 34.);
-	Sense->Update(Fixture, T + 34.1);
-	TMap<int32, FBattleObserver> RestoredObservers; TArray<FBattleReport> RestoredReports;
-	Sense->Capture(RestoredObservers, RestoredReports, T + 34.1);
-	CheckSmoke(SavedReports.Num() == 1 && RestoredReports.Num() == 1 && !Contact(B),
-		TEXT("Restored pending transmission is neither duplicated nor delivered early on the next sensor update"));
-	Sense->Update(Fixture, T + 34.5);
-	CheckSmoke(Contact(B) && Contact(B)->bShared && FMath::IsNearlyEqual(Contact(B)->LastSeenTime, T + 34., .001),
-		TEXT("Restored report keeps its original rebased observation and delivery time"));
 	Sense->Reset();
 	for (int32 Step = 0; Step < 24; ++Step) Sense->Update(Fixture, T + 35. + Step * .025, (A->GetUnitID() + Step) % 8, 8);
 	CheckSmoke(!Contact(A), TEXT("Eight sensor slices do not bypass the configured acquisition delay"));

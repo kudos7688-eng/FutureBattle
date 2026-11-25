@@ -66,9 +66,9 @@ struct FBattleCommandBarLayout
 // sessions where keys are awkward) and the quit confirmation it opens. Shared by Canvas and input.
 struct FBattleQuitLayout
 {
- // Tool ids: 0 AI pause (P), 1 speed (.), 2 save (F8), 3 load (F9), 4 quit (Esc / F10), 5 select all (Q), 6 direct control (E) /
- // tactical view (Tab), 7 sector grid (M), 8 fog (N), 9 enemy ranges (L), 10 plan panel (U), 11 form group (F), 12 select group (V).
- enum : uint8 { AIPause, Speed, Save, Load, Quit, SelectAll, Control, Grid, Fog, Ranges, Plan, FormGroup, SelectGroup, ToolCount };
+ // Tool ids: 0 AI pause (P), 1 speed (.), 2 quit (Esc / F10), 3 select all (Q), 4 direct control (E) /
+ // tactical view (Tab), 5 sector grid (M), 6 fog (N), 7 enemy ranges (L), 8 plan panel (U), 9 form group (F), 10 select group (V).
+ enum : uint8 { AIPause, Speed, Quit, SelectAll, Control, Grid, Fog, Ranges, Plan, FormGroup, SelectGroup, ToolCount };
  struct FTool { FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector; uint8 Id=0; };
  TArray<FTool> Tools;
  FVector2D Panel, PanelSize, QuitChoice, Back, ChoiceSize;
@@ -222,9 +222,6 @@ public:
 	void HireElite(); // = key: an elite platoon (-BattleElite=1; BattleArms.cpp)
 	void HireSniper(); // ] key: a sniper team (-BattleSniperTeam=1; BattleArms.cpp)
 	void StartMatch();
-	void SaveMatch();
-	void LoadMatch();
- FString QuickSaveSlot=TEXT("FutureBattleQuick01"); // Smoke fixtures inject the whitelisted test slot.
 	void ResetMatchControl();
 	void RequestSupport();
 	bool IsTactical() const { return bTactical; }

@@ -18,7 +18,7 @@ if(!$p.WaitForExit(180000)){Stop-Process -Id $p.Id;throw "Timed out: $log"}
 $t=Get-Content $log -Raw
 $pass=$p.ExitCode -eq 0 -and $t -match 'BATTLE_MIXED_FAST_RESULT failures=0' -and $t -notmatch 'BATTLE_MIXED_FAST_CHECK FAIL|Fatal error:|Assertion failed:'
 @{passed=$pass;exitCode=$p.ExitCode;dll=(Get-FileHash $dll).Hash;checks=([regex]::Matches($t,'BATTLE_MIXED_FAST_CHECK PASS')).Count}|ConvertTo-Json|Set-Content (Join-Path $out 'result.json')
-$t -split "`n"|Where-Object{$_ -match 'BATTLE_MIXED_FAST|MIXED_SAVE_'}|Write-Output
+$t -split "`n"|Where-Object{$_ -match 'BATTLE_MIXED_FAST'}|Write-Output
 if(!$pass){throw "Test failed: $log"}
 if($Rendered -and !(Test-Path (Join-Path $out 'screen-restored.png'))){throw 'Missing restored screen'}
 

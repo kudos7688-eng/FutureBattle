@@ -7,7 +7,6 @@ static_assert(FBattleSightExperiment::MaxSquadTypes==BattleSquadType::Count,"typ
 #include "BattleMetrics.h"
 #include "BattlePerception.h"
 #include "BattleSquadTactics.h"
-#include "BattleSave.h"
 #include "BattleFieldLayout.h"
 #include "BattleTactics.h"
 #include "Dom/JsonObject.h"
@@ -36,33 +35,6 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
   E.Started=true;E.StartWall=FPlatformTime::Seconds();Metrics->Start();
   E.FlankTrial=FParse::Param(FCommandLine::Get(),TEXT("BattleFlankTrial"));
   UE_LOG(LogFutureBattle,Display,TEXT("SIGHT_EXPERIMENT_START output=%s"),*E.Output);
- }
- // -BattleVerifySaveAt=<s> (default 80): when the round trip is made (2026-11-22: the strategy layer's states form after 225 s).
- static const float VerifySaveAt=[]{float At=80.f;FParse::Value(FCommandLine::Get(),TEXT("BattleVerifySaveAt="),At);return FMath::IsFinite(At)?FMath::Max(1.f,At):80.f;}();
- if(!E.SaveCheckDone && Match->Elapsed>=VerifySaveAt && FParse::Param(FCommandLine::Get(),TEXT("BattleVerifyMixedSave")))
- {
-  E.SaveCheckDone=true;auto* Before=Match->CaptureSnapshot();FString Error;int32 BrokenCarried=0;
-  bool OK=Before&&Before->Validate(Error)&&Match->SaveMatch(TEXT("FutureBattleSmokeOnly"))&&Match->LoadMatch(TEXT("FutureBattleSmokeOnly"));
-  if(OK)
-  {
-   auto* After=Match->CaptureSnapshot();OK=After&&After->Validate(Error)&&After->MatchID==Before->MatchID&&After->Units.Num()==Before->Units.Num()&&After->SavedPlans.Num()==Before->SavedPlans.Num();
-   if(OK&&Match->bArea)OK=After->AllyCredits==Before->AllyCredits&&After->EnemyCredits==Before->EnemyCredits&&After->Area.BaseHP==Before->Area.BaseHP&&After->Area.KnownOwners==Before->Area.KnownOwners&&After->Area.Replacements.OrderIndependentCompareEqual(Before->Area.Replacements)&&After->Area.HireSpent==Before->Area.HireSpent&&After->Area.Income==Before->Area.Income&&After->Area.IncomeClock==Before->Area.IncomeClock&&After->Area.LastAIHireAt==Before->Area.LastAIHireAt&&After->Squads.Num()==Before->Squads.Num();
-   if(OK)for(int32 I=0;I<Before->Units.Num();++I)
-   {
-    const auto& A=Before->Units[I];const auto& B=After->Units[I];
-    OK&=A.State.UnitID==B.State.UnitID&&A.State.HP==B.State.HP&&A.State.Ammo==B.State.Ammo&&A.State.Reserve==B.State.Reserve&&A.State.bActorRepresentation==B.State.bActorRepresentation&&A.Position.Equals(B.Position,.01);
-    OK&=A.BrokenCoverSlot==B.BrokenCoverSlot&&FMath::IsNearlyEqual(A.BrokenCoverLeft,B.BrokenCoverLeft,.05f)&&A.BrokenCoverAt.Equals(B.BrokenCoverAt,.01);
-    BrokenCarried+=A.BrokenCoverSlot!=INDEX_NONE;
-   }
-   if(OK)for(const auto& P:Before->SavedPlans)
-   {
-    const auto* Q=After->SavedPlans.Find(P.Key);
-    OK&=Q&&Q->Action==P.Value.Action&&Q->Age==P.Value.Age&&Q->SupportSquad==P.Value.SupportSquad&&Q->FlankTarget==P.Value.FlankTarget&&Q->FlankSupport==P.Value.FlankSupport&&Q->FlankSupportChanges==P.Value.FlankSupportChanges;
-   }
-  }
-  E.SaveCheckPassed=OK;
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MIXED_SAVE_SOAK_RESULT failures=%d seconds=%.2f validation=%s message=%s broken_cover=%d"),OK?0:1,Match->Elapsed,*Error,*Match->LastMessage,BrokenCarried);
-  if(!OK){E.Finished=true;FPlatformMisc::RequestExitWithStatus(false,1);return;}
  }
  Metrics->BeginFrame();
  if(Match->Elapsed>=E.NextProgress){UE_LOG(LogFutureBattle,Display,TEXT("SIGHT_EXPERIMENT_PROGRESS seconds=%.1f shots=%d score=%.1f/%.1f"),Match->Elapsed,E.Shots,Match->Score[0],Match->Score[1]);E.NextProgress+=20;}
@@ -168,7 +140,7 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
  auto Root=Metrics->Finish();
  Root->SetNumberField(TEXT("winner"),Match->Winner);Root->SetStringField(TEXT("reason"),Mode->Result);
  Root->SetNumberField(TEXT("match_seconds"),Match->Elapsed);
- Root->SetBoolField(TEXT("mixed_save_round_trip_verified"),E.SaveCheckPassed);
+ Root->SetBoolField(TEXT("mixed_save_round_trip_verified"),false);
  Root->SetNumberField(TEXT("ally_score"),Match->Score[0]);Root->SetNumberField(TEXT("enemy_score"),Match->Score[1]);
  TArray<TSharedPtr<FJsonValue>> PointStates;
  for(const auto& Point:Match->Objectives)

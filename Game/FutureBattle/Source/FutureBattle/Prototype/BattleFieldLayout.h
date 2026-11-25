@@ -61,8 +61,6 @@ namespace BattleFieldLayout
 		FVector2D CityHalf=FVector2D::ZeroVector;
 		float MatchSeconds=180;
 		float CameraMaxHeight=4500;
-		// Largest |X|, |Y| a saved position may have.
-		FVector2D SaveLimit=FVector2D(32000,22000);
 		// Ground heights (BattleTerrain.h): hills, stairs and upper floors. Empty on the flat maps A-F.
 		BattleTerrain::FHeights Heights;
 	};
@@ -77,7 +75,7 @@ namespace BattleFieldLayout
 			for(const TCHAR* Name:{TEXT("Lvl_BattleWide_A"),TEXT("Lvl_BattleWide_B"),TEXT("Lvl_BattleWide_C"),TEXT("Lvl_BattleWide_D")})
 			{
 				FMapDef D;D.Name=Name;D.Kind=EMapKind::Wide;D.bExpanded=FCString::Strcmp(Name,TEXT("Lvl_BattleWide_D"))==0;
-				if(D.bExpanded){D.Scale=FVector(4./3.,1.5,1);D.HalfExtent=FVector2D(40000,30000);D.HomeDistance=36000;D.CameraMaxHeight=130000;D.SaveLimit=FVector2D(42000,32000);}
+				if(D.bExpanded){D.Scale=FVector(4./3.,1.5,1);D.HalfExtent=FVector2D(40000,30000);D.HomeDistance=36000;D.CameraMaxHeight=130000;}
 				else{D.HalfExtent=FVector2D(30000,20000);D.HomeDistance=27000;D.CameraMaxHeight=100000;}
 				for(int32 I=0;I<3;++I)D.Objectives.Add(Objective(I,D.bExpanded));
 				D.Lookouts={Expand(FVector(0,17000,0),D.bExpanded),Expand(FVector(0,-17000,0),D.bExpanded)};
@@ -88,7 +86,7 @@ namespace BattleFieldLayout
 			FMapDef Urban;Urban.Kind=EMapKind::Wide;Urban.bUrban=true;
 			Urban.HalfExtent=FVector2D(50000,35000);Urban.HomeDistance=42000;Urban.SpawnX=39000;
 			Urban.Lookouts={FVector(0,16500,0),FVector(0,-16500,0)};
-			Urban.CityHalf=FVector2D(25000,15000);Urban.MatchSeconds=900;Urban.CameraMaxHeight=160000;Urban.SaveLimit=FVector2D(52000,37000);
+			Urban.CityHalf=FVector2D(25000,15000);Urban.MatchSeconds=900;Urban.CameraMaxHeight=160000;
 			Urban.VehicleSearchNodes=32768;
 			{
 				FMapDef D=Urban;D.Name=TEXT("Lvl_BattleWide_E");
@@ -285,12 +283,6 @@ namespace BattleFieldLayout
 		for(const FMapDef& D:Maps())if(Map.EndsWith(D.Name))return D;
 		return Maps()[0];
 	}
-	// True for the maps a mixed save may name (exact name).
-	inline bool IsMixedSaveMap(const FString& Map)
-	{
-		for(const FMapDef& D:Maps())if(D.Kind!=EMapKind::Arena&&Map==D.Name)return true;
-		return false;
-	}
 	inline const FMapDef& Of(const UWorld* World)
 	{
 		if(!World)return Maps()[0];
@@ -313,7 +305,7 @@ namespace BattleFieldLayout
 	inline bool SectorComboSwitch(int32 Arg) {return Arg>=0?Arg!=0:SectorComboDefault();}
 	inline bool IsSightField(const UWorld* World) {return Of(World).Kind==EMapKind::Wide;}
 	inline bool IsLarge(const UWorld* World) {return Of(World).Kind!=EMapKind::Arena;}
-	// Objectives of the wide maps by map name (also used to validate saves). Other names get the three objectives of map A.
+	// Objectives of the wide maps by map name. Other names get the three objectives of map A.
 	inline int32 ObjectiveCountForMap(const FString& Map) {const FMapDef& D=ByName(Map);return D.Kind==EMapKind::Wide?D.Objectives.Num():3;}
 	inline FVector ObjectiveForMap(const FString& Map,int32 Index)
 	{
