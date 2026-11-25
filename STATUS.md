@@ -35,6 +35,39 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-25 11時00分 Claude（評価の道具）：通しの試遊手順・試験の対応表・解析の条件表示と発動回数・兵種の役割の表・進行中の実験の一覧（文書と `Setup/` の解析だけ。C++・ビルド・試合なし）
+
+`Docs/review-2026-11-25/` の方針「新しい機能より先に、何を確かめれば次へ進めるかを揃える」の道具。下調べとレビューは Codex（読み取り専用）、指摘は Claude がコードで確かめて反映した。
+
+- **通しの試遊手順** `Docs/playtest-walkthrough.md`（4f29df4 ほか）：マップI（区画AI の組み合わせが既定ON なのは I だけ・評価の試合の大半が I・B06 で既定が変わったのも I・壁がある・起動時の作り直しが無い）。起動は `Play-Area.ps1 -Map I -SectionOrders`。8段階（委任 → 区間の指定 → 攻撃群 → 区間の前進・後退 → 補給 → FPS → 壁遮蔽中の保存と読込 → RTS へ戻る）を「できた／できない／意図が分からない」で記録し、「FPS 中に指揮へ戻りたくなった理由」の欄がある。デスクトップに「FutureBattle 通し試遊（区間・攻撃群・補給・FPS） マップI」と「FutureBattle 通し試遊（区間の前進・後退だけ） マップJ」（段階4の予備）を作った（起動はせず、ショートカットの中身と引数の受け付けだけ確かめた）。
+  - 制限：**段階7（壁遮蔽中の F8／F9）は B01・B02（contract b9fa623）が main に入ってから合格する想定**。手順は実際の画面では通していない（操作と期待の文は、コードと Codex の照合まで）。
+- **試験の対応表** `Docs/test-map.md`（6b5e6a6）：スモーク25本と `Test-*.ps1` 40本を「契約・局所の挙動・通常の試合・操作の体験」に対応づけた。わかったこと：
+  - 入口の試験が無い自己試験が2つある：B06 の `-BattleMissionResumeSmoke`（`Test-SquadRetreat` は走らせない。`Test-WideSight -ExtraArgs` で渡しても合否に入らない）と、区画の命令の `-BattleSectorSmoke`。
+  - 足すべき固定場面3つは、どれも今の試験では足りない：壁で分断された小隊（`Test-MovementStability` の狭路の壁は経路網に効かない壁で、同じ小隊を壁の両側に置く場面が無い）、遮蔽へ置く守備小隊（兵1人の遮蔽の動作までで、全員が着いて留まる合否が無い）、補給から戻る小隊（復帰の関数の契約と補給車の規則は別々にあるが、弾が減る → 歩く → 補充 → 復帰 → 帰着の通しが無い）。作るのは各担当。
+- **解析の改善** `Setup/Analyze-MatchDelta.py`：今までの出力（組ごとの項目と MEAN）の後に3つ足した。今までの出力は変えていない（6試合3組で、変更前のスクリプトの44行と一致）。
+  - `CONDITIONS`：ビルド・DLL・マップ・シード・FPS・描画・試験した側・保存の確認・`passed` を並べ、不一致と不明に印。片方だけにある起動引数も出す（起動引数であって、実際に効いた設定の一式ではない）。
+  - `ACTIVATIONS`：発動指標を `run.log` からチーム別に数え、「0（起き得たが起きなかった）／対象なし／対象不明／記録なし」を区別。`--count 名前=正規表現[@対象の行]` で足せる。
+  - `ALL MATCHES`：渡した全部の組を向きに関係なく1行ずつ（読めない組も残る）。
+  - 既存の結果での動作（`python -I Setup/Analyze-MatchDelta.py co-K-off-s7 co-K-on-s7 co-K-off-s43 co-K-on-s43 ct-base-I-s7 ct-base-Idel-s7` の最後の部分）：
+
+    ```
+    ALL MATCHES: 3 pair(s) given, 3 read. Change of (team0 - team1) from base to trial; nothing is left out by its direction.
+      base -> trial                        score  damage   kills  deaths  notes
+      co-K-off-s7 -> co-K-on-s7             -296   -1790      -2      +4  base has 2 argument(s) the trial lacks; build not frozen
+          activations base|trial (team0/team1): AREA_HIRE 15/12|5/5  ARMS_ASSAULT 136/148|85/92  ARMS_CHARGE 16/11|8/6  ARMS_GRENADE 114/126|45/48  ARMS_MELEE 15/15|2/3
+      co-K-off-s43 -> co-K-on-s43             +8   -3977     -28     +25  build not frozen
+          activations base|trial (team0/team1): AREA_HIRE 9/11|9/11  ARMS_ASSAULT 213/111|231/229  ARMS_CHARGE 11/1|22/25  ARMS_GRENADE 99/81|183/178  ARMS_MELEE 2/1|18/13
+      ct-base-I-s7 -> ct-base-Idel-s7       +237   -1668     -23      -1  -
+          activations base|trial (team0/team1): AREA_HIRE 12/10|11/9  HIRE_RESERVE op=buy no subj|6/4  ARMS_GRENADE 0/3|0?  ARMS_MELEE 0|0?
+    ```
+
+    読み方の例：マップK の `-BattleCutOffRoute` の組は、凍結ビルドではなく作業ツリーから起動した試合で、種7は基準の側だけ `-BattleStateTrace=150 -BattleStateTraceDetail=0-240` が付いている（`CONDITIONS` の `only base`）。雇用の委任の組（`-BattleHireDelegate=2`）は、基準が「予約なし＝対象なし」、試験した側が予約からの購入 6回・4回。`COMPOSITION_EXECUTE`・`FRONT_FOCUS2_GROUP`・`FRONT_ORDER_STEP` は3組とも「対象なし（切替が無い）」と出る。
+  - 制限：対象の有無は起動引数とログの行から決めるので、既定値で入っている機能（躍進・突撃・手りゅう弾は、精鋭小隊がいたかどうか）は「対象不明」と出ることがある。`BATTLE_MISSION_RESUME` の行にはチームが無いので「no team」に数える。`Setup/Test-WideSight.ps1` は触っていない。
+  - **採用の確認に使う未使用のシードは 239・277**（`MEASURE.md` に記載。main と全ワークツリーの結果の manifest を数え、使用済みは 3・7・11・19・43・61・89・101・131・157・173・191・211）。試合は増やしていない。
+- **兵種の役割の表** `Docs/design-unit-roles.md`（0cd7282）：10兵種の「主な仕事／得意な相手／苦手な状況／必要な支援／費用／確かめる固定場面」。数値は変えていない。決まっていない欄は「未定」のまま：装甲車・自走砲の主な仕事、小銃小隊・重装歩兵の得意な相手、多くの兵種の必要な支援。迫撃砲班は「編成AI の目標は早めに1」と要約の「AI が迫撃砲を買わない」が食い違い、どちらが今の状態かは未確認。
+- **進行中の実験の一覧** `Docs/experiments.md`（30751b8）：要約に出ている進行中の試験切替を「担当の系統／目的／依存／見直し日／終了条件」の表にした。見直し日の初期値は一律 2026-12-09（依存の修理待ちは「修理の後」）で、**各系統が自分の行を直す**。終了条件が記録から読めないものは「未定」。要約に無く直近の項目にだけある切替は別の表に覚えとして並べた。`AGENTS.md` に「新しい試験切替を足すときはこの表に1行足す」を足した。
+- 次の一手：(1) ユーザーの通しの試遊（B01・B02 の取り込みの後がよい）。(2) 各系統が `Docs/experiments.md` の自分の行と、`Docs/test-map.md` 3章の固定場面を引き取る。(3) 兵種の役割の「未定」のうち、装甲車・自走砲の主な仕事はユーザーの判断。(4) 実際に効いた切替の一式を試合の開始時に記録する（C++ の変更。解析の `CONDITIONS` はそれが入るまでの代わり）。
+
 ## 2026-11-25 11時05分 Claude（弾薬と補給）：小銃兵の時間の約95%は「小隊に目標が無く、自分も敵が見えない」。撃てる状態は0.4〜0.5%（記録だけの切替 `-BattleFireTimeLog`）
 
 ユーザー指示「数える」（撃てる時間が短い理由）。なお「ここを常に最優先に」の指示により、この系統はロックの列に毎回先頭（`-Urgent`）で入る（掲示板に記録）。
