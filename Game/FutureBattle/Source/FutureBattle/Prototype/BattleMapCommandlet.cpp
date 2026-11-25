@@ -38,6 +38,7 @@
 #include "PhysicsEngine/BodySetup.h"
 #include "NavModifierComponent.h"
 #include "Misc/PackageName.h"
+#include "HAL/FileManager.h"
 #include "EngineUtils.h"
 #endif
 
@@ -55,6 +56,10 @@ int32 BuildGroundTiles(UWorld* World,const BattleTerrain::FHeightField& F,TFunct
 	{
 		const int32 I0=TI*Cells,J0=TJ*Cells,I1=FMath::Min(I0+Cells,F.NX-1),J1=FMath::Min(J0+Cells,F.NY-1);
 		const FString Name=FString::Printf(TEXT("SM_Ground_%02d_%02d"),TI,TJ);
+		// A regeneration (-Force) replaces the tiles of the last one: a package that exists on disk but is not loaded cannot be saved
+		// over, so the old file goes first (these assets are made only here).
+		const FString OldFile=FPackageName::LongPackageNameToFilename(Root/Name,FPackageName::GetAssetPackageExtension());
+		if(IFileManager::Get().FileExists(*OldFile)&&!IFileManager::Get().Delete(*OldFile,false,true)){UE_LOG(LogTemp,Error,TEXT("TERRAIN_FIELD_DELETE_FAILED %s"),*OldFile);return -1;}
 		UPackage* Package=CreatePackage(*(Root/Name));
 		UStaticMesh* Mesh=NewObject<UStaticMesh>(Package,*Name,RF_Public|RF_Standalone);
 		Mesh->GetStaticMaterials().Add(FStaticMaterial(Mat,TEXT("Ground"),TEXT("Ground")));
@@ -145,8 +150,8 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 	const TArray<BattleTerrain::FHill> TerrainHills=UrbanK?BattleMapK::Hills():UrbanJ?BattleMapJ::Hills():UrbanI?BattleMapI::Hills():UrbanH?BattleSectors::Hills():UrbanG?BattleTerrain::HillsG():TArray<BattleTerrain::FHill>();
 	const FString WideName=TEXT("Lvl_BattleWide_")+Wide;
 	// Map L: the height field of the map definition (null on every other map: their ground is the flat floor at height 0).
-	const BattleTerrain::FHeightField* Field=UrbanL?&BattleFieldLayout::ByName(WideName).Heights.Field:nullptr;
-	auto GroundZ=[Field](double X,double Y){return Field?Field->Height(X,Y):0.;};
+	const BattleTerrain::FHeightField* HeightField=UrbanL?&BattleFieldLayout::ByName(WideName).Heights.Field:nullptr;
+	auto GroundZ=[HeightField](double X,double Y){return HeightField?HeightField->Height(X,Y):0.;};
 	const bool Sight=!Wide.IsEmpty();
 	const bool Large = Sight || FParse::Param(*Params,TEXT("LargeField"));
 	const FString Name=Sight?TEXT("Lvl_BattleWide_")+Wide:Large?TEXT("Lvl_BattleField500"):TEXT("Lvl_BattlePrototype");
@@ -194,21 +199,21 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 		Location=BattleFieldLayout::Expand(Location,Expanded);Size=BattleFieldLayout::Expand(Size,Expanded);
 		Spawned.Reset();
 		TArray<TPair<FVector,FVector>> Pieces;Pieces.Emplace(Location,Size);
-		if(Field)
+		if(HeightField)
 		{
 			Pieces.Reset();
 			const bool bStands=FieldStand&&Location.Z-Size.Z*.5<5.;
-			double Low=0,High=0;Field->Range(Location.X-Size.X*.5,Location.Y-Size.Y*.5,Location.X+Size.X*.5,Location.Y+Size.Y*.5,Low,High);
+			double Low=0,High=0;HeightField->Range(Location.X-Size.X*.5,Location.Y-Size.Y*.5,Location.X+Size.X*.5,Location.Y+Size.Y*.5,Low,High);
 			const bool bAlongX=Size.X>=Size.Y;const double Long=bAlongX?Size.X:Size.Y;
 			const int32 N=bStands&&FieldSplit&&Long>400.&&High-Low>20.?FMath::CeilToInt(Long/300.):1;
 			for(int32 K=0;K<N;++K)
 			{
 				FVector At=Location,Extent=Size;
 				if(N>1){const double Part=Long/N,From=(bAlongX?Location.X:Location.Y)-Long*.5+Part*(K+.5);(bAlongX?At.X:At.Y)=From;(bAlongX?Extent.X:Extent.Y)=Part;}
-				const double G=Field->Height(At.X,At.Y);
+				const double G=HeightField->Height(At.X,At.Y);
 				if(bStands)
 				{
-					double PieceLow=0,PieceHigh=0;Field->Range(At.X-Extent.X*.5,At.Y-Extent.Y*.5,At.X+Extent.X*.5,At.Y+Extent.Y*.5,PieceLow,PieceHigh);
+					double PieceLow=0,PieceHigh=0;HeightField->Range(At.X-Extent.X*.5,At.Y-Extent.Y*.5,At.X+Extent.X*.5,At.Y+Extent.Y*.5,PieceLow,PieceHigh);
 					const double Top=G+At.Z+Extent.Z*.5,Bottom=FMath::Min(G+At.Z-Extent.Z*.5,PieceLow-20.);
 					At.Z=(Top+Bottom)*.5;Extent.Z=Top-Bottom;
 				}
@@ -251,7 +256,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 				UPackage::SavePackage(Package,GroundMat,*(FPaths::ProjectContentDir()/TEXT("Prototype/Materials/")+MatName+TEXT(".uasset")),Args);
 			}
 		}
-		const BattleTerrain::FHeightField& F=*Field;
+		const BattleTerrain::FHeightField& F=*HeightField;
 		auto Paint=[&](int32 I,int32 J)->FLinearColor
 		{
 			const double X=F.Origin.X+I*F.Step,Y=F.Origin.Y+J*F.Step,H=F.At(I,J);
@@ -634,11 +639,11 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 	// islands formed on rooftops and car roofs; destinations projected onto them and the paths came back partial.
 	// Map L: one volume from below the lowest ground to above the highest upper floor; the tops of obstacles are kept out of the
 	// navigation by a null-area modifier on every obstacle instead (below).
-	double FieldHigh=0;if(Field)for(const float Z:Field->Z)FieldHigh=FMath::Max(FieldHigh,double(Z));
-	ANavMeshBoundsVolume* Bounds = World->SpawnActor<ANavMeshBoundsVolume>(FVector(0, 0, Field ? (FieldHigh+450.-50.)*.5 : Urban ? 52.5 : 150), FRotator::ZeroRotator);
+	double FieldHigh=0;if(HeightField)for(const float Z:HeightField->Z)FieldHigh=FMath::Max(FieldHigh,double(Z));
+	ANavMeshBoundsVolume* Bounds = World->SpawnActor<ANavMeshBoundsVolume>(FVector(0, 0, HeightField ? (FieldHigh+450.-50.)*.5 : Urban ? 52.5 : 150), FRotator::ZeroRotator);
 	Bounds->SetActorLabel(TEXT("ArenaNavigationBounds"));
 	UCubeBuilder* Builder = NewObject<UCubeBuilder>(Bounds);
-	Builder->X = Urban?99800:Expanded?79800:Sight ? 59800 : Large ? 23800 : 7800; Builder->Y = Urban?69800:Expanded?59800:Sight ? 39800 : Large ? 17800 : 5800; Builder->Z = Field ? FieldHigh+500. : Urban ? 145 : 1200;
+	Builder->X = Urban?99800:Expanded?79800:Sight ? 59800 : Large ? 23800 : 7800; Builder->Y = Urban?69800:Expanded?59800:Sight ? 39800 : Large ? 17800 : 5800; Builder->Z = HeightField ? FieldHigh+500. : Urban ? 145 : 1200;
 	UActorFactory::CreateBrushForVolumeActor(Bounds, Builder);
 	Bounds->GetBrushComponent()->BuildSimpleBrushCollision();
 	Bounds->PostEditChange();
@@ -646,7 +651,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 	// volume of its own that reaches just over it. Cover that stands on those is 130cm high, above the volume.
 	TArray<ANavMeshBoundsVolume*> TerrainVolumes;
 	int32 NoRoof=0;
-	if(Field)
+	if(HeightField)
 	{
 		for(TActorIterator<AStaticMeshActor> It(World);It;++It)
 		{
@@ -658,7 +663,7 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 		}
 		UE_LOG(LogTemp,Display,TEXT("TERRAIN_FIELD_NAV no_roof_modifiers=%d volume_top_cm=%.0f"),NoRoof,FieldHigh+450.);
 	}
-	if(Terrain&&!Field)
+	if(Terrain&&!HeightField)
 	{
 		auto Extra=[&](double X0,double X1,double Y0,double Y1,double Z0,double Z1)
 		{
@@ -689,10 +694,10 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 		for(int32 I=0;I<3;++I)for(int32 Sign:{-1,1})
 		{
 			// Map L: from 1m below the lowest ground of the piece to 3m above its highest (map I: -100..220 over the flat floor).
-			double Low=0,High=0;if(Field)Field->Range(Sign>0?RiverX0:-RiverX1,Sign>0?Cuts[I][0]:-Cuts[I][1],Sign>0?RiverX1:-RiverX0,Sign>0?Cuts[I][1]:-Cuts[I][0],Low,High);
-			ANavModifierVolume* Water=World->SpawnActor<ANavModifierVolume>(FVector(Sign*(RiverX0+RiverX1)*.5,Sign*(Cuts[I][0]+Cuts[I][1])*.5,Field?(Low-100.+High+300.)*.5:60),FRotator::ZeroRotator);
+			double Low=0,High=0;if(HeightField)HeightField->Range(Sign>0?RiverX0:-RiverX1,Sign>0?Cuts[I][0]:-Cuts[I][1],Sign>0?RiverX1:-RiverX0,Sign>0?Cuts[I][1]:-Cuts[I][0],Low,High);
+			ANavModifierVolume* Water=World->SpawnActor<ANavModifierVolume>(FVector(Sign*(RiverX0+RiverX1)*.5,Sign*(Cuts[I][0]+Cuts[I][1])*.5,HeightField?(Low-100.+High+300.)*.5:60),FRotator::ZeroRotator);
 			Water->SetActorLabel(TEXT("RiverNoWalk"));
-			UCubeBuilder* WaterCube=NewObject<UCubeBuilder>(Water);WaterCube->X=RiverX1-RiverX0;WaterCube->Y=Cuts[I][1]-Cuts[I][0];WaterCube->Z=Field?High+300.-(Low-100.):320;
+			UCubeBuilder* WaterCube=NewObject<UCubeBuilder>(Water);WaterCube->X=RiverX1-RiverX0;WaterCube->Y=Cuts[I][1]-Cuts[I][0];WaterCube->Z=HeightField?High+300.-(Low-100.):320;
 			UActorFactory::CreateBrushForVolumeActor(Water,WaterCube);Water->GetBrushComponent()->BuildSimpleBrushCollision();
 			Water->SetAreaClass(UNavArea_Null::StaticClass());Water->PostEditChange();
 		}
@@ -800,17 +805,19 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 					for(const BattleTerrain::FHouse& B:TerrainHouses){const BattleTerrain::FHouseShape S(B);Reach(FVector(Sign*B.X,Sign*(S.S0y+S.SY)*.5+60,GroundZ(B.X,B.Y)+BattleTerrain::FloorZ));}
 					for(const BattleTerrain::FHill& H:TerrainHills)Reach(FVector(Sign*H.X,Sign*H.Y,H.Top));
 					// Map L: the tops of the knoll and the ridge (the hills of map I, part of the field).
-					if(Field)for(const FVector2D Top:{FVector2D(22500,7500),FVector2D(20000,-29500)})Reach(FVector(Sign*Top.X,Sign*Top.Y,GroundZ(Top.X,Top.Y)));
+					if(HeightField)for(const FVector2D Top:{FVector2D(22500,7500),FVector2D(20000,-29500)})Reach(FVector(Sign*Top.X,Sign*Top.Y,GroundZ(Top.X,Top.Y)));
 				}
 				// Map L: the ground mesh is the field (a trace down every 10m; points where an obstacle stands are skipped), and no
 				// obstacle top carries navigation (a point 40cm above the middle of the top of every obstacle wider than 70cm).
 				int32 FieldSamples=0,FieldMismatched=0,Roofs=0,RoofChecked=0;double FieldWorst=0;
-				if(Field)
+				if(HeightField)
 				{
 					// Inside both triangles of a cell (u = .36, v = .68 and the other way round), not at the grid points.
 					for(const FVector2D Off:{FVector2D(90,170),FVector2D(170,90)})for(double SX=-49500;SX<=49500;SX+=1000)for(double SY=-34500;SY<=34500;SY+=1000)
 					{
 						const double X=SX+Off.X,Y=SY+Off.Y,Z=GroundZ(X,Y);FHitResult Hit;
+						// Inside a house the stairs and the upper floor are patches over the field (checked above with the patches).
+						if(Heights.Patches.ContainsByPredicate([&](const BattleTerrain::FHeightPatch& P){return P.Contains(X,Y);}))continue;
 						const bool bHit=World->LineTraceSingleByObjectType(Hit,FVector(X,Y,Z+300),FVector(X,Y,Z-300),FCollisionObjectQueryParams(ECC_WorldStatic));
 						if(bHit&&!BattleTerrain::IsGround(Hit))continue;
 						++FieldSamples;const double Gap=bHit?FMath::Abs(Hit.ImpactPoint.Z-Z):1.e6;FieldWorst=FMath::Max(FieldWorst,Gap);
