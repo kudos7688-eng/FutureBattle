@@ -76,6 +76,7 @@ void UBattlePerception::Restore(const TMap<int32, FBattleObserver>& SavedObserve
 	// The squads' tables come back with RestoreSquadKnowledge (BattleSave.cpp); without it they are rebuilt from the members' own contacts.
 	SquadIntel.Reset(); SquadReports.Reset(); SquadReportKeys.Reset();
 	NextScanTimes.Reset(); LastScanTimes.Reset();
+ GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->SightExperiment.PeekScans.Reset();
 	for (auto& Observer : Observers)
 	{
 		for (auto& Contact : Observer.Value.Contacts) { Contact.Value.LastSeenTime += Now; Contact.Value.bVisible = false; }
@@ -204,7 +205,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	};
 	for (auto It = CrossSectorLook.CreateIterator(); It; ++It) if (It.Value() < Now) It.RemoveCurrent();
 	// One candidate of one observer's scan. Visible: -1 = test line of sight here, 0/1 = result already traced (parallel trial).
-	auto Consider = [&](FBattleObserver& Observer, const TPair<int32, FLiveUnit>& Pair, const FBattleSightContext& Sight, bool bFarPulse, TSet<int32>& InView, const FLiveUnit& Candidate, int32 Visible)
+	auto Consider = [&](FBattleObserver& Observer, const TPair<int32, FLiveUnit>& Pair, const FBattleSightContext& Sight, bool bFarPulse, TSet<int32>& InView, const FLiveUnit& Candidate, int32 Visible, bool bWhyPrefiltered=false)
 	{
 		ABattleUnit* Unit = Pair.Value.Unit;
 		const auto* State = Pair.Value.State;
@@ -214,7 +215,13 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 		if (SkipFar(Observer, Sight, bFarPulse, Candidate))
 		{ if (Metrics->bRecording) ++Metrics->FarCandidatesSkipped; return; }
 		if (SkipCross(Observer, Pair, Candidate)) { ++SectorSightSkipped; return; }
-		if (Visible >= 0 ? Visible == 0 : Mixed ? !(bReuseSightContext ? (VehicleSpot2 > 0. && FVector::DistSquared(Sight.Position, Candidate.Position) > Sight.RangeSquared && Leader->IsVehicle(Candidate.State->UnitID) ? Leader->CanSeeVehicleFar(Pair.Key, Sight, Candidate.State->UnitID, Now) : Leader->CanSeeWithContext(Sight,Candidate.State->UnitID,Pair.Key)) : Leader->CanSee(Pair.Key,Candidate.State->UnitID)) : !Unit->CanSeeSnapshot(Sight, Candidate.Unit, Candidate.Position, true)) return;
+  auto* WhyScan=Leader->SightExperiment.Enabled?Leader->SightExperiment.PeekScans.Find(Pair.Key):nullptr;
+  if(WhyScan && WhyScan->Target!=Candidate.State->UnitID)WhyScan=nullptr;
+  int32 WhyPrepared=Visible>=0?(bWhyPrefiltered?0:1):-1;
+  if(WhyScan && Visible<0)Leader->PeekwhyPrepared=&WhyPrepared;
+  const bool bWhyInvisible=Visible >= 0 ? Visible == 0 : Mixed ? !(bReuseSightContext ? (VehicleSpot2 > 0. && FVector::DistSquared(Sight.Position, Candidate.Position) > Sight.RangeSquared && Leader->IsVehicle(Candidate.State->UnitID) ? Leader->CanSeeVehicleFar(Pair.Key, Sight, Candidate.State->UnitID, Now) : Leader->CanSeeWithContext(Sight,Candidate.State->UnitID,Pair.Key)) : Leader->CanSee(Pair.Key,Candidate.State->UnitID)) : !Unit->CanSeeSnapshot(Sight, Candidate.Unit, Candidate.Position, true);
+  if(WhyScan){Leader->PeekwhyPrepared=nullptr;WhyScan->Stage=WhyPrepared<0?4:WhyPrepared>0?1:0;}
+  if(bWhyInvisible)return;
 		const int32 TargetID = Candidate.State->UnitID;
 		InView.Add(TargetID);
 		double* Started = Observer.DetectionStarted.Find(TargetID);
@@ -230,7 +237,8 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			// Evaluation only: a contact this observer saw itself within 1s must wait for detection again.
 			if (Metrics->bRecording) if (const auto* Known = Observer.Contacts.Find(TargetID); Known && !Known->bShared && Now - Known->LastSeenTime <= 1. + 1.e-6) ++Metrics->ReacquireKnownStarted;
 		}
-		if (Now - *Started + 1.e-6 < Profile.DetectionSeconds) return;
+		if (Now - *Started + 1.e-6 < Profile.DetectionSeconds) {if(WhyScan)WhyScan->Stage=2;return;}
+  if(WhyScan)WhyScan->Stage=3;
 		if (Metrics->bRecording && *Started < Now - 1.e-6)
 			if (const auto* Known = Observer.Contacts.Find(TargetID); Known && !Known->bShared && Known->LastSeenTime < *Started - 1.e-6 && *Started - Known->LastSeenTime <= 1. + 1.e-6)
 			{
@@ -299,7 +307,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			const auto& Profile = State->Perception;
 			auto& Observer = Observers.FindOrAdd(Pair.Key);
 			if (Observer.ProfileRevision != State->PerceptionRevision)
-			{ Observer.Contacts.Reset(); Observer.DetectionStarted.Reset(); Observer.ProfileRevision = State->PerceptionRevision; }
+			{ Observer.Contacts.Reset(); Observer.DetectionStarted.Reset(); if(Leader->SightExperiment.Enabled)Leader->SightExperiment.PeekScans.Remove(Pair.Key); Observer.ProfileRevision = State->PerceptionRevision; }
 			if (SliceCount > 1 && Pair.Key % SliceCount != Slice) continue;
 			const double Phase = double((int64(Pair.Key) * 137) % 503) / 503. * .2;
 			double Lateness = 0.;
@@ -329,6 +337,11 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 				*Due += Step;
 				if (*Due <= Now + 1.e-6) *Due = (FMath::FloorToDouble((Now - Phase) / .2) + 1.) * .2 + Phase;
 			}
+   if(Leader->SightExperiment.Enabled)
+   {
+    if(State->CoverPhase>=2 && State->CoverPhase<=4)Leader->SightExperiment.PeekScans.Add(Pair.Key,{State->CoverTargetID,Now,0});
+    else Leader->SightExperiment.PeekScans.Remove(Pair.Key);
+   }
 			UpdatedObservers.Add(Pair.Key);
 			const double* PreviousScan = LastScanTimes.Find(Pair.Key);
 			Metrics->RecordObserverScan(PreviousScan ? Now - *PreviousScan : 0., Lateness);
@@ -435,7 +448,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 								++RayZone[Zone][RaySquadState && RaySquadState->SquadType == BattleSquadType::Rifle && RaySquadState->LeaderUnitID != Job.Pair->Key ? 1 : 0][Visible];
 							}
 						}
-						Consider(Observer, *Job.Pair, Job.Sight, Job.bFarPulse, InView, Candidate, Visible);
+						Consider(Observer, *Job.Pair, Job.Sight, Job.bFarPulse, InView, Candidate, Visible, Pre[K]==0);
 					}
 					Forget(Observer, Job.Pair->Value.State->Perception, InView);
 				}
@@ -659,4 +672,10 @@ void UBattlePerception::AddHint(int32 ObserverID, int32 TargetID, const FVector&
 	FBattleContact Hint; Hint.TargetID = TargetID; Hint.LastKnownPosition = Position; Hint.LastSeenTime = Now;
 	Hint.Confidence = FMath::Clamp(Confidence, 0.f, 1.f); Hint.bVisible = false; Hint.SourceUnitID = ObserverID; Hint.bShared = true; // its own (valid, same-team) source for saves
 	Observer->Contacts.Add(TargetID, Hint);
+}
+
+void UBattlePerception::Reset()
+{
+ Observers.Reset();PendingReports.Reset();PendingCounts.Reset();NextScanTimes.Reset();LastScanTimes.Reset();CrossSectorLook.Reset();SquadIntel.Reset();SquadReports.Reset();SquadReportKeys.Reset();
+ GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->SightExperiment.PeekScans.Reset();
 }

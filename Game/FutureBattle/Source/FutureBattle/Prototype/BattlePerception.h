@@ -152,7 +152,7 @@ public:
 	// Trial -BattleHitReveal: the observer was just shot by TargetID and has a clear line to him. The detection delay counts as
 	// already spent and the observer scans on the next frame; the contact still forms only through the normal scan (line of sight).
 	void RevealShooter(int32 ObserverID, int32 TargetID, double Now, float DetectionSeconds);
-	void Reset() { Observers.Reset(); PendingReports.Reset(); PendingCounts.Reset(); NextScanTimes.Reset(); LastScanTimes.Reset(); CrossSectorLook.Reset(); SquadIntel.Reset(); SquadReports.Reset(); SquadReportKeys.Reset(); }
+	void Reset();
 	void Capture(TMap<int32, FBattleObserver>& OutObservers, TArray<FBattleReport>& OutReports, double Now) const;
 	void Restore(const TMap<int32, FBattleObserver>& SavedObservers, const TArray<FBattleReport>& SavedReports, double Now);
 private:

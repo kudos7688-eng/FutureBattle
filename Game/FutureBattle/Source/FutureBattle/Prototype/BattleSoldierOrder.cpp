@@ -34,7 +34,7 @@ bool UBattleLeaderRuntime::IssueSoldierOrder(int32 ID,FVector Goal,FString& Why)
  const FVector Pos=Position(ID);
  UNavigationPath* Route=Nav->FindPathToLocationSynchronously(GetWorld(),Pos,Projected.Location);
  if(!Route || !Route->IsValid() || Route->IsPartial() || Route->PathPoints.Num()<2){Why=TEXT("そこまでの道がありません");return false;}
- CancelCoverAction(ID);CoverApproaches.Remove(ID);FirePositions.Remove(ID);CoverProbeAfter.Remove(ID);
+ CancelCoverAction(ID,TEXT("move"));CoverApproaches.Remove(ID);FirePositions.Remove(ID);CoverProbeAfter.Remove(ID);
  U->bSoldierOrder=true;U->bSoldierReturn=false;U->SoldierGoal=Projected.Location;U->SoldierOrderMission=S->MissionRevision;U->SoldierRepaths=0;U->SoldierStalledSince=0;
  auto& Path=SoldierPaths.FindOrAdd(ID);Path=FSoldierPath();for(const FVector& Point:Route->PathPoints)Path.Points.Add(Point);
  U->DecisionReason=TEXT("PLAYER ORDER / OWN PLACE");
@@ -52,7 +52,7 @@ bool UBattleLeaderRuntime::ReturnSoldier(int32 ID)
  if(!IssueSoldierOrder(ID,U->Destination,Why))
  {
   // No full path back (or his place is out of reach): he still walks back; the stuck rule ends the order if he cannot.
-  CancelCoverAction(ID);SoldierPaths.Remove(ID);U->SoldierGoal=U->Destination;U->SoldierRepaths=0;U->SoldierStalledSince=0;
+  CancelCoverAction(ID,TEXT("move"));SoldierPaths.Remove(ID);U->SoldierGoal=U->Destination;U->SoldierRepaths=0;U->SoldierStalledSince=0;
  }
  U->bSoldierReturn=true;U->SoldierOrderMission=Mission;return true;
 }

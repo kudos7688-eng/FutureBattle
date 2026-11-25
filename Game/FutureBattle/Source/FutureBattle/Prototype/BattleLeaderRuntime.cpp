@@ -221,6 +221,8 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_WIDE_MIXED_READY squads=%d actors=%d mass=%d objectives=%d paused=%d"),2*Starting,2*Starting,2*Starting*(BattleSquadType::RifleMembers()-1),Match->Objectives.Num(),Mode->bCombatPaused?1:0);
   if(FParse::Param(FCommandLine::Get(),TEXT("BattleSectorSmoke")))
   {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSectorSmoke,6.f,false);}
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleCoverPeekTrial")))
+  {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunCoverPeekTrial,4.f,false);}
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleCoverActionSmoke")))
   {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunCoverActionSmoke,4.f,false);}
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleFlankBayTrial")))
@@ -387,6 +389,7 @@ FHitResult UBattleLeaderRuntime::TraceSight(const FBattleSightContext& C,const F
 }
 bool UBattleLeaderRuntime::PrepareSightTrace(const FBattleSightContext& C,int32 Target,FVector& End) const
 {
+ if(PeekwhyPrepared)*PeekwhyPrepared=0;
  // The one copy of the checks before a unit sight trace (alive, range, field of view); vehicles are seen out to VehicleSpotRange.
  const auto* T=GetWorld()->GetSubsystem<UBattleState>()->Find(Target);
  if(!C.bAlive || !T || !T->IsAlive() || !Bodies.Contains(Target)) return false;
@@ -395,6 +398,7 @@ bool UBattleLeaderRuntime::PrepareSightTrace(const FBattleSightContext& C,int32 
  End=P+FVector(0,0,TargetAimOffset(Target));
  // A soldier blind-firing around an edge is seen by the part of him that shows past it.
  FVector Shown;if(SideExposure(Target,GetWorld()->GetTimeSeconds(),Shown))End=Shown;
+ if(PeekwhyPrepared)*PeekwhyPrepared=1;
  return true;
 }
 bool UBattleLeaderRuntime::SightHitStatsEnabled()

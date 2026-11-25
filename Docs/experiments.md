@@ -12,6 +12,7 @@
 
 | 切替 | 担当の系統 | 目的 | 依存する切替・前提 | 今わかっていること | 見直し日 | 終了条件（採用／削除／休止と再開の条件） |
 |---|---|---|---|---|---|---|
+| `-BattleCoverPeekTrial` | 壁の遮蔽判定（coverlean） | 覗き0発の固定場面と記録専用peekwhy計数の検証（通常の試合は変更しない） | `-BattleSightExperiment=<path>`・`-BattleStances=1`・CoverActions/Fire/PeekSight/Validation=1、マップC | 実装のみ、未ビルド・未実行 | 2026-12-09 | 固定場面(i)(ii)合格とpeekwhyを除いた同一試合の一致確認後、回帰試験として維持するか判断 |
 | `-BattleFrontSectionOrders=1` | 戦略層・マップJ | プレイヤーが前線の区間ごとに前進・後退を指示する | `-BattleFrontPlan=1`・`-BattleFrontPlanTeam=0`・`-BattleFrontPlanPlayer=1`（`Play-Area.ps1 -SectionOrders` が足す） | 自動確認（マップJ 種7）で、前進・後退の区間だけが目標の線まで動いた。画面は未確認 | 通しの試遊の後（遅くとも 2026-12-09） | 採用：通しの試遊（`Docs/playtest-walkthrough.md` 段階4）で「できた」。プレイヤーの操作なので勝敗では決めない。削除・休止：未定 |
 | `-BattleFrontPlan=1`（段階2）、`-BattleFrontPlanFlex=1`（段階4）、`-BattleFrontPlanFocus2=1`（段階5）、`-BattleHireDelegate=1/2`（段階6）、`-BattleFrontPlanPlayer=1`（段階7） | 戦略層・マップJ | 前線と戦略層の統合（重点の区間・兵の融通・第二の重点・雇用の委任・プレイヤーの指定） | 区画のあるマップ。段階4〜7は段階2が要る。段階6・7の予約は `-BattleHireReserve` | 段階2：東ONは4本ともプラス、西ONは4本ともマイナス（原因は未調査、線の下限と重点が未分離）。段階4は混在、段階5は一度も発動せず、段階6はマイナス（採用しない）、段階7は画面の確認待ち | 2026-12-09 | 自動の配分（段階2・4・5）は、線の下限と重点を分けて測ってから再評価（それまで機能を足さない、11-25 の協議）。段階5は発動の条件を見直すまで休止。段階6は削除の候補としてユーザーへ諮る。段階7は通しの試遊（段階2・3）で判断 |
 | `-BattleFrontShare`、`-BattleRouteTieSymmetric=1` | 戦略層・マップJ | 未確認（要約に名前だけ）／経路の同点の対称化 | 未確認 | 記録なし（要約に名前だけ） | 2026-12-09 | 未定（`-BattleFrontShare` は設計上「区間の兵の目安で要らなくなる」＝削除の候補） |

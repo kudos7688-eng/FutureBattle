@@ -12,6 +12,8 @@
 #include "BattleBodyAnim.h"
 #include "BattleLeaderRuntime.generated.h"
 
+struct FBattleContact;
+
 class ABattleGameMode;
 class UBattleSave;
 struct FBattleSavedUnit;
@@ -427,7 +429,7 @@ public:
  bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot);
  FVector TracerStart(int32 ID,const FVector& Start,const FVector& Direction) const;
  bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f,bool bAllHidden=false,const TFunction<bool(int32,const FVector&)>& Accept=nullptr);
- void CancelCoverAction(int32 ID);
+ void CancelCoverAction(int32 ID,const TCHAR* PeekCancel=TEXT("other"));
  bool StepCoverAction(int32 ID,float Dt,double Now);
  // Wall cover of the directly controlled soldier (BattleWallCover.cpp, user 11-24; -BattlePlayerWallCover=0 turns it off).
  // Pressing against a wall for WallPushSeconds, or C facing one, takes cover right there: behind a low wall crouched (aim to
@@ -888,6 +890,13 @@ public:
  void RunMovementTrial();
  void RunContactTrial();
  void RunCoverFirePointTrial();
+ void RunCoverPeekTrial();
+ int32 PeekTrialStage=0,PeekTrialCase=0,PeekTrialFailures=0;
+ double PeekTrialAt=0,PeekTrialLast=0;
+ bool PeekTrialFixture=false,PeekTrialReady=false;
+ FVector PeekTrialAnchor=FVector::ZeroVector;
+ void RecordPeekFrame(int32 ID,double Now,const FBattleContact* Contact,int32 Ray=-1,bool bFired=false);
+ mutable int32* PeekwhyPrepared=nullptr; // Scoped game-thread perception prefilter observation, never an input.
  void RunSightTrial();
  void RunWeaponRangeTrial();
  void RunWideMapAudit();

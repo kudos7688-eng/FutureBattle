@@ -22,6 +22,9 @@ static_assert(FBattleSightExperiment::MaxSquadTypes==BattleSquadType::Count,"typ
 void UBattleLeaderRuntime::StepSightExperiment(float Dt)
 {
  if(!SightExperiment.Enabled || SightExperiment.Finished) return;
+ // The fixed fixture drives perception and cover itself, while the match remains paused.
+ static const bool bPeekFixture=FParse::Param(FCommandLine::Get(),TEXT("BattleCoverPeekTrial"));
+ if(bPeekFixture)return;
  auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  auto* Metrics=GetWorld()->GetSubsystem<UBattleMetrics>();
@@ -235,6 +238,7 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
  auto Events=MakeShared<FJsonObject>();for(const auto& Pair:Tactics->EventCounts())Events->SetNumberField(Pair.Key.ToString(),Pair.Value);
  auto Durations=MakeShared<FJsonObject>();for(const auto& Pair:Tactics->ActionDurations())Durations->SetNumberField(Pair.Key.ToString(),Pair.Value);
  Root->SetObjectField(TEXT("tactical_events"),Events);Root->SetObjectField(TEXT("tactical_squad_seconds"),Durations);
+ for(const auto& WhyUnit:Store->GetUnits())if(WhyUnit.Value.CoverPhase==3 || WhyUnit.Value.CoverPhase==4)E.PeekAdd(TEXT("peekwhy_open_at_end"));
  auto CoverDiag=MakeShared<FJsonObject>();for(const auto& Pair:E.CoverDiag)CoverDiag->SetNumberField(Pair.Key.ToString(),Pair.Value);
  Root->SetObjectField(TEXT("cover_diagnostics"),CoverDiag);
  Root->SetStringField(TEXT("cover_diagnostics_scope"),TEXT("Whole match including pre-save time; ai_* are AI unit-frames in Follow; request_* are per RequestCoverAction call by furthest stage; peek_* are per rejected peek offset; cancel_* are cover endings"));

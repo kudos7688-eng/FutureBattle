@@ -27,10 +27,17 @@ bool PeekRangeCheck()
 }
 }
 
-void UBattleLeaderRuntime::CancelCoverAction(int32 ID)
+void UBattleLeaderRuntime::CancelCoverAction(int32 ID,const TCHAR* PeekCancel)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);if(!U)return;
+ if(SightExperiment.Enabled && SightExperiment.PeekWhy.Contains(ID))
+ {
+  if(U->CoverPhase==4)RecordPeekFrame(ID,GetWorld()->GetTimeSeconds(),GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,U->CoverTargetID));
+  if(U->IsAlive())SightExperiment.PeekAdd(*FString::Printf(TEXT("peekwhy_cancel_%s"),FCString::Strcmp(PeekCancel,TEXT("timeout"))==0?TEXT("other"):PeekCancel));
+  if(U->CoverPhase==3)SightExperiment.PeekAdd(!U->IsAlive()?TEXT("peekwhy_walk_end_death"):FCString::Strcmp(PeekCancel,TEXT("timeout"))==0?TEXT("peekwhy_walk_end_timeout"):TEXT("peekwhy_walk_end_cancel"));
+ }
  if(U->CoverPhase==4)EndPeekDiag(ID,U->IsAlive()?TEXT("cancel"):TEXT("died"));
+ SightExperiment.PeekWhy.Remove(ID);SightExperiment.PeekScans.Remove(ID);
  QuietPeeks.Remove(ID); // -BattleStanceSteady: the 3 s hide after an empty peek is for the same cover action only
  if(U->CoverPhase){GetWorld()->GetSubsystem<UBattleCover>()->Release(ID);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVER_RELEASE unit=%d phase=%d position=%s remaining=%.2f revision=%d/%d"),ID,U->CoverPhase,*Position(ID).ToCompactString(),U->CoverSeconds,U->OrderRevision,U->CoverOrderRevision);}
  U->CoverPhase=0;U->CoverSeconds=0;U->CoverTargetID=INDEX_NONE;U->CoverSlot=INDEX_NONE;U->SoldierMoveUntil=0;U->CoverFirstBreak=0;RelocateWaiting.Remove(ID);
@@ -55,12 +62,31 @@ void UBattleLeaderRuntime::CancelCoverAction(int32 ID)
 void UBattleLeaderRuntime::EndPeekDiag(int32 ID,const TCHAR* Cause)
 {
  int32 Shots=0;if(!CoverPeekShots.RemoveAndCopyValue(ID,Shots))return;
+ if(SightExperiment.Enabled)
+ {
+  const TCHAR* WhyCause=FCString::Strcmp(Cause,TEXT("died"))==0?TEXT("death"):Cause;
+  SightExperiment.PeekAdd(*FString::Printf(TEXT("peekwhy_end_%s_%s"),WhyCause,Shots<=0?TEXT("0"):Shots==1?TEXT("1"):TEXT("2plus")));
+  FBattleSightExperiment::FPeekWhy WhyEpisode;
+  if(SightExperiment.PeekWhy.RemoveAndCopyValue(ID,WhyEpisode))
+  {
+   int32 WhyMain=0,WhyTotal=0;
+   for(int32 WhyIndex=0;WhyIndex<FBattleSightExperiment::PeekClassCount;++WhyIndex)
+   {
+    WhyTotal+=WhyEpisode.Frames[WhyIndex];
+    if(WhyEpisode.Frames[WhyIndex]>WhyEpisode.Frames[WhyMain])WhyMain=WhyIndex;
+    SightExperiment.PeekAdd(*FString::Printf(TEXT("peekwhy_%s_frames_%s"),Shots<=0?TEXT("zero"):TEXT("shot"),FBattleSightExperiment::PeekClass(WhyIndex)),WhyEpisode.Frames[WhyIndex]);
+   }
+   if(Shots<=0 && WhyTotal)SightExperiment.PeekAdd(*FString::Printf(TEXT("peekwhy_zero_main_%s"),FBattleSightExperiment::PeekClass(WhyMain)));
+   if(FCString::Strcmp(Cause,TEXT("blind"))==0)SightExperiment.PeekAdd(WhyEpisode.bSaw?TEXT("peekwhy_blind_lost"):TEXT("peekwhy_blind_never"));
+  }
+ }
  SightExperiment.Cover(*FString::Printf(TEXT("peek_end_%s"),Cause));
  SightExperiment.Cover(Shots<=0?TEXT("peek_end_shots_0"):Shots==1?TEXT("peek_end_shots_1"):TEXT("peek_end_shots_2plus"));
  if(const auto* PeekUnit=GetWorld()->GetSubsystem<UBattleState>()->Find(ID))
  {
   const double PeekDistance=FVector::Dist2D(PeekUnit->CoverAnchor,PeekUnit->CoverPeek);
   const TCHAR* PeekKind=PeekDistance<=1.?TEXT("over"):PeekDistance>=100.&&PeekDistance<=120.?TEXT("lean"):TEXT("step");
+  if(Shots<=0)SightExperiment.PeekAdd(*FString::Printf(TEXT("peekwhy_zero_%s"),PeekKind));
   SightExperiment.Cover(*FString::Printf(TEXT("peek_end_shots_%s_%s"),Shots<=0?TEXT("0"):Shots==1?TEXT("1"):TEXT("2plus"),PeekKind));
   if(FCString::Strcmp(Cause,TEXT("blind"))==0)SightExperiment.Cover(*FString::Printf(TEXT("peek_end_blind_%s"),PeekKind));
  }
@@ -612,12 +638,12 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  const auto PhaseAtStart=U->CoverPhase; // the player's stance is set only when the phase changes (below)
  auto& Diag=SightExperiment;
  if(!BattleTactics::CoverActionsEnabled() || !U->IsAlive() || !Squad || Squad->CommandStatus!=EBattleCommandStatus::Active || U->OrderRevision!=U->CoverOrderRevision || (!Player && U->Order==EBattleOrder::Move && !U->bSoldierOrder))
- {Diag.Cover(!U->IsAlive()?TEXT("cancel_died"):(!Squad || Squad->CommandStatus!=EBattleCommandStatus::Active)?TEXT("cancel_squad_inactive"):TEXT("cancel_new_order"));CancelCoverAction(ID);return false;}
+ {Diag.Cover(!U->IsAlive()?TEXT("cancel_died"):(!Squad || Squad->CommandStatus!=EBattleCommandStatus::Active)?TEXT("cancel_squad_inactive"):TEXT("cancel_new_order"));CancelCoverAction(ID,U->OrderRevision!=U->CoverOrderRevision?TEXT("revision"):(!Player && U->Order==EBattleOrder::Move && !U->bSoldierOrder)?TEXT("move"):TEXT("other"));return false;}
  auto* Cover=GetWorld()->GetSubsystem<UBattleCover>();Cover->BuildSlots();
  // Reservations are rebuilt after loading, against saved positions in this same map.
  if(U->CoverSlot==FreeCoverSlot){}
  else if(U->CoverSlot==INDEX_NONE)for(int32 Slot:Cover->NearbySlots(U->CoverAnchor,120,4))if(FVector::Dist2D(Cover->GetSlots()[Slot],U->CoverAnchor)<100 && Cover->Reserve(Slot,ID,Now)){U->CoverSlot=Slot;break;}
- if(U->CoverSlot!=FreeCoverSlot && !Cover->Reserve(U->CoverSlot,ID,Now)){Diag.Cover(TEXT("cancel_slot_lost"));CancelCoverAction(ID);return false;}
+ if(U->CoverSlot!=FreeCoverSlot && !Cover->Reserve(U->CoverSlot,ID,Now)){Diag.Cover(TEXT("cancel_slot_lost"));CancelCoverAction(ID,TEXT("reservation"));return false;}
  U->CoverSeconds=FMath::Max(0.f,U->CoverSeconds-Dt);
  // -BattleSoldierMove: a longer walk to the chosen cover place keeps its timer while it lasts (saved as time left).
  const bool bWalkingToPlace=U->CoverPhase==1 && U->SoldierMoveUntil>0 && Now<U->SoldierMoveUntil;
@@ -626,12 +652,12 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  const auto* Contact=!SquadKnowledgeCover()?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,U->CoverTargetID):GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,U->SquadID,U->CoverTargetID,KnownOfTarget)?&KnownOfTarget:nullptr;
  // The walk to a place he chose (stage A relocation, B1) is finished even when the contact goes stale or out of range on the
  // way, and even when the contact is forgotten: stopping halfway would leave him in the open. Once there, the usual rules apply.
- if(!Player && !bWalkingToPlace && (!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds))){Diag.Cover(U->CoverPhase==1?TEXT("cancel_contact_stale_entering"):TEXT("cancel_contact_stale_in_cover"));CancelCoverAction(ID);return false;}
+ if(!Player && !bWalkingToPlace && (!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds))){Diag.Cover(U->CoverPhase==1?TEXT("cancel_contact_stale_entering"):TEXT("cancel_contact_stale_in_cover"));CancelCoverAction(ID,TEXT("stale"));return false;}
  // Cover validation (default ON): leave cover once the observed threat is beyond weapon range, and only step out to a
  // peek point with a clear line to the threat's last known position; otherwise stay hidden and check again shortly.
  const bool Validate=!Player && BattleTactics::CoverValidationEnabled();
  if(Validate && !bWalkingToPlace && Contact && FVector::Dist2D(Position(ID),Contact->LastKnownPosition)>TargetRange(ID))
- {Diag.Cover(TEXT("cancel_target_out_of_range"));CancelCoverAction(ID);return false;}
+ {Diag.Cover(TEXT("cancel_target_out_of_range"));CancelCoverAction(ID,TEXT("range"));return false;}
  // -BattleThreatCover: a hidden soldier leaves a place that one of his threats now sees into (BattleThreatCover.cpp).
  if(!Player && Contact && CheckCoverThreats(ID,Contact->LastKnownPosition,Now,Dt))return false;
  // -BattleSoldierMove: a hidden soldier may walk to a clearly better cover place in the sector (BattleSoldierMove.cpp).
@@ -642,34 +668,41 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
   // Trial -BattleAIBlindFire=1: a pinned AI soldier fires blind at the threat's last known position instead of waiting idle.
   if(IsPinned(ID,Now)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_suppressed"));if(BattleBlindFire::AIEnabled())TryAIBlindFire(ID,Contact->LastKnownPosition,Now);}
   else if(Validate && !RevalidatePeek(ID,Contact->LastKnownPosition)){U->CoverSeconds=.5f;Diag.Cover(TEXT("peek_hold_no_line"));}
-  else{U->CoverPhase=3;U->CoverSeconds=3;}
+  else{U->CoverPhase=3;U->CoverSeconds=3;if(Diag.Enabled){Diag.PeekWhy.Add(ID,FBattleSightExperiment::FPeekWhy());Diag.PeekAdd(TEXT("peekwhy_attempt"));}}
  }
  // -BattleCoverFire=1: an AI peek ends after AICoverShotsPerPeek shots instead of a fixed 1.2s that is shorter than the AI shot interval.
  const bool AIPeekFire=!Player && BattleTactics::CoverFireEnabled();
  if(U->CoverPhase==4)
  {
+  if(Diag.Enabled)if(auto* WhyEpisode=Diag.PeekWhy.Find(ID))WhyEpisode->bSaw|=Contact && Contact->bVisible && !Contact->bShared;
   const TCHAR* PeekEnd=U->ReloadEndTime>0?TEXT("reload"):(!Player && IsPinned(ID,Now))?TEXT("suppressed"):(AIPeekFire && CoverPeekShots.FindRef(ID)>=(BattleTactics::CoverPeekShots()>0?BattleTactics::CoverPeekShots():FMath::Max(1,GetDefault<UBattleTuning>()->AICoverShotsPerPeek)))?TEXT("shots_done"):U->CoverSeconds<=0?TEXT("timer"):
    (Validate && !CoverLineClear(ID,Position(ID),Contact->LastKnownPosition))?TEXT("no_line"):
    // -BattleCoverPeekSight=1: stop exposing once the blind time has passed at the peek point without an own sighting.
    (AIPeekFire && BattleTactics::CoverPeekSightEnabled() && !(Contact->bVisible && !Contact->bShared) &&
     FMath::Clamp(GetDefault<UBattleTuning>()->AICoverPeekSeconds,.1f,3.f)-U->CoverSeconds>=GetDefault<UBattleTuning>()->AICoverPeekBlindSeconds)?TEXT("blind"):nullptr;
-  if(PeekEnd){EndPeekDiag(ID,PeekEnd);U->CoverPhase=1;U->CoverSeconds=3;}
+  if(PeekEnd){RecordPeekFrame(ID,Now,Contact);EndPeekDiag(ID,PeekEnd);U->CoverPhase=1;U->CoverSeconds=3;}
  }
  B.Velocity=FVector::ZeroVector;
  if(U->CoverPhase==1 || U->CoverPhase==3)
  {
+  if(Diag.Enabled && U->CoverPhase==3)if(auto* WhyEpisode=Diag.PeekWhy.Find(ID))++WhyEpisode->WalkFrames;
   const FVector Goal=U->CoverPhase==1?U->CoverAnchor:U->CoverPeek;
   const FVector Before=Position(ID),D=(Goal-Before).GetSafeNormal2D();
   if(FVector::Dist2D(Before,Goal)<40)
   {U->CoverPhase=U->CoverPhase==1?2:4;U->CoverSeconds=U->CoverPhase==2?CoverHideSeconds(ID):AIPeekFire?FMath::Clamp(GetDefault<UBattleTuning>()->AICoverPeekSeconds,.1f,3.f):1.2f;if(U->CoverPhase==4 && !Player)
    {
     CoverPeekShots.Add(ID,0);
+    if(Diag.Enabled)
+    {
+     auto& WhyEpisode=Diag.PeekWhy.FindOrAdd(ID);WhyEpisode.bArrived=true;WhyEpisode.ArrivedAt=Now;
+     Diag.PeekAdd(TEXT("peekwhy_arrived"));Diag.PeekAdd(TEXT("peekwhy_walk_frames"),WhyEpisode.WalkFrames);
+    }
     // Evaluation only: what the AI knew and whether its weapon was ready when it reached the peek point.
     Diag.Cover(!Contact?TEXT("peek_start_no_contact"):Contact->bVisible&&!Contact->bShared?TEXT("peek_start_visible"):Now-Contact->LastSeenTime<=GetDefault<UBattleTuning>()->ReacquireGraceSeconds?TEXT("peek_start_seen_within_grace"):TEXT("peek_start_seen_before_grace"));
     if(U->NextShotTime>Now)Diag.Cover(TEXT("peek_start_cooldown_pending"));
    }
    if(!Player)Diag.Cover(U->CoverPhase==2?TEXT("reached_hidden"):TEXT("reached_peek"));if(B.Actor.IsValid())B.Actor->GetCharacterMovement()->StopMovementImmediately();}
-  else if(U->CoverSeconds<=0){Diag.Cover(U->CoverPhase==1?TEXT("cancel_move_timeout_to_hidden"):TEXT("cancel_move_timeout_to_peek"));CancelCoverAction(ID);return false;}
+  else if(U->CoverSeconds<=0){Diag.Cover(U->CoverPhase==1?TEXT("cancel_move_timeout_to_hidden"):TEXT("cancel_move_timeout_to_peek"));CancelCoverAction(ID,TEXT("timeout"));return false;}
   else
   {
    if(B.Actor.IsValid()){B.Actor->AddMovementInput(D);B.Velocity=B.Actor->GetVelocity();}
@@ -677,6 +710,12 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
   }
  }
  else if(B.Actor.IsValid())B.Actor->GetCharacterMovement()->StopMovementImmediately();
+ int32 WhyRay=-1;bool bWhyFired=false;
+ if(!Player && U->CoverPhase==4 && Diag.Enabled)if(auto* WhyEpisode=Diag.PeekWhy.Find(ID);WhyEpisode && WhyEpisode->bFirst)
+ {
+  if(FVector::Dist2D(U->CoverAnchor,U->CoverPeek)<=1. && StanceOf(ID)==BattleStance::Crouch)Diag.PeekAdd(TEXT("peekwhy_first_frame_crouched"));
+  WhyEpisode->bFirst=false;
+ }
  if(!Player && Contact)
  {
   // From his own eye height (a crouched or prone peek no longer fires from standing height).
@@ -686,12 +725,12 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
   else {Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity).Forward=Aim.GetSafeNormal2D();B.Capsule->SetWorldRotation(FRotator(0,Aim.Rotation().Yaw,0));}
   Store->UpdateAim(ID,Now,B.Velocity.Size2D(),Aim,true);
   const bool InRange=FVector::Dist2D(Position(ID),Contact->LastKnownPosition)<=(UnderFire(ID)?BattleRanges::Reach(U->Weapon):BattleRanges::Engage(U->Weapon));
-  if(U->CoverPhase==4 && Contact->bVisible && !Contact->bShared && InRange && CanSee(ID,U->CoverTargetID))
+  if(U->CoverPhase==4 && Contact->bVisible && !Contact->bShared && InRange && (WhyRay=CanSee(ID,U->CoverTargetID)?1:0)!=0)
   {
    if(U->Ammo==0){Store->StartReload(ID,Now);Diag.Cover(TEXT("peekwait_reloading"));}
    else
    {
-    const bool Shot=Fire(ID,Eye,Aim,false);
+    const bool Shot=Fire(ID,Eye,Aim,false);bWhyFired=Shot;
     if(Shot){Diag.Cover(TEXT("cover_shots"));if(++CoverPeekShots.FindOrAdd(ID)==1)Diag.Cover(TEXT("peek_first_shot"));}
     else Diag.Cover(U->ReloadEndTime>0?TEXT("peekwait_reloading"):Now<U->NextShotTime?TEXT("peekwait_cooldown"):TEXT("peekwait_fire_other"));
     if(Shot && Squad->TacticalPlan.Action==EBattleSquadTactic::Support)GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(Squad->SquadID,U->CoverTargetID);
@@ -699,9 +738,10 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
   }
   // Evaluation only (never AI input): why this AI peek frame could not fire. The extra line-of-sight check runs only in experiments.
   else if(U->CoverPhase==4 && Diag.Enabled)
-   Diag.Cover(!Contact->bVisible?(CanSee(ID,U->CoverTargetID)?TEXT("peekwait_detecting"):TEXT("peekwait_no_line_of_sight")):Contact->bShared?TEXT("peekwait_shared_only"):!InRange?TEXT("peekwait_out_of_range"):TEXT("peekwait_ray_blocked"));
+   Diag.Cover(!Contact->bVisible?((WhyRay=CanSee(ID,U->CoverTargetID)?1:0)!=0?TEXT("peekwait_detecting"):TEXT("peekwait_no_line_of_sight")):Contact->bShared?TEXT("peekwait_shared_only"):!InRange?TEXT("peekwait_out_of_range"):TEXT("peekwait_ray_blocked"));
  }
  else if(!Player && U->CoverPhase==4)Diag.Cover(TEXT("peekwait_no_contact"));
+ if(!Player && U->CoverPhase==4)RecordPeekFrame(ID,Now,Contact,WhyRay,bWhyFired);
  if(U->CoverPhase==2 && U->Ammo==0)Store->StartReload(ID,Now);
  if(!B.Actor.IsValid())
  {

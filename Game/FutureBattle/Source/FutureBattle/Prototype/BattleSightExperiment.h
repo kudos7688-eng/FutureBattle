@@ -25,6 +25,15 @@ struct FBattleSightExperiment
  TSet<int32> PreviouslySeeing;
  TArray<double> EngagementDistances; // Evaluation-only cover action funnel (unit-frames, requests, outcomes). Never read by AI decisions.
  TMap<FName,int32> CoverDiag;
+ // Diagnostic-only, unsaved. One current cover target per observer; never read by tactical code.
+ struct FPeekScan { int32 Target=INDEX_NONE; double At=-1; uint8 Stage=0; }; // 0 unsearched, 1 searched, 2 detecting, 3 seen, 4 unknown (cached/non-mixed)
+ struct FPeekWhy { int32 Frames[12]={}; int32 WalkFrames=0; double LastFrameAt=-1,ArrivedAt=-1; bool bArrived=false,bSaw=false,bFirst=true; };
+ TMap<int32,FPeekScan> PeekScans;
+ TMap<int32,FPeekWhy> PeekWhy;
+ TMap<int32,double> PeekAimUntil,PeekIntervalUntil;
+ static constexpr int32 PeekClassCount=12;
+ static const TCHAR* PeekClass(int32 Index);
+ void PeekAdd(const TCHAR* Key,int32 Count=1){if(Enabled)CoverDiag.FindOrAdd(FName(Key))+=Count;}
  // Evaluation only: when each squad last lost its visible target (squad_target_* keys in CoverDiag).
  TMap<int32,double> SquadTargetLostAt;
  // Evaluation only: living soldiers within 100m (2D) of any objective, person-seconds by team (5Hz samples).

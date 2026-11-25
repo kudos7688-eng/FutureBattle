@@ -32,6 +32,7 @@
 | Test-MixedFast | ○ | ○ | | | 混成の購入・予算：課金は一度、人数、不正な購入の拒否、有料の補給、読込後の新ID | `BATTLE_MIXED_FAST_RESULT failures=0` | 500体の野原、約10秒 |
 | Test-Delegation | ○ | ○ | | △ | 委任：選んだ小隊だけ委任、手動小隊の命令保持、直接操作で権限を奪われない、保存、ボタン（720p・1080p） | `BATTLE_DELEGATION_RESULT failures=0` | 小マップ・野原、4ケース |
 | Test-SquadTactics | ○ | ○ | | △ | 任務と一時の計画の分離、計画中の任務更新、計画の満了で復帰、保存と旧形式、観測の重複排除（守備の散開は検査しない） | `BATTLE_SMOKE_RESULT failures=0` | 小マップ／`-LargeField` |
+| Test-CoverPeek | | ○ | | | 120cm低壁の上越し：自分で目撃済みなら発射、敵だけ隠れたら0発blind。未発見の場面は記録のみ。peekwhyの分類も検査 | `BATTLE_COVERPEEK_RESULT failures=0`、CHECK visible/lost各1件 | マップC、上限180秒。未ビルド・未実行 |
 | Test-CoverActions | ○ | ○ | | △ | 兵1人の遮蔽：保護位置へ着く、覗いて撃つ、制圧で隠れる、ブラインドファイア、壁遮蔽の出入りと保存（B01・B02 は `contract` b9fa623 で追加） | `BATTLE_COVER_RESULT failures=0` | マップC／D、上限180秒 |
 | Test-MovementStability | | ○ | | | 移動の4場面（密集・狭路・対向流・集合）：全員が1m以内に着く、到着枠の間隔、経路要求数、兵どうしの間隔 | `BATTLE_MOVE_RESULT failures=0` | 野原、各30秒まで |
 | Test-ContactMovement | ○ | ○ | | | 接触の3場面：止まっている小隊の横を通る、到着の予約を別小隊が占めている、狭路で待って通る。止まっている側を勝手に動かさない | `BATTLE_CONTACT_RESULT failures=0` | 野原（場面の中に壁を作る）、各30秒まで |
