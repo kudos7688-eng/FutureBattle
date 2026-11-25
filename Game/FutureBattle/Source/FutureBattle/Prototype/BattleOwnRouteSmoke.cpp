@@ -30,7 +30,7 @@ namespace
   TMap<int32,int32> QueriesAtStart;
   int32 Lost=0,Gained=0,CheckedReplans=0,ForcedReplans=0,UsedSquads=0;
   // A forced replan that has not run yet: the plan's request count when it was asked, and the own routes at that time.
-  bool bPending=false;int32 PendingRequests=0;TMap<int32,FVector> PendingEnds;
+  bool bPending=false;int32 PendingRequests=0;TMap<int32,TArray<FVector>> PendingRoutes;TMap<int32,int32> PendingWaypoints,PendingQueries;
   int32 OrderRequests=0;
  };
  FOwnRouteSmoke GOwnRouteSmoke;
@@ -137,29 +137,31 @@ void UBattleLeaderRuntime::StepOwnRouteSmoke(double Now)
    if(!Body.bOwnRoute&&T.Had[MID]&&bSameOrder)
    {++T.Lost;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_OWN_ROUTE_SMOKE_LOST scene=%d unit=%d t=%.1f pos=%s"),T.Scene,MID,Now-T.StageAt,*Position(MID).ToString());}
    T.Had[MID]=Body.bOwnRoute;Own+=Body.bOwnRoute;
-   if(const FVector* Goal=P->ArrivalGoals.Find(MID);Goal&&FVector::Dist2D(Position(MID),*Goal)<300.)++Arrived;
+   if(const FVector* Goal=P->ArrivalGoals.Find(MID);Goal&&(Body.bArrived||(FVector::Dist2D(Position(MID),*Goal)<300.&&ClearMovementSegment(Position(MID),*Goal))))++Arrived;
   }
   // A forced squad replan has run: every own route of that moment is still there and ends where it ended.
   if(T.bPending&&P->PathRequests!=T.PendingRequests)
   {
    T.bPending=false;int32 Kept=0;
-   for(const auto& End:T.PendingEnds)
+   // The same points, no step back along them, and no new query: the replan itself left the route alone.
+   for(const auto& Before:T.PendingRoutes)
    {
-    const auto* Route=P->Corridors.Find(End.Key);
-    if(Bodies.FindChecked(End.Key).bOwnRoute&&Route&&Route->Num()>1&&Route->Last().Equals(End.Value,1.))++Kept;
+    const auto* Route=P->Corridors.Find(Before.Key);const auto& Body=Bodies.FindChecked(Before.Key);
+    if(Body.bOwnRoute&&Route&&*Route==Before.Value&&Body.Waypoint>=T.PendingWaypoints[Before.Key]&&Body.OwnRouteQueries==T.PendingQueries[Before.Key])++Kept;
    }
    ++T.CheckedReplans;
-   Check(Kept==T.PendingEnds.Num(),FString::Printf(TEXT("own routes survive a squad replan (%d of %d, t=%.1f)"),Kept,T.PendingEnds.Num(),Now-T.StageAt));
+   Check(Kept==T.PendingRoutes.Num(),FString::Printf(TEXT("own routes survive a squad replan (%d of %d, t=%.1f)"),Kept,T.PendingRoutes.Num(),Now-T.StageAt));
   }
   // Every 3 s while a cut-off member walks a route of his own: ask for a squad replan, as a stalled member does.
   if(!T.bPending&&Now>=T.NextForce&&bSameOrder&&Arrived<Living)
   {
-   T.NextForce=Now+3.;T.PendingEnds.Reset();
-   for(int32 MID:T.Cut)if(const auto* Route=P->Corridors.Find(MID);Route&&Route->Num()>1&&Bodies.FindChecked(MID).bOwnRoute&&Store->Find(MID)->IsAlive())T.PendingEnds.Add(MID,Route->Last());
-   if(T.PendingEnds.Num()){T.bPending=true;T.PendingRequests=P->PathRequests;P->bReplan=true;P->NextPath=0;++T.ForcedReplans;}
+   T.NextForce=Now+3.;T.PendingRoutes.Reset();T.PendingWaypoints.Reset();T.PendingQueries.Reset();
+   for(int32 MID:T.Cut)if(const auto* Route=P->Corridors.Find(MID);Route&&Route->Num()>1&&Bodies.FindChecked(MID).bOwnRoute&&Store->Find(MID)->IsAlive())
+   {T.PendingRoutes.Add(MID,*Route);T.PendingWaypoints.Add(MID,Bodies.FindChecked(MID).Waypoint);T.PendingQueries.Add(MID,Bodies.FindChecked(MID).OwnRouteQueries);}
+   if(T.PendingRoutes.Num()){T.bPending=true;T.PendingRequests=P->PathRequests;P->bReplan=true;P->NextPath=0;++T.ForcedReplans;}
   }
-  const bool bAll=Living>0&&Arrived==Living;
-  if(!bAll&&Now<T.Limit)return;
+  const bool bAll=Living==T.Cut.Num()&&Arrived==Living;
+  if(!bAll&&Living==T.Cut.Num()&&bSameOrder&&Now<T.Limit)return;
   Check(bSameOrder,TEXT("the order stayed in force during the walk"));
   Check(bAll,FString::Printf(TEXT("the cut-off members reach their places (%d of %d in %.1f s, limit %.1f s)"),Arrived,Living,Now-T.StageAt,T.Limit-T.StageAt));
   Check(T.Gained>0,FString::Printf(TEXT("cut-off members get routes of their own (%d)"),T.Gained));
@@ -184,7 +186,7 @@ void UBattleLeaderRuntime::StepOwnRouteSmoke(double Now)
    ++Living;StillOwn+=Bodies.FindChecked(MID).bOwnRoute;
    if(const auto* Route=P->Corridors.Find(MID);Route&&Route->Num()>1&&FVector::Dist2D(Route->Last(),T.Dest)<1500.)++Planned;
   }
-  Check(P->PathRequests!=T.OrderRequests&&StillOwn==0&&Planned==Living,FString::Printf(TEXT("a new order drops the own routes and plans again (own=%d planned=%d of %d)"),StillOwn,Planned,Living));
+  Check(P->PathRequests!=T.OrderRequests&&Living>0&&StillOwn==0&&Planned==Living,FString::Printf(TEXT("a new order drops the own routes and plans again (own=%d planned=%d of %d)"),StillOwn,Planned,Living));
   if(++T.Scene<2){T.Stage=0;return;}
   Finish();
  }

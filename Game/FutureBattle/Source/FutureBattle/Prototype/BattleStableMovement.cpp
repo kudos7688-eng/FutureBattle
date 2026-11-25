@@ -661,7 +661,7 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  // waiting for a squad replan that starts from the squad centre and does not help him. At most two such queries per frame.
  // B05 (mode 2): an own route kept through replans ends at the place it was built for; when the member's arrival place has moved
  // since and cannot be walked to straight from the last leg, ask again (same budget, same 3 s spacing).
- const bool bOwnGoalMoved=CutOffRouteMode()==2 && B.bOwnRoute && Final && !Goal->Equals(B.OwnRouteGoal,50.) && !ClearMovementSegment(Pos,*Goal);
+ const bool bOwnGoalMoved=CutOffRouteMode()==2 && B.bOwnRoute && Now>=B.NextOwnPath && Final && !Goal->Equals(B.OwnRouteGoal,50.) && !ClearMovementSegment(Pos,*Goal);
  if(BattleFieldLayout::IsUrban(GetWorld()) && Now>=B.NextOwnPath && (bOwnGoalMoved || (Now-B.LastProgressTime>2 && !ClearMovementSegment(Pos,Way))))
  {
   static uint64 QueryFrame=0; static int32 QueriesThisFrame=0;
@@ -680,9 +680,12 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
     // B05: a complete route is the member's own execution state (a partial one ends short of his place and is not kept).
     B.bOwnRoute=!Own->IsPartial() && S;
     if(B.bOwnRoute){B.OwnRouteOrder=uint8(S->Order);B.OwnRouteDestination=S->Destination;B.OwnRouteGoal=*Goal;}
+    // A partial answer for a moved arrival place would leave him at its end with nothing asking again: back to the squad plan.
+    else if(bOwnGoalMoved){P.bReplan=true;SightExperiment.Cover(TEXT("move_own_route_goal_replan"));}
     return true;
    }
    if(B.bOwnRoute){B.bOwnRoute=false;SightExperiment.Cover(TEXT("move_own_route_dropped_no_path"));}
+   if(bOwnGoalMoved){P.bReplan=true;SightExperiment.Cover(TEXT("move_own_route_goal_replan"));}
   }
   else SightExperiment.Cover(TEXT("move_own_route_budget_wait"));
  }
