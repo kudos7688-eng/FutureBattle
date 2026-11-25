@@ -156,7 +156,17 @@ FVector UBattleMatch::RouteStep(const FVector& From,const FVector& Goal,int32 Fl
  }
  // The next junction worth an order: not one the leader is already at or past (within 60m, or the next one is nearer to the
  // leader than to this one), so the squad keeps walking instead of stopping at every junction.
- for(int32 I=0;I<Path.Num();++I)
+ // Trial -BattleRoutePassed=1 (2026-11-25, default 0). The rule above has no memory: a junction counts as passed only while the
+ // leader is within 60m of it or nearer to the next one. Map K, a squad leaving the west home for the north: the way is
+ // (-350,0) (-350,-50) (-300,-50) (-300,150); close to the first two it is sent to (-300,150), and as soon as it has walked
+ // 60m from (-350,-50) that junction is "not passed" again and it is sent back south - 2328 of 3533 new orders of a match
+ // (ln5-K-base-trace-s7) went back to the junction before, most of them at this place and its mirror image. With the switch
+ // every junction before the last passed one (among the first four of the way) counts as passed too.
+ static const bool bRoutePassed=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleRoutePassed="),V);return V!=0;}();
+ int32 FirstOpen=0;
+ if(bRoutePassed)for(int32 PassedIndex=0;PassedIndex<FMath::Min(4,Path.Num());++PassedIndex)
+  if(FVector::Dist2D(From,Nodes[Path[PassedIndex]])<6000||(PassedIndex+1<Path.Num()&&FVector::Dist2D(From,Nodes[Path[PassedIndex+1]])<FVector::Dist2D(Nodes[Path[PassedIndex]],Nodes[Path[PassedIndex+1]])))FirstOpen=PassedIndex+1;
+ for(int32 I=FirstOpen;I<Path.Num();++I)
  {
   const FVector& Here=Nodes[Path[I]];
   if(FVector::Dist2D(From,Here)<6000)continue;

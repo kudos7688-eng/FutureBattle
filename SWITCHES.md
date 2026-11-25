@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 503 種類。
+計 505 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -194,7 +194,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleFrontPlanLog` | Value | 0 | BattleFrontLine.cpp:1089 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontPlanPlayer` | Value | 0 | BattleFrontLine.cpp:1417 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontPlanTeam` | Value | -1 | BattleFrontLine.cpp:1204 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
-| `-BattleFrontPostSector` | Value | 0 | BattleMatch.cpp:539 |  |
+| `-BattleFrontPostSector` | Value | 0 | BattleMatch.cpp:541 |  |
 | `-BattleFrontReserve` | Value | 0 | BattleFrontLine.cpp:61 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontSectionOrders` | Value | 0 | BattleFrontLine.cpp:1468 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleFrontShare` | Value | 1.f | BattleFrontLine.cpp:44 |  |
@@ -272,6 +272,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleOffscreenMarkers` | Value | 1 | BattleHUD.cpp:1274 |  |
 | `-BattleOpponentPreset` | Value | 空文字列 | BattleBenchmark.cpp:48 | ReadTier → BattleBenchmark.cpp:45（ヘルパー経由） |
 | `-BattleOrderSync` | Value | 1 | BattleArea.cpp:342 | default on (user decision 2026-11-22) |
+| `-BattleOrderTrace` | Value | 0 | BattleMatch.cpp:549 |  |
 | `-BattleOwnTarget` | Value | 0 | BattleSoldierFire.cpp:18 |  |
 | `-BattleOwnTargetCover` | Value | 0 | BattleSoldierFire.cpp:32 |  |
 | `-BattleOwnTargetTeam` | Value | -1 | BattleSoldierFire.cpp:19 |  |
@@ -310,6 +311,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleRouteKeep` | Value | 0 | BattleRoutes.cpp:66 |  |
 | `-BattleRouteLoad` | Value | 0 | BattleRoutes.cpp:63 |  |
 | `-BattleRouteLog` | Value | 0 | BattleRoutes.cpp:68 |  |
+| `-BattleRoutePassed` | Value | 0 | BattleRoutes.cpp:165 |  |
 | `-BattleRoutes` | Value | -1 | BattleRoutes.cpp:20 |  |
 | `-BattleRouteTieSymmetric` | Value | 0 | BattleRoutes.cpp:46 |  |
 | `-BattleSaveReloadBoundary` | Value | 0 | BattleArtillery.cpp:266 |  |
@@ -320,7 +322,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleScopeShot` | Param | off | BattleLeaderRuntime.cpp:242 |  |
 | `-BattleScoutRetreat` | Value | true | BattleScoutReport.cpp:22 |  |
 | `-BattleSeconds` | Value | 20.f | BattleBenchmark.cpp:41 |  |
-| `-BattleSectorAI` | Value | 0 | BattleMatch.cpp:507, BattleMatch.cpp:522, BattleMatch.cpp:533 |  |
+| `-BattleSectorAI` | Value | 0 | BattleMatch.cpp:509, BattleMatch.cpp:524, BattleMatch.cpp:535 |  |
 | `-BattleSectorAudit` | Param | off | BattleSectorAudit.cpp:28 |  |
 | `-BattleSectorContact` | Value | -1 | BattleLeaderRuntime.cpp:1715 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleSectorCoverRoute` | Value | -1 | BattleSectorRoute.cpp:22 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
@@ -331,7 +333,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSectorLanes` | Value | 0 | BattleSectorLanes.cpp:15 |  |
 | `-BattleSectorMove` | Value | 0 | BattleLeaderRuntime.cpp:1720 |  |
 | `-BattleSectorMoveFire` | Value | -1 | BattleLeaderRuntime.cpp:1730 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
-| `-BattleSectorNoRoad` | Value | 0 | BattleMatch.cpp:504 |  |
+| `-BattleSectorNoRoad` | Value | 0 | BattleMatch.cpp:506 |  |
 | `-BattleSectorRoute` | Value | -1 | BattleSectorRoute.cpp:16 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleSectorSight` | Value | 1 | BattleSectorSight.cpp:14 |  |
 | `-BattleSectorSightHit` | Value | 1 | BattleSectorSight.cpp:21 |  |
