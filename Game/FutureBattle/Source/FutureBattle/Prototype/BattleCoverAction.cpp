@@ -86,13 +86,13 @@ bool UBattleLeaderRuntime::CoverLineClear(int32 ID,FVector From,FVector Threat) 
 
 // AllowedKinds: bit 1 = over low cover, bit 2 = short step past an edge. The caller checks that the anchor hides him.
 // Kind is derived from the saved positions; no new transient or persistent tactical state is needed.
-bool UBattleLeaderRuntime::CoverFirePoint(int32 /*ID*/,FVector Anchor,FVector Threat,FVector& OutPeek,uint8& OutKind,uint8 AllowedKinds)
+bool UBattleLeaderRuntime::CoverFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& OutPeek,uint8& OutKind,uint8 AllowedKinds,bool bPeekLine)
 {
  OutKind=0;
  const FVector FireEye=Threat+FVector(0,0,60);
  if((AllowedKinds&1) && BattleStance::Enabled(GetWorld()) &&
     !BattleTactics::HasTerrainLine(GetWorld(),Anchor+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch)),FireEye) &&
-    BattleTactics::HasTerrainLine(GetWorld(),Anchor+FVector(0,0,60),FireEye))
+    BattleTactics::HasTerrainLine(GetWorld(),Anchor+FVector(0,0,60),FireEye) && (!bPeekLine || CoverLineClear(ID,Anchor,Threat)))
  {OutPeek=Anchor;OutKind=1;return true;}
  if(!(AllowedKinds&2))return false;
  auto* FireNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!FireNav)return false;
@@ -104,6 +104,7 @@ bool UBattleLeaderRuntime::CoverFirePoint(int32 /*ID*/,FVector Anchor,FVector Th
   const double FireDistance=FVector::Dist2D(Anchor,FirePeek);if(FireDistance<100.||FireDistance>120.)continue;
   if(GetWorld()->SweepTestByObjectType(Anchor,FirePeek,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))continue;
   if(!BattleTactics::HasTerrainLine(GetWorld(),FirePeek+FVector(0,0,60),FireEye))continue;
+  if(bPeekLine && !CoverLineClear(ID,FirePeek,Threat))continue;
   OutPeek=FirePeek;OutKind=2;return true;
  }
  return false;
@@ -116,9 +117,11 @@ bool UBattleLeaderRuntime::RevalidatePeek(int32 ID,FVector Threat)
  // (never the 220/400 cm walk-outs below).
  if(BattleTactics::CoverFirePointEnabled())
  {
-  if(CoverLineClear(ID,U->CoverPeek,Threat))return true;
+  // Do not recheck ThreatSeen here: exposed anchors must not leave soldiers waiting instead of firing.
+  const double CheckedDistance=FVector::Dist2D(U->CoverAnchor,U->CoverPeek);
+  if((CheckedDistance<=1. || (CheckedDistance>=100. && CheckedDistance<=120.)) && CoverLineClear(ID,U->CoverPeek,Threat))return true;
   FVector CheckedPeek;uint8 CheckedKind=0;
-  if(!CoverFirePoint(ID,U->CoverAnchor,Threat,CheckedPeek,CheckedKind))return false;
+  if(!CoverFirePoint(ID,U->CoverAnchor,Threat,CheckedPeek,CheckedKind,3,true))return false;
   U->CoverPeek=CheckedPeek;SightExperiment.Cover(TEXT("peek_repicked"));return true;
  }
  const double ExistingDistance=PeekRangeCheck()?FVector::Dist2D(U->CoverAnchor,U->CoverPeek):0.;

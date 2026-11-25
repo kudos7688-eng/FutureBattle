@@ -34,7 +34,8 @@ bool ArrivalFirePoint(UWorld* FireWorld,UNavigationSystemV1* FireNav,const FVect
 {
  const FCollisionObjectQueryParams FireStatic(ECC_WorldStatic);
  const FVector FireStart=FireGround+FVector(0,0,150);
- if(BattleStance::Enabled(FireWorld) && !FireWorld->LineTraceTestByObjectType(FireStart,FireStart+FireDirection*300,FireStatic))return true;
+ if(BattleStance::Enabled(FireWorld) && !FireWorld->LineTraceTestByObjectType(FireStart,FireStart+FireDirection*300,FireStatic) &&
+    FireWorld->LineTraceTestByObjectType(FireGround+FVector(0,0,110),FireGround+FireDirection*250+FVector(0,0,110),FireStatic))return true;
  if(!FireNav)return false;
  const FVector FireSide=FVector::CrossProduct(FireDirection,FVector::UpVector);
  for(float FireOffset:{-100.f,100.f,-110.f,110.f,-120.f,120.f})
@@ -43,7 +44,8 @@ bool ArrivalFirePoint(UWorld* FireWorld,UNavigationSystemV1* FireNav,const FVect
   const double FireDistance=FVector::Dist2D(FireGround,FireProjected.Location);if(FireDistance<100.||FireDistance>120.)continue;
   if(FireWorld->SweepTestByObjectType(FireGround+FVector(0,0,90),FireProjected.Location+FVector(0,0,90),FQuat::Identity,FireStatic,FCollisionShape::MakeCapsule(36,88)))continue;
   const FVector FireSideEye=FireProjected.Location+FVector(0,0,150);
-  if(!FireWorld->LineTraceTestByObjectType(FireSideEye,FireSideEye+FireDirection*300,FireStatic))return true;
+  if(!FireWorld->LineTraceTestByObjectType(FireSideEye,FireSideEye+FireDirection*300,FireStatic) &&
+     !FireWorld->LineTraceTestByObjectType(FireProjected.Location+FVector(0,0,100),FireProjected.Location+FireDirection*250+FVector(0,0,100),FireStatic))return true;
  }
  return false;
 }
@@ -161,6 +163,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   static const bool CoverArrivalAllowed=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverArrival="),Value);return Value!=0;}();
   const bool CoverArrival=CoverArrivalAllowed && BattleFieldLayout::IsUrban(GetWorld()) && !Rally && Nav;
   TArray<FVector> CoverCandidates; TSet<int32> CoverAssigned;
+  int32 ArrivalSlotFireChecks=0,ArrivalHuddleFireChecks=0;
   // -BattleCoverOutward: the outward directions this sector is defended toward (rear and friendly-held sides left out).
   TArray<FVector> Outward;
   if(CoverArrival && Sector && CoverOutwardEnabled() && !bFocusArrival)
@@ -213,11 +216,18 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
     if(Sector && BattleSectors::Cell(At)!=Cell)continue;
     // Evaluation (arrival_slot_*): slots in the sector, those without an obstacle 2.5 m ahead, those seen by the nearest threat (-BattleCoverStrict).
     SightExperiment.Cover(TEXT("arrival_slot_in_cell"));
-    bool SlotFireAllowed=false;
-    if(!WallAhead(At,BattleTactics::CoverFirePointEnabled()?&SlotFireAllowed:nullptr)) SightExperiment.Cover(TEXT("arrival_slot_no_wall_ahead"));
-    else if(BattleTactics::CoverFirePointEnabled() && !SlotFireAllowed) SightExperiment.Cover(TEXT("arrival_slot_no_fire_point"));
-    else if(HidesFromThreat(At)) CoverCandidates.Add(At);
-    else SightExperiment.Cover(TEXT("arrival_slot_exposed"));
+    if(!WallAhead(At)) SightExperiment.Cover(TEXT("arrival_slot_no_wall_ahead"));
+    else if(!HidesFromThreat(At)) SightExperiment.Cover(TEXT("arrival_slot_exposed"));
+    else if(BattleTactics::CoverFirePointEnabled())
+    {
+     // Bound expensive fire-point searches per plan, after the cheap wall and hiding checks.
+     if(ArrivalSlotFireChecks>=48){SightExperiment.Cover(TEXT("arrival_slot_fire_check_cap"));continue;}
+     ++ArrivalSlotFireChecks;
+     bool SlotFireAllowed=false;WallAhead(At,&SlotFireAllowed);
+     if(SlotFireAllowed)CoverCandidates.Add(At);
+     else SightExperiment.Cover(TEXT("arrival_slot_no_fire_point"));
+    }
+    else CoverCandidates.Add(At);
    }
   }
   // -BattleCoverIndoor: in a sector, slots under a roof or upper floor first (stable order otherwise).
@@ -284,6 +294,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
       if(!GetWorld()->LineTraceTestByObjectType(Projected.Location+FVector(0,0,100),Projected.Location-Normal*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic)) || !HidesFromThreat(Projected.Location)) continue;
       if(BattleTactics::CoverFirePointEnabled())
       {
+       if(ArrivalHuddleFireChecks>=40){SightExperiment.Cover(TEXT("arrival_huddle_fire_check_cap"));continue;}
+       ++ArrivalHuddleFireChecks;
        bool HuddleFireAllowed=false;WallAhead(Projected.Location,&HuddleFireAllowed);
        if(!HuddleFireAllowed){SightExperiment.Cover(TEXT("arrival_huddle_no_fire_point"));continue;}
       }
