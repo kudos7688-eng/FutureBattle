@@ -46,7 +46,8 @@
 
 - **決定**（11時すぎ、依頼元のセッションからの中継）：案A（段階の順と申請1行）・案B（基準の台帳、I・J・K × 7・43 と H × 7、持ち主は当面この系統）・案E（既定の切替と取り込みは6時・18時、今日の18時から。急ぎは `-Urgent`）・案D（ロックを分ける。先に負荷をかけた状態の一致の確認）・比較の試合は凍結ビルドから、を採用。標準の記録（案C）は後で。枠（案F）は入れない。
 - **進行中**：台帳 `Setup/Baseline.py`・掲示板の申請 `Board.py plan`・`Analyze-MatchDelta.py --baseline` を Codex が `FutureBattle-budget` で実装中。ロックの一致の確認は列で順番待ち（11時13分に並んだ）。決まりの文（`AGENTS.md`・`MEASURE.md`）は道具が main に入るときに一緒に入れる。
-- **まだ変えていない**：`Lock-Queue.ps1`、`AGENTS.md`、`MEASURE.md`。それまでは今までの決まりのまま。
+- **11時25分 追記**：道具と決まりを main へ入れた（405a54e）：`Board.py plan`（申請）、`Setup/Baseline.py`（台帳）、`Analyze-MatchDelta.py --baseline`、`AGENTS.md`「調査試合の決まり」、`MEASURE.md`「勝ち負けの比較の決まり」の5項目。Codex が実装し、Claude が差分を読み、仮の置き場所で `set`・`show`・`check`・`equiv`・`plan`・`find` を確かめた（`--baseline` なしの出力は変更前と同じ）。**「記録だけを足したビルドは、回し直す前に `Compare-MatchResults.py` の1本で一致を見る」もユーザー決定**（中継）で決まりに入れた。台帳はまだ空（最初の基準は18時、セーブ・ロードの削除を取り込んだ後の main で）。
+- **まだ変えていない**：`Lock-Queue.ps1`（変更案は `FutureBattle-budget` に未コミット。一致の確認の順番待ち）。
 
 ## 2026-11-25 11時10分 Claude（試合数の統制）：調査試合の回数を減らす案を `Docs/design-match-budget.md` に置いた（集計と案だけ。決まり・スクリプトは不変、ビルド・試合なし）
 
