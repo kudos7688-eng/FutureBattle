@@ -197,7 +197,7 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   }
   const int32 SID=Store->CreateLeaderSquad(Team,IDs,IDs[0],Team==0 && Group!=NoControl);
   if(SID==INDEX_NONE) return false;
-  FBattleLeaderPlan Plan; Plan.Center=Center; Plan.NextThink=GetWorld()->GetTimeSeconds()+.05*(SID%10); Plans.Add(SID,Plan);
+  FBattleLeaderPlan Plan; Plan.Center=Center; Plan.NextThink=GetWorld()->GetTimeSeconds()+.05*(BattleTactics::PhaseIndex(GetWorld(),SID,Team)%10); Plans.Add(SID,Plan);
   IssueOrder(SID,bWideField?EBattleOrder::Hold:Phase3->bEnabled?EBattleOrder::AttackMove:Team?EBattleOrder::AttackMove:EBattleOrder::Hold,bWideField?Center:Phase3->bEnabled?Phase3->Goal(Team,Group):FVector(Team?600:Center.X,Center.Y,0));
  }
  if(DisplayLOD==1 && !VAT->Initialize(this))return false;
@@ -865,6 +865,11 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    }
    if(S->TacticalPlan.bAutonomous && S->TacticalPlan.Action==EBattleSquadTactic::Regroup && FVector::Dist2D(From.Location,To.Location)<50)
     P.Path={From.Location,To.Location}; // Followers can converge even when the leader is already at the rally point.
+  }
+  if(BattleTactics::MoveTraceSquad(SID))
+  {
+   FString TracePoints;for(const FVector& TracePoint:P.Path)TracePoints+=FString::Printf(TEXT(" (%.1f,%.1f)"),TracePoint.X,TracePoint.Y);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MOVE_TRACE_PATH squad=%d now=%.3f origin=(%.2f,%.2f) dest=(%.2f,%.2f) points=%d:%s"),SID,Now,Origin.X,Origin.Y,S->Destination.X,S->Destination.Y,P.Path.Num(),*TracePoints);
   }
   if(bWideField && bStableMovement) BuildMovementPlan(SID);
   else for(int32 ID:S->Members) if(auto* B=Bodies.Find(ID)) B->Waypoint=1;

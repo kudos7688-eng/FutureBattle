@@ -389,6 +389,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  if(bArea&&(BattleTactics::ATHunt()||BattleTactics::ATFire()))UpdateATHunts(Team);
  // Routes (map F): what the team sees now, gathered once for all its squads.
  const bool bRoutes=bStrategy&&RoutesOn();TArray<FVector> RouteEnemies;if(bRoutes)RouteEnemies=RouteKnownEnemies(Team);
+ TArray<int32> RouteLoad; // -BattleRouteLoad: squads of this team already sent over each road section in this round
 	for (const auto& Pair : Store->GetSquads()) if (Pair.Value.Team == Team)
 	{
 		// Public objective status only; never use an unseen enemy's location.
@@ -494,7 +495,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     const FVector P=Runtime->Position(Pair.Value.LeaderUnitID);
     // The player's route choice for the squad comes before the AI's own (empty map in matches without a player's choice).
     const bool bChosen=!PlayerRoutes.IsEmpty()&&PlayerRouteLane(Pair.Key)!=0;
-    FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault&&!(BattleTactics::GroupSupplySlot()&&Pair.Value.SquadType==BattleSquadType::Supply)?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies);
+    FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault&&!(BattleTactics::GroupSupplySlot()&&Pair.Value.SquadType==BattleSquadType::Supply)?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies,&RouteLoad,Pair.Key);
     // -BattlePinnedFlank: a pinned AI sector squad first takes a sector beside the threat.
     static const bool bSectorAIOn=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
     FVector PinStage;
