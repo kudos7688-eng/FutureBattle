@@ -59,7 +59,7 @@ struct FBattleAreaState
  UPROPERTY() float WarClock=0;
  // Rounds left on each supply vehicle (squad type 9; BattleSupplyCar.cpp). A vehicle without an entry is full (UBattleTuning::SupplyCarStock).
  UPROPERTY() TMap<int32,int32> SupplyStock;
- // Strategy layer stage S2 (BattleStrategy.cpp, -BattleStrategy>=2; absent in older saves = no focus). Per team: phase (0 deploy, 1 focus),
+ // Focus state, written by the front plan (BattleFrontLine.cpp, -BattleFrontPlan; absent in older saves = no focus). Per team: phase (0 deploy, 1 focus),
  // the focus objective (-1 none), when the focus began, the next review, and a focus the AI attack group failed at with its end time.
  // Match times (Elapsed), as HomeHitAt.
  UPROPERTY() TArray<int32> StrategyPhase={0,0};
@@ -68,12 +68,6 @@ struct FBattleAreaState
  UPROPERTY() TArray<float> StrategyReviewAt={-1,-1};
  UPROPERTY() TArray<int32> StrategyAvoid={-1,-1};
  UPROPERTY() TArray<float> StrategyAvoidUntil={-1,-1};
- // Stage S3 (-BattleStrategy=3): held own points (bit per objective), since when each own point's theatre is "enemy ahead" (2 x objectives,
- // -1 = not; empty until first used), and the counter candidate with the end of its bonus.
- UPROPERTY() TArray<int32> StrategyHoldMask={0,0};
- UPROPERTY() TArray<float> StrategyThreatSince;
- UPROPERTY() TArray<int32> StrategyCounter={-1,-1};
- UPROPERTY() TArray<float> StrategyCounterUntil={-1,-1};
- // Stage S4 (-BattleStrategy=4): rifle squads the AI bought for its focus (their Area.HirePurpose follows the focus when it changes).
- UPROPERTY() TArray<int32> StrategyHired;
+ // (Stage S3/S4 fields StrategyHoldMask, StrategyThreatSince, StrategyCounter, StrategyCounterUntil and StrategyHired were removed
+ // with the older strategy layer on 2026-11-25; older saves that carry them load with the fields skipped.)
 };

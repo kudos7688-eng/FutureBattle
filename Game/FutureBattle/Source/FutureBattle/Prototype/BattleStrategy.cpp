@@ -205,7 +205,7 @@ void UBattleMatch::BuildSituation(int32 Team,FBattleSituation& Out) const
 
 void UBattleMatch::UpdateSituationLog()
 {
- if((!SituationLogOn()&&StrategyLevel()<1)||!bArea||Phase!=EBattleMatchPhase::Combat||Objectives.IsEmpty())return;
+ if(!SituationLogOn()||!bArea||Phase!=EBattleMatchPhase::Combat||Objectives.IsEmpty())return;
  const int32 Bucket=FMath::FloorToInt(Elapsed/BattleSituationValues::LogEvery);
  if(Bucket==SituationLogBucket)return;
  SituationLogBucket=Bucket;if(Bucket<1)return;
@@ -236,10 +236,9 @@ void UBattleMatch::UpdateSituationLog()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
-// Stage S2 (-BattleStrategy=2): recon -> focus attack. The team deploys as before until the first review (StrategyOpen x match
-// length / 600 s), then concentrates on the objective with the best score from its situation map: few known enemies, own strength
-// near it, close to its own front. The focus is kept at least StrategyFocusHold seconds (unless it is taken), reviewed every
-// StrategyReview seconds, and handed down through FAreaIntent::FocusPoint (S6) and the AI attack group's next point.
+// Values shared by the front plan (BattleFrontLine.cpp): the opening before the first focus and the least time a focus is kept.
+// The older strategy layer S2-S4 (-BattleStrategy=2/3/4, -BattleStrategyPass) was removed on 2026-11-25 (user decision,
+// Docs/review-2026-11-25); its last results can be reproduced from main b470127.
 namespace BattleStrategyValues
 {
  float Seconds(const TCHAR* Name,float Default,float Min)
@@ -247,41 +246,6 @@ namespace BattleStrategyValues
   float V=Default;FParse::Value(FCommandLine::Get(),Name,V);
   return FMath::IsFinite(V)?FMath::Max(Min,V):Default;
  }
- constexpr double AvoidSeconds=120.;  // a focus the AI attack group gave up on is avoided this long
- constexpr double KnownWeight=1.;     // per unit of known enemy power in the theatre (memory-weighted)
- constexpr double OwnWeight=.5;       // per unit of own power in the theatre and its two nearest neighbours (ease of gathering)
- constexpr double DistanceWeight=1.;  // per 100 m from the nearest point the team observes as its own (its home when none)
- constexpr double OwnNearCap=40.;     // own power near a candidate counts up to this (11-22: troops already gathered kept a focus)
- constexpr double KeepBonus=3.;       // the current focus: no switch for a small difference
- // Stage S3 (-BattleStrategy=3): hold and defend -> counter.
- constexpr double HoldAfter=20.;      // s an own point's theatre stays "enemy ahead" before it is held
- constexpr double QuietAfter=30.;     // s without seeing an enemy in a held theatre before the hold ends
- constexpr double CounterSeconds=90.; // the counter candidate (where the attackers came from) keeps its bonus this long
- constexpr double CounterBonus=5.;
- constexpr double HoldWeight=2.;      // S1 weight multiplier of a held point
- // Passes (-BattleStrategyPass=1, sector maps; Docs/design-terrain-ai.md 3-4).
- constexpr double PassThreatMin=1.;   // known enemies (fresh + weighted memory) at a pass or its exits that make it threatened
- constexpr int32 PassDetour=4;        // sectors: a longer way round the threatened passes counts as no way round
- constexpr double PassPenalty=5.;
-}
-
-bool UBattleMatch::StrategyPassOn()
-{
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleStrategyPass="),V);return V!=0;}();
- return bOn;
-}
-
-int32 UBattleMatch::StrategyLevel()
-{
- static const int32 Level=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleStrategy="),V);return FMath::Clamp(V,0,4);}();
- return Level;
-}
-
-bool UBattleMatch::StrategyOn(int32 Team,int32 Level)
-{
- // One team only: -BattleStrategyTeam=0/1, else the one-team trial flag of the strategy screens (-BattleAreaTrialTeam).
- static const int32 Only=[]{int32 V=-1;if(!FParse::Value(FCommandLine::Get(),TEXT("BattleStrategyTeam="),V))V=BattleTactics::AreaStrategy().TrialTeam;return V;}();
- return StrategyLevel()>=Level&&(Only<0||Only==Team);
 }
 
 float UBattleMatch::StrategyOpenSeconds()
@@ -299,191 +263,7 @@ float UBattleMatch::StrategyFocusHoldSeconds()
 int32 UBattleMatch::StrategyFocusPoint(int32 Team) const
 {
  // The front plan (BattleFrontLine.cpp, -BattleFrontPlan=1) writes its focus section's target point here too.
- if(!bArea||Team<0||Team>1||!(StrategyOn(Team,2)||FrontPlanOn(Team))||!Area.StrategyFocus.IsValidIndex(Team))return INDEX_NONE;
+ if(!bArea||Team<0||Team>1||!FrontPlanOn(Team)||!Area.StrategyFocus.IsValidIndex(Team))return INDEX_NONE;
  const int32 F=Area.StrategyFocus[Team];
  return Objectives.IsValidIndex(F)?F:INDEX_NONE;
-}
-
-int32 UBattleMatch::StrategyHoldPoint(int32 Team) const
-{
- // Stage S3: the held point threatened longest (its theatre turned "enemy ahead" first); INDEX_NONE without holds.
- if(!bArea||Team<0||Team>1||!StrategyOn(Team,3)||!Area.StrategyHoldMask.IsValidIndex(Team)||Area.StrategyHoldMask[Team]==0)return INDEX_NONE;
- const int32 N=Objectives.Num();int32 Best=INDEX_NONE;float BestSince=MAX_flt;
- for(int32 I=0;I<N&&I<31;++I)if((Area.StrategyHoldMask[Team]>>I)&1)
- {
-  const float Since=Area.StrategyThreatSince.IsValidIndex(Team*N+I)?Area.StrategyThreatSince[Team*N+I]:-1.f;
-  const float Key=Since>=0?Since:MAX_flt/2;
-  if(Best==INDEX_NONE||Key<BestSince){Best=I;BestSince=Key;}
- }
- return Best;
-}
-
-bool UBattleMatch::StrategyHolds(int32 Team,int32 Point) const
-{
- return bArea&&Team>=0&&Team<2&&Point>=0&&Point<31&&StrategyOn(Team,3)&&Area.StrategyHoldMask.IsValidIndex(Team)&&((Area.StrategyHoldMask[Team]>>Point)&1)!=0;
-}
-
-void UBattleMatch::UpdateStrategy(int32 Team)
-{
- if(!bArea||Team<0||Team>1||!StrategyOn(Team,2)||Objectives.IsEmpty()||Phase!=EBattleMatchPhase::Combat)return;
- using namespace BattleStrategyValues;
- const float OpenBase=StrategyOpenSeconds();
- const float Hold=StrategyFocusHoldSeconds();
- static const float Review=Seconds(TEXT("BattleStrategyReview="),60.f,10.f);
- auto Fix=[](auto& A,auto V){if(A.Num()!=2)A.Init(V,2);};
- Fix(Area.StrategyPhase,0);Fix(Area.StrategyFocus,-1);Fix(Area.StrategyFocusAt,-1.f);Fix(Area.StrategyReviewAt,-1.f);Fix(Area.StrategyAvoid,-1);Fix(Area.StrategyAvoidUntil,-1.f);
- int32& SPhase=Area.StrategyPhase[Team];int32& Focus=Area.StrategyFocus[Team];int32& Avoid=Area.StrategyAvoid[Team];
- float& FocusAt=Area.StrategyFocusAt[Team];float& ReviewAt=Area.StrategyReviewAt[Team];float& AvoidUntil=Area.StrategyAvoidUntil[Team];
- const int32 N=Objectives.Num();
- if(Elapsed<OpenBase*MatchTimeLimit()/600.f)return;
- // The situation map is built at most once per call: for the holds (S3, every order update) and for a review.
- FBattleSituation S;bool bBuilt=false;
- auto Situation=[&]()->const FBattleSituation&{if(!bBuilt){BuildSituation(Team,S);bBuilt=true;}return S;};
- // Stage S3: an own point whose theatre stays "enemy ahead" for HoldAfter s is held (S1 weight, the attack group's reserve and
- // defence go there); the hold ends when the point is lost, or after QuietAfter s without a sighting there - then the neighbouring
- // theatre where an enemy was seen most recently (where the attackers came from, by own observations) becomes a counter candidate.
- bool bCounter=false;
- if(StrategyOn(Team,3)&&N<=31&&Situation().Theatres.Num()==N+2)
- {
-  Fix(Area.StrategyHoldMask,0);Fix(Area.StrategyCounter,-1);Fix(Area.StrategyCounterUntil,-1.f);
-  if(Area.StrategyThreatSince.Num()!=2*N)Area.StrategyThreatSince.Init(-1.f,2*N);
-  int32& Mask=Area.StrategyHoldMask[Team];int32& Counter=Area.StrategyCounter[Team];float& CounterUntil=Area.StrategyCounterUntil[Team];
-  if(Counter>=0&&Elapsed>=CounterUntil){Counter=-1;CounterUntil=-1.f;}
-  for(int32 I=0;I<N;++I)
-  {
-   float& Since=Area.StrategyThreatSince[Team*N+I];const auto& X=S.Theatres[I];const bool bHeld=((Mask>>I)&1)!=0;
-   if(ObservedOwner(Team,I)!=Team)
-   {
-    Since=-1.f;
-    if(bHeld){Mask&=~(1<<I);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STRATEGY_HOLD team=%d t=%.1f point=%d hold=0 reason=lost"),Team,Elapsed,I);}
-    continue;
-   }
-   if(X.State==1){if(Since<0)Since=Elapsed;}else Since=-1.f;
-   if(!bHeld&&Since>=0&&Elapsed-Since>=HoldAfter)
-   {Mask|=1<<I;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STRATEGY_HOLD team=%d t=%.1f point=%d hold=1 known=%.1f own=%.1f"),Team,Elapsed,I,X.KnownPower,X.OwnPower);}
-   else if(bHeld&&X.State!=1&&(X.EnemySeenAge<0||X.EnemySeenAge>=QuietAfter))
-   {
-    Mask&=~(1<<I);
-    // The two nearest points not own: the one where an enemy was seen most recently.
-    int32 Best=INDEX_NONE;double BestAge=DBL_MAX;
-    TArray<int32> Near;for(int32 J=0;J<N;++J)if(J!=I&&ObservedOwner(Team,J)!=Team)Near.Add(J);
-    Near.Sort([&](int32 A,int32 B){const double DA=FVector::DistSquared2D(Objectives[A].Position,Objectives[I].Position),DB=FVector::DistSquared2D(Objectives[B].Position,Objectives[I].Position);return DA!=DB?DA<DB:A<B;});
-    for(int32 K=0;K<FMath::Min(2,Near.Num());++K){const double Age=S.Theatres[Near[K]].EnemySeenAge;if(Age>=0&&Age<BestAge){BestAge=Age;Best=Near[K];}}
-    if(Best!=INDEX_NONE){Counter=Best;CounterUntil=Elapsed+CounterSeconds;bCounter=true;}
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STRATEGY_HOLD team=%d t=%.1f point=%d hold=0 reason=quiet counter=%d"),Team,Elapsed,I,Best);
-   }
-  }
- }
- if(Avoid>=0&&Elapsed>=AvoidUntil){Avoid=-1;AvoidUntil=-1.f;}
- // The AI attack group gave up on the focus (its own avoid clock runs): the team avoids it too and reviews at once, without waiting
- // for the hold; an avoided point is no candidate while avoided (11-22: map J seed 19 kept a given-up focus for 170 s).
- bool bAvoided=false;
- if(Objectives.IsValidIndex(Focus)&&Avoid!=Focus)
-  for(const auto& P:Groups)
-   if(P.Value.Team==Team&&!P.Value.bPlayer&&P.Value.Kind==0&&P.Value.Avoid==Focus&&Elapsed<P.Value.AvoidUntil){Avoid=Focus;AvoidUntil=Elapsed+AvoidSeconds;bAvoided=true;break;}
- const TCHAR* Why=nullptr;
- if(SPhase==0&&ReviewAt<0)Why=TEXT("open");
- else if(Objectives.IsValidIndex(Focus)&&ObservedOwner(Team,Focus)==Team)Why=TEXT("taken");
- else if(bAvoided)Why=TEXT("avoid");
- else if(Elapsed>=ReviewAt)Why=TEXT("review");
- else if(bCounter)Why=TEXT("counter");
- if(!Why)return;
- // A focus is kept at least Hold seconds; only taking it or giving it up ends it sooner.
- const bool bTaken=FCString::Strcmp(Why,TEXT("taken"))==0;
- if(SPhase==1&&Objectives.IsValidIndex(Focus)&&!bTaken&&!bAvoided&&Elapsed-FocusAt<Hold){ReviewAt=FocusAt+Hold;return;}
- if(Situation().Theatres.Num()!=N+2)return;
- const int32 Counter=StrategyOn(Team,3)&&Area.StrategyCounter.IsValidIndex(Team)?Area.StrategyCounter[Team]:INDEX_NONE;
- TArray<int32> OwnPoints;for(int32 I=0;I<N;++I)if(ObservedOwner(Team,I)==Team)OwnPoints.Add(I);
- const FVector Home=AreaHome(Team);
- // Sector maps: by path (sector steps x 50m) from the nearest own point or the home, so that a point behind a mountain is far
- // (Docs/design-terrain-ai.md 3-3); points without a path, and maps without sectors, by the straight line.
- const bool bPathSteps=TheatreSteps.Num()==N*N&&HomeTheatreSteps.Num()==2*N;
- auto FrontDistance=[&](int32 I)
- {
-  if(bPathSteps)
-  {
-   int32 Steps=HomeTheatreSteps[Team*N+I];
-   for(int32 J:OwnPoints)Steps=FMath::Min(Steps,TheatreSteps[J*N+I]);
-   if(Steps<MAX_int32)return double(Steps)*BattleSectors::Size;
-  }
-  double D=FVector::Dist2D(Objectives[I].Position,Home);
-  for(int32 J:OwnPoints)D=FMath::Min(D,FVector::Dist2D(Objectives[I].Position,Objectives[J].Position));
-  return D;
- };
- // Own power in the theatre and in the theatres that touch it (sector maps: by sectors, Docs/design-terrain-ai.md 3-2), else in the
- // two theatres whose points are nearest its point.
- if(BattleFieldLayout::Of(GetWorld()).bSectors)BuildSectorTheatres();
- const bool bTouching=TheatreNeighbours.Num()==N;
- auto OwnNear=[&](int32 I)
- {
-  if(bTouching)
-  {
-   double Sum=S.Theatres[I].OwnPower;
-   for(int32 J=0;J<N;++J)if(J!=I&&(TheatreNeighbours[I]>>J)&1)Sum+=S.Theatres[J].OwnPower;
-   return Sum;
-  }
-  int32 A=INDEX_NONE,B=INDEX_NONE;double DA=DBL_MAX,DB=DBL_MAX;
-  for(int32 J=0;J<N;++J)if(J!=I)
-  {
-   const double D=FVector::DistSquared2D(Objectives[I].Position,Objectives[J].Position);
-   if(D<DA){B=A;DB=DA;A=J;DA=D;}else if(D<DB){B=J;DB=D;}
-  }
-  return S.Theatres[I].OwnPower+(A!=INDEX_NONE?S.Theatres[A].OwnPower:0.)+(B!=INDEX_NONE?S.Theatres[B].OwnPower:0.);
- };
- // -BattleStrategyPass (3-4): the passes with known enemies are closed and the way from the own front is measured again; a candidate
- // then reached only by a detour of more than PassDetour sectors (or not at all) loses PassPenalty. Known enemies only.
- uint32 PassBlocked=0;int32 Threatened=0;
- if(StrategyPassOn()&&bPathSteps&&N<=32&&S.PassThreat.Num()==StrategyPasses.Num()&&PassOfCell.Num()==BattleSectors::Columns*BattleSectors::Rows)
- {
-  TArray<bool> Closed;Closed.Init(false,BattleSectors::Columns*BattleSectors::Rows);
-  for(int32 P=0;P<StrategyPasses.Num();++P)
-   if(S.PassThreat[P]>=PassThreatMin){Closed[StrategyPasses[P].Y*BattleSectors::Columns+StrategyPasses[P].X]=true;++Threatened;}
-  if(Threatened)
-  {
-   TArray<FIntPoint> Sources;Sources.Add(BattleSectors::Cell(Home));for(int32 J:OwnPoints)Sources.Add(BattleSectors::Cell(Objectives[J].Position));
-   TArray<int32> Safe;
-   for(int32 I=0;I<N;++I)
-   {
-    if(OwnPoints.Contains(I))continue;
-    int32 Steps=HomeTheatreSteps[Team*N+I];for(int32 J:OwnPoints)Steps=FMath::Min(Steps,TheatreSteps[J*N+I]);
-    if(Steps==MAX_int32)continue;
-    SectorSteps(GetWorld(),BattleSectors::Cell(Objectives[I].Position),&Closed,Safe);
-    int32 SafeSteps=MAX_int32;
-    for(const FIntPoint& Src:Sources)if(BattleSectors::Valid(Src))SafeSteps=FMath::Min(SafeSteps,Safe[Src.Y*BattleSectors::Columns+Src.X]);
-    if(SafeSteps==MAX_int32||SafeSteps>Steps+PassDetour)PassBlocked|=1u<<I;
-   }
-   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STRATEGY_PASS team=%d t=%.1f passes=%d threatened=%d blocked=0x%x"),Team,Elapsed,StrategyPasses.Num(),Threatened,PassBlocked);
-  }
- }
- int32 Best=INDEX_NONE,Next=INDEX_NONE,Unknown=0;double BestScore=0,NextScore=0;
- for(int32 I=0;I<N;++I)
- {
-  if(OwnPoints.Contains(I)||I==Avoid)continue;
-  const auto& X=S.Theatres[I];
-  // An unknown theatre is not guessed at: it is not a focus candidate (user decision 2026-11-17).
-  if(X.State==0){++Unknown;continue;}
-  const double CandidateScore=-KnownWeight*X.KnownPower+OwnWeight*FMath::Min(OwnNear(I),OwnNearCap)-DistanceWeight*FrontDistance(I)/10000.+(I==Focus?KeepBonus:0.)+(I==Counter?CounterBonus:0.)-
-   (I<32&&((PassBlocked>>I)&1)?PassPenalty:0.);
-  if(Best==INDEX_NONE||CandidateScore>BestScore){Next=Best;NextScore=BestScore;Best=I;BestScore=CandidateScore;}
-  else if(Next==INDEX_NONE||CandidateScore>NextScore){Next=I;NextScore=CandidateScore;}
- }
- const int32 Old=Focus;
- if(Best!=Focus){Focus=Best;FocusAt=Elapsed;}
- // Stage S4: the squads bought for the focus follow it (no focus: they go back to the normal spread).
- if(StrategyOn(Team,4)&&Best!=Old)
- {
-  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
-  for(int32 K=Area.StrategyHired.Num()-1;K>=0;--K)
-  {
-   const int32 SID=Area.StrategyHired[K];const auto* Sq=Store?Store->FindSquad(SID):nullptr;
-   if(!Sq){Area.StrategyHired.RemoveAt(K);continue;}
-   if(Sq->Team!=Team)continue;
-   if(Best!=INDEX_NONE&&Sq->CommandStatus==EBattleCommandStatus::Active)Area.HirePurpose.Add(SID,Best);
-   else{Area.HirePurpose.Remove(SID);Area.StrategyHired.RemoveAt(K);}
-  }
- }
- SPhase=Best!=INDEX_NONE?1:0;ReviewAt=Elapsed+Review;
- const auto* F=Objectives.IsValidIndex(Best)?&S.Theatres[Best]:nullptr;
- UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_STRATEGY team=%d t=%.1f phase=%d focus=%d old=%d reason=%s score=%.1f known=%.1f own=%.1f next=%d nextScore=%.1f unknown=%d avoid=%d"),
-  Team,Elapsed,SPhase,Best,Old,Why,Best!=INDEX_NONE?BestScore:0.,F?F->KnownPower:0.,F?OwnNear(Best):0.,Next,Next!=INDEX_NONE?NextScore:0.,Unknown,Avoid);
 }

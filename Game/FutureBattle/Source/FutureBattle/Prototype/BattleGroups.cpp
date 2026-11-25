@@ -404,8 +404,6 @@ void UBattleMatch::UpdateGroups(int32 Team)
   FGroupStrength Power,FullPower;
   if(Weighted){Power=GroupPower(*G);FullPower=GroupPower(*G,true);if(G->StartStrength<0)G->StartStrength=Power.Total();}
   auto ThreatPoint=[&](){
-   // Strategy layer S3 (BattleStrategy.cpp): a held point (own, "enemy ahead" for 20 s by the situation map) comes first.
-   if(const int32 Held=StrategyHoldPoint(Team);Held!=INDEX_NONE)return Held;
    if(!Weighted)return AreaIntelThreat(Team);
    int32 Best=INDEX_NONE;double BestRisk=-1;
    for(int32 I=0;I<Objectives.Num();++I)if(GroupPointThreat(Team,I))
@@ -715,7 +713,6 @@ UBattleMatch::FGroupStrength UBattleMatch::GroupPointPower(int32 Team,int32 Poin
 }
 bool UBattleMatch::GroupPointThreat(int32 Team,int32 Point) const
 {
- if(StrategyHolds(Team,Point))return true; // strategy layer S3: a held point counts as threatened (-BattleStrategy=3 only)
  if(!BattleTactics::GroupStrengthEnabled())return AreaIntelThreatAt(Team,Point);
  if(ObservedOwner(Team,Point)!=Team)return false;
  const auto Own=GroupPointPower(Team,Point,false),Enemy=GroupPointPower(Team,Point,true);

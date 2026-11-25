@@ -98,7 +98,7 @@ void ABattleHUD::DrawHUD()
 	const auto* Controlled=Cast<ABattleUnit>(PC->GetPawn());
 	Label(PC->IsTactical() ? TEXT("作戦指揮") : Controlled && !Controlled->UsesThirdPersonView() ? TEXT("直接操作（一人称）") : TEXT("直接操作（三人称）"), W * .4f, 30, Mint, 1.2f);
 	Label(FString::Printf(TEXT("味方 %02d ／ 敵 %02d ／ 発見中 %02d"), Allies, Enemies, Spotted), W * .4f, 54, White, .9f);
-	Label(Mode->bCombatPaused ? TEXT("AI停止中 [P]") : TEXT("AI稼働中 [P]"), W - 165, 35, Mode->bCombatPaused ? FLinearColor::Yellow : Muted);
+	// AI pause and speed are toolbar buttons since 2026-11-25 (DrawQuitMenu).
 	// Setup before the start (-BattleSetupPhase=1, user decision 2026-11-22): the match waits paused at 0 s for the player's purchases and orders.
 	if (const auto* SetupMatch = GetWorld()->GetSubsystem<UBattleMatch>(); SetupMatch && SetupMatch->bArea && UBattleMatch::SetupPhase() && Mode->bCombatPaused && SetupMatch->Elapsed <= 0.f)
 	{
@@ -106,8 +106,6 @@ void ABattleHUD::DrawHUD()
 		Label(FString::Printf(TEXT("開始前の編成 ／ 資源 %d ／ 部隊 %d/%d"), SetupMatch->Credits[0], SetupMatch->ActiveSquads(0), BattleTactics::AreaHire().MaxActive), W * .5f - 318, 126, FLinearColor::Yellow, 1.f);
 		Label(TEXT("B の購入画面で部隊を買い、前線軍・攻撃軍と命令を整えたら P で開始"), W * .5f - 318, 150, White, .85f);
 	}
-	if (const auto* SpeedPC = Cast<ABattleController>(GetOwningPlayerController()); SpeedPC && SpeedPC->IsTactical())
-		Label(SpeedPC->GetGameSpeed() == 0 ? FString(TEXT("一時停止 [.]")) : FString::Printf(TEXT("速度 x%d [.]"), SpeedPC->GetGameSpeed()), W - 165, 55, SpeedPC->GetGameSpeed() != 1 ? FLinearColor::Yellow : Muted);
 	const auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (Match->IsEnabled())
 	{
@@ -171,38 +169,6 @@ void ABattleHUD::DrawHUD()
   else if(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->bMixedFastMatch)Label(TEXT("本拠地・保有拠点で補給：1発につき資源1 ／ F8 保存 ／ F9 読込 ／ 支援攻撃なし"),28,172,Mint,.85f);
   else if (BattleFieldLayout::IsLarge(GetWorld())) Label(TEXT("固定戦力 ／ 増援・補給・支援攻撃なし"),28,172,Mint,.85f);
 		else Label(FString::Printf(TEXT("[B] 支援攻撃 400 ／ 残り%d ／ 再装填 %.0f秒 ／ 選択部隊が知る位置へ"), 3 - Match->SupportUsed[0], Match->SupportCooldown[0]), 28, 172, Mint, .85f);
-  // Strategy band (Docs/design-strategy-ui.md 2.1, display only): the own AI's plan, for the squads the player delegated. Shown only
-  // while the strategy layer runs for team 0 (-BattleStrategy>=2); the opponent's plan is never shown.
-  if(Match->bArea&&UBattleMatch::StrategyOn(0,2))
-  {
-   const int32 Focus=Match->StrategyFocusPoint(0);
-   const float Open=UBattleMatch::StrategyOpenSeconds()*Match->MatchTimeLimit()/600.f;
-   FString Plan;
-   if(Match->Elapsed<Open)Plan=FString::Printf(TEXT("AIの方針：展開中（集中先は %.0f秒後に決める）"),Open-Match->Elapsed);
-   else if(Focus==INDEX_NONE)Plan=TEXT("AIの方針：展開（集中先の候補なし。見えている戦線が無い）");
-   else
-   {
-    const float Left=Match->Area.StrategyFocusAt.IsValidIndex(0)?Match->Area.StrategyFocusAt[0]+UBattleMatch::StrategyFocusHoldSeconds()-Match->Elapsed:0.f;
-    Plan=Left>0?FString::Printf(TEXT("AIの方針：集中 → 拠点%c（あと%.0f秒は変えない）"),TCHAR('A'+Focus),Left):FString::Printf(TEXT("AIの方針：集中 → 拠点%c（見直し待ち）"),TCHAR('A'+Focus));
-   }
-   FString Holds;int32 HoldBits=0;
-   for(int32 I=0;I<Match->Objectives.Num()&&I<31;++I)if(Match->StrategyHolds(0,I)){HoldBits|=1<<I;Holds+=FString::Printf(TEXT("%s拠点%c"),Holds.IsEmpty()?TEXT(""):TEXT("・"),TCHAR('A'+I));}
-   if(!Holds.IsEmpty())Plan+=FString::Printf(TEXT(" ／ 保持：%s"),*Holds);
-   DrawRect(Ink,16,193,560,22);Label(Plan+TEXT("（委任した部隊）"),28,196,FLinearColor(1.f,.85f,.35f),.8f);
-   // Notices when the plan changes (2.3): the reason is not stored, so the text says what changed.
-   if(auto* NoticePC=Cast<ABattleController>(PlayerOwner))
-   {
-    if(ShownStrategyFocus!=-2&&Focus!=ShownStrategyFocus)
-     NoticePC->PushNotice(6,Focus==INDEX_NONE?FString(TEXT("方針の変更：集中をやめた")):ShownStrategyFocus>=0?FString::Printf(TEXT("方針の変更：集中 拠点%c → 拠点%c"),TCHAR('A'+ShownStrategyFocus),TCHAR('A'+Focus)):FString::Printf(TEXT("方針：拠点%c に集中"),TCHAR('A'+Focus)),
-      Focus!=INDEX_NONE?Match->Objectives[Focus].Position:Match->AreaHome(0));
-    if(ShownStrategyHolds>=0)for(int32 I=0;I<Match->Objectives.Num()&&I<31;++I)
-    {
-     const bool bNow=(HoldBits>>I)&1,bBefore=(ShownStrategyHolds>>I)&1;
-     if(bNow!=bBefore)NoticePC->PushNotice(6,bNow?FString::Printf(TEXT("拠点%c を保持（敵が優勢）"),TCHAR('A'+I)):FString::Printf(TEXT("拠点%c の保持を解除"),TCHAR('A'+I)),Match->Objectives[I].Position);
-    }
-   }
-   ShownStrategyFocus=Focus;ShownStrategyHolds=HoldBits;
-  }
   // Front plan band (stage 7, -BattleFrontPlanPlayer=1): the own plan by section, the player's choices included. The enemy's is never shown.
   if(Match->bArea&&Match->PlayerRolesOn(0))
   {
@@ -545,6 +511,54 @@ void ABattleHUD::DrawHUD()
  DrawPlanPanel(PC);
  DrawBuyPanel(PC);
  DrawGamepadMenu(PC);
+ DrawQuitMenu(PC);
+}
+
+void ABattleHUD::DrawQuitMenu(ABattleController* PC)
+{
+ // Top bar toolbar (clickable in the tactical view) and, when open, the quit confirmation panel over everything.
+ if(!PC||!Canvas)return;
+ const auto L=FBattleQuitLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY));
+ const FLinearColor Ink(.025f,.04f,.065f,.96f),Plain(.08f,.11f,.15f,.98f),Lit(.14f,.2f,.26f,.98f),Mint(.28f,.95f,.8f),White(.94f,.97f,1.f),Gold(1.f,.85f,.35f),Red(.45f,.09f,.08f,.98f),RedLit(.62f,.14f,.12f,.98f);
+ FVector2D P;const bool bPointer=PC->GetPointerPosition(P);
+ auto Button=[&](FVector2D O,FVector2D S,const FString& Text,FLinearColor Fill,FLinearColor FillLit,FLinearColor Color,float Scale)
+ {
+  DrawRect(bPointer&&FBattleQuitLayout::In(P,O,S)?FillLit:Fill,O.X,O.Y,S.X,S.Y);
+  float TW=0,TH=0;Canvas->StrLen(GEngine->GetSmallFont(),Text,TW,TH);
+  DrawText(Text,Color,O.X+(S.X-TW*Scale)*.5f,O.Y+(S.Y-TH*Scale)*.5f,GEngine->GetSmallFont(),Scale);
+ };
+ // Toolbar: each button names its key; a state that is not the usual one is yellow.
+ const auto* GameMode=GetWorld()->GetAuthGameMode<ABattleGameMode>();
+ for(const auto& Tool:L.Tools)
+ {
+  FString Text;bool bOn=false;
+  switch(Tool.Id)
+  {
+  case FBattleQuitLayout::AIPause: bOn=GameMode&&GameMode->bCombatPaused;Text=bOn?TEXT("AI停止中 [P]"):TEXT("AI稼働中 [P]");break;
+  case FBattleQuitLayout::Speed: bOn=PC->GetGameSpeed()!=1;Text=PC->GetGameSpeed()==0?FString(TEXT("一時停止 [.]")):FString::Printf(TEXT("速度 x%d [.]"),PC->GetGameSpeed());break;
+  case FBattleQuitLayout::Save: Text=TEXT("保存 [F8]");break;
+  case FBattleQuitLayout::Load: Text=TEXT("読込 [F9]");break;
+  case FBattleQuitLayout::Quit: Text=TEXT("終了 [Esc]");break;
+  case FBattleQuitLayout::SelectAll: Text=TEXT("全選択 [Q]");break;
+  case FBattleQuitLayout::Control: Text=PC->IsTactical()?TEXT("直接操作 [E]"):TEXT("作戦画面 [Tab]");break;
+  case FBattleQuitLayout::Grid: bOn=!PC->bShowSectorGrid;Text=PC->bShowSectorGrid?TEXT("格子 表示 [M]"):TEXT("格子 なし [M]");break;
+  case FBattleQuitLayout::Fog: bOn=!PC->bShowFog;Text=PC->bShowFog?TEXT("霧 表示 [N]"):TEXT("霧 なし [N]");break;
+  case FBattleQuitLayout::Ranges: bOn=PC->RangeRingMode!=0;Text=PC->RangeRingMode==0?TEXT("射程の円 なし [L]"):TEXT("射程の円 表示 [L]");break;
+  case FBattleQuitLayout::Plan: bOn=PC->IsPlanPanelOpen();Text=TEXT("作戦方針 [U]");break;
+  case FBattleQuitLayout::FormGroup: Text=TEXT("群を編成 [F]");break;
+  case FBattleQuitLayout::SelectGroup: Text=TEXT("群を選択 [V]");break;
+  default: break;
+  }
+  float TW=0,TH=0;Canvas->StrLen(GEngine->GetSmallFont(),Text,TW,TH);
+  Button(Tool.Origin,Tool.Size,Text,Plain,Lit,bOn?FLinearColor::Yellow:White,FMath::Min(.8f,(Tool.Size.X-8.f)/FMath::Max(1.f,TW)));
+ }
+ if(!PC->IsQuitMenuOpen())return;
+ DrawRect(FLinearColor(0,0,0,.45f),0,0,Canvas->SizeX,Canvas->SizeY);
+ DrawRect(Ink,L.Panel.X,L.Panel.Y,L.PanelSize.X,L.PanelSize.Y);DrawRect(Gold,L.Panel.X,L.Panel.Y,L.PanelSize.X,2);
+ DrawText(TEXT("ゲームを終了しますか？"),Gold,L.Panel.X+30,L.Panel.Y+22,GEngine->GetSmallFont(),1.1f);
+ DrawText(TEXT("保存していない進行は失われます（F8 で保存）"),White,L.Panel.X+30,L.Panel.Y+54,GEngine->GetSmallFont(),.8f);
+ Button(L.QuitChoice,L.ChoiceSize,PC->bGamepadActive?TEXT("終了する [A]"):TEXT("終了する [Enter]"),Red,RedLit,White,.95f);
+ Button(L.Back,L.ChoiceSize,PC->bGamepadActive?TEXT("戻る [B]"):TEXT("戻る [Esc]"),Plain,Lit,Mint,.95f);
 }
 
 void ABattleHUD::DrawPlanPanel(ABattleController* PC)

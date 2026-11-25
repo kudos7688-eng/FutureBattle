@@ -1,7 +1,7 @@
 // Corpse removal (display only). -BattleCorpseLifetime=S (default 20 since 2026-11-20, user decision; 0 keeps bodies): S seconds after death a body sinks 1.2 m into the ground
 // over 1.5 s and is then hidden. The unit record (UBattleState), its position and its collision are left alone: score,
 // save, replacement and AI read the record, never the body. Yet the match is not identical (map E seed 7: 566/618 -> 532/614,
-// same winner; an unknown display->match coupling, like -BattleVATFarLight). The user accepted that.
+// same winner; an unknown display->match coupling, like the removed -BattleVATFarLight trial). The user accepted that.
 #include "BattleLeaderRuntime.h"
 #include "BattleBodyAnim.h"
 #include "FutureBattle.h"

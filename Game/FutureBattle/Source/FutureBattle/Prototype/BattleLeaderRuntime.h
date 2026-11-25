@@ -293,6 +293,8 @@ public:
  int32 ArmsBlockedLogs=0,ArmsTimeoutLogs=0,ArmsStuckLogs=0,ArmsNoStrikeLogs=0; // evaluation: BATTLE_ARMS_CHARGE_BLOCKED (at most 300) / BATTLE_ARMS_ASSAULT_TIMEOUT / BATTLE_ARMS_ASSAULT_STUCK / BATTLE_ARMS_CHARGE_NOSTRIKE (200 each) lines
  void RunArmsSmoke(double Now); // -BattleArmsSmoke (with -BattleElite=1): BATTLE_ARMS_SMOKE_RESULT failures=N, once after the start
  bool bArmsSmokeDone=false;
+ void RunMissionResumeSmoke(); // -BattleMissionResumeSmoke (B06): BATTLE_MISSION_RESUME_SMOKE_RESULT failures=N, once after the start
+ bool bMissionResumeSmokeDone=false;
  double ArmsNextPick=0,ArmsNextMelee=0,ArmsNextHeal=0;int32 ArmsIssuedUnits=-1;bool bArmsElite=false;
  TMap<int32,double> ArmsActionUntil;TMap<int32,uint8> ArmsActionKind;
  TArray<TWeakObjectPtr<class UStaticMeshComponent>> ArmsShellMeshes;

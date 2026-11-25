@@ -1203,8 +1203,8 @@ bool UBattleMatch::FrontPlanOn(int32 Team) const
 {
  static const int32 On=BattleFrontValues::Arg(TEXT("BattleFrontPlan="),0);
  static const int32 Only=BattleFrontValues::Arg(TEXT("BattleFrontPlanTeam="),-1);
- // Needs the front army's own line (FrontHold); the older strategy layer S2 keeps the focus for itself when it runs.
- return On!=0&&(Only<0||Only==Team)&&FrontLineOn(Team)&&BattleFrontValues::Hold()&&!StrategyOn(Team,2);
+ // Needs the front army's own line (FrontHold).
+ return On!=0&&(Only<0||Only==Team)&&FrontLineOn(Team)&&BattleFrontValues::Hold();
 }
 
 void UBattleMatch::FrontPlanFocusRows(int32 Team,TArray<uint8>& InFocus,int32& TargetCol) const

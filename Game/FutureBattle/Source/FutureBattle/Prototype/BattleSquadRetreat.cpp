@@ -24,6 +24,34 @@ bool UBattleSquadTactics::Apply(int32 SID, EBattleSquadTactic Action, EBattleOrd
  return true;
 }
 
+// B06 (Docs/review-2026-11-25): the one way back from a temporary plan (supply, regroup, raid, shield, contact) to the squad's mission.
+// The mission is read now, not copied when the plan began, so a mission update during the plan (deferred by SetSquadOrder) is the
+// one resumed; an explicit order during the plan cancels the plan itself and this is never reached. The sector flag of the mission is
+// kept (it was dropped before: a sector mission came back as a point order). Once resumed the plan is Mission, so it runs once.
+// Returns whether the mission route was accepted (the plan is then over).
+bool UBattleSquadTactics::ResumeMission(int32 SID,const TCHAR* Reason,const TCHAR* EventName)
+{
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ FBattleMission M;
+ if(!Store||!Runtime||!Store->MissionOf(SID,M))return false;
+ const auto* S=Store->FindSquad(SID);
+ if(!S||S->TacticalPlan.Action==EBattleSquadTactic::Mission)return false;
+ const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();const double Now=Match?Match->Elapsed:0.;
+ const int32 OrderRev=S->OrderRevision;
+ // Validate the route first (inside a plan this only updates the mission fields), then release the plan and execute.
+ if(!Runtime->IssueOrder(SID,M.Order,M.Goal,true,M.bSector))
+ {
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MISSION_RESUME squad=%d t=%.1f reason=%s order=%d sector=%d rev=%d ok=0"),SID,Now,Reason,int32(M.Order),M.bSector?1:0,M.Revision);
+  return false;
+ }
+ Store->CancelSquadTacticalPlan(SID,Reason);
+ const bool bRan=Runtime->IssueOrder(SID,M.Order,M.Goal,true,M.bSector);
+ if(EventName)Event(EventName);
+ const auto* After=Store->FindSquad(SID);
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MISSION_RESUME squad=%d t=%.1f reason=%s order=%d sector=%d rev=%d ok=%d order_steps=%d"),SID,Now,Reason,int32(M.Order),
+  After&&After->bSectorMission?1:0,After?After->MissionRevision:M.Revision,bRan?1:2,After?After->OrderRevision-OrderRev:0);
+ return true;
+}
 bool UBattleSquadTactics::RetreatGoal(const FBattleSquadState& S,const FBattleSquadObservation& Sample,FVector& Goal)
 {
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
@@ -162,8 +190,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   }
   if(O.Armed>=FMath::CeilToInt(O.Living*.9f)&&bAmmoBack)
   {
-   const auto Order=S->MissionOrder;const FVector Goal=S->MissionDestination;
-   if(Runtime->IssueOrder(SID,Order,Goal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("FIELD SUPPLY COMPLETE / RESUME"));Runtime->IssueOrder(SID,Order,Goal,true);Event(TEXT("FieldSupplyResume"));}
+   ResumeMission(SID,TEXT("FIELD SUPPLY COMPLETE / RESUME"),TEXT("FieldSupplyResume"));
    return;
   }
   // The vehicle moved: follow it.
@@ -186,8 +213,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   const bool Healed=Supply.ResumeHealthRatio<=0.f||O.Health/FullHP>=Supply.ResumeHealthRatio;
   if(Home && !bSPGEmpty && O.Armed>=FMath::CeilToInt(O.Living*.6f) && bAmmoBack && Manned && Healed)
   {
-   const auto Order=S->MissionOrder;const FVector Goal=S->MissionDestination;
-   if(Runtime->IssueOrder(SID,Order,Goal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("HOME SUPPLY COMPLETE / RESUME"));Runtime->IssueOrder(SID,Order,Goal,true);Event(TEXT("HomeSupplyResume"));SupplyTripEnd(SID,true);}
+   if(ResumeMission(SID,TEXT("HOME SUPPLY COMPLETE / RESUME"),TEXT("HomeSupplyResume")))SupplyTripEnd(SID,true);
   }
   return;
  }
@@ -249,8 +275,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   // Trial -BattleArtilleryRaidSneak: a regrouping raid goes straight back to its raid when nothing forces it back (exo: shield up again).
   if(bRaidSneak && P.Action==EBattleSquadTactic::Regroup && !Emergency && O.Armed>0 && P.Age>=2.f && (!bExo || ShieldRatio>=T->ExoResumeShield))
   {
-   const auto RaidOrder=S->MissionOrder; const FVector RaidGoal=S->MissionDestination;
-   if(Runtime->IssueOrder(SID,RaidOrder,RaidGoal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("RAID / RESUME MISSION"));Runtime->IssueOrder(SID,RaidOrder,RaidGoal,true);Event(TEXT("RaidResume"));return;}
+   if(ResumeMission(SID,TEXT("RAID / RESUME MISSION"),TEXT("RaidResume")))return;
   }
   if(Threats && P.RetrySeconds<=0 && (Emergency || P.Action==EBattleSquadTactic::Regroup)) { Retreat(); return; }
   // Armour AI: a vehicle resumes above its repair threshold (below it, it drives home; between that and 60% it used to wait forever).
@@ -259,8 +284,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   // Exoskeleton: back to the mission as soon as the shield is up again (it does not wait out the regroup time).
   if(bExo && ShieldRatio>=T->ExoResumeShield && O.Health/FullHP>=ResumeHealth && O.RecentDamage==0 && O.Armed>0 && P.Age>=2.f)
   {
-   const auto Order=S->MissionOrder; const FVector Goal=S->MissionDestination;
-   if(Runtime->IssueOrder(SID,Order,Goal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("SHIELD RESTORED / RESUME MISSION"));Runtime->IssueOrder(SID,Order,Goal,true);Event(TEXT("ExoShieldResume"));return;}
+   if(ResumeMission(SID,TEXT("SHIELD RESTORED / RESUME MISSION"),TEXT("ExoShieldResume")))return;
   }
   int32 Joined=0; for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive() && FVector::Dist2D(Runtime->Position(ID),P.Destination)<500) ++Joined;
   const bool Cohesive=Joined>=FMath::CeilToInt(O.Living*.7f);
@@ -274,14 +298,9 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
    }
    else if(ReadyToReturn && Cohesive)
    {
-    const auto Order=S->MissionOrder; const FVector Goal=S->MissionDestination;
     // Validate the latest mission before releasing protection from the objective director.
-    if(Runtime->IssueOrder(SID,Order,Goal,true))
-    {
-     Store->CancelSquadTacticalPlan(SID,TEXT("SAFE REGROUP / RESUME MISSION"));
-     Runtime->IssueOrder(SID,Order,Goal,true); Event(TEXT("ResumeMission"));
-     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ST2_RESUME squad=%d"),SID);
-    }
+    if(ResumeMission(SID,TEXT("SAFE REGROUP / RESUME MISSION"),TEXT("ResumeMission")))
+     {UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ST2_RESUME squad=%d"),SID);}
     else { P.Reason=TEXT("MISSION ROUTE UNREACHABLE / HOLD"); P.SafeSeconds=0; }
    }
    else if(P.Action!=EBattleSquadTactic::Recover && (Cohesive || P.Age>=15))
@@ -312,8 +331,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   const bool bSneak=Match->SurpriseMoving(SID)||Match->RaidSneaking(SID);
   if((P.SafeSeconds>=4 || bSneak) && P.Age>=3)
   {
-   const auto Order=S->MissionOrder; const FVector Goal=S->MissionDestination;
-   if(Runtime->IssueOrder(SID,Order,Goal,true)) { Store->CancelSquadTacticalPlan(SID,bSneak?TEXT("SURPRISE MOVE / RESUME MISSION"):TEXT("CONTACT LOST / RESUME MISSION")); Runtime->IssueOrder(SID,Order,Goal,true); }
+   ResumeMission(SID,bSneak?TEXT("SURPRISE MOVE / RESUME MISSION"):TEXT("CONTACT LOST / RESUME MISSION"),nullptr);
   }
   return;
  }

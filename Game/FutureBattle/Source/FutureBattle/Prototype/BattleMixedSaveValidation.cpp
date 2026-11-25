@@ -156,12 +156,6 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   for(int32 Team=0;Team<2;++Team)
    if(Area.StrategyPhase[Team]<0||Area.StrategyPhase[Team]>4||Area.StrategyFocus[Team]<-1||Area.StrategyFocus[Team]>=Objectives.Num()||Area.StrategyAvoid[Team]<-1||Area.StrategyAvoid[Team]>=Objectives.Num()||
       !Finite(Area.StrategyFocusAt[Team],-1,Elapsed+.01)||!Finite(Area.StrategyReviewAt[Team],-1,Elapsed+3600)||!Finite(Area.StrategyAvoidUntil[Team],-1,Elapsed+3600))return Fail(TEXT("Invalid strategy state"));
-  // Stage S3: held points are own objectives (bits below the objective count), threat clocks in the past, counter in range.
-  if(Area.StrategyHoldMask.Num()!=2||Area.StrategyCounter.Num()!=2||Area.StrategyCounterUntil.Num()!=2||(Area.StrategyThreatSince.Num()!=0&&Area.StrategyThreatSince.Num()!=2*Objectives.Num()))return Fail(TEXT("Invalid strategy hold state"));
-  for(int32 Team=0;Team<2;++Team)
-   if(Area.StrategyHoldMask[Team]<0||(Objectives.Num()<31&&(Area.StrategyHoldMask[Team]>>Objectives.Num())!=0)||Area.StrategyCounter[Team]<-1||Area.StrategyCounter[Team]>=Objectives.Num()||!Finite(Area.StrategyCounterUntil[Team],-1,Elapsed+3600))return Fail(TEXT("Invalid strategy hold state"));
-  for(float Since:Area.StrategyThreatSince)if(!Finite(Since,-1,Elapsed+.01))return Fail(TEXT("Invalid strategy hold state"));
-  for(int32 SID:Area.StrategyHired)if(!BySquad.FindRef(SID))return Fail(TEXT("Invalid strategy hire"));
 
   // Starting resources: -BattleAreaStartCredits (default 100; the check had 100 fixed, which failed any other value).
   const int32 Start=BattleTactics::AreaIncome().StartCredits;

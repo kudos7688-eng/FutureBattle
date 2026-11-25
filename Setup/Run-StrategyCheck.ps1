@@ -3,7 +3,7 @@
 # Cases are "Label=Map:Seed:Snapshot:extra args" strings; Snapshot is 'S' (-StrategyBuild) or 'B' (-BaseBuild). Existing outputs are kept.
 # Example:
 #  .\Run-StrategyCheck.ps1 -StrategyBuild Benchmarks/BuildSnapshots/strat-r1/manifest.json -BaseBuild <main snapshot manifest> -Tag c1 `
-#   -Cases 'base=E:7:B','def=E:7:S','sl=E:7:S:-SituationLog 1','st2=E:7:S:-Strategy 2'
+#   -Cases 'base=E:7:B','def=E:7:S','sl=E:7:S:-SituationLog 1'
 # Outputs: Benchmarks/SightTrial-20261111/chk-<Label>-<Map><Seed>-<Tag>. Compare with Compare-MatchResults.py, summarise with
 # Analyze-Situation.py.
 [CmdletBinding()]
