@@ -247,6 +247,8 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   { bMovementTrial=true;FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWideMapAudit,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleSightTrial")))
   { FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSightTrial,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleCoverFirePointTrial")))
+  { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunCoverFirePointTrial,4.f,false); }
   else if(bContactTrial)
   { FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunContactTrial,4.f,false); }
   else if(bMovementTrial)

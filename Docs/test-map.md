@@ -35,6 +35,7 @@
 | Test-CoverActions | ○ | ○ | | △ | 兵1人の遮蔽：保護位置へ着く、覗いて撃つ、制圧で隠れる、ブラインドファイア、壁遮蔽の出入りと保存（B01・B02 は `contract` b9fa623 で追加） | `BATTLE_COVER_RESULT failures=0` | マップC／D、上限180秒 |
 | Test-MovementStability | | ○ | | | 移動の4場面（密集・狭路・対向流・集合）：全員が1m以内に着く、到着枠の間隔、経路要求数、兵どうしの間隔 | `BATTLE_MOVE_RESULT failures=0` | 野原、各30秒まで |
 | Test-ContactMovement | ○ | ○ | | | 接触の3場面：止まっている小隊の横を通る、到着の予約を別小隊が占めている、狭路で待って通る。止まっている側を勝手に動かさない | `BATTLE_CONTACT_RESULT failures=0` | 野原（場面の中に壁を作る）、各30秒まで |
+| Test-CoverFirePoint | | ○ | | | 射撃用遮蔽の固定4場面：低壁は上越し、長い高壁は不可、端のある高壁は100〜120cmのリーン（到着地点の判定も同じ3点）、端まで2mの長い高壁は上越し・リーン不可で値2の step（220cm）が見つかる（計8件） | `BATTLE_COVERFP_RESULT failures=0`、CHECK 8件 | 野原（NavMeshに影響しない静的な箱4つ）、上限180秒 |
 | Test-SquadRetreat | ○ | ○ | (△) | | 撤退：被害・弾切れ・劣勢で退く、集合を待つ、安全になったら任務へ戻る、弾や HP を作らない。**B06 の自己試験は含まない** | `BATTLE_ST2_RESULT failures=0`（`-Soak` は `BATTLE_WIDE_SOAK_RESULT`） | 野原、約10秒（Soak 180秒） |
 | Test-TeamSupport | ○ | ○ | (△) | | 小隊間の援護：近い適格な小隊を割り当て、重複なし、実弾で確認、期限・弾切れ・見失いで解除 | `BATTLE_SUPPORT_RESULT failures=0` | 野原、約7秒 |
 | Test-SquadFlank | ○ | ○ | (△) | | 迂回：遮蔽のある経路は単独、露出する経路は援護が要る、未観測の真値を使わない、到着後に交戦へ戻る | `BATTLE_FLANK_RESULT failures=0` | 野原、約19秒 |

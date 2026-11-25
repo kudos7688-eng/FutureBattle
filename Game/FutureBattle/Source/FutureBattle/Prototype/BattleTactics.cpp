@@ -245,6 +245,18 @@ bool BattleTactics::ContactCoverEnabled()
  return Enabled;
 }
 
+// Trial -BattleCoverFirePoint (default 0): 1 = over/lean, 2 = step fallback within each threat pass.
+int32 BattleTactics::CoverFirePointLevel()
+{
+ static const int32 Level=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverFirePoint="),Value);return Value;}(); // trial, default 0
+ return Level;
+}
+
+bool BattleTactics::CoverFirePointEnabled()
+{
+ return CoverFirePointLevel()!=0;
+}
+
 bool BattleTactics::CoverActionsEnabled()
 {
  static const bool Enabled=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverActions="),Value);return Value!=0;}();
