@@ -147,13 +147,8 @@ $supply=@{
  'GF1'=@('-FrontLine','0','-GroupFireSupport','1')
  'SG1'=@('-FrontLine','1','-FrontAuto','1','-SurpriseGroup','1')
  # Strategy layer (2026-11-22, Docs/design-strategy-layer.md): SL1 = situation map log only (must equal the baseline);
- # ST2 = stage S2, recon -> focus attack (with -TrialTeam only that team, through -AreaTrialTeam).
+ # (ST2/ST2P/ST3/ST4, the older strategy layer S2-S4, were removed on 2026-11-25; main b470127 still runs them.)
  'SL1'=@('-SituationLog','1')
- 'ST2'=@('-Strategy','2')
- # ST2P = ST2 with the pass check (-BattleStrategyPass=1, sector maps; Docs/design-terrain-ai.md 3-4).
- 'ST2P'=@('-Strategy','2','-StrategyPass','1')
- 'ST3'=@('-Strategy','3')
- 'ST4'=@('-Strategy','4')
  # RTS = symmetric tie-break of the home-assault flank side (-BattleRouteTieSymmetric, 2026-11-22; maps E-I with the symmetric start).
  'RTS'=@('-RouteTieSymmetric','1')
  # Subtraction evaluation (2026-11-22, Docs/design-subtraction-eval.md): ALL = both teams buy every type (use as -Baseline);

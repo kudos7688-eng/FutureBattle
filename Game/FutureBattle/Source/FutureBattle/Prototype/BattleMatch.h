@@ -139,6 +139,14 @@ public:
  // Why a purchase cannot happen now: 0 = it can, 1 = it can later (resources, squad slots, type limit: a reservation waits),
  // 2 = not in this state (disabled, not in combat, bad type, 100 squad records). Why gets HireAreaSquad's message.
  int32 HireBlock(int32 Team,uint8 SquadType,FString& Why,uint8 Grade=0) const; // Grade 1 elite platoon, 2 sniper team (BattleArms.cpp)
+ int32 HireCost(uint8 SquadType,uint8 Grade=0) const;
+ // Replenishments queued for the team (each reserves one resource; HireAreaSquad cancels those the rest cannot cover).
+ int32 PendingReplacements(int32 Team) const;
+ // B03 (Docs/review-2026-11-25): the resources the AI leaves unspent (the player's delegation setting, else the intent's HireReserve) and
+ // whether an AI purchase of Cost keeps them. Checked for every AI purchase, also delegated ones and AI reservations when they are bought;
+ // the player's own purchases and reservations are not limited by it.
+ int32 AIHireKeep(int32 Team) const;
+ bool AIHireAffordable(int32 Team,int32 Cost) const;
  // Buys now when nothing of the same type waits ahead and nothing is starved (as a plain purchase); otherwise queues.
  // Returns 0 refused (LastMessage says why), 1 bought, 2 queued.
  int32 ReserveHire(int32 Team,uint8 SquadType,bool bByAI,int32 Dest=-1);
@@ -531,21 +539,11 @@ public:
  static bool SituationLogOn();
  void UpdateSituationLog();
  int32 SituationLogBucket = -1;
- // Stage S2 (-BattleStrategy=2, -BattleStrategyTeam=0/1 for one team): recon -> focus attack. UpdateStrategy runs once per team order
- // update (before AreaIntent is read): after the opening it picks the focus objective from the situation map, keeps it at least
- // StrategyFocusHold seconds, reviews every StrategyReview seconds and at once when the focus is taken. State in Area.Strategy*.
- static int32 StrategyLevel();
- static bool StrategyOn(int32 Team, int32 Level);
- static float StrategyOpenSeconds();      // before the first review (x match length / 600)
+ // The front plan's focus timing and focus (state in Area.Strategy*). The older strategy layer S2-S4 (-BattleStrategy=2/3/4,
+ // -BattleStrategyPass) was removed on 2026-11-25 (user decision); main b470127 reproduces its results.
+ static float StrategyOpenSeconds();      // before the first focus (x match length / 600)
  static float StrategyFocusHoldSeconds(); // least time a focus is kept
- // -BattleStrategyPass=1 (default 0; sector maps): a focus candidate whose way from the own front can avoid the passes with known
- // enemies only by a detour of more than 4 sectors loses 5 points (Docs/design-terrain-ai.md 3-4).
- static bool StrategyPassOn();
- int32 StrategyFocusPoint(int32 Team) const; // INDEX_NONE without a valid focus
- void UpdateStrategy(int32 Team);
- // Stage S3 (-BattleStrategy=3): own points held against a known superior enemy (Area.StrategyHoldMask).
- int32 StrategyHoldPoint(int32 Team) const; // the one threatened longest; INDEX_NONE without holds
- bool StrategyHolds(int32 Team, int32 Point) const;
+ int32 StrategyFocusPoint(int32 Team) const; // INDEX_NONE without a valid focus (front plan only)
 	// Objective worth (FMapDef::ObjectiveValues; 1 where the map sets none): multiplies its income and its end score.
 	float ObjectiveValue(int32 Point) const;
 	// Resources a team gains per income tick from the objectives it truly owns now (before the time ramp): base + per point x value x map scale.

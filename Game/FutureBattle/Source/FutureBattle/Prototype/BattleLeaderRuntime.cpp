@@ -1654,6 +1654,9 @@ void UBattleLeaderRuntime::Step(float Dt)
   if(bArea && ArtilleryShells.Num()) StepArtilleryShells(Dt);
   // Infantry arms (BattleArms.cpp): only with a trial switch on, an elite platoon or a round in flight.
   if(bWideField && ArmsActive()) StepArms(Dt,Now);
+  // Self-test -BattleMissionResumeSmoke (B06, BattleSquadRetreatSmoke.cpp): once, 3 s into the combat. Changes the match (test runs only).
+  static const bool bResumeSmoke=FParse::Param(FCommandLine::Get(),TEXT("BattleMissionResumeSmoke"));
+  if(bResumeSmoke && bWideField && !bMissionResumeSmokeDone && Now>=Mode->CombatStartsAt+3.){bMissionResumeSmokeDone=true;RunMissionResumeSmoke();}
  }
  int32 Living[2]={0,0}; for(const auto& U:Store->GetUnits()) if(U.Value.IsAlive()) ++Living[U.Value.Team];
  if(!bArea && !Mode->bBattleEnded && (!Living[0] || !Living[1]))

@@ -225,6 +225,14 @@ bool UBattleState::SetSquadOrder(int32 ID, EBattleOrder Order, FVector Destinati
 	return true;
 }
 
+bool UBattleState::MissionOf(int32 ID, FBattleMission& Out) const
+{
+ const auto* S = Squads.Find(ID);
+ if (!S || !S->bHasMission) return false;
+ Out.Order = S->MissionOrder; Out.Goal = S->MissionDestination; Out.bSector = S->bSectorMission; Out.Revision = S->MissionRevision;
+ return true;
+}
+
 void UBattleState::CancelSquadTacticalPlan(int32 ID, const FString& Reason)
 {
  if (auto* S = Squads.Find(ID))
