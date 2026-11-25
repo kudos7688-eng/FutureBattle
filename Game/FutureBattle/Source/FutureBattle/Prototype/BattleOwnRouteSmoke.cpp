@@ -47,6 +47,7 @@ void UBattleLeaderRuntime::StepOwnRouteSmoke(double Now)
  auto Finish=[&]()
  {
   T.bDone=true;SmokeFailures+=T.Failures;
+  for(const auto& Count:SightExperiment.CoverDiag)if(Count.Key.ToString().StartsWith(TEXT("move_")))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_OWN_ROUTE_SMOKE_COUNT %s=%d"),*Count.Key.ToString(),Count.Value);
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_OWN_ROUTE_SMOKE_RESULT failures=%d mode=%d scenes=%d"),T.Failures,Mode2,T.Scene);
   FPlatformMisc::RequestExitWithStatus(false,T.Failures?1:0);
  };
@@ -183,7 +184,7 @@ void UBattleLeaderRuntime::StepOwnRouteSmoke(double Now)
   int32 StillOwn=0,Planned=0,Living=0;
   for(int32 MID:T.Cut)if(Store->Find(MID)->IsAlive())
   {
-   ++Living;StillOwn+=Bodies.FindChecked(MID).bOwnRoute;
+   ++Living;StillOwn+=Bodies.FindChecked(MID).bOwnRoute&&!Bodies.FindChecked(MID).OwnRouteDestination.Equals(T.Dest,1.); // a new own route under the new order is fine
    if(const auto* Route=P->Corridors.Find(MID);Route&&Route->Num()>1&&FVector::Dist2D(Route->Last(),T.Dest)<1500.)++Planned;
   }
   Check(P->PathRequests!=T.OrderRequests&&Living>0&&StillOwn==0&&Planned==Living,FString::Printf(TEXT("a new order drops the own routes and plans again (own=%d planned=%d of %d)"),StillOwn,Planned,Living));

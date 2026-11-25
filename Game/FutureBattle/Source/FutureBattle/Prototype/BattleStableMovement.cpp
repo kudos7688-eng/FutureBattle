@@ -391,7 +391,13 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   // straight at its next point and presses against the wall. StableMove gives him a route of his own after 2s, but the squad
   // replan that the pressing itself asks for (4s) resets every corridor here and sends him back to the wall. With the switch a
   // member on foot who cannot walk straight to his corridor point gets his own route to his arrival place at once.
+  B->bOwnRouteWanted=false;
   if(FKeptRoute* KeptRoute=KeptRoutes.Find(ID)) {B->Waypoint=KeptRoute->Waypoint;Route=MoveTemp(KeptRoute->Points);}
+  // Mode 2: a member on foot who cannot walk straight to his corridor point is cut off by a wall. He does not wait for the 2 s
+  // stall (side steps along the wall count as progress and keep resetting it: no own route in 56 s in the fixed scene);
+  // StableMove asks for his route through its two-per-frame budget.
+  else if(CutOffRouteMode()==2 && Nav && BattleFieldLayout::IsUrban(GetWorld()) && !NavFor(ID) && Route.IsValidIndex(B->Waypoint) && P.ArrivalGoals.Contains(ID) && !ClearMovementSegment(Position(ID),Route[B->Waypoint]))
+  {B->bOwnRouteWanted=true;SightExperiment.Cover(TEXT("move_own_route_wanted"));}
   else if(CutOffRouteMode()==1 && Nav && BattleFieldLayout::IsUrban(GetWorld()) && !NavFor(ID) && Route.IsValidIndex(B->Waypoint) && !ClearMovementSegment(Position(ID),Route[B->Waypoint]))
    if(const FVector* OwnGoal=P.ArrivalGoals.Find(ID))
     if(auto* OwnPath=Nav->FindPathToLocationSynchronously(GetWorld(),Position(ID),*OwnGoal);OwnPath && OwnPath->IsValid() && !OwnPath->IsPartial() && OwnPath->PathPoints.Num()>1)
@@ -687,13 +693,13 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  // B05 (mode 2): an own route kept through replans ends at the place it was built for; when the member's arrival place has moved
  // since and cannot be walked to straight from the last leg, ask again (same budget, same 3 s spacing).
  const bool bOwnGoalMoved=CutOffRouteMode()==2 && B.bOwnRoute && Now>=B.NextOwnPath && Final && !Goal->Equals(B.OwnRouteGoal,50.) && !ClearMovementSegment(Pos,*Goal);
- if(BattleFieldLayout::IsUrban(GetWorld()) && Now>=B.NextOwnPath && (bOwnGoalMoved || (Now-B.LastProgressTime>2 && !ClearMovementSegment(Pos,Way))))
+ if(BattleFieldLayout::IsUrban(GetWorld()) && Now>=B.NextOwnPath && (bOwnGoalMoved || B.bOwnRouteWanted || (Now-B.LastProgressTime>2 && !ClearMovementSegment(Pos,Way))))
  {
   static uint64 QueryFrame=0; static int32 QueriesThisFrame=0;
   if(QueryFrame!=GFrameCounter) {QueryFrame=GFrameCounter;QueriesThisFrame=0;}
   if(QueriesThisFrame<2)
   {
-   ++QueriesThisFrame; ++B.OwnRouteQueries; B.NextOwnPath=Now+3;
+   ++QueriesThisFrame; ++B.OwnRouteQueries; B.NextOwnPath=Now+3; B.bOwnRouteWanted=false;
    auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
    auto* Own=Nav?Nav->FindPathToLocationSynchronously(GetWorld(),Pos,*Goal,NavFor(ID)?Actor(ID):nullptr):nullptr;
    if(Own && Own->IsValid() && Own->PathPoints.Num()>1)
