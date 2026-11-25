@@ -558,7 +558,11 @@ public:
 	bool RoutesOn() const;
 	TArray<FVector> RouteKnownEnemies(int32 Team) const;
 	int32 RouteFlankSide(const FVector& From, const FVector& OwnHome, const TArray<FVector>& KnownEnemies, int32 SquadID) const;
-	FVector RouteStep(const FVector& From, const FVector& Goal, int32 FlankSide, const TArray<FVector>& KnownEnemies) const;
+	FVector RouteStep(const FVector& From, const FVector& Goal, int32 FlankSide, const TArray<FVector>& KnownEnemies, TArray<int32>* Load = nullptr, int32 SquadID = INDEX_NONE) const;
+	// -BattleRouteLoad: the junctions a squad was sent along, kept until its goal changes (not saved: chosen anew after a load).
+	struct FRouteCommit { FVector Goal = FVector::ZeroVector; int32 FlankSide = 0; TArray<int32> Nodes; };
+	mutable TMap<int32, FRouteCommit> RouteCommits;
+	mutable TMap<int32, FRouteCommit> RouteSeen; // -BattleRouteLog: the way last chosen, to record a change of way on the road
 	// Sector routes (BattleSectorRoute.cpp, trial -BattleSectorRoute=1): the sector beside the next junction an AI squad stops in.
 	static bool SectorRouteOn();
 	static bool SectorFlankOn(); // -BattleSectorFlank=1: stops beside the known enemy's front near the goal
