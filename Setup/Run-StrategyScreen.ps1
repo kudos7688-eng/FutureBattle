@@ -1,4 +1,4 @@
-# One-team strategy screening (2026-11-16; sequential stopping and 60 FPS confirmation since 2026-11-18).
+﻿# One-team strategy screening (2026-11-16; sequential stopping and 60 FPS confirmation since 2026-11-18).
 # Each condition is played by one team at a time against the default (Run-EconomyMatrix -TrialTeam 0 and 1) and compared
 # with default-vs-default on the same seeds, which removes the side bias. Per seed, gain = mean over the two trial teams of
 # (trial-team score lead - that side's lead in the default-vs-default matches), each over maps x swap.
@@ -62,7 +62,15 @@ function SeedGain([string]$Condition,[int]$Seed,[string]$RunTag){
 function Invoke-Pool($specs){
  $jobs=@()
  foreach($s in $specs){
-  if(Test-Path (Join-Path $root $s.Name)){continue}
+  if(Test-Path (Join-Path $root $s.Name)){
+  $resumeFolder=(Join-Path $root $s.Name)
+  $resumeManifest=$null
+  try{$resumeManifest=Get-Content -LiteralPath (Join-Path $resumeFolder 'manifest.json') -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json -ErrorAction Stop}catch{}
+  if(($resumeManifest.arguments -join ' ') -match '(?i)(?<![A-Za-z0-9_])-BattleVerifyMixedSave(?=[=\s"\x27]|$)'){
+   throw "$resumeFolder は 11-25 の削除より前の往復保存ありの結果です。新しい Tag（接頭辞）で回してください"
+  }
+  continue
+ }
   while(@($jobs|Where-Object{!$_.HasExited}).Count -ge $Concurrency){Start-Sleep 5}
   $jobs+=Start-Process powershell.exe -ArgumentList $s.Args -RedirectStandardOutput "Econ-$($s.Name).txt" -RedirectStandardError "Econ-$($s.Name).err.txt" -WindowStyle Hidden -PassThru
   Start-Sleep 3

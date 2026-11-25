@@ -114,8 +114,8 @@
 - `TEXT("Mission survives real binary save and world restore")`
 - `TEXT("Legacy missing mission fields migrate from stored own orders")`
 - `TEXT("Invalid mission save is rejected before world mutation")`
-- `TEXT("Last member death cancels tactical authority immediately")`
-- `TEXT("Recent own damage is recorded without enemy state access")`
+- `TEXT("Last member death cancels tactical authority immediately")`（11-25 保存なしで戻した）
+- `TEXT("Recent own damage is recorded without enemy state access")`（11-25 保存なしで戻した）
 - `TEXT("Death fixture restores clean live match")`
 
 ## BattleSupportSmoke.cpp
@@ -237,7 +237,7 @@
 - `TEXT("restore fixture for live continuation")`
 - `TEXT("F8/F9 controller callbacks reach mixed save/load using isolated test slot")`
 - `TEXT("restored retreat continues through real Actor movement")`
-- `TEXT("restored follower reload completes")`
+- `TEXT("restored follower reload completes")`（11-25 保存なしで戻した）
 - `TEXT("live continuation preserves mixed representation")`
 - `TEXT("live mixed combat remains serializable after clocks advance")`
 

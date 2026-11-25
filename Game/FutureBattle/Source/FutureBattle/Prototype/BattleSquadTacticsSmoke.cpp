@@ -113,8 +113,28 @@ void ABattleGameMode::RunSquadTacticsSmokeTest()
    CheckSmoke(!Controller->GetSelection().IsEmpty(), TEXT("HUD capture has a living selected squad"));
    FScreenshotRequest::RequestScreenshot(Prefix+TEXT("-rts.png"),true,false);
   }
-  UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_SMOKE_RESULT failures=%d"), SmokeFailures);
   FTimerHandle Exit;
-  GetWorldTimerManager().SetTimer(Exit, FTimerDelegate::CreateWeakLambda(this,[this](){ FPlatformMisc::RequestExitWithStatus(false,SmokeFailures?1:0); }), 1.f, false);
+  GetWorldTimerManager().SetTimer(Exit, FTimerDelegate::CreateWeakLambda(this,[this]()
+  {
+   // Destructive fixture runs after the live observations and screenshot have finished.
+   auto* DeathStore = GetWorld()->GetSubsystem<UBattleState>();
+   auto* DeathTactics = GetWorld()->GetSubsystem<UBattleSquadTactics>();
+   if (DeathTactics->IsEnabled())
+   {
+    const int32 DeathFirstID = DeathStore->RegisterUnit(0, 100.f);
+    const int32 DeathLastID = DeathStore->RegisterUnit(0, 100.f);
+    const int32 DeathSquadID = DeathStore->CreateSquad(0, {DeathFirstID, DeathLastID});
+    TMap<int32,FVector> DeathGoals; DeathGoals.Add(DeathFirstID, FVector::ZeroVector); DeathGoals.Add(DeathLastID, FVector::ZeroVector);
+    DeathStore->SetSquadDelegated(DeathSquadID, true);
+    CheckSmoke(DeathStore->SetSquadTacticalPlan(DeathSquadID, EBattleSquadTactic::Support, EBattleOrder::Hold, FVector::ZeroVector, DeathGoals, 3, TEXT("DEATH FIXTURE")) && DeathTactics->Observe(*DeathStore->FindSquad(DeathSquadID)).RecentDamage == 0, TEXT("Death fixture begins with active tactical authority and no damage history"));
+    DeathStore->ApplyDamage(DeathFirstID, 1, 10000);
+    CheckSmoke(DeathStore->FindSquad(DeathSquadID)->TacticalPlan.Action == EBattleSquadTactic::Support, TEXT("Surviving member retains tactical authority"));
+    DeathStore->ApplyDamage(DeathLastID, 1, 10000);
+    CheckSmoke(DeathStore->FindSquad(DeathSquadID)->TacticalPlan.Action == EBattleSquadTactic::Mission && DeathTactics->Observe(*DeathStore->FindSquad(DeathSquadID)).Living == 0, TEXT("Last member death cancels tactical authority immediately"));
+    CheckSmoke(DeathTactics->Observe(*DeathStore->FindSquad(DeathSquadID)).RecentDamage == 200.f, TEXT("Recent own damage is recorded without enemy state access"));
+   }
+   UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_SMOKE_RESULT failures=%d"), SmokeFailures);
+   FPlatformMisc::RequestExitWithStatus(false,SmokeFailures?1:0);
+  }), 1.f, false);
  }), Duration, false);
 }

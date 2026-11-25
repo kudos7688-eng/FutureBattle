@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（169 モジュール、45867 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（169 モジュール、45916 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -229,7 +229,7 @@
 | `BattleMatchSmoke` | .cpp | 58 |  |  |
 | `BattleMatchSoak` | .cpp | 52 |  |  |
 | `BattleMaterialTrial` | .cpp | 106 |  |  |
-| `BattleMixedFastSmoke` | .cpp | 32 |  |  |
+| `BattleMixedFastSmoke` | .cpp | 61 |  |  |
 | `BattleMovementTrial` | .cpp | 112 |  |  |
 | `BattleMovingSquadTrial` | .cpp | 222 |  |  |
 | `BattleNetworkBenchmark` | .cpp | 119 |  |  |
@@ -251,7 +251,7 @@
 | `BattleSquadFlankSmoke` | .cpp | 181 |  |  |
 | `BattleSquadRetreatSmoke` | .cpp | 195 |  |  |
 | `BattleSquadSmoke` | .cpp | 215 |  |  |
-| `BattleSquadTacticsSmoke` | .cpp | 120 |  |  |
+| `BattleSquadTacticsSmoke` | .cpp | 140 |  |  |
 | `BattleSquadTrial` | .h/.cpp | 164 + 181 | FBattleTrialSoldier, UBattleSquadTrial, FT2bUnit, FMember, FFieldUnit |  |
 | `BattleStanceShot` | .cpp | 101 |  | 姿勢の撮影試験（UBattleLeaderRuntime の一部） |
 | `BattleSupportSmoke` | .cpp | 68 |  |  |

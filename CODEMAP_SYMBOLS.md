@@ -82,7 +82,7 @@
 - `BattleMixedBodies.cpp`: UBattleLeaderRuntime::CreateBody:18, UBattleLeaderRuntime::DestroyBody:53
 - `BattleMixedDriver.h`: FBattleMixedUnit::GetWorld:11, FBattleMixedUnit::GetUnitID:12, FBattleMixedUnit::IsAlive:16, FBattleMixedUnit::GetActorRotation:19, FBattleMixedUnit::GetVelocity:20, FBattleMixedUnit::EyePosition:21, FBattleMixedUnit::SetActorRotation:22, FBattleMixedDriver::GetWorld:37, FBattleMixedDriver::StopMovement:38, FBattleMixedDriver::ClearFocus:39, FBattleMixedDriver::SetFocalPoint:40
 - `BattleMixedDriver.cpp`: FBattleMixedUnit::GetActorLocation:11, FBattleMixedUnit::GetActorForwardVector:12, FBattleMixedUnit::CaptureSightContext:13, FBattleMixedUnit::CanSeeSnapshot:14, FBattleMixedUnit::FireAt:15, FBattleMixedDriver::GetMoveStatus:16, FBattleMixedDriver::MoveToLocation:18, FBattleMixedDriver::ResetExecution:26, FBattleMixedDriver::SuspendMovement:43, FBattleMixedDriver::RetryMove:51, FBattleMixedDriver::ExecuteMove:75, FBattleMixedDriver::Tick:126, FBattleMixedDriver::ClearCoverPlan:231, FBattleMixedDriver::TryTacticalAction:241, FBattleMixedUnit::IsAIActive:340, FBattleMixedUnit::CanSee:341
-- `BattleMixedFastSmoke.cpp`: UBattleLeaderRuntime::RunMixedFastSmoke:8
+- `BattleMixedFastSmoke.cpp`: UBattleLeaderRuntime::RunMixedFastSmoke:10
 - `BattleMixedRecruitment.cpp`: UBattleLeaderRuntime::ReplaceFollower:12, UBattleLeaderRuntime::SpawnPurchasedSquad:43, UBattleLeaderRuntime::HireSightRefresh:119, UBattleLeaderRuntime::PromoteScout:125
 - `BattleMixedSquadAI.cpp`: UBattleSquadAI::UpdateMixed:8
 - `BattleMoveCourse.h`: UBattleMoveCourse::Seconds:22, UBattleMoveCourse::HasMoved:23
