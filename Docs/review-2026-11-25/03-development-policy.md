@@ -63,3 +63,8 @@ Claude がコードを読んで確かめた指摘：B01・B03・B04・B06・B07�
 1. **切替なしで直してよい範囲：案のとおり**。正しい動作を勝敗と関係なく決められるもの（明示された契約への違反、保存する値の欠落）は切替なしで直す。複数の正しい動作から1つを選ぶ変更（処理順など）と、戦術・知覚のルールの変更は今までどおり既定0の切替で評価する。
 2. **削除の候補は全部削除**：`-BattleVATFarLight`、`-BattleSectorNoRoad`、旧 `-BattleStrategy=2/3/4` と `-BattleStrategyPass`、`Setup/Test-WideSight.ps1` の `BattleFollowSightParallel` 引数、`LeaderAbilityScale`。（`LeaderAbilityScale` は反射・既存のセーブとの互換を確かめてから。旧 Strategy は旧結果を再現できるコミットを STATUS に書いてから。削除後は `Setup/Export-Switches.py` で SWITCHES.md を作り直す。）
 3. **`-BattleSectorSight=1` は既定のまま**。
+
+## 6. その後の変更（2026-11-25 昼）
+
+- **一戦中のセーブ・ロードは削除する**（ユーザー決定、掲示板 C28、作業ツリー `FutureBattle-nosave`）。これにより、保存に関わる修理 **B01／B02／B04／B10 は棚上げ**（`contract` ブランチの b9fa623・510c176・22e240c は main に入れない）。2.2「保存の合格条件」と、2.1 の 3〜5、4章の 4〜6 は対象外になった。B03・B06・削除5件は main に入っている（42d0333）。
+- 次に実装する内容の順は `04-next-implementation.md`、標準的なやり方との比較は `05-standard-practice-comparison.md`、調査試合の回数を減らす決まりは `Docs/design-match-budget.md`。
