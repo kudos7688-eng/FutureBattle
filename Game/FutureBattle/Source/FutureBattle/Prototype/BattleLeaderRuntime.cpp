@@ -965,6 +965,31 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
    !Contact->bVisible?TEXT("target_remembered_not_seen"):
    bSaveRounds||(S->TacticalPlan.Action==EBattleSquadTactic::Support&&TargetID!=S->TacticalPlan.SupportTarget)?TEXT("target_seen_not_allowed"):TEXT("target_seen_beyond_range");
   SightExperiment.Cover(*FString::Printf(TEXT("firetime_%s_%s"),Why,LastVelocity.SizeSquared2D()>1.?TEXT("walk"):TEXT("still")));
+  // Where that time goes (one sample a second per soldier at the fixed 30 frames a second, so the counts are about soldier-seconds; soldiers in a cover action are not sampled):
+  // with or without a squad target, the squad's plan and order, walking or not, at his home / within 100 m of a point / between,
+  // and how far the nearest living enemy is. That distance is the truth; it is read for this count only and decides nothing.
+  if((GFrameCounter+uint64(ID))%30==0)
+  {
+   const auto* WhereMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+   double Near=TNumericLimits<double>::Max();
+   for(const auto& Other:Bodies)if(const auto* E=Store->Find(Other.Key);E && E->IsAlive() && E->Team!=U->Team)Near=FMath::Min(Near,FVector::DistSquared2D(Pos,Position(Other.Key)));
+   Near=FMath::Sqrt(Near);
+   const TCHAR* Far=Near>1.e12?TEXT("noenemy"):Near<5000.?TEXT("lt50m"):Near<10000.?TEXT("lt100m"):Near<20000.?TEXT("lt200m"):Near<40000.?TEXT("lt400m"):TEXT("ge400m");
+   bool bPoint=false;for(const auto& Ob:WhereMatch->Objectives)bPoint|=FVector::DistSquared2D(Pos,Ob.Position)<=FMath::Square(10000.);
+   const TCHAR* Place=WhereMatch->bArea && FVector::DistSquared2D(Pos,WhereMatch->AreaHome(U->Team))<=FMath::Square(8000.)?TEXT("home"):bPoint?TEXT("point"):TEXT("field");
+   const auto& WherePlan=S->TacticalPlan;
+   const TCHAR* PlanName=WherePlan.Action==EBattleSquadTactic::Mission?TEXT("mission"):WherePlan.Reason.StartsWith(TEXT("HOME SUPPLY"))?TEXT("homesupply"):
+    WherePlan.Reason.StartsWith(TEXT("FIELD SUPPLY"))?TEXT("fieldsupply"):WherePlan.Action==EBattleSquadTactic::Engage?TEXT("engage"):TEXT("otherplan");
+   // The squad's group (BattleGroups.cpp): kind 0 attack, 1 front-holding, 2 surprise; phase 0 assemble, 1 advance, 2 hold.
+   const auto* WhereGroup=WhereMatch->Groups.Find(WhereMatch->GroupOf(S->SquadID));
+   const FString GroupName=WhereGroup?FString::Printf(TEXT("g%dp%d"),int32(WhereGroup->Kind),int32(WhereGroup->Phase)):FString(TEXT("nogroup"));
+   // "none": the same frames as firetime_no_target_sees_none (no squad target and no enemy in his sight). "at": within 15 m of the squad's destination.
+   const bool bSeesNone=FCString::Strcmp(Why,TEXT("no_target_sees_none"))==0;
+   const bool bAt=FVector::DistSquared2D(Pos,S->Destination)<=FMath::Square(1500.);
+   static const TCHAR* OrderName[]={TEXT("hold"),TEXT("move"),TEXT("attackmove"),TEXT("defend")};
+   SightExperiment.Cover(*FString::Printf(TEXT("firewhere_%s_%s_%s_%s%s_%s_%s_%s_%s"),bSeesNone?TEXT("none"):TEXT("other"),PlanName,*GroupName,
+    OrderName[FMath::Clamp<int32>(int32(S->Order),0,3)],S->bSectorMission?TEXT("sector"):TEXT(""),LastVelocity.SizeSquared2D()>1.?TEXT("walk"):TEXT("still"),bAt?TEXT("at"):TEXT("away"),Place,Far));
+  }
  }
  // Evaluation: an engagement that begins with his head turned (-BattleWalkLook) at a target outside his body's 120 degrees.
  if((CanEngage || bOwnEngage) && WalkLooks.Num() && WalkLooks.Contains(ID) &&

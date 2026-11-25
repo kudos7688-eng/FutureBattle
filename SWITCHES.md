@@ -91,8 +91,8 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleArmsSmoke` | Param | off | BattleArms.cpp:56 |  |
 | `-BattleArmsTeam` | Value | -1 | BattleArms.cpp:60 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleArrivalReady` | Value | 0 | BattleStance.cpp:72 |  |
-| `-BattleArrivalThreat` | Value | -1 | BattleLeaderRuntime.cpp:1987 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
-| `-BattleArrivalWalk` | Value | 1 | BattleLeaderRuntime.cpp:1772 |  |
+| `-BattleArrivalThreat` | Value | -1 | BattleLeaderRuntime.cpp:2012 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
+| `-BattleArrivalWalk` | Value | 1 | BattleLeaderRuntime.cpp:1797 |  |
 | `-BattleArtilleryClusters` | Value | 0 | BattleArtillery.cpp:291 |  |
 | `-BattleArtilleryFlash` | Strifind/Value | 0 | BattleAreaSmoke.cpp:532, BattleArtillery.cpp:57 |  |
 | `-BattleArtilleryHomeGap` | Value | 0.f | BattleArtillery.cpp:105 |  |
@@ -108,7 +108,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleATFire` | Value | 0 | BattleATHunt.cpp:30 |  |
 | `-BattleATHunt` | Value | 0 | BattleATHunt.cpp:24 |  |
 | `-BattleATRange` | Value | 0 | BattleATHunt.cpp:17 |  |
-| `-BattleAttackFocus` | Value | 1 | BattleLeaderRuntime.cpp:1933 |  |
+| `-BattleAttackFocus` | Value | 1 | BattleLeaderRuntime.cpp:1958 |  |
 | `-BattleBenchmark` | Param | off | BattleBenchmark.cpp:28, BattleController.cpp:104, BattleLeaderRuntime.cpp:78 |  |
 | `-BattleBenchmarkFPS` | Param | off | BattleBenchmark.cpp:120, BattleBenchmark.cpp:154 |  |
 | `-BattleBlastOcclusion` | Value | 0 | BattleArtillery.cpp:285 |  |
@@ -118,13 +118,13 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleBlindFireExpose` | Value | 1 | BattleBlindFire.cpp:77 | Switch → BattleBlindFire.cpp:14（ヘルパー経由） |
 | `-BattleBlindFireSpread` | Value | 4.f | BattleBlindFire.cpp:30 |  |
 | `-BattleBodyAnim` | Value | 1 | BattleBodyAnim.cpp:59 |  |
-| `-BattleBounding` | Value | 0 | BattleLeaderRuntime.cpp:1787 |  |
+| `-BattleBounding` | Value | 0 | BattleLeaderRuntime.cpp:1812 |  |
 | `-BattleBurstFire` | Value | 0 | BattleTactics.cpp:54 |  |
 | `-BattleBurstPause` | Value | 1.f | BattleTactics.cpp:59 |  |
 | `-BattleBuyPanelShot` | Value | 空文字列 | BattleBuyPanel.cpp:244 |  |
 | `-BattleCarbineReserve` | Value | -1 | BattleTactics.cpp:79 |  |
 | `-BattleCarbineShotRounds` | Value | 1 | BattleTactics.cpp:69 |  |
-| `-BattleCloseIn` | Value | 0 | BattleLeaderRuntime.cpp:1901 |  |
+| `-BattleCloseIn` | Value | 0 | BattleLeaderRuntime.cpp:1926 |  |
 | `-BattleContactAvoidance` | Value | 1 | BattleLeaderRuntime.cpp:90 |  |
 | `-BattleContactCover` | Value | 0 | BattleTactics.cpp:244 |  |
 | `-BattleContactCoverTeam` | Value | -1 | BattleTactics.cpp:238 |  |
@@ -138,15 +138,15 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleCoverActionSmoke` | Param | off | BattleLeaderRuntime.cpp:224 |  |
 | `-BattleCoverApproach` | Value | -1 | BattleTactics.cpp:232 |  |
 | `-BattleCoverArrival` | Value | 1 | BattleStableMovement.cpp:143 |  |
-| `-BattleCoverDense` | Value | 0 | BattleLeaderRuntime.cpp:1972 |  |
+| `-BattleCoverDense` | Value | 0 | BattleLeaderRuntime.cpp:1997 |  |
 | `-BattleCoverFire` | Value | True | BattleTactics.cpp:208 |  |
 | `-BattleCoverHuddle` | Value | -1 | BattleStableMovement.cpp:237 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
-| `-BattleCoverIndoor` | Value | 0 | BattleLeaderRuntime.cpp:1977 |  |
-| `-BattleCoverOutward` | Value | 0 | BattleLeaderRuntime.cpp:1982 |  |
+| `-BattleCoverIndoor` | Value | 0 | BattleLeaderRuntime.cpp:2002 |  |
+| `-BattleCoverOutward` | Value | 0 | BattleLeaderRuntime.cpp:2007 |  |
 | `-BattleCoverPeekShots` | Value | 0 | BattleTactics.cpp:64 |  |
 | `-BattleCoverPeekSight` | Value | True | BattleTactics.cpp:220 |  |
-| `-BattleCoverPriority` | Value | 1 | BattleLeaderRuntime.cpp:1886 |  |
-| `-BattleCoverStrict` | Value | 0 | BattleLeaderRuntime.cpp:1992 |  |
+| `-BattleCoverPriority` | Value | 1 | BattleLeaderRuntime.cpp:1911 |  |
+| `-BattleCoverStrict` | Value | 0 | BattleLeaderRuntime.cpp:2017 |  |
 | `-BattleCoverValidation` | Value | True | BattleTactics.cpp:214 |  |
 | `-BattleCutOffRoute` | Value | 0 | BattleStableMovement.cpp:373 |  |
 | `-BattleDangerRoute` | Value | 0 | BattleSectorRoute.cpp:28 |  |
@@ -184,7 +184,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleFlankSmoke` | Param | off | BattleLeaderRuntime.cpp:254 |  |
 | `-BattleFlankTeams` | Value | 3 | BattleSquadTactics.cpp:24 |  |
 | `-BattleFlankTrial` | Param | off | BattleSightExperiment.cpp:37, BattleSquadFlank.cpp:128, BattleSquadRetreat.cpp:19 |  |
-| `-BattleFocusTarget` | Value | 0 | BattleLeaderRuntime.cpp:1938 |  |
+| `-BattleFocusTarget` | Value | 0 | BattleLeaderRuntime.cpp:1963 |  |
 | `-BattleFollowerAnimBudget` | Value | 0 | BattleVATDisplay.cpp:39 |  |
 | `-BattleFollowerAnimSkip` | Value | 0 | BattleVATDisplay.cpp:44 |  |
 | `-BattleFollowerNoOverlap` | Value | 0 | BattleLeaderRuntime.cpp:877 |  |
@@ -225,12 +225,12 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleHeightTest` | Param | off | BattleTerrainTest.cpp:99 |  |
 | `-BattleHireDelegate` | Value | 0 | BattleArea.cpp:234 |  |
 | `-BattleHireDelegateTeam` | Value | -1 | BattleArea.cpp:235 |  |
-| `-BattleHireMirror` | Value | 1 | BattleLeaderRuntime.cpp:1911 | default on (user decision 2026-11-22) |
+| `-BattleHireMirror` | Value | 1 | BattleLeaderRuntime.cpp:1936 | default on (user decision 2026-11-22) |
 | `-BattleHireReserve` | Value | 1 | BattleArea.cpp:177 |  |
 | `-BattleHireSightRefresh` | Value | 0 | BattleMixedRecruitment.cpp:122 |  |
 | `-BattleHitDirection` | Value | 1 | BattleHUD.cpp:1250 |  |
-| `-BattleHitFace` | Value | 0 | BattleLeaderRuntime.cpp:1797 |  |
-| `-BattleHitReveal` | Value | 0 | BattleLeaderRuntime.cpp:1802 |  |
+| `-BattleHitFace` | Value | 0 | BattleLeaderRuntime.cpp:1822 |  |
+| `-BattleHitReveal` | Value | 0 | BattleLeaderRuntime.cpp:1827 |  |
 | `-BattleJoinFight` | Value | 0 | BattleTactics.cpp:39 |  |
 | `-BattleJoinFightMax` | Value | 2 | BattleTactics.cpp:49 |  |
 | `-BattleJoinFightRange` | Value | 15000.f | BattleTactics.cpp:44 |  |
@@ -256,7 +256,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleMelee` | Value | 1 | BattleArms.cpp:42 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleMeleeDamage` | Value | 60.f | BattleArms.cpp:166 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleMemorySeconds` | Value | 0.f | BattleTactics.cpp:29 |  |
-| `-BattleMissionResumeSmoke` | Param | off | BattleLeaderRuntime.cpp:1712 |  |
+| `-BattleMissionResumeSmoke` | Param | off | BattleLeaderRuntime.cpp:1737 |  |
 | `-BattleMixedFastMatch` | Param | off | BattleLeaderRuntime.cpp:81 |  |
 | `-BattleMixedFastSmoke` | Param | off | BattleLeaderRuntime.cpp:228 |  |
 | `-BattleMixedSaveSmoke` | Param | off | BattleArtillery.cpp:272, BattleLeaderRuntime.cpp:230, BattleMixedBodies.cpp:115, BattleSave.cpp:101 |  |
@@ -275,7 +275,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleNetSeconds` | Value | 20 | BattleNetworkBenchmark.cpp:73 |  |
 | `-BattleNetUnits` | Value | 20 | BattleNetwork.cpp:27, BattleNetworkBenchmark.cpp:83, BattleNetworkPilotProbe.cpp:22, BattleNetworkProbe.cpp:23 |  |
 | `-BattleNoAnimationLOD` | Param | off | BattleBenchmark.cpp:157, BattleBenchmark.cpp:158, BattleNetworkBenchmark.cpp:78, BattleUnit.cpp:800 |  |
-| `-BattleNoCoverFallback` | Value | 0 | BattleLeaderRuntime.cpp:1792 |  |
+| `-BattleNoCoverFallback` | Value | 0 | BattleLeaderRuntime.cpp:1817 |  |
 | `-BattleNoMuzzleFlash` | Param | off | BattleMuzzleFlash.cpp:65 |  |
 | `-BattleNoStagger` | Param | off | BattleBenchmark.cpp:54 |  |
 | `-BattleObservedArmour` | Strifind/Value | 0 | BattleAreaSmoke.cpp:528, BattleArmourAI.cpp:34 |  |
@@ -290,7 +290,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattlePerceptionGrid` | Value | True | BattleLeaderRuntime.cpp:111 |  |
 | `-BattlePerceptionSlices` | Value | 4 | BattleBenchmark.cpp:56 |  |
 | `-BattlePhase3` | Value | 空文字列 | BattlePhase3.cpp:45, BattleUnit.cpp:42, BattleVATDisplay.cpp:421, BattleVATDisplay.cpp:424 |  |
-| `-BattlePinnedFlank` | Value | -1 | BattleLeaderRuntime.cpp:1906 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
+| `-BattlePinnedFlank` | Value | -1 | BattleLeaderRuntime.cpp:1931 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattlePlayerRouteTest` | Param | off | BattlePlayerRoutes.cpp:128 |  |
 | `-BattlePlayerWallCover` | Value | 1 | BattleWallCover.cpp:38 |  |
 | `-BattlePreset` | Value | 空文字列 | BattleBenchmark.cpp:48 | ReadTier → BattleBenchmark.cpp:45（ヘルパー経由） |
@@ -331,13 +331,13 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSeconds` | Value | 20.f | BattleBenchmark.cpp:41 |  |
 | `-BattleSectorAI` | Value | 0 | BattleMatch.cpp:499, BattleMatch.cpp:514, BattleMatch.cpp:525 |  |
 | `-BattleSectorAudit` | Param | off | BattleSectorAudit.cpp:28 |  |
-| `-BattleSectorContact` | Value | -1 | BattleLeaderRuntime.cpp:1762 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
+| `-BattleSectorContact` | Value | -1 | BattleLeaderRuntime.cpp:1787 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleSectorCoverRoute` | Value | -1 | BattleSectorRoute.cpp:22 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
-| `-BattleSectorCoverWalk` | Value | 0 | BattleLeaderRuntime.cpp:1896 |  |
+| `-BattleSectorCoverWalk` | Value | 0 | BattleLeaderRuntime.cpp:1921 |  |
 | `-BattleSectorFlank` | Value | -1 | BattleSectorRoute.cpp:124 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleSectorFront` | Value | -1 | BattleSectorRoute.cpp:130 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
-| `-BattleSectorMove` | Value | 0 | BattleLeaderRuntime.cpp:1767 |  |
-| `-BattleSectorMoveFire` | Value | -1 | BattleLeaderRuntime.cpp:1777 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
+| `-BattleSectorMove` | Value | 0 | BattleLeaderRuntime.cpp:1792 |  |
+| `-BattleSectorMoveFire` | Value | -1 | BattleLeaderRuntime.cpp:1802 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleSectorRoute` | Value | -1 | BattleSectorRoute.cpp:16 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleSectorSight` | Value | 1 | BattleSectorSight.cpp:14 |  |
 | `-BattleSectorSightHit` | Value | 1 | BattleSectorSight.cpp:21 |  |
@@ -345,14 +345,14 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSectorSightTeam` | Value | -1 | BattleSectorSight.cpp:15 |  |
 | `-BattleSectorSlotReserve` | Value | 1 | BattleStableMovement.cpp:81 |  |
 | `-BattleSectorSmoke` | Param | off | BattleLeaderRuntime.cpp:222 |  |
-| `-BattleSectorSymmetric` | Value | 1 | BattleLeaderRuntime.cpp:1916 | default on since 2026-11-22 (user decision) |
+| `-BattleSectorSymmetric` | Value | 1 | BattleLeaderRuntime.cpp:1941 | default on since 2026-11-22 (user decision) |
 | `-BattleSectorViewShot` | Value | 空文字列 | BattleHUD.cpp:1404 |  |
 | `-BattleSeed` | Value | 7 | BattleBenchmark.cpp:42 |  |
 | `-BattleSenseMode` | Value | 空文字列 | BattleBenchmark.cpp:29 |  |
 | `-BattleSetupPhase` | Value | 0 | BattleArea.cpp:362 |  |
 | `-BattleSFX` | Value | 1 | BattleAudio.cpp:185 |  |
-| `-BattleShotDirection` | Value | 0 | BattleLeaderRuntime.cpp:1997 |  |
-| `-BattleShotLog` | Param | off | BattleLeaderRuntime.cpp:1411 |  |
+| `-BattleShotDirection` | Value | 0 | BattleLeaderRuntime.cpp:2022 |  |
+| `-BattleShotLog` | Param | off | BattleLeaderRuntime.cpp:1436 |  |
 | `-BattleSidearms` | Value | 1 | BattleArms.cpp:40 | IntSwitch → BattleArms.cpp:34（ヘルパー経由） |
 | `-BattleSightExperiment` | Value | 未解決 | BattleLeaderRuntime.cpp:84 |  |
 | `-BattleSightHitStats` | Value | 0 | BattleLeaderRuntime.cpp:400 |  |
@@ -385,7 +385,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSPGSetup` | Value | -1.f | BattleArtillery.cpp:138 |  |
 | `-BattleSPGStayAfterFire` | Value | 0.f | BattleArtillery.cpp:143 |  |
 | `-BattleSplitDecisions` | Param | off | BattleBenchmark.cpp:35 |  |
-| `-BattleSquadCoverCheck` | Value | 0 | BattleLeaderRuntime.cpp:1782 |  |
+| `-BattleSquadCoverCheck` | Value | 0 | BattleLeaderRuntime.cpp:1807 |  |
 | `-BattleSquadFlank` | Value | 1 | BattleSquadTactics.cpp:22 |  |
 | `-BattleSquadIcons` | Value | 1 | BattleHUD.cpp:260, BattleHUD.cpp:1100 |  |
 | `-BattleSquadKnowledge` | Value | 0 | BattlePerception.cpp:112 |  |
@@ -434,7 +434,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleTeamSupport` | Value | 1 | BattleTeamAI.cpp:13 |  |
 | `-BattleTerrainLineBodies` | Value | 1 | BattleTactics.cpp:289 |  |
 | `-BattleTerrainShot` | Param | off | BattleTerrainTest.cpp:44 |  |
-| `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:1681 |  |
+| `-BattleThinkCap` | Value | 0 | BattleLeaderRuntime.cpp:1706 |  |
 | `-BattleThreatCover` | Value | 0 | BattleThreatCover.cpp:23 |  |
 | `-BattleThreatCoverCrouch` | Value | 0 | BattleThreatCover.cpp:67 |  |
 | `-BattleThreatCoverCrouchTeam` | Value | -1 | BattleThreatCover.cpp:68 |  |
@@ -443,7 +443,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleTracerShot` | Param | off | BattleStanceShot.cpp:87 |  |
 | `-BattleTrialSeed` | Value | 0 | BattleTactics.cpp:265 |  |
 | `-BattleTrialSwap` | Param | off | BattleArea.cpp:18, BattleAreaDepot.cpp:32, BattleLeaderRuntime.cpp:86, BattleMatch.cpp:27, BattleMatch.cpp:293, BattleMatch.cpp:312, BattleWideMapAudit.cpp:116 |  |
-| `-BattleUnderFireCover` | Value | 0 | BattleLeaderRuntime.cpp:1891 |  |
+| `-BattleUnderFireCover` | Value | 0 | BattleLeaderRuntime.cpp:1916 |  |
 | `-BattleUnits` | Value | 20（BattleBenchmark.cpp:36） / 1000（BattleSquadTrial.cpp:28） | BattleBenchmark.cpp:36, BattleSquadTrial.cpp:28 |  |
 | `-BattleVehicleHitCover` | Strifind/Value | 0 | BattleAreaSmoke.cpp:529, BattleArtillery.cpp:45 |  |
 | `-BattleVehicleOrderHere` | Value | 0 | BattleArtillery.cpp:39 |  |

@@ -100,6 +100,20 @@ def analyse(run):
             print('   %-52s %8.0f  %5.2f%%' % (label, n / 30, 100 * n / total))
         if left:
             print('   not grouped:', left)
+    where = [(k[10:].split('_'), v) for k, v in c.items() if k.startswith('firewhere_')]
+    if where:
+        # One sample a second per rifleman outside cover actions: sight (none = no squad target and no enemy in his sight), plan,
+        # group (g<kind>p<phase>: kind 0 attack, 1 front-holding, 2 surprise; phase 0 assemble, 1 advance, 2 hold), order, walk/still,
+        # at/away from the squad's destination, place (home 80 m, point 100 m, field), nearest living enemy (truth).
+        none = [(p, v) for p, v in where if p[0] == 'none']
+        base = sum(v for _, v in none) or 1
+        print(' no target and no enemy in sight: %.1f%% of %d samples; of that time:' % (100 * base / sum(v for _, v in where), sum(v for _, v in where)))
+        for title, idx in (('plan', (1,)), ('group', (2,)), ('order', (3,)), ('walking / at destination', (4, 5)), ('place', (6,)),
+                           ('nearest enemy', (7,)), ('plan, order, walking, at destination', (1, 3, 4, 5)), ('place, nearest enemy', (6, 7))):
+            count = collections.Counter()
+            for p, v in none:
+                count[' '.join(p[i] for i in idx)] += v
+            print('   %s: %s' % (title, ', '.join('%s %.1f%%' % (k, 100 * v / base) for k, v in count.most_common(8))))
     if shots:
         soldiers = sum(v for v in first_living.values() if v == 8)
         ranked = sorted(shots.values(), reverse=True)
