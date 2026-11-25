@@ -59,10 +59,10 @@ bool UBattleSquadTactics::RetreatGoal(const FBattleSquadState& S,const FBattleSq
  if(!Nav) return false;
  const FVector Start=Runtime->Position(S.LeaderUnitID);
  FVector Away=FVector::ZeroVector;
- auto Distance=[&](FVector P){ double D=FMath::Max(10000.,double(GetDefault<UBattleTuning>()->EffectiveWeaponRange())*2); for(const auto& C:Sample.Contacts) D=FMath::Min(D,FVector::Dist2D(P,C.Value.LastKnownPosition)); return D; };
+ auto Distance=[&](FVector P){ double D=FMath::Max(10000.,double(GetDefault<UBattleTuning>()->EffectiveWeaponRange())*2); for(const auto& C:Sample.Contacts) D=FMath::Min(D,FVector::Dist2D(P,C.Value.MoveAt())); return D; };
  for(const auto& C:Sample.Contacts)
  {
-  const FVector D=Start-C.Value.LastKnownPosition;
+  const FVector D=Start-C.Value.MoveAt();
   if(D.Size2D()<GetDefault<UBattleTuning>()->EffectiveWeaponRange()*1.2) Away+=D.GetSafeNormal2D()/FMath::Max(100.,D.Size2D());
  }
  Away=Away.GetSafeNormal2D(); if(Away.IsNearlyZero()) Away=FVector(S.Team?1:-1,0,0);
@@ -86,7 +86,7 @@ bool UBattleSquadTactics::RetreatGoal(const FBattleSquadState& S,const FBattleSq
    const FVector A=Path->PathPoints[J-1], B=Path->PathPoints[J]; Length+=FVector::Dist2D(A,B);
    for(const auto& C:Sample.Contacts)
    {
-    const FVector Threat(C.Value.LastKnownPosition.X,C.Value.LastKnownPosition.Y,0);
+    const FVector Threat(C.Value.MoveAt().X,C.Value.MoveAt().Y,0);
     const FVector Closest=FMath::ClosestPointOnSegment(Threat,FVector(A.X,A.Y,0),FVector(B.X,B.Y,0));
     if(FVector::Dist2D(Threat,Closest)<Initial-200) Dangerous=true;
    }
@@ -96,10 +96,10 @@ bool UBattleSquadTactics::RetreatGoal(const FBattleSquadState& S,const FBattleSq
   const FBattleContact* Nearest=nullptr; double NearDistance=DBL_MAX;
   for(const auto& C:Sample.Contacts)
   {
-   const double D=FVector::DistSquared2D(P.Location,C.Value.LastKnownPosition);
+   const double D=FVector::DistSquared2D(P.Location,C.Value.MoveAt());
    if(D<NearDistance || (D==NearDistance && Nearest && C.Key<Nearest->TargetID)) { NearDistance=D; Nearest=&C.Value; }
   }
-  const double Cover=Nearest && GetWorld()->LineTraceTestByObjectType(P.Location+FVector(0,0,60),Nearest->LastKnownPosition+FVector(0,0,60),FCollisionObjectQueryParams(ECC_WorldStatic))?500.:0.;
+  const double Cover=Nearest && GetWorld()->LineTraceTestByObjectType(P.Location+FVector(0,0,60),Nearest->MoveAt()+FVector(0,0,60),FCollisionObjectQueryParams(ECC_WorldStatic))?500.:0.;
   const double Score=EndDistance-Length*.2+Cover;
   if(Score>Best) { Best=Score; Goal=P.Location; }
  }
@@ -119,8 +119,9 @@ void UBattleSquadTactics::RefreshKnownSpots(int32 Team)
   if(const auto* Contacts=Perception->GetContacts(U.Key))
    for(const auto& C:*Contacts)
    {
-    if(!C.Value.bVisible || C.Value.bShared || Runtime->IsVehicle(C.Key) || Match->IsScoutLongContact(U.Key,C.Value))continue;
-    const FVector& At=C.Value.LastKnownPosition;
+    // -BattleSpotTrack: an enemy he follows after losing sight of it counts as seen, where it is now.
+    if(!(C.Value.bVisible || C.Value.bTracked) || C.Value.bShared || Runtime->IsVehicle(C.Key) || Match->IsScoutLongContact(U.Key,C.Value))continue;
+    const FVector& At=C.Value.MoveAt();
     FKnownSpot Spot;Spot.At=At;Spot.Seen=Now;
     Spots.Add(FIntPoint(FMath::FloorToInt32(At.X/5000.),FMath::FloorToInt32(At.Y/5000.)),Spot);
    }

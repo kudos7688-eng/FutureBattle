@@ -1156,7 +1156,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   // Map E: cover is plentiful but small, so AI looks a little further for it (6.5m instead of 3.5m; AI cognition only).
   const float LocalRadius=bOwnOrder?400.f:(ProbeBudget||LeaderFirst)?CoverTuning->AICoverSearchRadius:BattleFieldLayout::IsUrban(GetWorld())?650.f:CoverTuning->CoverActionSearchRadius;
   // -BattleShotDirection: take cover from where this soldier was just hit from, when that is not his target.
-  FVector CoverThreat=Contact->LastKnownPosition;
+  FVector CoverThreat=Contact->MoveAt();
   if(FVector From;ShotDirectionEnabled() && UnitShotFrom(ID,Now,From))
   {if(ShotFromOther(Pos,CoverThreat,From)){CoverThreat=From;SightExperiment.Cover(TEXT("cover_from_shot_direction"));}else SightExperiment.Cover(TEXT("cover_shot_by_target"));}
   if(bHitCover){SightExperiment.Cover(Contact->bVisible?TEXT("hit_cover_request_seen_far"):TEXT("hit_cover_request_unseen"));if(ShotFromOther(Pos,CoverThreat,HitFrom))CoverThreat=HitFrom;}
@@ -1294,7 +1294,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   // contact information while moving sideways; never resolve the enemy body here.
   FBattleContact KnownOfFlank;
   const auto* Known=GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,S->SquadID,S->TacticalPlan.FlankTarget,KnownOfFlank)?&KnownOfFlank:nullptr;
-  Direction=((Known?Known->LastKnownPosition:S->TacticalPlan.FlankContact)-Position(ID)).GetSafeNormal2D();
+  Direction=((Known?Known->MoveAt():S->TacticalPlan.FlankContact)-Position(ID)).GetSafeNormal2D();
  }
  // (-BattleOwnTarget=2 turns him the same way, for its team.)
  else if(FVector From;(HitFaceEnabled() || OwnTargetMode(U->Team)>=2) && !bArtilleryAim && !IsVehicle(ID) && HitWithin(ID,Now,2.) && UnitShotFrom(ID,Now,From) && FVector::DistSquared2D(From,Pos)>1.e4)

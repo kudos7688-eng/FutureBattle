@@ -55,6 +55,17 @@ namespace BattleTactics
  // -BattleSeekKnownMax=n (default 2, 1..8) squads per square. With an enemy in its own sight it fights as usual; 10 s at the place
  // with none, or 90 s, and it goes back to its mission. 1: squads outside the groups only. 2: also squads of front-holding groups
  // (attack and surprise groups never). Not saved. BattleSquadRetreat.cpp (Evaluate, RefreshKnownSpots).
+ // Contact trial, user 2026-11-25 ("once spotted, know its true place for some seconds"; an exception to the rule that decisions
+ // read observed information only, limited to this). -BattleSpotTrack=s (default 0 = off, 0..30): for s seconds after a soldier
+ // loses sight of an enemy he saw himself, his contact also holds where that enemy is now (FBattleContact::TrackedPosition,
+ // refreshed at his perception scans, so it may be one scan old; no longer than his memory of the contact, 5 s by default,
+ // see -BattleMemorySeconds). Read through FBattleContact::MoveAt() only where a soldier or squad decides where to look, walk, take cover or
+ // fall back: the watch and walking look (BattleSoldierWatch.cpp), the choice of cover (BattleThreatCover.cpp, Follow), the
+ // retreat goal and the safety of a flank route (BattleSquadRetreat.cpp, BattleSquadFlank.cpp), the facing on a flank move, and
+ // the team's places for -BattleSeekKnown. LastKnownPosition is untouched: everything that fires or throws at a remembered place
+ // (grenades, covering fire, suppressing fire, blind fire, guns) and the player's map read that, so nothing is shot at a tracked
+ // place. Not reported to other soldiers, not saved.
+ float SpotTrack();
  int32 SeekKnown();
  float SeekKnownSeconds();
  float SeekKnownRange();

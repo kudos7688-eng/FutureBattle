@@ -36,7 +36,7 @@ bool UBattleSquadTactics::ReassessSoloFlank(int32 SID,const FBattleSquadObservat
   for(int32 K=0;K<=N;++K)
   {
    const FVector At=FMath::Lerp(A,B,double(K)/N);
-   for(const auto& Threat:O.Contacts)if(FVector::Dist2D(At,Threat.Value.LastKnownPosition)<FMath::Min(600.,FVector::Dist2D(Start,Threat.Value.LastKnownPosition)*.65))return false;
+   for(const auto& Threat:O.Contacts)if(FVector::Dist2D(At,Threat.Value.MoveAt())<FMath::Min(600.,FVector::Dist2D(Start,Threat.Value.MoveAt())*.65))return false;
    ++Total;Visible+=!GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,170),C->LastKnownPosition+FVector(0,0,70),FCollisionObjectQueryParams(ECC_WorldStatic));
   }
  }
@@ -105,7 +105,7 @@ bool UBattleSquadTactics::TryFlank(int32 SID,int32 Supporter)
    {
     const FVector P=FMath::Lerp(A,B,double(K)/SampleCount);
     for(const auto& C:O.Contacts)
-     if(FVector::Dist2D(P,C.Value.LastKnownPosition)<FMath::Min(600.,FVector::Dist2D(Start,C.Value.LastKnownPosition)*.65)) Unsafe=true;
+     if(FVector::Dist2D(P,C.Value.MoveAt())<FMath::Min(600.,FVector::Dist2D(Start,C.Value.MoveAt())*.65)) Unsafe=true;
     ++Total; Visible+=!GetWorld()->LineTraceTestByObjectType(P+FVector(0,0,170),Threat+FVector(0,0,70),FCollisionObjectQueryParams(ECC_WorldStatic));
    }
   }
