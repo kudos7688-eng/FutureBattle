@@ -42,7 +42,7 @@
 - **変更**（`BattleStableMovement.cpp` 中心。`BattleLeaderRuntime.h` に兵の状態1行と宣言、`.cpp` に試験の起動3行）：`-BattleCutOffRoute=2`（既定0。値1 は従来のまま）。(1) 個人の経路を兵の実行状態（`bOwnRoute`＋作ったときの命令・目的地・到着位置）として持ち、`BuildMovementPlan` は命令と目的地が同じなら消さない。捨てる条件：命令か目的地が変わった／兵の死亡・到着位置なし／再探索の失敗・途中までの経路。到着位置だけ動いたときは最後の区間で引き直す。(2) 再計画のとき、次の中継点へまっすぐ歩けない歩兵に印（`bOwnRouteWanted`）を付け、`StableMove` が既存の **2件/フレーム** の枠（と兵ごと3秒の間隔）で経路を引く。同期の探索は足していない。値0・値1 に足したのは計数だけ。保存はしない（読み込み後は作り直し）。
 - **固定場面の試験**：`Setup/Test-OwnRoute.ps1`（`-BattleOwnRouteSmoke`、`BattleOwnRouteSmoke.cpp`。マップK の塀の両側に一小隊を置き、通常の移動と補給の行程。強制した再計画で経路の全点・進み・探索回数が変わらない、3人とも到着、新しい命令で捨てる、探索は少数）。値2：failures=0（`or4-m2`。3人が12〜15秒で到着、再計画7回すべてで保持、探索 3〜4回）。値0：failures=6（`or3-m0`。56秒で0人）。
 - **検証**：`Build-Editor` 成功、`Test-Battle` failures=0（`Battle-Smoke-20261125-124134.log`）。`Test-MovementStability` は回していない（その試験の壁は経路網に入らない壁で、市街地の規則の外）。
-- **試合**（凍結ビルド `movestall-b05-1245`＝main 455d58b＋mapk c928a1c＋この変更、マップK 版9c、30FPS、`-CoverActions 1 -FlankCoordination 1 -BattleShotLog`、申請済み。補給＝11-25 05時25分の再現条件の6つの引数）：
+- **試合**（凍結ビルド `movestall-b05-1245`＝main 2ecf13b＋mapk c928a1c＋この変更、マップK 版9c、30FPS、`-CoverActions 1 -FlankCoordination 1 -BattleShotLog`、申請済み。補給＝11-25 05時25分の再現条件の6つの引数）：
 
 | 組（基準 → 値2） | 壁・最初の中継点の止まり | 詰まり全体 | 得点 | 与えた損害（西/東） | 撃破（西/東） | 戦死（西/東） | 個人の経路 |
 |---|---|---|---|---|---|---|---|
