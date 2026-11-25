@@ -205,6 +205,13 @@ bool BattleTactics::ContactCoverEnabled()
  return Enabled;
 }
 
+// Trial -BattleCoverFirePoint=1 (default 0): firing cover must allow standing over it or a 100..120 cm step past its edge.
+bool BattleTactics::CoverFirePointEnabled()
+{
+ static const bool Enabled=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverFirePoint="),Value);return Value!=0;}(); // trial, default 0: over low cover or a 100..120 cm step past an edge
+ return Enabled;
+}
+
 bool BattleTactics::CoverActionsEnabled()
 {
  static const bool Enabled=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverActions="),Value);return Value!=0;}();

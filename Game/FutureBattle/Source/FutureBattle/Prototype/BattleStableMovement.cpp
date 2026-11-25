@@ -29,6 +29,24 @@ void SweepSoldier(UWorld* World,const UPrimitiveComponent* Ignore,FVector From,F
   Result=Candidate;break;
  }
 }
+// Called only with -BattleCoverFirePoint=1, after the 100 cm wall test in this same direction.
+bool ArrivalFirePoint(UWorld* FireWorld,UNavigationSystemV1* FireNav,const FVector& FireGround,const FVector& FireDirection)
+{
+ const FCollisionObjectQueryParams FireStatic(ECC_WorldStatic);
+ const FVector FireStart=FireGround+FVector(0,0,150);
+ if(BattleStance::Enabled(FireWorld) && !FireWorld->LineTraceTestByObjectType(FireStart,FireStart+FireDirection*300,FireStatic))return true;
+ if(!FireNav)return false;
+ const FVector FireSide=FVector::CrossProduct(FireDirection,FVector::UpVector);
+ for(float FireOffset:{-100.f,100.f,-110.f,110.f,-120.f,120.f})
+ {
+  FNavLocation FireProjected;if(!FireNav->ProjectPointToNavigation(FireGround+FireSide*FireOffset,FireProjected,FVector(50,50,150)))continue;
+  const double FireDistance=FVector::Dist2D(FireGround,FireProjected.Location);if(FireDistance<100.||FireDistance>120.)continue;
+  if(FireWorld->SweepTestByObjectType(FireGround+FVector(0,0,90),FireProjected.Location+FVector(0,0,90),FQuat::Identity,FireStatic,FCollisionShape::MakeCapsule(36,88)))continue;
+  const FVector FireSideEye=FireProjected.Location+FVector(0,0,150);
+  if(!FireWorld->LineTraceTestByObjectType(FireSideEye,FireSideEye+FireDirection*300,FireStatic))return true;
+ }
+ return false;
+}
 // Trial -BattleAllyPass=1 (default 0): see FBattleLeaderBody::AllyPassUntil.
 bool AllyPassOn(){static const bool V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAllyPass="),X);return X!=0;}();return V;}
 }
@@ -162,20 +180,29 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    }
    SightExperiment.Cover(Outward.IsEmpty()?TEXT("arrival_outward_none_old_rule"):Outward.Num()<=2?TEXT("arrival_outward_dirs_le2"):Outward.Num()<=4?TEXT("arrival_outward_dirs_le4"):TEXT("arrival_outward_dirs_gt4"));
   }
-  auto WallAhead=[&](const FVector& At)
+  auto WallAhead=[&](const FVector& At,bool* FireAllowed=nullptr)
   {
    const FCollisionObjectQueryParams Static(ECC_WorldStatic);
+   bool AnyWall=false;
+   auto DirectionWall=[&](const FVector& WallDir)
+   {
+    if(!GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+WallDir*250+FVector(0,0,100),Static))return false;
+    AnyWall=true;
+    if(!FireAllowed)return true;
+    if(!ArrivalFirePoint(GetWorld(),Nav,At,WallDir))return false;
+    *FireAllowed=true;return true;
+   };
    // -BattleAttackFocus: an obstacle toward the focus from this slot, or 30 degrees either side.
    if(bFocusArrival)
     if(const FVector ToFocus=(P.Focus-At).GetSafeNormal2D();!ToFocus.IsNearlyZero())
     {
      for(const float Deg:{0.f,-30.f,30.f})
-      if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+ToFocus.RotateAngleAxis(Deg,FVector::UpVector)*250+FVector(0,0,100),Static))return true;
-     return false;
+      if(DirectionWall(ToFocus.RotateAngleAxis(Deg,FVector::UpVector)))return true;
+     return AnyWall;
     }
-   if(Outward.IsEmpty())return GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),Static);
-   for(const FVector& Dir:Outward)if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Dir*250+FVector(0,0,100),Static))return true;
-   return false;
+   if(Outward.IsEmpty()){DirectionWall(Forward);return AnyWall;}
+   for(const FVector& Dir:Outward)if(DirectionWall(Dir))return true;
+   return AnyWall;
   };
   if(CoverArrival)
   {
@@ -186,7 +213,9 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
     if(Sector && BattleSectors::Cell(At)!=Cell)continue;
     // Evaluation (arrival_slot_*): slots in the sector, those without an obstacle 2.5 m ahead, those seen by the nearest threat (-BattleCoverStrict).
     SightExperiment.Cover(TEXT("arrival_slot_in_cell"));
-    if(!WallAhead(At)) SightExperiment.Cover(TEXT("arrival_slot_no_wall_ahead"));
+    bool SlotFireAllowed=false;
+    if(!WallAhead(At,BattleTactics::CoverFirePointEnabled()?&SlotFireAllowed:nullptr)) SightExperiment.Cover(TEXT("arrival_slot_no_wall_ahead"));
+    else if(BattleTactics::CoverFirePointEnabled() && !SlotFireAllowed) SightExperiment.Cover(TEXT("arrival_slot_no_fire_point"));
     else if(HidesFromThreat(At)) CoverCandidates.Add(At);
     else SightExperiment.Cover(TEXT("arrival_slot_exposed"));
    }
@@ -253,6 +282,11 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
       if(Taken) continue;
       FNavLocation Projected; if(!Nav->ProjectPointToNavigation(Want,Projected,FVector(30,30,200)) || FVector::Dist2D(Projected.Location,Want)>40) continue;
       if(!GetWorld()->LineTraceTestByObjectType(Projected.Location+FVector(0,0,100),Projected.Location-Normal*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic)) || !HidesFromThreat(Projected.Location)) continue;
+      if(BattleTactics::CoverFirePointEnabled())
+      {
+       bool HuddleFireAllowed=false;WallAhead(Projected.Location,&HuddleFireAllowed);
+       if(!HuddleFireAllowed){SightExperiment.Cover(TEXT("arrival_huddle_no_fire_point"));continue;}
+      }
       ++TailQueries;
       auto* Tail=Nav->FindPathToLocationSynchronously(GetWorld(),P.Path.Num()?P.Path.Last():S->Destination,Projected.Location);
       if(!Tail || !Tail->IsValid() || Tail->IsPartial() || Tail->PathPoints.Num()<2 || Tail->GetPathLength()>6500) continue;

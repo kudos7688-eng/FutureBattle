@@ -80,6 +80,7 @@ namespace BattleTactics
  bool ArmourSectorGateEnabled(); // trial, default 0: armour priority within Think's accepted candidate set
  bool OrderAllowsTarget(const FBattleSquadState& Squad,int32 TargetID,const FVector& KnownPosition);
  bool CoverActionsEnabled();
+ bool CoverFirePointEnabled();
  // Trial switch -BattleAICoverProbe=1: per-frame AI cover probe budget and wider AI search instead of one shared probe per interval.
  bool AICoverProbeBudgetEnabled();
  // Trial switch -BattleCoverApproach=1: an engaged AI soldier with no cover nearby walks to a hidden cover slot within a wider radius.
