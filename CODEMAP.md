@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（173 モジュール、47513 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（173 モジュール、47537 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -35,7 +35,7 @@
 | 認識（見えた敵の記憶） | `UBattlePerception::Update` (BattlePerception.cpp:148) 、 `UBattlePerception::GetContacts` (BattlePerception.cpp:91) | 視線は `UBattleLeaderRuntime::CanSee` (BattleLeaderRuntime.cpp:348) 、 `UBattleLeaderRuntime::TraceSight` (BattleLeaderRuntime.cpp:379) 。試験用の視界切替は `BattleSightExperiment` |
 | 隊長の判断と兵の実行（混成） | `UBattleLeaderRuntime::Think` (BattleLeaderRuntime.cpp:624) 、 `UBattleLeaderRuntime::Follow` (BattleLeaderRuntime.cpp:885) 、 `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:1303) | 兵単位の実行は `FBattleMixedDriver::Tick` (BattleMixedDriver.cpp:126) 、 `FBattleMixedDriver::TryTacticalAction` (BattleMixedDriver.cpp:241) |
 | 移動・経路・混雑 | `UBattleLeaderRuntime::StableMove` (BattleStableMovement.cpp:427) 、 `UBattleLeaderRuntime::BuildMovementPlan` (BattleStableMovement.cpp:62) | 到着地点の重なりは `UBattleLeaderRuntime::ReassignOccupiedArrival` (BattleContactMovement.cpp:16) 。目的地の補正は `BattleNavigation::ResolveGoal` (BattleNavigation.cpp:7) |
-| 遮蔽（場所の予約） | `UBattleCover::BuildSlots` (BattleCover.cpp:28) 、 `UBattleCover::Reserve` (BattleCover.cpp:269) | 露出の計算は `BattleTactics::ExposureAt` (BattleTactics.cpp:259) |
+| 遮蔽（場所の予約） | `UBattleCover::BuildSlots` (BattleCover.cpp:28) 、 `UBattleCover::Reserve` (BattleCover.cpp:280) | 露出の計算は `BattleTactics::ExposureAt` (BattleTactics.cpp:259) |
 | 体のアニメーション | `ABattleUnit::UpdateBodyAnim` (BattleUnit.cpp:499) 、 `FBattleBodyAnimProxy::Evaluate` (BattleBodyAnim.cpp:228) | 部下は `UBattleLeaderRuntime::FollowerClip` (BattleStance.cpp:123) 、 `UBattleLeaderRuntime::StepBodyTimers` (BattleStance.cpp:152) |
 | 効果音・エフェクト（表示と音だけ） | `BattleAudio::Shot` (BattleAudio.cpp:199) 、 `BattleAudio::Explosion` (BattleAudio.cpp:245) 、 `BattleAudio::TickPlayer` (BattleAudio.cpp:302) 、 `BattleEffects::Explosion` (BattleEffects.cpp:92) | 呼び出しは `UBattleLeaderRuntime::Fire` (BattleLeaderRuntime.cpp:1303) （射撃・着弾・かすめる弾）、 `UBattleLeaderRuntime::Explode` (BattleAntiTank.cpp:8) （対戦車弾・戦車砲弾・外骨格兵の発射筒の爆発）、 `UBattleLeaderRuntime::FireArtillery` (BattleArtillery.cpp:714) ・ `UBattleLeaderRuntime::StepArtilleryShells` (BattleArtillery.cpp:792) ・ `UBattleLeaderRuntime::ArtilleryImpact` (BattleArtillery.cpp:818) （砲撃）、 `ABattleController::PlayerTick` (BattleController.cpp:1181) （作戦画面の聞く位置・装填/構え/スコープ・拠点と勝敗の合図）。`-BattleSFX=0`／`-BattleFX=0` で止まる。素材と出典は `Docs/ASSET_SOURCES_AUDIO_FX.md` |
 | 死体の消滅（表示だけ） | `UBattleLeaderRuntime::StepCorpses` (BattleCorpses.cpp:46) 、 `UBattleLeaderRuntime::HideCorpse` (BattleCorpses.cpp:73) | 登録は OnDeath の `UBattleLeaderRuntime::AddCorpse` (BattleCorpses.cpp:39) |
@@ -114,7 +114,7 @@
 | `BattleContactMovement` | .cpp | 162 |  | 停止中の味方との接触・到着地点の重なりの解消（UBattleLeaderRuntime の一部） |
 | `BattleController` | .h/.cpp | 365 + 1755 | ABattleCameraPawn, FBattleNoticeEntry, FBattleNoticeLayout, FBattleCommandBarLayout, FBattlePlanPanelLayout, FBattleBuyPanelLayout, ABattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド |
 | `BattleCorpses` | .cpp | 87 |  | 死体の消滅（表示だけ。`-BattleCorpseLifetime=秒`、既定20、0で残す。UBattleLeaderRuntime の一部） |
-| `BattleCover` | .h/.cpp | 45 + 292 | FBattleCoverReservation, UBattleCover | 遮蔽の場所の一覧と予約 |
+| `BattleCover` | .h/.cpp | 45 + 303 | FBattleCoverReservation, UBattleCover | 遮蔽の場所の一覧と予約 |
 | `BattleCoverAction` | .cpp | 640 |  | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部） |
 | `BattleCoverClips` | .h | 79 | BattleCoverClips, FSet | 遮蔽の状態 → 遮蔽アニメの対応表（データだけ。「アセット参考資料の検討」セッション作） |
 | `BattleEffects` | .h/.cpp | 19 + 103 | BattleEffects | 爆発の効果（表示だけ。Lyra の Niagara。`-BattleFX=0` で止まる。着弾の効果は未実装） |
@@ -151,7 +151,7 @@
 | `BattleRagdoll` | .h/.cpp | 14 + 43 | BattleRagdoll | 死体が死亡クリップの後に物理で倒れて止まる（表示だけ。`-BattleRagdoll=0` でクリップの最終フレームのまま） |
 | `BattleRanges` | .h/.cpp | 19 + 56 | BattleRanges | 認識・交戦の距離（マップごとに決まる） |
 | `BattleReplayData` | .h | 15 | FBattleReplayHeader, FBattleReplayUnit | 再生用データの型（試験専用） |
-| `BattleRoutes` | .cpp | 156 |  | 通り道：道路網のあるマップ（F）で、遠い目的地へ交差点を順に指示する。本拠地へ向かう部隊は観測した敵の少ない側面路を選ぶ（UBattleMatch の一部） |
+| `BattleRoutes` | .cpp | 169 |  | 通り道：道路網のあるマップ（F）で、遠い目的地へ交差点を順に指示する。本拠地へ向かう部隊は観測した敵の少ない側面路を選ぶ（UBattleMatch の一部） |
 | `BattleSave` | .h/.cpp | 245 + 583 | BattleSaveValidation, FBattleSavedUnit, FBattleSavedDamage, FBattleSavedArtillery, FBattleSavedArtilleryShell, FBattleSavedArmsShell, FBattleSavedGroup, FBattleSavedCarChoice ほか2 | 保存形式、試合の保存と復元、検証 |
 | `BattleScoutReport` | .cpp | 178 |  | 偵察報告（UBattleMatch の一部） |
 | `BattleSectorRoute` | .cpp | 239 |  | 区画経由の移動 `-BattleSectorRoute`・側面 `-BattleSectorFlank`・前線 `-BattleSectorFront`（区画のあるマップ、AIの歩兵）：道路網の次の交差点の代わりに、その周りで遮蔽の多い区画を制圧・維持しながら進む。側面は観測した敵の正面を避けた区画、前線は自軍の区画のうち敵に接する区画（UBattleMatch の一部） |

@@ -65,29 +65,37 @@ FVector UBattleMatch::RouteStep(const FVector& From,const FVector& Goal,int32 Fl
  // -BattleRouteKeep=1 (default 0): only the keeping of the chosen way (below), without the load; -BattleRouteLoad keeps it too.
  static const bool bRouteKeep=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleRouteKeep="),V);return V!=0;}();
  const bool bCommit=(bLoad||bRouteKeep)&&SquadID!=INDEX_NONE;
+ static const bool bRouteLog=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleRouteLog="),V);return V!=0;}();
+ // A way kept for another goal or another kind of order is forgotten first, also when this order needs no way at all.
+ if(bCommit)if(const FRouteCommit* Old=RouteCommits.Find(SquadID);Old&&(FVector::Dist2D(Old->Goal,Goal)>3000.||Old->FlankSide!=FlankSide))RouteCommits.Remove(SquadID);
+ if(bRouteLog&&SquadID!=INDEX_NONE)if(const FRouteCommit* OldSeen=RouteSeen.Find(SquadID);OldSeen&&(FVector::Dist2D(OldSeen->Goal,Goal)>3000.||OldSeen->FlankSide!=FlankSide))RouteSeen.Remove(SquadID);
  const auto& Def=BattleFieldLayout::Of(GetWorld());const auto& Nodes=Def.RouteNodes;const int32 N=Nodes.Num();
  // Near the goal the squad goes straight there (the last leg is the tactical layer's business).
- if(N<2||FVector::Dist2D(From,Goal)<15000)return Goal;
+ if(N<2||FVector::Dist2D(From,Goal)<15000){if(bCommit)RouteCommits.Remove(SquadID);return Goal;}
  auto Nearest=[&](const FVector& P){int32 Best=0;double BestD=DBL_MAX;for(int32 I=0;I<N;++I){const double D=FVector::DistSquared2D(P,Nodes[I]);if(D<BestD){BestD=D;Best=I;}}return Best;};
  const int32 Start=Nearest(From),End=Nearest(Goal);
- if(Start==End)return Goal;
+ if(Start==End){if(bCommit)RouteCommits.Remove(SquadID);return Goal;}
  // Dijkstra over the few dozen junctions. FlankSide (+1 north, -1 south, 0 none) is set for squads sent against the enemy home:
  // the centre route costs three times its length, the other flank road twice, and each known enemy within 150m of a road
  // section adds a quarter (up to double).
- // -BattleRouteLoad, the way once chosen is kept (user 2026-11-25: squads have changed their way in the middle of a road): the
- // choice is made anew every 5s and the load of the roads changes with every squad, so a squad half way down one road could be
- // sent back to another. Its junctions are kept until the goal moves by more than 30m or the kind of order changes; junctions
- // reached or passed are dropped; a squad more than 400m from its next junction (thrown off its way) chooses again.
- TArray<int32> Path;
+ // The way once chosen is kept (-BattleRouteLoad; -BattleRouteKeep=1 alone. User 2026-11-25: squads have changed their way in the
+ // middle of a road - map K 16-18 times a match, mostly because the nearest junction changes as the squad walks). Its junctions
+ // are kept until the goal moves by more than 30m or the kind of order changes (checked above, before the short ways out);
+ // junctions reached or passed are dropped, the last of them remembered (Passed); a squad that has left the road section it
+ // walks by more than 60m, or is more than 250m from its first junction, chooses again. (Not saved: in-match saving is being removed, user 2026-11-25.)
+ TArray<int32> Path;int32 PassedNode=INDEX_NONE;
  if(bCommit)
   if(FRouteCommit* Commit=RouteCommits.Find(SquadID))
   {
-   if(FVector::Dist2D(Commit->Goal,Goal)<=3000.&&Commit->FlankSide==FlankSide)
+   while(Commit->Nodes.Num()&&(FVector::Dist2D(From,Nodes[Commit->Nodes[0]])<6000||(Commit->Nodes.Num()>1&&FVector::Dist2D(From,Nodes[Commit->Nodes[1]])<FVector::Dist2D(Nodes[Commit->Nodes[0]],Nodes[Commit->Nodes[1]]))))
+   {Commit->Passed=Commit->Nodes[0];Commit->Nodes.RemoveAt(0);}
+   bool bOnWay=Commit->Nodes.Num()>0;
+   if(bOnWay)
    {
-    while(Commit->Nodes.Num()&&(FVector::Dist2D(From,Nodes[Commit->Nodes[0]])<6000||(Commit->Nodes.Num()>1&&FVector::Dist2D(From,Nodes[Commit->Nodes[1]])<FVector::Dist2D(Nodes[Commit->Nodes[0]],Nodes[Commit->Nodes[1]]))))Commit->Nodes.RemoveAt(0);
-    if(Commit->Nodes.Num()&&FVector::Dist2D(From,Nodes[Commit->Nodes[0]])<=40000.)Path=Commit->Nodes;
+    const FVector NextAt=Nodes[Commit->Nodes[0]];
+    bOnWay=Nodes.IsValidIndex(Commit->Passed)?FVector::Dist2D(From,FMath::ClosestPointOnSegment(FVector(From.X,From.Y,0),Nodes[Commit->Passed],NextAt))<=6000.:FVector::Dist2D(From,NextAt)<=25000.;
    }
-   if(Path.IsEmpty())RouteCommits.Remove(SquadID);
+   if(bOnWay){Path=Commit->Nodes;PassedNode=Commit->Passed;}else RouteCommits.Remove(SquadID);
   }
  if(Path.IsEmpty())
  {
@@ -117,11 +125,10 @@ FVector UBattleMatch::RouteStep(const FVector& From,const FVector& Goal,int32 Fl
  for(int32 I=End;I!=INDEX_NONE;I=Prev[I])Path.Insert(I,0);
  // Records only, -BattleRouteLog=1 (default 0): BATTLE_ROUTE_CHANGE when a squad with the same goal is sent to a way that leaves
  // out the junction it was walking to (junctions already reached or passed do not count).
- static const bool bRouteLog=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleRouteLog="),V);return V!=0;}();
  if(bRouteLog&&SquadID!=INDEX_NONE)
  {
   FRouteCommit& Seen=RouteSeen.FindOrAdd(SquadID);
-  if(Seen.Nodes.Num()&&FVector::Dist2D(Seen.Goal,Goal)<=3000.&&Seen.FlankSide==FlankSide)
+  if(Seen.Nodes.Num())
   {
    while(Seen.Nodes.Num()&&(FVector::Dist2D(From,Nodes[Seen.Nodes[0]])<6000||(Seen.Nodes.Num()>1&&FVector::Dist2D(From,Nodes[Seen.Nodes[1]])<FVector::Dist2D(Nodes[Seen.Nodes[0]],Nodes[Seen.Nodes[1]]))))Seen.Nodes.RemoveAt(0);
    if(Seen.Nodes.Num()&&!Path.Contains(Seen.Nodes[0]))
@@ -137,9 +144,15 @@ FVector UBattleMatch::RouteStep(const FVector& From,const FVector& Goal,int32 Fl
  }
  if(bLoad)
  {
+  // Every road section still ahead counts, the one the squad is walking included (from the junction passed last).
   if(Load->Num()!=Def.RouteEdges.Num())Load->Init(0,Def.RouteEdges.Num());
-  for(int32 I=0;I+1<Path.Num();++I)for(int32 EdgeIndex=0;EdgeIndex<Def.RouteEdges.Num();++EdgeIndex)
-   if(const auto& PathEdge=Def.RouteEdges[EdgeIndex];(PathEdge.A==Path[I]&&PathEdge.B==Path[I+1])||(PathEdge.B==Path[I]&&PathEdge.A==Path[I+1])){++(*Load)[EdgeIndex];break;}
+  auto CountSection=[&](int32 NodeA,int32 NodeB)
+  {
+   for(int32 EdgeIndex=0;EdgeIndex<Def.RouteEdges.Num();++EdgeIndex)
+    if(const auto& PathEdge=Def.RouteEdges[EdgeIndex];(PathEdge.A==NodeA&&PathEdge.B==NodeB)||(PathEdge.B==NodeA&&PathEdge.A==NodeB)){++(*Load)[EdgeIndex];return;}
+  };
+  if(PassedNode!=INDEX_NONE&&Path.Num())CountSection(PassedNode,Path[0]);
+  for(int32 I=0;I+1<Path.Num();++I)CountSection(Path[I],Path[I+1]);
  }
  // The next junction worth an order: not one the leader is already at or past (within 60m, or the next one is nearer to the
  // leader than to this one), so the squad keeps walking instead of stopping at every junction.

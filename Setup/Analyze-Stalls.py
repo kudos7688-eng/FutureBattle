@@ -10,7 +10,8 @@ Cause, in this order (user 2026-11-25: "trying to move and cannot" is the proble
   queue   he holds back by the queue rule behind an ally (BATTLE_MOVE_STALL_WHY scale < 0.15): waiting in line, not stuck
   pushed  he walks on (scale >= 0.15) and does not get on: against bodies (allies within 1.5 m) or alone
 Builds before BATTLE_MOVE_STALL_WHY have no scale: those stalls are sorted by the allies within 1.5 m only ("no-why").
-BATTLE_MOVE_STALL_END gives how long a stall lasted; a stall with no END lasted to the end of the match or of the record.
+BATTLE_MOVE_STALL_END gives how long a stall lasted. It is written when the soldier next moves on; a soldier who dies, arrives or
+stops to fight while stalled writes none, so "end not seen" is not "stalled to the end".
 Places: 5 m cells, the east half turned onto the west (maps built by 180-degree rotation)."""
 import re,sys,collections,math
 ps=re.compile(r'BATTLE_MOVE_STALL unit=(\d+) team=(\d) squad=(\d+) pos=X=([-\d.]+) Y=([-\d.]+) Z=([-\d.]+) waypoint=X=([-\d.]+) Y=([-\d.]+)')
@@ -30,6 +31,7 @@ for r in sys.argv[1:]:
         m=pe.search(l)
         if m:
             u=int(m.group(1))
+            if pend and pend['u']==u: close(pend);cur[u]=pend['c'];pend=None
             if u in cur: secs[cur.pop(u)].append(float(m.group(2)))
             continue
         m=pw.search(l)
@@ -54,7 +56,7 @@ for r in sys.argv[1:]:
     if pend: close(pend);cur[pend['u']]=pend['c']
     for u,c in cur.items(): opened[c]+=1
 print('matches',len(sys.argv)-1,'stalls',n)
-print('  %-64s %5s %5s  %s'%('cause','count','share','lasted: median / 10s+ / 30s+ / never ended'))
+print('  %-64s %5s %5s  %s'%('cause','count','share','lasted: median / 10s+ / 30s+ / end not seen'))
 for c in sorted(tot):
     v=sorted(secs[c]);med=('%.0fs'%v[len(v)//2]) if v else '-'
     print('  %-64s %5d %4.0f%%  %s / %d / %d / %d'%(c,tot[c],100*tot[c]/max(1,n),med,sum(1 for x in v if x>=10),sum(1 for x in v if x>=30),opened[c]))

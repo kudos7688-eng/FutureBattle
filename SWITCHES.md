@@ -309,7 +309,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleRifleMembers` | Value | 未解決 | BattleState.cpp:582 |  |
 | `-BattleRouteKeep` | Value | 0 | BattleRoutes.cpp:66 |  |
 | `-BattleRouteLoad` | Value | 0 | BattleRoutes.cpp:63 |  |
-| `-BattleRouteLog` | Value | 0 | BattleRoutes.cpp:120 |  |
+| `-BattleRouteLog` | Value | 0 | BattleRoutes.cpp:68 |  |
 | `-BattleRoutes` | Value | -1 | BattleRoutes.cpp:20 |  |
 | `-BattleRouteTieSymmetric` | Value | 0 | BattleRoutes.cpp:46 |  |
 | `-BattleSaveReloadBoundary` | Value | 0 | BattleArtillery.cpp:266 |  |
@@ -423,7 +423,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSurpriseGroup` | Value | 0 | BattleFrontLine.cpp:896 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleSurpriseSquads` | Value | 2 | BattleFrontLine.cpp:918 | Arg → BattleFrontLine.cpp:31（ヘルパー経由） |
 | `-BattleSymmetricStart` | Value | -1 | BattleGroups.cpp:59 |  |
-| `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:93 |  |
+| `-BattleSymmetryAudit` | Param | off | BattleCover.cpp:104 |  |
 | `-BattleTacticalObserve` | Param | off | BattleSquadTactics.cpp:26 |  |
 | `-BattleTankGunFlash` | Strifind/Value | 0 | BattleAreaSmoke.cpp:497, BattleArtillery.cpp:51 |  |
 | `-BattleTeamSupport` | Value | 1 | BattleTeamAI.cpp:13 |  |

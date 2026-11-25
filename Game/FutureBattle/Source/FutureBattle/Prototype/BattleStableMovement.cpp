@@ -365,7 +365,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
     if(Distance<=Best && ClearMovementSegment(Position(ID),Route[I])) {Best=Distance;B->Waypoint=I;}
    }
   }
-  // Trial -BattleCutOffRoute=1 (2026-11-25, default 0; hand-over from the supply lane, STATUS 11-25): the shared path starts at the
+  // Trial -BattleCutOffRoute=1 (default 0; made default 1 on 2026-11-25 by user decision and taken back the same day: with all five on, map K had 758-856 stalls a match against 244 and three times the deaths, nd-K-*; hand-over from the supply lane, STATUS 11-25): the shared path starts at the
   // centre of the squad, so a member on the other side of a wall (map K: the yard walls, doorways 12m and more apart) walks
   // straight at its next point and presses against the wall. StableMove gives him a route of his own after 2s, but the squad
   // replan that the pressing itself asks for (4s) resets every corridor here and sends him back to the wall. With the switch a

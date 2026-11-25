@@ -82,12 +82,23 @@ void UBattleCover::BuildSlots(bool bForce)
 	static const bool bSlotsMirror = [] { int32 V = 0; FParse::Value(FCommandLine::Get(), TEXT("BattleCoverSlotsMirror="), V); return V != 0; }();
 	if (bSlotsMirror && BattleTactics::SymmetricStart(GetWorld()))
 	{
-		TArray<FVector> WestSlots;
-		for (const FVector& WestSlot : Slots) if (WestSlot.X < 0.) WestSlots.Add(WestSlot);
+		// A pair is kept only when the image also lies on the navigation mesh (within 70cm) and a soldier fits there: the start
+		// rule does not prove that a map is symmetric (Codex review 2026-11-25). Places on the x = 0 line stay as they are.
+		TArray<FVector> WestSlots, MiddleSlots; int32 Dropped = 0;
+		for (const FVector& OldSlot : Slots)
+		{
+			if (FMath::Abs(OldSlot.X) < 1.) { MiddleSlots.Add(OldSlot); continue; }
+			if (OldSlot.X > 0.) continue;
+			const FVector Image(-OldSlot.X, -OldSlot.Y, OldSlot.Z); FNavLocation ImageNav;
+			if (!Nav->ProjectPointToNavigation(Image, ImageNav, FVector(70, 70, 300)) ||
+				GetWorld()->OverlapBlockingTestByChannel(Image + FVector(0, 0, 94), FQuat::Identity, ECC_Pawn, FCollisionShape::MakeCapsule(40.f, 90.f), Query)) { ++Dropped; continue; }
+			WestSlots.Add(OldSlot);
+		}
 		const int32 Before = Slots.Num();
 		Slots = WestSlots;
 		for (const FVector& WestSlot : WestSlots) Slots.Add(FVector(-WestSlot.X, -WestSlot.Y, WestSlot.Z));
-		UE_LOG(LogTemp, Display, TEXT("BATTLE_COVER_MIRROR slots=%d before=%d west=%d"), Slots.Num(), Before, WestSlots.Num());
+		Slots.Append(MiddleSlots);
+		UE_LOG(LogTemp, Display, TEXT("BATTLE_COVER_MIRROR slots=%d before=%d west=%d middle=%d image_not_usable=%d"), Slots.Num(), Before, WestSlots.Num(), MiddleSlots.Num(), Dropped);
 	}
 	BuildSlotIndex();
 	if (FParse::Param(FCommandLine::Get(), TEXT("BattleSymmetryAudit"))) AuditSymmetry();
