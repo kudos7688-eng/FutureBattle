@@ -67,8 +67,8 @@ struct FBattleCommandBarLayout
 struct FBattleQuitLayout
 {
  // Tool ids: 0 AI pause (P), 1 speed (.), 2 save (F8), 3 load (F9), 4 quit (Esc / F10), 5 select all (Q), 6 direct control (E) /
- // tactical view (Tab), 7 sector grid (M), 8 fog (N), 9 enemy ranges (L), 10 plan panel (U).
- enum : uint8 { AIPause, Speed, Save, Load, Quit, SelectAll, Control, Grid, Fog, Ranges, Plan, ToolCount };
+ // tactical view (Tab), 7 sector grid (M), 8 fog (N), 9 enemy ranges (L), 10 plan panel (U), 11 form group (F), 12 select group (V).
+ enum : uint8 { AIPause, Speed, Save, Load, Quit, SelectAll, Control, Grid, Fog, Ranges, Plan, FormGroup, SelectGroup, ToolCount };
  struct FTool { FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector; uint8 Id=0; };
  TArray<FTool> Tools;
  FVector2D Panel, PanelSize, QuitChoice, Back, ChoiceSize;
@@ -194,9 +194,9 @@ public:
 	bool bShowSectorGrid = true, bShowFog = true;
 	void ToggleSectorGrid();
 	void ToggleFogView();
-	// Range rings (L cycles, display only, ABattleHUD::DrawRangeRings): 1 selected own squads only (default),
-	// 2 + the enemy squad under the pointer, 3 + every seen enemy squad, 0 none.
-	int32 RangeRingMode = 1;
+	// Range rings (L cycles, display only, ABattleHUD::DrawRangeRings): 1 selected own squads only,
+	// 2 + the enemy squad under the pointer, 3 + every seen enemy squad, 0 none (default since 2026-11-25, user request; was 1).
+	int32 RangeRingMode = 0;
 	bool ShowsOwnRanges() const { return RangeRingMode != 0; }
 	bool ShowsHoveredEnemyRanges() const { return RangeRingMode == 2; }
 	bool ShowsAllEnemyRanges() const { return RangeRingMode == 3; }

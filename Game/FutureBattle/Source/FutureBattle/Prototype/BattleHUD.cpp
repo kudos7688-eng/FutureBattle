@@ -543,8 +543,10 @@ void ABattleHUD::DrawQuitMenu(ABattleController* PC)
   case FBattleQuitLayout::Control: Text=PC->IsTactical()?TEXT("直接操作 [E]"):TEXT("作戦画面 [Tab]");break;
   case FBattleQuitLayout::Grid: bOn=!PC->bShowSectorGrid;Text=PC->bShowSectorGrid?TEXT("格子 表示 [M]"):TEXT("格子 なし [M]");break;
   case FBattleQuitLayout::Fog: bOn=!PC->bShowFog;Text=PC->bShowFog?TEXT("霧 表示 [N]"):TEXT("霧 なし [N]");break;
-  case FBattleQuitLayout::Ranges: Text=TEXT("射程の円 [L]");break;
+  case FBattleQuitLayout::Ranges: bOn=PC->RangeRingMode!=0;Text=PC->RangeRingMode==0?TEXT("射程の円 なし [L]"):TEXT("射程の円 表示 [L]");break;
   case FBattleQuitLayout::Plan: bOn=PC->IsPlanPanelOpen();Text=TEXT("作戦方針 [U]");break;
+  case FBattleQuitLayout::FormGroup: Text=TEXT("群を編成 [F]");break;
+  case FBattleQuitLayout::SelectGroup: Text=TEXT("群を選択 [V]");break;
   default: break;
   }
   float TW=0,TH=0;Canvas->StrLen(GEngine->GetSmallFont(),Text,TW,TH);

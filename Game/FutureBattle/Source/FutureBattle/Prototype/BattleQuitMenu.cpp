@@ -1,5 +1,5 @@
 // Top bar toolbar and quit menu (2026-11-25, user request). The top bar holds a button for each main key (AI pause, speed, save, load,
-// quit, select all, direct control / tactical view, grid, fog, ranges, plan panel); a left click runs the same action as the key, so a
+// quit, select all, form / select group, direct control / tactical view, grid, fog, ranges, plan panel); a left click runs the same action as the key, so a
 // remote session needs no awkward keys. Quit (its button, Esc or F10) opens a confirmation panel; its quit button, Enter, Y or pad A ends
 // the game; its back button, Esc, F10 or pad B closes it. Drawn by ABattleHUD::DrawQuitMenu.
 #include "BattleController.h"
@@ -16,12 +16,12 @@
 FBattleQuitLayout FBattleQuitLayout::Make(FVector2D View)
 {
  FBattleQuitLayout L;
- // Top bar (y 16..82): two rows of six right of the view title and unit counts (drawn at 0.4 W, about 250 px wide).
- constexpr int32 Columns=6;constexpr float Gap=6.f,RowH=27.f;
+ // Top bar (y 16..82): two rows of seven right of the view title and unit counts (drawn at 0.4 W, about 250 px wide).
+ constexpr int32 Columns=7;constexpr float Gap=6.f,RowH=27.f;
  const float Left=FMath::Max(float(View.X)*.4f+260.f,300.f),Right=float(View.X)-24.f;
  const float Width=FMath::Max(40.f,(Right-Left-Gap*(Columns-1))/Columns);
- // Row 1: AI pause, speed, save, load, (gap), quit at the far right; row 2: select all, control, grid, fog, ranges, plan.
- const uint8 Rows[2][Columns]={{AIPause,Speed,Save,Load,ToolCount,Quit},{SelectAll,Control,Grid,Fog,Ranges,Plan}};
+ // Row 1: AI pause, speed, save, load, plan, (gap), quit at the far right; row 2: select all, form group, select group, control, grid, fog, ranges.
+ const uint8 Rows[2][Columns]={{AIPause,Speed,Save,Load,Plan,ToolCount,Quit},{SelectAll,FormGroup,SelectGroup,Control,Grid,Fog,Ranges}};
  for(int32 R=0;R<2;++R)for(int32 C=0;C<Columns;++C)if(Rows[R][C]!=ToolCount)
  {FTool T;T.Id=Rows[R][C];T.Origin=FVector2D(Left+C*(Width+Gap),20.f+R*(RowH+4.f));T.Size=FVector2D(Width,RowH);L.Tools.Add(T);}
  L.PanelSize=FVector2D(440,170);L.Panel=(View-L.PanelSize)*.5f;
@@ -70,6 +70,8 @@ void ABattleController::RunTopTool(int32 Id)
  case FBattleQuitLayout::Fog: ToggleFogView();break;
  case FBattleQuitLayout::Ranges: ToggleEnemyRanges();break;
  case FBattleQuitLayout::Plan: TogglePlanPanel();break;
+ case FBattleQuitLayout::FormGroup: FormGroupSelected();break;
+ case FBattleQuitLayout::SelectGroup: SelectGroupSelected();break;
  default: break;
  }
 }
