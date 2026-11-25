@@ -17,7 +17,9 @@
 
 namespace
 {
- struct FHeightTestRow { int32 Squad=INDEX_NONE; FVector Goal=FVector::ZeroVector; const TCHAR* Name=TEXT(""); bool bAccepted=false; double MaxFeet=0; int32 Members=0,BestOnLevel=0,BestNear=0; };
+ // Tolerance: how far from the goal's height a soldier still stands "on its level" (20cm on a flat hilltop or floor; 150cm on the
+ // rounded hills of map L, whose tops fall away from the middle and carry low walls 10m out).
+ struct FHeightTestRow { int32 Squad=INDEX_NONE; FVector Goal=FVector::ZeroVector; const TCHAR* Name=TEXT(""); bool bAccepted=false; double MaxFeet=0; int32 Members=0,BestOnLevel=0,BestNear=0; double Tolerance=20; };
  TArray<FHeightTestRow> HeightTestRows;
  int32 HeightTestState=0; // 0 not started, 1 running, 2 reported
  float HeightTestClock=0;
@@ -53,9 +55,9 @@ void UBattleMatch::UpdateTerrainTest(float DeltaSeconds)
    {FVector(8000,-6000,G(8000,-6000)+1500),FVector(22500,7500,G(22500,7500)+300),TEXT("knoll"),1.f},
    {FVector(20000,-13000,G(20000,-13000)+1200),FVector(20000,-29500,G(20000,-29500)+400),TEXT("ridge"),1.f},
    {FVector(6300,3000,G(6300,3000)+900),FVector(6300,22000,G(6300,22000)),TEXT("valley"),1.f},
-   {FVector::ZeroVector,FVector::ZeroVector,TEXT("squad-a"),45.f},
-   {FVector::ZeroVector,FVector::ZeroVector,TEXT("squad-b"),90.f},
-   {FVector::ZeroVector,FVector::ZeroVector,TEXT("squad-c"),150.f},
+   {FVector::ZeroVector,FVector::ZeroVector,TEXT("squad-a"),15.f},
+   {FVector::ZeroVector,FVector::ZeroVector,TEXT("squad-b"),30.f},
+   {FVector::ZeroVector,FVector::ZeroVector,TEXT("squad-c"),45.f},
   };
   if(TerrainShotStage<UE_ARRAY_COUNT(Views)&&PC&&Elapsed>=Views[TerrainShotStage].From)
   {
@@ -129,7 +131,7 @@ void UBattleMatch::UpdateTerrainTest(float DeltaSeconds)
   }
   for(int32 I=0;I<3&&I<IDs.Num();++I)
   {
-   FHeightTestRow Row;Row.Squad=IDs[I];Row.Goal=Goals[I];Row.Name=Names[I];
+   FHeightTestRow Row;Row.Squad=IDs[I];Row.Goal=Goals[I];Row.Name=Names[I];if(!Heights.Field.IsEmpty()&&I!=1)Row.Tolerance=150;
    Row.bAccepted=Runtime->IssueOrder(IDs[I],EBattleOrder::Move,Goals[I]);
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HEIGHT_TEST start squad=%d goal=%s x_m=%.0f y_m=%.0f z_cm=%.0f accepted=%d"),IDs[I],Names[I],Goals[I].X/100,Goals[I].Y/100,Goals[I].Z,Row.bAccepted?1:0);
    HeightTestRows.Add(Row);
@@ -145,7 +147,7 @@ void UBattleMatch::UpdateTerrainTest(float DeltaSeconds)
   if(const auto* S=Store->FindSquad(Row.Squad))for(int32 ID:S->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())
   {
    double Level,Off;Feet(ID,Level,Off);++Alive;const bool bNear=FVector::Dist2D(Runtime->Position(ID),Row.Goal)<2500;
-   Near+=bNear;OnLevel+=bNear&&FMath::Abs(Level-Row.Goal.Z)<=20;
+   Near+=bNear;OnLevel+=bNear&&FMath::Abs(Level-Row.Goal.Z)<=Row.Tolerance;
   }
   Row.Members=FMath::Max(Row.Members,Alive);Row.BestOnLevel=FMath::Max(Row.BestOnLevel,OnLevel);Row.BestNear=FMath::Max(Row.BestNear,Near);
  }
@@ -157,7 +159,7 @@ void UBattleMatch::UpdateTerrainTest(float DeltaSeconds)
   // at least half reached the far side on the ground and somebody was up on the ridge on the way.
   const bool bOK=Row.bAccepted&&Row.Members>0&&Row.BestOnLevel*2>=Row.Members&&(Row.Goal.Z>0||Row.MaxFeet>100);
   Failures+=!bOK;
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HEIGHT_TEST squad=%d goal=%s members=%d best_on_level=%d best_near=%d highest_cm=%.0f ok=%d"),Row.Squad,Row.Name,Row.Members,Row.BestOnLevel,Row.BestNear,Row.MaxFeet,bOK?1:0);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HEIGHT_TEST squad=%d goal=%s members=%d best_on_level=%d best_near=%d highest_cm=%.0f goal_cm=%.0f tolerance_cm=%.0f ok=%d"),Row.Squad,Row.Name,Row.Members,Row.BestOnLevel,Row.BestNear,Row.MaxFeet,Row.Goal.Z,Row.Tolerance,bOK?1:0);
  }
  // Every soldier of the team: capsule centre within 15cm of where it belongs above the level he stands on.
  int32 Soldiers=0,OffGround=0;double Worst=0;

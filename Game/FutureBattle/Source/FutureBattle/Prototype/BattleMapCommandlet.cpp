@@ -76,7 +76,9 @@ int32 BuildGroundTiles(UWorld* World,const BattleTerrain::FHeightField& F,TFunct
 			const int32 XA=FMath::Max(I-1,0),XB=FMath::Min(I+1,F.NX-1),YA=FMath::Max(J-1,0),YB=FMath::Min(J+1,F.NY-1);
 			const double DX=(F.At(XB,J)-F.At(XA,J))/((XB-XA)*F.Step),DY=(F.At(I,YB)-F.At(I,YA))/((YB-YA)*F.Step);
 			Normals[VI]=FVector3f(FVector(-DX,-DY,1.).GetSafeNormal());
-			const FLinearColor C=Paint(I,J);Colors[VI]=FVector4f(C.R,C.G,C.B,1.f);
+			// The build stores vertex colours sRGB-encoded and the material reads them back as they are (no decoding), so the linear
+			// colour wanted on screen goes in raised to 2.2 (else the ground came out almost white, terrain-shot-r1).
+			const FLinearColor C=Paint(I,J);Colors[VI]=FVector4f(FMath::Pow(C.R,2.2f),FMath::Pow(C.G,2.2f),FMath::Pow(C.B,2.2f),1.f);
 			UVs.Set(VI,0,FVector2f(float(X/1000.),float(Y/1000.)));
 			Inst[(J-J0)*W+(I-I0)]=VI;
 		}
