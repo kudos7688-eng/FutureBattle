@@ -298,7 +298,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
    {
     // Validate the latest mission before releasing protection from the objective director.
     if(ResumeMission(SID,TEXT("SAFE REGROUP / RESUME MISSION"),TEXT("ResumeMission")))
-     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ST2_RESUME squad=%d"),SID);
+     {UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ST2_RESUME squad=%d"),SID);}
     else { P.Reason=TEXT("MISSION ROUTE UNREACHABLE / HOLD"); P.SafeSeconds=0; }
    }
    else if(P.Action!=EBattleSquadTactic::Recover && (Cohesive || P.Age>=15))
