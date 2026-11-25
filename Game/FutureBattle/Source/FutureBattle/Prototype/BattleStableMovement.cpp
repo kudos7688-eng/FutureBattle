@@ -1,4 +1,5 @@
 #include "BattleLeaderRuntime.h"
+#include "BattleCoverFire.h"
 #include "BattleGameMode.h"
 #include "BattleTactics.h"
 #include "BattleFieldLayout.h"
@@ -51,6 +52,11 @@ bool ArrivalFirePoint(UWorld* FireWorld,UNavigationSystemV1* FireNav,const FVect
 }
 // Trial -BattleAllyPass=1 (default 0): see FBattleLeaderBody::AllyPassUntil.
 bool AllyPassOn(){static const bool V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAllyPass="),X);return X!=0;}();return V;}
+}
+
+bool BattleCoverFire::ArrivalFirePoint(UWorld* FireWorld,UNavigationSystemV1* FireNav,const FVector& FireGround,const FVector& FireDirection)
+{
+ return ::ArrivalFirePoint(FireWorld,FireNav,FireGround,FireDirection);
 }
 
 bool UBattleLeaderRuntime::TerrainStep(const FVector& From,FVector& Step) const

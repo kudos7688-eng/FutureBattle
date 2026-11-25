@@ -886,6 +886,7 @@ public:
  FVector FlankSmokeGoal=FVector::ZeroVector;
  void RunMovementTrial();
  void RunContactTrial();
+ void RunCoverFirePointTrial();
  void RunSightTrial();
  void RunWeaponRangeTrial();
  void RunWideMapAudit();
