@@ -99,6 +99,18 @@ private:
  // been fighting (-1: it fights) and when the join ended (-1: under way). Not saved.
  struct FJoinFight{int32 Host=INDEX_NONE;double Start=0.,QuietSince=-1.,EndAt=-1.;};
  TMap<int32,FJoinFight> JoinFights;
+ // Trial -BattleSeekKnown (BattleTactics.h): per team, the 50 m squares in which one of its soldiers saw enemy infantry (the place
+ // and the time of the last sighting; refreshed once a second), and per seeking squad the square it walks to, the place, when it
+ // set out, when it arrived (-1: on its way) and when the seek ended (-1: under way). Not saved.
+ struct FKnownSpot{FVector At=FVector::ZeroVector;double Seen=0.;};
+ TMap<FIntPoint,FKnownSpot> KnownSpots[2];
+ double KnownSpotsAt[2]={-100.,-100.};
+ struct FSeekEnemy{FIntPoint Cell=FIntPoint::ZeroValue;FVector At=FVector::ZeroVector;double Start=0.,ArrivedAt=-1.,EndAt=-1.;};
+ TMap<int32,FSeekEnemy> SeekEnemies;
+ // Per squad, the squares its seeks ended in and when (30 s before it goes to one again, and its place there counts that long).
+ TMap<int32,TMap<FIntPoint,double>> SeekEnded;
+ void RefreshKnownSpots(int32 Team);
+ void EndSeek(int32 SquadID);
  void SupplyTripEnd(int32 SquadID, bool bResumed);
  TMap<int32, TArray<TPair<double, float>>> DamageHistory;
  double TotalStepMs = 0, MaxStepMs = 0;

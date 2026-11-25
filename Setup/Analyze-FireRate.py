@@ -82,6 +82,11 @@ def analyse(run):
     if engage:
         print(' if every soldier of a squad in ENGAGE fired without pause (8 per squad): %.0f shots; actual share %.0f%%' % (
             engage * 8 / INTERVAL, 100 * m['shots'] / (engage * 8 / INTERVAL)))
+    if ev.get('SeekEnemyGo') or ev.get('JoinFightGo'):
+        # -BattleSeekKnown / -BattleJoinFight: squads sent to where the team saw an enemy / to a fighting squad, and how those ended.
+        print(' seeks %d (met an enemy %d, none there %d, 90 s %d); joins %d (met an enemy %d)' % (
+            ev.get('SeekEnemyGo', 0), ev.get('SeekEnemyContact', 0), ev.get('SeekEnemyEndEmpty', 0), ev.get('SeekEnemyEndTimeout', 0),
+            ev.get('JoinFightGo', 0), ev.get('JoinFightContact', 0)))
     if watches:
         came = [w for w in watches if w[2]]
         print(' arrival watches: %d by %d squads (%d in a sector); walked in for %.0f s on average; %d gave up after 30 s short of the destination' % (

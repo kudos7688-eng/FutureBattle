@@ -39,6 +39,26 @@ float BattleTactics::SuppressFire()
  static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSuppressFire="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,60.f):0.f;}();
  return Seconds;
 }
+int32 BattleTactics::SeekKnown()
+{
+ static const int32 Mode=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSeekKnown="),Value);return FMath::Clamp(Value,0,2);}();
+ return Mode;
+}
+float BattleTactics::SeekKnownSeconds()
+{
+ static const float Seconds=[](){float Value=30.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSeekKnownSeconds="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,5.f,180.f):30.f;}();
+ return Seconds;
+}
+float BattleTactics::SeekKnownRange()
+{
+ static const float Range=[](){float Value=20000.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSeekKnownRange="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,2000.f,60000.f):20000.f;}();
+ return Range;
+}
+int32 BattleTactics::SeekKnownMax()
+{
+ static const int32 Max=[](){int32 Value=2;FParse::Value(FCommandLine::Get(),TEXT("BattleSeekKnownMax="),Value);return FMath::Clamp(Value,1,8);}();
+ return Max;
+}
 bool BattleTactics::JoinFight()
 {
  static const bool bOn=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleJoinFight="),Value);return Value!=0;}();

@@ -31,6 +31,7 @@ void UBattleSquadTactics::Reset()
 {
  ActiveSeconds = 0; NextDump = 5; NextSample.Reset(); Samples.Reset(); Events.Reset(); ActionSeconds.Reset();
  SupplyTripStart.Reset(); SupplyTripSeconds.Reset(); JoinFights.Reset();
+ SeekEnemies.Reset(); SeekEnded.Reset(); KnownSpots[0].Reset(); KnownSpots[1].Reset(); KnownSpotsAt[0]=KnownSpotsAt[1]=-100.;
  GetWorld()->GetSubsystem<UBattleTeamAI>()->Reset();
  DamageHistory.Reset(); TotalStepMs = MaxStepMs = 0; StepCount = 0;
 }
