@@ -120,7 +120,7 @@ bool UBattleLeaderRuntime::CoverStepFirePoint(FVector Anchor,FVector Threat,FVec
  {
   FNavLocation StepProjected;if(!StepNav->ProjectPointToNavigation(Anchor+Lateral*StepOffset-FVector(0,0,90),StepProjected,FVector(50,50,150))){SightExperiment.Cover(TEXT("peek_off_navmesh"));continue;}
   const FVector StepPeek=StepProjected.Location+FVector(0,0,90);
-  if(PeekRangeCheck()){const double StepDistance=FVector::Dist2D(Anchor,StepPeek);if(StepDistance<100.||StepDistance>450.)continue;}
+  const double StepDistance=FVector::Dist2D(Anchor,StepPeek);if(StepDistance<=120.||StepDistance>450.)continue;
   if(GetWorld()->SweepTestByObjectType(Anchor,StepPeek,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88))){SightExperiment.Cover(TEXT("peek_path_blocked"));continue;}
   if(BattleTactics::ExposureAt(GetWorld(),StepPeek,Facing,StepEye).Fraction()<Hidden+.39f){SightExperiment.Cover(TEXT("peek_not_exposed_enough"));continue;}
   if(!BattleTactics::HasTerrainLine(GetWorld(),StepPeek+FVector(0,0,60),StepEye)){SightExperiment.Cover(TEXT("peek_no_line_to_threat"));continue;}
@@ -154,7 +154,8 @@ bool UBattleLeaderRuntime::RevalidatePeek(int32 ID,FVector Threat)
  {
   FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Anchor+Lateral*Offset-FVector(0,0,90),Projected,FVector(50,50,150)))continue;
   const FVector Peek=Projected.Location+FVector(0,0,90);
-  if(PeekRangeCheck()){const double D=FVector::Dist2D(Anchor,Peek);if(D<100.||D>450.)continue;}
+  if(BattleTactics::CoverFirePointEnabled()){const double StepDistance=FVector::Dist2D(Anchor,Peek);if(StepDistance<=120.||StepDistance>450.)continue;}
+  else if(PeekRangeCheck()){const double D=FVector::Dist2D(Anchor,Peek);if(D<100.||D>450.)continue;}
   if(GetWorld()->SweepTestByObjectType(Anchor,Peek,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))continue;
   if(!CoverLineClear(ID,Peek,Threat))continue;
   U->CoverPeek=Peek;SightExperiment.Cover(TEXT("peek_repicked"));return true;
