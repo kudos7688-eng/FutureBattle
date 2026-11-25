@@ -37,6 +37,15 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-25 18時40分 Claude（試合数の統制）：共用の基準 E1 を台帳に登録した（main bc4b1c4、凍結ビルド `baseline-bc4b1c4`、7本）。main の既定の基準は自分で流さず、ここから引く
+
+- **対象**：18時の回の取り込み（mapk 28af6ba、movestall c1a0af0、`-BattleRoutePassed` 既定1 15d6b3b、セーブ・ロード削除 9997b7a）がすべて入った main bc4b1c4（DLL は 18時25分のビルド）。後から入った 502415a（`Test-SquadTactics` の試験だけの修正）はゲームのコードを変えないので、基準はそのまま使える。
+- **条件**：`Test-WideSight.ps1 -Area -ObserveTactics -Experiment -CoverActions 1 -FlankCoordination 1 -Fps 30 -BehaviorConcurrency 7 -FrozenBuild baseline-bc4b1c4`、描画なし、往復保存なし。試合の枠で7本同時（18時29分〜18時36分）。7本とも `failures=0`・900秒。
+- **結果（得点 味方:敵）**：I s7 441:685／I s43 685:624／J s7 421:465／J s43 345:332／K s7 463:264／K s43 443:284／H s7 251:448。結果は `Setup/Benchmarks/SightTrial-20261111/base-bc4b1c4-<マップ>-s<シード>`。K s7 はマップの系統が 15d6b3b の凍結ビルドで流した1本（463:264）と同じ得点。
+- **使い方**：`python -I Setup/Baseline.py show`、`path --map K --seed 7`、`python -I Setup/Analyze-MatchDelta.py --baseline <試験の結果...>`。自分の凍結ビルドが基準と同じかは `Baseline.py check <結果>`。既定0の切替だけを足したビルドは `equiv --switch-only` で同等として登録できる。凍結ビルド `baseline-bc4b1c4` はそのまま試験側の起動にも使える（既にある切替の比較ならビルド不要、試合の枠だけで流せる）。
+- **制限**：シードは 7・43 だけ（239・277 は台帳に無い。要る系統が流す）。損害・戦死の数字はここに書いていない（`Analyze-MatchDelta.py` が比較のときに出す）。次の取り直しは、既定を変えるコミットが入った次の定時（6時・18時）。
+- `/measure` スキルの手順書（`FPS/.claude/skills/measure/SKILL.md`、git の管理外）を作業の列・試合の枠・申請・台帳に合わせて直した（ユーザー指示）。
+
 ## 2026-11-25 18時36分 Claude（マップ）：マップI に残る「区画の行き来」を調査。大半は交戦中の小隊の任務の書き換えで、実際の移動先は変わっていない。コードは変更なし
 
 - 経緯：ユーザー「調べる」。調査は Codex（読むだけ）と既存の記録（`ln8-I-passed-s7`・`ln8-I-base-s7`、`-BattleOrderTrace=1`）。ビルド・試合なし。
