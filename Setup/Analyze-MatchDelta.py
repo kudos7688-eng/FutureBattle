@@ -3,6 +3,8 @@
 # the change of (team 0 - team 1) for the score and its parts, and per team: damage dealt, kills, combat deaths, leaders lost,
 # hire spending. Read only; no build and no lock needed.
 #   python -I Setup/Analyze-MatchDelta.py <base> <trial> [<base> <trial> ...] [--root <dir>] [--count LABEL=REGEX[@SUBJECT]] [--no-log]
+#   python -I Setup/Analyze-MatchDelta.py --baseline <trial> [<trial> ...] [--root <dir>]
+# --baseline reads the current era from BASELINE_DIR/baselines.json and reports DLL registration.
 # A name without a path separator is looked up under Setup/Benchmarks/SightTrial-20261111 (or --root).
 #
 # After the item-by-item part (unchanged since 2026-11-24) three parts follow (2026-11-25, Docs/review-2026-11-25/03-development-policy.md 2.3):
@@ -234,6 +236,16 @@ def short_activation(text, n):
 
 def main(argv):
     global ROOT
+    use_baseline = '--baseline' in argv
+    if use_baseline:
+        argv.remove('--baseline')
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        sys.dont_write_bytecode = True
+        import Baseline
+        if '--root' not in argv:
+            ROOT = str(Baseline.ROOT)
     if '--root' in argv:
         i = argv.index('--root'); ROOT = argv[i + 1]; del argv[i:i + 2]
     indicators, use_log = list(INDICATORS), True
@@ -251,11 +263,35 @@ def main(argv):
         except re.error as e:
             print('--count %s: bad regular expression (%s)' % (spec, e)); return 2
         indicators.append((label, pattern, [('need_log', subj, 'no line matching ' + subj), ('yes',)] if subj else []))
-    if len(argv) < 2 or len(argv) % 2:
+    if not argv or (not use_baseline and (len(argv) < 2 or len(argv) % 2)):
         print(__doc__ or 'usage: Analyze-MatchDelta.py <base> <trial> [<base> <trial> ...] [--root <dir>] [--count LABEL=REGEX[@SUBJECT]] [--no-log]'); return 2
-    pairs = [(argv[i], argv[i + 1]) for i in range(0, len(argv), 2)]
     rows, unreadable = [], {}
+    if use_baseline:
+        try:
+            era = Baseline.current_era()
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            print('基準台帳を読めません: %s' % e); return 1
+        pairs, registrations = [], []
+        for trial in argv:
+            base = '(基準なし)'
+            try:
+                match = Baseline.read_match(trial, ROOT, with_metrics=False)
+                status, eq = Baseline.dll_status(era, match['dll'])
+                registrations.append((trial, status, eq))
+                entry = Baseline.find_entry(era, match['map'], match['seed'])
+                if entry:
+                    base = entry['folder']
+                else:
+                    unreadable[(base, trial)] = '(no baseline for map %s seed %s)' % (match['map'], match['seed'])
+            except (OSError, ValueError, KeyError, TypeError) as e:
+                unreadable[(base, trial)] = str(e)
+                registrations.append((trial, '読み取り不可: %s' % e, None))
+            pairs.append((base, trial))
+    else:
+        pairs = [(argv[i], argv[i + 1]) for i in range(0, len(argv), 2)]
     for base, trial in pairs:
+        if (base, trial) in unreadable:
+            continue
         try:
             jb, jt = load(base), load(trial)
         except (OSError, ValueError) as e:
@@ -286,6 +322,23 @@ def main(argv):
         conds[(base, trial)] = (cb, ct)
         notes[(base, trial)] = print_conditions(base, trial, cb, ct)
 
+    if use_baseline:
+        print('')
+        print('BASELINE')
+        if era:
+            print('  id=%s commit=%s 凍結ビルド=%s 時刻=%s' %
+                  (era['id'], era['commit'], era['snapshot'], era['time']))
+        else:
+            print('  基準が登録されていません。')
+        for trial, status, eq in registrations:
+            detail = ''
+            if eq:
+                detail = '（%s %s）' % (eq['who'], eq['time'])
+            if status == 'UNREGISTERED':
+                status = '!! UNREGISTERED'
+                detail = '（基準と DLL が違い、同等の登録も無い。差には DLL の違いが混ざり得る）'
+            print('  %s: 試験の DLL は %s%s' % (trial, status, detail))
+
     print('')
     acts = {}
     if use_log:
@@ -307,9 +360,9 @@ def main(argv):
     print('  %-52s %7s %7s %7s %7s  %s' % ('base -> trial', 'score', 'damage', 'kills', 'deaths', 'notes'))
     by_pair = {(r[0], r[1]): r for r in rows}
     for base, trial in pairs:
-        title = ('%s -> %s' % (base, trial))[:52]
+        title = ('%s -> %s' % (os.path.basename(base), os.path.basename(trial)))[:52] if use_baseline else ('%s -> %s' % (base, trial))[:52]
         if (base, trial) in unreadable:
-            print('  %-52s %s' % (title, 'NOT READ  ' + unreadable[(base, trial)])); continue
+            print('  %-52s %s' % (title, ('NOT READ ' if use_baseline else 'NOT READ  ') + unreadable[(base, trial)])); continue
         _, _, b, t, _, _ = by_pair[(base, trial)]
         d = {k: (t[0][k] - t[1][k]) - (b[0][k] - b[1][k]) for k in ('score', 'damage', 'kills', 'deaths')}
         print('  %-52s %+7.0f %+7.0f %+7.0f %+7.0f  %s' % (title, d['score'], d['damage'], d['kills'], d['deaths'], '; '.join(notes[(base, trial)]) or '-'))
