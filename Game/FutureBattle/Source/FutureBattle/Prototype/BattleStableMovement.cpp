@@ -428,7 +428,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
     if(Distance<=Best && ClearMovementSegment(Position(ID),Route[I])) {Best=Distance;B->Waypoint=I;}
    }
   }
-  // Trial -BattleCutOffRoute=1 (2026-11-25, default 0; hand-over from the supply lane, STATUS 11-25): the shared path starts at the
+  // Trial -BattleCutOffRoute=1 (default 0; made default 1 on 2026-11-25 by user decision and taken back the same day: with all five on, map K had 758-856 stalls a match against 244 and three times the deaths, nd-K-*; hand-over from the supply lane, STATUS 11-25): the shared path starts at the
   // centre of the squad, so a member on the other side of a wall (map K: the yard walls, doorways 12m and more apart) walks
   // straight at its next point and presses against the wall. StableMove gives him a route of his own after 2s, but the squad
   // replan that the pressing itself asks for (4s) resets every corridor here and sends him back to the wall. With the switch a
@@ -441,6 +441,12 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
      TArray<FVector> OwnRoute;for(const auto& OwnPoint:OwnPath->PathPoints)OwnRoute.Add(OwnPoint);
      Route=MoveTemp(OwnRoute);B->Waypoint=1;SightExperiment.Cover(TEXT("move_cutoff_route"));
     }
+  if(BattleTactics::MoveTraceSquad(SID))
+  {
+   FString TraceRoute;for(int32 TraceI=0;TraceI<Route.Num()&&TraceI<5;++TraceI)TraceRoute+=FString::Printf(TEXT(" (%.1f,%.1f)"),Route[TraceI].X,Route[TraceI].Y);
+   const FVector* TraceGoal=P.ArrivalGoals.Find(ID);
+   UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_TRACE_ROUTE squad=%d unit=%d new=%d wp=%d/%d pos=(%.1f,%.1f) goal=(%.1f,%.1f) route:%s"),SID,ID,NewOrder?1:0,B->Waypoint,Route.Num(),Position(ID).X,Position(ID).Y,TraceGoal?TraceGoal->X:0.,TraceGoal?TraceGoal->Y:0.,*TraceRoute);
+  }
  }
 }
 
@@ -519,10 +525,15 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  }
  if(Final && FVector::Dist2D(Pos,*Goal)<20)
  {B.bArrived=true;Stop();return true;}
+ // Records only (2026-11-25, user: "the problem is a soldier who tries to move and cannot; one who waits in place is fine"):
+ // BATTLE_MOVE_STALL_WHY tells whether the stalled soldier pushed on (scale >= 0.15) or held back by the queue rule behind an
+ // ally (scale < 0.15), BATTLE_MOVE_STALL_END how long the stall lasted (moved=0: he left the moving state instead).
+ bool bStallLogged=false;
  if(SightExperiment.Started && !SightExperiment.Finished)
  {
   if(B.LastMoveSampleFrame+1!=GFrameCounter || FVector::DistSquared2D(Pos,B.MoveSampleOrigin)>FMath::Square(40.))
   {
+   if(B.StationaryMoveSeconds>=3.f)UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_STALL_END unit=%d seconds=%.1f moved=%d"),ID,B.StationaryMoveSeconds,B.LastMoveSampleFrame+1==GFrameCounter?1:0);
    B.MoveSampleOrigin=Pos;
    B.StationaryMoveSeconds=0;
   }
@@ -531,6 +542,7 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   B.StationaryMoveSeconds+=Dt;
   if(Previous<3.f && B.StationaryMoveSeconds>=3.f)
   {
+   bStallLogged=true;
    UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_STALL unit=%d team=%d squad=%d pos=%s waypoint=%s"),ID,U->Team,U->SquadID,*Pos.ToString(),*Way.ToString());
    // Detail (2026-11-20, diagnosis of the map I sector jams): what the soldier walks to, whether the way is clear of walls,
    // and who stands within 1.5m (same squad / other squad of the team / enemy; and how many of them stand still).
@@ -554,6 +566,16 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
      FVector::DotProduct((Pos-Way).GetSafeNormal2D(),(Next-Way).GetSafeNormal2D())>0.f && ClearMovementSegment(Pos,Next))
   {++B.Waypoint;Way=Next;Final=B.Waypoint==Route->Num()-1;SightExperiment.Cover(TEXT("waypoint_pass"));}
  }
+// Trial -BattleWaypointCrowd=1 (2026-11-25, default 0; user request: fewer soldiers getting stuck): every soldier has to come within
+ // 65cm of each corner point of his route, and the squads of a group share those points. At the town entrance of map K some
+ // 150 soldiers pushed at one point of the road (g9b-K-base: 400 of 783 stalls within 5m of it, 64 in 100 of them walking on
+ // against bodies). With the switch a soldier who has not got on for 1.5s within 8m of a corner point goes on to the next
+ // point when he can walk to it in a straight swept line - also from the near side of the corner (WaypointPass asks for the
+ // far side and 4m).
+ static const bool WaypointCrowd=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleWaypointCrowd="),V);return V!=0;}();
+ if(WaypointCrowd && !Final && B.Waypoint+1<Route->Num() && Now-B.LastProgressTime>1.5 && FVector::DistSquared2D(Pos,Way)<FMath::Square(800.))
+  if(const FVector& CrowdNext=(*Route)[B.Waypoint+1];ClearMovementSegment(Pos,CrowdNext))
+  {++B.Waypoint;Way=CrowdNext;Final=B.Waypoint==Route->Num()-1;B.LastProgressTime=Now;SightExperiment.Cover(TEXT("waypoint_crowd_skip"));}
  if(!Final && FVector::Dist2D(Pos,Way)<65) {++B.Waypoint;Way=(*Route)[B.Waypoint];Final=B.Waypoint==Route->Num()-1;}
  FVector D=(Way-Pos).GetSafeNormal2D(); const FVector Right(-D.Y,D.X,0);
  const bool Confined=NarrowHere;
@@ -647,7 +669,10 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  if(AllyPassOn()&&!bAllyPass&&B.bContactWaiting&&Now-B.LastProgressTime>3)
  {BeginAllyPass(ID,Now);B.bContactWaiting=false;Scale=1;Separation=FVector::ZeroVector;D=(Way-Pos).GetSafeNormal2D();}
  Direction=LimitedSteering(D,Separation,GetDefault<UBattleTuning>()->WideAvoidanceMaxSide);
+ if(BattleTactics::MoveTraceSquad(U->SquadID))if(const auto* TraceMatch=GetWorld()->GetSubsystem<UBattleMatch>();TraceMatch&&TraceMatch->Elapsed<4.f)
+  UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_TRACE_STEP unit=%d t=%.3f pos=(%.1f,%.1f) wp=%d way=(%.1f,%.1f) d=(%.3f,%.3f) scale=%.3f blocker=%d passing=%d sep=(%.3f,%.3f) dir=(%.3f,%.3f)"),ID,TraceMatch->Elapsed,Pos.X,Pos.Y,B.Waypoint,Way.X,Way.Y,D.X,D.Y,Scale,Blocker,B.PassingID,Separation.X,Separation.Y,Direction.X,Direction.Y);
  B.bTrafficWait=Scale<.15f;
+ if(bStallLogged)UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_STALL_WHY unit=%d scale=%.2f blocker=%d passing=%d escape=%d contact_wait=%d"),ID,Scale,Blocker,B.PassingID,Now<B.EscapeUntil?1:0,B.bContactWaiting?1:0);
  // Heavy infantry moves slower (squad type speed scale); rifle squads keep the configured speed.
  const float TypeSpeed=S?BattleSquadType::SpeedAt(S->SquadType,GetWorld(),Pos):1.f;
  const float Speed=GetDefault<UBattleTuning>()->MoveSpeed*TypeSpeed;

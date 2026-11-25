@@ -72,6 +72,8 @@ int32 FBattleSquadListLayout::RowAt(FVector2D P) const
 bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
 {
  if(bEnabled) return false;
+ // 2026-11-25: authored lanes belong to this world/start, like the per-world lookout cache.
+ SectorLanes.Reset();SectorLaneIndex.Reset();bSectorLanesRead=false;
  // The sector AI combination's default follows the map this runtime starts on (BattleFieldLayout::SectorComboSwitch).
  BattleFieldLayout::SectorComboDefault()=BattleFieldLayout::Of(GetWorld()).bSectorCombo;
  // Explicit opt-in isolated runtime. Legacy trials, saves and network modes are not silently mixed.
@@ -197,7 +199,7 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   }
   const int32 SID=Store->CreateLeaderSquad(Team,IDs,IDs[0],Team==0 && Group!=NoControl);
   if(SID==INDEX_NONE) return false;
-  FBattleLeaderPlan Plan; Plan.Center=Center; Plan.NextThink=GetWorld()->GetTimeSeconds()+.05*(SID%10); Plans.Add(SID,Plan);
+  FBattleLeaderPlan Plan; Plan.Center=Center; Plan.NextThink=GetWorld()->GetTimeSeconds()+.05*(BattleTactics::PhaseIndex(GetWorld(),SID,Team)%10); Plans.Add(SID,Plan);
   IssueOrder(SID,bWideField?EBattleOrder::Hold:Phase3->bEnabled?EBattleOrder::AttackMove:Team?EBattleOrder::AttackMove:EBattleOrder::Hold,bWideField?Center:Phase3->bEnabled?Phase3->Goal(Team,Group):FVector(Team?600:Center.X,Center.Y,0));
  }
  if(DisplayLOD==1 && !VAT->Initialize(this))return false;
@@ -280,6 +282,7 @@ void UBattleLeaderRuntime::Deinitialize()
   if(Manager) for(auto& P:Bodies) if(P.Value.Entity.IsSet() && Manager->IsEntityValid(P.Value.Entity)) Manager->DestroyEntity(P.Value.Entity);
   Bodies.Reset(); Manager.Reset();
  }
+ SectorLanes.Reset();SectorLaneIndex.Reset();bSectorLanesRead=false;
  Super::Deinitialize();
 }
 ABattleUnit* UBattleLeaderRuntime::Actor(int32 ID) const { const auto* B=Bodies.Find(ID); return B?B->Actor.Get():nullptr; }
@@ -867,6 +870,13 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    }
    if(S->TacticalPlan.bAutonomous && S->TacticalPlan.Action==EBattleSquadTactic::Regroup && FVector::Dist2D(From.Location,To.Location)<50)
     P.Path={From.Location,To.Location}; // Followers can converge even when the leader is already at the rally point.
+   // 2026-11-25: replace only entering infantry paths, after mirroring and before movement planning and tracing.
+   if(SectorLanesEnabled() && !VehicleNav && P.Path.Num()>1)ApplySectorLane(SID,Origin,From.Location,To.Location,*Nav);
+  }
+  if(BattleTactics::MoveTraceSquad(SID))
+  {
+   FString TracePoints;for(const FVector& TracePoint:P.Path)TracePoints+=FString::Printf(TEXT(" (%.1f,%.1f)"),TracePoint.X,TracePoint.Y);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MOVE_TRACE_PATH squad=%d now=%.3f origin=(%.2f,%.2f) dest=(%.2f,%.2f) points=%d:%s"),SID,Now,Origin.X,Origin.Y,S->Destination.X,S->Destination.Y,P.Path.Num(),*TracePoints);
   }
   if(bWideField && bStableMovement) BuildMovementPlan(SID);
   else for(int32 ID:S->Members) if(auto* B=Bodies.Find(ID)) B->Waypoint=1;

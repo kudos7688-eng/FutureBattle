@@ -124,6 +124,14 @@ struct FBattleLeaderBody
  int32 Waypoint=1, Pose=0;
  FBattleAnimTasks AnimTasks;
 };
+// 2026-11-25: authored doorway-to-hub routes, read once from this world.
+struct FBattleSectorLane
+{
+ FIntPoint Cell;
+ TArray<FVector> Points;
+ double Length=0.;
+};
+
 struct FBattleLeaderPlan
 {
  int32 OrderRevision=INDEX_NONE, TargetID=INDEX_NONE;
@@ -150,6 +158,10 @@ struct FBattleLeaderPlan
  // Trial -BattleCloseIn=1: in its sector, fighting a target over 90 m away for 8 s while at least even (the -BattleSquadCoverCheck
  // count) = too far (the AI order loop then moves the squad one sector closer, UBattleMatch::CloseInStage).
  double FarSince=0,FarCheckAt=0;bool bCloseIn=false;FVector CloseInAt=FVector::ZeroVector;
+ // Trial -BattleSectorLanes=1 (2026-11-25, default 0): keep the entry lane across replans of the same order.
+ int32 LaneIndex=INDEX_NONE;
+ int32 LaneRevision=INDEX_NONE;
+ FVector LaneGoal=FVector::ZeroVector;
  TArray<FVector> Path;
  FVector Center=FVector::ZeroVector;
  TMap<int32,FVector> ArrivalGoals;
@@ -946,6 +958,12 @@ private:
  TSharedPtr<FMassEntityManager> Manager;
  TMap<int32,FBattleLeaderBody> Bodies;
  TMap<int32,FBattleLeaderPlan> Plans;
+ TArray<FBattleSectorLane> SectorLanes;
+ TMap<FIntPoint,TArray<int32>> SectorLaneIndex;
+ bool bSectorLanesRead=false;
+ static bool SectorLanesEnabled();
+ void ReadSectorLanes();
+ void ApplySectorLane(int32 SquadID,const FVector& Origin,const FVector& From,const FVector& To,class UNavigationSystemV1& Navigation);
  bool ObservedAvoidancePosition(int32 ObserverID,int32 OtherID,FVector& OutPosition) const;
  void BuildObservedAvoidance(int32 ObserverID,TMap<FIntPoint,int32>& OutGrid,TArray<TArray<int32>>& OutBuckets,TMap<int32,FVector>& OutPositions) const;
  TMap<FIntPoint,int32> AvoidanceGrid;

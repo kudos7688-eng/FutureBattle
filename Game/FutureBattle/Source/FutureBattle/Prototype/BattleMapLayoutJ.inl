@@ -89,9 +89,33 @@
 	}
 	FRandomStream RandomJ(20261122);
 	int32 LanesK=0,LaneDroppedK=0,LaneClearedK=0,LaneSectorsK=0;
+	// Generation 9 (2026-11-25, user request: fewer soldiers getting stuck): the blind wall stands 6.6m behind its doorway, which leaves a
+	// slot 6m wide between the yard wall and the blind (generations 5-8: 4.6m and 4m). In generation 8 half the stalls were a crowd,
+	// most of it in such a slot: the doorway is 6m but everybody then turns into a way 4m wide.
+	const double BlindBackK=660.;
+	// Generation 9b: a blind 6.6m back is 18m long (14m at 4.6m), so that it covers the same slanting lines through the doorway as
+	// before (up to about 42 degrees): with 14m the shots beyond 100m rose from 16-21% to 36-39% (g9-K-base).
+	// Generation 9c: not where both blinds of a wall stand on the same side (the walls beside a road, the x = 0 border): at 18m the
+	// two join and close the way out between them, and the road at the town entrance jammed (g9b-K-base: 400 of 783 stalls there).
+	auto BlindHalfK=[](double Back,bool bSameSide){return Back>500.&&!bSameSide?900.:700.;};
 	for(int32 Cx=BattleMapJ::Columns/2;Cx<BattleMapJ::Columns;++Cx)for(int32 Rx=0;Rx<BattleMapJ::Rows;++Rx)
 	{
 		const TCHAR Kx=BattleMapJ::Kind(Cx,Rx);const FVector2D Mx=BattleMapJ::Centre(Cx,Rx);const double SXc=Mx.X,SYc=Mx.Y;
+		// How far behind its doorway a blind of map K stands: 6.6m, but 4.6m (generations 5-8) where it would come within 3m of the
+		// sector's house (at 6.6m two houses lost the way to their upper floor, TERRAIN_MAP_UNREACHED).
+		auto BackOfK=[&](bool bAlongB,double LineB,double SideB,double DoorB2,bool bSameSideB)
+		{
+			// (Tried as 9d and dropped: 4.6m for the walls beside a road and the x = 0 border. The far shots did not go back -
+			// median 33m and 55m, 25 and 38 in 100 beyond 100m - and the stalls rose to 963 against 483 of 9c. User decision
+			// 2026-11-25: getting through comes first on this map, so every wall has the 6m slot; the shots are then about 60m.)
+			(void)bSameSideB;
+			const FVector2D AtB=bAlongB?FVector2D(DoorB2,LineB+SideB*BlindBackK):FVector2D(LineB+SideB*BlindBackK,DoorB2);
+			const int32 CB=Cx+FMath::RoundToInt((AtB.X-SXc)/BattleMapJ::Cell),RB=Rx+FMath::RoundToInt((AtB.Y-SYc)/BattleMapJ::Cell);
+			BattleTerrain::FHouse HB;
+			if(CB<0||CB>=BattleMapJ::Columns||RB<0||RB>=BattleMapJ::Rows||!BattleMapJ::HouseOf(CB,RB,HB))return BlindBackK;
+			const double ReachX=(bAlongB?700.:30.)+HB.W*.5+300.,ReachY=(bAlongB?30.:700.)+HB.H*.5+300.;
+			return FMath::Abs(AtB.X-HB.X)<ReachX&&FMath::Abs(AtB.Y-HB.Y)<ReachY?460.:BlindBackK;
+		};
 		const BattleMapJ::FMirror Mr=BattleMapJ::Mirror(Cx,Rx);
 		const int32 Vr=BattleMapJ::Variant(Cx,Rx,6);const uint32 Hh=BattleMapJ::Hash(Cx,Rx,3);
 		// Map K, generation 8 (lanes inside the sectors): the content below runs twice. PassK 1 only collects the tall pieces
@@ -379,7 +403,7 @@
 				BattleTerrain::FHouse Hk;
 				if(BattleMapJ::HouseOf(Cx,Rx,Hk))BigK.Add(FBox2D(FVector2D(Hk.X-Hk.W*.5-50.,Hk.Y-Hk.H*.5-50.),FVector2D(Hk.X+Hk.W*.5+50.,Hk.Y+Hk.H*.5+50.)));
 			}
-			struct FSideK{bool bOk=false;bool bAlongX=false;double Line=0.,In=0.;double Door[2]={0.,0.};bool bBlind[2]={false,false};};
+			struct FSideK{bool bOk=false;bool bAlongX=false;double Line=0.,In=0.;double Door[2]={0.,0.};bool bBlind[2]={false,false};double Back[2]={460.,460.};bool bSame=false;};
 			// The wall this sector has towards (C2,R2): the same numbers as BorderJ below. Dir: +1 when this sector lies on the
 			// greater side of the border line. bX0: the border on the x = 0 line (both blinds on the east side).
 			auto SideK=[&](int32 C2,int32 R2,bool bAlongX,double At,double Mid,uint32 Pick,double Dir,bool bX0)
@@ -393,7 +417,7 @@
 				const uint32 Bits=bRoadK?(Dir>0.?Pick:(Pick>>7)):Pick;Sd.Line=bRoadK?At+Dir*500.:At;
 				Sd.Door[0]=Mid-1700.+400.*((Bits>>1)%3);Sd.Door[1]=Mid+700.+400.*((Bits>>3)%3);
 				const double SideA=bX0?1.:((Bits>>5)&1)?1.:-1.;
-				Sd.bBlind[0]=bRoadK||SideA==Dir;Sd.bBlind[1]=bRoadK||(bX0?1.:-SideA)==Dir;
+				Sd.bBlind[0]=bRoadK||SideA==Dir;Sd.bBlind[1]=bRoadK||(bX0?1.:-SideA)==Dir;Sd.bSame=bRoadK||bX0;
 				return Sd;
 			};
 			const double HalfK=BattleMapJ::Cell*.5;
@@ -410,30 +434,43 @@
 				SidesK[3].Line=-SidesK[3].Line;SidesK[3].In=1.;const double D0=-SidesK[3].Door[0];SidesK[3].Door[0]=-SidesK[3].Door[1];SidesK[3].Door[1]=D0;
 				Swap(SidesK[3].bBlind[0],SidesK[3].bBlind[1]);
 			}
+			for(FSideK& SdB:SidesK)if(SdB.bOk)for(int32 Bi=0;Bi<2;++Bi)SdB.Back[Bi]=BackOfK(SdB.bAlongX,SdB.Line,SdB.In,SdB.Door[Bi],SdB.bSame);
 			// The blind walls on this sector's side of its four borders (14m x 0.6m, 4.6m inside the wall; BorderJ below builds them
 			// after the content, so the lane has to keep clear of them: a lane from one side can run past the blind of another).
 			TArray<FBox2D> BlindK;
 			for(const FSideK& Sd:SidesK)if(Sd.bOk)for(int32 Bi=0;Bi<2;++Bi)if(Sd.bBlind[Bi])
 			{
-				const double Bc=Sd.Line+Sd.In*460.;
-				BlindK.Add(Sd.bAlongX?FBox2D(FVector2D(Sd.Door[Bi]-700.,Bc-30.),FVector2D(Sd.Door[Bi]+700.,Bc+30.)):FBox2D(FVector2D(Bc-30.,Sd.Door[Bi]-700.),FVector2D(Bc+30.,Sd.Door[Bi]+700.)));
+				const double Bc=Sd.Line+Sd.In*Sd.Back[Bi];
+				const double Bh=BlindHalfK(Sd.Back[Bi],Sd.bSame);BlindK.Add(Sd.bAlongX?FBox2D(FVector2D(Sd.Door[Bi]-Bh,Bc-30.),FVector2D(Sd.Door[Bi]+Bh,Bc+30.)):FBox2D(FVector2D(Bc-30.,Sd.Door[Bi]-Bh),FVector2D(Bc+30.,Sd.Door[Bi]+Bh)));
 			}
 			// The pieces of the lane from doorway Ix of a side to the hub; false when a tall piece or a blind is in the way.
-			auto LaneOfK=[&](const FSideK& Sd,int32 Ix,double HubX,double HubY,TArray<FBox2D>& Out)
+			auto LaneOfK=[&](const FSideK& Sd,int32 Ix,double HubX,double HubY,TArray<FBox2D>& Out,TArray<FVector>* RouteK=nullptr)
 			{
 				const double HubA=Sd.bAlongX?HubX:HubY,HubC=Sd.bAlongX?HubY:HubX,Dr=Sd.Door[Ix],Wd=175.;
-				const double Ea=Sd.bBlind[Ix]?Dr+(HubA>=Dr?900.:-900.):Dr;
-				if(Sd.bBlind[1-Ix]&&FMath::Abs(Ea-Sd.Door[1-Ix])<900.)return false;
+				const double Reach=BlindHalfK(Sd.Back[Ix],Sd.bSame)+200.;const double Ea=Sd.bBlind[Ix]?Dr+(HubA>=Dr?Reach:-Reach):Dr;
+				if(Sd.bBlind[1-Ix]&&FMath::Abs(Ea-Sd.Door[1-Ix])<BlindHalfK(Sd.Back[1-Ix],Sd.bSame)+200.)return false;
 				auto Add=[&](double A0,double A1,double C0,double C1)
 				{
 					const double Al=FMath::Min(A0,A1),Ah=FMath::Max(A0,A1),Cl=FMath::Min(C0,C1),Ch=FMath::Max(C0,C1);
 					Out.Add(Sd.bAlongX?FBox2D(FVector2D(Al,Cl),FVector2D(Ah,Ch)):FBox2D(FVector2D(Cl,Al),FVector2D(Ch,Ah)));
 				};
-				if(Sd.bBlind[Ix])Add(Dr,Ea+(Ea>Dr?Wd:-Wd),Sd.Line+Sd.In*70.,Sd.Line+Sd.In*420.);
+				if(Sd.bBlind[Ix])Add(Dr,Ea+(Ea>Dr?Wd:-Wd),Sd.Line+Sd.In*70.,Sd.Line+Sd.In*(Sd.Back[Ix]-40.));
 				Add(Ea-Wd,Ea+Wd,Sd.Line+Sd.In*40.,HubC+Sd.In*Wd);
 				Add(Ea+(HubA>=Ea?-Wd:Wd),HubA+(HubA>=Ea?Wd:-Wd),HubC-Wd,HubC+Wd);
 				for(const FBox2D& Ln:Out)for(const FBox2D& Bg:BigK)if(Ln.Intersect(Bg))return false;
 				for(const FBox2D& Ln:Out)for(const FBox2D& Bl:BlindK)if(Ln.Intersect(Bl))return false;
+				// 2026-11-25: keep the centreline from the same coordinates as the painted lane for runtime entry routes.
+				if(RouteK)
+				{
+					auto RoutePointK=[&](double AlongK,double AcrossK)
+					{
+						const FVector PointK=Sd.bAlongX?FVector(AlongK,AcrossK,0):FVector(AcrossK,AlongK,0);
+						if(RouteK->IsEmpty()||FVector::Dist2D(RouteK->Last(),PointK)>1.)RouteK->Add(PointK);
+					};
+					RoutePointK(Dr,Sd.Line);
+					if(Sd.bBlind[Ix]){RoutePointK(Dr,Sd.Line+Sd.In*Sd.Back[Ix]*.5);RoutePointK(Ea,Sd.Line+Sd.In*Sd.Back[Ix]*.5);}
+					RoutePointK(Ea,HubC);RoutePointK(HubA,HubC);
+				}
 				return true;
 			};
 			const bool bObjectiveK=Kx==TEXT('O')||Kx==TEXT('D');
@@ -461,11 +498,23 @@
 			{
 				if(!SidesK[Si].bOk)continue;
 				if(BestDoor[Si]<0){++LaneDroppedK;continue;}
-				TArray<FBox2D> Tmp;LaneOfK(SidesK[Si],BestDoor[Si],BestX,BestY,Tmp);++LanesK;
+				TArray<FBox2D> Tmp;TArray<FVector> RouteK;LaneOfK(SidesK[Si],BestDoor[Si],BestX,BestY,Tmp,&RouteK);++LanesK;
 				for(const FBox2D& Ln:Tmp)
 				{
 					LaneK.Add(Ln);const FVector2D Cn=Ln.GetCenter(),Sz=Ln.GetSize();
 					for(int32 Sg:{-1,1})Box(TEXT("Lane"),FVector(Cn.X*Sg,Cn.Y*Sg,2.25),FVector(Sz.X,Sz.Y,4.5),LaneMatJ,false);
+				}
+				// 2026-11-25: non-colliding markers carry both rotated routes; at most five integer pairs fit below 900 characters.
+				for(int32 RouteSignK:{-1,1})
+				{
+					FString RouteTagK=TEXT("LanePts=");
+					for(const FVector& RouteAtK:RouteK)
+					{
+						if(RouteTagK.Len()>8)RouteTagK+=TEXT(";");
+						RouteTagK+=FString::Printf(TEXT("%d,%d"),FMath::RoundToInt(RouteAtK.X*RouteSignK),FMath::RoundToInt(RouteAtK.Y*RouteSignK));
+					}
+					AStaticMeshActor* RouteActorK=Box(TEXT("LaneRoute"),FVector(BestX*RouteSignK,BestY*RouteSignK,2),FVector(20,20,4),LaneMatJ,false);
+					RouteActorK->Tags.Add(TEXT("BattleLaneRoute"));RouteActorK->Tags.Add(FName(*RouteTagK));
 				}
 			}
 			PassK=bDryK?2:0;
@@ -503,7 +552,7 @@
 					const double SideA=Side!=0.?Side:((Bits>>5)&1)?1.:-1.;const double Doors[2][2]={{DoorA,SideA},{DoorB,Side!=0.?Side:-SideA}};
 					for(const auto& D:Doors)
 					{
-						if(bAlongX)Emit(TEXT("YardBlind"),D[0],Line+D[1]*460.,1400,60,250);else Emit(TEXT("YardBlind"),Line+D[1]*460.,D[0],60,1400,250);
+						if(bAlongX){const double Bk=BackOfK(true,Line,D[1],D[0],Side!=0.);Emit(TEXT("YardBlind"),D[0],Line+D[1]*Bk,2.*BlindHalfK(Bk,Side!=0.),60,250);}else{const double Bk=BackOfK(false,Line,D[1],D[0],Side!=0.);Emit(TEXT("YardBlind"),Line+D[1]*Bk,D[0],60,2.*BlindHalfK(Bk,Side!=0.),250);}
 					}
 				};
 				if(bRoadJ){WallK(At+500.,1.,Pick);WallK(At-500.,-1.,Pick>>7);}
@@ -523,5 +572,6 @@
 	}
 	UseJ(GreyJ);
 	if(BattleMapJ::bDenseCover)UE_LOG(LogTemp,Display,TEXT("TOWN_K_LANES sectors=%d lanes=%d dropped=%d cleared=%d (x2 by rotation)"),LaneSectorsK,LanesK,LaneDroppedK,LaneClearedK);
+	if(BattleMapJ::bDenseCover)UE_LOG(LogTemp,Display,TEXT("TOWN_K_LANE_ROUTES routes=%d"),LanesK*2);
 	UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_LAYOUT objects=%d (x2 by rotation) layout=terrain-j-v1"),Objects);
 }

@@ -389,6 +389,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  if(bArea&&(BattleTactics::ATHunt()||BattleTactics::ATFire()))UpdateATHunts(Team);
  // Routes (map F): what the team sees now, gathered once for all its squads.
  const bool bRoutes=bStrategy&&RoutesOn();TArray<FVector> RouteEnemies;if(bRoutes)RouteEnemies=RouteKnownEnemies(Team);
+ TArray<int32> RouteLoad; // -BattleRouteLoad: squads of this team already sent over each road section in this round
 	for (const auto& Pair : Store->GetSquads()) if (Pair.Value.Team == Team)
 	{
 		// Public objective status only; never use an unseen enemy's location.
@@ -484,6 +485,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   if(bStrategy&&Pair.Value.SquadType==BattleSquadType::Supply)SupplyCarOrder(Pair.Key,Team,Center,Order);
   // Routes: a distant goal is reached junction by junction along the roads of the map (BattleRoutes.cpp). Not for scout pairs
   // (their posts and fall-backs are their own) or the home defence.
+  // Diagnosis -BattleOrderTrace=1 (2026-11-25, log only): the goal before the road routing, for BATTLE_ORDER_TRACE below.
+  const FVector TraceGoal=Center;
   bool bRoadWaypoint=false,bSectorStage=false;
   // A surprise bridge leg is already a precise waypoint; road/sector routing must not replace it with another crossing.
   bool bSurpriseBridge=false;
@@ -494,7 +497,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     const FVector P=Runtime->Position(Pair.Value.LeaderUnitID);
     // The player's route choice for the squad comes before the AI's own (empty map in matches without a player's choice).
     const bool bChosen=!PlayerRoutes.IsEmpty()&&PlayerRouteLane(Pair.Key)!=0;
-    FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault&&!(BattleTactics::GroupSupplySlot()&&Pair.Value.SquadType==BattleSquadType::Supply)?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies);
+    FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault&&!(BattleTactics::GroupSupplySlot()&&Pair.Value.SquadType==BattleSquadType::Supply)?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies,&RouteLoad,Pair.Key);
     // -BattlePinnedFlank: a pinned AI sector squad first takes a sector beside the threat.
     static const bool bSectorAIOn=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
     FVector PinStage;
@@ -540,6 +543,14 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     if(bRaidDuty || bMortarPost || bSurpriseBridge || bHomeDefence || Order!=EBattleOrder::AttackMove || (WatchGroup && WatchGroup->Phase==0) || Leader->IsVehicle(S.LeaderUnitID))ArriveWatches.Remove(Pair.Key);
     else if(ArriveWatchHolds(S,Leader->Position(S.LeaderUnitID)))continue;
    }
+   // Diagnosis -BattleOrderTrace=1 (2026-11-25, default 0, log only): every new mission of an infantry squad - where the leader stands, the
+   // goal the layers above gave (group, front, flank), and what the road routing made of it. Map K with lanes: the destination sector
+   // of a squad alternated every order round (1221 of 1513 lane choices in a match).
+   static const bool bOrderTrace=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleOrderTrace="),V);return V!=0;}();
+   if(bOrderTrace && !Leader->IsVehicle(S.LeaderUnitID) && (!S.bHasMission || S.bSectorMission!=Sector || S.MissionOrder!=Order || !(Sector?BattleSectors::Cell(S.MissionDestination)==BattleSectors::Cell(Center):S.MissionDestination.Equals(Center,20))))
+   {const FVector TraceAt=Leader->Position(S.LeaderUnitID);
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ORDER_TRACE squad=%d team=%d at=(%.0f,%.0f) goal=(%.0f,%.0f) now=(%.0f,%.0f) was=(%.0f,%.0f) order=%d road=%d stage=%d sector=%d group=%d"),
+     Pair.Key,Team,TraceAt.X,TraceAt.Y,TraceGoal.X,TraceGoal.Y,Center.X,Center.Y,S.MissionDestination.X,S.MissionDestination.Y,int32(Order),bRoadWaypoint?1:0,bSectorStage?1:0,Sector?1:0,GroupOf(Pair.Key));}
    if(!S.bHasMission || S.bSectorMission!=Sector || S.MissionOrder!=Order || !(Sector?BattleSectors::Cell(S.MissionDestination)==BattleSectors::Cell(Center):S.MissionDestination.Equals(Center,20))) if(!Leader->SameVehicleMission(Pair.Key,Order,Center)) Leader->IssueOrder(Pair.Key,Order,Center,true,Sector);
    continue;
   }
