@@ -18,9 +18,9 @@ if($timedOut){Stop-Process -Id $p.Id;$p.WaitForExit()}
 $p.Refresh()
 $log=if(Test-Path "$out/run.log"){Get-Content "$out/run.log" -Raw}else{''}
 $checks=@([regex]::Matches($log,'BATTLE_COVERFP_CHECK[^\r\n]+')|ForEach-Object {$_.Value})
-$ok=!$timedOut -and $p.ExitCode -eq 0 -and $log -match 'BATTLE_COVERFP_RESULT failures=0(?:\r?\n|$)' -and $checks.Count -eq 6 -and @($checks|Where-Object {$_ -notmatch ' ok=1 ' }).Count -eq 0
+$ok=!$timedOut -and $p.ExitCode -eq 0 -and $log -match 'BATTLE_COVERFP_RESULT failures=0(?:\r?\n|$)' -and $checks.Count -eq 8 -and @($checks|Where-Object {$_ -notmatch ' ok=1 ' }).Count -eq 0
 @{passed=$ok;timedOut=$timedOut;exitCode=$p.ExitCode;dll=(Get-FileHash $dll).Hash;checks=$checks}|ConvertTo-Json -Depth 5|Set-Content "$out/result.json" -Encoding utf8
 $checks|Write-Output
-if($timedOut -or $log -match 'Fatal error:|Assertion failed:' -or $checks.Count -ne 6 -or (!$ok -and !$Probe)){throw "Cover fire point trial failed: $out"}
+if($timedOut -or $log -match 'Fatal error:|Assertion failed:' -or $checks.Count -ne 8 -or (!$ok -and !$Probe)){throw "Cover fire point trial failed: $out"}
 Write-Output "Evidence: $out"
 

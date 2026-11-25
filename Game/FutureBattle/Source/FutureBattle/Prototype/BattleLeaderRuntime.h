@@ -556,6 +556,7 @@ public:
  bool CoverLineClear(int32 ID,FVector From,FVector Threat) const;
  // Re-picks a peek point beside the cover anchor with a clear line to Threat; false keeps the soldier hidden.
  bool RevalidatePeek(int32 ID,FVector Threat);
+ bool CoverStepFirePoint(FVector Anchor,FVector Threat,FVector Lateral,FVector Facing,float Hidden,FVector& OutPeek);
  bool CoverFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& OutPeek,uint8& OutKind,uint8 AllowedKinds=3,bool bPeekLine=false);
  // Suppression trial (-BattleSuppression=1, see BattleSuppression.h). Runtime only: time at which each unit's level decays to zero.
  TMap<int32,double> SuppressionZeroAt;

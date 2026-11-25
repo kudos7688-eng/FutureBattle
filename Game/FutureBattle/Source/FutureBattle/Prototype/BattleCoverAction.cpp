@@ -110,22 +110,44 @@ bool UBattleLeaderRuntime::CoverFirePoint(int32 ID,FVector Anchor,FVector Threat
  return false;
 }
 
+// Level 2 request fallback only: keep the baseline step order, projection bounds and exposure tests.
+// The caller supplies the request's lateral direction (from the soldier, not from each anchor).
+bool UBattleLeaderRuntime::CoverStepFirePoint(FVector Anchor,FVector Threat,FVector Lateral,FVector Facing,float Hidden,FVector& OutPeek)
+{
+ auto* StepNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!StepNav)return false;
+ const FVector StepEye=Threat+FVector(0,0,60);
+ for(float StepOffset:{-220.f,220.f,-400.f,400.f})
+ {
+  FNavLocation StepProjected;if(!StepNav->ProjectPointToNavigation(Anchor+Lateral*StepOffset-FVector(0,0,90),StepProjected,FVector(50,50,150))){SightExperiment.Cover(TEXT("peek_off_navmesh"));continue;}
+  const FVector StepPeek=StepProjected.Location+FVector(0,0,90);
+  if(PeekRangeCheck()){const double StepDistance=FVector::Dist2D(Anchor,StepPeek);if(StepDistance<100.||StepDistance>450.)continue;}
+  if(GetWorld()->SweepTestByObjectType(Anchor,StepPeek,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88))){SightExperiment.Cover(TEXT("peek_path_blocked"));continue;}
+  if(BattleTactics::ExposureAt(GetWorld(),StepPeek,Facing,StepEye).Fraction()<Hidden+.39f){SightExperiment.Cover(TEXT("peek_not_exposed_enough"));continue;}
+  if(!BattleTactics::HasTerrainLine(GetWorld(),StepPeek+FVector(0,0,60),StepEye)){SightExperiment.Cover(TEXT("peek_no_line_to_threat"));continue;}
+  OutPeek=StepPeek;return true;
+ }
+ return false;
+}
+
 bool UBattleLeaderRuntime::RevalidatePeek(int32 ID,FVector Threat)
 {
  auto* U=GetWorld()->GetSubsystem<UBattleState>()->Units.Find(ID);if(!U)return false;
  // -BattleCoverFirePoint: the current peek still sees the threat, or one over the cover / a short step past its edge does
- // (never the 220/400 cm walk-outs below).
+ // (level 2 may retain a previous step after both short firing-point checks fail).
  if(BattleTactics::CoverFirePointEnabled())
  {
   // Do not recheck ThreatSeen here: exposed anchors must not leave soldiers waiting instead of firing.
   const double CheckedDistance=FVector::Dist2D(U->CoverAnchor,U->CoverPeek);
   if((CheckedDistance<=1. || (CheckedDistance>=100. && CheckedDistance<=120.)) && CoverLineClear(ID,U->CoverPeek,Threat))return true;
   FVector CheckedPeek;uint8 CheckedKind=0;
-  if(!CoverFirePoint(ID,U->CoverAnchor,Threat,CheckedPeek,CheckedKind,3,true))return false;
-  U->CoverPeek=CheckedPeek;SightExperiment.Cover(TEXT("peek_repicked"));return true;
+  if(CoverFirePoint(ID,U->CoverAnchor,Threat,CheckedPeek,CheckedKind,3,true))
+  {U->CoverPeek=CheckedPeek;SightExperiment.Cover(TEXT("peek_repicked"));return true;}
+  // Match EndPeekDiag: 100..120 cm is lean, not step. Do not turn a failed lean/over into a walk-out.
+  if(BattleTactics::CoverFirePointLevel()<2 || CheckedDistance<=120. || CheckedDistance>450.)return false;
+  if(CoverLineClear(ID,U->CoverPeek,Threat))return true;
  }
  const double ExistingDistance=PeekRangeCheck()?FVector::Dist2D(U->CoverAnchor,U->CoverPeek):0.;
- if((!PeekRangeCheck()||ExistingDistance==0.||(ExistingDistance>=100.&&ExistingDistance<=450.))&&CoverLineClear(ID,U->CoverPeek,Threat))return true;
+ if(!BattleTactics::CoverFirePointEnabled() && (!PeekRangeCheck()||ExistingDistance==0.||(ExistingDistance>=100.&&ExistingDistance<=450.))&&CoverLineClear(ID,U->CoverPeek,Threat))return true;
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!Nav)return false;
  const FVector Anchor=U->CoverAnchor,Lateral=FVector::CrossProduct((Threat-Anchor).GetSafeNormal2D(),FVector::UpVector);
  for(float Offset:{-220.f,220.f,-400.f,400.f})
@@ -162,10 +184,12 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
  TArray<FVector,TInlineAllocator<3>> Threats;if(bThreats)GatherThreats(ID,Threat,Now,Threats);
  TArray<int32> Candidates=Cover->NearbySlots(Pos,FMath::Max(0.f,SearchRadius>=0?SearchRadius:Tuning->CoverActionSearchRadius),BattleFieldLayout::IsUrban(GetWorld())?12:FMath::Max(1,Tuning->CoverActionCandidateLimit));
  TArray<int32> Deferred;
+ struct FStepCandidate{int32 Slot;FVector Anchor;float Hidden;};
  for(int32 Pass=0;Pass<2;++Pass)
  {
  // bAllHidden (a soldier leaving a flanked place): only places hidden from every threat, no second pass.
  if(Pass==1){if(Deferred.IsEmpty() || bAllHidden)break;Candidates=MoveTemp(Deferred);Diag.Cover(TEXT("threat_request_second_pass"));}
+ TArray<FStepCandidate,TInlineAllocator<12>> StepCandidates;
  for(int32 Slot:Candidates)
  {
   const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
@@ -182,7 +206,12 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
   if(BattleTactics::CoverFirePointEnabled() && !(Bodies.FindChecked(ID).Actor.IsValid() && Bodies.FindChecked(ID).Actor->IsPlayerControlled()))
   {
    FVector FirePeek;uint8 FireKind=0;
-   if(!CoverFirePoint(ID,Anchor,Threat,FirePeek,FireKind)){Diag.Cover(TEXT("cover_fire_point_none"));continue;}
+   if(!CoverFirePoint(ID,Anchor,Threat,FirePeek,FireKind))
+   {
+    Diag.Cover(TEXT("cover_fire_point_none"));
+    if(BattleTactics::CoverFirePointLevel()>=2)StepCandidates.Add({Slot,Anchor,Hidden});
+    continue;
+   }
    Diag.Cover(FireKind==1?TEXT("cover_fire_point_over"):TEXT("cover_fire_point_lean"));
    Stage=FMath::Max(Stage,5);if(!Cover->Reserve(Slot,ID,Now))continue;
    Diag.Cover(TEXT("request_success"));if(FireKind==1)Diag.Cover(TEXT("request_success_stand_up"));
@@ -228,6 +257,17 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
    U->CoverOrderRevision=U->OrderRevision;U->CoverTargetID=Target;U->DecisionReason=TEXT("COVER / ENTER PHYSICAL SHELTER");
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVER_ACTION unit=%d slot=%d hidden=%.2f peek_cm=%.1f"),ID,Slot,Hidden,FVector::Dist2D(Anchor,Peek));return true;
   }
+ }
+ // Preserve threat-pass priority: safe step cover precedes the deferred, other-threat-exposed slots.
+ // Reserve only after all short firing points in this pass have been tried; a failed reservation tries the next slot.
+ for(const FStepCandidate& StepCandidate:StepCandidates)
+ {
+  FVector StepPoint;
+  if(!CoverStepFirePoint(StepCandidate.Anchor,Threat,Lateral,Forward(ID),StepCandidate.Hidden,StepPoint))continue;
+  Stage=FMath::Max(Stage,5);if(!Cover->Reserve(StepCandidate.Slot,ID,Now))continue;
+  Diag.Cover(TEXT("cover_fire_point_step"));Diag.Cover(TEXT("request_success"));
+  U->CoverAnchor=StepCandidate.Anchor;U->CoverPeek=StepPoint;U->CoverSlot=StepCandidate.Slot;U->CoverPhase=1;U->CoverSeconds=3;
+  U->CoverOrderRevision=U->OrderRevision;U->CoverTargetID=Target;U->DecisionReason=TEXT("COVER / FIRE POINT STEP");return true;
  }
  }
  Diag.Cover(StageKeys[Stage]);if(Diag.Enabled)LastCoverStage.Add(ID,(int8)Stage);

@@ -14,18 +14,18 @@ void UBattleLeaderRuntime::RunCoverFirePointTrial()
  Mode->bCombatPaused=true;
  auto* TrialWorld=GetWorld();auto* TrialNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(TrialWorld);
  int32 TrialFailures=0;
- const TCHAR* TrialNames[]={TEXT("A"),TEXT("B"),TEXT("C")};
- const double TrialLengths[]={400.,1200.,300.};
- const double TrialHeights[]={120.,250.,250.};
- for(int32 TrialIndex=0;TrialIndex<3;++TrialIndex)
+ const TCHAR* TrialNames[]={TEXT("A"),TEXT("B"),TEXT("C"),TEXT("D")};
+ const double TrialLengths[]={400.,1200.,300.,1200.};
+ const double TrialHeights[]={120.,250.,250.,250.};
+ for(int32 TrialIndex=0;TrialIndex<4;++TrialIndex)
  {
-  // Same open strip as the movement fixtures, with separate lanes for the three walls.
+  // Same open strip as the movement fixtures, with separate lanes for the four walls.
   FVector TrialGround(-9595,-4000+TrialIndex*4000,0);
   FHitResult TrialFloor;
   const bool bTrialFloor=TrialWorld->LineTraceSingleByObjectType(TrialFloor,TrialGround+FVector(0,0,500),TrialGround-FVector(0,0,500),FCollisionObjectQueryParams(ECC_WorldStatic));
   if(bTrialFloor)TrialGround.Z=TrialFloor.ImpactPoint.Z;
-  // C is 25 cm inside its positive-Y edge; its threat is straight ahead of the anchor.
-  FVector TrialWallAt=TrialGround+FVector(95,TrialIndex==2?-125:0,TrialHeights[TrialIndex]*.5);
+  // C is 25 cm, D is 200 cm inside its positive-Y edge; its threat is straight ahead of the anchor.
+  FVector TrialWallAt=TrialGround+FVector(95,TrialIndex==2?-125:TrialIndex==3?-400:0,TrialHeights[TrialIndex]*.5);
   auto* TrialWall=TrialWorld->SpawnActor<AActor>();
   bool bTrialFixture=bTrialFloor && TrialNav && BattleStance::Enabled(TrialWorld) && TrialWall;
   if(TrialWall)
@@ -50,11 +50,23 @@ void UBattleLeaderRuntime::RunCoverFirePointTrial()
   FVector TrialPeek=TrialAnchor;uint8 TrialKind=0;
   const bool bTrialFire=CoverFirePoint(INDEX_NONE,TrialAnchor,TrialThreat,TrialPeek,TrialKind,3,false);
   const double TrialPeekCM=FVector::Dist2D(TrialAnchor,TrialPeek);
-  const bool bTrialExpected=TrialIndex!=1;
-  const bool bTrialShape=TrialIndex==0?(TrialKind==1 && TrialPeek.Equals(TrialAnchor,.01)):TrialIndex==1?TrialKind==0:(TrialKind==2 && TrialPeekCM>=100. && TrialPeekCM<=120.);
+  const bool bTrialExpected=TrialIndex==0 || TrialIndex==2;
+  const bool bTrialShape=TrialIndex==0?(TrialKind==1 && TrialPeek.Equals(TrialAnchor,.01)):(TrialIndex==1 || TrialIndex==3)?TrialKind==0:(TrialKind==2 && TrialPeekCM>=100. && TrialPeekCM<=120.);
   const bool bTrialCoverOK=bTrialFixture && bTrialFire==bTrialExpected && bTrialShape;
   TrialFailures+=!bTrialCoverOK;
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVERFP_CHECK name=%s_cover ok=%d kind=%d peek_cm=%.3f"),TrialNames[TrialIndex],bTrialCoverOK,int32(TrialKind),TrialPeekCM);
+  if(TrialIndex==3)
+  {
+   // Exercise the level 2 fallback directly; retain -BattleCoverFirePoint=1 and the original six checks.
+   const float TrialHidden=BattleTactics::ExposureAt(TrialWorld,TrialAnchor,TrialDirection,TrialThreat+FVector(0,0,60)).Fraction();
+   FVector TrialStepPeek=TrialAnchor;
+   const bool bTrialStep=CoverStepFirePoint(TrialAnchor,TrialThreat,FVector::CrossProduct(TrialDirection,FVector::UpVector),TrialDirection,TrialHidden,TrialStepPeek);
+   const double TrialStepCM=FVector::Dist2D(TrialAnchor,TrialStepPeek);
+   const bool bTrialStepOK=bTrialFixture && !bTrialFire && TrialHidden<=.4f && bTrialStep && TrialStepCM>120. && TrialStepCM<=450.;
+   TrialFailures+=!bTrialStepOK;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVERFP_CHECK name=D_step ok=%d kind=3 peek_cm=%.3f"),bTrialStepOK,TrialStepCM);
+   continue;
+  }
   const bool bTrialArrival=BattleCoverFire::ArrivalFirePoint(TrialWorld,TrialNav,TrialGround,TrialDirection);
   const bool bTrialArrivalOK=bTrialFixture && bTrialArrival==bTrialExpected;TrialFailures+=!bTrialArrivalOK;
   // Arrival returns only a bool; -1 marks kind/distance as unavailable, not inferred from CoverFirePoint.
