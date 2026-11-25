@@ -444,7 +444,7 @@
 				const double Bh=BlindHalfK(Sd.Back[Bi],Sd.bSame);BlindK.Add(Sd.bAlongX?FBox2D(FVector2D(Sd.Door[Bi]-Bh,Bc-30.),FVector2D(Sd.Door[Bi]+Bh,Bc+30.)):FBox2D(FVector2D(Bc-30.,Sd.Door[Bi]-Bh),FVector2D(Bc+30.,Sd.Door[Bi]+Bh)));
 			}
 			// The pieces of the lane from doorway Ix of a side to the hub; false when a tall piece or a blind is in the way.
-			auto LaneOfK=[&](const FSideK& Sd,int32 Ix,double HubX,double HubY,TArray<FBox2D>& Out)
+			auto LaneOfK=[&](const FSideK& Sd,int32 Ix,double HubX,double HubY,TArray<FBox2D>& Out,TArray<FVector>* RouteK=nullptr)
 			{
 				const double HubA=Sd.bAlongX?HubX:HubY,HubC=Sd.bAlongX?HubY:HubX,Dr=Sd.Door[Ix],Wd=175.;
 				const double Reach=BlindHalfK(Sd.Back[Ix],Sd.bSame)+200.;const double Ea=Sd.bBlind[Ix]?Dr+(HubA>=Dr?Reach:-Reach):Dr;
@@ -459,6 +459,18 @@
 				Add(Ea+(HubA>=Ea?-Wd:Wd),HubA+(HubA>=Ea?Wd:-Wd),HubC-Wd,HubC+Wd);
 				for(const FBox2D& Ln:Out)for(const FBox2D& Bg:BigK)if(Ln.Intersect(Bg))return false;
 				for(const FBox2D& Ln:Out)for(const FBox2D& Bl:BlindK)if(Ln.Intersect(Bl))return false;
+				// 2026-11-25: keep the centreline from the same coordinates as the painted lane for runtime entry routes.
+				if(RouteK)
+				{
+					auto RoutePointK=[&](double AlongK,double AcrossK)
+					{
+						const FVector PointK=Sd.bAlongX?FVector(AlongK,AcrossK,0):FVector(AcrossK,AlongK,0);
+						if(RouteK->IsEmpty()||FVector::Dist2D(RouteK->Last(),PointK)>1.)RouteK->Add(PointK);
+					};
+					RoutePointK(Dr,Sd.Line);
+					if(Sd.bBlind[Ix]){RoutePointK(Dr,Sd.Line+Sd.In*Sd.Back[Ix]*.5);RoutePointK(Ea,Sd.Line+Sd.In*Sd.Back[Ix]*.5);}
+					RoutePointK(Ea,HubC);RoutePointK(HubA,HubC);
+				}
 				return true;
 			};
 			const bool bObjectiveK=Kx==TEXT('O')||Kx==TEXT('D');
@@ -486,11 +498,23 @@
 			{
 				if(!SidesK[Si].bOk)continue;
 				if(BestDoor[Si]<0){++LaneDroppedK;continue;}
-				TArray<FBox2D> Tmp;LaneOfK(SidesK[Si],BestDoor[Si],BestX,BestY,Tmp);++LanesK;
+				TArray<FBox2D> Tmp;TArray<FVector> RouteK;LaneOfK(SidesK[Si],BestDoor[Si],BestX,BestY,Tmp,&RouteK);++LanesK;
 				for(const FBox2D& Ln:Tmp)
 				{
 					LaneK.Add(Ln);const FVector2D Cn=Ln.GetCenter(),Sz=Ln.GetSize();
 					for(int32 Sg:{-1,1})Box(TEXT("Lane"),FVector(Cn.X*Sg,Cn.Y*Sg,2.25),FVector(Sz.X,Sz.Y,4.5),LaneMatJ,false);
+				}
+				// 2026-11-25: non-colliding markers carry both rotated routes; at most five integer pairs fit below 900 characters.
+				for(int32 RouteSignK:{-1,1})
+				{
+					FString RouteTagK=TEXT("LanePts=");
+					for(const FVector& RouteAtK:RouteK)
+					{
+						if(RouteTagK.Len()>8)RouteTagK+=TEXT(";");
+						RouteTagK+=FString::Printf(TEXT("%d,%d"),FMath::RoundToInt(RouteAtK.X*RouteSignK),FMath::RoundToInt(RouteAtK.Y*RouteSignK));
+					}
+					AStaticMeshActor* RouteActorK=Box(TEXT("LaneRoute"),FVector(BestX*RouteSignK,BestY*RouteSignK,2),FVector(20,20,4),LaneMatJ,false);
+					RouteActorK->Tags.Add(TEXT("BattleLaneRoute"));RouteActorK->Tags.Add(FName(*RouteTagK));
 				}
 			}
 			PassK=bDryK?2:0;
@@ -548,5 +572,6 @@
 	}
 	UseJ(GreyJ);
 	if(BattleMapJ::bDenseCover)UE_LOG(LogTemp,Display,TEXT("TOWN_K_LANES sectors=%d lanes=%d dropped=%d cleared=%d (x2 by rotation)"),LaneSectorsK,LanesK,LaneDroppedK,LaneClearedK);
+	if(BattleMapJ::bDenseCover)UE_LOG(LogTemp,Display,TEXT("TOWN_K_LANE_ROUTES routes=%d"),LanesK*2);
 	UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_LAYOUT objects=%d (x2 by rotation) layout=terrain-j-v1"),Objects);
 }
