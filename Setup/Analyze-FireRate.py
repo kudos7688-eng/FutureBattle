@@ -21,7 +21,7 @@ INTERVAL = 1.4
 
 def analyse(run):
     folder = run if os.path.isdir(run) else os.path.join(BASE, run)
-    m = json.load(open(os.path.join(folder, 'metrics.json'), encoding='utf-8'))
+    m = json.load(open(os.path.join(folder, 'metrics.json'), encoding='utf-8-sig'))
     shots, first_living, seen = collections.Counter(), {}, {}
     contact_squad, all_squad, contact_person, all_person = 0., 0., 0., 0.
     with open(os.path.join(folder, 'run.log'), encoding='utf-8', errors='replace') as log:
@@ -51,6 +51,14 @@ def analyse(run):
     plan = m.get('tactical_squad_seconds', {})
     plan_total = sum(plan.values()) or 1
     print('==', os.path.basename(folder.rstrip('/\\')), '(%.0f s)' % m['match_seconds'])
+    for side in ('ally', 'enemy'):
+        act = m[side + '_type_activity']
+        print(' %s: score %s, shots %d, damage dealt %.0f, kills %d, deaths %d, alive at end %s' % (
+            side, m.get(side + '_score'), sum(a['shots'] for a in act), sum(a['damage'] for a in act), sum(a['kills'] for a in act),
+            sum(a['deaths'] for a in act), m.get(side + '_alive')))
+    ev = m.get('tactical_events', {})
+    print(' result: winner %s (%s); supply trips home %d (out of ammunition %d, low ammunition %d), to a supply vehicle %d' % (
+        m.get('winner'), m.get('reason'), ev.get('HomeSupplyReturn', 0), ev.get('HomeSupplyReturnAmmo', 0), ev.get('HomeSupplyReturnLowAmmo', 0), ev.get('FieldSupplyGo', 0)))
     print(' all shots %d, rifle shots %d, rifleman-seconds %.0f (about %.0f riflemen alive on average)' % (
         m['shots'], rifle_shots, rifle_seconds, rifle_seconds / m['match_seconds']))
     print(' per rifleman: %.1f shots in the match, %.2f per minute; ceiling at one shot per %.1f s: %.0f per minute -> %.1f%% of the ceiling' % (

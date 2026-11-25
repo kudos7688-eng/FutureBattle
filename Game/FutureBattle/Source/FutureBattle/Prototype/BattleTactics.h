@@ -27,6 +27,15 @@ namespace BattleTactics
  // carbine carries. Other weapons are unchanged.
  int32 CarbineShotRounds();
  int32 CarbineReserve();
+ // Fire trial (2026-11-25, STATUS "弾薬と補給"; user: the 1.4 s pace of an AI rifle was the wrong base). -BattleBurstFire=n (default 0 =
+ // off, 2..10): an AI soldier's carbine fires bursts of n rounds at the player's interval (UBattleTuning::ShotInterval for the
+ // player), then holds for -BattleBurstPause=s (default 1.0, 0.2..5; from the
+ // burst's last round to the next burst's first). Each round is a real shot (damage, spread, one round of
+ // ammunition). The count within a burst is not saved (a new burst after a load).
+ // -BattleCoverPeekShots=n (default 0 = UBattleTuning::AICoverShotsPerPeek, 1..30): shots after which an AI peek out of cover ends.
+ int32 BurstFire();
+ float BurstPause();
+ int32 CoverPeekShots();
  // Stage 2: -BattleSupplyAmmoShare=x (default 0 = off, 0..0.9): an infantry squad whose living members together hold x or less of
  // their full reserve (loaded rounds are not counted, so a refilled squad is never low) goes for ammunition (a supply vehicle in
  // reach, else home), instead of only when half or all of them are empty; it resumes with 0.9 of the reserve or more. Own squad

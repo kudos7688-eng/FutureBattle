@@ -24,6 +24,21 @@ float BattleTactics::LeaderHealthMultiplier()
  return Multiplier;
 }
 
+int32 BattleTactics::BurstFire()
+{
+ static const int32 Rounds=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleBurstFire="),Value);return Value<2?0:FMath::Min(Value,10);}();
+ return Rounds;
+}
+float BattleTactics::BurstPause()
+{
+ static const float Seconds=[](){float Value=1.f;FParse::Value(FCommandLine::Get(),TEXT("BattleBurstPause="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,.2f,5.f):1.f;}();
+ return Seconds;
+}
+int32 BattleTactics::CoverPeekShots()
+{
+ static const int32 Shots=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverPeekShots="),Value);return FMath::Clamp(Value,0,30);}();
+ return Shots;
+}
 int32 BattleTactics::CarbineShotRounds()
 {
  static const int32 Rounds=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCarbineShotRounds="),Value);return FMath::Clamp(Value,1,10);}();
