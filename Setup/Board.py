@@ -15,6 +15,9 @@ Usage (any Python 3; from Bash or PowerShell):
   python -I Setup/Board.py done --who 個人AI [--id C3] --result "原因は詰め寄りの出発距離" --ref "STATUS 11-22 13:35"
   python -I Setup/Board.py status                                # open claims (stale ones marked)
   python -I Setup/Board.py drop --who 個人AI [--id C3]             # abandon a claim without a result
+  python -I Setup/Board.py plan --who 個人AI --question "問い" --why "既存結果では不明" \\
+         --runs "1条件×2シード、I、2本" --stop "差がなければ終了" [--keys a,b] [--stage 3] [--ref ...]
+                                                                # stage: 2 activation, 3 baseline comparison, 4 adoption (239/277)
 
 A text that starts with "-" (a switch name) must be written as --fact=-Battle... / --result=-Battle... (argparse).
 Matching is plain case-insensitive substring matching of every key / topic word against the other entry's topic, keys, question
@@ -134,7 +137,7 @@ def words(topic, keys):
 
 def text_of(e):
     return ' '.join([e.get('topic', ''), ' '.join(e.get('keys', [])), e.get('question', ''),
-                     e.get('fact', ''), e.get('result', '')]).lower()
+                     e.get('fact', ''), e.get('result', ''), e.get('why', ''), e.get('runs', '')]).lower()
 
 
 def hits(ws, e):
@@ -162,6 +165,10 @@ def fmt_claim(c, matched=None):
 def fmt_finding(r, matched=None):
     kind = '結論' if r['kind'] == 'done' else ('取下げ' if r['kind'] == 'drop' else '事実')
     body = r.get('result') or r.get('fact') or ''
+    if r['kind'] == 'plan':
+        kind = '申請'
+        body = f"問い: {r['question']} / 本数: {r['runs']} / やめる条件: {r['stop']} / 段階: {r['stage']}"
+        body = ' '.join(body.splitlines())
     s = f"{short(r['time'])} {r['who']} [{kind}{'・' + r['claim'] if r.get('claim') else ''}] "
     if r['kind'] in ('done', 'drop') and r.get('topic'):
         s += f"{r['topic']} → "
@@ -242,6 +249,19 @@ def cmd_note(a):
     print('記録した。')
 
 
+def cmd_plan(a):
+    with Locked():
+        b = load_board()
+        mine = [c for c in b['claims'] if c['who'] == a.who]
+        c = mine[0] if len(mine) == 1 else None
+        keys = split_keys(a.keys) or (c['keys'] if c else [])
+        report_matches(words(a.question, keys), b)
+        append_finding({'time': iso(now()), 'kind': 'plan', 'who': a.who,
+                        'claim': c['id'] if c else '', 'keys': keys, 'question': a.question,
+                        'why': a.why, 'runs': a.runs, 'stop': a.stop, 'stage': a.stage, 'ref': a.ref})
+    print('申請を記録した。')
+
+
 def close(a, kind):
     with Locked():
         b = load_board()
@@ -262,6 +282,12 @@ def cmd_status(a):
         print(fmt_claim(c))
     n = load_findings()
     print(f'（記録 {len(n)} 件。検索は find）')
+    t = now()
+    plans = [r for r in reversed(n) if r['kind'] == 'plan' and t - timedelta(hours=24) <= parse(r['time']) <= t]
+    plans.sort(key=lambda r: r['time'], reverse=True)
+    print(f'直近24時間の申請 {len(plans)} 件')
+    for r in plans[:10]:
+        print('  ' + fmt_finding(r))
 
 
 def main():
@@ -286,6 +312,13 @@ def main():
     n.add_argument('--keys', default='')
     n.add_argument('--id')
     n.set_defaults(fn=cmd_note)
+    pl = s.add_parser('plan')
+    for name in ('who', 'question', 'why', 'runs', 'stop'):
+        pl.add_argument('--' + name, required=True)
+    pl.add_argument('--keys', default='')
+    pl.add_argument('--stage', type=int, choices=(2, 3, 4), default=3)
+    pl.add_argument('--ref', default='')
+    pl.set_defaults(fn=cmd_plan)
     d = s.add_parser('done')
     d.add_argument('--who', required=True)
     d.add_argument('--result', required=True)

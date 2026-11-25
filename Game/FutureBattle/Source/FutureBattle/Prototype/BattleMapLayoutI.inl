@@ -16,7 +16,9 @@
 	// Emit, Piece and Ramp take their material from WallMat (captured by reference): set it before a group of pieces.
 	auto Use=[&](UMaterial* Mat){WallMat=Mat;};
 	using namespace BattleMapI;
-	// Ground paint (no collision): roads, fields, water.
+	// Ground paint (no collision): roads, fields, water. Map L paints them into its ground mesh instead (BattleMapCommandlet.cpp).
+	if(!UrbanL)
+	{
 	for(const FRoad& R:Roads())
 		Box(TEXT("Road"),R.bAlongX?FVector((R.From+R.To)*.5,R.At,1.5):FVector(R.At,(R.From+R.To)*.5,1.5),R.bAlongX?FVector(R.To-R.From,800,3):FVector(800,R.To-R.From,3),RoadMat,false);
 	for(int32 C=0;C<Columns;++C)for(int32 R=0;R<Rows;++R)if(Kind(C,R)==TEXT('F'))
@@ -26,6 +28,7 @@
 		Box(TEXT("River"),FVector(Sign*(RiverX0+RiverX1)*.5,Sign*(RiverY0+RiverY1)*.5,2),FVector(RiverX1-RiverX0,RiverY1-RiverY0,4),WaterMat,false);
 		Box(TEXT("BridgeDeck"),FVector(Sign*(RiverX0+RiverX1)*.5,Sign*BridgeY,4),FVector(RiverX1-RiverX0+400,BridgeHalf*2,6),BridgeMat,false);
 		Box(TEXT("Ford"),FVector(Sign*(RiverX0+RiverX1)*.5,Sign*FordY,4),FVector(RiverX1-RiverX0+200,FordHalf*2,6),FieldMat,false);
+	}
 	}
 	// Two-storey houses (the shapes of BattleTerrain.h, as on map G): outer walls in sections with a door on the south and east
 	// sides of the ground floor and window sills in every second section, stairs along the north wall, an upper floor without a
@@ -60,8 +63,9 @@
 		Piece(TEXT("UpperCrate"),B.X-B.W*.25,B.Y-B.H*.15,F,130,130,130);
 	}
 	// Hills: a flat top with a ramp on each side, low walls on top along the two long edges (60cm thick: no navigation island).
+	// Map L: the hills are part of the rolling ground (BattleMapL.h); only the low walls are built, standing on that ground.
 	Use(HillMat);
-	for(const BattleTerrain::FHill& H:Hills())
+	if(!UrbanL)for(const BattleTerrain::FHill& H:Hills())
 	{
 		const double X0=H.X-H.W*.5,X1=H.X+H.W*.5,Y0=H.Y-H.H*.5,Y1=H.Y+H.H*.5;
 		Piece(TEXT("HillTop"),H.X,H.Y,0,H.W,H.H,H.Top,true);
@@ -74,8 +78,9 @@
 		const bool bLongX=H.W>=H.H;
 		for(int32 Side:{-1,1}) for(int32 I=-1;I<=1;++I)
 		{
-			if(bLongX)Piece(TEXT("HillWall"),H.X+I*H.W*.3,H.Y+Side*(H.H*.5-150),H.Top,500,60,130);
-			else Piece(TEXT("HillWall"),H.X+Side*(H.W*.5-150),H.Y+I*H.H*.3,H.Top,60,500,130);
+			const double Z0=UrbanL?0.:H.Top;
+			if(bLongX)Piece(TEXT("HillWall"),H.X+I*H.W*.3,H.Y+Side*(H.H*.5-150),Z0,500,60,130);
+			else Piece(TEXT("HillWall"),H.X+Side*(H.W*.5-150),H.Y+I*H.H*.3,Z0,60,500,130);
 		}
 	}
 	// A warehouse: one storey, 3.5m walls without a roof, two doors in the south wall and one in each end wall, crates inside.
@@ -207,5 +212,5 @@
 	Use(Grey);
 	// Bridge railings (cover on the bridge) on both sides of the deck.
 	for(int32 Side:{-1,1})Emit(TEXT("BridgeRail"),(RiverX0+RiverX1)*.5,BridgeY+Side*(BridgeHalf+30),RiverX1-RiverX0,40,110);
-	UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_LAYOUT objects=%d (x2 by rotation) layout=sectors-v2"),Objects);
+	UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_LAYOUT objects=%d (x2 by rotation) layout=%s"),Objects,UrbanL?TEXT("terrain-l-v1"):TEXT("sectors-v2"));
 }

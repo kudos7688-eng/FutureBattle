@@ -10,7 +10,8 @@ Per match, from metrics.json and run.log:
     (cover_diagnostics.arms_cover_fire_shots),
   - squad time by plan (tactical_squad_seconds) and by known contacts (BATTLE_ST_SAMPLE contacts=),
   - how many shots a peek out of cover ends with (cover_diagnostics.peek_end_shots_*),
-  - how unevenly the aimed shots are spread over the soldiers (BATTLE_SHOT_AT unit=)."""
+  - how unevenly the aimed shots are spread over the soldiers (BATTLE_SHOT_AT unit=),
+  - with -BattleFireTimeLog: the riflemen's time by what keeps them from firing (cover_diagnostics.firetime_*)."""
 import collections, json, os, re, sys
 
 SAMPLE = re.compile(r'BATTLE_ST_SAMPLE t=([\d.]+) squad=(\d+) team=(\d) managed=\d living=(\d+) .*? contacts=(\d+) ')
@@ -77,6 +78,28 @@ def analyse(run):
     peeks = [c.get('peek_end_shots_0', 0), c.get('peek_end_shots_1', 0), c.get('peek_end_shots_2plus', 0)]
     if sum(peeks):
         print(' peeks out of cover ending with 0 / 1 / 2+ shots: %d / %d / %d (%.0f%% with none)' % (*peeks, 100 * peeks[0] / sum(peeks)))
+    total = c.get('firetime_total', 0)
+    if total:
+        # -BattleFireTimeLog: one count per frame of an AI rifleman (30 frames a second in evaluation matches).
+        groups = collections.OrderedDict((
+            ('no target, sees no enemy, walking', ('no_target_sees_none_walk',)),
+            ('no target, sees no enemy, standing', ('no_target_sees_none_still',)),
+            ('no target, sees some enemy', ('no_target_sees_some_enemy',)),
+            ('target he does not know or only heard of or remembers', ('target_unknown', 'target_reported', 'target_remembered')),
+            ('target the scan sees but not he at this moment', ('target_scan_sees_not_now',)),
+            ('target seen beyond range or not allowed', ('target_seen',)),
+            ('sees another enemy in range (not the target)', ('sees_other_enemy', 'scan_sees_other_enemy')),
+            ('cover action: walking in, hidden, moving out', ('cover_1', 'cover_2', 'cover_3', 'cover_phase0')),
+            ('cover action: exposed', ('cover_4',)),
+            ('may fire: between shots, reloading, ready', ('engage_', 'own_fire_')),
+            ('squad without a plan or inactive', ('no_plan', 'squad_inactive'))))
+        left = {k[9:]: v for k, v in c.items() if k.startswith('firetime_') and k != 'firetime_total'}
+        print(' rifleman time by what keeps him from firing (soldier-seconds, share):')
+        for label, prefixes in groups.items():
+            n = sum(left.pop(k) for k in [k for k in left if k.startswith(prefixes)])
+            print('   %-52s %8.0f  %5.2f%%' % (label, n / 30, 100 * n / total))
+        if left:
+            print('   not grouped:', left)
     if shots:
         soldiers = sum(v for v in first_living.values() if v == 8)
         ranked = sorted(shots.values(), reverse=True)

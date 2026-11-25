@@ -741,6 +741,7 @@ FVector UBattleMatch::AreaScoutPost(int32 Team,int32 SquadID) const
  FVector Post=Point+Ahead*FMath::Clamp(GetDefault<UBattleTuning>()->ScoutPostAdvance,-30000.f,30000.f);
  // After each retreat the pair watches from a post shifted sideways (right, left, back to centre), not the spot it was found at.
  if(const auto* Rep=ScoutReports.Find(SquadID);Rep&&Rep->Burns>0){const int32 Step=Rep->Burns%3;Post+=FVector(-Ahead.Y,Ahead.X,0)*(Step==1?1.f:Step==2?-1.f:0.f)*FMath::Clamp(GetDefault<UBattleTuning>()->ScoutPostShift,0.f,20000.f);}
+ BattleFieldLayout::Of(GetWorld()).Heights.OnField(Post);
  if(auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
  {FNavLocation L;if(Nav->ProjectPointToNavigation(Post,L,FVector(1500,1500,500)))Post=L.Location;else Post=Point;}
  return Post;

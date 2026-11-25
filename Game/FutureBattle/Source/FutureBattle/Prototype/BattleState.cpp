@@ -133,7 +133,7 @@ bool UBattleState::SetTrainingPreset(int32 ID, EBattleTraining Training)
 	P.SightRange = T->EffectiveSightRange() * (bRecruit ? .75f : bVeteran ? 1.25f : 1.f);
 	P.FieldOfView = T->FieldOfView * (bRecruit ? .75f : bVeteran ? 1.25f : 1.f);
 	P.DetectionSeconds = T->DetectionSeconds * (bRecruit ? 2.f : bVeteran ? .5f : 1.f);
-	P.MemorySeconds = T->MemorySeconds * (bRecruit ? .6f : bVeteran ? 1.6f : 1.f);
+	P.MemorySeconds = (BattleTactics::MemorySeconds() > 0.f ? BattleTactics::MemorySeconds() : T->MemorySeconds) * (bRecruit ? .6f : bVeteran ? 1.6f : 1.f);
 	P.ShareRange = T->ShareRange * (bRecruit ? .625f : bVeteran ? 1.375f : 1.f);
 	P.ShareDelay = T->ShareDelay * (bRecruit ? 1.5f : bVeteran ? .5f : 1.f);
 	if (!SetPerceptionProfile(ID, P)) return false;

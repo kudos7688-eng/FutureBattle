@@ -95,6 +95,10 @@ private:
  TMap<int32, double> SupplyTripStart;
  TArray<double> SupplyTripSeconds;
  void SupplyTripBegin(int32 SquadID){ SupplyTripStart.Add(SquadID, ActiveSeconds); }
+ // Trial -BattleJoinFight (BattleTactics.h): the squad each joining squad walks to, when it set out, since when that squad has not
+ // been fighting (-1: it fights) and when the join ended (-1: under way). Not saved.
+ struct FJoinFight{int32 Host=INDEX_NONE;double Start=0.,QuietSince=-1.,EndAt=-1.;};
+ TMap<int32,FJoinFight> JoinFights;
  void SupplyTripEnd(int32 SquadID, bool bResumed);
  TMap<int32, TArray<TPair<double, float>>> DamageHistory;
  double TotalStepMs = 0, MaxStepMs = 0;

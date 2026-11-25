@@ -84,7 +84,7 @@ bool UBattleSquadTactics::TryFlank(int32 SID,int32 Supporter)
    const FVector Lateral(-Away.Y,Away.X,0);
    Raw=Start+Side*Lateral*(Angle<45.f?2000.:3500.)-Away*500.;
   }
-  FNavLocation Goal;
+  FNavLocation Goal;BattleFieldLayout::Of(GetWorld()).Heights.OnField(Raw);
   if(!Nav->ProjectPointToNavigation(Raw,Goal,FVector(150,150,400))) {Event(TEXT("FlankCandidateOffNav"));continue;}
   if(GetWorld()->LineTraceTestByObjectType(Goal.Location+FVector(0,0,170),Threat+FVector(0,0,70),FCollisionObjectQueryParams(ECC_WorldStatic))) {Event(TEXT("FlankCandidateBlockedFiringPosition"));continue;}
   Event(TEXT("FlankPathRequest"));

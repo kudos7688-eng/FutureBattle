@@ -2,6 +2,7 @@
 #include "BattleMatch.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
+#include "BattleFieldLayout.h"
 #include "BattleTactics.h"
 #include "NavigationSystem.h"
 #include "NavigationPath.h"
@@ -70,7 +71,8 @@ bool UBattleSquadTactics::RetreatGoal(const FBattleSquadState& S,const FBattleSq
  for(int32 I=0;I<4;++I)
  {
   const float Angle=I==2?45.f:I==3?-45.f:0.f;
-  const FVector Raw=Start+Away.RotateAngleAxis(Angle,FVector::UpVector)*(I==0?1500.f:2500.f);
+  FVector Raw=Start+Away.RotateAngleAxis(Angle,FVector::UpVector)*(I==0?1500.f:2500.f);
+  BattleFieldLayout::Of(GetWorld()).Heights.OnField(Raw);
   FNavLocation P;
   if(!Nav->ProjectPointToNavigation(Raw,P,FVector(150,150,400))) continue;
   const double EndDistance=Distance(P.Location);
@@ -324,6 +326,27 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  if(P.Action==EBattleSquadTactic::Support) return; // Emergency retreat above overrides team assignment.
  if(P.Action==EBattleSquadTactic::Engage)
  {
+  // Trial -BattleJoinFight (BattleTactics.h): on its way to, or waiting beside, the squad it joined.
+  if(P.Reason.StartsWith(TEXT("JOIN FIGHT")))
+  {
+   auto* J=JoinFights.Find(SID);const double JoinNow=Clock();
+   if(Visible&&O.Armed>0)
+   {
+    Event(TEXT("JoinFightContact"));if(J)J->EndAt=JoinNow;
+    Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("KNOWN ENEMY / HOLD FIRING POSITION"));return;
+   }
+   const auto* Host=J?Store->FindSquad(J->Host):nullptr;
+   const bool bHostFights=Host&&Host->CommandStatus==EBattleCommandStatus::Active&&Host->TacticalPlan.Action==EBattleSquadTactic::Engage&&!Host->TacticalPlan.Reason.StartsWith(TEXT("JOIN FIGHT"));
+   if(J){if(bHostFights)J->QuietSince=-1.;else if(J->QuietSince<0.)J->QuietSince=JoinNow;}
+   const TCHAR* End=!J?TEXT("JoinFightEndLost"):JoinNow-J->Start>=60.?TEXT("JoinFightEndTimeout"):J->QuietSince>=0.&&JoinNow-J->QuietSince>=10.?TEXT("JoinFightEndQuiet"):nullptr;
+   if(End)
+   {
+    if(J)J->EndAt=JoinNow;
+    // No route back to the mission: an ordinary holding plan, which asks for the mission again as any squad that lost its contact.
+    if(!ResumeMission(SID,TEXT("FIGHT OVER / RESUME MISSION"),End))Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("FIGHT OVER / HOLD"));
+   }
+   return;
+  }
   // A moving surprise group (trial -BattleSurpriseGroup=1) goes back to its move as soon as it may (Codex review 2026-11-21: holding at
   // every seen enemy stopped the whole group, the leading armour too).
   const bool bSneak=Match->SurpriseMoving(SID)||Match->RaidSneaking(SID);
@@ -332,6 +355,52 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
    ResumeMission(SID,bSneak?TEXT("SURPRISE MOVE / RESUME MISSION"):TEXT("CONTACT LOST / RESUME MISSION"),nullptr);
   }
   return;
+ }
+ // Trial -BattleJoinFight (BattleTactics.h, default off): a healthy rifle squad on its mission with no enemy near goes to the nearest
+ // squad of its team that holds a firing position against an enemy (not one that is itself joining). Left out: squads of an attack
+ // group, in a home-assault slot, on a surprise move or a raid (their task is elsewhere), and every other squad type.
+ if(BattleTactics::JoinFight() && Match->bArea && !Visible && Threats==0 && O.RecentDamage==0 && S->SquadType==BattleSquadType::Rifle &&
+    O.Armed>=FMath::CeilToInt(O.Living*.6f) && O.Living>S->Members.Num()*T->SquadRetreatLivingRatio && O.Health/FullHP>=T->SquadRetreatHealthRatio &&
+    !Match->SurpriseMoving(SID) && !Match->RaidSneaking(SID) && Match->GroupOf(SID)==INDEX_NONE)
+ {
+  bool bBase=false;if(BattleTactics::AreaStrategy().bEnabled)Match->AreaStrategyTarget(SID,S->Team,bBase);
+  const double JoinNow=Clock();
+  // A join that something else ended (supply, retreat, an order): it is over now, so the waits below hold for it too.
+  if(auto* Open=JoinFights.Find(SID);Open && Open->EndAt<0.)Open->EndAt=JoinNow;
+  const FJoinFight Last=JoinFights.FindRef(SID);
+  // 5 s after a join before the next; 20 s before the same squad again (no walking to and fro).
+  if(!bBase && !(Last.EndAt>=0. && JoinNow-Last.EndAt<5.))
+  {
+   int32 Best=INDEX_NONE;double BestD=FMath::Square(double(BattleTactics::JoinFightRange()));
+   for(const auto& Pair:Store->GetSquads())
+   {
+    const auto& H=Pair.Value;
+    if(H.Team!=S->Team || H.SquadID==SID || H.CommandStatus!=EBattleCommandStatus::Active || H.TacticalPlan.Action!=EBattleSquadTactic::Engage ||
+       H.TacticalPlan.Reason.StartsWith(TEXT("JOIN FIGHT")) || (Last.Host==H.SquadID && Last.EndAt>=0. && JoinNow-Last.EndAt<20.))continue;
+    // Nearer than 15 m it is there already. The nearest; the lower number on a tie.
+    const double D=FVector::DistSquared2D(Here,Runtime->Position(H.LeaderUnitID));
+    if(D<FMath::Square(1500.) || D>BestD || (D==BestD && Best!=INDEX_NONE && H.SquadID>Best))continue;
+    // It fights now: its latest observation holds an enemy one of its own members sees (the plan alone may be a memory).
+    bool bSees=false;
+    if(const auto* HO=Samples.Find(H.SquadID);HO && JoinNow-HO->SampleTime<=2.5)for(const auto& C:HO->Contacts)if(C.Value.bVisible && !C.Value.bShared){bSees=true;break;}
+    if(!bSees)continue;
+    // Squads on their way to it, and those that reached its fight within the last 30 s, fill its places.
+    int32 Joiners=0;
+    for(const auto& Other:JoinFights)if(Other.Key!=SID && Other.Value.Host==H.SquadID && (Other.Value.EndAt<0. || JoinNow-Other.Value.EndAt<30.))++Joiners;
+    if(Joiners>=BattleTactics::JoinFightMax())continue;
+    Best=H.SquadID;BestD=D;
+   }
+   if(Best!=INDEX_NONE)
+   {
+    const FVector HostAt=Runtime->Position(Store->FindSquad(Best)->LeaderUnitID);
+    if(Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Move,HostAt,FString::Printf(TEXT("JOIN FIGHT S%d / MOVE TO ITS POSITION"),Best)))
+    {
+     FJoinFight Join;Join.Host=Best;Join.Start=JoinNow;JoinFights.Add(SID,Join);Event(TEXT("JoinFightGo"));
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_JOIN_FIGHT t=%.0f squad=%d to=%d dist=%.0f"),Match->Elapsed,SID,Best,FMath::Sqrt(BestD));
+     return;
+    }
+   }
+  }
  }
  if(Visible && O.Armed>0 && !Match->SurpriseMoving(SID) && !Match->RaidSneaking(SID)) Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("KNOWN ENEMY / HOLD FIRING POSITION"));
 }

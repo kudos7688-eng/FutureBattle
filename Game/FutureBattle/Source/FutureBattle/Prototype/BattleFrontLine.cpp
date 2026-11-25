@@ -801,7 +801,8 @@ namespace BattleSurpriseRoute
    const double Cost=FVector::Dist2D(From,A)+FVector::Dist2D(B,Goal)+FMath::Abs(Y-EdgeY);
    if(Cost<Best){Best=Cost;Entry=A;Exit=B;}
   };
-  if(FCString::Strcmp(Def.Name,TEXT("Lvl_BattleWide_I"))==0)
+  // Map L has the rivers of map I.
+  if(FCString::Strcmp(Def.Name,TEXT("Lvl_BattleWide_I"))==0||FCString::Strcmp(Def.Name,TEXT("Lvl_BattleWide_L"))==0)
   {
    using namespace BattleMapI;
    for(double Sign:{-1.,1.})

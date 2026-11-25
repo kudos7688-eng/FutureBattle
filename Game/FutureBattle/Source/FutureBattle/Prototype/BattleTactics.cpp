@@ -24,6 +24,31 @@ float BattleTactics::LeaderHealthMultiplier()
  return Multiplier;
 }
 
+float BattleTactics::MemorySeconds()
+{
+ static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleMemorySeconds="),Value);return FMath::IsFinite(Value)&&Value>0.f?FMath::Clamp(Value,1.f,120.f):0.f;}();
+ return Seconds;
+}
+float BattleTactics::SuppressFire()
+{
+ static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSuppressFire="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,60.f):0.f;}();
+ return Seconds;
+}
+bool BattleTactics::JoinFight()
+{
+ static const bool bOn=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleJoinFight="),Value);return Value!=0;}();
+ return bOn;
+}
+float BattleTactics::JoinFightRange()
+{
+ static const float Range=[](){float Value=15000.f;FParse::Value(FCommandLine::Get(),TEXT("BattleJoinFightRange="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,2000.f,60000.f):15000.f;}();
+ return Range;
+}
+int32 BattleTactics::JoinFightMax()
+{
+ static const int32 Max=[](){int32 Value=2;FParse::Value(FCommandLine::Get(),TEXT("BattleJoinFightMax="),Value);return FMath::Clamp(Value,1,8);}();
+ return Max;
+}
 int32 BattleTactics::BurstFire()
 {
  static const int32 Rounds=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleBurstFire="),Value);return Value<2?0:FMath::Min(Value,10);}();
