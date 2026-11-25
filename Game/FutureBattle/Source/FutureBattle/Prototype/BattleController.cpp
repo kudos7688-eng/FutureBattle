@@ -1182,6 +1182,14 @@ void ABattleController::PlayerTick(float DeltaTime)
 {
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattlePlayerTick);
 	Super::PlayerTick(DeltaTime);
+	// Map L (rolling ground): the tactical camera's pivot follows the height of the ground under it, so the lowest zoom (10m) stays
+	// above the hills. On the other maps there is no field and the pivot stays at height 0.
+	if(TacticalPawn)if(const auto& Field=BattleFieldLayout::Of(GetWorld()).Heights.Field;!Field.IsEmpty())
+	{
+		FVector P=TacticalPawn->GetActorLocation();
+		const double Want=Field.Height(P.X,P.Y);
+		if(FMath::Abs(P.Z-Want)>1.){P.Z=FMath::FInterpTo(P.Z,Want,DeltaTime,6.);TacticalPawn->SetActorLocation(P);}
+	}
 	UpdateNoticeLog();
 	UpdateGamepad(DeltaTime);
 	UpdatePathDraw();

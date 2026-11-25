@@ -69,6 +69,7 @@
 | マップの定義・配置 | `BattleFieldLayout.h`（マップごとの表 `Maps()`） | 生成は @UBattleMapCommandlet::Main （既存の手編集を `-Force` で上書きしない） |
 | 通り道（道路網に沿った移動の指示） | @UBattleMatch::RouteStep 、 @UBattleMatch::RouteFlankSide | 呼び出しは @UBattleMatch::UpdateTeamOrders 。道路網は `FMapDef::RouteNodes/RouteEdges` |
 | 高低差（丘・階段・2階。マップG） | @UBattleLeaderRuntime::TerrainStep 、 @UBattleMatch::UpdateTerrainTest | 高さの表は `BattleTerrain.h`（`FHeights::Ground`、家と丘の位置 `HousesG/HillsG`）と `FMapDef::Heights`。形は `BattleMapLayoutG.inl`。隊長はエンジンの歩行、多数兵は表に沿う。自己試験 `Test-WideSight.ps1 -Map G -HeightTest` |
+| 地面全体の起伏（高さの格子。マップL） | `BattleTerrain::FHeightField::Height` 、 `BattleMapL::MakeField` | 2.5m 格子の地面の高さ（`FHeights::Field`。他のマップは空で高さ0）。地面の網目と塗りは生成時に `BuildGroundTiles`・`BuildTerrainL`（`BattleMapCommandlet.cpp`）、物を地面に載せるのは同じファイルの `Box`。設計は `Docs/design-terrain-field.md` |
 | マップの数値監査（試合なし） | @UBattleLeaderRuntime::RunMapStats | `Setup/Test-MapStats.ps1`。拠点ごとの持ち主・価値は `FMapDef::ObjectiveOwners/ObjectiveValues` |
 | 計測の記録 | @UBattleMetrics::BeginFrame 、 @UBattleMetrics::Finish | 段取りは MEASURE.md |
 | ネットワーク試作 | @ABattleNetGameMode::BeginPlay 、 @ABattleNetController::ServerOrder_Implementation | |
@@ -170,9 +171,10 @@ BattleWeaponPreview | 武器の見た目の確認
 BattleMapStats | マップの統計（区域ごとの見通し・遮蔽、経路の長さ）を JSON に書き出す。試合は行わない（UBattleLeaderRuntime の一部）
 BattleAreaDepot | 集積所の重み：価値が1より大きい拠点（マップFの集積所）への割り振りの重みを、守る・取り返す・襲うの状況で変える（UBattleMatch の一部）
 BattlePlayerRoutes | 通り道のプレイヤー指定：部隊ごとに 自動・中央・北・南 を選び、手動の遠い命令と委任中の移動をその道に通す。自動試験 `-BattlePlayerRouteTest`（UBattleMatch の一部）
-BattleTerrain | 地面の高さの表（マップG）：丘・階段・2階の矩形と、その場所の高さを返す `FHeights::Ground`。家と丘の位置（`HousesG/HillsG`）は生成と共通
+BattleTerrain | 地面の高さの表：丘・階段・2階の矩形（マップG〜K）と地面全体の高さの格子 `FHeightField`（マップL）、その場所の高さを返す `FHeights::Ground`。家と丘の位置（`HousesG/HillsG`）は生成と共通
 BattleTerrainTest | 高低差の自己試験 `-BattleHeightTest`：丘の上・2階・尾根越えへ3部隊を歩かせ、着いた高さと浮き沈みを調べる（UBattleMatch の一部）
 BattleMapI | マップI（区画を前提にした設計）の表：50mの区画 20×14 の種類 `Kind`、道路 `Roads`、川・橋・浅瀬の位置、家 `Houses`・丘 `Hills`、高さの表 `MakeHeights`、拠点 `Objectives`。配置は `BattleMapLayoutI.inl`（生成と共有）
+BattleMapL | マップL（11-25、`Docs/design-terrain-field.md`）：マップIの区画・道・川・家・拠点を起伏のある地面に置いた地図。地面の形 `Raw`（起伏・丘・川の谷・本拠地の平地）、家と倉庫の平らな土台 `Pads`、高さの格子 `MakeField`、高さの表 `MakeHeights`、地面の高さの拠点 `Objectives`
 BattleSectorAudit | 区画命令の検証 `-BattleSectorAudit`（区画のあるマップ、描画なし）：全区画へ制圧命令を出して受け付けを数え、8部隊の到着位置が区画内か、240秒後に維持へ移ったかを報告する。規則は変えない
 BattleSectors | マップHの区画の表（Codex）：50mの区画 20×14 の種類 `Kind`、位置から区画 `Cell`・区画の中心 `Center`、川の線 `RiverX`、家・丘の一覧。区画の種類をマップごとに引くのは `BattleFieldLayout::SectorKind`（H・I）
 BattlePlayerPath | プレイヤーの入力の補助：命令先の点（2階は壁越しでも指せる、Alt で1階）`PickOrderPoint`、右ドラッグで引いた道筋の命令 `PlayerPathOrder`、選んだ部隊の道筋の予測表示 `DrawOrderWays`／`PlayerRoutePreview`、壁の乗り越え `TryVault`、作戦カメラの速さ `PanSpeed`（ABattleController・UBattleMatch・ABattleHUD の一部）

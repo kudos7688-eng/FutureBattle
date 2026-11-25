@@ -36,7 +36,8 @@ bool ABattleController::PickOrderPoint(FVector2D Screen,FVector& Out,int32* Leve
  {
   // Flat raised levels only; beneath a solid one (a hill) there is nothing to stand on.
   if(P.Axis!=0||P.Z0<BattleTerrain::StepMax||(bLower&&P.bSolid))continue;
-  const double T=((bLower?0.:double(P.Z0))-Origin.Z)/Dir.Z;if(T<=0||T>=BestT)continue;
+  // The ground floor under an upper floor is FloorZ below it (height 0 on the flat maps; the house's pad on map L).
+  const double T=((bLower?double(P.Z0)-BattleTerrain::FloorZ:double(P.Z0))-Origin.Z)/Dir.Z;if(T<=0||T>=BestT)continue;
   const FVector At=Origin+Dir*T;if(!P.Contains(At.X,At.Y))continue;
   BestT=T;Out=At;if(Level)*Level=P.bSolid?0:bLower?1:2;
  }

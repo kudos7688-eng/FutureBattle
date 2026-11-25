@@ -3,6 +3,7 @@
 #include "Engine/World.h"
 #include "BattleSectors.h"
 #include "BattleMapI.h"
+#include "BattleMapL.h"
 #include "BattleMapJ.h"
 #include "BattleMapK.h"
 
@@ -160,6 +161,17 @@ namespace BattleFieldLayout
 				for(int32 I=0;I<6;++I){Edge(RoadX[I],20000,RoadX[I+1],20000,ERouteLane::North);Edge(RoadX[I],-20000,RoadX[I+1],-20000,ERouteLane::South);}
 				for(double X:RoadX){Edge(X,20000,X,0,ERouteLane::Connector);Edge(X,0,X,-20000,ERouteLane::Connector);}
 				D.Heights=BattleMapI::MakeHeights(D.HalfExtent);
+				T.Add(D);
+			}
+			// L (2026-11-25, Docs/design-terrain-field.md): map I on rolling ground (BattleMapL.h). The same sectors, roads, river,
+			// houses, objectives, rules and sector AI combination as I; the ground is a height field, the hills are smooth, the homes flat.
+			{
+				FMapDef D=T.Last();D.Name=TEXT("Lvl_BattleWide_L");
+				D.Heights=BattleMapL::MakeHeights(D.HalfExtent);
+				D.Objectives=BattleMapL::Objectives(D.Heights.Field);
+				// Lookouts: the tops of the knolls (as on I), at the height of the ground there.
+				D.Lookouts={FVector(22500,7500,0),FVector(-22500,-7500,0)};
+				for(FVector& P:D.Lookouts)P.Z=D.Heights.Field.Height(P.X,P.Y);
 				T.Add(D);
 			}
 			// J (2026-11-22, Docs/design-map-j-terrain.md): the grid of I with two mountain ranges (impassable, they block sight) that split

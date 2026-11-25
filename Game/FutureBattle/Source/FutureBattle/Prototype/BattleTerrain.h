@@ -37,13 +37,49 @@ namespace BattleTerrain
 		// The 180-degree counterpart (the maps are point symmetric).
 		FHeightPatch Rotated() const {FHeightPatch P=*this;P.Min=-Max;P.Max=-Min;P.Z0=Z1;P.Z1=Z0;if(Axis==0)P.Z1=P.Z0=Z0;return P;}
 	};
+	// Rolling ground over the whole floor (2026-11-25, map L, Docs/design-terrain-field.md). Heights on a square grid; between the
+	// points the ground is two flat triangles per cell, split along the diagonal from (I,J) to (I+1,J+1). The generator builds the
+	// ground mesh from the same points and the same triangles, so the table and the collision agree to rounding. The grid is
+	// centred on the origin and the heights are point symmetric, so the 180-degree partner of a place has the same height and the
+	// same triangle. Empty on every other map: the ground there is the flat floor at height 0.
+	struct FHeightField
+	{
+		FVector2D Origin=FVector2D::ZeroVector;double Step=250.;int32 NX=0,NY=0;TArray<float> Z;
+		bool IsEmpty() const {return Z.IsEmpty();}
+		float At(int32 I,int32 J) const {return Z[J*NX+I];}
+		// Height of the ground at (X,Y); outside the grid the edge is continued. Slope: rise per run of that triangle.
+		double Height(double X,double Y,double* Slope=nullptr) const
+		{
+			const double FX=(X-Origin.X)/Step,FY=(Y-Origin.Y)/Step;
+			const int32 I=FMath::Clamp(FMath::FloorToInt(FX),0,NX-2),J=FMath::Clamp(FMath::FloorToInt(FY),0,NY-2);
+			const double U=FMath::Clamp(FX-I,0.,1.),V=FMath::Clamp(FY-J,0.,1.);
+			const double H00=At(I,J),H10=At(I+1,J),H01=At(I,J+1),H11=At(I+1,J+1);
+			// Lower triangle (0,0)-(1,0)-(1,1) where U >= V, upper triangle (0,0)-(1,1)-(0,1) otherwise: rise along X and along Y.
+			const double DX=U>=V?H10-H00:H11-H01,DY=U>=V?H11-H10:H01-H00;
+			if(Slope)*Slope=FMath::Sqrt(DX*DX+DY*DY)/Step;
+			return H00+U*DX+V*DY;
+		}
+		// Lowest and highest ground over a rectangle (the grid points inside it and its corners).
+		void Range(double X0,double Y0,double X1,double Y1,double& Low,double& High) const
+		{
+			Low=DBL_MAX;High=-DBL_MAX;
+			for(double X:{X0,X1})for(double Y:{Y0,Y1}){const double H=Height(X,Y);Low=FMath::Min(Low,H);High=FMath::Max(High,H);}
+			const int32 I0=FMath::Clamp(FMath::CeilToInt((X0-Origin.X)/Step),0,NX-1),I1=FMath::Clamp(FMath::FloorToInt((X1-Origin.X)/Step),0,NX-1);
+			const int32 J0=FMath::Clamp(FMath::CeilToInt((Y0-Origin.Y)/Step),0,NY-1),J1=FMath::Clamp(FMath::FloorToInt((Y1-Origin.Y)/Step),0,NY-1);
+			for(int32 J=J0;J<=J1;++J)for(int32 I=I0;I<=I1;++I){Low=FMath::Min(Low,double(At(I,J)));High=FMath::Max(High,double(At(I,J)));}
+		}
+	};
 	struct FHeights
 	{
 		TArray<FHeightPatch> Patches;
 		// 25m cells over the floor, each with the patches that touch it.
 		TArray<TArray<int32>> Cells;FVector2D Half=FVector2D::ZeroVector;int32 Columns=0,Rows=0;
 		static constexpr double Cell=2500.;
-		bool IsEmpty() const {return Patches.IsEmpty();}
+		// Rolling ground (map L). The base level, which is height 0 on the other maps, is this field; the patches stand on it.
+		FHeightField Field;
+		bool IsEmpty() const {return Patches.IsEmpty()&&Field.IsEmpty();}
+		// Height of the base level at (X,Y): the field, or 0.
+		double Base(double X,double Y,double* Slope=nullptr) const {if(Field.IsEmpty()){if(Slope)*Slope=0;return 0.;}return Field.Height(X,Y,Slope);}
 		void Build(FVector2D InHalf)
 		{
 			Half=InHalf;Columns=FMath::CeilToInt(2*Half.X/Cell);Rows=FMath::CeilToInt(2*Half.Y/Cell);Cells.Reset();Cells.SetNum(Columns*Rows);
@@ -60,9 +96,12 @@ namespace BattleTerrain
 		bool Ground(double X,double Y,double Feet,double& Out,double* Slope=nullptr,double Step=StepMax) const
 		{
 			Out=0;if(Slope)*Slope=0;
-			if(Patches.IsEmpty())return true;
+			if(Patches.IsEmpty()&&Field.IsEmpty())return true;
+			// The base level: the field on map L, height 0 elsewhere (where the lines below are the same as before the field).
+			double BaseSlope=0;const double BaseZ=Base(X,Y,&BaseSlope);
+			if(Patches.IsEmpty()){Out=BaseZ;if(Slope)*Slope=BaseSlope;return FMath::Abs(BaseZ-Feet)<=Step;}
 			const int32 CX=FMath::FloorToInt((X+Half.X)/Cell),CY=FMath::FloorToInt((Y+Half.Y)/Cell);
-			bool bBase=true;double Best=0,BestGap=FMath::Abs(Feet),BestSlope=0;bool bAny=false;
+			bool bBase=true;double Best=0,BestGap=FMath::Abs(Feet-BaseZ),BestSlope=0;bool bAny=false;
 			if(CX>=0&&CY>=0&&CX<Columns&&CY<Rows)for(int32 I:Cells[CY*Columns+CX])
 			{
 				const FHeightPatch& P=Patches[I];if(!P.Contains(X,Y))continue;
@@ -70,14 +109,16 @@ namespace BattleTerrain
 				const double Z=P.HeightAt(X,Y),Gap=FMath::Abs(Z-Feet);
 				if(!bAny||Gap<BestGap){bAny=true;Best=Z;BestGap=Gap;BestSlope=P.Slope();}
 			}
-			if(bBase&&(!bAny||FMath::Abs(Feet)<BestGap)){Best=0;BestGap=FMath::Abs(Feet);BestSlope=0;}
+			if(bBase&&(!bAny||FMath::Abs(Feet-BaseZ)<BestGap)){Best=BaseZ;BestGap=FMath::Abs(Feet-BaseZ);BestSlope=BaseSlope;}
 			Out=Best;if(Slope)*Slope=BestSlope;
 			return BestGap<=Step;
 		}
 		// Raises a point that lies inside solid ground (a goal given at height 0 under a hill) onto that ground. Hills higher than
-		// the reach of the navigation projection (4m) need it; lower ones are unaffected in effect.
+		// the reach of the navigation projection (4m) need it; lower ones are unaffected in effect. On map L a point more than 30cm
+		// below the field (a goal given at height 0) is raised onto the field first.
 		void Lift(FVector& Point) const
 		{
+			if(!Field.IsEmpty()){const double B=Field.Height(Point.X,Point.Y);if(Point.Z<B-30)Point.Z=B;}
 			if(Patches.IsEmpty())return;
 			const int32 CX=FMath::FloorToInt((Point.X+Half.X)/Cell),CY=FMath::FloorToInt((Point.Y+Half.Y)/Cell);
 			if(CX<0||CY<0||CX>=Columns||CY>=Rows)return;
@@ -109,13 +150,14 @@ namespace BattleTerrain
 			S0=B.X-StairRun*.5;S1=B.X+StairRun*.5;SY=N0y-StairWidth;
 		}
 	};
-	inline void AddHouse(FHeights& T,const FHouse& B)
+	// Base: height of the flat ground the house stands on (map L: its pad on the rolling ground; 0 elsewhere).
+	inline void AddHouse(FHeights& T,const FHouse& B,double Base=0.)
 	{
 		const FHouseShape S(B);FHeightPatch P;
 		// Stairs.
-		P.Min=FVector2D(S.S0,S.SY);P.Max=FVector2D(S.S1,S.N0y);P.Z0=0;P.Z1=FloorZ;P.Axis=1;P.bSolid=true;T.Patches.Add(P);
+		P.Min=FVector2D(S.S0,S.SY);P.Max=FVector2D(S.S1,S.N0y);P.Z0=Base;P.Z1=Base+FloorZ;P.Axis=1;P.bSolid=true;T.Patches.Add(P);
 		// Upper floor: everything south of the stairs, and the landing east of them.
-		P=FHeightPatch();P.Z0=P.Z1=FloorZ;P.Axis=0;P.bSolid=false;
+		P=FHeightPatch();P.Z0=P.Z1=Base+FloorZ;P.Axis=0;P.bSolid=false;
 		P.Min=FVector2D(S.W0,S.S0y);P.Max=FVector2D(S.E0,S.SY);T.Patches.Add(P);
 		P.Min=FVector2D(S.S1,S.SY);P.Max=FVector2D(S.E0,S.N0y);T.Patches.Add(P);
 	}
