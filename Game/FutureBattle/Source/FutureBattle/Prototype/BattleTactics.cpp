@@ -69,6 +69,11 @@ int32 BattleTactics::CarbineShotRounds()
  static const int32 Rounds=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCarbineShotRounds="),Value);return FMath::Clamp(Value,1,10);}();
  return Rounds;
 }
+float BattleTactics::BaseRifleDamage()
+{
+ static const float Scale=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleBaseRifleDamage="),Value);return FMath::IsFinite(Value)&&Value>0.f?FMath::Clamp(Value,.01f,1.f):1.f;}();
+ return Scale;
+}
 float BattleTactics::SupplyAmmoShare()
 {
  static const float Share=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyAmmoShare="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,.9f):0.f;}();
