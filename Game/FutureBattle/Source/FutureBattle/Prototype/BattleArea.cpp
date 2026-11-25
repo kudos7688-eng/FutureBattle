@@ -45,6 +45,7 @@ void UBattleMatch::InitializeArea()
  }
  if(BattleTactics::ArtilleryPosts())GenerateArtilleryPosts();
  InitializeComposition();
+ if(BattleTactics::BaseGarrison())GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->InitializeBaseGarrison();
  if(FParse::Param(FCommandLine::Get(),TEXT("BattleAreaSmoke")))
  {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,GetWorld()->GetSubsystem<UBattleLeaderRuntime>(),&UBattleLeaderRuntime::RunAreaSmoke,5.f,false);}
 }
@@ -75,28 +76,28 @@ bool UBattleMatch::DamageBase(AActor* Target,int32 Team,float Damage)
 }
 int32 UBattleMatch::ActiveSquads(int32 Team)const
 {
- int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active;
+ int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&(!BattleTactics::BaseGarrison()||!IsBaseGarrison(P.Key));
  return Count;
 }
 // Ordinary scout pairs only: sniper teams (scout pairs of grade 2, BattleArms.cpp) have their own count and limit.
 int32 UBattleMatch::ActiveScouts(int32 Team)const
 {
- int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==BattleSquadType::Scout&&P.Value.Grade==0;
+ int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&(!BattleTactics::BaseGarrison()||!IsBaseGarrison(P.Key))&&P.Value.SquadType==BattleSquadType::Scout&&P.Value.Grade==0;
  return Count;
 }
 int32 UBattleMatch::ActiveSnipers(int32 Team)const
 {
- int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==BattleSquadType::Scout&&P.Value.Grade==2;
+ int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&(!BattleTactics::BaseGarrison()||!IsBaseGarrison(P.Key))&&P.Value.SquadType==BattleSquadType::Scout&&P.Value.Grade==2;
  return Count;
 }
 int32 UBattleMatch::ActiveElite(int32 Team)const
 {
- int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.Grade==1;
+ int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&(!BattleTactics::BaseGarrison()||!IsBaseGarrison(P.Key))&&P.Value.Grade==1;
  return Count;
 }
 int32 UBattleMatch::ActiveOfType(int32 Team,uint8 SquadType)const
 {
- int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==SquadType;
+ int32 Count=0;for(const auto& P:GetWorld()->GetSubsystem<UBattleState>()->GetSquads())Count+=P.Value.Team==Team&&P.Value.CommandStatus==EBattleCommandStatus::Active&&(!BattleTactics::BaseGarrison()||!IsBaseGarrison(P.Key))&&P.Value.SquadType==SquadType;
  return Count;
 }
 int32 UBattleMatch::HireBlock(int32 Team,uint8 SquadType,FString& Why,uint8 Grade) const
@@ -376,7 +377,7 @@ void UBattleMatch::UpdateAreaHiring()
   const int32 Pending=PendingReplacements(Team);
   // Squad type by the intent's heavy share: heavy infantry while the team's bought heavy squads are below that share of its purchases.
   FAreaIntent HireIntent=AreaIntent(Team); uint8 Type=BattleSquadType::Rifle; uint8 HireGrade=0;
-  int32 Bought=0,Heavy=0;for(const auto& P:Store->GetSquads())if(P.Value.Team==Team){Bought+=P.Key>StartSquadCount();Heavy+=P.Value.SquadType==BattleSquadType::Heavy;}
+  int32 Bought=0,Heavy=0;for(const auto& P:Store->GetSquads())if(P.Value.Team==Team&&(!BattleTactics::BaseGarrison()||!IsBaseGarrison(P.Key))){Bought+=P.Key>StartSquadCount();Heavy+=P.Value.SquadType==BattleSquadType::Heavy;}
   // Subtraction evaluation (Docs/design-subtraction-eval.md, trials default 0): -BattleAreaAllTypes=1 gives BOTH teams the all-types mix
   // (the composition schedule below plus heavy share 0.2, two scout pairs, one exoskeleton soldier, one supply vehicle; command-line
   // keep values are not mixed in); -BattleAreaWithout=<type> then removes one type (the trial team only with -BattleAreaTrialTeam).
@@ -498,6 +499,7 @@ void UBattleMatch::UpdateArea(float Dt)
  const auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>();
  if(!bArea||Phase!=EBattleMatchPhase::Combat||!Mode||Mode->bCombatPaused||!FMath::IsFinite(Dt)||Dt<=0)return;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ if(BattleTactics::BaseGarrison()){UpdateBaseGarrison(Dt);if(Phase!=EBattleMatchPhase::Combat)return;}
  UpdateDepots(Dt);
  Area.ObserveClock+=Dt;
  if(Area.ObserveClock>=.2f)
@@ -542,7 +544,7 @@ void UBattleMatch::UpdateArea(float Dt)
  for(auto It=Area.Replacements.CreateIterator();It;++It)
  {
   const auto* U=Store->Find(It.Key());
-  if(!U||U->IsAlive()||U->bRetired||!AtHome.Contains(U->SquadID)){It.RemoveCurrent();continue;}
+  if(!U||U->IsAlive()||U->bRetired||(BattleTactics::BaseGarrison()&&IsBaseGarrison(U->SquadID))||!AtHome.Contains(U->SquadID)){It.RemoveCurrent();continue;}
   It.Value()=FMath::Min(10.f,It.Value()+Step);
  }
  // Stable IDs make simultaneous completion/resource accounting deterministic.
@@ -589,7 +591,7 @@ void UBattleMatch::UpdateArea(float Dt)
   if(const float Heal=bMachineHere&&BattleTactics::MachineRepairRate()>0.f?BattleTactics::MachineRepairRate():BattleTactics::Supply().HealPerSecond;Heal>0.f&&!bDepotMachine)
    for(int32 ID:S->Members)Store->Heal(ID,Heal*Step);
   // Scout pairs are never replenished.
-  if(BattleSquadType::Replenished(S->SquadType))
+  if(BattleSquadType::Replenished(S->SquadType)&&(!BattleTactics::BaseGarrison()||!IsBaseGarrison(SID)))
   for(int32 ID:S->Members)if(!Store->Find(ID)->IsAlive()&&ID!=S->LeaderUnitID&&!Area.Replacements.Contains(ID)&&Reserved[S->Team]<Credits[S->Team])
   {Area.Replacements.Add(ID,0);++Reserved[S->Team];}
  }
@@ -609,7 +611,7 @@ int32 UBattleMatch::AreaHireNeed(int32 Team) const
  for(const auto& U:Store->GetUnits())if(U.Value.Team==Team&&U.Value.IsAlive())
  {
   const FVector P=R->Position(U.Key);
-  for(int32 I=0;I<Objectives.Num();++I)if(FVector::DistSquared2D(P,Objectives[I].Position)<=FMath::Square(10000.)){++Own[I];break;}
+  for(int32 I=0;I<Objectives.Num();++I)if(FVector::DistSquared2D(P,Objectives[I].Position)<=FMath::Square(10000.)){if(!BattleTactics::BaseGarrison()||!IsBaseGarrison(U.Value.SquadID))++Own[I];break;}
   if(!bThreat&&Perception&&FVector::DistSquared2D(P,Home)<=FMath::Square(15000.))
    if(const auto* Contacts=Perception->GetContacts(U.Key))
     for(const auto& C:*Contacts)if(C.Value.bVisible&&FVector::DistSquared2D(C.Value.LastKnownPosition,Home)<=FMath::Square(15000.)){bThreat=true;break;}

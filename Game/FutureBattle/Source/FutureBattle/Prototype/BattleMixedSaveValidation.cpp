@@ -126,8 +126,9 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   {const auto* S=BySquad.FindRef(U.State.SquadID);if(!S||S->Team!=U.State.Team)return Fail(TEXT("Invalid retired squad reference"));++Retired[U.State.Team];}
   // New-squad hiring (2026-11-14): each team starts with 25 squads; every extra squad is a purchase of 10 fresh soldiers,
   // at most BattleTactics::AreaHire().MaxActive (default 25) active per team, and resources spent on hires join the conservation law. Pre-hiring saves have none.
+  if(BattleTactics::BaseGarrison()&&(Area.GarrisonHeld.Num()!=2||!Finite(Area.GarrisonHeld[0],0,BattleTactics::BaseGarrisonSeconds())||!Finite(Area.GarrisonHeld[1],0,BattleTactics::BaseGarrisonSeconds())))return Fail(TEXT("Invalid base garrison clock"));
   int32 TeamSquads[2]={0,0},TeamActive[2]={0,0};
-  for(const auto& S:Squads){if(S.Team<0||S.Team>1)return Fail(TEXT("Invalid squad team"));++TeamSquads[S.Team];TeamActive[S.Team]+=S.CommandStatus==EBattleCommandStatus::Active;}
+  for(const auto& S:Squads){if(S.Team<0||S.Team>1)return Fail(TEXT("Invalid squad team"));if(BattleTactics::BaseGarrison()&&Area.HirePurpose.FindRef(S.SquadID)==102)continue;++TeamSquads[S.Team];TeamActive[S.Team]+=S.CommandStatus==EBattleCommandStatus::Active;}
   if(Area.HireSpent.Num()!=2)return Fail(TEXT("Invalid area hire record"));
   for(int32 Team=0;Team<2;++Team)
   {
@@ -141,7 +142,18 @@ bool UBattleSave::ValidateMixed(FString& Error) const
   for(int32 Team=0;Team<2;++Team)if(Area.WarPoint[Team]<0||Area.WarPoint[Team]>1000000||Area.WarLoss[Team]<0||Area.WarLoss[Team]>1000000||Area.WarPointEstimate[Team]<0||Area.WarPointEstimate[Team]>1000000)return Fail(TEXT("Invalid area war score"));
   if(Area.LastAIHireAt.Num()!=2||!Finite(Area.LastAIHireAt[0],-1000,Elapsed+.01)||!Finite(Area.LastAIHireAt[1],-1000,Elapsed+.01))return Fail(TEXT("Invalid area AI hire clock"));
   // P1 trial (2026-11-16): bought-squad missions point at existing squads with a known mission; home hit times are past clocks.
-  for(const auto& P:Area.HirePurpose)if(!((P.Value>=0&&P.Value<Objectives.Num())||P.Value==100||P.Value==101)||!BySquad.FindRef(P.Key))return Fail(TEXT("Invalid area hire purpose"));
+  for(const auto& P:Area.HirePurpose)if(!((P.Value>=0&&P.Value<Objectives.Num())||P.Value==100||P.Value==101||(BattleTactics::BaseGarrison()&&P.Value==102))||!BySquad.FindRef(P.Key))return Fail(TEXT("Invalid area hire purpose"));
+  if(BattleTactics::BaseGarrison())
+  {
+   int32 GuardCount[2]={0,0};
+   for(const auto& GuardPurpose:Area.HirePurpose)if(GuardPurpose.Value==102)
+   {
+    const auto* Guard=BySquad.FindRef(GuardPurpose.Key);
+    if(!Guard||Guard->Team<0||Guard->Team>1||Guard->SquadType!=BattleSquadType::Rifle||Guard->Grade!=0)return Fail(TEXT("Invalid base garrison squad"));
+    ++GuardCount[Guard->Team];
+   }
+   if(Area.bGarrisonReady?(GuardCount[0]!=BattleTactics::BaseGarrisonSquads||GuardCount[1]!=BattleTactics::BaseGarrisonSquads):(GuardCount[0]!=0||GuardCount[1]!=0||Area.GarrisonHeld[0]!=0||Area.GarrisonHeld[1]!=0))return Fail(TEXT("Incomplete base garrison deployment"));
+  }
   // Purchase reservations: at most 12 per team, known types, past reservation times.
   {int32 N[2]={0,0};for(const auto& Q:Area.HireQueue){if(Q.Team<0||Q.Team>1||++N[Q.Team]>UBattleMatch::HireQueueMax||Q.Type<0||Q.Type>=BattleSquadType::Count||Q.Dest<-1||Q.Dest>1000000||!Finite(Q.At,0,Elapsed+.01))return Fail(TEXT("Invalid hire reservation"));}}
   // Stage 7: the player's section roles and hiring delegation.

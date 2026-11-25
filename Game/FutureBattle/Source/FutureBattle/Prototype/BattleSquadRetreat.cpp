@@ -108,6 +108,7 @@ bool UBattleSquadTactics::RetreatGoal(const FBattleSquadState& S,const FBattleSq
 
 void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,float Dt)
 {
+ if(BattleTactics::BaseGarrison()&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID))return;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); auto* S=Store->Squads.Find(SID);
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>();

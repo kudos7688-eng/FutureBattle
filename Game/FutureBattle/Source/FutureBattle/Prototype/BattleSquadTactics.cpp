@@ -119,7 +119,7 @@ void UBattleSquadTactics::Step(float DeltaSeconds)
  {
   const auto& Squad = Pair.Value;
   if (Squad.CommandStatus != EBattleCommandStatus::Legacy && !(Wide && Squad.CommandStatus==EBattleCommandStatus::Active)) continue;
-  const bool bManaged = bEnabled && Match->IsEnabled() && (Squad.Team == 1 || Squad.bPlayerDelegated);
+  const bool bManaged = (!BattleTactics::BaseGarrison()||!Match->IsBaseGarrison(Pair.Key)) && bEnabled && Match->IsEnabled() && (Squad.Team == 1 || Squad.bPlayerDelegated);
   if (bManaged && !Squad.TacticalPlan.bAutonomous) Store->AdvanceSquadTacticalPlan(Squad.SquadID, DeltaSeconds);
   if (!bManaged && !bObserve) { Samples.Remove(Pair.Key); continue; }
   double* Due = NextSample.Find(Pair.Key);

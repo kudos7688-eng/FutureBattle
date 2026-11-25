@@ -69,6 +69,18 @@ int32 BattleTactics::CarbineShotRounds()
  static const int32 Rounds=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCarbineShotRounds="),Value);return FMath::Clamp(Value,1,10);}();
  return Rounds;
 }
+bool BattleTactics::BaseGarrison()
+{
+ static const bool On=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleBaseGarrison="),Value);return Value!=0;}();return On;
+}
+float BattleTactics::BaseGarrisonRadius()
+{
+ static const float Radius=[](){float Value=6000.f;FParse::Value(FCommandLine::Get(),TEXT("BattleBaseGarrisonRadius="),Value);return FMath::IsFinite(Value)&&Value>0.f?Value:6000.f;}();return Radius;
+}
+float BattleTactics::BaseGarrisonSeconds()
+{
+ static const float Seconds=[](){float Value=30.f;FParse::Value(FCommandLine::Get(),TEXT("BattleBaseGarrisonSeconds="),Value);return FMath::IsFinite(Value)&&Value>0.f?Value:30.f;}();return Seconds;
+}
 float BattleTactics::BaseRifleDamage()
 {
  static const float Scale=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleBaseRifleDamage="),Value);return FMath::IsFinite(Value)&&Value>0.f?FMath::Clamp(Value,.01f,1.f):1.f;}();

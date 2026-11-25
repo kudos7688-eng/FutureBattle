@@ -300,7 +300,10 @@ public:
  bool bArmsSmokeDone=false;
  void RunMissionResumeSmoke(); // -BattleMissionResumeSmoke (B06): BATTLE_MISSION_RESUME_SMOKE_RESULT failures=N, once after the start
  bool bMissionResumeSmokeDone=false;
- void StepOwnRouteSmoke(double Now); // -BattleOwnRouteSmoke (B05, BattleOwnRouteSmoke.cpp): BATTLE_OWN_ROUTE_SMOKE_RESULT failures=N, then exits
+ void StepOwnRouteSmoke(double Now); // -BattleOwnRouteSmoke (B05): result then exits
+ void InitializeBaseGarrison();
+ void StepBaseGarrisonSmoke(double Now);
+ bool bBaseGarrisonSmokeDone=false; // test-only latch, never a match decision
  double ArmsNextPick=0,ArmsNextMelee=0,ArmsNextHeal=0;int32 ArmsIssuedUnits=-1;bool bArmsElite=false;
  TMap<int32,double> ArmsActionUntil;TMap<int32,uint8> ArmsActionKind;
  TArray<TWeakObjectPtr<class UStaticMeshComponent>> ArmsShellMeshes;

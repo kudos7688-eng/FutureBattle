@@ -62,6 +62,10 @@ namespace BattleTactics
  // Trial -BattleBaseRifleDamage=x (default 0 = unchanged, 0.01..1): small-arms shots do x of their damage to an enemy home base
  // (anti-tank rounds, tank guns and shells keep their own base damage).
  float BaseRifleDamage();
+ bool BaseGarrison();
+ constexpr int32 BaseGarrisonSquads=2;
+ float BaseGarrisonRadius();
+ float BaseGarrisonSeconds();
  // Trial -BattleVehicleOrderHere=1 (default 0): a vehicle order to where the vehicle already stands is accepted as arrived (no route needed).
  bool VehicleOrderHere();
  bool ArtilleryPosts(); // Trial -BattleArtilleryPosts=1 (default 0): public mortar posts and raids.

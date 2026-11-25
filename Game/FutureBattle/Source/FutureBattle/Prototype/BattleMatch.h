@@ -98,6 +98,9 @@ public:
  UPROPERTY() FBattleAreaState Area;
  UPROPERTY() TArray<TObjectPtr<AActor>> BaseActors;
  void InitializeArea();
+ bool IsBaseGarrison(int32 SquadID) const;
+ int32 GarrisonLiving(int32 Team,bool bInsideOnly=false) const;
+ void UpdateBaseGarrison(float Dt);
  void UpdateArea(float Dt);
  bool AreaVisible(int32 Observer,FVector Point,AActor* Target=nullptr) const;
  bool DamageBase(AActor* Target,int32 AttackerTeam,float Damage);

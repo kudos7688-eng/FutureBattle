@@ -546,7 +546,7 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID);
  if(!Mode || Mode->bBattleEnded || !S || S->CommandStatus!=EBattleCommandStatus::Active || Goal.ContainsNaN()) return false;
  const FVector AskedGoal=Goal;
- if(!bMissionUpdate)SectorFireBack.Remove(SID);
+ if(!bMissionUpdate&&(!BattleTactics::BaseGarrison()||!GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID)))SectorFireBack.Remove(SID);
  if(bSector)
  {
   const FIntPoint Cell=BattleSectors::Cell(Goal);
@@ -554,7 +554,17 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
   Goal=BattleSectors::Center(Cell);
   BattleFieldLayout::Of(GetWorld()).Heights.Ground(Goal.X,Goal.Y,0,Goal.Z,nullptr,1.e9);
  }
- if(bWideField && Order!=EBattleOrder::Hold)
+ // Version 1 constrains destinations only.
+ const bool bGarrisonOrder=BattleTactics::BaseGarrison()&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID);
+ FVector GarrisonHome=FVector::ZeroVector;
+ if(bGarrisonOrder)
+ {
+  GarrisonHome=GetWorld()->GetSubsystem<UBattleMatch>()->AreaHome(S->Team);
+  const FVector Offset=Goal-GarrisonHome;const double Radius=BattleTactics::BaseGarrisonRadius();
+  if(Offset.Size2D()>Radius){const FVector Edge=GarrisonHome+Offset.GetSafeNormal2D()*Radius;Goal.X=Edge.X;Goal.Y=Edge.Y;}
+  bSector=false; // A sector centre may lie outside the base; retain the clamped point mission.
+ }
+ if(bWideField && (Order!=EBattleOrder::Hold||bGarrisonOrder))
  {
   // A goal under a hill (given at height 0) is the place on the hill above it (map I: hills above the projection's reach).
   BattleFieldLayout::Of(GetWorld()).Heights.Lift(Goal);
@@ -577,7 +587,24 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
    static const int32 RoadGoal=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleVehicleRoadGoal="),V);return V;}();
    if(RoadGoal>0)for(double Reach:{1500.,3000.,6000.})if(Nav->ProjectPointToNavigation(Goal,Projected,FVector(Reach,Reach,400),VehicleNav)){Projectable=true;SightExperiment.Cover(TEXT("vehicle_goal_moved"));break;}
   }
+  if(bGarrisonOrder)
+  {
+   // Search inward when the circle edge is blocked or projects outside; never commit a refused order.
+   Projectable=false;
+   if(Nav)for(double GarrisonScale:{1.,.9,.75,.5,.25,0.})
+   {
+    FVector GarrisonCandidate=GarrisonHome+(Goal-GarrisonHome)*GarrisonScale;
+    BattleFieldLayout::Of(GetWorld()).Heights.Lift(GarrisonCandidate);
+    FNavLocation GarrisonProjection;
+    if(!Nav->ProjectPointToNavigation(GarrisonCandidate,GarrisonProjection,FVector(100,100,400))||
+       FVector::Dist2D(GarrisonProjection.Location,GarrisonHome)>BattleTactics::BaseGarrisonRadius())continue;
+    auto* GarrisonPath=Nav->FindPathToLocationSynchronously(GetWorld(),Position(S->LeaderUnitID),GarrisonProjection.Location);
+    if(!GarrisonPath||!GarrisonPath->IsValid()||GarrisonPath->IsPartial())continue;
+    Projected=GarrisonProjection;Projectable=true;break;
+   }
+  }
   if(!Projectable){if(VehicleNav||NavFor(S->LeaderUnitID)!=nullptr||IsVehicle(S->LeaderUnitID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_ORDER_FAIL squad=%d reason=project nav=%s goal=%s"),SID,VehicleNav?*VehicleNav->GetName():TEXT("none"),*Goal.ToCompactString());Refuse();return false;}
+  if(bGarrisonOrder&&FVector::Dist2D(Projected.Location,GarrisonHome)>BattleTactics::BaseGarrisonRadius())return false;
   auto* Route=Nav->FindPathToLocationSynchronously(GetWorld(),Position(S->LeaderUnitID),Projected.Location,VehicleContext);
   // A tank whose goal lies where it cannot fit (the narrow streets of map E) drives to the end of the partial route instead.
   const bool VehiclePartial=VehicleNav&&Route&&Route->IsValid()&&Route->IsPartial()&&Route->PathPoints.Num()>1;
@@ -615,6 +642,7 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
  const bool OK=Store->SetSquadOrder(SID,Order,Goal,Goals,bMissionUpdate,bSector);
  if(OK)
  {
+  if(bGarrisonOrder&&!bMissionUpdate)SectorFireBack.Remove(SID);
   if(S->OrderRevision!=Revision) { auto& P=Plans.FindOrAdd(SID); P.bReplan=true; P.NextThink=0; }
   if(bWideField && !bMissionUpdate && S->Team==0) Store->SetSquadDelegated(SID,false);
   if(IsVehicle(S->LeaderUnitID)){auto& V=VehicleOrders.FindOrAdd(SID);V.Requested=AskedGoal;V.MissionRevision=S->MissionRevision;V.RetryAt=0;}
@@ -1650,6 +1678,7 @@ void UBattleLeaderRuntime::Step(float Dt)
  if(!bEnabled) return;
  // Named CPU trace scopes (Unreal Insights, -trace=cpu): free when no trace is recording.
  TRACE_CPUPROFILER_EVENT_SCOPE(BattleRuntimeStep);
+ if(BattleTactics::BaseGarrison()&&bArea&&FParse::Param(FCommandLine::Get(),TEXT("BattleBaseGarrisonSmoke"))){StepBaseGarrisonSmoke(GetWorld()->GetTimeSeconds());return;}
  if(SightExperiment.Enabled) { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightExperiment); StepSightExperiment(Dt); }
  StepSoldierOrderTest();
  // After the previous frame's facing and poses; also on the Phase3 path (it returns before the body timers).

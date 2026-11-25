@@ -54,8 +54,8 @@ BattleComposition::FInput BattleComposition::Capture(const UBattleMatch& Match,c
  TArray<int32> SquadIDs;Store.GetSquads().GetKeys(SquadIDs);SquadIDs.Sort();
  for(int32 SquadID:SquadIDs)
  {
-  const auto& Squad=Store.GetSquads().FindChecked(SquadID);if(Squad.Team!=Team)continue;
-  Result.LegacyBought+=SquadID>Match.StartSquadCount();Result.LegacyHeavy+=Squad.SquadType==BattleSquadType::Heavy;
+  const auto& Squad=Store.GetSquads().FindChecked(SquadID);if(Squad.Team!=Team||(BattleTactics::BaseGarrison()&&Match.IsBaseGarrison(SquadID)))continue;
+  Result.LegacyBought+=SquadID>Match.StartSquadCount()&&(!BattleTactics::BaseGarrison()||!Match.IsBaseGarrison(SquadID));Result.LegacyHeavy+=Squad.SquadType==BattleSquadType::Heavy;
   if(Squad.CommandStatus!=EBattleCommandStatus::Active)continue;
   ++Result.Active;if(Squad.SquadType>=BattleSquadType::Count)continue;
   auto& Type=Result.Types[Squad.SquadType];++Type.Active;
