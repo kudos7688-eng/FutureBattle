@@ -4,7 +4,8 @@ param(
  [string]$OutputName='headless',
  [ValidateSet('E','K','I','J')][string]$Map='K',
  # 2 = B05 (own routes survive squad replans). 0 shows the defect: the "survive a squad replan" checks fail.
- [ValidateSet(0,1,2)][int]$CutOffRoute=2,
+ [ValidateSet(0,1,2,3)][int]$CutOffRoute=2,
+ [ValidateSet(0,1)][int]$MoveProgress=0,
  [int]$Fps=30
 )
 # B05 fixed scene (BattleOwnRouteSmoke.cpp): one squad split by a wall, a plain move and a supply trip.
@@ -21,7 +22,7 @@ $log=Join-Path $out 'run.log'
 $arguments=@(('"'+$project+'"'),"/Game/Prototype/Lvl_BattleWide_$Map",'-game','-unattended','-nosound','-nosplash','-BattleWideMixed','-BattleRangeAware=1','-BattleSightRange=5000',
  ('-abslog="'+$log+'"'),'-BattleSectorAI=1','-BattleSquadFlank=1','-BattleCoverActions=1','-BattleFlankCoordination=1','-BattleAICoverProbe=0','-BattleCoverApproach=1','-BattleLeaderGuard=1',
  '-BattleTacticalObserve','-BattleArea',('-BattleSightExperiment="'+(Join-Path $out 'metrics.json')+'"'),'-BattleTrialSeed=7','-UseFixedTimeStep',"-FPS=$Fps",'-nullrhi',
- "-BattleCutOffRoute=$CutOffRoute",'-BattleOwnRouteSmoke')
+ "-BattleCutOffRoute=$CutOffRoute","-BattleMoveProgress=$MoveProgress",'-BattleOwnRouteSmoke')
 @{machine=(Get-MeasurementMachine);dll=(Get-FileHash $dll).Hash;map=$Map;cutOffRoute=$CutOffRoute;fps=$Fps;arguments=$arguments} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $out 'manifest.json') -Encoding utf8
 $p=Start-Process (Join-Path $EngineRoot 'Engine/Binaries/Win64/UnrealEditor-Cmd.exe') -ArgumentList $arguments -WindowStyle Hidden -PassThru
 if(!$p.WaitForExit(600000)){Stop-Process -Id $p.Id;throw "Timed out: $log"}
