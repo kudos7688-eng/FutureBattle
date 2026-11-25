@@ -775,9 +775,33 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    {P.ArrivalGoals.Reset();P.bReplan=true;P.FocusReplanAt=Now+10.;SightExperiment.Cover(TEXT("attack_focus_replan"));}
   }
  }
+ // Trial -BattleDefendSpread=1, stage 1b (BattleDefendSpread.cpp): a squad holding its sector places its fire teams again when the
+ // threat - its target, else the known enemy nearest to the sector within 200 m - is 45 degrees or more off the direction they were
+ // placed against. Checked every 2 s while the sector is hot for its team (-BattleHotSectors, IsHotSector), else every 10 s; at
+ // most once in 10 s. It takes the place of the -BattleArrivalThreat re-facing below for these squads.
+ const bool bSpreadHold=DefendSpreadEnabled() && Sector && (S->Order==EBattleOrder::Defend || S->Order==EBattleOrder::Hold) && BattleSectors::Cell(P.Center)==SectorCell;
+ if(bSpreadHold && Now>=P.SpreadCheckAt)
+ {
+  const bool bHot=IsHotSector(S->Team,S->Destination);
+  P.SpreadCheckAt=Now+(bHot?2.:10.);
+  SightExperiment.Cover(bHot?TEXT("defend_spread_checks_hot"):TEXT("defend_spread_checks_cold"));
+  FVector Threat=TargetAt;bool bThreat=bTargetKnown;
+  if(!bThreat)
+  {
+   double Nearest=FMath::Square(20000.);
+   for(const FVector& E:GetWorld()->GetSubsystem<UBattleMatch>()->RouteKnownEnemies(S->Team))
+    if(const double D=FVector::DistSquared2D(E,S->Destination);D<Nearest){Nearest=D;Threat=E;bThreat=true;}
+  }
+  const FVector Dir=bThreat?(Threat-S->Destination).GetSafeNormal2D():FVector::ZeroVector;
+  if(!Dir.IsNearlyZero() && !P.SpreadFacing.IsNearlyZero() && FVector::DotProduct(Dir,P.SpreadFacing)<.707f && S->Order!=EBattleOrder::Hold)
+  {
+   if(Now<P.SpreadPlacedAt+10.)SightExperiment.Cover(TEXT("defend_spread_turn_waited"));
+   else{P.SpreadWant=Dir;P.ArrivalGoals.Reset();P.bReplan=true;ReleaseSpreadCover(*S);SightExperiment.Cover(bHot?TEXT("defend_spread_replaced_hot"):TEXT("defend_spread_replaced_cold"));}
+  }
+ }
  // Trial -BattleArrivalThreat=1: in the sector, a target far off the direction the arrival places face picks them again
  // (not with -BattleAttackFocus, which re-plans by its focus).
- if(ArrivalThreatEnabled() && !AttackFocusEnabled() && Sector && bTargetKnown && BattleSectors::Cell(P.Center)==SectorCell && Now>=P.FacingCheckAt)
+ if(ArrivalThreatEnabled() && !AttackFocusEnabled() && !bSpreadHold && Sector && bTargetKnown && BattleSectors::Cell(P.Center)==SectorCell && Now>=P.FacingCheckAt)
  {
   P.FacingCheckAt=Now+3.;
   if(!P.ArrivalFacing.IsNearlyZero() && FVector::DotProduct((TargetAt-S->Destination).GetSafeNormal2D(),P.ArrivalFacing)<.707f)
@@ -816,6 +840,9 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    // Keep the assigned places and mission revision when the deployed squad begins holding.
    Store->Squads.FindChecked(SID).Order=EBattleOrder::Defend;
    for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive())Store->Units.FindChecked(ID).Order=EBattleOrder::Defend;
+   // -BattleDefendSpread (BattleDefendSpread.cpp): once, the squad that now holds the sector places its fire teams.
+   // (Codex 11-25: the arrival revision is kept, so members already in place go on from their own part of the path.)
+   if(DefendSpreadEnabled()){P.ArrivalGoals.Reset();P.ArrivalTails.Reset();P.bReplan=true;ReleaseSpreadCover(*S);SightExperiment.Cover(TEXT("defend_spread_on_hold"));}
   }
  }
  const bool NewOrder=P.OrderRevision!=S->OrderRevision;
@@ -1543,6 +1570,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   else BattleAudio::Shot(GetWorld(),Start,Shooter->Weapon==EBattleWeapon::SupportGun?BattleAudio::EShot::Heavy:BattleAudio::EShot::Rifle,bPlayerShot);
   if(!bAT&&Hit.bBlockingHit)BattleAudio::Impact(GetWorld(),HitAt,Victim>0);
   BattleAudio::ShotPassing(GetWorld(),Start,HitAt,Shooter->Team,Victim);
+  if(HotSectorsEnabled()&&FVector::Dist2D(Start,HitAt)<=5000.)NoteHotEvent(Start,.2f); // hot sectors: a shot over at most 50 m
  }
  if(Damaged)
   if(bPlayerShot) if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())) PC->HitMarkerUntil=Now+.18;
@@ -1654,6 +1682,7 @@ void UBattleLeaderRuntime::Step(float Dt)
   if(bArea && ArtilleryShells.Num()) StepArtilleryShells(Dt);
   // Infantry arms (BattleArms.cpp): only with a trial switch on, an elite platoon or a round in flight.
   if(bWideField && ArmsActive()) StepArms(Dt,Now);
+  if(bWideField && HotSectorsEnabled()) StepHotSectors(Now);
  }
  int32 Living[2]={0,0}; for(const auto& U:Store->GetUnits()) if(U.Value.IsAlive()) ++Living[U.Value.Team];
  if(!bArea && !Mode->bBattleEnded && (!Living[0] || !Living[1]))
@@ -1959,6 +1988,7 @@ void UBattleLeaderRuntime::NoteUnderFire(int32 ID)
  if(ShotDirectionEnabled() || ThreatCoverEnabled(0) || ThreatCoverEnabled(1) || SoldierMoveEnabled(0) || SoldierMoveEnabled(1) || OwnTargetMode(0) || OwnTargetMode(1) || UnderFireCoverEnabled() || CoverPriorityEnabled() || HitFaceEnabled() || (BattleTactics::VehicleHitCover()&&IsVehicle(ID))){FVector From;if(GetWorld()->GetSubsystem<UBattleState>()->PendingHitSource(From))ShotFrom.Add(ID,TPair<FVector,double>(From,GetWorld()->GetTimeSeconds()));}
  if(SectorContactEnabled() || SectorMoveFireEnabled() || !SectorFireBack.IsEmpty())SectorHitUntil.Add(ID,GetWorld()->GetTimeSeconds()+5.0);
  if(BattleArms::HoldFireEnabled())ArmsHitAt.Add(ID,GetWorld()->GetTimeSeconds());
+ if(HotSectorsEnabled())if(const auto* V=GetWorld()->GetSubsystem<UBattleState>()->Find(ID)){NoteHotEvent(Position(ID),1.f);NoteHotObserved(V->Team,Position(ID),GetWorld()->GetTimeSeconds());}
  if(SightExperiment.Enabled)if(const int32 Shooter=GetWorld()->GetSubsystem<UBattleState>()->PendingHitShooter();Shooter!=INDEX_NONE)DiagnoseHitSight(ID,Shooter);
  if(const int32 HitLook=SectorSightHitMode())
  {

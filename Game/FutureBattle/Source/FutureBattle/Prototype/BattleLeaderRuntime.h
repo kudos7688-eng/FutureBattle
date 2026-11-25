@@ -144,6 +144,9 @@ struct FBattleLeaderPlan
  double PinnedSince=0,PinnedBestDist=0;bool bPinned=false;FVector PinnedAt=FVector::ZeroVector;
  // Trial -BattleArrivalThreat=1: the direction the arrival places were chosen against (zero = the direction of advance).
  FVector ArrivalFacing=FVector::ZeroVector;double FacingCheckAt=0;
+ // Trial -BattleDefendSpread=1 (BattleDefendSpread.cpp, stage 1b): the threat direction the fire teams were placed against, the
+ // direction the next placement is to face (zero = the usual arrival facing), the next check and the last placement.
+ FVector SpreadFacing=FVector::ZeroVector,SpreadWant=FVector::ZeroVector;double SpreadCheckAt=0,SpreadPlacedAt=-1.e9;
  // Trial -BattleAttackFocus=1: the point this sector squad defends toward (from its team's sightings, re-picked every 3 s) and
  // the direction its current arrival places were chosen against (from the destination; zero = not chosen against a focus).
  FVector Focus=FVector::ZeroVector;bool bFocus=false;FVector FocusPlanDir=FVector::ZeroVector;double FocusCheckAt=0,FocusReplanAt=0;
@@ -272,6 +275,21 @@ public:
  TMap<int32,FArmsBoundMemory> ArmsBoundMemory;
  TMap<int32,double> ArmsChargeNext,ArmsBoundArrived;double ArmsNextCharge=0;
  TMap<int32,double> ArmsHitAt; // -BattleArmsHoldFire: when each soldier was last hit (NoteUnderFire). Runtime only.
+ // Hot sectors (BattleHotSectors.cpp, trial -BattleHotSectors=1, default 0): the sectors whose squads get the detailed defence
+ // computation (Docs/design-defense-deployment.md). Record only so far. Key = sector X*100+Y. Runtime only, not saved.
+ struct FHotSector{uint8 Source=0;uint8 Attackers=0;int32 PlayerTeam=INDEX_NONE;double Since=0,Until=0,LowSince=-1;bool bTeam[2]={false,false};}; // Source 1 player, 2 attack order, 3 heat
+ struct FHotHeat{float Points[10]={0,0,0,0,0,0,0,0,0,0};int32 Sec[10]={-100,-100,-100,-100,-100,-100,-100,-100,-100,-100};};
+ static bool HotSectorsEnabled();
+ // Defensive deployment stage 1a (BattleDefendSpread.cpp, trial -BattleDefendSpread=1, default 0): a squad holding a sector splits
+ // into fire teams; each member gets his own cover candidate order (BuildMovementPlan).
+ static bool DefendSpreadEnabled();
+ void ReleaseSpreadCover(const FBattleSquadState& S); // a re-placement: members in a cover action leave it to walk to their new places
+ void PlanDefendSpread(const FBattleSquadState& S,const FVector& Forward,const FVector& Right,const TArray<FVector>& Candidates,TMap<int32,TArray<FVector>>& Order);
+ void StepHotSectors(double Now);
+ void NoteHotEvent(const FVector& At,float Points);
+ void NoteHotObserved(int32 Team,const FVector& At,double Now);
+ bool IsHotSector(int32 Team,const FVector& At) const; // that team's squads in the sector at At are detailed
+ TMap<int32,FHotSector> HotSectors;TMap<int32,FHotHeat> HotHeat;TMap<int32,double> HotObserved[2];TMap<int32,double> HotAttackSince;TSet<int32> HotAlive;double HotNext=0,HotNextLog=0;
  // Sector tasks (BattleArmsSector.cpp, -BattleArmsSectorTask / -BattleArmsRushWatch / -BattleArmsCoverFire). Runtime only, cleared on
  // restore. ArmsRushSamples: a defending squad's last sighting of an enemy (key squad << 32 | enemy); ArmsRushers: per squad, the
  // enemies seen closing on its place at 3 m/s or more (kept 3 s); ArmsCoverCalls: per bounder, the point to fire at; ArmsCoverFire:

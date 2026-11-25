@@ -154,7 +154,7 @@ void UBattleLeaderRuntime::StepArmsRush(double Now)
 					const bool bNew = !Rushers.Contains(E);
 					auto& R = Rushers.FindOrAdd(E);
 					R.At = At; R.Vel = (At - Old->At) / Dt; R.Vel.Z = 0; R.Seen = Now; R.Watchers = Watchers.FindRef(E);
-					if (bNew) SightExperiment.Cover(TEXT("arms_rush_seen"));
+					if (bNew) { SightExperiment.Cover(TEXT("arms_rush_seen")); NoteHotEvent(At, 3.f); }
 				}
 				else if (auto* Known = ArmsRushers.Find(SID)) if (auto* R = Known->Find(E)) { R->At = At; R->Watchers = Watchers.FindRef(E); }
 			}
