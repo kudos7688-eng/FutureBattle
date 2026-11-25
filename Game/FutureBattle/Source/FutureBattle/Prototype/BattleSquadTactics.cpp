@@ -30,7 +30,7 @@ void UBattleSquadTactics::Initialize(FSubsystemCollectionBase& Collection)
 void UBattleSquadTactics::Reset()
 {
  ActiveSeconds = 0; NextDump = 5; NextSample.Reset(); Samples.Reset(); Events.Reset(); ActionSeconds.Reset();
- SupplyTripStart.Reset(); SupplyTripSeconds.Reset();
+ SupplyTripStart.Reset(); SupplyTripSeconds.Reset(); JoinFights.Reset();
  GetWorld()->GetSubsystem<UBattleTeamAI>()->Reset();
  DamageHistory.Reset(); TotalStepMs = MaxStepMs = 0; StepCount = 0;
 }

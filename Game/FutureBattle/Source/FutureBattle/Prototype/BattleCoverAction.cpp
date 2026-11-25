@@ -607,7 +607,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  const bool AIPeekFire=!Player && BattleTactics::CoverFireEnabled();
  if(U->CoverPhase==4)
  {
-  const TCHAR* PeekEnd=U->ReloadEndTime>0?TEXT("reload"):(!Player && IsPinned(ID,Now))?TEXT("suppressed"):(AIPeekFire && CoverPeekShots.FindRef(ID)>=FMath::Max(1,GetDefault<UBattleTuning>()->AICoverShotsPerPeek))?TEXT("shots_done"):U->CoverSeconds<=0?TEXT("timer"):
+  const TCHAR* PeekEnd=U->ReloadEndTime>0?TEXT("reload"):(!Player && IsPinned(ID,Now))?TEXT("suppressed"):(AIPeekFire && CoverPeekShots.FindRef(ID)>=(BattleTactics::CoverPeekShots()>0?BattleTactics::CoverPeekShots():FMath::Max(1,GetDefault<UBattleTuning>()->AICoverShotsPerPeek)))?TEXT("shots_done"):U->CoverSeconds<=0?TEXT("timer"):
    (Validate && !CoverLineClear(ID,Position(ID),Contact->LastKnownPosition))?TEXT("no_line"):
    // -BattleCoverPeekSight=1: stop exposing once the blind time has passed at the peek point without an own sighting.
    (AIPeekFire && BattleTactics::CoverPeekSightEnabled() && !(Contact->bVisible && !Contact->bShared) &&

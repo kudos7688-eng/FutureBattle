@@ -123,6 +123,7 @@ FVector UBattleMatch::GroupSupportPost(int32 Team,int32 Point) const
  const FVector P=Objectives[Point].Position,Home=AreaHome(Team);const double Length=FVector::Dist2D(Home,P);
  const double Range=BattleRanges::Get().bActive?BattleRanges::Engage(EBattleWeapon::Carbine):T->EffectiveWeaponRange();
  FVector Post=P+(Home-P).GetSafeNormal2D()*FMath::Clamp(double(T->GroupSupportBack)*Range,0.,FMath::Max(0.,Length-3000.));
+ BattleFieldLayout::Of(GetWorld()).Heights.OnField(Post);
  if(auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld())){FNavLocation L;if(Nav->ProjectPointToNavigation(Post,L,FVector(1000,1000,500)))Post=L.Location;}
  return Post;
 }

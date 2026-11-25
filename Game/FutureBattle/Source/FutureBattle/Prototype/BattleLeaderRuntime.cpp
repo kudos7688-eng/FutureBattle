@@ -887,8 +887,17 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  auto& B=Bodies.FindChecked(ID);
  // The player's order to this soldier ends (squad order, squad stopped, taken over...) before his cover action runs.
  if(U->bSoldierOrder)SoldierOrderActive(ID);
+ // Evaluation only, -BattleFireTimeLog (default off, needs the evaluation counters of -BattleSightExperiment; STATUS 2026-11-25
+ // "弾薬と補給"): one count per frame of an AI rifleman, by what keeps him from firing (cover_diagnostics firetime_*; frames / the
+ // fixed frame rate = soldier-seconds). Changes nothing in the match (its sight checks write only sight statistics).
+ static const bool bFireTimeLog=FParse::Param(FCommandLine::Get(),TEXT("BattleFireTimeLog"));
+ const bool bFireTimeUnit=bFireTimeLog && SightExperiment.Enabled && U->Weapon==EBattleWeapon::Carbine && !IsVehicle(ID) && !(B.Actor.IsValid() && B.Actor->IsPlayerControlled());
+ if(bFireTimeUnit)SightExperiment.Cover(TEXT("firetime_total"));
  if(StepCoverAction(ID,Dt,Now))
  {
+  // The phase after this frame's step: 1 walking in or back from a peek, 2 hidden, 3 moving out to peek, 4 exposed (why an
+  // exposed soldier does not fire is in peekwait_* and cover_shots).
+  if(bFireTimeUnit){static const TCHAR* Phase[]={TEXT("firetime_cover_phase0"),TEXT("firetime_cover_1_entering"),TEXT("firetime_cover_2_hidden"),TEXT("firetime_cover_3_to_peek"),TEXT("firetime_cover_4_peeking")};SightExperiment.Cover(Phase[FMath::Min<int32>(U->CoverPhase,4)]);}
   if(CoverApproaches.Num())if(auto* A=CoverApproaches.Find(ID);A&&A->bAssault)++A->CoverWaits; // evaluation (BattleArms.cpp)
   return;
  }
@@ -899,7 +908,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   if(BattleStance::MoveMode()==0 && StanceOf(ID)!=BattleStance::Stand && B.Actor->GetVelocity().SizeSquared2D()>2500.)SetStance(ID,BattleStance::Stand,Now,true,true);
   return;
  }
- const auto* S=Store->FindSquad(U->SquadID); auto* P=Plans.Find(U->SquadID); if(!P || S->CommandStatus!=EBattleCommandStatus::Active) return;
+ const auto* S=Store->FindSquad(U->SquadID); auto* P=Plans.Find(U->SquadID);
+ if(!P || S->CommandStatus!=EBattleCommandStatus::Active){if(bFireTimeUnit)SightExperiment.Cover(!P?TEXT("firetime_no_plan"):TEXT("firetime_squad_inactive"));return;}
  FVector Pos=Position(ID), Direction=Forward(ID); const FVector LastVelocity=B.Velocity; B.Velocity=FVector::ZeroVector;
  // The player's order to this soldier (BattleSoldierOrder.cpp): his own place instead of the squad's movement.
  const bool bOwnOrder=U->bSoldierOrder && SoldierOrderActive(ID);
@@ -939,6 +949,23 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   U->Weapon!=EBattleWeapon::AntiTank && !IsArtillery(ID) ? OwnTarget(ID,Pos,Now,bOwnAtShooter) : INDEX_NONE;
  const auto* OwnContact=OwnTargetID!=INDEX_NONE?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,OwnTargetID):nullptr;
  const bool bOwnEngage=OwnContact && CanSee(ID,OwnTargetID);
+ if(bFireTimeUnit)
+ {
+  // The nearest enemy soldier he sees himself within range, whether or not -BattleOwnTarget lets him fire at it. "at_check": the
+  // state at this point of the frame; a cover action that starts further down may still take the shot away.
+  bool bUnused=false;const int32 SeenID=CanEngage?INDEX_NONE:OwnTargetID!=INDEX_NONE?OwnTargetID:OwnTarget(ID,Pos,Now,bUnused);
+  const TCHAR* Why=
+   CanEngage?(U->ReloadEndTime>0?TEXT("engage_reloading"):U->Ammo==0?TEXT("engage_empty"):Now<U->NextShotTime?TEXT("engage_between_shots"):TEXT("engage_ready_at_check")):
+   bOwnEngage?(U->ReloadEndTime>0?TEXT("own_fire_reloading"):U->Ammo==0?TEXT("own_fire_empty"):Now<U->NextShotTime?TEXT("own_fire_between_shots"):TEXT("own_fire_ready_at_check")):
+   SeenID!=INDEX_NONE?(CanSee(ID,SeenID)?TEXT("sees_other_enemy_in_range"):TEXT("scan_sees_other_enemy_not_now")):
+   ObservedEngage?TEXT("target_scan_sees_not_now"):
+   TargetID==INDEX_NONE?(SeesEnemy(ID)?TEXT("no_target_sees_some_enemy"):TEXT("no_target_sees_none")):
+   !Contact?TEXT("target_unknown_to_him"):
+   Contact->bShared?TEXT("target_reported_not_seen"):
+   !Contact->bVisible?TEXT("target_remembered_not_seen"):
+   bSaveRounds||(S->TacticalPlan.Action==EBattleSquadTactic::Support&&TargetID!=S->TacticalPlan.SupportTarget)?TEXT("target_seen_not_allowed"):TEXT("target_seen_beyond_range");
+  SightExperiment.Cover(*FString::Printf(TEXT("firetime_%s_%s"),Why,LastVelocity.SizeSquared2D()>1.?TEXT("walk"):TEXT("still")));
+ }
  // Evaluation: an engagement that begins with his head turned (-BattleWalkLook) at a target outside his body's 120 degrees.
  if((CanEngage || bOwnEngage) && WalkLooks.Num() && WalkLooks.Contains(ID) &&
   FVector::DotProduct(Forward(ID).GetSafeNormal2D(),((CanEngage?Contact:OwnContact)->LastKnownPosition-Pos).GetSafeNormal2D())<.5)
@@ -1208,8 +1235,24 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const FVector Muzzle(0,0,BattleStance::EyeOffset(StanceOf(ID)));
  // -BattleArmsCoverFire (BattleArmsSector.cpp): with nothing of his own to fire at he fires at the point a bounding soldier called.
  FVector CoverFirePoint;const bool bCoverFire=!BaseEngage&&!CanEngage&&!bOwnEngage&&ArmsCoverFire.Num()&&!bVehicleBody&&!bArtilleryAim&&ArmsCoverFireAt(ID,Now,CoverFirePoint);
+ // Trial -BattleSuppressFire (BattleTactics.h, default off): standing, with the squad's target out of his sight, he keeps firing at
+ // where he saw it last himself. Observed data only (his own contact). The wall check runs only when a shot is due.
+ bool bSuppress=false;FVector SuppressPoint=FVector::ZeroVector;
+ if(BattleTactics::SuppressFire()>0.f&&!BaseEngage&&!bCoverFire&&!CanEngage&&!bOwnEngage&&!bVehicleBody&&!bArtilleryAim&&!bSaveRounds&&
+    (U->Weapon==EBattleWeapon::Carbine||U->Weapon==EBattleWeapon::SupportGun)&&Contact&&!Contact->bVisible&&!Contact->bShared&&
+    Now-Contact->LastSeenTime<=BattleTactics::SuppressFire()&&LastVelocity.SizeSquared2D()<=1.&&U->ReloadEndTime==0&&Now>=U->NextShotTime)
+ {
+  SuppressPoint=Contact->LastKnownPosition+FVector(0,0,60);const FVector From=Pos+Muzzle;const double Far=FVector::Dist(From,SuppressPoint);
+  if(Far>300.&&Far<=BattleRanges::Engage(U->Weapon))
+  {
+   FHitResult Wall;
+   bSuppress=!GetWorld()->LineTraceSingleByObjectType(Wall,From,SuppressPoint,FCollisionObjectQueryParams(ECC_WorldStatic))||Wall.Distance>=Far*.6;
+   if(SightExperiment.Enabled)SightExperiment.Cover(bSuppress?TEXT("suppress_fire_due"):TEXT("suppress_fire_wall_near"));
+  }
+ }
  if(BaseEngage)Direction=(BaseTarget-(Pos+Muzzle)).GetSafeNormal();
  else if(bCoverFire)Direction=(CoverFirePoint-(Pos+Muzzle)).GetSafeNormal();
+ else if(bSuppress)Direction=(SuppressPoint-(Pos+Muzzle)).GetSafeNormal();
  else if(CanEngage || bOwnEngage)
  {
   // The squad's target, or under -BattleOwnTarget his own.
@@ -1291,6 +1334,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const bool bSidearm=(U->SideAmmo+U->SideReserve>0||U->bSidearmSelected)&&UseSidearm(ID,CanEngage?TargetID:INDEX_NONE,Now);
  if(BaseEngage)Fire(ID,Pos+Muzzle,Direction,false);
  if(bCoverFire){if(U->Ammo==0)Store->StartReload(ID,Now);else{bArmsCoverShot=true;if(Fire(ID,Pos+Muzzle,Direction,false))SightExperiment.Cover(TEXT("arms_cover_fire_shots"));bArmsCoverShot=false;}}
+ if(bSuppress){if(U->Ammo==0)Store->StartReload(ID,Now);else{bArmsCoverShot=true;if(Fire(ID,Pos+Muzzle,Direction,false))SightExperiment.Cover(TEXT("suppress_fire_shots"));bArmsCoverShot=false;}}
  if(CanEngage) { if(bSidearm) Fire(ID,Pos+Muzzle,Direction,false); else if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false) && S->TacticalPlan.Action==EBattleSquadTactic::Support) GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(S->SquadID,TargetID); }
  else if(bOwnEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false)) SightExperiment.Cover(TEXT("own_target_shots")); }
  Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:((BattleTactics::ObservedTactics()?ObservedEngage:CanEngage)||bOwnEngage||bCoverFire)?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
@@ -1342,7 +1386,17 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   return FireExoLauncher(ID,Start+Direction.GetSafeNormal()*BattleRanges::Reach(EBattleWeapon::AntiTank),Now);
  Store->UpdateAim(ID,Now,Actor(ID)?Actor(ID)->GetVelocity().Size2D():Bodies.FindChecked(ID).Velocity.Size2D(),Direction,Actor(ID)?Actor(ID)->GetCharacterMovement()->IsMovingOnGround():true);
  if(ABattleUnit* Shooter=Actor(ID);Shooter && !bPlayerShot)Shooter->NoteDisplayAim(Direction,Now);
- if(bSide?!BattleArms::ConsumeSidearmShot(Store->Units.FindChecked(ID),Now,T->ShotInterval(W,bPlayerShot)):!Store->ConsumeShot(ID,Now,T->ShotInterval(W,bPlayerShot),!bPlayerShot&&W==EBattleWeapon::Carbine?BattleTactics::CarbineShotRounds():1)) return false;
+ // Trial -BattleBurstFire (BattleTactics.h, default off): an AI carbine fires a burst at the player's interval, then holds.
+ double Interval=T->ShotInterval(W,bPlayerShot);int32* Burst=nullptr;
+ if(!bPlayerShot&&!bSide&&W==EBattleWeapon::Carbine&&BattleTactics::BurstFire()>0)
+ {
+  // A burst not continued within 0.6 s of its last round (aim change, reload, cover, lost sight) is over: the next round starts a new one.
+  auto& State=BurstLeft.FindOrAdd(ID,TPair<int32,double>(0,-100.));
+  if(State.Key<=0||Now-State.Value>.6||Now<State.Value)State.Key=BattleTactics::BurstFire();
+  Burst=&State.Key;Interval=*Burst>1?T->ShotInterval(W,true):BattleTactics::BurstPause();
+ }
+ if(bSide?!BattleArms::ConsumeSidearmShot(Store->Units.FindChecked(ID),Now,Interval):!Store->ConsumeShot(ID,Now,Interval,!bPlayerShot&&W==EBattleWeapon::Carbine?BattleTactics::CarbineShotRounds():1)) return false;
+ if(Burst){--*Burst;BurstLeft.FindChecked(ID).Value=Now;}
  if(bSide)SightExperiment.Cover(bPlayerShot?TEXT("arms_sidearm_shots_player"):TEXT("arms_sidearm_shots"));
  if(SightExperiment.Started)
  {

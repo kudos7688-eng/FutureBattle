@@ -4,6 +4,7 @@
 // backed off 330 m from every known anti-tank soldier (launcher reach 300 m); moving their goal or post did not raise their kills.
 #include "BattleMatch.h"
 #include "BattleLeaderRuntime.h"
+#include "BattleFieldLayout.h"
 #include "BattlePerception.h"
 #include "BattleState.h"
 #include "BattleTactics.h"
@@ -157,6 +158,7 @@ bool UBattleMatch::ACShieldPost(int32 Team,int32 SquadID,FVector& Post) const
  if(Toward.IsZero())Toward=Lead->MissionDestination;
  const FVector Dir=(Toward-LeadAt).GetSafeNormal2D();if(Dir.IsNearlyZero())return false;
  Post=LeadAt+Dir*FMath::Min(4000.,FVector::Dist2D(LeadAt,Toward));
+ BattleFieldLayout::Of(GetWorld()).Heights.OnField(Post);
  if(auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld())){FNavLocation L;if(Nav->ProjectPointToNavigation(Post,L,FVector(1500,1500,400),R->NavFor(Car->LeaderUnitID)))Post=L.Location;}
  return true;
 }

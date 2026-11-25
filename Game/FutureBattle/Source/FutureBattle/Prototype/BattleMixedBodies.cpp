@@ -124,7 +124,7 @@ bool UBattleLeaderRuntime::RestoreMixedBodies(const UBattleSave* Save,FString& E
  CoverApproaches.Reset();FirePositions.Reset();
  ArmsBoundMemory.Reset();ArmsBoundArrived.Reset();ArmsRushSamples.Reset();ArmsRushers.Reset();ArmsRetreatNext.Reset();ArmsCoverCalls.Reset();ArmsCoverFire.Reset(); // + sector tasks (BattleArmsSector.cpp)
   // where assault bounds saw their enemy and reached cover (BattleArms.cpp)
- SuppressionZeroAt.Reset();
+ SuppressionZeroAt.Reset();BurstLeft.Reset(); // -BattleBurstFire: a restored match starts new bursts
  Stances.Reset();StanceLockedUntil.Reset();LowMoveUntil.Reset();CrouchBlindAt.Reset();QuietPeeks.Reset(); // -BattleStanceSteady memories
  PC->ResetMatchControl();
  const bool UseVAT=bDisplayLODEnabled;

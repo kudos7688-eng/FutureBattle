@@ -70,7 +70,8 @@ void UBattleLeaderRuntime::RunMapStats()
  const double SightReach=60000,ClearReach=5000,Cell=2500;
  for(double X=-Half.X+Cell*.5;X<Half.X;X+=Cell) for(double Y=-Half.Y+Cell*.5;Y<Half.Y;Y+=Cell)
  {
-  FNavLocation Ground;if(!Nav||!Nav->ProjectPointToNavigation(FVector(X,Y,0),Ground,FVector(60,60,200)))continue;
+  // At the height of the base ground (the field of map L; 0 elsewhere).
+  FNavLocation Ground;if(!Nav||!Nav->ProjectPointToNavigation(FVector(X,Y,BattleFieldLayout::Of(W).Heights.Base(X,Y)),Ground,FVector(60,60,200)))continue;
   FMapZone& Z=Zones[ZoneOf(Ground.Location)];++Z.Points;
   double Longest=0,Clear=ClearReach;
   for(int32 I=0;I<16;++I)
