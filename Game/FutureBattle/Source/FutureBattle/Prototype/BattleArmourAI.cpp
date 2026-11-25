@@ -257,7 +257,8 @@ int32 UBattleMatch::AreaArmourReaction(int32 Team,int32 SquadID,float DamageRati
      const FVector HideDirection=FVector::ForwardVector.RotateAngleAxis((HideIndex/2)*45.,FVector::UpVector);
      if(FVector::DotProduct(HideDirection,TowardHit)>.3)continue;
      FNavLocation HideLocation;++HideCandidates;
-     if(!Nav->ProjectPointToNavigation(Here+HideDirection*(HideIndex%2==0?2500.:5000.),HideLocation,FVector(1500,1500,400),Data))continue;
+     FVector HideWant=Here+HideDirection*(HideIndex%2==0?2500.:5000.);BattleFieldLayout::Of(GetWorld()).Heights.OnField(HideWant);
+     if(!Nav->ProjectPointToNavigation(HideWant,HideLocation,FVector(1500,1500,400),Data))continue;
      if(FVector::DotProduct((HideLocation.Location-Here).GetSafeNormal2D(),TowardHit)>.3)continue;
      if(!GetWorld()->LineTraceTestByChannel(HitOrigin+FVector(0,0,150),HideLocation.Location+FVector(0,0,150),ECC_Visibility,HideQuery))continue;
      ++HideCount;const double HideHomeDistance=FVector::DistSquared2D(HideLocation.Location,Home);
@@ -272,8 +273,9 @@ int32 UBattleMatch::AreaArmourReaction(int32 Team,int32 SquadID,float DamageRati
     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_VEHICLE_HIDE squad=%d origin=%s goal=fallback_home candidates=%d hidden=0"),SquadID,*HitOrigin.ToCompactString(),HideCandidates);
    }
   }
-  FNavLocation L;
-  if(!Nav->ProjectPointToNavigation(Here+Away*Distance,L,FVector(1500,1500,400),Data)&&!Nav->ProjectPointToNavigation(Here+ToHome*Distance,L,FVector(1500,1500,400),Data))return 0;
+  FNavLocation L;FVector AwayWant=Here+Away*Distance,HomeWant=Here+ToHome*Distance;
+  BattleFieldLayout::Of(GetWorld()).Heights.OnField(AwayWant);BattleFieldLayout::Of(GetWorld()).Heights.OnField(HomeWant);
+  if(!Nav->ProjectPointToNavigation(AwayWant,L,FVector(1500,1500,400),Data)&&!Nav->ProjectPointToNavigation(HomeWant,L,FVector(1500,1500,400),Data))return 0;
   Goal=L.Location;Why=Threat?TEXT("ANTI-TANK THREAT / STAND OFF"):TEXT("HEAVY HIT / PULL BACK");
   return 1;
  }

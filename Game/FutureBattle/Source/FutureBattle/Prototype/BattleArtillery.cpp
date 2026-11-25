@@ -737,6 +737,8 @@ bool UBattleLeaderRuntime::FireArtillery(int32 ID,const FVector& Aim,double Now)
  const float Spread=ArtillerySpread(bSPG,Distance);const float Angle=Random.FRandRange(0.f,2.f*PI),Radius=Spread*FMath::Sqrt(Random.FRand());
  FArtilleryShell Shell;Shell.ShooterID=ID;Shell.Team=U->Team;Shell.bSPG=bSPG;
  Shell.At=Aim+FVector(FMath::Cos(Angle)*Radius,FMath::Sin(Angle)*Radius,0.f);
+ // Map L (rolling ground): the round falls at the aim's height above the ground where it lands, not at the aim's own height.
+ if(const auto& LandHeights=BattleFieldLayout::Of(GetWorld()).Heights;!LandHeights.Field.IsEmpty())Shell.At.Z+=LandHeights.Base(Shell.At.X,Shell.At.Y)-LandHeights.Base(Aim.X,Aim.Y);
  const auto* SS=Store->FindSquad(U->SquadID);Shell.ShooterType=SS?SS->SquadType:0;
  Shell.Remaining=float(Distance/FMath::Max(100.f,bSPG?T->SPGShellSpeed:T->MortarShellSpeed));
  ArtilleryShells.Add(Shell);

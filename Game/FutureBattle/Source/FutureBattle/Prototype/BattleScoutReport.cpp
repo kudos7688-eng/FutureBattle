@@ -6,6 +6,7 @@
 // The player's own direct view is not filtered: what the camera shows is seen at once.
 #include "BattleMatch.h"
 #include "BattleLeaderRuntime.h"
+#include "BattleFieldLayout.h"
 #include "BattlePerception.h"
 #include "BattleSuppression.h"
 #include "BattleRanges.h"
@@ -123,6 +124,7 @@ void UBattleMatch::UpdateScoutReports()
    const FVector ToHome=AreaHome(S->Team)-Eye;
    const FVector Away=NearestD<DBL_MAX?(Eye-Nearest).GetSafeNormal2D():ToHome.GetSafeNormal2D();
    FVector Back=Eye+(Away.IsNearlyZero()?ToHome.GetSafeNormal2D():Away)*FMath::Min<double>(FMath::Max(0.f,T->ScoutRetreatDistance),ToHome.Size2D());
+   BattleFieldLayout::Of(GetWorld()).Heights.OnField(Back);
    if(auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld())){FNavLocation L;if(Nav->ProjectPointToNavigation(Back,L,FVector(1500,1500,500)))Back=L.Location;}
    Rep.RetreatPoint=Back;Rep.RetreatUntil=Now+FMath::Max(1.f,T->ScoutRetreatSeconds);++Rep.Burns;
    if(Rep.Started>=0&&Rep.PauseStart<0)Rep.PauseStart=Now;

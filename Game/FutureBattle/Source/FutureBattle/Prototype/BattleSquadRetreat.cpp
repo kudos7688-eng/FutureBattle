@@ -2,6 +2,7 @@
 #include "BattleMatch.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
+#include "BattleFieldLayout.h"
 #include "BattleTactics.h"
 #include "NavigationSystem.h"
 #include "NavigationPath.h"
@@ -42,7 +43,8 @@ bool UBattleSquadTactics::RetreatGoal(const FBattleSquadState& S,const FBattleSq
  for(int32 I=0;I<4;++I)
  {
   const float Angle=I==2?45.f:I==3?-45.f:0.f;
-  const FVector Raw=Start+Away.RotateAngleAxis(Angle,FVector::UpVector)*(I==0?1500.f:2500.f);
+  FVector Raw=Start+Away.RotateAngleAxis(Angle,FVector::UpVector)*(I==0?1500.f:2500.f);
+  BattleFieldLayout::Of(GetWorld()).Heights.OnField(Raw);
   FNavLocation P;
   if(!Nav->ProjectPointToNavigation(Raw,P,FVector(150,150,400))) continue;
   const double EndDistance=Distance(P.Location);

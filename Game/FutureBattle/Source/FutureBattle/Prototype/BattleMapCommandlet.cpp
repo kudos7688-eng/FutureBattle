@@ -807,9 +807,10 @@ int32 UBattleMapCommandlet::Main(const FString& Params)
 				int32 FieldSamples=0,FieldMismatched=0,Roofs=0,RoofChecked=0;double FieldWorst=0;
 				if(Field)
 				{
-					for(double X=-49500;X<=49500;X+=1000)for(double Y=-34500;Y<=34500;Y+=1000)
+					// Inside both triangles of a cell (u = .36, v = .68 and the other way round), not at the grid points.
+					for(const FVector2D Off:{FVector2D(90,170),FVector2D(170,90)})for(double SX=-49500;SX<=49500;SX+=1000)for(double SY=-34500;SY<=34500;SY+=1000)
 					{
-						const double Z=GroundZ(X,Y);FHitResult Hit;
+						const double X=SX+Off.X,Y=SY+Off.Y,Z=GroundZ(X,Y);FHitResult Hit;
 						const bool bHit=World->LineTraceSingleByObjectType(Hit,FVector(X,Y,Z+300),FVector(X,Y,Z-300),FCollisionObjectQueryParams(ECC_WorldStatic));
 						if(bHit&&!BattleTerrain::IsGround(Hit))continue;
 						++FieldSamples;const double Gap=bHit?FMath::Abs(Hit.ImpactPoint.Z-Z):1.e6;FieldWorst=FMath::Max(FieldWorst,Gap);

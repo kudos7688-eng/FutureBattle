@@ -59,11 +59,21 @@ namespace BattleTerrain
 			if(Slope)*Slope=FMath::Sqrt(DX*DX+DY*DY)/Step;
 			return H00+U*DX+V*DY;
 		}
-		// Lowest and highest ground over a rectangle (the grid points inside it and its corners).
+		// Lowest and highest ground over a rectangle. The ground is flat on every triangle, so the extremes lie at the grid points
+		// inside the rectangle and on its edges where they cross a grid line or a cell diagonal (the corners included).
 		void Range(double X0,double Y0,double X1,double Y1,double& Low,double& High) const
 		{
 			Low=DBL_MAX;High=-DBL_MAX;
-			for(double X:{X0,X1})for(double Y:{Y0,Y1}){const double H=Height(X,Y);Low=FMath::Min(Low,H);High=FMath::Max(High,H);}
+			auto Take=[&](double X,double Y){const double H=Height(X,Y);Low=FMath::Min(Low,H);High=FMath::Max(High,H);};
+			auto Edge=[&](bool bAlongX,double At,double From,double To)
+			{
+				Take(bAlongX?From:At,bAlongX?At:From);Take(bAlongX?To:At,bAlongX?At:To);
+				// Grid lines cross the edge at O + K*Step; the diagonals (FX - FY = integer) at O + Shift + K*Step.
+				const double O=bAlongX?Origin.X:Origin.Y,Shift=bAlongX?At-Origin.Y:At-Origin.X;
+				for(int32 K=FMath::CeilToInt((From-O)/Step);O+K*Step<=To;++K){const double C=O+K*Step;Take(bAlongX?C:At,bAlongX?At:C);}
+				for(int32 K=FMath::CeilToInt((From-O-Shift)/Step);O+Shift+K*Step<=To;++K){const double C=O+Shift+K*Step;Take(bAlongX?C:At,bAlongX?At:C);}
+			};
+			Edge(true,Y0,X0,X1);Edge(true,Y1,X0,X1);Edge(false,X0,Y0,Y1);Edge(false,X1,Y0,Y1);
 			const int32 I0=FMath::Clamp(FMath::CeilToInt((X0-Origin.X)/Step),0,NX-1),I1=FMath::Clamp(FMath::FloorToInt((X1-Origin.X)/Step),0,NX-1);
 			const int32 J0=FMath::Clamp(FMath::CeilToInt((Y0-Origin.Y)/Step),0,NY-1),J1=FMath::Clamp(FMath::FloorToInt((Y1-Origin.Y)/Step),0,NY-1);
 			for(int32 J=J0;J<=J1;++J)for(int32 I=I0;I<=I1;++I){Low=FMath::Min(Low,double(At(I,J)));High=FMath::Max(High,double(At(I,J)));}
@@ -80,6 +90,10 @@ namespace BattleTerrain
 		bool IsEmpty() const {return Patches.IsEmpty()&&Field.IsEmpty();}
 		// Height of the base level at (X,Y): the field, or 0.
 		double Base(double X,double Y,double* Slope=nullptr) const {if(Field.IsEmpty()){if(Slope)*Slope=0;return 0.;}return Field.Height(X,Y,Slope);}
+		// Map L: a point made by moving another point tens of metres sideways (a flank, retreat or post goal) still has the height of
+		// the place it came from; it is put on the field before it is projected onto the navigation mesh, whose search reaches only a
+		// few metres up and down (Codex review 2026-11-25). No change where the map has no field.
+		void OnField(FVector& Point) const {if(!Field.IsEmpty())Point.Z=Field.Height(Point.X,Point.Y);}
 		void Build(FVector2D InHalf)
 		{
 			Half=InHalf;Columns=FMath::CeilToInt(2*Half.X/Cell);Rows=FMath::CeilToInt(2*Half.Y/Cell);Cells.Reset();Cells.SetNum(Columns*Rows);
