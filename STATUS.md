@@ -37,6 +37,16 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-25 18時33分 Claude（SquadTactics試験）：`Test-SquadTactics` の2件の FAIL は試験が古いためだった（コードの不具合ではない）。試験だけを今の仕様に合わせて直し failures=0（main 502415a、18時の回）。既定の試合は不変
+
+`Test-SquadTactics`（Test-Battle には入っていない）で `TPS RTS switch preserves squad plan` と `Expired plan resumes latest mission` が失敗していた。セーブ・ロード削除の前（main f6162d5）でも同じく失敗する既存の失敗（掲示板 C28・C31）。
+
+- **原因**：試験は 11-14（a51107b）に、直接操作中も小隊の委任と戦術計画（Retreat）が残る前提で書かれた。11-19 の 939e066 で「隊長を直接操作すると小隊は手動指揮に切り替わる」（PROTOTYPE.md の作戦画面の行、`Docs/playtest-walkthrough.md` 段階8）が入り、`ABattleController::ControlUnit`（`BattleController.cpp:513-514`）が `SetAllyDelegated(false)` → `UBattleState::SetSquadDelegated(false)` → `CancelSquadTacticalPlan("MANUAL COMMAND / KEEP EXECUTION")` を呼ぶ。計画は `EnterTactical` ではなく `ControlUnit` の時点で Mission に戻り、実行中の命令（Move）は残る。2件目は、手動になった小隊の計画が満了処理の対象外のまま命令が Move で残ることによる連鎖。その後の K・H の確認は、手動の小隊に Support の計画が断られた状態から始まり、中身を確かめずに通っていた（空振りの合格）。
+- **直し方（試験だけ、`BattleSquadTacticsSmoke.cpp`。Codex が実装し、Claude がコードと突き合わせた）**：(1) 直接操作に入ると委任と計画が取り消され、命令・改訂番号・任務は残ることを確かめる項目を足した。(2) TPS→RTS の切替の前後で委任・計画・命令・改訂番号・任務が変わらないことを確かめる項目に直した（名前 `TPS RTS switch preserves squad command state`）。(3) 満了の確認は、再委任（命令と最新の任務 AttackMove はそのまま）→ 寿命3の Retreat を入れ直す → 満了で AttackMove に戻る、の形にした。(4) K・H の確認は、委任中で Support の計画が受理された状態から始め、受理を確かめるようにした。ゲーム本体のコードは変えていないので、既定の試合は変わらない。
+- **検証**：作業ツリー `FutureBattle-squadtest`（ブランチ `squadtest` 242f0b6、nosave 8e5e278 から分岐）で `Build-Editor` 成功、`Test-SquadTactics` failures=0（28件、`Setup/Benchmarks/SquadTactics-ST01-20261111/squadtest-fix-r1`）、`Test-Battle` failures=0。main へ取り込んだ後（502415a、nosave と18時の回の変更の上）も `Build-Editor` 成功、`Test-SquadTactics` failures=0（同じ28件、`main-merge-squadtest`）、`Test-Battle` failures=0（193件、`Setup/Battle-Smoke-20261125-183023.log`）。
+- **制限**：`-LargeField` と `-BattleSquadTactics=0` の版は回していない（変えたのは `IsEnabled()` の枝だけで、OFF の枝は不変）。
+- **次の一手**：なし。`Test-SquadTactics` は Test-Battle に入っていないので、計画・委任・直接操作に触れる変更のときは個別に回す（`Docs/test-map.md`）。
+
 ## 2026-11-25 18時28分 Claude（セーブ削除）：【ユーザー決定】一戦中のセーブ・ロードを削除した（main 9997b7a、18時の回）
 
 - 変更範囲：
@@ -53,7 +63,7 @@
   - 取り込み後の main 9997b7a：`Build-Editor.ps1` 成功、`Test-Battle.ps1` failures=0（193件 PASS、`Battle-Smoke-20261125-182558.log`）。
 - 制限：
   - 作業ツリーの凍結ビルドには `Project/Saved/Config/WindowsEditor` が無く、試合がすぐ落ちた。main の ini 4つを前後の両方へ同じように写して回した。
-  - Test-SquadTactics の2件の失敗は削除の前からある（試験が 11-19 の仕様に追いついていない）。別のセッションが `squadtest`（242f0b6）で試験だけを直し、この後に取り込む。
+  - Test-SquadTactics の2件の失敗は削除の前からある（試験が 11-19 の仕様に追いついていない）。別のセッションが `squadtest`（242f0b6）で試験だけを直し、この後に取り込む（→ 18時33分に main 502415a へ取り込み済み、上の項目）。
   - 往復保存が無くなったので、評価の結果（result.json の項目・soak の合格条件）は18時の回より前と比べない。
 - 次の一手：この系統はなし。試合数の統制の系統が、取り込み後の main で共用の基準を回す。
 
