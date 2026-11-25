@@ -36,6 +36,14 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-25 17時53分 Claude（マップ）：18時の回。mapk を main へ取り込み（28af6ba）。マップK は版9c（目隠しを戸口から6.6m奥、小道の目印つき）になる。切替はすべて既定0
+
+- 入ったもの：マップK 版9c（`Lvl_BattleWide_K.umap`、小道の素材 `M_MapLane`）、試験切替 `-BattleSectorLanes`・`-BattleRoutePassed`・`-BattleRouteLoad`・`-BattleRouteKeep`・`-BattleWaypointCrowd`・`-BattleCoverSlotsMirror`・`-BattleThinkSymmetric`、診断 `-BattleOrderTrace`・`-BattleRouteLog`・`-BattleMoveTrace`、`Setup/Analyze-Stalls.py`、設計書 `Docs/design-authored-lanes-cover.md`・`Docs/design-map-policy.md`。
+- 基準への影響：**マップK の既定の結果は版8 から版9c に変わる**（例 seed 7：690:660、止まり 244、損害 7420:8831。mapk の凍結ビルドでの値。main のビルドでは未計測）。マップK の基準を持つレーンは取り直しが必要。マップA〜J の物と既定の動きは変えていない。
+- 衝突の解消：`BattleMatch.cpp` で、main が消した `-BattleSectorNoRoad`（c86cb5a、ユーザー決定）は消したまま、`-BattleArriveWatch` の処理のあとに命令の記録を置いた。`SWITCHES.md`・`CODEMAP*.md` は作り直し（523 切替）。
+- 検証：`Build-Editor.ps1` 成功、`Test-Battle.ps1` failures=0（`Battle-Smoke-20261125-175207.log`）。main のビルドでの試合は未実施。
+- 待たせた点：main に弾薬と補給の未コミットの変更（`-BattleSpotTrack`）が重なっていたため、3a1911e のコミットを待ってから取り込んだ。
+
 ## 2026-11-25 18時35分（弾薬と補給）発見後の位置追跡 -BattleSpotTrack：追跡5秒だけで与ダメージ +32%、向かう切替と合わせると敵に会う割合 65% → 73〜76%（1 seed）
 
 - 経緯: ユーザー提案「スポットしたら何秒間かは場所の真値を把握する」「壁に対しては撃たないように」。`AGENTS.md` の「敵真値を判断へ戻さない」に対する例外で、範囲は「自分の目で見た敵を見失ってから s 秒、位置だけ、撃つ先には使わない」（ユーザー判断 2026-11-25）。
