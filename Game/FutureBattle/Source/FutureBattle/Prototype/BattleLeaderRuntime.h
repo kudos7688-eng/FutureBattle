@@ -478,6 +478,9 @@ public:
  TMap<int32,FCoverApproach> CoverApproaches;
  // -BattleCoverFire: shots fired during the current AI peek (runtime only; a restored peek starts from zero).
  TMap<int32,int32> CoverPeekShots;
+ // Trial -BattleBurstFire (BattleTactics.h): rounds left in the burst an AI soldier is firing and when he fired its last round.
+ // Not saved; emptied on a restore (BattleMixedBodies.cpp), so a loaded match starts new bursts.
+ TMap<int32,TPair<int32,double>> BurstLeft;
  // Blind fire (2026-11-19, user request; BattleBlindFire.cpp): a soldier hidden behind cover (CoverPhase 2) fires over a low
  // cover or around the edge of a wide one without leaving it. The player does it by firing without aiming (aiming and firing
  // still peeks); AI soldiers only with the trial -BattleAIBlindFire=1, while pinned. -BattleBlindFire=0 turns it off.

@@ -1342,7 +1342,17 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   return FireExoLauncher(ID,Start+Direction.GetSafeNormal()*BattleRanges::Reach(EBattleWeapon::AntiTank),Now);
  Store->UpdateAim(ID,Now,Actor(ID)?Actor(ID)->GetVelocity().Size2D():Bodies.FindChecked(ID).Velocity.Size2D(),Direction,Actor(ID)?Actor(ID)->GetCharacterMovement()->IsMovingOnGround():true);
  if(ABattleUnit* Shooter=Actor(ID);Shooter && !bPlayerShot)Shooter->NoteDisplayAim(Direction,Now);
- if(bSide?!BattleArms::ConsumeSidearmShot(Store->Units.FindChecked(ID),Now,T->ShotInterval(W,bPlayerShot)):!Store->ConsumeShot(ID,Now,T->ShotInterval(W,bPlayerShot),!bPlayerShot&&W==EBattleWeapon::Carbine?BattleTactics::CarbineShotRounds():1)) return false;
+ // Trial -BattleBurstFire (BattleTactics.h, default off): an AI carbine fires a burst at the player's interval, then holds.
+ double Interval=T->ShotInterval(W,bPlayerShot);int32* Burst=nullptr;
+ if(!bPlayerShot&&!bSide&&W==EBattleWeapon::Carbine&&BattleTactics::BurstFire()>0)
+ {
+  // A burst not continued within 0.6 s of its last round (aim change, reload, cover, lost sight) is over: the next round starts a new one.
+  auto& State=BurstLeft.FindOrAdd(ID,TPair<int32,double>(0,-100.));
+  if(State.Key<=0||Now-State.Value>.6||Now<State.Value)State.Key=BattleTactics::BurstFire();
+  Burst=&State.Key;Interval=*Burst>1?T->ShotInterval(W,true):BattleTactics::BurstPause();
+ }
+ if(bSide?!BattleArms::ConsumeSidearmShot(Store->Units.FindChecked(ID),Now,Interval):!Store->ConsumeShot(ID,Now,Interval,!bPlayerShot&&W==EBattleWeapon::Carbine?BattleTactics::CarbineShotRounds():1)) return false;
+ if(Burst){--*Burst;BurstLeft.FindChecked(ID).Value=Now;}
  if(bSide)SightExperiment.Cover(bPlayerShot?TEXT("arms_sidearm_shots_player"):TEXT("arms_sidearm_shots"));
  if(SightExperiment.Started)
  {
