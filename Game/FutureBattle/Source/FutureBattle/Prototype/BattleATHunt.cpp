@@ -36,6 +36,12 @@ int32 BattleTactics::ACStandOff()
  return Keep;
 }
 
+int32 BattleTactics::ACTankStandOff()
+{
+ static const int32 Keep=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleACTankStandOff="),V);return V>0?FMath::Clamp(V,2000,100000):0;}();
+ return Keep;
+}
+
 bool BattleTactics::ACShield()
 {
  static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleACShield="),V);return V==1;}();

@@ -70,6 +70,12 @@ int32 BattleTactics::AllocationIndex(const UWorld* World,int32 SquadID,int32 Tea
  return FMath::Max(1,Index);
 }
 
+bool BattleTactics::GroupSupplySlot()
+{
+ static const bool bOn=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupSupplySlot="),X);return X!=0;}();
+ return bOn;
+}
+
 bool BattleTactics::AreaGroups(int32 Team)
 {
  // On by default for both teams. Only an explicit -BattleAreaGroups=1 is a trial that -BattleAreaTrialTeam limits to one team, so a
@@ -233,7 +239,7 @@ int32 UBattleMatch::FormGroup(int32 Team,const TArray<int32>& Squads,bool bPlaye
  G.Objective=bArea&&!Objectives.IsEmpty()?GroupFocus(Team,AreaHome(Team)):INDEX_NONE;
  G.Rally=G.Objective!=INDEX_NONE?GroupRally(Team,G.Objective):Center;G.Phase=0;G.PhaseAt=Elapsed;
  for(int32 SID:G.Squads)SquadGroup.Add(SID,G.ID);
- UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_FORM group=%d team=%d player=%d squads=%d objective=%d rally=%s time=%.1f"),G.ID,Team,bPlayer?1:0,G.Squads.Num(),G.Objective,*G.Rally.ToCompactString(),Elapsed);
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_FORM group=%d team=%d player=%d squads=%d objective=%d rally=%s time=%.1f ids=%s"),G.ID,Team,bPlayer?1:0,G.Squads.Num(),G.Objective,*G.Rally.ToCompactString(),Elapsed,*FString::JoinBy(G.Squads,TEXT(","),[](int32 I){return FString::FromInt(I);}));
  const int32 ID=G.ID;Groups.Add(ID,MoveTemp(G));
  return ID;
 }
@@ -292,7 +298,8 @@ void UBattleMatch::UpdateGroups(int32 Team)
     static const int32 FireArg=[]{int32 X=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupFireSupport="),X);return X;}(); // -1 = on for both teams (default, user 2026-11-21)
     const bool bFire=FireArg<0||(FireArg!=0&&(BattleTactics::AreaStrategy().TrialTeam<0||BattleTactics::AreaStrategy().TrialTeam==Team));
     if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Tank&&S.SquadType!=BattleSquadType::Mortar&&S.SquadType!=BattleSquadType::AntiTank&&S.SquadType!=BattleSquadType::Supply&&!(bFire&&S.SquadType==BattleSquadType::SPGun))continue;
-    bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase)continue;
+    // Trial -BattleGroupSupplySlot=1 (default 0): a supply vehicle in a home-assault slot may still join the attack group.
+    bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);if(bBase&&!(BattleTactics::GroupSupplySlot()&&S.SquadType==BattleSquadType::Supply))continue;
     Free.Add({P.Key,S.SquadType,FVector::DistSquared2D(R->Position(S.LeaderUnitID),Rally)});
    }
    Free.Sort([](const FFree& A,const FFree& B){return A.D!=B.D?A.D<B.D:A.SID<B.SID;});
@@ -315,7 +322,7 @@ void UBattleMatch::UpdateGroups(int32 Team)
     auto& G=Groups[AIGroup];
     for(int32 SID:Pick){G.Squads.Add(SID);SquadGroup.Add(SID,AIGroup);}
     G.Squads.Sort();
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_JOIN group=%d team=%d joined=%d squads=%d time=%.1f"),AIGroup,Team,Pick.Num(),G.Squads.Num(),Elapsed);
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_GROUP_JOIN group=%d team=%d joined=%d squads=%d time=%.1f ids=%s"),AIGroup,Team,Pick.Num(),G.Squads.Num(),Elapsed,*FString::JoinBy(Pick,TEXT(","),[](int32 I){return FString::FromInt(I);}));
    }
   }
  }

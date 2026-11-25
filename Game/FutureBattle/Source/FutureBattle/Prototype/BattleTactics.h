@@ -68,6 +68,7 @@ namespace BattleTactics
  int32 ATHunt(); // Trial -BattleATHunt=1|2 (default 0; 2 = the squad goes on to the last seen position when the soldier is lost): an armoured unit that sees an anti-tank soldier asks nearby infantry to attack it.
  bool ATFire(); // Trial -BattleATFire=1 (default 0): an armoured unit that sees an anti-tank soldier also calls the team's mortars / guns on him (BattleATHunt.cpp).
  int32 ACStandOff(); // Trial -BattleACStandOff=<cm> (default 0 = anti-tank reach + VehicleStandOffMargin): how far an armoured car keeps from known anti-tank soldiers.
+ int32 ACTankStandOff(); // Trial -BattleACTankStandOff=<cm> (default 0 = off): an armoured car also keeps this far from known enemy tanks / guns (BattleATHunt.cpp).
  bool ACShield(); // Trial -BattleACShield=1 (default 0): an armoured car goes ahead of attacking infantry and holds against anti-tank soldiers.
  bool SaveReloadBoundary(); // Trial -BattleSaveReloadBoundary=1 (default 0): finish due reloads on the save copy.
  int32 OverrideSaveReloadBoundaryForSmoke(int32 Value); // Smoke only; -1 restores command-line policy.
@@ -161,6 +162,9 @@ namespace BattleTactics
  int32 AreaWithout(int32 Team);
  // Squad groups -BattleAreaGroups=0/1 (UBattleTuning::bAreaGroups, default 1 since 2026-11-20 by user decision; the trial team with -BattleAreaTrialTeam): the AI forms one attack group per team (BattleGroups.cpp).
  bool AreaGroups(int32 Team);
+ // Trial -BattleGroupSupplySlot=1 (default 0, STATUS 2026-11-25): a supply vehicle whose number falls in a home-assault slot may still
+ // join the AI attack group (BattleGroups.cpp) and does not take the home assault's flank route (BattleMatch.cpp, RouteStep).
+ bool GroupSupplySlot();
  // -BattleSymmetricStart=0/1 (default on for the maps with the urban rule set, E to I, since 2026-11-20 by user decision; off on
  // A/D unless UBattleTuning::bSymmetricStart): a point-symmetric start for both teams. The maps and
  // objectives are 180-degree symmetric, but (1) the east side's squads started in the same north-south rows as the west side's (now

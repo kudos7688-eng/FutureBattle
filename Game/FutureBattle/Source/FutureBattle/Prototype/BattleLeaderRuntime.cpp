@@ -992,7 +992,11 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   const bool LostSight=!CanEngage && Contact && !Contact->bVisible && Now-Contact->LastSeenTime<=4.;
   // Trial -BattleStanceMove=2: a threat is being under fire or seeing any enemy himself (a Move order has no squad target).
   const bool bThreat=BattleStance::MoveMode()>=2 && WillMove && (UnderFire(ID) || (Contact && Contact->bVisible && !Contact->bShared) || SeesEnemy(ID));
-  UpdateAIStance(ID,Now,WillMove,StopForCombat,LostSight,bThreat);
+  // Trial -BattleArrivalReady: at his arrival place (within 25 cm; the squad still on its way, no fight) he crouches, not stands.
+  const bool bArrivalReady=BattleStance::ArrivalReady() && bWideField && bStableMovement && WillMove && !bOwnOrder && !bOwnWalking &&
+   !CoverApproaches.Contains(ID) && P->ArrivalGoals.Contains(ID) && FVector::DistSquared2D(Pos,P->ArrivalGoals[ID])<=FMath::Square(25.) && !IsPinned(ID,Now);
+  if(bArrivalReady){NoCoverProneUntil.Remove(ID);SetStance(ID,BattleStance::Crouch,Now);SightExperiment.Cover(TEXT("arrival_ready_crouch_frames"));}
+  else UpdateAIStance(ID,Now,WillMove,StopForCombat,LostSight,bThreat);
   // Evaluation (route_*_frames): soldiers of a squad on its way (not holding, not in a cover action) - walking, or standing still
   // (last frame's speed under 0.5 m/s): for no fight, or stopped for a fight standing or low, and standing with no enemy in sight.
   if(SightExperiment.Enabled && bOnRoute && !bOwnOrder && S->Order!=EBattleOrder::Hold && !U->CoverPhase && !CoverApproaches.Contains(ID))
@@ -1008,11 +1012,25 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
     SightExperiment.Cover(B.bArrived?TEXT("route_still_why_arrived"):B.bArrivalOccupied?TEXT("route_still_why_place_taken"):
      B.bTrafficWait?TEXT("route_still_why_traffic"):bGettingUp?TEXT("route_still_why_getting_up"):B.StalledSince>0?TEXT("route_still_why_stalled"):
      ID==S->LeaderUnitID?TEXT("route_still_why_other_leader"):TEXT("route_still_why_other"));
+    // Arrived: waiting for squad mates still walking, or the whole squad is there (by order, sector mission, and for how long).
+    if(B.bArrived)
+    {
+     bool bAll=true;
+     for(int32 Mate:S->Members)if(const auto* MU=Store->Find(Mate);MU && MU->IsAlive())if(const auto* MB=Bodies.Find(Mate);MB && !MB->bArrived){bAll=false;break;}
+     if(!bAll){RouteAllArrivedSince.Remove(U->SquadID);SightExperiment.Cover(TEXT("route_arrived_mates_walking"));}
+     else
+     {
+      const double Since=RouteAllArrivedSince.FindOrAdd(U->SquadID,Now);const double Wait=Now-Since;
+      SightExperiment.Cover(S->Order==EBattleOrder::Move?TEXT("route_arrived_all_move"):S->Order==EBattleOrder::AttackMove?TEXT("route_arrived_all_attack"):TEXT("route_arrived_all_defend"));
+      if(S->bSectorMission)SightExperiment.Cover(TEXT("route_arrived_all_sector_mission"));
+      SightExperiment.Cover(Wait<10.?TEXT("route_arrived_all_wait_0_10s"):Wait<30.?TEXT("route_arrived_all_wait_10_30s"):Wait<60.?TEXT("route_arrived_all_wait_30_60s"):TEXT("route_arrived_all_wait_60s_plus"));
+     }
+    }
    }
   }
   // Getting up takes time: no walking until the soldier is standing. With -BattleStanceMove=2 he walks in his stance instead
   // (crouched or crawling, at its speed below).
-  if(WillMove && StanceOf(ID)!=BattleStance::Stand && BattleStance::MoveMode()<2)
+  if(WillMove && !bArrivalReady && StanceOf(ID)!=BattleStance::Stand && BattleStance::MoveMode()<2)
   {
    if(SightExperiment.Enabled)CoverGate.Add(ID,8);
    if(auto* A=CoverApproaches.Find(ID);A&&A->bAssault)++A->StanceWaits; // evaluation (BattleArms.cpp)
