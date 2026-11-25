@@ -89,6 +89,8 @@ BattleExo | 外骨格兵：盾の回復、副武器（肩の対戦車火器）�
 BattleArms | 歩兵の装備：副武装（拳銃）・手りゅう弾・擲弾銃の弾・近接攻撃・衛生兵の手当て・精鋭小隊の役割と自分の目標、追加の武器種の値（UBattleLeaderRuntime の一部と BattleArms 名前空間）
 BattleArmsSector | 区画の任務と歩兵の装備（試験、既定0）：躍進は攻める任務だけ `-BattleArmsSectorTask`、守る側が走り込みを見つけて迎え撃つ・手りゅう弾・下がる・逆襲 `-BattleArmsRushWatch`、躍進への周りの小隊の援護射撃（制圧が効く） `-BattleArmsCoverFire`
 BattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド
+BattleDefendSpread | 守りの配置の段階1 `-BattleDefendSpread`（試験、既定0、arms）：区画を守る小隊を2〜3組に分けて散らす候補の順（PlanDefendSpread）、置き直しのとき遮蔽の動作を止める（UBattleLeaderRuntime の一部）
+BattleHotSectors | 詳しく計算する区画の選び方と記録 `-BattleHotSectors`（試験、既定0、arms）：プレイヤーの周り・攻撃指示・接触の点数（UBattleLeaderRuntime の一部）
 BattleCover | 遮蔽の場所の一覧と予約
 BattleCoverAction | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部）
 BattleBlindFire | 遮蔽の陰からのブラインドファイア（弾の出る位置・AIの試験・アニメ。UBattleLeaderRuntime の一部）
