@@ -650,6 +650,7 @@ public:
  static int32 SectorSightHitMode();
  static bool SectorSightFar(const FVector& From,const FVector& To);
  int32 SectorLookout(const struct FBattleSquadState& Squad) const;
+ const FBattleContact* SectorLookoutSighting(int32 ID,int32 TargetID,const FVector& Pos,const FBattleSquadState& Squad,const FBattleContact* Contact) const;
  bool SectorSightMember(int32 ID) const {return SectorSightRole(ID)!=0;}
  int32 SectorSightRole(int32 ID) const; // 0 scans as before, 1 leaves cross-sector enemies to the lookout, 2 scans cross-sector vehicles only
  // Trial -BattleSectorMoveFire=1 (2026-11-20, default 0): every squad on a sector mission (AI squads and the player's sector

@@ -937,9 +937,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const FBattleContact* Contact=GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,U->SquadID,TargetID,KnownOfTarget)?&KnownOfTarget:nullptr;
  // Trial -BattleSectorSight (BattleSectorSight.cpp): a rifle squad member who does not see the squad's target himself uses his
  // lookout's sighting of it when it is a cross-sector enemy for him. His own line of sight (CanSee below) still decides his fire.
- if(TargetID!=INDEX_NONE && !(Contact && Contact->bVisible && !Contact->bShared) && SectorSightMember(ID))
-  if(const auto* Seen=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(SectorLookout(*S),TargetID);Seen && Seen->bVisible && !Seen->bShared && SectorSightFar(Pos,Seen->LastKnownPosition))
-  {Contact=Seen;SightExperiment.Cover(TEXT("sector_sight_lookout_target_frames"));}
+ if(const auto* Seen=SectorLookoutSighting(ID,TargetID,Pos,*S,Contact))
+ {Contact=Seen;SightExperiment.Cover(TEXT("sector_sight_lookout_target_frames"));}
  // Regrouping does not replenish ammunition, but may load existing reserve without an enemy target.
  if(bWideField && U->Ammo==0 && U->Reserve>0 && U->ReloadEndTime==0) Store->StartReload(ID,Now);
  const bool ObservedEngage=Contact && Contact->bVisible && !Contact->bShared && !bSaveRounds &&
