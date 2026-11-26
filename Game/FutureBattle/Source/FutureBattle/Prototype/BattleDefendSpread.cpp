@@ -27,7 +27,8 @@ namespace
 
 bool UBattleLeaderRuntime::DefendSpreadEnabled()
 {
- static const bool b=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleDefendSpread="),V);return V!=0;}();
+ // Default 1 since 2026-11-27 (user decision; -BattleDefendSpread=0 turns it off).
+ static const bool b=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleDefendSpread="),V);return V!=0;}();
  return b;
 }
 
