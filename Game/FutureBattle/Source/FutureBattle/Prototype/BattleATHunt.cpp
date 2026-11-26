@@ -181,7 +181,9 @@ void UBattleMatch::UpdateSupplyHunts(int32 Team)
   for(int32 CandidateID:SquadKeys)
   {
    const auto* C=Store->FindSquad(CandidateID);
-   if(!C||C->Team!=Team||(C->SquadType!=BattleSquadType::Rifle&&C->SquadType!=BattleSquadType::Heavy&&C->SquadType!=BattleSquadType::AntiTank&&C->SquadType!=BattleSquadType::Exo)||C->CommandStatus!=EBattleCommandStatus::Active||
+   // =2: tanks and armoured cars too.
+   const bool bHuntVehicle=BattleTactics::SupplyCarHunt()>=2&&(C&&(C->SquadType==BattleSquadType::Tank||C->SquadType==BattleSquadType::ArmoredCar));
+   if(!C||C->Team!=Team||(!bHuntVehicle&&C->SquadType!=BattleSquadType::Rifle&&C->SquadType!=BattleSquadType::Heavy&&C->SquadType!=BattleSquadType::AntiTank&&C->SquadType!=BattleSquadType::Exo)||C->CommandStatus!=EBattleCommandStatus::Active||
       C->TacticalPlan.Action==EBattleSquadTactic::Recover||C->TacticalPlan.Action==EBattleSquadTactic::Retreat||C->TacticalPlan.Action==EBattleSquadTactic::Regroup||
       (Team==0&&!C->bPlayerDelegated)||SupplyHunts.Contains(CandidateID)||ATHunts.Contains(CandidateID)||ArtilleryRaids.Contains(CandidateID)||
       Area.HirePurpose.Contains(CandidateID)||IntelPurpose.Contains(CandidateID))continue;
@@ -192,14 +194,15 @@ void UBattleMatch::UpdateSupplyHunts(int32 Team)
    int32 Living=0;bool bAntiTank=false;
    for(int32 M:C->Members)if(const auto* MU=Store->Find(M);MU&&MU->IsAlive()){++Living;bAntiTank|=MU->Launcher>0||(MU->Weapon==EBattleWeapon::AntiTank&&MU->Ammo+MU->Reserve>0);}
    if(Living*2<C->Members.Num())continue;
-   const double D=FVector::DistSquared2D(R->Position(C->LeaderUnitID),CarAt);if(D>FMath::Square(50000.))continue;
-   Picks.Add({bAntiTank?0:1,D,CandidateID});
+   const double D=FVector::DistSquared2D(R->Position(C->LeaderUnitID),CarAt);if(D>FMath::Square(bHuntVehicle?80000.:50000.))continue;
+   // The order of choice: a tank, an anti-tank weapon, an armoured car, small arms.
+   Picks.Add({C->SquadType==BattleSquadType::Tank?0:bAntiTank?1:C->SquadType==BattleSquadType::ArmoredCar?2:3,D,CandidateID});
   }
   Picks.Sort([](const FPick& A,const FPick& B){return A.Kind!=B.Kind?A.Kind<B.Kind:A.Distance!=B.Distance?A.Distance<B.Distance:A.SquadID<B.SquadID;});
   for(int32 I=0;I<Picks.Num()&&I<2;++I)
   {
    FSupplyHunt& Hunt=SupplyHunts.Add(Picks[I].SquadID);Hunt.Team=Team;Hunt.Target=CarID;Hunt.Position=CarAt;Hunt.StartAt=Hunt.SeenAt=Hunt.CheckAt=Elapsed;Hunt.CheckDistance=FMath::Sqrt(Picks[I].Distance);
-   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SUPPLY_HUNT team=%d time=%.0f squad=%d type=%d antitank=%d target=%d range=%.0f"),Team,Elapsed,Picks[I].SquadID,int32(Store->FindSquad(Picks[I].SquadID)->SquadType),Picks[I].Kind==0?1:0,CarID,FMath::Sqrt(Picks[I].Distance));
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SUPPLY_HUNT team=%d time=%.0f squad=%d type=%d antitank=%d target=%d range=%.0f"),Team,Elapsed,Picks[I].SquadID,int32(Store->FindSquad(Picks[I].SquadID)->SquadType),Picks[I].Kind<=1?1:0,CarID,FMath::Sqrt(Picks[I].Distance));
   }
   if(!Picks.IsEmpty())Hunted.Add(CarID);
  }

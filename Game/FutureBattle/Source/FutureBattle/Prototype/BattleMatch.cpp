@@ -482,12 +482,13 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   bool bATHunt=false;
   if(bArea&&BattleTactics::ATHunt()){FVector HuntCenter;if(ATHuntGoal(Team,Pair.Key,HuntCenter)){Center=HuntCenter;Order=EBattleOrder::AttackMove;bATHunt=true;}}
   // Trial -BattleSupplyCarHunt: a squad sent to an enemy supply vehicle the team saw (BattleATHunt.cpp); treated as the hunts above.
-  if(bArea&&BattleTactics::SupplyCarHunt()){FVector HuntCenter;if(SupplyHuntGoal(Team,Pair.Key,HuntCenter)){Center=HuntCenter;Order=EBattleOrder::AttackMove;bATHunt=true;}}
+  bool bSupplyHunt=false;
+  if(bArea&&BattleTactics::SupplyCarHunt()){FVector HuntCenter;if(SupplyHuntGoal(Team,Pair.Key,HuntCenter)){Center=HuntCenter;Order=EBattleOrder::AttackMove;bATHunt=true;bSupplyHunt=true;}}
   const bool bRaidDuty=RaidPost!=nullptr||bRaidScreen||bATHunt;
   // The tank's overwatch post; a post near its current mission is kept (no new order for every small change in what the team knows).
-  if(bCarShield){Center=CarShield;Order=EBattleOrder::AttackMove;if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2000.)Center=Pair.Value.MissionDestination;
+  if(bCarShield&&!bSupplyHunt){Center=CarShield;Order=EBattleOrder::AttackMove;if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2000.)Center=Pair.Value.MissionDestination;
    else UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AC_SHIELD team=%d squad=%d post=%s"),Team,Pair.Key,*Center.ToCompactString());}
-  if(bTankPost){Center=AreaTankPost(Team,Target);if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2500.)Center=Pair.Value.MissionDestination;}
+  if(bTankPost&&!bSupplyHunt){Center=AreaTankPost(Team,Target);if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2500.)Center=Pair.Value.MissionDestination;}
   // A squad in a group the AI runs follows its group: the rally point while gathering, then the group's objective together.
   if(!bRaidDuty&&!bMortarPost&&bStrategy&&!Purpose&&!Groups.IsEmpty())GroupOrder(Pair.Key,Team,Center,Order);
   // Trial -BattleFrontReserve: a free squad of the front army's reserve waits behind the line (BattleFrontLine.cpp, 6c).

@@ -142,7 +142,14 @@ namespace BattleTactics
  //   of where the vehicle was last seen and the team has not seen it for 2 s, after 120 s, when the squad has not come 10 m nearer
  //   in 30 s (an order refused, a way blocked), goes for supply or is no longer active; after a hunt that did not get there the
  //   vehicle is left alone for 60 s. Whether the vehicle still lives is not read. BattleATHunt.cpp (UpdateSupplyHunts), BattleMatch.cpp.
- bool SupplyCarHunt();
+ // -BattleSupplyCarHunt=2 (user 2026-11-26 "let the guns and the armoured cars aim at it"; with =1 eight hunts in ten of the
+ //   infantry did not get there, they met enemies on the way): as 1, and the hunters are chosen in this order - a tank (within
+ //   800 m; its gun kills the vehicle in a few hits and -BattleSupplyCarTarget makes it its target), an anti-tank team or
+ //   exoskeleton, an armoured car (within 800 m; its machine gun does ACArmorSmallArms), a rifle or heavy squad. A hunting tank or
+ //   car leaves its overwatch post or shield place for the hunt. A self-propelled gun whose team sees the vehicle in its range
+ //   fires at it before any group of soldiers (after an anti-tank fire call); by default only a direct hit hurts a vehicle
+ //   (-BattleArtilleryVehicleSplash adds the near miss). BattleATHunt.cpp, BattleMatch.cpp, BattleArtillery.cpp (PickArtilleryAim).
+ int32 SupplyCarHunt();
  // Trial -BattleBaseRifleDamage=x (default 0 = unchanged, 0.01..1): small-arms shots do x of their damage to an enemy home base
  // (anti-tank rounds, tank guns and shells keep their own base damage).
  float BaseRifleDamage();
