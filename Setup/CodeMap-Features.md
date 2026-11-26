@@ -14,6 +14,7 @@
 | 機能 | 入口（ここから読む） | 関連 |
 |---|---|---|
 | 軍共有の既知敵への射撃（段階1） | @UBattlePerception::BuildTeamKnownTargets 、 @UBattleLeaderRuntime::SelectKnownFire 、 @UBattleLeaderRuntime::RunKnownTargetFireTrial | `-BattleKnownTargetFire=1`（既定0）。通常射撃と既存の覗き、SpotTrackの限定例外、光線予算。移動追加なし |
+| 軍が知った敵へ向かう・スポットの緩和（試験） | @UBattleSquadTactics::RefreshKnownSpots 、 @UBattleSquadTactics::AddKnownSpot 、 @UBattleSquadTactics::NoteShotSpot 、 @UBattleSquadTactics::NotePointLost 、 @UBattleSquadTactics::AdvanceHQSpots | `-BattleSeekKnown`（向かう読み手、既定0）の目撃マスに、`-BattleSpotShare`・`-BattleSpotShots`・`-BattleSpotLost`・`-BattleSpotHQ`・診断 `-BattleSpotTruth`（すべて既定0）が知らせを入れる。向かう判断は `UBattleSquadTactics::Evaluate`（BattleSquadRetreat.cpp）。設計 `Docs/design-spot-relax.md` |
 | 覗き0発の診断・固定場面 | @UBattleLeaderRuntime::RecordPeekFrame 、 @UBattleLeaderRuntime::RunCoverPeekTrial | 記録だけの `peekwhy_*`。`Test-CoverPeek.ps1` は目撃済み／見失いを検査、未発見は記録のみ |
 | 編成AI・候補選択と貯蓄購入 | @UBattleMatch::UpdateCompositionHiring 、 @BattleComposition::Decide | Planner/PlannerTeams は既定0。ONは不足・緊急性で選択し貯蓄／購入。検査は @UBattleLeaderRuntime::RunCompositionSmoke |
 | 盾被弾制圧・群の兵種別戦力（試験） | @UBattleLeaderRuntime::NoteUnderFire 、 @UBattleState::AdvanceShields 、 @UBattleMatch::GroupPower 、 @UBattleMatch::GroupPointPower | `BattleExoShieldSuppression` / `BattleGroupStrength` は既定0。観測兵種は @UBattlePerception::Update で取得、重みはUBattleTuning |
