@@ -249,6 +249,8 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   { bMovementTrial=true;FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWideMapAudit,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleSightTrial")))
   { FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSightTrial,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleKnownTargetFireTrial")))
+  { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunKnownTargetFireTrial,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleCoverFirePointTrial")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunCoverFirePointTrial,4.f,false); }
   else if(bContactTrial)
@@ -1322,6 +1324,10 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
    if(SightExperiment.Enabled)SightExperiment.Cover(bSuppress?TEXT("suppress_fire_due"):TEXT("suppress_fire_wall_near"));
   }
  }
+ // Select after all movement: the checked origin is the actual firing origin. Existing fire sources keep priority.
+ BattleKnownFire::FResult KnownFire;
+ if(BattleKnownFire::Enabled() && !CanEngage && !bOwnEngage && !BaseEngage && !bCoverFire && !bSuppress && !bArtilleryAim)
+  KnownFire=SelectKnownFire(ID,Position(ID)+Muzzle,Now);
  if(BaseEngage)Direction=(BaseTarget-(Pos+Muzzle)).GetSafeNormal();
  else if(bCoverFire)Direction=(CoverFirePoint-(Pos+Muzzle)).GetSafeNormal();
  else if(bSuppress)Direction=(SuppressPoint-(Pos+Muzzle)).GetSafeNormal();
@@ -1333,6 +1339,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   FVector Shown;
   Direction=((SideExposure(AimID,Now,Shown)?Shown:AimContact->LastKnownPosition+FVector(0,0,TargetAimOffset(AimID)))-(Pos+Muzzle)).GetSafeNormal();
  }
+ else if(KnownFire.TargetID!=INDEX_NONE)Direction=(KnownFire.AimPosition-(Position(ID)+Muzzle)).GetSafeNormal();
  else if(S->TacticalPlan.Action==EBattleSquadTactic::Flank)
  {
   // Movement has already consumed its steering vector. Keep watch toward known
@@ -1409,7 +1416,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  if(bSuppress){if(U->Ammo==0)Store->StartReload(ID,Now);else{bArmsCoverShot=true;if(Fire(ID,Pos+Muzzle,Direction,false))SightExperiment.Cover(TEXT("suppress_fire_shots"));bArmsCoverShot=false;}}
  if(CanEngage) { if(bSidearm) Fire(ID,Pos+Muzzle,Direction,false); else if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false) && S->TacticalPlan.Action==EBattleSquadTactic::Support) GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(S->SquadID,TargetID); }
  else if(bOwnEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false)) SightExperiment.Cover(TEXT("own_target_shots")); }
- Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:((BattleTactics::ObservedTactics()?ObservedEngage:CanEngage)||bOwnEngage||bCoverFire)?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
+ else if(KnownFire.Ready())FireKnownTarget(ID,Position(ID)+Muzzle,KnownFire,false);
+ Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:((BattleTactics::ObservedTactics()?ObservedEngage:CanEngage)||bOwnEngage||bCoverFire||KnownFire.TargetID!=INDEX_NONE)?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
 }
 bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot)
 {

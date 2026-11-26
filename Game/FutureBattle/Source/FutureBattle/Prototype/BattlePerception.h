@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "BattleKnownTargets.h"
 #include "BattlePerception.generated.h"
 
 class ABattleUnit;
@@ -21,6 +22,9 @@ struct FBattleContact
  bool bLocalShareEligible = false; // Measured at acquisition, not from the sender's later position.
  // Trial -BattleSpotTrack (BattleTactics.h): where the enemy is now, for some seconds after its observer lost sight of it; for
  // looking, walking and cover only (MoveAt), never to fire at. Not saved, not copied to reports or the squad table.
+ // KnownTargetFire alone may use the copied tracking sample to aim; other consumers retain their contract.
+ double KnownExpiresAt=0,KnownTrackSampleAt=0;
+ int32 KnownSourceSquad=INDEX_NONE;
  bool bTracked = false;
  FVector TrackedPosition = FVector::ZeroVector;
  const FVector& MoveAt() const { return bTracked ? TrackedPosition : LastKnownPosition; }
@@ -132,6 +136,8 @@ public:
 	// Trial -BattleHitReveal: the observer was just shot by TargetID and has a clear line to him. The detection delay counts as
 	// already spent and the observer scans on the next frame; the contact still forms only through the normal scan (line of sight).
 	void RevealShooter(int32 ObserverID, int32 TargetID, double Now, float DetectionSeconds);
+ BattleKnownFire::FTeam TeamKnownTargets[2];
+ void BuildTeamKnownTargets(double Now);
 	void Reset();
 	void Capture(TMap<int32, FBattleObserver>& OutObservers, TArray<FBattleReport>& OutReports, double Now) const;
 	void Restore(const TMap<int32, FBattleObserver>& SavedObservers, const TArray<FBattleReport>& SavedReports, double Now);

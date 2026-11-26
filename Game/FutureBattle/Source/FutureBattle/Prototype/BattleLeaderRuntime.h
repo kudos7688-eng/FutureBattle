@@ -10,6 +10,7 @@
 #include "BattleTactics.h"
 #include "BattleCoverClips.h"
 #include "BattleBodyAnim.h"
+#include "BattleKnownTargets.h"
 #include "BattleLeaderRuntime.generated.h"
 
 struct FBattleContact;
@@ -914,6 +915,15 @@ public:
  void RunMovementTrial();
  void RunContactTrial();
  void RunCoverFirePointTrial();
+ void RunKnownTargetFireTrial();
+ bool KnownFireAllowed(int32 ID,const BattleKnownFire::FTarget& Target,double Now);
+ void KnownFireCandidates(int32 ID,double Now,TArray<int32>& Out);
+ bool KnownFireRay(int32 ID,double Now);
+ BattleKnownFire::FResult SelectKnownFire(int32 ID,const FVector& Origin,double Now);
+ bool FireKnownTarget(int32 ID,const FVector& Origin,const BattleKnownFire::FResult& Result,bool Peek);
+ bool KnownCoverContact(int32 ID,double Now,FBattleContact& Out);
+ TMap<int32,BattleKnownFire::FSearch> KnownFireSearches;
+ BattleKnownFire::FBudget KnownFireBudgets[2];
  void RunCoverPeekTrial();
  int32 PeekTrialStage=0,PeekTrialCase=0,PeekTrialFailures=0;
  int32 PeekTrialShots=0;

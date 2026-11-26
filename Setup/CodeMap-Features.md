@@ -13,6 +13,7 @@
 
 | 機能 | 入口（ここから読む） | 関連 |
 |---|---|---|
+| 軍共有の既知敵への射撃（段階1） | @UBattlePerception::BuildTeamKnownTargets 、 @UBattleLeaderRuntime::SelectKnownFire 、 @UBattleLeaderRuntime::RunKnownTargetFireTrial | `-BattleKnownTargetFire=1`（既定0）。通常射撃と既存の覗き、SpotTrackの限定例外、光線予算。移動追加なし |
 | 覗き0発の診断・固定場面 | @UBattleLeaderRuntime::RecordPeekFrame 、 @UBattleLeaderRuntime::RunCoverPeekTrial | 記録だけの `peekwhy_*`。`Test-CoverPeek.ps1` は目撃済み／見失いを検査、未発見は記録のみ |
 | 編成AI・候補選択と貯蓄購入 | @UBattleMatch::UpdateCompositionHiring 、 @BattleComposition::Decide | Planner/PlannerTeams は既定0。ONは不足・緊急性で選択し貯蓄／購入。検査は @UBattleLeaderRuntime::RunCompositionSmoke |
 | 盾被弾制圧・群の兵種別戦力（試験） | @UBattleLeaderRuntime::NoteUnderFire 、 @UBattleState::AdvanceShields 、 @UBattleMatch::GroupPower 、 @UBattleMatch::GroupPointPower | `BattleExoShieldSuppression` / `BattleGroupStrength` は既定0。観測兵種は @UBattlePerception::Update で取得、重みはUBattleTuning |
@@ -192,6 +193,9 @@ BattleSectors | マップHの50m区画の格子（20×14）：区画の番号と
 BattleFrontLine | Surprise bridge waypoints: UpdateSurpriseBridge, BattleSurpriseRoute::Bridge / Intersects; fixed H/I map geometry, entrance / exit / edge goal, retained on same-time restore
 
 BattleWeaponOrders | 命令・防衛範囲・支援対象・区画任務の交戦許可と武器/装甲AIの試験切替
+BattleKnownTargets | 軍共有の観測表と50m格子。知覚結果の適用後だけ集約し、元の観測時刻・期限・追跡試料を保持（既定0）
+BattleKnownTargetFire | 軍共有候補の上位3件・本人確認・狙いの射線・光線予算・通常／覗き射撃（UBattleLeaderRuntimeの一部、段階1）
+BattleKnownTargetFireTrial | 軍共有射撃の固定場面。実発砲・候補の切替・鮮度・追跡・予算・命令を検査、BATTLE_KNOWN_FIRE_RESULT
 BattleComposition | 編成AIの兵種定義・解決済み入力・診断
 BattleCompositionPlanner | 編成AIの純粋な候補選択・貯蓄遷移・状態検証。整数比較、乱数なし
 BattleCompositionRuntime | 編成AIと観測・収入窓・既存購入実行の接続、設定キー
