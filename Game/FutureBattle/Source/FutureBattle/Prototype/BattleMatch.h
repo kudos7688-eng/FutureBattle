@@ -305,6 +305,7 @@ public:
  // squads the front army could take wait at a place two or three columns behind its line, a row of their own each (transient).
  bool FrontReserveOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
  TMap<int32,FVector> FrontReservePosts; // reserve squad -> the sector centre it waits at
+ TMap<int32,int32> FreeLogSlot; // log only: the 30 s slot of the last BATTLE_FREE_SQUAD line per squad
  TMap<int32,int32> FrontReserveRow; // reserve squad -> its row (the team's own row order), kept while it stays in the reserve
  // Measurement of the free squads' moves (log only, BATTLE_FRONT_LINE free_rev/free_moved_m; transient): last leader position and 2 s step.
  TMap<int32,FVector> FreeLastPos,FreeLastStep; int32 FreeReversals[2]={0,0}; double FreeMoved[2]={0.,0.}; int32 SectorCrowd[2]={0,0}; int32 FrontLanes[2]={0,0}; int32 RoadSteps[2]={0,0}; TArray<int32> LatFront[2],LatOther[2]; /* log only: infantry squads per row across the map, summed per update */ /* summed extra squads per shared sector at each update */

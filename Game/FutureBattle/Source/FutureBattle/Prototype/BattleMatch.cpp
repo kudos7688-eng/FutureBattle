@@ -435,7 +435,20 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   }
   ++Group;
 		// Keep assignment stable when only some squads are delegated.
-		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated) continue;
+		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated)
+		{
+   // Log only: the player's own squads the team AI does not move (BATTLE_FREE_SQUAD role=player, see below).
+   if(bArea&&GroupOf(Pair.Key)==INDEX_NONE&&Pair.Value.CommandStatus==EBattleCommandStatus::Active)
+    if(auto* FreeRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();FreeRuntime&&FreeRuntime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
+     if(int32& Last=FreeLogSlot.FindOrAdd(Pair.Key,-1);Last!=FMath::FloorToInt(Elapsed/30.f))
+     {
+      Last=FMath::FloorToInt(Elapsed/30.f);const FVector LP=FreeRuntime->Position(Pair.Value.LeaderUnitID);const FIntPoint Here=BattleSectors::Cell(LP),To=BattleSectors::Cell(Pair.Value.MissionDestination);
+      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FREE_SQUAD t=%.0f team=%d squad=%d type=%d role=player here=%d,%d home_m=%.0f to=%d,%d order=%d target=-1 delegated=0 action=%d reason=%s"),
+       Elapsed,Team,Pair.Key,int32(Pair.Value.SquadType),Here.X,Here.Y,FVector::Dist2D(LP,AreaHome(Team))/100.,To.X,To.Y,Pair.Value.bHasMission?int32(Pair.Value.MissionOrder):-1,
+       int32(Pair.Value.TacticalPlan.Action),*Pair.Value.TacticalPlan.Reason);
+     }
+   continue;
+		}
   // A routed manual order of the player is under way (BattlePlayerRoutes.cpp): the team AI leaves the squad alone.
   if(!PlayerRoutes.IsEmpty())if(const FPlayerRoute* Routed=PlayerRoutes.Find(Pair.Key);Routed&&Routed->bMission)continue;
   const bool BaseAssault=bStrategy?bStrategyBase:(bArea&&Group%5==0);
@@ -526,6 +539,23 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
      if(SectorRouteOn()&&bSectorAI&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&!Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&SectorStage(Pair.Value,P,Step,Center,RouteEnemies,Stage))
      {Center=Stage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
      else if(!Step.Equals(Center,1)){bRoadWaypoint=true;Center=Step;if(!Runtime->IsVehicle(Pair.Value.LeaderUnitID))++RoadSteps[Team]; /* log only (road=) */if(Order==EBattleOrder::Defend)Order=EBattleOrder::AttackMove;}
+    }
+   }
+  // Log only (user question 2026-11-26: what do the unassigned squads near the home do?): every 30 s, each active squad in no group
+  // with its role in this update, where its leader is, where it is sent and what its tactics do.
+  if(bArea&&GroupOf(Pair.Key)==INDEX_NONE&&Pair.Value.CommandStatus==EBattleCommandStatus::Active)
+   if(auto* FreeRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();FreeRuntime&&FreeRuntime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
+   {
+    const int32 Slot=FMath::FloorToInt(Elapsed/30.f);
+    if(int32& Last=FreeLogSlot.FindOrAdd(Pair.Key,-1);Last!=Slot)
+    {
+     Last=Slot;
+     const TCHAR* Role=bRaidDuty?TEXT("raid_or_hunt"):bMortarPost||bArtillery?TEXT("artillery"):bScout?TEXT("scout"):bHomeDefence?TEXT("home_defence"):BaseAssault?TEXT("enemy_home")
+      :FrontReservePosts.Contains(Pair.Key)?TEXT("front_reserve"):bTankPost||bCarShield?TEXT("armour_post"):Purpose?TEXT("bought_for_point"):TEXT("point");
+     const FVector LP=FreeRuntime->Position(Pair.Value.LeaderUnitID);const FIntPoint Here=BattleSectors::Cell(LP),To=BattleSectors::Cell(Center);
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FREE_SQUAD t=%.0f team=%d squad=%d type=%d role=%s here=%d,%d home_m=%.0f to=%d,%d order=%d target=%d delegated=%d action=%d reason=%s"),
+      Elapsed,Team,Pair.Key,int32(Pair.Value.SquadType),Role,Here.X,Here.Y,FVector::Dist2D(LP,AreaHome(Team))/100.,To.X,To.Y,int32(Order),Target,Pair.Value.bPlayerDelegated?1:0,
+      int32(Pair.Value.TacticalPlan.Action),*Pair.Value.TacticalPlan.Reason);
     }
    }
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())
