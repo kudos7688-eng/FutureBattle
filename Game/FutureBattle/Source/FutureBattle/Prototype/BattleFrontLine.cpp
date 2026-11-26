@@ -344,7 +344,9 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
     auto Cap=[&](int32 Y,int32 Z){int32 V=A[Z]+1;if(InFocus.Num()==Rows&&InFocus[Y]&&!InFocus[Z]&&TargetCol>=0)V=FMath::Max(V,FMath::Min(A[Z]+3,TargetCol));
      // Section orders: at the border of an advancing or falling back section the neighbouring section does not pull the rows
      // (first matches 2026-11-24: a three-column allowance let a falling back section drag the next sections back with it).
-     if((SectionOrderOfRow(Team,Y)||SectionOrderOfRow(Team,Z))&&FrontRoleOfRow(Team,Y)!=FrontRoleOfRow(Team,Z))V=TNumericLimits<int32>::Max();
+     const auto& CapPlan=FrontPlanState[Team];
+     if((SectionOrderOfRow(Team,Y)||SectionOrderOfRow(Team,Z))&&CapPlan.SectionOfRow.IsValidIndex(Y)&&CapPlan.SectionOfRow.IsValidIndex(Z)&&CapPlan.SectionOfRow[Y]!=CapPlan.SectionOfRow[Z])
+      V=TNumericLimits<int32>::Max();
      return V;};
     for(int32 Pass=0;Pass<Rows;++Pass)for(int32 Y=0;Y<Rows;++Y){if(Y>0)A[Y]=FMath::Min(A[Y],Cap(Y,Y-1));if(Y+1<Rows)A[Y]=FMath::Min(A[Y],Cap(Y,Y+1));}
    };
@@ -391,6 +393,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
      {
       const int32 T=Area.FrontTarget.IsValidIndex(Y)?Area.FrontTarget[Y]:-1;
       if(Ord==TEXT('A')&&T>H[Y]&&H[Y]+1<EnemyHomeCol-1&&(Reached[Y]<0||Reached[Y]>=H[Y]-RowLag)){++Next[Y];++Moved;++Ordered;}
+      else if(Ord==TEXT('A')&&T>=0&&T<H[Y]&&H[Y]>HomeCol){--Next[Y];++Moved;++Ordered;} // a row of the drawn line behind its post
       else if(Ord==TEXT('B')&&H[Y]>(T>=0?FMath::Max(HomeCol,T):HomeCol)){--Next[Y];++Moved;++Ordered;} // stops on the target line
       continue;
      }
@@ -752,13 +755,15 @@ int32 UBattleMatch::SetDrawnFrontLine(int32 Team,const TArray<FVector>& Points)
   FString AutoRoles,Summary;
   for(int32 DrawSection=0;DrawSection<DrawPlan.Sections;++DrawSection)
   {
-   double DeltaSum=0.;int32 CrossedRows=0;
+   double DeltaSum=0.;int32 CrossedRows=0,MaxDelta=0,MinDelta=0;
    for(int32 DrawRow=0;DrawRow<Rows;++DrawRow)
     if(DrawPlan.SectionOfRow.IsValidIndex(DrawRow)&&DrawPlan.SectionOfRow[DrawRow]==DrawSection&&DrawnCol[DrawRow]>=0)
-    {DeltaSum+=DrawnCol[DrawRow]-PreviousHold[DrawRow];++CrossedRows;}
+    {const int32 RowDelta=DrawnCol[DrawRow]-PreviousHold[DrawRow];DeltaSum+=RowDelta;MaxDelta=FMath::Max(MaxDelta,RowDelta);MinDelta=FMath::Min(MinDelta,RowDelta);++CrossedRows;}
    if(!CrossedRows)continue;
    const double MeanDelta=DeltaSum/CrossedRows;
-   const uint8 AutoRole=MeanDelta>=.5?5:MeanDelta<=-.5?6:3;
+   // Advance moves every row to the line (forward and back); fall back only when no row of the line is ahead (review 2026-11-26:
+   // a mean would leave a line crossing the post both ways on hold).
+   const uint8 AutoRole=MaxDelta>0?5:MinDelta<0?6:3;
    SetPlayerSectionRole(DrawSection,AutoRole);
    for(int32 TargetRow=0;TargetRow<Rows;++TargetRow)
     if(DrawPlan.SectionOfRow.IsValidIndex(TargetRow)&&DrawPlan.SectionOfRow[TargetRow]==DrawSection)

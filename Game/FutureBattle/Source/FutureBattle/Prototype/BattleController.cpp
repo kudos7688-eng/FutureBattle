@@ -686,6 +686,7 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 
 void ABattleController::CancelPlayerInput(bool bGamepadOnly)
 {
+ if(!bGamepadOnly){bSectionMenuPress=false;SectionMenuIndex=INDEX_NONE;}
  TMap<FKey,FInputKeyEventArgs> Released;
  for(auto& Pair:HeldPlayerKeys)
  {
@@ -1809,6 +1810,15 @@ bool ABattleController::SectionMenuInput(const FInputKeyEventArgs& Params)
   SectionMenuIndex=INDEX_NONE;
  }
  if(bPlanPanel||bBuyPanel||bQuitMenu||bGamepadMenuOpen)return false;
+ {
+  // The HUD panels drawn over the field (squad list, delegation, command bar, notices, minimap) keep their clicks (review 2026-11-26).
+  int32 PanelViewW=0,PanelViewH=0;GetViewportSize(PanelViewW,PanelViewH);const FVector2D PanelView(PanelViewW,PanelViewH);
+  const auto PanelBar=FBattleCommandBarLayout::Make(PanelView,GetWorld(),bGamepadActive);
+  const auto PanelNotices=VisibleNotices();
+  const auto PanelNoticeLayout=FBattleNoticeLayout::Make(PanelView,GetWorld(),PanelNotices.Num(),NoticeLogTop());
+  if(SquadPanelAtPointer()||DelegationPanelAt(MenuPointer)||PanelBar.ButtonAt(MenuPointer)!=INDEX_NONE||PanelBar.RouteAt(MenuPointer)
+   ||PanelNoticeLayout.RowAt(MenuPointer)!=INDEX_NONE||FBattleMinimapLayout::Make(PanelView,GetWorld()).Contains(MenuPointer))return false;
+ }
  for(const auto& LabelHit:SectionLabels())
   if(MenuPointer.X>=LabelHit.Origin.X&&MenuPointer.X<LabelHit.Origin.X+LabelHit.Size.X&&MenuPointer.Y>=LabelHit.Origin.Y&&MenuPointer.Y<LabelHit.Origin.Y+LabelHit.Size.Y)
   {OpenSectionMenu(LabelHit.Index,LabelHit.Origin+FVector2D(0,28));bSectionMenuPress=true;bTriggerHeld=false;return true;}
