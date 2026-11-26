@@ -189,3 +189,9 @@ const TCHAR* BattleSectorView::StatusName(int32 Status)
 }
 
 FString BattleSectorView::SectorName(FIntPoint Cell) { return FString::Printf(TEXT("%c%d"), TCHAR('A' + Cell.X), 1 + Cell.Y); }
+
+FLinearColor BattleSectorView::SectionColor(int32 Section)
+{
+ static const FLinearColor Palette[]={FLinearColor(.35f,1.f,.45f),FLinearColor(.65f,.5f,1.f),FLinearColor(1.f,.4f,.7f),FLinearColor(.95f,1.f,.35f),FLinearColor(.3f,.65f,1.f)};
+ return Palette[FMath::Clamp(Section,0,4)];
+}

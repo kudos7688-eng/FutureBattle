@@ -204,10 +204,11 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  {
   if(Emergency){Event(TEXT("FieldSupplyAbortEmergency"));Retreat();return;}
   FVector Car;int32 CarID=INDEX_NONE;
-  if(!Match->FieldSupplyPoint(SID,Car,&CarID))
+  if(!Match->FieldSupplyPoint(SID,Car,&CarID,true))
   {
    Event(TEXT("FieldSupplyLost"));
    // Trial -BattleSupplyCarRecover: on a trip for its losses, no new try at a vehicle for 180 s (it goes home when its losses ask for it).
+   FieldRecoverArrived.Remove(SID);
    if(FieldRecoverSince.Remove(SID)>0)FieldRecoverGaveUp.Add(SID,Clock());
    Store->CancelSquadTacticalPlan(SID,TEXT("FIELD SUPPLY / NO VEHICLE"));return;
   }
@@ -226,17 +227,23 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   }
   // Trial -BattleSupplyCarRecover: a trip that began for its losses also waits for its replacements there (as at home), for 120 s
   // at most since it set out (the plan's own age starts again each time the vehicle moves).
+  // Trial -BattleSupplyCarFirst: the 120 s count from its arrival beside the vehicle; 300 s to get there.
+  if(BattleTactics::SupplyCarFirst()&&FieldRecoverSince.Contains(SID)&&!FieldRecoverArrived.Contains(SID)&&
+     FVector::Dist2D(Here,Car)<=FMath::Clamp(T->SupplyTeamRadius,100.f,20000.f))
+  {FieldRecoverArrived.Add(SID);FieldRecoverSince.Add(SID,Clock());Event(TEXT("FieldSupplyArrived"));}
   const double* RecoverSince=FieldRecoverSince.Find(SID);
+  const double RecoverLimit=BattleTactics::SupplyCarFirst()&&!FieldRecoverArrived.Contains(SID)?300.:120.;
   const bool bFieldManned=!RecoverSince||bNoReplenish||O.Living>=FMath::Min(S->Members.Num(),Supply.ResumeLiving)||Match->Credits[S->Team]==0;
   if(O.Armed>=FMath::CeilToInt(O.Living*.9f)&&bAmmoBack&&bFieldManned)
   {
    if(RecoverSince){Event(TEXT("FieldSupplyManned"));FieldRecoverSince.Remove(SID);}
+   FieldRecoverArrived.Remove(SID);
    ResumeMission(SID,TEXT("FIELD SUPPLY COMPLETE / RESUME"),TEXT("FieldSupplyResume"));
    return;
   }
-  if(RecoverSince&&!bFieldManned&&(Clock()-*RecoverSince>=120.||Clock()<*RecoverSince))
+  if(RecoverSince&&!bFieldManned&&(Clock()-*RecoverSince>=RecoverLimit||Clock()<*RecoverSince))
   {
-   Event(TEXT("FieldSupplyGaveUp"));FieldRecoverGaveUp.Add(SID,Clock());FieldRecoverSince.Remove(SID);
+   Event(TEXT("FieldSupplyGaveUp"));FieldRecoverGaveUp.Add(SID,Clock());FieldRecoverSince.Remove(SID);FieldRecoverArrived.Remove(SID);
    Store->CancelSquadTacticalPlan(SID,TEXT("FIELD SUPPLY / NOT MANNED IN TIME"));return;
   }
   // The vehicle moved: follow it.
@@ -283,7 +290,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
     P.Action!=EBattleSquadTactic::Retreat && P.Action!=EBattleSquadTactic::Support && P.Action!=EBattleSquadTactic::Flank && P.Action!=EBattleSquadTactic::Recover)
  {
   FVector Car;
-  if(Match->FieldSupplyPoint(SID,Car)&&Apply(SID,EBattleSquadTactic::Recover,EBattleOrder::Move,Car,TEXT("FIELD SUPPLY / TO SUPPLY VEHICLE"))){Event(TEXT("FieldSupplyGo"));if(bFieldLosses){Event(TEXT("FieldSupplyGoLosses"));FieldRecoverSince.Add(SID,Clock());}else FieldRecoverSince.Remove(SID);return;}
+  if(Match->FieldSupplyPoint(SID,Car)&&Apply(SID,EBattleSquadTactic::Recover,EBattleOrder::Move,Car,TEXT("FIELD SUPPLY / TO SUPPLY VEHICLE"))){Event(TEXT("FieldSupplyGo"));FieldRecoverArrived.Remove(SID);if(bFieldLosses){Event(TEXT("FieldSupplyGoLosses"));FieldRecoverSince.Add(SID,Clock());}else FieldRecoverSince.Remove(SID);return;}
  }
  if(bRepair || (Match->bArea && Threats==0 && O.RecentDamage==0 && ((O.Living<=ReturnLiving&&Match->Credits[S->Team]>0)||O.Armed==0||bLowAmmo||bSPGEmpty) && P.Action!=EBattleSquadTactic::Retreat && P.Action!=EBattleSquadTactic::Support && P.Action!=EBattleSquadTactic::Flank))
  {
