@@ -1088,11 +1088,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   const bool LostSight=!CanEngage && Contact && !Contact->bVisible && Now-Contact->LastSeenTime<=4.;
   // Trial -BattleStanceMove=2: a threat is being under fire or seeing any enemy himself (a Move order has no squad target).
   const bool bThreat=BattleStance::MoveMode()>=2 && WillMove && (UnderFire(ID) || (Contact && Contact->bVisible && !Contact->bShared) || SeesEnemy(ID));
-  // Trial -BattleArrivalReady: at his arrival place (within 25 cm; the squad still on its way, no fight) he crouches, not stands.
-  const bool bArrivalReady=BattleStance::ArrivalReady() && bWideField && bStableMovement && WillMove && !bOwnOrder && !bOwnWalking &&
-   !CoverApproaches.Contains(ID) && P->ArrivalGoals.Contains(ID) && FVector::DistSquared2D(Pos,P->ArrivalGoals[ID])<=FMath::Square(25.) && !IsPinned(ID,Now);
-  if(bArrivalReady){NoCoverProneUntil.Remove(ID);SetStance(ID,BattleStance::Crouch,Now);SightExperiment.Cover(TEXT("arrival_ready_crouch_frames"));}
-  else UpdateAIStance(ID,Now,WillMove,StopForCombat,LostSight,bThreat);
+  UpdateAIStance(ID,Now,WillMove,StopForCombat,LostSight,bThreat);
   // Evaluation (route_*_frames): soldiers of a squad on its way (not holding, not in a cover action) - walking, or standing still
   // (last frame's speed under 0.5 m/s): for no fight, or stopped for a fight standing or low, and standing with no enemy in sight.
   if(SightExperiment.Enabled && bOnRoute && !bOwnOrder && S->Order!=EBattleOrder::Hold && !U->CoverPhase && !CoverApproaches.Contains(ID))
@@ -1126,7 +1122,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   }
   // Getting up takes time: no walking until the soldier is standing. With -BattleStanceMove=2 he walks in his stance instead
   // (crouched or crawling, at its speed below).
-  if(WillMove && !bArrivalReady && StanceOf(ID)!=BattleStance::Stand && BattleStance::MoveMode()<2)
+  if(WillMove && StanceOf(ID)!=BattleStance::Stand && BattleStance::MoveMode()<2)
   {
    if(SightExperiment.Enabled)CoverGate.Add(ID,8);
    if(auto* A=CoverApproaches.Find(ID);A&&A->bAssault)++A->StanceWaits; // evaluation (BattleArms.cpp)

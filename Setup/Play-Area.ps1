@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K','L')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(-1,0,1)][int]$StanceSteady=-1,[ValidateSet(0,1)][int]$ArrivalReady=0,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[switch]$SectionOrders,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms,[switch]$SquadKnowledge)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K','L')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(-1,0,1)][int]$StanceSteady=-1,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[switch]$SectionOrders,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms,[switch]$SquadKnowledge)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
@@ -20,8 +20,6 @@ if ($OwnTargetCover -gt 0) { $extra += "-BattleOwnTargetCover=$OwnTargetCover" }
 # -StanceSteady: fewer crouch/stand changes on the spot (stays standing where crouching hid his enemy; 3 s down after an empty peek).
 # Default 1 in the game since 2026-11-24; -StanceSteady 0 restores the old behaviour.
 if ($StanceSteady -ge 0) { $extra += "-BattleStanceSteady=$StanceSteady" }
-# -ArrivalReady 1: a soldier at his arrival place while his squad is still on its way crouches instead of standing.
-if ($ArrivalReady -gt 0) { $extra += "-BattleArrivalReady=$ArrivalReady" }
 if ($WalkLook -gt 0) { $extra += "-BattleWalkLook=$WalkLook" }
 # Squad knowledge stage 2 (Docs/design-squad-knowledge.md; trial, default 0): both teams keep what they know per squad.
 if ($SquadKnowledge) { $extra += '-BattleSquadKnowledge=1' }
