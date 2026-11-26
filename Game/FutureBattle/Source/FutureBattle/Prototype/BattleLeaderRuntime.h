@@ -940,6 +940,7 @@ public:
  struct FKnownMove
  {
   BattleKnownFire::FTarget Observation;
+  uint8 Source=3;FBox SourceBox=FBox(ForceInit);int32 FaceAxis=INDEX_NONE;double FaceSign=0.,EndSign=0.;
   FVector Start=FVector::ZeroVector,Goal=FVector::ZeroVector,Peek=FVector::ZeroVector,Last=FVector::ZeroVector;
   int32 Mission=0,Revision=0,Slot=INDEX_NONE;
   double Started=0,Arrived=-1,Distance=0;float Stuck=0;
@@ -954,6 +955,7 @@ public:
  int32 KnownMoveReservedID=INDEX_NONE,KnownMoveRemainingRays=0,KnownMoveRemainingSweeps=0,KnownMoveRemainingNav=0;
  int64 KnownMoveReservedWindow=-1;
  bool bKnownMoveDeferred=false;
+ bool bKnownMoveTrialSkipEdges=false; // Scoped only by the fixed-scene negative control.
  void RunCoverPeekTrial();
  int32 PeekTrialStage=0,PeekTrialCase=0,PeekTrialFailures=0;
  int32 PeekTrialShots=0;

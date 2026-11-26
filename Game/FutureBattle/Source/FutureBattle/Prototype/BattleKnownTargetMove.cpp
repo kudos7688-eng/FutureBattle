@@ -186,21 +186,20 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
  SightExperiment.Cover(TEXT("known_move_searches"));
  auto FinishBudget=[&](){KnownMoveRelease(ID);};
  // Source: edge / inferred opening / ordinary slot / ring. Geometry queries do not trace.
- struct FPlace {FVector At;int32 Slot;uint8 Source;};TArray<FPlace> Places;
+ struct FPlace {FVector At;int32 Slot;uint8 Source;FBox SourceBox;int32 FaceAxis;double FaceSign,EndSign;};TArray<FPlace> Places;
  const FVector ObservedGoal=Team.Targets.FindChecked(Candidates[0]).At(Now);
  const auto& Heights=BattleFieldLayout::Of(GetWorld()).Heights;
  const TArray<FBox> Boxes=Cover->KnownMoveGeometry(Start,BattleKnownFire::MoveRange()+200.);
- auto AddPlace=[&](FVector Point,int32 PlaceSlot,uint8 SourceKind)
+ auto AddPlace=[&](FVector Point,int32 PlaceSlot,uint8 SourceKind,FBox CandidateBox=FBox(ForceInit),int32 CandidateFaceAxis=INDEX_NONE,double CandidateFaceSign=0.,double CandidateEndSign=0.)
  {
   if(FVector::DistSquared2D(Start,Point)>FMath::Square(BattleKnownFire::MoveRange()))return;
   for(const FPlace& Existing:Places)if(FVector::DistSquared(Existing.At,Point)<FMath::Square(60.))return;
-  Places.Add({Point,PlaceSlot,SourceKind});
+  Places.Add({Point,PlaceSlot,SourceKind,CandidateBox,CandidateFaceAxis,CandidateFaceSign,CandidateEndSign});
  };
  // Corners sit 50 cm inside an end, 95 cm off its face: the existing 1-1.2 m lean can clear it.
- for(int32 EdgeBoxIndex=0;EdgeBoxIndex<FMath::Min(24,Boxes.Num());++EdgeBoxIndex)
+ for(int32 EdgeBoxIndex=0;!bKnownMoveTrialSkipEdges && EdgeBoxIndex<FMath::Min(24,Boxes.Num());++EdgeBoxIndex)
  {
   const FBox& Box=Boxes[EdgeBoxIndex];
-  if(Box.Max.Z<Start.Z-30. || Box.Min.Z>Start.Z+60.)continue;
   for(int32 FaceAxis=0;FaceAxis<2;++FaceAxis)for(double FaceSign:{-1.,1.})for(double EndSign:{-1.,1.})
   {
    const int32 AlongAxis=1-FaceAxis;const FVector BoxCentre=Box.GetCenter(),BoxExtent=Box.GetExtent();
@@ -213,13 +212,17 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
    if(FMath::Abs(Across)>100.)EdgeAt[AlongAxis]+=(ObservedGoal[AlongAxis]-EndPlane)*(EdgeAt[FaceAxis]-FacePlane)/Across;
    // Keep the near face. Opposite faces would require walking through/around the whole obstacle.
    if((Start[FaceAxis]-BoxCentre[FaceAxis])*FaceSign<0.)continue;
+   // Match ring heights after XY is final. With no field, preserve the starting floor
+   // as rings do; Nav projection and the full path/sweeps still validate connectivity.
+   if(!Heights.Field.IsEmpty())EdgeAt.Z=Heights.Base(EdgeAt.X,EdgeAt.Y)+90.;
+   if(Box.Max.Z<EdgeAt.Z-30. || Box.Min.Z>EdgeAt.Z+60.)continue;
    bool Opening=false;
    if(BoxExtent[FaceAxis]<=100.)for(const FBox& Adjacent:Boxes)
    {
     const double Gap=EndSign>0.?Adjacent.Min[AlongAxis]-Box.Max[AlongAxis]:Box.Min[AlongAxis]-Adjacent.Max[AlongAxis];
-    if(Gap>=90. && Gap<=600. && FMath::Abs(Adjacent.GetCenter()[FaceAxis]-BoxCentre[FaceAxis])<10. && Adjacent.GetExtent()[FaceAxis]<=100. && Adjacent.Min.Z<=Start.Z+60. && Adjacent.Max.Z>=Start.Z+60.){Opening=true;break;}
+    if(Gap>=90. && Gap<=600. && FMath::Abs(Adjacent.GetCenter()[FaceAxis]-BoxCentre[FaceAxis])<10. && Adjacent.GetExtent()[FaceAxis]<=100. && Adjacent.Min.Z<=EdgeAt.Z+60. && Adjacent.Max.Z>=EdgeAt.Z+60.){Opening=true;break;}
    }
-   AddPlace(EdgeAt,INDEX_NONE,Opening?1:0);
+   AddPlace(EdgeAt,INDEX_NONE,Opening?1:0,Box,FaceAxis,FaceSign,EndSign);
   }
  }
  for(int32 Slot:Cover->NearbySlots(Start,float(BattleKnownFire::MoveRange()),24))AddPlace(Cover->GetSlots()[Slot]+FVector(0,0,90),Slot,2);
@@ -253,6 +256,12 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
   Turn=(Turn+1)%CycleSize;KnownMoveCursor.Add(ID,Turn);
   KnownMoveAfter.Add(ID,Now+(Turn==0?1.:.1));
   FVector Anchor=Place.At;const bool Free=Place.Slot==INDEX_NONE;
+  auto RejectPath=[&](const TCHAR* PathReason)
+  {
+   SightExperiment.Cover(PathReason);
+   if(SightExperiment.Enabled && Place.Source<2)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_EDGE_PATH_REJECT unit=%d reason=%s start=%s raw=%s projected=%s box_min=%s box_max=%s face_axis=%d face_sign=%.0f end_sign=%.0f"),
+    ID,PathReason,*Start.ToCompactString(),*Place.At.ToCompactString(),*Anchor.ToCompactString(),*Place.SourceBox.Min.ToCompactString(),*Place.SourceBox.Max.ToCompactString(),Place.FaceAxis,Place.FaceSign,Place.EndSign);
+  };
   SightExperiment.Cover(Free?TEXT("known_move_candidate_free"):TEXT("known_move_candidate_slot"));
   if(Place.Source!=2)SightExperiment.Cover(Place.Source==0?TEXT("known_move_candidate_edge"):Place.Source==1?TEXT("known_move_candidate_door"):TEXT("known_move_candidate_ring"));
   if(const TCHAR* MissionRejection=KnownMovePlaceRejection(ID,Start,Anchor)){SightExperiment.Cover(TEXT("known_move_reject_anchor_mission"));SightExperiment.Cover(MissionRejection);continue;}
@@ -264,7 +273,7 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
   if(!Occupied)for(const auto& Friendly:Store->GetUnits())if(Friendly.Key!=ID && Friendly.Value.Team==Unit->Team && Friendly.Value.IsAlive() && FVector::DistSquared2D(Position(Friendly.Key),Anchor)<FMath::Square(120.)){Occupied=true;break;}
   if(Occupied){SightExperiment.Cover(TEXT("known_move_reject_occupied"));continue;}
   if(!KnownMoveSpend(ID,Now,2))break;
-  FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Anchor-FVector(0,0,90),Projected,FVector(50,50,150))){SightExperiment.Cover(TEXT("known_move_reject_anchor_nav"));continue;}
+  FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Anchor-FVector(0,0,90),Projected,FVector(50,50,150))){RejectPath(TEXT("known_move_reject_anchor_nav"));continue;}
   Anchor=Projected.Location+FVector(0,0,90);if(!KnownMovePlaceAllowed(ID,Start,Anchor)){SightExperiment.Cover(TEXT("known_move_reject_projected_mission"));continue;}
   do
   {
@@ -313,26 +322,27 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
    if(GetWorld()->SweepTestByObjectType(Anchor,Anchor,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88))){SightExperiment.Cover(TEXT("known_move_reject_anchor_capsule"));continue;}
    if(!KnownMoveSpend(ID,Now,2))break;
    UNavigationPath* Route=Nav->FindPathToLocationSynchronously(GetWorld(),Start-FVector(0,0,90),Projected.Location);
-   if(!Route || !Route->IsValid() || Route->IsPartial() || Route->PathPoints.Num()<2){SightExperiment.Cover(TEXT("known_move_reject_path_invalid"));continue;}
+   if(!Route || !Route->IsValid() || Route->IsPartial() || Route->PathPoints.Num()<2){RejectPath(TEXT("known_move_reject_path_invalid"));continue;}
    double Length=0.;bool PathAllowed=true;
    for(int32 Index=1;Index<Route->PathPoints.Num();++Index)
    {Length+=FVector::Dist(Route->PathPoints[Index-1],Route->PathPoints[Index]);PathAllowed &= KnownMovePlaceAllowed(ID,Start,Route->PathPoints[Index]+FVector(0,0,90));}
-   if(!PathAllowed){SightExperiment.Cover(TEXT("known_move_reject_path_mission"));continue;}
-   if(Length>1.5*FVector::Dist2D(Start,Anchor)){SightExperiment.Cover(TEXT("known_move_reject_path_length"));continue;}
+   if(!PathAllowed){RejectPath(TEXT("known_move_reject_path_mission"));continue;}
+   if(Length>1.5*FVector::Dist2D(Start,Anchor)){RejectPath(TEXT("known_move_reject_path_length"));continue;}
    // A finite transaction must also bound path complexity, independently of token availability.
-   if(Route->PathPoints.Num()>18){SightExperiment.Cover(TEXT("known_move_reject_path_complexity"));continue;}
+   if(Route->PathPoints.Num()>18){RejectPath(TEXT("known_move_reject_path_complexity"));continue;}
    // The mesh can lag dynamic geometry. Validate every segment, with the same bounded sweep budget.
    for(int32 SegmentIndex=1;SegmentIndex<Route->PathPoints.Num();++SegmentIndex)
    {
     if(!KnownMoveSpend(ID,Now,1)){PathAllowed=false;break;}
     if(GetWorld()->SweepTestByObjectType(Route->PathPoints[SegmentIndex-1]+FVector(0,0,90),Route->PathPoints[SegmentIndex]+FVector(0,0,90),FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88))){PathAllowed=false;break;}
    }
-   if(!PathAllowed){SightExperiment.Cover(bKnownMoveDeferred?TEXT("known_move_reject_path_deferred"):TEXT("known_move_reject_path_capsule"));continue;}
+   if(!PathAllowed){RejectPath(bKnownMoveDeferred?TEXT("known_move_reject_path_deferred"):TEXT("known_move_reject_path_capsule"));continue;}
    // Reserve before publishing the approach; CancelCoverAction releases the old reservation first.
    const int32 OldSlot=Unit->CoverSlot;
    CancelCoverAction(ID);
    if(!Free && !Cover->Reserve(Place.Slot,ID,Now)){SightExperiment.Cover(TEXT("known_move_reject_reservation"));if(OldSlot>=0)Cover->Reserve(OldSlot,ID,Now);continue;}
    FKnownMove Episode;Episode.Start=Start;Episode.Goal=Anchor;Episode.Last=Start;Episode.Peek=Peek;Episode.Observation=Target;Episode.Mission=Squad->MissionRevision;
+   Episode.Source=Place.Source;Episode.SourceBox=Place.SourceBox;Episode.FaceAxis=Place.FaceAxis;Episode.FaceSign=Place.FaceSign;Episode.EndSign=Place.EndSign;
    Episode.bMarch=March;Episode.Revision=Unit->OrderRevision;Episode.Started=Now;Episode.Slot=Place.Slot;Episode.bStandUp=StandUp || Place.Source<2;KnownMoves.Add(ID,Episode);
    FCoverApproach Approach;Approach.Goal=Anchor;Approach.Target=TargetID;Approach.Slot=Place.Slot;Approach.Revision=Unit->OrderRevision;
    Approach.Until=Now+FMath::Max(8.,Length/100.+3.);Approach.bFree=Free;CoverApproaches.Add(ID,Approach);

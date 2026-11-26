@@ -303,24 +303,29 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  Check(TEXT("move_interval_diagnostic"),!StartKnownMove(2,TestNow+.5) && Count(TEXT("known_move_gate_search_interval"))==IntervalBefore+1);
  Check(TEXT("move_no_partial_geometry"),Count(TEXT("known_move_reservation_violation"))==0 && KnownMoveReservedID==INDEX_NONE);
  // Additional scene only; all preceding checks and the stage 1 fixture are unchanged.
- Reset();
- for(auto* EdgeOldWall:Walls){EdgeOldWall->SetActorEnableCollision(false);EdgeOldWall->Destroy();}Walls.Reset();
- Wall(Start+FVector(250,0,60),FVector(30,900,250));
  auto* EdgeCover=TestWorld->GetSubsystem<UBattleCover>();
  auto* EdgeCube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));
  int32 EdgeCrates=0;
- // Nearby real slots from small crates behind the shooter; they cannot lean past the long wall.
- for(double CrateBack:{-300.,-600.})for(double CrateSide:{-450.,-150.,150.,450.})
+ auto SetupEdgeScene=[&]()
  {
-  auto* Crate=TestWorld->SpawnActor<AStaticMeshActor>();
-  if(!Crate || !EdgeCube)continue;
-  Crate->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);Crate->GetStaticMeshComponent()->SetCanEverAffectNavigation(false);
-  Crate->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));
-  Crate->GetStaticMeshComponent()->SetStaticMesh(EdgeCube);Crate->SetActorScale3D(FVector(1.,1.,1.));
-  Crate->SetActorLocation(Start+FVector(CrateBack,CrateSide,-40.));
-  Crate->GetStaticMeshComponent()->SetMobility(EComponentMobility::Static);Walls.Add(Crate);++EdgeCrates;
- }
- EdgeCover->BuildSlots(true);EdgeCover->KnownMoveGeometry(Start,BattleKnownFire::MoveRange(),true);
+  Reset();
+  for(auto* EdgeOldWall:Walls){EdgeOldWall->SetActorEnableCollision(false);EdgeOldWall->Destroy();}Walls.Reset();
+  Wall(Start+FVector(250,0,60),FVector(30,900,250));
+  EdgeCrates=0;
+  // Nearby real slots from small crates behind the shooter; they cannot lean past the long wall.
+  for(double CrateBack:{-300.,-600.})for(double CrateSide:{-450.,-150.,150.,450.})
+  {
+   auto* Crate=TestWorld->SpawnActor<AStaticMeshActor>();
+   if(!Crate || !EdgeCube)continue;
+   Crate->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);Crate->GetStaticMeshComponent()->SetCanEverAffectNavigation(false);
+   Crate->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));
+   Crate->GetStaticMeshComponent()->SetStaticMesh(EdgeCube);Crate->SetActorScale3D(FVector(1.,1.,1.));
+   Crate->SetActorLocation(Start+FVector(CrateBack,CrateSide,-40.));
+   Crate->GetStaticMeshComponent()->SetMobility(EComponentMobility::Static);Walls.Add(Crate);++EdgeCrates;
+  }
+  EdgeCover->BuildSlots(true);EdgeCover->KnownMoveGeometry(Start,BattleKnownFire::MoveRange(),true);
+ };
+ SetupEdgeScene();
  TArray<int32> EdgeOldSlots=EdgeCover->NearbySlots(Start,float(BattleKnownFire::MoveRange()),24);
  EdgeOldSlots.Sort([&](int32 LeftSlot,int32 RightSlot){const double LeftDistance=FVector::DistSquared2D(EdgeCover->GetSlots()[LeftSlot],Enemy),RightDistance=FVector::DistSquared2D(EdgeCover->GetSlots()[RightSlot],Enemy);return LeftDistance==RightDistance?LeftSlot<RightSlot:LeftDistance<RightDistance;});
  if(EdgeOldSlots.Num()>4)EdgeOldSlots.SetNum(4,EAllowShrinking::No);
@@ -342,6 +347,32 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  int32 EdgeArrivalSensors=0;bool EdgeBudgetsOK=true,EdgeNoEarlyShot=true;
  const int32 EdgeFiredBefore=Count(TEXT("known_move_arrived_fired"));
  const bool EdgeStarted=TryStart();bool EdgeArrived=false,EdgeHiddenChecked=false,EdgeHiddenSilent=false;
+ bool EdgeGoalMatches=false,EdgeRayClears=false;
+ if(const auto* SelectedEdge=KnownMoves.Find(2))
+ {
+  const FBox ExpectedEdgeBox(Start+FVector(220,-900,-190),Start+FVector(280,900,310));
+  const double SelectedEndY=Start.Y+SelectedEdge->EndSign*900.;
+  EdgeGoalMatches=SelectedEdge->Source==0 && SelectedEdge->SourceBox.Min.Equals(ExpectedEdgeBox.Min,1.) &&
+   SelectedEdge->SourceBox.Max.Equals(ExpectedEdgeBox.Max,1.) && SelectedEdge->FaceAxis==0 && SelectedEdge->FaceSign==-1. &&
+   FMath::Abs(SelectedEdge->EndSign)==1. && SelectedEdge->Goal.X<ExpectedEdgeBox.Min.X &&
+   FVector::Dist2D(SelectedEdge->Goal,FVector(ExpectedEdgeBox.Min.X,SelectedEndY,SelectedEdge->Goal.Z))<=200.;
+  const FVector EdgeRayFrom=SelectedEdge->Peek+FVector(0,0,60),EdgeRayTo=Enemy+FVector(0,0,60);
+  EdgeRayClears=EdgeGoalMatches && EdgeRayFrom.X<ExpectedEdgeBox.Min.X && EdgeRayTo.X>ExpectedEdgeBox.Max.X;
+  for(double EdgePlaneX:{ExpectedEdgeBox.Min.X,ExpectedEdgeBox.Max.X})
+  {
+   const double EdgeRayDX=EdgeRayTo.X-EdgeRayFrom.X;
+   const double EdgeRayT=FMath::Abs(EdgeRayDX)>1.? (EdgePlaneX-EdgeRayFrom.X)/EdgeRayDX : -1.;
+   const FVector EdgeCrossing=FMath::Lerp(EdgeRayFrom,EdgeRayTo,EdgeRayT);
+   // Cross outside the selected end at BOTH wall faces, below the top: no over-wall success.
+   EdgeRayClears &= EdgeRayT>0. && EdgeRayT<1. && SelectedEdge->EndSign*(EdgeCrossing.Y-SelectedEndY)>1. &&
+    EdgeCrossing.Z>ExpectedEdgeBox.Min.Z && EdgeCrossing.Z<ExpectedEdgeBox.Max.Z;
+  }
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_EDGE_SELECTED source=%d box_min=%s box_max=%s face_axis=%d face_sign=%.0f end_sign=%.0f goal=%s peek=%s goal_matches=%d ray_clears=%d"),
+   int32(SelectedEdge->Source),*SelectedEdge->SourceBox.Min.ToCompactString(),*SelectedEdge->SourceBox.Max.ToCompactString(),SelectedEdge->FaceAxis,SelectedEdge->FaceSign,SelectedEdge->EndSign,
+   *SelectedEdge->Goal.ToCompactString(),*SelectedEdge->Peek.ToCompactString(),EdgeGoalMatches,EdgeRayClears);
+ }
+ Check(TEXT("move_edge_specified_goal"),EdgeStarted && EdgeGoalMatches);
+ Check(TEXT("move_edge_specified_peek_ray"),EdgeStarted && EdgeRayClears);
  for(int32 EdgeFrame=0;EdgeFrame<900 && EdgeStarted;++EdgeFrame)
  {
   TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
@@ -360,6 +391,25 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   EdgeNoEarlyShot && EdgeHiddenChecked && EdgeHiddenSilent && Count(TEXT("known_fire_sensor_checks"))>EdgeArrivalSensors && Shooter.ShotSequence>EdgeShotsBefore && Count(TEXT("known_move_arrived_fired"))==EdgeFiredBefore+1);
  Check(TEXT("move_edge_budget"),EdgeBudgetsOK && Count(TEXT("known_move_reservation_violation"))==0 && KnownMoveReservedID==INDEX_NONE &&
   KnownFireBudgets[Shooter.Team].Used<=BattleKnownFire::MoveRayBudget() && MoveTeamBudget.Sweeps<=BattleKnownFire::MoveSweepBudget() && MoveTeamBudget.Nav<=BattleKnownFire::MoveNavBudget());
+ // Recreate exactly the same fixture; only edge/opening generation differs.
+ SetupEdgeScene();
+ {
+  TGuardValue<bool> SkipEdgeCandidates(bKnownMoveTrialSkipEdges,true);
+  const int32 ControlShots=Shooter.ShotSequence,ControlStarts=Count(TEXT("known_move_started"));
+  const int32 ControlSearches=Count(TEXT("known_move_searches")),ControlEdges=Count(TEXT("known_move_candidate_edge"))+Count(TEXT("known_move_candidate_door"));
+  bool ControlStill=true,ControlSilent=true,ControlNoMove=true;
+  for(int32 ControlFrame=0;ControlFrame<900;++ControlFrame)
+  {
+   TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
+   ControlStill &= FVector::Dist2D(Position(2),Start)<1.;
+   ControlSilent &= Shooter.ShotSequence==ControlShots;
+   ControlNoMove &= !KnownMoves.Contains(2) && !CoverApproaches.Contains(2);
+  }
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_EDGE_CONTROL searches=%d starts=%d shots=%d still=%d no_move=%d"),
+   Count(TEXT("known_move_searches"))-ControlSearches,Count(TEXT("known_move_started"))-ControlStarts,Shooter.ShotSequence-ControlShots,ControlStill,ControlNoMove);
+  Check(TEXT("move_edge_disabled_no_move_fire"),EdgeCube && EdgeCrates==8 && Count(TEXT("known_move_searches"))>ControlSearches &&
+   Count(TEXT("known_move_candidate_edge"))+Count(TEXT("known_move_candidate_door"))==ControlEdges && Count(TEXT("known_move_started"))==ControlStarts && ControlNoMove && ControlStill && ControlSilent);
+ }
  for(auto* TestWall:Walls){TestWall->SetActorEnableCollision(false);TestWall->Destroy();}
  return Failures;
 }
