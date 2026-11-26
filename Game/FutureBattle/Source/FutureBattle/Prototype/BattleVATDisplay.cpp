@@ -28,16 +28,6 @@
 #include "AssetCompilingManager.h"
 #endif
 
-// Trial -BattleVATFarLight=1 (2026-11-18, default 0): a far follower's skeletal mesh stops ticking and is detached from its
-// capsule while the VAT instance stands in for it. The presenter advances the clip time in one loop, and moving the capsule
-// no longer recomputes the hidden mesh's transform. Measured on map E (rendered, 310 far followers): about 0.1 ms per frame,
-// and the match result changes (9,846 -> 9,900 shots), so it stays off. Suspected cause, not verified: enabling and
-// disabling component ticks changes the order in which later-registered ticks (hired leaders' movement) run.
-static bool FarLight()
-{
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleVATFarLight="),V);return V!=0;}();
- return bOn;
-}
 // Trial -BattleFollowerAnimSkip=1 (2026-11-18, default 0, display only): a near follower's skeleton is evaluated every
 // frame only at mesh LOD 0; every 2nd frame at LOD 1, every 3rd beyond, every 4th while not on screen (staggered by unit).
 // The engine's own update-rate optimisation shares one rate per owning actor, and all followers share one host actor.
@@ -90,22 +80,13 @@ void UBattleVATSkeletalMeshComponent::TickComponent(float Dt,ELevelTick Type,FAc
    if(bUpdate)PendingDt=0;
    if(Presenter.IsValid()){++Presenter->StatAnimTicks;Presenter->StatAnimEvals+=bUpdate;}
   }
-  Super::TickComponent(Dt,Type,Function);HasNativeTick|=PoseTickedThisFrame();NativeTickFrame=GFrameCounter;
+  Super::TickComponent(Dt,Type,Function);HasNativeTick|=PoseTickedThisFrame();
  }
 }
 // Hands the body back to the engine's own per-frame update (far display, death, or a pose that must be current now).
 void UBattleVATSkeletalMeshComponent::EndAnimSkip()
 {
  EnableExternalTickRateControl(false);EnableExternalEvaluationRateLimiting(false);EnableExternalUpdate(false);PendingDt=0;
-}
-// One advance per frame for a far body whose own tick is off. A body that enters or leaves the far display earlier in
-// the frame than the presenter's tick (Phase 3 selects from the game mode tick) still gets exactly one advance.
-void ABattleVATDisplay::AdvanceFar(FBattleVATEntry& E,float Dt)
-{
- if(E.AdvancedFrame==GFrameCounter)return;
- E.AdvancedFrame=GFrameCounter;
- const auto* M=E.Body.Get();
- if(!E.Dead && M && M->ShouldTickPose() && M->ShouldTickAnimation())FAnimationRuntime::AdvanceTime(true,(E.Rate*Data->Clips[E.Pose].Clip->RateScale)*Dt,E.Time,Data->Clips[E.Pose].Length);
 }
 bool UBattleVATSkeletalMeshComponent::ShouldCreateRenderState()const{return !VATFar && Super::ShouldCreateRenderState();}
 // Runs after the pose is evaluated and before the engine flips it to the shown buffer; the rifle and other socket children
@@ -217,15 +198,7 @@ bool ABattleVATDisplay::Initialize(UBattleLeaderRuntime* InRuntime)
  FAssetCompilingManager::Get().FinishAllCompilation();
  if(GShaderCompilingManager)GShaderCompilingManager->FinishAllCompilation();
 #endif
- UE_LOG(LogTemp,Display,TEXT("VAT_DISPLAY enabled=1 followers=%d scope=mass_followers groups=%d max_instances=250 far_light=%d ray_wpo=%d ray_simulation_count=%d"),Entries.Num(),Groups.Num(),int32(FarLight()),IConsoleManager::Get().FindConsoleVariable(TEXT("r.RayTracing.Geometry.InstancedStaticMeshes.EvaluateWPO"))->GetInt(),IConsoleManager::Get().FindConsoleVariable(TEXT("r.RayTracing.Geometry.InstancedStaticMeshes.SimulationCount"))->GetInt());return true;
-}
-void ABattleVATDisplay::ResetBodies()
-{
- // Loading can occur inside a GameMode tick task. Keep the existing owner of
- // render CVars; restarting PrepareRendering would recursively drain that queue.
- for(const auto& Pair:Entries)if(Pair.Value.Body.IsValid())RemoveTickPrerequisiteComponent(Pair.Value.Body.Get());
- Entries.Reset();
- for(auto& G:Groups)if(G)G->DestroyComponent();Groups.Reset();
+ UE_LOG(LogTemp,Display,TEXT("VAT_DISPLAY enabled=1 followers=%d scope=mass_followers groups=%d max_instances=250 ray_wpo=%d ray_simulation_count=%d"),Entries.Num(),Groups.Num(),IConsoleManager::Get().FindConsoleVariable(TEXT("r.RayTracing.Geometry.InstancedStaticMeshes.EvaluateWPO"))->GetInt(),IConsoleManager::Get().FindConsoleVariable(TEXT("r.RayTracing.Geometry.InstancedStaticMeshes.SimulationCount"))->GetInt());return true;
 }
 void ABattleVATDisplay::RemoveUnit(int32 ID)
 {
@@ -292,12 +265,6 @@ void ABattleVATDisplay::Enter(FBattleVATEntry& E)
  if(E.Dead && !Audit){E.BodyRelative.SetRotation(FRotator(0,-90,85).Quaternion());++StatCorpseEnters;}
  W->UnregisterComponent();W->DetachFromComponent(FDetachmentTransformRules::KeepRelativeTransform);
  auto* Trial=CastChecked<UBattleVATSkeletalMeshComponent>(M);Trial->VATFar=true;M->SetVisibility(false);M->MarkRenderStateDirty();
- if(FarLight())
- {
-  // The body's own tick already advanced the clip this frame: the presenter must not advance it again.
-  if(Trial->NativeTickFrame==GFrameCounter)E.AdvancedFrame=GFrameCounter;
-  M->SetComponentTickEnabled(false);M->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
- }
  E.Far=true;E.PreviousFrames=Frames(E);
  if(Audit)++AuditEnters;
 }
@@ -305,8 +272,6 @@ void ABattleVATDisplay::Leave(FBattleVATEntry& E)
 {
  auto* M=E.Body.Get();auto* W=E.Weapon.Get();const auto& B=Runtime->GetBodies().FindChecked(E.ID);
  M->HandleExistingParallelEvaluationTask(true,true);
- // The body does not tick again this frame: take this frame's advance before handing the time back to it.
- if(FarLight())AdvanceFar(E,GetWorld()->GetDeltaSeconds());
  if(M->GetAttachParent()!=B.Capsule.Get())M->AttachToComponent(B.Capsule.Get(),FAttachmentTransformRules::KeepRelativeTransform);
  M->SetRelativeTransform(E.BodyRelative);CastChecked<UBattleVATSkeletalMeshComponent>(M)->VATFar=false;
  M->SetVisibility(false);
@@ -354,8 +319,6 @@ void ABattleVATDisplay::Tick(float Dt)
  const double Start=FPlatformTime::Seconds();int32 FarCount=0,ShownCount=0;
  TRACE_CPUPROFILER_EVENT_SCOPE(BattleVATDisplay);
  const auto* Phase=GetWorld()->GetSubsystem<UBattlePhase3>();
- // Far bodies no longer tick: advance their clip time here, under the same conditions as the component tick did.
- if(FarLight())for(auto& Pair:Entries)if(Pair.Value.Far)AdvanceFar(Pair.Value,Dt);
  if(!Phase->bEnabled)
  {
   // Ordinary leader play retains native skeletal LOD selection. Only replace

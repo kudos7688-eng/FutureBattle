@@ -4,7 +4,6 @@
 #include "BattleCompositionState.h"
 
 class UBattleMatch;
-class UBattleSave;
 struct FAreaIntent;
 
 // Selection is pure with respect to the world: explicit input and prior state -> decision and next state.
@@ -66,7 +65,6 @@ namespace BattleComposition
  void CompletePurchase(FCompositionTeamState& State,bool bSuccess,int32 Type,EFailure Failure=EFailure::Placement);
  FString RulesKey();
  bool ValidateState(const FCompositionTeamState& State,int32 NowMS,int32 Objectives,FString& Error);
- bool ValidateSave(const UBattleSave& Save,FString& Error);
  FSettings Settings();
  const TArray<FTypeDef>& Definitions();
  FInput Capture(const UBattleMatch& Match,const UBattleState& Store,int32 Team,const FAreaIntent& ResolvedIntent,bool bAutoTargets,bool bAutoAllowed);

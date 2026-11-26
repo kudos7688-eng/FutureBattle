@@ -1,11 +1,8 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[ValidateRange(0,4)][int]$Strategy=0,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(-1,0,1)][int]$StanceSteady=-1,[ValidateSet(0,1)][int]$ArrivalReady=0,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[switch]$SectionOrders,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms,[switch]$SquadKnowledge)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K','L')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(-1,0,1)][int]$StanceSteady=-1,[ValidateSet(0,1)][int]$ArrivalReady=0,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[switch]$SectionOrders,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms,[switch]$SquadKnowledge)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
-# Strategy layer (Docs/design-strategy-layer.md; trial, default 0): both AI teams, and the squads the player delegates (J), plan by
-# the situation map; the top bar shows the own plan. 2 = recon -> focus attack, 3 = + hold and counter, 4 = + purchases for the focus.
-if ($Strategy -gt 0) { $extra += "-BattleStrategy=$Strategy" }
 # Trial (2026-11-23, default 0): a vehicle ordered into a place it cannot enter (a walled sector of map K) goes to the nearest road instead of refusing the order.
 if ($VehicleRoadGoal -gt 0) { $extra += "-BattleVehicleRoadGoal=$VehicleRoadGoal" }
 # Setup before the start (user decision 2026-11-22, trial): 15 rifle squads instead of 25 and 250 resources instead of 100 (the 10 squads'
@@ -41,8 +38,12 @@ if ($Map -eq 'J') {
 if ($Map -eq 'K') {
     & (Join-Path $PSScriptRoot 'Initialize-MapK.ps1') -Project $project
 }
+# Map L (2026-11-25): map I on rolling ground (Docs/design-terrain-field.md).
+if ($Map -eq 'L') {
+    & (Join-Path $PSScriptRoot 'Initialize-MapL.ps1') -Project $project
+}
 # Maps with sectors (H, I): the same play condition.
-if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J' -or $Map -eq 'K') {
+if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J' -or $Map -eq 'K' -or $Map -eq 'L') {
     $extra += '-BattleLeaderGuard=1'
     # Player's move click = sector move that fires on the move; a drawn line = point move (BattlePlayerPath.cpp).
     $extra += '-BattleSectorMove=1'

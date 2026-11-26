@@ -108,6 +108,8 @@ void UBattleTeamAI::Step()
    const auto* S=Store->FindSquad(ID); const auto* O=T->Find(ID);
    if(S->Team!=Faction || !Managed(S) || !O || Now-O->SampleTime>2.5 ||
       S->FlankCooldown>0 || S->TacticalPlan.Action!=EBattleSquadTactic::Engage) continue;
+   // Trial -BattleJoinFight: a squad walking to another squad's fight has no enemy to flank yet (a failed attempt would end this team's search).
+   if(S->TacticalPlan.Reason.StartsWith(TEXT("JOIN FIGHT")) || S->TacticalPlan.Reason.StartsWith(TEXT("SEEK ENEMY"))) continue;
    TArray<int32> Partners;
    for(int32 OtherID:IDs)
    {

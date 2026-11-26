@@ -72,6 +72,8 @@ int32 FBattleSquadListLayout::RowAt(FVector2D P) const
 bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
 {
  if(bEnabled) return false;
+ // 2026-11-25: authored lanes belong to this world/start, like the per-world lookout cache.
+ SectorLanes.Reset();SectorLaneIndex.Reset();bSectorLanesRead=false;
  // The sector AI combination's default follows the map this runtime starts on (BattleFieldLayout::SectorComboSwitch).
  BattleFieldLayout::SectorComboDefault()=BattleFieldLayout::Of(GetWorld()).bSectorCombo;
  // Explicit opt-in isolated runtime. Legacy trials, saves and network modes are not silently mixed.
@@ -197,7 +199,7 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   }
   const int32 SID=Store->CreateLeaderSquad(Team,IDs,IDs[0],Team==0 && Group!=NoControl);
   if(SID==INDEX_NONE) return false;
-  FBattleLeaderPlan Plan; Plan.Center=Center; Plan.NextThink=GetWorld()->GetTimeSeconds()+.05*(SID%10); Plans.Add(SID,Plan);
+  FBattleLeaderPlan Plan; Plan.Center=Center; Plan.NextThink=GetWorld()->GetTimeSeconds()+.05*(BattleTactics::PhaseIndex(GetWorld(),SID,Team)%10); Plans.Add(SID,Plan);
   IssueOrder(SID,bWideField?EBattleOrder::Hold:Phase3->bEnabled?EBattleOrder::AttackMove:Team?EBattleOrder::AttackMove:EBattleOrder::Hold,bWideField?Center:Phase3->bEnabled?Phase3->Goal(Team,Group):FVector(Team?600:Center.X,Center.Y,0));
  }
  if(DisplayLOD==1 && !VAT->Initialize(this))return false;
@@ -227,8 +229,6 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunFlankBayTrial,4.f,false);}
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleMixedFastSmoke")))
   {FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunMixedFastSmoke,4.f,false);}
-  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleMixedSaveSmoke")))
-  { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunMixedSaveSmoke,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleWeaponTrial")))
   { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWeaponRangeTrial,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleExoShot")))
@@ -247,6 +247,8 @@ bool UBattleLeaderRuntime::Start(ABattleGameMode& InMode)
   { bMovementTrial=true;FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunWideMapAudit,4.f,false); }
   else if(FParse::Param(FCommandLine::Get(),TEXT("BattleSightTrial")))
   { FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunSightTrial,4.f,false); }
+  else if(FParse::Param(FCommandLine::Get(),TEXT("BattleCoverFirePointTrial")))
+  { FTimerHandle H;GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunCoverFirePointTrial,4.f,false); }
   else if(bContactTrial)
   { FTimerHandle H; GetWorld()->GetTimerManager().SetTimer(H,this,&UBattleLeaderRuntime::RunContactTrial,4.f,false); }
   else if(bMovementTrial)
@@ -278,6 +280,7 @@ void UBattleLeaderRuntime::Deinitialize()
   if(Manager) for(auto& P:Bodies) if(P.Value.Entity.IsSet() && Manager->IsEntityValid(P.Value.Entity)) Manager->DestroyEntity(P.Value.Entity);
   Bodies.Reset(); Manager.Reset();
  }
+ SectorLanes.Reset();SectorLaneIndex.Reset();bSectorLanesRead=false;
  Super::Deinitialize();
 }
 ABattleUnit* UBattleLeaderRuntime::Actor(int32 ID) const { const auto* B=Bodies.Find(ID); return B?B->Actor.Get():nullptr; }
@@ -484,7 +487,13 @@ void UBattleLeaderRuntime::LogSightHitStats(const TCHAR* Why) const
  Top(SightHitClasses,TEXT("BATTLE_SIGHT_HITS_CLASS"),20);Top(SightHitTags,TEXT("BATTLE_SIGHT_HITS_TAG"),20);Top(SightHitActors,TEXT("BATTLE_SIGHT_HITS_ACTOR"),40);
 }
 bool UBattleLeaderRuntime::CanSelectLeader(int32 ID) const { return Actor(ID) && GetWorld()->GetSubsystem<UBattleState>()->CanSelectLeader(ID); }
-bool UBattleLeaderRuntime::CanControlLeader(int32 ID) const { return CanSelectLeader(ID) && Mode && !Mode->bBattleEnded; }
+// Base garrison (-BattleBaseGarrison): orders only, no direct control (user decision 2026-11-25); the leader stays selectable.
+bool UBattleLeaderRuntime::CanControlLeader(int32 ID) const
+{
+ if(!CanSelectLeader(ID) || !Mode || Mode->bBattleEnded)return false;
+ if(BattleTactics::BaseGarrison()){const auto* GarrisonUnit=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);if(GarrisonUnit&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(GarrisonUnit->SquadID))return false;}
+ return true;
+}
 const TArray<FBattleSquadSummary>& UBattleLeaderRuntime::Summaries()
 {
  if(bSummaryDirty)
@@ -546,7 +555,7 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID);
  if(!Mode || Mode->bBattleEnded || !S || S->CommandStatus!=EBattleCommandStatus::Active || Goal.ContainsNaN()) return false;
  const FVector AskedGoal=Goal;
- if(!bMissionUpdate)SectorFireBack.Remove(SID);
+ if(!bMissionUpdate&&(!BattleTactics::BaseGarrison()||!GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID)))SectorFireBack.Remove(SID);
  if(bSector)
  {
   const FIntPoint Cell=BattleSectors::Cell(Goal);
@@ -554,7 +563,17 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
   Goal=BattleSectors::Center(Cell);
   BattleFieldLayout::Of(GetWorld()).Heights.Ground(Goal.X,Goal.Y,0,Goal.Z,nullptr,1.e9);
  }
- if(bWideField && Order!=EBattleOrder::Hold)
+ // Version 1 constrains destinations only.
+ const bool bGarrisonOrder=BattleTactics::BaseGarrison()&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID);
+ FVector GarrisonHome=FVector::ZeroVector;
+ if(bGarrisonOrder)
+ {
+  GarrisonHome=GetWorld()->GetSubsystem<UBattleMatch>()->AreaHome(S->Team);
+  const FVector Offset=Goal-GarrisonHome;const double Radius=BattleTactics::BaseGarrisonRadius();
+  if(Offset.Size2D()>Radius){const FVector Edge=GarrisonHome+Offset.GetSafeNormal2D()*Radius;Goal.X=Edge.X;Goal.Y=Edge.Y;}
+  bSector=false; // A sector centre may lie outside the base; retain the clamped point mission.
+ }
+ if(bWideField && (Order!=EBattleOrder::Hold||bGarrisonOrder))
  {
   // A goal under a hill (given at height 0) is the place on the hill above it (map I: hills above the projection's reach).
   BattleFieldLayout::Of(GetWorld()).Heights.Lift(Goal);
@@ -577,7 +596,24 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
    static const int32 RoadGoal=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleVehicleRoadGoal="),V);return V;}();
    if(RoadGoal>0)for(double Reach:{1500.,3000.,6000.})if(Nav->ProjectPointToNavigation(Goal,Projected,FVector(Reach,Reach,400),VehicleNav)){Projectable=true;SightExperiment.Cover(TEXT("vehicle_goal_moved"));break;}
   }
+  if(bGarrisonOrder)
+  {
+   // Search inward when the circle edge is blocked or projects outside; never commit a refused order.
+   Projectable=false;
+   if(Nav)for(double GarrisonScale:{1.,.9,.75,.5,.25,0.})
+   {
+    FVector GarrisonCandidate=GarrisonHome+(Goal-GarrisonHome)*GarrisonScale;
+    BattleFieldLayout::Of(GetWorld()).Heights.Lift(GarrisonCandidate);
+    FNavLocation GarrisonProjection;
+    if(!Nav->ProjectPointToNavigation(GarrisonCandidate,GarrisonProjection,FVector(100,100,400))||
+       FVector::Dist2D(GarrisonProjection.Location,GarrisonHome)>BattleTactics::BaseGarrisonRadius())continue;
+    auto* GarrisonPath=Nav->FindPathToLocationSynchronously(GetWorld(),Position(S->LeaderUnitID),GarrisonProjection.Location);
+    if(!GarrisonPath||!GarrisonPath->IsValid()||GarrisonPath->IsPartial())continue;
+    Projected=GarrisonProjection;Projectable=true;break;
+   }
+  }
   if(!Projectable){if(VehicleNav||NavFor(S->LeaderUnitID)!=nullptr||IsVehicle(S->LeaderUnitID))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_TANK_ORDER_FAIL squad=%d reason=project nav=%s goal=%s"),SID,VehicleNav?*VehicleNav->GetName():TEXT("none"),*Goal.ToCompactString());Refuse();return false;}
+  if(bGarrisonOrder&&FVector::Dist2D(Projected.Location,GarrisonHome)>BattleTactics::BaseGarrisonRadius())return false;
   auto* Route=Nav->FindPathToLocationSynchronously(GetWorld(),Position(S->LeaderUnitID),Projected.Location,VehicleContext);
   // A tank whose goal lies where it cannot fit (the narrow streets of map E) drives to the end of the partial route instead.
   const bool VehiclePartial=VehicleNav&&Route&&Route->IsValid()&&Route->IsPartial()&&Route->PathPoints.Num()>1;
@@ -615,6 +651,7 @@ bool UBattleLeaderRuntime::IssueOrder(int32 SID,EBattleOrder Order,FVector Goal,
  const bool OK=Store->SetSquadOrder(SID,Order,Goal,Goals,bMissionUpdate,bSector);
  if(OK)
  {
+  if(bGarrisonOrder&&!bMissionUpdate)SectorFireBack.Remove(SID);
   if(S->OrderRevision!=Revision) { auto& P=Plans.FindOrAdd(SID); P.bReplan=true; P.NextThink=0; }
   if(bWideField && !bMissionUpdate && S->Team==0) Store->SetSquadDelegated(SID,false);
   if(IsVehicle(S->LeaderUnitID)){auto& V=VehicleOrders.FindOrAdd(SID);V.Requested=AskedGoal;V.MissionRevision=S->MissionRevision;V.RetryAt=0;}
@@ -892,6 +929,13 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    }
    if(S->TacticalPlan.bAutonomous && S->TacticalPlan.Action==EBattleSquadTactic::Regroup && FVector::Dist2D(From.Location,To.Location)<50)
     P.Path={From.Location,To.Location}; // Followers can converge even when the leader is already at the rally point.
+   // 2026-11-25: replace only entering infantry paths, after mirroring and before movement planning and tracing.
+   if(SectorLanesEnabled() && !VehicleNav && P.Path.Num()>1)ApplySectorLane(SID,Origin,From.Location,To.Location,*Nav);
+  }
+  if(BattleTactics::MoveTraceSquad(SID))
+  {
+   FString TracePoints;for(const FVector& TracePoint:P.Path)TracePoints+=FString::Printf(TEXT(" (%.1f,%.1f)"),TracePoint.X,TracePoint.Y);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MOVE_TRACE_PATH squad=%d now=%.3f origin=(%.2f,%.2f) dest=(%.2f,%.2f) points=%d:%s"),SID,Now,Origin.X,Origin.Y,S->Destination.X,S->Destination.Y,P.Path.Num(),*TracePoints);
   }
   if(bWideField && bStableMovement) BuildMovementPlan(SID);
   else for(int32 ID:S->Members) if(auto* B=Bodies.Find(ID)) B->Waypoint=1;
@@ -914,8 +958,17 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  auto& B=Bodies.FindChecked(ID);
  // The player's order to this soldier ends (squad order, squad stopped, taken over...) before his cover action runs.
  if(U->bSoldierOrder)SoldierOrderActive(ID);
+ // Evaluation only, -BattleFireTimeLog (default off, needs the evaluation counters of -BattleSightExperiment; STATUS 2026-11-25
+ // "弾薬と補給"): one count per frame of an AI rifleman, by what keeps him from firing (cover_diagnostics firetime_*; frames / the
+ // fixed frame rate = soldier-seconds). Changes nothing in the match (its sight checks write only sight statistics).
+ static const bool bFireTimeLog=FParse::Param(FCommandLine::Get(),TEXT("BattleFireTimeLog"));
+ const bool bFireTimeUnit=bFireTimeLog && SightExperiment.Enabled && U->Weapon==EBattleWeapon::Carbine && !IsVehicle(ID) && !(B.Actor.IsValid() && B.Actor->IsPlayerControlled());
+ if(bFireTimeUnit)SightExperiment.Cover(TEXT("firetime_total"));
  if(StepCoverAction(ID,Dt,Now))
  {
+  // The phase after this frame's step: 1 walking in or back from a peek, 2 hidden, 3 moving out to peek, 4 exposed (why an
+  // exposed soldier does not fire is in peekwait_* and cover_shots).
+  if(bFireTimeUnit){static const TCHAR* Phase[]={TEXT("firetime_cover_phase0"),TEXT("firetime_cover_1_entering"),TEXT("firetime_cover_2_hidden"),TEXT("firetime_cover_3_to_peek"),TEXT("firetime_cover_4_peeking")};SightExperiment.Cover(Phase[FMath::Min<int32>(U->CoverPhase,4)]);}
   if(CoverApproaches.Num())if(auto* A=CoverApproaches.Find(ID);A&&A->bAssault)++A->CoverWaits; // evaluation (BattleArms.cpp)
   return;
  }
@@ -926,7 +979,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   if(BattleStance::MoveMode()==0 && StanceOf(ID)!=BattleStance::Stand && B.Actor->GetVelocity().SizeSquared2D()>2500.)SetStance(ID,BattleStance::Stand,Now,true,true);
   return;
  }
- const auto* S=Store->FindSquad(U->SquadID); auto* P=Plans.Find(U->SquadID); if(!P || S->CommandStatus!=EBattleCommandStatus::Active) return;
+ const auto* S=Store->FindSquad(U->SquadID); auto* P=Plans.Find(U->SquadID);
+ if(!P || S->CommandStatus!=EBattleCommandStatus::Active){if(bFireTimeUnit)SightExperiment.Cover(!P?TEXT("firetime_no_plan"):TEXT("firetime_squad_inactive"));return;}
  FVector Pos=Position(ID), Direction=Forward(ID); const FVector LastVelocity=B.Velocity; B.Velocity=FVector::ZeroVector;
  // The player's order to this soldier (BattleSoldierOrder.cpp): his own place instead of the squad's movement.
  const bool bOwnOrder=U->bSoldierOrder && SoldierOrderActive(ID);
@@ -966,6 +1020,48 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   U->Weapon!=EBattleWeapon::AntiTank && !IsArtillery(ID) ? OwnTarget(ID,Pos,Now,bOwnAtShooter) : INDEX_NONE;
  const auto* OwnContact=OwnTargetID!=INDEX_NONE?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,OwnTargetID):nullptr;
  const bool bOwnEngage=OwnContact && CanSee(ID,OwnTargetID);
+ if(bFireTimeUnit)
+ {
+  // The nearest enemy soldier he sees himself within range, whether or not -BattleOwnTarget lets him fire at it. "at_check": the
+  // state at this point of the frame; a cover action that starts further down may still take the shot away.
+  bool bUnused=false;const int32 SeenID=CanEngage?INDEX_NONE:OwnTargetID!=INDEX_NONE?OwnTargetID:OwnTarget(ID,Pos,Now,bUnused);
+  const TCHAR* Why=
+   CanEngage?(U->ReloadEndTime>0?TEXT("engage_reloading"):U->Ammo==0?TEXT("engage_empty"):Now<U->NextShotTime?TEXT("engage_between_shots"):TEXT("engage_ready_at_check")):
+   bOwnEngage?(U->ReloadEndTime>0?TEXT("own_fire_reloading"):U->Ammo==0?TEXT("own_fire_empty"):Now<U->NextShotTime?TEXT("own_fire_between_shots"):TEXT("own_fire_ready_at_check")):
+   SeenID!=INDEX_NONE?(CanSee(ID,SeenID)?TEXT("sees_other_enemy_in_range"):TEXT("scan_sees_other_enemy_not_now")):
+   ObservedEngage?TEXT("target_scan_sees_not_now"):
+   TargetID==INDEX_NONE?(SeesEnemy(ID)?TEXT("no_target_sees_some_enemy"):TEXT("no_target_sees_none")):
+   !Contact?TEXT("target_unknown_to_him"):
+   Contact->bShared?TEXT("target_reported_not_seen"):
+   !Contact->bVisible?TEXT("target_remembered_not_seen"):
+   bSaveRounds||(S->TacticalPlan.Action==EBattleSquadTactic::Support&&TargetID!=S->TacticalPlan.SupportTarget)?TEXT("target_seen_not_allowed"):TEXT("target_seen_beyond_range");
+  SightExperiment.Cover(*FString::Printf(TEXT("firetime_%s_%s"),Why,LastVelocity.SizeSquared2D()>1.?TEXT("walk"):TEXT("still")));
+  // Where that time goes (one sample a second per soldier at the fixed 30 frames a second, so the counts are about soldier-seconds; soldiers in a cover action are not sampled):
+  // with or without a squad target, the squad's plan and order, walking or not, at his home / within 100 m of a point / between,
+  // and how far the nearest living enemy is. That distance is the truth; it is read for this count only and decides nothing.
+  if((GFrameCounter+uint64(ID))%30==0)
+  {
+   const auto* WhereMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+   double Near=TNumericLimits<double>::Max();
+   for(const auto& Other:Bodies)if(const auto* E=Store->Find(Other.Key);E && E->IsAlive() && E->Team!=U->Team)Near=FMath::Min(Near,FVector::DistSquared2D(Pos,Position(Other.Key)));
+   Near=FMath::Sqrt(Near);
+   const TCHAR* Far=Near>1.e12?TEXT("noenemy"):Near<5000.?TEXT("lt50m"):Near<10000.?TEXT("lt100m"):Near<20000.?TEXT("lt200m"):Near<40000.?TEXT("lt400m"):TEXT("ge400m");
+   bool bPoint=false;for(const auto& Ob:WhereMatch->Objectives)bPoint|=FVector::DistSquared2D(Pos,Ob.Position)<=FMath::Square(10000.);
+   const TCHAR* Place=WhereMatch->bArea && FVector::DistSquared2D(Pos,WhereMatch->AreaHome(U->Team))<=FMath::Square(8000.)?TEXT("home"):bPoint?TEXT("point"):TEXT("field");
+   const auto& WherePlan=S->TacticalPlan;
+   const TCHAR* PlanName=WherePlan.Action==EBattleSquadTactic::Mission?TEXT("mission"):WherePlan.Reason.StartsWith(TEXT("HOME SUPPLY"))?TEXT("homesupply"):
+    WherePlan.Reason.StartsWith(TEXT("FIELD SUPPLY"))?TEXT("fieldsupply"):WherePlan.Action==EBattleSquadTactic::Engage?TEXT("engage"):TEXT("otherplan");
+   // The squad's group (BattleGroups.cpp): kind 0 attack, 1 front-holding, 2 surprise; phase 0 assemble, 1 advance, 2 hold.
+   const auto* WhereGroup=WhereMatch->Groups.Find(WhereMatch->GroupOf(S->SquadID));
+   const FString GroupName=WhereGroup?FString::Printf(TEXT("g%dp%d"),int32(WhereGroup->Kind),int32(WhereGroup->Phase)):FString(TEXT("nogroup"));
+   // "none": the same frames as firetime_no_target_sees_none (no squad target and no enemy in his sight). "at": within 15 m of the squad's destination.
+   const bool bSeesNone=FCString::Strcmp(Why,TEXT("no_target_sees_none"))==0;
+   const bool bAt=FVector::DistSquared2D(Pos,S->Destination)<=FMath::Square(1500.);
+   static const TCHAR* OrderName[]={TEXT("hold"),TEXT("move"),TEXT("attackmove"),TEXT("defend")};
+   SightExperiment.Cover(*FString::Printf(TEXT("firewhere_%s_%s_%s_%s%s_%s_%s_%s_%s"),bSeesNone?TEXT("none"):TEXT("other"),PlanName,*GroupName,
+    OrderName[FMath::Clamp<int32>(int32(S->Order),0,3)],S->bSectorMission?TEXT("sector"):TEXT(""),LastVelocity.SizeSquared2D()>1.?TEXT("walk"):TEXT("still"),bAt?TEXT("at"):TEXT("away"),Place,Far));
+  }
+ }
  // Evaluation: an engagement that begins with his head turned (-BattleWalkLook) at a target outside his body's 120 degrees.
  if((CanEngage || bOwnEngage) && WalkLooks.Num() && WalkLooks.Contains(ID) &&
   FVector::DotProduct(Forward(ID).GetSafeNormal2D(),((CanEngage?Contact:OwnContact)->LastKnownPosition-Pos).GetSafeNormal2D())<.5)
@@ -1129,7 +1225,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   // Map E: cover is plentiful but small, so AI looks a little further for it (6.5m instead of 3.5m; AI cognition only).
   const float LocalRadius=bOwnOrder?400.f:(ProbeBudget||LeaderFirst)?CoverTuning->AICoverSearchRadius:BattleFieldLayout::IsUrban(GetWorld())?650.f:CoverTuning->CoverActionSearchRadius;
   // -BattleShotDirection: take cover from where this soldier was just hit from, when that is not his target.
-  FVector CoverThreat=Contact->LastKnownPosition;
+  FVector CoverThreat=Contact->MoveAt();
   if(FVector From;ShotDirectionEnabled() && UnitShotFrom(ID,Now,From))
   {if(ShotFromOther(Pos,CoverThreat,From)){CoverThreat=From;SightExperiment.Cover(TEXT("cover_from_shot_direction"));}else SightExperiment.Cover(TEXT("cover_shot_by_target"));}
   if(bHitCover){SightExperiment.Cover(Contact->bVisible?TEXT("hit_cover_request_seen_far"):TEXT("hit_cover_request_unseen"));if(ShotFromOther(Pos,CoverThreat,HitFrom))CoverThreat=HitFrom;}
@@ -1235,8 +1331,24 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const FVector Muzzle(0,0,BattleStance::EyeOffset(StanceOf(ID)));
  // -BattleArmsCoverFire (BattleArmsSector.cpp): with nothing of his own to fire at he fires at the point a bounding soldier called.
  FVector CoverFirePoint;const bool bCoverFire=!BaseEngage&&!CanEngage&&!bOwnEngage&&ArmsCoverFire.Num()&&!bVehicleBody&&!bArtilleryAim&&ArmsCoverFireAt(ID,Now,CoverFirePoint);
+ // Trial -BattleSuppressFire (BattleTactics.h, default off): standing, with the squad's target out of his sight, he keeps firing at
+ // where he saw it last himself. Observed data only (his own contact). The wall check runs only when a shot is due.
+ bool bSuppress=false;FVector SuppressPoint=FVector::ZeroVector;
+ if(BattleTactics::SuppressFire()>0.f&&!BaseEngage&&!bCoverFire&&!CanEngage&&!bOwnEngage&&!bVehicleBody&&!bArtilleryAim&&!bSaveRounds&&
+    (U->Weapon==EBattleWeapon::Carbine||U->Weapon==EBattleWeapon::SupportGun)&&Contact&&!Contact->bVisible&&!Contact->bShared&&
+    Now-Contact->LastSeenTime<=BattleTactics::SuppressFire()&&LastVelocity.SizeSquared2D()<=1.&&U->ReloadEndTime==0&&Now>=U->NextShotTime)
+ {
+  SuppressPoint=Contact->LastKnownPosition+FVector(0,0,60);const FVector From=Pos+Muzzle;const double Far=FVector::Dist(From,SuppressPoint);
+  if(Far>300.&&Far<=BattleRanges::Engage(U->Weapon))
+  {
+   FHitResult Wall;
+   bSuppress=!GetWorld()->LineTraceSingleByObjectType(Wall,From,SuppressPoint,FCollisionObjectQueryParams(ECC_WorldStatic))||Wall.Distance>=Far*.6;
+   if(SightExperiment.Enabled)SightExperiment.Cover(bSuppress?TEXT("suppress_fire_due"):TEXT("suppress_fire_wall_near"));
+  }
+ }
  if(BaseEngage)Direction=(BaseTarget-(Pos+Muzzle)).GetSafeNormal();
  else if(bCoverFire)Direction=(CoverFirePoint-(Pos+Muzzle)).GetSafeNormal();
+ else if(bSuppress)Direction=(SuppressPoint-(Pos+Muzzle)).GetSafeNormal();
  else if(CanEngage || bOwnEngage)
  {
   // The squad's target, or under -BattleOwnTarget his own.
@@ -1251,7 +1363,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   // contact information while moving sideways; never resolve the enemy body here.
   FBattleContact KnownOfFlank;
   const auto* Known=GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,S->SquadID,S->TacticalPlan.FlankTarget,KnownOfFlank)?&KnownOfFlank:nullptr;
-  Direction=((Known?Known->LastKnownPosition:S->TacticalPlan.FlankContact)-Position(ID)).GetSafeNormal2D();
+  Direction=((Known?Known->MoveAt():S->TacticalPlan.FlankContact)-Position(ID)).GetSafeNormal2D();
  }
  // (-BattleOwnTarget=2 turns him the same way, for its team.)
  else if(FVector From;(HitFaceEnabled() || OwnTargetMode(U->Team)>=2) && !bArtilleryAim && !IsVehicle(ID) && HitWithin(ID,Now,2.) && UnitShotFrom(ID,Now,From) && FVector::DistSquared2D(From,Pos)>1.e4)
@@ -1318,6 +1430,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const bool bSidearm=(U->SideAmmo+U->SideReserve>0||U->bSidearmSelected)&&UseSidearm(ID,CanEngage?TargetID:INDEX_NONE,Now);
  if(BaseEngage)Fire(ID,Pos+Muzzle,Direction,false);
  if(bCoverFire){if(U->Ammo==0)Store->StartReload(ID,Now);else{bArmsCoverShot=true;if(Fire(ID,Pos+Muzzle,Direction,false))SightExperiment.Cover(TEXT("arms_cover_fire_shots"));bArmsCoverShot=false;}}
+ if(bSuppress){if(U->Ammo==0)Store->StartReload(ID,Now);else{bArmsCoverShot=true;if(Fire(ID,Pos+Muzzle,Direction,false))SightExperiment.Cover(TEXT("suppress_fire_shots"));bArmsCoverShot=false;}}
  if(CanEngage) { if(bSidearm) Fire(ID,Pos+Muzzle,Direction,false); else if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false) && S->TacticalPlan.Action==EBattleSquadTactic::Support) GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(S->SquadID,TargetID); }
  else if(bOwnEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false)) SightExperiment.Cover(TEXT("own_target_shots")); }
  Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:((BattleTactics::ObservedTactics()?ObservedEngage:CanEngage)||bOwnEngage||bCoverFire)?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
@@ -1369,7 +1482,17 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   return FireExoLauncher(ID,Start+Direction.GetSafeNormal()*BattleRanges::Reach(EBattleWeapon::AntiTank),Now);
  Store->UpdateAim(ID,Now,Actor(ID)?Actor(ID)->GetVelocity().Size2D():Bodies.FindChecked(ID).Velocity.Size2D(),Direction,Actor(ID)?Actor(ID)->GetCharacterMovement()->IsMovingOnGround():true);
  if(ABattleUnit* Shooter=Actor(ID);Shooter && !bPlayerShot)Shooter->NoteDisplayAim(Direction,Now);
- if(bSide?!BattleArms::ConsumeSidearmShot(Store->Units.FindChecked(ID),Now,T->ShotInterval(W,bPlayerShot)):!Store->ConsumeShot(ID,Now,T->ShotInterval(W,bPlayerShot),!bPlayerShot&&W==EBattleWeapon::Carbine?BattleTactics::CarbineShotRounds():1)) return false;
+ // Trial -BattleBurstFire (BattleTactics.h, default off): an AI carbine fires a burst at the player's interval, then holds.
+ double Interval=T->ShotInterval(W,bPlayerShot);int32* Burst=nullptr;
+ if(!bPlayerShot&&!bSide&&W==EBattleWeapon::Carbine&&BattleTactics::BurstFire()>0)
+ {
+  // A burst not continued within 0.6 s of its last round (aim change, reload, cover, lost sight) is over: the next round starts a new one.
+  auto& State=BurstLeft.FindOrAdd(ID,TPair<int32,double>(0,-100.));
+  if(State.Key<=0||Now-State.Value>.6||Now<State.Value)State.Key=BattleTactics::BurstFire();
+  Burst=&State.Key;Interval=*Burst>1?T->ShotInterval(W,true):BattleTactics::BurstPause();
+ }
+ if(bSide?!BattleArms::ConsumeSidearmShot(Store->Units.FindChecked(ID),Now,Interval):!Store->ConsumeShot(ID,Now,Interval,!bPlayerShot&&W==EBattleWeapon::Carbine?BattleTactics::CarbineShotRounds():1)) return false;
+ if(Burst){--*Burst;BurstLeft.FindChecked(ID).Value=Now;}
  if(bSide)SightExperiment.Cover(bPlayerShot?TEXT("arms_sidearm_shots_player"):TEXT("arms_sidearm_shots"));
  if(SightExperiment.Started)
  {
@@ -1440,7 +1563,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  // An anti-tank round hits for ATDamage (and ATBaseDamage on an enemy home); its explosion follows below.
  const bool bAT=W==EBattleWeapon::AntiTank;
  const float ShotDmg=bAT?T->ATDamage:[&]{const auto* SS=Store->FindSquad(U->SquadID);return T->ShotDamage*BattleSquadType::DamageScale(SS?SS->SquadType:0)*BattleArms::DamageAt(W,FVector::Dist(Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End));}();
- if(bArea && !bShownPartHit)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,bAT?T->ATBaseDamage:ShotDmg);
+ if(bArea && !bShownPartHit)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,bAT?T->ATBaseDamage:ShotDmg*BattleTactics::BaseRifleDamage());
  if(SightExperiment.Started && Victim>0) ++SightExperiment.Hits;
  const auto* BeforeVictim=Store->Find(Victim);
  const float BeforeHP=BeforeVictim?BeforeVictim->HP:0;
@@ -1619,6 +1742,7 @@ void UBattleLeaderRuntime::Step(float Dt)
  if(!bEnabled) return;
  // Named CPU trace scopes (Unreal Insights, -trace=cpu): free when no trace is recording.
  TRACE_CPUPROFILER_EVENT_SCOPE(BattleRuntimeStep);
+ if(BattleTactics::BaseGarrison()&&bArea&&FParse::Param(FCommandLine::Get(),TEXT("BattleBaseGarrisonSmoke"))){StepBaseGarrisonSmoke(GetWorld()->GetTimeSeconds());return;}
  if(SightExperiment.Enabled) { TRACE_CPUPROFILER_EVENT_SCOPE(BattleSightExperiment); StepSightExperiment(Dt); }
  StepSoldierOrderTest();
  // After the previous frame's facing and poses; also on the Phase3 path (it returns before the body timers).
@@ -1683,6 +1807,12 @@ void UBattleLeaderRuntime::Step(float Dt)
   // Infantry arms (BattleArms.cpp): only with a trial switch on, an elite platoon or a round in flight.
   if(bWideField && ArmsActive()) StepArms(Dt,Now);
   if(bWideField && HotSectorsEnabled()) StepHotSectors(Now);
+  // Self-test -BattleMissionResumeSmoke (B06, BattleSquadRetreatSmoke.cpp): once, 3 s into the combat. Changes the match (test runs only).
+  static const bool bResumeSmoke=FParse::Param(FCommandLine::Get(),TEXT("BattleMissionResumeSmoke"));
+  if(bResumeSmoke && bWideField && !bMissionResumeSmokeDone && Now>=Mode->CombatStartsAt+3.){bMissionResumeSmokeDone=true;RunMissionResumeSmoke();}
+  // Self-test -BattleOwnRouteSmoke (B05, BattleOwnRouteSmoke.cpp): from 3 s into the combat. Changes the match (test runs only).
+  static const bool bOwnRouteSmoke=FParse::Param(FCommandLine::Get(),TEXT("BattleOwnRouteSmoke"));
+  if(bOwnRouteSmoke && bWideField && bStableMovement)StepOwnRouteSmoke(Now);
  }
  int32 Living[2]={0,0}; for(const auto& U:Store->GetUnits()) if(U.Value.IsAlive()) ++Living[U.Value.Team];
  if(!bArea && !Mode->bBattleEnded && (!Living[0] || !Living[1]))

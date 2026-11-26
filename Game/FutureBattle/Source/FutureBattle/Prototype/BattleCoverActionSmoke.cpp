@@ -6,7 +6,6 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "BattleGameMode.h"
 #include "BattleMatch.h"
-#include "BattleSave.h"
 #include "BattleController.h"
 #include "BattlePerception.h"
 #include "BattleFieldLayout.h"
@@ -193,13 +192,6 @@ void UBattleLeaderRuntime::RunCoverActionSmoke()
    Check(BattleBodyAnim::Locomotion(0,FVector(200,0,0),true)==BattleBodyAnim::Get(BattleBodyAnim::EClip::StandJog)&&BattleBodyAnim::Locomotion(0,FVector(-200,0,0),true)==BattleBodyAnim::Get(BattleBodyAnim::EClip::JogBwd)&&BattleBodyAnim::Locomotion(1,FVector(200,0,0),true)==BattleBodyAnim::Get(BattleBodyAnim::EClip::CrouchFwd),TEXT("moving without firing runs with the rifle low (standing only)"));
    Check(BattleBodyAnim::Death(FVector(1,0,0),FVector(1,0,0),0)==BattleBodyAnim::Get(BattleBodyAnim::EClip::DeathBack),TEXT("a shot from behind picks the back death clip"));
   }
-  Match->DirectorClock=0;Match->DelegationClock=0;
-  FString Error;auto* Snapshot=Match->CaptureSnapshot();Check(Snapshot&&Snapshot->Validate(Error),TEXT("active cover snapshot validates"));
-  Check(Match->SaveMatch(TEXT("FutureBattleSmokeOnly"))&&Match->LoadMatch(TEXT("FutureBattleSmokeOnly")),TEXT("active cover serializes and restores"));
-  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVER_SAVE message=%s validation=%s"),*Match->LastMessage,*Error);
-  Match->DirectorClock=-1000;Match->DelegationClock=-1000;
-  Check(Store->Find(1)->CoverPhase==2 && FVector::Dist2D(Position(1),Store->Find(1)->CoverAnchor)<40,TEXT("cover phase and anchor survive loading"));
-  Check(FVector::Dist2D(Store->Find(1)->CoverAnchor,Store->Find(1)->CoverPeek)>=100 && Store->Find(2)->CoverTargetID==251,TEXT("peek destination and Mass target survive serialization"));
   {
    const bool AnchorLine=CoverLineClear(1,Store->Find(1)->CoverAnchor,Threat),PeekLine=CoverLineClear(1,Store->Find(1)->CoverPeek,Threat);
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVER_LINE anchor=%d peek=%d"),AnchorLine,PeekLine);

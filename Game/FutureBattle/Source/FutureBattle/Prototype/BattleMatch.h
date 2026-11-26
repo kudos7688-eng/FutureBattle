@@ -6,7 +6,6 @@
 #include "BattleAreaState.h"
 #include "BattleCompositionState.h"
 #include "BattleMatch.generated.h"
-class UBattleSave;
 // Area strategy layer (ROADMAP 2026-11-16). The team intent is all the lower layers read: point allocation (S1 with S4/S6) and
 // AI purchasing. Stage 1: a fixed intent built from the tuning, so behaviour is unchanged.
 struct FAreaIntent
@@ -92,12 +91,13 @@ public:
 	float SupportCooldown[2] = { 0, 0 };
 	int32 SupportUsed[2] = { 0, 0 };
 	FString LastMessage;
- // HUD invalidation only; not part of the saved match state.
- uint64 RestoreGeneration=0;
  bool bArea=false;
  UPROPERTY() FBattleAreaState Area;
  UPROPERTY() TArray<TObjectPtr<AActor>> BaseActors;
  void InitializeArea();
+ bool IsBaseGarrison(int32 SquadID) const;
+ int32 GarrisonLiving(int32 Team,bool bInsideOnly=false) const;
+ void UpdateBaseGarrison(float Dt);
  void UpdateArea(float Dt);
  bool AreaVisible(int32 Observer,FVector Point,AActor* Target=nullptr) const;
  bool DamageBase(AActor* Target,int32 AttackerTeam,float Damage);
@@ -107,7 +107,7 @@ public:
  FVector RepairPoint(int32 Team) const;
  mutable FVector DepotPoint[2]={FVector::ZeroVector,FVector::ZeroVector};
  mutable bool bDepotPointBuilt[2]={false,false};
- // Trial -BattleDepotHealth (BattleArtillery.cpp): the depot's health, broken until DepotDownUntil (match Elapsed). Not saved.
+ // Trial -BattleDepotHealth (BattleArtillery.cpp): the depot's health, broken until DepotDownUntil (match Elapsed).
  float DepotDamage[2]={0.f,0.f};
  double DepotDownUntil[2]={-1.,-1.};
  int32 DepotBreaks[2]={0,0};
@@ -139,6 +139,14 @@ public:
  // Why a purchase cannot happen now: 0 = it can, 1 = it can later (resources, squad slots, type limit: a reservation waits),
  // 2 = not in this state (disabled, not in combat, bad type, 100 squad records). Why gets HireAreaSquad's message.
  int32 HireBlock(int32 Team,uint8 SquadType,FString& Why,uint8 Grade=0) const; // Grade 1 elite platoon, 2 sniper team (BattleArms.cpp)
+ int32 HireCost(uint8 SquadType,uint8 Grade=0) const;
+ // Replenishments queued for the team (each reserves one resource; HireAreaSquad cancels those the rest cannot cover).
+ int32 PendingReplacements(int32 Team) const;
+ // B03 (Docs/review-2026-11-25): the resources the AI leaves unspent (the player's delegation setting, else the intent's HireReserve) and
+ // whether an AI purchase of Cost keeps them. Checked for every AI purchase, also delegated ones and AI reservations when they are bought;
+ // the player's own purchases and reservations are not limited by it.
+ int32 AIHireKeep(int32 Team) const;
+ bool AIHireAffordable(int32 Team,int32 Cost) const;
  // Buys now when nothing of the same type waits ahead and nothing is starved (as a plain purchase); otherwise queues.
  // Returns 0 refused (LastMessage says why), 1 bought, 2 queued.
  int32 ReserveHire(int32 Team,uint8 SquadType,bool bByAI,int32 Dest=-1);
@@ -170,7 +178,7 @@ public:
  // Once per match second: per team, the first reservation (in order, the first of each type) that can be bought is bought.
  void UpdateHireQueue();
  int32 HireQueueSecond=-1;
- // Reservations bought per team in this run (not saved), and the last one's type and maker: the player's notice (BattleBuyPanel.cpp).
+ // Reservations bought per team in this run, and the last one's type and maker: the player's notice (BattleBuyPanel.cpp).
  int32 HireQueueBought[2]={0,0}, HireQueueBoughtType[2]={-1,-1}; bool HireQueueBoughtByAI[2]={false,false};
  // P1 trial: the observed need a new AI squad would serve (see FAreaHireTuning), or -1 for none.
  int32 AreaHireNeed(int32 Team) const;
@@ -190,7 +198,7 @@ public:
  static int32 StartSquads();
  int32 StartSquadCount() const { return 2*StartSquads(); } // squads of both teams at the start; higher squad IDs were bought
  bool bSetupDone=false, bSetupBurst=false;
- // Initialized only for new ON matches. Loading pre-extension-4 saves explicitly disables the planner.
+ // Initialized only for new ON matches.
  int32 CompositionTeams=0;
  UPROPERTY() TArray<FCompositionTeamState> CompositionState;
  void InitializeComposition();
@@ -230,18 +238,21 @@ public:
  // True while the squad's surprise group is moving along its row (phase 1): its tactics do not stop to hold at a seen enemy.
  bool SurpriseMoving(int32 SquadID) const;
  bool RaidSneaking(int32 SquadID) const; // Trial -BattleArtilleryRaidSneak: an artillery raid squad still farther than the sneak radius from its target.
- // After a save restore: no front/surprise timer further ahead than its own interval (an earlier save would stall them).
- void ClampFrontTimers();
  float SurpriseNextAt[2]={0.f,0.f},SurpriseSkipLogAt[2]={0.f,0.f};
  TMap<int32,FVector> FrontPosts; // squad of a front-holding group -> the sector centre it holds (transient)
+ // Trial -BattleArriveWatch (BattleTactics.h): squad -> the mission (its revision) it keeps, since when, and until when (-1: not
+ // yet at the destination). Transient. ArriveWatchHolds: true while the squad is to keep its mission.
+ struct FArriveWatch{int32 Revision=0;float Start=0.f,Until=-1.f;};
+ TMap<int32,FArriveWatch> ArriveWatches;
+ bool ArriveWatchHolds(const FBattleSquadState& Squad,const FVector& LeaderAt);
  // Reservation destinations (stage 7, Docs/design-front-strategy.md 5.1): a bought squad sent to a front section waits here for its first
- // post, which then prefers that section's rows (squad -> section; transient: after a restore before the first post it takes any post).
+ // post, which then prefers that section's rows (squad -> section).
  TMap<int32,int32> FrontSectionWish;
  TSet<int32> FrontLeads; // squads of a front-holding group on a row's front place, not a support place (transient, like FrontPosts)
  float FrontLineAt[2]={-1.f,-1.f},FrontLineLogAt[2]={-1.f,-1.f};
  // Front plan, stage 1 (Docs/design-front-strategy.md, trial -BattleFrontPlanLog=1, default 0): the team's front line split into 3-5
  // sections (cut where impassable terrain separates neighbouring rows), with each section's push, damage, known enemies and points
- // logged as BATTLE_FRONT_SECTION every 30 s. Log only: nothing reads it back, so the match is unchanged. Transient (not saved).
+ // logged as BATTLE_FRONT_SECTION every 30 s. Log only: nothing reads it back, so the match is unchanged. Transient.
  // Stage 2 (-BattleFrontPlan=1, default 0; -BattleFrontPlanTeam=0/1 for one team): UpdateFrontPlan picks the focus section from the
  // latest stats (push, damage, known enemies ahead) and its target point; the target goes to Area.StrategyFocus (S6 and the attack group
  // read it through StrategyFocusPoint); UpdateFrontLine keeps own points as the line's floor and lets the focus section stand out.
@@ -298,7 +309,7 @@ public:
  // Measurement of the free squads' moves (log only, BATTLE_FRONT_LINE free_rev/free_moved_m; transient): last leader position and 2 s step.
  TMap<int32,FVector> FreeLastPos,FreeLastStep; int32 FreeReversals[2]={0,0}; double FreeMoved[2]={0.,0.}; int32 SectorCrowd[2]={0,0}; int32 FrontLanes[2]={0,0}; int32 RoadSteps[2]={0,0}; TArray<int32> LatFront[2],LatOther[2]; /* log only: infantry squads per row across the map, summed per update */ /* summed extra squads per shared sector at each update */
  float MatchTimeLimit() const;
- // Smoke fixtures only (not saved): suspend Area income so exact resource checks stay deterministic.
+ // Smoke fixtures only: suspend Area income so exact resource checks stay deterministic.
  bool bAreaIncomeHeld=false;
 	void InitializeMatch();
 	static int32 SquadPrice(EBattleTraining Training);
@@ -321,7 +332,7 @@ public:
 	FVector AreaScoutPost(int32 Team, int32 SquadID) const;
 	// Indirect-fire squads (mortar team, self-propelled gun; BattleArtillery.cpp): their assigned goal, pulled back towards the own home
 	// until it is ArtilleryStandoff x their range from every enemy the team knows of (known positions only).
- // Public map geometry and AI purposes: transient, rebuilt/reset after a successful restore.
+ // Public map geometry and AI purposes: transient.
  TArray<FVector> ArtilleryPostPositions[2];
  TArray<double> ArtilleryPostEvidence[2]; // observer team -> enemy post's last evidence timestamp
  TMap<int32,int32> ArtilleryRaids;
@@ -334,7 +345,7 @@ public:
  // raid target) and the infantry squads that push the front out at Screen on the same side while the group goes round.
  struct FArtilleryRaidGroup { int32 Phase=-1; FVector Rally=FVector::ZeroVector,Way=FVector::ZeroVector,Screen=FVector::ZeroVector; double PhaseAt=-1.; TArray<int32> Screens; };
  FArtilleryRaidGroup ArtilleryRaidGroups[2];
- // Trials -BattleATHunt / -BattleACShield (BattleATHunt.cpp). Not saved (trial state).
+ // Trials -BattleATHunt / -BattleACShield (BattleATHunt.cpp).
  struct FATHunt { int32 Team=0; int32 Target=INDEX_NONE; FVector Position=FVector::ZeroVector; double StartAt=-1.,SeenAt=-1.; };
  TMap<int32,FATHunt> ATHunts; double ATHuntClock[2]={-1.,-1.};
  TMap<int32,double> ATFireCalls[2]; // -BattleATFire: anti-tank soldier unit ID -> when an own armoured unit last saw him
@@ -358,7 +369,7 @@ public:
 	// True when an enemy the team knows of and can tell apart as an anti-tank soldier or a tank threatens a vehicle at P.
 	bool AreaArmourThreat(int32 Team, const FVector& P, bool bTankGuns = true) const; // bTankGuns false: anti-tank soldiers only
 	// Armour AI, stage 3 (BattleArmourAI.cpp; -BattleArmourAI, default 1). Known enemies and own state only.
-	// Enemy vehicles the team has known of within the last VehicleMemory seconds (seen units; transient, not saved).
+	// Enemy vehicles the team has known of within the last VehicleMemory seconds (seen units; transient).
 	struct FKnownVehicle { float At = -1.f; FVector Position = FVector::ZeroVector; };
 	mutable TMap<int32, FKnownVehicle> KnownVehicles[2];
 	void NoteKnownVehicles(int32 Team) const;
@@ -371,7 +382,7 @@ public:
 	// Tank objective (the point with the most known enemies, outside the city of map E) and its overwatch post short of that point.
 	int32 AreaTankTarget(int32 Team, int32 SquadID) const;
 	FVector AreaTankPost(int32 Team, int32 Point, float Overwatch = -1.f) const; // Overwatch below zero: UBattleTuning::TankOverwatch
-	// Squad groups, stage 1 (BattleGroups.cpp): members, one objective, a phase (0 assemble at Rally, 1 advance, 2 hold). Saved with all decision history by combat extension 2 (older saves start empty).
+	// Squad groups, stage 1 (BattleGroups.cpp): members, one objective, a phase (0 assemble at Rally, 1 advance, 2 hold).
 	// Stage 2: roles while advancing (0 assault: to the point; 1 support: fires from a post short of it; 2 armour: the tank's post behind
 	// the infantry; 3 fire: mortar or gun at its firing post; 4 guard: the anti-tank team beside the support post; 5 supply: the supply vehicle behind
 	// the group's post (BattleSupplyCar.cpp); 255 none: the squad
@@ -387,7 +398,7 @@ public:
 		bool bFocus2 = false; /* front plan stage 5: the second attack army, aimed at FFrontPlanTeam::Focus2 (Kind 0) */
 		bool bFollowFocus = true; /* front plan stage 7: a player's attack group follows the focus while delegated (the player's per-group switch) */
 		int32 SurpriseRow = 0; /* surprise group: the edge sector row it moves along */
-		uint8 SurpriseBridgeStage = 0; /* 0 none, 1 entrance, 2 exit, 3 original edge goal; retained during same-time restore */
+		uint8 SurpriseBridgeStage = 0; /* 0 none, 1 entrance, 2 exit, 3 original edge goal */
 		int32 SurpriseBridgeLeader = INDEX_NONE;
 		float SurpriseBridgeAt = 0.f; /* when the current bridge leg began */
 		int32 SurpriseNextCol = -1; /* surprise group: the furthest stop column given in phase 1; a temporary pull-back does not move it back */
@@ -424,7 +435,7 @@ public:
 	int32 FormGroup(int32 Team, const TArray<int32>& Squads, bool bPlayer);
 	void DissolveGroup(int32 GroupID, const TCHAR* Why);
 	// Command UI armies (2026-11-21): 0 unassigned, 1 front army (the team's front-holding group), 2 attack army (its other groups).
-	// AssignArmy moves an own squad there and pins it, so automatic filling (front army, attack and surprise groups) leaves it. Not saved.
+	// AssignArmy moves an own squad there and pins it, so automatic filling (front army, attack and surprise groups) leaves it.
 	// TargetGroup: an own attack group to join, NewAttackGroup for a new one (the "+ new group" row), INDEX_NONE for the army's default.
 	static constexpr int32 NewAttackGroup = -2;
 	bool AssignArmy(int32 SquadID, int32 Army, int32 TargetGroup = INDEX_NONE);
@@ -460,9 +471,9 @@ public:
 	// Strategic layer trial (-BattleAreaComposition=1): the AI's own mix of special squad types, written into the intent's Keep numbers.
 	void AreaComposition(int32 Team, FAreaIntent& Intent, int32 Bought) const;
 	struct FCarChoice { int32 Target = INDEX_NONE; double At = -1; };
-	mutable TMap<int32, FCarChoice> CarChoices; // saved, squad -> current objective (At uses match Elapsed)
+	mutable TMap<int32, FCarChoice> CarChoices; // squad -> current objective (At uses match Elapsed)
 	// Scout reports (ROADMAP 2026-11-14, stage 3): what a scout pair sees beyond normal sight reaches its team only through a timed
-	// two-step report (direction after ScoutAlertSeconds, positions and size after ScoutReportSeconds). Transient: a load restarts the timers.
+	// two-step report (direction after ScoutAlertSeconds, positions and size after ScoutReportSeconds). Transient.
 	struct FScoutReport { bool bHomeObserved=false; double Started=-1, LastLong=-1, AlertAt=-1, ReportedAt=-1, NextHint=0, RetreatUntil=-1, PauseStart=-1, LastDanger=-1; FVector ReportFrom=FVector::ZeroVector; float LastHP=-1; int32 Stage=0, Living=0, Sequence=0, AlertSequence=0, Burns=0; FVector Direction=FVector::ZeroVector, Approx=FVector::ZeroVector, RetreatPoint=FVector::ZeroVector; TArray<FVector> Positions; };
 	// Scout retreat (2026-11-17): an AI-led pair that is hit falls back ScoutRetreatDistance from the nearest seen enemy, watches from
 	// there until ScoutHoldSeconds pass without a hit, then returns to its post shifted sideways (Burns). The report pauses while it moves.
@@ -494,7 +505,7 @@ public:
 	TMap<int32, int32> IntelPurpose;           // squad -> point it was bought to defend (transient)
 	mutable FAreaIntelView IntelViews[2];
  struct FFireReveal { uint8 ObservedSquadType=255; bool bArtillery=false; double At=0,Memory=10.; float ErrorRadius=500.f; FVector Position=FVector::ZeroVector; FVector Sum=FVector::ZeroVector; int32 Count=0; }; // Sum/Count: averaged artillery reports (counter-battery)
- // Shared gun reports, keyed by shooter unit ID; match seconds, transient, never saved.
+ // Shared gun reports, keyed by shooter unit ID; match seconds, transient.
  mutable TMap<int32,FFireReveal> FireReveals[2];
 	TMap<int32, FScoutReport> ScoutReports;
 	void UpdateScoutReports();
@@ -531,21 +542,11 @@ public:
  static bool SituationLogOn();
  void UpdateSituationLog();
  int32 SituationLogBucket = -1;
- // Stage S2 (-BattleStrategy=2, -BattleStrategyTeam=0/1 for one team): recon -> focus attack. UpdateStrategy runs once per team order
- // update (before AreaIntent is read): after the opening it picks the focus objective from the situation map, keeps it at least
- // StrategyFocusHold seconds, reviews every StrategyReview seconds and at once when the focus is taken. State in Area.Strategy*.
- static int32 StrategyLevel();
- static bool StrategyOn(int32 Team, int32 Level);
- static float StrategyOpenSeconds();      // before the first review (x match length / 600)
+ // The front plan's focus timing and focus (state in Area.Strategy*). The older strategy layer S2-S4 (-BattleStrategy=2/3/4,
+ // -BattleStrategyPass) was removed on 2026-11-25 (user decision); main b470127 reproduces its results.
+ static float StrategyOpenSeconds();      // before the first focus (x match length / 600)
  static float StrategyFocusHoldSeconds(); // least time a focus is kept
- // -BattleStrategyPass=1 (default 0; sector maps): a focus candidate whose way from the own front can avoid the passes with known
- // enemies only by a detour of more than 4 sectors loses 5 points (Docs/design-terrain-ai.md 3-4).
- static bool StrategyPassOn();
- int32 StrategyFocusPoint(int32 Team) const; // INDEX_NONE without a valid focus
- void UpdateStrategy(int32 Team);
- // Stage S3 (-BattleStrategy=3): own points held against a known superior enemy (Area.StrategyHoldMask).
- int32 StrategyHoldPoint(int32 Team) const; // the one threatened longest; INDEX_NONE without holds
- bool StrategyHolds(int32 Team, int32 Point) const;
+ int32 StrategyFocusPoint(int32 Team) const; // INDEX_NONE without a valid focus (front plan only)
 	// Objective worth (FMapDef::ObjectiveValues; 1 where the map sets none): multiplies its income and its end score.
 	float ObjectiveValue(int32 Point) const;
 	// Resources a team gains per income tick from the objectives it truly owns now (before the time ramp): base + per point x value x map scale.
@@ -558,7 +559,11 @@ public:
 	bool RoutesOn() const;
 	TArray<FVector> RouteKnownEnemies(int32 Team) const;
 	int32 RouteFlankSide(const FVector& From, const FVector& OwnHome, const TArray<FVector>& KnownEnemies, int32 SquadID) const;
-	FVector RouteStep(const FVector& From, const FVector& Goal, int32 FlankSide, const TArray<FVector>& KnownEnemies) const;
+	FVector RouteStep(const FVector& From, const FVector& Goal, int32 FlankSide, const TArray<FVector>& KnownEnemies, TArray<int32>* Load = nullptr, int32 SquadID = INDEX_NONE) const;
+	// -BattleRouteLoad: the junctions a squad was sent along, kept until its goal changes.
+	struct FRouteCommit { FVector Goal = FVector::ZeroVector; int32 FlankSide = 0; int32 Passed = INDEX_NONE; TArray<int32> Nodes; };
+	mutable TMap<int32, FRouteCommit> RouteCommits;
+	mutable TMap<int32, FRouteCommit> RouteSeen; // -BattleRouteLog: the way last chosen, to record a change of way on the road
 	// Sector routes (BattleSectorRoute.cpp, trial -BattleSectorRoute=1): the sector beside the next junction an AI squad stops in.
 	static bool SectorRouteOn();
 	static bool SectorFlankOn(); // -BattleSectorFlank=1: stops beside the known enemy's front near the goal
@@ -615,10 +620,6 @@ public:
 	bool SetAllyDelegated(int32 SquadID, bool bDelegated);
 	float DelegationClock = 5.f;
 	int32 Resupply(int32 UnitID, int32 RequestedRounds = 10);
-	UBattleSave* CaptureSnapshot() const;
-	bool RestoreSnapshot(const UBattleSave* Snapshot);
-	bool SaveMatch(const FString& Slot = TEXT("FutureBattleQuick01"));
-	bool LoadMatch(const FString& Slot = TEXT("FutureBattleQuick01"));
 	bool RequestSupport(int32 ObserverID);
 	void UpdateSupport(float DeltaSeconds);
 	bool IsEnabled() const { return Phase != EBattleMatchPhase::Disabled; }

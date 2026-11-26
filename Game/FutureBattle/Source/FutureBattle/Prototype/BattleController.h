@@ -62,6 +62,22 @@ struct FBattleCommandBarLayout
 
 // Plan panel (front plan stage 7, Docs/design-front-strategy.md 6; U in the tactical view): the player's section roles
 // (-BattleFrontPlanPlayer=1) and the purchase reservations with the hiring delegation (-BattleHireReserve=1). Shared by Canvas and input.
+// Top bar toolbar (BattleQuitMenu.cpp, 2026-11-25 user request: every main key also has a button that a click runs, for remote
+// sessions where keys are awkward) and the quit confirmation it opens. Shared by Canvas and input.
+struct FBattleQuitLayout
+{
+ // Tool ids: 0 AI pause (P), 1 speed (.), 2 quit (Esc / F10), 3 select all (Q), 4 direct control (E) /
+ // tactical view (Tab), 5 sector grid (M), 6 fog (N), 7 enemy ranges (L), 8 plan panel (U), 9 form group (F), 10 select group (V).
+ enum : uint8 { AIPause, Speed, Quit, SelectAll, Control, Grid, Fog, Ranges, Plan, FormGroup, SelectGroup, ToolCount };
+ struct FTool { FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector; uint8 Id=0; };
+ TArray<FTool> Tools;
+ FVector2D Panel, PanelSize, QuitChoice, Back, ChoiceSize;
+ static FBattleQuitLayout Make(FVector2D View);
+ static bool In(FVector2D P,FVector2D O,FVector2D S){return P.X>=O.X&&P.X<O.X+S.X&&P.Y>=O.Y&&P.Y<O.Y+S.Y;}
+ int32 ToolAt(FVector2D P) const {for(const auto& T:Tools)if(In(P,T.Origin,T.Size))return T.Id;return INDEX_NONE;}
+ const FTool* Find(uint8 Id) const {return Tools.FindByPredicate([Id](const FTool& T){return T.Id==Id;});}
+};
+
 struct FBattlePlanPanelLayout
 {
  // Kind: 0 text, 1 section role, 2 reservation one up, 3 reservation cancel, 4 delegation level, 5 reserve down, 6 reserve up,
@@ -178,9 +194,9 @@ public:
 	bool bShowSectorGrid = true, bShowFog = true;
 	void ToggleSectorGrid();
 	void ToggleFogView();
-	// Range rings (L cycles, display only, ABattleHUD::DrawRangeRings): 1 selected own squads only (default),
-	// 2 + the enemy squad under the pointer, 3 + every seen enemy squad, 0 none.
-	int32 RangeRingMode = 1;
+	// Range rings (L cycles, display only, ABattleHUD::DrawRangeRings): 1 selected own squads only,
+	// 2 + the enemy squad under the pointer, 3 + every seen enemy squad, 0 none (default since 2026-11-25, user request; was 1).
+	int32 RangeRingMode = 0;
 	bool ShowsOwnRanges() const { return RangeRingMode != 0; }
 	bool ShowsHoveredEnemyRanges() const { return RangeRingMode == 2; }
 	bool ShowsAllEnemyRanges() const { return RangeRingMode == 3; }
@@ -206,9 +222,6 @@ public:
 	void HireElite(); // = key: an elite platoon (-BattleElite=1; BattleArms.cpp)
 	void HireSniper(); // ] key: a sniper team (-BattleSniperTeam=1; BattleArms.cpp)
 	void StartMatch();
-	void SaveMatch();
-	void LoadMatch();
- FString QuickSaveSlot=TEXT("FutureBattleQuick01"); // Smoke fixtures inject the whitelisted test slot.
 	void ResetMatchControl();
 	void RequestSupport();
 	bool IsTactical() const { return bTactical; }
@@ -216,6 +229,8 @@ public:
 	bool IsPlanPanelOpen() const { return bPlanPanel; }
 	void TogglePlanPanel();
 	// Purchase panel (BattleBuyPanel.cpp): B opens and closes it in the area battle (elsewhere B is still the support request).
+	// Quit menu (BattleQuitMenu.cpp, 2026-11-25 user request): the top bar's quit button or Esc opens a confirmation; its quit button ends the game.
+	bool IsQuitMenuOpen() const { return bQuitMenu; }
 	bool IsBuyPanelOpen() const { return bTactical && bBuyPanel; }
 	int32 GetBuyPanelRow() const { return BuyPanelRow; }
 	void ToggleBuyPanel();
@@ -330,6 +345,13 @@ private:
  bool PlanPanelInput(const FInputKeyEventArgs& Params);
  // Purchase panel: open, a left press inside it (its release is swallowed too), the highlighted row (pointer or D-pad), the pad
  // buttons it took (their releases are swallowed too) and the last pointer position (a move over a row highlights it).
+ // Quit menu: open; the input handler runs before every other one (BattleQuitMenu.cpp).
+ bool bQuitMenu=false;
+ bool HandleQuitMenu(const FInputKeyEventArgs& Params);
+ void SetQuitMenu(bool bOpen);
+ void QuitGameNow();
+ void RunTopTool(int32 Id); // a toolbar button: the same action as its key
+ void UpdateQuitMenuShot(); // display check -BattleQuitMenuShot (BattleQuitMenu.cpp)
  bool bBuyPanel=false, bBuyPress=false;
  int32 BuyPanelRow=0;
  TSet<FKey> BuyPadKeys;

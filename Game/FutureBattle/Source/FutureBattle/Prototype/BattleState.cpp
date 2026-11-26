@@ -58,7 +58,7 @@ void UBattleState::RestoreRecords(const TArray<FBattleUnitState>& SavedUnits, co
 	for (auto Squad : SavedSquads)
  {
   if(!PreservePlans) Squad.TacticalPlan = FBattleSquadTacticalPlan();
-  // Old saves have no mission fields; rebuild only from their own stored orders.
+  // Records without a mission derive it only from their own orders.
   if (!Squad.bHasMission)
   {
    Squad.bHasMission = true; Squad.MissionOrder = Squad.Order; Squad.MissionDestination = Squad.Destination;
@@ -133,7 +133,7 @@ bool UBattleState::SetTrainingPreset(int32 ID, EBattleTraining Training)
 	P.SightRange = T->EffectiveSightRange() * (bRecruit ? .75f : bVeteran ? 1.25f : 1.f);
 	P.FieldOfView = T->FieldOfView * (bRecruit ? .75f : bVeteran ? 1.25f : 1.f);
 	P.DetectionSeconds = T->DetectionSeconds * (bRecruit ? 2.f : bVeteran ? .5f : 1.f);
-	P.MemorySeconds = T->MemorySeconds * (bRecruit ? .6f : bVeteran ? 1.6f : 1.f);
+	P.MemorySeconds = (BattleTactics::MemorySeconds() > 0.f ? BattleTactics::MemorySeconds() : T->MemorySeconds) * (bRecruit ? .6f : bVeteran ? 1.6f : 1.f);
 	P.ShareRange = T->ShareRange * (bRecruit ? .625f : bVeteran ? 1.375f : 1.f);
 	P.ShareDelay = T->ShareDelay * (bRecruit ? 1.5f : bVeteran ? .5f : 1.f);
 	if (!SetPerceptionProfile(ID, P)) return false;
@@ -223,6 +223,14 @@ bool UBattleState::SetSquadOrder(int32 ID, EBattleOrder Order, FVector Destinati
 	++Squad->OrderRevision;
 	for (int32 Member : Squad->Members) if (Units.FindChecked(Member).IsAlive()) SetOrder(Member, Order, Goals.FindChecked(Member));
 	return true;
+}
+
+bool UBattleState::MissionOf(int32 ID, FBattleMission& Out) const
+{
+ const auto* S = Squads.Find(ID);
+ if (!S || !S->bHasMission) return false;
+ Out.Order = S->MissionOrder; Out.Goal = S->MissionDestination; Out.bSector = S->bSectorMission; Out.Revision = S->MissionRevision;
+ return true;
 }
 
 void UBattleState::CancelSquadTacticalPlan(int32 ID, const FString& Reason)
@@ -580,7 +588,7 @@ namespace
 }
 // Rifle squad size: UBattleTuning::RifleMembers (8 since 2026-11-19, user decision; was 10) in area matches (-BattleArea, the played mode);
 // the older non-area fields and their test fixtures keep 10. -BattleRifleMembers= (2..10) overrides per run in any mode.
-// The starting squads, hires and the save checks all read it here; cost is AreaSquadCost.
+// The starting squads and hires read it here; cost is AreaSquadCost.
 int32 BattleSquadType::RifleMembers(){static const int32 N=[]{const TCHAR* C=FCommandLine::Get();int32 V=FParse::Param(C,TEXT("BattleArea"))?GetDefault<UBattleTuning>()->RifleMembers:10;FParse::Value(C,TEXT("BattleRifleMembers="),V);return FMath::Clamp(V,2,10);}();return N;}
 int32 BattleSquadType::Members(uint8 Type){return Type==Heavy?HeavyValues().Members:Type==Scout?2:Type==AntiTank?4:Type==Mortar?3:Type==Exo||IsVehicle(Type)?1:RifleMembers();}
 bool BattleSquadType::Replenished(uint8 Type){return Type!=Scout&&Type!=Exo;}

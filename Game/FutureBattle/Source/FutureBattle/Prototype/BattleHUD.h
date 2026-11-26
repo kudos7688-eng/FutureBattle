@@ -13,6 +13,7 @@ public:
 	virtual void DrawHUD() override;
 private:
  void DrawGamepadMenu(class ABattleController* PC);
+ void DrawQuitMenu(class ABattleController* PC); // quit button and its confirmation (BattleQuitMenu.cpp, 2026-11-25)
  void DrawPlanPanel(class ABattleController* PC); // front plan stage 7 (U)
  void DrawBuyPanel(class ABattleController* PC); // purchase panel (B, 2026-11-23; layout FBattleBuyPanelLayout)
  void DrawSquadList();
@@ -56,7 +57,6 @@ private:
  bool HoveredSector(class ABattleController* PC, FIntPoint& Out) const;
  void DrawMinimapOverlay(class ABattleController* PC, const struct FBattleMinimapLayout& Map);
  FBattleFogGrid Fog;
- uint64 FogRestoreGeneration=0;
  TArray<FBattleSectorInfo> Sectors;
  // Contact pointers exist only during DrawHUD; every frame rebuilds the snapshot in source order.
  TMap<int32,const FBattleContact*> FrameContacts;
@@ -64,7 +64,6 @@ private:
  TArray<FVector2D> OverlayScreen;
  // Strategy band (Docs/design-strategy-ui.md 2.1/2.3; only while the strategy layer runs for the player's side): the last focus and
  // holds shown, to notice when they change.
- int32 ShownStrategyFocus=-2,ShownStrategyHolds=-1;
  TBitArray<> OverlayOn;
  TArray<float> OverlayDark;
  TArray<uint8> OverlayCount;

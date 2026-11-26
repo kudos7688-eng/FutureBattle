@@ -1,7 +1,6 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleComposition.h"
 #include "BattleMatch.h"
-#include "BattleSave.h"
 #include "BattleGameMode.h"
 #include "Engine/World.h"
 #include "UObject/Class.h"
@@ -140,58 +139,4 @@ void UBattleLeaderRuntime::RunCompositionSmoke()
   BattleComposition::ClassifyFailure(TEXT("Home deployment area is blocked"))==BattleComposition::EFailure::Placement&&
   BattleComposition::ClassifyFailure(TEXT("Navigation unavailable"))==BattleComposition::EFailure::Configuration,TEXT("planner classifies executor capacity placement and configuration messages"));
 
- // Serialize nonempty goal and window state through the real SaveGame codec, then continue the pure decision.
- auto* CompositionMatch=GetWorld()->GetSubsystem<UBattleMatch>();const FString CompositionOriginalMessage=CompositionMatch->LastMessage;
- auto* CompositionSnapshot=CompositionMatch->CaptureSnapshot();
- CompositionCheck(CompositionSnapshot!=nullptr,TEXT("planner can capture area fixture"));
- if(CompositionSnapshot)
- {
-  CompositionSnapshot->CombatStateVersion=4;CompositionSnapshot->CompositionTeams=2;
-  CompositionSnapshot->CompositionPolicy=BattleComposition::PolicyVersion;CompositionSnapshot->CompositionRules=BattleComposition::RulesKey();
-  CompositionSnapshot->CompositionState.SetNum(2);CompositionSnapshot->CompositionState[0]=FCompositionTeamState();
-  auto CompositionPersisted=CompositionSaved.Next;CompositionPersisted.SaveCost=BattleComposition::Definitions()[4].Cost;
-  CompositionPersisted.WindowCredits=CompositionSnapshot->EnemyCredits;CompositionPersisted.NetPerMinute=60;
-  for(const auto& PersistSquad:CompositionSnapshot->Squads)if(PersistSquad.Team==1)
-  {CompositionPersisted.EmergencyUntilMS.Add(PersistSquad.SquadID,30000);CompositionSnapshot->Area.HirePurpose.Add(PersistSquad.SquadID,101);break;}
-  CompositionPersisted.bConfigurationFailed=true;
-  CompositionSnapshot->CompositionState[1]=CompositionPersisted;
-  FString CompositionSaveError;TArray<uint8> CompositionBytes;
-  const bool CompositionEncoded=CompositionSnapshot->Validate(CompositionSaveError)&&UGameplayStatics::SaveGameToMemory(CompositionSnapshot,CompositionBytes);
-  auto* CompositionDecoded=CompositionEncoded?Cast<UBattleSave>(BattleSaveValidation::Decode(CompositionBytes)):nullptr;
-  CompositionCheck(CompositionDecoded&&CompositionDecoded->Validate(CompositionSaveError)&&FCompositionTeamState::StaticStruct()->CompareScriptStruct(&CompositionDecoded->CompositionState[1],&CompositionPersisted,0),TEXT("planner revision four serializes full saving and income state"));
-  if(CompositionDecoded)
-  {
-   CompositionPersisted.bConfigurationFailed=false;CompositionDecoded->CompositionState[1].bConfigurationFailed=false;
-   auto CompositionContinueInput=CompositionInput;CompositionContinueInput.Free=23;
-   const auto CompositionContinuous=BattleComposition::Decide(CompositionContinueInput,BattleComposition::Definitions(),CompositionPersisted);
-   const auto CompositionResumed=BattleComposition::Decide(CompositionContinueInput,BattleComposition::Definitions(),CompositionDecoded->CompositionState[1]);
-   CompositionCheck(CompositionContinuous.Type==CompositionResumed.Type&&CompositionContinuous.Action==CompositionResumed.Action&&FCompositionTeamState::StaticStruct()->CompareScriptStruct(&CompositionContinuous.Next,&CompositionResumed.Next,0),TEXT("planner post-save decision and state match uninterrupted calculation"));
-   auto* CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->CompositionPolicy=1;
-   CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner rejects old policy one v4 instead of guessing emergency provenance"));
-   CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->CompositionState[1].EmergencyUntilMS.Reset();CompositionBad->CompositionState[1].EmergencyUntilMS.Add(MAX_int32,30000);
-   CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner rejects unknown emergency squad reference"));
-   CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->Area.HirePurpose.Reset();
-   CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner rejects emergency provenance without matching hire purpose"));
-   CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);
-   for(auto& EmergencyValue:CompositionBad->CompositionState[1].EmergencyUntilMS)EmergencyValue.Value=FMath::FloorToInt(CompositionBad->Elapsed*1000.f)+30001;
-   CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner rejects emergency deadline beyond thirty seconds"));
-   CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->CompositionState[1].SaveType=99;
-   CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner save rejects invalid type"));
-   CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->CompositionState[1].SaveDeadlineMS=CompositionBad->CompositionState[1].SaveStartedMS-1;
-   CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner save rejects inverted deadline"));
-   CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->CompositionState[1].VehicleSeenMS.Add(MAX_int32,0);
-   CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner save rejects unknown observation ID"));
-   CompositionBad->CompositionState[1].VehicleSeenMS.Reset();
-   for(const auto& CompositionUnit:CompositionBad->Units)if(CompositionUnit.State.Team==1){CompositionBad->CompositionState[1].VehicleSeenMS.Add(CompositionUnit.State.UnitID,0);break;}
-   CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner save rejects own-team vehicle memory"));
-   CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->CompositionRules=FString::ChrN(32,TCHAR('0'));
-   const int32 CompositionCreditsBefore=CompositionMatch->Credits[1];const int32 CompositionMaskBefore=CompositionMatch->CompositionTeams;
-   CompositionCheck(!CompositionMatch->RestoreSnapshot(CompositionBad)&&CompositionMatch->Credits[1]==CompositionCreditsBefore&&CompositionMatch->CompositionTeams==CompositionMaskBefore,TEXT("planner rule mismatch rejected before mutating live match"));
-   CompositionBad=DuplicateObject<UBattleSave>(CompositionDecoded,this);CompositionBad->CombatStateVersion=3;
-   CompositionCheck(!CompositionBad->Validate(CompositionSaveError),TEXT("planner state cannot be smuggled into older extension"));
-   CompositionBad->CompositionTeams=0;CompositionBad->CompositionPolicy=0;CompositionBad->CompositionRules.Reset();CompositionBad->CompositionState.Reset();
-   CompositionCheck(CompositionBad->Validate(CompositionSaveError),TEXT("legacy revision three remains readable without planner data"));
-  }
- }
- CompositionMatch->LastMessage=CompositionOriginalMessage;
 }

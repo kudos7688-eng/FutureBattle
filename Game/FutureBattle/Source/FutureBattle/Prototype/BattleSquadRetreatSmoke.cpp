@@ -3,6 +3,8 @@
 #include "BattleGameMode.h"
 #include "BattleController.h"
 #include "BattleMatch.h"
+#include "BattleFieldLayout.h"
+#include "BattleSectors.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
 #include "Misc/CommandLine.h"
@@ -134,4 +136,60 @@ void UBattleLeaderRuntime::RunST2Smoke()
  }
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ST2_RESULT failures=%d"),SmokeFailures);
  FPlatformMisc::RequestExitWithStatus(false,SmokeFailures?1:0);
+}
+
+// B06 self-test (-BattleMissionResumeSmoke on an area map; Docs/review-2026-11-25): a temporary plan returns to the squad's mission
+// through UBattleSquadTactics::ResumeMission with the mission's sector flag, to a mission updated during the plan, never after an
+// explicit order during the plan, and only once. On a map with sectors the mission is a sector mission, else a point mission.
+void UBattleLeaderRuntime::RunMissionResumeSmoke()
+{
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* T=GetWorld()->GetSubsystem<UBattleSquadTactics>();
+ int32 Failures=0;
+ auto Check=[&](bool bOk,const TCHAR* What){if(!bOk)++Failures;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MISSION_RESUME_SMOKE %s %s"),bOk?TEXT("PASS"):TEXT("FAIL"),What);};
+ const bool bSec=BattleFieldLayout::Of(GetWorld()).bSectors;
+ // An AI rifle squad of team 1 with living members (the AI's squads accept temporary plans).
+ int32 SID=INDEX_NONE;
+ for(const auto& P:Store->GetSquads())
+  if(P.Value.Team==1&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==BattleSquadType::Rifle&&!IsVehicle(P.Value.LeaderUnitID)&&Store->Find(P.Value.LeaderUnitID)&&Store->Find(P.Value.LeaderUnitID)->IsAlive()){SID=P.Key;break;}
+ if(SID==INDEX_NONE||!T){UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MISSION_RESUME_SMOKE_RESULT failures=1 sector=%d (no squad)"),bSec?1:0);++SmokeFailures;return;}
+ const FVector Here=Position(Store->FindSquad(SID)->LeaderUnitID);
+ // Goals: the own cell (always reachable) and a neighbouring one the route accepts.
+ auto CellGoal=[&](FIntPoint Cell){return bSec?BattleSectors::Center(Cell):Here+FVector((Cell.X-BattleSectors::Cell(Here).X)*2000.,(Cell.Y-BattleSectors::Cell(Here).Y)*2000.,0);};
+ const FIntPoint Own=BattleSectors::Cell(Here);
+ const FVector GoalA=bSec?BattleSectors::Center(Own):Here;
+ Check(IssueOrder(SID,EBattleOrder::Move,GoalA,false,bSec),TEXT("explicit mission order accepted"));
+ const auto* S=Store->FindSquad(SID);
+ Check(S->bSectorMission==bSec,TEXT("mission carries the sector flag"));
+ // 1) Home supply plan -> resume: the sector flag and the goal cell are kept, one executed order.
+ Check(T->Apply(SID,EBattleSquadTactic::Recover,EBattleOrder::Move,Here+FVector(300,0,0),TEXT("HOME SUPPLY / SMOKE")),TEXT("supply plan accepted"));
+ const int32 Rev1=S->OrderRevision;const FVector MissionA=S->MissionDestination;
+ const bool bResumed=T->ResumeMission(SID,TEXT("HOME SUPPLY COMPLETE / SMOKE"),nullptr);
+ Check(bResumed&&S->TacticalPlan.Action==EBattleSquadTactic::Mission&&S->bSectorMission==bSec&&S->MissionDestination.Equals(MissionA,1.)&&S->Order==EBattleOrder::Move&&S->OrderRevision==Rev1+1,
+  TEXT("resume keeps the sector flag and the goal, one order step"));
+ // 2) Once only: a second resume does nothing.
+ const int32 Rev2=S->OrderRevision;
+ Check(!T->ResumeMission(SID,TEXT("SMOKE AGAIN"),nullptr)&&S->OrderRevision==Rev2,TEXT("a second resume does nothing"));
+ // 3) A mission update during the plan is the one resumed.
+ FVector GoalB=FVector::ZeroVector;bool bHaveB=false;
+ for(const FIntPoint D:{FIntPoint(1,0),FIntPoint(-1,0),FIntPoint(0,1),FIntPoint(0,-1)})
+ {
+  const FIntPoint Cell=Own+D;if(bSec&&!BattleSectors::Valid(Cell))continue;
+  Check(T->Apply(SID,EBattleSquadTactic::Recover,EBattleOrder::Move,Here+FVector(300,0,0),TEXT("HOME SUPPLY / SMOKE")),TEXT("supply plan accepted (update)"));
+  if(IssueOrder(SID,EBattleOrder::AttackMove,CellGoal(Cell),true,bSec)){GoalB=CellGoal(Cell);bHaveB=true;break;}
+ }
+ if(bHaveB)
+ {
+  Check(S->TacticalPlan.Action==EBattleSquadTactic::Recover&&S->Order==EBattleOrder::Move,TEXT("the mission update waits for the plan"));
+  const bool bOk=T->ResumeMission(SID,TEXT("HOME SUPPLY COMPLETE / SMOKE"),nullptr);
+  Check(bOk&&S->Order==EBattleOrder::AttackMove&&S->bSectorMission==bSec&&(bSec?BattleSectors::Cell(S->Destination)==BattleSectors::Cell(GoalB):FVector::Dist2D(S->Destination,GoalB)<300.),
+   TEXT("resume goes to the mission updated during the plan"));
+ }
+ else Check(false,TEXT("no neighbouring goal accepted for the update case"));
+ // 4) An explicit order during the plan ends the plan: nothing to resume, the explicit order stays.
+ Check(T->Apply(SID,EBattleSquadTactic::Recover,EBattleOrder::Move,Here+FVector(300,0,0),TEXT("HOME SUPPLY / SMOKE")),TEXT("supply plan accepted (explicit)"));
+ Check(IssueOrder(SID,EBattleOrder::Hold,GoalA,false,bSec)&&S->TacticalPlan.Action==EBattleSquadTactic::Mission,TEXT("an explicit order cancels the plan"));
+ const int32 Rev4=S->OrderRevision;
+ Check(!T->ResumeMission(SID,TEXT("SMOKE AFTER EXPLICIT"),nullptr)&&S->Order==EBattleOrder::Hold&&S->OrderRevision==Rev4,TEXT("no resume after an explicit order"));
+ SmokeFailures+=Failures;
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MISSION_RESUME_SMOKE_RESULT failures=%d sector=%d squad=%d"),Failures,bSec?1:0,SID);
 }

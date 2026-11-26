@@ -35,14 +35,14 @@ int32 UBattleLeaderRuntime::KnownEnemyDirection(int32 ID,int32 TargetID,const FV
  const auto* Contacts=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(ID);if(!Contacts)return 0;
  // A contact he still holds: seen now, or within his memory (expired ones are dropped only at his next perception scan).
  const double Memory=U->Perception.MemorySeconds;
- auto Held=[&](const FBattleContact& K){return K.bVisible || Now-K.LastSeenTime<=Memory;};
+ auto Held=[&](const FBattleContact& K){return K.bVisible || K.bTracked || Now-K.LastSeenTime<=Memory;};
  // 1. The squad's target, when he knows where it is (out of sight now): he keeps looking there.
  const auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();FBattleContact KnownOfTarget;
  if(const FBattleContact* K=Sense->Knows(ID,U->SquadID,TargetID,KnownOfTarget)?&KnownOfTarget:nullptr; K && Held(*K))
   if(const auto* T=Store->Find(TargetID); T && T->IsAlive() && T->Team!=U->Team)
-  if(Within<=0. || FVector::DistSquared2D(Pos,K->LastKnownPosition)<=FMath::Square(Within))
+  if(Within<=0. || FVector::DistSquared2D(Pos,K->MoveAt())<=FMath::Square(Within))
   {
-   Out=(K->LastKnownPosition-Pos).GetSafeNormal2D();
+   Out=(K->MoveAt()-Pos).GetSafeNormal2D();
    if(!Out.IsNearlyZero())return 1;
   }
  // 2. Else the nearest enemy he sees himself now, and 3. else the nearest he knows of (his memory and his comrades' reports,
@@ -54,9 +54,9 @@ int32 UBattleLeaderRuntime::KnownEnemyDirection(int32 ID,int32 TargetID,const FV
  {
   if(!Held(C.Value))continue;
   const auto* T=Store->Find(C.Key);if(!T || !T->IsAlive() || T->Team==U->Team)continue;
-  const double D=FVector::DistSquared2D(Pos,C.Value.LastKnownPosition);if(D<=1.)continue;
-  if(C.Value.bVisible && !C.Value.bShared && D<BestSeen){BestSeen=D;AtSeen=C.Value.LastKnownPosition;}
-  if(D<BestHeld){BestHeld=D;AtHeld=C.Value.LastKnownPosition;}
+  const double D=FVector::DistSquared2D(Pos,C.Value.MoveAt());if(D<=1.)continue;
+  if(C.Value.bVisible && !C.Value.bShared && D<BestSeen){BestSeen=D;AtSeen=C.Value.MoveAt();}
+  if(D<BestHeld){BestHeld=D;AtHeld=C.Value.MoveAt();}
  }
  // -BattleSquadKnowledge=1: what his comrades saw and what the squad heard is in the squad's table.
  if(const auto* SquadKnown=Sense->GetSquadContacts(U->SquadID))for(const auto& C:*SquadKnown)

@@ -342,6 +342,7 @@ static void UpdateBuyPanelShot(ABattleController* PC)
 void ABattleController::UpdateBuyPanel()
 {
  UpdateBuyPanelShot(this);
+ UpdateQuitMenuShot();
  auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  // A reservation bought by the queue (UBattleMatch::UpdateHireQueue) is announced, the panel open or not.
  if(Match->bArea)

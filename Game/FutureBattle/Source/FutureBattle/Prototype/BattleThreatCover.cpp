@@ -45,10 +45,10 @@ int32 UBattleLeaderRuntime::GatherThreats(int32 ID,FVector Primary,double Now,TA
   {
    const auto& K=C.Value;if(K.bShared || Now-K.LastSeenTime>4.)continue;
    const auto* T=Store->Find(C.Key);if(!T || !T->IsAlive() || T->Team==U->Team)continue;
-   const double D=FVector::DistSquared2D(Pos,K.LastKnownPosition);if(D>FMath::Square(double(Reach)))continue;
+   const double D=FVector::DistSquared2D(Pos,K.MoveAt());if(D>FMath::Square(double(Reach)))continue;
    // Narrowed: an enemy he sees now and that faces him (within 30 degrees); its facing is what he sees of it.
-   if(bNarrow && !(K.bVisible && FVector::DotProduct(Forward(C.Key).GetSafeNormal2D(),(Pos-K.LastKnownPosition).GetSafeNormal2D())>.866f))continue;
-   Near.Add({D,K.LastKnownPosition});
+   if(bNarrow && !(K.bVisible && FVector::DotProduct(Forward(C.Key).GetSafeNormal2D(),(Pos-K.MoveAt()).GetSafeNormal2D())>.866f))continue;
+   Near.Add({D,K.MoveAt()});
   }
  if(FVector From;UnitShotFrom(ID,Now,From))Near.Add({FVector::DistSquared2D(Pos,From),From});
  Near.Sort([](const TPair<double,FVector>& A,const TPair<double,FVector>& B){return A.Key<B.Key;});
@@ -110,9 +110,9 @@ int32 UBattleLeaderRuntime::ExposingEnemy(int32 ID,FVector Anchor,double Now) co
  {
   const auto& K=C.Value;if(K.bShared || !K.bVisible || Now-K.LastSeenTime>.5)continue;
   const auto* T=Store->Find(C.Key);if(!T || !T->IsAlive() || T->Team==U->Team)continue;
-  const double D=FVector::DistSquared2D(Anchor,K.LastKnownPosition);if(D>FMath::Square(double(Range)) || D>=BestD)continue;
-  if(ThreatSeen(ID,Anchor,K.LastKnownPosition)<=CoverExposureLimit())continue;
-  if(!CoverLineClear(ID,Anchor,K.LastKnownPosition))continue;
+  const double D=FVector::DistSquared2D(Anchor,K.MoveAt());if(D>FMath::Square(double(Range)) || D>=BestD)continue;
+  if(ThreatSeen(ID,Anchor,K.MoveAt())<=CoverExposureLimit())continue;
+  if(!CoverLineClear(ID,Anchor,K.MoveAt()))continue;
   Best=C.Key;BestD=D;
  }
  return Best;

@@ -232,6 +232,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
  // The reserve (6c) is these squads too.
  auto IsFree=[&](int32 SID,const auto& S)
  {
+  if(BattleTactics::BaseGarrison()&&IsBaseGarrison(SID))return false;
   if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated)||GroupOf(SID)!=INDEX_NONE)return false;
   if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Heavy)return false;
   if(Area.HirePurpose.Contains(SID)||IntelPurpose.Contains(SID)||ArmyPinned.Contains(SID))return false;
@@ -801,7 +802,8 @@ namespace BattleSurpriseRoute
    const double Cost=FVector::Dist2D(From,A)+FVector::Dist2D(B,Goal)+FMath::Abs(Y-EdgeY);
    if(Cost<Best){Best=Cost;Entry=A;Exit=B;}
   };
-  if(FCString::Strcmp(Def.Name,TEXT("Lvl_BattleWide_I"))==0)
+  // Map L has the rivers of map I.
+  if(FCString::Strcmp(Def.Name,TEXT("Lvl_BattleWide_I"))==0||FCString::Strcmp(Def.Name,TEXT("Lvl_BattleWide_L"))==0)
   {
    using namespace BattleMapI;
    for(double Sign:{-1.,1.})
@@ -821,7 +823,6 @@ namespace BattleSurpriseRoute
 
 bool UBattleMatch::UpdateSurpriseBridge(FBattleGroup& G,const FVector& Lead)
 {
- // Groups survive RestoreSnapshot in the same match. These fields, like Rally, are untouched by a same-time save round trip.
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  // The guide: the living squad nearest the lead, armour not in Recover first (Codex review 2026-11-21: a guide in Recover drove the
  // bridge legs from behind the river).
@@ -1061,27 +1062,6 @@ bool UBattleMatch::SurpriseMoving(int32 SquadID) const
  const FBattleGroup* G=Groups.Find(ID);return G&&G->Kind==2&&G->Phase==1;
 }
 
-void UBattleMatch::ClampFrontTimers()
-{
- // A no-op for the standard save round trip (saved and loaded at the same time); after loading an earlier save the timers set later
- // in the abandoned run would otherwise stall the front line and the surprise group (Codex review 2026-11-21).
- for(int32 T=0;T<2;++T)
- {
-  FrontLineAt[T]=FMath::Min(FrontLineAt[T],Elapsed+BattleFrontValues::Interval);
-  FrontLineLogAt[T]=FMath::Min(FrontLineLogAt[T],Elapsed+BattleFrontValues::LogInterval);
-  SurpriseNextAt[T]=FMath::Min(SurpriseNextAt[T],Elapsed+BattleSurpriseValues::Interval);
- }
- for(auto& P:Groups)if(P.Value.Kind==1){P.Value.FrontStepAt=FMath::Min(P.Value.FrontStepAt,Elapsed);P.Value.FrontBackAt=FMath::Min(P.Value.FrontBackAt,Elapsed);P.Value.FrontReleaseAt=FMath::Min(P.Value.FrontReleaseAt,Elapsed);P.Value.FrontExcessSince=FMath::Min(P.Value.FrontExcessSince,Elapsed);}
- for(auto& P:Groups)if(P.Value.Kind==2)
- {
-  auto& G=P.Value;
-  G.SurpriseEndAt=FMath::Min(G.SurpriseEndAt,Elapsed+BattleSurpriseValues::AssembleMax+BattleSurpriseValues::Max);
-  G.SurpriseLogAt=FMath::Min(G.SurpriseLogAt,Elapsed+30.f);
-  if(G.SurpriseWaitAt>Elapsed)G.SurpriseWaitAt=-1.f;
-  G.PhaseAt=FMath::Min(G.PhaseAt,Elapsed);
- }
-}
-
 // ---- Front plan, stage 1: sections and their log (Docs/design-front-strategy.md 2.2 and 7; trial -BattleFrontPlanLog=1, default 0) ----
 // Log only. Rows are the team's own rows (FrontCell), so both teams of a 180-degree symmetric map get the same sections.
 bool UBattleMatch::FrontPlanLogOn()
@@ -1202,8 +1182,8 @@ bool UBattleMatch::FrontPlanOn(int32 Team) const
 {
  static const int32 On=BattleFrontValues::Arg(TEXT("BattleFrontPlan="),0);
  static const int32 Only=BattleFrontValues::Arg(TEXT("BattleFrontPlanTeam="),-1);
- // Needs the front army's own line (FrontHold); the older strategy layer S2 keeps the focus for itself when it runs.
- return On!=0&&(Only<0||Only==Team)&&FrontLineOn(Team)&&BattleFrontValues::Hold()&&!StrategyOn(Team,2);
+ // Needs the front army's own line (FrontHold).
+ return On!=0&&(Only<0||Only==Team)&&FrontLineOn(Team)&&BattleFrontValues::Hold();
 }
 
 void UBattleMatch::FrontPlanFocusRows(int32 Team,TArray<uint8>& InFocus,int32& TargetCol) const

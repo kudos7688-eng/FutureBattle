@@ -2,6 +2,7 @@
 #include "BattleMatch.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
+#include "BattleFieldLayout.h"
 #include "BattleTactics.h"
 #include "NavigationSystem.h"
 #include "NavigationPath.h"
@@ -23,6 +24,34 @@ bool UBattleSquadTactics::Apply(int32 SID, EBattleSquadTactic Action, EBattleOrd
  return true;
 }
 
+// B06 (Docs/review-2026-11-25): the one way back from a temporary plan (supply, regroup, raid, shield, contact) to the squad's mission.
+// The mission is read now, not copied when the plan began, so a mission update during the plan (deferred by SetSquadOrder) is the
+// one resumed; an explicit order during the plan cancels the plan itself and this is never reached. The sector flag of the mission is
+// kept (it was dropped before: a sector mission came back as a point order). Once resumed the plan is Mission, so it runs once.
+// Returns whether the mission route was accepted (the plan is then over).
+bool UBattleSquadTactics::ResumeMission(int32 SID,const TCHAR* Reason,const TCHAR* EventName)
+{
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ FBattleMission M;
+ if(!Store||!Runtime||!Store->MissionOf(SID,M))return false;
+ const auto* S=Store->FindSquad(SID);
+ if(!S||S->TacticalPlan.Action==EBattleSquadTactic::Mission)return false;
+ const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();const double Now=Match?Match->Elapsed:0.;
+ const int32 OrderRev=S->OrderRevision;
+ // Validate the route first (inside a plan this only updates the mission fields), then release the plan and execute.
+ if(!Runtime->IssueOrder(SID,M.Order,M.Goal,true,M.bSector))
+ {
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MISSION_RESUME squad=%d t=%.1f reason=%s order=%d sector=%d rev=%d ok=0"),SID,Now,Reason,int32(M.Order),M.bSector?1:0,M.Revision);
+  return false;
+ }
+ Store->CancelSquadTacticalPlan(SID,Reason);
+ const bool bRan=Runtime->IssueOrder(SID,M.Order,M.Goal,true,M.bSector);
+ if(EventName)Event(EventName);
+ const auto* After=Store->FindSquad(SID);
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_MISSION_RESUME squad=%d t=%.1f reason=%s order=%d sector=%d rev=%d ok=%d order_steps=%d"),SID,Now,Reason,int32(M.Order),
+  After&&After->bSectorMission?1:0,After?After->MissionRevision:M.Revision,bRan?1:2,After?After->OrderRevision-OrderRev:0);
+ return true;
+}
 bool UBattleSquadTactics::RetreatGoal(const FBattleSquadState& S,const FBattleSquadObservation& Sample,FVector& Goal)
 {
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
@@ -30,10 +59,10 @@ bool UBattleSquadTactics::RetreatGoal(const FBattleSquadState& S,const FBattleSq
  if(!Nav) return false;
  const FVector Start=Runtime->Position(S.LeaderUnitID);
  FVector Away=FVector::ZeroVector;
- auto Distance=[&](FVector P){ double D=FMath::Max(10000.,double(GetDefault<UBattleTuning>()->EffectiveWeaponRange())*2); for(const auto& C:Sample.Contacts) D=FMath::Min(D,FVector::Dist2D(P,C.Value.LastKnownPosition)); return D; };
+ auto Distance=[&](FVector P){ double D=FMath::Max(10000.,double(GetDefault<UBattleTuning>()->EffectiveWeaponRange())*2); for(const auto& C:Sample.Contacts) D=FMath::Min(D,FVector::Dist2D(P,C.Value.MoveAt())); return D; };
  for(const auto& C:Sample.Contacts)
  {
-  const FVector D=Start-C.Value.LastKnownPosition;
+  const FVector D=Start-C.Value.MoveAt();
   if(D.Size2D()<GetDefault<UBattleTuning>()->EffectiveWeaponRange()*1.2) Away+=D.GetSafeNormal2D()/FMath::Max(100.,D.Size2D());
  }
  Away=Away.GetSafeNormal2D(); if(Away.IsNearlyZero()) Away=FVector(S.Team?1:-1,0,0);
@@ -42,7 +71,8 @@ bool UBattleSquadTactics::RetreatGoal(const FBattleSquadState& S,const FBattleSq
  for(int32 I=0;I<4;++I)
  {
   const float Angle=I==2?45.f:I==3?-45.f:0.f;
-  const FVector Raw=Start+Away.RotateAngleAxis(Angle,FVector::UpVector)*(I==0?1500.f:2500.f);
+  FVector Raw=Start+Away.RotateAngleAxis(Angle,FVector::UpVector)*(I==0?1500.f:2500.f);
+  BattleFieldLayout::Of(GetWorld()).Heights.OnField(Raw);
   FNavLocation P;
   if(!Nav->ProjectPointToNavigation(Raw,P,FVector(150,150,400))) continue;
   const double EndDistance=Distance(P.Location);
@@ -56,7 +86,7 @@ bool UBattleSquadTactics::RetreatGoal(const FBattleSquadState& S,const FBattleSq
    const FVector A=Path->PathPoints[J-1], B=Path->PathPoints[J]; Length+=FVector::Dist2D(A,B);
    for(const auto& C:Sample.Contacts)
    {
-    const FVector Threat(C.Value.LastKnownPosition.X,C.Value.LastKnownPosition.Y,0);
+    const FVector Threat(C.Value.MoveAt().X,C.Value.MoveAt().Y,0);
     const FVector Closest=FMath::ClosestPointOnSegment(Threat,FVector(A.X,A.Y,0),FVector(B.X,B.Y,0));
     if(FVector::Dist2D(Threat,Closest)<Initial-200) Dangerous=true;
    }
@@ -66,24 +96,54 @@ bool UBattleSquadTactics::RetreatGoal(const FBattleSquadState& S,const FBattleSq
   const FBattleContact* Nearest=nullptr; double NearDistance=DBL_MAX;
   for(const auto& C:Sample.Contacts)
   {
-   const double D=FVector::DistSquared2D(P.Location,C.Value.LastKnownPosition);
+   const double D=FVector::DistSquared2D(P.Location,C.Value.MoveAt());
    if(D<NearDistance || (D==NearDistance && Nearest && C.Key<Nearest->TargetID)) { NearDistance=D; Nearest=&C.Value; }
   }
-  const double Cover=Nearest && GetWorld()->LineTraceTestByObjectType(P.Location+FVector(0,0,60),Nearest->LastKnownPosition+FVector(0,0,60),FCollisionObjectQueryParams(ECC_WorldStatic))?500.:0.;
+  const double Cover=Nearest && GetWorld()->LineTraceTestByObjectType(P.Location+FVector(0,0,60),Nearest->MoveAt()+FVector(0,0,60),FCollisionObjectQueryParams(ECC_WorldStatic))?500.:0.;
   const double Score=EndDistance-Length*.2+Cover;
   if(Score>Best) { Best=Score; Goal=P.Location; }
  }
  return Best>-DBL_MAX;
 }
 
+void UBattleSquadTactics::RefreshKnownSpots(int32 Team)
+{
+ // Trial -BattleSeekKnown: once a second per team. What its soldiers see themselves now, infantry only; a square not seen again is
+ // forgotten after -BattleSeekKnownSeconds.
+ const double Now=Clock();
+ if((Team!=0 && Team!=1) || (Now>=KnownSpotsAt[Team] && Now-KnownSpotsAt[Team]<1.))return;
+ KnownSpotsAt[Team]=Now;auto& Spots=KnownSpots[Team];
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Perception=GetWorld()->GetSubsystem<UBattlePerception>();
+ const auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ for(const auto& U:Store->GetUnits())if(U.Value.Team==Team && U.Value.IsAlive())
+  if(const auto* Contacts=Perception->GetContacts(U.Key))
+   for(const auto& C:*Contacts)
+   {
+    // -BattleSpotTrack: an enemy he follows after losing sight of it counts as seen, where it is now.
+    if(!(C.Value.bVisible || C.Value.bTracked) || C.Value.bShared || Runtime->IsVehicle(C.Key) || Match->IsScoutLongContact(U.Key,C.Value))continue;
+    const FVector& At=C.Value.MoveAt();
+    FKnownSpot Spot;Spot.At=At;Spot.Seen=Now;
+    Spots.Add(FIntPoint(FMath::FloorToInt32(At.X/5000.),FMath::FloorToInt32(At.Y/5000.)),Spot);
+   }
+ for(auto It=Spots.CreateIterator();It;++It)if(Now<It->Value.Seen || Now-It->Value.Seen>BattleTactics::SeekKnownSeconds())It.RemoveCurrent();
+}
+
+void UBattleSquadTactics::EndSeek(int32 SquadID)
+{
+ if(auto* K=SeekEnemies.Find(SquadID);K && K->EndAt<0.){K->EndAt=Clock();SeekEnded.FindOrAdd(SquadID).Add(K->Cell,K->EndAt);}
+}
+
 void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,float Dt)
 {
+ if(BattleTactics::BaseGarrison()&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID))return;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); auto* S=Store->Squads.Find(SID);
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>();
  if(!IsST2Enabled() || !Runtime->IsWideField() || !Mode || Mode->bCombatPaused || Mode->bBattleEnded || !S ||
     S->CommandStatus!=EBattleCommandStatus::Active || (S->Team==0 && !S->bPlayerDelegated) || O.Living==0) return;
  auto& P=S->TacticalPlan;
+ // Trial -BattleSeekKnown: the team's sightings are kept whether or not any squad may seek now.
+ if(BattleTactics::SeekKnown()>0)RefreshKnownSpots(S->Team);
  // A direct-controlled leader suspends tactical transitions; followers retain the existing plan.
  if(O.Direct>0 || (P.Action!=EBattleSquadTactic::Mission && !P.bAutonomous)) return;
  const auto* T=GetDefault<UBattleTuning>(); const FVector Here=Runtime->Position(S->LeaderUnitID);
@@ -160,8 +220,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   }
   if(O.Armed>=FMath::CeilToInt(O.Living*.9f)&&bAmmoBack)
   {
-   const auto Order=S->MissionOrder;const FVector Goal=S->MissionDestination;
-   if(Runtime->IssueOrder(SID,Order,Goal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("FIELD SUPPLY COMPLETE / RESUME"));Runtime->IssueOrder(SID,Order,Goal,true);Event(TEXT("FieldSupplyResume"));}
+   ResumeMission(SID,TEXT("FIELD SUPPLY COMPLETE / RESUME"),TEXT("FieldSupplyResume"));
    return;
   }
   // The vehicle moved: follow it.
@@ -184,8 +243,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   const bool Healed=Supply.ResumeHealthRatio<=0.f||O.Health/FullHP>=Supply.ResumeHealthRatio;
   if(Home && !bSPGEmpty && O.Armed>=FMath::CeilToInt(O.Living*.6f) && bAmmoBack && Manned && Healed)
   {
-   const auto Order=S->MissionOrder;const FVector Goal=S->MissionDestination;
-   if(Runtime->IssueOrder(SID,Order,Goal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("HOME SUPPLY COMPLETE / RESUME"));Runtime->IssueOrder(SID,Order,Goal,true);Event(TEXT("HomeSupplyResume"));SupplyTripEnd(SID,true);}
+   if(ResumeMission(SID,TEXT("HOME SUPPLY COMPLETE / RESUME"),TEXT("HomeSupplyResume")))SupplyTripEnd(SID,true);
   }
   return;
  }
@@ -247,8 +305,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   // Trial -BattleArtilleryRaidSneak: a regrouping raid goes straight back to its raid when nothing forces it back (exo: shield up again).
   if(bRaidSneak && P.Action==EBattleSquadTactic::Regroup && !Emergency && O.Armed>0 && P.Age>=2.f && (!bExo || ShieldRatio>=T->ExoResumeShield))
   {
-   const auto RaidOrder=S->MissionOrder; const FVector RaidGoal=S->MissionDestination;
-   if(Runtime->IssueOrder(SID,RaidOrder,RaidGoal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("RAID / RESUME MISSION"));Runtime->IssueOrder(SID,RaidOrder,RaidGoal,true);Event(TEXT("RaidResume"));return;}
+   if(ResumeMission(SID,TEXT("RAID / RESUME MISSION"),TEXT("RaidResume")))return;
   }
   if(Threats && P.RetrySeconds<=0 && (Emergency || P.Action==EBattleSquadTactic::Regroup)) { Retreat(); return; }
   // Armour AI: a vehicle resumes above its repair threshold (below it, it drives home; between that and 60% it used to wait forever).
@@ -257,8 +314,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   // Exoskeleton: back to the mission as soon as the shield is up again (it does not wait out the regroup time).
   if(bExo && ShieldRatio>=T->ExoResumeShield && O.Health/FullHP>=ResumeHealth && O.RecentDamage==0 && O.Armed>0 && P.Age>=2.f)
   {
-   const auto Order=S->MissionOrder; const FVector Goal=S->MissionDestination;
-   if(Runtime->IssueOrder(SID,Order,Goal,true)){Store->CancelSquadTacticalPlan(SID,TEXT("SHIELD RESTORED / RESUME MISSION"));Runtime->IssueOrder(SID,Order,Goal,true);Event(TEXT("ExoShieldResume"));return;}
+   if(ResumeMission(SID,TEXT("SHIELD RESTORED / RESUME MISSION"),TEXT("ExoShieldResume")))return;
   }
   int32 Joined=0; for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive() && FVector::Dist2D(Runtime->Position(ID),P.Destination)<500) ++Joined;
   const bool Cohesive=Joined>=FMath::CeilToInt(O.Living*.7f);
@@ -272,14 +328,9 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
    }
    else if(ReadyToReturn && Cohesive)
    {
-    const auto Order=S->MissionOrder; const FVector Goal=S->MissionDestination;
     // Validate the latest mission before releasing protection from the objective director.
-    if(Runtime->IssueOrder(SID,Order,Goal,true))
-    {
-     Store->CancelSquadTacticalPlan(SID,TEXT("SAFE REGROUP / RESUME MISSION"));
-     Runtime->IssueOrder(SID,Order,Goal,true); Event(TEXT("ResumeMission"));
-     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ST2_RESUME squad=%d"),SID);
-    }
+    if(ResumeMission(SID,TEXT("SAFE REGROUP / RESUME MISSION"),TEXT("ResumeMission")))
+     {UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ST2_RESUME squad=%d"),SID);}
     else { P.Reason=TEXT("MISSION ROUTE UNREACHABLE / HOLD"); P.SafeSeconds=0; }
    }
    else if(P.Action!=EBattleSquadTactic::Recover && (Cohesive || P.Age>=15))
@@ -305,15 +356,151 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  if(P.Action==EBattleSquadTactic::Support) return; // Emergency retreat above overrides team assignment.
  if(P.Action==EBattleSquadTactic::Engage)
  {
+  // Trial -BattleJoinFight (BattleTactics.h): on its way to, or waiting beside, the squad it joined.
+  if(P.Reason.StartsWith(TEXT("JOIN FIGHT")))
+  {
+   auto* J=JoinFights.Find(SID);const double JoinNow=Clock();
+   if(Visible&&O.Armed>0)
+   {
+    Event(TEXT("JoinFightContact"));if(J)J->EndAt=JoinNow;
+    Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("KNOWN ENEMY / HOLD FIRING POSITION"));return;
+   }
+   const auto* Host=J?Store->FindSquad(J->Host):nullptr;
+   const bool bHostFights=Host&&Host->CommandStatus==EBattleCommandStatus::Active&&Host->TacticalPlan.Action==EBattleSquadTactic::Engage&&!Host->TacticalPlan.Reason.StartsWith(TEXT("JOIN FIGHT"));
+   if(J){if(bHostFights)J->QuietSince=-1.;else if(J->QuietSince<0.)J->QuietSince=JoinNow;}
+   const TCHAR* End=!J?TEXT("JoinFightEndLost"):JoinNow-J->Start>=60.?TEXT("JoinFightEndTimeout"):J->QuietSince>=0.&&JoinNow-J->QuietSince>=10.?TEXT("JoinFightEndQuiet"):nullptr;
+   if(End)
+   {
+    if(J)J->EndAt=JoinNow;
+    // No route back to the mission: an ordinary holding plan, which asks for the mission again as any squad that lost its contact.
+    if(!ResumeMission(SID,TEXT("FIGHT OVER / RESUME MISSION"),End))Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("FIGHT OVER / HOLD"));
+   }
+   return;
+  }
+  // Trial -BattleSeekKnown (BattleTactics.h): on its way to, or searching at, a place where its team saw enemy infantry.
+  if(P.Reason.StartsWith(TEXT("SEEK ENEMY")))
+  {
+   auto* K=SeekEnemies.Find(SID);const double SeekNow=Clock();
+   if(Visible&&O.Armed>0)
+   {
+    Event(TEXT("SeekEnemyContact"));EndSeek(SID);
+    Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("KNOWN ENEMY / HOLD FIRING POSITION"));return;
+   }
+   // Arrived: the leader within 30 m of the place.
+   if(K && K->ArrivedAt<0. && FVector::DistSquared2D(Here,K->At)<=FMath::Square(3000.))K->ArrivedAt=SeekNow;
+   const TCHAR* End=!K?TEXT("SeekEnemyEndLost"):SeekNow-K->Start>=90.?TEXT("SeekEnemyEndTimeout"):K->ArrivedAt>=0.&&SeekNow-K->ArrivedAt>=10.?TEXT("SeekEnemyEndEmpty"):nullptr;
+   if(End)
+   {
+    EndSeek(SID);
+    if(!ResumeMission(SID,TEXT("NO ENEMY THERE / RESUME MISSION"),End))Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("NO ENEMY THERE / HOLD"));
+   }
+   return;
+  }
   // A moving surprise group (trial -BattleSurpriseGroup=1) goes back to its move as soon as it may (Codex review 2026-11-21: holding at
   // every seen enemy stopped the whole group, the leading armour too).
   const bool bSneak=Match->SurpriseMoving(SID)||Match->RaidSneaking(SID);
   if((P.SafeSeconds>=4 || bSneak) && P.Age>=3)
   {
-   const auto Order=S->MissionOrder; const FVector Goal=S->MissionDestination;
-   if(Runtime->IssueOrder(SID,Order,Goal,true)) { Store->CancelSquadTacticalPlan(SID,bSneak?TEXT("SURPRISE MOVE / RESUME MISSION"):TEXT("CONTACT LOST / RESUME MISSION")); Runtime->IssueOrder(SID,Order,Goal,true); }
+   ResumeMission(SID,bSneak?TEXT("SURPRISE MOVE / RESUME MISSION"):TEXT("CONTACT LOST / RESUME MISSION"),nullptr);
   }
   return;
+ }
+ // Trial -BattleJoinFight (BattleTactics.h, default off): a healthy rifle squad on its mission with no enemy near goes to the nearest
+ // squad of its team that holds a firing position against an enemy (not one that is itself joining). Left out: squads of an attack
+ // group, in a home-assault slot, on a surprise move or a raid (their task is elsewhere), and every other squad type.
+ if(BattleTactics::JoinFight() && Match->bArea && !Visible && Threats==0 && O.RecentDamage==0 && S->SquadType==BattleSquadType::Rifle &&
+    O.Armed>=FMath::CeilToInt(O.Living*.6f) && O.Living>S->Members.Num()*T->SquadRetreatLivingRatio && O.Health/FullHP>=T->SquadRetreatHealthRatio &&
+    !Match->SurpriseMoving(SID) && !Match->RaidSneaking(SID) && Match->GroupOf(SID)==INDEX_NONE)
+ {
+  bool bBase=false;if(BattleTactics::AreaStrategy().bEnabled)Match->AreaStrategyTarget(SID,S->Team,bBase);
+  const double JoinNow=Clock();
+  // A join that something else ended (supply, retreat, an order): it is over now, so the waits below hold for it too.
+  if(auto* Open=JoinFights.Find(SID);Open && Open->EndAt<0.)Open->EndAt=JoinNow;
+  const FJoinFight Last=JoinFights.FindRef(SID);
+  // 5 s after a join before the next; 20 s before the same squad again (no walking to and fro).
+  if(!bBase && !(Last.EndAt>=0. && JoinNow-Last.EndAt<5.))
+  {
+   int32 Best=INDEX_NONE;double BestD=FMath::Square(double(BattleTactics::JoinFightRange()));
+   for(const auto& Pair:Store->GetSquads())
+   {
+    const auto& H=Pair.Value;
+    if(H.Team!=S->Team || H.SquadID==SID || H.CommandStatus!=EBattleCommandStatus::Active || H.TacticalPlan.Action!=EBattleSquadTactic::Engage ||
+       H.TacticalPlan.Reason.StartsWith(TEXT("JOIN FIGHT")) || (Last.Host==H.SquadID && Last.EndAt>=0. && JoinNow-Last.EndAt<20.))continue;
+    // Nearer than 15 m it is there already. The nearest; the lower number on a tie.
+    const double D=FVector::DistSquared2D(Here,Runtime->Position(H.LeaderUnitID));
+    if(D<FMath::Square(1500.) || D>BestD || (D==BestD && Best!=INDEX_NONE && H.SquadID>Best))continue;
+    // It fights now: its latest observation holds an enemy one of its own members sees (the plan alone may be a memory).
+    bool bSees=false;
+    if(const auto* HO=Samples.Find(H.SquadID);HO && JoinNow-HO->SampleTime<=2.5)for(const auto& C:HO->Contacts)if(C.Value.bVisible && !C.Value.bShared){bSees=true;break;}
+    if(!bSees)continue;
+    // Squads on their way to it, and those that reached its fight within the last 30 s, fill its places.
+    int32 Joiners=0;
+    for(const auto& Other:JoinFights)if(Other.Key!=SID && Other.Value.Host==H.SquadID && (Other.Value.EndAt<0. || JoinNow-Other.Value.EndAt<30.))++Joiners;
+    if(Joiners>=BattleTactics::JoinFightMax())continue;
+    Best=H.SquadID;BestD=D;
+   }
+   if(Best!=INDEX_NONE)
+   {
+    const FVector HostAt=Runtime->Position(Store->FindSquad(Best)->LeaderUnitID);
+    if(Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Move,HostAt,FString::Printf(TEXT("JOIN FIGHT S%d / MOVE TO ITS POSITION"),Best)))
+    {
+     FJoinFight Join;Join.Host=Best;Join.Start=JoinNow;JoinFights.Add(SID,Join);Event(TEXT("JoinFightGo"));
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_JOIN_FIGHT t=%.0f squad=%d to=%d dist=%.0f"),Match->Elapsed,SID,Best,FMath::Sqrt(BestD));
+     return;
+    }
+   }
+  }
+ }
+ // Trial -BattleSeekKnown (BattleTactics.h, default off): a healthy rifle squad on its mission with no enemy near attack-moves to the
+ // nearest place where its team saw enemy infantry. Left out: squads of attack and surprise groups (mode 1: of every group), in a
+ // home-assault slot, on a surprise move or a raid, and every other squad type.
+ if(BattleTactics::SeekKnown()>0 && Match->bArea && !Visible && Threats==0 && O.RecentDamage==0 && S->SquadType==BattleSquadType::Rifle &&
+    O.Armed>=FMath::CeilToInt(O.Living*.6f) && O.Living>S->Members.Num()*T->SquadRetreatLivingRatio && O.Health/FullHP>=T->SquadRetreatHealthRatio &&
+    !Match->SurpriseMoving(SID) && !Match->RaidSneaking(SID))
+ {
+  const auto* SeekGroup=Match->Groups.Find(Match->GroupOf(SID));
+  bool bBase=false;if(BattleTactics::AreaStrategy().bEnabled)Match->AreaStrategyTarget(SID,S->Team,bBase);
+  const double SeekNow=Clock();
+  // A seek that something else ended (supply, retreat, an order): it is over now, so the waits below hold for it too.
+  EndSeek(SID);
+  const FSeekEnemy Last=SeekEnemies.FindRef(SID);const bool bHadSeek=SeekEnemies.Contains(SID);
+  const auto* OwnEnded=SeekEnded.Find(SID);
+  // A squad bought for a purpose (a point, the home defence) keeps to it.
+  const bool bPurpose=Match->Area.HirePurpose.Contains(SID) || Match->IntelPurpose.Contains(SID);
+  // 5 s after a seek before the next; 30 s before the same square again (no walking to and fro).
+  if(!bBase && !bPurpose && (!SeekGroup || (BattleTactics::SeekKnown()>=2 && SeekGroup->Kind==1)) && !(bHadSeek && SeekNow-Last.EndAt<5.))
+  {
+   const FKnownSpot* Best=nullptr;FIntPoint BestCell=FIntPoint::ZeroValue;double BestD=FMath::Square(double(BattleTactics::SeekKnownRange()));
+   for(const auto& Spot:KnownSpots[S->Team])
+   {
+    if(const double* Ended=OwnEnded?OwnEnded->Find(Spot.Key):nullptr;Ended && SeekNow>=*Ended && SeekNow-*Ended<30.)continue;
+    // Nearer than 30 m it is there already. The nearest; the lower square on a tie.
+    const double D=FVector::DistSquared2D(Here,Spot.Value.At);
+    if(D<FMath::Square(3000.) || D>BestD || (D==BestD && Best && (Spot.Key.X>BestCell.X || (Spot.Key.X==BestCell.X && Spot.Key.Y>BestCell.Y))))continue;
+    // Squads of the team on their way to the square (still seeking: alive, under command, that plan), and those whose seek there
+    // ended within the last 30 s, fill its places.
+    int32 Seekers=0;
+    for(const auto& Other:SeekEnemies)if(Other.Key!=SID)
+    {
+     const auto* OS=Store->FindSquad(Other.Key);if(!OS || OS->Team!=S->Team)continue;
+     const bool bSeeking=Other.Value.EndAt<0. && Other.Value.Cell==Spot.Key && OS->CommandStatus==EBattleCommandStatus::Active && OS->TacticalPlan.Reason.StartsWith(TEXT("SEEK ENEMY"));
+     const auto* OtherEnded=SeekEnded.Find(Other.Key);const double* Ended=OtherEnded?OtherEnded->Find(Spot.Key):nullptr;
+     if(bSeeking || (Ended && SeekNow>=*Ended && SeekNow-*Ended<30.))++Seekers;
+    }
+    if(Seekers>=BattleTactics::SeekKnownMax())continue;
+    Best=&Spot.Value;BestCell=Spot.Key;BestD=D;
+   }
+   if(Best)
+   {
+    const FVector SeekAt=Best->At;const double Age=SeekNow-Best->Seen;
+    if(Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::AttackMove,SeekAt,TEXT("SEEK ENEMY / MOVE TO WHERE THE TEAM SAW IT")))
+    {
+     FSeekEnemy Seek;Seek.Cell=BestCell;Seek.At=SeekAt;Seek.Start=SeekNow;SeekEnemies.Add(SID,Seek);Event(TEXT("SeekEnemyGo"));
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SEEK_ENEMY t=%.0f squad=%d team=%d group=%d dist=%.0f age=%.0f"),Match->Elapsed,SID,S->Team,SeekGroup?int32(SeekGroup->Kind):-1,FMath::Sqrt(BestD),Age);
+     return;
+    }
+   }
+  }
  }
  if(Visible && O.Armed>0 && !Match->SurpriseMoving(SID) && !Match->RaidSneaking(SID)) Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("KNOWN ENEMY / HOLD FIRING POSITION"));
 }

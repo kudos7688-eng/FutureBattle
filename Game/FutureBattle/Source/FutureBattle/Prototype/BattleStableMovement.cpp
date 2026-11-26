@@ -1,4 +1,5 @@
 #include "BattleLeaderRuntime.h"
+#include "BattleCoverFire.h"
 #include "BattleGameMode.h"
 #include "BattleTactics.h"
 #include "BattleFieldLayout.h"
@@ -29,8 +30,33 @@ void SweepSoldier(UWorld* World,const UPrimitiveComponent* Ignore,FVector From,F
   Result=Candidate;break;
  }
 }
+// Called only with -BattleCoverFirePoint=1, after the 100 cm wall test in this same direction.
+bool ArrivalFirePoint(UWorld* FireWorld,UNavigationSystemV1* FireNav,const FVector& FireGround,const FVector& FireDirection)
+{
+ const FCollisionObjectQueryParams FireStatic(ECC_WorldStatic);
+ const FVector FireStart=FireGround+FVector(0,0,150);
+ if(BattleStance::Enabled(FireWorld) && !FireWorld->LineTraceTestByObjectType(FireStart,FireStart+FireDirection*300,FireStatic) &&
+    FireWorld->LineTraceTestByObjectType(FireGround+FVector(0,0,110),FireGround+FireDirection*250+FVector(0,0,110),FireStatic))return true;
+ if(!FireNav)return false;
+ const FVector FireSide=FVector::CrossProduct(FireDirection,FVector::UpVector);
+ for(float FireOffset:{-100.f,100.f,-110.f,110.f,-120.f,120.f})
+ {
+  FNavLocation FireProjected;if(!FireNav->ProjectPointToNavigation(FireGround+FireSide*FireOffset,FireProjected,FVector(50,50,150)))continue;
+  const double FireDistance=FVector::Dist2D(FireGround,FireProjected.Location);if(FireDistance<100.||FireDistance>120.)continue;
+  if(FireWorld->SweepTestByObjectType(FireGround+FVector(0,0,90),FireProjected.Location+FVector(0,0,90),FQuat::Identity,FireStatic,FCollisionShape::MakeCapsule(36,88)))continue;
+  const FVector FireSideEye=FireProjected.Location+FVector(0,0,150);
+  if(!FireWorld->LineTraceTestByObjectType(FireSideEye,FireSideEye+FireDirection*300,FireStatic) &&
+     !FireWorld->LineTraceTestByObjectType(FireProjected.Location+FVector(0,0,100),FireProjected.Location+FireDirection*250+FVector(0,0,100),FireStatic))return true;
+ }
+ return false;
+}
 // Trial -BattleAllyPass=1 (default 0): see FBattleLeaderBody::AllyPassUntil.
 bool AllyPassOn(){static const bool V=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAllyPass="),X);return X!=0;}();return V;}
+}
+
+bool BattleCoverFire::ArrivalFirePoint(UWorld* FireWorld,UNavigationSystemV1* FireNav,const FVector& FireGround,const FVector& FireDirection)
+{
+ return ::ArrivalFirePoint(FireWorld,FireNav,FireGround,FireDirection);
 }
 
 bool UBattleLeaderRuntime::TerrainStep(const FVector& From,FVector& Step) const
@@ -58,6 +84,17 @@ bool UBattleLeaderRuntime::ClearMovementSegment(FVector A,FVector B) const
  A.Z=FMath::Max(A.Z,100.); B.Z=FMath::Max(B.Z,100.);
  return !GetWorld()->SweepTestByObjectType(A,B,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,75));
 }
+
+// -BattleCutOffRoute (default 0): 1 = a member who cannot walk straight to his corridor point gets a route of his own inside
+// the squad replan (synchronous query, outside the two-per-frame budget; 2026-11-25 map lane). 2 = B05 (Docs/review-2026-11-25):
+// a member's own route (StableMove, two queries per frame) is an execution state of its own that a squad replan keeps. It is
+// dropped when the squad's order or destination changes, when the member dies or loses his arrival place, and when a new query
+// for it fails or is partial; a changed arrival place is asked for again through the same budget on the last leg.
+// 3 = 2, and (a) when only the destination moved on (same order) a cut-off member keeps the walked-to part of his own route
+// and joins the new arrival place from the first remaining point that has a straight swept walk to it (no path query);
+// a marked member who is no longer behind the wall when his turn in the budget comes is not given a route.
+static int32 CutOffRouteMode()
+{static const int32 Mode=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCutOffRoute="),V);return V;}();return Mode;}
 
 void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
 {
@@ -145,7 +182,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   // -BattleCoverArrival=0 turns it off for comparison.
   static const bool CoverArrivalAllowed=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverArrival="),Value);return Value!=0;}();
   const bool CoverArrival=CoverArrivalAllowed && BattleFieldLayout::IsUrban(GetWorld()) && !Rally && Nav;
-  TArray<FVector> CoverCandidates; TSet<int32> CoverAssigned;
+  TArray<FVector> CoverCandidates,HideOnlyCandidates; TSet<int32> CoverAssigned;
+  int32 ArrivalSlotFireChecks=0,ArrivalHuddleFireChecks=0;
   // -BattleCoverOutward: the outward directions this sector is defended toward (rear and friendly-held sides left out).
   TArray<FVector> Outward;
   if(CoverArrival && Sector && CoverOutwardEnabled() && !bFocusArrival)
@@ -165,20 +203,29 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    }
    SightExperiment.Cover(Outward.IsEmpty()?TEXT("arrival_outward_none_old_rule"):Outward.Num()<=2?TEXT("arrival_outward_dirs_le2"):Outward.Num()<=4?TEXT("arrival_outward_dirs_le4"):TEXT("arrival_outward_dirs_gt4"));
   }
-  auto WallAhead=[&](const FVector& At)
+  auto WallAhead=[&](const FVector& At,bool* FireAllowed=nullptr)
   {
    const FCollisionObjectQueryParams Static(ECC_WorldStatic);
+   bool AnyWall=false;
+   auto DirectionWall=[&](const FVector& WallDir)
+   {
+    if(!GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+WallDir*250+FVector(0,0,100),Static))return false;
+    AnyWall=true;
+    if(!FireAllowed)return true;
+    if(!ArrivalFirePoint(GetWorld(),Nav,At,WallDir))return false;
+    *FireAllowed=true;return true;
+   };
    // -BattleAttackFocus: an obstacle toward the focus from this slot, or 30 degrees either side.
    if(bFocusArrival)
     if(const FVector ToFocus=(P.Focus-At).GetSafeNormal2D();!ToFocus.IsNearlyZero())
     {
      for(const float Deg:{0.f,-30.f,30.f})
-      if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+ToFocus.RotateAngleAxis(Deg,FVector::UpVector)*250+FVector(0,0,100),Static))return true;
-     return false;
+      if(DirectionWall(ToFocus.RotateAngleAxis(Deg,FVector::UpVector)))return true;
+     return AnyWall;
     }
-   if(Outward.IsEmpty())return GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),Static);
-   for(const FVector& Dir:Outward)if(GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,100),At+Dir*250+FVector(0,0,100),Static))return true;
-   return false;
+   if(Outward.IsEmpty()){DirectionWall(Forward);return AnyWall;}
+   for(const FVector& Dir:Outward)if(DirectionWall(Dir))return true;
+   return AnyWall;
   };
   if(CoverArrival)
   {
@@ -190,21 +237,37 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
     // Evaluation (arrival_slot_*): slots in the sector, those without an obstacle 2.5 m ahead, those seen by the nearest threat (-BattleCoverStrict).
     SightExperiment.Cover(TEXT("arrival_slot_in_cell"));
     if(!WallAhead(At)) SightExperiment.Cover(TEXT("arrival_slot_no_wall_ahead"));
-    else if(HidesFromThreat(At)) CoverCandidates.Add(At);
-    else SightExperiment.Cover(TEXT("arrival_slot_exposed"));
+    else if(!HidesFromThreat(At)) SightExperiment.Cover(TEXT("arrival_slot_exposed"));
+    else if(BattleTactics::CoverFirePointEnabled())
+    {
+     // Bound expensive fire-point searches per plan, after the cheap wall and hiding checks.
+     if(ArrivalSlotFireChecks>=48){SightExperiment.Cover(TEXT("arrival_slot_fire_check_cap"));HideOnlyCandidates.Add(At);continue;}
+     ++ArrivalSlotFireChecks;
+     bool SlotFireAllowed=false;WallAhead(At,&SlotFireAllowed);
+     if(SlotFireAllowed)CoverCandidates.Add(At);
+     else {SightExperiment.Cover(TEXT("arrival_slot_no_fire_point"));HideOnlyCandidates.Add(At);}
+    }
+    else CoverCandidates.Add(At);
    }
   }
-  // -BattleCoverIndoor: in a sector, slots under a roof or upper floor first (stable order otherwise).
-  int32 IndoorSlots=0;
-  if(CoverIndoorEnabled() && Sector && !CoverCandidates.IsEmpty())
+  // Keep firing cover first, then hiding-only slots in their original distance order.
+  const int32 FireCoverSlots=CoverCandidates.Num();
+  // -BattleCoverIndoor: stable roof-first ordering within each tier, never across tiers.
+  int32 IndoorSlots=0,HideOnlyIndoorSlots=0;
+  if(CoverIndoorEnabled() && Sector && (!CoverCandidates.IsEmpty() || !HideOnlyCandidates.IsEmpty()))
   {
-   TArray<FVector> Indoor,Outdoor;
-   for(const FVector& At:CoverCandidates)
-    (GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,120),At+FVector(0,0,800),FCollisionObjectQueryParams(ECC_WorldStatic))?Indoor:Outdoor).Add(At);
-   IndoorSlots=Indoor.Num();
-   SightExperiment.Cover(IndoorSlots==0?TEXT("arrival_indoor_none"):IndoorSlots<5?TEXT("arrival_indoor_lt5"):TEXT("arrival_indoor_ge5"));
-   CoverCandidates=MoveTemp(Indoor);CoverCandidates.Append(Outdoor);
+   for(TArray<FVector>* CoverTier:{&CoverCandidates,&HideOnlyCandidates})
+   {
+    TArray<FVector> Indoor,Outdoor;
+    for(const FVector& At:*CoverTier)
+     (GetWorld()->LineTraceTestByObjectType(At+FVector(0,0,120),At+FVector(0,0,800),FCollisionObjectQueryParams(ECC_WorldStatic))?Indoor:Outdoor).Add(At);
+    if(CoverTier==&CoverCandidates)IndoorSlots=Indoor.Num();else HideOnlyIndoorSlots=Indoor.Num();
+    *CoverTier=MoveTemp(Indoor);CoverTier->Append(Outdoor);
+   }
+   const int32 TotalIndoorSlots=IndoorSlots+HideOnlyIndoorSlots;
+   SightExperiment.Cover(TotalIndoorSlots==0?TEXT("arrival_indoor_none"):TotalIndoorSlots<5?TEXT("arrival_indoor_lt5"):TEXT("arrival_indoor_ge5"));
   }
+  CoverCandidates.Append(HideOnlyCandidates);
   const double TakenRadius=Sector && CoverDenseEnabled()?130.:190.;
   // Trial -BattleDefendSpread=1 (BattleDefendSpread.cpp): a squad holding a sector walks each member's own candidate order.
   TMap<int32,TArray<FVector>> SpreadOrder;
@@ -225,7 +288,9 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    if(CoverArrival && (Sector || ID==S->LeaderUnitID || OpenMembers++>=3))
     for(const FVector& At:MemberCandidates)
     {
-     const bool bIndoorSlot=OwnOrder?(IndoorSlots>0 && CoverCandidates.IndexOfByKey(At)<IndoorSlots):int32(&At-CoverCandidates.GetData())<IndoorSlots;
+     const int32 CoverCandidateIndex=OwnOrder?CoverCandidates.IndexOfByKey(At):int32(&At-CoverCandidates.GetData());
+     const bool bFireCoverSlot=CoverCandidateIndex<FireCoverSlots;
+     const bool bIndoorSlot=bFireCoverSlot?CoverCandidateIndex<IndoorSlots:CoverCandidateIndex-FireCoverSlots<HideOnlyIndoorSlots;
      bCoverTried=true;
      if(TailQueries>=24) {bCapHit=true;break;}
      bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,At)<FMath::Square(TakenRadius)) {Taken=true;break;}
@@ -236,6 +301,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
      {if(Tail && Tail->IsValid() && !Tail->IsPartial() && Tail->PathPoints.Num()>=2) ++ArrLong; else ++ArrNoPath; continue;}
      P.ArrivalGoals.Add(ID,At); P.ArrivalTails.Add(ID,Tail->PathPoints); Reserved.Add(At); CoverAssigned.Add(ID); Found=true;
      SightExperiment.Cover(TEXT("arrival_cover_slot"));
+     if(BattleTactics::CoverFirePointEnabled())SightExperiment.Cover(bFireCoverSlot?TEXT("arrival_cover_slot_fire"):TEXT("arrival_cover_slot_hide_only"));
      if(bIndoorSlot)SightExperiment.Cover(TEXT("arrival_indoor_slot"));
      break;
     }
@@ -251,7 +317,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    if(!Found && CoverHuddle && Sector && CoverArrival)
     for(const FVector& At:CoverCandidates)
     {
-     if(Found || TailQueries>=40) break;
+     // Huddle keeps its original firing-cover bases; hiding-only slots are arrival fallbacks.
+     if(Found || TailQueries>=40 || int32(&At-CoverCandidates.GetData())>=FireCoverSlots) break;
      FHitResult Face;
      if(!GetWorld()->LineTraceSingleByObjectType(Face,At+FVector(0,0,100),At+Forward*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic))) continue;
      const FVector Normal=FVector(Face.ImpactNormal.X,Face.ImpactNormal.Y,0).GetSafeNormal();
@@ -265,6 +332,13 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
       if(Taken) continue;
       FNavLocation Projected; if(!Nav->ProjectPointToNavigation(Want,Projected,FVector(30,30,200)) || FVector::Dist2D(Projected.Location,Want)>40) continue;
       if(!GetWorld()->LineTraceTestByObjectType(Projected.Location+FVector(0,0,100),Projected.Location-Normal*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic)) || !HidesFromThreat(Projected.Location)) continue;
+      if(BattleTactics::CoverFirePointEnabled())
+      {
+       if(ArrivalHuddleFireChecks>=40){SightExperiment.Cover(TEXT("arrival_huddle_fire_check_cap"));continue;}
+       ++ArrivalHuddleFireChecks;
+       bool HuddleFireAllowed=false;WallAhead(Projected.Location,&HuddleFireAllowed);
+       if(!HuddleFireAllowed){SightExperiment.Cover(TEXT("arrival_huddle_no_fire_point"));continue;}
+      }
       ++TailQueries;
       auto* Tail=Nav->FindPathToLocationSynchronously(GetWorld(),P.Path.Num()?P.Path.Last():S->Destination,Projected.Location);
       if(!Tail || !Tail->IsValid() || Tail->IsPartial() || Tail->PathPoints.Num()<2 || Tail->GetPathLength()>6500) continue;
@@ -345,6 +419,22 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    Swap(P.ArrivalGoals[S->LeaderUnitID],P.ArrivalGoals[ClosestID]);
   }
  }
+ // B05: own routes that outlive this replan (mode 2), and the count of those a replan throws away (every mode; counters only).
+ struct FKeptRoute{TArray<FVector> Points;int32 Waypoint=1;};
+ TMap<int32,FKeptRoute> KeptRoutes,JoinRoutes;
+ for(int32 KeepID:S->Members) if(auto* KeepBody=Bodies.Find(KeepID);KeepBody && KeepBody->bOwnRoute)
+ {
+  const auto* KeepUnit=Store->Find(KeepID);const auto* OldRoute=P.Corridors.Find(KeepID);
+  const bool bSameOrder=KeepBody->OwnRouteOrder==uint8(S->Order) && KeepBody->OwnRouteDestination.Equals(S->Destination,1.);
+  const bool bUsable=KeepUnit && KeepUnit->IsAlive() && OldRoute && KeepBody->Waypoint>=1 && OldRoute->IsValidIndex(KeepBody->Waypoint) && P.ArrivalGoals.Contains(KeepID);
+  if(CutOffRouteMode()>=2 && bSameOrder && bUsable)
+  {FKeptRoute Kept;Kept.Points=*OldRoute;Kept.Waypoint=KeepBody->Waypoint;KeptRoutes.Add(KeepID,MoveTemp(Kept));SightExperiment.Cover(TEXT("move_own_route_kept"));}
+  else
+  {
+   if(CutOffRouteMode()>=3 && bUsable && KeepBody->OwnRouteOrder==uint8(S->Order)){FKeptRoute Old;Old.Points=*OldRoute;Old.Waypoint=KeepBody->Waypoint;JoinRoutes.Add(KeepID,MoveTemp(Old));}
+   KeepBody->bOwnRoute=false;SightExperiment.Cover(!bSameOrder?TEXT("move_own_route_dropped_order"):!bUsable?TEXT("move_own_route_dropped_unusable"):TEXT("move_own_route_lost_replan"));
+  }
+ }
  P.Corridors.Reset();
  P.bNarrowCorridor=false;
  for(int32 I=1;I<P.Path.Num();++I)
@@ -388,19 +478,44 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
     if(Distance<=Best && ClearMovementSegment(Position(ID),Route[I])) {Best=Distance;B->Waypoint=I;}
    }
   }
-  // Trial -BattleCutOffRoute=1 (2026-11-25, default 0; hand-over from the supply lane, STATUS 11-25): the shared path starts at the
+  // Trial -BattleCutOffRoute=1 (default 0; made default 1 on 2026-11-25 by user decision and taken back the same day: with all five on, map K had 758-856 stalls a match against 244 and three times the deaths, nd-K-*; hand-over from the supply lane, STATUS 11-25): the shared path starts at the
   // centre of the squad, so a member on the other side of a wall (map K: the yard walls, doorways 12m and more apart) walks
   // straight at its next point and presses against the wall. StableMove gives him a route of his own after 2s, but the squad
   // replan that the pressing itself asks for (4s) resets every corridor here and sends him back to the wall. With the switch a
   // member on foot who cannot walk straight to his corridor point gets his own route to his arrival place at once.
-  static const bool bCutOffRoute=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCutOffRoute="),V);return V!=0;}();
-  if(bCutOffRoute && Nav && BattleFieldLayout::IsUrban(GetWorld()) && !NavFor(ID) && Route.IsValidIndex(B->Waypoint) && !ClearMovementSegment(Position(ID),Route[B->Waypoint]))
+  B->bOwnRouteWanted=false;B->ProgressWayDist=1.e30; // -BattleMoveProgress: a new plan measures progress afresh
+  if(FKeptRoute* KeptRoute=KeptRoutes.Find(ID)) {B->Waypoint=KeptRoute->Waypoint;Route=MoveTemp(KeptRoute->Points);}
+  // Mode 2: a member on foot who cannot walk straight to his corridor point is cut off by a wall. He does not wait for the 2 s
+  // stall (side steps along the wall count as progress and keep resetting it: no own route in 56 s in the fixed scene);
+  // StableMove asks for his route through its two-per-frame budget.
+  else if(CutOffRouteMode()>=2 && Nav && BattleFieldLayout::IsUrban(GetWorld()) && !NavFor(ID) && Route.IsValidIndex(B->Waypoint) && P.ArrivalGoals.Contains(ID) && !ClearMovementSegment(Position(ID),Route[B->Waypoint]))
+  {
+   // Mode 3 (a): the destination moved on. Up to eight remaining points of the old own route are tried for a straight walk to the new place.
+   int32 JoinAt=INDEX_NONE;FKeptRoute* JoinRoute=JoinRoutes.Find(ID);const FVector JoinGoal=P.ArrivalGoals.FindChecked(ID);
+   if(JoinRoute)for(int32 JoinI=JoinRoute->Waypoint;JoinI<JoinRoute->Points.Num()&&JoinI<JoinRoute->Waypoint+8;++JoinI)
+    if(ClearMovementSegment(JoinRoute->Points[JoinI],JoinGoal)){JoinAt=JoinI;break;}
+   // Pushed off the old leg meanwhile: the old route no longer starts where he stands.
+   if(JoinAt!=INDEX_NONE && !ClearMovementSegment(Position(ID),JoinRoute->Points[JoinRoute->Waypoint]))JoinAt=INDEX_NONE;
+   if(JoinAt!=INDEX_NONE)
+   {
+    JoinRoute->Points.SetNum(JoinAt+1);JoinRoute->Points.Add(JoinGoal);B->Waypoint=JoinRoute->Waypoint;Route=MoveTemp(JoinRoute->Points);
+    B->bOwnRoute=true;B->OwnRouteOrder=uint8(S->Order);B->OwnRouteDestination=S->Destination;B->OwnRouteGoal=JoinGoal;SightExperiment.Cover(TEXT("move_own_route_joined"));
+   }
+   else{B->bOwnRouteWanted=true;SightExperiment.Cover(TEXT("move_own_route_wanted"));if(JoinRoute)SightExperiment.Cover(TEXT("move_own_route_join_failed"));}
+  }
+  else if(CutOffRouteMode()==1 && Nav && BattleFieldLayout::IsUrban(GetWorld()) && !NavFor(ID) && Route.IsValidIndex(B->Waypoint) && !ClearMovementSegment(Position(ID),Route[B->Waypoint]))
    if(const FVector* OwnGoal=P.ArrivalGoals.Find(ID))
     if(auto* OwnPath=Nav->FindPathToLocationSynchronously(GetWorld(),Position(ID),*OwnGoal);OwnPath && OwnPath->IsValid() && !OwnPath->IsPartial() && OwnPath->PathPoints.Num()>1)
     {
      TArray<FVector> OwnRoute;for(const auto& OwnPoint:OwnPath->PathPoints)OwnRoute.Add(OwnPoint);
      Route=MoveTemp(OwnRoute);B->Waypoint=1;SightExperiment.Cover(TEXT("move_cutoff_route"));
     }
+  if(BattleTactics::MoveTraceSquad(SID))
+  {
+   FString TraceRoute;for(int32 TraceI=0;TraceI<Route.Num()&&TraceI<5;++TraceI)TraceRoute+=FString::Printf(TEXT(" (%.1f,%.1f)"),Route[TraceI].X,Route[TraceI].Y);
+   const FVector* TraceGoal=P.ArrivalGoals.Find(ID);
+   UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_TRACE_ROUTE squad=%d unit=%d new=%d wp=%d/%d pos=(%.1f,%.1f) goal=(%.1f,%.1f) route:%s"),SID,ID,NewOrder?1:0,B->Waypoint,Route.Num(),Position(ID).X,Position(ID).Y,TraceGoal?TraceGoal->X:0.,TraceGoal?TraceGoal->Y:0.,*TraceRoute);
+  }
  }
 }
 
@@ -479,10 +594,15 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  }
  if(Final && FVector::Dist2D(Pos,*Goal)<20)
  {B.bArrived=true;Stop();return true;}
+ // Records only (2026-11-25, user: "the problem is a soldier who tries to move and cannot; one who waits in place is fine"):
+ // BATTLE_MOVE_STALL_WHY tells whether the stalled soldier pushed on (scale >= 0.15) or held back by the queue rule behind an
+ // ally (scale < 0.15), BATTLE_MOVE_STALL_END how long the stall lasted (moved=0: he left the moving state instead).
+ bool bStallLogged=false;
  if(SightExperiment.Started && !SightExperiment.Finished)
  {
   if(B.LastMoveSampleFrame+1!=GFrameCounter || FVector::DistSquared2D(Pos,B.MoveSampleOrigin)>FMath::Square(40.))
   {
+   if(B.StationaryMoveSeconds>=3.f)UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_STALL_END unit=%d seconds=%.1f moved=%d"),ID,B.StationaryMoveSeconds,B.LastMoveSampleFrame+1==GFrameCounter?1:0);
    B.MoveSampleOrigin=Pos;
    B.StationaryMoveSeconds=0;
   }
@@ -491,6 +611,7 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   B.StationaryMoveSeconds+=Dt;
   if(Previous<3.f && B.StationaryMoveSeconds>=3.f)
   {
+   bStallLogged=true;
    UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_STALL unit=%d team=%d squad=%d pos=%s waypoint=%s"),ID,U->Team,U->SquadID,*Pos.ToString(),*Way.ToString());
    // Detail (2026-11-20, diagnosis of the map I sector jams): what the soldier walks to, whether the way is clear of walls,
    // and who stands within 1.5m (same squad / other squad of the team / enemy; and how many of them stand still).
@@ -514,6 +635,16 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
      FVector::DotProduct((Pos-Way).GetSafeNormal2D(),(Next-Way).GetSafeNormal2D())>0.f && ClearMovementSegment(Pos,Next))
   {++B.Waypoint;Way=Next;Final=B.Waypoint==Route->Num()-1;SightExperiment.Cover(TEXT("waypoint_pass"));}
  }
+// Trial -BattleWaypointCrowd=1 (2026-11-25, default 0; user request: fewer soldiers getting stuck): every soldier has to come within
+ // 65cm of each corner point of his route, and the squads of a group share those points. At the town entrance of map K some
+ // 150 soldiers pushed at one point of the road (g9b-K-base: 400 of 783 stalls within 5m of it, 64 in 100 of them walking on
+ // against bodies). With the switch a soldier who has not got on for 1.5s within 8m of a corner point goes on to the next
+ // point when he can walk to it in a straight swept line - also from the near side of the corner (WaypointPass asks for the
+ // far side and 4m).
+ static const bool WaypointCrowd=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleWaypointCrowd="),V);return V!=0;}();
+ if(WaypointCrowd && !Final && B.Waypoint+1<Route->Num() && Now-B.LastProgressTime>1.5 && FVector::DistSquared2D(Pos,Way)<FMath::Square(800.))
+  if(const FVector& CrowdNext=(*Route)[B.Waypoint+1];ClearMovementSegment(Pos,CrowdNext))
+  {++B.Waypoint;Way=CrowdNext;Final=B.Waypoint==Route->Num()-1;B.LastProgressTime=Now;SightExperiment.Cover(TEXT("waypoint_crowd_skip"));}
  if(!Final && FVector::Dist2D(Pos,Way)<65) {++B.Waypoint;Way=(*Route)[B.Waypoint];Final=B.Waypoint==Route->Num()-1;}
  FVector D=(Way-Pos).GetSafeNormal2D(); const FVector Right(-D.Y,D.X,0);
  const bool Confined=NarrowHere;
@@ -607,7 +738,10 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
  if(AllyPassOn()&&!bAllyPass&&B.bContactWaiting&&Now-B.LastProgressTime>3)
  {BeginAllyPass(ID,Now);B.bContactWaiting=false;Scale=1;Separation=FVector::ZeroVector;D=(Way-Pos).GetSafeNormal2D();}
  Direction=LimitedSteering(D,Separation,GetDefault<UBattleTuning>()->WideAvoidanceMaxSide);
+ if(BattleTactics::MoveTraceSquad(U->SquadID))if(const auto* TraceMatch=GetWorld()->GetSubsystem<UBattleMatch>();TraceMatch&&TraceMatch->Elapsed<4.f)
+  UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_TRACE_STEP unit=%d t=%.3f pos=(%.1f,%.1f) wp=%d way=(%.1f,%.1f) d=(%.3f,%.3f) scale=%.3f blocker=%d passing=%d sep=(%.3f,%.3f) dir=(%.3f,%.3f)"),ID,TraceMatch->Elapsed,Pos.X,Pos.Y,B.Waypoint,Way.X,Way.Y,D.X,D.Y,Scale,Blocker,B.PassingID,Separation.X,Separation.Y,Direction.X,Direction.Y);
  B.bTrafficWait=Scale<.15f;
+ if(bStallLogged)UE_LOG(LogTemp,Display,TEXT("BATTLE_MOVE_STALL_WHY unit=%d scale=%.2f blocker=%d passing=%d escape=%d contact_wait=%d"),ID,Scale,Blocker,B.PassingID,Now<B.EscapeUntil?1:0,B.bContactWaiting?1:0);
  // Heavy infantry moves slower (squad type speed scale); rifle squads keep the configured speed.
  const float TypeSpeed=S?BattleSquadType::SpeedAt(S->SquadType,GetWorld(),Pos):1.f;
  const float Speed=GetDefault<UBattleTuning>()->MoveSpeed*TypeSpeed;
@@ -657,17 +791,36 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
   auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity); F.Position=B.Capsule->GetComponentLocation();
   B.Velocity=(F.Position-Before)/FMath::Max(Dt,.001f);
  }
- if(FVector::Dist2D(Pos,B.LastProgressPosition)>40) {B.LastProgressPosition=Pos;B.LastProgressTime=Now;B.StalledSince=0;}
+ // Trial -BattleMoveProgress=1 (2026-11-25, default 0; B05 follow-up): progress is getting 40cm closer to the current route point
+ // (or a new route point), not any 40cm. The side steps along a wall (escape probe, 120cm) counted as progress, so a member
+ // pressed against a wall never reached the 2 s without progress that gives him a route of his own (fixed scene: none in 56 s).
+ static const bool bWayProgress=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleMoveProgress="),V);return V!=0;}();
+ if(bWayProgress)
+ {
+  // Measured against the fixed route point (the steering target Way moves in narrow corridors and at the last leg). While he passes
+  // an ally, follows a contact detour or walks through allies, any 40cm still counts: those moves lead away from the point on purpose.
+  const FVector RoutePoint=(*Route)[B.Waypoint];const double ToWay=FVector::Dist2D(Pos,RoutePoint);
+  const bool bDetour=B.PassingID!=INDEX_NONE || !B.ContactRoute.IsEmpty() || bAllyPass;
+  const bool bSamePoint=RoutePoint.Equals(B.ProgressWay,1.);
+  if(!bSamePoint || ToWay<B.ProgressWayDist-40. || (bDetour && FVector::Dist2D(Pos,B.LastProgressPosition)>40))
+  {B.ProgressWay=RoutePoint;B.ProgressWayDist=bSamePoint?FMath::Min(ToWay,B.ProgressWayDist):ToWay;B.LastProgressPosition=Pos;B.LastProgressTime=Now;B.StalledSince=0;}
+  else if(Now-B.LastProgressTime>1) {B.StalledSince=B.LastProgressTime;B.bTrafficWait=true;}
+ }
+ else if(FVector::Dist2D(Pos,B.LastProgressPosition)>40) {B.LastProgressPosition=Pos;B.LastProgressTime=Now;B.StalledSince=0;}
  else if(Now-B.LastProgressTime>1) {B.StalledSince=B.LastProgressTime;B.bTrafficWait=true;}
  // Map E: a member cut off from the shared corridor by walls gets a route of his own to his arrival spot, instead of
  // waiting for a squad replan that starts from the squad centre and does not help him. At most two such queries per frame.
- if(BattleFieldLayout::IsUrban(GetWorld()) && Now-B.LastProgressTime>2 && Now>=B.NextOwnPath && !ClearMovementSegment(Pos,Way))
+ // B05 (mode 2): an own route kept through replans ends at the place it was built for; when the member's arrival place has moved
+ // since and cannot be walked to straight from the last leg, ask again (same budget, same 3 s spacing).
+ if(CutOffRouteMode()>=3 && B.bOwnRouteWanted && Now>=B.NextOwnPath && ClearMovementSegment(Pos,Way)){B.bOwnRouteWanted=false;SightExperiment.Cover(TEXT("move_own_route_wanted_cleared"));}
+ const bool bOwnGoalMoved=CutOffRouteMode()>=2 && B.bOwnRoute && Now>=B.NextOwnPath && Final && !Goal->Equals(B.OwnRouteGoal,50.) && !ClearMovementSegment(Pos,*Goal);
+ if(BattleFieldLayout::IsUrban(GetWorld()) && Now>=B.NextOwnPath && (bOwnGoalMoved || B.bOwnRouteWanted || (Now-B.LastProgressTime>2 && !ClearMovementSegment(Pos,Way))))
  {
   static uint64 QueryFrame=0; static int32 QueriesThisFrame=0;
   if(QueryFrame!=GFrameCounter) {QueryFrame=GFrameCounter;QueriesThisFrame=0;}
   if(QueriesThisFrame<2)
   {
-   ++QueriesThisFrame; B.NextOwnPath=Now+3;
+   ++QueriesThisFrame; ++B.OwnRouteQueries; B.NextOwnPath=Now+3; B.bOwnRouteWanted=false;
    auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
    auto* Own=Nav?Nav->FindPathToLocationSynchronously(GetWorld(),Pos,*Goal,NavFor(ID)?Actor(ID):nullptr):nullptr;
    if(Own && Own->IsValid() && Own->PathPoints.Num()>1)
@@ -675,13 +828,22 @@ bool UBattleLeaderRuntime::StableMove(int32 ID,float Dt,double Now,FVector& Dire
     TArray<FVector> OwnRoute; for(const auto& Point:Own->PathPoints) OwnRoute.Add(Point);
     P.Corridors.Add(ID,MoveTemp(OwnRoute)); B.Waypoint=1; B.LastProgressTime=Now; B.StalledSince=0;
     SightExperiment.Cover(TEXT("move_own_route"));
+    if(bOwnGoalMoved)SightExperiment.Cover(TEXT("move_own_route_goal_requery"));
+    // B05: a complete route is the member's own execution state (a partial one ends short of his place and is not kept).
+    B.bOwnRoute=!Own->IsPartial() && S;
+    if(B.bOwnRoute){B.OwnRouteOrder=uint8(S->Order);B.OwnRouteDestination=S->Destination;B.OwnRouteGoal=*Goal;}
+    // A partial answer for a moved arrival place would leave him at its end with nothing asking again: back to the squad plan.
+    else if(bOwnGoalMoved){P.bReplan=true;SightExperiment.Cover(TEXT("move_own_route_goal_replan"));}
     return true;
    }
+   if(B.bOwnRoute){B.bOwnRoute=false;SightExperiment.Cover(TEXT("move_own_route_dropped_no_path"));}
+   if(bOwnGoalMoved){P.bReplan=true;SightExperiment.Cover(TEXT("move_own_route_goal_replan"));}
   }
+  else SightExperiment.Cover(TEXT("move_own_route_budget_wait"));
  }
  // Congestion is not a navigation failure: do not reset all ten paths every two seconds.
  if(B.StalledSince>0 && Now-B.LastProgressTime>4 && !ClearMovementSegment(Pos,Way) && Now>=P.NextPath)
- {P.bReplan=true;P.NextPath=Now+1;B.LastProgressTime=Now;}
+ {P.bReplan=true;P.NextPath=Now+1;B.LastProgressTime=Now;SightExperiment.Cover(TEXT("move_stall_replan"));}
  return true;
 }
 

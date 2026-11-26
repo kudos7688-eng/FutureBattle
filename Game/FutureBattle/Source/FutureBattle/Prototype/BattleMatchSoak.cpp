@@ -1,6 +1,5 @@
 #include "BattleGameMode.h"
 #include "BattleMatch.h"
-#include "BattleSave.h"
 #include "BattleUnit.h"
 #include "FutureBattle.h"
 #include "Misc/CommandLine.h"
@@ -30,13 +29,6 @@ void ABattleGameMode::UpdateMatchSoak()
 			Match->UpdateTeamOrders(0);
 			if (Match->Credits[0] >= 1300) for (ABattleUnit* Unit : Units) if (Unit && Unit->IsAlive() && Unit->GetState()->Team == 0 && Match->RequestSupport(Unit->GetUnitID())) break;
 		}
-		if (!bMatchSoakSaved && Match->Elapsed >= 20)
-		{
-			const FGuid ID = Match->MatchID; const int32 Count = Units.Num();
-			const bool bSaved = Match->SaveMatch(TEXT("FutureBattleSmokeOnly"));
-			bMatchSoakSaved = bSaved && Match->LoadMatch(TEXT("FutureBattleSmokeOnly")) && Match->MatchID == ID && Units.Num() == Count;
-			if (!bMatchSoakSaved) { UE_LOG(LogFutureBattle, Error, TEXT("BATTLE_MATCH_RUN success=0 save=%s"), *Match->LastMessage); bMatchSoakComplete = true; FPlatformMisc::RequestExitWithStatus(false, 1); }
-		}
 	}
 	if (Match->Phase != EBattleMatchPhase::Finished && GetWorld()->GetTimeSeconds() < 200) return;
 	bMatchSoakComplete = true;
@@ -47,14 +39,14 @@ void ABattleGameMode::UpdateMatchSoak()
 		const auto* S = Unit->GetState(); IDs.Add(S->UnitID); if (S->IsAlive()) ++Alive[S->Team]; Shots += S->ShotSequence;
 		bValid &= S->Ammo >= 0 && S->Reserve >= 0 && FMath::IsFinite(S->HP);
 	}
-	bValid &= IDs.Num() == Units.Num() && Shots > 0 && (bMatchSoakSaved || Match->Elapsed < 20);
+	bValid &= IDs.Num() == Units.Num() && Shots > 0;
 	auto Json = MakeShared<FJsonObject>(); Json->SetBoolField(TEXT("success"), bValid); Json->SetNumberField(TEXT("seconds"), Match->Elapsed);
-	Json->SetNumberField(TEXT("winner"), Match->Winner); Json->SetStringField(TEXT("result"), Result); Json->SetBoolField(TEXT("save_reload"), bMatchSoakSaved);
+	Json->SetNumberField(TEXT("winner"), Match->Winner); Json->SetStringField(TEXT("result"), Result); Json->SetBoolField(TEXT("save_reload"), false);
 	Json->SetNumberField(TEXT("allies_alive"), Alive[0]); Json->SetNumberField(TEXT("enemies_alive"), Alive[1]); Json->SetNumberField(TEXT("units_deployed"), Units.Num()); Json->SetNumberField(TEXT("shots"), Shots);
 	Json->SetNumberField(TEXT("ally_score"), Match->Score[0]); Json->SetNumberField(TEXT("enemy_score"), Match->Score[1]); Json->SetNumberField(TEXT("ally_credits"), Match->Credits[0]); Json->SetNumberField(TEXT("enemy_credits"), Match->Credits[1]);
 	Json->SetNumberField(TEXT("ally_support_used"), Match->SupportUsed[0]); Json->SetNumberField(TEXT("enemy_support_used"), Match->SupportUsed[1]);
 	FString Text, Path; FJsonSerializer::Serialize(Json, TJsonWriterFactory<>::Create(&Text)); FParse::Value(FCommandLine::Get(), TEXT("BattleMatchReport="), Path);
 	if (!Path.IsEmpty()) bValid &= FFileHelper::SaveStringToFile(Text, *Path);
-	UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_MATCH_RUN success=%d winner=%d time=%.1f save=%d shots=%d"), bValid, Match->Winner, Match->Elapsed, bMatchSoakSaved, Shots);
+	UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_MATCH_RUN success=%d winner=%d time=%.1f save=%d shots=%d"), bValid, Match->Winner, Match->Elapsed, false, Shots);
 	FPlatformMisc::RequestExitWithStatus(false, bValid ? 0 : 1);
 }

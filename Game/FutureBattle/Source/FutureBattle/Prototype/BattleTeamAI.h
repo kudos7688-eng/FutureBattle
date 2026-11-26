@@ -2,7 +2,6 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "BattleTeamAI.generated.h"
-class UBattleSave;
 
 // Team coordination consumes squad reports, never enemy state/body data.
 // BattleMatch owns objective allocation; BattleSquadTactics owns local execution.
@@ -13,8 +12,6 @@ class UBattleTeamAI : public UWorldSubsystem
 public:
  virtual void Initialize(FSubsystemCollectionBase& Collection) override;
  void Step();
- void CaptureSave(UBattleSave& Save) const;
- void RestoreSave(const UBattleSave& Save);
  void Reset() { NextAssignment=0; RetryAfter.Reset(); }
  bool IsEnabled() const { return bEnabled; }
 private:

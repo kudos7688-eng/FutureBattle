@@ -69,7 +69,6 @@ uint8 BattleArms::EliteKit(int32 Slot)
 }
 uint8 BattleArms::GradeKit(uint8 Grade,int32 Slot){return Grade==2?uint8(Slot==0?KitSniper:KitSpotter):Grade==1?EliteKit(Slot):uint8(KitNone);}
 bool BattleArms::ValidGrade(uint8 SquadType,uint8 Grade){return Grade==0||(Grade==1&&SquadType==BattleSquadType::Rifle)||(Grade==2&&SquadType==BattleSquadType::Scout);}
-bool BattleArms::GradeWeapon(uint8 Grade,EBattleWeapon W){for(int32 Slot=0;Slot<10;++Slot)if(GradeKit(Grade,Slot)!=KitNone&&KitWeapon(GradeKit(Grade,Slot))==W)return true;return false;}
 EBattleWeapon BattleArms::KitWeapon(uint8 Kit)
 {
  switch(Kit)
@@ -94,7 +93,6 @@ int32 BattleArms::KitGrenades(uint8 Kit)
  }
 }
 bool BattleArms::ValidKit(uint8 Kit){return Kit<KitCount;}
-bool BattleArms::EliteWeapon(EBattleWeapon W){for(uint8 K=1;K<KitCount;++K)if(KitWeapon(K)==W)return true;return false;}
 const TCHAR* BattleArms::KitName(uint8 Kit)
 {
  switch(Kit)

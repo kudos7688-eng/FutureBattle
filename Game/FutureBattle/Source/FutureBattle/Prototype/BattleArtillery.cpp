@@ -260,19 +260,6 @@ float BattleTactics::ArtilleryStandoff()
  return HasOverride?FMath::Clamp(OverrideStandoff,0.f,1.f):GetDefault<UBattleTuning>()->ArtilleryStandoff;
 }
 
-namespace { int32 SaveReloadBoundarySmokeOverride=-1; }
-bool BattleTactics::SaveReloadBoundary()
-{
- static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSaveReloadBoundary="),V);return V==1;}();
- return SaveReloadBoundarySmokeOverride>=0?SaveReloadBoundarySmokeOverride==1:On;
-}
-int32 BattleTactics::OverrideSaveReloadBoundaryForSmoke(int32 Value)
-{
- const int32 Previous=SaveReloadBoundarySmokeOverride;
- if(FParse::Param(FCommandLine::Get(),TEXT("BattleMixedSaveSmoke")))SaveReloadBoundarySmokeOverride=FMath::Clamp(Value,-1,1);
- return Previous;
-}
-
 bool BattleTactics::SPGAmmoEnabled()
 {
  // Default 1 since 2026-11-24 (user decision "12発・6発で既定に"): 12 rounds, 6 per 10 s supply (BattleTuning); -BattleSPGAmmo=0 restores unlimited fire.
@@ -737,6 +724,8 @@ bool UBattleLeaderRuntime::FireArtillery(int32 ID,const FVector& Aim,double Now)
  const float Spread=ArtillerySpread(bSPG,Distance);const float Angle=Random.FRandRange(0.f,2.f*PI),Radius=Spread*FMath::Sqrt(Random.FRand());
  FArtilleryShell Shell;Shell.ShooterID=ID;Shell.Team=U->Team;Shell.bSPG=bSPG;
  Shell.At=Aim+FVector(FMath::Cos(Angle)*Radius,FMath::Sin(Angle)*Radius,0.f);
+ // Map L (rolling ground): the round falls at the aim's height above the ground where it lands, not at the aim's own height.
+ if(const auto& LandHeights=BattleFieldLayout::Of(GetWorld()).Heights;!LandHeights.Field.IsEmpty())Shell.At.Z+=LandHeights.Base(Shell.At.X,Shell.At.Y)-LandHeights.Base(Aim.X,Aim.Y);
  const auto* SS=Store->FindSquad(U->SquadID);Shell.ShooterType=SS?SS->SquadType:0;
  Shell.Remaining=float(Distance/FMath::Max(100.f,bSPG?T->SPGShellSpeed:T->MortarShellSpeed));
  ArtilleryShells.Add(Shell);
