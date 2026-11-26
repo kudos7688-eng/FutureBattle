@@ -124,10 +124,14 @@ bool UBattleLeaderRuntime::CoverFirePoint(int32 ID,FVector Anchor,FVector Threat
  auto FireLine=[&](FVector FireFrom,FVector FireTo){return KnownMoveNow>=0.?KnownMoveLine(ID,FireFrom,FireTo,KnownMoveNow):BattleTactics::HasTerrainLine(GetWorld(),FireFrom,FireTo);};
  OutKind=0;
  const FVector FireEye=Threat+FVector(0,0,60);
- if((AllowedKinds&1) && BattleStance::Enabled(GetWorld()) &&
-    !FireLine(Anchor+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch)),FireEye) &&
-    FireLine(Anchor+FVector(0,0,60),FireEye) && (!bPeekLine || CoverLineClear(ID,Anchor,Threat)))
- {OutPeek=Anchor;OutKind=1;return true;}
+ if((AllowedKinds&1) && BattleStance::Enabled(GetWorld()))
+ {
+  const bool FireOverHidden=!FireLine(Anchor+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch)),FireEye);
+  const bool FireOverClear=FireOverHidden && FireLine(Anchor+FVector(0,0,60),FireEye);
+  if(FireOverClear && (!bPeekLine || CoverLineClear(ID,Anchor,Threat)))
+  {OutPeek=Anchor;OutKind=1;return true;}
+  if(KnownMoveNow>=0.)SightExperiment.Cover(bKnownMoveDeferred?TEXT("known_move_reject_over_deferred"):!FireOverHidden?TEXT("known_move_reject_over_not_hidden"):TEXT("known_move_reject_over_line"));
+ }
  if(KnownMoveNow>=0. && bKnownMoveDeferred)return false;
  if(!(AllowedKinds&2))return false;
  auto* FireNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!FireNav)return false;
@@ -135,12 +139,12 @@ bool UBattleLeaderRuntime::CoverFirePoint(int32 ID,FVector Anchor,FVector Threat
  for(float FireOffset:{-100.f,100.f,-110.f,110.f,-120.f,120.f})
  {
   if(KnownMoveNow>=0. && !KnownMoveSpend(ID,KnownMoveNow,2))return false;
-  FNavLocation FireProjected;if(!FireNav->ProjectPointToNavigation(Anchor+FireSide*FireOffset-FVector(0,0,90),FireProjected,FVector(50,50,150)))continue;
+  FNavLocation FireProjected;if(!FireNav->ProjectPointToNavigation(Anchor+FireSide*FireOffset-FVector(0,0,90),FireProjected,FVector(50,50,150))){if(KnownMoveNow>=0.)SightExperiment.Cover(TEXT("known_move_reject_lean_nav"));continue;}
   const FVector FirePeek=FireProjected.Location+FVector(0,0,90);
-  const double FireDistance=FVector::Dist2D(Anchor,FirePeek);if(FireDistance<100.||FireDistance>120.)continue;
+  const double FireDistance=FVector::Dist2D(Anchor,FirePeek);if(FireDistance<100.||FireDistance>120.){if(KnownMoveNow>=0.)SightExperiment.Cover(TEXT("known_move_reject_lean_distance"));continue;}
   if(KnownMoveNow>=0. && !KnownMoveSpend(ID,KnownMoveNow,1))return false;
-  if(GetWorld()->SweepTestByObjectType(Anchor,FirePeek,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))continue;
-  if(!FireLine(FirePeek+FVector(0,0,60),FireEye))continue;
+  if(GetWorld()->SweepTestByObjectType(Anchor,FirePeek,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88))){if(KnownMoveNow>=0.)SightExperiment.Cover(TEXT("known_move_reject_lean_capsule"));continue;}
+  if(!FireLine(FirePeek+FVector(0,0,60),FireEye)){if(KnownMoveNow>=0.)SightExperiment.Cover(bKnownMoveDeferred?TEXT("known_move_reject_lean_deferred"):TEXT("known_move_reject_lean_line"));continue;}
   if(bPeekLine && !CoverLineClear(ID,FirePeek,Threat))continue;
   OutPeek=FirePeek;OutKind=2;return true;
  }

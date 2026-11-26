@@ -4,6 +4,7 @@
 #include "BattleCover.h"
 #include "BattleStance.h"
 #include "BattleSectors.h"
+#include "NavigationSystem.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "FutureBattle.h"
@@ -39,7 +40,7 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   Contact.bLongRangeObservation=false;Contact.ObservedSquadType=0;
   Contact.bVisible=true;Contact.bShared=false;Contact.KnownExpiresAt=TestNow+20.;Contact.KnownSourceSquad=TestStore->Find(11)->SquadID;TestSense->BuildTeamKnownTargets(TestNow);
  };
- auto Reset=[&]()
+ auto Reset=[&](bool OriginalLowWalls=false)
  {
   if(KnownMoves.Contains(2))EndKnownMove(2,TestNow,TEXT("known_move_test_reset"));
   CancelCoverAction(2);TestWorld->GetSubsystem<UBattleCover>()->Release(2);CoverApproaches.Remove(2);SoldierPaths.Remove(2);FirePositions.Remove(2);
@@ -54,13 +55,36 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   auto& TestPlan=Plans.FindOrAdd(Shooter.SquadID);TestPlan=FBattleLeaderPlan();TestPlan.Center=Start;
   SetStance(2,BattleStance::Stand,TestNow,true);Observe();
   Wall(Start+FVector(250,0,60),FVector(30,120,150));
-  // Each free candidate has low cover: same hidden chest as the start, with a clear standing muzzle.
-  Wall(Start+FVector(100,-500,-25),FVector(20,160,65));Wall(Start+FVector(100,500,-25),FVector(20,160,65));
+  // Match the planner's projected body centre, not the physical floor at Start.
+  // The old top (Start.Z+40) leaves only 8.45 cm for navmesh elevation before
+  // the chest ray at the wall's near face (80/1500 of the ray) clears it.
+  auto* TrialNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(TestWorld);
+  for(double TrialSide:{-500.,500.})
+  {
+   FNavLocation TrialProjected;
+   if(!TrialNav || !TrialNav->ProjectPointToNavigation(Start+FVector(0,TrialSide,-90),TrialProjected,FVector(50,50,150)))
+   {Check(TEXT("move_fixture_nav"),false);continue;}
+   const FVector TrialAnchor=TrialProjected.Location+FVector(0,0,90);
+   // A 15 cm margin on either side of the chest/muzzle heights. Keep the wall
+   // off the lateral walking path (its nearest face is 80 cm away).
+   if(OriginalLowWalls)Wall(Start+FVector(100,TrialSide,-25),FVector(20,160,65));
+   else Wall(TrialAnchor+FVector(100,0,-22.5),FVector(20,160,67.5));
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_FIXTURE side=%.0f start=%s anchor=%s old_top=%.3f old_chest_at_face=%.3f new_top=%.3f"),
+    TrialSide,*Start.ToCompactString(),*TrialAnchor.ToCompactString(),Start.Z+40.,FMath::Lerp(TrialAnchor.Z+30.,Enemy.Z+60.,80./(Enemy.X-TrialAnchor.X)),TrialAnchor.Z+45.);
+  }
  };
  auto TryStart=[&]()
  {
   const int32 StartRays=Count(TEXT("known_move_rays")),StartSweeps=Count(TEXT("known_move_sweeps")),StartNav=Count(TEXT("known_move_nav"));
-  for(int32 Attempt=0;Attempt<8;++Attempt){TestNow+=1.01;Observe();if(StartKnownMove(2,TestNow))return true;}
+  for(int32 Attempt=0;Attempt<8;++Attempt)
+  {
+   const TMap<FName,int32> BeforeRejects=SightExperiment.CoverDiag;
+   TestNow+=1.01;Observe();const bool AttemptStarted=StartKnownMove(2,TestNow);
+   for(const auto& Reject:SightExperiment.CoverDiag)
+    if(Reject.Key.ToString().StartsWith(TEXT("known_move_reject_")) && Reject.Value>BeforeRejects.FindRef(Reject.Key))
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_REJECT now=%.3f attempt=%d started=%d %s=%d"),TestNow,Attempt,AttemptStarted,*Reject.Key.ToString(),Reject.Value-BeforeRejects.FindRef(Reject.Key));
+   if(AttemptStarted)return true;
+  }
   int32 TestLiving=0,TestMoving=0;
   for(int32 TestMember:Squad.Members)if(const auto* TestUnit=TestStore->Find(TestMember);TestUnit && TestUnit->IsAlive())
   {++TestLiving;if(TestMember!=2 && (TestUnit->CoverPhase==1 || CoverApproaches.Contains(TestMember)))++TestMoving;}
@@ -72,7 +96,35 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
    Count(TEXT("known_move_rays"))-StartRays,Count(TEXT("known_move_sweeps"))-StartSweeps,Count(TEXT("known_move_nav"))-StartNav);
   return false;
  };
- TestWorld->GetSubsystem<UBattleCover>()->BuildSlots();Reset();
+ TestWorld->GetSubsystem<UBattleCover>()->BuildSlots();
+ // Replay the original geometry first for diagnosis, then require the repaired
+ // fixture to hide the chest AND permit fire. Existing outcome checks stay intact.
+ auto ProbeFixture=[&](bool RequireGeometry)
+ {
+  for(double FixtureSide:{-500.,500.})
+  {
+   auto* FixtureNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(TestWorld);FNavLocation FixtureProjected;
+   const bool FixtureOnNav=FixtureNav && FixtureNav->ProjectPointToNavigation(Start+FVector(0,FixtureSide,-90),FixtureProjected,FVector(50,50,150));
+   bool FixtureHere=false,FixtureThere=false,FixtureFire=false;
+   if(FixtureOnNav)
+   {
+    TestNow+=.2;bKnownMoveDeferred=false;
+    const FVector FixtureAnchor=FixtureProjected.Location+FVector(0,0,90);
+    FixtureHere=KnownMoveLine(2,Start+FVector(0,0,30),Enemy+FVector(0,0,60),TestNow);
+    FixtureThere=KnownMoveLine(2,FixtureAnchor+FVector(0,0,30),Enemy+FVector(0,0,60),TestNow);
+    FixtureFire=KnownMoveLine(2,FixtureAnchor+FVector(0,0,60),Enemy+FVector(0,0,60),TestNow);
+   }
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_FIXTURE_PROBE repaired=%d side=%.0f nav=%d here=%d there=%d fire=%d deferred=%d"),RequireGeometry,FixtureSide,FixtureOnNav,FixtureHere,FixtureThere,FixtureFire,bKnownMoveDeferred);
+   if(RequireGeometry)Check(FixtureSide<0?TEXT("move_fixture_left_hidden_fire"):TEXT("move_fixture_right_hidden_fire"),FixtureOnNav && !FixtureHere && !FixtureThere && FixtureFire && !bKnownMoveDeferred);
+  }
+ };
+ Reset(true);ProbeFixture(false);
+ // Run the original candidate selection too: its per-attempt rejection counts
+ // distinguish exposure from budget exhaustion or a different map/navmesh.
+ const bool OriginalStarted=TryStart();
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_ORIGINAL started=%d"),OriginalStarted);
+ Reset();ProbeFixture(true);
+ TestNow+=.2;Observe();
  const auto Blocked=SelectKnownFire(2,Start+FVector(0,0,60),TestNow);
  const bool Started=!Blocked.Ready() && TryStart();const int32 BeforeShot=Shooter.ShotSequence;
  bool Within=true,Arrived=false,RecheckedHidden=false,HiddenDidNotFire=false;
