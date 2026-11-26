@@ -39,20 +39,30 @@ float BattleTactics::SuppressFire()
  static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSuppressFire="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,60.f):0.f;}();
  return Seconds;
 }
+int32 BattleTactics::SupplyCarHunt()
+{
+ static const int32 Mode=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarHunt="),Value);return FMath::Clamp(Value,0,2);}();
+ return Mode;
+}
 bool BattleTactics::SupplyCarFirst()
 {
  static const bool bOn=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarFirst="),Value);return Value!=0;}();
  return bOn;
 }
-bool BattleTactics::SupplyCarPost()
+int32 BattleTactics::SupplyCarPost()
 {
- static const bool bOn=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarPost="),Value);return Value!=0;}();
- return bOn;
+ static const int32 Mode=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarPost="),Value);return FMath::Clamp(Value,0,2);}();
+ return Mode;
 }
 bool BattleTactics::SupplyCarTarget()
 {
  static const bool bOn=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarTarget="),Value);return Value!=0;}();
  return bOn;
+}
+float BattleTactics::SupplyCarHealStock()
+{
+ static const float Stock=[](){float Value=3000.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarHealStock="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,100000.f):3000.f;}();
+ return Stock;
 }
 bool BattleTactics::SupplyCarRecover()
 {

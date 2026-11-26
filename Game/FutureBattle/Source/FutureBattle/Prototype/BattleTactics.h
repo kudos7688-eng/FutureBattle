@@ -107,6 +107,12 @@ namespace BattleTactics
  // who were not hit in the last 5 s; it costs nothing. A replacement waits while the stock holds less than his rounds. Not for
  // vehicles, exoskeletons, scout pairs and the base garrison. BattleArea.cpp (UpdateArea), BattleSquadRetreat.cpp (Evaluate).
  bool SupplyCarRecover();
+ // User 2026-11-27 (with -BattleSupplyCarRecover): the healing beside a supply vehicle draws on a gauge of that vehicle,
+ // -BattleSupplyCarHealStock=<hit points> (default 3000, 0 = no limit as before, up to 100000): each hit point healed leaves it;
+ // empty, the vehicle heals no more, drives home as when its rounds run low and is full again there (with its rounds). And a
+ // replacement made beside a supply vehicle appears right beside the vehicle (3.5 m to 8 m from it) instead of around his leader.
+ // BattleArea.cpp (UpdateArea), BattleSupplyCar.cpp, BattleMixedRecruitment.cpp (ReplaceFollower).
+ float SupplyCarHealStock();
  // Supply trials, user 2026-11-26 (with -BattleSupplyCarRecover the supply vehicle is where squads recover), each default 0:
  // -BattleSupplyCarFirst=1: a squad that needs supply or replacements goes to the nearest supply vehicle of its team that has
  //   stock to give (not one about to drive home to load) whenever that vehicle is no farther from it than its home, instead of only
@@ -128,8 +134,32 @@ namespace BattleTactics
  //   enemy tank first, then a supply vehicle, then the other vehicles, and always tries its line to the best supply vehicle. What
  //   the squad or tank sees and the observed type only. BattleArmourAI.cpp (PickArmourTargets), BattleTankGun.cpp (TankGunTarget).
  bool SupplyCarFirst();
- bool SupplyCarPost();
+ // -BattleSupplyCarPost=2 (user 2026-11-27 "the vehicle's place is bad"; counted on map K seed 7: in 31 of 53 trips to a vehicle the
+ //   vehicle moved more than 30 m while the squad walked to it, median 84 m): only the halt of =1 - the vehicle stands still (a
+ //   Hold order) while a squad is on its way to it or stands beside it short of members (and the team has credits for
+ //   replacements); its posts are chosen as without the switch.
+ int32 SupplyCarPost();
  bool SupplyCarTarget();
+ // -BattleSupplyCarHunt=1 (default 0; user 2026-11-26 "attack a supply vehicle as soon as it is found"; -BattleSupplyCarTarget alone
+ //   changed nothing in a match, the vehicles stand behind their line and are rarely in the view of a squad that picks targets):
+ //   when a soldier of the team sees an enemy supply vehicle (AreaIntelView: the units seen now; its type is the observed type
+ //   with -BattleObservedArmour, else the type of that seen unit, as the other vehicle checks; scout report dots carry no type and
+ //   do not count), the nearest two free squads within 500 m of it get an attack-move to it, as the anti-tank hunts
+ //   (-BattleATHunt): anti-tank teams and exoskeletons first, then rifle and heavy squads (small arms do ACArmorSmallArms of their
+ //   damage to it; map K's rifle squads have no anti-tank soldier). Not squads bought for a purpose, on a raid, on a player's
+ //   route, of a front-holding group, under the player's own command, with fewer than half their members, or falling back,
+ //   regrouping or on a supply trip. The goal follows the vehicle while the team sees it. A hunt ends when the squad is within 15 m
+ //   of where the vehicle was last seen and the team has not seen it for 2 s, after 120 s, when the squad has not come 10 m nearer
+ //   in 30 s (an order refused, a way blocked), goes for supply or is no longer active; after a hunt that did not get there the
+ //   vehicle is left alone for 60 s. Whether the vehicle still lives is not read. BattleATHunt.cpp (UpdateSupplyHunts), BattleMatch.cpp.
+ // -BattleSupplyCarHunt=2 (user 2026-11-26 "let the guns and the armoured cars aim at it"; with =1 eight hunts in ten of the
+ //   infantry did not get there, they met enemies on the way): as 1, and the hunters are chosen in this order - a tank (within
+ //   800 m; its gun kills the vehicle in a few hits and -BattleSupplyCarTarget makes it its target), an anti-tank team or
+ //   exoskeleton, an armoured car (within 800 m; its machine gun does ACArmorSmallArms), a rifle or heavy squad. A hunting tank or
+ //   car leaves its overwatch post or shield place for the hunt. A self-propelled gun whose team sees the vehicle in its range
+ //   fires at it before any group of soldiers (after an anti-tank fire call); by default only a direct hit hurts a vehicle
+ //   (-BattleArtilleryVehicleSplash adds the near miss). BattleATHunt.cpp, BattleMatch.cpp, BattleArtillery.cpp (PickArtilleryAim).
+ int32 SupplyCarHunt();
  // Trial -BattleBaseRifleDamage=x (default 0 = unchanged, 0.01..1): small-arms shots do x of their damage to an enemy home base
  // (anti-tank rounds, tank guns and shells keep their own base damage).
  float BaseRifleDamage();

@@ -33,8 +33,15 @@ namespace
 int32 UBattleMatch::SupplyStockMax() const { return FMath::Clamp(GetDefault<UBattleTuning>()->SupplyCarStock,0,100000); }
 int32 UBattleMatch::SupplyStockOf(int32 SquadID) const { const int32* S=Area.SupplyStock.Find(SquadID); return S?*S:SupplyStockMax(); }
 void UBattleMatch::SpendSupply(int32 SquadID,int32 Rounds) { Area.SupplyStock.Add(SquadID,FMath::Max(0,SupplyStockOf(SquadID)-FMath::Max(0,Rounds))); }
+float UBattleMatch::SupplyHealOf(int32 SquadID) const { const float* Left=SupplyHealLeft.Find(SquadID); return Left?*Left:BattleTactics::SupplyCarHealStock(); }
 void UBattleMatch::RestockSupplyCar(int32 SquadID)
 {
+ // The healing gauge is filled with the rounds (-BattleSupplyCarHealStock).
+ if(const float* Heal=SupplyHealLeft.Find(SquadID))
+ {
+  UE_LOG(LogFutureBattle,Display,TEXT("AREA_SUPPLY_REHEAL time=%.0f squad=%d heal=%.0f"),Elapsed,SquadID,*Heal);
+  SupplyHealLeft.Remove(SquadID);
+ }
  if(!Area.SupplyStock.Contains(SquadID))return;
  UE_LOG(LogFutureBattle,Display,TEXT("AREA_SUPPLY_RESTOCK time=%.0f squad=%d stock=%d"),Elapsed,SquadID,Area.SupplyStock[SquadID]);
  Area.SupplyStock.Remove(SquadID); // no entry = full
@@ -97,7 +104,10 @@ bool UBattleMatch::SupplyCarOrder(int32 SquadID,int32 Team,FVector& Center,EBatt
  const FVector Home=AreaHome(Team),Here=R->Position(S->LeaderUnitID);
  const int32 Stock=SupplyStockOf(SquadID),Max=SupplyStockMax();
  // Loading: low on stock, or at home and not yet full. The waiting place is beside the home, toward the field.
- if(Max>0&&(Stock<FMath::CeilToInt(Max*FMath::Clamp(T->SupplyCarRestockRatio,0.f,1.f))||(Stock<Max&&FVector::Dist2D(Here,Home)<=2500.)))
+ // -BattleSupplyCarHealStock: the same when its healing gauge is empty (and at home until that is full).
+ const float HealMax=BattleTactics::SupplyCarRecover()?BattleTactics::SupplyCarHealStock():0.f;const float HealLeft=SupplyHealOf(SquadID);
+ const bool bHealLoad=HealMax>0.f&&(HealLeft<=0.f||(HealLeft<HealMax&&FVector::Dist2D(Here,Home)<=2500.));
+ if(bHealLoad||(Max>0&&(Stock<FMath::CeilToInt(Max*FMath::Clamp(T->SupplyCarRestockRatio,0.f,1.f))||(Stock<Max&&FVector::Dist2D(Here,Home)<=2500.))))
  {Center=Home+FVector((Home.X>0?-1:1)*700,(SquadID%5-2)*600,0);Order=EBattleOrder::Move;return true;}
  const double Back=FMath::Max(0.f,T->SupplyCarBack);
  // Trial -BattleSupplyCarPost (BattleTactics.h): behind the squads it serves; halted while one comes to it or recovers beside it.
@@ -120,7 +130,7 @@ bool UBattleMatch::SupplyCarOrder(int32 SquadID,int32 Team,FVector& Center,EBatt
     const FVector At=R->Position(O.LeaderUnitID);const double ToMe=FVector::Dist2D(At,Here);
     int32 Living=0;for(int32 ID:O.Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())++Living;
     const bool bFieldTrip=O.TacticalPlan.Action==EBattleSquadTactic::Recover&&O.TacticalPlan.Reason.StartsWith(TEXT("FIELD SUPPLY"));
-    if((bFieldTrip&&FVector::Dist2D(O.TacticalPlan.Destination,Here)<=2000.)||(ToMe<=Reach&&Living<O.Members.Num())){bServing=true;break;}
+    if((bFieldTrip&&FVector::Dist2D(O.TacticalPlan.Destination,Here)<=2000.)||(ToMe<=Reach&&Living<O.Members.Num()&&Credits[Team]>0)){bServing=true;break;}
     if(FVector::Dist2D(At,Home)<=3000.||(O.TacticalPlan.Action==EBattleSquadTactic::Recover&&O.TacticalPlan.Reason.StartsWith(TEXT("HOME SUPPLY"))))continue;
     bool bMine=true;
     for(const auto& Other:OtherCars){const double D=FVector::Dist2D(At,Other.Value);if(D<ToMe||(D==ToMe&&Other.Key<SquadID)){bMine=false;break;}}
@@ -133,7 +143,7 @@ bool UBattleMatch::SupplyCarOrder(int32 SquadID,int32 Team,FVector& Center,EBatt
     Center=S->bHasMission&&S->MissionOrder==EBattleOrder::Hold&&FVector::Dist2D(S->MissionDestination,Here)<=300.?S->MissionDestination:Here;
     Order=EBattleOrder::Hold;return true;
    }
-   if(Weight>0.)
+   if(Weight>0.&&BattleTactics::SupplyCarPost()==1)
    {
     FVector Post=SupplyBack(*this,Team,Sum/Weight,Back);
     const FVector EnemyHome=AreaHome(1-Team);const double PostToEnemy=FVector::Dist2D(Post,EnemyHome);
@@ -184,6 +194,8 @@ bool UBattleMatch::FieldSupplyPoint(int32 SquadID,FVector& Where,int32* CarID,bo
   for(const auto& Pair:Store->GetSquads())
   {
    const auto& O=Pair.Value;if(O.Team!=S->Team||O.SquadType!=BattleSquadType::Supply||O.CommandStatus!=EBattleCommandStatus::Active||SupplyStockOf(Pair.Key)<Enough)continue;
+   // A vehicle whose healing gauge is empty drives home (-BattleSupplyCarHealStock): not one to go to.
+   if(BattleTactics::SupplyCarRecover()&&BattleTactics::SupplyCarHealStock()>0.f&&SupplyHealOf(Pair.Key)<=0.f)continue;
    const auto* L=Store->Find(O.LeaderUnitID);if(!L||!L->IsAlive())continue;
    const double D=FVector::Dist2D(R->Position(O.LeaderUnitID),Here);
    if(D<=Limit&&(D<BestD||(D==BestD&&Pair.Key<Best))){BestD=D;Best=Pair.Key;}
@@ -200,6 +212,7 @@ bool UBattleMatch::FieldSupplyPoint(int32 SquadID,FVector& Where,int32* CarID,bo
  if(Car==INDEX_NONE)Car=SupplyCarNear(S->Team,Here,Range);
  // A vehicle low enough to be going home to load is not sent for (it still supplies squads beside it).
  if(Car==INDEX_NONE||SupplyStockOf(Car)<FMath::CeilToInt(SupplyStockMax()*FMath::Clamp(GetDefault<UBattleTuning>()->SupplyCarRestockRatio,0.f,1.f)))return false;
+ if(BattleTactics::SupplyCarRecover()&&BattleTactics::SupplyCarHealStock()>0.f&&SupplyHealOf(Car)<=0.f)return false;
  Where=R->Position(Store->FindSquad(Car)->LeaderUnitID);if(CarID)*CarID=Car;
  return true;
 }

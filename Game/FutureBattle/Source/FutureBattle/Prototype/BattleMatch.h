@@ -221,6 +221,9 @@ public:
  int32 SupplyStockOf(int32 SquadID) const;
  void SpendSupply(int32 SquadID,int32 Rounds);
  void RestockSupplyCar(int32 SquadID);
+ // -BattleSupplyCarHealStock (BattleTactics.h): supply vehicle -> hit points of healing it has left (no entry = full; transient).
+ TMap<int32,float> SupplyHealLeft;
+ float SupplyHealOf(int32 SquadID) const;
  // The order of an AI-run supply vehicle: home to load while low; with its group (role 5) behind the group's post; otherwise behind the
  // own point nearest the enemy home. False: not a supply vehicle.
  bool SupplyCarOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
@@ -242,6 +245,13 @@ public:
  bool SurpriseOn(int32 Team) const;
  void UpdateSurpriseGroup(int32 Team,int32 FrontID);
  bool SurpriseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ // Home-assault group (trial -BattleBaseGroup=1, BattleBaseGroup.cpp): the home-assault squads as one group (Kind 3) on one flank.
+ bool BaseGroupOn() const;
+ int32 BaseGroupRowCell(int32 Team,int32 Column,int32 Row,FIntPoint& Out) const;
+ void UpdateBaseGroup(int32 Team);
+ bool BaseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ bool BaseGroupFinal(int32 SquadID) const; // in the home-assault group, on its last approach to the enemy home
+ mutable TMap<int32,FVector> BaseLegs; // home-assault group: each squad's current leg along the row (kept until reached; transient)
  // True while the squad's surprise group is moving along its row (phase 1): its tactics do not stop to hold at a seen enemy.
  bool SurpriseMoving(int32 SquadID) const;
  bool RaidSneaking(int32 SquadID) const; // Trial -BattleArtilleryRaidSneak: an artillery raid squad still farther than the sneak radius from its target.
@@ -315,6 +325,7 @@ public:
  // squads the front army could take wait at a place two or three columns behind its line, a row of their own each (transient).
  bool FrontReserveOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
  TMap<int32,FVector> FrontReservePosts; // reserve squad -> the sector centre it waits at
+ TMap<int32,int32> FreeLogSlot; // log only: the 30 s slot of the last BATTLE_FREE_SQUAD line per squad
  TMap<int32,int32> FrontReserveRow; // reserve squad -> its row (the team's own row order), kept while it stays in the reserve
  // Measurement of the free squads' moves (log only, BATTLE_FRONT_LINE free_rev/free_moved_m; transient): last leader position and 2 s step.
  TMap<int32,FVector> FreeLastPos,FreeLastStep; int32 FreeReversals[2]={0,0}; double FreeMoved[2]={0.,0.}; int32 SectorCrowd[2]={0,0}; int32 FrontLanes[2]={0,0}; int32 RoadSteps[2]={0,0}; TArray<int32> LatFront[2],LatOther[2]; /* log only: infantry squads per row across the map, summed per update */ /* summed extra squads per shared sector at each update */
@@ -362,6 +373,13 @@ public:
  int64 ATFireAims=0;
  void UpdateATHunts(int32 Team);
  bool ATHuntGoal(int32 Team,int32 SquadID,FVector& Center) const;
+ // Trial -BattleSupplyCarHunt (BattleTactics.h): hunting squad -> the enemy supply vehicle it is sent to (transient).
+ struct FSupplyHunt { int32 Team=0; int32 Target=INDEX_NONE; FVector Position=FVector::ZeroVector; double StartAt=-1.,SeenAt=-1.,CheckAt=-1.,CheckDistance=0.,TraceAt=-100.; };
+ TMap<int32,FSupplyHunt> SupplyHunts; double SupplyHuntClock[2]={-1.,-1.};
+ TMap<int32,double> SupplyHuntRest[2]; // enemy supply vehicle -> no new hunt for it before this time
+ TSet<int32> SupplySeenLogged[2];
+ void UpdateSupplyHunts(int32 Team);
+ bool SupplyHuntGoal(int32 Team,int32 SquadID,FVector& Center) const;
  bool ACShieldPost(int32 Team,int32 SquadID,FVector& Post) const;
  void UpdateArtilleryRaidGroup(int32 Team);
  void PlanArtilleryRaidFlank(int32 Team,const FVector& From,const FVector& Target);
@@ -404,7 +422,7 @@ public:
 		bool bOpened = false; /* the opening rush was decided (once per group) */
 		bool bArrived = false; /* this advance has reached its point: the stall clock (PhaseAt) runs from then */
 		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */
-		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp) */
+		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp), 3 home-assault group (BattleBaseGroup.cpp) */
 		bool bFocus2 = false; /* front plan stage 5: the second attack army, aimed at FFrontPlanTeam::Focus2 (Kind 0) */
 		bool bFollowFocus = true; /* front plan stage 7: a player's attack group follows the focus while delegated (the player's per-group switch) */
 		int32 SurpriseRow = 0; /* surprise group: the edge sector row it moves along */
