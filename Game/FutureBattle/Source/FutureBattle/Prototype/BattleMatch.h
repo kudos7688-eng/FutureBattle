@@ -212,6 +212,10 @@ public:
  // Supply vehicles (squad type 9, BattleSupplyCar.cpp). SupplyCarNear: the nearest commanded vehicle of the team with stock left within
  // Radius (default UBattleTuning::SupplyTeamRadius) of the position (INDEX_NONE: none); SupplyTeamNear says whether there is one.
  int32 SupplyCarNear(int32 Team,const FVector& Position,float Radius=-1.f) const;
+ // Evaluation only (-BattleCarRecoverShots with -BattleWideScreens=<prefix>, rendered matches; changes nothing in the match): a
+ // camera beside the squad and the vehicle and two pictures (1 s and 4 s later) of the first four replacements made beside a supply
+ // vehicle (-BattleSupplyCarRecover), at least 20 s apart; the match ends 6 s after the fourth.
+ void CarRecoverShot(int32 SquadID,int32 CarID);
  bool SupplyTeamNear(int32 Team,const FVector& Position) const { return SupplyCarNear(Team,Position)!=INDEX_NONE; }
  int32 SupplyStockMax() const;
  int32 SupplyStockOf(int32 SquadID) const;

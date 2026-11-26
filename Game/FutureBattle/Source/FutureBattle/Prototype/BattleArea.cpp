@@ -572,6 +572,7 @@ void UBattleMatch::UpdateArea(float Dt)
    {
     SpendSupply(*Car,Tune->Magazine+Tune->ReserveAmmo);
     UE_LOG(LogFutureBattle,Display,TEXT("AREA_CAR_REPLACE time=%.0f squad=%d team=%d car=%d stock=%d"),Elapsed,ReplacedSquad,Team,*Car,SupplyStockOf(*Car));
+    CarRecoverShot(ReplacedSquad,*Car);
    }
   }
  }

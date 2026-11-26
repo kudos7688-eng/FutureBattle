@@ -8,6 +8,13 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleState.h"
 #include "FutureBattle.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "TimerManager.h"
+#include "UnrealClient.h"
 
 namespace
 {
@@ -29,6 +36,38 @@ void UBattleMatch::RestockSupplyCar(int32 SquadID)
  if(!Area.SupplyStock.Contains(SquadID))return;
  UE_LOG(LogFutureBattle,Display,TEXT("AREA_SUPPLY_RESTOCK time=%.0f squad=%d stock=%d"),Elapsed,SquadID,Area.SupplyStock[SquadID]);
  Area.SupplyStock.Remove(SquadID); // no entry = full
+}
+
+void UBattleMatch::CarRecoverShot(int32 SquadID,int32 CarID)
+{
+ static const bool bOn=FParse::Param(FCommandLine::Get(),TEXT("BattleCarRecoverShots"));
+ static const FString Prefix=[]{FString P;FParse::Value(FCommandLine::Get(),TEXT("BattleWideScreens="),P);return P;}();
+ if(!bOn||Prefix.IsEmpty())return;
+ static int32 Shots=0;static float LastAt=-100.f;
+ if(Shots>=4||(Elapsed>=LastAt&&Elapsed-LastAt<20.f))return;
+ auto* PC=GetWorld()->GetFirstPlayerController();
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ const auto* S=Store->FindSquad(SquadID);const auto* C=Store->FindSquad(CarID);if(!PC||!Runtime||!S||!C)return;
+ const FVector CarAt=Runtime->Position(C->LeaderUnitID),SquadAt=Runtime->Position(S->LeaderUnitID);
+ const FVector Mid=(CarAt+SquadAt)*.5;FVector Along=(SquadAt-CarAt).GetSafeNormal2D();if(Along.IsNearlyZero())Along=FVector(1,0,0);
+ static TWeakObjectPtr<ACameraActor> Camera;
+ if(!Camera.IsValid())
+ {
+  Camera=GetWorld()->SpawnActor<ACameraActor>();if(!Camera.IsValid())return;
+  auto& PP=Camera->GetCameraComponent()->PostProcessSettings;PP.bOverride_MotionBlurAmount=true;PP.MotionBlurAmount=0;
+  Camera->GetCameraComponent()->SetFieldOfView(60);Camera->GetCameraComponent()->bConstrainAspectRatio=false;
+ }
+ const FVector Eye=Mid+FVector(-Along.Y,Along.X,0)*1500.+FVector(0,0,1300);
+ Camera->SetActorLocationAndRotation(Eye,(Mid-Eye).Rotation());
+ PC->SetViewTarget(Camera.Get());PC->bAutoManageActiveCameraTarget=false;
+ const int32 Number=++Shots;LastAt=Elapsed;
+ int32 Living=0;for(int32 ID:S->Members)if(const auto* U=Store->Find(ID);U&&U->IsAlive())++Living;
+ UE_LOG(LogFutureBattle,Display,TEXT("CAR_RECOVER_SHOT n=%d time=%.0f squad=%d team=%d car=%d living=%d of %d squad_at=%s car_at=%s"),Number,Elapsed,SquadID,S->Team,CarID,Living,S->Members.Num(),*SquadAt.ToCompactString(),*CarAt.ToCompactString());
+ const FString Name=Prefix+FString::Printf(TEXT("-carrecover-%d-squad%d"),Number,SquadID);
+ FTimerHandle First,Second,End;auto& Timers=GetWorld()->GetTimerManager();
+ Timers.SetTimer(First,FTimerDelegate::CreateWeakLambda(this,[Name]{FScreenshotRequest::RequestScreenshot(Name+TEXT("-a.png"),true,false);}),1.f,false);
+ Timers.SetTimer(Second,FTimerDelegate::CreateWeakLambda(this,[Name]{FScreenshotRequest::RequestScreenshot(Name+TEXT("-b.png"),true,false);}),4.f,false);
+ if(Number>=4)Timers.SetTimer(End,FTimerDelegate::CreateWeakLambda(this,[]{UE_LOG(LogFutureBattle,Display,TEXT("CAR_RECOVER_SHOT done"));FPlatformMisc::RequestExitWithStatus(false,0);}),6.f,false);
 }
 
 int32 UBattleMatch::SupplyCarNear(int32 Team,const FVector& Position,float Radius) const
