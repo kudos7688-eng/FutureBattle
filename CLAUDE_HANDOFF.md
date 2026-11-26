@@ -99,7 +99,10 @@ Areaの成功ログは `BATTLE_AREA_RESULT failures=0`。他試験は各スク�
 # 混成購入戦: .\Setup\Play-MixedFast.ps1 -Map A
 # 従来の広域入口: .\Play-TestField.cmd
 # Editor: .\Setup\Open-Editor.ps1
+# MCP 付き Editor（Claude がエディタを操作する）: .\Setup\Open-EditorMcp.ps1 [-Port 8000]
 ```
+
+`Open-EditorMcp.ps1` は UE 5.8 同梱の MCP（`ModelContextProtocol`＋`AllToolsets`、実験段階）を起動引数 `-EnablePlugins=` で有効にする。`.uproject`・Config・試合の条件は変わらない（`.uproject` で有効にすると試合でも読み込まれる部品があるので、そちらはしない）。Claude Code の接続先はワークスペース直下の `C:\Users\nanek\Documents\FPS\.mcp.json`（`unreal-mcp`、`127.0.0.1:8000/mcp`）で、セッションを開き直すと読み込まれる。同時に複数の作業ツリーで開くときは `-Port` を分け、接続先も合わせる。開いている間はその作業ツリーの DLL が使用中になり、同じ作業ツリーの `Build-Editor.ps1` は失敗する。MCP でマップ・アセット・Config を変えるのは計測ロックの「作業の列」の作業。スケルタルメッシュの LOD の画面サイズは MCP でも Python でも変えられない（C++ が要る）。Live Coding は使わない（差し替えは凍結ビルドに入らない）。
 
 AreaはQで全選択→JでAI委任→Pで開始。RTSはWASD/ホイール、右クリック移動、T→右クリック攻撃移動、G→右クリック防衛、H停止。Eで選択隊長をTPS操作し、TabでRTSへ戻る。TPSはWASD/マウス/左クリック射撃/Rリロード。Kで手動指揮に戻す。混成Fastは1/2/3で購入、Enterで開始。
 

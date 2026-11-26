@@ -426,7 +426,8 @@ void UBattleMatch::UpdateAreaHiring()
    const int32 ExoWant=bExoEarly?(Bought>=After?HireIntent.ExoKeep:0):FMath::Min(HireIntent.ExoKeep,Bought/After);
    if((Type==BattleSquadType::Rifle||(bExoEarly&&Type!=BattleSquadType::Scout))&&ExoWant>0&&ActiveOfType(Team,BattleSquadType::Exo)<ExoWant)Type=BattleSquadType::Exo;
    // Supply vehicles (trial -BattleAreaSupplyKeep, default AreaSupplyKeep 0; BattleSupplyCar.cpp): the same pacing, after everything else.
-   static const bool bSupplyEarly=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaSupplyEarly="),V);return V==1;}();
+   // -BattleAreaSupplyEarly: default 1 since 2026-11-27 (user decision, with the recovery beside supply vehicles).
+   static const bool bSupplyEarly=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleAreaSupplyEarly="),V);return V==1;}();
    const int32 SupplyWant=bSupplyEarly?(Bought>=After?HireIntent.SupplyKeep:0):FMath::Min(HireIntent.SupplyKeep,Bought/After);
    if((Type==BattleSquadType::Rifle||(bSupplyEarly&&Type!=BattleSquadType::Scout))&&SupplyWant>0&&ActiveOfType(Team,BattleSquadType::Supply)<SupplyWant)Type=BattleSquadType::Supply;
    // Elite platoons (trial -BattleAreaEliteKeep=n, default 0; BattleArms.cpp): the same pacing, in place of a rifle squad.

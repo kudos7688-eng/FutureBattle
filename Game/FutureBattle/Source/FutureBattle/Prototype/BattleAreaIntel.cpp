@@ -41,6 +41,14 @@ const UBattleMatch::FAreaIntelView& UBattleMatch::AreaIntelView(int32 Team) cons
    for(const auto& C:*Contacts)if(C.Value.bVisible&&!IsScoutLongContact(U.Key,C.Value)){Seen.Add(C.Key,C.Value.LastKnownPosition);if(BattleTactics::ObservedArmour()){V.EnemyTypes.Add(C.Key,C.Value.ObservedSquadType);V.EnemyObservedAt.Add(C.Key,Elapsed-(GetWorld()->GetTimeSeconds()-C.Value.LastSeenTime));}if(BattleTactics::ArtilleryPosts()&&!C.Value.bShared)V.DirectEnemies.Add(C.Key,C.Value.LastKnownPosition);if((BattleTactics::GroupStrengthEnabled()||BattleTactics::ArtilleryPosts())&&C.Value.ObservedSquadType<BattleSquadType::Count)V.EnemyTypes.Add(C.Key,C.Value.ObservedSquadType);}
  }
  AddScoutReportSightings(Team,Seen);
+ // Diagnostic -BattleSpotTruth bit 2 (Docs/design-spot-relax.md): every living enemy the team does not know of, where it is now
+ // (type unknown).
+ if(BattleTactics::SpotTruth()&2)
+ {
+  if(FMath::FloorToInt32(Elapsed/60.)!=FMath::FloorToInt32((Elapsed-1.)/60.))
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SPOT_TRUTH kind=view team=%d t=%.0f added=%lld known=%d"),Team,Elapsed,SpotTruthViews[FMath::Clamp(Team,0,1)],Seen.Num());
+  for(const auto& U:Store->GetUnits())if(U.Value.Team==1-Team&&U.Value.IsAlive()&&!Seen.Contains(U.Key)){Seen.Add(U.Key,R->Position(U.Key));++SpotTruthViews[FMath::Clamp(Team,0,1)];}
+ }
  if(BattleTactics::TankGunFlash()||BattleTactics::ArtilleryFlash())
  {
   auto& Flashes=FireReveals[FMath::Clamp(Team,0,1)];

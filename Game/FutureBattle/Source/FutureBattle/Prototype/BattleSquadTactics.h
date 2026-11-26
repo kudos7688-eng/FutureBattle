@@ -60,6 +60,12 @@ public:
  void Dump() const;
  void Reset();
  double Clock() const { return ActiveSeconds; }
+ // Spot relaxation entry points. Callers gate trials; helpers take explicit values for isolated smoke tests.
+ bool AddKnownSpot(int32 Team,const FVector& At,double Seen,uint8 Kind,bool bLegacy=false);
+ bool NoteShotSpot(int32 ShooterID,int32 Team,const FVector& At,double Now,float Hear,float Error,float Every);
+ void NotePointLost(int32 PointID,int32 NewOwner,const FVector& At,double Now,float Seconds);
+ void AdvanceHQSpots(int32 Team,double Now,float Interval,float Delay,int32 Min,int32 Depth);
+ static void TestSpotRelax(UWorld* World,TFunctionRef<void(bool,const TCHAR*)> Check);
  const TMap<FName,int64>& EventCounts() const { return Events; }
  const TMap<FName,double>& ActionDurations() const { return ActionSeconds; }
  // Evaluation only (never read by AI decisions): home supply trips by squad, timed on the tactical clock.
@@ -105,13 +111,30 @@ private:
  // Trial -BattleSeekKnown (BattleTactics.h): per team, the 50 m squares in which one of its soldiers saw enemy infantry (the place
  // and the time of the last sighting; refreshed once a second), and per seeking squad the square it walks to, the place, when it
  // set out, when it arrived (-1: on its way) and when the seek ended (-1: under way). Not saved.
- struct FKnownSpot{FVector At=FVector::ZeroVector;double Seen=0.;};
+ struct FKnownSpot{FVector At=FVector::ZeroVector;double Seen=0.;uint8 Kind=0;};
  TMap<FIntPoint,FKnownSpot> KnownSpots[2];
  double KnownSpotsAt[2]={-100.,-100.};
+ int64 SpotTruthSpots[2]={0,0}; // diagnostic -BattleSpotTruth bit 1: places written from the truth
  struct FSeekEnemy{FIntPoint Cell=FIntPoint::ZeroValue;FVector At=FVector::ZeroVector;double Start=0.,ArrivedAt=-1.,EndAt=-1.;};
  TMap<int32,FSeekEnemy> SeekEnemies;
  // Per squad, the squares its seeks ended in and when (30 s before it goes to one again, and its place there counts that long).
  TMap<int32,TMap<FIntPoint,double>> SeekEnded;
+ // All auxiliary writes are inside enabled trial paths. Kind: own, shared, shot, lost, HQ, truth.
+ int64 SpotWrites[2][6]={};
+ double SpotRelaxLogAt[2]={-1.,-1.};
+ TMap<int32,double> ShotSpotAt;
+ struct FLostSpot{int32 Team=0;FVector At=FVector::ZeroVector;double Until=0.,Written=-1.;};
+ TMap<int32,FLostSpot> LostSpots;
+ struct FHQSpot{FVector At=FVector::ZeroVector;double Taken=0.;};
+ TArray<FHQSpot> HQSpots[2];
+ double HQTakenAt[2]={0.,0.};
+ void ResetSpotRelax();
+ void AdvanceLostSpots(int32 Team,double Now);
+ bool NoteHeardShotSpot(int32 ShooterID,int32 Team,const FVector& At,double Now,float Error,float Every,TFunctionRef<bool()> CanHear);
+ static bool ShotSpotListener(int32 Team,int32 ListenerTeam,bool bAlive,bool bVehicle,const FVector& At,const FVector& Listener,float Hear);
+ static FVector ShotSpotError(int32 ShooterID,const FVector& At,double Now,float Error,float Every);
+ static bool SpotDepthAllows(const FVector& At,const FVector& Home,const FVector& EnemyHome,int32 Depth);
+ void AdvanceHQReports(int32 Team,double Now,float Interval,float Delay,int32 Min,int32 Depth,const FVector& Home,const FVector& EnemyHome,const TMap<FIntPoint,int32>& Counts);
  void RefreshKnownSpots(int32 Team);
  void EndSeek(int32 SquadID);
  void SupplyTripEnd(int32 SquadID, bool bResumed);
