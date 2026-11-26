@@ -24,6 +24,7 @@ struct FBattleSightExperiment
  TSet<int32> PreviouslySeeing;
  TArray<double> EngagementDistances; // Evaluation-only cover action funnel (unit-frames, requests, outcomes). Never read by AI decisions.
  TMap<FName,int32> CoverDiag;
+ double KnownFireDamage=0,OrdinaryFireDamage=0; // Actual HP removed by known_fire; keep fractional damage.
  // Diagnostic-only, unsaved. One current cover target per observer; never read by tactical code.
  struct FPeekScan { int32 Target=INDEX_NONE; double At=-1; uint8 Stage=0; }; // 0 unsearched, 1 searched, 2 detecting, 3 seen, 4 unknown (cached/non-mixed)
  struct FPeekWhy { int32 Frames[12]={}; int32 WalkFrames=0; double LastFrameAt=-1,ArrivedAt=-1; bool bArrived=false,bSaw=false,bFirst=true; };

@@ -17,10 +17,10 @@ $timedOut=!$p.WaitForExit(180000)
 if($timedOut){Stop-Process -Id $p.Id;$p.WaitForExit()}
 $p.Refresh()
 $log=if(Test-Path "$out/run.log"){Get-Content "$out/run.log" -Raw}else{''}
-$expected=@('fixture','other_squad_open','other_squad_peek','blocked_first_second_fires','stale_no_revival','track_aim','track_still_needs_sensor','budget_deferred','budget_fifo','move_order','support_target','weapon_gate','unreported_scout','aim_wall_separate','blocked_first_peek_second','delivered_original_expiry','sensor_fov','sensor_range','search_interval','selected_rechecked','all_blocked_no_move','legacy_peek_priority')
+$expected=@('fixture','other_squad_open','other_squad_peek','blocked_first_second_fires','stale_no_revival','track_aim','track_still_needs_sensor','budget_deferred','budget_fifo','move_order','support_target','weapon_gate','unreported_scout','aim_wall_separate','blocked_first_peek_second','delivered_original_expiry','sensor_fov','sensor_range','search_interval','selected_rechecked','all_blocked_no_move','legacy_peek_priority','old_aim_wall_ignored','confirmed_aim_held','known_damage_counter','ordinary_not_known','confirmed_stance_aim')
 $checks=@([regex]::Matches($log,'BATTLE_KNOWN_FIRE_CHECK name=(\w+) ok=([01])')|ForEach-Object{@{name=$_.Groups[1].Value;passed=$_.Groups[2].Value -eq '1'}})
 $diagnostics=@{}
-foreach($entry in [regex]::Matches($log,'BATTLE_KNOWN_FIRE_DIAG (known_fire_\w+)=(\d+)')){$diagnostics[$entry.Groups[1].Value]=[long]$entry.Groups[2].Value}
+foreach($entry in [regex]::Matches($log,'BATTLE_KNOWN_FIRE_DIAG (known_fire_\w+)=(\d+(?:\.\d+)?)')){$diagnostics[$entry.Groups[1].Value]=[double]::Parse($entry.Groups[2].Value,[Globalization.CultureInfo]::InvariantCulture)}
 $missing=@($expected|Where-Object {$label=$_;@($checks|Where-Object {$_.name -eq $label}).Count -ne 1})
 $ok=!$timedOut -and $p.ExitCode -eq 0 -and $log -match 'BATTLE_KNOWN_FIRE_RESULT failures=0(?:\r?\n|$)' -and $checks.Count -eq $expected.Count -and $missing.Count -eq 0 -and @($checks|Where-Object {!$_.passed}).Count -eq 0 -and $log -notmatch 'Fatal error:|Assertion failed:'
 # Keep the actual rendering adapter evidence beside the machine inventory; NullRHI has no rendering GPU.

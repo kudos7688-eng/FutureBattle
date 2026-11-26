@@ -113,7 +113,7 @@ BattleKnownFire::FResult UBattleLeaderRuntime::SelectKnownFire(int32 ID,const FV
   // Keep the observed aim between shots, without reusing a fire permit or tracing during cooldown.
   const auto& WaitingTeam=GetWorld()->GetSubsystem<UBattlePerception>()->TeamKnownTargets[Unit->Team];
   if(const auto* WaitingTarget=WaitingTeam.Targets.Find(Search.Selected);WaitingTarget && KnownFireAllowed(ID,*WaitingTarget,Now))
-  {Result.TargetID=WaitingTarget->TargetID;Result.AimPosition=WaitingTarget->At(Now)+FVector(0,0,35);Result.bTracked=WaitingTarget->Tracked(Now);}
+  {Result.TargetID=WaitingTarget->TargetID;Result.AimPosition=Search.ConfirmedTarget==WaitingTarget->TargetID?Search.ConfirmedAim:WaitingTarget->At(Now)+FVector(0,0,35);Result.bTracked=WaitingTarget->Tracked(Now);}
   return Result;
  }
  // Retain the candidate cursor while queued, even across the search interval.
@@ -147,8 +147,10 @@ BattleKnownFire::FResult UBattleLeaderRuntime::SelectKnownFire(int32 ID,const FV
   SightExperiment.Cover(TEXT("known_fire_sensor_rays"));
   if(!SightHitVisible(TraceSight(Context,End,TargetID,SightFromCanSee),TargetID))
   {Result.Reject=EReject::SensorWall;SightExperiment.Cover(TEXT("known_fire_reject_sensor_wall"));continue;}
-  // Tracking is a copy from perception, never Position(TargetID). The aim line is separate from the sensor line.
-  const FVector Aim=Target->At(Now)+FVector(0,0,35);
+  // Successful personal sensing permits a current observation; failed sensors never refresh this sample.
+  // Keep it local to this firing path: do not rewrite shared contacts or their original expiry.
+  const FVector Aim=End; // Confirmed current sensor point includes stance and exposed body parts.
+  Search.ConfirmedTarget=TargetID;Search.ConfirmedAim=Aim;
   if(!KnownFireRay(ID,Now)){if(Recheck)Search.Selected=TargetID;Result.Reject=EReject::Deferred;return Result;}
   auto AimContext=Context;AimContext.Eye=Origin;SightExperiment.Cover(TEXT("known_fire_aim_rays"));
   if(!SightHitVisible(TraceSight(AimContext,Aim,TargetID,SightFromCanSee),TargetID))
@@ -161,7 +163,7 @@ BattleKnownFire::FResult UBattleLeaderRuntime::SelectKnownFire(int32 ID,const FV
 
 bool UBattleLeaderRuntime::FireKnownTarget(int32 ID,const FVector& Origin,const BattleKnownFire::FResult& Result,bool Peek)
 {
- if(!Result.Ready() || !Fire(ID,Origin,(Result.AimPosition-Origin).GetSafeNormal(),false))return false;
+ if(!Result.Ready() || !Fire(ID,Origin,(Result.AimPosition-Origin).GetSafeNormal(),false,true))return false;
  SightExperiment.Cover(Peek?TEXT("known_fire_shots_peek"):TEXT("known_fire_shots_open"));
  if(Result.bTracked)SightExperiment.Cover(TEXT("known_fire_tracked_shots"));
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Unit=Store->Find(ID);const auto* Squad=Unit?Store->FindSquad(Unit->SquadID):nullptr;

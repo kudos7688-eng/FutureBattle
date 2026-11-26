@@ -35,6 +35,7 @@ namespace BattleKnownFire
  struct FSearch
  {
   double NextAt=0;TArray<int32> Candidates;int32 Cursor=0,Selected=INDEX_NONE;bool bPending=true;
+  int32 ConfirmedTarget=INDEX_NONE;FVector ConfirmedAim=FVector::ZeroVector;
   bool bCoverFacing=false;FVector CoverAnchor=FVector::ZeroVector,CoverPeek=FVector::ZeroVector,CoverFacing=FVector::ZeroVector;
   int32 CoverTarget=INDEX_NONE,CoverRevision=INDEX_NONE;
  };

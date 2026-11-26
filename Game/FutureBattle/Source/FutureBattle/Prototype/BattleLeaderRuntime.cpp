@@ -1419,7 +1419,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  else if(KnownFire.Ready())FireKnownTarget(ID,Position(ID)+Muzzle,KnownFire,false);
  Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:((BattleTactics::ObservedTactics()?ObservedEngage:CanEngage)||bOwnEngage||bCoverFire||KnownFire.TargetID!=INDEX_NONE)?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
 }
-bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot)
+bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot,bool bKnownFireShot)
 {
  FPhase3Scope Timing(Phase3,EPhase3Cost::Shot);
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
@@ -1549,6 +1549,8 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  const float ShotDmg=bAT?T->ATDamage:[&]{const auto* SS=Store->FindSquad(U->SquadID);return T->ShotDamage*BattleSquadType::DamageScale(SS?SS->SquadType:0)*BattleArms::DamageAt(W,FVector::Dist(Start,Hit.bBlockingHit?FVector(Hit.ImpactPoint):End));}();
  if(bArea && !bShownPartHit)GetWorld()->GetSubsystem<UBattleMatch>()->DamageBase(Hit.GetActor(),U->Team,bAT?T->ATBaseDamage:ShotDmg*BattleTactics::BaseRifleDamage());
  if(SightExperiment.Started && Victim>0) ++SightExperiment.Hits;
+ // Same hit definition as Hits; damage below counts actual HP removed, including incidental victims.
+ if(BattleKnownFire::Enabled() && Victim>0)SightExperiment.Cover(bKnownFireShot?TEXT("known_fire_hits"):TEXT("ordinary_fire_hits"));
  const auto* BeforeVictim=Store->Find(Victim);
  const float BeforeHP=BeforeVictim?BeforeVictim->HP:0;
  const int32 VictimSquad=BeforeVictim?BeforeVictim->SquadID:INDEX_NONE;
@@ -1571,6 +1573,8 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
  }
  // Armour: a vehicle takes only anti-tank hits (rifles and machine guns do nothing to it).
  const bool Damaged=Victim>0 && ArmorScale(Victim,W)>0.f && Store->ApplyDamageFrom(Victim,U->Team,ShotDmg*ArmorScale(Victim,W),Start,ID,EBattleKillKind::Shot);
+ if(BattleKnownFire::Enabled() && SightExperiment.Enabled && Damaged && BeforeVictim)
+  (bKnownFireShot?SightExperiment.KnownFireDamage:SightExperiment.OrdinaryFireDamage)+=FMath::Max(0.f,BeforeHP-Store->Find(Victim)->HP);
  if(SightExperiment.Started && Damaged && BeforeVictim)
  {
   auto& E=SightExperiment;const bool Killed=BeforeHP>0 && !Store->Find(Victim)->IsAlive();

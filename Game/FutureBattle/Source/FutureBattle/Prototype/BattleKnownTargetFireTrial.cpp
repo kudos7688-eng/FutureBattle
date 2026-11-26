@@ -101,6 +101,13 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
  const int32 TrialSecondPeekShots=TrialShooter.ShotSequence;StepCoverAction(2,1.f/30.f,TrialNow);
  TrialCheck(TEXT("blocked_first_peek_second"),TrialShooter.CoverPhase==4 && TrialShooter.ShotSequence==TrialSecondPeekShots+1 && KnownFireSearches.FindChecked(2).Selected==252 && Position(2).Equals(TrialStart,.01));
 
+ TrialReset();TrialObserve(251,TrialFirst,0);
+ SetStance(251,BattleStance::Crouch,TrialNow,true);const auto TrialCrouchAim=TrialPick();
+ KnownFireSearches.Reset();SetStance(251,BattleStance::Prone,TrialNow,true);const auto TrialProneAim=TrialPick();
+ TrialCheck(TEXT("confirmed_stance_aim"),TrialCrouchAim.Ready() && TrialProneAim.Ready() &&
+  TrialCrouchAim.AimPosition.Equals(TrialFirst+FVector(0,0,BattleStance::AimOffset(BattleStance::Crouch)),.01) &&
+  TrialProneAim.AimPosition.Equals(TrialFirst+FVector(0,0,BattleStance::AimOffset(BattleStance::Prone)),.01));
+
  TrialReset();TrialObserve(251,TrialFirst,6);TrialSense->BuildTeamKnownTargets(TrialNow);
  const int32 TrialStaleRays=TrialCount(TEXT("known_fire_rays"));const int32 TrialStaleShots=TrialShooter.ShotSequence;
  const auto TrialStale=TrialPick();Follow(2,1.f/30.f,TrialNow);
@@ -108,8 +115,10 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
 
  TrialReset();TrialPlace(251,TrialSecond);TrialPlace(252,TrialStart+FVector(5000,3000,0));
  TrialObserve(251,TrialFirst,1,BattleTactics::SpotTrack()>0);
- const auto TrialTracking=TrialPick();const FVector TrialExpected=(BattleTactics::SpotTrack()>0?TrialSecond:TrialFirst)+FVector(0,0,35);
+ const auto TrialTracking=TrialPick();const FVector TrialExpected=TrialSecond+FVector(0,0,35);
  TrialCheck(TEXT("track_aim"),TrialTracking.Ready() && TrialTracking.AimPosition.Equals(TrialExpected,.01) && TrialTracking.bTracked==(BattleTactics::SpotTrack()>0) && FireKnownTarget(2,TrialStart+FVector(0,0,60),TrialTracking,false));
+ const auto TrialHeldAim=TrialPick();
+ TrialCheck(TEXT("confirmed_aim_held"),!TrialHeldAim.Ready() && TrialHeldAim.AimPosition.Equals(TrialExpected,.01));
  TrialWall(TrialGround+FVector(750,250,150),FVector(30,400,150));KnownFireSearches.Reset();TrialShooter.NextShotTime=0;
  const auto TrialTrackBlocked=TrialPick();
  TrialCheck(TEXT("track_still_needs_sensor"),!TrialTrackBlocked.Ready() && TrialTrackBlocked.Reject==BattleKnownFire::EReject::SensorWall);
@@ -155,7 +164,12 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
  TrialSense->Observers.FindChecked(11).Contacts.FindChecked(251).LastKnownPosition=TrialSecond;
  TrialSense->BuildTeamKnownTargets(TrialNow);TrialWall(TrialGround+FVector(750,250,150),FVector(30,100,150));
  const auto TrialAimWall=TrialPick();
- TrialCheck(TEXT("aim_wall_separate"),!TrialAimWall.Ready() && TrialAimWall.Reject==BattleKnownFire::EReject::AimWall);
+ TrialCheck(TEXT("old_aim_wall_ignored"),TrialAimWall.Ready() && TrialAimWall.AimPosition.Equals(TrialFirst+FVector(0,0,35),.01));
+ // Sensor at eye height can see above this obstacle, while the lower muzzle cannot.
+ TrialReset();TrialObserve(251,TrialFirst,0);
+ TrialWall(TrialGround+FVector(750,0,108),FVector(30,130,8));
+ const auto TrialMuzzleWall=SelectKnownFire(2,TrialStart,TrialNow);
+ TrialCheck(TEXT("aim_wall_separate"),!TrialMuzzleWall.Ready() && TrialMuzzleWall.Reject==BattleKnownFire::EReject::AimWall);
 
  TrialReset();TrialObserve(251,TrialFirst,0);
  auto& TrialDelivered=TrialSense->Observers.FindChecked(11).Contacts.FindChecked(251);
@@ -198,6 +212,25 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
  TrialObserve(252,TrialStart+FVector(0,1800,0),0);
  const bool TrialSideRejected=!KnownFireAllowed(2,TrialSense->TeamKnownTargets[TrialShooter.Team].Targets.FindChecked(252),TrialNow);
  TrialCheck(TEXT("legacy_peek_priority"),TrialLegacyPriority && TrialSideRejected);
+
+ // Close target and minimum skill spread keep this counter fixture independent of the shot sequence.
+ TrialReset();TrialPlace(251,TrialStart+FVector(300,0,0));TrialObserve(251,TrialFirst,0);
+ const float TrialSavedSkill=TrialShooter.SpreadSkillScale;TrialShooter.SpreadSkillScale=.25f;
+ const auto TrialMetricTarget=TrialPick();
+ const double TrialDamageBefore=SightExperiment.KnownFireDamage;
+ const float TrialHPBefore=TrialStore->Find(251)->HP;
+ const int32 TrialHitsBefore=TrialCount(TEXT("known_fire_hits"));
+ const bool TrialMetricShot=FireKnownTarget(2,TrialStart+FVector(0,0,60),TrialMetricTarget,false);
+ const float TrialLostHP=TrialHPBefore-TrialStore->Find(251)->HP;
+ TrialCheck(TEXT("known_damage_counter"),TrialMetricShot && TrialLostHP>0 &&
+  FMath::IsNearlyEqual(SightExperiment.KnownFireDamage-TrialDamageBefore,double(TrialLostHP),.001) && TrialCount(TEXT("known_fire_hits"))==TrialHitsBefore+1);
+ TrialShooter.NextShotTime=0;
+ const double TrialKnownDamageAfter=SightExperiment.KnownFireDamage;
+ const int32 TrialKnownHitsAfter=TrialCount(TEXT("known_fire_hits"));
+ const bool TrialNormalShot=Fire(2,TrialStart+FVector(0,0,60),(TrialMetricTarget.AimPosition-(TrialStart+FVector(0,0,60))).GetSafeNormal(),false);
+ TrialCheck(TEXT("ordinary_not_known"),TrialNormalShot && SightExperiment.KnownFireDamage==TrialKnownDamageAfter && TrialCount(TEXT("known_fire_hits"))==TrialKnownHitsAfter);
+ TrialShooter.SpreadSkillScale=TrialSavedSkill;
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_DIAG known_fire_damage=%.6f"),SightExperiment.KnownFireDamage);
 
  for(const auto& TrialDiag:SightExperiment.CoverDiag)if(TrialDiag.Key.ToString().StartsWith(TEXT("known_fire_")))
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_DIAG %s=%d"),*TrialDiag.Key.ToString(),TrialDiag.Value);

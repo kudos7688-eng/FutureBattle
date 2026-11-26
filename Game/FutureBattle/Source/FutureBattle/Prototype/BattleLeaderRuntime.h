@@ -452,7 +452,7 @@ public:
  mutable TMap<FString,int64> SightHitClasses,SightHitTags,SightHitActors;
  mutable bool bSightHitsLogged=false;
  int64 MoveSweeps=0,MoveHitSoldier=0,MoveHitWorld=0,MoveShortened=0; // Mass follower moves (BATTLE_MOVE_SWEEP)
- bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot);
+ bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot,bool bKnownFireShot=false);
  FVector TracerStart(int32 ID,const FVector& Start,const FVector& Direction) const;
  bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f,bool bAllHidden=false,const TFunction<bool(int32,const FVector&)>& Accept=nullptr);
  void CancelCoverAction(int32 ID,const TCHAR* PeekCancel=TEXT("other"));

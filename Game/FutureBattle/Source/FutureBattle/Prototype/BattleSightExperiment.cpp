@@ -217,6 +217,13 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
  Root->SetObjectField(TEXT("tactical_events"),Events);Root->SetObjectField(TEXT("tactical_squad_seconds"),Durations);
  for(const auto& WhyUnit:Store->GetUnits())if(WhyUnit.Value.CoverPhase==3 || WhyUnit.Value.CoverPhase==4)E.PeekAdd(TEXT("peekwhy_open_at_end"));
  auto CoverDiag=MakeShared<FJsonObject>();for(const auto& Pair:E.CoverDiag)CoverDiag->SetNumberField(Pair.Key.ToString(),Pair.Value);
+ if(BattleKnownFire::Enabled())
+ {
+  CoverDiag->SetNumberField(TEXT("known_fire_hits"),E.CoverDiag.FindRef(FName(TEXT("known_fire_hits"))));
+  CoverDiag->SetNumberField(TEXT("known_fire_damage"),E.KnownFireDamage);
+  CoverDiag->SetNumberField(TEXT("ordinary_fire_hits"),E.CoverDiag.FindRef(FName(TEXT("ordinary_fire_hits"))));
+  CoverDiag->SetNumberField(TEXT("ordinary_fire_damage"),E.OrdinaryFireDamage);
+ }
  Root->SetObjectField(TEXT("cover_diagnostics"),CoverDiag);
  Root->SetStringField(TEXT("cover_diagnostics_scope"),TEXT("Whole match including pre-save time; ai_* are AI unit-frames in Follow; request_* are per RequestCoverAction call by furthest stage; peek_* are per rejected peek offset; cancel_* are cover endings"));
  Root->SetStringField(TEXT("tactical_time_scope"),TEXT("1Hz squad samples; active delegated AI only; not per-soldier or exact transition timestamps"));
