@@ -39,6 +39,12 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-27 7時05分 Claude（UE スキル確認）：MCP 付きでエディタを開く `Setup/Open-EditorMcp.ps1` を追加（ゲーム・試合は不変）
+
+- ユーザーが Claude Code に Epic の Unreal Engine スキル（unreal-mcp ほか）を入れたので中身を確認し、`.uproject` を変えずに使う起動手段を用意した。`-EnablePlugins=ModelContextProtocol,AllToolsets -ModelContextProtocolStartServer -ModelContextProtocolPort=<Port>`。接続設定はワークスペース直下の `.mcp.json`（git の外）。使い方と注意は `CLAUDE_HANDOFF.md` 6章。
+- 検証：main で起動し、`127.0.0.1:8000/mcp` の initialize・tools/list（`list_toolsets`/`describe_toolset`/`call_tool`）・読み取りの呼び出し（現在のレベル `Lvl_BattlePrototype`、Quinn の LOD 数3・LOD2 の頂点 7,421）が通った。エディタは正常に閉じ、追跡中のファイルの変更なし。Claude Code のセッションからの接続はまだ試していない（セッションを開き直す必要がある）。
+- わかったこと（掲示板に記録）：スケルタルメッシュの LOD 画面サイズは MCP でも Python でも変えられない（C++ が要る）。Live Coding は 5.8 既定オフで、差し替えは凍結ビルドに入らない。既存の試験は UE の Automation ではないので MCP の試験ツールでは走らない。
+
 ## 2026-11-27 6時50分 Claude（壁の遮蔽判定）：**既定の変更** — `-BattleKnownTargetFire` 既定2（ユーザー決定、6時の回、main 714523ee）。既定の試合の結果が変わる（基準は取り直し）
 
 - 中身：軍で共有する既知の敵を本人が確かめてその場で撃つ（値1）＋撃てる位置へ移る（探し方・移動の約束12秒・防衛兵 DefendMarch=1・Reach 15m）。`=1` はその場で撃つだけ、`=0` で元の動き。
