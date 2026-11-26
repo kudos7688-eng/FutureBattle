@@ -33,6 +33,8 @@ namespace BattleTactics
  // burst's last round to the next burst's first). Each round is a real shot (damage, spread, one round of
  // ammunition).
  // -BattleCoverPeekShots=n (default 0 = UBattleTuning::AICoverShotsPerPeek, 1..30): shots after which an AI peek out of cover ends.
+ // Defaults since 2026-11-27 (user decision; STATUS 2026-11-27 05:50, measured over the supply vehicle default): -BattleBurstFire=3,
+ // -BattleBurstPause=1.4, -BattleCoverPeekShots=3. The old pace: -BattleBurstFire=0 -BattleCoverPeekShots=2.
  int32 BurstFire();
  float BurstPause();
  int32 CoverPeekShots();

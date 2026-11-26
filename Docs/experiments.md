@@ -40,7 +40,7 @@
 | `-BattleArtilleryFlash`、`-BattleSPGRange`、`-BattleAreaSPGCost`、`-BattleArtilleryPosts`、`-BattleArtilleryRaidChase`、`-BattleArtilleryRaidSneak`、`-BattleArtilleryRaidGroup`、`-BattleArtilleryStandoff`、`-BattleAreaExoEarly` | 車両・砲兵（Codex委任） | 砲兵の方向（撃つと位置が知られる・射程の制限・公開の陣地・襲撃。11-21 ユーザー決定） | 襲撃は外骨格兵・装甲車が要る（AI は既定で外骨格兵を買わない）。AI が迫撃砲を買わないと陣地が使われない | 射程55000で自走砲の撃破が3〜4割減る。構える深さ0.35＋前線を抜ける襲撃で外骨格兵が自走砲を撃破（2シードで3両）。強襲群・早買いは撃破が増えない | 2026-12-09 | 未定。一式で諮るか1つずつかを担当が決める。自走砲が強すぎる件（数値は未調整）の扱いと合わせる |
 | `-BattleObservedArmour=1`、`-BattleObservedTactics=1` | 車両・砲兵（Codex委任）／観測の原則 | 観測した情報だけで判断する（主砲の目標選びなど） | **保存の修理（B01〜B04）が先**。`ObservedTactics` は保存の往復の一致を保証しない設計 | 既定化は今週はしない（11-25 方針）。追加の負荷は未計測 | 契約の修理の後 | 休止中。再開の条件：保存の修理が main に入る。小さな専用の場面で1つずつ確かめ、まとめて既定にしない |
 | `-BattleArmsAssault=2`（普通の小銃小隊も躍進・突撃） | 歩兵の装備（arms） | 普通の小隊の詰め寄り | 武器一式（既定）。`-BattleArmsCharge`・`-BattleArmsSectorTask` | 東の軍で悪くなる原因だった。既定は1（精鋭だけ、11-25 ユーザー決定） | 2026-12-09 | 休止（値2は残っている）。再開の条件：未定（守りの配置の後か、担当が書く） |
-| `-BattleOwnTarget=1/2`、`-BattleOwnTargetCover=1/2`、`-BattleWalkLook=1` | 個人AI | 撃ち返し、撃ち返す兵が遮蔽に入る、歩行中の視線 | `OwnTargetCover` は `OwnTarget` が要る | 撃ち返しは片側20本すべてで「撃破−戦死」が増えたが、試遊で棒立ちの射撃が増えた印象 → 既定0のまま（11-22 ユーザー決定）。遮蔽つきは切替なし比でまだマイナス | 2026-12-09 | 通常の試合（プラス）と操作の体験（マイナス）が食い違った例。再び諮る条件：遮蔽つきで切替なし比がプラス、かつ試遊で棒立ちが減った |
+| `-BattleOwnTarget=1/2`、`-BattleOwnTargetCover=1/2`、`-BattleWalkLook=1` | 個人AI | 撃ち返し、撃ち返す兵が遮蔽に入る、歩行中の視線 | `OwnTargetCover` は `OwnTarget` が要る | 撃ち返しは片側20本すべてで「撃破−戦死」が増えたが、試遊で棒立ちの射撃が増えた印象 → 既定0のまま（11-22 ユーザー決定）。**11-27 採用：`-BattleOwnTarget=2`・`-BattleOwnTargetCover=1` を既定に（ユーザー決定、指切りの既定と一緒に。STATUS 11-27）。`-BattleWalkLook` は既定0のまま。**遮蔽つきは切替なし比でまだマイナス | 2026-12-09 | 通常の試合（プラス）と操作の体験（マイナス）が食い違った例。再び諮る条件：遮蔽つきで切替なし比がプラス、かつ試遊で棒立ちが減った |
 | `-BattleThreatCover=1`、`-BattleThreatCoverCrouch`、`-BattleSoldierMove=1`、`-BattleSoldierAIFocus` | 個人AI | 兵ごとの脅威と遮蔽の取り直し、区画の中で兵が遮蔽を移る、プレイヤーの周りだけ | `-BattleCoverActions=1` | 要約に評価の結果なし | 2026-12-09 | 未定 |
 | `-BattleSoldierBody=1` | 一般兵の体 RB01 | 一般兵の体を RB01 にする（表示だけ） | なし | 回帰合格、近景・遠景の画面を確認、1フレームの時間は同じ（PC が遅い状態での比較）。GPU の時間は未計測 | 通しの試遊の後 | 既定にするかはユーザーの判断（見た目）。勝敗では決めない |
 
@@ -50,7 +50,7 @@
 
 | 切替 | 担当の系統 | 目的 | 状態 |
 |---|---|---|---|
-| `-BattleBurstFire`、`-BattleBurstPause`、`-BattleCoverPeekShots` | 弾薬と補給 | AI の小銃の指切り・顔出しの発数 | 11-25：射撃は約2倍、損害 +2〜4割。既定0 |
+| `-BattleBurstFire`、`-BattleBurstPause`、`-BattleCoverPeekShots` | 弾薬と補給 | AI の小銃の指切り・顔出しの発数 | 11-25：射撃は約2倍、損害 +2〜4割。**11-27 採用（既定：3発・間1.4秒・顔出し3発、ユーザー決定）**。新しい既定の上の測り直し（マップK 2 seed）：射撃 +11%／+74%、損害は seed で向きが割れる（-9%／+33%）、弾は尽きない。元に戻すには `-BattleBurstFire=0 -BattleCoverPeekShots=2` |
 | `-BattleGroupSupplySlot=1`、弾薬の案3の4つの切替 | 弾薬と補給 | 補給車を1台目から群に付ける、弾切れで戻る | 働く条件は見つかったが、片方の軍だけ・撃った弾の18%。前提：補給へ着けること（移動の詰まり）。**11-27：`-BattleGroupSupplySlot` は既定1（補給車の回復と一緒に採用）。弾を絞る切替は既定のまま＝小隊は弾ではなく損害で戻る（いちばん絞っても弾が理由は53回中6回）** |
 | `-BattleSupplyCarRecover`、`-BattleSupplyCarFirst`、`-BattleSupplyCarHealStock`、`-BattleAreaSupplyEarly`、`AreaSupplyKeep` | 弾薬と補給 | 補給車のそばで補充と回復、本拠地より補給車を優先、回復ゲージ、AI が補給車を2台持つ | **11-27 採用（既定ON、ゲージ1000、ユーザー決定。候補 seed は飛ばした）**。マップK 2 seed：本拠地戻り 48〜71 → 20〜22回、補充 約3.5倍、得点差は縮む |
 | `-BattleSupplyCarPost=1/2`、`-BattleSupplyCarTarget`、`-BattleSupplyCarHunt=1/2`、`-BattleSupplyHuntLog`、`-BattleCarRecoverShots` | 弾薬と補給 | 補給車の位置取り（持ち場・停止）、敵の補給車を優先目標に・部隊や砲を差し向ける、記録と撮影 | 既定0。位置取り=1 は1試合で本拠地が落ちた、=2（止めるだけ）は効果不明。狩りは届かない（10回中6回が手前の敵で止まる）。見直し：補給車の位置取りを作り直すとき |
