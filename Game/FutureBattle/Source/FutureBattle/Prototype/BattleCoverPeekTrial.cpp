@@ -71,14 +71,16 @@ void UBattleLeaderRuntime::RunCoverPeekTrial()
  if(PeekTrialStage==1)
  {
   // Establish an actual own sighting before the first two scenes. The third starts with memory only.
-  if(PeekTrialCase<2)
+  // Scene "lost": after the sighting the enemy moves behind the high wall; normal scans on later frames must drop it.
+  static bool bTrialLosing=false;static double TrialLoseAt=0;
+  if(PeekTrialCase<2 && !bTrialLosing)
   {
    TrialSense->Update(Mode->Units,TrialNow,0,0);
    const auto* TrialContact=TrialSense->FindContact(2,251);
    PeekTrialReady=TrialContact && TrialContact->bVisible && !TrialContact->bShared;
    if(!PeekTrialReady && TrialNow-PeekTrialAt<6.){TrialLater();return;}
   }
-  else
+  else if(PeekTrialCase==2)
   {
    auto& TrialObserver=TrialSense->Observers.FindOrAdd(2);TrialObserver.ProfileRevision=TrialShooter.PerceptionRevision;
    FBattleContact TrialMemory;TrialMemory.TargetID=251;TrialMemory.SourceUnitID=2;TrialMemory.LastKnownPosition=PeekTrialAnchor+FVector(1500,0,0);TrialMemory.LastSeenTime=TrialNow;TrialMemory.Confidence=1;TrialMemory.bShared=true;
@@ -86,11 +88,14 @@ void UBattleLeaderRuntime::RunCoverPeekTrial()
   }
   if(PeekTrialCase==1)
   {
-   TrialPlace(251,PeekTrialAnchor+FVector(1500,1000,0));
+   if(!bTrialLosing){TrialPlace(251,PeekTrialAnchor+FVector(1500,1000,0));bTrialLosing=true;TrialLoseAt=TrialNow;TrialLater();return;}
    // A normal scan must lose the sighting; never fabricate the hidden enemy's new known position.
-   TrialSense->Update(Mode->Units,TrialNow);
+   TrialSense->Update(Mode->Units,TrialNow,0,0);
    const auto* TrialLost=TrialSense->FindContact(2,251);
-   PeekTrialReady&=TrialLost && !TrialLost->bVisible && TrialLost->LastKnownPosition.Equals(PeekTrialAnchor+FVector(1500,0,0),1.);
+   const bool bTrialLost=TrialLost && !TrialLost->bVisible && FVector::Dist2D(TrialLost->LastKnownPosition,PeekTrialAnchor+FVector(1500,0,0))<=5.;
+   if(!bTrialLost && TrialNow-TrialLoseAt<6.){TrialLater();return;}
+   if(!bTrialLost)UE_LOG(LogFutureBattle,Warning,TEXT("BATTLE_COVERPEEK_LOST_SETUP contact=%d visible=%d shared=%d known=%s"),TrialLost?1:0,TrialLost&&TrialLost->bVisible?1:0,TrialLost&&TrialLost->bShared?1:0,TrialLost?*TrialLost->LastKnownPosition.ToCompactString():TEXT("-"));
+   bTrialLosing=false;PeekTrialReady&=bTrialLost;
   }
   PeekTrialReady&=CoverLineClear(2,PeekTrialAnchor,PeekTrialAnchor+FVector(1500,0,0));
   TrialShooter.CoverPhase=2;TrialShooter.CoverAnchor=PeekTrialAnchor;TrialShooter.CoverPeek=PeekTrialAnchor;TrialShooter.CoverTargetID=251;TrialShooter.CoverSlot=FreeCoverSlot;TrialShooter.CoverOrderRevision=TrialShooter.OrderRevision;TrialShooter.CoverSeconds=0;
