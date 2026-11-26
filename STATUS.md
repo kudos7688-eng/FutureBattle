@@ -39,6 +39,40 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-27 06時29分（弾薬と補給）【既定の変更・6時の回】補給車の回復、AI小銃の指切り、自分で見た敵を撃つ、を既定にして main へ取り込み（0e875bd8）。共用の基準は取り直しが要る
+
+- ユーザー判断（11-27）: 補給車の回復を既定に（候補 seed は飛ばす、得点差が縮むのは可、回復ゲージ1000、補充兵は補給車のそば）。指切り「3発・間1.4秒・顔出し3発」を既定に。「自分で見た敵を撃つ」も既定に（11-22 の試遊では棒立ちの射撃が増えた印象で既定0と決めていた件。今回は遮蔽に入る設定つきで入れる。試遊での確認はこれから）。取り込みは6時の回。
+- 既定の変更（main 0e875bd8）:
+  - 補給車: `-BattleSupplyCarRecover` 0→1、`-BattleSupplyCarFirst` 0→1、`-BattleSupplyCarHealStock` 3000→1000、`AreaSupplyKeep` 0→2（`DefaultGame.ini` も）、`-BattleAreaSupplyEarly` 0→1、`-BattleGroupSupplySlot` 0→1。HUD の説明と、選んだ補給車の在庫・回復ゲージの表示。
+  - 射撃: `-BattleBurstFire` 0→3、`-BattleBurstPause` 1.0→1.4、`-BattleCoverPeekShots` 0（＝2発）→3、`-BattleOwnTarget` 0→2、`-BattleOwnTargetCover` 0→1。
+  - 元に戻す引数: `-BattleSupplyCarRecover=0 -BattleSupplyCarFirst=0 -BattleAreaSupplyKeep=0 -BattleAreaSupplyEarly=0 -BattleGroupSupplySlot=0 -BattleBurstFire=0 -BattleCoverPeekShots=2 -BattleOwnTarget=0`。
+- 手順: `ammo` ブランチに3つの既定の変更を積み（2eb79497、946df661）、6時の回で先に入った main（壁の遮蔽の取り込みなど）を `ammo` へ取り込み（0e875bd8。競合は自動生成の `SWITCHES.md`・`CODEMAP.md` だけで、作り直して解消）、作業ツリーで試験してから main を同じコミットへ進めた（main は `ammo` に含まれていたので早送り）。push はしていない。
+- 検証:
+  - `ammo` の作業ツリー（0e875bd8）: 全体ビルド成功、`Test-Battle` 失敗0、`Test-Area` 失敗0、`Test-CoverPeek` 失敗0、`Test-CoverFirePoint` 合格、`Test-KnownTargetFire` 失敗0、`Test-SquadTactics` 失敗0（出力名の重なりで1回やり直し）。
+  - `Test-CoverActions`: 同じビルドで4回走らせ、1回目だけ9項目失敗（「Actor reaches protected anchor」から続けて）、2〜4回目は失敗0。切替を1つずつ戻した3通り（自分の目標なし／遮蔽なし／指切りなし）も失敗0。指切りだけの版（946df661 の前）でも失敗0。失敗の原因は特定していない（試験のばらつきと見ているが未確認）。
+  - main（0e875bd8）: ビルド成功、`Test-Battle` 失敗0、`Test-Area` 失敗0。凍結ビルド `newdefault-0e875bd8`。
+- 新しい既定の試合（main の凍結ビルド、マップK、引数は `-BattleShotLog -BattleFireTimeLog` だけ、各1試合）:
+
+| | seed 7 | seed 43 |
+|---|---|---|
+| 結果 | 西の勝ち | 引き分け |
+| 得点 西/東 | 651/425 | 397/397 |
+| 全射撃 | 5754 | 8205 |
+| 小銃1人あたりの発砲（15分） | 18.2 | 21.6 |
+| うち自分の目標への射撃 | 1776 | 3110 |
+| 与ダメージ 西/東 | 19435/17505 | 25765/26322 |
+| 撃破 西/東 | 126/121 | 166/156 |
+| 終了時の生存 西/東 | 169/144 | 167/137 |
+| 本拠地へ戻った回数（弾が理由） | 26（0） | 11（0） |
+| 補給車へ向かった回数（復帰／緊急退却） | 76（21／27） | 81（37／31） |
+| 補充（うち補給車のそば） | 115（115） | 161（157） |
+| 回復した HP ／ ゲージが空になった回数 ／ 満たした回数 | 4141／1／4 | 7051／4／7 |
+
+  - 引数で同じ切替を付けた試合（`ammo` の `bf2-K-ownburst-s7`・`-s43`、05時50分の節）と得点・射撃・損害が一致＝既定として正しく入っている。
+- 他の系統への影響: エリア戦の既定の結果が全マップで変わる。共用の基準（台帳）は取り直しが要る（同等登録は不可）。掲示板に周知済み。
+- 未実施・制限: マップK 以外。プレイヤー操作と試遊（自分で見た敵を撃つ兵の棒立ち、補給車を選んだときの在庫・ゲージの表示）。指切りと自分の目標の実画面確認。2 seed・各1試合で、損害と勝敗への効き方は seed で割れている（05時50分の節）。補給車へ向かう行程の3分の1前後は途中で緊急退却になる（補給車の位置取りは未解決）。補給車が足りない間は他の兵種の購入が後回しになる。未委任のプレイヤーの補給車は自分では本拠地へ戻らない。
+- 既定にしていない切替: `-BattleSupplyCarPost`、`-BattleSupplyCarTarget`、`-BattleSupplyCarHunt`、`-BattleArriveWatch`、`-BattleSeekKnown`、`-BattleSpotTrack`、`-BattleJoinFight`、`-BattleMemorySeconds`、`-BattleSuppressFire`（どれも既定0）。
+
 ## 2026-11-27 6時00分 Claude（壁の遮蔽判定）：coverlean を main へ（6時の回、merge 09079c22）。`-BattleKnownTargetFire=2` の探し方・移動の約束・防衛兵（すべて既定0、既定の試合は不変）
 
 - 入ったもの：撃てる位置の候補（壁・塀の端と切れ目 → 遮蔽スロット → 環、光線の前の予選）、移動の約束 `-BattleKnownMoveCommit=12`／`-BattleKnownMoveWait=1.5`、防衛兵 `-BattleKnownMoveDefendMarch`・`-BattleKnownMoveDefendReach=1500`（値2の中の既定）。調査記録 `Docs/investigation-defend-march-2026-11-27.md`。
