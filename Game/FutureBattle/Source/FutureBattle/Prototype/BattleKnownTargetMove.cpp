@@ -549,7 +549,7 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now,bool FollowingMarc
      (FVector::DistSquared2D(Peek,Squad->Destination)>FMath::Square(double(Squad->DefenseRadius)) && FVector::DistSquared2D(Peek,SelectedPost)<=FMath::Square(SelectedReach))))SightExperiment.Cover(TEXT("known_move_defend_reach_places"));
    Episode.bDefendPost=DefendAtPost || (Episode.bDefendReach && !DefendMarch);Episode.bDefendMarch=DefendMarch;Episode.bMarch=March;Episode.Revision=Unit->OrderRevision;Episode.Started=Now;Episode.Slot=Place.Slot;Episode.bStandUp=StandUp || Place.Source<2;
    Episode.CommitUntil=CommitDeadline;
-   if(CommitSeconds>0.)for(int32 ReturnIndex=Route->PathPoints.Num()-1;ReturnIndex>=0;--ReturnIndex)Episode.ReturnPoints.Add(Route->PathPoints[ReturnIndex]+FVector(0,0,90));
+   if(CommitSeconds>0. || Episode.bDefendReach)for(int32 ReturnIndex=Route->PathPoints.Num()-1;ReturnIndex>=0;--ReturnIndex)Episode.ReturnPoints.Add(Route->PathPoints[ReturnIndex]+FVector(0,0,90));
    KnownMoves.Add(ID,Episode);
    if(DefendMarch){if(KnownDefendResumes.Remove(ID))RecordMove(TEXT("known_move_defend_march_resume_interrupted"));SightExperiment.Cover(TEXT("known_move_defend_march_started"));}
    if(DefendAtPost)SightExperiment.Cover(TEXT("known_move_defend_post_started"));
@@ -571,7 +571,7 @@ void UBattleLeaderRuntime::EndKnownMove(int32 ID,double Now,const TCHAR* Reason)
 {
  const auto* Episode=KnownMoves.Find(ID);if(!Episode)return;
  // Arrival owns the fire request until it fires, returns, or is cancelled (including death).
- if(Episode->CommitUntil>0. && Episode->Arrived>=0)
+ if((Episode->CommitUntil>0. || Episode->bDefendReach) && Episode->Arrived>=0)
   for(auto& EndingBudget:KnownFireBudgets){EndingBudget.Waiting.Remove(ID);EndingBudget.RequestedAt.Remove(ID);}
  SightExperiment.Cover(Reason);
  if(SightExperiment.Enabled && Episode->Arrived<0){SightExperiment.KnownMoveDistance+=Episode->Distance;SightExperiment.KnownMoveSeconds+=Now-Episode->Started;}

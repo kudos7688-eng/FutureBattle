@@ -826,7 +826,9 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
    Shooter.Destination==PostOrderGoal && Squad.Destination==PostOrderGoal && PostTrialPlan.ArrivalGoals.FindChecked(2)==Start);
  }
  // New defense reach fixture: the tall wall blocks the 6 m disk; the low
- // side walls admit a muzzle ray only at the 10 m lateral ring positions.
+ // side walls admit fire near the 10 m lateral positions. Their 120 cm half-width
+ // keeps the preferred oblique edge at 989 cm (160 cm selected 946 cm, outside
+ // the unchanged 1000 +/- 50 cm assertion), without disabling edge planning.
  auto SetupReachScene=[&]()
  {
   Reset();KnownDefendResumes.Reset();
@@ -840,7 +842,7 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   {
    FNavLocation ReachProjected;
    if(ReachNav && ReachNav->ProjectPointToNavigation(Start+FVector(0,ReachSide,-90),ReachProjected,FVector(50,50,150)))
-    Wall(ReachProjected.Location+FVector(100,0,67.5),FVector(20,160,67.5));
+    Wall(ReachProjected.Location+FVector(100,0,67.5),FVector(20,120,67.5));
   }
   TestWorld->GetSubsystem<UBattleCover>()->BuildSlots(true);
   TestWorld->GetSubsystem<UBattleCover>()->KnownMoveGeometry(Start,BattleKnownFire::MoveRange(),true);
@@ -876,7 +878,18 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   const int32 ReachTargets=Count(TEXT("known_move_defend_reach_targets")),ReachPlaces=Count(TEXT("known_move_defend_reach_places"));
   const int32 ReachReturned=Count(TEXT("known_move_defend_post_resume_arrived"));
   const bool ReachStarted=TryStart();bool ReachAtTen=false,ReachWithin=true,ReachNoEarly=true;
-  if(const auto* ReachEpisode=KnownMoves.Find(2))ReachAtTen=FMath::Abs(FVector::Dist2D(ReachEpisode->Goal,Start)-1000.)<50.;
+  bool ReachReverseSaved=false;
+  if(const auto* ReachSaved=KnownMoves.Find(2))
+   if(const auto* ReachOutbound=SoldierPaths.Find(2))
+   {
+    ReachReverseSaved=ReachSaved->ReturnPoints.Num()==ReachOutbound->Points.Num() && ReachOutbound->Points.Num()>=2;
+    for(int32 ReachPathIndex=0;ReachPathIndex<ReachOutbound->Points.Num() && ReachReverseSaved;++ReachPathIndex)
+     ReachReverseSaved=ReachSaved->ReturnPoints[ReachPathIndex].Equals(ReachOutbound->Points[ReachOutbound->Points.Num()-1-ReachPathIndex]+FVector(0,0,90),.001);
+   }
+  Check(TEXT("move_defend_reach_reverse_saved"),ReachStarted && ReachReverseSaved);
+  double ReachGoalDistance=-1.;int32 ReachSource=INDEX_NONE;
+  if(const auto* ReachEpisode=KnownMoves.Find(2))
+  {ReachGoalDistance=FVector::Dist2D(ReachEpisode->Goal,Start);ReachSource=ReachEpisode->Source;ReachAtTen=FMath::Abs(ReachGoalDistance-1000.)<50.;}
   for(int32 ReachFrame=0;ReachFrame<900 && KnownMoves.Contains(2);++ReachFrame)
   {
    if(const auto* ReachEpisode=KnownMoves.Find(2))
@@ -887,6 +900,10 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
    TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
    ReachWithin &= FVector::Dist2D(Position(2),Start)<=1500.;
   }
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_REACH_FIRE started=%d at_ten=%d within=%d no_early=%d shot_ok=%d fire_ok=%d targets_ok=%d places_ok=%d goal_cm=%.3f source=%d shots=%d fires=%d targets=%d places=%d"),
+   ReachStarted,ReachAtTen,ReachWithin,ReachNoEarly,Shooter.ShotSequence>ReachShots,Count(TEXT("known_move_defend_reach_fired"))==ReachFires+1,
+   Count(TEXT("known_move_defend_reach_targets"))>ReachTargets,Count(TEXT("known_move_defend_reach_places"))==ReachPlaces+1,ReachGoalDistance,ReachSource,
+   Shooter.ShotSequence-ReachShots,Count(TEXT("known_move_defend_reach_fired"))-ReachFires,Count(TEXT("known_move_defend_reach_targets"))-ReachTargets,Count(TEXT("known_move_defend_reach_places"))-ReachPlaces);
   Check(TEXT("move_defend_reach_fire"),ReachStarted && ReachAtTen && ReachWithin && ReachNoEarly &&
    Shooter.ShotSequence>ReachShots && Count(TEXT("known_move_defend_reach_fired"))==ReachFires+1 &&
    Count(TEXT("known_move_defend_reach_targets"))>ReachTargets && Count(TEXT("known_move_defend_reach_places"))==ReachPlaces+1);
@@ -896,7 +913,94 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   Check(TEXT("move_defend_reach_return"),Count(TEXT("known_move_defend_post_resume_arrived"))==ReachReturned+1 &&
    FVector::Dist2D(Position(2),Start)<=100. && !KnownMoves.Contains(2) && !KnownDefendResumes.Contains(2) &&
    !CoverApproaches.Contains(2) && !SoldierPaths.Contains(2) && !FirePositions.Contains(2) && !Shooter.CoverPhase);
+  // Exercise Follow's resume tracking even with -BattleKnownMoveDefendMarch=0.
+  Put(251,Enemy);TestNow+=5.01;Observe();
+  const int32 ReachResearches=Count(TEXT("known_move_searches"));
+  const bool ReachRestarted=TryStart();
+  Check(TEXT("move_defend_reach_research"),ReachRestarted && !KnownDefendResumes.Contains(2) && Count(TEXT("known_move_searches"))>ReachResearches);
+
+  if(BattleKnownFire::MoveCommit()==0.)
+  {
+   // Fixed certified dogleg: the direct return hits the box; both cached legs clear it.
+   Reset();KnownDefendResumes.Reset();
+   for(auto* ReachReturnWall:Walls){ReachReturnWall->SetActorEnableCollision(false);ReachReturnWall->Destroy();}Walls.Reset();
+   Squad.DefenseRadius=600;
+   const FVector ReachFreeGoal=Start+FVector(0,1000,0),ReachBend=Start+FVector(-500,500,0);
+   Wall(Start+FVector(0,500,0),FVector(100,100,150));
+   FCollisionQueryParams ReachRouteQuery;
+   const FCollisionObjectQueryParams ReachRouteObjects(ECC_WorldStatic);
+   const FCollisionShape ReachRouteCapsule=FCollisionShape::MakeCapsule(36,88);
+   const bool ReachBentFixture=TestWorld->SweepTestByObjectType(ReachFreeGoal,Start,FQuat::Identity,ReachRouteObjects,ReachRouteCapsule,ReachRouteQuery) &&
+    !TestWorld->SweepTestByObjectType(ReachFreeGoal,ReachBend,FQuat::Identity,ReachRouteObjects,ReachRouteCapsule,ReachRouteQuery) &&
+    !TestWorld->SweepTestByObjectType(ReachBend,Start,FQuat::Identity,ReachRouteObjects,ReachRouteCapsule,ReachRouteQuery);
+   FKnownMove ReachFreeEpisode;ReachFreeEpisode.Start=Start;ReachFreeEpisode.Goal=ReachFreeGoal;ReachFreeEpisode.Peek=ReachFreeGoal;
+   ReachFreeEpisode.Last=ReachFreeGoal;ReachFreeEpisode.Source=3;ReachFreeEpisode.bStandUp=false;ReachFreeEpisode.bDefendReach=true;ReachFreeEpisode.bDefendPost=true;
+   ReachFreeEpisode.Revision=Shooter.OrderRevision;ReachFreeEpisode.Mission=Squad.MissionRevision;
+   ReachFreeEpisode.Started=TestNow;ReachFreeEpisode.Arrived=TestNow;ReachFreeEpisode.ReturnPoints={ReachFreeGoal,ReachBend,Start};
+   ReachFreeEpisode.Observation=TestSense->TeamKnownTargets[Shooter.Team].Targets.FindChecked(251);
+   KnownMoves.Add(2,ReachFreeEpisode);Put(2,ReachFreeGoal);Put(251,Start+FVector(50000,0,0));
+   const int32 ReachFreeShots=Shooter.ShotSequence,ReachFreeUnseen=Count(TEXT("known_move_arrived_unseen"));
+   const int32 ReachFreeReturned=Count(TEXT("known_move_returned"));bool ReachVisitedBend=false;
+   for(int32 ReachFreeFrame=0;ReachFreeFrame<600 && KnownMoves.Contains(2);++ReachFreeFrame)
+   {
+    TestNow+=1./30.;Observe();StepKnownMove(2,1.f/30.f,TestNow);
+    ReachVisitedBend |= FVector::Dist2D(Position(2),ReachBend)<1.;
+   }
+   Check(TEXT("move_defend_reach_free_unseen_return"),ReachBentFixture && ReachVisitedBend && !KnownMoves.Contains(2) &&
+    FVector::Dist2D(Position(2),Start)<1. && Shooter.ShotSequence==ReachFreeShots &&
+    Count(TEXT("known_move_arrived_unseen"))==ReachFreeUnseen+1 && Count(TEXT("known_move_returned"))==ReachFreeReturned+1);
+
+   for(int32 ReachCancelKind=0;ReachCancelKind<3;++ReachCancelKind)
+   {
+    Reset();KnownDefendResumes.Reset();
+    for(auto* ReachQueueWall:Walls){ReachQueueWall->SetActorEnableCollision(false);ReachQueueWall->Destroy();}Walls.Reset();
+    FKnownMove ReachQueuedEpisode;ReachQueuedEpisode.Start=Start;ReachQueuedEpisode.Goal=Start;ReachQueuedEpisode.Peek=Start;
+    ReachQueuedEpisode.Revision=Shooter.OrderRevision;ReachQueuedEpisode.Mission=Squad.MissionRevision;
+    ReachQueuedEpisode.Arrived=TestNow;ReachQueuedEpisode.bDefendReach=true;ReachQueuedEpisode.bDefendPost=true;
+    ReachQueuedEpisode.Observation=TestSense->TeamKnownTargets[Shooter.Team].Targets.FindChecked(251);
+    KnownMoves.Add(2,ReachQueuedEpisode);
+    auto& ReachQueueBudget=KnownFireBudgets[Shooter.Team];ReachQueueBudget.Window=FMath::FloorToInt64(TestNow/.1);ReachQueueBudget.Used=BattleKnownFire::MoveRayBudget();
+    StepKnownMove(2,0.f,TestNow);
+    const bool ReachWasQueued=ReachQueueBudget.Waiting.Contains(2) && ReachQueueBudget.RequestedAt.Contains(2);
+    const bool ReachNextDeferred=!KnownFireRay(11,TestNow);
+    const auto ReachOldHealth=Shooter.HP;const int32 ReachOldRevision=Shooter.OrderRevision;
+    if(ReachCancelKind==0)++Shooter.OrderRevision;
+    else if(ReachCancelKind==1)Shooter.HP=0;
+    else TestSense->Reset();
+    StepKnownMove(2,0.f,TestNow);
+    const bool ReachQueueReleased=!KnownMoves.Contains(2) && !ReachQueueBudget.Waiting.Contains(2) && !ReachQueueBudget.RequestedAt.Contains(2);
+    Shooter.HP=ReachOldHealth;Shooter.OrderRevision=ReachOldRevision;
+    TestNow+=.11;const bool ReachNextGranted=KnownFireRay(11,TestNow);
+    Check(ReachCancelKind==0?TEXT("move_defend_reach_cancel_fifo_order"):ReachCancelKind==1?TEXT("move_defend_reach_cancel_fifo_death"):TEXT("move_defend_reach_cancel_fifo_stale"),
+     ReachWasQueued && ReachNextDeferred && ReachQueueReleased && ReachNextGranted);
+   }
+  }
  }
+ // Reach=0 control with an admitted target: searches must reach the position gate.
+ Reset();KnownDefendResumes.Reset();
+ for(auto* ReachControlWall:Walls){ReachControlWall->SetActorEnableCollision(false);ReachControlWall->Destroy();}Walls.Reset();
+ Squad.DefenseRadius=600;const FVector ReachControlEnemy=Start+FVector(500,0,0),ReachControlOutside=Start+FVector(0,1450,0);
+ Put(251,ReachControlEnemy);Wall(Start+FVector(250,0,60),FVector(30,600,150));
+ TestWorld->GetSubsystem<UBattleCover>()->BuildSlots(true);
+ TestWorld->GetSubsystem<UBattleCover>()->KnownMoveGeometry(Start,BattleKnownFire::MoveRange(),true);
+ const int32 ReachControlSearches=Count(TEXT("known_move_searches")),ReachControlRejects=Count(TEXT("known_move_reject_mission_defend"));
+ bool ReachControlIdle=true,ReachControlAdmitted=true;
+ for(int32 ReachControlAttempt=0;ReachControlAttempt<24;++ReachControlAttempt)
+ {
+  TestNow+=1.01;Observe();TestSense->Observers.FindChecked(11).Contacts.FindChecked(251).LastKnownPosition=ReachControlEnemy;TestSense->BuildTeamKnownTargets(TestNow);
+  ReachControlAdmitted &= WeaponOrderAllows(2,251,ReachControlEnemy);
+  ReachControlIdle &= !StartKnownMove(2,TestNow);
+ }
+ const FVector ReachControlPeek=ReachControlOutside+FVector(0,100,0);
+ const TArray<FVector> ReachControlPath={Start,ReachControlOutside,Start+FVector(0,500,0)};
+ bool ReachControlPathAllowed=true;
+ for(const FVector& ReachControlPoint:ReachControlPath)ReachControlPathAllowed &= KnownMovePlaceAllowed(2,Start,ReachControlPoint);
+ const bool ReachControlGeometry=KnownMovePlaceAllowed(2,Start,Start+FVector(0,500,0)) &&
+  !KnownMovePlaceAllowed(2,Start,ReachControlOutside) && !KnownMovePlaceAllowed(2,Start,ReachControlPeek) && !ReachControlPathAllowed &&
+  TestWorld->LineTraceTestByObjectType(Start+FVector(0,500,60),ReachControlEnemy+FVector(0,0,60),FCollisionObjectQueryParams(ECC_WorldStatic)) &&
+  !TestWorld->LineTraceTestByObjectType(ReachControlOutside+FVector(0,0,60),ReachControlEnemy+FVector(0,0,60),FCollisionObjectQueryParams(ECC_WorldStatic));
+ Check(TEXT("move_defend_reach_zero_position"),ReachControlAdmitted && ReachControlIdle && ReachControlGeometry &&
+  Count(TEXT("known_move_searches"))>ReachControlSearches && Count(TEXT("known_move_reject_mission_defend"))>ReachControlRejects && !KnownMoves.Contains(2));
  for(auto* TestWall:Walls){TestWall->SetActorEnableCollision(false);TestWall->Destroy();}
  return Failures;
 }

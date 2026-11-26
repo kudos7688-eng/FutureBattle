@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（183 モジュール、50766 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（183 モジュール、50870 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -236,7 +236,7 @@
 | `BattleGridTrial` | .cpp | 86 |  | Test-only synchronous mixed Actor/Mass fixture. Never used for performance. |
 | `BattleHiddenBoneTrial` | .h/.cpp | 27 + 74 | ABattleHiddenBoneTrial |  |
 | `BattleKnownTargetFireTrial` | .cpp | 252 |  | 軍共有射撃の固定場面。実発砲・候補の切替・鮮度・追跡・予算・命令を検査、BATTLE_KNOWN_FIRE_RESULT |
-| `BattleKnownTargetMoveTrial` | .cpp | 902 |  | 値2の固定場面。値1の27項目に追加。Commit=0の旧鮮度切れ、Commit>0の完歩・本人確認・未発見帰還・期限・更新（進軍／停止）を分岐検査。追加項目は未実行 |
+| `BattleKnownTargetMoveTrial` | .cpp | 1006 |  | 値2の固定場面。値1の27項目に追加。Commit=0の旧鮮度切れ、Commit>0の完歩・本人確認・未発見帰還・期限・更新（進軍／停止）を分岐検査。追加項目は未実行 |
 | `BattleLargeFieldTest` | .cpp | 83 |  |  |
 | `BattleLeaderSmoke` | .cpp | 143 |  |  |
 | `BattleMapCommandlet` | .h/.cpp | 14 + 934 | UBattleMapCommandlet | Reproducible editor-only arena authoring; never overwrites a map unless -Force is passed. |

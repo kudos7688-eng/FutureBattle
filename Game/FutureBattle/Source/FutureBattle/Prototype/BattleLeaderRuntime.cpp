@@ -933,7 +933,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  // head is turned, so he can turn to an enemy at his side and fire - and ends with it unless he takes the look again.
  bool bLookAgain=false;
  ON_SCOPE_EXIT{if(!bLookAgain && WalkLooks.Num())WalkLooks.Remove(ID);};
- if(BattleKnownFire::MoveEnabled() && BattleKnownFire::MoveDefendMarch())TrackKnownDefendResume(ID,Now);
+ if(BattleKnownFire::MoveEnabled() && (BattleKnownFire::MoveDefendMarch() || KnownDefendResumes.Contains(ID)))TrackKnownDefendResume(ID,Now);
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()){if(BattleKnownFire::MoveEnabled() && KnownMoves.Contains(ID))EndKnownMove(ID,Now,TEXT("known_move_cancel_died"));return;}
  auto& B=Bodies.FindChecked(ID);
  if(BattleKnownFire::MoveEnabled() && KnownMoves.Contains(ID) && StepKnownMove(ID,Dt,Now)){SightExperiment.Cover(TEXT("known_move_gate_active"));return;}
