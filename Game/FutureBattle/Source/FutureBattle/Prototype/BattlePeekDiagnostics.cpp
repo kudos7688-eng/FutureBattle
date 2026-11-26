@@ -20,12 +20,11 @@ void UBattleLeaderRuntime::RecordPeekFrame(int32 ID,double Now,const FBattleCont
  {
   const auto* WhyScan=WhyDiag.PeekScans.Find(ID);
   if(WhyScan && WhyScan->Target!=WhyUnit->CoverTargetID)WhyScan=nullptr;
-  const auto* WhySense=GetWorld()->GetSubsystem<UBattlePerception>();
-  const double* WhyDue=WhySense->NextScanTimes.Find(ID);
   // No scan since arriving at the peek point = waiting for the scan. Otherwise the last scan's outcome: 0 not searched,
   // 1 searched but no line, 2 detection running. Unknown scans stay unknown (the cover CanSee, when it ran, decides nolos).
-  const bool bWhyNoScanYet=WhyScan?WhyScan->At<WhyEpisode->ArrivedAt-1.e-6:(WhyDue && *WhyDue>Now+1.e-6);
-  WhyClass=bWhyNoScanYet?2:!WhyScan?(Ray==0?3:4):WhyScan->Stage==0?0:WhyScan->Stage==1?3:WhyScan->Stage==2?1:Ray==0?3:4;
+  // Perception runs before cover movement: a scan at ArrivedAt still used the pre-arrival position/stance.
+  const bool bWhyNoScanYet=!WhyScan || WhyScan->At<=WhyEpisode->ArrivedAt+1.e-6;
+  WhyClass=bWhyNoScanYet?2:WhyScan->Stage==0?0:WhyScan->Stage==1?3:WhyScan->Stage==2?1:Ray==0?3:4;
  }
  else if(bFired)WhyClass=10; // Fire has already moved its interval deadline; this frame fired, it did not wait.
  else if(Now<WhyUnit->NextShotTime && WhyDiag.PeekAimUntil.FindRef(ID)>Now && WhyDiag.PeekAimUntil.FindRef(ID)==WhyUnit->NextShotTime)WhyClass=5;

@@ -892,6 +892,7 @@ public:
  void RunCoverFirePointTrial();
  void RunCoverPeekTrial();
  int32 PeekTrialStage=0,PeekTrialCase=0,PeekTrialFailures=0;
+ int32 PeekTrialShots=0;
  double PeekTrialAt=0,PeekTrialLast=0;
  bool PeekTrialFixture=false,PeekTrialReady=false;
  FVector PeekTrialAnchor=FVector::ZeroVector;

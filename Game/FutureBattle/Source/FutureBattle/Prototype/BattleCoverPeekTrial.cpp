@@ -1,5 +1,6 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
+#include "BattleFieldLayout.h"
 #include "BattlePerception.h"
 #include "BattleStance.h"
 #include "BattleTactics.h"
@@ -13,6 +14,8 @@
 void UBattleLeaderRuntime::RunCoverPeekTrial()
 {
  if(!FParse::Param(FCommandLine::Get(),TEXT("BattleCoverPeekTrial")))return;
+ if(FCString::Strcmp(BattleFieldLayout::Of(GetWorld()).Name,TEXT("Lvl_BattleWide_C"))!=0)
+ {UE_LOG(LogFutureBattle,Error,TEXT("BATTLE_COVERPEEK_RESULT failures=1 wrong_map"));FPlatformMisc::RequestExitWithStatus(false,1);return;}
  auto* TrialWorld=GetWorld();auto* TrialStore=TrialWorld->GetSubsystem<UBattleState>();auto* TrialSense=TrialWorld->GetSubsystem<UBattlePerception>();
  const double TrialNow=TrialWorld->GetTimeSeconds();
  auto TrialLater=[&](){FTimerHandle TrialTimer;TrialWorld->GetTimerManager().SetTimer(TrialTimer,this,&UBattleLeaderRuntime::RunCoverPeekTrial,1.f/30.f,false);};
@@ -58,7 +61,7 @@ void UBattleLeaderRuntime::RunCoverPeekTrial()
   TrialSense->Reset();
   TrialPlace(2,PeekTrialAnchor);TrialPlace(251,PeekTrialAnchor+FVector(1500,0,0));
   auto& TrialShooter=TrialStore->Units.FindChecked(2);auto& TrialEnemy=TrialStore->Units.FindChecked(251);
-  TrialShooter.HP=10000;TrialEnemy.HP=10000;TrialShooter.Ammo=30;TrialShooter.Reserve=90;TrialShooter.ReloadEndTime=0;TrialShooter.NextShotTime=0;TrialShooter.bWeaponAimInitialized=false;
+  TrialShooter.HP=10000;TrialEnemy.HP=10000;TrialShooter.Ammo=30;TrialShooter.Reserve=90;TrialShooter.ReloadEndTime=0;TrialShooter.NextShotTime=0;TrialShooter.bWeaponAimInitialized=false;PeekTrialShots=TrialShooter.ShotSequence;
   TrialShooter.Order=EBattleOrder::Hold;TrialStore->Squads.FindChecked(TrialShooter.SquadID).CommandStatus=EBattleCommandStatus::Active;
   auto& TrialFollower=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(Bodies.FindChecked(2).Entity);TrialFollower.Forward=FVector(1,0,0);Bodies.FindChecked(2).Capsule->SetWorldRotation(FRotator::ZeroRotator);
   SetStance(2,BattleStance::Stand,TrialNow,true);SetStance(251,BattleStance::Stand,TrialNow,true);
@@ -99,7 +102,8 @@ void UBattleLeaderRuntime::RunCoverPeekTrial()
  if(!bTrialEnded && TrialNow-PeekTrialAt<6.){TrialLater();return;}
  const int32 TrialFired=TrialCount(TEXT("peekwhy_shot_frames_fired")),TrialBlind=TrialCount(TEXT("peekwhy_end_blind_0"));
  int32 TrialUnseen=0;for(int32 TrialClass=0;TrialClass<5;++TrialClass)TrialUnseen+=TrialCount(*FString::Printf(TEXT("peekwhy_zero_frames_%s"),FBattleSightExperiment::PeekClass(TrialClass)));
- const bool bTrialOK=PeekTrialReady && bTrialEnded && (PeekTrialCase==0?TrialFired>0:TrialBlind==1 && TrialUnseen>0 && TrialCount(TEXT("peekwhy_zero_frames_aimturn"))==0 && TrialCount(TEXT("peekwhy_zero_frames_interval"))==0);
+ const int32 TrialShots=TrialShooter.ShotSequence-PeekTrialShots;
+ const bool bTrialOK=PeekTrialReady && bTrialEnded && TrialCount(TEXT("peekwhy_arrived"))==1 && (PeekTrialCase==0?TrialFired>0 && TrialShots>0:TrialBlind==1 && TrialShots==0 && TrialUnseen>0 && TrialCount(TEXT("peekwhy_zero_frames_nolos"))>0 && TrialCount(TEXT("peekwhy_zero_frames_aimturn"))==0 && TrialCount(TEXT("peekwhy_zero_frames_interval"))==0);
  if(PeekTrialCase<2){PeekTrialFailures+=!bTrialOK;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVERPEEK_CHECK name=%s ok=%d arrived=%d fired=%d blind=%d unseen=%d ready=%d"),TrialName,bTrialOK,TrialCount(TEXT("peekwhy_arrived")),TrialFired,TrialBlind,TrialUnseen,PeekTrialReady);}
  else UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVERPEEK_CHECK name=undetected info arrived=%d fired=%d blind=%d detection_seconds=%.3f ended=%d"),TrialCount(TEXT("peekwhy_arrived")),TrialFired,TrialBlind,TrialShooter.Perception.DetectionSeconds,bTrialEnded);
  for(const auto& TrialCounter:SightExperiment.CoverDiag)if(TrialCounter.Key.ToString().StartsWith(TEXT("peekwhy_")))UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_COVERPEEK_DIAG name=%s %s=%d"),TrialName,*TrialCounter.Key.ToString(),TrialCounter.Value);

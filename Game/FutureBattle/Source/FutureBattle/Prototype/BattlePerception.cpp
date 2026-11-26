@@ -76,7 +76,7 @@ void UBattlePerception::Restore(const TMap<int32, FBattleObserver>& SavedObserve
 	// The squads' tables come back with RestoreSquadKnowledge (BattleSave.cpp); without it they are rebuilt from the members' own contacts.
 	SquadIntel.Reset(); SquadReports.Reset(); SquadReportKeys.Reset();
 	NextScanTimes.Reset(); LastScanTimes.Reset();
- GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->SightExperiment.PeekScans.Reset();
+ if(auto* WhyWorld=GetWorld())if(auto* WhyRuntime=WhyWorld->GetSubsystem<UBattleLeaderRuntime>())WhyRuntime->SightExperiment.PeekScans.Reset();
 	for (auto& Observer : Observers)
 	{
 		for (auto& Contact : Observer.Value.Contacts) { Contact.Value.LastSeenTime += Now; Contact.Value.bVisible = false; }
@@ -677,5 +677,5 @@ void UBattlePerception::AddHint(int32 ObserverID, int32 TargetID, const FVector&
 void UBattlePerception::Reset()
 {
  Observers.Reset();PendingReports.Reset();PendingCounts.Reset();NextScanTimes.Reset();LastScanTimes.Reset();CrossSectorLook.Reset();SquadIntel.Reset();SquadReports.Reset();SquadReportKeys.Reset();
- GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->SightExperiment.PeekScans.Reset();
+ if(auto* WhyWorld=GetWorld())if(auto* WhyRuntime=WhyWorld->GetSubsystem<UBattleLeaderRuntime>())WhyRuntime->SightExperiment.PeekScans.Reset();
 }

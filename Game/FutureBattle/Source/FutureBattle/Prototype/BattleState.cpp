@@ -313,8 +313,8 @@ bool UBattleState::ConsumeShot(int32 ID, double Now, double Interval, int32 Roun
 	State->Ammo = FMath::Max(0, State->Ammo - FMath::Max(1, Rounds));
 	++State->ShotSequence;
 	State->NextShotTime = Now + FMath::Max(0.05, Interval);
- auto& WhyDiag=GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->SightExperiment;
- if(WhyDiag.Enabled){WhyDiag.PeekIntervalUntil.Add(ID,State->NextShotTime);WhyDiag.PeekAimUntil.Remove(ID);}
+ if(auto* WhyWorld=GetWorld())if(auto* WhyRuntime=WhyWorld->GetSubsystem<UBattleLeaderRuntime>();WhyRuntime && WhyRuntime->SightExperiment.Enabled)
+ {auto& WhyDiag=WhyRuntime->SightExperiment;WhyDiag.PeekIntervalUntil.Add(ID,State->NextShotTime);WhyDiag.PeekAimUntil.Remove(ID);}
 	return true;
 }
 
@@ -342,8 +342,8 @@ void UBattleState::UpdateAim(int32 ID, double Now, float Speed, FVector Directio
    {
     const double WhyBefore=Unit->NextShotTime;
     Unit->NextShotTime=FMath::Max(Unit->NextShotTime,Now+AimTuning->AimSwitchDelay(Angle));Unit->WeaponAimDirection=Aim;
-    auto& WhyDiag=GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->SightExperiment;
-    if(WhyDiag.Enabled && Unit->NextShotTime>WhyBefore)WhyDiag.PeekAimUntil.Add(ID,Unit->NextShotTime);
+    if(auto* WhyWorld=GetWorld())if(auto* WhyRuntime=WhyWorld->GetSubsystem<UBattleLeaderRuntime>();WhyRuntime && WhyRuntime->SightExperiment.Enabled && Unit->NextShotTime>WhyBefore)
+     WhyRuntime->SightExperiment.PeekAimUntil.Add(ID,Unit->NextShotTime);
    }
   }
   if(!Unit->bWeaponAimInitialized)Unit->WeaponAimDirection=Aim;Unit->bWeaponAimInitialized=true;

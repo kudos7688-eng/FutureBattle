@@ -62,7 +62,8 @@ void UBattleLeaderRuntime::CancelCoverAction(int32 ID,const TCHAR* PeekCancel)
 void UBattleLeaderRuntime::EndPeekDiag(int32 ID,const TCHAR* Cause)
 {
  int32 Shots=0;if(!CoverPeekShots.RemoveAndCopyValue(ID,Shots))return;
- if(SightExperiment.Enabled)
+ const bool bWhyEpisode=SightExperiment.Enabled && SightExperiment.PeekWhy.Contains(ID);
+ if(bWhyEpisode)
  {
   const TCHAR* WhyCause=FCString::Strcmp(Cause,TEXT("died"))==0?TEXT("death"):Cause;
   SightExperiment.PeekAdd(*FString::Printf(TEXT("peekwhy_end_%s_%s"),WhyCause,Shots<=0?TEXT("0"):Shots==1?TEXT("1"):TEXT("2plus")));
@@ -86,7 +87,7 @@ void UBattleLeaderRuntime::EndPeekDiag(int32 ID,const TCHAR* Cause)
  {
   const double PeekDistance=FVector::Dist2D(PeekUnit->CoverAnchor,PeekUnit->CoverPeek);
   const TCHAR* PeekKind=PeekDistance<=1.?TEXT("over"):PeekDistance>=100.&&PeekDistance<=120.?TEXT("lean"):TEXT("step");
-  if(Shots<=0)SightExperiment.PeekAdd(*FString::Printf(TEXT("peekwhy_zero_%s"),PeekKind));
+  if(bWhyEpisode && Shots<=0)SightExperiment.PeekAdd(*FString::Printf(TEXT("peekwhy_zero_%s"),PeekKind));
   SightExperiment.Cover(*FString::Printf(TEXT("peek_end_shots_%s_%s"),Shots<=0?TEXT("0"):Shots==1?TEXT("1"):TEXT("2plus"),PeekKind));
   if(FCString::Strcmp(Cause,TEXT("blind"))==0)SightExperiment.Cover(*FString::Printf(TEXT("peek_end_blind_%s"),PeekKind));
  }

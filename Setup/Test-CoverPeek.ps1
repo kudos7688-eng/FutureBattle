@@ -24,7 +24,7 @@ foreach($m in [regex]::Matches($t,'BATTLE_COVERPEEK_DIAG name=(\w+) (peekwhy_\w+
  if(!$scenes.ContainsKey($scene)){$scenes[$scene]=@{cover_diagnostics=@{}}}
  $scenes[$scene].cover_diagnostics[$m.Groups[2].Value]=[int]$m.Groups[3].Value
 }
-$ok=!$timedOut -and $p.ExitCode -eq 0 -and $t -match 'BATTLE_COVERPEEK_RESULT failures=0' -and $checks.Count -eq 2 -and @($checks|Where-Object{!$_.passed}).Count -eq 0 -and $t -match 'BATTLE_COVERPEEK_CHECK name=undetected info' -and $t -notmatch 'BATTLE_COVERPEEK_CHECK[^\r\n]*ok=0|Fatal error:|Assertion failed:'
+$ok=!$timedOut -and $p.ExitCode -eq 0 -and $t -match 'BATTLE_COVERPEEK_RESULT failures=0' -and $checks.Count -eq 2 -and @($checks|Where-Object{$_.name -eq 'visible'}).Count -eq 1 -and @($checks|Where-Object{$_.name -eq 'lost'}).Count -eq 1 -and @($checks|Where-Object{!$_.passed}).Count -eq 0 -and $t -match 'BATTLE_COVERPEEK_CHECK name=undetected info' -and $t -notmatch 'BATTLE_COVERPEEK_CHECK[^\r\n]*ok=0|Fatal error:|Assertion failed:'
 @{passed=$ok;exitCode=$p.ExitCode;timedOut=$timedOut;checks=$checks;scenes=$scenes}|ConvertTo-Json -Depth 8|Set-Content (Join-Path $out 'result.json') -Encoding utf8
 $t -split "`n"|Where-Object{$_ -match 'BATTLE_COVERPEEK_(CHECK|RESULT|DIAG)'}
 if(!$ok){throw "Cover peek failed: $log"}

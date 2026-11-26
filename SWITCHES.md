@@ -147,7 +147,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleCoverOutward` | Value | 0 | BattleLeaderRuntime.cpp:1988 |  |
 | `-BattleCoverPeekShots` | Value | 0 | BattleTactics.cpp:64 |  |
 | `-BattleCoverPeekSight` | Value | True | BattleTactics.cpp:220 |  |
-| `-BattleCoverPeekTrial` | Param | off | BattleCoverPeekTrial.cpp:15, BattleLeaderRuntime.cpp:224, BattleSightExperiment.cpp:26 |  |
+| `-BattleCoverPeekTrial` | Param | off | BattleCoverPeekTrial.cpp:16, BattleLeaderRuntime.cpp:224, BattleSightExperiment.cpp:26 |  |
 | `-BattleCoverPriority` | Value | 1 | BattleLeaderRuntime.cpp:1892 |  |
 | `-BattleCoverStrict` | Value | 0 | BattleLeaderRuntime.cpp:1998 |  |
 | `-BattleCoverValidation` | Value | True | BattleTactics.cpp:214 |  |
@@ -392,7 +392,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSquadFlank` | Value | 1 | BattleSquadTactics.cpp:22 |  |
 | `-BattleSquadIcons` | Value | 1 | BattleHUD.cpp:260, BattleHUD.cpp:1100 |  |
 | `-BattleSquadKnowledge` | Value | 0 | BattlePerception.cpp:113 |  |
-| `-BattleSquadKnowledgeCover` | Value | 0 | BattleCoverAction.cpp:490 |  |
+| `-BattleSquadKnowledgeCover` | Value | 0 | BattleCoverAction.cpp:491 |  |
 | `-BattleSquadKnowledgeTeam` | Value | -1 | BattlePerception.cpp:114 |  |
 | `-BattleSquadST2` | Value | 1 | BattleSquadTactics.cpp:21 |  |
 | `-BattleSquadTactics` | Value | 1 | BattleSquadTactics.cpp:17 |  |
