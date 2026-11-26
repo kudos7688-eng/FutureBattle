@@ -156,6 +156,18 @@ void UBattleMatch::UpdateSupplyHunts(int32 Team)
   if(const FVector* At=Seen.Find(Hunt.Target)){Hunt.Position=*At;Hunt.SeenAt=Elapsed;}
   const double Distance=Hunter?FVector::Dist2D(R->Position(Hunter->LeaderUnitID),Hunt.Position):0.;
   const bool bArrived=Hunter&&Elapsed-Hunt.SeenAt>2.&&Distance<1500.;
+  // Log only (-BattleSupplyHuntLog, default off; STATUS 2026-11-26 21:10: the hunts do not get there): every 5 s where the squad
+  // is, the order and mission it holds, its plan and what its leader does. Changes nothing in the match.
+  static const bool bHuntLog=FParse::Param(FCommandLine::Get(),TEXT("BattleSupplyHuntLog"));
+  if(bHuntLog&&Hunter&&(Elapsed-Hunt.TraceAt>=5.||Elapsed<Hunt.TraceAt))
+  {
+   Hunt.TraceAt=Elapsed;const auto* LU=Store->Find(Hunter->LeaderUnitID);const FVector HunterAt=R->Position(Hunter->LeaderUnitID);
+   int32 Living=0;for(int32 M:Hunter->Members)if(const auto* MU=Store->Find(M);MU&&MU->IsAlive())++Living;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SUPPLY_HUNT_TRACE t=%.0f squad=%d type=%d target=%d dist=%.0f unseen=%.0f here=(%.0f,%.0f) goal=(%.0f,%.0f) status=%d order=%d dest=(%.0f,%.0f) dest_to_goal=%.0f has_mission=%d mission_order=%d mission_dest=(%.0f,%.0f) mission_to_goal=%.0f plan=%d plan_dest_to_goal=%.0f leader_alive=%d leader_order=%d leader_action=%d leader_dest_to_goal=%.0f retries=%d living=%d plan_reason=%s"),
+    Elapsed,HunterID,int32(Hunter->SquadType),Hunt.Target,Distance,Elapsed-Hunt.SeenAt,HunterAt.X,HunterAt.Y,Hunt.Position.X,Hunt.Position.Y,int32(Hunter->CommandStatus),int32(Hunter->Order),Hunter->Destination.X,Hunter->Destination.Y,
+    FVector::Dist2D(Hunter->Destination,Hunt.Position),Hunter->bHasMission?1:0,int32(Hunter->MissionOrder),Hunter->MissionDestination.X,Hunter->MissionDestination.Y,FVector::Dist2D(Hunter->MissionDestination,Hunt.Position),
+    int32(Hunter->TacticalPlan.Action),FVector::Dist2D(Hunter->TacticalPlan.Destination,Hunt.Position),LU&&LU->IsAlive()?1:0,LU?int32(LU->Order):-1,LU?int32(LU->Action):-1,LU?FVector::Dist2D(LU->Destination,Hunt.Position):-1.,LU?LU->MoveRetries:-1,Living,*Hunter->TacticalPlan.Reason);
+  }
   // Every 30 s: 10 m nearer than at the last check, or the hunt is not getting there.
   bool bStalled=false;
   if(Elapsed-Hunt.CheckAt>=30.){bStalled=Distance>Hunt.CheckDistance-1000.&&Distance>=3000.;Hunt.CheckAt=Elapsed;Hunt.CheckDistance=Distance;}

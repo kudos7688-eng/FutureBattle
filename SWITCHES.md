@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 543 種類。
+計 544 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -452,6 +452,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSupplyCarRecover` | Value | 0 | BattleTactics.cpp:64 |  |
 | `-BattleSupplyCarTarget` | Value | 0 | BattleTactics.cpp:59 |  |
 | `-BattleSupplyHeal` | Value | 10.0 | BattleTactics.cpp:164 |  |
+| `-BattleSupplyHuntLog` | Param | off | BattleATHunt.cpp:161 |  |
 | `-BattleSupplyResumeHealth` | Value | 0.9 | BattleTactics.cpp:165 |  |
 | `-BattleSupplyResumeLiving` | Value | 10 | BattleTactics.cpp:163 |  |
 | `-BattleSupplyReturnLiving` | Value | 8 | BattleTactics.cpp:163 |  |
