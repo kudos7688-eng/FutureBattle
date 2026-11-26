@@ -71,6 +71,11 @@ namespace BattleTactics
  float SeekKnownSeconds();
  float SeekKnownRange();
  int32 SeekKnownMax();
+ // Spot relaxation (Docs/design-spot-relax.md, user 2026-11-27). -BattleSpotTruth=bits (default 0; DIAGNOSTIC ONLY, never a default):
+ // the true places of the living enemies enter what a team was told. Bit 1: its infantry, into the team's places for
+ // -BattleSeekKnown (needs that switch). Bit 2: every enemy, into the team's view (AreaIntelView: the front line, the groups,
+ // the guns' known places). Nothing fires at a soldier because of it; no soldier's own contact changes.
+ int32 SpotTruth();
  // Contact trial, user 2026-11-25. -BattleMemorySeconds=s (default 0 = UBattleTuning::MemorySeconds, 5 s; 1..120): how long a soldier
  // keeps an enemy he no longer sees (before the recruit/veteran factor). The 5 s caps inside the cover actions stay.
  // -BattleSuppressFire=s (default 0 = off, 0..60): a soldier who stands still and has lost sight of the squad's target keeps firing

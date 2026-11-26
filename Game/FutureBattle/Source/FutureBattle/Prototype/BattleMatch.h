@@ -535,6 +535,7 @@ public:
  struct FFireReveal { uint8 ObservedSquadType=255; bool bArtillery=false; double At=0,Memory=10.; float ErrorRadius=500.f; FVector Position=FVector::ZeroVector; FVector Sum=FVector::ZeroVector; int32 Count=0; }; // Sum/Count: averaged artillery reports (counter-battery)
  // Shared gun reports, keyed by shooter unit ID; match seconds, transient.
  mutable TMap<int32,FFireReveal> FireReveals[2];
+ mutable int64 SpotTruthViews[2]={0,0}; // diagnostic -BattleSpotTruth bit 2: enemies added to the view from the truth
 	TMap<int32, FScoutReport> ScoutReports;
 	void UpdateScoutReports();
 	// True when a scout sees this contact only because of its long still-sight (team displays and plans use the reports instead).

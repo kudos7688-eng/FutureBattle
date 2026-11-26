@@ -108,6 +108,7 @@ private:
  struct FKnownSpot{FVector At=FVector::ZeroVector;double Seen=0.;};
  TMap<FIntPoint,FKnownSpot> KnownSpots[2];
  double KnownSpotsAt[2]={-100.,-100.};
+ int64 SpotTruthSpots[2]={0,0}; // diagnostic -BattleSpotTruth bit 1: places written from the truth
  struct FSeekEnemy{FIntPoint Cell=FIntPoint::ZeroValue;FVector At=FVector::ZeroVector;double Start=0.,ArrivedAt=-1.,EndAt=-1.;};
  TMap<int32,FSeekEnemy> SeekEnemies;
  // Per squad, the squares its seeks ended in and when (30 s before it goes to one again, and its place there counts that long).

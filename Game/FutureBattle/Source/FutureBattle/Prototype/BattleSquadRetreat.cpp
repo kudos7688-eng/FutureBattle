@@ -125,6 +125,18 @@ void UBattleSquadTactics::RefreshKnownSpots(int32 Team)
     FKnownSpot Spot;Spot.At=At;Spot.Seen=Now;
     Spots.Add(FIntPoint(FMath::FloorToInt32(At.X/5000.),FMath::FloorToInt32(At.Y/5000.)),Spot);
    }
+ // Diagnostic -BattleSpotTruth bit 1 (Docs/design-spot-relax.md): the true places of the enemy's living infantry, as if seen now.
+ if(BattleTactics::SpotTruth()&1)
+ {
+  if(FMath::FloorToInt32(Now/60.)!=FMath::FloorToInt32((Now-1.)/60.))
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SPOT_TRUTH kind=seek team=%d t=%.0f written=%lld spots=%d"),Team,Match->Elapsed,SpotTruthSpots[Team],Spots.Num());
+  for(const auto& U:Store->GetUnits())if(U.Value.Team==1-Team && U.Value.IsAlive() && !Runtime->IsVehicle(U.Key))
+  {
+   const FVector At=Runtime->Position(U.Key);
+   FKnownSpot Spot;Spot.At=At;Spot.Seen=Now;
+   Spots.Add(FIntPoint(FMath::FloorToInt32(At.X/5000.),FMath::FloorToInt32(At.Y/5000.)),Spot);++SpotTruthSpots[Team];
+  }
+ }
  for(auto It=Spots.CreateIterator();It;++It)if(Now<It->Value.Seen || Now-It->Value.Seen>BattleTactics::SeekKnownSeconds())It.RemoveCurrent();
 }
 

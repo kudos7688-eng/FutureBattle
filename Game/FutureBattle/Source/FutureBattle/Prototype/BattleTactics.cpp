@@ -89,6 +89,11 @@ float BattleTactics::SeekKnownRange()
  static const float Range=[](){float Value=20000.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSeekKnownRange="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,2000.f,60000.f):20000.f;}();
  return Range;
 }
+int32 BattleTactics::SpotTruth()
+{
+ static const int32 Bits=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSpotTruth="),Value);return FMath::Clamp(Value,0,3);}();
+ return Bits;
+}
 int32 BattleTactics::SeekKnownMax()
 {
  static const int32 Max=[](){int32 Value=2;FParse::Value(FCommandLine::Get(),TEXT("BattleSeekKnownMax="),Value);return FMath::Clamp(Value,1,8);}();
