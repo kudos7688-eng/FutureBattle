@@ -34,6 +34,7 @@ bool PeekRangeCheck()
 
 void UBattleLeaderRuntime::CancelCoverAction(int32 ID,const TCHAR* PeekCancel)
 {
+ if(BattleKnownFire::Enabled())if(auto* EndedSearch=KnownFireSearches.Find(ID))EndedSearch->bCoverFacing=false;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);if(!U)return;
  if(SightExperiment.Enabled && SightExperiment.PeekWhy.Contains(ID))
  {
@@ -517,7 +518,7 @@ bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 
  else if(Target!=A->Target && !(Contact && Contact->bVisible) && !bContactCover && !A->bAssault)End=TEXT("approach_cancel_target_changed");
  // An assault dash (BattleArms.cpp) runs on to its cover even when the enemy is lost: the cover is still a place closer to where he
  // was, and the next bound heads for where he was seen last (StepArms).
- else if(!A->bAssault && (!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds) || FVector::Dist2D(Position(ID),Contact->LastKnownPosition)>TargetRange(ID)))End=TEXT("approach_cancel_contact_stale");
+ else if(!A->bAssault && (!Contact || Now-Contact->LastSeenTime>FMath::Min(5.f,U->Perception.MemorySeconds)))End=TEXT("approach_cancel_contact_stale");
  else if(!A->bFree && !GetWorld()->GetSubsystem<UBattleCover>()->IsAvailable(A->Slot,ID,Now))End=TEXT("approach_cancel_slot_taken");
  else if(FVector::Dist2D(Pos,A->Goal)<120)
  {
@@ -654,6 +655,16 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  // -BattleSoldierMove: a longer walk to the chosen cover place keeps its timer while it lasts (saved as time left).
  const bool bWalkingToPlace=U->CoverPhase==1 && U->SoldierMoveUntil>0 && Now<U->SoldierMoveUntil;
  if(bWalkingToPlace)U->CoverSeconds=3.f;
+ if(BattleKnownFire::Enabled() && !Player)
+ {
+  auto& FacingSearch=KnownFireSearches.FindOrAdd(ID);
+  if(!FacingSearch.bCoverFacing || FacingSearch.CoverAnchor!=U->CoverAnchor || FacingSearch.CoverPeek!=U->CoverPeek ||
+   FacingSearch.CoverTarget!=U->CoverTargetID || FacingSearch.CoverRevision!=U->CoverOrderRevision)
+  {
+   FacingSearch.bCoverFacing=true;FacingSearch.CoverAnchor=U->CoverAnchor;FacingSearch.CoverPeek=U->CoverPeek;
+   FacingSearch.CoverTarget=U->CoverTargetID;FacingSearch.CoverRevision=U->CoverOrderRevision;FacingSearch.CoverFacing=Forward(ID).GetSafeNormal2D();
+  }
+ }
  FBattleContact KnownOfTarget;
  const auto* Contact=!SquadKnowledgeCover()?GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(ID,U->CoverTargetID):GetWorld()->GetSubsystem<UBattlePerception>()->Knows(ID,U->SquadID,U->CoverTargetID,KnownOfTarget)?&KnownOfTarget:nullptr;
  // Shared contact resolution never grants personal visibility and never changes the squad target.

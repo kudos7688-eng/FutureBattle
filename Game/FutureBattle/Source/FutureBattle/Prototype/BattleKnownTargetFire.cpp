@@ -51,14 +51,30 @@ void UBattleLeaderRuntime::KnownFireCandidates(int32 ID,double Now,TArray<int32>
    const FVector Delta=Target.At(Now)-From;
    const double Score=Delta.SizeSquared()*(1.+.25*(1.-FVector::DotProduct(Facing,Delta.GetSafeNormal2D())));
    int32 Place=0;while(Place<Best.Num() && (Best[Place].Score<Score || (Best[Place].Score==Score && Best[Place].Candidate<TargetID)))++Place;
-   if(Place<3){Best.Insert({TargetID,Score},Place);if(Best.Num()>3)Best.SetNum(3,EAllowShrinking::No);}
+   if(Place<3){Best.Insert(FChoice{TargetID,Score},Place);if(Best.Num()>3)Best.SetNum(3,EAllowShrinking::No);}
   }
  if(Unit->CoverPhase)
  {
   TArray<int32,TInlineAllocator<3>> Preferred;
-  if(const auto* Plan=Plans.Find(Unit->SquadID))
-  {const int32 RoleID=(Unit->Kit||ArmsCharging(ID))?ArmsRoleTarget(ID,Plan->TargetID):Plan->TargetID;Preferred.AddUnique(RoleID);}
-  if(OwnTargetMode(Unit->Team)){bool AtShooter=false;Preferred.AddUnique(OwnTarget(ID,From,Now,AtShooter));}
+  // Do not call ArmsRoleTarget/OwnTarget here: their legacy paths read enemy truth.
+  if(const auto* Plan=Plans.Find(Unit->SquadID))Preferred.AddUnique(Plan->TargetID);
+  if(const auto* Charge=CoverApproaches.Find(ID);Charge && Charge->bCharge)Preferred.Insert(Charge->Target,0);
+  if(OwnTargetMode(Unit->Team))
+  {
+   const auto* OwnContacts=GetWorld()->GetSubsystem<UBattlePerception>()->GetContacts(ID);
+   int32 OwnID=INDEX_NONE;double OwnDistance=TNumericLimits<double>::Max();
+   if(OwnContacts)for(const auto& OwnPair:*OwnContacts)
+   {
+    const auto* Observed=Team.Targets.Find(OwnPair.Key);if(!Observed)continue;
+    const auto* OwnSeen=&OwnPair.Value;
+    if(!OwnSeen->bVisible || OwnSeen->bShared || BattleSquadType::IsVehicle(Observed->ObservedSquadType) ||
+     !KnownFireAllowed(ID,*Observed,Now))continue;
+    const double OwnCandidateDistance=FVector::DistSquared(From,Observed->At(Now));
+    if(OwnCandidateDistance<OwnDistance || (OwnCandidateDistance==OwnDistance && OwnPair.Key<OwnID))
+    {OwnID=OwnPair.Key;OwnDistance=OwnCandidateDistance;}
+   }
+   Preferred.AddUnique(OwnID);
+  }
   for(int32 PreferredID:Preferred)if(const auto* PreferredTarget=Team.Targets.Find(PreferredID);PreferredTarget && KnownFireAllowed(ID,*PreferredTarget,Now))Out.AddUnique(PreferredID);
  }
  for(const auto& Choice:Best)if(Out.Num()<3)Out.AddUnique(Choice.Candidate);
@@ -93,13 +109,15 @@ BattleKnownFire::FResult UBattleLeaderRuntime::SelectKnownFire(int32 ID,const FV
  auto& Search=KnownFireSearches.FindOrAdd(ID);
  if(Unit->Ammo<=0 || Unit->ReloadEndTime>0 || Unit->NextShotTime>Now)
  {
+  if(Unit->Ammo<=0 && Unit->ReloadEndTime==0)GetWorld()->GetSubsystem<UBattleState>()->StartReload(ID,Now);
   // Keep the observed aim between shots, without reusing a fire permit or tracing during cooldown.
   const auto& WaitingTeam=GetWorld()->GetSubsystem<UBattlePerception>()->TeamKnownTargets[Unit->Team];
   if(const auto* WaitingTarget=WaitingTeam.Targets.Find(Search.Selected);WaitingTarget && KnownFireAllowed(ID,*WaitingTarget,Now))
   {Result.TargetID=WaitingTarget->TargetID;Result.AimPosition=WaitingTarget->At(Now)+FVector(0,0,35);Result.bTracked=WaitingTarget->Tracked(Now);}
   return Result;
  }
- if(Now>=Search.NextAt){KnownFireCandidates(ID,Now,Search.Candidates);Search.NextAt=Now+.4;Search.Cursor=0;Search.Selected=INDEX_NONE;Search.bPending=true;}
+ // Retain the candidate cursor while queued, even across the search interval.
+ if(Now>=Search.NextAt && !KnownFireBudgets[Unit->Team].Waiting.Contains(ID)){KnownFireCandidates(ID,Now,Search.Candidates);Search.NextAt=Now+.4;Search.Cursor=0;Search.Selected=INDEX_NONE;Search.bPending=true;}
  if(!Search.bPending && Search.Selected==INDEX_NONE)return Result;
  const auto& Team=GetWorld()->GetSubsystem<UBattlePerception>()->TeamKnownTargets[Unit->Team];
  auto& Budget=KnownFireBudgets[Unit->Team];
@@ -160,7 +178,7 @@ bool UBattleLeaderRuntime::KnownCoverContact(int32 ID,double Now,FBattleContact&
  auto& Search=KnownFireSearches.FindOrAdd(ID);
  if(!Target || !KnownFireAllowed(ID,*Target,Now))
  {
-  if(Now>=Search.NextAt){KnownFireCandidates(ID,Now,Search.Candidates);Search.NextAt=Now+.4;Search.Cursor=0;Search.Selected=INDEX_NONE;Search.bPending=true;}
+  if(Now>=Search.NextAt && !KnownFireBudgets[Unit->Team].Waiting.Contains(ID)){KnownFireCandidates(ID,Now,Search.Candidates);Search.NextAt=Now+.4;Search.Cursor=0;Search.Selected=INDEX_NONE;Search.bPending=true;}
   Target=nullptr;
   for(int32 CandidateID:Search.Candidates)if(const auto* Candidate=Team.Targets.Find(CandidateID);Candidate && KnownFireAllowed(ID,*Candidate,Now)){Target=Candidate;break;}
  }

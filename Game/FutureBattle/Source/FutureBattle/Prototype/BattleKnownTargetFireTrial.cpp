@@ -13,7 +13,7 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
  const double TrialNow=TrialWorld->GetTimeSeconds();int32 TrialFailures=0;
  auto TrialCheck=[&](const TCHAR* TrialName,bool TrialOK)
  {TrialFailures+=!TrialOK;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_CHECK name=%s ok=%d"),TrialName,TrialOK);};
- if(!BattleKnownFire::Enabled() || !SightExperiment.Enabled || !Bodies.Contains(2) || !Bodies.Contains(11) || !Bodies.Contains(251) || !Bodies.Contains(252))
+ if(!TrialWorld->GetMapName().EndsWith(TEXT("Lvl_BattleField500")) || !BattleKnownFire::Enabled() || !SightExperiment.Enabled || !Bodies.Contains(2) || !Bodies.Contains(11) || !Bodies.Contains(251) || !Bodies.Contains(252))
  {UE_LOG(LogFutureBattle,Error,TEXT("BATTLE_KNOWN_FIRE_RESULT failures=1 fixture"));FPlatformMisc::RequestExitWithStatus(false,1);return;}
  FVector TrialGround(-9595,-4000,0);FHitResult TrialFloor;
  const bool TrialHasFloor=TrialWorld->LineTraceSingleByObjectType(TrialFloor,TrialGround+FVector(0,0,500),TrialGround-FVector(0,0,500),FCollisionObjectQueryParams(ECC_WorldStatic));
@@ -25,7 +25,12 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
   if(TrialBody.Actor.IsValid())TrialBody.Actor->SetActorLocation(TrialAt,false,nullptr,ETeleportType::TeleportPhysics);
   else{TrialBody.Capsule->SetWorldLocation(TrialAt);Manager->GetFragmentDataChecked<FBattleFollowerFragment>(TrialBody.Entity).Position=TrialAt;}
  };
- for(auto& TrialPair:TrialStore->Units){TrialPair.Value.Ammo=0;TrialPair.Value.Reserve=0;}
+ for(auto& TrialPair:TrialStore->Units)
+ {
+  TrialPair.Value.Ammo=0;TrialPair.Value.Reserve=0;
+  // Keep unrelated bodies from blocking the fixture's rays or moving its shooter through separation.
+  if(Bodies.Contains(TrialPair.Key))TrialPlace(TrialPair.Key,FVector(8000+(TrialPair.Key%20)*120,-7000+(TrialPair.Key/20)*120,100));
+ }
  auto& TrialShooter=TrialStore->Units.FindChecked(2);auto& TrialSquad=TrialStore->Squads.FindChecked(TrialShooter.SquadID);
  auto& TrialObserver=TrialStore->Units.FindChecked(11);
  TrialCheck(TEXT("fixture"),TrialHasFloor && TrialObserver.SquadID!=TrialShooter.SquadID && TrialObserver.Team==TrialShooter.Team && BattleStance::Enabled(TrialWorld) && BattleTactics::CoverActionsEnabled());
@@ -47,6 +52,7 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
   for(int32 TrialID:{2,11,251,252}){auto& TrialUnit=TrialStore->Units.FindChecked(TrialID);TrialUnit.HP=100000;TrialUnit.CoverPhase=0;TrialUnit.Perception.MemorySeconds=20;SetStance(TrialID,BattleStance::Stand,TrialNow,true);}
   TrialShooter.Weapon=EBattleWeapon::Carbine;TrialShooter.bSidearmSelected=false;TrialShooter.bLauncherSelected=false;
   TrialShooter.Ammo=30;TrialShooter.Reserve=90;TrialShooter.ReloadEndTime=0;TrialShooter.NextShotTime=0;TrialShooter.bWeaponAimInitialized=false;
+  Bodies.FindChecked(2).Velocity=FVector::ZeroVector;
   TrialShooter.Order=EBattleOrder::Hold;TrialShooter.bSoldierOrder=false;TrialShooter.Perception.SightRange=10000;TrialShooter.Perception.FieldOfView=120;
   TrialSquad.Order=EBattleOrder::Hold;TrialSquad.CommandStatus=EBattleCommandStatus::Active;TrialSquad.bSectorMission=false;TrialSquad.TacticalPlan.Action=EBattleSquadTactic::Mission;
   Plans.FindOrAdd(TrialShooter.SquadID)=FBattleLeaderPlan();
@@ -118,7 +124,15 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
  const auto TrialResumed=SelectKnownFire(2,TrialStart+FVector(0,0,60),TrialNow+.11);
  const bool TrialNextCaller=KnownFireRay(11,TrialNow+.11);
  if(TrialNextCaller){SightExperiment.Cover(TEXT("known_fire_sensor_rays"));TraceSight(Sight(11),TrialFirst+FVector(0,0,35),251,SightFromCanSee);}
- TrialCheck(TEXT("budget_fifo"),!TrialNewCaller && TrialResumed.Ready() && TrialNextCaller && TrialBudget.Used==3);
+ const bool TrialFIFOImmediate=!TrialNewCaller && TrialResumed.Ready() && TrialNextCaller && TrialBudget.Used==3;
+ // A suspended second candidate must not restart at the first after the search interval.
+ TrialReset();TrialObserve(251,TrialFirst,0);TrialObserve(252,TrialSecond,0);
+ TrialWall(TrialGround+FVector(750,0,150),FVector(30,130,150));
+ TrialBudget.Window=FMath::FloorToInt64(TrialNow/.1);TrialBudget.Used=31;
+ const auto TrialPartial=TrialPick();const int32 TrialPartialCursor=KnownFireSearches.FindChecked(2).Cursor;
+ const auto TrialLateResume=SelectKnownFire(2,TrialStart+FVector(0,0,60),TrialNow+.41);
+ TrialCheck(TEXT("budget_fifo"),TrialFIFOImmediate && TrialPartial.Reject==BattleKnownFire::EReject::Deferred && TrialPartialCursor==1 &&
+  TrialLateResume.Ready() && TrialLateResume.TargetID==252 && TrialBudget.Used==2);
 
  TrialReset();TrialObserve(251,TrialFirst,0);TrialSquad.Order=EBattleOrder::Move;
  const int32 TrialOrderRays=TrialCount(TEXT("known_fire_rays"));const auto TrialOrder=TrialPick();
@@ -126,7 +140,10 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
  TrialReset();TrialObserve(251,TrialFirst,0);TrialSquad.TacticalPlan.Action=EBattleSquadTactic::Support;TrialSquad.TacticalPlan.SupportTarget=252;
  TrialCheck(TEXT("support_target"),!TrialPick().Ready());
  TrialReset();TrialObserve(251,TrialFirst,0);TrialShooter.Weapon=EBattleWeapon::AntiTank;
- TrialCheck(TEXT("weapon_gate"),!TrialPick().Ready());
+ const bool TrialWrongWeapon=!TrialPick().Ready();
+ TrialShooter.Weapon=EBattleWeapon::Carbine;TrialShooter.Ammo=0;
+ const int32 TrialReloadRays=TrialCount(TEXT("known_fire_rays"));const auto TrialEmpty=TrialPick();
+ TrialCheck(TEXT("weapon_gate"),TrialWrongWeapon && !TrialEmpty.Ready() && TrialShooter.ReloadEndTime>TrialNow && TrialCount(TEXT("known_fire_rays"))==TrialReloadRays);
 
  TrialReset();TrialObserve(251,TrialFirst,0);
  TrialSense->Observers.FindChecked(11).Contacts.FindChecked(251).bLongRangeObservation=true;TrialSense->BuildTeamKnownTargets(TrialNow);
@@ -172,7 +189,12 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
  TrialShooter.CoverSlot=FreeCoverSlot;TrialShooter.CoverOrderRevision=TrialShooter.OrderRevision;TrialShooter.CoverSeconds=1;
  const int32 TrialLegacyRays=TrialCount(TEXT("known_fire_rays")),TrialLegacyShots=TrialShooter.ShotSequence;
  StepCoverAction(2,1.f/30.f,TrialNow);
- TrialCheck(TEXT("legacy_peek_priority"),TrialShooter.ShotSequence==TrialLegacyShots+1 && TrialCount(TEXT("known_fire_rays"))==TrialLegacyRays);
+ const bool TrialLegacyPriority=TrialShooter.ShotSequence==TrialLegacyShots+1 && TrialCount(TEXT("known_fire_rays"))==TrialLegacyRays;
+ // Even if legacy aiming turns the body, the cover's initial facing remains the reference.
+ Manager->GetFragmentDataChecked<FBattleFollowerFragment>(Bodies.FindChecked(2).Entity).Forward=FVector(0,1,0);
+ TrialObserve(252,TrialStart+FVector(0,1800,0),0);
+ const bool TrialSideRejected=!KnownFireAllowed(2,TrialSense->TeamKnownTargets[TrialShooter.Team].Targets.FindChecked(252),TrialNow);
+ TrialCheck(TEXT("legacy_peek_priority"),TrialLegacyPriority && TrialSideRejected);
 
  for(const auto& TrialDiag:SightExperiment.CoverDiag)if(TrialDiag.Key.ToString().StartsWith(TEXT("known_fire_")))
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_DIAG %s=%d"),*TrialDiag.Key.ToString(),TrialDiag.Value);
