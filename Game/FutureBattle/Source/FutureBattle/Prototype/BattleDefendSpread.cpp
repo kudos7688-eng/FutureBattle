@@ -12,6 +12,8 @@
 // Records: defend_spread_plans, defend_spread_teams_2 / _3, defend_spread_approach_slots, defend_spread_rated, defend_spread_view_sum.
 #include "BattleLeaderRuntime.h"
 #include "BattleCover.h"
+#include "BattlePerception.h"
+#include "BattleSectors.h"
 #include "BattleState.h"
 #include "FutureBattle.h"
 #include "Misc/CommandLine.h"
@@ -91,5 +93,56 @@ void UBattleLeaderRuntime::PlanDefendSpread(const FBattleSquadState& S,const FVe
   SightExperiment.CoverDiag.FindOrAdd(FName(TEXT("defend_spread_approach_slots")))+=Approach.Num();
   SightExperiment.CoverDiag.FindOrAdd(FName(TEXT("defend_spread_rated")))+=FMath::Min(RateMax,Candidates.Num());
   SightExperiment.CoverDiag.FindOrAdd(FName(TEXT("defend_spread_view_sum")))+=ViewSum;
+ }
+}
+
+// Evaluation only (2026-11-26, why the side using -BattleDefendSpread loses in the one-sided trial): hits and deaths of soldiers
+// holding a sector (squad on a sector mission with order Defend or Hold, the soldier inside its sector), per team, with what was
+// around them at death; and the hits and kills they scored. Recorded with the switch on or off (compare against switch off).
+// Keys defend_<name>_t<team>. Never AI input.
+bool UBattleLeaderRuntime::IsSectorDefender(int32 ID) const
+{
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);if(!U)return false;
+ const auto* S=Store->FindSquad(U->SquadID);
+ return S && S->bSectorMission && (S->Order==EBattleOrder::Defend||S->Order==EBattleOrder::Hold) && !BattleSquadType::IsVehicle(S->SquadType)
+  && BattleSectors::Cell(Position(ID))==BattleSectors::Cell(S->Destination);
+}
+
+void UBattleLeaderRuntime::NoteDefendHit(int32 Victim,int32 Shooter,const FVector& From,bool bKilled,int32 CoverState,bool bWalking)
+{
+ if(!SightExperiment.Started)return;
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Perc=GetWorld()->GetSubsystem<UBattlePerception>();
+ auto Note=[&](const TCHAR* Name,int32 Team){SightExperiment.Cover(*FString::Printf(TEXT("defend_%s_t%d"),Name,Team));};
+ if(const auto* SU=Store->Find(Shooter);SU&&SU->Team>=0&&SU->Team<2&&IsSectorDefender(Shooter)){Note(TEXT("shooter_hits"),SU->Team);if(bKilled)Note(TEXT("shooter_kills"),SU->Team);}
+ const auto* V=Store->Find(Victim);if(!V||V->Team<0||V->Team>1||!IsSectorDefender(Victim))return;
+ const int32 T=V->Team;const FVector At=Position(Victim);
+ Note(TEXT("victim_hits"),T);if(bWalking)Note(TEXT("victim_hit_walking"),T);
+ if(!bKilled)return;
+ Note(TEXT("victim_deaths"),T);
+ Note(CoverState==0?TEXT("victim_death_no_cover"):TEXT("victim_death_cover"),T);
+ if(bWalking)Note(TEXT("victim_death_walking"),T);
+ // The nearest living squad mate, and the squad mates within 20 m that see the shooter now (could answer him).
+ double Near=DBL_MAX;int32 Seeing=0;
+ if(const auto* S=Store->FindSquad(V->SquadID))for(int32 M:S->Members)if(M!=Victim)if(const auto* MU=Store->Find(M);MU&&MU->IsAlive())
+ {
+  const double D=FVector::Dist2D(Position(M),At);Near=FMath::Min(Near,D);
+  if(D<2000.)if(const auto* C=Perc->FindContact(M,Shooter);C&&C->bVisible)++Seeing;
+ }
+ Note(Near<500.?TEXT("victim_death_mate_lt5m"):Near<1500.?TEXT("victim_death_mate_lt15m"):Near<DBL_MAX?TEXT("victim_death_mate_ge15m"):TEXT("victim_death_mate_none"),T);
+ Note(Seeing==0?TEXT("victim_death_support_0"):Seeing==1?TEXT("victim_death_support_1"):TEXT("victim_death_support_2plus"),T);
+ const double R=FVector::Dist2D(From,At);
+ Note(R<1500.?TEXT("victim_death_range_lt15m"):R<4000.?TEXT("victim_death_range_lt40m"):TEXT("victim_death_range_ge40m"),T);
+ const auto* VC=Perc->FindContact(Victim,Shooter);Note(VC&&VC->bVisible?TEXT("victim_death_shooter_seen"):TEXT("victim_death_shooter_unseen"),T);
+}
+
+void UBattleLeaderRuntime::NoteDefendSeconds()
+{
+ // 1 Hz (StepHotSectors): soldier-seconds holding a sector per team, and those in a cover action.
+ if(!SightExperiment.Started)return;
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ for(const auto& P:Store->GetUnits())if(P.Value.IsAlive()&&P.Value.Team>=0&&P.Value.Team<2&&Bodies.Contains(P.Key)&&IsSectorDefender(P.Key))
+ {
+  SightExperiment.Cover(*FString::Printf(TEXT("defend_member_seconds_t%d"),P.Value.Team));
+  if(P.Value.CoverPhase!=0)SightExperiment.Cover(*FString::Printf(TEXT("defend_member_cover_seconds_t%d"),P.Value.Team));
  }
 }

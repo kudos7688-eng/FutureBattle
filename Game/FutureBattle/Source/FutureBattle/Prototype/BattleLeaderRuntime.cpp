@@ -1604,6 +1604,7 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
     HitShooterSquad?int32(HitShooterSquad->SquadType):-1,int32(W),FVector::Dist2D(Position(Victim),Start),HitOwn&&HitOwn->bVisible&&!HitOwn->bShared?1:0,HitShooterSquad&&HitShooterSquad->LeaderUnitID==ID?1:0);
   }
   E.Cover(HitKeys[VictimCoverState]);if(Killed)E.Cover(DeathKeys[VictimCoverState]);
+  NoteDefendHit(Victim,ID,Start,Killed,VictimCoverState,VictimAction==EBattleAction::Moving||VictimAction==EBattleAction::Flanking||VictimAction==EBattleAction::Returning||VictimAction==EBattleAction::Regrouping||VictimAction==EBattleAction::TakingCover); // evaluation only (BattleDefendSpread.cpp)
   // Evaluation only: what a soldier hit outside cover was doing (walking, shooting, other), and for a sector squad whether
   // he was still on the way or already inside the sector (where moving hits come from; 11-20).
   if(VictimCoverState==0 && !IsVehicle(Victim))

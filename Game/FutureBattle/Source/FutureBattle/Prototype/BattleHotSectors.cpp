@@ -102,6 +102,7 @@ void UBattleLeaderRuntime::StepHotSectors(double Now)
  if(DefendSmokeEnabled()&&!bDefendSmokeDone&&Mode&&Now>=Mode->CombatStartsAt+3.){bDefendSmokeDone=true;RunDefendSmoke(Now);}
  if(!HotSectorsEnabled()||!BattleFieldLayout::Of(GetWorld()).bSectors||Now<HotNext)return;
  HotNext=Now+1.;
+ NoteDefendSeconds(); // evaluation only (BattleDefendSpread.cpp)
  const double T0=FPlatformTime::Seconds();
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  // Observations and deaths.

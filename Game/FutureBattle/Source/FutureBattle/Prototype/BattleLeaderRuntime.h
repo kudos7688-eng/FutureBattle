@@ -307,6 +307,9 @@ public:
  // into fire teams; each member gets his own cover candidate order (BuildMovementPlan).
  static bool DefendSpreadEnabled();
  static bool DefendSpreadFor(int32 Team); // and -BattleDefendSpreadTeam (one-sided trial, default -1 both)
+ bool IsSectorDefender(int32 ID) const; // evaluation only: holding a sector (BattleDefendSpread.cpp)
+ void NoteDefendHit(int32 Victim,int32 Shooter,const FVector& From,bool bKilled,int32 CoverState,bool bWalking); // evaluation only
+ void NoteDefendSeconds(); // evaluation only, 1 Hz
  void ReleaseSpreadCover(const FBattleSquadState& S); // a re-placement: members in a cover action leave it to walk to their new places
  void PlanDefendSpread(const FBattleSquadState& S,const FVector& Forward,const FVector& Right,const TArray<FVector>& Candidates,TMap<int32,TArray<FVector>>& Order);
  void StepHotSectors(double Now);
