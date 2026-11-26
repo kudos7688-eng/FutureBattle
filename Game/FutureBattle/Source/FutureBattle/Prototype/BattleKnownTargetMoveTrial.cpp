@@ -726,6 +726,45 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
    FVector::Dist2D(Position(2),Start)<1. && !KnownDefendResumes.Contains(2) &&
    !KnownMovePlaceAllowed(2,Start,Start+FVector(500,0,0)));
  }
+ // Match-shaped sector deployment: order destination is the sector centre; the personal
+ // arrival slot is outside the 6 m defense disk, and only the individual tail remains.
+ Reset();KnownDefendResumes.Reset();
+ const FVector DeploymentCenter(2500,2500,Start.Z),DeploymentStart=DeploymentCenter+FVector(1500,0,0);
+ const FVector DeploymentPost=DeploymentStart+FVector(0,1500,0),DeploymentCandidate=DeploymentStart+FVector(0,800,0);
+ Squad.bSectorMission=true;Squad.Destination=DeploymentCenter;Squad.DefenseRadius=600;Shooter.Destination=DeploymentCenter;
+ auto& DeploymentPlan=Plans.FindChecked(Shooter.SquadID);DeploymentPlan.Center=DeploymentStart;
+ DeploymentPlan.Path={DeploymentCenter-FVector(500,0,0),DeploymentCenter};
+ DeploymentPlan.Corridors.Add(2,{DeploymentStart,DeploymentCenter,DeploymentPost});
+ DeploymentPlan.ArrivalGoals.Add(2,DeploymentPost);DeploymentPlan.ArrivalTails.Add(2,{DeploymentCenter,DeploymentPost});
+ Bodies.FindChecked(2).Waypoint=2;Put(2,DeploymentStart);
+ const int32 DeploymentPasses=Count(TEXT("known_move_defend_gate_pass")),DeploymentAtPost=Count(TEXT("known_move_defend_gate_at_post"));
+ const bool DeploymentMarch=KnownMoveDefendMarching(2,true,true);
+ bool DeploymentGeometry=true;
+ if(BattleKnownFire::MoveDefendMarch())
+ {
+  DeploymentGeometry=KnownMovePlaceAllowed(2,DeploymentStart,DeploymentCandidate,true) &&
+   !KnownMovePlaceAllowed(2,DeploymentStart,DeploymentCandidate,false) &&
+   !KnownMovePlaceAllowed(2,DeploymentStart,DeploymentStart-FVector(0,700,0),true);
+  // Reassignment must not rotate the allowed strip during an existing detour.
+  FKnownMove DeploymentEpisode;DeploymentEpisode.Start=DeploymentStart;DeploymentEpisode.DefendPost=DeploymentPost;
+  DeploymentEpisode.bDefendMarch=true;KnownMoves.Add(2,DeploymentEpisode);
+  DeploymentPlan.ArrivalGoals[2]=DeploymentStart-FVector(0,1500,0);
+  DeploymentGeometry &= KnownMovePlaceAllowed(2,DeploymentStart,DeploymentCandidate) &&
+   !KnownMovePlaceAllowed(2,DeploymentStart,DeploymentStart-FVector(0,700,0));
+  KnownMoves.Remove(2);DeploymentPlan.ArrivalGoals[2]=DeploymentPost;
+  const FVector DeploymentOldCenter=DeploymentPlan.Center;
+  DeploymentPlan.Center=DeploymentCandidate+FVector(BattleKnownFire::MoveSquadRadius()+1.,0,0);
+  DeploymentGeometry &= !KnownMovePlaceAllowed(2,DeploymentStart,DeploymentCandidate,true);
+  DeploymentPlan.Center=DeploymentOldCenter;
+ }
+ Check(TEXT("move_defend_march_personal_post"),DeploymentMarch==BattleKnownFire::MoveDefendMarch() && DeploymentGeometry &&
+  Count(TEXT("known_move_defend_gate_pass"))==DeploymentPasses+(BattleKnownFire::MoveDefendMarch()?1:0) &&
+  !DeploymentPlan.Path.IsValidIndex(Bodies.FindChecked(2).Waypoint) && DeploymentPlan.Corridors.FindChecked(2).IsValidIndex(Bodies.FindChecked(2).Waypoint) &&
+  BattleSectors::Cell(DeploymentStart)==BattleSectors::Cell(DeploymentPost) && Shooter.Destination==Squad.Destination);
+ Put(2,DeploymentPost);Bodies.FindChecked(2).bArrived=true;
+ Check(TEXT("move_defend_march_arrived_gate"),!KnownMoveDefendMarching(2,true,true) &&
+  Count(TEXT("known_move_defend_gate_at_post"))==DeploymentAtPost+(BattleKnownFire::MoveDefendMarch()?1:0) &&
+  DeploymentPlan.Corridors.FindChecked(2).IsValidIndex(Bodies.FindChecked(2).Waypoint));
  for(auto* TestWall:Walls){TestWall->SetActorEnableCollision(false);TestWall->Destroy();}
  return Failures;
 }

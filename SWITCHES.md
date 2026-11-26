@@ -257,7 +257,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleKnownMoveSweepBudget` | Value | 24 | BattleKnownTargetMove.cpp:29 |  |
 | `-BattleKnownMoveWait` | Value | 1.5 | BattleKnownTargetMove.cpp:20, BattleKnownTargetMoveTrial.cpp:322 |  |
 | `-BattleKnownTargetFire` | Value | 0 | BattleKnownTargetMove.cpp:18, BattleKnownTargets.cpp:12 |  |
-| `-BattleKnownTargetFireTrial` | Param | off | BattleKnownTargetMove.cpp:374, BattleLeaderRuntime.cpp:252 |  |
+| `-BattleKnownTargetFireTrial` | Param | off | BattleKnownTargetMove.cpp:398, BattleLeaderRuntime.cpp:252 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
 | `-BattleLauncherDamage` | Value | 60.f | BattleArms.cpp:158 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleLeaderCommand` | Value | 0 | BattleGameMode.cpp:54 |  |

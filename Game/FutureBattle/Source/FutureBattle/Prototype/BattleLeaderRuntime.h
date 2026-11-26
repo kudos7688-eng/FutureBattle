@@ -927,7 +927,7 @@ public:
  BattleKnownFire::FBudget KnownFireBudgets[2];
  bool KnownMoveAllowed(int32 ID,bool CountGate=false);
  bool KnownMoveMarching(int32 ID) const;
- bool KnownMoveDefendMarching(int32 ID,bool FollowingMarch) const;
+ bool KnownMoveDefendMarching(int32 ID,bool FollowingMarch,bool CountGate=false);
  void TrackKnownDefendResume(int32 ID,double Now);
  const TCHAR* KnownMovePlaceRejection(int32 ID,FVector Start,FVector Place,bool DefendMarchAtStart=false) const;
  bool KnownMovePlaceAllowed(int32 ID,FVector Start,FVector Place,bool DefendMarchAtStart=false) const;
@@ -945,6 +945,7 @@ public:
   BattleKnownFire::FTarget Observation;
   uint8 Source=3;FBox SourceBox=FBox(ForceInit);int32 FaceAxis=INDEX_NONE;double FaceSign=0.,EndSign=0.;
   FVector Start=FVector::ZeroVector,Goal=FVector::ZeroVector,Peek=FVector::ZeroVector,Last=FVector::ZeroVector;
+  FVector DefendPost=FVector::ZeroVector; // Fixed personal post for the lifetime of a defend detour.
   int32 Mission=0,Revision=0,Slot=INDEX_NONE;
   double Started=0,Arrived=-1,Distance=0;float Stuck=0;
   double CommitUntil=0,CheckUntil=0,NextCheck=0,ReturnUntil=0;
