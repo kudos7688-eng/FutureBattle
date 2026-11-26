@@ -696,22 +696,35 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   // A squad target stops this soldier, although his own view is blocked and the route remains.
   // The small defense disk is beyond MoveRange: the marching strip must not admit a detour.
   Reset();KnownDefendResumes.Reset();
+  // Admit the observed enemy through WeaponOrderAllows, while keeping the soldier behind the wall.
+  // The defense disk starts 26 m away, outside the 25 m search: no marching strip while stopped.
+  const FVector DefendStoppedPost=Start+FVector(3000,0,0);Put(251,DefendStoppedPost);
   auto& DefendStoppedPlan=Plans.FindChecked(Shooter.SquadID);
-  DefendStoppedPlan.Path={Start,DefendPost};DefendStoppedPlan.Corridors.Add(2,DefendStoppedPlan.Path);
-  DefendStoppedPlan.ArrivalGoals.Add(2,DefendPost);Bodies.FindChecked(2).Waypoint=1;
+  DefendStoppedPlan.Path={Start,DefendStoppedPost};DefendStoppedPlan.Corridors.Add(2,DefendStoppedPlan.Path);
+  DefendStoppedPlan.ArrivalGoals.Add(2,DefendStoppedPost);Bodies.FindChecked(2).Waypoint=1;
   DefendStoppedPlan.TargetID=251;DefendStoppedPlan.bCoverStop=false;
-  Shooter.Destination=DefendPost;Squad.Destination=DefendPost;Squad.DefenseRadius=400;
+  Shooter.Destination=DefendStoppedPost;Squad.Destination=DefendStoppedPost;Squad.DefenseRadius=400;
   const int32 DefendStoppedSearches=Count(TEXT("known_move_searches")),DefendStoppedStarts=Count(TEXT("known_move_defend_march_started"));
-  const int32 DefendStoppedShots=Shooter.ShotSequence;bool DefendStoppedNoDetour=true;
+  const TMap<FName,int32> DefendStoppedBefore=SightExperiment.CoverDiag;
+  const int32 DefendStoppedShots=Shooter.ShotSequence;bool DefendStoppedNoDetour=true,DefendStoppedFixture=true;
   for(int32 DefendStoppedAttempt=0;DefendStoppedAttempt<24;++DefendStoppedAttempt)
   {
-   TestNow+=1.01;Observe();Follow(2,0.f,TestNow);
+   TestNow+=1.01;Observe();
+   TestSense->Observers.FindChecked(11).Contacts.FindChecked(251).LastKnownPosition=DefendStoppedPost;
+   TestSense->BuildTeamKnownTargets(TestNow);
+   DefendStoppedFixture &= WeaponOrderAllows(2,251,DefendStoppedPost) && !CanSee(2,251);
+   Follow(2,0.f,TestNow);
    DefendStoppedNoDetour &= !KnownMoves.Contains(2) && !CoverApproaches.Contains(2) && KnownMoveReservedID==INDEX_NONE;
   }
-  Check(TEXT("move_defend_march_combat_stop"),DefendStoppedNoDetour && Count(TEXT("known_move_searches"))>DefendStoppedSearches &&
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_DEFEND_STOP no_detour=%d searches=%d/%d starts=%d/%d shots=%d/%d dist=%.1f resume=%d place_allowed=%d active=%d approach=%d"),DefendStoppedNoDetour,Count(TEXT("known_move_searches")),DefendStoppedSearches,Count(TEXT("known_move_defend_march_started")),DefendStoppedStarts,Shooter.ShotSequence,DefendStoppedShots,FVector::Dist2D(Position(2),Start),KnownDefendResumes.Contains(2),KnownMovePlaceAllowed(2,Start,Start+FVector(500,0,0)),KnownMoves.Contains(2),CoverApproaches.Contains(2));
+  for(const auto& DefendStoppedMetric:SightExperiment.CoverDiag)
+   if(DefendStoppedMetric.Key.ToString().StartsWith(TEXT("known_move_gate_")) && DefendStoppedMetric.Value>DefendStoppedBefore.FindRef(DefendStoppedMetric.Key))
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_DEFEND_STOP_GATE %s=%d"),*DefendStoppedMetric.Key.ToString(),DefendStoppedMetric.Value-DefendStoppedBefore.FindRef(DefendStoppedMetric.Key));
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_DEFEND_STOP_FIXTURE allowed_and_hidden=%d"),DefendStoppedFixture);
+  Check(TEXT("move_defend_march_combat_stop"),DefendStoppedFixture && DefendStoppedNoDetour && Count(TEXT("known_move_searches"))>DefendStoppedSearches &&
    Count(TEXT("known_move_defend_march_started"))==DefendStoppedStarts && Shooter.ShotSequence==DefendStoppedShots &&
    FVector::Dist2D(Position(2),Start)<1. && !KnownDefendResumes.Contains(2) &&
-   !KnownMovePlaceAllowed(2,Start,Start+FVector(0,500,0)));
+   !KnownMovePlaceAllowed(2,Start,Start+FVector(500,0,0)));
  }
  for(auto* TestWall:Walls){TestWall->SetActorEnableCollision(false);TestWall->Destroy();}
  return Failures;
