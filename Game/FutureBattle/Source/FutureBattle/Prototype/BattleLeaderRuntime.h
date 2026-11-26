@@ -584,7 +584,7 @@ public:
  // Re-picks a peek point beside the cover anchor with a clear line to Threat; false keeps the soldier hidden.
  bool RevalidatePeek(int32 ID,FVector Threat);
  bool CoverStepFirePoint(FVector Anchor,FVector Threat,FVector Lateral,FVector Facing,float Hidden,FVector& OutPeek);
- bool CoverFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& OutPeek,uint8& OutKind,uint8 AllowedKinds=3,bool bPeekLine=false);
+ bool CoverFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& OutPeek,uint8& OutKind,uint8 AllowedKinds=3,bool bPeekLine=false,double KnownMoveNow=-1.);
  // Suppression trial (-BattleSuppression=1, see BattleSuppression.h). Runtime only: time at which each unit's level decays to zero.
  TMap<int32,double> SuppressionZeroAt;
  float Suppression(int32 ID,double Now) const;
@@ -916,6 +916,7 @@ public:
  void RunContactTrial();
  void RunCoverFirePointTrial();
  void RunKnownTargetFireTrial();
+ int32 RunKnownTargetMoveTrial();
  bool KnownFireAllowed(int32 ID,const BattleKnownFire::FTarget& Target,double Now);
  void KnownFireCandidates(int32 ID,double Now,TArray<int32>& Out);
  bool KnownFireRay(int32 ID,double Now);
@@ -924,6 +925,28 @@ public:
  bool KnownCoverContact(int32 ID,double Now,FBattleContact& Out);
  TMap<int32,BattleKnownFire::FSearch> KnownFireSearches;
  BattleKnownFire::FBudget KnownFireBudgets[2];
+ bool KnownMoveAllowed(int32 ID) const;
+ bool KnownMovePlaceAllowed(int32 ID,FVector Start,FVector Place) const;
+ bool KnownMoveSpend(int32 ID,double Now,uint8 Kind);
+ bool KnownMoveLine(int32 ID,FVector From,FVector To,double Now);
+ bool StartKnownMove(int32 ID,double Now);
+ bool StepKnownMove(int32 ID,float Dt,double Now);
+ void EndKnownMove(int32 ID,double Now,const TCHAR* Reason);
+ void KnownMoveShot(int32 ID,int32 Target,double Now);
+ struct FKnownMove
+ {
+  BattleKnownFire::FTarget Observation;
+  FVector Start=FVector::ZeroVector,Peek=FVector::ZeroVector,Last=FVector::ZeroVector;
+  int32 Mission=0,Revision=0,Slot=INDEX_NONE;
+  double Started=0,Arrived=-1,Distance=0;float Stuck=0;
+  bool bReturning=false,bFired=false,bStandUp=false;
+ };
+ TMap<int32,FKnownMove> KnownMoves;
+ TMap<int32,double> KnownMoveAfter;
+ TMap<int32,int32> KnownMoveCursor;
+ struct FKnownMoveBudget {int64 Window=-1;int32 Rays=0,Sweeps=0,Nav=0;TArray<int32> Waiting;TMap<int32,double> Asked;};
+ FKnownMoveBudget KnownMoveBudgets[2];
+ bool bKnownMoveDeferred=false;
  void RunCoverPeekTrial();
  int32 PeekTrialStage=0,PeekTrialCase=0,PeekTrialFailures=0;
  int32 PeekTrialShots=0;

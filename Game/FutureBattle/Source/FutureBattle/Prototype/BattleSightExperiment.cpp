@@ -224,6 +224,12 @@ void UBattleLeaderRuntime::StepSightExperiment(float Dt)
   CoverDiag->SetNumberField(TEXT("ordinary_fire_hits"),E.CoverDiag.FindRef(FName(TEXT("ordinary_fire_hits"))));
   CoverDiag->SetNumberField(TEXT("ordinary_fire_damage"),E.OrdinaryFireDamage);
  }
+ if(BattleKnownFire::MoveEnabled())
+ {
+  CoverDiag->SetNumberField(TEXT("known_move_distance_cm"),E.KnownMoveDistance);
+  CoverDiag->SetNumberField(TEXT("known_move_time"),E.KnownMoveSeconds);
+  CoverDiag->SetNumberField(TEXT("known_move_first_shot_time"),E.KnownMoveFirstShotSeconds);
+ }
  Root->SetObjectField(TEXT("cover_diagnostics"),CoverDiag);
  Root->SetStringField(TEXT("cover_diagnostics_scope"),TEXT("Whole match including pre-save time; ai_* are AI unit-frames in Follow; request_* are per RequestCoverAction call by furthest stage; peek_* are per rejected peek offset; cancel_* are cover endings"));
  Root->SetStringField(TEXT("tactical_time_scope"),TEXT("1Hz squad samples; active delegated AI only; not per-soldier or exact transition timestamps"));

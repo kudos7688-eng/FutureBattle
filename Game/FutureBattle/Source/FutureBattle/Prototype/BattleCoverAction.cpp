@@ -119,24 +119,28 @@ bool UBattleLeaderRuntime::CoverLineClear(int32 ID,FVector From,FVector Threat) 
 
 // AllowedKinds: bit 1 = over low cover, bit 2 = short step past an edge. The caller checks that the anchor hides him.
 // Kind is derived from the saved positions; no new transient or persistent tactical state is needed.
-bool UBattleLeaderRuntime::CoverFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& OutPeek,uint8& OutKind,uint8 AllowedKinds,bool bPeekLine)
+bool UBattleLeaderRuntime::CoverFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& OutPeek,uint8& OutKind,uint8 AllowedKinds,bool bPeekLine,double KnownMoveNow)
 {
+ auto FireLine=[&](FVector FireFrom,FVector FireTo){return KnownMoveNow>=0.?KnownMoveLine(ID,FireFrom,FireTo,KnownMoveNow):BattleTactics::HasTerrainLine(GetWorld(),FireFrom,FireTo);};
  OutKind=0;
  const FVector FireEye=Threat+FVector(0,0,60);
  if((AllowedKinds&1) && BattleStance::Enabled(GetWorld()) &&
-    !BattleTactics::HasTerrainLine(GetWorld(),Anchor+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch)),FireEye) &&
-    BattleTactics::HasTerrainLine(GetWorld(),Anchor+FVector(0,0,60),FireEye) && (!bPeekLine || CoverLineClear(ID,Anchor,Threat)))
+    !FireLine(Anchor+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch)),FireEye) &&
+    FireLine(Anchor+FVector(0,0,60),FireEye) && (!bPeekLine || CoverLineClear(ID,Anchor,Threat)))
  {OutPeek=Anchor;OutKind=1;return true;}
+ if(KnownMoveNow>=0. && bKnownMoveDeferred)return false;
  if(!(AllowedKinds&2))return false;
  auto* FireNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!FireNav)return false;
  const FVector FireSide=FVector::CrossProduct((Threat-Anchor).GetSafeNormal2D(),FVector::UpVector);
  for(float FireOffset:{-100.f,100.f,-110.f,110.f,-120.f,120.f})
  {
+  if(KnownMoveNow>=0. && !KnownMoveSpend(ID,KnownMoveNow,2))return false;
   FNavLocation FireProjected;if(!FireNav->ProjectPointToNavigation(Anchor+FireSide*FireOffset-FVector(0,0,90),FireProjected,FVector(50,50,150)))continue;
   const FVector FirePeek=FireProjected.Location+FVector(0,0,90);
   const double FireDistance=FVector::Dist2D(Anchor,FirePeek);if(FireDistance<100.||FireDistance>120.)continue;
+  if(KnownMoveNow>=0. && !KnownMoveSpend(ID,KnownMoveNow,1))return false;
   if(GetWorld()->SweepTestByObjectType(Anchor,FirePeek,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))continue;
-  if(!BattleTactics::HasTerrainLine(GetWorld(),FirePeek+FVector(0,0,60),FireEye))continue;
+  if(!FireLine(FirePeek+FVector(0,0,60),FireEye))continue;
   if(bPeekLine && !CoverLineClear(ID,FirePeek,Threat))continue;
   OutPeek=FirePeek;OutKind=2;return true;
  }
@@ -498,6 +502,7 @@ static bool SquadKnowledgeCover(){static const bool On=[]{int32 V=0;FParse::Valu
 
 bool UBattleLeaderRuntime::StepCoverApproach(int32 ID,float Dt,double Now,int32 Target)
 {
+ if(BattleKnownFire::MoveEnabled() && KnownMoves.Contains(ID))return StepKnownMove(ID,Dt,Now);
  auto* A=CoverApproaches.Find(ID);if(!A)return false;
  if(A->bCharge)return StepCharge(ID,Dt,Now); // a charge at a seen enemy (BattleArms.cpp, -BattleArmsCharge)
  if(A->bAssault)++A->Steps; // evaluation (the timeout record below)
@@ -712,7 +717,15 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
     Diag.Cover(TEXT("known_fire_aim_rays"));
     if(SightHitVisible(TraceSight(KnownPeekContext,Contact->LastKnownPosition+FVector(0,0,35),Contact->TargetID,SightFromCanSee),Contact->TargetID))
     {U->CoverPhase=3;U->CoverSeconds=3;if(Diag.Enabled){Diag.PeekWhy.Add(ID,FBattleSightExperiment::FPeekWhy());Diag.PeekAdd(TEXT("peekwhy_attempt"));}}
-    else{U->CoverSeconds=.4f;Diag.Cover(TEXT("known_fire_reject_aim_wall"));}
+    else
+    {
+     U->CoverSeconds=.4f;Diag.Cover(TEXT("known_fire_reject_aim_wall"));
+     if(BattleKnownFire::MoveEnabled())
+     {
+      const auto HiddenCheck=SelectKnownFire(ID,Position(ID)+FVector(0,0,BattleStance::EyeOffset(StanceOf(ID))),Now);
+      if(HiddenCheck.TargetID==INDEX_NONE && HiddenCheck.Reject!=BattleKnownFire::EReject::Deferred && StartKnownMove(ID,Now))return true;
+     }
+    }
     KnownFireBudgets[U->Team].Waiting.Remove(ID);KnownFireBudgets[U->Team].RequestedAt.Remove(ID);
    }
   }
@@ -727,6 +740,8 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
  const auto* PeekLookout=!Player && bPeekAtCheck && CoverPeekLookout()?SectorLookoutSighting(ID,U->CoverTargetID,Position(ID),*Squad,Contact):nullptr;
  const auto* PeekContact=PeekLookout?PeekLookout:Contact;
  if(BattleKnownFire::Enabled())CheckKnownPeek();
+ if(BattleKnownFire::MoveEnabled() && !Player && U->CoverPhase==4 && !bKnownLegacyVisible && KnownFire.TargetID==INDEX_NONE &&
+  KnownFire.Reject!=BattleKnownFire::EReject::Deferred && KnownFire.Reject!=BattleKnownFire::EReject::Waiting && StartKnownMove(ID,Now))return true;
  if(U->CoverPhase==4)
  {
   if(Diag.Enabled)if(auto* WhyEpisode=Diag.PeekWhy.Find(ID))WhyEpisode->bSaw|=Contact && Contact->bVisible && !Contact->bShared;
@@ -792,6 +807,7 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
    else
    {
     const bool Shot=Fire(ID,Eye,Aim,false);bWhyFired=Shot;
+    if(Shot && BattleKnownFire::MoveEnabled())KnownMoveShot(ID,U->CoverTargetID,Now);
     if(Shot){if(PeekLookout)Diag.Cover(TEXT("peek_lookout_shot"));Diag.Cover(TEXT("cover_shots"));if(++CoverPeekShots.FindOrAdd(ID)==1)Diag.Cover(TEXT("peek_first_shot"));}
     else Diag.Cover(U->ReloadEndTime>0?TEXT("peekwait_reloading"):Now<U->NextShotTime?TEXT("peekwait_cooldown"):TEXT("peekwait_fire_other"));
     if(Shot && Squad->TacticalPlan.Action==EBattleSquadTactic::Support)GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(Squad->SquadID,U->CoverTargetID);

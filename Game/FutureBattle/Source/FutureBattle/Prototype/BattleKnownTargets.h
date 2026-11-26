@@ -4,6 +4,10 @@
 namespace BattleKnownFire
 {
  bool Enabled();
+ bool MoveEnabled();
+ double MoveRange();
+ double MoveSquadRadius();
+ int32 MoveMax();
  enum class EReject : uint8 { None, Stale, Order, Range, FOV, Invalid, SensorWall, AimWall, Deferred, Waiting };
  struct FTarget
  {

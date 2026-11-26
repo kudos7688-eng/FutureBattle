@@ -166,6 +166,7 @@ bool UBattleLeaderRuntime::FireKnownTarget(int32 ID,const FVector& Origin,const 
  if(!Result.Ready() || !Fire(ID,Origin,(Result.AimPosition-Origin).GetSafeNormal(),false,true))return false;
  SightExperiment.Cover(Peek?TEXT("known_fire_shots_peek"):TEXT("known_fire_shots_open"));
  if(Result.bTracked)SightExperiment.Cover(TEXT("known_fire_tracked_shots"));
+ if(BattleKnownFire::MoveEnabled())KnownMoveShot(ID,Result.TargetID,Result.CheckedAt);
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Unit=Store->Find(ID);const auto* Squad=Unit?Store->FindSquad(Unit->SquadID):nullptr;
  if(Squad && Squad->TacticalPlan.Action==EBattleSquadTactic::Support)GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(Squad->SquadID,Result.TargetID);
  return true;

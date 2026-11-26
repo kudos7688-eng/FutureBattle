@@ -63,5 +63,6 @@ struct FBattleSightExperiment
  // within 100 m of an objective, shots, damage dealt, kills, damage taken, deaths. Squad type is that of the soldier's squad.
  static constexpr int32 MaxSquadTypes=10; // BattleSquadType::Count (checked in BattleSightExperiment.cpp)
  double TypePersonSec[2][MaxSquadTypes]={},TypePointSec[2][MaxSquadTypes]={},TypeDamage[2][MaxSquadTypes]={},TypeTaken[2][MaxSquadTypes]={}; int32 TypeShots[2][MaxSquadTypes]={},TypeKills[2][MaxSquadTypes]={},TypeDeaths[2][MaxSquadTypes]={};
+ double KnownMoveDistance=0,KnownMoveSeconds=0,KnownMoveFirstShotSeconds=0;
  void Cover(const TCHAR* Key){if(Enabled)++CoverDiag.FindOrAdd(FName(Key));}
 };

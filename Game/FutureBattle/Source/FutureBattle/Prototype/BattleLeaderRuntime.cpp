@@ -933,8 +933,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  // head is turned, so he can turn to an enemy at his side and fire - and ends with it unless he takes the look again.
  bool bLookAgain=false;
  ON_SCOPE_EXIT{if(!bLookAgain && WalkLooks.Num())WalkLooks.Remove(ID);};
- auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()) return;
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()){if(BattleKnownFire::MoveEnabled() && KnownMoves.Contains(ID))EndKnownMove(ID,Now,TEXT("known_move_cancel_died"));return;}
  auto& B=Bodies.FindChecked(ID);
+ if(BattleKnownFire::MoveEnabled() && KnownMoves.Contains(ID) && StepKnownMove(ID,Dt,Now))return;
  // The player's order to this soldier ends (squad order, squad stopped, taken over...) before his cover action runs.
  if(U->bSoldierOrder)SoldierOrderActive(ID);
  // Evaluation only, -BattleFireTimeLog (default off, needs the evaluation counters of -BattleSightExperiment; STATUS 2026-11-25
@@ -1328,6 +1329,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  BattleKnownFire::FResult KnownFire;
  if(BattleKnownFire::Enabled() && !CanEngage && !bOwnEngage && !BaseEngage && !bCoverFire && !bSuppress && !bArtilleryAim)
   KnownFire=SelectKnownFire(ID,Position(ID)+Muzzle,Now);
+ if(BattleKnownFire::MoveEnabled() && !CanEngage && !bOwnEngage && !BaseEngage && !bCoverFire && !bSuppress && !bArtilleryAim &&
+  KnownFire.TargetID==INDEX_NONE && KnownFire.Reject!=BattleKnownFire::EReject::Deferred &&
+  (!bOnRoute || StopForCombat) && !bArrivalWalk && StartKnownMove(ID,Now))return;
  if(BaseEngage)Direction=(BaseTarget-(Pos+Muzzle)).GetSafeNormal();
  else if(bCoverFire)Direction=(CoverFirePoint-(Pos+Muzzle)).GetSafeNormal();
  else if(bSuppress)Direction=(SuppressPoint-(Pos+Muzzle)).GetSafeNormal();
@@ -1414,9 +1418,11 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  if(BaseEngage)Fire(ID,Pos+Muzzle,Direction,false);
  if(bCoverFire){if(U->Ammo==0)Store->StartReload(ID,Now);else{bArmsCoverShot=true;if(Fire(ID,Pos+Muzzle,Direction,false))SightExperiment.Cover(TEXT("arms_cover_fire_shots"));bArmsCoverShot=false;}}
  if(bSuppress){if(U->Ammo==0)Store->StartReload(ID,Now);else{bArmsCoverShot=true;if(Fire(ID,Pos+Muzzle,Direction,false))SightExperiment.Cover(TEXT("suppress_fire_shots"));bArmsCoverShot=false;}}
+ const int32 KnownMoveShotsBefore=BattleKnownFire::MoveEnabled()?U->ShotSequence:0;
  if(CanEngage) { if(bSidearm) Fire(ID,Pos+Muzzle,Direction,false); else if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false) && S->TacticalPlan.Action==EBattleSquadTactic::Support) GetWorld()->GetSubsystem<UBattleSquadTactics>()->RecordSupportShot(S->SquadID,TargetID); }
  else if(bOwnEngage) { if(U->Ammo==0) Store->StartReload(ID,Now); else if(Fire(ID,Pos+Muzzle,Direction,false)) SightExperiment.Cover(TEXT("own_target_shots")); }
  else if(KnownFire.Ready())FireKnownTarget(ID,Position(ID)+Muzzle,KnownFire,false);
+ if(BattleKnownFire::MoveEnabled() && U->ShotSequence>KnownMoveShotsBefore && (CanEngage || bOwnEngage))KnownMoveShot(ID,CanEngage?TargetID:OwnTargetID,Now);
  Store->SetAction(ID,U->ReloadEndTime>0?EBattleAction::Reloading:((BattleTactics::ObservedTactics()?ObservedEngage:CanEngage)||bOwnEngage||bCoverFire||KnownFire.TargetID!=INDEX_NONE)?EBattleAction::Engaging:B.Velocity.SizeSquared2D()>1?EBattleAction::Moving:EBattleAction::Idle);
 }
 bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot,bool bKnownFireShot)

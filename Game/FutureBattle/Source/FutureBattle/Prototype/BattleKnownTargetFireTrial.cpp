@@ -232,7 +232,14 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
  TrialShooter.SpreadSkillScale=TrialSavedSkill;
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_DIAG known_fire_damage=%.6f"),SightExperiment.KnownFireDamage);
 
- for(const auto& TrialDiag:SightExperiment.CoverDiag)if(TrialDiag.Key.ToString().StartsWith(TEXT("known_fire_")))
+ if(BattleKnownFire::MoveEnabled())
+ {
+  TrialFailures+=RunKnownTargetMoveTrial();
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_DIAG known_move_distance_cm=%.6f"),SightExperiment.KnownMoveDistance);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_DIAG known_move_time=%.6f"),SightExperiment.KnownMoveSeconds);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_DIAG known_move_first_shot_time=%.6f"),SightExperiment.KnownMoveFirstShotSeconds);
+ }
+ for(const auto& TrialDiag:SightExperiment.CoverDiag)if(TrialDiag.Key.ToString().StartsWith(TEXT("known_fire_")) || TrialDiag.Key.ToString().StartsWith(TEXT("known_move_")))
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_DIAG %s=%d"),*TrialDiag.Key.ToString(),TrialDiag.Value);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_RESULT failures=%d"),TrialFailures);
  FPlatformMisc::RequestExitWithStatus(false,TrialFailures?1:0);
