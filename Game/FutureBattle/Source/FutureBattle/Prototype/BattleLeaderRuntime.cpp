@@ -935,7 +935,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  ON_SCOPE_EXIT{if(!bLookAgain && WalkLooks.Num())WalkLooks.Remove(ID);};
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()){if(BattleKnownFire::MoveEnabled() && KnownMoves.Contains(ID))EndKnownMove(ID,Now,TEXT("known_move_cancel_died"));return;}
  auto& B=Bodies.FindChecked(ID);
- if(BattleKnownFire::MoveEnabled() && KnownMoves.Contains(ID) && StepKnownMove(ID,Dt,Now))return;
+ if(BattleKnownFire::MoveEnabled() && KnownMoves.Contains(ID) && StepKnownMove(ID,Dt,Now)){SightExperiment.Cover(TEXT("known_move_gate_active"));return;}
+ const bool bKnownMoveEntryAllowed=!BattleKnownFire::MoveEnabled() || KnownMoveAllowed(ID,true);
  // The player's order to this soldier ends (squad order, squad stopped, taken over...) before his cover action runs.
  if(U->bSoldierOrder)SoldierOrderActive(ID);
  // Evaluation only, -BattleFireTimeLog (default off, needs the evaluation counters of -BattleSightExperiment; STATUS 2026-11-25
@@ -946,6 +947,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  if(bFireTimeUnit)SightExperiment.Cover(TEXT("firetime_total"));
  if(StepCoverAction(ID,Dt,Now))
  {
+  if(BattleKnownFire::MoveEnabled() && bKnownMoveEntryAllowed)SightExperiment.Cover(TEXT("known_move_gate_cover"));
   // The phase after this frame's step: 1 walking in or back from a peek, 2 hidden, 3 moving out to peek, 4 exposed (why an
   // exposed soldier does not fire is in peekwait_* and cover_shots).
   if(bFireTimeUnit){static const TCHAR* Phase[]={TEXT("firetime_cover_phase0"),TEXT("firetime_cover_1_entering"),TEXT("firetime_cover_2_hidden"),TEXT("firetime_cover_3_to_peek"),TEXT("firetime_cover_4_peeking")};SightExperiment.Cover(Phase[FMath::Min<int32>(U->CoverPhase,4)]);}
@@ -960,7 +962,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   return;
  }
  const auto* S=Store->FindSquad(U->SquadID); auto* P=Plans.Find(U->SquadID);
- if(!P || S->CommandStatus!=EBattleCommandStatus::Active){if(bFireTimeUnit)SightExperiment.Cover(!P?TEXT("firetime_no_plan"):TEXT("firetime_squad_inactive"));return;}
+ if(!P || S->CommandStatus!=EBattleCommandStatus::Active){if(BattleKnownFire::MoveEnabled() && bKnownMoveEntryAllowed)SightExperiment.Cover(TEXT("known_move_gate_plan"));if(bFireTimeUnit)SightExperiment.Cover(!P?TEXT("firetime_no_plan"):TEXT("firetime_squad_inactive"));return;}
  FVector Pos=Position(ID), Direction=Forward(ID); const FVector LastVelocity=B.Velocity; B.Velocity=FVector::ZeroVector;
  // The player's order to this soldier (BattleSoldierOrder.cpp): his own place instead of the squad's movement.
  const bool bOwnOrder=U->bSoldierOrder && SoldierOrderActive(ID);
@@ -1329,9 +1331,17 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  BattleKnownFire::FResult KnownFire;
  if(BattleKnownFire::Enabled() && !CanEngage && !bOwnEngage && !BaseEngage && !bCoverFire && !bSuppress && !bArtilleryAim)
   KnownFire=SelectKnownFire(ID,Position(ID)+Muzzle,Now);
- if(BattleKnownFire::MoveEnabled() && !CanEngage && !bOwnEngage && !BaseEngage && !bCoverFire && !bSuppress && !bArtilleryAim &&
-  KnownFire.TargetID==INDEX_NONE && KnownFire.Reject!=BattleKnownFire::EReject::Deferred &&
-  (!bOnRoute || StopForCombat) && !bArrivalWalk && StartKnownMove(ID,Now))return;
+ if(BattleKnownFire::MoveEnabled() && bKnownMoveEntryAllowed)
+ {
+  if(CanEngage || bOwnEngage || BaseEngage || bCoverFire || bSuppress || bArtilleryAim || KnownFire.TargetID!=INDEX_NONE)SightExperiment.Cover(TEXT("known_move_gate_fire_candidate"));
+  else if(KnownFire.Reject==BattleKnownFire::EReject::Deferred)SightExperiment.Cover(TEXT("known_move_gate_budget"));
+  else if((bOnRoute && !StopForCombat) || bArrivalWalk)
+  {
+   if(!BattleKnownFire::MoveMarch() || S->Order!=EBattleOrder::AttackMove)SightExperiment.Cover(TEXT("known_move_gate_march"));
+   else if(StartKnownMove(ID,Now))return;
+  }
+  else if(StartKnownMove(ID,Now))return;
+ }
  if(BaseEngage)Direction=(BaseTarget-(Pos+Muzzle)).GetSafeNormal();
  else if(bCoverFire)Direction=(CoverFirePoint-(Pos+Muzzle)).GetSafeNormal();
  else if(bSuppress)Direction=(SuppressPoint-(Pos+Muzzle)).GetSafeNormal();

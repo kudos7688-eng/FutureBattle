@@ -925,7 +925,8 @@ public:
  bool KnownCoverContact(int32 ID,double Now,FBattleContact& Out);
  TMap<int32,BattleKnownFire::FSearch> KnownFireSearches;
  BattleKnownFire::FBudget KnownFireBudgets[2];
- bool KnownMoveAllowed(int32 ID) const;
+ bool KnownMoveAllowed(int32 ID,bool CountGate=false);
+ bool KnownMoveMarching(int32 ID) const;
  bool KnownMovePlaceAllowed(int32 ID,FVector Start,FVector Place) const;
  bool KnownMoveSpend(int32 ID,double Now,uint8 Kind);
  bool KnownMoveLine(int32 ID,FVector From,FVector To,double Now);
@@ -939,7 +940,7 @@ public:
   FVector Start=FVector::ZeroVector,Goal=FVector::ZeroVector,Peek=FVector::ZeroVector,Last=FVector::ZeroVector;
   int32 Mission=0,Revision=0,Slot=INDEX_NONE;
   double Started=0,Arrived=-1,Distance=0;float Stuck=0;
-  bool bReturning=false,bFired=false,bStandUp=false;
+  bool bReturning=false,bFired=false,bStandUp=false,bMarch=false;
  };
  TMap<int32,FKnownMove> KnownMoves;
  TMap<int32,double> KnownMoveAfter;

@@ -5,6 +5,7 @@ namespace BattleKnownFire
 {
  bool Enabled();
  bool MoveEnabled();
+ bool MoveMarch();
  double MoveRange();
  double MoveSquadRadius();
  int32 MoveMax();

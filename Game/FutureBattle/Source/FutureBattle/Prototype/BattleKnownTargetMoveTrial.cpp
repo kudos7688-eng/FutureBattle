@@ -162,7 +162,54 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  Check(TEXT("move_priority_gates"),Held && Personal && Retreat && Supply && !StartKnownMove(2,TestNow) && Count(TEXT("known_move_started"))==HeldBefore);
  Reset();auto& March=Plans.FindChecked(Shooter.SquadID);March.Path={Start,Start+FVector(2000,0,0)};Bodies.FindChecked(2).Waypoint=1;
  Squad.Order=EBattleOrder::AttackMove;Shooter.Order=EBattleOrder::AttackMove;Shooter.Destination=March.Path[1];
- Check(TEXT("move_march_gate"),!StartKnownMove(2,TestNow));
+ if(!BattleKnownFire::MoveMarch())
+ {
+  Check(TEXT("move_march_gate"),!StartKnownMove(2,TestNow));
+  const int32 GateStartsBefore=Count(TEXT("known_move_started")),GateCountBefore=Count(TEXT("known_move_gate_march"));
+  TestNow+=1.01;Observe();Follow(2,0.f,TestNow);
+  Check(TEXT("move_march_follow_gate"),!KnownMoves.Contains(2) && Count(TEXT("known_move_started"))==GateStartsBefore && Count(TEXT("known_move_gate_march"))>GateCountBefore);
+ }
+ if(BattleKnownFire::MoveMarch())
+ {
+  // Exercise the Follow entry gate as well as the planner. Zero dt keeps the initial geometry fixed.
+  const FVector MarchDestination=Start+FVector(0,3000,0);
+  March.Path={Start,MarchDestination};March.Corridors.Add(2,March.Path);March.ArrivalGoals.Add(2,MarchDestination);Shooter.Destination=MarchDestination;Squad.Destination=MarchDestination;
+  const auto SavedOrderRevision=Shooter.OrderRevision;const auto SavedMissionRevision=Squad.MissionRevision;
+  const int32 MarchShots=Shooter.ShotSequence,MarchFiredBefore=Count(TEXT("known_move_arrived_fired"));
+  bool MarchStarted=false,MarchArrived=false,MarchWithin=true;
+  for(int32 MarchAttempt=0;MarchAttempt<8 && !MarchStarted;++MarchAttempt)
+  {TestNow+=1.01;Observe();Follow(2,0.f,TestNow);MarchStarted=KnownMoves.Contains(2);}
+  for(int32 MarchFrame=0;MarchFrame<600 && KnownMoves.Contains(2);++MarchFrame)
+  {
+   TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
+   if(const auto* MarchEpisode=KnownMoves.Find(2);MarchEpisode && MarchEpisode->Arrived>=0)MarchArrived=true;
+   MarchWithin &= FVector::Dist2D(Position(2),Plans.FindChecked(Shooter.SquadID).Center)<=BattleKnownFire::MoveSquadRadius()+1.;
+  }
+  Check(TEXT("move_march_arrive_fire"),MarchStarted && MarchArrived && MarchWithin && Shooter.ShotSequence>MarchShots && Count(TEXT("known_move_arrived_fired"))==MarchFiredBefore+1);
+  const FVector MarchResumeAt=Position(2);TestSense->Reset();Put(251,Start+FVector(50000,0,0));
+  for(int32 ResumeFrame=0;ResumeFrame<30;++ResumeFrame){TestNow+=1./30.;Follow(2,1.f/30.f,TestNow);}
+  Check(TEXT("move_march_resume"),!KnownMoves.Contains(2) && !CoverApproaches.Contains(2) && !FirePositions.Contains(2) && !Shooter.CoverPhase &&
+   FVector::Dist2D(Position(2),MarchDestination)<FVector::Dist2D(MarchResumeAt,MarchDestination)-40. &&
+   Shooter.Order==EBattleOrder::AttackMove && Squad.Order==EBattleOrder::AttackMove && Shooter.OrderRevision==SavedOrderRevision && Squad.MissionRevision==SavedMissionRevision && Squad.Destination==MarchDestination);
+  Reset();auto& StaleMarchPlan=Plans.FindChecked(Shooter.SquadID);StaleMarchPlan.Path={Start,MarchDestination};StaleMarchPlan.Corridors.Add(2,StaleMarchPlan.Path);StaleMarchPlan.ArrivalGoals.Add(2,MarchDestination);Bodies.FindChecked(2).Waypoint=1;
+  Squad.Order=EBattleOrder::AttackMove;Shooter.Order=EBattleOrder::AttackMove;Shooter.Destination=MarchDestination;Squad.Destination=MarchDestination;
+  const bool StaleMarchStarted=TryStart();TestSense->Reset();Put(251,Start+FVector(50000,0,0));
+  const int32 StaleMarchShots=Shooter.ShotSequence;const FVector StaleMarchAt=Position(2);
+  for(int32 StaleMarchFrame=0;StaleMarchFrame<30;++StaleMarchFrame){TestNow+=1./30.;Follow(2,1.f/30.f,TestNow);}
+  Check(TEXT("move_march_stale_resume"),StaleMarchStarted && !KnownMoves.Contains(2) && Shooter.ShotSequence==StaleMarchShots &&
+   FVector::Dist2D(Position(2),MarchDestination)<FVector::Dist2D(StaleMarchAt,MarchDestination)-40.);
+  Reset();Squad.Order=EBattleOrder::AttackMove;Shooter.Order=EBattleOrder::AttackMove;Shooter.Destination=MarchDestination;
+  // A fresh report in the spatial bucket but outside weapon engagement range cannot start a march detour.
+  auto& DistantReport=TestSense->TeamKnownTargets[Shooter.Team].Targets.FindChecked(251);DistantReport.LastKnownPosition=Start+FVector(100000,0,0);
+  Check(TEXT("move_march_near_gate"),!StartKnownMove(2,TestNow) && !KnownMoves.Contains(2));
+  Reset();Squad.Order=EBattleOrder::AttackMove;Shooter.Order=EBattleOrder::AttackMove;Shooter.Destination=MarchDestination;Squad.bSectorMission=true;
+  const FVector MarchCellStart(-10,100,Start.Z),MarchCellGoal(10,100,Start.Z);
+  Squad.Destination=MarchCellGoal;Plans.FindChecked(Shooter.SquadID).Center=MarchCellStart;
+  Check(TEXT("move_march_sector"),KnownMovePlaceAllowed(2,MarchCellStart,MarchCellStart) && KnownMovePlaceAllowed(2,MarchCellStart,MarchCellGoal) &&
+   !KnownMovePlaceAllowed(2,MarchCellStart,FVector(-10,-10,Start.Z)));
+  Plans.FindChecked(Shooter.SquadID).Center=MarchCellStart+FVector(BattleKnownFire::MoveSquadRadius()+10.,0,0);
+  Check(TEXT("move_march_squad_radius"),!KnownMovePlaceAllowed(2,MarchCellStart,MarchCellStart));
+ }
  Reset();const bool OutsideRange=!KnownMovePlaceAllowed(2,Start,Start+FVector(BattleKnownFire::MoveRange()+1.,0,0));
  Plans.FindChecked(Shooter.SquadID).Center=Start+FVector(BattleKnownFire::MoveSquadRadius()+10.,0,0);
  const bool OutsideSquad=!KnownMovePlaceAllowed(2,Start,Start);Plans.FindChecked(Shooter.SquadID).Center=Start;Squad.DefenseRadius=100;
