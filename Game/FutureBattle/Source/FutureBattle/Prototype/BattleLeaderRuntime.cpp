@@ -2097,6 +2097,11 @@ bool UBattleLeaderRuntime::CoverOutwardEnabled()
  static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverOutward="),V);return V!=0;}();
  return bOn;
 }
+bool UBattleLeaderRuntime::CoverNearEnemyEnabled()
+{
+ static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverNearEnemy="),V);return FMath::Clamp(V,0,1)!=0;}();
+ return bOn;
+}
 bool UBattleLeaderRuntime::ArrivalThreatEnabled()
 {
  static const int32 Arg=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleArrivalThreat="),V);return V;}();const bool bOn=BattleFieldLayout::SectorComboSwitch(Arg); // -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision)

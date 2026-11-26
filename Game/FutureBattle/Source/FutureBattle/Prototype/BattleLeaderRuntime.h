@@ -776,6 +776,11 @@ public:
  // the team's home (rear, more than 45 degrees toward it) unless enemies are known there. With no direction left, the old rule.
  // Counts arrival_outward_*.
  static bool CoverOutwardEnabled();
+ // Trial -BattleCoverNearEnemy=1 (default 0, clamped 0..1): sector arrival only. Prefer cover near the focus, else the most
+ // populated known neighbouring sector, else the enemy-home neighbour. Check hiding against known points (48 per plan),
+ // keep unchecked slots last in each fire/hide tier, and stably sort 200 cm distance bands within indoor/outdoor groups.
+ // Does not change contact cover or the stored focus/facing. Counts arrival_near_enemy_*.
+ static bool CoverNearEnemyEnabled();
  // Trial -BattleCoverDense=1 (2026-11-21, default 0; user idea 11-21, step 3): on maps with city cover (IsUrban), every side of an
  // obstacle longer than 3 m also gets cover slots every 1.4 m (BattleCover.cpp BuildSlots; the usual 5 samples per side stay),
  // so several soldiers can use one long wall. Sector arrival then treats a slot as taken only within 1.3 m of another

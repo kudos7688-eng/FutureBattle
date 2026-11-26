@@ -183,9 +183,74 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   const bool CoverArrival=CoverArrivalAllowed && BattleFieldLayout::IsUrban(GetWorld()) && !Rally && Nav;
   TArray<FVector> CoverCandidates,HideOnlyCandidates; TSet<int32> CoverAssigned;
   int32 ArrivalSlotFireChecks=0,ArrivalHuddleFireChecks=0;
+  const bool bNearEnemyArrival=CoverNearEnemyEnabled() && Sector && CoverArrival;
+  FVector EnemyPoint=FVector::ZeroVector;bool bNearEnemyKnown=false;
+  if(bNearEnemyArrival)
+  {
+   const auto* NearMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+   const TCHAR* NearSource=TEXT("arrival_near_enemy_plan_home");
+   if(P.bFocus){EnemyPoint=P.Focus;bNearEnemyKnown=true;NearSource=TEXT("arrival_near_enemy_plan_focus");}
+   else
+   {
+    TMap<FIntPoint,int32> NearCounts;
+    for(const FVector& KnownPoint:NearMatch->RouteKnownEnemies(S->Team))
+    {
+     const FIntPoint KnownCell=BattleSectors::Cell(KnownPoint);
+     if(KnownCell!=Cell && BattleSectors::Valid(KnownCell) && FMath::Abs(KnownCell.X-Cell.X)<=1 && FMath::Abs(KnownCell.Y-Cell.Y)<=1)
+      ++NearCounts.FindOrAdd(KnownCell);
+    }
+    const int32 NearTurn=NearMatch->AreaHome(S->Team).X>0?-1:1;
+    FIntPoint NearBestCell(0,0);int32 NearBestCount=0;double NearBestDistance=0.;
+    for(const auto& NearPair:NearCounts)
+    {
+     const double NearDistance=FVector::DistSquared2D(BattleSectors::Center(NearPair.Key),S->Destination);
+     if(!bNearEnemyKnown || NearPair.Value>NearBestCount || (NearPair.Value==NearBestCount &&
+      (NearDistance<NearBestDistance || (NearDistance==NearBestDistance && (NearTurn*NearPair.Key.X<NearTurn*NearBestCell.X ||
+       (NearPair.Key.X==NearBestCell.X && NearTurn*NearPair.Key.Y<NearTurn*NearBestCell.Y))))))
+     {bNearEnemyKnown=true;NearBestCell=NearPair.Key;NearBestCount=NearPair.Value;NearBestDistance=NearDistance;}
+    }
+    if(bNearEnemyKnown){EnemyPoint=BattleSectors::Center(NearBestCell);NearSource=TEXT("arrival_near_enemy_plan_sector");}
+    else
+    {
+     const FVector EnemyHome=NearMatch->AreaHome(1-S->Team);
+     const FVector HomeDirection=(EnemyHome-BattleSectors::Center(Cell)).GetSafeNormal2D();
+     const double HomeOctant=FMath::RoundToDouble(FMath::Atan2(HomeDirection.Y,HomeDirection.X)/(PI/4.))*(PI/4.);
+     const FIntPoint HomeCell=Cell+FIntPoint(FMath::RoundToInt(FMath::Cos(HomeOctant)),FMath::RoundToInt(FMath::Sin(HomeOctant)));
+     EnemyPoint=BattleSectors::Valid(HomeCell)?BattleSectors::Center(HomeCell):S->Destination+(EnemyHome-S->Destination).GetSafeNormal2D()*5000.;
+    }
+   }
+   SightExperiment.Cover(NearSource);
+  }
+  // Keep the arrival facing/replan contract. Only wall/exposure tests use the local enemy point.
+  int32 NearEnemyChecks=0;bool bNearEnemyCapRecorded=false;
+  TMap<FVector,bool> NearEnemyHiding;TSet<FVector> NearEnemyUnchecked;
+  auto NearEnemyHides=[&](const FVector& NearGround)
+  {
+   if(!bNearEnemyKnown)return true;
+   if(const bool* NearCached=NearEnemyHiding.Find(NearGround))return *NearCached;
+   if(NearEnemyChecks>=48)
+   {
+    NearEnemyUnchecked.Add(NearGround);
+    if(!bNearEnemyCapRecorded){SightExperiment.Cover(TEXT("arrival_near_enemy_check_cap"));bNearEnemyCapRecorded=true;}
+    return true;
+   }
+   ++NearEnemyChecks;
+   const bool bNearHides=BattleTactics::ExposureAt(GetWorld(),NearGround+FVector(0,0,90),
+    (EnemyPoint-NearGround).GetSafeNormal2D(),EnemyPoint+FVector(0,0,60)).VisibleSamples<=2;
+   NearEnemyHiding.Add(NearGround,bNearHides);
+   if(!bNearHides)SightExperiment.Cover(TEXT("arrival_near_enemy_exposed"));
+   return bNearHides;
+  };
+  auto RecordNearEnemySlot=[&](const FVector& NearSlot)
+  {
+   SightExperiment.Cover(TEXT("arrival_near_enemy_slot"));
+   const double NearMetres=FVector::Dist2D(NearSlot,EnemyPoint)/100.;
+   SightExperiment.Cover(NearMetres<30.?TEXT("arrival_near_enemy_dist_lt30m"):NearMetres<60.?TEXT("arrival_near_enemy_dist_30_60m"):
+    NearMetres<100.?TEXT("arrival_near_enemy_dist_60_100m"):TEXT("arrival_near_enemy_dist_ge100m"));
+  };
   // -BattleCoverOutward: the outward directions this sector is defended toward (rear and friendly-held sides left out).
   TArray<FVector> Outward;
-  if(CoverArrival && Sector && CoverOutwardEnabled() && !bFocusArrival)
+  if(CoverArrival && Sector && CoverOutwardEnabled() && !bFocusArrival && !bNearEnemyArrival)
   {
    const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
    const FVector Mid=BattleSectors::Center(Cell);
@@ -215,8 +280,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
     *FireAllowed=true;return true;
    };
    // -BattleAttackFocus: an obstacle toward the focus from this slot, or 30 degrees either side.
-   if(bFocusArrival)
-    if(const FVector ToFocus=(P.Focus-At).GetSafeNormal2D();!ToFocus.IsNearlyZero())
+   if(bFocusArrival || bNearEnemyArrival)
+    if(const FVector ToFocus=((bNearEnemyArrival?EnemyPoint:P.Focus)-At).GetSafeNormal2D();!ToFocus.IsNearlyZero())
     {
      for(const float Deg:{0.f,-30.f,30.f})
       if(DirectionWall(ToFocus.RotateAngleAxis(Deg,FVector::UpVector)))return true;
@@ -236,7 +301,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
     // Evaluation (arrival_slot_*): slots in the sector, those without an obstacle 2.5 m ahead, those seen by the nearest threat (-BattleCoverStrict).
     SightExperiment.Cover(TEXT("arrival_slot_in_cell"));
     if(!WallAhead(At)) SightExperiment.Cover(TEXT("arrival_slot_no_wall_ahead"));
-    else if(!HidesFromThreat(At)) SightExperiment.Cover(TEXT("arrival_slot_exposed"));
+    else if(bNearEnemyArrival?!NearEnemyHides(At):!HidesFromThreat(At))
+    {if(!bNearEnemyArrival)SightExperiment.Cover(TEXT("arrival_slot_exposed"));}
     else if(BattleTactics::CoverFirePointEnabled())
     {
      // Bound expensive fire-point searches per plan, after the cheap wall and hiding checks.
@@ -251,6 +317,11 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   }
   // Keep firing cover first, then hiding-only slots in their original distance order.
   const int32 FireCoverSlots=CoverCandidates.Num();
+  TMap<FVector,int32> NearEnemyOriginalOrder;
+  if(bNearEnemyArrival)
+   for(const TArray<FVector>* OriginalTier:{&CoverCandidates,&HideOnlyCandidates})
+    for(int32 OriginalIndex=0;OriginalIndex<OriginalTier->Num();++OriginalIndex)
+     NearEnemyOriginalOrder.FindOrAdd((*OriginalTier)[OriginalIndex],OriginalIndex);
   // -BattleCoverIndoor: stable roof-first ordering within each tier, never across tiers.
   int32 IndoorSlots=0,HideOnlyIndoorSlots=0;
   if(CoverIndoorEnabled() && Sector && (!CoverCandidates.IsEmpty() || !HideOnlyCandidates.IsEmpty()))
@@ -266,6 +337,31 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    const int32 TotalIndoorSlots=IndoorSlots+HideOnlyIndoorSlots;
    SightExperiment.Cover(TotalIndoorSlots==0?TEXT("arrival_indoor_none"):TotalIndoorSlots<5?TEXT("arrival_indoor_lt5"):TEXT("arrival_indoor_ge5"));
   }
+  // Unchecked slots come last even when indoor. Keep actual indoor flags instead of reading the old prefix.
+  // Fire/hide tiers never mix; unknowns keep their order from before the indoor partition.
+  TArray<bool> NearEnemyIndoor;
+  if(bNearEnemyArrival)
+  {
+   for(TArray<FVector>* NearTier:{&CoverCandidates,&HideOnlyCandidates})
+   {
+    const int32 NearIndoorCount=NearTier==&CoverCandidates?IndoorSlots:HideOnlyIndoorSlots;
+    TArray<int32> NearOrder;
+    for(int32 NearIndex=0;NearIndex<NearTier->Num();++NearIndex)NearOrder.Add(NearIndex);
+    NearOrder.StableSort([&](int32 NearA,int32 NearB)
+    {
+     const bool bUnknownA=NearEnemyUnchecked.Contains((*NearTier)[NearA]),bUnknownB=NearEnemyUnchecked.Contains((*NearTier)[NearB]);
+     if(bUnknownA!=bUnknownB)return !bUnknownA;
+     if(bUnknownA)return NearEnemyOriginalOrder.FindChecked((*NearTier)[NearA])<NearEnemyOriginalOrder.FindChecked((*NearTier)[NearB]);
+     const bool bIndoorA=NearA<NearIndoorCount,bIndoorB=NearB<NearIndoorCount;
+     if(bIndoorA!=bIndoorB)return bIndoorA;
+     return FMath::FloorToDouble(FVector::Dist2D((*NearTier)[NearA],EnemyPoint)/200.)<
+      FMath::FloorToDouble(FVector::Dist2D((*NearTier)[NearB],EnemyPoint)/200.);
+    });
+    TArray<FVector> NearSorted;
+    for(int32 NearIndex:NearOrder){NearSorted.Add((*NearTier)[NearIndex]);NearEnemyIndoor.Add(NearIndex<NearIndoorCount);}
+    *NearTier=MoveTemp(NearSorted);
+   }
+  }
   CoverCandidates.Append(HideOnlyCandidates);
   const double TakenRadius=Sector && CoverDenseEnabled()?130.:190.;
   int32 Queries=0, OpenMembers=0, TailQueries=0;
@@ -280,7 +376,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
     {
      const int32 CoverCandidateIndex=int32(&At-CoverCandidates.GetData());
      const bool bFireCoverSlot=CoverCandidateIndex<FireCoverSlots;
-     const bool bIndoorSlot=bFireCoverSlot?CoverCandidateIndex<IndoorSlots:CoverCandidateIndex-FireCoverSlots<HideOnlyIndoorSlots;
+     const bool bIndoorSlot=bNearEnemyArrival?NearEnemyIndoor[CoverCandidateIndex]:(bFireCoverSlot?CoverCandidateIndex<IndoorSlots:CoverCandidateIndex-FireCoverSlots<HideOnlyIndoorSlots);
      bCoverTried=true;
      if(TailQueries>=24) {bCapHit=true;break;}
      bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,At)<FMath::Square(TakenRadius)) {Taken=true;break;}
@@ -290,6 +386,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
      if(!Tail || !Tail->IsValid() || Tail->IsPartial() || Tail->PathPoints.Num()<2 || Tail->GetPathLength()>(Sector?6500:2500))
      {if(Tail && Tail->IsValid() && !Tail->IsPartial() && Tail->PathPoints.Num()>=2) ++ArrLong; else ++ArrNoPath; continue;}
      P.ArrivalGoals.Add(ID,At); P.ArrivalTails.Add(ID,Tail->PathPoints); Reserved.Add(At); CoverAssigned.Add(ID); Found=true;
+     if(bNearEnemyArrival)RecordNearEnemySlot(At);
      SightExperiment.Cover(TEXT("arrival_cover_slot"));
      if(BattleTactics::CoverFirePointEnabled())SightExperiment.Cover(bFireCoverSlot?TEXT("arrival_cover_slot_fire"):TEXT("arrival_cover_slot_hide_only"));
      if(bIndoorSlot)SightExperiment.Cover(TEXT("arrival_indoor_slot"));
@@ -321,7 +418,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
       bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,Want)<FMath::Square(90.)) {Taken=true;break;}
       if(Taken) continue;
       FNavLocation Projected; if(!Nav->ProjectPointToNavigation(Want,Projected,FVector(30,30,200)) || FVector::Dist2D(Projected.Location,Want)>40) continue;
-      if(!GetWorld()->LineTraceTestByObjectType(Projected.Location+FVector(0,0,100),Projected.Location-Normal*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic)) || !HidesFromThreat(Projected.Location)) continue;
+      if(!GetWorld()->LineTraceTestByObjectType(Projected.Location+FVector(0,0,100),Projected.Location-Normal*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic)) || (bNearEnemyArrival?!NearEnemyHides(Projected.Location):!HidesFromThreat(Projected.Location))) continue;
       if(BattleTactics::CoverFirePointEnabled())
       {
        if(ArrivalHuddleFireChecks>=40){SightExperiment.Cover(TEXT("arrival_huddle_fire_check_cap"));continue;}
@@ -333,6 +430,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
       auto* Tail=Nav->FindPathToLocationSynchronously(GetWorld(),P.Path.Num()?P.Path.Last():S->Destination,Projected.Location);
       if(!Tail || !Tail->IsValid() || Tail->IsPartial() || Tail->PathPoints.Num()<2 || Tail->GetPathLength()>6500) continue;
       P.ArrivalGoals.Add(ID,Projected.Location); P.ArrivalTails.Add(ID,Tail->PathPoints); Reserved.Add(Projected.Location); CoverAssigned.Add(ID); Found=true;
+      if(bNearEnemyArrival)RecordNearEnemySlot(Projected.Location);
       SightExperiment.Cover(TEXT("arrival_huddle"));
       break;
      }
