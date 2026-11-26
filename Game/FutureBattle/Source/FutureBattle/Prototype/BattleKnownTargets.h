@@ -9,6 +9,9 @@ namespace BattleKnownFire
  double MoveRange();
  double MoveSquadRadius();
  int32 MoveMax();
+ int32 MoveRayBudget();
+ int32 MoveSweepBudget();
+ int32 MoveNavBudget();
  enum class EReject : uint8 { None, Stale, Order, Range, FOV, Invalid, SensorWall, AimWall, Deferred, Waiting };
  struct FTarget
  {

@@ -1337,7 +1337,11 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   else if(KnownFire.Reject==BattleKnownFire::EReject::Deferred)SightExperiment.Cover(TEXT("known_move_gate_budget"));
   else if((bOnRoute && !StopForCombat) || bArrivalWalk)
   {
-   if(!BattleKnownFire::MoveMarch() || S->Order!=EBattleOrder::AttackMove)SightExperiment.Cover(TEXT("known_move_gate_march"));
+   if(!BattleKnownFire::MoveMarch() || S->Order!=EBattleOrder::AttackMove)
+   {
+    SightExperiment.Cover(TEXT("known_move_gate_march"));
+    SightExperiment.Cover(S->Order==EBattleOrder::Defend?TEXT("known_move_gate_march_defend"):S->Order==EBattleOrder::AttackMove?TEXT("known_move_gate_march_attack_move"):S->Order==EBattleOrder::Move?TEXT("known_move_gate_march_move"):TEXT("known_move_gate_march_hold"));
+   }
    else if(StartKnownMove(ID,Now))return;
   }
   else if(StartKnownMove(ID,Now))return;

@@ -51,7 +51,7 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  {
   if(KnownMoves.Contains(2))EndKnownMove(2,TestNow,TEXT("known_move_test_reset"));
   CancelCoverAction(2);TestWorld->GetSubsystem<UBattleCover>()->Release(2);CoverApproaches.Remove(2);SoldierPaths.Remove(2);FirePositions.Remove(2);
-  KnownFireSearches.Reset();KnownMoveAfter.Reset();KnownMoveCursor.Reset();
+  KnownFireSearches.Reset();KnownMoveAfter.Reset();KnownMoveEndCooldown.Reset();KnownMoveCursor.Reset();KnownMoveReservedID=INDEX_NONE;
   for(auto& FireBudget:KnownFireBudgets)FireBudget=BattleKnownFire::FBudget();
   for(auto& MoveBudget:KnownMoveBudgets)MoveBudget=FKnownMoveBudget();
   for(auto* OldWall:Walls){OldWall->SetActorEnableCollision(false);OldWall->Destroy();}Walls.Reset();
@@ -83,7 +83,7 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  auto TryStart=[&]()
  {
   const int32 StartRays=Count(TEXT("known_move_rays")),StartSweeps=Count(TEXT("known_move_sweeps")),StartNav=Count(TEXT("known_move_nav"));
-  for(int32 Attempt=0;Attempt<8;++Attempt)
+  for(int32 Attempt=0;Attempt<24;++Attempt)
   {
    const TMap<FName,int32> BeforeRejects=SightExperiment.CoverDiag;
    TestNow+=1.01;Observe();const bool AttemptStarted=StartKnownMove(2,TestNow);
@@ -116,10 +116,13 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
    if(FixtureOnNav)
    {
     TestNow+=.2;bKnownMoveDeferred=false;
+    const bool ProbeReserved=KnownMoveReserve(2,TestNow);
+    if(!ProbeReserved){Check(TEXT("move_fixture_budget"),false);continue;}
     const FVector FixtureAnchor=FixtureProjected.Location+FVector(0,0,90);
     FixtureHere=KnownMoveLine(2,Start+FVector(0,0,30),Enemy+FVector(0,0,60),TestNow);
     FixtureThere=KnownMoveLine(2,FixtureAnchor+FVector(0,0,30),Enemy+FVector(0,0,60),TestNow);
     FixtureFire=KnownMoveLine(2,FixtureAnchor+FVector(0,0,60),Enemy+FVector(0,0,60),TestNow);
+    KnownMoveRelease(2);
    }
    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_FIXTURE_PROBE repaired=%d side=%.0f nav=%d here=%d there=%d fire=%d deferred=%d"),RequireGeometry,FixtureSide,FixtureOnNav,FixtureHere,FixtureThere,FixtureFire,bKnownMoveDeferred);
    if(RequireGeometry)Check(FixtureSide<0?TEXT("move_fixture_left_hidden_fire"):TEXT("move_fixture_right_hidden_fire"),FixtureOnNav && !FixtureHere && !FixtureThere && FixtureFire && !bKnownMoveDeferred);
@@ -185,7 +188,7 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   const int32 MarchShots=Shooter.ShotSequence,MarchFiredBefore=Count(TEXT("known_move_arrived_fired"));
   const TMap<FName,int32> MarchBeforeDiag=SightExperiment.CoverDiag;
   bool MarchStarted=false,MarchArrived=false,MarchWithin=true;
-  for(int32 MarchAttempt=0;MarchAttempt<8 && !MarchStarted;++MarchAttempt)
+  for(int32 MarchAttempt=0;MarchAttempt<24 && !MarchStarted;++MarchAttempt)
   {
    const TMap<FName,int32> MarchBeforeAttempt=SightExperiment.CoverDiag;
    TestNow+=1.01;Observe();Follow(2,0.f,TestNow);MarchStarted=KnownMoves.Contains(2);
@@ -225,7 +228,7 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   const FVector MarchCellStart(-10,100,Start.Z),MarchCellGoal(10,100,Start.Z);
   Squad.Destination=MarchCellGoal;Plans.FindChecked(Shooter.SquadID).Center=MarchCellStart;
   Check(TEXT("move_march_sector"),KnownMovePlaceAllowed(2,MarchCellStart,MarchCellStart) && KnownMovePlaceAllowed(2,MarchCellStart,MarchCellGoal) &&
-   !KnownMovePlaceAllowed(2,MarchCellStart,FVector(-10,-10,Start.Z)));
+   KnownMovePlaceAllowed(2,MarchCellStart,FVector(-10,-10,Start.Z)));
   Plans.FindChecked(Shooter.SquadID).Center=MarchCellStart+FVector(BattleKnownFire::MoveSquadRadius()+10.,0,0);
   Check(TEXT("move_march_squad_radius"),!KnownMovePlaceAllowed(2,MarchCellStart,MarchCellStart));
  }
@@ -259,17 +262,42 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  for(int32 Frame=0;Frame<600 && KnownMoves.Contains(2);++Frame){TestNow+=1./30.;StepKnownMove(2,1.f/30.f,TestNow);}
  Check(TEXT("move_stale_return"),StaleStart && LeftStart && !KnownMoves.Contains(2) && Count(TEXT("known_move_cancel_stale"))==StaleBefore+1 &&
   FVector::Dist2D(Position(2),StaleGoal)<40. && !CoverApproaches.Contains(2) && !SoldierPaths.Contains(2));
- Reset();bool Tokens=true;for(int32 Token=0;Token<16;++Token)Tokens &= KnownMoveSpend(2,TestNow,0);
- const bool Deferred=!KnownMoveSpend(2,TestNow,0);auto& TeamBudget=KnownFireBudgets[Shooter.Team];
- Check(TEXT("move_ray_budget"),Tokens && Deferred && TeamBudget.Used==16 && KnownMoveBudgets[Shooter.Team].Rays==16);
- bool MoreTokens=true;for(int32 Token=0;Token<16;++Token)MoreTokens &= KnownFireRay(2,TestNow);
- Check(TEXT("move_shared_ray_budget"),MoreTokens && TeamBudget.Used==32 && !KnownFireRay(2,TestNow));
- Reset();bool Sweeps=true,Navs=true;for(int32 Token=0;Token<16;++Token){Sweeps &= KnownMoveSpend(2,TestNow,1);Navs &= KnownMoveSpend(2,TestNow,2);}
- Check(TEXT("move_geometry_budget"),Sweeps && Navs && !KnownMoveSpend(2,TestNow,1) && !KnownMoveSpend(2,TestNow,2));
- const bool NewCaller=!KnownMoveSpend(11,TestNow+1.01,2);const bool OldCaller=KnownMoveSpend(2,TestNow+1.01,2);
- Check(TEXT("move_budget_fifo"),NewCaller && OldCaller);
+ Reset();const bool RayReserved=KnownMoveReserve(2,TestNow);
+ bool Tokens=RayReserved;for(int32 Token=0;Token<12;++Token)Tokens &= KnownMoveSpend(2,TestNow,0);
+ KnownMoveRelease(2);auto& MoveTeamBudget=KnownMoveBudgets[Shooter.Team];
+ Check(TEXT("move_ray_budget"),Tokens && MoveTeamBudget.Rays==12 && MoveTeamBudget.Sweeps==0 && MoveTeamBudget.Nav==0);
+ // Movement rays are charged to the shared 32-ray allowance; only 20 remain.
+ bool MoreTokens=true;for(int32 Token=0;Token<20;++Token)MoreTokens &= KnownFireRay(2,TestNow);
+ Check(TEXT("move_shared_ray_budget"),MoreTokens && KnownFireBudgets[Shooter.Team].Used==32 && !KnownFireRay(2,TestNow));
+ Reset();bool Sweeps=KnownMoveReserve(2,TestNow),Navs=Sweeps;
+ for(int32 Token=0;Token<24;++Token)Sweeps &= KnownMoveSpend(2,TestNow,1);
+ for(int32 Token=0;Token<8;++Token)Navs &= KnownMoveSpend(2,TestNow,2);
+ KnownMoveRelease(2);
+ Check(TEXT("move_geometry_budget"),Sweeps && Navs && MoveTeamBudget.Sweeps==24 && MoveTeamBudget.Nav==8 && MoveTeamBudget.Rays==0);
+ // Failure in each dimension is atomic: no other dimension is charged and no cursor is advanced.
+ bool Atomic=true;
+ for(int32 Dimension=0;Dimension<3;++Dimension)
+ {
+  Reset();MoveTeamBudget.Window=FMath::FloorToInt64(TestNow/.1);
+  MoveTeamBudget.Rays=Dimension==0?BattleKnownFire::MoveRayBudget():0;
+  KnownFireBudgets[Shooter.Team].Window=MoveTeamBudget.Window;KnownFireBudgets[Shooter.Team].Used=MoveTeamBudget.Rays;
+  MoveTeamBudget.Sweeps=Dimension==1?BattleKnownFire::MoveSweepBudget():0;
+  MoveTeamBudget.Nav=Dimension==2?BattleKnownFire::MoveNavBudget():0;
+  const int32 BeforeRays=MoveTeamBudget.Rays,BeforeSweeps=MoveTeamBudget.Sweeps,BeforeNav=MoveTeamBudget.Nav,BeforeShared=KnownFireBudgets[Shooter.Team].Used;
+  Atomic &= !StartKnownMove(2,TestNow) && KnownMoveReservedID==INDEX_NONE && KnownMoveCursor.FindRef(2)==0 &&
+   MoveTeamBudget.Rays==BeforeRays && MoveTeamBudget.Sweeps==BeforeSweeps && MoveTeamBudget.Nav==BeforeNav && KnownFireBudgets[Shooter.Team].Used==BeforeShared;
+ }
+ Check(TEXT("move_budget_atomic"),Atomic);
+ const bool NewCaller=!KnownMoveReserve(11,TestNow+1.01);const bool OldCaller=KnownMoveReserve(2,TestNow+1.01);
+ KnownMoveRelease(2);
+ const bool NextCaller=KnownMoveReserve(11,TestNow+1.01);KnownMoveRelease(11);
+ Check(TEXT("move_budget_fifo"),NewCaller && OldCaller && NextCaller);
  Reset();const bool IntervalStart=TryStart();if(IntervalStart)EndKnownMove(2,TestNow,TEXT("known_move_test_reset"));
- Check(TEXT("move_cooldown"),IntervalStart && !StartKnownMove(2,TestNow+4.99));
+ const int32 EndCooldownBefore=Count(TEXT("known_move_gate_end_cooldown"));
+ Check(TEXT("move_cooldown"),IntervalStart && !StartKnownMove(2,TestNow+4.99) && Count(TEXT("known_move_gate_end_cooldown"))==EndCooldownBefore+1);
+ Reset();KnownMoveAfter.Add(2,TestNow+1.);const int32 IntervalBefore=Count(TEXT("known_move_gate_search_interval"));
+ Check(TEXT("move_interval_diagnostic"),!StartKnownMove(2,TestNow+.5) && Count(TEXT("known_move_gate_search_interval"))==IntervalBefore+1);
+ Check(TEXT("move_no_partial_geometry"),Count(TEXT("known_move_reservation_violation"))==0 && KnownMoveReservedID==INDEX_NONE);
  for(auto* TestWall:Walls){TestWall->SetActorEnableCollision(false);TestWall->Destroy();}
  return Failures;
 }

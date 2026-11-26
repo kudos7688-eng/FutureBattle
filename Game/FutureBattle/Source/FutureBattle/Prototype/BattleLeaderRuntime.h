@@ -927,7 +927,10 @@ public:
  BattleKnownFire::FBudget KnownFireBudgets[2];
  bool KnownMoveAllowed(int32 ID,bool CountGate=false);
  bool KnownMoveMarching(int32 ID) const;
+ const TCHAR* KnownMovePlaceRejection(int32 ID,FVector Start,FVector Place) const;
  bool KnownMovePlaceAllowed(int32 ID,FVector Start,FVector Place) const;
+ bool KnownMoveReserve(int32 ID,double Now);
+ void KnownMoveRelease(int32 ID);
  bool KnownMoveSpend(int32 ID,double Now,uint8 Kind);
  bool KnownMoveLine(int32 ID,FVector From,FVector To,double Now);
  bool StartKnownMove(int32 ID,double Now);
@@ -944,9 +947,12 @@ public:
  };
  TMap<int32,FKnownMove> KnownMoves;
  TMap<int32,double> KnownMoveAfter;
+ TMap<int32,double> KnownMoveEndCooldown;
  TMap<int32,int32> KnownMoveCursor;
  struct FKnownMoveBudget {int64 Window=-1;int32 Rays=0,Sweeps=0,Nav=0;TArray<int32> Waiting;TMap<int32,double> Asked;};
  FKnownMoveBudget KnownMoveBudgets[2];
+ int32 KnownMoveReservedID=INDEX_NONE,KnownMoveRemainingRays=0,KnownMoveRemainingSweeps=0,KnownMoveRemainingNav=0;
+ int64 KnownMoveReservedWindow=-1;
  bool bKnownMoveDeferred=false;
  void RunCoverPeekTrial();
  int32 PeekTrialStage=0,PeekTrialCase=0,PeekTrialFailures=0;

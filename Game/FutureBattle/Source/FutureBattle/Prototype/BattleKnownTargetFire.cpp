@@ -92,7 +92,7 @@ bool UBattleLeaderRuntime::KnownFireRay(int32 ID,double Now)
   if(!WaitingUnit || !WaitingUnit->IsAlive() || Now-Budget.RequestedAt.FindRef(WaitingID)>.5)
   {Budget.Waiting.RemoveAt(At);Budget.RequestedAt.Remove(WaitingID);}
  }
- if(Budget.Used>=32 || (Budget.Waiting.Num() && Budget.Waiting[0]!=ID))
+ if(Budget.Used>=(BattleKnownFire::MoveEnabled()?BattleKnownFire::MoveRayBudget():32) || (Budget.Waiting.Num() && Budget.Waiting[0]!=ID))
  {
   Budget.Waiting.AddUnique(ID);Budget.RequestedAt.Add(ID,Now);SightExperiment.Cover(TEXT("known_fire_budget_deferred"));return false;
  }
