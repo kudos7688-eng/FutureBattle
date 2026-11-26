@@ -17,6 +17,7 @@
 #include "BattleSectors.h"
 #include "BattleState.h"
 #include "BattleTactics.h"
+#include "FutureBattle.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 
