@@ -121,7 +121,7 @@ private:
  struct FSeizeSector
  {
   FIntPoint Cell=FIntPoint::ZeroValue;
-  double Start=0.,EnterAt=-1.,QuietSince=-1.,TakenAt=-1.,EndAt=-1.,LastKnown=0.;
+  double Start=0.,EnterAt=-1.,QuietSince=-1.,TakenAt=-1.,EndAt=-1.,LastKnown=0.,LastSeen=-1.;
  };
  TMap<int32,FSeizeSector> SeizeSectors;
  TMap<int32,TMap<FIntPoint,double>> SeizeEnded;

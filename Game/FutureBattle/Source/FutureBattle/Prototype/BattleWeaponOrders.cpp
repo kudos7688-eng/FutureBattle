@@ -21,7 +21,9 @@ bool BattleTactics::OrderAllowsTarget(const FBattleSquadState& S,int32 TargetID,
 {
  if(S.Order==EBattleOrder::Move)return false;
  if(S.TacticalPlan.Action==EBattleSquadTactic::Support&&(TargetID<=0||TargetID!=S.TacticalPlan.SupportTarget))return false;
- const bool Sector=S.bSectorMission&&S.TacticalPlan.Action==EBattleSquadTactic::Mission;
+ // -BattleSectorSeize: a squad taking a sector (plan Engage, reason SEIZE SECTOR) fights as a sector squad, not inside a defence radius.
+ const bool Sector=(S.bSectorMission&&S.TacticalPlan.Action==EBattleSquadTactic::Mission)||
+  (SectorSeize()>0&&S.TacticalPlan.Action==EBattleSquadTactic::Engage&&S.TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")));
  if(!Sector&&S.Order==EBattleOrder::Defend&&!DefendEngage(S.Team)&&FVector::Dist2D(KnownPosition,S.Destination)>S.DefenseRadius)return false;
  return true;
 }

@@ -177,6 +177,8 @@ bool UBattleSquadTactics::StepSeizeSector(int32 SID,const FBattleSquadObservatio
  }
  const TCHAR* End=!Seize || Seize->EndAt>=0.?TEXT("SeizeEndLost"):
   Seize->TakenAt<0. && Now-Seize->Start>=180.?TEXT("SeizeEndTimeout"):
+  // After the sector was taken a renewed fire fight may not keep the squad for good (Codex review 2026-11-27).
+  Seize->TakenAt>=0. && Now-Seize->TakenAt>=BattleTactics::SectorSeizeHold()+90.?TEXT("SeizeEndHeldLong"):
   Seize->EnterAt<0. && Now-Seize->LastKnown>=60.?TEXT("SeizeEndGone"):nullptr;
  if(End)
  {
@@ -197,13 +199,15 @@ bool UBattleSquadTactics::StepSeizeSector(int32 SID,const FBattleSquadObservatio
   if(Plan.Reason!=TEXT("SEIZE SECTOR / FIRE") &&
      Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("SEIZE SECTOR / FIRE")))
    Event(TEXT("SeizeContact"));
-  Seize->QuietSince=-1.;
+  Seize->QuietSince=-1.;Seize->LastSeen=Now;
   return true;
  }
  const FVector Center=BattleSectors::Center(Seize->Cell);
  if(Plan.Reason==TEXT("SEIZE SECTOR / FIRE"))
  {
-  if(Plan.SafeSeconds>=4 && Plan.Age>=3 &&
+  // Four seconds since a member last saw an enemy himself, and no damage (SafeSeconds also waits for shared and remembered
+  // contacts to fade, which kept the squad in place; Codex review 2026-11-27).
+  if(Now-Seize->LastSeen>=4. && O.RecentDamage==0 && Plan.Age>=3 &&
      Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::AttackMove,Center,TEXT("SEIZE SECTOR / MOVE ON")))
    Event(TEXT("SeizeAgain"));
   return true;
