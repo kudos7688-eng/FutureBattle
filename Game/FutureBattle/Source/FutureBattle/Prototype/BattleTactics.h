@@ -130,6 +130,19 @@ namespace BattleTactics
  bool SupplyCarFirst();
  bool SupplyCarPost();
  bool SupplyCarTarget();
+ // -BattleSupplyCarHunt=1 (default 0; user 2026-11-26 "attack a supply vehicle as soon as it is found"; -BattleSupplyCarTarget alone
+ //   changed nothing in a match, the vehicles stand behind their line and are rarely in the view of a squad that picks targets):
+ //   when a soldier of the team sees an enemy supply vehicle (AreaIntelView: the units seen now; its type is the observed type
+ //   with -BattleObservedArmour, else the type of that seen unit, as the other vehicle checks; scout report dots carry no type and
+ //   do not count), the nearest two free squads within 500 m of it get an attack-move to it, as the anti-tank hunts
+ //   (-BattleATHunt): anti-tank teams and exoskeletons first, then rifle and heavy squads (small arms do ACArmorSmallArms of their
+ //   damage to it; map K's rifle squads have no anti-tank soldier). Not squads bought for a purpose, on a raid, on a player's
+ //   route, of a front-holding group, under the player's own command, with fewer than half their members, or falling back,
+ //   regrouping or on a supply trip. The goal follows the vehicle while the team sees it. A hunt ends when the squad is within 15 m
+ //   of where the vehicle was last seen and the team has not seen it for 2 s, after 120 s, when the squad has not come 10 m nearer
+ //   in 30 s (an order refused, a way blocked), goes for supply or is no longer active; after a hunt that did not get there the
+ //   vehicle is left alone for 60 s. Whether the vehicle still lives is not read. BattleATHunt.cpp (UpdateSupplyHunts), BattleMatch.cpp.
+ bool SupplyCarHunt();
  // Trial -BattleBaseRifleDamage=x (default 0 = unchanged, 0.01..1): small-arms shots do x of their damage to an enemy home base
  // (anti-tank rounds, tank guns and shells keep their own base damage).
  float BaseRifleDamage();

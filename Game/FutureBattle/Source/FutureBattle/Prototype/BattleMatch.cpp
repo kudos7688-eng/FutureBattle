@@ -387,6 +387,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  UpdateGroups(Team);
  if(bArea&&BattleTactics::ArtilleryPosts())UpdateArtilleryRaids(Team);
  if(bArea&&(BattleTactics::ATHunt()||BattleTactics::ATFire()))UpdateATHunts(Team);
+ if(bArea&&BattleTactics::SupplyCarHunt())UpdateSupplyHunts(Team);
  // Routes (map F): what the team sees now, gathered once for all its squads.
  const bool bRoutes=bStrategy&&RoutesOn();TArray<FVector> RouteEnemies;if(bRoutes)RouteEnemies=RouteKnownEnemies(Team);
  TArray<int32> RouteLoad; // -BattleRouteLoad: squads of this team already sent over each road section in this round
@@ -480,6 +481,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   // Trial -BattleATHunt: a squad asked by an armoured unit attacks the anti-tank soldier it saw (BattleATHunt.cpp).
   bool bATHunt=false;
   if(bArea&&BattleTactics::ATHunt()){FVector HuntCenter;if(ATHuntGoal(Team,Pair.Key,HuntCenter)){Center=HuntCenter;Order=EBattleOrder::AttackMove;bATHunt=true;}}
+  // Trial -BattleSupplyCarHunt: a squad sent to an enemy supply vehicle the team saw (BattleATHunt.cpp); treated as the hunts above.
+  if(bArea&&BattleTactics::SupplyCarHunt()){FVector HuntCenter;if(SupplyHuntGoal(Team,Pair.Key,HuntCenter)){Center=HuntCenter;Order=EBattleOrder::AttackMove;bATHunt=true;}}
   const bool bRaidDuty=RaidPost!=nullptr||bRaidScreen||bATHunt;
   // The tank's overwatch post; a post near its current mission is kept (no new order for every small change in what the team knows).
   if(bCarShield){Center=CarShield;Order=EBattleOrder::AttackMove;if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2000.)Center=Pair.Value.MissionDestination;

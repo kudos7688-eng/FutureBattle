@@ -39,6 +39,11 @@ float BattleTactics::SuppressFire()
  static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSuppressFire="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,60.f):0.f;}();
  return Seconds;
 }
+bool BattleTactics::SupplyCarHunt()
+{
+ static const bool bOn=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarHunt="),Value);return Value!=0;}();
+ return bOn;
+}
 bool BattleTactics::SupplyCarFirst()
 {
  static const bool bOn=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarFirst="),Value);return Value!=0;}();

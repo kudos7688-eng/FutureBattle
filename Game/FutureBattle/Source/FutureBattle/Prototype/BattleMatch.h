@@ -362,6 +362,13 @@ public:
  int64 ATFireAims=0;
  void UpdateATHunts(int32 Team);
  bool ATHuntGoal(int32 Team,int32 SquadID,FVector& Center) const;
+ // Trial -BattleSupplyCarHunt (BattleTactics.h): hunting squad -> the enemy supply vehicle it is sent to (transient).
+ struct FSupplyHunt { int32 Team=0; int32 Target=INDEX_NONE; FVector Position=FVector::ZeroVector; double StartAt=-1.,SeenAt=-1.,CheckAt=-1.,CheckDistance=0.; };
+ TMap<int32,FSupplyHunt> SupplyHunts; double SupplyHuntClock[2]={-1.,-1.};
+ TMap<int32,double> SupplyHuntRest[2]; // enemy supply vehicle -> no new hunt for it before this time
+ TSet<int32> SupplySeenLogged[2];
+ void UpdateSupplyHunts(int32 Team);
+ bool SupplyHuntGoal(int32 Team,int32 SquadID,FVector& Center) const;
  bool ACShieldPost(int32 Team,int32 SquadID,FVector& Post) const;
  void UpdateArtilleryRaidGroup(int32 Team);
  void PlanArtilleryRaidFlank(int32 Team,const FVector& From,const FVector& Target);
