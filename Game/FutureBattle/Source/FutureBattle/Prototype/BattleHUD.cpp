@@ -1,4 +1,5 @@
 #include "BattleHUD.h"
+#include "BattleEnemyTrack.h"
 #include "BattleArms.h"
 #include "BattleSquadTactics.h"
 #include "BattleLeaderRuntime.h"
@@ -746,6 +747,12 @@ void ABattleHUD::DrawMinimap()
  const auto& Known=FrameContacts;
  for(const auto& Pair:Known) if(!Pair.Value->bVisible && Pair.Value->Confidence>.35f) Dot(Pair.Value->LastKnownPosition,3,Stale);
  for(const auto& Pair:Known) if(Pair.Value->bVisible) Dot(Pair.Value->LastKnownPosition,4,Enemy);
+ if(BattleEnemyTrack::KeepSeconds()>0.f)for(const auto& Track:PC->EnemyTrack)if(Track.Value.State==1||Track.Value.State==2)
+ {
+  const FVector2D TrackAt=Map.ToScreen(Track.Value.Where);
+  if(Map.Contains(TrackAt-FVector2D(4,4))&&Map.Contains(TrackAt+FVector2D(4,4)))
+   Frame(TrackAt-FVector2D(4,4),TrackAt+FVector2D(4,4),Track.Value.State==1?Enemy:Stale);
+ }
  // Scout reports: own pairs' direction alerts (a line from the pair) and reported positions; enemy observers reporting near own
  // soldiers as a circle at their approximate position.
  if(Match->bArea)
@@ -966,25 +973,6 @@ namespace
    if(W==EBattleWeapon::AntiTank) bAT=true; else if(W==EBattleWeapon::Mortar) bMortar=true; else Direct=FMath::Max(Direct,BattleRanges::Engage(W));
   }
   return RangeRingsFor(L,Direct,bAT,bMortar,Type==BattleSquadType::SPGun,Type==BattleSquadType::Tank,true,bGuess);
- }
- // Enemy squads the player's side sees now: centre of their seen soldiers and the identified type. Seen contacts only
- // (remembered ones and a scout's long-range sightings are left out, as on the minimap).
- struct FBattleSeenEnemySquad{FVector Sum=FVector::ZeroVector;int32 Count=0;uint8 Type=255;TArray<FVector,TInlineAllocator<8>> Soldiers;};
- TMap<int32,FBattleSeenEnemySquad> SeenEnemySquads(const UWorld* World)
- {
-  TMap<int32,FBattleSeenEnemySquad> Out; TSet<int32> Counted;
-  const auto* Store=World->GetSubsystem<UBattleState>(); const auto* Sense=World->GetSubsystem<UBattlePerception>(); const auto* Match=World->GetSubsystem<UBattleMatch>();
-  for(const auto& Pair:Store->GetUnits()) if(Pair.Value.Team==0&&Pair.Value.IsAlive())
-   if(const auto* Contacts=Sense->GetContacts(Pair.Key)) for(const auto& C:*Contacts)
-   {
-    if(!C.Value.bVisible||(Match->bArea&&Match->IsScoutLongContact(Pair.Key,C.Value))) continue;
-    const auto* Target=Store->Find(C.Key); if(!Target||!Target->IsAlive()||Target->Team==0) continue;
-    auto& G=Out.FindOrAdd(Target->SquadID);
-    if(C.Value.ObservedSquadType<BattleSquadType::Count) G.Type=C.Value.ObservedSquadType;
-    if(Counted.Contains(C.Key)) continue; Counted.Add(C.Key);
-    G.Sum+=C.Value.LastKnownPosition; ++G.Count; G.Soldiers.Add(C.Value.LastKnownPosition);
-   }
-  return Out;
  }
 }
 
@@ -1209,8 +1197,26 @@ void ABattleHUD::DrawSquadIcons()
   Add(Where,E.Value.Type,FLinearColor(1.f,.35f,.28f,.95f*A),false,false,FString::FromInt(E.Value.Count),1);
  }
  // Last known place of enemy squads no longer seen: always shown (also close up), dashed and dimmer, with the time since.
- for(const auto& R:RememberedEnemySquads(GetWorld(),Seen))
-  Add(R.Value.Where,R.Value.Type,FLinearColor(1.f,.55f,.35f,.7f),true,false,FString::Printf(TEXT("%.0f秒前"),FMath::Max(0.,Now-R.Value.SeenAt)),2);
+ if(BattleEnemyTrack::KeepSeconds()>0.f)
+ {
+  for(const auto& Track:PC->EnemyTrack)
+  {
+   const auto& Entry=Track.Value;
+   if(Entry.State==1)Add(Entry.Where,Entry.Type,FLinearColor(1.f,.45f,.3f,.9f),false,false,TEXT("追跡"),1);
+   else if(Entry.State==2)
+   {
+    const double Age=FMath::Max(0.,Now-Entry.LastSeenAt);
+    const double Span=BattleEnemyTrack::KeepSeconds()-BattleEnemyTrack::TrackSeconds();
+    const float Alpha=FMath::Lerp(.7f,.35f,float(FMath::Clamp(Span>0.?(Age-BattleEnemyTrack::TrackSeconds())/Span:1.,0.,1.)));
+    Add(Entry.Where,Entry.Type,FLinearColor(1.f,.55f,.35f,Alpha),true,false,FString::Printf(TEXT("%.0f秒前"),Age),2);
+   }
+  }
+ }
+ else
+ {
+  for(const auto& R:RememberedEnemySquads(GetWorld(),Seen))
+   Add(R.Value.Where,R.Value.Type,FLinearColor(1.f,.55f,.35f,.7f),true,false,FString::Printf(TEXT("%.0f秒前"),FMath::Max(0.,Now-R.Value.SeenAt)),2);
+ }
  // Icons of the same kind that would overlap are merged into the first (selected first): it shows "+N" for the others.
  Items.StableSort([](const FItem& X,const FItem& Y){return X.bSelected&&!Y.bSelected;});
  TArray<int32> Shown;
@@ -1224,6 +1230,33 @@ void ABattleHUD::DrawSquadIcons()
  {
   const FItem& It=Items[I];
   Icon(It.C,It.Type,It.Color,It.bDashed,It.bSelected,It.Merged>0?FString::Printf(TEXT("%s +%d"),*It.Note,It.Merged):It.Note);
+ }
+ // Target brackets use the same unmerged anchor as picking, including at close camera distances.
+ auto TargetBracket=[&](const FVector& Where,const TCHAR* Caption)
+ {
+  FVector2D Center;if(!PC->ProjectWorldLocationToScreen(Where+FVector(0,0,250),Center))return;
+  Center.Y-=14.;if(Center.X<20||Center.X>Canvas->SizeX-20||Center.Y<120||Center.Y>H-215)return;
+  const FLinearColor Red(1.f,.18f,.12f,.95f);
+  for(int32 SX:{-1,1})for(int32 SY:{-1,1})
+  {
+   const FVector2D Corner=Center+FVector2D(SX*20.,SY*16.);
+   DrawLine(Corner.X,Corner.Y,Corner.X-SX*7.f,Corner.Y,Red,2.f);
+   DrawLine(Corner.X,Corner.Y,Corner.X,Corner.Y-SY*7.f,Red,2.f);
+  }
+  DrawText(Caption,Red,Center.X-20,Center.Y-34,GEngine->GetSmallFont(),.8f);
+ };
+ if(!PC->GetSelection().IsEmpty()&&PC->GetSoldierSelection()==INDEX_NONE)
+ {
+  FVector2D PointerAt;FBattleEnemyTrackEntry HoverEntry;
+  if(PC->GetPointerPosition(PointerAt)&&PC->EnemyEntry(PC->EnemySquadAt(PointerAt),HoverEntry))TargetBracket(HoverEntry.Where,TEXT("右クリック：この部隊を攻撃"));
+ }
+ TSet<int32> MarkedTargets;
+ for(const auto& SelectedUnit:PC->GetSelection())if(SelectedUnit&&SelectedUnit->GetState())
+ {
+  const int32 TargetID=PC->TargetOrderOf(SelectedUnit->GetState()->SquadID);
+  if(MarkedTargets.Contains(TargetID))continue;MarkedTargets.Add(TargetID);
+  FBattleEnemyTrackEntry TargetEntry;
+  if(PC->EnemyEntry(TargetID,TargetEntry))TargetBracket(TargetEntry.Where,TEXT("攻撃目標"));
  }
 }
 
@@ -1245,6 +1278,9 @@ void ABattleHUD::DrawOrderMarks()
  {
   if(!Unit||!Unit->GetState()) continue; const int32 SID=Unit->GetState()->SquadID; if(Done.Contains(SID)) continue; Done.Add(SID);
   const auto* S=Store->FindSquad(SID); if(!S||S->CommandStatus!=EBattleCommandStatus::Active) continue;
+  FBattleEnemyTrackEntry TargetEntry;
+  if(PC->EnemyEntry(PC->TargetOrderOf(SID),TargetEntry))
+   Segment(L->Position(S->LeaderUnitID)+FVector(0,0,40),TargetEntry.Where+FVector(0,0,40),FLinearColor(1.f,.18f,.12f,.8f),1.f);
   const EBattleOrder Order=S->bHasMission?S->MissionOrder:S->Order; const FVector Goal=(S->bHasMission?S->MissionDestination:S->Destination)+FVector(0,0,25);
   if(Order==EBattleOrder::Hold) continue;
   const FLinearColor Color=Order==EBattleOrder::AttackMove?FLinearColor(1,.6f,.2f,.9f):Order==EBattleOrder::Defend?FLinearColor(.45f,.7f,1,.9f):FLinearColor(.28f,.95f,.8f,.9f);

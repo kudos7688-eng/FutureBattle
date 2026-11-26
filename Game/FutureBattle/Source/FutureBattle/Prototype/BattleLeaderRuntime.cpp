@@ -708,6 +708,8 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    if(!BattleTactics::OrderAllowsTarget(*S,C.Key,C.Value.LastKnownPosition))continue;
    if(bArmourSectorGate)AllowedArmourTargets.Add(C.Key);
    double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
+   if(!OrderTargets.IsEmpty())if(const int32* OrderedEnemy=OrderTargets.Find(SID))
+    if(const auto* CandidateUnit=Store->Find(C.Key);CandidateUnit&&CandidateUnit->SquadID==*OrderedEnemy)D*=.0625;
    const bool bInCone=!bFocusTarget || FVector::DotProduct((C.Value.LastKnownPosition-P.Center).GetSafeNormal2D(),FocusDir)>=.707f;
    if(!bInCone)D*=2.25;
    if(D<Best || (D==Best && C.Key<P.TargetID)) { Best=D; P.TargetID=C.Key;bBestInCone=bInCone;if(BattleTactics::ObservedTactics())SelectedTargetAt=C.Value.LastKnownPosition; }
@@ -919,6 +921,13 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   if(bWideField && bStableMovement) BuildMovementPlan(SID);
   else for(int32 ID:S->Members) if(auto* B=Bodies.Find(ID)) B->Waypoint=1;
  }
+ // Record the final visible, non-shared choice only for an explicit player target.
+ if(!OrderTargets.IsEmpty())if(const int32* OrderedEnemy=OrderTargets.Find(SID))
+  if(const auto* ChosenUnit=Store->Find(P.TargetID);ChosenUnit&&ChosenUnit->SquadID==*OrderedEnemy)
+   if(const auto* ChosenContacts=Known.ByTarget.Find(P.TargetID))
+    for(const auto& ChosenContact:*ChosenContacts)
+     if(ChosenContact.Contact->bVisible&&!ChosenContact.Contact->bShared&&Store->Find(ChosenContact.MemberID)->IsAlive())
+     {SightExperiment.Cover(TEXT("order_target_pick"));++OrderTargetPicks;break;}
 }
 // Trial -BattleFollowerNoOverlap=1 (2026-11-18, performance, default 0): follower capsules, bodies and weapons do not
 // generate overlap events. Nothing in the game listens for them; every capsule move otherwise runs an overlap query.

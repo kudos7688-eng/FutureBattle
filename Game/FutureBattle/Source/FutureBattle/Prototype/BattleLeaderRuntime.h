@@ -893,6 +893,11 @@ public:
  void SetSectorFireBack(int32 SquadID){SectorFireBack.Add(SquadID);}
  bool HasSectorFireBack(int32 SquadID) const {return SectorFireBack.Contains(SquadID);}
  TSet<int32> SectorFireBack;
+ // Explicit player target only; an empty table leaves AI evaluation unchanged.
+ TMap<int32,int32> OrderTargets;
+ void SetOrderTarget(int32 SquadID,int32 EnemySquadID);
+ int32 OrderTarget(int32 SquadID) const;
+ int32 OrderTargetPicks=0; // Diagnostic count, independent of sight-experiment enablement.
  bool CanSelectLeader(int32 ID) const;
  bool CanControlLeader(int32 ID) const;
  const TArray<FBattleSquadSummary>& Summaries();

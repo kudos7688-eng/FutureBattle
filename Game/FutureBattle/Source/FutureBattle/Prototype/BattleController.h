@@ -3,6 +3,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "BattleState.h"
+#include "BattleEnemyTrack.h"
 #include "InputKeyEventArgs.h"
 #include "BattleController.generated.h"
 
@@ -188,6 +189,31 @@ public:
 	void ChooseAttackMove();
 	void ChooseDefend();
 	EBattleOrder PendingOrder = EBattleOrder::Move;
+ // Player-only map tracks and explicit enemy-squad orders (BattleEnemyTrack.cpp / BattleTargetOrder.cpp).
+ TMap<int32,FBattleEnemyTrackEntry> EnemyTrack;
+ TMap<int32,double> EnemyTrackDestroyed;
+ int32 EnemyTrackedEntries=0, EnemyRememberedEntries=0;
+ double EnemyLongestRemembered=0.;
+ struct FTargetOrder { int32 EnemySquad=INDEX_NONE; FVector Goal=FVector::ZeroVector; int32 Revision=0; double IssuedAt=0.,LastReissueAt=0.; };
+ TMap<int32,FTargetOrder> TargetOrders;
+ double NextTargetOrderUpdate=0.;
+ int32 TargetReissueRefused=0;
+ TMap<int32,int32> TargetRefusedBySquad;
+ void UpdateEnemyTrack();
+ bool EnemyEntry(int32 EnemySquadID,FBattleEnemyTrackEntry& Out) const;
+ int32 EnemySquadAt(FVector2D Screen) const;
+ int32 IssueTargetOrder(int32 EnemySquadID);
+ void UpdateTargetOrders();
+ int32 TargetOrderOf(int32 SquadID) const;
+ bool TryTargetOrderClick();
+ void StepTargetOrderTest();
+ struct FTargetTest
+ {
+  int32 Stage=0,Failures=0,Squad=INDEX_NONE,Enemy=INDEX_NONE,Followed=0,Moved=0,RefusedAtMove=0,LastRefusedSeen=0;
+  double Since=0.,Started=-1.,NextPoll=0.,MoveAt=-1.,OrderShotAt=-1.,RememberedShotAt=-1.;
+  FVector MoveGoal=FVector::ZeroVector;
+  bool bOrderShot=false,bRememberedShot=false,bHoldIssued=false;
+ } TargetTest;
 	bool bShowContactDebug = false;
 	void ToggleContactDebug() { bShowContactDebug = !bShowContactDebug; }
 	// Tactical view overlays (display only, ABattleHUD::DrawFieldOverlay): M = sector grid, N = fog of war.
@@ -344,6 +370,9 @@ private:
 	FVector VaultFrom = FVector::ZeroVector, VaultTo = FVector::ZeroVector; double VaultPeak = 0; float VaultTime = 0, VaultDuration = .4f;
 	int32 DelegationPress = INDEX_NONE;
  int32 SoldierSelection = INDEX_NONE;
+ // A world right press is remembered even when the ground pick fails.
+ FVector2D TargetPressScreen=FVector2D::ZeroVector;
+ bool bTargetPress=false;
  bool bSquadListPress=false;
  // A left press that started on the minimap (moves the tactical camera); its release is swallowed too.
  bool bMinimapPress=false;

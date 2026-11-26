@@ -451,6 +451,15 @@ void ABattleController::StartMatch()
 
 void ABattleController::ResetMatchControl()
 {
+ // Drop player-only knowledge before squad IDs are reused in a new match.
+ if(!TargetOrders.IsEmpty())
+ {
+  auto* TargetRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+  for(const auto& TargetPair:TargetOrders)TargetRuntime->SetOrderTarget(TargetPair.Key,INDEX_NONE);
+ }
+ TargetOrders.Reset();EnemyTrack.Reset();EnemyTrackDestroyed.Reset();TargetRefusedBySquad.Reset();
+ NextTargetOrderUpdate=0.;EnemyTrackedEntries=EnemyRememberedEntries=TargetReissueRefused=0;EnemyLongestRemembered=0.;
+ bTargetPress=false;TargetTest=FTargetTest{};
 	EnterTactical(); Selected.Reset(); LastControlled = nullptr; bTriggerHeld = false; PendingOrder = EBattleOrder::Move;
 }
 
@@ -707,7 +716,7 @@ void ABattleController::CancelPlayerInput(bool bGamepadOnly)
  if(!bGamepadOnly||Released.Contains(EKeys::LeftMouseButton))
  {bTriggerHeld=false;DelegationPress=INDEX_NONE;bSquadListPress=false;bMinimapPress=false;bBuyPress=false;PressedSquadID=INDEX_NONE;}
  if(!bGamepadOnly||Released.Contains(EKeys::RightMouseButton))
- {bAimHeld=false;bPathDraw=false;DrawnPath.Reset();DrawnLength=0;}
+ {bTargetPress=false;bAimHeld=false;bPathDraw=false;DrawnPath.Reset();DrawnLength=0;}
 }
 
 bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
@@ -797,8 +806,8 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
  // A world right-drag owns its release even when the pointer has entered a panel.
  if(bTactical && Params.Key==EKeys::RightMouseButton && Params.Event==IE_Released && bPathDraw)
  {
-  if(OverDelegation || SquadPanelAtPointer()){bPathDraw=false;DrawnPath.Reset();DrawnLength=0;}
-  else EndPathDraw();
+  if(OverDelegation || SquadPanelAtPointer()){bTargetPress=false;bPathDraw=false;DrawnPath.Reset();DrawnLength=0;}
+  else if(!TryTargetOrderClick()) EndPathDraw();
   Super::InputKey(Params);return true;
  }
 	if (OverDelegation && Params.Key == EKeys::RightMouseButton) return true;
@@ -901,8 +910,8 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
 	// A picked soldier takes the right click as his own order (no drawn way).
 	if (bTactical && SoldierSelection != INDEX_NONE && Params.Key == EKeys::RightMouseButton)
 	{ if (Params.Event == IE_Released) { FVector2D At; if (GetPointerPosition(At)) OrderSoldierAt(At); } return true; }
-	if (Params.Key == EKeys::RightMouseButton && Params.Event == IE_Pressed) { BeginPathDraw(); return true; }
-	if (Params.Key == EKeys::RightMouseButton && Params.Event == IE_Released) { EndPathDraw(); return true; }
+	if (Params.Key == EKeys::RightMouseButton && Params.Event == IE_Pressed) { bTargetPress=GetPointerPosition(TargetPressScreen)&&!bFrontDrawArmed&&!IsInputKeyDown(EKeys::LeftControl)&&!IsInputKeyDown(EKeys::RightControl); BeginPathDraw(); return true; }
+	if (Params.Key == EKeys::RightMouseButton && Params.Event == IE_Released) { if(!TryTargetOrderClick()) EndPathDraw(); return true; }
 	return bHandled;
 }
 
@@ -1177,6 +1186,9 @@ void ABattleController::PlayerTick(float DeltaTime)
 {
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(BattlePlayerTick);
 	Super::PlayerTick(DeltaTime);
+ UpdateEnemyTrack();
+ UpdateTargetOrders();
+ StepTargetOrderTest();
 	// Map L (rolling ground): the tactical camera's pivot follows the height of the ground under it, so the lowest zoom (10m) stays
 	// above the hills. On the other maps there is no field and the pivot stays at height 0.
 	if(TacticalPawn)if(const auto& Field=BattleFieldLayout::Of(GetWorld()).Heights.Field;!Field.IsEmpty())
