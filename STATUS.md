@@ -37,7 +37,7 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
-## 2026-11-26 19時50分 Claude（個人AI）：止まった兵の見張りの向き `-BattleSoldierWatch`（既定1）を両軍で切った試合と台帳 E2 の比較（マップI 種7・43）
+## 2026-11-26 19時48分 Claude（個人AI）：止まった兵の見張りの向き `-BattleSoldierWatch`（既定1）を両軍で切った試合と台帳 E2 の比較（マップI 種7・43）
 
 - **依頼**：ユーザー「見張りの効果を測る」。掲示板に申請済み（2本）。
 - **条件**：凍結ビルド baseline-37a3f33（台帳 E2 と同じ DLL）、`Test-WideSight.ps1 -FrozenBuild ... -Fps 30 -Map I -Area -ObserveTactics -Experiment -CoverActions 1 -FlankCoordination 1 -Seed 7/43 -ExtraArgs '-BattleSoldierWatch=0'`。結果 `sw-off-obs-I-s7`・`sw-off-obs-I-s43`。基準は台帳の `base-37a3f33-I-s7/s43`（引数の違いは切替だけ）。固定場面の試験は省いた（既にある既定の機能を切るだけ）。
