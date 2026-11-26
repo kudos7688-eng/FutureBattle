@@ -247,19 +247,19 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleJoinFightMax` | Value | 2 | BattleTactics.cpp:177 |  |
 | `-BattleJoinFightRange` | Value | 15000.f | BattleTactics.cpp:172 |  |
 | `-BattleKillLog` | Value | 1 | BattleHUD.cpp:1371 |  |
-| `-BattleKnownMoveCommit` | Value | 12. | BattleKnownTargetMove.cpp:20, BattleKnownTargetMoveTrial.cpp:324 |  |
-| `-BattleKnownMoveDefendMarch` | Value | 1 | BattleKnownTargetMove.cpp:23 |  |
-| `-BattleKnownMoveDefendReach` | Value | 1500. | BattleKnownTargetMove.cpp:24 |  |
-| `-BattleKnownMoveMarch` | Value | 1 | BattleKnownTargetMove.cpp:22 |  |
-| `-BattleKnownMoveMax` | Value | 0 | BattleKnownTargetMove.cpp:65 |  |
-| `-BattleKnownMoveNavBudget` | Value | 32 | BattleKnownTargetMove.cpp:70 |  |
-| `-BattleKnownMoveRange` | Value | 2500. | BattleKnownTargetMove.cpp:63 |  |
-| `-BattleKnownMoveRayBudget` | Value | 32 | BattleKnownTargetMove.cpp:68 |  |
-| `-BattleKnownMoveSquadRadius` | Value | 5000. | BattleKnownTargetMove.cpp:64 |  |
-| `-BattleKnownMoveSweepBudget` | Value | 24 | BattleKnownTargetMove.cpp:69 |  |
-| `-BattleKnownMoveWait` | Value | 1.5 | BattleKnownTargetMove.cpp:21, BattleKnownTargetMoveTrial.cpp:325 |  |
-| `-BattleKnownTargetFire` | Value | 0 | BattleKnownTargetMove.cpp:19, BattleKnownTargets.cpp:12 |  |
-| `-BattleKnownTargetFireTrial` | Param | off | BattleKnownTargetMove.cpp:503, BattleLeaderRuntime.cpp:252 |  |
+| `-BattleKnownMoveCommit` | Value | 12. | BattleKnownTargetMove.cpp:21, BattleKnownTargetMoveTrial.cpp:324 |  |
+| `-BattleKnownMoveDefendMarch` | Value | 1 | BattleKnownTargetMove.cpp:24 |  |
+| `-BattleKnownMoveDefendReach` | Value | 1500. | BattleKnownTargetMove.cpp:25 |  |
+| `-BattleKnownMoveMarch` | Value | 1 | BattleKnownTargetMove.cpp:23 |  |
+| `-BattleKnownMoveMax` | Value | 0 | BattleKnownTargetMove.cpp:66 |  |
+| `-BattleKnownMoveNavBudget` | Value | 32 | BattleKnownTargetMove.cpp:71 |  |
+| `-BattleKnownMoveRange` | Value | 2500. | BattleKnownTargetMove.cpp:64 |  |
+| `-BattleKnownMoveRayBudget` | Value | 32 | BattleKnownTargetMove.cpp:69 |  |
+| `-BattleKnownMoveSquadRadius` | Value | 5000. | BattleKnownTargetMove.cpp:65 |  |
+| `-BattleKnownMoveSweepBudget` | Value | 24 | BattleKnownTargetMove.cpp:70 |  |
+| `-BattleKnownMoveWait` | Value | 1.5 | BattleKnownTargetMove.cpp:22, BattleKnownTargetMoveTrial.cpp:325 |  |
+| `-BattleKnownTargetFire` | Value | 2 | BattleKnownTargetMove.cpp:20, BattleKnownTargets.cpp:12 | Default 2 (user decision 2026-11-27). |
+| `-BattleKnownTargetFireTrial` | Param | off | BattleKnownTargetMove.cpp:504, BattleLeaderRuntime.cpp:252 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
 | `-BattleLauncherDamage` | Value | 60.f | BattleArms.cpp:158 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleLeaderCommand` | Value | 0 | BattleGameMode.cpp:54 |  |
