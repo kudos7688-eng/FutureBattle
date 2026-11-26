@@ -120,7 +120,7 @@
 - `BattleScaleSmoke.cpp`: ABattleGameMode::RunScaleSmokeTest:10
 - `BattleScopeShot.cpp`: UBattleLeaderRuntime::RunScopeShot:15
 - `BattleScoutReport.cpp`: UBattleMatch::IsScoutLongContact:28, UBattleMatch::AddScoutReportSightings:38, UBattleMatch::UpdateScoutReports:49, UBattleMatch::IsAIScoutLed:175
-- `BattleSectorLanes.cpp`: UBattleLeaderRuntime::SectorLanesEnabled:13, UBattleLeaderRuntime::ReadSectorLanes:19, UBattleLeaderRuntime::ApplySectorLane:59
+- `BattleSectorLanes.cpp`: UBattleLeaderRuntime::SectorLanesEnabled:13, UBattleLeaderRuntime::ReadSectorLanes:21, UBattleLeaderRuntime::ApplySectorLane:61
 - `BattleSectorRoute.cpp`: UBattleMatch::SectorRouteOn:14, UBattleMatch::SectorCoverRouteOn:20, UBattleMatch::DangerRouteOn:26, UBattleMatch::NoteSectorDanger:31, UBattleMatch::SectorDanger:37, UBattleMatch::CloseInStage:42, UBattleMatch::PinnedFlankStage:74, UBattleMatch::SectorCoverCount:109, UBattleMatch::SectorFlankOn:122, UBattleMatch::SectorFrontOn:128, UBattleMatch::UpdateSectorFront:138, UBattleMatch::SectorStage:166
 - `BattleSectorSight.cpp`: UBattleLeaderRuntime::SectorSightMode:12, UBattleLeaderRuntime::SectorSightHitMode:19, UBattleLeaderRuntime::SectorSightFar:25, UBattleLeaderRuntime::SectorLookout:32, UBattleLeaderRuntime::SectorSightRole:45
 - `BattleSectorView.h`: FBattleFogGrid::IsValid:27, FBattleFogGrid::CellMin:29, FBattleFogGrid::Window:31, FBattleFogGrid::InSight:32, FBattleFogGrid::Explored:33, FBattleFogGrid::State:35, FBattleFogGrid::Corner:36, FBattleSectorInfo::SightShare:51
