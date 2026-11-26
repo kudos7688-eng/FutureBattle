@@ -61,7 +61,7 @@ void UBattlePerception::BuildSquadKnowledge(const TArray<int32>& Members, FBattl
 
 int32 UBattlePerception::SquadKnowledgeMode(int32 Team)
 {
-	static const int32 Value = [] { int32 V = 0; FParse::Value(FCommandLine::Get(), TEXT("BattleSquadKnowledge="), V); return FMath::Clamp(V, 0, 1); }();
+	static const int32 Value = [] { int32 V = 1; FParse::Value(FCommandLine::Get(), TEXT("BattleSquadKnowledge="), V); return FMath::Clamp(V, 0, 1); }(); // default 1 since 2026-11-26 (user decision); =0: the soldier-to-soldier reports
 	static const int32 Only = [] { int32 V = -1; FParse::Value(FCommandLine::Get(), TEXT("BattleSquadKnowledgeTeam="), V); return V == 0 || V == 1 ? V : -1; }();
 	return Only < 0 || Only == Team ? Value : 0;
 }

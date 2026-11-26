@@ -410,7 +410,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSquadCoverCheck` | Value | 0 | BattleLeaderRuntime.cpp:1851 |  |
 | `-BattleSquadFlank` | Value | 1 | BattleSquadTactics.cpp:22 |  |
 | `-BattleSquadIcons` | Value | 1 | BattleHUD.cpp:259, BattleHUD.cpp:1107 |  |
-| `-BattleSquadKnowledge` | Value | 0 | BattlePerception.cpp:64 |  |
+| `-BattleSquadKnowledge` | Value | 1 | BattlePerception.cpp:64 | default 1 since 2026-11-26 (user decision); =0: the soldier-to-soldier reports |
 | `-BattleSquadKnowledgeCover` | Value | 0 | BattleCoverAction.cpp:464 |  |
 | `-BattleSquadKnowledgeTeam` | Value | -1 | BattlePerception.cpp:65 |  |
 | `-BattleSquadST2` | Value | 1 | BattleSquadTactics.cpp:21 |  |
