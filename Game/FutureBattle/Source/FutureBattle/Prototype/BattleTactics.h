@@ -49,11 +49,11 @@ namespace BattleTactics
  int32 JoinFightMax();
  // Contact trial, user 2026-11-25 ("share the enemy's place across the team", STATUS "弾薬と補給" 14:10/16:00: an enemy is within
  // 200 m for 74% of the time without one in sight; a sighting reaches only soldiers within ShareRange, 16 m, and the team's view
- // serves the front line and the groups, never a squad's own way). -BattleSeekKnown=1|2 (default 0): the team remembers for
+ // serves the front line and the groups, never a squad's own way). -BattleSeekKnown=0|1|2 (default 2 since 2026-11-27, user decision; 0 = off): the team remembers for
  // -BattleSeekKnownSeconds=s (default 30, 5..180) each 50 m square in which one of its soldiers saw enemy infantry himself (no
  // vehicles, no scout long sight, no reports; the place last seen there, no true positions). An AI rifle squad on its mission with
- // no enemy of its own attack-moves to the nearest such place within -BattleSeekKnownRange=cm (default 20000, 2000..60000), at most
- // -BattleSeekKnownMax=n (default 2, 1..8) squads per square. With an enemy in its own sight it fights as usual; 10 s at the place
+ // no enemy of its own attack-moves to the nearest such place within -BattleSeekKnownRange=cm (default 60000, 2000..60000), at most
+ // -BattleSeekKnownMax=n (default 8, 1..8) squads per square. With an enemy in its own sight it fights as usual; 10 s at the place
  // with none, or 90 s, and it goes back to its mission. 1: squads outside the groups only. 2: also squads of front-holding groups
  // (attack and surprise groups never). Not saved. BattleSquadRetreat.cpp (Evaluate, RefreshKnownSpots).
  // Contact trial, user 2026-11-25 ("once spotted, know its true place for some seconds"; an exception to the rule that decisions
