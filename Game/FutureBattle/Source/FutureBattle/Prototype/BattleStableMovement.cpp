@@ -2,6 +2,7 @@
 #include "BattleCoverFire.h"
 #include "BattleGameMode.h"
 #include "BattleTactics.h"
+#include "BattleSquadTactics.h"
 #include "BattleFieldLayout.h"
 #include "BattleCover.h"
 #include "BattleStance.h"
@@ -100,7 +101,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID); auto& P=Plans.FindChecked(SID);
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
- const bool Sector=S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission;
+ const bool Sector=(S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission) ||
+  (BattleTactics::SectorSeize()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizingSector(SID));
  const auto Cell=BattleSectors::Cell(S->Destination);
  const bool NewOrder=P.ArrivalRevision!=S->OrderRevision;
  if(NewOrder || P.ArrivalGoals.IsEmpty())

@@ -457,6 +457,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
    }
    return;
   }
+  if(BattleTactics::SectorSeize()>0 && P.Reason.StartsWith(TEXT("SEIZE SECTOR")) && StepSeizeSector(SID,O,Visible))return;
   // Trial -BattleSeekKnown (BattleTactics.h): on its way to, or searching at, a place where its team saw enemy infantry.
   if(P.Reason.StartsWith(TEXT("SEEK ENEMY")))
   {
@@ -531,6 +532,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
    }
   }
  }
+ if(BattleTactics::SectorSeize()>0 && BeginSeizeSector(SID,O,Visible,Threats))return;
  // Trial -BattleSeekKnown (BattleTactics.h, default off): a healthy rifle squad on its mission with no enemy near attack-moves to the
  // nearest place where its team saw enemy infantry. Left out: squads of attack and surprise groups (mode 1: of every group), in a
  // home-assault slot, on a surprise move or a raid, and every other squad type.

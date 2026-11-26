@@ -69,6 +69,11 @@ namespace BattleTactics
  // Exception: -BattleKnownTargetFire=1 copies valid tracking samples into its team index for candidate ranking and aim only;
  // it still requires the shooter's sensor and aim line. No other consumer or tracking update changes.
  float SpotTrack();
+ // Sector attack trial (design-sector-attack-defend.md, chapter 3), default off.
+ int32 SectorSeize(); // 0..1; needs SeekKnown, sectors and an area match.
+ int32 SectorSeizeMax(); // 3, 1..8 squads per sector.
+ float SectorSeizeHold(); // 30, 0..120 seconds after taking it.
+ int32 SectorSeizeTeam(); // -1 both, 0/1 one team.
  int32 SeekKnown();
  float SeekKnownSeconds();
  float SeekKnownRange();

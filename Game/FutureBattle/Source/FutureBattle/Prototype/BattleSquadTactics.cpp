@@ -1,4 +1,5 @@
 #include "BattleSquadTactics.h"
+#include "BattleTactics.h"
 #include "BattleState.h"
 #include "BattleGameMode.h"
 #include "BattleMatch.h"
@@ -32,6 +33,12 @@ void UBattleSquadTactics::Reset()
  ActiveSeconds = 0; NextDump = 5; NextSample.Reset(); Samples.Reset(); Events.Reset(); ActionSeconds.Reset();
  SupplyTripStart.Reset(); SupplyTripSeconds.Reset(); JoinFights.Reset(); FieldRecoverGaveUp.Reset(); FieldRecoverSince.Reset(); FieldRecoverArrived.Reset();
  SeekEnemies.Reset(); SeekEnded.Reset(); KnownSpots[0].Reset(); KnownSpots[1].Reset(); KnownSpotsAt[0]=KnownSpotsAt[1]=-100.;
+ if(BattleTactics::SectorSeize()>0)
+ {
+  SeizeSectors.Reset();SeizeEnded.Reset();
+  for(int32 SeizeTeam=0;SeizeTeam<2;++SeizeTeam)
+  {SeizeOwnCells[SeizeTeam].Reset();SeizeKnownCells[SeizeTeam].Reset();SeizeCellsAt[SeizeTeam]=-100.;}
+ }
  if(BattleTactics::SpotShare() || BattleTactics::SpotShots() || BattleTactics::SpotLost() || BattleTactics::SpotHQ()>0.f || (BattleTactics::SpotTruth()&1))ResetSpotRelax();
  GetWorld()->GetSubsystem<UBattleTeamAI>()->Reset();
  DamageHistory.Reset(); TotalStepMs = MaxStepMs = 0; StepCount = 0;

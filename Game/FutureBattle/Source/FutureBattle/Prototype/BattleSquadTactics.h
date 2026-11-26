@@ -59,6 +59,7 @@ public:
  void RecordDamage(int32 SquadID, float Damage);
  void Dump() const;
  void Reset();
+ bool SeizingSector(int32 SID) const;
  double Clock() const { return ActiveSeconds; }
  // Spot relaxation entry points. Callers gate trials; helpers take explicit values for isolated smoke tests.
  bool AddKnownSpot(int32 Team,const FVector& At,double Seen,uint8 Kind,bool bLegacy=false);
@@ -117,6 +118,23 @@ private:
  int64 SpotTruthSpots[2]={0,0}; // diagnostic -BattleSpotTruth bit 1: places written from the truth
  struct FSeekEnemy{FIntPoint Cell=FIntPoint::ZeroValue;FVector At=FVector::ZeroVector;double Start=0.,ArrivedAt=-1.,EndAt=-1.;};
  TMap<int32,FSeekEnemy> SeekEnemies;
+ struct FSeizeSector
+ {
+  FIntPoint Cell=FIntPoint::ZeroValue;
+  double Start=0.,EnterAt=-1.,QuietSince=-1.,TakenAt=-1.,EndAt=-1.,LastKnown=0.;
+ };
+ TMap<int32,FSeizeSector> SeizeSectors;
+ TMap<int32,TMap<FIntPoint,double>> SeizeEnded;
+ TSet<FIntPoint> SeizeOwnCells[2],SeizeKnownCells[2];
+ double SeizeCellsAt[2]={-100.,-100.};
+ bool SectorSeizeEnabled(int32 Team) const;
+ bool SeizeSectorKnown(int32 Team,FIntPoint Cell,double Now,int32* Count=nullptr) const;
+ int32 SeizeSectorAllies(int32 SID,int32 Team,FIntPoint Cell) const;
+ bool PickSeizeSector(int32 SID,const FBattleSquadState& S,const FVector& Here,double Now,const FIntPoint* Around,FIntPoint& Out);
+ bool StepSeizeSector(int32 SID,const FBattleSquadObservation& O,bool Visible);
+ bool BeginSeizeSector(int32 SID,const FBattleSquadObservation& O,bool Visible,int32 Threats);
+ void EndSeize(int32 SID,const TCHAR* Why=TEXT("SeizeEndOther"));
+ void LogSeizeSector(int32 SID,const FSeizeSector& Seize,const TCHAR* Why) const;
  // Per squad, the squares its seeks ended in and when (30 s before it goes to one again, and its place there counts that long).
  TMap<int32,TMap<FIntPoint,double>> SeekEnded;
  // All auxiliary writes are inside enabled trial paths. Kind: own, shared, shot, lost, HQ, truth.

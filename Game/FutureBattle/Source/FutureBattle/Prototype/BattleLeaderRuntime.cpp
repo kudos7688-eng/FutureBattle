@@ -675,7 +675,8 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  P.NextThink=Now+FMath::Max(.2f,GetDefault<UBattleTuning>()->SquadDecisionSeconds);
  const int32 PreviousTarget=P.TargetID;
  // Trial -BattleDefendEngage=1: a defending squad targets any enemy within weapon range (BattleGroups.cpp).
- const bool Sector=S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission;
+ const bool Sector=(S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission) ||
+  (BattleTactics::SectorSeize()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizingSector(SID));
  const bool bArmourSectorGate=BattleTactics::ArmourSectorGateEnabled();
  TSet<int32> AllowedArmourTargets;
  // Trial -BattleSectorContact=1: shot at on the way or while holding, the squad also answers enemies outside its sector.
@@ -1074,7 +1075,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  const FVector* ArrivalGoal=(bWideField && bStableMovement && P->ArrivalTails.Contains(ID))?P->ArrivalGoals.Find(ID):nullptr;
  const TArray<FVector>* OwnRoute=bWideField && bStableMovement?P->Corridors.Find(ID):nullptr;
  const bool bTailLeft=OwnRoute && !P->Path.IsValidIndex(B.Waypoint) && OwnRoute->IsValidIndex(B.Waypoint);
- const bool bWalkIn=ArrivalGoal && !bVehicleBody && S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission &&
+ const bool bWalkIn=ArrivalGoal && !bVehicleBody &&
+  ((S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission) ||
+   (BattleTactics::SectorSeize()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizingSector(S->SquadID))) &&
   BattleSectors::Cell(Pos)==BattleSectors::Cell(S->Destination) && FVector::DistSquared2D(Pos,*ArrivalGoal)>FMath::Square(150.) &&
   !U->CoverPhase && !CoverApproaches.Contains(ID);
  const bool bArrivalWalk=!bOwnOrder && ArrivalWalkEnabled() && bWalkIn && S->Order!=EBattleOrder::Hold && OwnRoute && OwnRoute->IsValidIndex(B.Waypoint);
@@ -1368,7 +1371,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  {Direction=(From-Pos).GetSafeNormal2D();SightExperiment.Cover(HitFaceEnabled()?TEXT("hit_face_turned"):TEXT("own_target_hit_turn_frames"));}
  // Trial -BattleAttackFocus=1: a still soldier of a sector squad with nothing to fire at watches the squad's focus, the members
  // fanned 0/-20/+20/-40/+40 degrees (with the 120-degree view, the squad watches about 200 degrees around the focus).
- else if(AttackFocusEnabled() && P->bFocus && !bArtilleryAim && !bVehicleBody && S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission &&
+ else if(AttackFocusEnabled() && P->bFocus && !bArtilleryAim && !bVehicleBody &&
+  ((S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission) ||
+   (BattleTactics::SectorSeize()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizingSector(S->SquadID))) &&
          B.Velocity.SizeSquared2D()<900. && FVector::DistSquared2D(P->Focus,Pos)>1.e4)
  {
   static const float Fan[]={0.f,-20.f,20.f,-40.f,40.f};

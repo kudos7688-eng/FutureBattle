@@ -77,6 +77,26 @@ float BattleTactics::SpotTrack()
  static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSpotTrack="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,30.f):0.f;}();
  return Seconds;
 }
+int32 BattleTactics::SectorSeize()
+{
+ static const int32 Mode=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSeize="),Value);return FMath::Clamp(Value,0,1);}();
+ return Mode;
+}
+int32 BattleTactics::SectorSeizeMax()
+{
+ static const int32 Max=[](){int32 Value=3;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSeizeMax="),Value);return FMath::Clamp(Value,1,8);}();
+ return Max;
+}
+float BattleTactics::SectorSeizeHold()
+{
+ static const float Seconds=[](){float Value=30.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSeizeHold="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,120.f):30.f;}();
+ return Seconds;
+}
+int32 BattleTactics::SectorSeizeTeam()
+{
+ static const int32 Team=[](){int32 Value=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSeizeTeam="),Value);return FMath::Clamp(Value,-1,1);}();
+ return Team;
+}
 int32 BattleTactics::SeekKnown()
 {
  static const int32 Mode=[](){int32 Value=2;FParse::Value(FCommandLine::Get(),TEXT("BattleSeekKnown="),Value);return FMath::Clamp(Value,0,2);}();
