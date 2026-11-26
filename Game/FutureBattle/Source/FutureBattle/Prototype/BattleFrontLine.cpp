@@ -543,6 +543,8 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
   }
   // Squads to posts. The front army: a squad keeps its last post when that sector is still one of them, the rest go to the nearest free
   // post (user report 2026-11-21: squads went back and forth because bands followed the squads' row order, which changes as they move).
+  // Trial -BattleFrontArmies (BattleFrontArmies.cpp): the group's squads in armies by bands of rows, before they take posts.
+  if(Hold()&&FrontArmiesWanted()>0)UpdateFrontArmies(Team,*G,SlotRow,NB,Previous);
   TArray<int32> Owner;Owner.Init(INDEX_NONE,NB);
   bool bAnyLast=false;for(const auto& M:Present)bAnyLast|=Previous.Contains(M.SID);
   if(Hold()&&!bAnyLast&&K>0)
@@ -556,6 +558,9 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
     else D[I].Init(0.,K);
    const TArray<int32> Slot=AssignMinTime(D);
    for(int32 I=0;I<K;++I)if(Slot.IsValidIndex(I)&&Slot[I]!=INDEX_NONE)Owner[Slot[I]]=I;
+   // Front armies: the first posts decide each squad's army (by its post's row), unless the player chose it.
+   if(FrontArmyCount(Team)>=2)for(int32 J=0;J<NB&&J<SlotRow.Num();++J)if(Owner[J]!=INDEX_NONE&&!FrontArmyPinned.Contains(Present[Owner[J]].SID))
+    FrontArmyOf.Add(Present[Owner[J]].SID,int8(FrontArmyOfRow(Team,SlotRow[J])));
   }
   else if(Hold())
   {
@@ -574,8 +579,8 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
     const int32* Wish=Last?nullptr:FrontSectionWish.Find(Present[I].SID);
     const auto& WishPlan=FrontPlanState[Team];
     for(int32 J=0;J<NB;++J)
-     Pairs.Add({Last?1.e13*FMath::Abs(SlotRow[J]-LastRow)+(bLead!=(J<FrontCount)?1.e11:0.)+FVector::DistSquared2D(Expected,BattleSectors::Center(Cells[J]))
-      :1.e15+(Wish&&!(WishPlan.SectionOfRow.IsValidIndex(SlotRow[J])&&WishPlan.SectionOfRow[SlotRow[J]]==*Wish)?1.e14:0.)+FVector::DistSquared2D(R->Position(S->LeaderUnitID),BattleSectors::Center(Cells[J])),I,J});
+     Pairs.Add({(FrontArmyMismatch(Team,Present[I].SID,SlotRow[J])?(Last?1.e16:2.e15):0.)+(Last?1.e13*FMath::Abs(SlotRow[J]-LastRow)+(bLead!=(J<FrontCount)?1.e11:0.)+FVector::DistSquared2D(Expected,BattleSectors::Center(Cells[J]))
+      :1.e15+(Wish&&!(WishPlan.SectionOfRow.IsValidIndex(SlotRow[J])&&WishPlan.SectionOfRow[SlotRow[J]]==*Wish)?1.e14:0.)+FVector::DistSquared2D(R->Position(S->LeaderUnitID),BattleSectors::Center(Cells[J]))),I,J});
    }
    Pairs.Sort([](const FPair& A,const FPair& B){return A.D!=B.D?A.D<B.D:A.I!=B.I?A.I<B.I:A.J<B.J;});
    for(const auto& Pair:Pairs)if(!Placed[Pair.I]&&Owner[Pair.J]==INDEX_NONE){Owner[Pair.J]=Pair.I;Placed[Pair.I]=true;}
