@@ -452,7 +452,7 @@ public:
  int32 FrontArmyOfRow(int32 Team,int32 Row) const;
  int32 FrontArmyOfSquad(int32 SquadID) const;
  bool SetFrontArmy(int32 SquadID,int32 Army); // the player drops a squad on an army's header
- void UpdateFrontArmies(int32 Team,const FBattleGroup& G,const TArray<int32>& SlotRow,int32 NB);
+ void UpdateFrontArmies(int32 Team,const FBattleGroup& G,const TArray<int32>& SlotRow,int32 NB,const TMap<int32,FIntPoint>& LastPosts);
  bool FrontArmyMismatch(int32 Team,int32 SquadID,int32 Row) const;
  TMap<int32,int8> FrontArmyOf; TSet<int32> FrontArmyPinned; TArray<int32> FrontArmyFirst[2],FrontArmyNeed[2];
  float FrontArmyMoveAt[2]={-100.f,-100.f},FrontArmyLogAt[2]={0.f,0.f};

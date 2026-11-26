@@ -544,7 +544,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
   // Squads to posts. The front army: a squad keeps its last post when that sector is still one of them, the rest go to the nearest free
   // post (user report 2026-11-21: squads went back and forth because bands followed the squads' row order, which changes as they move).
   // Trial -BattleFrontArmies (BattleFrontArmies.cpp): the group's squads in armies by bands of rows, before they take posts.
-  if(Hold()&&FrontArmiesWanted()>0)UpdateFrontArmies(Team,*G,SlotRow,NB);
+  if(Hold()&&FrontArmiesWanted()>0)UpdateFrontArmies(Team,*G,SlotRow,NB,Previous);
   TArray<int32> Owner;Owner.Init(INDEX_NONE,NB);
   bool bAnyLast=false;for(const auto& M:Present)bAnyLast|=Previous.Contains(M.SID);
   if(Hold()&&!bAnyLast&&K>0)
@@ -579,7 +579,7 @@ void UBattleMatch::UpdateFrontLine(int32 Team)
     const int32* Wish=Last?nullptr:FrontSectionWish.Find(Present[I].SID);
     const auto& WishPlan=FrontPlanState[Team];
     for(int32 J=0;J<NB;++J)
-     Pairs.Add({(FrontArmyMismatch(Team,Present[I].SID,SlotRow[J])?(Last?1.e15:5.e14):0.)+(Last?1.e13*FMath::Abs(SlotRow[J]-LastRow)+(bLead!=(J<FrontCount)?1.e11:0.)+FVector::DistSquared2D(Expected,BattleSectors::Center(Cells[J]))
+     Pairs.Add({(FrontArmyMismatch(Team,Present[I].SID,SlotRow[J])?(Last?1.e16:2.e15):0.)+(Last?1.e13*FMath::Abs(SlotRow[J]-LastRow)+(bLead!=(J<FrontCount)?1.e11:0.)+FVector::DistSquared2D(Expected,BattleSectors::Center(Cells[J]))
       :1.e15+(Wish&&!(WishPlan.SectionOfRow.IsValidIndex(SlotRow[J])&&WishPlan.SectionOfRow[SlotRow[J]]==*Wish)?1.e14:0.)+FVector::DistSquared2D(R->Position(S->LeaderUnitID),BattleSectors::Center(Cells[J]))),I,J});
    }
    Pairs.Sort([](const FPair& A,const FPair& B){return A.D!=B.D?A.D<B.D:A.I!=B.I?A.I<B.I:A.J<B.J;});

@@ -56,7 +56,7 @@ bool UBattleMatch::SetFrontArmy(int32 SquadID,int32 Army)
  return true;
 }
 
-void UBattleMatch::UpdateFrontArmies(int32 Team,const FBattleGroup& G,const TArray<int32>& SlotRow,int32 NB)
+void UBattleMatch::UpdateFrontArmies(int32 Team,const FBattleGroup& G,const TArray<int32>& SlotRow,int32 NB,const TMap<int32,FIntPoint>& LastPosts)
 {
  using namespace BattleFrontArmyValues;
  const int32 Want=FrontArmiesWanted();
@@ -70,8 +70,9 @@ void UBattleMatch::UpdateFrontArmies(int32 Team,const FBattleGroup& G,const TArr
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const bool bLow=AreaHome(Team).X<0;
  auto RowOf=[&](const FIntPoint& C){return bLow?C.Y:Rows-1-C.Y;};
- // Squads that left the group leave their army.
- for(auto It=FrontArmyOf.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||(S->Team==Team&&!G.Squads.Contains(It.Key()))){FrontArmyPinned.Remove(It.Key());It.RemoveCurrent();}
+ // Squads that left the group leave their army; so do squads of an army that no longer exists (the bands may change from equal
+ // bands to the front plan's sections once those are made; Codex review 2026-11-27).
+ for(auto It=FrontArmyOf.CreateIterator();It;++It)if(const auto* S=Store->FindSquad(It.Key());!S||(S->Team==Team&&(!G.Squads.Contains(It.Key())||It.Value()<0||It.Value()>=NA))){FrontArmyPinned.Remove(It.Key());It.RemoveCurrent();}
  // Needs: posts per army.
  TArray<int32> Slots,Have;Slots.Init(0,NA);Have.Init(0,NA);
  for(int32 J=0;J<NB&&J<SlotRow.Num();++J)if(const int32 A=FrontArmyOfRow(Team,SlotRow[J]);A!=INDEX_NONE)++Slots[A];
@@ -80,7 +81,8 @@ void UBattleMatch::UpdateFrontArmies(int32 Team,const FBattleGroup& G,const TArr
  auto Middle=[&](int32 A){const int32 First=FrontArmyFirst[Team][A],Last=A+1<NA?FrontArmyFirst[Team][A+1]-1:Rows-1;return .5*(First+Last);};
  auto SquadRow=[&](int32 SID)->double
  {
-  if(const FVector* Post=FrontPosts.Find(SID))return RowOf(BattleSectors::Cell(*Post));
+  // The last post (UpdateFrontLine has already cleared this update's FrontPosts; Codex review 2026-11-27).
+  if(const FIntPoint* Post=LastPosts.Find(SID))return RowOf(*Post);
   if(const auto* S=Store->FindSquad(SID);S&&R)return RowOf(BattleSectors::Cell(R->Position(S->LeaderUnitID)));
   return Rows*.5;
  };
@@ -89,6 +91,8 @@ void UBattleMatch::UpdateFrontArmies(int32 Team,const FBattleGroup& G,const TArr
  {
   int32 Best=0;double BestScore=-1e9;const double Row=SquadRow(SID);
   for(int32 A=0;A<NA;++A){const double Score=(Slots[A]-Have[A])*100.-FMath::Abs(Row-Middle(A));if(Score>BestScore){BestScore=Score;Best=A;}}
+  // A squad bought for a section (stage 7 reservation destination) joins the army of that section's rows (Codex review 2026-11-27).
+  if(const int32* Wish=FrontSectionWish.Find(SID);Wish&&Plan.SectionFirst.IsValidIndex(*Wish))if(const int32 W=FrontArmyOfRow(Team,Plan.SectionFirst[*Wish]);W!=INDEX_NONE)Best=W;
   FrontArmyOf.Add(SID,int8(Best));++Have[Best];
  }
  // One move every RebalanceHold seconds: from the most over-strength army to the most under-strength one.
@@ -98,7 +102,9 @@ void UBattleMatch::UpdateFrontArmies(int32 Team,const FBattleGroup& G,const TArr
   for(int32 A=0;A<NA;++A)
   {
    if(Slots[A]-Have[A]>0&&(Short==INDEX_NONE||Slots[A]-Have[A]>Slots[Short]-Have[Short]))Short=A;
-   if(Have[A]-Slots[A]>0&&(Over==INDEX_NONE||Have[A]-Slots[A]>Have[Over]-Slots[Over]))Over=A;
+   // Only an army with a squad the player did not place by hand can give one (Codex review 2026-11-27).
+   bool bMovable=false;for(int32 SID:G.Squads)if(const int8* Of=FrontArmyOf.Find(SID);Of&&*Of==A&&!FrontArmyPinned.Contains(SID))bMovable=true;
+   if(bMovable&&Have[A]-Slots[A]>0&&(Over==INDEX_NONE||Have[A]-Slots[A]>Have[Over]-Slots[Over]))Over=A;
   }
   if(Short!=INDEX_NONE&&Over!=INDEX_NONE)
   {
