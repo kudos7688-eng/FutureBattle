@@ -39,6 +39,11 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-27 6時00分 Claude（壁の遮蔽判定）：coverlean を main へ（6時の回、merge 09079c22）。`-BattleKnownTargetFire=2` の探し方・移動の約束・防衛兵（すべて既定0、既定の試合は不変）
+
+- 入ったもの：撃てる位置の候補（壁・塀の端と切れ目 → 遮蔽スロット → 環、光線の前の予選）、移動の約束 `-BattleKnownMoveCommit=12`／`-BattleKnownMoveWait=1.5`、防衛兵 `-BattleKnownMoveDefendMarch`・`-BattleKnownMoveDefendReach=1500`（値2の中の既定）。調査記録 `Docs/investigation-defend-march-2026-11-27.md`。
+- 検証（main 09079c22）：Build-Editor 成功、Test-Battle failures=0、Test-KnownTargetFire 値1・値2 failures=0、Test-CoverActions・Test-CoverPeek failures=0。試合は回していない（切替なしの一致は coverlean の凍結ビルドで台帳 E2 と IDENTICAL を確認済み）。
+
 ## 2026-11-27 6時00分 Claude（ミッション）：精鋭の本拠地攻撃が着かない理由を記録で分けた。隊長交代と移動の進捗の直し（`missions` の先頭、ミッションの切替の内側）で「立ち止まり」は消えたが、まだ敵の本拠地には着かない（最も近づいて329m）
 
 - **ユーザー決定（11-27）**：精鋭が倒れた場所と理由を数える → C（精鋭小隊は隊長が戦死しても次の兵が引き継ぐ）と A（進んだかを行き先に近づいたかで判定、記録で原因を確かめてから）を進める。
