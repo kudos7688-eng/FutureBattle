@@ -351,8 +351,8 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSectorCoverWalk` | Value | 0 | BattleLeaderRuntime.cpp:1965 |  |
 | `-BattleSectorFlank` | Value | -1 | BattleSectorRoute.cpp:124 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleSectorFront` | Value | -1 | BattleSectorRoute.cpp:130 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
-| `-BattleSectorLaneLoad` | Value | 1500. | BattleSectorLanes.cpp:74 |  |
-| `-BattleSectorLanes` | Value | 0 | BattleSectorLanes.cpp:15 |  |
+| `-BattleSectorLaneLoad` | Value | 1500. | BattleSectorLanes.cpp:76 |  |
+| `-BattleSectorLanes` | Value | 1 | BattleSectorLanes.cpp:17 |  |
 | `-BattleSectorMove` | Value | 0 | BattleLeaderRuntime.cpp:1836 |  |
 | `-BattleSectorMoveFire` | Value | -1 | BattleLeaderRuntime.cpp:1846 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleSectorRoute` | Value | -1 | BattleSectorRoute.cpp:16 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |

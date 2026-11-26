@@ -88,6 +88,7 @@
 		}
 	}
 	FRandomStream RandomJ(20261122);
+	int32 ShellBuildingsE2=0,ShellDoorsE2=0,ShellSolidE2=0,ShellCountersE2=0;
 	int32 LanesK=0,LaneDroppedK=0,LaneClearedK=0,LaneSectorsK=0;
 	// Generation 9 (2026-11-25, user request: fewer soldiers getting stuck): the blind wall stands 6.6m behind its doorway, which leaves a
 	// slot 6m wide between the yard wall and the blind (generations 5-8: 4.6m and 4m). In generation 8 half the stalls were a crowd,
@@ -129,15 +130,121 @@
 			return false;
 		};
 		// Put: an obstacle given in the sector's own frame (offset from the middle, size), turned by the sector's orientation.
-		auto Put=[&](const TCHAR* Lb,double Ox,double Oy,double Sw,double Sd,double Hz,bool bCc=false)
+		auto RawPutE2=[&](const TCHAR* Lb,double Ox,double Oy,double Sw,double Sd,double Hz,bool bCc=false)
 		{
 			const FVector2D Of=Mr.Offset(Ox,Oy),Sz=Mr.Size(Sw,Sd);
 			if(PassK==1){if(Hz>300.)BigK.Add(FBox2D(FVector2D(SXc+Of.X-FMath::Abs(Sz.X)*.5,SYc+Of.Y-FMath::Abs(Sz.Y)*.5),FVector2D(SXc+Of.X+FMath::Abs(Sz.X)*.5,SYc+Of.Y+FMath::Abs(Sz.Y)*.5)));return;}
 			if(PassK==2&&Hz<=300.&&!bKeepK&&OnLaneK(SXc+Of.X,SYc+Of.Y,Sz.X,Sz.Y)){++LaneClearedK;return;}
 			Emit(Lb,SXc+Of.X,SYc+Of.Y,Sz.X,Sz.Y,Hz,bCc);
 		};
-		auto PutOn=[&](const TCHAR* Lb,double Ox,double Oy,double Z0,double Sw,double Sd,double Hz)
-		{if(PassK==1)return;const FVector2D Of=Mr.Offset(Ox,Oy),Sz=Mr.Size(Sw,Sd);Piece(Lb,SXc+Of.X,SYc+Of.Y,Z0,Sz.X,Sz.Y,Hz);};
+		// 2026-11-26: collect original footprints, not shell walls, so generation 9c sees exactly the same obstacles.
+		bool bCollectE2=false;TArray<FBox2D> SolidsE2,BoundsE2;
+		auto RectE2=[&](double XE2,double YE2,double WE2,double DE2)
+		{const FVector2D OE2=Mr.Offset(XE2,YE2),SE2=Mr.Size(WE2,DE2);return FBox2D(FVector2D(SXc+OE2.X-SE2.X*.5,SYc+OE2.Y-SE2.Y*.5),FVector2D(SXc+OE2.X+SE2.X*.5,SYc+OE2.Y+SE2.Y*.5));};
+		auto Put=[&](const TCHAR* LabelE2,double XE2,double YE2,double WE2,double DE2,double HE2,bool bConcealE2=false)
+		{
+			const FBox2D FootE2=RectE2(XE2,YE2,WE2,DE2);
+			if(bCollectE2){SolidsE2.Add(FootE2);return;}
+			const bool bShellE2=FCString::Strcmp(LabelE2,TEXT("Tower"))==0||FCString::Strcmp(LabelE2,TEXT("TowerWing"))==0||FCString::Strcmp(LabelE2,TEXT("Podium"))==0||FCString::Strcmp(LabelE2,TEXT("Apartment"))==0||FCString::Strcmp(LabelE2,TEXT("Nave"))==0||FCString::Strcmp(LabelE2,TEXT("Shop"))==0;
+			if(PassK==1||!bShellE2||WE2<800.||DE2<800.)
+			{
+				if(PassK!=1&&(bShellE2||FCString::Strcmp(LabelE2,TEXT("BellTower"))==0))++ShellSolidE2;
+				RawPutE2(LabelE2,XE2,YE2,WE2,DE2,HE2,bConcealE2);return;
+			}
+			// Doors are full-height 4m gaps. Search inward faces and their inner corners first, leaving the room centre for cover.
+			// Keep a 4m-deep apron clear of original pieces and blinds.
+			// Existing 1m/1.5m gaps and small shops cannot satisfy every requested clearance without moving old footprints.
+			const double X0E2=XE2-WE2*.5,X1E2=XE2+WE2*.5,Y0E2=YE2-DE2*.5,Y1E2=YE2+DE2*.5;
+			struct FDoorE2{int32 Side;double At;FVector2D Point;};TArray<FDoorE2> DoorsE2;
+			const int32 WantDoorsE2=FMath::Max(WE2,DE2)>2000.?3:2;
+			for(int32 RoundE2=0;RoundE2<2&&DoorsE2.Num()<WantDoorsE2;++RoundE2)
+			for(int32 FaceE2=0;FaceE2<4&&DoorsE2.Num()<WantDoorsE2;++FaceE2)
+			{
+				const int32 AxisFaceE2=(FaceE2%2)*2+FaceE2/2;
+				const int32 SideE2=AxisFaceE2<2?(YE2>=0.?AxisFaceE2:1-AxisFaceE2):(XE2>=0.?AxisFaceE2:5-AxisFaceE2);
+				const bool bXE2=SideE2<2;const double SignE2=(SideE2%2)?1.:-1.;
+				const double LineE2=bXE2?(SignE2<0.?Y0E2:Y1E2):(SignE2<0.?X0E2:X1E2),MidE2=bXE2?XE2:YE2,SpanE2=bXE2?WE2:DE2;
+				bool bUsedE2=false;for(const FDoorE2& ExistingE2:DoorsE2)if(ExistingE2.Side==SideE2)bUsedE2=true;
+				if(!RoundE2&&bUsedE2)continue;
+				for(int32 TryE2=0;TryE2<=int32(SpanE2/100.)&&DoorsE2.Num()<WantDoorsE2;++TryE2)
+				{
+					// The church's east face and the wing's north face have a neighbour 1m away; cluster doors at the other corner.
+					const bool bLowEndE2=MidE2>=0.||(bXE2&&Kx==TEXT('C')&&Vr%2==0)||(!bXE2&&FCString::Strcmp(LabelE2,TEXT("TowerWing"))==0);
+					const double AtE2=MidE2+(bLowEndE2?-1.:1.)*(SpanE2*.5-250.-TryE2*100.);
+					if(FMath::Abs(AtE2-MidE2)+250.>SpanE2*.5)continue;
+					bool bFreeE2=true;for(const FDoorE2& ExistingE2:DoorsE2)if(ExistingE2.Side==SideE2&&FMath::Abs(ExistingE2.At-AtE2)<700.)bFreeE2=false;
+					const FBox2D ApronE2=bXE2?RectE2(AtE2,LineE2+SignE2*200.,400.,400.):RectE2(LineE2+SignE2*200.,AtE2,400.,400.);
+					const FBox2D ClearanceE2=bXE2?RectE2(AtE2,LineE2,1000.,600.):RectE2(LineE2,AtE2,600.,1000.);
+					for(const FBox2D& ObstacleE2:SolidsE2)if(!(ObstacleE2.Min==FootE2.Min&&ObstacleE2.Max==FootE2.Max)&&(ApronE2.Intersect(ObstacleE2)||ClearanceE2.Intersect(ObstacleE2)))bFreeE2=false;
+					for(const FBox2D& BorderE2:BoundsE2)if(ApronE2.Intersect(BorderE2)||ClearanceE2.Intersect(BorderE2))bFreeE2=false;
+					if(!bFreeE2)continue;
+					DoorsE2.Add({SideE2,AtE2,bXE2?FVector2D(AtE2,LineE2):FVector2D(LineE2,AtE2)});break;
+				}
+			}
+			if(DoorsE2.IsEmpty())
+			{
+				++ShellSolidE2;RawPutE2(LabelE2,XE2,YE2,WE2,DE2,HE2,bConcealE2);
+				if(FCString::Strcmp(LabelE2,TEXT("Podium"))==0)
+				{const FVector2D TopAtE2=Mr.Offset(-800.,1450.),TopSizeE2=Mr.Size(1400.,1000.);Piece(TEXT("Tower"),SXc+TopAtE2.X,SYc+TopAtE2.Y,600.,TopSizeE2.X,TopSizeE2.Y,2200.+(Hh%3)*300.);}
+				UE_LOG(LogTemp,Warning,TEXT("MAP_J_SHELL_BLOCKED cell=%d,%d building=%s"),Cx,Rx,LabelE2);return;
+			}
+			++ShellBuildingsE2;ShellDoorsE2+=DoorsE2.Num();
+			for(int32 WallE2=0;WallE2<4;++WallE2)
+			{
+				const bool bAlongE2=WallE2<2;const double LowE2=bAlongE2?X0E2:Y0E2+50.,HighE2=bAlongE2?X1E2:Y1E2-50.;
+				const double FixedE2=WallE2==0?Y0E2+25.:WallE2==1?Y1E2-25.:WallE2==2?X0E2+25.:X1E2-25.;
+				TArray<double> CutsE2;CutsE2.Add(LowE2);CutsE2.Add(HighE2);
+				for(const FDoorE2& OpeningE2:DoorsE2)if(OpeningE2.Side==WallE2){CutsE2.Add(OpeningE2.At-200.);CutsE2.Add(OpeningE2.At+200.);}
+				// Podium: only its outer north/south wall carries the old tower's tall silhouette; no nested wall or upper floor.
+				const bool bTallE2=bAlongE2&&FCString::Strcmp(LabelE2,TEXT("Podium"))==0;
+				if(bTallE2){CutsE2.Add(-1500.);CutsE2.Add(-100.);}CutsE2.Sort();
+				for(int32 PartE2=1;PartE2<CutsE2.Num();++PartE2)
+				{
+					const double CentreE2=(CutsE2[PartE2-1]+CutsE2[PartE2])*.5,LengthE2=CutsE2[PartE2]-CutsE2[PartE2-1];bool bGapE2=false;
+					for(const FDoorE2& OpeningE2:DoorsE2)if(OpeningE2.Side==WallE2&&FMath::Abs(CentreE2-OpeningE2.At)<200.)bGapE2=true;
+					if(bGapE2||LengthE2<=0.)continue;
+					const double HeightE2=bTallE2&&CentreE2>-1500.&&CentreE2<-100.?600.+2200.+(Hh%3)*300.:HE2;
+					RawPutE2(LabelE2,bAlongE2?CentreE2:FixedE2,bAlongE2?FixedE2:CentreE2,bAlongE2?LengthE2:50.,bAlongE2?50.:LengthE2,HeightE2);
+				}
+			}
+			// 2026-11-26: fit cover by its edges, not its centre; never squeeze a counter into an undersized room.
+			const int32 WantCoverE2=FCString::Strcmp(LabelE2,TEXT("Shop"))==0?1:FMath::Min(4,FMath::FloorToInt((WE2-100.)*(DE2-100.)/600000.));
+			TArray<FBox2D> CoverE2;
+			auto OverlapE2=[](const FBox2D& LeftE2,const FBox2D& RightE2){return LeftE2.Min.X<RightE2.Max.X&&LeftE2.Max.X>RightE2.Min.X&&LeftE2.Min.Y<RightE2.Max.Y&&LeftE2.Max.Y>RightE2.Min.Y;};
+			for(int32 TurnE2=0;TurnE2<2&&CoverE2.Num()<WantCoverE2;++TurnE2)
+			for(double CY2=Y0E2+350.+(TurnE2?200.:30.);CY2<=Y1E2-350.-(TurnE2?200.:30.)&&CoverE2.Num()<WantCoverE2;CY2+=50.)
+			for(double CX2=X0E2+350.+(TurnE2?30.:200.);CX2<=X1E2-350.-(TurnE2?30.:200.)&&CoverE2.Num()<WantCoverE2;CX2+=50.)
+			{
+				const double CW2=TurnE2?60.:400.,CD2=TurnE2?400.:60.;const FBox2D CandidateE2(FVector2D(CX2-CW2*.5,CY2-CD2*.5),FVector2D(CX2+CW2*.5,CY2+CD2*.5));bool bClearE2=true;
+				for(const FBox2D& OldCoverE2:CoverE2)if(OverlapE2(CandidateE2.ExpandBy(300.),OldCoverE2))bClearE2=false;
+				for(const FBox2D& BorderE2:BoundsE2)if(RectE2(CX2,CY2,CW2+600.,CD2+600.).Intersect(BorderE2))bClearE2=false;
+				for(const FDoorE2& DoorE2:DoorsE2)
+				{
+					const FVector2D HalfDoorE2=DoorE2.Side<2?FVector2D(200.,0.):FVector2D(0.,200.);
+					if(OverlapE2(CandidateE2.ExpandBy(300.),FBox2D(DoorE2.Point-HalfDoorE2,DoorE2.Point+HalfDoorE2)))bClearE2=false;
+					for(const FDoorE2& OtherDoorE2:DoorsE2)
+					{
+						// Clip the doorway centreline against the counter expanded by half a doorway; diagonal routes stay clear too.
+						const FBox2D WalkE2=CandidateE2.ExpandBy(200.);double NearE2=0.,FarE2=1.;bool bCrossE2=true;
+						for(int32 AxisE2=0;AxisE2<2;++AxisE2)
+						{
+							const double StartE2=AxisE2?DoorE2.Point.Y:DoorE2.Point.X,DeltaE2=(AxisE2?OtherDoorE2.Point.Y:OtherDoorE2.Point.X)-StartE2;
+							const double MinE2=AxisE2?WalkE2.Min.Y:WalkE2.Min.X,MaxE2=AxisE2?WalkE2.Max.Y:WalkE2.Max.X;
+							if(DeltaE2==0.){if(StartE2<MinE2||StartE2>MaxE2)bCrossE2=false;}
+							else{const double TA2=(MinE2-StartE2)/DeltaE2,TB2=(MaxE2-StartE2)/DeltaE2;NearE2=FMath::Max(NearE2,FMath::Min(TA2,TB2));FarE2=FMath::Min(FarE2,FMath::Max(TA2,TB2));}
+						}
+						if(bCrossE2&&NearE2<=FarE2)bClearE2=false;
+					}
+				}
+				if(!bClearE2)continue;
+				// Piece preserves 120cm (Emit rounds 100..125cm up to 130cm); both place the same rotated partner.
+				CoverE2.Add(CandidateE2);const FVector2D CoverAtE2=Mr.Offset(CX2,CY2),CoverSizeE2=Mr.Size(CW2,CD2);
+				Piece(TEXT("Counter"),SXc+CoverAtE2.X,SYc+CoverAtE2.Y,0.,CoverSizeE2.X,CoverSizeE2.Y,120.);++ShellCountersE2;
+			}
+			bool bTwoSidesE2=false,bInwardE2=false;for(const FDoorE2& DoorE2:DoorsE2)
+			{if(DoorE2.Side!=DoorsE2[0].Side)bTwoSidesE2=true;if((DoorE2.Side<2?DoorE2.Point.Y:DoorE2.Point.X)*(DoorE2.Side%2?1.:-1.)<0.)bInwardE2=true;}
+			if(DoorsE2.Num()<WantDoorsE2||!bTwoSidesE2||!bInwardE2||CoverE2.Num()<WantCoverE2)UE_LOG(LogTemp,Warning,TEXT("MAP_J_SHELL_LIMIT cell=%d,%d building=%s doors=%d/%d different_sides=%d inward=%d counters=%d/%d"),Cx,Rx,LabelE2,DoorsE2.Num(),WantDoorsE2,int32(bTwoSidesE2),int32(bInwardE2),CoverE2.Num(),WantCoverE2);
+		};
 		// A tree: a trunk that stops bullets and a crown that is only drawn.
 		auto Tree=[&](double Ox,double Oy)
 		{
@@ -200,7 +307,7 @@
 			}
 			break;
 		case TEXT('B'):
-			// Office towers: one tall tower in a corner, an L of two blocks, or a tower on a podium. Not enterable; they block sight.
+			// Office towers: one tall tower in a corner, an L of two blocks, or a tower on a podium. Full-height shells retain their footprints (2026-11-26).
 			UseJ(TowerMatJ);
 			if(Vr%3==0)
 			{
@@ -217,12 +324,12 @@
 			}
 			else
 			{
-				Put(TEXT("Podium"),0,1450,3800,1100,600);PutOn(TEXT("Tower"),-800,1450,600,1400,1000,2200+(Hh%3)*300);UseJ(GreyJ);
+				Put(TEXT("Podium"),0,1450,3800,1100,600);UseJ(GreyJ);
 				Put(TEXT("Bench"),-900,-1300,400,80,130);Put(TEXT("Kiosk"),1400,-1400,250,250,260);
 			}
 			break;
 		case TEXT('A'):
-			// Apartment blocks: a long slab along one side, two blocks in opposite corners, or an L. Not enterable.
+			// Apartment blocks: a long slab along one side, two blocks in opposite corners, or an L. Full-height shells (2026-11-26).
 			UseJ(FlatMatJ);
 			if(Vr%3==0){Put(TEXT("Apartment"),0,1450,3800,1000,1200);UseJ(GreyJ);Car(-1300,-1550,true);Car(0,-1600,true);Put(TEXT("YardWall"),1500,-700,60,800,130);}
 			else if(Vr%3==1){Put(TEXT("Apartment"),1200,1300,1400,1300,900);Put(TEXT("Apartment"),-1250,-1250,1300,1400,900);UseJ(GreyJ);Put(TEXT("Playground"),1300,-1300,600,60,130);Put(TEXT("Playground"),-1300,1300,60,600,130);}
@@ -390,6 +497,14 @@
 		default: break; // hills are built above
 		}
 		};
+		// Only these deterministic sectors need a footprint prepass; do not replay fields/woods or consume random draws.
+		if(Kx==TEXT('B')||Kx==TEXT('A')||Kx==TEXT('C')||Kx==TEXT('Q'))
+		{
+			bCollectE2=true;ContentJ();bCollectE2=false;
+			// Conservative sector edges for J; K supplies its actual inset border lines and blinds below.
+			if(!BattleMapJ::bDenseCover)for(int32 EdgeE2:{-1,1})
+			{BoundsE2.Add(RectE2(0.,EdgeE2*2500.,5000.,100.));BoundsE2.Add(RectE2(EdgeE2*2500.,0.,100.,5000.));}
+		}
 		if(BattleMapJ::bDenseCover&&Kx!=TEXT('M')&&Kx!=TEXT('L')&&Kx!=TEXT('h')&&Kx!=TEXT('S')&&Kx!=TEXT(' '))
 		{
 			// Lanes (user request 2026-11-24: a continuous way through the sectors, not only templates turned about): from one
@@ -443,6 +558,10 @@
 				const double Bc=Sd.Line+Sd.In*Sd.Back[Bi];
 				const double Bh=BlindHalfK(Sd.Back[Bi],Sd.bSame);BlindK.Add(Sd.bAlongX?FBox2D(FVector2D(Sd.Door[Bi]-Bh,Bc-30.),FVector2D(Sd.Door[Bi]+Bh,Bc+30.)):FBox2D(FVector2D(Bc-30.,Sd.Door[Bi]-Bh),FVector2D(Bc+30.,Sd.Door[Bi]+Bh)));
 			}
+			// Read-only copies for shell aprons; these never feed back into BigK, BlindK, LaneK or the lane search.
+			BoundsE2=BlindK;
+			for(const FSideK& ShellSideE2:SidesK)if(ShellSideE2.bOk)
+			{const double MidSideE2=ShellSideE2.bAlongX?SXc:SYc;BoundsE2.Add(ShellSideE2.bAlongX?FBox2D(FVector2D(MidSideE2-2500.,ShellSideE2.Line-30.),FVector2D(MidSideE2+2500.,ShellSideE2.Line+30.)):FBox2D(FVector2D(ShellSideE2.Line-30.,MidSideE2-2500.),FVector2D(ShellSideE2.Line+30.,MidSideE2+2500.)));}
 			// The pieces of the lane from doorway Ix of a side to the hub; false when a tall piece or a blind is in the way.
 			auto LaneOfK=[&](const FSideK& Sd,int32 Ix,double HubX,double HubY,TArray<FBox2D>& Out,TArray<FVector>* RouteK=nullptr)
 			{
@@ -573,5 +692,6 @@
 	UseJ(GreyJ);
 	if(BattleMapJ::bDenseCover)UE_LOG(LogTemp,Display,TEXT("TOWN_K_LANES sectors=%d lanes=%d dropped=%d cleared=%d (x2 by rotation)"),LaneSectorsK,LanesK,LaneDroppedK,LaneClearedK);
 	if(BattleMapJ::bDenseCover)UE_LOG(LogTemp,Display,TEXT("TOWN_K_LANE_ROUTES routes=%d"),LanesK*2);
+	UE_LOG(LogTemp,Display,TEXT("MAP_J_SHELLS buildings=%d doorways=%d kept_solid=%d counters=%d (x2 by rotation)"),ShellBuildingsE2,ShellDoorsE2,ShellSolidE2,ShellCountersE2);
 	UE_LOG(LogTemp,Display,TEXT("URBAN_MAP_LAYOUT objects=%d (x2 by rotation) layout=terrain-j-v1"),Objects);
 }
