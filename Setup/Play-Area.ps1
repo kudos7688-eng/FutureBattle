@@ -59,6 +59,8 @@ if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J' -or $Map -eq 'K' -or $Map -eq
     $extra += '-BattleGroupSectors=1'
     # The home-assault squads go as one group on one flank (trial, user 2026-11-27 play test; BattleBaseGroup.cpp).
     $extra += '-BattleBaseGroup=1'
+    # The front army in three armies by bands of rows, shown in the army list and on the front line (trial, user 2026-11-27 play test).
+    $extra += '-BattleFrontArmies=1'
     # AI orders as sector missions (move by sectors, fire on the move into the sector), as Test-WideSight.ps1 measures them by default
     # (-SectorAI 1). Before 2026-11-24 the play passed it only with -SectorAI, so the play's AI differed from the measured one (user decision).
     $extra += '-BattleSectorAI=1'
