@@ -105,6 +105,29 @@ namespace BattleTactics
  // who were not hit in the last 5 s; it costs nothing. A replacement waits while the stock holds less than his rounds. Not for
  // vehicles, exoskeletons, scout pairs and the base garrison. BattleArea.cpp (UpdateArea), BattleSquadRetreat.cpp (Evaluate).
  bool SupplyCarRecover();
+ // Supply trials, user 2026-11-26 (with -BattleSupplyCarRecover the supply vehicle is where squads recover), each default 0:
+ // -BattleSupplyCarFirst=1: a squad that needs supply or replacements goes to the nearest supply vehicle of its team that has
+ //   stock to give (not one about to drive home to load) whenever that vehicle is no farther from it than its home, instead of only
+ //   within UBattleTuning::FieldSupplyRange (200 m); once on its way the distance no longer ends the trip. A trip for losses may
+ //   take 300 s to reach the vehicle, and the 120 s of waiting for replacements count from its arrival beside it.
+ //   BattleSupplyCar.cpp (FieldSupplyPoint), BattleSquadRetreat.cpp (Evaluate).
+ // -BattleSupplyCarPost=1: where an AI-run supply vehicle stands when it is not loading and its group is not gathering. It halts
+ //   where it is (a Hold order) while a squad is on its way to it or stands beside it short of members. Else it goes behind the
+ //   infantry squads it serves (those nearer to it than to another supply vehicle with stock, the lower squad number on a tie; away
+ //   from the home and not on their way home): their leaders' centre, a squad counting once more for every two members it is short
+ //   of, moved UBattleTuning::SupplyCarBack toward the home (further while a known anti-tank soldier reaches it), then to the
+ //   nearest road junction within 100 m that is no nearer to the enemy's home, not in reach of a known anti-tank soldier and not
+ //   another supply vehicle's post (maps with routes; none: the place itself). A post within 30 m of its last one is kept. It takes
+ //   no flank road of the home assault. Own squads' state and known enemies only; the posts are not saved.
+ //   BattleSupplyCar.cpp (SupplyCarOrder), BattleMatch.cpp (UpdateTeamOrders).
+ // -BattleSupplyCarTarget=1: an enemy supply vehicle a squad sees is a preferred target. The anti-tank gunner takes a vehicle with
+ //   a main gun first, then a supply vehicle, then the others (the nearest of its kind). Small arms count it as 1.5 times as far
+ //   instead of twice (they do ACArmorSmallArms of their damage to it; infantry near by still comes first). A tank gun takes an
+ //   enemy tank first, then a supply vehicle, then the other vehicles, and always tries its line to the best supply vehicle. What
+ //   the squad or tank sees and the observed type only. BattleArmourAI.cpp (PickArmourTargets), BattleTankGun.cpp (TankGunTarget).
+ bool SupplyCarFirst();
+ bool SupplyCarPost();
+ bool SupplyCarTarget();
  // Trial -BattleBaseRifleDamage=x (default 0 = unchanged, 0.01..1): small-arms shots do x of their damage to an enemy home base
  // (anti-tank rounds, tank guns and shells keep their own base damage).
  float BaseRifleDamage();

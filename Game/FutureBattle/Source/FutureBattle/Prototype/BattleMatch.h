@@ -226,7 +226,10 @@ public:
  bool SupplyCarOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
  // Where a squad short of ammunition gets it in the field: the position of a supply vehicle of its team with stock within
  // UBattleTuning::FieldSupplyRange (its own group's first). False: none (the squad goes home as before).
- bool FieldSupplyPoint(int32 SquadID,FVector& Where,int32* CarID=nullptr) const;
+ // bOnTrip: the squad is already on its way to a vehicle (-BattleSupplyCarFirst: the distance no longer limits the choice).
+ bool FieldSupplyPoint(int32 SquadID,FVector& Where,int32* CarID=nullptr,bool bOnTrip=false) const;
+ // Trial -BattleSupplyCarPost (BattleTactics.h): supply vehicle -> the post it was last given (transient).
+ mutable TMap<int32,FVector> SupplyPosts;
  // Front line and front-holding group (2026-11-20, user proposal; group stage 4, BattleFrontLine.cpp). Trial -BattleFrontLine=1 (default
  // 0; with -BattleAreaTrialTeam for that team only), maps with sectors only. FrontLine[Team][Row]: the line's sector column in that
  // sector row, counted from the team's own home edge (0); empty while off. Built from own positions and known enemies only.
