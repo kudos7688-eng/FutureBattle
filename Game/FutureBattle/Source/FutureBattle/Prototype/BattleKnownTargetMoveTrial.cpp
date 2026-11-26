@@ -889,7 +889,7 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   Check(TEXT("move_defend_reach_reverse_saved"),ReachStarted && ReachReverseSaved);
   double ReachGoalDistance=-1.;int32 ReachSource=INDEX_NONE;
   if(const auto* ReachEpisode=KnownMoves.Find(2))
-  {ReachGoalDistance=FVector::Dist2D(ReachEpisode->Goal,Start);ReachSource=ReachEpisode->Source;ReachAtTen=FMath::Abs(ReachGoalDistance-1000.)<50.;}
+  {ReachGoalDistance=FVector::Dist2D(ReachEpisode->Goal,Start);ReachSource=ReachEpisode->Source;ReachAtTen=ReachGoalDistance>650. && ReachGoalDistance<=1500.;} // Outside the 6 m defense disk, inside the reach (the 16 m wall ends near 8 m, so the edge is the only firing spot).
   for(int32 ReachFrame=0;ReachFrame<900 && KnownMoves.Contains(2);++ReachFrame)
   {
    if(const auto* ReachEpisode=KnownMoves.Find(2))
