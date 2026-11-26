@@ -6,6 +6,7 @@ namespace BattleKnownFire
  bool Enabled();
  bool MoveEnabled();
  bool MoveMarch();
+ bool MoveDefendMarch();
  double MoveCommit();
  double MoveWait();
  double MoveRange();

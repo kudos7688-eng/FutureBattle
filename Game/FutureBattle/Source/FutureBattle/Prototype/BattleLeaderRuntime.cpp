@@ -933,6 +933,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  // head is turned, so he can turn to an enemy at his side and fire - and ends with it unless he takes the look again.
  bool bLookAgain=false;
  ON_SCOPE_EXIT{if(!bLookAgain && WalkLooks.Num())WalkLooks.Remove(ID);};
+ if(BattleKnownFire::MoveEnabled() && BattleKnownFire::MoveDefendMarch())TrackKnownDefendResume(ID,Now);
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()){if(BattleKnownFire::MoveEnabled() && KnownMoves.Contains(ID))EndKnownMove(ID,Now,TEXT("known_move_cancel_died"));return;}
  auto& B=Bodies.FindChecked(ID);
  if(BattleKnownFire::MoveEnabled() && KnownMoves.Contains(ID) && StepKnownMove(ID,Dt,Now)){SightExperiment.Cover(TEXT("known_move_gate_active"));return;}
@@ -1333,7 +1334,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   else if(KnownFire.Reject==BattleKnownFire::EReject::Deferred)SightExperiment.Cover(TEXT("known_move_gate_budget"));
   else if((bOnRoute && !StopForCombat) || bArrivalWalk)
   {
-   if(!BattleKnownFire::MoveMarch() || S->Order!=EBattleOrder::AttackMove)
+   if((!BattleKnownFire::MoveMarch() || S->Order!=EBattleOrder::AttackMove) && !KnownMoveDefendMarching(ID))
    {
     SightExperiment.Cover(TEXT("known_move_gate_march"));
     SightExperiment.Cover(S->Order==EBattleOrder::Defend?TEXT("known_move_gate_march_defend"):S->Order==EBattleOrder::AttackMove?TEXT("known_move_gate_march_attack_move"):S->Order==EBattleOrder::Move?TEXT("known_move_gate_march_move"):TEXT("known_move_gate_march_hold"));

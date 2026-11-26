@@ -609,6 +609,66 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   Check(TEXT("move_edge_disabled_no_move_fire"),EdgeCube && EdgeCrates==8 && Count(TEXT("known_move_searches"))>ControlSearches &&
    Count(TEXT("known_move_candidate_edge"))+Count(TEXT("known_move_candidate_door"))==ControlEdges && Count(TEXT("known_move_started"))==ControlStarts && ControlNoMove && ControlStill && ControlSilent);
  }
+ // Defense marching uses the real Follow gate, with the same hidden-fire fixture.
+ Reset();KnownDefendResumes.Reset();
+ // The edge scene cached crates and a long wall; rebuild after removing them.
+ TestWorld->GetSubsystem<UBattleCover>()->BuildSlots(true);
+ TestWorld->GetSubsystem<UBattleCover>()->KnownMoveGeometry(Start,BattleKnownFire::MoveRange(),true);
+ const FVector DefendPost=Start+FVector(0,3000,0);
+ auto& DefendPlan=Plans.FindChecked(Shooter.SquadID);DefendPlan.Path={Start,DefendPost};
+ DefendPlan.Corridors.Add(2,DefendPlan.Path);DefendPlan.ArrivalGoals.Add(2,DefendPost);Bodies.FindChecked(2).Waypoint=1;
+ Shooter.Destination=DefendPost;Squad.Destination=DefendPost;Squad.DefenseRadius=3400;
+ const int32 DefendRevision=Shooter.OrderRevision,DefendMission=Squad.MissionRevision;
+ const int32 DefendStarts=Count(TEXT("known_move_defend_march_started")),DefendArrivals=Count(TEXT("known_move_defend_march_arrived"));
+ const int32 DefendFires=Count(TEXT("known_move_defend_march_fired")),DefendResumes=Count(TEXT("known_move_defend_march_resumed"));
+ const int32 DefendPostArrivals=Count(TEXT("known_move_defend_march_resume_arrived")),DefendShots=Shooter.ShotSequence;
+ const int32 DefendSearches=Count(TEXT("known_move_searches")),DefendRays=Count(TEXT("known_move_rays"));
+ const int32 DefendSensors=Count(TEXT("known_fire_sensor_checks"));
+ bool DefendStarted=false,DefendNoEarlyShot=true;
+ for(int32 DefendAttempt=0;DefendAttempt<24 && !DefendStarted;++DefendAttempt)
+ {TestNow+=1.01;Observe();Follow(2,0.f,TestNow);DefendStarted=KnownMoves.Contains(2);}
+ if(!BattleKnownFire::MoveDefendMarch())
+ {
+  Check(TEXT("move_defend_march_disabled"),!DefendStarted && Count(TEXT("known_move_defend_march_started"))==DefendStarts &&
+   Count(TEXT("known_move_searches"))==DefendSearches && Count(TEXT("known_move_rays"))==DefendRays && Shooter.ShotSequence==DefendShots && FVector::Dist2D(Position(2),Start)<1.);
+ }
+ else
+ {
+  for(int32 DefendFrame=0;DefendFrame<900 && KnownMoves.Contains(2);++DefendFrame)
+  {
+   TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
+   if(const auto* DefendEpisode=KnownMoves.Find(2);DefendEpisode && DefendEpisode->Arrived<0)DefendNoEarlyShot &= Shooter.ShotSequence==DefendShots;
+  }
+  Check(TEXT("move_defend_march_arrive_fire"),DefendStarted && DefendNoEarlyShot && Shooter.ShotSequence>DefendShots && Count(TEXT("known_fire_sensor_checks"))>DefendSensors &&
+   Count(TEXT("known_move_defend_march_started"))==DefendStarts+1 && Count(TEXT("known_move_defend_march_arrived"))==DefendArrivals+1 && Count(TEXT("known_move_defend_march_fired"))==DefendFires+1);
+  TestSense->Reset();Put(251,Start+FVector(50000,0,0));
+  for(int32 DefendResumeFrame=0;DefendResumeFrame<900;++DefendResumeFrame)
+  {TestNow+=1./30.;Follow(2,1.f/30.f,TestNow);if(Count(TEXT("known_move_defend_march_resume_arrived"))>DefendPostArrivals)break;}
+  Check(TEXT("move_defend_march_resume"),!KnownMoves.Contains(2) && !CoverApproaches.Contains(2) && !Shooter.CoverPhase &&
+   Count(TEXT("known_move_defend_march_resumed"))==DefendResumes+1 && Count(TEXT("known_move_defend_march_resume_arrived"))==DefendPostArrivals+1 &&
+   FVector::Dist2D(Position(2),DefendPost)<=100. && Shooter.Order==EBattleOrder::Defend && Squad.Order==EBattleOrder::Defend &&
+   Shooter.OrderRevision==DefendRevision && Squad.MissionRevision==DefendMission && Shooter.Destination==DefendPost && Squad.Destination==DefendPost);
+  // Start outside the assigned sector and defense disk; crossing a cell border is legal only in the strip.
+  Reset();KnownDefendResumes.Reset();Squad.bSectorMission=true;Squad.DefenseRadius=400;
+  const FVector DefendBoundaryStart(-100,100,Start.Z),DefendBoundaryPost(2000,100,Start.Z);
+  Put(2,DefendBoundaryStart);Shooter.Destination=DefendBoundaryPost;Squad.Destination=DefendBoundaryPost;Plans.FindChecked(Shooter.SquadID).Center=DefendBoundaryStart;
+  Plans.FindChecked(Shooter.SquadID).Path={DefendBoundaryStart,DefendBoundaryPost};Bodies.FindChecked(2).Waypoint=1;
+  Check(TEXT("move_defend_march_sector"),BattleSectors::Cell(DefendBoundaryStart)!=BattleSectors::Cell(DefendBoundaryPost) &&
+   KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart) && KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart+FVector(500,0,0)) &&
+   KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryPost) && !KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart+FVector(500,700,0)));
+  Check(TEXT("move_defend_march_reverse_rejected"),!KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart-FVector(700,0,0)) &&
+   !KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart-FVector(1,0,0)));
+  // Expired information must eventually release the detour without changing the post.
+  Reset();KnownDefendResumes.Reset();auto& DefendStalePlan=Plans.FindChecked(Shooter.SquadID);
+  DefendStalePlan.Path={Start,DefendPost};DefendStalePlan.Corridors.Add(2,DefendStalePlan.Path);DefendStalePlan.ArrivalGoals.Add(2,DefendPost);Bodies.FindChecked(2).Waypoint=1;
+  Shooter.Destination=DefendPost;Squad.Destination=DefendPost;Squad.DefenseRadius=3400;
+  const bool DefendStaleStarted=TryStart();const int32 DefendStaleShots=Shooter.ShotSequence,DefendStaleResumes=Count(TEXT("known_move_defend_march_resumed"));
+  TestSense->Reset();Put(251,Start+FVector(50000,0,0));
+  for(int32 DefendStaleFrame=0;DefendStaleFrame<2400 && KnownMoves.Contains(2);++DefendStaleFrame)
+  {TestNow+=1./30.;Follow(2,1.f/30.f,TestNow);}
+  Check(TEXT("move_defend_march_stale_resume"),DefendStaleStarted && !KnownMoves.Contains(2) && Shooter.ShotSequence==DefendStaleShots &&
+   Count(TEXT("known_move_defend_march_resumed"))==DefendStaleResumes+1 && Shooter.Destination==DefendPost && Squad.Destination==DefendPost);
+ }
  for(auto* TestWall:Walls){TestWall->SetActorEnableCollision(false);TestWall->Destroy();}
  return Failures;
 }
