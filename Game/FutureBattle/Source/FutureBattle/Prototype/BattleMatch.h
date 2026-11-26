@@ -284,6 +284,9 @@ public:
  bool PlayerRolesOn(int32 Team) const;
  bool FrontRolesOn(int32 Team) const; // stage 4 roles or the player's
  uint8 PlayerSectionRole(int32 Section) const;
+ bool CanSetPlayerSectionRole(int32 Section,uint8 Role) const;
+ bool SetPlayerSectionRole(int32 Section,uint8 Role);
+ int32 DrawFrontSectionOffsets(const TArray<int32>& Offsets);
  bool CyclePlayerSectionRole(int32 Section); // the next allowed role; LastMessage says which
  static const TCHAR* SectionRoleJa(uint8 PlayerRole);
  // Section orders (trial -BattleFrontSectionOrders=1, default 0, needs the player roles): roles 5 advance and 6 fall back move the

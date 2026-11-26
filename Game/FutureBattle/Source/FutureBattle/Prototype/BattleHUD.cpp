@@ -508,6 +508,7 @@ void ABattleHUD::DrawHUD()
  DrawNoticeLog();
  DrawSectorPanel(PC);
  DrawPlanPanel(PC);
+ DrawSectionMenu(PC);
  DrawBuyPanel(PC);
  DrawGamepadMenu(PC);
  DrawQuitMenu(PC);
@@ -567,10 +568,19 @@ void ABattleHUD::DrawPlanPanel(ABattleController* PC)
  DrawRect(Ink,L.Origin.X,L.Origin.Y,L.Size.X,L.Size.Y);DrawRect(Gold,L.Origin.X,L.Origin.Y,L.Size.X,2);
  for(const auto& I:L.Items)
  {
+  if(I.Kind==12){DrawRect(BattleSectorView::SectionColor(I.Index),I.Origin.X,I.Origin.Y+6,7,7);continue;}
+  if(GetWorld()->GetSubsystem<UBattleMatch>()->FrontSectionOrdersOn(0)&&I.Kind==0)
+  {
+   float TextW=0,TextH=0;Canvas->StrLen(GEngine->GetSmallFont(),I.Text,TextW,TextH);
+   const float TextScale=FMath::Min(I.Tone==4?1.f:.8f,FMath::Max(1.f,float(L.Origin.X+L.Size.X-12-I.Origin.X))/FMath::Max(1.f,TextW));
+   DrawText(I.Text,I.Tone==4?Gold:I.Tone==5?Muted:White,I.Origin.X,I.Origin.Y,GEngine->GetSmallFont(),TextScale);continue;
+  }
   if(I.Kind==0){DrawText(I.Text,I.Tone==4?Gold:I.Tone==5?Muted:White,I.Origin.X,I.Origin.Y,GEngine->GetSmallFont(),I.Tone==4?1.f:.8f);continue;}
   const FLinearColor Fill=I.Tone==1?FLinearColor(.10f,.24f,.24f,.98f):I.Tone==2?FLinearColor(.25f,.08f,.08f,.98f):I.Tone==3?FLinearColor(.45f,.4f,.1f,.98f):FLinearColor(.08f,.11f,.15f,.98f);
   DrawRect(Fill,I.Origin.X,I.Origin.Y,I.Size.X,I.Size.Y);
-  DrawText(I.Text,I.Tone==2?Muted:I.Tone==3?FLinearColor::Yellow:Mint,I.Origin.X+6,I.Origin.Y+3,GEngine->GetSmallFont(),.8f);
+  float ButtonScale=.8f;
+  if(I.Kind==11){float ButtonW=0,ButtonH=0;Canvas->StrLen(GEngine->GetSmallFont(),I.Text,ButtonW,ButtonH);ButtonScale=FMath::Min(.8f,float(I.Size.X-12)/FMath::Max(1.f,ButtonW));}
+  DrawText(I.Text,I.Tone==2?Muted:I.Tone==3?FLinearColor::Yellow:Mint,I.Origin.X+6,I.Origin.Y+3,GEngine->GetSmallFont(),ButtonScale);
  }
 }
 
@@ -1558,13 +1568,19 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
  // across the rows. It is the team's own picture (own positions and known enemies), so it may be shown.
  if(const auto* FM=GetWorld()->GetSubsystem<UBattleMatch>();FM&&FM->FrontLine[0].Num()==BattleSectors::Rows)
  {
-  const FLinearColor FrontInk(1.f,.55f,.15f,.9f);const double Sign=FM->AreaHome(0).X<0?1.:-1.;
+  FLinearColor FrontInk(1.f,.55f,.15f,.9f);const double Sign=FM->AreaHome(0).X<0?1.:-1.;
   // By grid row (top to bottom); FrontLine is in the team's own rows, which run the other way for the team on the high X side.
   auto EdgeX=[&](int32 GridRow){const int32 Row=Sign>0?GridRow:BattleSectors::Rows-1-GridRow;return BattleSectors::Center(FM->FrontCell(0,FM->FrontLine[0][Row],Row)).X+Sign*Size*.5;};
   auto Thick=[&](FVector A,FVector B){FVector2D SA,SB;if(Project(A,SA)&&Project(B,SB)&&(OnScreen(SA)||OnScreen(SB)))DrawLine(SA.X,SA.Y,SB.X,SB.Y,FrontInk,3.f);};
   for(int32 R=0;R<BattleSectors::Rows;++R)
   {
+   const int32 ColourRow=Sign>0?R:BattleSectors::Rows-1-R;
+   const auto& ColourPlan=FM->FrontPlanState[0];
+   if(FM->FrontSectionOrdersOn(0)&&ColourPlan.SectionOfRow.IsValidIndex(ColourRow))FrontInk=BattleSectorView::SectionColor(ColourPlan.SectionOfRow[ColourRow]);
    const double X=EdgeX(R),Y0=-HY+R*Size;
+   const int32 PreviousRow=Sign>0?R-1:BattleSectors::Rows-R;
+   if(FM->FrontSectionOrdersOn(0)&&ColourPlan.SectionOfRow.IsValidIndex(ColourRow)&&ColourPlan.SectionOfRow.IsValidIndex(PreviousRow)&&ColourPlan.SectionOfRow[ColourRow]!=ColourPlan.SectionOfRow[PreviousRow])
+    Thick(Ground(X-Size*.18,Y0),Ground(X+Size*.18,Y0));
    for(double Y=Y0;Y<Y0+Size-1;Y+=StepLen)Thick(Ground(X,Y),Ground(X,FMath::Min(Y+StepLen,Y0+Size)));
    if(R+1<BattleSectors::Rows&&EdgeX(R+1)!=X){const double X1=EdgeX(R+1),Y=Y0+Size;for(double T=0;T<1;T+=.25)Thick(Ground(FMath::Lerp(X,X1,T),Y),Ground(FMath::Lerp(X,X1,T+.25),Y));}
   }
@@ -1581,7 +1597,16 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
    }
   }
   // Front plan stage 7: each section's number and role at its middle row's line (the player's choice marked).
-  if(FM->PlayerRolesOn(0))
+  if(FM->FrontSectionOrdersOn(0))
+  {
+   for(const auto& SectionLabel:PC->SectionLabels())
+   {
+    DrawRect(BattleSectorView::SectionColor(SectionLabel.Index),SectionLabel.Origin.X,SectionLabel.Origin.Y,SectionLabel.Size.X,SectionLabel.Size.Y);
+    DrawRect(FLinearColor(.02f,.03f,.05f,.96f),SectionLabel.Origin.X+2,SectionLabel.Origin.Y+2,SectionLabel.Size.X-4,SectionLabel.Size.Y-4);
+    DrawText(SectionLabel.Text,FLinearColor::White,SectionLabel.Origin.X+6,SectionLabel.Origin.Y+4,GEngine->GetSmallFont(),.8f);
+   }
+  }
+  else if(FM->PlayerRolesOn(0))
   {
    const auto& LineFP=FM->FrontPlanState[0];
    for(int32 SecK=0;SecK<LineFP.Sections;++SecK)
@@ -1718,5 +1743,20 @@ void ABattleHUD::DrawMinimapOverlay(ABattleController* PC,const FBattleMinimapLa
   const FVector M=BattleSectors::Center(Hover);const FVector2D A=Map.ToScreen(M+FVector(-Size*.5,-Size*.5,0)),B=Map.ToScreen(M+FVector(Size*.5,Size*.5,0));
   const FLinearColor Bright(1.f,.9f,.3f);
   DrawLine(A.X,A.Y,B.X,A.Y,Bright,1.5f);DrawLine(B.X,A.Y,B.X,B.Y,Bright,1.5f);DrawLine(B.X,B.Y,A.X,B.Y,Bright,1.5f);DrawLine(A.X,B.Y,A.X,A.Y,Bright,1.5f);
+ }
+}
+
+void ABattleHUD::DrawSectionMenu(ABattleController* PC)
+{
+ if(!PC||!Canvas||!PC->IsTactical()||PC->SectionMenuIndex<0)return;
+ const auto* MenuMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+ if(!MenuMatch->FrontSectionOrdersOn(0))return;
+ const FVector2D MenuAt=PC->SectionMenuOrigin;
+ DrawRect(BattleSectorView::SectionColor(PC->SectionMenuIndex),MenuAt.X-2,MenuAt.Y-2,228,200);
+ for(uint8 MenuRole=0;MenuRole<7;++MenuRole)
+ {
+  const bool bAllowed=MenuMatch->CanSetPlayerSectionRole(PC->SectionMenuIndex,MenuRole),bChosen=MenuMatch->PlayerSectionRole(PC->SectionMenuIndex)==MenuRole;
+  DrawRect(bChosen?FLinearColor(.25f,.3f,.18f,.99f):FLinearColor(.025f,.04f,.065f,.99f),MenuAt.X,MenuAt.Y+MenuRole*28,224,28);
+  DrawText(FString::Printf(TEXT("%s %s"),bChosen?TEXT("●"):TEXT("　"),UBattleMatch::SectionRoleJa(MenuRole)),!bAllowed?FLinearColor(.35f,.38f,.42f):bChosen?FLinearColor::Yellow:FLinearColor::White,MenuAt.X+6,MenuAt.Y+MenuRole*28+5,GEngine->GetSmallFont(),.85f);
  }
 }
