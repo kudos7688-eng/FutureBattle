@@ -39,7 +39,7 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
-## 2026-11-27 03時40分（弾薬と補給）指切り（3発・間1.4秒・顔出し3発）を新しい既定の上で測り直し：射撃は増える（+11〜107%）が、損害は seed で向きが割れる（seed 7 は -3〜-11%、seed 43 は +6〜33%）。弾は尽きない
+## 2026-11-27 05時50分（弾薬と補給）指切り（3発・間1.4秒・顔出し3発）を新しい既定の上で測り直し：射撃は増える（+11〜107%）が、損害は seed で向きが割れる（seed 7 は -3〜-11%、seed 43 は +6〜33%）。弾は尽きない
 
 - 経緯: ユーザー質問「3発・間1.4秒・顔出し3発は現在どうなっているか」→ 試験切替のまま既定0（`-BattleBurstFire` 0、`-BattleBurstPause` 1.0、`-BattleCoverPeekShots` 0＝2発）で、11-25 の測定（古い既定）以来触っていない → ユーザー指示「今の既定（6時の回で入る補給車の変更を含む）の上で測り直す」。
 - 計画: 掲示板の申請（段3、既存の2 seed）。凍結ビルド `supplydefault2`（`ammo` 2eb79497＝補給車の回復が既定の版。`FutureBattle-ammo` の作業ツリー）、マップK、`-BattleShotLog -BattleFireTimeLog`、各1試合。切替なしは `sd1-K-default-*`。自分の目標＝`-BattleOwnTarget=2 -BattleOwnTargetCover=1`、指切り＝`-BattleBurstFire=3 -BattleBurstPause=1.4 -BattleCoverPeekShots=3`。結果は `FutureBattle-ammo/Setup/Benchmarks/SightTrial-20261111/bf2-K-*`。
