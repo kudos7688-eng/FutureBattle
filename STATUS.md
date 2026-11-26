@@ -181,6 +181,15 @@
 - 入ったもの：撃てる位置の候補（壁・塀の端と切れ目 → 遮蔽スロット → 環、光線の前の予選）、移動の約束 `-BattleKnownMoveCommit=12`／`-BattleKnownMoveWait=1.5`、防衛兵 `-BattleKnownMoveDefendMarch`・`-BattleKnownMoveDefendReach=1500`（値2の中の既定）。調査記録 `Docs/investigation-defend-march-2026-11-27.md`。
 - 検証（main 09079c22）：Build-Editor 成功、Test-Battle failures=0、Test-KnownTargetFire 値1・値2 failures=0、Test-CoverActions・Test-CoverPeek failures=0。試合は回していない（切替なしの一致は coverlean の凍結ビルドで台帳 E2 と IDENTICAL を確認済み）。
 
+## 2026-11-27 8時45分 Claude（ミッション）：精鋭を2個そろえてマップの端から出す第5段（`missions` 7883eae1、ミッションの切替の内側）。出発はするが、まだ敵の本拠地には着かない
+
+- **ユーザー決定（11-27）**：立て直しの直し（第4段 6c4e98af）を入れたうえで、出し方は A（端を回る経路）＋B（2個そろうまで待つ、上限150秒）。
+- **変更**：`-BattleMissionAssaultEdge`・`-BattleMissionAssaultPair`・`-BattleMissionAssaultPairWait=150`（ミッションの切替が1のとき有効、0で前の動き）。記録 `BATTLE_BASE_ASSAULT_GO`、`mission_assault_go`／`_pair_wait`／`_route_fallback`、TRACE に `leg=`。
+- **検証**：ビルド成功、`Test-Battle` failures=0、`Test-Missions`（m7、8通り）すべて failures=0。凍結ビルド `missions-stage5`。
+- **1試合（マップK seed 43、`ms7-K-edge-s43`、偵察の深さ0.55）**：両軍とも2個で出発（西 267秒、東 820秒）。西の2個は南の端寄りを進み、敵の本拠地まで349m の地点で敵と約150秒交戦 → 立て直し（action=6、集合点は自軍の本拠地）に入って530m の地点まで下がり、そこで終了まで250秒以上動かない（生存4人、strength_ok=1 でも解けない）。`*_near_opponent_home_seconds` は両軍0。得点 西587／東327、本拠地HP 西680／東1000。
+- **制限**：seed 43 の1試合だけ。着かなかったので seed 7 と2シードの比較はしていない。得点・損害の比較は未実施。
+- **次の一手**：立て直しに入った精鋭が途中で止まる理由（集合点が320m 後ろの自軍本拠地、合流できず再開もしない）を直すか、精鋭の攻撃を群の攻勢に合わせる形へ変えるかをユーザーに確認する。
+
 ## 2026-11-27 6時00分 Claude（ミッション）：精鋭の本拠地攻撃が着かない理由を記録で分けた。隊長交代と移動の進捗の直し（`missions` の先頭、ミッションの切替の内側）で「立ち止まり」は消えたが、まだ敵の本拠地には着かない（最も近づいて329m）
 
 - **ユーザー決定（11-27）**：精鋭が倒れた場所と理由を数える → C（精鋭小隊は隊長が戦死しても次の兵が引き継ぐ）と A（進んだかを行き先に近づいたかで判定、記録で原因を確かめてから）を進める。
