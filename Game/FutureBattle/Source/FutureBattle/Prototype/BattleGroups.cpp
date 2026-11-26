@@ -98,7 +98,8 @@ bool BattleTactics::MoveTraceSquad(int32 SquadID)
 
 bool BattleTactics::GroupSupplySlot()
 {
- static const bool bOn=[]{int32 X=0;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupSupplySlot="),X);return X!=0;}();
+ // Default 1 since 2026-11-27 (user decision, with the recovery beside supply vehicles).
+ static const bool bOn=[]{int32 X=1;FParse::Value(FCommandLine::Get(),TEXT("BattleGroupSupplySlot="),X);return X!=0;}();
  return bOn;
 }
 

@@ -146,7 +146,7 @@ void ABattleHUD::DrawHUD()
   if(Match->bArea&&BattleTactics::BaseGarrison())
   {DrawRect(Ink,576,165,520,26);Label(FString::Printf(TEXT("守備隊 残り%d人 ／ 敵の占領 %.0f/%.0f秒"),Match->GarrisonLiving(0),Match->Area.GarrisonHeld[0],BattleTactics::BaseGarrisonSeconds()),588,172,Mint,.85f);}
 		DrawRect(Ink, 16, 165, 560, 26);
-  if(Match->bArea)Label(TEXT("本拠地：10秒で補充 ／ 兵1人につき資源1"),28,172,Mint,.85f);
+  if(Match->bArea)Label(BattleTactics::SupplyCarRecover()?TEXT("本拠地・補給車で補充（10秒、1人＝資源1）／補給車は回復も"):TEXT("本拠地：10秒で補充 ／ 兵1人につき資源1"),28,172,Mint,.85f);
   // Purchase reservations (-BattleHireReserve, default 1 since 2026-11-23): the own list in order with each one's wait
   // (Docs/design-front-strategy.md 6), only while there is one (the purchase panel shows the list too).
   if(Match->bArea&&UBattleMatch::HireReserveOn()&&!Match->HireQueueOf(0).IsEmpty())
@@ -332,6 +332,14 @@ void ABattleHUD::DrawHUD()
       for(int32 ID:Squad->Members) if(const auto* U=Store->Find(ID); U && U->IsAlive())
       {++Living;HP+=U->HP;Ammo+=U->Ammo+U->Reserve;const uint8 St=LR->StanceOf(ID);Crouch+=St==BattleStance::Crouch;Prone+=St==BattleStance::Prone;Pinned+=LR->Suppression(ID,Now)>=.5f;InCover+=U->CoverPhase!=0;}
       const float Y0=Movement.IsEmpty()?402.f:421.f;
+      // A supply vehicle (BattleSupplyCar.cpp): the rounds it still carries and, with the recovery beside it, its healing gauge.
+      if(Match->bArea&&Squad->SquadType==BattleSquadType::Supply)
+      {
+       const float HealMax=BattleTactics::SupplyCarRecover()?BattleTactics::SupplyCarHealStock():0.f;
+       Label(HealMax>0.f?FString::Printf(TEXT("補給車   HP %.0f   弾の在庫 %d/%d   回復ゲージ %.0f/%.0f（空なら本拠地で補充）"),HP,Match->SupplyStockOf(Squad->SquadID),Match->SupplyStockMax(),Match->SupplyHealOf(Squad->SquadID),HealMax):
+        FString::Printf(TEXT("補給車   HP %.0f   弾の在庫 %d/%d"),HP,Match->SupplyStockOf(Squad->SquadID),Match->SupplyStockMax()),28,Y0,White,.8f);
+      }
+      else
       Label(FString::Printf(TEXT("生存 %d/%d   HP %.0f   弾 %d   しゃがみ %d・伏せ %d   制圧 %d   遮蔽 %d"),Living,Squad->Members.Num(),HP,Ammo,Crouch,Prone,Pinned,InCover),28,Y0,White,.8f);
       FString History; if(const auto* Past=PC->ReasonHistory.Find(Squad->SquadID)) for(int32 I=0;I<Past->Num();++I) History+=(I?TEXT(" ← "):TEXT(""))+BattleUIText::Ja((*Past)[I]);
       Label(TEXT("履歴：")+(History.IsEmpty()?FString(TEXT("なし")):History.Left(60)),28,Y0+19,Muted,.75f);

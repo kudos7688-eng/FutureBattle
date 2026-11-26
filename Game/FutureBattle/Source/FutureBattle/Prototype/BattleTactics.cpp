@@ -46,7 +46,8 @@ int32 BattleTactics::SupplyCarHunt()
 }
 bool BattleTactics::SupplyCarFirst()
 {
- static const bool bOn=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarFirst="),Value);return Value!=0;}();
+ // Default 1 since 2026-11-27 (user decision; =0: only a vehicle within FieldSupplyRange).
+ static const bool bOn=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarFirst="),Value);return Value!=0;}();
  return bOn;
 }
 int32 BattleTactics::SupplyCarPost()
@@ -61,12 +62,14 @@ bool BattleTactics::SupplyCarTarget()
 }
 float BattleTactics::SupplyCarHealStock()
 {
- static const float Stock=[](){float Value=3000.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarHealStock="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,100000.f):3000.f;}();
+ // 1000 since 2026-11-27 (user decision: 3000 never ran out in a match).
+ static const float Stock=[](){float Value=1000.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarHealStock="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,100000.f):1000.f;}();
  return Stock;
 }
 bool BattleTactics::SupplyCarRecover()
 {
- static const bool bOn=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarRecover="),Value);return Value!=0;}();
+ // Default 1 since 2026-11-27 (user decision; =0 restores the home-only recovery).
+ static const bool bOn=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarRecover="),Value);return Value!=0;}();
  return bOn;
 }
 float BattleTactics::SpotTrack()

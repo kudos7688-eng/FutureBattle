@@ -97,7 +97,8 @@ namespace BattleTactics
  float SupplyAmmoShare();
  // Supply trial, user 2026-11-26 ("the supply unit restores everyone"; STATUS "弾薬と補給" 11-26: rifle squads go home for their
  // losses, at 3-5 of 8 living with 95% of their rounds left, so ammunition never becomes a reason). -BattleSupplyCarRecover=1
- // (default 0): an infantry squad whose leader is within UBattleTuning::SupplyTeamRadius of a supply vehicle of its team with
+ // (default 1 since 2026-11-27, user decision; with -BattleSupplyCarFirst, the AI's two supply vehicles and their group slot:
+ // STATUS 2026-11-27): an infantry squad whose leader is within UBattleTuning::SupplyTeamRadius of a supply vehicle of its team with
  // stock gets there what it gets at home: its living members are healed in full at once and its dead members are replaced (10 s
  // each, one credit each as at home; each replacement also takes one soldier's load of rounds, magazine + reserve, from the
  // vehicle's stock). A squad down to the living count that sends it home drives to a supply vehicle within
@@ -108,13 +109,13 @@ namespace BattleTactics
  // vehicles, exoskeletons, scout pairs and the base garrison. BattleArea.cpp (UpdateArea), BattleSquadRetreat.cpp (Evaluate).
  bool SupplyCarRecover();
  // User 2026-11-27 (with -BattleSupplyCarRecover): the healing beside a supply vehicle draws on a gauge of that vehicle,
- // -BattleSupplyCarHealStock=<hit points> (default 3000, 0 = no limit as before, up to 100000): each hit point healed leaves it;
+ // -BattleSupplyCarHealStock=<hit points> (default 1000 since 2026-11-27, 0 = no limit, up to 100000): each hit point healed leaves it;
  // empty, the vehicle heals no more, drives home as when its rounds run low and is full again there (with its rounds). And a
  // replacement made beside a supply vehicle appears right beside the vehicle (3.5 m to 8 m from it) instead of around his leader.
  // BattleArea.cpp (UpdateArea), BattleSupplyCar.cpp, BattleMixedRecruitment.cpp (ReplaceFollower).
  float SupplyCarHealStock();
  // Supply trials, user 2026-11-26 (with -BattleSupplyCarRecover the supply vehicle is where squads recover), each default 0:
- // -BattleSupplyCarFirst=1: a squad that needs supply or replacements goes to the nearest supply vehicle of its team that has
+ // -BattleSupplyCarFirst=1 (default 1 since 2026-11-27): a squad that needs supply or replacements goes to the nearest supply vehicle of its team that has
  //   stock to give (not one about to drive home to load) whenever that vehicle is no farther from it than its home, instead of only
  //   within UBattleTuning::FieldSupplyRange (200 m); once on its way the distance no longer ends the trip. A trip for losses may
  //   take 300 s to reach the vehicle, and the 120 s of waiting for replacements count from its arrival beside it.
