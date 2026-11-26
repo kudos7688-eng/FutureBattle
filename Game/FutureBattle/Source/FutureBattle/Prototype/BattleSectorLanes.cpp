@@ -12,7 +12,9 @@
 
 bool UBattleLeaderRuntime::SectorLanesEnabled()
 {
- static const bool bOn=[]{int32 LaneArg=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorLanes="),LaneArg);return LaneArg!=0;}();
+ // Default 1 since 2026-11-26 (user decision "make it the default"; map K, four seeds on the new default: stalls 399->329,
+ // 398->281, 427->398, 807->260, town entrance stalls 53-87 -> 4-6). =0 is the old behaviour. Only maps with lane markers (K).
+ static const bool bOn=[]{int32 LaneArg=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorLanes="),LaneArg);return LaneArg!=0;}();
  return bOn;
 }
 

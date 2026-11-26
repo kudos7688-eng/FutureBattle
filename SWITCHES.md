@@ -350,8 +350,8 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleSectorCoverWalk` | Value | 0 | BattleLeaderRuntime.cpp:1969 |  |
 | `-BattleSectorFlank` | Value | -1 | BattleSectorRoute.cpp:124 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleSectorFront` | Value | -1 | BattleSectorRoute.cpp:130 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
-| `-BattleSectorLaneLoad` | Value | 1500. | BattleSectorLanes.cpp:74 |  |
-| `-BattleSectorLanes` | Value | 0 | BattleSectorLanes.cpp:15 |  |
+| `-BattleSectorLaneLoad` | Value | 1500. | BattleSectorLanes.cpp:76 |  |
+| `-BattleSectorLanes` | Value | 1 | BattleSectorLanes.cpp:17 |  |
 | `-BattleSectorMove` | Value | 0 | BattleLeaderRuntime.cpp:1840 |  |
 | `-BattleSectorMoveFire` | Value | -1 | BattleLeaderRuntime.cpp:1850 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleSectorRoute` | Value | -1 | BattleSectorRoute.cpp:16 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
@@ -427,10 +427,10 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleStartSquads` | Value | 25 | BattleArea.cpp:365 |  |
 | `-BattleStateTrace` | Value | 0 | BattleStateTrace.cpp:24 |  |
 | `-BattleStateTraceDetail` | Value | 空文字列 | BattleStateTrace.cpp:26 |  |
-| `-BattleSTObserveSeconds` | Value | 8 | BattleSquadTacticsSmoke.cpp:98 |  |
+| `-BattleSTObserveSeconds` | Value | 8 | BattleSquadTacticsSmoke.cpp:137 |  |
 | `-BattleStrategyFocusHold` | Value | 90.f | BattleStrategy.cpp:259 | Seconds → BattleStrategy.cpp:246（ヘルパー経由） |
 | `-BattleStrategyOpen` | Value | 150.f | BattleStrategy.cpp:253 | Seconds → BattleStrategy.cpp:246（ヘルパー経由） |
-| `-BattleSTScreens` | Value | 空文字列 | BattleSquadTacticsSmoke.cpp:99 |  |
+| `-BattleSTScreens` | Value | 空文字列 | BattleSquadTacticsSmoke.cpp:138 |  |
 | `-BattleSupplyAmmoShare` | Value | 0.f | BattleTactics.cpp:121 |  |
 | `-BattleSupplyAwayRatio` | Value | 1.0 | BattleTactics.cpp:139 |  |
 | `-BattleSupplyHeal` | Value | 10.0 | BattleTactics.cpp:139 |  |
