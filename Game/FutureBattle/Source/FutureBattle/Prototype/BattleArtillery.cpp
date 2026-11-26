@@ -590,6 +590,23 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
    Candidates.Add({Key,*At,ATFireScore-FMath::Sqrt(D2)/1.e6});
   }
  }
+ // Trial -BattleSupplyCarHunt=2 (BattleTactics.h): a self-propelled gun fires at an enemy supply vehicle its team sees, before any
+ // group of soldiers and after an anti-tank fire call. The type: observed with -BattleObservedArmour, else that of the unit seen.
+ constexpr double SupplyFireScore=4.e3;
+ if(bSPG&&BattleTactics::SupplyCarHunt()>=2)
+ {
+  TArray<int32> SupplyKeys;Known.GetKeys(SupplyKeys);SupplyKeys.Sort();
+  for(int32 Key:SupplyKeys)
+  {
+   if(Key<=0)continue;
+   const uint8* SeenType=BattleTactics::ObservedArmour()&&KnownTypes?KnownTypes->Find(Key):nullptr;
+   const uint8 Type=BattleTactics::ObservedArmour()?(SeenType?*SeenType:uint8(255)):(IsVehicle(Key)?VehicleType(Key):uint8(255));
+   if(Type!=BattleSquadType::Supply)continue;
+   const FVector& At=Known.FindChecked(Key);const double D2=FVector::DistSquared2D(Pos,At);if(D2<Min2||D2>Max2)continue;
+   if(BattleTactics::WeaponOrderGateEnabled()&&!WeaponOrderAllows(ID,Key,At))continue;
+   Candidates.Add({Key,At,SupplyFireScore-FMath::Sqrt(D2)/1.e6});
+  }
+ }
  Candidates.Sort([](const FCandidate& A,const FCandidate& B){return A.Score!=B.Score?A.Score>B.Score:A.Key<B.Key;});
  // Never where the blast plus the landing spread may reach an own unit.
  const int32 Selected=FirstSafeArtillery(Candidates,BattleTactics::ArtilleryClustersEnabled(),[&](const FCandidate& C)
@@ -600,6 +617,7 @@ bool UBattleLeaderRuntime::PickArtilleryAim(int32 ID,const TMap<int32,FVector>& 
  if(Selected!=INDEX_NONE)
  {
   const auto& C=Candidates[Selected];Aim=C.At;if(TargetKey)*TargetKey=C.Key;
+  if(C.Score>=SupplyFireScore*.5&&C.Score<ATFireScore*.5)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SUPPLY_FIRE unit=%d target=%d aim=(%.0f,%.0f) range=%.0f"),ID,C.Key,Aim.X,Aim.Y,FVector::Dist2D(Pos,Aim));
   if(C.Score>=ATFireScore*.5)if(auto* FM=GetWorld()->GetSubsystem<UBattleMatch>()){++FM->ATFireAims;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AT_FIRE unit=%d target=%d aim=(%.0f,%.0f) spg=%d"),ID,C.Key,Aim.X,Aim.Y,bSPG?1:0);}
   if(C.Helped!=INDEX_NONE)
   {

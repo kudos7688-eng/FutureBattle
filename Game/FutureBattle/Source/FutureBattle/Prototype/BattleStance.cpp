@@ -67,11 +67,6 @@ bool BattleStance::Steady()
  static const bool bOn=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleStanceSteady="),V);return V!=0;}();
  return bOn;
 }
-bool BattleStance::ArrivalReady()
-{
- static const bool bOn=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArrivalReady="),V);return V!=0;}();
- return bOn;
-}
 float BattleStance::MoveScale(uint8 Stance){return Stance==Prone?.25f:Stance==Crouch?.55f:1.f;}
 
 bool UBattleLeaderRuntime::SetStance(int32 ID,uint8 Stance,double Now,bool bForce,bool bOnTheMove)

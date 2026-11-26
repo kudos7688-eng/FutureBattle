@@ -10,7 +10,10 @@
 #include "BattleTactics.h"
 #include "BattleCoverClips.h"
 #include "BattleBodyAnim.h"
+#include "BattleKnownTargets.h"
 #include "BattleLeaderRuntime.generated.h"
+
+struct FBattleContact;
 
 class ABattleGameMode;
 // Parameters used to stage a body before canonical IDs are allocated.
@@ -449,10 +452,10 @@ public:
  mutable TMap<FString,int64> SightHitClasses,SightHitTags,SightHitActors;
  mutable bool bSightHitsLogged=false;
  int64 MoveSweeps=0,MoveHitSoldier=0,MoveHitWorld=0,MoveShortened=0; // Mass follower moves (BATTLE_MOVE_SWEEP)
- bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot);
+ bool Fire(int32 ID,FVector Start,FVector Direction,bool bPlayerShot,bool bKnownFireShot=false);
  FVector TracerStart(int32 ID,const FVector& Start,const FVector& Direction) const;
  bool RequestCoverAction(int32 ID,FVector Threat,int32 Target=INDEX_NONE,float SearchRadius=-1.f,bool bAllHidden=false,const TFunction<bool(int32,const FVector&)>& Accept=nullptr);
- void CancelCoverAction(int32 ID);
+ void CancelCoverAction(int32 ID,const TCHAR* PeekCancel=TEXT("other"));
  bool StepCoverAction(int32 ID,float Dt,double Now);
  // Wall cover of the directly controlled soldier (BattleWallCover.cpp, user 11-24; -BattlePlayerWallCover=0 turns it off).
  // Pressing against a wall for WallPushSeconds, or C facing one, takes cover right there: behind a low wall crouched (aim to
@@ -581,7 +584,7 @@ public:
  // Re-picks a peek point beside the cover anchor with a clear line to Threat; false keeps the soldier hidden.
  bool RevalidatePeek(int32 ID,FVector Threat);
  bool CoverStepFirePoint(FVector Anchor,FVector Threat,FVector Lateral,FVector Facing,float Hidden,FVector& OutPeek);
- bool CoverFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& OutPeek,uint8& OutKind,uint8 AllowedKinds=3,bool bPeekLine=false);
+ bool CoverFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& OutPeek,uint8& OutKind,uint8 AllowedKinds=3,bool bPeekLine=false,double KnownMoveNow=-1.);
  // Suppression trial (-BattleSuppression=1, see BattleSuppression.h). Runtime only: time at which each unit's level decays to zero.
  TMap<int32,double> SuppressionZeroAt;
  float Suppression(int32 ID,double Now) const;
@@ -672,6 +675,7 @@ public:
  static int32 SectorSightHitMode();
  static bool SectorSightFar(const FVector& From,const FVector& To);
  int32 SectorLookout(const struct FBattleSquadState& Squad) const;
+ const FBattleContact* SectorLookoutSighting(int32 ID,int32 TargetID,const FVector& Pos,const FBattleSquadState& Squad,const FBattleContact* Contact) const;
  bool SectorSightMember(int32 ID) const {return SectorSightRole(ID)!=0;}
  int32 SectorSightRole(int32 ID) const; // 0 scans as before, 1 leaves cross-sector enemies to the lookout, 2 scans cross-sector vehicles only
  // Trial -BattleSectorMoveFire=1 (2026-11-20, default 0): every squad on a sector mission (AI squads and the player's sector
@@ -911,6 +915,53 @@ public:
  void RunMovementTrial();
  void RunContactTrial();
  void RunCoverFirePointTrial();
+ void RunKnownTargetFireTrial();
+ int32 RunKnownTargetMoveTrial();
+ bool KnownFireAllowed(int32 ID,const BattleKnownFire::FTarget& Target,double Now);
+ void KnownFireCandidates(int32 ID,double Now,TArray<int32>& Out);
+ bool KnownFireRay(int32 ID,double Now);
+ BattleKnownFire::FResult SelectKnownFire(int32 ID,const FVector& Origin,double Now);
+ bool FireKnownTarget(int32 ID,const FVector& Origin,const BattleKnownFire::FResult& Result,bool Peek);
+ bool KnownCoverContact(int32 ID,double Now,FBattleContact& Out);
+ TMap<int32,BattleKnownFire::FSearch> KnownFireSearches;
+ BattleKnownFire::FBudget KnownFireBudgets[2];
+ bool KnownMoveAllowed(int32 ID,bool CountGate=false);
+ bool KnownMoveMarching(int32 ID) const;
+ const TCHAR* KnownMovePlaceRejection(int32 ID,FVector Start,FVector Place) const;
+ bool KnownMovePlaceAllowed(int32 ID,FVector Start,FVector Place) const;
+ bool KnownMoveReserve(int32 ID,double Now);
+ void KnownMoveRelease(int32 ID);
+ bool KnownMoveSpend(int32 ID,double Now,uint8 Kind);
+ bool KnownMoveLine(int32 ID,FVector From,FVector To,double Now);
+ bool StartKnownMove(int32 ID,double Now);
+ bool StepKnownMove(int32 ID,float Dt,double Now);
+ void EndKnownMove(int32 ID,double Now,const TCHAR* Reason);
+ void KnownMoveShot(int32 ID,int32 Target,double Now);
+ struct FKnownMove
+ {
+  BattleKnownFire::FTarget Observation;
+  FVector Start=FVector::ZeroVector,Goal=FVector::ZeroVector,Peek=FVector::ZeroVector,Last=FVector::ZeroVector;
+  int32 Mission=0,Revision=0,Slot=INDEX_NONE;
+  double Started=0,Arrived=-1,Distance=0;float Stuck=0;
+  bool bReturning=false,bFired=false,bStandUp=false,bMarch=false;
+ };
+ TMap<int32,FKnownMove> KnownMoves;
+ TMap<int32,double> KnownMoveAfter;
+ TMap<int32,double> KnownMoveEndCooldown;
+ TMap<int32,int32> KnownMoveCursor;
+ struct FKnownMoveBudget {int64 Window=-1;int32 Rays=0,Sweeps=0,Nav=0;TArray<int32> Waiting;TMap<int32,double> Asked;};
+ FKnownMoveBudget KnownMoveBudgets[2];
+ int32 KnownMoveReservedID=INDEX_NONE,KnownMoveRemainingRays=0,KnownMoveRemainingSweeps=0,KnownMoveRemainingNav=0;
+ int64 KnownMoveReservedWindow=-1;
+ bool bKnownMoveDeferred=false;
+ void RunCoverPeekTrial();
+ int32 PeekTrialStage=0,PeekTrialCase=0,PeekTrialFailures=0;
+ int32 PeekTrialShots=0;
+ double PeekTrialAt=0,PeekTrialLast=0;
+ bool PeekTrialFixture=false,PeekTrialReady=false;
+ FVector PeekTrialAnchor=FVector::ZeroVector;
+ void RecordPeekFrame(int32 ID,double Now,const FBattleContact* Contact,int32 Ray=-1,bool bFired=false);
+ mutable int32* PeekwhyPrepared=nullptr; // Scoped game-thread perception prefilter observation, never an input.
  void RunSightTrial();
  void RunWeaponRangeTrial();
  void RunWideMapAudit();

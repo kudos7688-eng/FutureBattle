@@ -62,21 +62,33 @@ bool UBattleLeaderRuntime::TankGunTarget(int32 ID,double Now,FVector& Direction)
   const auto& V=M->AreaIntelView(U->Team);
   for(int32 I=0;I<V.Enemies.Num()&&I<V.EnemyKeys.Num();++I)if(!Known.Contains(V.EnemyKeys[I]))
   {Known.Add(V.EnemyKeys[I],V.Enemies[I]);if(BattleTactics::ObservedArmour())KnownTypes.Add(V.EnemyKeys[I],V.ObservedType(V.EnemyKeys[I]));}
-  struct FCandidate{int32 Key;FVector At;double Score;};TArray<FCandidate> Candidates;
+  struct FCandidate{int32 Key;FVector At;double Score;bool bSupply=false;};TArray<FCandidate> Candidates;
   for(const auto& K:Known)
   {
    const double D2=FVector::DistSquared2D(Pos,K.Value);if(D2>Engage2||D2<Min2)continue;
    const bool Vehicle=BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(KnownTypes.FindChecked(K.Key)):K.Key>0&&IsVehicle(K.Key);
    int32 Around=0;if(!Vehicle)for(const auto& O:Known)Around+=FVector::DistSquared2D(O.Value,K.Value)<=Splash2;
    if(!Vehicle&&Around<FMath::Max(1,T->TankGunMinCluster))continue;
-   Candidates.Add({K.Key,K.Value,(Vehicle?1000.:double(Around))-FMath::Sqrt(D2)/1.e6});
+   // Trial -BattleSupplyCarTarget (BattleTactics.h): an enemy tank first, then a supply vehicle, then the other vehicles.
+   double VehicleScore=1000.;bool bSupplySeen=false;
+   if(Vehicle&&BattleTactics::SupplyCarTarget())
+   {
+    const uint8 SeenType=BattleTactics::ObservedArmour()?KnownTypes.FindChecked(K.Key):(K.Key>0?VehicleType(K.Key):uint8(255));
+    bSupplySeen=SeenType==BattleSquadType::Supply;
+    VehicleScore=BattleSquadType::HasMainGun(SeenType)?1200.:bSupplySeen?1100.:1000.;
+   }
+   Candidates.Add({K.Key,K.Value,(Vehicle?VehicleScore:double(Around))-FMath::Sqrt(D2)/1.e6,bSupplySeen});
   }
   Candidates.Sort([](const FCandidate& A,const FCandidate& B){return A.Score!=B.Score?A.Score>B.Score:A.Key<B.Key;});
   // Line of fire from the turret: a clear line, or the round would burst close enough to the target.
   auto Q=Sight(ID).Query;const FVector Muzzle=Pos+FVector(0,0,60);
-  for(int32 I=0;I<Candidates.Num()&&I<3&&!G.bHasTarget;++I)
+  // The three best; -BattleSupplyCarTarget: and the best supply vehicle when it is not among them.
+  bool bSupplyTried=false;
+  for(int32 I=0;I<Candidates.Num()&&!G.bHasTarget;++I)
   {
    const auto& C=Candidates[I];
+   if(I>=3&&(!C.bSupply||bSupplyTried))continue;
+   bSupplyTried|=C.bSupply;
    // Team knowledge has no current posture: use the observed vehicle centre or a standing infantry aim height.
    const float AimHeight=BattleTactics::ObservedArmour()&&!DirectKeys.Contains(C.Key)?
     (BattleSquadType::IsVehicle(KnownTypes.FindChecked(C.Key))?0.f:35.f):(C.Key>0?TargetAimOffset(C.Key):35.f);
