@@ -34,6 +34,9 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  {
   TestSense->Reset();auto& Contact=TestSense->Observers.FindOrAdd(11).Contacts.FindOrAdd(251);
   Contact.TargetID=251;Contact.SourceUnitID=11;Contact.LastKnownPosition=Enemy;Contact.LastSeenTime=TestNow;
+  // This fixture is a normal observation by another squad, not an unreported long-range scout contact.
+  // FBattleContact defaults to restricted provenance; BuildTeamKnownTargets must keep rejecting that default.
+  Contact.bLongRangeObservation=false;Contact.ObservedSquadType=0;
   Contact.bVisible=true;Contact.bShared=false;Contact.KnownExpiresAt=TestNow+20.;Contact.KnownSourceSquad=TestStore->Find(11)->SquadID;TestSense->BuildTeamKnownTargets(TestNow);
  };
  auto Reset=[&]()
@@ -56,7 +59,17 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  };
  auto TryStart=[&]()
  {
+  const int32 StartRays=Count(TEXT("known_move_rays")),StartSweeps=Count(TEXT("known_move_sweeps")),StartNav=Count(TEXT("known_move_nav"));
   for(int32 Attempt=0;Attempt<8;++Attempt){TestNow+=1.01;Observe();if(StartKnownMove(2,TestNow))return true;}
+  int32 TestLiving=0,TestMoving=0;
+  for(int32 TestMember:Squad.Members)if(const auto* TestUnit=TestStore->Find(TestMember);TestUnit && TestUnit->IsAlive())
+  {++TestLiving;if(TestMember!=2 && (TestUnit->CoverPhase==1 || CoverApproaches.Contains(TestMember)))++TestMoving;}
+  const int32 TestLimit=BattleKnownFire::MoveMax()>0?FMath::Min(TestLiving/2,BattleKnownFire::MoveMax()):TestLiving/2;
+  const auto* TestKnown=TestSense->TeamKnownTargets[Shooter.Team].Targets.Find(251);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_DIAG move_start_failed now=%.3f allowed=%d known=%d fresh=%d target_allowed=%d living=%d moving=%d limit=%d episode=%d approach=%d cooldown=%.3f cover_built=%d rays=%d sweeps=%d nav=%d"),
+   TestNow,KnownMoveAllowed(2),TestKnown!=nullptr,TestKnown && TestKnown->Fresh(TestNow),TestKnown && WeaponOrderAllows(2,251,TestKnown->At(TestNow)),
+   TestLiving,TestMoving,TestLimit,KnownMoves.Contains(2),CoverApproaches.Contains(2),KnownMoveAfter.FindRef(2)-TestNow,TestWorld->GetSubsystem<UBattleCover>()->IsBuilt(),
+   Count(TEXT("known_move_rays"))-StartRays,Count(TEXT("known_move_sweeps"))-StartSweeps,Count(TEXT("known_move_nav"))-StartNav);
   return false;
  };
  TestWorld->GetSubsystem<UBattleCover>()->BuildSlots();Reset();
