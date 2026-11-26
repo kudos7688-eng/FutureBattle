@@ -373,20 +373,33 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  }
  Check(TEXT("move_edge_specified_goal"),EdgeStarted && EdgeGoalMatches);
  Check(TEXT("move_edge_specified_peek_ray"),EdgeStarted && EdgeRayClears);
+ // Trial-only evidence from the actual body, including the hidden-target interval. No extra traces.
+ auto FollowEdge=[&]()
+ {
+  const uint8 EdgePhaseBefore=Shooter.CoverPhase;
+  const int32 EdgeSensorsBefore=Count(TEXT("known_fire_sensor_checks"));
+  Follow(2,1.f/30.f,TestNow);
+  if(Shooter.CoverPhase!=EdgePhaseBefore || Count(TEXT("known_fire_sensor_checks"))!=EdgeSensorsBefore)
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_EDGE_STEP now=%.3f phase=%d/%d pos=%s peek=%s remaining_cm=%.3f sensor_wall=%d aim_wall=%d range=%d fov=%d shots=%d"),
+    TestNow,int32(EdgePhaseBefore),int32(Shooter.CoverPhase),*Position(2).ToCompactString(),*Shooter.CoverPeek.ToCompactString(),
+    FVector::Dist2D(Position(2),Shooter.CoverPeek),Count(TEXT("known_fire_reject_sensor_wall")),Count(TEXT("known_fire_reject_aim_wall")),
+    Count(TEXT("known_fire_reject_range")),Count(TEXT("known_fire_reject_fov")),Shooter.ShotSequence);
+ };
  for(int32 EdgeFrame=0;EdgeFrame<900 && EdgeStarted;++EdgeFrame)
  {
-  TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
+  TestNow+=1./30.;Observe();FollowEdge();
   if(const auto* EdgeEpisode=KnownMoves.Find(2);EdgeEpisode && EdgeEpisode->Arrived>=0)EdgeArrived=true;
   if(!EdgeArrived)EdgeNoEarlyShot &= Shooter.ShotSequence==EdgeShotsBefore;
   EdgeBudgetsOK &= KnownFireBudgets[Shooter.Team].Used<=BattleKnownFire::MoveRayBudget() && MoveTeamBudget.Sweeps<=BattleKnownFire::MoveSweepBudget() && MoveTeamBudget.Nav<=BattleKnownFire::MoveNavBudget();
   if(EdgeArrived && !EdgeHiddenChecked)
   {
    EdgeArrivalSensors=Count(TEXT("known_fire_sensor_checks"));EdgeHiddenChecked=true;const int32 EdgeHiddenShots=Shooter.ShotSequence;Put(251,Start+FVector(50000,0,0));
-   for(int32 EdgeHiddenFrame=0;EdgeHiddenFrame<15;++EdgeHiddenFrame){TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);}
+   for(int32 EdgeHiddenFrame=0;EdgeHiddenFrame<15;++EdgeHiddenFrame){TestNow+=1./30.;Observe();FollowEdge();}
    EdgeHiddenSilent=Shooter.ShotSequence==EdgeHiddenShots;Put(251,Enemy);Observe();
   }
   if(Count(TEXT("known_move_arrived_fired"))>EdgeFiredBefore)break;
  }
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_EDGE_ARRIVE started=%d arrived=%d picks=%d/%d no_early=%d hidden_checked=%d hidden_silent=%d sensors=%d/%d shots=%d/%d fired=%d/%d"),EdgeStarted,EdgeArrived,Count(TEXT("known_move_pick_edge")),EdgePicksBefore+1,EdgeNoEarlyShot,EdgeHiddenChecked,EdgeHiddenSilent,Count(TEXT("known_fire_sensor_checks")),EdgeArrivalSensors,Shooter.ShotSequence,EdgeShotsBefore,Count(TEXT("known_move_arrived_fired")),EdgeFiredBefore+1);
  Check(TEXT("move_edge_arrive_personal_fire"),EdgeStarted && EdgeArrived && Count(TEXT("known_move_pick_edge"))==EdgePicksBefore+1 &&
   EdgeNoEarlyShot && EdgeHiddenChecked && EdgeHiddenSilent && Count(TEXT("known_fire_sensor_checks"))>EdgeArrivalSensors && Shooter.ShotSequence>EdgeShotsBefore && Count(TEXT("known_move_arrived_fired"))==EdgeFiredBefore+1);
  Check(TEXT("move_edge_budget"),EdgeBudgetsOK && Count(TEXT("known_move_reservation_violation"))==0 && KnownMoveReservedID==INDEX_NONE &&
