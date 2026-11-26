@@ -8,9 +8,10 @@
 #include "BattleVATDisplay.h"
 #include "Components/CapsuleComponent.h"
 #include "NavigationSystem.h"
+#include "NavigationPath.h"
 #include "FutureBattle.h"
 
-bool UBattleLeaderRuntime::ReplaceFollower(int32 DeadID)
+bool UBattleLeaderRuntime::ReplaceFollower(int32 DeadID,const FVector* Beside)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Old=Store->Find(DeadID);
  const auto* S=Old?Store->FindSquad(Old->SquadID):nullptr;
@@ -22,8 +23,11 @@ bool UBattleLeaderRuntime::ReplaceFollower(int32 DeadID)
  FVector PositionToUse;bool Found=false;
  for(int32 I=0;I<32&&!Found;++I)
  {
-  FNavLocation P;const FVector Candidate=Position(S->LeaderUnitID)+FVector(FMath::Cos(I*PI/4),FMath::Sin(I*PI/4),0)*(250+(I/8)*150);
+  // Around his leader (2.5 m to 7 m); beside a supply vehicle, around the vehicle (3.5 m to 8 m, clear of its body).
+  FNavLocation P;const FVector Candidate=(Beside?*Beside:Position(S->LeaderUnitID))+FVector(FMath::Cos(I*PI/4),FMath::Sin(I*PI/4),0)*((Beside?350:250)+(I/8)*150);
   if(!Nav->ProjectPointToNavigation(Candidate,P,FVector(60,60,250)))continue;
+  // Beside a vehicle he may stand up to some 40 m from his leader: only a place he can walk to his leader from.
+  if(Beside){auto* Way=Nav->FindPathToLocationSynchronously(GetWorld(),P.Location,Position(S->LeaderUnitID));if(!Way||!Way->IsValid()||Way->IsPartial())continue;}
   PositionToUse=P.Location+FVector(0,0,100);
   Found=!GetWorld()->OverlapBlockingTestByChannel(PositionToUse,FQuat::Identity,ECC_Pawn,FCollisionShape::MakeCapsule(40,90));
  }

@@ -385,8 +385,10 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  // Squad groups (BattleGroups.cpp): members, AI formation (trial) and phases, before the orders that read them.
  if((CompositionTeams&(1<<Team))!=0)UpdateCompositionPurposes(Team);
  UpdateGroups(Team);
+ if(bStrategy)UpdateBaseGroup(Team); // trial -BattleBaseGroup (BattleBaseGroup.cpp)
  if(bArea&&BattleTactics::ArtilleryPosts())UpdateArtilleryRaids(Team);
  if(bArea&&(BattleTactics::ATHunt()||BattleTactics::ATFire()))UpdateATHunts(Team);
+ if(bArea&&BattleTactics::SupplyCarHunt())UpdateSupplyHunts(Team);
  // Routes (map F): what the team sees now, gathered once for all its squads.
  const bool bRoutes=bStrategy&&RoutesOn();TArray<FVector> RouteEnemies;if(bRoutes)RouteEnemies=RouteKnownEnemies(Team);
  TArray<int32> RouteLoad; // -BattleRouteLoad: squads of this team already sent over each road section in this round
@@ -435,7 +437,20 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   }
   ++Group;
 		// Keep assignment stable when only some squads are delegated.
-		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated) continue;
+		if (bDelegatedOnly && !Pair.Value.bPlayerDelegated)
+		{
+   // Log only: the player's own squads the team AI does not move (BATTLE_FREE_SQUAD role=player, see below).
+   if(bArea&&GroupOf(Pair.Key)==INDEX_NONE&&Pair.Value.CommandStatus==EBattleCommandStatus::Active)
+    if(auto* FreeRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();FreeRuntime&&FreeRuntime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
+     if(int32& Last=FreeLogSlot.FindOrAdd(Pair.Key,-1);Last!=FMath::FloorToInt(Elapsed/30.f))
+     {
+      Last=FMath::FloorToInt(Elapsed/30.f);const FVector LP=FreeRuntime->Position(Pair.Value.LeaderUnitID);const FIntPoint Here=BattleSectors::Cell(LP),To=BattleSectors::Cell(Pair.Value.MissionDestination);
+      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FREE_SQUAD t=%.0f team=%d squad=%d type=%d role=player here=%d,%d home_m=%.0f to=%d,%d order=%d target=-1 delegated=0 action=%d reason=%s"),
+       Elapsed,Team,Pair.Key,int32(Pair.Value.SquadType),Here.X,Here.Y,FVector::Dist2D(LP,AreaHome(Team))/100.,To.X,To.Y,Pair.Value.bHasMission?int32(Pair.Value.MissionOrder):-1,
+       int32(Pair.Value.TacticalPlan.Action),*Pair.Value.TacticalPlan.Reason);
+     }
+   continue;
+		}
   // A routed manual order of the player is under way (BattlePlayerRoutes.cpp): the team AI leaves the squad alone.
   if(!PlayerRoutes.IsEmpty())if(const FPlayerRoute* Routed=PlayerRoutes.Find(Pair.Key);Routed&&Routed->bMission)continue;
   const bool BaseAssault=bStrategy?bStrategyBase:(bArea&&Group%5==0);
@@ -480,11 +495,14 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   // Trial -BattleATHunt: a squad asked by an armoured unit attacks the anti-tank soldier it saw (BattleATHunt.cpp).
   bool bATHunt=false;
   if(bArea&&BattleTactics::ATHunt()){FVector HuntCenter;if(ATHuntGoal(Team,Pair.Key,HuntCenter)){Center=HuntCenter;Order=EBattleOrder::AttackMove;bATHunt=true;}}
+  // Trial -BattleSupplyCarHunt: a squad sent to an enemy supply vehicle the team saw (BattleATHunt.cpp); treated as the hunts above.
+  bool bSupplyHunt=false;
+  if(bArea&&BattleTactics::SupplyCarHunt()){FVector HuntCenter;if(SupplyHuntGoal(Team,Pair.Key,HuntCenter)){Center=HuntCenter;Order=EBattleOrder::AttackMove;bATHunt=true;bSupplyHunt=true;}}
   const bool bRaidDuty=RaidPost!=nullptr||bRaidScreen||bATHunt;
   // The tank's overwatch post; a post near its current mission is kept (no new order for every small change in what the team knows).
-  if(bCarShield){Center=CarShield;Order=EBattleOrder::AttackMove;if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2000.)Center=Pair.Value.MissionDestination;
+  if(bCarShield&&!bSupplyHunt){Center=CarShield;Order=EBattleOrder::AttackMove;if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2000.)Center=Pair.Value.MissionDestination;
    else UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AC_SHIELD team=%d squad=%d post=%s"),Team,Pair.Key,*Center.ToCompactString());}
-  if(bTankPost){Center=AreaTankPost(Team,Target);if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2500.)Center=Pair.Value.MissionDestination;}
+  if(bTankPost&&!bSupplyHunt){Center=AreaTankPost(Team,Target);if(Pair.Value.bHasMission&&FVector::Dist2D(Pair.Value.MissionDestination,Center)<2500.)Center=Pair.Value.MissionDestination;}
   // A squad in a group the AI runs follows its group: the rally point while gathering, then the group's objective together.
   if(!bRaidDuty&&!bMortarPost&&bStrategy&&!Purpose&&!Groups.IsEmpty())GroupOrder(Pair.Key,Team,Center,Order);
   // Trial -BattleFrontReserve: a free squad of the front army's reserve waits behind the line (BattleFrontLine.cpp, 6c).
@@ -496,6 +514,9 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   // Diagnosis -BattleOrderTrace=1 (2026-11-25, log only): the goal before the road routing, for BATTLE_ORDER_TRACE below.
   const FVector TraceGoal=Center;
   bool bRoadWaypoint=false,bSectorStage=false;
+  // Trial -BattleBaseGroup: on its last approach (within a few columns of the enemy home) a squad of the home-assault group goes straight
+  // for the home - no stages beside the way, which swung between two sectors short of it (map I seed 7, 2026-11-26).
+  const bool bBaseFinal=BaseGroupFinal(Pair.Key);
   // A surprise bridge leg is already a precise waypoint; road/sector routing must not replace it with another crossing.
   bool bSurpriseBridge=false;
   if(bStrategy&&!Purpose&&SurpriseOn(Team))if(const auto* G=Groups.Find(GroupOf(Pair.Key));G&&G->Kind==2&&G->Phase<2&&G->SurpriseBridgeStage!=0&&GroupAIRun(*G))bSurpriseBridge=true;
@@ -505,16 +526,16 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     const FVector P=Runtime->Position(Pair.Value.LeaderUnitID);
     // The player's route choice for the squad comes before the AI's own (empty map in matches without a player's choice).
     const bool bChosen=!PlayerRoutes.IsEmpty()&&PlayerRouteLane(Pair.Key)!=0;
-    FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault&&!(BattleTactics::GroupSupplySlot()&&Pair.Value.SquadType==BattleSquadType::Supply)?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies,&RouteLoad,Pair.Key);
+    FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault&&!((BattleTactics::GroupSupplySlot()||BattleTactics::SupplyCarPost())&&Pair.Value.SquadType==BattleSquadType::Supply)?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies,&RouteLoad,Pair.Key);
     // -BattlePinnedFlank: a pinned AI sector squad first takes a sector beside the threat.
     static const bool bSectorAIOn=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
     FVector PinStage;
     if(UBattleLeaderRuntime::PinnedFlankEnabled()&&SectorRouteOn()&&bSectorAIOn&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&
-       !Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&PinnedFlankStage(Pair.Key,P,PinStage))
+       !Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&!bBaseFinal&&PinnedFlankStage(Pair.Key,P,PinStage))
     {Center=PinStage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
     // -BattleCloseIn: a sector squad trading fire at long range moves one sector closer first.
     else if(UBattleLeaderRuntime::CloseInEnabled()&&SectorRouteOn()&&bSectorAIOn&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&
-       !Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&CloseInStage(Pair.Key,P,PinStage))
+       !Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&!bBaseFinal&&CloseInStage(Pair.Key,P,PinStage))
     {Center=PinStage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
     // -BattleSectorFlank: the last leg (no junction left) may also stop in a sector beside the enemy's front first.
     else if(!Step.Equals(Center,1) || (SectorFlankOn()&&SectorRouteOn()))
@@ -523,9 +544,26 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
      // (a sector mission) instead of walking to the junction itself.
      FVector Stage;
      static const bool bSectorAI=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
-     if(SectorRouteOn()&&bSectorAI&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&!Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&SectorStage(Pair.Value,P,Step,Center,RouteEnemies,Stage))
+     if(SectorRouteOn()&&bSectorAI&&!bChosen&&!Purpose&&!bBaseFinal&&BattleFieldLayout::Of(GetWorld()).bSectors&&!Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&SectorStage(Pair.Value,P,Step,Center,RouteEnemies,Stage))
      {Center=Stage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
      else if(!Step.Equals(Center,1)){bRoadWaypoint=true;Center=Step;if(!Runtime->IsVehicle(Pair.Value.LeaderUnitID))++RoadSteps[Team]; /* log only (road=) */if(Order==EBattleOrder::Defend)Order=EBattleOrder::AttackMove;}
+    }
+   }
+  // Log only (user question 2026-11-26: what do the unassigned squads near the home do?): every 30 s, each active squad in no group
+  // with its role in this update, where its leader is, where it is sent and what its tactics do.
+  if(bArea&&GroupOf(Pair.Key)==INDEX_NONE&&Pair.Value.CommandStatus==EBattleCommandStatus::Active)
+   if(auto* FreeRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();FreeRuntime&&FreeRuntime->IsWideField()&&Store->Find(Pair.Value.LeaderUnitID))
+   {
+    const int32 Slot=FMath::FloorToInt(Elapsed/30.f);
+    if(int32& Last=FreeLogSlot.FindOrAdd(Pair.Key,-1);Last!=Slot)
+    {
+     Last=Slot;
+     const TCHAR* Role=bRaidDuty?TEXT("raid_or_hunt"):bMortarPost||bArtillery?TEXT("artillery"):bScout?TEXT("scout"):bHomeDefence?TEXT("home_defence"):BaseAssault?TEXT("enemy_home")
+      :FrontReservePosts.Contains(Pair.Key)?TEXT("front_reserve"):bTankPost||bCarShield?TEXT("armour_post"):Purpose?TEXT("bought_for_point"):TEXT("point");
+     const FVector LP=FreeRuntime->Position(Pair.Value.LeaderUnitID);const FIntPoint Here=BattleSectors::Cell(LP),To=BattleSectors::Cell(Center);
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FREE_SQUAD t=%.0f team=%d squad=%d type=%d role=%s here=%d,%d home_m=%.0f to=%d,%d order=%d target=%d delegated=%d action=%d reason=%s"),
+      Elapsed,Team,Pair.Key,int32(Pair.Value.SquadType),Role,Here.X,Here.Y,FVector::Dist2D(LP,AreaHome(Team))/100.,To.X,To.Y,int32(Order),Target,Pair.Value.bPlayerDelegated?1:0,
+      int32(Pair.Value.TacticalPlan.Action),*Pair.Value.TacticalPlan.Reason);
     }
    }
   if(auto* Leader=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); Leader->IsWideField())

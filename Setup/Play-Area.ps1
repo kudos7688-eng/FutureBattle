@@ -1,8 +1,10 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K','L')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(-1,0,1)][int]$StanceSteady=-1,[ValidateSet(0,1)][int]$ArrivalReady=0,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[switch]$SectionOrders,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms,[switch]$SquadKnowledge)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K','L')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(-1,0,1)][int]$StanceSteady=-1,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[switch]$SectionOrders,[switch]$NoSectionOrders,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms,[switch]$SquadKnowledge,[ValidateSet(-1,0,1)][int]$CoverPeekLookout=-1)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
+# Trial (2026-11-26, default 0): a cover peek may fire on the lookout's current sighting (sector sight), like ordinary fire.
+if ($CoverPeekLookout -ge 0) { $extra += "-BattleCoverPeekLookout=$CoverPeekLookout" }
 # Trial (2026-11-23, default 0): a vehicle ordered into a place it cannot enter (a walled sector of map K) goes to the nearest road instead of refusing the order.
 if ($VehicleRoadGoal -gt 0) { $extra += "-BattleVehicleRoadGoal=$VehicleRoadGoal" }
 # Setup before the start (user decision 2026-11-22, trial): 15 rifle squads instead of 25 and 250 resources instead of 100 (the 10 squads'
@@ -20,13 +22,13 @@ if ($OwnTargetCover -gt 0) { $extra += "-BattleOwnTargetCover=$OwnTargetCover" }
 # -StanceSteady: fewer crouch/stand changes on the spot (stays standing where crouching hid his enemy; 3 s down after an empty peek).
 # Default 1 in the game since 2026-11-24; -StanceSteady 0 restores the old behaviour.
 if ($StanceSteady -ge 0) { $extra += "-BattleStanceSteady=$StanceSteady" }
-# -ArrivalReady 1: a soldier at his arrival place while his squad is still on its way crouches instead of standing.
-if ($ArrivalReady -gt 0) { $extra += "-BattleArrivalReady=$ArrivalReady" }
 if ($WalkLook -gt 0) { $extra += "-BattleWalkLook=$WalkLook" }
 # Squad knowledge stage 2 (Docs/design-squad-knowledge.md; trial, default 0): both teams keep what they know per squad.
 if ($SquadKnowledge) { $extra += '-BattleSquadKnowledge=1' }
 # Front plan stage 7 (Docs/design-front-strategy.md 6; trials, default 0): the player's team plans by sections of its front line; U opens the
 # plan panel (section roles, purchase reservations, hiring delegation), the top bar shows the own plan. Team 0 only; second focus allowed.
+# Section orders (2026-11-26, user: adopt for play): on by default on the sector maps (H to L); -NoSectionOrders turns them off.
+if (-not $NoSectionOrders -and $Map -in @('H','I','J','K','L')) { $SectionOrders=$true }
 if ($SectionOrders) { $FrontPlanPlayer=$true; $extra += @('-BattleFrontSectionOrders=1') }
 if ($FrontPlanPlayer) { $extra += @('-BattleFrontPlan=1','-BattleFrontPlanTeam=0','-BattleFrontPlanPlayer=1','-BattleFrontPlanFocus2=1','-BattleHireReserve=1') }
 if ($Map -eq 'H') {
@@ -55,6 +57,8 @@ if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J' -or $Map -eq 'K' -or $Map -eq
     $extra += '-BattleArmourWait=1'
     # A group gives its squads one sector each around its rally and its point, from the side first (trial, user 2026-11-23).
     $extra += '-BattleGroupSectors=1'
+    # The home-assault squads go as one group on one flank (trial, user 2026-11-27 play test; BattleBaseGroup.cpp).
+    $extra += '-BattleBaseGroup=1'
     # AI orders as sector missions (move by sectors, fire on the move into the sector), as Test-WideSight.ps1 measures them by default
     # (-SectorAI 1). Before 2026-11-24 the play passed it only with -SectorAI, so the play's AI differed from the measured one (user decision).
     $extra += '-BattleSectorAI=1'

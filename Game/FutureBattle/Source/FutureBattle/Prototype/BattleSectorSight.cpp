@@ -8,6 +8,7 @@
 #include "BattleFieldLayout.h"
 #include "BattleSectors.h"
 #include "BattleState.h"
+#include "BattlePerception.h"
 
 int32 UBattleLeaderRuntime::SectorSightMode(int32 Team)
 {
@@ -58,4 +59,12 @@ int32 UBattleLeaderRuntime::SectorSightRole(int32 ID) const
  if(Type==BattleSquadType::Heavy || Type==BattleSquadType::Supply)return 1;
  if(Type==BattleSquadType::AntiTank)return U->Weapon==EBattleWeapon::AntiTank?2:1;
  return 0;
+}
+
+// The same observed-only fallback for ordinary fire and the optional cover peek. No traces or contact writes.
+const FBattleContact* UBattleLeaderRuntime::SectorLookoutSighting(int32 ID,int32 TargetID,const FVector& Pos,const FBattleSquadState& Squad,const FBattleContact* Contact) const
+{
+ if(TargetID!=INDEX_NONE && !(Contact && Contact->bVisible && !Contact->bShared) && SectorSightMember(ID))
+  if(const auto* Seen=GetWorld()->GetSubsystem<UBattlePerception>()->FindContact(SectorLookout(Squad),TargetID);Seen && Seen->bVisible && !Seen->bShared && SectorSightFar(Pos,Seen->LastKnownPosition))return Seen;
+ return nullptr;
 }

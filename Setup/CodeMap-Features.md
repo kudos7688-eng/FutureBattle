@@ -13,6 +13,8 @@
 
 | 機能 | 入口（ここから読む） | 関連 |
 |---|---|---|
+| 軍共有の既知敵への射撃（段階1） | @UBattlePerception::BuildTeamKnownTargets 、 @UBattleLeaderRuntime::SelectKnownFire 、 @UBattleLeaderRuntime::RunKnownTargetFireTrial | `-BattleKnownTargetFire=1`（既定0）。通常射撃と既存の覗き、SpotTrackの限定例外、光線予算。移動追加なし |
+| 覗き0発の診断・固定場面 | @UBattleLeaderRuntime::RecordPeekFrame 、 @UBattleLeaderRuntime::RunCoverPeekTrial | 記録だけの `peekwhy_*`。`Test-CoverPeek.ps1` は目撃済み／見失いを検査、未発見は記録のみ |
 | 編成AI・候補選択と貯蓄購入 | @UBattleMatch::UpdateCompositionHiring 、 @BattleComposition::Decide | Planner/PlannerTeams は既定0。ONは不足・緊急性で選択し貯蓄／購入。検査は @UBattleLeaderRuntime::RunCompositionSmoke |
 | 盾被弾制圧・群の兵種別戦力（試験） | @UBattleLeaderRuntime::NoteUnderFire 、 @UBattleState::AdvanceShields 、 @UBattleMatch::GroupPower 、 @UBattleMatch::GroupPointPower | `BattleExoShieldSuppression` / `BattleGroupStrength` は既定0。観測兵種は @UBattlePerception::Update で取得、重みはUBattleTuning |
 | 間接射撃の試験切替 | @UBattleMatch::ArtilleryHomeObserved 、 @UBattleMatch::AreaArtilleryClusters 、 @UBattleLeaderRuntime::FireArtillery 、 @UBattleLeaderRuntime::ArtilleryBlastTransmission | 自走砲弾は @UBattleState::UseSPGAmmo / @UBattleState::RefillSPGAmmo 。4切替は既定0 |
@@ -94,6 +96,8 @@ BattleHotSectors | 詳しく計算する区画の選び方と記録 `-BattleHotS
 BattleCover | 遮蔽の場所の一覧と予約
 BattleCoverAction | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部）。撃てる遮蔽の判定 `UBattleLeaderRuntime::CoverFirePoint`（over/lean）と値2の step `CoverStepFirePoint`（試験 `-BattleCoverFirePoint`、既定0）
 BattleCoverFire | 区画の到着地点が撃てる遮蔽か（over/lean）の判定 `BattleCoverFire::ArrivalFirePoint` の公開（中身は BattleStableMovement.cpp、試験 `-BattleCoverFirePoint`）
+BattlePeekDiagnostics | 覗き1回のフレームを排他的に分類する記録専用の計数（peekwhy）
+BattleCoverPeekTrial | 低壁越しの覗きの固定場面3つ（目撃済み・見失い・未発見、試験の印があるときだけ）
 BattleBlindFire | 遮蔽の陰からのブラインドファイア（弾の出る位置・AIの試験・アニメ。UBattleLeaderRuntime の一部）
 BattleBodyAnimImport | 体のアニメーション（遮蔽・伏せ・しゃがみの向き別）の取り込みと計測（エディタ用。宣言は BattleVATBake.h）
 BattleCoverClips | 遮蔽の状態 → 遮蔽アニメの対応表（データだけ。「アセット参考資料の検討」セッション作）
@@ -187,13 +191,21 @@ BattleMapJ | マップJ（11-22、`Docs/design-map-j-terrain.md`）の区画の�
 BattleMapK | マップK（11-22、`Docs/design-map-k.md`）の区画の表：密な小さい市街地（街は列4〜15・行3〜10、外側は山）、道 `Roads`、拠点6つ、入れる家 `HouseOf`。配置はマップJ の `BattleMapLayoutJ.inl` を名前空間だけ差し替えて使い、K だけの高い塀・追加の遮蔽は `bDenseCover`、道のトラックは `BattleMapCommandlet`（`-WideField=K`、`Setup/Initialize-MapK.ps1`、区画図 `Setup/Export-MapK.py`）
 BattleSectorView | 作戦画面の表示だけ（規則・AIは読まない）：自軍の視界の格子 `FBattleFogGrid`（12.5m、自軍の兵から静的な物体への光線）と区画ごとの状態 `BattleSectorView::Gather`（自軍の人数・観測した敵・視界の割合・拠点・命令中の部隊・遮蔽位置の数）
 BattleSectorRoute | 区画経由の移動 `-BattleSectorRoute`・側面 `-BattleSectorFlank`・前線 `-BattleSectorFront`（区画のあるマップ、AIの歩兵）：道路網の次の交差点の代わりに、その周りで遮蔽の多い区画を制圧・維持しながら進む。側面は観測した敵の正面を避けた区画、前線は自軍の区画のうち敵に接する区画（UBattleMatch の一部）
+BattleBaseGroup | 本拠地攻撃隊（試験切替 `-BattleBaseGroup`、既定0、区画マップ）：本拠地攻撃の枠の部隊を1つの群（Kind 3）にし、知っている敵の少ない端の列を1回だけ選んで、集合地点でそろってからその列を2区画ずつ進む `UpdateBaseGroup`・`BaseGroupOrder`
 BattleSectors | マップHの50m区画の格子（20×14）：区画の番号と中心、区画の種類の表、川・橋・浅瀬の位置
 BattleFrontLine | Surprise bridge waypoints: UpdateSurpriseBridge, BattleSurpriseRoute::Bridge / Intersects; fixed H/I map geometry, entrance / exit / edge goal, retained on same-time restore
 
 BattleWeaponOrders | 命令・防衛範囲・支援対象・区画任務の交戦許可と武器/装甲AIの試験切替
+BattleKnownTargets | 軍共有の観測表と50m格子。知覚結果の適用後だけ集約し、元の観測時刻・期限・追跡試料を保持（既定0）
+BattleKnownTargetFire | 軍共有候補の上位3件・本人確認・狙いの射線・光線予算・通常／覗き射撃（UBattleLeaderRuntimeの一部、段階1）
+BattleKnownTargetFireTrial | 軍共有射撃の固定場面。実発砲・候補の切替・鮮度・追跡・予算・命令を検査、BATTLE_KNOWN_FIRE_RESULT
 BattleComposition | 編成AIの兵種定義・解決済み入力・診断
 BattleCompositionPlanner | 編成AIの純粋な候補選択・貯蓄遷移・状態検証。整数比較、乱数なし
 BattleCompositionRuntime | 編成AIと観測・収入窓・既存購入実行の接続、設定キー
 BattleCompositionState | 編成AIの陣営状態
 BattleCompositionSmoke | 編成AIの選択・貯蓄のスモーク検査（UBattleLeaderRuntimeの一部）
 BattleSectorSight | 区画内・区画間の戦い（`-BattleSectorSight`、11-23 から既定1＝通常小隊だけ。`=2` は兵種ごとの決まり `SectorSightRole`〔試験〕、`=0` で元の動き。`Docs/design-sector-combat.md`）：区画のあるマップで、通常小隊は別の区画（20m より遠い）の敵を探す光線を隊長だけが出し、隊員は隊長が今見ている敵を発射直前の視線判定で撃つ（UBattleLeaderRuntime の一部。走査の側は `UBattlePerception::Update` の `SkipCross`）
+
+BattleKnownTargetMove | 既知敵の位置取り（値2）：観測で候補を選び、期限付き完歩・同目標の情報更新・到着後の本人確認・未発見時の帰還
+BattleKnownTargetMoveTrial | 値2の固定場面。値1の27項目に追加。Commit=0の旧鮮度切れ、Commit>0の完歩・本人確認・未発見帰還・期限・更新（進軍／停止）を分岐検査。追加項目は未実行
+BattleKnownMoveGeometry | 値2専用の静的な箱形遮蔽の格子索引。端・開口部の推定と光線前の予選に使う

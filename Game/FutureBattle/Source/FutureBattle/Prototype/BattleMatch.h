@@ -212,17 +212,27 @@ public:
  // Supply vehicles (squad type 9, BattleSupplyCar.cpp). SupplyCarNear: the nearest commanded vehicle of the team with stock left within
  // Radius (default UBattleTuning::SupplyTeamRadius) of the position (INDEX_NONE: none); SupplyTeamNear says whether there is one.
  int32 SupplyCarNear(int32 Team,const FVector& Position,float Radius=-1.f) const;
+ // Evaluation only (-BattleCarRecoverShots with -BattleWideScreens=<prefix>, rendered matches; changes nothing in the match): a
+ // camera beside the squad and the vehicle and two pictures (1 s and 4 s later) of the first four replacements made beside a supply
+ // vehicle (-BattleSupplyCarRecover), at least 20 s apart; the match ends 6 s after the fourth.
+ void CarRecoverShot(int32 SquadID,int32 CarID);
  bool SupplyTeamNear(int32 Team,const FVector& Position) const { return SupplyCarNear(Team,Position)!=INDEX_NONE; }
  int32 SupplyStockMax() const;
  int32 SupplyStockOf(int32 SquadID) const;
  void SpendSupply(int32 SquadID,int32 Rounds);
  void RestockSupplyCar(int32 SquadID);
+ // -BattleSupplyCarHealStock (BattleTactics.h): supply vehicle -> hit points of healing it has left (no entry = full; transient).
+ TMap<int32,float> SupplyHealLeft;
+ float SupplyHealOf(int32 SquadID) const;
  // The order of an AI-run supply vehicle: home to load while low; with its group (role 5) behind the group's post; otherwise behind the
  // own point nearest the enemy home. False: not a supply vehicle.
  bool SupplyCarOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
  // Where a squad short of ammunition gets it in the field: the position of a supply vehicle of its team with stock within
  // UBattleTuning::FieldSupplyRange (its own group's first). False: none (the squad goes home as before).
- bool FieldSupplyPoint(int32 SquadID,FVector& Where,int32* CarID=nullptr) const;
+ // bOnTrip: the squad is already on its way to a vehicle (-BattleSupplyCarFirst: the distance no longer limits the choice).
+ bool FieldSupplyPoint(int32 SquadID,FVector& Where,int32* CarID=nullptr,bool bOnTrip=false) const;
+ // Trial -BattleSupplyCarPost (BattleTactics.h): supply vehicle -> the post it was last given (transient).
+ mutable TMap<int32,FVector> SupplyPosts;
  // Front line and front-holding group (2026-11-20, user proposal; group stage 4, BattleFrontLine.cpp). Trial -BattleFrontLine=1 (default
  // 0; with -BattleAreaTrialTeam for that team only), maps with sectors only. FrontLine[Team][Row]: the line's sector column in that
  // sector row, counted from the team's own home edge (0); empty while off. Built from own positions and known enemies only.
@@ -235,6 +245,13 @@ public:
  bool SurpriseOn(int32 Team) const;
  void UpdateSurpriseGroup(int32 Team,int32 FrontID);
  bool SurpriseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ // Home-assault group (trial -BattleBaseGroup=1, BattleBaseGroup.cpp): the home-assault squads as one group (Kind 3) on one flank.
+ bool BaseGroupOn() const;
+ int32 BaseGroupRowCell(int32 Team,int32 Column,int32 Row,FIntPoint& Out) const;
+ void UpdateBaseGroup(int32 Team);
+ bool BaseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ bool BaseGroupFinal(int32 SquadID) const; // in the home-assault group, on its last approach to the enemy home
+ mutable TMap<int32,FVector> BaseLegs; // home-assault group: each squad's current leg along the row (kept until reached; transient)
  // True while the squad's surprise group is moving along its row (phase 1): its tactics do not stop to hold at a seen enemy.
  bool SurpriseMoving(int32 SquadID) const;
  bool RaidSneaking(int32 SquadID) const; // Trial -BattleArtilleryRaidSneak: an artillery raid squad still farther than the sneak radius from its target.
@@ -284,6 +301,9 @@ public:
  bool PlayerRolesOn(int32 Team) const;
  bool FrontRolesOn(int32 Team) const; // stage 4 roles or the player's
  uint8 PlayerSectionRole(int32 Section) const;
+ bool CanSetPlayerSectionRole(int32 Section,uint8 Role) const;
+ bool SetPlayerSectionRole(int32 Section,uint8 Role);
+ int32 DrawFrontSectionOffsets(const TArray<int32>& Offsets);
  bool CyclePlayerSectionRole(int32 Section); // the next allowed role; LastMessage says which
  static const TCHAR* SectionRoleJa(uint8 PlayerRole);
  // Section orders (trial -BattleFrontSectionOrders=1, default 0, needs the player roles): roles 5 advance and 6 fall back move the
@@ -305,6 +325,7 @@ public:
  // squads the front army could take wait at a place two or three columns behind its line, a row of their own each (transient).
  bool FrontReserveOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
  TMap<int32,FVector> FrontReservePosts; // reserve squad -> the sector centre it waits at
+ TMap<int32,int32> FreeLogSlot; // log only: the 30 s slot of the last BATTLE_FREE_SQUAD line per squad
  TMap<int32,int32> FrontReserveRow; // reserve squad -> its row (the team's own row order), kept while it stays in the reserve
  // Measurement of the free squads' moves (log only, BATTLE_FRONT_LINE free_rev/free_moved_m; transient): last leader position and 2 s step.
  TMap<int32,FVector> FreeLastPos,FreeLastStep; int32 FreeReversals[2]={0,0}; double FreeMoved[2]={0.,0.}; int32 SectorCrowd[2]={0,0}; int32 FrontLanes[2]={0,0}; int32 RoadSteps[2]={0,0}; TArray<int32> LatFront[2],LatOther[2]; /* log only: infantry squads per row across the map, summed per update */ /* summed extra squads per shared sector at each update */
@@ -352,6 +373,13 @@ public:
  int64 ATFireAims=0;
  void UpdateATHunts(int32 Team);
  bool ATHuntGoal(int32 Team,int32 SquadID,FVector& Center) const;
+ // Trial -BattleSupplyCarHunt (BattleTactics.h): hunting squad -> the enemy supply vehicle it is sent to (transient).
+ struct FSupplyHunt { int32 Team=0; int32 Target=INDEX_NONE; FVector Position=FVector::ZeroVector; double StartAt=-1.,SeenAt=-1.,CheckAt=-1.,CheckDistance=0.,TraceAt=-100.; };
+ TMap<int32,FSupplyHunt> SupplyHunts; double SupplyHuntClock[2]={-1.,-1.};
+ TMap<int32,double> SupplyHuntRest[2]; // enemy supply vehicle -> no new hunt for it before this time
+ TSet<int32> SupplySeenLogged[2];
+ void UpdateSupplyHunts(int32 Team);
+ bool SupplyHuntGoal(int32 Team,int32 SquadID,FVector& Center) const;
  bool ACShieldPost(int32 Team,int32 SquadID,FVector& Post) const;
  void UpdateArtilleryRaidGroup(int32 Team);
  void PlanArtilleryRaidFlank(int32 Team,const FVector& From,const FVector& Target);
@@ -394,7 +422,7 @@ public:
 		bool bOpened = false; /* the opening rush was decided (once per group) */
 		bool bArrived = false; /* this advance has reached its point: the stall clock (PhaseAt) runs from then */
 		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */
-		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp) */
+		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp), 3 home-assault group (BattleBaseGroup.cpp) */
 		bool bFocus2 = false; /* front plan stage 5: the second attack army, aimed at FFrontPlanTeam::Focus2 (Kind 0) */
 		bool bFollowFocus = true; /* front plan stage 7: a player's attack group follows the focus while delegated (the player's per-group switch) */
 		int32 SurpriseRow = 0; /* surprise group: the edge sector row it moves along */

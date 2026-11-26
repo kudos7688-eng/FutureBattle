@@ -12,7 +12,9 @@
 
 bool UBattleLeaderRuntime::SectorLanesEnabled()
 {
- static const bool bOn=[]{int32 LaneArg=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorLanes="),LaneArg);return LaneArg!=0;}();
+ // Default 1 since 2026-11-26 (user decision "make it the default"; map K, four seeds on the new default: stalls 399->329,
+ // 398->281, 427->398, 807->260, town entrance stalls 53-87 -> 4-6). =0 is the old behaviour. Only maps with lane markers (K).
+ static const bool bOn=[]{int32 LaneArg=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorLanes="),LaneArg);return LaneArg!=0;}();
  return bOn;
 }
 
@@ -104,17 +106,33 @@ void UBattleLeaderRuntime::ApplySectorLane(int32 SquadID,const FVector& Origin,c
  {
   FNavLocation LaneOnMesh;
   if(!Navigation.ProjectPointToNavigation(AuthoredPoint,LaneOnMesh,FVector(100,100,400)))
-  {ClearLaneChoice();SightExperiment.Cover(TEXT("sector_lane_no_nav"));return;}
+  {
+   // 2026-11-26: which lane fails and at which step (map I: 18% of the choices fall back to the normal path).
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SECTOR_LANE_FAIL squad=%d lane=%d cell=(%d,%d) why=project point=%d of=%d at=(%.0f,%.0f)"),SquadID,LanePlan.LaneIndex,LaneCell.X,LaneCell.Y,ProjectedLane.Num(),ChosenLane.Points.Num(),AuthoredPoint.X,AuthoredPoint.Y);
+   ClearLaneChoice();SightExperiment.Cover(TEXT("sector_lane_no_nav"));return;
+  }
   ProjectedLane.Add(LaneOnMesh.Location);
  }
  auto* EntryPath=Navigation.FindPathToLocationSynchronously(GetWorld(),From,ProjectedLane[0]);
- auto* ExitPath=Navigation.FindPathToLocationSynchronously(GetWorld(),ProjectedLane.Last(),To);
+ // 2026-11-26 trial -BattleSectorLaneHubGoal=1 (default 0): a lane that ends on the goal itself needs no tail. In objective sectors the
+ // hub is the sector's middle, which is also the sector order's goal: the tail query from a point to itself returns one point and
+ // the lane was refused (map I: 187 of the 198 refusals of lf-I-lanefail-s7, all in the O and D sectors).
+ static const bool bLaneHubGoal=[]{int32 HubGoalArg=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorLaneHubGoal="),HubGoalArg);return HubGoalArg!=0;}();
+ const bool bLaneEndsAtGoal=bLaneHubGoal && FVector::Dist2D(ProjectedLane.Last(),To)<100.;
+ auto* ExitPath=bLaneEndsAtGoal?nullptr:Navigation.FindPathToLocationSynchronously(GetWorld(),ProjectedLane.Last(),To);
  if(!EntryPath || !EntryPath->IsValid() || EntryPath->IsPartial() || EntryPath->PathPoints.Num()<2 ||
-    !ExitPath || !ExitPath->IsValid() || ExitPath->IsPartial() || ExitPath->PathPoints.Num()<2)
- {ClearLaneChoice();SightExperiment.Cover(TEXT("sector_lane_no_nav"));return;}
+    (!bLaneEndsAtGoal && (!ExitPath || !ExitPath->IsValid() || ExitPath->IsPartial() || ExitPath->PathPoints.Num()<2)))
+ {
+  const bool bEntryBad=!EntryPath || !EntryPath->IsValid() || EntryPath->IsPartial() || EntryPath->PathPoints.Num()<2;
+  const UNavigationPath* FailedLanePath=bEntryBad?EntryPath:ExitPath;
+  const FVector FailFrom=bEntryBad?From:ProjectedLane.Last(),FailTo=bEntryBad?ProjectedLane[0]:To;
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SECTOR_LANE_FAIL squad=%d lane=%d cell=(%d,%d) why=%s valid=%d partial=%d points=%d from=(%.0f,%.0f) to=(%.0f,%.0f) dist=%.0f"),SquadID,LanePlan.LaneIndex,LaneCell.X,LaneCell.Y,bEntryBad?TEXT("entry"):TEXT("exit"),FailedLanePath&&FailedLanePath->IsValid()?1:0,FailedLanePath&&FailedLanePath->IsPartial()?1:0,FailedLanePath?FailedLanePath->PathPoints.Num():-1,FailFrom.X,FailFrom.Y,FailTo.X,FailTo.Y,FVector::Dist2D(FailFrom,FailTo));
+  ClearLaneChoice();SightExperiment.Cover(TEXT("sector_lane_no_nav"));return;
+ }
  TArray<FVector> JoinedLanePath=EntryPath->PathPoints;
  for(int32 LanePointIndex=1;LanePointIndex<ProjectedLane.Num();++LanePointIndex)JoinedLanePath.Add(ProjectedLane[LanePointIndex]);
- for(int32 ExitPointIndex=1;ExitPointIndex<ExitPath->PathPoints.Num();++ExitPointIndex)JoinedLanePath.Add(ExitPath->PathPoints[ExitPointIndex]);
+ if(bLaneEndsAtGoal)SightExperiment.Cover(TEXT("sector_lane_hub_goal"));
+ for(int32 ExitPointIndex=1;ExitPath && ExitPointIndex<ExitPath->PathPoints.Num();++ExitPointIndex)JoinedLanePath.Add(ExitPath->PathPoints[ExitPointIndex]);
  LanePlan.Path=MoveTemp(JoinedLanePath);
  SightExperiment.Cover(TEXT("sector_lane_used"));
  if(bKeptLane)SightExperiment.Cover(TEXT("sector_lane_kept"));

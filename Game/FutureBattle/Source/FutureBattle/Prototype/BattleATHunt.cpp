@@ -128,6 +128,104 @@ void UBattleMatch::UpdateATHunts(int32 Team)
  }
 }
 
+void UBattleMatch::UpdateSupplyHunts(int32 Team)
+{
+ // Trial -BattleSupplyCarHunt (BattleTactics.h). What the team sees and the observed type only; nothing of the vehicle's true state.
+ if(!bArea||!BattleTactics::SupplyCarHunt()||Team<0||Team>1)return;
+ if(Elapsed<SupplyHuntClock[Team]){SupplyHunts.Reset();SupplyHuntRest[0].Reset();SupplyHuntRest[1].Reset();SupplySeenLogged[0].Reset();SupplySeenLogged[1].Reset();}
+ SupplyHuntClock[Team]=Elapsed;
+ auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ if(!Store||!R)return;
+ const auto& V=AreaIntelView(Team);
+ // The enemy supply vehicles the team sees now (unit keys only: a scout report dot has no identity or type). The type: observed
+ // with -BattleObservedArmour, else that of the unit seen, as the vehicle checks of the default game.
+ TMap<int32,FVector> Seen;
+ for(int32 I=0;I<V.EnemyKeys.Num()&&I<V.Enemies.Num();++I)
+ {
+  const int32 Key=V.EnemyKeys[I];if(Key<=0)continue;
+  const uint8 Type=BattleTactics::ObservedArmour()?V.ObservedType(Key):(R->IsVehicle(Key)?R->VehicleType(Key):uint8(255));
+  if(Type!=BattleSquadType::Supply)continue;
+  Seen.Add(Key,V.Enemies[I]);
+  if(!SupplySeenLogged[Team].Contains(Key)){SupplySeenLogged[Team].Add(Key);UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SUPPLY_SEEN team=%d time=%.0f target=%d"),Team,Elapsed,Key);}
+ }
+ TArray<int32> HuntKeys;SupplyHunts.GetKeys(HuntKeys);HuntKeys.Sort();
+ for(int32 HunterID:HuntKeys)
+ {
+  FSupplyHunt& Hunt=SupplyHunts[HunterID];if(Hunt.Team!=Team)continue;
+  const auto* Hunter=Store->FindSquad(HunterID);
+  if(const FVector* At=Seen.Find(Hunt.Target)){Hunt.Position=*At;Hunt.SeenAt=Elapsed;}
+  const double Distance=Hunter?FVector::Dist2D(R->Position(Hunter->LeaderUnitID),Hunt.Position):0.;
+  const bool bArrived=Hunter&&Elapsed-Hunt.SeenAt>2.&&Distance<1500.;
+  // Log only (-BattleSupplyHuntLog, default off; STATUS 2026-11-26 21:10: the hunts do not get there): every 5 s where the squad
+  // is, the order and mission it holds, its plan and what its leader does. Changes nothing in the match.
+  static const bool bHuntLog=FParse::Param(FCommandLine::Get(),TEXT("BattleSupplyHuntLog"));
+  if(bHuntLog&&Hunter&&(Elapsed-Hunt.TraceAt>=5.||Elapsed<Hunt.TraceAt))
+  {
+   Hunt.TraceAt=Elapsed;const auto* LU=Store->Find(Hunter->LeaderUnitID);const FVector HunterAt=R->Position(Hunter->LeaderUnitID);
+   int32 Living=0;for(int32 M:Hunter->Members)if(const auto* MU=Store->Find(M);MU&&MU->IsAlive())++Living;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SUPPLY_HUNT_TRACE t=%.0f squad=%d type=%d target=%d dist=%.0f unseen=%.0f here=(%.0f,%.0f) goal=(%.0f,%.0f) status=%d order=%d dest=(%.0f,%.0f) dest_to_goal=%.0f has_mission=%d mission_order=%d mission_dest=(%.0f,%.0f) mission_to_goal=%.0f plan=%d plan_dest_to_goal=%.0f leader_alive=%d leader_order=%d leader_action=%d leader_dest_to_goal=%.0f retries=%d living=%d plan_reason=%s"),
+    Elapsed,HunterID,int32(Hunter->SquadType),Hunt.Target,Distance,Elapsed-Hunt.SeenAt,HunterAt.X,HunterAt.Y,Hunt.Position.X,Hunt.Position.Y,int32(Hunter->CommandStatus),int32(Hunter->Order),Hunter->Destination.X,Hunter->Destination.Y,
+    FVector::Dist2D(Hunter->Destination,Hunt.Position),Hunter->bHasMission?1:0,int32(Hunter->MissionOrder),Hunter->MissionDestination.X,Hunter->MissionDestination.Y,FVector::Dist2D(Hunter->MissionDestination,Hunt.Position),
+    int32(Hunter->TacticalPlan.Action),FVector::Dist2D(Hunter->TacticalPlan.Destination,Hunt.Position),LU&&LU->IsAlive()?1:0,LU?int32(LU->Order):-1,LU?int32(LU->Action):-1,LU?FVector::Dist2D(LU->Destination,Hunt.Position):-1.,LU?LU->MoveRetries:-1,Living,*Hunter->TacticalPlan.Reason);
+  }
+  // Every 30 s: 10 m nearer than at the last check, or the hunt is not getting there.
+  bool bStalled=false;
+  if(Elapsed-Hunt.CheckAt>=30.){bStalled=Distance>Hunt.CheckDistance-1000.&&Distance>=3000.;Hunt.CheckAt=Elapsed;Hunt.CheckDistance=Distance;}
+  const bool bSupplyTrip=Hunter&&Hunter->TacticalPlan.Action==EBattleSquadTactic::Recover;
+  const TCHAR* End=!Hunter||Hunter->CommandStatus!=EBattleCommandStatus::Active?TEXT("inactive"):bArrived?TEXT("searched"):bSupplyTrip?TEXT("supply"):
+   bStalled?TEXT("stalled"):Elapsed-Hunt.StartAt>120.?TEXT("timeout"):nullptr;
+  if(End)
+  {
+   if(!bArrived)SupplyHuntRest[Team].Add(Hunt.Target,Elapsed+60.);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SUPPLY_HUNT_END team=%d squad=%d target=%d reason=%s after=%.0f unseen=%.0f"),Team,HunterID,Hunt.Target,End,Elapsed-Hunt.StartAt,Elapsed-Hunt.SeenAt);
+   SupplyHunts.Remove(HunterID);
+  }
+ }
+ TSet<int32> Hunted;for(const auto& Pair:SupplyHunts)if(Pair.Value.Team==Team)Hunted.Add(Pair.Value.Target);
+ TArray<int32> SquadKeys;Store->GetSquads().GetKeys(SquadKeys);SquadKeys.Sort();
+ TArray<int32> SeenKeys;Seen.GetKeys(SeenKeys);SeenKeys.Sort();
+ for(int32 CarID:SeenKeys)
+ {
+  if(Hunted.Contains(CarID))continue;
+  if(const double* Rest=SupplyHuntRest[Team].Find(CarID);Rest&&Elapsed<*Rest)continue;
+  const FVector CarAt=Seen[CarID];
+  struct FPick{int32 Kind;double Distance;int32 SquadID;};TArray<FPick> Picks;
+  for(int32 CandidateID:SquadKeys)
+  {
+   const auto* C=Store->FindSquad(CandidateID);
+   // =2: tanks and armoured cars too.
+   const bool bHuntVehicle=BattleTactics::SupplyCarHunt()>=2&&(C&&(C->SquadType==BattleSquadType::Tank||C->SquadType==BattleSquadType::ArmoredCar));
+   if(!C||C->Team!=Team||(!bHuntVehicle&&C->SquadType!=BattleSquadType::Rifle&&C->SquadType!=BattleSquadType::Heavy&&C->SquadType!=BattleSquadType::AntiTank&&C->SquadType!=BattleSquadType::Exo)||C->CommandStatus!=EBattleCommandStatus::Active||
+      C->TacticalPlan.Action==EBattleSquadTactic::Recover||C->TacticalPlan.Action==EBattleSquadTactic::Retreat||C->TacticalPlan.Action==EBattleSquadTactic::Regroup||
+      (Team==0&&!C->bPlayerDelegated)||SupplyHunts.Contains(CandidateID)||ATHunts.Contains(CandidateID)||ArtilleryRaids.Contains(CandidateID)||
+      Area.HirePurpose.Contains(CandidateID)||IntelPurpose.Contains(CandidateID))continue;
+   if(const FPlayerRoute* Route=PlayerRoutes.Find(CandidateID);Route&&Route->bMission)continue;
+   if(const auto* Group=Groups.Find(GroupOf(CandidateID));Group&&Group->Kind==1)continue;
+   const auto* CL=Store->Find(C->LeaderUnitID);if(!CL||!CL->IsAlive())continue;
+   // At least half its members alive. Squads with an anti-tank weapon and a round for it come first.
+   int32 Living=0;bool bAntiTank=false;
+   for(int32 M:C->Members)if(const auto* MU=Store->Find(M);MU&&MU->IsAlive()){++Living;bAntiTank|=MU->Launcher>0||(MU->Weapon==EBattleWeapon::AntiTank&&MU->Ammo+MU->Reserve>0);}
+   if(Living*2<C->Members.Num())continue;
+   const double D=FVector::DistSquared2D(R->Position(C->LeaderUnitID),CarAt);if(D>FMath::Square(bHuntVehicle?80000.:50000.))continue;
+   // The order of choice: a tank, an anti-tank weapon, an armoured car, small arms.
+   Picks.Add({C->SquadType==BattleSquadType::Tank?0:bAntiTank?1:C->SquadType==BattleSquadType::ArmoredCar?2:3,D,CandidateID});
+  }
+  Picks.Sort([](const FPick& A,const FPick& B){return A.Kind!=B.Kind?A.Kind<B.Kind:A.Distance!=B.Distance?A.Distance<B.Distance:A.SquadID<B.SquadID;});
+  for(int32 I=0;I<Picks.Num()&&I<2;++I)
+  {
+   FSupplyHunt& Hunt=SupplyHunts.Add(Picks[I].SquadID);Hunt.Team=Team;Hunt.Target=CarID;Hunt.Position=CarAt;Hunt.StartAt=Hunt.SeenAt=Hunt.CheckAt=Elapsed;Hunt.CheckDistance=FMath::Sqrt(Picks[I].Distance);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SUPPLY_HUNT team=%d time=%.0f squad=%d type=%d antitank=%d target=%d range=%.0f"),Team,Elapsed,Picks[I].SquadID,int32(Store->FindSquad(Picks[I].SquadID)->SquadType),Picks[I].Kind<=1?1:0,CarID,FMath::Sqrt(Picks[I].Distance));
+  }
+  if(!Picks.IsEmpty())Hunted.Add(CarID);
+ }
+}
+
+bool UBattleMatch::SupplyHuntGoal(int32 Team,int32 SquadID,FVector& Center) const
+{
+ const FSupplyHunt* Hunt=SupplyHunts.Find(SquadID);if(!Hunt||Hunt->Team!=Team)return false;
+ Center=Hunt->Position;return true;
+}
+
 bool UBattleMatch::ATHuntGoal(int32 Team,int32 SquadID,FVector& Center) const
 {
  const FATHunt* Hunt=ATHunts.Find(SquadID);if(!Hunt||Hunt->Team!=Team)return false;
