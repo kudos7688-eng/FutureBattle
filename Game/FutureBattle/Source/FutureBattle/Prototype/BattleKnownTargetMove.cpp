@@ -37,9 +37,9 @@ bool UBattleLeaderRuntime::KnownMoveMarching(int32 ID) const
   Squad->TacticalPlan.Action!=EBattleSquadTactic::Engage && FVector::DistSquared2D(Position(ID),Unit->Destination)>FMath::Square(100.);
 }
 
-bool UBattleLeaderRuntime::KnownMoveDefendMarching(int32 ID) const
+bool UBattleLeaderRuntime::KnownMoveDefendMarching(int32 ID,bool FollowingMarch) const
 {
- if(!BattleKnownFire::MoveEnabled() || !BattleKnownFire::MoveDefendMarch())return false;
+ if(!FollowingMarch || !BattleKnownFire::MoveEnabled() || !BattleKnownFire::MoveDefendMarch())return false;
  const auto* DefendStore=GetWorld()->GetSubsystem<UBattleState>();const auto* DefendUnit=DefendStore->Find(ID);
  const auto* DefendSquad=DefendUnit?DefendStore->FindSquad(DefendUnit->SquadID):nullptr;
  const auto* DefendPlan=DefendUnit?Plans.Find(DefendUnit->SquadID):nullptr;
@@ -92,7 +92,7 @@ bool UBattleLeaderRuntime::KnownMoveAllowed(int32 ID,bool CountGate)
  return !Group || Group->Phase!=0 || RejectGate(TEXT("known_move_gate_assembly"));
 }
 
-const TCHAR* UBattleLeaderRuntime::KnownMovePlaceRejection(int32 ID,FVector Start,FVector Place) const
+const TCHAR* UBattleLeaderRuntime::KnownMovePlaceRejection(int32 ID,FVector Start,FVector Place,bool DefendMarchAtStart) const
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Unit=Store->Find(ID);
  const auto* Squad=Unit?Store->FindSquad(Unit->SquadID):nullptr;const auto* Plan=Unit?Plans.Find(Unit->SquadID):nullptr;
@@ -100,7 +100,7 @@ const TCHAR* UBattleLeaderRuntime::KnownMovePlaceRejection(int32 ID,FVector Star
  if(FVector::DistSquared2D(Start,Place)>FMath::Square(BattleKnownFire::MoveRange()))return TEXT("known_move_reject_mission_range");
  if(FVector::DistSquared2D(Plan->Center,Place)>FMath::Square(BattleKnownFire::MoveSquadRadius()))return TEXT("known_move_reject_mission_squad_radius");
  const auto* Episode=KnownMoves.Find(ID);
- const bool DefendMarch=Episode?Episode->bDefendMarch:KnownMoveDefendMarching(ID);
+ const bool DefendMarch=Episode?Episode->bDefendMarch:DefendMarchAtStart;
  const bool March=(BattleKnownFire::MoveMarch() && (Episode?Episode->bMarch:KnownMoveMarching(ID))) || DefendMarch;
  // A six metre strip of the start-to-post segment, or the defense disk. No backward cap.
  // Keep the departure fixed throughout the detour; otherwise repeated checks permit drift.
@@ -118,9 +118,9 @@ const TCHAR* UBattleLeaderRuntime::KnownMovePlaceRejection(int32 ID,FVector Star
  return nullptr;
 }
 
-bool UBattleLeaderRuntime::KnownMovePlaceAllowed(int32 ID,FVector Start,FVector Place) const
+bool UBattleLeaderRuntime::KnownMovePlaceAllowed(int32 ID,FVector Start,FVector Place,bool DefendMarchAtStart) const
 {
- return KnownMovePlaceRejection(ID,Start,Place)==nullptr;
+ return KnownMovePlaceRejection(ID,Start,Place,DefendMarchAtStart)==nullptr;
 }
 
 // One complete position/target transaction: exposure 4 + over 2 + lean 6 rays,
@@ -196,7 +196,7 @@ bool UBattleLeaderRuntime::KnownMoveLine(int32 ID,FVector From,FVector To,double
  return !Hit.bBlockingHit;
 }
 
-bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
+bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now,bool FollowingMarch)
 {
  if(!KnownMoveAllowed(ID,true))return false;
  if(KnownMoves.Contains(ID) || CoverApproaches.Contains(ID)){SightExperiment.Cover(TEXT("known_move_gate_active"));return false;}
@@ -209,7 +209,8 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
  // March=0 retains the original in-flight gate. The caller also retains its route/arrival gate.
  if(!BattleKnownFire::MoveMarch() && Squad->Order==EBattleOrder::AttackMove && Plan->Path.IsValidIndex(Bodies.FindChecked(ID).Waypoint) &&
   !Plan->bCoverStop && Squad->TacticalPlan.Action!=EBattleSquadTactic::Engage && FVector::DistSquared2D(Position(ID),Unit->Destination)>FMath::Square(100.)){SightExperiment.Cover(TEXT("known_move_gate_march"));SightExperiment.Cover(TEXT("known_move_gate_march_attack_move"));return false;}
- const bool DefendMarch=KnownMoveDefendMarching(ID);
+ // Follow supplies its actual route/arrival movement gate; preserve it in the episode.
+ const bool DefendMarch=KnownMoveDefendMarching(ID,FollowingMarch);
  const bool March=(BattleKnownFire::MoveMarch() && KnownMoveMarching(ID)) || DefendMarch;
  KnownMoveAfter.Add(ID,Now+1.);
  int32 Living=0,Moving=0;
@@ -327,7 +328,7 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
   };
   SightExperiment.Cover(Free?TEXT("known_move_candidate_free"):TEXT("known_move_candidate_slot"));
   if(Place.Source!=2)SightExperiment.Cover(Place.Source==0?TEXT("known_move_candidate_edge"):Place.Source==1?TEXT("known_move_candidate_door"):TEXT("known_move_candidate_ring"));
-  if(const TCHAR* MissionRejection=KnownMovePlaceRejection(ID,Start,Anchor)){SightExperiment.Cover(TEXT("known_move_reject_anchor_mission"));SightExperiment.Cover(MissionRejection);continue;}
+  if(const TCHAR* MissionRejection=KnownMovePlaceRejection(ID,Start,Anchor,DefendMarch)){SightExperiment.Cover(TEXT("known_move_reject_anchor_mission"));SightExperiment.Cover(MissionRejection);continue;}
   if(FVector::Dist2D(Start,Anchor)<150.){SightExperiment.Cover(TEXT("known_move_reject_too_close"));continue;}
   if(!Free && !Cover->IsAvailable(Place.Slot,ID,Now)){SightExperiment.Cover(TEXT("known_move_reject_slot_busy"));continue;}
   bool Occupied=false;
@@ -337,7 +338,7 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
   if(Occupied){SightExperiment.Cover(TEXT("known_move_reject_occupied"));continue;}
   if(!KnownMoveSpend(ID,Now,2))break;
   FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Anchor-FVector(0,0,90),Projected,FVector(50,50,150))){RejectPath(TEXT("known_move_reject_anchor_nav"));continue;}
-  Anchor=Projected.Location+FVector(0,0,90);if(!KnownMovePlaceAllowed(ID,Start,Anchor)){SightExperiment.Cover(TEXT("known_move_reject_projected_mission"));continue;}
+  Anchor=Projected.Location+FVector(0,0,90);if(!KnownMovePlaceAllowed(ID,Start,Anchor,DefendMarch)){SightExperiment.Cover(TEXT("known_move_reject_projected_mission"));continue;}
   do
   {
    if(bKnownMoveDeferred)break;
@@ -380,7 +381,7 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
    const bool CanFire=Place.Source==3?KnownMoveLine(ID,Anchor+FVector(0,0,60),Threat+FVector(0,0,60),Now):CoverFirePoint(ID,Anchor,Threat,Peek,Kind,3,false,Now);
    if(bKnownMoveDeferred){SightExperiment.Cover(TEXT("known_move_reject_fire_deferred"));continue;}
    if(!CanFire){SightExperiment.Cover(Place.Source==3?TEXT("known_move_reject_free_fire_line"):TEXT("known_move_reject_cover_fire_point"));continue;}
-   if(!KnownMovePlaceAllowed(ID,Start,Peek)){SightExperiment.Cover(TEXT("known_move_reject_peek_mission"));continue;}
+   if(!KnownMovePlaceAllowed(ID,Start,Peek,DefendMarch)){SightExperiment.Cover(TEXT("known_move_reject_peek_mission"));continue;}
    if(!Safe(Peek)){SightExperiment.Cover(TEXT("known_move_reject_peek_danger"));continue;}
    if(FVector::DistSquared2D(Peek,Threat)>FMath::Square(Reach)){SightExperiment.Cover(TEXT("known_move_reject_peek_range"));continue;}
    SightExperiment.Cover(Place.Source==3?TEXT("known_move_fire_free"):Kind==1?TEXT("known_move_fire_over"):TEXT("known_move_fire_lean"));
@@ -391,7 +392,7 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
    if(!Route || !Route->IsValid() || Route->IsPartial() || Route->PathPoints.Num()<2){RejectPath(TEXT("known_move_reject_path_invalid"));continue;}
    double Length=0.;bool PathAllowed=true;
    for(int32 Index=1;Index<Route->PathPoints.Num();++Index)
-   {Length+=FVector::Dist(Route->PathPoints[Index-1],Route->PathPoints[Index]);PathAllowed &= KnownMovePlaceAllowed(ID,Start,Route->PathPoints[Index]+FVector(0,0,90));}
+   {Length+=FVector::Dist(Route->PathPoints[Index-1],Route->PathPoints[Index]);PathAllowed &= KnownMovePlaceAllowed(ID,Start,Route->PathPoints[Index]+FVector(0,0,90),DefendMarch);}
    if(!PathAllowed){RejectPath(TEXT("known_move_reject_path_mission"));continue;}
    if(CommitSeconds>0. && Now+Length/WalkSpeed>CommitDeadline){SightExperiment.Cover(TEXT("known_move_reject_commit_time"));continue;}
    if(Length>1.5*FVector::Dist2D(Start,Anchor)){RejectPath(TEXT("known_move_reject_path_length"));continue;}

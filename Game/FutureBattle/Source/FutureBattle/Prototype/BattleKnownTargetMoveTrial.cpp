@@ -631,6 +631,20 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  {
   Check(TEXT("move_defend_march_disabled"),!DefendStarted && Count(TEXT("known_move_defend_march_started"))==DefendStarts &&
    Count(TEXT("known_move_searches"))==DefendSearches && Count(TEXT("known_move_rays"))==DefendRays && Shooter.ShotSequence==DefendShots && FVector::Dist2D(Position(2),Start)<1.);
+  bool DefendDisabledStraight=true;double DefendDisabledRemaining=FVector::Dist2D(Position(2),DefendPost);
+  for(int32 DefendDisabledFrame=0;DefendDisabledFrame<900 && DefendDisabledRemaining>100.;++DefendDisabledFrame)
+  {
+   TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
+   const double DefendDisabledNext=FVector::Dist2D(Position(2),DefendPost);
+   DefendDisabledStraight &= FMath::Abs(Position(2).X-Start.X)<1. && DefendDisabledNext<=DefendDisabledRemaining &&
+    !KnownMoves.Contains(2) && !CoverApproaches.Contains(2) && !Shooter.CoverPhase;
+   DefendDisabledRemaining=DefendDisabledNext;
+  }
+  Check(TEXT("move_defend_march_disabled_walk"),DefendDisabledStraight && DefendDisabledRemaining<=100. && FVector::Dist2D(Position(2),Start)>100. &&
+   Count(TEXT("known_move_searches"))==DefendSearches && Count(TEXT("known_move_rays"))==DefendRays &&
+   Count(TEXT("known_move_defend_march_started"))==DefendStarts && KnownMoveReservedID==INDEX_NONE &&
+   Shooter.Order==EBattleOrder::Defend && Squad.Order==EBattleOrder::Defend && Shooter.OrderRevision==DefendRevision &&
+   Squad.MissionRevision==DefendMission && Shooter.Destination==DefendPost && Squad.Destination==DefendPost);
  }
  else
  {
@@ -654,20 +668,50 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   Put(2,DefendBoundaryStart);Shooter.Destination=DefendBoundaryPost;Squad.Destination=DefendBoundaryPost;Plans.FindChecked(Shooter.SquadID).Center=DefendBoundaryStart;
   Plans.FindChecked(Shooter.SquadID).Path={DefendBoundaryStart,DefendBoundaryPost};Bodies.FindChecked(2).Waypoint=1;
   Check(TEXT("move_defend_march_sector"),BattleSectors::Cell(DefendBoundaryStart)!=BattleSectors::Cell(DefendBoundaryPost) &&
-   KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart) && KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart+FVector(500,0,0)) &&
-   KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryPost) && !KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart+FVector(500,700,0)));
-  Check(TEXT("move_defend_march_reverse_rejected"),!KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart-FVector(700,0,0)) &&
-   !KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart-FVector(1,0,0)));
+   KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart,true) && KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart+FVector(500,0,0),true) &&
+   KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryPost,true) && !KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart+FVector(500,700,0),true));
+  Check(TEXT("move_defend_march_reverse_rejected"),!KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart-FVector(700,0,0),true) &&
+   !KnownMovePlaceAllowed(2,DefendBoundaryStart,DefendBoundaryStart-FVector(1,0,0),true));
   // Expired information must eventually release the detour without changing the post.
   Reset();KnownDefendResumes.Reset();auto& DefendStalePlan=Plans.FindChecked(Shooter.SquadID);
   DefendStalePlan.Path={Start,DefendPost};DefendStalePlan.Corridors.Add(2,DefendStalePlan.Path);DefendStalePlan.ArrivalGoals.Add(2,DefendPost);Bodies.FindChecked(2).Waypoint=1;
   Shooter.Destination=DefendPost;Squad.Destination=DefendPost;Squad.DefenseRadius=3400;
-  const bool DefendStaleStarted=TryStart();const int32 DefendStaleShots=Shooter.ShotSequence,DefendStaleResumes=Count(TEXT("known_move_defend_march_resumed"));
+  bool DefendStaleStarted=false;
+  for(int32 DefendStaleAttempt=0;DefendStaleAttempt<24 && !DefendStaleStarted;++DefendStaleAttempt)
+  {TestNow+=1.01;Observe();Follow(2,0.f,TestNow);DefendStaleStarted=KnownMoves.Contains(2);}
+  const int32 DefendStaleShots=Shooter.ShotSequence,DefendStaleResumes=Count(TEXT("known_move_defend_march_resumed"));
+  const int32 DefendStaleArrivals=Count(TEXT("known_move_defend_march_resume_arrived"));
+  const int32 DefendStaleRevision=Shooter.OrderRevision,DefendStaleMission=Squad.MissionRevision;
   TestSense->Reset();Put(251,Start+FVector(50000,0,0));
-  for(int32 DefendStaleFrame=0;DefendStaleFrame<2400 && KnownMoves.Contains(2);++DefendStaleFrame)
-  {TestNow+=1./30.;Follow(2,1.f/30.f,TestNow);}
-  Check(TEXT("move_defend_march_stale_resume"),DefendStaleStarted && !KnownMoves.Contains(2) && Shooter.ShotSequence==DefendStaleShots &&
-   Count(TEXT("known_move_defend_march_resumed"))==DefendStaleResumes+1 && Shooter.Destination==DefendPost && Squad.Destination==DefendPost);
+  for(int32 DefendStaleFrame=0;DefendStaleFrame<2400;++DefendStaleFrame)
+  {TestNow+=1./30.;Follow(2,1.f/30.f,TestNow);if(Count(TEXT("known_move_defend_march_resume_arrived"))>DefendStaleArrivals)break;}
+  bool DefendStaleSlotsReleased=true;
+  for(int32 DefendStaleSlot=0;DefendStaleSlot<EdgeCover->GetSlots().Num();++DefendStaleSlot)
+   DefendStaleSlotsReleased &= EdgeCover->Owner(DefendStaleSlot,0.)!=2; // Detect leaked reservations even if their lease expired.
+  Check(TEXT("move_defend_march_stale_resume"),DefendStaleSlotsReleased && DefendStaleStarted && !KnownMoves.Contains(2) && Shooter.ShotSequence==DefendStaleShots &&
+   Count(TEXT("known_move_defend_march_resumed"))==DefendStaleResumes+1 && Shooter.Destination==DefendPost && Squad.Destination==DefendPost &&
+   Count(TEXT("known_move_defend_march_resume_arrived"))==DefendStaleArrivals+1 && FVector::Dist2D(Position(2),DefendPost)<=100. &&
+   !KnownDefendResumes.Contains(2) && !CoverApproaches.Contains(2) && !Shooter.CoverPhase && KnownMoveReservedID==INDEX_NONE &&
+   Shooter.Order==EBattleOrder::Defend && Squad.Order==EBattleOrder::Defend && Shooter.OrderRevision==DefendStaleRevision && Squad.MissionRevision==DefendStaleMission);
+  // A squad target stops this soldier, although his own view is blocked and the route remains.
+  // The small defense disk is beyond MoveRange: the marching strip must not admit a detour.
+  Reset();KnownDefendResumes.Reset();
+  auto& DefendStoppedPlan=Plans.FindChecked(Shooter.SquadID);
+  DefendStoppedPlan.Path={Start,DefendPost};DefendStoppedPlan.Corridors.Add(2,DefendStoppedPlan.Path);
+  DefendStoppedPlan.ArrivalGoals.Add(2,DefendPost);Bodies.FindChecked(2).Waypoint=1;
+  DefendStoppedPlan.TargetID=251;DefendStoppedPlan.bCoverStop=false;
+  Shooter.Destination=DefendPost;Squad.Destination=DefendPost;Squad.DefenseRadius=400;
+  const int32 DefendStoppedSearches=Count(TEXT("known_move_searches")),DefendStoppedStarts=Count(TEXT("known_move_defend_march_started"));
+  const int32 DefendStoppedShots=Shooter.ShotSequence;bool DefendStoppedNoDetour=true;
+  for(int32 DefendStoppedAttempt=0;DefendStoppedAttempt<24;++DefendStoppedAttempt)
+  {
+   TestNow+=1.01;Observe();Follow(2,0.f,TestNow);
+   DefendStoppedNoDetour &= !KnownMoves.Contains(2) && !CoverApproaches.Contains(2) && KnownMoveReservedID==INDEX_NONE;
+  }
+  Check(TEXT("move_defend_march_combat_stop"),DefendStoppedNoDetour && Count(TEXT("known_move_searches"))>DefendStoppedSearches &&
+   Count(TEXT("known_move_defend_march_started"))==DefendStoppedStarts && Shooter.ShotSequence==DefendStoppedShots &&
+   FVector::Dist2D(Position(2),Start)<1. && !KnownDefendResumes.Contains(2) &&
+   !KnownMovePlaceAllowed(2,Start,Start+FVector(0,500,0)));
  }
  for(auto* TestWall:Walls){TestWall->SetActorEnableCollision(false);TestWall->Destroy();}
  return Failures;
