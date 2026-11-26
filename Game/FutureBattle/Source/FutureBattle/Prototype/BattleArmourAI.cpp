@@ -106,6 +106,8 @@ void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P,cons
  const double ATReach2=FMath::Square(double(BattleRanges::Engage(EBattleWeapon::AntiTank)));
  FVector PickedPosition=FVector::ZeroVector;
  bool bSeesVehicle=false;int32 Target=INDEX_NONE,Armour=INDEX_NONE;double Best=DBL_MAX,BestArmour=DBL_MAX;
+ // Trial -BattleSupplyCarTarget (BattleTactics.h): the kind of the gunner's vehicle target so far (0 main gun, 1 supply, 2 other).
+ int32 ArmourKind=3;
  for(int32 ID:S->Members)
  {
   const auto* U=Store->Find(ID);const auto* Contacts=U&&U->IsAlive()?Sense->GetContacts(ID):nullptr;if(!Contacts)continue;
@@ -123,15 +125,19 @@ void UBattleLeaderRuntime::PickArmourTargets(int32 SID,FBattleLeaderPlan& P,cons
    }
    const bool bVehicle=BattleTactics::ObservedArmour()?BattleSquadType::IsVehicle(C.Value.ObservedSquadType):IsVehicle(C.Key);bSeesVehicle|=bVehicle;
    const double Range2=FVector::DistSquared(Pos,C.Value.LastKnownPosition);double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
-   // An anti-tank gunner's vehicle target: within the anti-tank engagement distance, the nearest to the squad.
-   if(bVehicle&&bGunner&&Range2<=ATReach2&&(D<BestArmour||(D==BestArmour&&C.Key<Armour))){BestArmour=D;Armour=C.Key;}
+   const uint8 SeenType=bVehicle?(BattleTactics::ObservedArmour()?C.Value.ObservedSquadType:VehicleType(C.Key)):uint8(255);
+   const bool bSupplyTarget=bVehicle&&BattleTactics::SupplyCarTarget()&&SeenType==BattleSquadType::Supply;
+   // An anti-tank gunner's vehicle target: within the anti-tank engagement distance, the nearest to the squad
+   // (-BattleSupplyCarTarget: of the first kind seen - a main gun, a supply vehicle, the others).
+   const int32 Kind=!BattleTactics::SupplyCarTarget()?0:BattleSquadType::HasMainGun(SeenType)?0:bSupplyTarget?1:2;
+   if(bVehicle&&bGunner&&Range2<=ATReach2&&(Kind<ArmourKind||(Kind==ArmourKind&&(D<BestArmour||(D==BestArmour&&C.Key<Armour))))){ArmourKind=Kind;BestArmour=D;Armour=C.Key;}
    if(bRangeAwareCombat&&Range2>FMath::Square(TargetRange(ID)))continue;
    if(bVehicle)
    {
     // Small arms: never a vehicle they cannot hurt; a lightly armoured one only when it is much nearer than the soldiers around it.
     const float Scale=BattleSquadType::ArmorSmallArms(BattleTactics::ObservedArmour()?C.Value.ObservedSquadType:VehicleType(C.Key));
     if(Scale<=0.f)continue;
-    if(Scale<1.f)D*=4.;
+    if(Scale<1.f)D*=bSupplyTarget?2.25:4.;
    }
    if(D<Best||(D==Best&&C.Key<Target)){Best=D;Target=C.Key;if(SelectedPosition)PickedPosition=C.Value.LastKnownPosition;}
   }

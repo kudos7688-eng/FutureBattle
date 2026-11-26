@@ -100,6 +100,8 @@ private:
  TMap<int32,double> FieldRecoverGaveUp;
  // ... and since when a squad is on a trip to a vehicle for its losses (a trip for ammunition only is not in here).
  TMap<int32,double> FieldRecoverSince;
+ // -BattleSupplyCarFirst: the squads of FieldRecoverSince that have reached their vehicle (their 120 s count from then).
+ TSet<int32> FieldRecoverArrived;
  // Trial -BattleSeekKnown (BattleTactics.h): per team, the 50 m squares in which one of its soldiers saw enemy infantry (the place
  // and the time of the last sighting; refreshed once a second), and per seeking squad the square it walks to, the place, when it
  // set out, when it arrived (-1: on its way) and when the seek ended (-1: under way). Not saved.
