@@ -3,6 +3,7 @@
 #include "BattlePerception.h"
 #include "BattleCover.h"
 #include "BattleRanges.h"
+#include "BattleTactics.h"
 #include "BattleFieldLayout.h"
 #include "BattleSectors.h"
 #include "BattleMatch.h"
@@ -20,6 +21,45 @@ double BattleKnownFire::MoveCommit(){static const double Seconds=[]{double V=12.
 double BattleKnownFire::MoveWait(){static const double Seconds=[]{double V=1.5;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownMoveWait="),V);return FMath::IsFinite(V)?FMath::Clamp(V,.1,5.):1.5;}();return Seconds;}
 bool BattleKnownFire::MoveMarch(){static const bool On=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownMoveMarch="),V);return V!=0;}();return On;}
 bool BattleKnownFire::MoveDefendMarch(){static const bool On=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownMoveDefendMarch="),V);return V!=0;}();return On;}
+double BattleKnownFire::MoveDefendReach(){static const double Radius=[]{double V=1500.;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownMoveDefendReach="),V);return FMath::IsFinite(V)?FMath::Clamp(V,0.,50000.):1500.;}();return Radius;}
+
+double UBattleLeaderRuntime::KnownMoveDefendReach(int32 ID) const
+{
+ if(!BattleKnownFire::MoveEnabled())return 0.;
+ const auto* ReachUnit=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
+ const auto* ReachSquad=ReachUnit?GetWorld()->GetSubsystem<UBattleState>()->FindSquad(ReachUnit->SquadID):nullptr;
+ return ReachSquad && ReachSquad->Order==EBattleOrder::Defend?
+  (KnownMoveTrialDefendReach>=0.?KnownMoveTrialDefendReach:BattleKnownFire::MoveDefendReach()):0.;
+}
+
+FVector UBattleLeaderRuntime::KnownMoveReachCenter(int32 ID) const
+{
+ const auto* CenterStore=GetWorld()->GetSubsystem<UBattleState>();const auto* CenterUnit=CenterStore->Find(ID);
+ const auto* CenterSquad=CenterUnit?CenterStore->FindSquad(CenterUnit->SquadID):nullptr;
+ if(CenterSquad && CenterSquad->DefenseRadius>0.)return CenterSquad->Destination;
+ const auto* CenterPlan=CenterUnit?Plans.Find(CenterUnit->SquadID):nullptr;
+ const auto* CenterAssigned=CenterPlan?CenterPlan->ArrivalGoals.Find(ID):nullptr;
+ return CenterAssigned?*CenterAssigned:CenterUnit?CenterUnit->Destination:FVector::ZeroVector;
+}
+
+// Called only for movement candidates or the current episode's observed target.
+bool UBattleLeaderRuntime::KnownMoveTargetAllows(int32 ID,int32 TargetID,const FVector& Observed) const
+{
+ if(WeaponOrderAllows(ID,TargetID,Observed))return true;
+ const double ExtraReach=KnownMoveDefendReach(ID);if(ExtraReach<=0.)return false;
+ const auto* ReachStore=GetWorld()->GetSubsystem<UBattleState>();const auto* ReachUnit=ReachStore->Find(ID);
+ const auto* ReachSquad=ReachUnit?ReachStore->FindSquad(ReachUnit->SquadID):nullptr;
+ if(!ReachUnit || !ReachUnit->IsAlive() || !ReachSquad || ReachSquad->CommandStatus!=EBattleCommandStatus::Active)return false;
+ // Never bypass the sector or support-target gates. Only enlarge the defense disk.
+ if(ReachSquad->bSectorMission && ReachSquad->TacticalPlan.Action==EBattleSquadTactic::Mission)return false;
+ const FVector ReachPost=KnownMoveReachCenter(ID);
+ const double TargetRadius=FMath::Max(0.,double(ReachSquad->DefenseRadius))+ExtraReach+BattleRanges::Engage(ReachUnit->Weapon);
+ if(FVector::DistSquared2D(Observed,ReachPost)>FMath::Square(TargetRadius))return false;
+ // The observed distance was checked above. Evaluate the remaining order gates
+ // at the defense center without copying the squad and its member/route arrays.
+ return BattleTactics::OrderAllowsTarget(*ReachSquad,TargetID,ReachSquad->Destination);
+}
+
 double BattleKnownFire::MoveRange(){static const double Range=[]{double V=2500.;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownMoveRange="),V);return FMath::Clamp(V,0.,25000.);}();return Range;}
 double BattleKnownFire::MoveSquadRadius(){static const double Radius=[]{double V=5000.;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownMoveSquadRadius="),V);return FMath::Clamp(V,0.,50000.);}();return Radius;}
 int32 BattleKnownFire::MoveMax(){static const int32 Maximum=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownMoveMax="),V);return FMath::Max(0,V);}();return Maximum;}
@@ -123,12 +163,15 @@ const TCHAR* UBattleLeaderRuntime::KnownMovePlaceRejection(int32 ID,FVector Star
  if(!Squad || !Plan || Place.ContainsNaN())return TEXT("known_move_reject_mission_invalid");
  if(FVector::DistSquared2D(Start,Place)>FMath::Square(BattleKnownFire::MoveRange()))return TEXT("known_move_reject_mission_range");
  if(FVector::DistSquared2D(Plan->Center,Place)>FMath::Square(BattleKnownFire::MoveSquadRadius()))return TEXT("known_move_reject_mission_squad_radius");
+ const double DefendReach=KnownMoveDefendReach(ID);
+ const FVector ReachPost=KnownMoveReachCenter(ID);
+ const bool InReach=DefendReach>0. && FVector::DistSquared2D(Place,ReachPost)<=FMath::Square(DefendReach);
  const auto* Episode=KnownMoves.Find(ID);
  const bool DefendMarch=Episode?Episode->bDefendMarch:DefendMarchAtStart;
  const bool March=(BattleKnownFire::MoveMarch() && (Episode?Episode->bMarch:KnownMoveMarching(ID))) || DefendMarch;
- // A six metre strip to the assigned personal post, or the squad defense disk. No backward cap.
+ // Reach=0 preserves the old strip. Reach>0 uses the defense/reach union, with no backward extension.
  // Keep the departure fixed throughout the detour; otherwise repeated checks permit drift.
- if(DefendMarch && Squad->DefenseRadius>0.)
+ if(DefendMarch && (Squad->DefenseRadius>0. || DefendReach>0.))
  {
   const FVector Departure=Episode?Episode->Start:Start;
   const FVector* AssignedPost=Plan->ArrivalGoals.Find(ID);
@@ -137,16 +180,53 @@ const TCHAR* UBattleLeaderRuntime::KnownMovePlaceRejection(int32 ID,FVector Star
   const double AxisSquared=Axis.SizeSquared(),Along=AxisSquared>1.?FVector::DotProduct(Offset,Axis)/AxisSquared:-1.;
   const bool InStrip=Along>=0. && Along<=1. && (Offset-Axis*Along).SizeSquared()<=FMath::Square(600.);
   const bool InDefense=FVector::DistSquared2D(Place,Squad->Destination)<=FMath::Square(double(Squad->DefenseRadius));
-  if(!InStrip && !InDefense)return TEXT("known_move_reject_mission_defend_march");
+  if(!InDefense && !(DefendReach>0.?(InReach && Along>=0.):InStrip))return TEXT("known_move_reject_mission_defend_march");
  }
  if(!March && Squad->bSectorMission && BattleSectors::Cell(Place)!=BattleSectors::Cell(Squad->Destination))return TEXT("known_move_reject_mission_sector");
- if(!DefendMarch && Squad->Order==EBattleOrder::Defend && FVector::DistSquared2D(Place,Squad->Destination)>FMath::Square(double(Squad->DefenseRadius)))return TEXT("known_move_reject_mission_defend");
+ if(!DefendMarch && !InReach && Squad->Order==EBattleOrder::Defend && FVector::DistSquared2D(Place,Squad->Destination)>FMath::Square(double(Squad->DefenseRadius)))return TEXT("known_move_reject_mission_defend");
  return nullptr;
 }
 
 bool UBattleLeaderRuntime::KnownMovePlaceAllowed(int32 ID,FVector Start,FVector Place,bool DefendMarchAtStart) const
 {
  return KnownMovePlaceRejection(ID,Start,Place,DefendMarchAtStart)==nullptr;
+}
+
+// Split at circle/forward-plane boundaries: inside each interval all range
+// predicates are constant. No traces, navigation, or sampling-distance loophole.
+bool UBattleLeaderRuntime::KnownMoveSegmentAllowed(int32 ID,FVector Start,FVector From,FVector To,bool DefendMarchAtStart) const
+{
+ const double SegmentReach=KnownMoveDefendReach(ID);if(SegmentReach<=0.)return true;
+ const auto* SegmentUnit=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
+ const auto* SegmentSquad=SegmentUnit?GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SegmentUnit->SquadID):nullptr;
+ if(!SegmentSquad || !KnownMovePlaceAllowed(ID,Start,From,DefendMarchAtStart) || !KnownMovePlaceAllowed(ID,Start,To,DefendMarchAtStart))return false;
+ TArray<double,TInlineAllocator<8>> Cuts;Cuts.Add(0.);Cuts.Add(1.);
+ const FVector SegmentDelta=(To-From)*FVector(1,1,0);const double SegmentLength2=SegmentDelta.SizeSquared();
+ auto CutCircle=[&](FVector CircleCenter,double CircleRadius)
+ {
+  if(SegmentLength2<=1.e-12)return;
+  const FVector CircleOffset=(From-CircleCenter)*FVector(1,1,0);
+  const double CircleB=FVector::DotProduct(CircleOffset,SegmentDelta);
+  const double CircleD=CircleB*CircleB-SegmentLength2*(CircleOffset.SizeSquared()-CircleRadius*CircleRadius);
+  if(CircleD<0.)return;
+  for(double CircleSign:{-1.,1.}){const double CircleT=(-CircleB+CircleSign*FMath::Sqrt(CircleD))/SegmentLength2;if(CircleT>0. && CircleT<1.)Cuts.Add(CircleT);}
+ };
+ CutCircle(SegmentSquad->Destination,FMath::Max(0.,double(SegmentSquad->DefenseRadius)));
+ CutCircle(KnownMoveReachCenter(ID),SegmentReach);
+ const auto* SegmentEpisode=KnownMoves.Find(ID);const auto* SegmentPlan=Plans.Find(SegmentUnit->SquadID);
+ if(SegmentPlan && (SegmentEpisode?SegmentEpisode->bDefendMarch:DefendMarchAtStart))
+ {
+  const auto* SegmentAssigned=SegmentPlan->ArrivalGoals.Find(ID);
+  const FVector SegmentPost=SegmentEpisode?SegmentEpisode->DefendPost:SegmentAssigned?*SegmentAssigned:SegmentUnit->Destination;
+  const FVector SegmentDeparture=SegmentEpisode?SegmentEpisode->Start:Start;
+  const FVector SegmentAxis=(SegmentPost-SegmentDeparture)*FVector(1,1,0);
+  const double PlaneRate=FVector::DotProduct(SegmentDelta,SegmentAxis);
+  if(FMath::Abs(PlaneRate)>1.e-12){const double PlaneT=-FVector::DotProduct(From-SegmentDeparture,SegmentAxis)/PlaneRate;if(PlaneT>0. && PlaneT<1.)Cuts.Add(PlaneT);}
+ }
+ Cuts.Sort();
+ for(int32 CutIndex=1;CutIndex<Cuts.Num();++CutIndex)
+  if(!KnownMovePlaceAllowed(ID,Start,FMath::Lerp(From,To,(Cuts[CutIndex-1]+Cuts[CutIndex])*.5),DefendMarchAtStart))return false;
+ return true;
 }
 
 // One complete position/target transaction: exposure 4 + over 2 + lean 6 rays,
@@ -269,10 +349,16 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now,bool FollowingMarc
   if(const auto* Bucket=Team.Grid.Find(FIntPoint(X,Y)))for(int32 TargetID:*Bucket)
   {
    const auto& Target=Team.Targets.FindChecked(TargetID);if(!Target.Fresh(Now)){if(DefendMarch)SightExperiment.Cover(TEXT("known_move_defend_march_target_stale"));continue;}Observed.Add(TargetID);
-   if(March && !(FVector::DistSquared(Start,Target.At(Now))<=FMath::Square(Reach)))
+   const double CandidateReach=KnownMoveDefendReach(ID);
+   const FVector CandidatePost=KnownMoveReachCenter(ID);
+   const bool ReachTarget=CandidateReach>0. && FVector::DistSquared2D(CandidatePost,Target.At(Now))<=
+    FMath::Square(FMath::Max(0.,double(Squad->DefenseRadius))+CandidateReach+Reach);
+   if(March && !ReachTarget && !(FVector::DistSquared(Start,Target.At(Now))<=FMath::Square(Reach)))
    {if(DefendMarch)SightExperiment.Cover(TEXT("known_move_defend_march_target_range"));continue;}
-   if(!WeaponOrderAllows(ID,TargetID,Target.At(Now)))
+   if(!KnownMoveTargetAllows(ID,TargetID,Target.At(Now)))
    {if(DefendMarch)SightExperiment.Cover(TEXT("known_move_defend_march_target_order"));continue;}
+   if(KnownMoveDefendReach(ID)>0. && (!WeaponOrderAllows(ID,TargetID,Target.At(Now)) ||
+    (March && FVector::DistSquared(Start,Target.At(Now))>FMath::Square(Reach))))SightExperiment.Cover(TEXT("known_move_defend_reach_targets"));
    Candidates.Add(TargetID);
   }
  Candidates.Sort([&](int32 Left,int32 Right){const double L=FVector::DistSquared2D(Start,Team.Targets.FindChecked(Left).At(Now)),R=FVector::DistSquared2D(Start,Team.Targets.FindChecked(Right).At(Now));return L==R?Left<Right:L<R;});
@@ -423,7 +509,7 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now,bool FollowingMarc
    const bool CanFire=Place.Source==3?KnownMoveLine(ID,Anchor+FVector(0,0,60),Threat+FVector(0,0,60),Now):CoverFirePoint(ID,Anchor,Threat,Peek,Kind,3,false,Now);
    if(bKnownMoveDeferred){RecordMove(TEXT("known_move_reject_fire_deferred"));continue;}
    if(!CanFire){RecordMove(Place.Source==3?TEXT("known_move_reject_free_fire_line"):TEXT("known_move_reject_cover_fire_point"));continue;}
-   if(!KnownMovePlaceAllowed(ID,Start,Peek,DefendMarch)){RecordMove(TEXT("known_move_reject_peek_mission"));continue;}
+   if(!KnownMovePlaceAllowed(ID,Start,Peek,DefendMarch) || !KnownMoveSegmentAllowed(ID,Start,Anchor,Peek,DefendMarch)){RecordMove(TEXT("known_move_reject_peek_mission"));continue;}
    if(!Safe(Peek)){RecordMove(TEXT("known_move_reject_peek_danger"));continue;}
    if(FVector::DistSquared2D(Peek,Threat)>FMath::Square(Reach)){RecordMove(TEXT("known_move_reject_peek_range"));continue;}
    RecordMove(Place.Source==3?TEXT("known_move_fire_free"):Kind==1?TEXT("known_move_fire_over"):TEXT("known_move_fire_lean"));
@@ -434,7 +520,8 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now,bool FollowingMarc
    if(!Route || !Route->IsValid() || Route->IsPartial() || Route->PathPoints.Num()<2){RejectPath(TEXT("known_move_reject_path_invalid"));continue;}
    double Length=0.;bool PathAllowed=true;
    for(int32 Index=1;Index<Route->PathPoints.Num();++Index)
-   {Length+=FVector::Dist(Route->PathPoints[Index-1],Route->PathPoints[Index]);PathAllowed &= KnownMovePlaceAllowed(ID,Start,Route->PathPoints[Index]+FVector(0,0,90),DefendMarch);}
+   {Length+=FVector::Dist(Route->PathPoints[Index-1],Route->PathPoints[Index]);PathAllowed &= KnownMovePlaceAllowed(ID,Start,Route->PathPoints[Index]+FVector(0,0,90),DefendMarch) &&
+     KnownMoveSegmentAllowed(ID,Start,Route->PathPoints[Index-1]+FVector(0,0,90),Route->PathPoints[Index]+FVector(0,0,90),DefendMarch);}
    if(!PathAllowed){RejectPath(TEXT("known_move_reject_path_mission"));continue;}
    if(CommitSeconds>0. && Now+Length/WalkSpeed>CommitDeadline){RecordMove(TEXT("known_move_reject_commit_time"));continue;}
    if(Length>1.5*FVector::Dist2D(Start,Anchor)){RejectPath(TEXT("known_move_reject_path_length"));continue;}
@@ -454,7 +541,13 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now,bool FollowingMarc
    FKnownMove Episode;Episode.Start=Start;Episode.Goal=Anchor;Episode.Last=Start;Episode.Peek=Peek;Episode.Observation=Target;Episode.Mission=Squad->MissionRevision;
    Episode.Source=Place.Source;Episode.SourceBox=Place.SourceBox;Episode.FaceAxis=Place.FaceAxis;Episode.FaceSign=Place.FaceSign;Episode.EndSign=Place.EndSign;
    if(DefendMarch){const FVector* EpisodePost=Plan->ArrivalGoals.Find(ID);Episode.DefendPost=EpisodePost?*EpisodePost:Unit->Destination;}
-   Episode.bDefendPost=DefendAtPost;Episode.bDefendMarch=DefendMarch;Episode.bMarch=March;Episode.Revision=Unit->OrderRevision;Episode.Started=Now;Episode.Slot=Place.Slot;Episode.bStandUp=StandUp || Place.Source<2;
+   const double SelectedReach=KnownMoveDefendReach(ID);
+   const FVector SelectedPost=KnownMoveReachCenter(ID);
+   Episode.bDefendReach=SelectedReach>0.;
+   if(Episode.bDefendReach &&
+    ((FVector::DistSquared2D(Anchor,Squad->Destination)>FMath::Square(double(Squad->DefenseRadius)) && FVector::DistSquared2D(Anchor,SelectedPost)<=FMath::Square(SelectedReach)) ||
+     (FVector::DistSquared2D(Peek,Squad->Destination)>FMath::Square(double(Squad->DefenseRadius)) && FVector::DistSquared2D(Peek,SelectedPost)<=FMath::Square(SelectedReach))))SightExperiment.Cover(TEXT("known_move_defend_reach_places"));
+   Episode.bDefendPost=DefendAtPost || (Episode.bDefendReach && !DefendMarch);Episode.bDefendMarch=DefendMarch;Episode.bMarch=March;Episode.Revision=Unit->OrderRevision;Episode.Started=Now;Episode.Slot=Place.Slot;Episode.bStandUp=StandUp || Place.Source<2;
    Episode.CommitUntil=CommitDeadline;
    if(CommitSeconds>0.)for(int32 ReturnIndex=Route->PathPoints.Num()-1;ReturnIndex>=0;--ReturnIndex)Episode.ReturnPoints.Add(Route->PathPoints[ReturnIndex]+FVector(0,0,90));
    KnownMoves.Add(ID,Episode);
@@ -523,22 +616,22 @@ bool UBattleLeaderRuntime::StepKnownMove(int32 ID,float Dt,double Now)
  {EndKnownMove(ID,Now,TEXT("known_move_cancel_order"));return false;}
  auto* Approach=CoverApproaches.Find(ID);
  const auto& Team=GetWorld()->GetSubsystem<UBattlePerception>()->TeamKnownTargets[Unit->Team];const auto* Current=Team.Targets.Find(Episode->Observation.TargetID);
- const bool Fresh=Current && Current->Fresh(Now) && WeaponOrderAllows(ID,Current->TargetID,Current->At(Now));
+ const bool Fresh=Current && Current->Fresh(Now) && KnownMoveTargetAllows(ID,Current->TargetID,Current->At(Now));
  const bool Commit=Episode->CommitUntil>0.;
  if(Commit && Current && Current->Fresh(Now) && (Current->ObservedAt>Episode->Observation.ObservedAt ||
   (Current->ObservedAt==Episode->Observation.ObservedAt && Current->TrackSampleAt>Episode->Observation.TrackSampleAt)))
  {Episode->Observation=*Current;SightExperiment.Cover(TEXT("known_move_refreshed"));}
- if(Commit && !WeaponOrderAllows(ID,Episode->Observation.TargetID,Episode->Observation.At(Now)))
+ if(Commit && !KnownMoveTargetAllows(ID,Episode->Observation.TargetID,Episode->Observation.At(Now)))
  {EndKnownMove(ID,Now,TEXT("known_move_cancel_order"));return false;}
  if((Episode->bMarch || Episode->bDefendPost) && ((!Fresh && !Commit) || Episode->bFired))
  {EndKnownMove(ID,Now,!Fresh && !Commit?TEXT("known_move_cancel_stale"):TEXT("known_move_finished"));return false;}
  if(Episode->bMarch && (!KnownMovePlaceAllowed(ID,Episode->Start,Position(ID)) || !KnownMovePlaceAllowed(ID,Episode->Start,Episode->Peek)))
  {EndKnownMove(ID,Now,TEXT("known_move_cancel_mission"));return false;}
- if(Commit && (!KnownMovePlaceAllowed(ID,Episode->Start,Position(ID)) || !KnownMovePlaceAllowed(ID,Episode->Start,Episode->Goal) || !KnownMovePlaceAllowed(ID,Episode->Start,Episode->Peek)))
+ if((Commit || Episode->bDefendReach) && (!KnownMovePlaceAllowed(ID,Episode->Start,Position(ID)) || !KnownMovePlaceAllowed(ID,Episode->Start,Episode->Goal) || !KnownMovePlaceAllowed(ID,Episode->Start,Episode->Peek)))
  {EndKnownMove(ID,Now,TEXT("known_move_cancel_mission"));return false;}
  if(Episode->Arrived>=0)
  {
-  if(Commit)return StepKnownMoveArrival(ID,Dt,Now);
+  if(Commit || Episode->bDefendReach)return StepKnownMoveArrival(ID,Dt,Now);
   if(Episode->bMarch || Episode->bDefendPost)
   {
    if(Now-Episode->Arrived>5.){EndKnownMove(ID,Now,TEXT("known_move_finished"));return false;}
@@ -682,8 +775,12 @@ bool UBattleLeaderRuntime::StepKnownMoveArrival(int32 ID,float Dt,double Now)
   if(Body.Actor.IsValid())Body.Actor->GetCharacterMovement()->StopMovementImmediately();
   Body.Velocity=FVector::ZeroVector;Unit.CoverPhase=Episode.Source<3 || Episode.bStandUp?4:0;
  }
+ if(Episode.bDefendReach && Episode.CommitUntil>0. && Now>Episode.CommitUntil)
+ {ReleaseFireQueue();EndKnownMove(ID,Now,TEXT("known_move_cancel_timeout"));return false;}
  if(Now>Episode.CheckUntil)
  {ReleaseFireQueue();Episode.bReturning=true;Episode.ReturnUntil=Now+12.;if(!Episode.bArrivalSeen)SightExperiment.Cover(TEXT("known_move_arrived_unseen"));return true;}
+ if(Episode.bDefendReach && !KnownMoveTargetAllows(ID,Episode.Observation.TargetID,Episode.Observation.At(Now)))
+ {ReleaseFireQueue();EndKnownMove(ID,Now,TEXT("known_move_cancel_order"));return false;}
  const FVector ObservedPoint=Episode.Observation.At(Now),WatchDirection=(ObservedPoint-Position(ID)).GetSafeNormal2D();
  if(Body.Actor.IsValid())Body.Actor->SetActorRotation(WatchDirection.Rotation());
  else Manager->GetFragmentDataChecked<FBattleFollowerFragment>(Body.Entity).Forward=WatchDirection;
@@ -720,6 +817,7 @@ void UBattleLeaderRuntime::KnownMoveShot(int32 ID,int32 Target,double Now)
  if(Episode->bDefendPost)SightExperiment.Cover(TEXT("known_move_defend_post_fired"));
  if(Target!=Episode->Observation.TargetID){SightExperiment.Cover(TEXT("known_move_arrived_other_shot"));if(Episode->bMarch || Episode->bDefendPost)Episode->bFired=true;return;}
  Episode->bFired=true;SightExperiment.Cover(TEXT("known_move_arrived_fired"));
+ if(Episode->bDefendReach)SightExperiment.Cover(TEXT("known_move_defend_reach_fired"));
  if(Episode->bCommittedWalk)SightExperiment.Cover(TEXT("known_move_commit_fired"));
  if(SightExperiment.Enabled)SightExperiment.KnownMoveFirstShotSeconds+=Now-Episode->Arrived;
  if(SightExperiment.Enabled)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_SHOT unit=%d target=%d known_move_first_shot_time=%.6f"),ID,Target,Now-Episode->Arrived);

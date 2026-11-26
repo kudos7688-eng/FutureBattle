@@ -3,6 +3,7 @@
 #include "BattlePerception.h"
 #include "BattleCover.h"
 #include "BattleStance.h"
+#include "BattleRanges.h"
 #include "BattleSectors.h"
 #include "NavigationSystem.h"
 #include "Components/BoxComponent.h"
@@ -19,6 +20,8 @@
 
 int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
 {
+ // Preserve every pre-Reach fixture and assertion under its original rules.
+ TGuardValue<double> LegacyReachRules(KnownMoveTrialDefendReach,0.);
  auto* TestWorld=GetWorld();auto* TestStore=TestWorld->GetSubsystem<UBattleState>();auto* TestSense=TestWorld->GetSubsystem<UBattlePerception>();
  auto& Shooter=TestStore->Units.FindChecked(2);auto& Squad=TestStore->Squads.FindChecked(Shooter.SquadID);
  // Follow/UpdateAim use the supplied time, but Fire/ConsumeShot read the world clock.
@@ -821,6 +824,78 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
    !CoverApproaches.Contains(2) && !SoldierPaths.Contains(2) && !FirePositions.Contains(2) && !Shooter.CoverPhase &&
    Shooter.OrderRevision==PostTrialRevision && Squad.MissionRevision==PostTrialMission &&
    Shooter.Destination==PostOrderGoal && Squad.Destination==PostOrderGoal && PostTrialPlan.ArrivalGoals.FindChecked(2)==Start);
+ }
+ // New defense reach fixture: the tall wall blocks the 6 m disk; the low
+ // side walls admit a muzzle ray only at the 10 m lateral ring positions.
+ auto SetupReachScene=[&]()
+ {
+  Reset();KnownDefendResumes.Reset();
+  for(auto* ReachOldWall:Walls){ReachOldWall->SetActorEnableCollision(false);ReachOldWall->Destroy();}Walls.Reset();
+  Squad.DefenseRadius=600;Squad.Destination=Start;Shooter.Destination=Start;
+  auto& ReachPlan=Plans.FindChecked(Shooter.SquadID);ReachPlan.Path={Start-FVector(0,500,0),Start};
+  ReachPlan.Corridors.Add(2,ReachPlan.Path);ReachPlan.ArrivalGoals.Add(2,Start);Bodies.FindChecked(2).Waypoint=1;Bodies.FindChecked(2).bArrived=true;
+  Wall(Start+FVector(250,0,60),FVector(30,800,150));
+  auto* ReachNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(TestWorld);
+  for(double ReachSide:{-1000.,1000.})
+  {
+   FNavLocation ReachProjected;
+   if(ReachNav && ReachNav->ProjectPointToNavigation(Start+FVector(0,ReachSide,-90),ReachProjected,FVector(50,50,150)))
+    Wall(ReachProjected.Location+FVector(100,0,67.5),FVector(20,160,67.5));
+  }
+  TestWorld->GetSubsystem<UBattleCover>()->BuildSlots(true);
+  TestWorld->GetSubsystem<UBattleCover>()->KnownMoveGeometry(Start,BattleKnownFire::MoveRange(),true);
+ };
+ SetupReachScene();
+ const int32 ReachZeroShots=Shooter.ShotSequence,ReachZeroStarts=Count(TEXT("known_move_started"));
+ const bool ReachZeroStarted=TryStart();
+ Check(TEXT("move_defend_reach_zero"),!ReachZeroStarted && !KnownMoves.Contains(2) &&
+  Count(TEXT("known_move_started"))==ReachZeroStarts && Shooter.ShotSequence==ReachZeroShots && FVector::Dist2D(Position(2),Start)<1.);
+ {
+  TGuardValue<double> EnabledReachRules(KnownMoveTrialDefendReach,1500.);
+  SetupReachScene();
+  const bool ReachLimits=KnownMovePlaceAllowed(2,Start,Start+FVector(0,1000,0)) &&
+   !KnownMovePlaceAllowed(2,Start,Start+FVector(0,1501,0)) &&
+   !KnownMoveTargetAllows(2,251,Start+FVector(600.+1500.+BattleRanges::Engage(Shooter.Weapon)+1.,0,0));
+  auto& ReachLimitPlan=Plans.FindChecked(Shooter.SquadID);
+  ReachLimitPlan.ArrivalGoals.FindChecked(2)=Start+FVector(0,500,0);
+  const bool ReachMarchLimits=KnownMovePlaceAllowed(2,Start,Start+FVector(0,1000,0),true) &&
+   !KnownMovePlaceAllowed(2,Start,Start+FVector(0,-1000,0),true) &&
+   !KnownMovePlaceAllowed(2,Start,Start+FVector(0,1501,0),true) &&
+   KnownMoveTargetAllows(2,251,Start+FVector(BattleRanges::Engage(Shooter.Weapon)+500.,0,0)) &&
+   !WeaponOrderAllows(2,251,Start+FVector(BattleRanges::Engage(Shooter.Weapon)+500.,0,0));
+  // Endpoints are legal but their connecting chord leaves the defense disk on
+  // the backward side before crossing the forward plane. It must be rejected.
+  const FVector ReachChordFrom=Start+FVector(590,-100,0),ReachChordTo=Start+FVector(1400,100,0);
+  const bool ReachChordRejected=KnownMovePlaceAllowed(2,Start,ReachChordFrom,true) &&
+   KnownMovePlaceAllowed(2,Start,ReachChordTo,true) && !KnownMoveSegmentAllowed(2,Start,ReachChordFrom,ReachChordTo,true);
+  Squad.DefenseRadius=0;
+  const bool ReachFallback=KnownMoveReachCenter(2)==ReachLimitPlan.ArrivalGoals.FindChecked(2);
+  Squad.DefenseRadius=600;ReachLimitPlan.ArrivalGoals.FindChecked(2)=Start;
+  Check(TEXT("move_defend_reach_limits"),ReachLimits && ReachMarchLimits && ReachChordRejected && ReachFallback);
+  const int32 ReachShots=Shooter.ShotSequence,ReachFires=Count(TEXT("known_move_defend_reach_fired"));
+  const int32 ReachTargets=Count(TEXT("known_move_defend_reach_targets")),ReachPlaces=Count(TEXT("known_move_defend_reach_places"));
+  const int32 ReachReturned=Count(TEXT("known_move_defend_post_resume_arrived"));
+  const bool ReachStarted=TryStart();bool ReachAtTen=false,ReachWithin=true,ReachNoEarly=true;
+  if(const auto* ReachEpisode=KnownMoves.Find(2))ReachAtTen=FMath::Abs(FVector::Dist2D(ReachEpisode->Goal,Start)-1000.)<50.;
+  for(int32 ReachFrame=0;ReachFrame<900 && KnownMoves.Contains(2);++ReachFrame)
+  {
+   if(const auto* ReachEpisode=KnownMoves.Find(2))
+   {
+    ReachWithin &= FVector::Dist2D(ReachEpisode->Goal,Start)<=1500. && FVector::Dist2D(ReachEpisode->Peek,Start)<=1500.;
+    if(ReachEpisode->Arrived<0)ReachNoEarly &= Shooter.ShotSequence==ReachShots;
+   }
+   TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
+   ReachWithin &= FVector::Dist2D(Position(2),Start)<=1500.;
+  }
+  Check(TEXT("move_defend_reach_fire"),ReachStarted && ReachAtTen && ReachWithin && ReachNoEarly &&
+   Shooter.ShotSequence>ReachShots && Count(TEXT("known_move_defend_reach_fired"))==ReachFires+1 &&
+   Count(TEXT("known_move_defend_reach_targets"))>ReachTargets && Count(TEXT("known_move_defend_reach_places"))==ReachPlaces+1);
+  TestSense->Reset();Put(251,Start+FVector(50000,0,0));
+  for(int32 ReachReturnFrame=0;ReachReturnFrame<900;++ReachReturnFrame)
+  {TestNow+=1./30.;Follow(2,1.f/30.f,TestNow);if(Count(TEXT("known_move_defend_post_resume_arrived"))>ReachReturned)break;}
+  Check(TEXT("move_defend_reach_return"),Count(TEXT("known_move_defend_post_resume_arrived"))==ReachReturned+1 &&
+   FVector::Dist2D(Position(2),Start)<=100. && !KnownMoves.Contains(2) && !KnownDefendResumes.Contains(2) &&
+   !CoverApproaches.Contains(2) && !SoldierPaths.Contains(2) && !FirePositions.Contains(2) && !Shooter.CoverPhase);
  }
  for(auto* TestWall:Walls){TestWall->SetActorEnableCollision(false);TestWall->Destroy();}
  return Failures;

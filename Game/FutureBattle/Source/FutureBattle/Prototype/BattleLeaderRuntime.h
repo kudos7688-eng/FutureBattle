@@ -925,12 +925,17 @@ public:
  bool KnownCoverContact(int32 ID,double Now,FBattleContact& Out);
  TMap<int32,BattleKnownFire::FSearch> KnownFireSearches;
  BattleKnownFire::FBudget KnownFireBudgets[2];
+ double KnownMoveDefendReach(int32 ID) const;
+ FVector KnownMoveReachCenter(int32 ID) const;
+ bool KnownMoveTargetAllows(int32 ID,int32 TargetID,const FVector& Observed) const;
+ double KnownMoveTrialDefendReach=-1.; // Scoped fixture override; never changed in a match.
  bool KnownMoveAllowed(int32 ID,bool CountGate=false);
  bool KnownMoveMarching(int32 ID) const;
  bool KnownMoveDefendAtPost(int32 ID) const;
  bool KnownMoveDefendMarching(int32 ID,bool FollowingMarch,bool CountGate=false);
  void TrackKnownDefendResume(int32 ID,double Now);
  const TCHAR* KnownMovePlaceRejection(int32 ID,FVector Start,FVector Place,bool DefendMarchAtStart=false) const;
+ bool KnownMoveSegmentAllowed(int32 ID,FVector Start,FVector From,FVector To,bool DefendMarchAtStart=false) const;
  bool KnownMovePlaceAllowed(int32 ID,FVector Start,FVector Place,bool DefendMarchAtStart=false) const;
  bool KnownMoveReserve(int32 ID,double Now);
  void KnownMoveRelease(int32 ID);
@@ -951,7 +956,7 @@ public:
   double Started=0,Arrived=-1,Distance=0;float Stuck=0;
   double CommitUntil=0,CheckUntil=0,NextCheck=0,ReturnUntil=0;
   bool bCommittedWalk=false,bAtPeek=false,bArrivalSeen=false;TArray<FVector> ReturnPoints;int32 ReturnNext=0;
-  bool bReturning=false,bFired=false,bStandUp=false,bMarch=false,bDefendMarch=false,bDefendPost=false;
+  bool bReturning=false,bFired=false,bStandUp=false,bMarch=false,bDefendMarch=false,bDefendPost=false,bDefendReach=false;
  };
  struct FKnownDefendResume {FVector Goal=FVector::ZeroVector,ArrivalGoal=FVector::ZeroVector;int32 Mission=0,Revision=0;double Best=0,ProgressAt=0;bool bReportedStuck=false,bDefendPost=false;};
  TMap<int32,FKnownDefendResume> KnownDefendResumes;
