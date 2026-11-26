@@ -240,6 +240,7 @@ public:
  int32 BaseGroupRowCell(int32 Team,int32 Column,int32 Row,FIntPoint& Out) const;
  void UpdateBaseGroup(int32 Team);
  bool BaseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ mutable TMap<int32,FVector> BaseLegs; // home-assault group: each squad's current leg along the row (kept until reached; transient)
  // True while the squad's surprise group is moving along its row (phase 1): its tactics do not stop to hold at a seen enemy.
  bool SurpriseMoving(int32 SquadID) const;
  bool RaidSneaking(int32 SquadID) const; // Trial -BattleArtilleryRaidSneak: an artillery raid squad still farther than the sneak radius from its target.

@@ -139,16 +139,14 @@ bool UBattleMatch::BaseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector
  const bool bLow=AreaHome(Team).X<0;auto ColOf=[&](const FIntPoint& C){return bLow?C.X:Cols-1-C.X;};
  const int32 EnemyHomeCol=FMath::Clamp(ColOf(BattleSectors::Cell(AreaHome(1-Team))),0,Cols-1);
  const FVector Leader=R->Position(S->LeaderUnitID);const int32 Col=ColOf(BattleSectors::Cell(Leader));
- // The current leg stands until the leader is within a sector of it, when it is still on the group's row and ahead of the leader.
- if(S->bHasMission&&FVector::Dist2D(Leader,S->MissionDestination)>BattleSectors::Size)
- {
-  const FIntPoint M=BattleSectors::Cell(S->MissionDestination);
-  if(BattleSectors::Valid(M)&&ColOf(M)>Col&&FMath::Abs(M.Y-FrontCell(Team,0,G->SurpriseRow).Y)<=BattleSectors::Rows/2-1&&ColOf(M)<EnemyHomeCol-EnemyHomeReach+LegColumns)
-  {Center=S->MissionDestination;return true;}
- }
+ // The current leg (kept apart from the mission, which the sector layer may have turned into a stage beside the way) stands until the
+ // leader is within a sector of it, while it is still ahead of the leader (map I seed 43: legs read back from the mission drifted with
+ // the stage picks and a squad of the north group swung between two stages for a minute).
+ if(const FVector* Leg=BaseLegs.Find(SquadID);Leg&&FVector::Dist2D(Leader,*Leg)>BattleSectors::Size&&ColOf(BattleSectors::Cell(*Leg))>Col)
+ {Center=*Leg;return true;}
  FIntPoint Cell;
  if(Col>=EnemyHomeCol-EnemyHomeReach||BaseGroupRowCell(Team,FMath::Min(Col+LegColumns,EnemyHomeCol-EnemyHomeReach),G->SurpriseRow,Cell)==INDEX_NONE)
- {Center=AreaHome(1-Team)*(25./27.);return true;}
- Center=BattleSectors::Center(Cell);Center.Z=G->Rally.Z;
+ {Center=AreaHome(1-Team)*(25./27.);BaseLegs.Remove(SquadID);return true;}
+ Center=BattleSectors::Center(Cell);Center.Z=G->Rally.Z;BaseLegs.Add(SquadID,Center);
  return true;
 }
