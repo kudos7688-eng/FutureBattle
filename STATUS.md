@@ -37,6 +37,15 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-26 18時11分 Claude（マップ）：**既定の変更** — mapk を main へ（18時の回、merge 7e6e051）。小道 `-BattleSectorLanes` 既定1、マップI 版3、マップJ・K の入れる建物。マップI・J・K の既定の結果が変わる（基準は取り直し）
+
+- 依頼：ユーザー「（小道を）既定にする」「全部入れる」（11-26）。中身と計測は下の 11時35分の項目（mapk f2c305e・9b2b3e7）。
+- 変わるもの：`BattleSectorLanes.cpp`（既定1。`-BattleSectorLanes=0` で元の動き。目印のあるマップ I・K だけで効く）、`BattleMapLayoutI.inl`・`BattleMapLayoutJ.inl`、`Lvl_BattleWide_I/J/K.umap`、新設 `Setup/Initialize-MapI.ps1`。main 側にこれらのファイルの変更は無く、衝突は自動生成の文書だけ（SWITCHES・CODEMAP は作り直し）。
+- **基準**：台帳 E1（`base-bc4b1c4-{I,J,K}-*`）は、この取り込み後のマップI・J・K とは比べられない（マップそのものが違う）。マップH は不変（小道の目印が無い）。マップL は作り直していない（umap は不変）。
+- 検証：`Build-Editor.ps1` 成功、`Test-Battle.ps1` failures=0（`Setup/Battle-Smoke-20261126-180926.log`）。main での試合は行っていない（同じ内容の mapk の凍結ビルドで測った結果が 11時35分の項目）。
+- 途中の事故：取り込みの確定中（衝突の解消の間）に別の担当の STATUS コミット 2aaf950 が入り、取り込みコミットがその項目を落とした。直後に 36d5588 で戻した（2aaf950 と同じ内容であることを確認）。
+- 制限：画面での見た目は未確認。マップI で小道につなげない回が約2割ある件、建物の中が使われているかは未調査。
+
 ## 2026-11-26 18時10分 Claude（ロードマップに従う改善活動）：区間ごとの前進・後退の操作画面の作り直しを main へ（18時の回、merge 6646dbf、生成文書 1681378）
 
 - **中身（strategy 0aaecbb・48aa9af・409da4e・57ad92e、実装は Codex、レビューも Codex で4件を修正）**：試験切替 `-BattleFrontSectionOrders=1`（既定0）のときだけ、作戦画面の前線を区間ごとに5色で塗り分け、境目に印を出す。区間の札をクリックすると役割の小さなメニューが開く。作戦方針の欄（U）には区間ごとに役割のボタンが横に並ぶ。前線を引くと、線が通った区間ごとに前進・保持・後退が自動で決まり、通知に「区間1：前進、区間3：後退」と出る。Ctrl+右クリックで目標を消す。試験用に `-BattleFrontOrderScript=秒:draw:a,b,c`、画面の撮影に `-BattlePlanPanelShot`（`Setup/Test-PlanPanelShot.ps1`）。
