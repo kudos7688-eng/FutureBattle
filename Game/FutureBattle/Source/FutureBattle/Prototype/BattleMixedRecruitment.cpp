@@ -1,7 +1,7 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleArms.h"
-#include "BattleSave.h"
 #include "BattleMatch.h"
+#include "BattleTactics.h"
 #include "BattleFieldLayout.h"
 #include "BattleGameMode.h"
 #include "BattleController.h"
@@ -14,6 +14,7 @@ bool UBattleLeaderRuntime::ReplaceFollower(int32 DeadID)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Old=Store->Find(DeadID);
  const auto* S=Old?Store->FindSquad(Old->SquadID):nullptr;
+ if(BattleTactics::BaseGarrison()&&S&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(S->SquadID))return false;
  if(!bArea||!Old||Old->IsAlive()||Old->bRetired||Old->bActorRepresentation||!S||!BattleSquadType::Replenished(S->SquadType)||S->CommandStatus!=EBattleCommandStatus::Active||Store->GetUnits().Num()>=BattleRosterLimits::Area)return false;
  const auto Weapon=Old->Weapon;const auto Training=Old->Training;const int32 Team=Old->Team,SID=S->SquadID;
  const uint8 Kit=Old->Kit; // elite platoon role (BattleArms.cpp): the replacement takes it over
@@ -27,7 +28,7 @@ bool UBattleLeaderRuntime::ReplaceFollower(int32 DeadID)
   Found=!GetWorld()->OverlapBlockingTestByChannel(PositionToUse,FQuat::Identity,ECC_Pawn,FCollisionShape::MakeCapsule(40,90));
  }
  if(!Found)return false;
- FBattleSavedUnit E;E.Position=PositionToUse;E.Rotation=Forward(S->LeaderUnitID).Rotation();E.State.bActorRepresentation=false;E.State.Weapon=Weapon;
+ FBattleBodyInit E;E.Position=PositionToUse;E.Rotation=Forward(S->LeaderUnitID).Rotation();E.State.bActorRepresentation=false;E.State.Weapon=Weapon;
  FBattleLeaderBody B;if(!CreateBody(E,DisplayHost,B)){DestroyBody(B);return false;}
  const int32 ID=Store->RegisterUnit(Team,0,Weapon);Store->SetTrainingPreset(ID,Training);
  const bool Replaced=Store->ReplaceDeadFollower(DeadID,ID,PositionToUse);check(Replaced);
@@ -52,8 +53,8 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  const int32 N=BattleSquadType::Members(SquadType);
  auto Fail=[&](const TCHAR* Why){Error=Why;return false;};
  if((!bMixedFastMatch&&!bArea) || !Mode || Team<0||Team>1||static_cast<uint8>(Training)>2)return Fail(TEXT("Mixed recruitment unavailable"));
- // Bound retained corpses and persistence size as well as living population.
- // Area: 500 starting soldiers + replenishments + 10 x hires (resources incl. income; capped at 1000 records, the save limit).
+ // Bound retained corpses as well as living population.
+ // Area: 500 starting soldiers + replenishments + 10 x hires (resources incl. income; capped at 1000 records).
  if(Store->GetUnits().Num()+N>(bArea?BattleRosterLimits::Area:BattleRosterLimits::Mixed))return Fail(bArea?TEXT("Match roster capacity reached (1000 including losses)"):TEXT("Match roster capacity reached (500 including losses)"));
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!Nav)return Fail(TEXT("Navigation unavailable"));
  TArray<FVector> Positions;
@@ -80,7 +81,7 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  TArray<FBattleLeaderBody> Staged;
  for(int32 Slot=0;Slot<N;++Slot)
  {
-  FBattleSavedUnit E;E.Position=Positions[Slot];E.Rotation=FRotator(0,Side>0?180:0,0);
+  FBattleBodyInit E;E.Position=Positions[Slot];E.Rotation=FRotator(0,Side>0?180:0,0);
   E.State.bActorRepresentation=Slot==0;E.State.Weapon=SlotWeapon(Slot);
   FBattleLeaderBody B;
   if(!CreateBody(E,DisplayHost,B))
@@ -108,7 +109,7 @@ bool UBattleLeaderRuntime::SpawnPurchasedSquad(int32 Team,EBattleTraining Traini
  if (Team == 0) Store->SetSquadDelegated(SID, true);
  if(OutSquadID)*OutSquadID=SID;
  if(auto* PC=Cast<ABattleController>(GetWorld()->GetFirstPlayerController())){PC->BindLeaderDeaths();if(Team==0&&bSelect)PC->SetSelection(Actor(Members[0]));}
- // Newly purchased followers use the normal skeletal fallback until next load.
+ // Newly purchased followers use the normal skeletal fallback.
  // Existing VAT entries and animation clocks remain untouched by recruitment.
  if(HireSightRefresh())Mode->RefreshVisibility();
  return true;
@@ -127,7 +128,7 @@ bool UBattleLeaderRuntime::PromoteScout(int32 SID,int32 NewID)
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(NewID);auto* Old=Bodies.Find(NewID);
  if(!Mode||!U||!U->IsAlive()||!Old||Old->Actor.IsValid())return false;
- FBattleSavedUnit E;E.State=*U;E.State.bActorRepresentation=true;E.Position=Position(NewID);E.Rotation=Forward(NewID).Rotation();
+ FBattleBodyInit E;E.State=*U;E.State.bActorRepresentation=true;E.Position=Position(NewID);E.Rotation=Forward(NewID).Rotation();
  FBattleLeaderBody B;if(!CreateBody(E,DisplayHost,B)){DestroyBody(B);return false;}
  if(!Store->HandOverLeader(SID,NewID)){DestroyBody(B);return false;}
  if(VAT)VAT->RemoveUnit(NewID);

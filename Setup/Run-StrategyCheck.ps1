@@ -1,5 +1,5 @@
-# Strategy-layer check (2026-11-22, Docs/design-strategy-layer.md): one wave of single-side-free matches (no swap) in parallel, each
-# with the standard evaluation arguments of Run-EconomyMatrix (map, seed, cover actions + flank coordination, save round trip, 60 FPS).
+﻿# Strategy-layer check (2026-11-22, Docs/design-strategy-layer.md): one wave of single-side-free matches (no swap) in parallel, each
+# with the standard evaluation arguments of Run-EconomyMatrix (map, seed, cover actions + flank coordination, 60 FPS).
 # Cases are "Label=Map:Seed:Snapshot:extra args" strings; Snapshot is 'S' (-StrategyBuild) or 'B' (-BaseBuild). Existing outputs are kept.
 # Example:
 #  .\Run-StrategyCheck.ps1 -StrategyBuild Benchmarks/BuildSnapshots/strat-r1/manifest.json -BaseBuild <main snapshot manifest> -Tag c1 `
@@ -28,10 +28,18 @@ foreach($c in $Cases){
  if(!$builds.ContainsKey($b)){throw "No build for $b in $c"}
  $name="chk-$label-$map$seed-$Tag"
  $names+=$name
- if(Test-Path "Benchmarks/SightTrial-20261111/$name"){continue}
+ if(Test-Path "Benchmarks/SightTrial-20261111/$name"){
+  $resumeFolder="Benchmarks/SightTrial-20261111/$name"
+  $resumeManifest=$null
+  try{$resumeManifest=Get-Content -LiteralPath (Join-Path $resumeFolder 'manifest.json') -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json -ErrorAction Stop}catch{}
+  if(($resumeManifest.arguments -join ' ') -match '(?i)(?<![A-Za-z0-9_])-BattleVerifyMixedSave(?=[=\s"\x27]|$)'){
+   throw "$resumeFolder は 11-25 の削除より前の往復保存ありの結果です。新しい Tag（接頭辞）で回してください"
+  }
+  continue
+ }
  $pa=@('-NoProfile','-ExecutionPolicy','Bypass','-File','.\Test-WideSight.ps1','-Map',$map,'-OutputName',$name,'-Seed',$seed,
   '-AICoverProbe','0','-LeaderGuard','0','-SightRange','10000','-WeaponRange','5000','-Area','-Experiment',
-  '-CoverActions','1','-FlankCoordination','1','-ObserveTactics','-BehaviorConcurrency',"$Concurrency",'-FrozenBuild',$builds[$b],'-RoundTripSave')
+  '-CoverActions','1','-FlankCoordination','1','-ObserveTactics','-BehaviorConcurrency',"$Concurrency",'-FrozenBuild',$builds[$b])
  if($Fps -ne 60){$pa+=@('-Fps',"$Fps")}
  if($extra){$pa+=@($extra -split '\s+'|Where-Object{$_})}
  while(@($jobs|Where-Object{!$_.HasExited}).Count -ge $Concurrency){Start-Sleep 5}

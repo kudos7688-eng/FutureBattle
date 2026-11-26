@@ -19,6 +19,11 @@ struct FBattleContact
 	UPROPERTY() bool bShared = false;
  bool bLongRangeObservation = true; // Unknown provenance stays restricted until a fresh sensor observation; copied with reports.
  bool bLocalShareEligible = false; // Measured at acquisition, not from the sender's later position.
+ // Trial -BattleSpotTrack (BattleTactics.h): where the enemy is now, for some seconds after its observer lost sight of it; for
+ // looking, walking and cover only (MoveAt), never to fire at. Not saved, not copied to reports or the squad table.
+ bool bTracked = false;
+ FVector TrackedPosition = FVector::ZeroVector;
+ const FVector& MoveAt() const { return bTracked ? TrackedPosition : LastKnownPosition; }
 };
 
 USTRUCT()
@@ -53,16 +58,6 @@ struct FBattleSquadKnowledge
 };
 
 // Squad knowledge, stage 2 (trial -BattleSquadKnowledge=1, default 0; Docs/design-squad-knowledge.md section 9).
-// Saved form of one -BattleSectorSightHit permission (CrossSectorLook): the time left, as the other perception times are saved.
-USTRUCT()
-struct FBattleSavedCrossLook
-{
-	GENERATED_BODY()
-	UPROPERTY() int32 ObserverID = INDEX_NONE;
-	UPROPERTY() int32 TargetID = INDEX_NONE;
-	UPROPERTY() double Remaining = 0.;
-};
-
 // One enemy known to a squad. Contact holds the newest information: bVisible = a living member sees him now,
 // bShared = the newest information came from another squad's report.
 USTRUCT()
@@ -91,15 +86,6 @@ struct FBattleSquadReport
 	UPROPERTY() FBattleContact Contact;
 };
 
-// Saved form of one entry of a squad's table (-BattleSquadKnowledge=1): the time is saved as the age, as for the soldiers' contacts.
-USTRUCT()
-struct FBattleSavedSquadContact
-{
-	GENERATED_BODY()
-	UPROPERTY() int32 SquadID = INDEX_NONE;
-	UPROPERTY() FBattleContact Contact;
-};
-
 UCLASS()
 class UBattlePerception : public UWorldSubsystem
 {
@@ -120,15 +106,9 @@ public:
 	// [zone][role][seen]: zone 0 = same sector or within 20 m, 1 = neighbouring sector, 2 = farther; role 1 = rifle squad member who is not the leader.
 	int64 RayZone[3][2][2] = {};
 	int64 SectorSightSkipped = 0; // -BattleSectorSight: cross-sector candidates a rifle squad member left to his lookout
-	// Trial -BattleSectorSightHit: until the given time the observer scans for this cross-sector enemy himself (he was hit by him). Saved as time left.
+	// Trial -BattleSectorSightHit: until the given time the observer scans for this cross-sector enemy himself (he was hit by him).
 	void AllowCrossSector(int32 ObserverID, int32 TargetID, double Until) { double& Held = CrossSectorLook.FindOrAdd((uint64(uint32(ObserverID)) << 32) | uint32(TargetID)); Held = FMath::Max(Held, Until); }
 	TMap<uint64, double> CrossSectorLook;
-	// Save and load of those permissions (BattleSave.cpp). Restore replaces the whole table, so nothing of the session before a load stays.
-	void CaptureCrossSector(TArray<FBattleSavedCrossLook>& Out, double Now) const;
-	// Save and load of the squads' tables and the squad-to-squad reports on their way (-BattleSquadKnowledge=1). A load with the switch off drops them.
-	void CaptureSquadKnowledge(TArray<FBattleSavedSquadContact>& OutContacts, TArray<FBattleSquadReport>& OutReports, double Now) const;
-	void RestoreSquadKnowledge(const TArray<FBattleSavedSquadContact>& SavedContacts, const TArray<FBattleSquadReport>& SavedReports, double Now);
-	void RestoreCrossSector(const TArray<FBattleSavedCrossLook>& Saved, double Now);
 	double CrossSectorUntil(int32 ObserverID, int32 TargetID) const { return CrossSectorLook.FindRef((uint64(uint32(ObserverID)) << 32) | uint32(TargetID)); }
 	bool bSlowUnknownFar = false; // Diagnostic only: unknown targets beyond 1200cm on alternate visits.
 	void Update(const TArray<TObjectPtr<ABattleUnit>>& Units, double Now, int32 Slice = 0, int32 SliceCount = 1);

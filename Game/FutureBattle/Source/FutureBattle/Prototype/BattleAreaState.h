@@ -21,6 +21,9 @@ struct FBattleAreaState
 {
  GENERATED_BODY()
  UPROPERTY() TArray<float> BaseHP={1000,1000};
+ // Saved elapsed occupation seconds and successful all-or-none deployment; no transient clock to rebuild.
+ UPROPERTY() TArray<float> GarrisonHeld={0,0};
+ UPROPERTY() bool bGarrisonReady=false;
  UPROPERTY() TMap<int32,float> Replacements;
  UPROPERTY() TMap<int32,float> AmmoTimers;
  // Three central points per observing team. -2 means never observed.
@@ -37,7 +40,7 @@ struct FBattleAreaState
  // Match time of each team's last AI purchase (-1000 = none), for the AI purchase interval.
  UPROPERTY() TArray<float> LastAIHireAt={-1000,-1000};
  // P1 purpose purchase trial (2026-11-16): mission of each AI-bought squad, 0..N-1 = objective index (take/hold),
-  // 100 = enemy home assault, 101 = own home defence; and the match time the own home last took damage (-1000 = never).
+  // 100 = enemy home assault, 101 = own home defence, 102 = dedicated base garrison; and the match time the own home last took damage (-1000 = never).
  UPROPERTY() TMap<int32,int32> HirePurpose;
  UPROPERTY() TArray<float> HomeHitAt={-1000,-1000};
  // Purchase reservations of both teams in reservation order (absent in older saves = empty; BattleArea.cpp UpdateHireQueue).

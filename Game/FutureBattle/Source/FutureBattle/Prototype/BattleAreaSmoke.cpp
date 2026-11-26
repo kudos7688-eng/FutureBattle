@@ -2,7 +2,6 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "BattleMatch.h"
 #include "BattleComposition.h"
-#include "BattleSave.h"
 #include "UObject/Class.h"
 #include <limits>
 #include "BattleGameMode.h"
@@ -127,11 +126,6 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   const int32 BeforeScore=M->AreaScore(0);
   for(int32 I=0;I<5;++I)M->UpdateArea(1);
   Check(!Store->Find(2)->IsAlive()&&M->AreaScore(0)==BeforeScore,TEXT("incomplete soldiers do not increase score"));
-  Mode->bCombatPaused=true;FString Error;auto* Save=M->CaptureSnapshot();
-  Check(Save&&Save->Version==3&&Save->Validate(Error),TEXT("version three validates pending replenishment"));
-  if(Save){Save->AllyCredits=1;Check(!M->RestoreSnapshot(Save)&&M->Credits[0]==100,TEXT("oversubscribed replacement resources rejected"));Save->AllyCredits=100;Save->Area.Replacements.Add(1,5);Check(!M->RestoreSnapshot(Save)&&M->Credits[0]==100,TEXT("invalid leader replacement rejected without mutation"));}
-  PC->QuickSaveSlot=TEXT("FutureBattleSmokeOnly");PC->SaveMatch();M->Area.Replacements.Reset();PC->LoadMatch();
-  Check(M->Area.Replacements.FindRef(2)==5&&M->Credits[0]==100,TEXT("F8 F9 preserve pending clocks and unspent resources"));
   auto* Blocker=GetWorld()->SpawnActor<AStaticMeshActor>(Position(1)+FVector(0,0,200),FRotator::ZeroRotator);
   Blocker->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);Blocker->GetStaticMeshComponent()->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
   Blocker->GetStaticMeshComponent()->SetCanEverAffectNavigation(false);Blocker->SetActorScale3D(FVector(20,20,10));Blocker->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));
@@ -143,7 +137,6 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   Blocker->Destroy();M->UpdateArea(1);
   Check(M->Credits[0]==98&&Store->Find(2)->bRetired&&Store->Find(3)->bRetired&&Store->Find(Total+1)&&Store->Find(Total+2),TEXT("completion spends one resource per fresh soldier identity"));
   Check(Bodies.Num()==Total&&Store->GetUnits().Num()==Total+2&&M->AreaScore(0)==BeforeScore,TEXT("replenishment preserves body capacity and resource score"));
-  Save=M->CaptureSnapshot();Check(Save&&Save->Validate(Error)&&M->RestoreSnapshot(Save),TEXT("retired contacts and new roster restore atomically"));
   M->Objectives[0].Owner=1;M->Area.KnownOwners[0]=-2;M->UpdateArea(1);
   Check(M->ObservedOwner(0,0)==-2,TEXT("unobserved objective ownership remains unknown"));
   const int32 Assignment=M->ChooseObjective(0,0);M->Objectives[0].Owner=0;
@@ -180,6 +173,9 @@ void UBattleLeaderRuntime::RunAreaSmoke()
   Check(M->CanFireAtBase(Lead(2),Target),TEXT("own line of sight and weapon range permit base engagement"));
   auto* Shooter=const_cast<FBattleUnitState*>(Store->Find(Lead(2)));Shooter->NextShotTime=0;
   Check(Fire(Lead(2),Position(Lead(2))+FVector(0,0,60),(M->BaseActors[1]->GetActorLocation()-(Position(Lead(2))+FVector(0,0,60))).GetSafeNormal(),true)&&M->Area.BaseHP[1]<1000,TEXT("shared player and AI shot path damages physical enemy base"));
+  // -BattleBaseRifleDamage: the same shot does the scaled damage (1x = ShotDamage or more by squad type and range).
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_SMOKE_BASE_SHOT damage=%.2f scale=%.2f"),1000.f-M->Area.BaseHP[1],BattleTactics::BaseRifleDamage());
+  Check(BattleTactics::BaseRifleDamage()>=1.f||FMath::IsNearlyEqual(1000.f-M->Area.BaseHP[1],GetDefault<UBattleTuning>()->ShotDamage*BattleTactics::BaseRifleDamage(),.01f),TEXT("small-arms damage to the enemy base follows -BattleBaseRifleDamage"));
   Check(!M->DamageBase(M->BaseActors[0],0,100),TEXT("friendly base cannot be damaged"));
   // New-squad hiring (squad 1 lost its leader above, so team 0 has one free slot).
   {
@@ -211,26 +207,6 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     PC->EnterTactical();
     Check(Leader->GetCharacterMovement()->MaxWalkSpeed == WalkSpeed,TEXT("walk speed restored for AI movement"));
    }
-   Mode->bCombatPaused=true;Save=M->CaptureSnapshot();
-   Check(Save&&Save->Validate(Error)&&Save->Squads.Num()==51,TEXT("save with a hired squad validates"));
-   if(Save)
-   {
-    Save->Area.HireSpent[0]=0;Check(!M->RestoreSnapshot(Save)&&M->Credits[0]==Before-HireCost,TEXT("hire spending outside conservation rejected"));Save->Area.HireSpent[0]=HireCost;
-    const FAreaIntent CompositionSaveIntent;
-    const auto CompositionBeforeRestore=BattleComposition::Capture(*M,*Store,0,CompositionSaveIntent,false,false);
-    Check(M->RestoreSnapshot(Save)&&Store->GetSquads().Num()==SquadCount+1&&M->Area.HireSpent[0]==HireCost&&M->Credits[0]==Before-HireCost&&Bodies.Contains(NewLeader)&&Store->Find(NewLeader)->IsAlive(),TEXT("hired squad survives restore"));
-    const auto CompositionAfterRestore=BattleComposition::Capture(*M,*Store,0,CompositionSaveIntent,false,false);
-    if(M->CompositionTeams!=0)
-    {
-     bool CompositionRestoredState=Save->CombatStateVersion==4&&Save->CompositionTeams==M->CompositionTeams&&Save->CompositionState.Num()==M->CompositionState.Num();
-     if(CompositionRestoredState)for(int32 CompositionTeamIndex=0;CompositionTeamIndex<M->CompositionState.Num();++CompositionTeamIndex)
-      CompositionRestoredState&=FCompositionTeamState::StaticStruct()->CompareScriptStruct(&Save->CompositionState[CompositionTeamIndex],&M->CompositionState[CompositionTeamIndex],0);
-     Check(CompositionRestoredState,TEXT("planner actual snapshot restore preserves full authoritative team state"));
-    }
-    Check(CompositionBeforeRestore.Free==CompositionAfterRestore.Free&&CompositionBeforeRestore.Pending==CompositionAfterRestore.Pending&&CompositionBeforeRestore.Active==CompositionAfterRestore.Active&&CompositionBeforeRestore.LegacyBought==CompositionAfterRestore.LegacyBought&&CompositionBeforeRestore.Elapsed==CompositionAfterRestore.Elapsed,
-     TEXT("composition stage one rebuilds budget roster and time from existing save"));
-   }
-   Mode->bCombatPaused=false;
    // A purchase that leaves fewer resources than queued replenishments cancels the least advanced ones.
    Store->ApplyDamage(Lead(3),1,10000);M->UpdateArea(1);
    M->Credits[0]=HireCost+1;M->Area.Replacements.Add(Lead(2)+1,5);M->Area.Replacements.Add(Lead(2)+2,1);
@@ -238,11 +214,8 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    // The fixture forced 16 resources; restore the conserving amount (100 - replenished - hire spending) and re-validate.
    int32 Retired0=0;for(const auto& U:Store->GetUnits())Retired0+=U.Value.bRetired&&U.Value.Team==0;
    M->Credits[0]=100-Retired0-M->Area.HireSpent[0];
-   Mode->bCombatPaused=true;Save=M->CaptureSnapshot();Check(Save&&Save->Validate(Error)&&Save->Squads.Num()==52,TEXT("two hires and a reservation validate"));Mode->bCombatPaused=false;
-   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HIRE_SMOKE squads=%d records=%d credits=%d validation=%s"),Store->GetSquads().Num(),Store->GetUnits().Num(),M->Credits[0],*Error);
    M->Area.Replacements.Reset();
    // Heavy infantry (squad type 1): a freed slot (the leader of squad 5 lost), 15 resources, 6 soldiers with support guns at 3x health;
-   // the type and health survive save and restore.
    {
     Store->ApplyDamage(Lead(5),1,10000);M->UpdateArea(1);
     if(M->Credits[0]<BattleSquadType::AreaCost(BattleSquadType::Heavy)){const int32 Add=BattleSquadType::AreaCost(BattleSquadType::Heavy)-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
@@ -253,14 +226,9 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     if(Heavy)for(int32 ID:HS->Members){const auto* U=Store->Find(ID);Heavy&=U&&U->Weapon==EBattleWeapon::SupportGun&&FMath::IsNearlyEqual(U->HP,GetDefault<UBattleTuning>()->Health*3.f);}
     Heavy&=FMath::IsNearlyEqual(BattleSquadType::DamageScale(BattleSquadType::Heavy),1.5f)&&FMath::IsNearlyEqual(BattleSquadType::DamageScale(BattleSquadType::Rifle),1.f);
     Check(Heavy,TEXT("heavy infantry: 6 soldiers, support guns, 3x health, 15 resources, 1.5x damage"));
-    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
-    const bool Restored=Valid&&M->RestoreSnapshot(Save);const auto* After=Store->FindSquad(HSID);
-    Check(Restored&&After&&After->SquadType==BattleSquadType::Heavy&&FMath::IsNearlyEqual(Store->Find(After->Members[1])->HP,GetDefault<UBattleTuning>()->Health*3.f),TEXT("heavy infantry survives save and restore"));
-    Mode->bCombatPaused=false;
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_HEAVY_SMOKE squad=%d members=%d validation=%s"),HSID,HS?HS->Members.Num():0,*Error);
    }
    // Scout pairs (squad type 2): 2 rifles for 8 resources, at most 3 per team, long sight while still, the survivor takes
-   // command when the leader falls, never replenished, and the handed-over squad survives save and restore.
+   // command when the leader falls, never replenished, the survivor keeps command.
    {
     for(int32 Leader:{Lead(6),Lead(7),Lead(8),Lead(9)})Store->ApplyDamage(Leader,1,10000);
     M->UpdateArea(1);M->Area.Replacements.Reset();
@@ -323,13 +291,8 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     const bool Handed=First->CommandStatus==EBattleCommandStatus::Active&&First->LeaderUnitID==Heir&&Actor(Heir)&&Store->CanSelectLeader(Heir,0);
     M->UpdateArea(1);M->UpdateArea(1);
     Check(Handed&&!M->Area.Replacements.Contains(OldLeader),TEXT("scout survivor takes command and the pair is not replenished"));
-    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
-    const bool Restored=Valid&&M->RestoreSnapshot(Save);const auto* After=Store->FindSquad(Scouts[0]);
-    Check(Restored&&After&&After->SquadType==BattleSquadType::Scout&&After->LeaderUnitID==Heir&&After->CommandStatus==EBattleCommandStatus::Active&&Actor(Heir),TEXT("handed-over scout pair survives save and restore"));
-    Mode->bCombatPaused=false;
     Store->ApplyDamage(Heir,1,10000);
     Check(Store->FindSquad(Scouts[0])->CommandStatus==EBattleCommandStatus::Disabled,TEXT("scout pair stops when both are lost"));
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_SCOUT_SMOKE squads=%d,%d,%d heir=%d validation=%s"),Scouts[0],Scouts[1],Scouts[2],Heir,*Error);
    }
    // Anti-tank team (squad type 3): 4 soldiers, two anti-tank weapons (1 loaded + 3 reserve, never refilled beyond that), 12
    // resources; its explosion hurts an enemy at the impact by ATSplashDamage and never an ally. Lookouts exist on this map.
@@ -488,7 +451,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
       auto& U=Store->Units.FindChecked(Observer);const auto OldUnit=U;auto& S=Store->Squads.FindChecked(U.SquadID);const auto OldSquad=S;
       U.Weapon=EBattleWeapon::AntiTank;U.Ammo=1;S.Order=EBattleOrder::AttackMove;S.TacticalPlan.Action=EBattleSquadTactic::Mission;
       FBattleContact C;C.TargetID=TankID;C.SourceUnitID=Observer;C.bVisible=true;C.Confidence=1.f;C.LastKnownPosition=Position(Observer)+FVector(500,0,0);
-      // Restore deliberately clears bVisible. Install a live observation for this helper-level test,
+      // Install a live observation for this helper-level test,
       // independent of the Think switch, and preserve the exact perception state afterwards.
       C.LastSeenTime=GetWorld()->GetTimeSeconds();
       Sense->Observers.Reset();Sense->Observers.FindOrAdd(Observer).Contacts.Add(TankID,C);
@@ -613,14 +576,9 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      }
      UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_ARMOUR_AI_SMOKE tank_target=%d post=%s turned=%.2f shock=%d why=%s at_target=%d mix6=at%d/tank%d/ac%d/mortar%d/spg%d"),TankPick,*WatchPost.ToCompactString(),Turned,Shock,*Why,ATTarget,Mix6.ATKeep,Mix6.TankKeep,Mix6.ACKeep,Mix6.MortarKeep,Mix6.SPGKeep);
     }
-    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
-    const bool Restored=Valid&&M->RestoreSnapshot(Save);ABattleUnit* After=Actor(TankID);
-    Check(Restored&&After&&IsVehicle(TankID)&&After->GetCapsuleComponent()->GetScaledCapsuleRadius()>=150.f&&Turrets.Contains(TankID),TEXT("tank survives save and restore"));
-    Mode->bCombatPaused=false;
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_TANK_SMOKE squad=%d tank=%d nav=%s validation=%s"),TSID,TankID,VN?*VN->GetName():TEXT("none"),*Error);
    }
    // Armoured car (squad type 5, stage 1 2026-11-18): one vehicle for 20 resources, at most 3 per team, health 150, small arms do a tenth,
-   // two anti-tank hits destroy it, 10 m/s in the open, a 120 degree view, the vehicle navigation data, no main gun; survives save and restore.
+   // two anti-tank hits destroy it, 10 m/s in the open, a 120 degree view, the vehicle navigation data, no main gun.
    {
     // Free squad slots: stop team 0 rifle squads (leader killed) until three cars fit under the active squad limit.
     for(int32 Pass=0;Pass<6&&M->ActiveSquads(0)>BattleTactics::AreaHire().MaxActive-3;++Pass)
@@ -659,18 +617,12 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     }
     Check(TwoHits,TEXT("armoured car: two anti-tank hits destroy it"));
     M->UpdateArea(1);M->Area.Replacements.Reset();
-    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
-    const bool Restored=Valid&&M->RestoreSnapshot(Save);ABattleUnit* After=Actor(CarID);
-    Check(Restored&&After&&IsVehicle(CarID)&&FMath::IsNearlyEqual(After->GetCapsuleComponent()->GetScaledCapsuleRadius(),TT->ACRadius,1.f)&&Turrets.Contains(CarID)&&
-     FMath::IsNearlyEqual(Store->Find(CarID)->Perception.FieldOfView,120.f),TEXT("armoured car survives save and restore"));
-    Mode->bCombatPaused=false;
     // Stage 2: the car's objective is a valid point outside the city of map E and is kept on the next pick (ACChoiceHold).
     {
      M->CarChoices.Remove(CSID);
      const int32 First=M->AreaCarTarget(0,CSID),Again=M->AreaCarTarget(0,CSID);
      const bool bCity=First!=INDEX_NONE&&BattleFieldLayout::IsUrban(GetWorld())&&FMath::Abs(M->Objectives[First].Position.X)<25000&&FMath::Abs(M->Objectives[First].Position.Y)<15000;
      Check(M->Objectives.IsValidIndex(First)&&First==Again&&!bCity,TEXT("armoured car objective: a point outside the city, kept on the next pick"));    }
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_AC_SMOKE squad=%d car=%d third=%d nav=%s validation=%s"),CSID,CarID,Third,CN?*CN->GetName():TEXT("none"),*Error);
    }
    // Indirect fire (stage 1 2026-11-18). Two known soldiers 2 m apart: a target worth a shell (ArtilleryMinCluster 2); keys below zero
    // stand for report positions. A direction from a unit whose blast-plus-spread circle at Distance holds no own unit (zero when none).
@@ -692,14 +644,14 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    };
    // Mortar team (squad type 6): 3 soldiers (slot 1 the mortar: 1 loaded, 11 in reserve), 14 resources, at most 3 per team; targets only
    // between 50 m and 300 m and never where the blast and spread may reach an own unit; no shot before 4 s of set-up or while moving;
-   // the shell lands after its flight time; the explosion hurts enemy soldiers and never own units; survives save and restore.
+   // the shell lands after its flight time; the explosion hurts enemy soldiers and never own units.
    {
     FreeSlots(4);
     const auto* TT=GetDefault<UBattleTuning>();
     const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::Mortar);
     if(M->Credits[0]<Cost*5){const int32 Add=Cost*5-M->Credits[0];M->Area.Income[0]+=Add;M->Credits[0]+=Add;}
     const int32 C0=M->Credits[0];const bool Hired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Mortar);
-    const auto* MS=Hired?Store->FindSquad(M->LastHiredSquadID):nullptr;const int32 MSID=MS?MS->SquadID:INDEX_NONE;
+    const auto* MS=Hired?Store->FindSquad(M->LastHiredSquadID):nullptr;
     const int32 Gunner=MS&&MS->Members.Num()==3?MS->Members[1]:INDEX_NONE;const int32 MLeader=MS?MS->LeaderUnitID:INDEX_NONE;
     bool Body=Hired&&Cost==14&&M->Credits[0]==C0-Cost&&MS&&MS->SquadType==BattleSquadType::Mortar&&MS->DisplayName.Contains(TEXT("迫撃砲班"))&&Gunner!=INDEX_NONE;
     if(Body)for(int32 I=0;I<3;++I){const auto* U=Store->Find(MS->Members[I]);Body&=U&&U->Weapon==(I==1?EBattleWeapon::Mortar:EBattleWeapon::Carbine);}
@@ -773,110 +725,10 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      Landed=Launched&&FMath::IsNearlyEqual(Flight,float(Distance/TT->MortarShellSpeed),.01f)&&Waiting&&ArtilleryShells.IsEmpty()&&ArtilleryImpacts==I0+1;
     }
     Check(Landed,TEXT("mortar shell lands after its flight time (distance / 100 m/s)"));
-    // Keep an actual in-flight shell, setup progress, target and sequence through serialization.
-    ArtilleryShells.Reset();
-    FArtilleryShell Pending;Pending.ShooterID=Gunner;Pending.Team=0;Pending.ShooterType=BattleSquadType::Mortar;Pending.At=Position(Gunner);Pending.Remaining=2.5f;ArtilleryShells.Add(Pending);
-    auto& SavedGun=Artillery.FindOrAdd(Gunner);SavedGun.StillSince=Now;SavedGun.SetupCredit=1.25;SavedGun.NextPick=Now+.5;SavedGun.Shots=17;
-    const int32 SavedGroup=M->FormGroup(0,{MSID},true);
-    Check(SavedGroup!=INDEX_NONE,TEXT("group persistence fixture formed"));
-    auto& Choice=M->CarChoices.FindOrAdd(MSID);Choice.Target=0;Choice.At=FMath::Max(0.,double(M->Elapsed)-2.);
-    if(auto* G=M->Groups.Find(SavedGroup))
-    {
-     G->Phase=1;G->PhaseAt=M->Elapsed+15.f;G->ArrivedAt=FMath::Max(0.f,M->Elapsed-2.f);G->AvoidUntil=M->Elapsed+60.f;
-     G->Objective=0;G->Avoid=1;G->StallPoint=1;G->Stalls=2;G->StartLiving=M->GroupLiving(*G);G->StartStrength=23.5;G->Extensions=3;
-     G->bOpened=true;G->bArrived=true;G->Roles.Add(MSID,3);
-     // A departed member's role is legitimate history, not current membership.
-     for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Key!=MSID){G->Roles.Add(P.Key,255);break;}
-    }
-    const auto GroupsBefore=M->Groups;const auto MembershipBefore=M->SquadGroup;const auto ChoicesBefore=M->CarChoices;
-    const int32 NextGroupBefore=M->NextGroupID;const float MatchClockBefore=M->Elapsed;
-    auto SameStrategy=[&]()
-    {
-     if(M->Groups.Num()!=GroupsBefore.Num()||!M->SquadGroup.OrderIndependentCompareEqual(MembershipBefore)||
-        M->NextGroupID!=NextGroupBefore||M->CarChoices.Num()!=ChoicesBefore.Num())return false;
-     for(const auto& P:GroupsBefore)
-     {
-      const auto* G=M->Groups.Find(P.Key);const auto& B=P.Value;
-      if(!G||G->ID!=B.ID||G->Team!=B.Team||G->Squads!=B.Squads||G->Objective!=B.Objective||G->Phase!=B.Phase||G->PhaseAt!=B.PhaseAt||
-         G->Rally!=B.Rally||G->bPlayer!=B.bPlayer||!G->Roles.OrderIndependentCompareEqual(B.Roles)||G->Avoid!=B.Avoid||G->AvoidUntil!=B.AvoidUntil||
-         G->StartStrength!=B.StartStrength||G->StartLiving!=B.StartLiving||G->StallPoint!=B.StallPoint||G->Stalls!=B.Stalls||G->bOpened!=B.bOpened||G->bArrived!=B.bArrived||
-         G->ArrivedAt!=B.ArrivedAt||G->Extensions!=B.Extensions)return false;
-     }
-     for(const auto& P:ChoicesBefore){const auto* C=M->CarChoices.Find(P.Key);if(!C||C->Target!=P.Value.Target||C->At!=P.Value.At)return false;}
-     return true;
-    };
-    Mode->bCombatPaused=true;
-    Check(M->SaveMatch(TEXT("FutureBattleSmokeOnly")),TEXT("artillery extension written to disk"));
-    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
-    Artillery.Reset();ArtilleryShells.Reset();
-    M->Groups.Reset();M->SquadGroup.Reset();M->NextGroupID=NextGroupBefore+100;M->CarChoices.Reset();M->Elapsed+=37.f;
-    const bool Restored=Valid&&M->LoadMatch(TEXT("FutureBattleSmokeOnly"));const auto* GU=Gunner!=INDEX_NONE?Store->Find(Gunner):nullptr;const auto* RS=Store->FindSquad(MSID);
-    Check(Restored&&GU&&GU->Weapon==EBattleWeapon::Mortar&&RS&&RS->SquadType==BattleSquadType::Mortar&&Artillery.Contains(Gunner)&&Artillery.FindChecked(Gunner).Shots==17&&Artillery.FindChecked(Gunner).SetupCredit>=1.25&&
-     ArtilleryShells.Num()==1&&ArtilleryShells[0].Remaining==2.5f&&ArtilleryShells[0].ShooterID==Gunner,TEXT("mortar setup sequence and in-flight shell survive serialized restore"));
-    Check(Restored&&M->Elapsed==MatchClockBefore&&SameStrategy(),TEXT("serialized restore preserves all group history membership and armour choices"));
-    if(Valid&&Save->SavedGroups.Contains(SavedGroup))
-    {
-     auto RejectStrategy=[&](TFunctionRef<void(UBattleSave&)> Corrupt,const TCHAR* Label)
-     {
-      auto* Bad=DuplicateObject<UBattleSave>(Save,this);Corrupt(*Bad);auto* StrategyActorBefore=Actor(MLeader);
-      Check(!M->RestoreSnapshot(Bad)&&Actor(MLeader)==StrategyActorBefore&&SameStrategy(),Label);
-     };
-     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].StartStrength=-.5;},TEXT("invalid weighted strength baseline rejected"));
-     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].ID+=1;},TEXT("group key identity mismatch rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].Squads.Add(MSID);},TEXT("duplicate group member rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedSquadGroup.Remove(MSID);},TEXT("missing reciprocal membership rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedSquadGroup[MSID]=S.SavedNextGroupID;},TEXT("foreign group reference rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedNextGroupID=SavedGroup;},TEXT("reused next group identity rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].Team=1;},TEXT("enemy group membership rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].Roles[MSID]=5;},TEXT("invalid role rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].Phase=4;},TEXT("invalid group phase rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].Avoid=S.Objectives.Num();},TEXT("invalid avoided objective rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].PhaseAge=std::numeric_limits<double>::quiet_NaN();},TEXT("non-finite group clock rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].ArrivalAge=-1.;},TEXT("future arrival rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].AvoidRemaining=3601.;},TEXT("excessive avoid deadline rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedGroups[SavedGroup].Stalls=-1;},TEXT("negative failure history rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedCarChoices[MSID].Target=S.Objectives.Num();},TEXT("invalid armour objective rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedCarChoices[MSID].Age=std::numeric_limits<double>::infinity();},TEXT("non-finite armour clock rejected atomically"));
-     RejectStrategy([&](UBattleSave& S){S.SavedCarChoices[MSID].bHasTime=false;},TEXT("invalid unset armour clock rejected atomically"));
-     RejectStrategy([](UBattleSave& S){S.CombatStateVersion=1;},TEXT("strategic payload without its extension version rejected"));
-     M->PlayerRoutes.FindOrAdd(MSID).Lane=2;
-     RestoreStageFailureAfter=2;
-     RejectStrategy([](UBattleSave&){},TEXT("body staging failure retains existing groups and choices"));
-     Check(M->LastMessage==TEXT("Could not stage representations; restore aborted"),TEXT("restore failure reaches body staging"));
-     const auto* RetainedRouteChoice=M->PlayerRoutes.Find(MSID);
-     Check(RetainedRouteChoice&&RetainedRouteChoice->Lane==2,TEXT("failed restore retains unsaved route choice"));
-     RestoreStageFailureAfter=INDEX_NONE;
-     // Changing the restored match epoch must shift clocks, while retaining ages and remaining deadlines.
-     auto* Shifted=DuplicateObject<UBattleSave>(Save,this);Shifted->Elapsed+=10.f;
-     const bool Rebased=M->RestoreSnapshot(Shifted);const auto* G=M->Groups.Find(SavedGroup);const auto* C=M->CarChoices.Find(MSID);
-     Check(Rebased&&M->PlayerRoutes.IsEmpty(),TEXT("successful restore discards unsaved route choices"));
-     Check(Rebased&&G&&C&&G->PhaseAt==GroupsBefore[SavedGroup].PhaseAt+10.f&&G->ArrivedAt==GroupsBefore[SavedGroup].ArrivedAt+10.f&&
-      G->AvoidUntil==GroupsBefore[SavedGroup].AvoidUntil+10.f&&C->At==ChoicesBefore[MSID].At+10.,TEXT("group and armour clocks rebase on restored match time"));
-     auto* Expired=DuplicateObject<UBattleSave>(Save,this);
-     Expired->SavedGroups[SavedGroup].AvoidRemaining=-double(Expired->Elapsed); // original deadline was zero
-     Expired->SavedCarChoices[MSID]=FBattleSavedCarChoice(); // original At was the -1 sentinel
-     const bool ExpiredRestored=M->RestoreSnapshot(Expired);const auto* EG=M->Groups.Find(SavedGroup);const auto* EC=M->CarChoices.Find(MSID);
-     Check(ExpiredRestored&&EG&&EC&&EG->AvoidUntil==0.f&&EC->At==-1.&&EC->Target==INDEX_NONE,TEXT("expired deadline and unset armour choice survive without clamping"));
-     for(int32 LegacyVersion:{0,1})
-     {
-      auto* Legacy=DuplicateObject<UBattleSave>(Save,this);Legacy->CombatStateVersion=LegacyVersion;Legacy->ArtilleryTrialFlags=0;for(auto& E:Legacy->Units)E.State.SPGAmmo=0;
-      Legacy->CompositionTeams=0;Legacy->CompositionPolicy=0;Legacy->CompositionRules.Reset();Legacy->CompositionState.Reset();
-      Legacy->SavedGroups.Reset();Legacy->SavedSquadGroup.Reset();Legacy->SavedNextGroupID=1;Legacy->SavedCarChoices.Reset();
-      if(LegacyVersion==0){Legacy->SavedArtillery.Reset();Legacy->SavedArtilleryShells.Reset();}
-      Check(M->RestoreSnapshot(Legacy)&&M->Groups.IsEmpty()&&M->SquadGroup.IsEmpty()&&M->NextGroupID==1&&M->CarChoices.IsEmpty(),
-       TEXT("legacy snapshot without group extension clears unsaved strategy"));
-     }
-     Check(M->RestoreSnapshot(Save)&&SameStrategy(),TEXT("revision two restores strategy after legacy loads"));
-    }
-    const int64 ImpactsBefore=ArtilleryImpacts;StepArtilleryShells(2.f);
-    Check(ArtilleryShells.Num()==1&&ArtilleryImpacts==ImpactsBefore,TEXT("restored shell waits remaining flight time"));
-    StepArtilleryShells(.6f);Check(ArtilleryShells.IsEmpty()&&ArtilleryImpacts==ImpactsBefore+1,TEXT("restored shell impacts exactly once"));
-    Mode->bCombatPaused=false;
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_MORTAR_SMOKE squad=%d gunner=%d dir=%s lost=%.1f flight=%.2f validation=%s"),MSID,Gunner,*Dir.ToCompactString(),Lost,Flight,*Error);
    }
    // Self-propelled gun (squad type 7): one vehicle for 35 resources, at most 2 per team, health 200, small arms do a tenth, 7 m/s in the
    // open, a 120 degree view, a machine gun and no direct main gun; targets between 100 m and 1000 m; 8 s of set-up, one round per 10 s;
-   // its shell hurts a vehicle only on a direct hit, a mortar shell never; survives save and restore.
+   // its shell hurts a vehicle only on a direct hit, a mortar shell never.
    {
     FreeSlots(3);
     const auto* TT=GetDefault<UBattleTuning>();
@@ -949,7 +801,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
       TEXT("artillery move-order gate blocks firing only when enabled"));
      A=SavedGun;ArtilleryShells.SetNum(ShellCount);Squad.Order=OldOrder;
     }
-    // Trial ammo: independent machine gun, last round, empty firing, capped supply and empty save round-trip.
+    // Trial ammo: independent machine gun, last round, empty firing, capped supply.
     const int32 SavedMainAmmo=Store->Find(GunID)->SPGAmmo;
     if(BattleTactics::SPGAmmoEnabled())
     {
@@ -991,51 +843,12 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      Check(!FireArtillery(GunID,M->AreaHome(1),Now),TEXT("retained base aim revalidates fire observation"));
      Artillery[GunID]=SavedBase;V=OldView;
     }
-    // Save and restore: body, setup, load, target and shot sequence all survive.
-    auto& BeforeSave=Artillery.FindOrAdd(GunID);BeforeSave.StillSince=Now;BeforeSave.SetupCredit=3.;BeforeSave.ReadyAt=Now+4.;BeforeSave.NextPick=Now+.5;
-    const int32 SavedShots=BeforeSave.Shots;const FVector SavedAim=BeforeSave.Aim;
-    FArtilleryShell Pending;Pending.ShooterID=GunID;Pending.Team=0;Pending.ShooterType=BattleSquadType::SPGun;Pending.bSPG=true;Pending.At=SavedAim;Pending.Remaining=4.5f;ArtilleryShells.Add(Pending);
-    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
-    TArray<uint8> Serialized;
-    const bool Encoded=Valid&&UGameplayStatics::SaveGameToMemory(Save,Serialized);
-    auto* Decoded=Encoded?Cast<UBattleSave>(BattleSaveValidation::Decode(Serialized)):nullptr;
-    Check(Decoded&&Decoded->Validate(Error)&&Decoded->CombatStateVersion>=3&&Decoded->ArtilleryTrialFlags==BattleTactics::ArtilleryTrialFlags(),
-     TEXT("artillery revision 3 serializes its trial configuration"));
-    if(Decoded)Save=Decoded;
-    const bool Restored=Valid&&M->RestoreSnapshot(Save);ABattleUnit* After=Actor(GunID);
-    Check(Restored&&After&&IsSPG(GunID)&&IsArtillery(GunID)&&FMath::IsNearlyEqual(After->GetCapsuleComponent()->GetScaledCapsuleRadius(),TT->SPGRadius,1.f)&&Turrets.Contains(GunID)&&Artillery.Contains(GunID)&&
-     Artillery.FindChecked(GunID).Shots==SavedShots&&Artillery.FindChecked(GunID).Aim==SavedAim&&Artillery.FindChecked(GunID).SetupCredit>=3.&&
-     FMath::IsNearlyEqual(Artillery.FindChecked(GunID).ReadyAt-GetWorld()->GetTimeSeconds(),4.,.01),
-     TEXT("self-propelled gun survives save and restore"));
-    Check(Restored&&ArtilleryShells.Num()==1&&ArtilleryShells[0].bSPG&&ArtilleryShells[0].ShooterID==GunID&&
-     ArtilleryShells[0].Remaining==4.5f&&ArtilleryShells[0].At==SavedAim,TEXT("self-propelled shell survives restore"));
-    Check(Restored&&Store->Find(GunID)->SPGAmmo==(BattleTactics::SPGAmmoEnabled()?0:SavedMainAmmo),TEXT("SPG empty ammunition survives restore without refill"));
-    if(Restored)
-    {
-     auto* WrongRules=DuplicateObject<UBattleSave>(Save,this);WrongRules->ArtilleryTrialFlags^=4;
-     const int32 AmmoBefore=Store->Find(GunID)->SPGAmmo;
-     Check(!M->RestoreSnapshot(WrongRules)&&Store->Find(GunID)->SPGAmmo==AmmoBefore,TEXT("different blast trial configuration rejected without mutation"));
-     auto* Bad=DuplicateObject<UBattleSave>(Save,this);for(auto& E:Bad->Units)if(E.State.UnitID==GunID)E.State.SPGAmmo=-1;
-     FString BadError;Check(!Bad->Validate(BadError),TEXT("negative SPG ammunition rejected"));
-     auto* Legacy=DuplicateObject<UBattleSave>(Save,this);Legacy->CombatStateVersion=2;Legacy->ArtilleryTrialFlags=0;
-     Legacy->CompositionTeams=0;Legacy->CompositionPolicy=0;Legacy->CompositionRules.Reset();Legacy->CompositionState.Reset();
-     for(auto& E:Legacy->Units)E.State.SPGAmmo=0;
-     Check(Legacy->Validate(BadError)&&M->RestoreSnapshot(Legacy)&&Store->Find(GunID)->SPGAmmo==(BattleTactics::SPGAmmoEnabled()?FMath::Clamp(TT->SPGInitialAmmo,0,FMath::Max(0,TT->SPGAmmoCapacity)):0),
-      TEXT("revision 2 save migrates SPG ammunition only when trial enabled"));
-     if(Save->CombatStateVersion>=4)
-     {
-      Check(M->CompositionTeams==0&&M->CompositionState.IsEmpty(),TEXT("legacy load explicitly disables planner without implicit conversion"));
-      Check(M->RestoreSnapshot(Save)&&M->CompositionTeams==Save->CompositionTeams,TEXT("revision four restores planner after legacy load"));
-     }
-     Store->Units.FindChecked(GunID).SPGAmmo=SavedMainAmmo;
-    }
+    Store->Units.FindChecked(GunID).SPGAmmo=SavedMainAmmo;
     ArtilleryShells.Reset();
-    Mode->bCombatPaused=false;
-    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_SPG_SMOKE squad=%d gun=%d enemy=%d dir=%s after_hit=%.0f nav=%s validation=%s"),GSID,GunID,EnemyGun,*Dir.ToCompactString(),AfterHit,GN?*GN->GetName():TEXT("none"),*Error);
    }
   }
   // Armoured exoskeleton soldier (squad type 8, 2026-11-18): one soldier for 30 resources, a strong automatic rifle and a launcher,
-  // armour against small arms, 10 m/s, a shield that takes damage first and refills after a pause, 5 soldiers in the score, save and restore.
+  // armour against small arms, 10 m/s, a shield that takes damage first and refills after a pause, 5 soldiers in the score.
   {
    const auto* TT=GetDefault<UBattleTuning>();const int32 Cost=BattleSquadType::AreaCost(BattleSquadType::Exo);const double Now=GetWorld()->GetTimeSeconds();
    for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Value.CommandStatus==EBattleCommandStatus::Active&&P.Value.SquadType==BattleSquadType::Rifle){Store->ApplyDamage(P.Value.LeaderUnitID,1,10000);break;}
@@ -1044,7 +857,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    const int32 C0=M->Credits[0],Score0=M->AreaScore(0);const bool Hired=M->HireAreaSquad(0,EBattleTraining::Regular,false,BattleSquadType::Exo);
    if(!Hired)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_EXO_SMOKE hire refused: %s"),*M->LastMessage);
    const int32 XSID=Hired?M->LastHiredSquadID:INDEX_NONE;const auto* XS=Store->FindSquad(XSID);
-   bool Body=false,Armour=false,Shield=false,Regen=false,Calm=false,Launch=false,Scored=false,Kept=false,Reserve=false;float ShieldSaved=-1.f;
+   bool Body=false,Armour=false,Shield=false,Regen=false,Calm=false,Launch=false,Scored=false,Reserve=false;
    if(XS&&XS->Members.Num()==1)
    {
     const int32 L=XS->LeaderUnitID;const auto* LU=Store->Find(L);const float HP0=LU->HP;
@@ -1125,43 +938,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
      const auto Known=M->GroupPointPower(0,0,true);V.EnemyTypes.Reset();const auto Unidentified=M->GroupPointPower(0,0,true);
      Check(Known.Total()==Tank.Total()&&Known.Hard==1&&Unidentified.Unknown==1&&Unidentified.Total()==0,
       TEXT("enemy strength uses recorded type without looking up live enemy state"));V=OldIntel;
-     auto* Metadata=NewObject<UBattleSave>(this);FBattleContact Identified,UnknownContact;
-     Identified.ObservedSquadType=BattleSquadType::Tank;
-     Metadata->Observers.FindOrAdd(1).Contacts.Add(2,Identified);Metadata->Observers[1].Contacts.Add(3,UnknownContact);
-     TArray<uint8> Bytes;const bool Written=UGameplayStatics::SaveGameToMemory(Metadata,Bytes);
-     const auto* Read=Written?Cast<UBattleSave>(BattleSaveValidation::Decode(Bytes)):nullptr;
-     const auto* Observer=Read?Read->Observers.Find(1):nullptr;
-     Check(Observer&&Observer->Contacts.Contains(2)&&Observer->Contacts.Contains(3)&&Observer->Contacts[2].ObservedSquadType==BattleSquadType::Tank&&Observer->Contacts[3].ObservedSquadType==255,
-      TEXT("identified and unknown contact metadata survive serialization"));
     }
-    // Save and restore: type, shield points, the pause before the refill and the launcher rounds survive.
-    Store->ApplyDamage(L,1,25);ShieldSaved=LU->Shield;
-    Mode->bCombatPaused=true;Save=M->CaptureSnapshot();const bool Valid=Save&&Save->Validate(Error);
-    const bool Restored=Valid&&M->RestoreSnapshot(Save);const auto* After=Store->FindSquad(XSID);const auto* RU=Store->Find(L);
-    if(Valid)
-    {
-     auto* WrongTrial=DuplicateObject<UBattleSave>(Save,this);WrongTrial->StrengthShieldTrialFlags^=1;
-     const auto* BeforeActor=Actor(L);
-     Check(!M->RestoreSnapshot(WrongTrial)&&Actor(L)==BeforeActor,TEXT("strength/shield trial mismatch rejected before mutation"));
-     auto RejectEquipment=[&](TFunctionRef<void(FBattleUnitState&)> Corrupt)
-     {
-      auto* Bad=DuplicateObject<UBattleSave>(Save,this);
-      for(auto& E:Bad->Units)if(E.State.UnitID==L){Corrupt(E.State);break;}
-      FString Why;return !Bad->Validate(Why);
-     };
-     Check(RejectEquipment([](FBattleUnitState& U){U.Shield=std::numeric_limits<float>::quiet_NaN();})&&
-      RejectEquipment([](FBattleUnitState& U){U.ShieldWait=std::numeric_limits<float>::infinity();})&&
-      RejectEquipment([](FBattleUnitState& U){U.LauncherWait=std::numeric_limits<float>::quiet_NaN();}),TEXT("non-finite exoskeleton resources rejected"));
-     Check(RejectEquipment([](FBattleUnitState& U){U.Shield=-1;})&&RejectEquipment([](FBattleUnitState& U){U.ShieldWait=-1;})&&
-      RejectEquipment([](FBattleUnitState& U){U.Launcher=-1;})&&RejectEquipment([](FBattleUnitState& U){U.LauncherWait=-1;}),TEXT("negative exoskeleton resources rejected"));
-     Check(RejectEquipment([](FBattleUnitState& U){U.Shield=BattleSquadType::ShieldMax(BattleSquadType::Exo)+1;})&&
-      RejectEquipment([](FBattleUnitState& U){U.Launcher=BattleSquadType::LauncherRounds(BattleSquadType::Exo)+1;})&&
-      RejectEquipment([&](FBattleUnitState& U){U.ShieldWait=BattleTactics::ExoShieldHitDelay()+1;})&&
-      RejectEquipment([&](FBattleUnitState& U){U.LauncherWait=FMath::Max(.5f,TT->ExoLauncherReload)+1;}),TEXT("exoskeleton resource upper bounds enforced"));
-    }
-    Kept=Restored&&After&&After->SquadType==BattleSquadType::Exo&&After->CommandStatus==EBattleCommandStatus::Active&&RU&&Actor(L)&&ExoLooks.Contains(L)&&FMath::IsNearlyEqual(RU->Shield,75.f)&&FMath::IsNearlyEqual(RU->ShieldWait,BattleTactics::ExoShieldHitDelay())&&
-     RU->Launcher==3&&RU->bLauncherSelected&&FMath::IsNearlyEqual(RU->HP,HP0-20.f)&&Store->HasShields()&&FMath::IsNearlyEqual(ArmorScale(L,EBattleWeapon::Carbine),.3f);
-    Mode->bCombatPaused=false;
    }
    Check(Body,TEXT("exoskeleton soldier: one soldier, 30 resources, automatic rifle at 2x damage, 4 launcher rounds, 200 health, 100 shield, 10 m/s"));
    Check(Scored,TEXT("exoskeleton soldier counts as 5 soldiers in the score"));
@@ -1171,8 +948,6 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    Check(Regen,TEXT("exoskeleton shield refills after the configured quiet window"));
    Check(Launch,TEXT("exoskeleton launcher: one round per 8 s, separate from the main weapon"));
    Check(Reserve,TEXT("exoskeleton soldier: the team layer gives it an objective as the fast reserve"));
-   Check(Kept,TEXT("exoskeleton soldier survives save and restore with its shield, launcher rounds and look"));
-   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AREA_EXO_SMOKE squad=%d shield_saved=%.0f validation=%s"),XSID,ShieldSaved,*Error);
   }
   // Resource income: base 1 plus 1 per actually owned point every 20 s, for both teams at once.
   {
@@ -1184,14 +959,11 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    // Fixture: team 0 owns two points, team 1 none. Amounts follow the configured income (INC4 = 4 + 4 per point since 2026-11-16).
    const int32 G0=BattleTactics::AreaIncome().Base+2*BattleTactics::AreaIncome().PerPoint,G1=BattleTactics::AreaIncome().Base;
    Check(M->Credits[0]==C0+G0&&M->Credits[1]==C1+G1&&M->Area.Income[0]==I0+G0&&M->Area.Income[1]==I1+G1,TEXT("payment is base plus per owned point (configured amounts)"));
-   Mode->bCombatPaused=true;Save=M->CaptureSnapshot();
-   Check(Save&&Save->Validate(Error),TEXT("income joins resource conservation"));
-   if(Save){Save->Area.Income[0]-=1;Check(!M->RestoreSnapshot(Save)&&M->Credits[0]==C0+G0,TEXT("income outside conservation rejected"));}
    Mode->bCombatPaused=false;M->bAreaIncomeHeld=true;
    for(auto& P:M->Objectives)P.Owner=INDEX_NONE;
   }
   // War score trial (default OFF): points from true ownership every 5 s, losses score for the other team, the opponent estimate
-  // uses observed ownership only, unspent resources are added at the end, and the record survives a snapshot.
+  // uses observed ownership only, unspent resources are added at the end, with no access to unknown ownership.
   {
    auto& W=BattleWarScore::MutableTuning();const auto SavedW=W;const auto KnownBefore=M->Area.KnownOwners;
    Check(!SavedW.bEnabled,TEXT("war score trial is off by default"));
@@ -1210,10 +982,6 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    M->RecordWarLoss(0);
    Check(M->Area.WarLoss[1]==1&&M->Area.WarLoss[0]==0&&M->WarScoreEstimate(0)==2,TEXT("a lost soldier scores for the other team and is known to the loser"));
    Check(M->WarScore(0)==2+M->Credits[0]&&M->WarScore(1)==2+M->Credits[1]&&M->AreaScore(0)==M->WarScore(0),TEXT("unspent resources are added to the war score"));
-   Mode->bCombatPaused=true;Save=M->CaptureSnapshot();
-   Check(Save&&Save->Validate(Error)&&Save->Area.WarPoint[0]==2&&Save->Area.WarLoss[1]==1,TEXT("war score joins the snapshot"));
-   if(Save){Save->Area.WarPoint[0]=-1;Check(!Save->Validate(Error),TEXT("invalid war score rejected"));}
-   Mode->bCombatPaused=false;
    M->Area.WarPoint={5,0};M->Area.WarLoss={0,0};M->Credits[0]=10;M->Credits[1]=16;M->Elapsed=600;M->CheckTimeLimit();
    Check(M->Winner==1&&M->Phase==EBattleMatchPhase::Finished,TEXT("resources kept decide the time limit under war score"));
    M->Phase=EBattleMatchPhase::Combat;Mode->bBattleEnded=false;M->Winner=INDEX_NONE;M->Elapsed=100;
@@ -1242,7 +1010,7 @@ void UBattleLeaderRuntime::RunAreaSmoke()
    PC->SquadFilter=3;PC->SquadSort=1;const int32 Sorted=PC->SquadListRows().Num();PC->SquadSort=0;
    const auto AllList=PC->SquadListRows();const int32 AllRows=AllList.Num();bool NoStopped=true;for(const auto& R:AllList)NoStopped&=R.Squad.bActive;
    int32 Stopped=0;for(const auto& P:Store->GetSquads())Stopped+=P.Value.Team==0&&P.Value.CommandStatus!=EBattleCommandStatus::Active;
-   // A player group of two active own squads for this check (groups are not saved; it is disbanded below).
+   // A player group of two active own squads for this check (it is disbanded below).
    TArray<int32> Pair;for(const auto& P:Store->GetSquads())if(P.Value.Team==0&&P.Value.CommandStatus==EBattleCommandStatus::Active&&M->GroupOf(P.Key)==INDEX_NONE&&Pair.Num()<2)Pair.Add(P.Key);
    const int32 TestGroup=Pair.Num()==2?M->FormGroup(0,Pair,true):INDEX_NONE;
    int32 Headers=0,Members=0;bool GroupsOk=true;

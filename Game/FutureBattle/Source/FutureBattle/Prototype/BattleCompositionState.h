@@ -2,7 +2,7 @@
 #include "CoreMinimal.h"
 #include "BattleCompositionState.generated.h"
 
-// Combat extension 4. Times are integer milliseconds on the saved match Elapsed clock, NOT world time.
+// Combat extension 4. Times are integer milliseconds on the match Elapsed clock, NOT world time.
 USTRUCT()
 struct FCompositionTeamState
 {

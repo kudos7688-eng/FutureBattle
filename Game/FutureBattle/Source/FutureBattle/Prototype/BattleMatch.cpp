@@ -171,7 +171,7 @@ void UBattleMatch::Update(float DeltaSeconds)
 	UpdateObjectives(DeltaSeconds);
  if(bArea)
  {
-  UpdateArea(DeltaSeconds);UpdateSituationLog();UpdateHireQueue();DirectorClock+=DeltaSeconds;
+  UpdateArea(DeltaSeconds);if(BattleTactics::BaseGarrison()&&Phase!=EBattleMatchPhase::Combat)return;UpdateSituationLog();UpdateHireQueue();DirectorClock+=DeltaSeconds;
   if(DirectorClock>=5)
   {
    DirectorClock=0;
@@ -389,8 +389,17 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  if(bArea&&(BattleTactics::ATHunt()||BattleTactics::ATFire()))UpdateATHunts(Team);
  // Routes (map F): what the team sees now, gathered once for all its squads.
  const bool bRoutes=bStrategy&&RoutesOn();TArray<FVector> RouteEnemies;if(bRoutes)RouteEnemies=RouteKnownEnemies(Team);
+ TArray<int32> RouteLoad; // -BattleRouteLoad: squads of this team already sent over each road section in this round
 	for (const auto& Pair : Store->GetSquads()) if (Pair.Value.Team == Team)
 	{
+  if(BattleTactics::BaseGarrison()&&IsBaseGarrison(Pair.Key))
+  {
+   const auto& Guard=Pair.Value;
+   if(Guard.CommandStatus==EBattleCommandStatus::Active&&(Team!=0||Guard.bPlayerDelegated)&&
+      (!Guard.bHasMission||Guard.MissionOrder!=EBattleOrder::Defend||FVector::Dist2D(Guard.MissionDestination,AreaHome(Team))>BattleTactics::BaseGarrisonRadius()))
+    GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IssueOrder(Pair.Key,EBattleOrder::Defend,AreaHome(Team),true);
+   continue;
+  }
 		// Public objective status only; never use an unseen enemy's location.
   bool bStrategyBase=false;
 		int32 Target = bStrategy ? AreaStrategyTarget(Pair.Key,Team,bStrategyBase) : ChooseObjective(Group, Team);
@@ -484,6 +493,8 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   if(bStrategy&&Pair.Value.SquadType==BattleSquadType::Supply)SupplyCarOrder(Pair.Key,Team,Center,Order);
   // Routes: a distant goal is reached junction by junction along the roads of the map (BattleRoutes.cpp). Not for scout pairs
   // (their posts and fall-backs are their own) or the home defence.
+  // Diagnosis -BattleOrderTrace=1 (2026-11-25, log only): the goal before the road routing, for BATTLE_ORDER_TRACE below.
+  const FVector TraceGoal=Center;
   bool bRoadWaypoint=false,bSectorStage=false;
   // A surprise bridge leg is already a precise waypoint; road/sector routing must not replace it with another crossing.
   bool bSurpriseBridge=false;
@@ -494,7 +505,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     const FVector P=Runtime->Position(Pair.Value.LeaderUnitID);
     // The player's route choice for the squad comes before the AI's own (empty map in matches without a player's choice).
     const bool bChosen=!PlayerRoutes.IsEmpty()&&PlayerRouteLane(Pair.Key)!=0;
-    FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault&&!(BattleTactics::GroupSupplySlot()&&Pair.Value.SquadType==BattleSquadType::Supply)?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies);
+    FVector Step=bChosen?PlayerRouteStep(Pair.Key,P,Center):RouteStep(P,Center,BaseAssault&&!(BattleTactics::GroupSupplySlot()&&Pair.Value.SquadType==BattleSquadType::Supply)?RouteFlankSide(P,AreaHome(Team),RouteEnemies,Pair.Key):0,RouteEnemies,&RouteLoad,Pair.Key);
     // -BattlePinnedFlank: a pinned AI sector squad first takes a sector beside the threat.
     static const bool bSectorAIOn=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
     FVector PinStage;
@@ -533,6 +544,21 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
    const bool Sector=!bRaidDuty && !bMortarPost && bSectorAIHere && !bSurpriseBridge && !bRoadWaypoint && BattleFieldLayout::Of(GetWorld()).bSectors && (bSectorStage || !BaseAssault) && !Purpose && !Leader->IsVehicle(S.LeaderUnitID)
       && (Order==EBattleOrder::AttackMove || Order==EBattleOrder::Defend) && BattleSectors::Valid(BattleSectors::Cell(Center));
    if(Sector)Center=BattleSectors::Center(BattleSectors::Cell(Center));
+   // Trial -BattleArriveWatch (BattleTactics.h): arrived at its attack-move destination, it keeps the mission for a while.
+   if(BattleTactics::ArriveWatch()>0.f)
+   {
+    const auto* WatchGroup=Groups.Find(GroupOf(Pair.Key));
+    if(bRaidDuty || bMortarPost || bSurpriseBridge || bHomeDefence || Order!=EBattleOrder::AttackMove || (WatchGroup && WatchGroup->Phase==0) || Leader->IsVehicle(S.LeaderUnitID))ArriveWatches.Remove(Pair.Key);
+    else if(ArriveWatchHolds(S,Leader->Position(S.LeaderUnitID)))continue;
+   }
+   // Diagnosis -BattleOrderTrace=1 (2026-11-25, default 0, log only): every new mission of an infantry squad - where the leader stands, the
+   // goal the layers above gave (group, front, flank), and what the road routing made of it. Map K with lanes: the destination sector
+   // of a squad alternated every order round (1221 of 1513 lane choices in a match).
+   static const bool bOrderTrace=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleOrderTrace="),V);return V!=0;}();
+   if(bOrderTrace && !Leader->IsVehicle(S.LeaderUnitID) && (!S.bHasMission || S.bSectorMission!=Sector || S.MissionOrder!=Order || !(Sector?BattleSectors::Cell(S.MissionDestination)==BattleSectors::Cell(Center):S.MissionDestination.Equals(Center,20))))
+   {const FVector TraceAt=Leader->Position(S.LeaderUnitID);
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ORDER_TRACE squad=%d team=%d at=(%.0f,%.0f) goal=(%.0f,%.0f) now=(%.0f,%.0f) was=(%.0f,%.0f) order=%d road=%d stage=%d sector=%d group=%d"),
+     Pair.Key,Team,TraceAt.X,TraceAt.Y,TraceGoal.X,TraceGoal.Y,Center.X,Center.Y,S.MissionDestination.X,S.MissionDestination.Y,int32(Order),bRoadWaypoint?1:0,bSectorStage?1:0,Sector?1:0,GroupOf(Pair.Key));}
    if(!S.bHasMission || S.bSectorMission!=Sector || S.MissionOrder!=Order || !(Sector?BattleSectors::Cell(S.MissionDestination)==BattleSectors::Cell(Center):S.MissionDestination.Equals(Center,20))) if(!Leader->SameVehicleMission(Pair.Key,Order,Center)) Leader->IssueOrder(Pair.Key,Order,Center,true,Sector);
    continue;
   }
@@ -569,6 +595,33 @@ int32 UBattleMatch::Resupply(int32 UnitID, int32 RequestedRounds)
 	Credits[S->Team] -= Added; return Added;
 }
 
+bool UBattleMatch::ArriveWatchHolds(const FBattleSquadState& Squad,const FVector& LeaderAt)
+{
+ // Only while the squad follows its attack-move mission (fighting, retreating or resupplying it is elsewhere; back on the mission
+ // it watches again).
+ if(Squad.SquadType!=BattleSquadType::Rifle || !Squad.bHasMission || Squad.MissionOrder!=EBattleOrder::AttackMove || Squad.TacticalPlan.Action!=EBattleSquadTactic::Mission)
+ {ArriveWatches.Remove(Squad.SquadID);return false;}
+ // Arrived: the leader within 15 m of the destination; in a sector mission, inside the sector. Near: within 65 m (a road waypoint
+ // is replaced by the next one at 60 m).
+ const double D2=FVector::DistSquared2D(LeaderAt,Squad.MissionDestination);
+ const bool bThere=Squad.bSectorMission?BattleSectors::Cell(LeaderAt)==BattleSectors::Cell(Squad.MissionDestination):D2<=FMath::Square(1500.);
+ auto* W=ArriveWatches.Find(Squad.SquadID);
+ // Another mission (the next one, or a player's order in between): its own watch. A clock that ran back: a new start.
+ if(W && (W->Revision!=Squad.MissionRevision || Elapsed<W->Start)){ArriveWatches.Remove(Squad.SquadID);W=nullptr;}
+ if(!W)
+ {
+  if(!bThere && (Squad.bSectorMission || D2>FMath::Square(6500.)))return false;
+  FArriveWatch Watch;Watch.Revision=Squad.MissionRevision;Watch.Start=Elapsed;W=&ArriveWatches.Add(Squad.SquadID,Watch);
+ }
+ if(W->Until<0.f)
+ {
+  // Walking in: at most 30 s (a destination its leader cannot reach), then the next mission.
+  if(!bThere && Elapsed-W->Start<30.f)return true;
+  W->Until=bThere?Elapsed+BattleTactics::ArriveWatch():Elapsed;
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ARRIVE_WATCH t=%.0f squad=%d team=%d sector=%d arrived=%d walk_in=%.0f until=%.0f"),Elapsed,Squad.SquadID,Squad.Team,Squad.bSectorMission?1:0,bThere?1:0,Elapsed-W->Start,W->Until);
+ }
+ return Elapsed<W->Until;
+}
 void UBattleMatch::Finish(int32 WinningTeam, const FString& Reason)
 {
 	if (Phase != EBattleMatchPhase::Combat) return;

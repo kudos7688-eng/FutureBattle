@@ -1,4 +1,4 @@
-# One-team strategy screening (2026-11-16; sequential stopping and 60 FPS confirmation since 2026-11-18).
+﻿# One-team strategy screening (2026-11-16; sequential stopping and 60 FPS confirmation since 2026-11-18).
 # Each condition is played by one team at a time against the default (Run-EconomyMatrix -TrialTeam 0 and 1) and compared
 # with default-vs-default on the same seeds, which removes the side bias. Per seed, gain = mean over the two trial teams of
 # (trial-team score lead - that side's lead in the default-vs-default matches), each over maps x swap.
@@ -24,7 +24,7 @@ param(
  [ValidateRange(10,120)][int]$ConfirmFps=60,   # confirmation rate for the conditions that pass screening
  [switch]$NoConfirm,
  [double]$SeedSd=60,   # floor for the per-seed gain spread (map E screens e1/e2 of 2026-11-17: sample sd 8-54 per seed)
- [switch]$NoRoundTripSave,
+ [switch]$NoRoundTripSave, # 11-25 から往復保存は無い（互換引数・何もしない）
  [switch]$NoReuse,   # 2026-11-18: identical matches (e.g. the baseline of an earlier screen on the same build) are reused unless set
  [ValidateRange(1,16)][int]$Concurrency=12,
  [string[]]$Maps=@('D','A'),   # 2026-11-17: map E screens pass -Maps E
@@ -62,7 +62,15 @@ function SeedGain([string]$Condition,[int]$Seed,[string]$RunTag){
 function Invoke-Pool($specs){
  $jobs=@()
  foreach($s in $specs){
-  if(Test-Path (Join-Path $root $s.Name)){continue}
+  if(Test-Path (Join-Path $root $s.Name)){
+  $resumeFolder=(Join-Path $root $s.Name)
+  $resumeManifest=$null
+  try{$resumeManifest=Get-Content -LiteralPath (Join-Path $resumeFolder 'manifest.json') -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json -ErrorAction Stop}catch{}
+  if(($resumeManifest.arguments -join ' ') -match '(?i)(?<![A-Za-z0-9_])-BattleVerifyMixedSave(?=[=\s"\x27]|$)'){
+   throw "$resumeFolder は 11-25 の削除より前の往復保存ありの結果です。新しい Tag（接頭辞）で回してください"
+  }
+  continue
+ }
   while(@($jobs|Where-Object{!$_.HasExited}).Count -ge $Concurrency){Start-Sleep 5}
   $jobs+=Start-Process powershell.exe -ArgumentList $s.Args -RedirectStandardOutput "Econ-$($s.Name).txt" -RedirectStandardError "Econ-$($s.Name).err.txt" -WindowStyle Hidden -PassThru
   Start-Sleep 3
@@ -70,7 +78,7 @@ function Invoke-Pool($specs){
  $jobs|ForEach-Object{$_.WaitForExit()}
 }
 function Invoke-Screen([string[]]$Candidates,[int]$PhaseFps,[string]$RunTag){
- $common=@{FrozenBuild=$FrozenBuild;Fps=$PhaseFps;NoRoundTripSave=$NoRoundTripSave;Concurrency=$Concurrency;Maps=$Maps;NoReuse=$NoReuse;PlanOnly=$true}
+ $common=@{FrozenBuild=$FrozenBuild;Fps=$PhaseFps;Concurrency=$Concurrency;Maps=$Maps;NoReuse=$NoReuse;PlanOnly=$true}
  $gains=@{};foreach($c in $Candidates){$gains[$c]=@()}
  $alive=@($Candidates);$passed=@();$i=0
  while($alive.Count -and $i -lt $allSeeds.Count){

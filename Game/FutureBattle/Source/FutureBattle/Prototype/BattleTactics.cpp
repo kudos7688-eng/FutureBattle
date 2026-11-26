@@ -29,10 +29,45 @@ float BattleTactics::MemorySeconds()
  static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleMemorySeconds="),Value);return FMath::IsFinite(Value)&&Value>0.f?FMath::Clamp(Value,1.f,120.f):0.f;}();
  return Seconds;
 }
+float BattleTactics::ArriveWatch()
+{
+ static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleArriveWatch="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,60.f):0.f;}();
+ return Seconds;
+}
 float BattleTactics::SuppressFire()
 {
  static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSuppressFire="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,60.f):0.f;}();
  return Seconds;
+}
+bool BattleTactics::SupplyCarRecover()
+{
+ static const bool bOn=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarRecover="),Value);return Value!=0;}();
+ return bOn;
+}
+float BattleTactics::SpotTrack()
+{
+ static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSpotTrack="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,30.f):0.f;}();
+ return Seconds;
+}
+int32 BattleTactics::SeekKnown()
+{
+ static const int32 Mode=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSeekKnown="),Value);return FMath::Clamp(Value,0,2);}();
+ return Mode;
+}
+float BattleTactics::SeekKnownSeconds()
+{
+ static const float Seconds=[](){float Value=30.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSeekKnownSeconds="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,5.f,180.f):30.f;}();
+ return Seconds;
+}
+float BattleTactics::SeekKnownRange()
+{
+ static const float Range=[](){float Value=20000.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSeekKnownRange="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,2000.f,60000.f):20000.f;}();
+ return Range;
+}
+int32 BattleTactics::SeekKnownMax()
+{
+ static const int32 Max=[](){int32 Value=2;FParse::Value(FCommandLine::Get(),TEXT("BattleSeekKnownMax="),Value);return FMath::Clamp(Value,1,8);}();
+ return Max;
 }
 bool BattleTactics::JoinFight()
 {
@@ -68,6 +103,23 @@ int32 BattleTactics::CarbineShotRounds()
 {
  static const int32 Rounds=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCarbineShotRounds="),Value);return FMath::Clamp(Value,1,10);}();
  return Rounds;
+}
+bool BattleTactics::BaseGarrison()
+{
+ static const bool On=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleBaseGarrison="),Value);return Value!=0;}();return On;
+}
+float BattleTactics::BaseGarrisonRadius()
+{
+ static const float Radius=[](){float Value=6000.f;FParse::Value(FCommandLine::Get(),TEXT("BattleBaseGarrisonRadius="),Value);return FMath::IsFinite(Value)&&Value>0.f?Value:6000.f;}();return Radius;
+}
+float BattleTactics::BaseGarrisonSeconds()
+{
+ static const float Seconds=[](){float Value=30.f;FParse::Value(FCommandLine::Get(),TEXT("BattleBaseGarrisonSeconds="),Value);return FMath::IsFinite(Value)&&Value>0.f?Value:30.f;}();return Seconds;
+}
+float BattleTactics::BaseRifleDamage()
+{
+ static const float Scale=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleBaseRifleDamage="),Value);return FMath::IsFinite(Value)&&Value>0.f?FMath::Clamp(Value,.01f,1.f):1.f;}();
+ return Scale;
 }
 float BattleTactics::SupplyAmmoShare()
 {
@@ -187,12 +239,6 @@ const BattleTactics::FAreaIncomeTuning& BattleTactics::AreaIncome()
   return I;
  }();
  return Value;
-}
-
-int32 BattleTactics::LeaderHealthSaveBits()
-{
- // 0 for the former x1 rule, so saves made before the multiplier existed load only under x1.
- return FMath::Clamp(FMath::RoundToInt(LeaderHealthMultiplier()*10.f)-10,0,90)<<9;
 }
 
 bool BattleTactics::ReacquireGraceEnabled()

@@ -1,4 +1,4 @@
-# Area economy comparison (2026-11-14): new-squad hiring x resource income, each ON/OFF. Runs Test-WideSight.ps1 for each
+﻿# Area economy comparison (2026-11-14): new-squad hiring x resource income, each ON/OFF. Runs Test-WideSight.ps1 for each
 # against one frozen build. Existing output folders are skipped, so an interrupted matrix can be resumed by re-running
 # the same command. Summarise with Setup/Analyze-EconomyMatrix.ps1.
 [CmdletBinding()]
@@ -11,7 +11,7 @@ param(
  [string]$Tag='r1',
  [ValidateRange(-1,1)][int]$TrialTeam=-1,   # 0/1: the S3-S6 trial flags apply to that team only (use a distinct -Tag)
  [ValidateRange(10,120)][int]$Fps=60,       # fixed simulation step (2026-11-16: 30 = about twice as fast; compare only runs with the same Fps)
- [switch]$NoRoundTripSave,                  # skip the 80 s save round trip (strategy screening only; regressions keep it)
+ [switch]$NoRoundTripSave,                  # 11-25 から往復保存は無い（互換引数・何もしない）
  [switch]$NoReuse,                          # 2026-11-18: by default a match whose build, map, Config and arguments equal an earlier passed one copies its result
  [switch]$PlanOnly                          # 2026-11-18: output the runs still missing ({Name, Args}) without starting them (Run-StrategyScreen pools them)
 )
@@ -229,12 +229,19 @@ $jobs=@(); $skipped=0
 foreach($r in $runs){
  $c,$seed,$map,$swap=$r
  $name="econ-$c-$map-s$seed"+($(if($swap){'-swap'}else{''}))+"-$Tag"
- if(Test-Path "Benchmarks/SightTrial-20261111/$name"){ $skipped++; continue }
+ if(Test-Path "Benchmarks/SightTrial-20261111/$name"){
+  $resumeFolder="Benchmarks/SightTrial-20261111/$name"
+  $resumeManifest=$null
+  try{$resumeManifest=Get-Content -LiteralPath (Join-Path $resumeFolder 'manifest.json') -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json -ErrorAction Stop}catch{}
+  if(($resumeManifest.arguments -join ' ') -match '(?i)(?<![A-Za-z0-9_])-BattleVerifyMixedSave(?=[=\s"\x27]|$)'){
+   throw "$resumeFolder は 11-25 の削除より前の往復保存ありの結果です。新しい Tag（接頭辞）で回してください"
+  }
+  $skipped++; continue
+ }
  $pa=@('-NoProfile','-ExecutionPolicy','Bypass','-File','.\Test-WideSight.ps1','-Map',$map,'-OutputName',$name,'-Seed',"$seed",
   '-AICoverProbe','0','-LeaderGuard','0','-SightRange','10000','-WeaponRange','5000','-Area','-Experiment',
   '-CoverActions','1','-FlankCoordination','1','-ObserveTactics','-BehaviorConcurrency',"$Concurrency",'-FrozenBuild',$frozen)+$supply[$c]
  if($TrialTeam -ge 0){$pa+=@('-AreaTrialTeam',"$TrialTeam")}
- if(!$NoRoundTripSave){$pa+='-RoundTripSave'}
  if(!$NoReuse){$pa+='-ReuseIdentical'}
  if($Fps -ne 60){$pa+=@('-Fps',"$Fps")}
  if($swap){$pa+='-Swap'}

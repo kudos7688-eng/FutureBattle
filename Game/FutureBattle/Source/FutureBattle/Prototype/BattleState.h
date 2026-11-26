@@ -10,7 +10,7 @@ UENUM(BlueprintType)
 // positions the team knows (BattleArtillery.cpp) after setting up while still. One round loaded, MortarReserve in reserve.
 // Infantry arms (2026-11-22, Docs/design-infantry-arms.md): Pistol (the sidearm, also a primary for no one yet), SMG, Shotgun,
 // Marksman (designated marksman rifle) and GrenadeLauncher (lobbed explosive rounds, no direct fire like the mortar; BattleArms.cpp).
-// Appended only: saved records keep their values. Values of the new weapons: BattleWeaponDef (BattleArms.cpp).
+// Appended only: record values remain stable. Values of the new weapons: BattleWeaponDef (BattleArms.cpp).
 // Sniper (2026-11-22, the sniper team): a bolt-action rifle for very long shots.
 enum class EBattleWeapon : uint8 { Carbine, SupportGun, AntiTank, Mortar, Pistol, SMG, Shotgun, Marksman, GrenadeLauncher, Sniper };
 constexpr uint8 BattleLastWeapon=uint8(EBattleWeapon::Sniper);
@@ -78,7 +78,7 @@ namespace BattleSquadType
 
 namespace BattleRosterLimits
 {
- // Shared by recruitment, replenishment and persistence; includes dead/retired records.
+ // Shared by recruitment and replenishment; includes dead/retired records.
  constexpr int32 Area=1000;
  constexpr int32 Mixed=500;
 }
@@ -195,7 +195,7 @@ struct FBattleSquadState
 	UPROPERTY() int32 LeaderUnitID = INDEX_NONE;
 	UPROPERTY() EBattleCommandStatus CommandStatus = EBattleCommandStatus::Legacy;
 	UPROPERTY() FString DisplayName;
-	UPROPERTY() uint8 SquadType = 0; // BattleSquadType (absent in older saves = rifle squad)
+	UPROPERTY() uint8 SquadType = 0; // BattleSquadType
 	UPROPERTY() int32 CommandRevision = 0;
 	UPROPERTY() FName StopReason;
 	UPROPERTY(VisibleAnywhere) int32 Team = 0;
@@ -211,13 +211,13 @@ struct FBattleSquadState
  UPROPERTY() FVector MissionDestination = FVector::ZeroVector;
  UPROPERTY() TMap<int32, FVector> MissionGoals;
  UPROPERTY() int32 MissionRevision = 0;
- // ST1 does not generate autonomous plans. ST2 will add selection and versioned plan saves.
+ // ST1 does not generate autonomous plans.
  UPROPERTY(Transient) FBattleSquadTacticalPlan TacticalPlan;
  UPROPERTY() float FlankCooldown = 0;
  // Infantry arms (2026-11-22): 1 = elite platoon (a rifle squad with roles per slot), 2 = sniper team (a scout pair: sniper and
- // spotter); BattleArms.cpp. Absent in older saves = 0.
+ // spotter); BattleArms.cpp.
  UPROPERTY() uint8 Grade = 0;
- // Seconds until any member may throw the next hand grenade (one per squad per BattleArms grenade gap; relative, saved).
+ // Seconds until any member may throw the next hand grenade (one per squad per BattleArms grenade gap; relative).
  UPROPERTY() float GrenadeGap = 0;
 };
 
@@ -278,8 +278,8 @@ struct FBattleUnitState
  UPROPERTY() FVector SoldierGoal=FVector::ZeroVector;
  UPROPERTY() int32 SoldierOrderMission=0;
  UPROPERTY() int32 SoldierRepaths=0; // path searched again after being stuck (the third time ends the order)
- UPROPERTY() double SoldierStalledSince=0; // stuck since (saved as how long)
- // Individual AI timers (BattleSoldierMove.cpp, BattleThreatCover.cpp), saved relative to the save time like ReloadEndTime.
+ UPROPERTY() double SoldierStalledSince=0; // stuck since
+ // Individual AI timers (BattleSoldierMove.cpp, BattleThreatCover.cpp).
  UPROPERTY() double SoldierMoveUntil=0; // a B1 walk keeps its cover timer at 3 s until then
  UPROPERTY() double SoldierMoveAfter=0; // no B1 decision before this time
  UPROPERTY() double CoverFirstBreak=0; // -BattleThreatCover=2: first break of the current place (cleared when he leaves it)
@@ -303,7 +303,7 @@ struct FBattleUnitState
 	UPROPERTY() float ShieldWait = 0.f;
 	// Exoskeleton second weapon: anti-tank rounds left and seconds until the next one is loaded (relative). 0 for other types.
 	UPROPERTY() int32 Launcher = 0;
- // Separate from the SPG machine gun. Revision 3 saves retain depleted main-gun ammunition.
+ // Separate from the SPG machine gun.
  UPROPERTY() int32 SPGAmmo = 0;
 	UPROPERTY() bool bLauncherSelected = false;
 	UPROPERTY() float LauncherWait = 0.f;
@@ -681,7 +681,7 @@ public:
 	UPROPERTY(Config, EditAnywhere) float ReacquireGraceSeconds = 1.f;
 	UPROPERTY(Config, EditAnywhere) float TargetHoldSeconds = 1.f;
 	// AI cover firing window (adopted ON 2026-11-14; -BattleCoverFire=0 restores the fixed 1.2s peek): AI stays at the peek point
-	// long enough for AICoverShotsPerPeek shots (AI interval 1.4s plus aim delay), capped at AICoverPeekSeconds (<=3 for saves).
+	// long enough for AICoverShotsPerPeek shots (AI interval 1.4s plus aim delay), capped at AICoverPeekSeconds.
 	UPROPERTY(Config, EditAnywhere) bool bAICoverFire = true;
 	UPROPERTY(Config, EditAnywhere) float AICoverPeekSeconds = 2.8f;
 	UPROPERTY(Config, EditAnywhere) int32 AICoverShotsPerPeek = 2;
@@ -787,7 +787,7 @@ struct FBattleKillNotice
 	bool bVictimLeader = false, bVictimVehicle = false, bKillerVehicle = false;
 };
 
-// A hit on the unit the player controls (display only: the HUD's hit direction; rules never read it, not saved).
+// A hit on the unit the player controls (display only: the HUD's hit direction; rules never read it).
 struct FBattleHitNotice
 {
 	double Time = 0.;
@@ -874,7 +874,7 @@ public:
 	// Kill log (2026-11-20, display only): deaths with a known killer where either side is team 0, newest last, at most 8.
 	TArray<FBattleKillNotice> KillNotices;
 	// Evaluation (11-23, arms branch): who killed each dead unit, with what and when (StepCharge's no-strike record). Rules and display
-	// never read it; not saved.
+	// never read it.
 	struct FDeathBy { int32 Killer = INDEX_NONE; EBattleKillKind Kind = EBattleKillKind::Unknown; double Time = 0.; };
 	TMap<int32, FDeathBy> DeathBy;
 	int32 AddReserve(int32 ID, int32 Rounds);

@@ -14,9 +14,9 @@
 | 機能 | 入口（ここから読む） | 関連 |
 |---|---|---|
 | 覗き0発の診断・固定場面 | @UBattleLeaderRuntime::RecordPeekFrame 、 @UBattleLeaderRuntime::RunCoverPeekTrial | 記録だけの `peekwhy_*`。`Test-CoverPeek.ps1` は目撃済み／見失いを検査、未発見は記録のみ |
-| 編成AI・候補選択と貯蓄購入 | @UBattleMatch::UpdateCompositionHiring 、 @BattleComposition::Decide 、 @BattleComposition::ValidateSave | Planner/PlannerTeams は既定0。ONは不足・緊急性で選択し貯蓄／購入。CombatStateVersion=4、旧保存はPlanner無効。検査は @UBattleLeaderRuntime::RunCompositionSmoke |
+| 編成AI・候補選択と貯蓄購入 | @UBattleMatch::UpdateCompositionHiring 、 @BattleComposition::Decide | Planner/PlannerTeams は既定0。ONは不足・緊急性で選択し貯蓄／購入。検査は @UBattleLeaderRuntime::RunCompositionSmoke |
 | 盾被弾制圧・群の兵種別戦力（試験） | @UBattleLeaderRuntime::NoteUnderFire 、 @UBattleState::AdvanceShields 、 @UBattleMatch::GroupPower 、 @UBattleMatch::GroupPointPower | `BattleExoShieldSuppression` / `BattleGroupStrength` は既定0。観測兵種は @UBattlePerception::Update で取得、重みはUBattleTuning |
-| 間接射撃の試験切替 | @UBattleMatch::ArtilleryHomeObserved 、 @UBattleMatch::AreaArtilleryClusters 、 @UBattleLeaderRuntime::FireArtillery 、 @UBattleLeaderRuntime::ArtilleryBlastTransmission | 自走砲弾は @UBattleState::UseSPGAmmo / @UBattleState::RefillSPGAmmo 。4切替は既定0、CombatStateVersion=3で弾数と切替を保存 |
+| 間接射撃の試験切替 | @UBattleMatch::ArtilleryHomeObserved 、 @UBattleMatch::AreaArtilleryClusters 、 @UBattleLeaderRuntime::FireArtillery 、 @UBattleLeaderRuntime::ArtilleryBlastTransmission | 自走砲弾は @UBattleState::UseSPGAmmo / @UBattleState::RefillSPGAmmo 。4切替は既定0 |
 | 歩兵の装備（副武装・手りゅう弾・近接・精鋭小隊・新しい武器種。試験） | @UBattleLeaderRuntime::StepArms 、 @UBattleLeaderRuntime::ThrowGrenade 、 @UBattleLeaderRuntime::FireLauncherRound 、 @UBattleLeaderRuntime::MeleeStrike 、 @UBattleLeaderRuntime::UseSidearm 、 @UBattleLeaderRuntime::ArmsRoleTarget | 切替は `BattleArms`（`-BattleSidearms`・`-BattleGrenades`・`-BattleMelee`・`-BattleElite`・`-BattleAreaEliteKeep`、既定0）。武器の値は `BattleWeaponDef`、精鋭小隊は @UBattleLeaderRuntime::IssueEliteKit と `FBattleSquadState::Grade`。設計は Docs/design-infantry-arms.md |
 | 区画の任務に合わせた躍進・守る側の対応・援護射撃（試験） | @UBattleLeaderRuntime::StepArmsRush 、 @UBattleLeaderRuntime::ArmsRushTarget 、 @UBattleLeaderRuntime::StartArmsRetreat 、 @UBattleLeaderRuntime::StepArmsCoverCalls 、 @UBattleLeaderRuntime::ArmsCoverFireAt | `-BattleArmsSectorTask`／`-BattleArmsRushWatch`／`-BattleArmsCoverFire`（Docs/design-infantry-arms.md） |
 | 詰め寄り・突撃（歩兵の装備の続き。試験） | @UBattleLeaderRuntime::StartAssault 、 @UBattleLeaderRuntime::StartCharge 、 @UBattleLeaderRuntime::StepCharge | 切替は `-BattleArmsAssault=1/2`・`-BattleArmsCharge=1`（既定0）。どちらも `CoverApproaches` の印（`bAssault`・`bCharge`）で動き、歩きは @UBattleLeaderRuntime::StepCoverApproach 。設計は Docs/design-infantry-arms.md |
@@ -46,7 +46,7 @@
 | その場のしゃがみ繰り返しを減らす（個人AI） | @BattleStance::Steady | `-BattleStanceSteady`（**既定1**、2026-11-24 ユーザー決定。`=0` で元に戻る）。開けた所で、しゃがんで敵が見えなくなり立ち上がった場所（`CrouchBlindAt`、2.5m以内）では立ったまま戦う（`UpdateAIStance`、数は `steady_stay_standing_frames`）。遮蔽の覗きが一発も撃たずに終わったら、次は0.8秒でなく3秒しゃがんで待つ（`QuietPeeks`、`CoverHideSeconds`、数は `steady_long_hide`）。評価用に、通り道の小隊の兵を歩き／戦闘なしで停止／戦闘で停止（低い・立ち・立ちで敵が見えない）に分けて数える（`route_*_frames`、`Follow`） |
 | 区画の中で兵が遮蔽を移る（個人AI段階B1） | @UBattleLeaderRuntime::StepSoldierMove 、 @UBattleLeaderRuntime::RateCoverPlace | 試験切替 `-BattleSoldierMove`（既定0）。呼び出しは @UBattleLeaderRuntime::StepCoverAction の隠れている間（1秒に1回・1フレーム4人まで） |
 | 個人AIをプレイヤーの周りだけで動かす | @UBattleLeaderRuntime::SoldierAIFocus | 試験切替 `-BattleSoldierAIFocus=<m>`（既定0＝全員）、`-BattleSoldierAIFocusAt=X,Y`。段階A（@UBattleLeaderRuntime::CheckCoverThreats ほか）とB1（@UBattleLeaderRuntime::StepSoldierMove）の入口で見る |
-| プレイヤーが兵1人に出す移動の命令（Ctrl＋クリックで選ぶ・右クリックで移動先・Hで戻す） | @UBattleLeaderRuntime::IssueSoldierOrder 、 @UBattleLeaderRuntime::StepSoldierOrder 、 @ABattleController::SelectSoldierAt 、直接操作では @ABattleController::CommandSoldierFromView （G） | 兵の状態 `bSoldierOrder`（保存される）。@UBattleLeaderRuntime::Follow の `bOwnOrder`。自動試験 `-BattleSoldierOrderTest`（@UBattleLeaderRuntime::StepSoldierOrderTest） |
+| プレイヤーが兵1人に出す移動の命令（Ctrl＋クリックで選ぶ・右クリックで移動先・Hで戻す） | @UBattleLeaderRuntime::IssueSoldierOrder 、 @UBattleLeaderRuntime::StepSoldierOrder 、 @ABattleController::SelectSoldierAt 、直接操作では @ABattleController::CommandSoldierFromView （G） | 兵の状態 `bSoldierOrder`。@UBattleLeaderRuntime::Follow の `bOwnOrder`。自動試験 `-BattleSoldierOrderTest`（@UBattleLeaderRuntime::StepSoldierOrderTest） |
 | 射撃の散らばり | @BattleTactics::SpreadDegrees 、 @BattleTactics::ShotDirection | 照準の遅れは @UBattleState::UpdateAim 。プレイヤーの直接操作だけの倍率は @ABattleUnit::PlayerSpreadScale |
 | 部隊の戦術（撤退・集合・援護・迂回） | @UBattleSquadTactics::Step 、 @UBattleSquadTactics::Evaluate 、 @UBattleSquadTactics::Apply | 撤退 @UBattleSquadTactics::RetreatGoal 、援護 @UBattleSquadTactics::AcceptSupport 、迂回 @UBattleSquadTactics::TryFlank |
 | 陣営全体の判断（援護・迂回の割り振り） | @UBattleTeamAI::Step | |
@@ -64,9 +64,7 @@
 | 支援砲撃（旧アリーナ） | @UBattleMatch::RequestSupport 、 @UBattleMatch::UpdateSupport | 混成には未接続 |
 | 車両・戦車砲・対戦車 | @UBattleLeaderRuntime::ConfigureVehicle 、 @UBattleLeaderRuntime::SteerVehicle 、 @UBattleLeaderRuntime::FireTankGun | 爆発は @UBattleLeaderRuntime::Explode |
 | 武器の命令・任務による交戦許可 | @BattleTactics::OrderAllowsTarget 、 @UBattleLeaderRuntime::WeaponOrderAllows | 副武器・間接射撃の試験は BattleWeaponOrderGate、装甲AIの候補制限は BattleArmourSectorGate（いずれも既定0） |
-| 保存・復元 | @UBattleMatch::SaveMatch 、 @UBattleMatch::LoadMatch 、 @UBattleMatch::CaptureSnapshot 、 @UBattleMatch::RestoreSnapshot | 検証は @UBattleSave::Validate 、 @UBattleSave::ValidateMixed 。戦術状態は @UBattleSquadTactics::CaptureSave |
-| プレイヤー経路の任意保存（S02） | @BattleTactics::SaveRoutes 、 @UBattleSave::Serialize 、 @UBattleSave::Validate | `-BattleSaveRoutes=1`（既定0）。PlayerRoutesVersion=1で最終命令・目的地・残り中継点・レーン・進行・相対期限を保存。OFF／経路なしは新規タグなし。検査は @UBattleLeaderRuntime::RunMixedSaveSmoke 内で一時切替 |
-| 表示（混成の体・遠距離 VAT） | @UBattleLeaderRuntime::CreateBody 、 @UBattleLeaderRuntime::RefreshDisplay 、 @ABattleVATDisplay::Tick | 復元時は @UBattleLeaderRuntime::RestoreMixedBodies |
+| 表示（混成の体・遠距離 VAT） | @UBattleLeaderRuntime::CreateBody 、 @UBattleLeaderRuntime::RefreshDisplay 、 @ABattleVATDisplay::Tick | 一戦中の保存・読込は 11-25 に削除 |
 | 歩兵の体のメッシュ（Quinn／RB01、試験切替 -BattleSoldierBody） | @BattleSoldierBody::LoadMesh 、 @BattleSoldierBody::VATRoot | 隊長は @ABattleUnit::InitializeUnit 、部下は @UBattleLeaderRuntime::CreateBody 、遠景は @ABattleVATDisplay::Initialize 。RB01 の取り込みは Setup/Import-RB01.ps1、VAT は Setup/Test-VATBake.ps1 -RB01 |
 | マップの定義・配置 | `BattleFieldLayout.h`（マップごとの表 `Maps()`） | 生成は @UBattleMapCommandlet::Main （既存の手編集を `-Force` で上書きしない） |
 | 通り道（道路網に沿った移動の指示） | @UBattleMatch::RouteStep 、 @UBattleMatch::RouteFlankSide | 呼び出しは @UBattleMatch::UpdateTeamOrders 。道路網は `FMapDef::RouteNodes/RouteEdges` |
@@ -84,7 +82,7 @@ BattleAnimTasks | アニメーション更新の並列実行の設定を兵ご�
 BattleAntiTank | 対戦車弾の爆発（UBattleLeaderRuntime の一部）
 BattleArea | エリア戦の本体：初期化、収入、拠点、AI の雇用と意図（UBattleMatch の一部）
 BattleAreaIntel | エリア戦の情報：観測に基づく区域の見え方と脅威（UBattleMatch の一部）
-BattleAreaState | エリア戦の保存される状態（拠点 HP、収入、観測）
+BattleAreaState | エリア戦の状態（拠点 HP、収入、観測）
 BattleArmourAI | 兵種を扱うAI：効かない車両を狙わない、対戦車兵の弾の温存、知っている敵車両、戦車の待機位置、兵種の構成（UBattleLeaderRuntime と UBattleMatch の一部）
 BattleArtillery | 迫撃砲と自走砲：間接射撃の目標選び、着弾、陣地の位置（UBattleLeaderRuntime と UBattleMatch の一部）
 BattleContactMovement | 停止中の味方との接触・到着地点の重なりの解消（UBattleLeaderRuntime の一部）
@@ -93,7 +91,8 @@ BattleArms | 歩兵の装備：副武装（拳銃）・手りゅう弾・擲弾�
 BattleArmsSector | 区画の任務と歩兵の装備（試験、既定0）：躍進は攻める任務だけ `-BattleArmsSectorTask`、守る側が走り込みを見つけて迎え撃つ・手りゅう弾・下がる・逆襲 `-BattleArmsRushWatch`、躍進への周りの小隊の援護射撃（制圧が効く） `-BattleArmsCoverFire`
 BattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド
 BattleCover | 遮蔽の場所の一覧と予約
-BattleCoverAction | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部）
+BattleCoverAction | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部）。撃てる遮蔽の判定 `UBattleLeaderRuntime::CoverFirePoint`（over/lean）と値2の step `CoverStepFirePoint`（試験 `-BattleCoverFirePoint`、既定0）
+BattleCoverFire | 区画の到着地点が撃てる遮蔽か（over/lean）の判定 `BattleCoverFire::ArrivalFirePoint` の公開（中身は BattleStableMovement.cpp、試験 `-BattleCoverFirePoint`）
 BattlePeekDiagnostics | 覗き1回のフレームを排他的に分類する記録専用の計数（peekwhy）
 BattleCoverPeekTrial | 低壁越しの覗きの固定場面3つ（目撃済み・見失い・未発見、試験の印があるときだけ）
 BattleBlindFire | 遮蔽の陰からのブラインドファイア（弾の出る位置・AIの試験・アニメ。UBattleLeaderRuntime の一部）
@@ -114,7 +113,7 @@ BattleHUD | 画面表示（HUD、ミニマップ、部隊一覧、通知、命�
 BattleLeaderRuntime | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新
 BattleMatch | 試合の進行、雇用、拠点の占領、陣営の命令、補給、勝敗
 BattleMetrics | 計測値の記録（1フレームの時間、判断の回数）
-BattleMixedBodies | 混成の兵の体の生成・破棄・復元（UBattleLeaderRuntime の一部）
+BattleMixedBodies | 混成の兵の体の生成・破棄（UBattleLeaderRuntime の一部）
 BattleMixedDriver | 混成の兵1人ぶんの実行（旧 AIController と同じ役を Actor なしで行う）
 BattleMixedRecruitment | 補充と購入部隊の出現、偵察兵の昇格（UBattleLeaderRuntime の一部）
 BattleMixedSquadAI | 部隊 AI の混成版の更新（UBattleSquadAI の一部）
@@ -122,11 +121,10 @@ BattleMoveCourse | 移動の計測コース
 BattleNavigation | 目的地の補正と隊形の位置
 BattleNetwork | ネットワーク試作（GameMode、Controller、HUD）
 BattleNetworkSerialization | ネットワーク用の兵の直列化
-BattlePerception | 認識：見えた敵の記憶、保存と復元。分隊単位の知識（`-BattleSquadKnowledge=1`〔試験、既定0〕：分隊の表と分隊間の報告は `Update` の末尾、読み口は `Knows`・`FindSquadContact`・`GetSquadContacts`。段階1の表は `BuildSquadKnowledge`。`Docs/design-squad-knowledge.md`）
+BattlePerception | 認識：見えた敵の記憶。分隊単位の知識（`-BattleSquadKnowledge=1`〔試験、既定0〕：分隊の表と分隊間の報告は `Update` の末尾、読み口は `Knows`・`FindSquadContact`・`GetSquadContacts`。段階1の表は `BuildSquadKnowledge`。`Docs/design-squad-knowledge.md`）
 BattlePhase3 | Phase3 の大規模試験経路（通常の混成とは別の処理）
 BattleRanges | 認識・交戦の距離（マップごとに決まる）
 BattleReplayData | 再生用データの型（試験専用）
-BattleSave | 保存形式、試合の保存と復元、検証
 BattleScoutReport | 偵察報告（UBattleMatch の一部）
 BattleSightVisual | 視界の目視確認用の表示（UBattleLeaderRuntime の一部）
 BattleSoldierBody | 歩兵の体のメッシュの選択（Quinn／RB01、試験切替 -BattleSoldierBody）と、それに合う遠景VATの置き場所
@@ -134,6 +132,7 @@ BattleSquadAI | 旧全Actor経路の部隊 AI
 BattleSquadFlank | 迂回の判断（UBattleSquadTactics の一部）
 BattleSquadRetreat | 撤退の判断と適用（UBattleSquadTactics の一部。Evaluate と Apply はここ）
 BattleSupplyCar | 補給車（兵種9）：積んだ弾・本拠地での積み直し・AIの命令（群の役割5、拠点の後ろ）・弾の少ない部隊の行き先（UBattleMatch の一部）
+BattleBaseGarrison | 基地の守備隊（試験 `-BattleBaseGarrison=1`、既定0、`Docs/design-base-garrison.md`）：開幕に両軍の本拠地へ専属の小銃小隊2個（`Area.HirePurpose`=102、`IsBaseGarrison`）、基地の範囲に生きた守備隊が居なくなり相手の歩兵が占領し続けると負け（`UpdateBaseGarrison`）。固定場面は BattleBaseGarrisonSmoke
 BattleFrontLine | 前線・前線維持群 `-BattleFrontLine`・奇襲群 `-BattleSurpriseGroup`（区画のあるマップ）：区画の行ごとの前線の列（自軍の兵・観測した拠点・知っている敵、隣の行と1列以内）、維持群の帯と維持する区画、押し上げ、奇襲群（装甲優先・端の行を進んで敵本拠地へ）（UBattleMatch の一部。表示は ABattleHUD::DrawFieldOverlay）
 BattleSquadSupport | 援護の受け渡し（UBattleSquadTactics の一部）
 BattleSquadTactics | 部隊の戦術の土台：観測、毎フレームの更新、記録
@@ -157,7 +156,6 @@ BattleSoldierMove | 個人AI段階B1 `-BattleSoldierMove`：区画の中で、�
 BattleSoldierOrder | プレイヤーが兵1人に出す移動の命令：命令と歩き（UBattleLeaderRuntime）、Ctrl＋クリックの選択と右クリックの命令（ABattleController）、印（ABattleHUD）、自動試験 `-BattleSoldierOrderTest`
 BattleTacticalAI | 旧全Actor経路の兵の戦術行動（ABattleAIController の一部）
 BattleTactics | 調整値の束（補給、雇用、戦略、収入）と試験切替、散らばり、露出の計算
-BattleTacticsSave | 戦術状態と陣営 AI の保存・復元
 BattleTankGun | 戦車砲の照準と発射（UBattleLeaderRuntime の一部）
 BattleTeamAI | 陣営全体の判断
 BattleUIText | 画面の文言の日本語化
@@ -197,7 +195,6 @@ BattleWeaponOrders | 命令・防衛範囲・支援対象・区画任務の交�
 BattleComposition | 編成AIの兵種定義・解決済み入力・診断
 BattleCompositionPlanner | 編成AIの純粋な候補選択・貯蓄遷移・状態検証。整数比較、乱数なし
 BattleCompositionRuntime | 編成AIと観測・収入窓・既存購入実行の接続、設定キー
-BattleCompositionState | CombatStateVersion=4で保存する編成AIの陣営状態
-BattleCompositionSave | 編成AI保存の版・陣営・時刻・参照先検証
-BattleCompositionSmoke | 編成AIの選択・貯蓄・保存往復のスモーク検査（UBattleLeaderRuntimeの一部）
+BattleCompositionState | 編成AIの陣営状態
+BattleCompositionSmoke | 編成AIの選択・貯蓄のスモーク検査（UBattleLeaderRuntimeの一部）
 BattleSectorSight | 区画内・区画間の戦い（`-BattleSectorSight`、11-23 から既定1＝通常小隊だけ。`=2` は兵種ごとの決まり `SectorSightRole`〔試験〕、`=0` で元の動き。`Docs/design-sector-combat.md`）：区画のあるマップで、通常小隊は別の区画（20m より遠い）の敵を探す光線を隊長だけが出し、隊員は隊長が今見ている敵を発射直前の視線判定で撃つ（UBattleLeaderRuntime の一部。走査の側は `UBattlePerception::Update` の `SkipCross`）

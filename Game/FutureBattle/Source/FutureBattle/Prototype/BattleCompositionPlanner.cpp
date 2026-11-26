@@ -19,7 +19,7 @@ BattleComposition::FDecision BattleComposition::Decide(const FInput& Input,const
   if(Candidate){Result.Type=Candidate->Type;Result.Mission=Candidate->Mission;}
   return Result;
  };
- // Explicit bounds make malformed pure-function inputs fail closed; save validation is stricter.
+ // Explicit bounds make malformed pure-function inputs fail closed.
  if(Defs.Num()!=BattleSquadType::Count||Next.Waiting.Num()!=BattleSquadType::Count||Next.SaveBlockedUntil.Num()!=BattleSquadType::Count||Next.Purchased.Num()!=BattleSquadType::Count||Next.SaveType< -1||Next.SaveType>=BattleSquadType::Supply||Next.Serial<0||Next.Serial>=100000)
   return Finish(EAction::Wait,nullptr,TEXT("invalid_input"));
  if(Next.bConfigurationFailed)return Finish(EAction::Wait,nullptr,TEXT("configuration_failed"));

@@ -4,7 +4,6 @@
 struct FBattleSightExperiment
 {
  bool Enabled=false, Started=false, Finished=false;
- bool SaveCheckDone=false, SaveCheckPassed=false;
  FString Output;
  double StartWall=0, NextSample=0, FirstSight=-1, FirstSightDistance=-1, FirstShot=-1, FirstShotDistance=-1;
  double NextProgress=20, LastSample=0;

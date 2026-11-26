@@ -1,7 +1,6 @@
 #include "BattleGameMode.h"
 #include "BattleSquadTactics.h"
 #include "BattleMatch.h"
-#include "BattleSave.h"
 #include "BattleController.h"
 #include "BattleUnit.h"
 #include "BattleFieldLayout.h"
@@ -43,24 +42,62 @@ void ABattleGameMode::RunSquadTacticsSmokeTest()
   TMap<int32,FVector> InvalidGoals;
   CheckSmoke(!Store->SetSquadOrder(SID, EBattleOrder::Hold, Origin, InvalidGoals) && Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Retreat, TEXT("Rejected order preserves plan and execution"));
   const auto Before = *A->GetState();
+  const auto BeforeDirectSquad = *Store->FindSquad(SID);
   CheckSmoke(PC->ControlUnit(A), TEXT("Direct control can begin during a tactical plan"));
+  const auto AfterDirectSquad = *Store->FindSquad(SID);
+  CheckSmoke(BeforeDirectSquad.bPlayerDelegated && BeforeDirectSquad.TacticalPlan.Action == EBattleSquadTactic::Retreat &&
+   !AfterDirectSquad.bPlayerDelegated && AfterDirectSquad.TacticalPlan.Action == EBattleSquadTactic::Mission &&
+   AfterDirectSquad.Order == EBattleOrder::Move && AfterDirectSquad.Order == BeforeDirectSquad.Order &&
+   AfterDirectSquad.Destination == BeforeDirectSquad.Destination && AfterDirectSquad.OrderRevision == BeforeDirectSquad.OrderRevision &&
+   AfterDirectSquad.MissionOrder == BeforeDirectSquad.MissionOrder && AfterDirectSquad.MissionRevision == BeforeDirectSquad.MissionRevision,
+   TEXT("Direct control cancels delegation and plan while keeping execution and mission"));
+  // Observation still excludes the controlled soldier; tactical stepping must leave this now-manual squad alone.
   const auto DirectSample = Tactics->Observe(*Store->FindSquad(SID));
   CheckSmoke(DirectSample.Direct == 1 && DirectSample.Ready == 4, TEXT("Directly controlled soldier is excluded from automatic ready count"));
   bCombatPaused = false; Tactics->Step(.5f); bCombatPaused = true;
   CheckSmoke(PC->GetPawn() == A && A->GetState()->Action == EBattleAction::DirectControl && A->GetState()->HP == Before.HP && A->GetState()->Ammo == Before.Ammo, TEXT("Tactical step preserves player control and resources"));
+  const auto BeforeTacticalSquad = *Store->FindSquad(SID);
   PC->EnterTactical();
-  CheckSmoke(Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Retreat, TEXT("TPS RTS switch preserves squad plan"));
-  CheckSmoke(Match->CaptureSnapshot() == nullptr, TEXT("ST1 refuses unsupported active-plan snapshot rather than dropping it"));
+  const auto AfterTacticalSquad = *Store->FindSquad(SID);
+  CheckSmoke(AfterTacticalSquad.bPlayerDelegated == BeforeTacticalSquad.bPlayerDelegated &&
+   AfterTacticalSquad.TacticalPlan.Action == BeforeTacticalSquad.TacticalPlan.Action &&
+   AfterTacticalSquad.TacticalPlan.Revision == BeforeTacticalSquad.TacticalPlan.Revision &&
+   AfterTacticalSquad.TacticalPlan.Remaining == BeforeTacticalSquad.TacticalPlan.Remaining &&
+   AfterTacticalSquad.TacticalPlan.Destination == BeforeTacticalSquad.TacticalPlan.Destination &&
+   AfterTacticalSquad.TacticalPlan.Reason == BeforeTacticalSquad.TacticalPlan.Reason &&
+   AfterTacticalSquad.Order == BeforeTacticalSquad.Order && AfterTacticalSquad.Destination == BeforeTacticalSquad.Destination &&
+   AfterTacticalSquad.OrderRevision == BeforeTacticalSquad.OrderRevision &&
+   AfterTacticalSquad.MissionOrder == BeforeTacticalSquad.MissionOrder && AfterTacticalSquad.MissionRevision == BeforeTacticalSquad.MissionRevision &&
+   AfterTacticalSquad.MissionDestination == BeforeTacticalSquad.MissionDestination,
+   TEXT("TPS RTS switch preserves squad command state"));
+  CheckSmoke(PC->GetSelection().Num() == 1 && PC->GetSelection().Contains(A), TEXT("TPS RTS switch retains selected squad for command checks"));
+  PC->DelegateSelected();
+  CheckSmoke(Store->FindSquad(SID)->bPlayerDelegated && Store->FindSquad(SID)->Order == AfterTacticalSquad.Order &&
+   Store->FindSquad(SID)->OrderRevision == AfterTacticalSquad.OrderRevision &&
+   Store->FindSquad(SID)->MissionOrder == EBattleOrder::AttackMove && Store->FindSquad(SID)->MissionRevision == AfterTacticalSquad.MissionRevision,
+   TEXT("Redelegation preserves execution and latest mission until director update"));
+  CheckSmoke(Store->SetSquadTacticalPlan(SID, EBattleSquadTactic::Retreat, EBattleOrder::Move, Origin, Goals, 3, TEXT("FIXTURE EXPIRY")) &&
+   Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Retreat && Store->FindSquad(SID)->TacticalPlan.Remaining == 3 &&
+   Store->FindSquad(SID)->Order == EBattleOrder::Move && Store->FindSquad(SID)->MissionOrder == EBattleOrder::AttackMove,
+   TEXT("Expiry fixture accepts a fresh retreat over latest mission"));
   bCombatPaused = false; Tactics->Step(3); bCombatPaused = true;
   CheckSmoke(Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Mission && Store->FindSquad(SID)->Order == EBattleOrder::AttackMove, TEXT("Expired plan resumes latest mission"));
-  Store->SetSquadTacticalPlan(SID, EBattleSquadTactic::Support, EBattleOrder::Hold, Origin, Goals, 3, TEXT("FIXTURE SUPPORT"));
+  CheckSmoke(Store->SetSquadTacticalPlan(SID, EBattleSquadTactic::Support, EBattleOrder::Hold, Origin, Goals, 3, TEXT("FIXTURE SUPPORT")) &&
+   Store->FindSquad(SID)->bPlayerDelegated && Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Support &&
+   Store->FindSquad(SID)->Order == EBattleOrder::Hold, TEXT("K fixture begins delegated with accepted support plan"));
   const int32 HeldRevision = Store->FindSquad(SID)->OrderRevision;
   PC->TakeCommandSelected();
-  CheckSmoke(!Store->FindSquad(SID)->bPlayerDelegated && Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Mission && Store->FindSquad(SID)->OrderRevision == HeldRevision, TEXT("K cancels tactical authority while keeping executing order"));
+  CheckSmoke(!Store->FindSquad(SID)->bPlayerDelegated && Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Mission && Store->FindSquad(SID)->OrderRevision == HeldRevision &&
+   Store->FindSquad(SID)->Order == EBattleOrder::Hold && Store->FindSquad(SID)->MissionOrder == EBattleOrder::AttackMove, TEXT("K cancels tactical authority while keeping executing order"));
   PC->DelegateSelected();
-  Store->SetSquadTacticalPlan(SID, EBattleSquadTactic::Support, EBattleOrder::Hold, Origin, Goals, 3, TEXT("FIXTURE SUPPORT"));
+  CheckSmoke(Store->SetSquadTacticalPlan(SID, EBattleSquadTactic::Support, EBattleOrder::Hold, Origin, Goals, 3, TEXT("FIXTURE SUPPORT")) &&
+   Store->FindSquad(SID)->bPlayerDelegated && Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Support &&
+   Store->FindSquad(SID)->Order == EBattleOrder::Hold, TEXT("H fixture begins delegated with accepted support plan"));
+  const int32 BeforeManualHoldRevision = Store->FindSquad(SID)->OrderRevision;
   PC->HoldSelected();
-  CheckSmoke(!Store->FindSquad(SID)->bPlayerDelegated && Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Mission, TEXT("Accepted manual hold cancels delegation and plan"));
+  CheckSmoke(!Store->FindSquad(SID)->bPlayerDelegated && Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Mission &&
+   Store->FindSquad(SID)->Order == EBattleOrder::Hold && Store->FindSquad(SID)->MissionOrder == EBattleOrder::Hold &&
+   Store->FindSquad(SID)->OrderRevision == BeforeManualHoldRevision + 1, TEXT("Accepted manual hold cancels delegation and plan"));
  }
  else
  {
@@ -94,32 +131,6 @@ void ABattleGameMode::RunSquadTacticsSmokeTest()
  Perception->Restore(Observers, {}, GetWorld()->GetTimeSeconds());
  CheckSmoke(Tactics->Observe(*Store->FindSquad(SID)).Contacts.IsEmpty(), TEXT("Expired observations cannot become current tactical threats"));
  Perception->Reset();
- if (!BattleFieldLayout::IsLarge(GetWorld()))
- {
-  auto* Save = Match->CaptureSnapshot(); FString Error; TArray<uint8> Bytes;
-  CheckSmoke(Save && Save->Validate(Error), *FString::Printf(TEXT("Mission snapshot validates: %s"), *Error));
-  auto* Decoded = Save && UGameplayStatics::SaveGameToMemory(Save, Bytes) ? Cast<UBattleSave>(BattleSaveValidation::Decode(Bytes)) : nullptr;
-  CheckSmoke(Decoded && Decoded->Validate(Error) && Match->RestoreSnapshot(Decoded) && Store->FindSquad(SID)->bHasMission, TEXT("Mission survives real binary save and world restore"));
-  A = FindUnitByID(AID); PC->SetSelection(A);
-  auto* Old = Match->CaptureSnapshot();
-  if (Old) for (auto& Squad : Old->Squads) { Squad.bHasMission = false; Squad.MissionGoals.Reset(); }
-  CheckSmoke(Old && Match->RestoreSnapshot(Old) && Store->FindSquad(SID)->bHasMission, TEXT("Legacy missing mission fields migrate from stored own orders"));
-  A = FindUnitByID(AID); PC->SetSelection(A);
-  auto* Invalid = Match->CaptureSnapshot();
-  if (Invalid) Invalid->Squads[0].MissionGoals.Add(999999, FVector::ZeroVector);
-  const int32 Rev = Store->FindSquad(SID)->OrderRevision;
-  CheckSmoke(Invalid && !Match->RestoreSnapshot(Invalid) && Store->FindSquad(SID)->OrderRevision == Rev, TEXT("Invalid mission save is rejected before world mutation"));
-  if (Tactics->IsEnabled())
-  {
-   auto* BeforeDeath = Match->CaptureSnapshot(); PC->DelegateSelected();
-   Store->SetSquadTacticalPlan(SID, EBattleSquadTactic::Support, EBattleOrder::Hold, Origin, Goals, 3, TEXT("DEATH FIXTURE"));
-   for (int32 ID : Store->FindSquad(SID)->Members) Store->ApplyDamage(ID, 1, 10000);
-   CheckSmoke(Store->FindSquad(SID)->TacticalPlan.Action == EBattleSquadTactic::Mission && Tactics->Observe(*Store->FindSquad(SID)).Living == 0, TEXT("Last member death cancels tactical authority immediately"));
-   CheckSmoke(Tactics->Observe(*Store->FindSquad(SID)).RecentDamage > 0, TEXT("Recent own damage is recorded without enemy state access"));
-   CheckSmoke(BeforeDeath && Match->RestoreSnapshot(BeforeDeath), TEXT("Death fixture restores clean live match"));
-   A = FindUnitByID(AID); PC->SetSelection(A);
-  }
- }
  // Live observation is explicitly separate from the synthetic command/knowledge checks above.
  Tactics->Reset(); PC->SelectAll(); PC->DelegateSelected(); PC->SetSelection(A);
  bCombatPaused = false; CombatStartsAt = 0; Match->DelegationClock = 5;
@@ -141,8 +152,28 @@ void ABattleGameMode::RunSquadTacticsSmokeTest()
    CheckSmoke(!Controller->GetSelection().IsEmpty(), TEXT("HUD capture has a living selected squad"));
    FScreenshotRequest::RequestScreenshot(Prefix+TEXT("-rts.png"),true,false);
   }
-  UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_SMOKE_RESULT failures=%d"), SmokeFailures);
   FTimerHandle Exit;
-  GetWorldTimerManager().SetTimer(Exit, FTimerDelegate::CreateWeakLambda(this,[this](){ FPlatformMisc::RequestExitWithStatus(false,SmokeFailures?1:0); }), 1.f, false);
+  GetWorldTimerManager().SetTimer(Exit, FTimerDelegate::CreateWeakLambda(this,[this]()
+  {
+   // Destructive fixture runs after the live observations and screenshot have finished.
+   auto* DeathStore = GetWorld()->GetSubsystem<UBattleState>();
+   auto* DeathTactics = GetWorld()->GetSubsystem<UBattleSquadTactics>();
+   if (DeathTactics->IsEnabled())
+   {
+    const int32 DeathFirstID = DeathStore->RegisterUnit(0, 100.f);
+    const int32 DeathLastID = DeathStore->RegisterUnit(0, 100.f);
+    const int32 DeathSquadID = DeathStore->CreateSquad(0, {DeathFirstID, DeathLastID});
+    TMap<int32,FVector> DeathGoals; DeathGoals.Add(DeathFirstID, FVector::ZeroVector); DeathGoals.Add(DeathLastID, FVector::ZeroVector);
+    DeathStore->SetSquadDelegated(DeathSquadID, true);
+    CheckSmoke(DeathStore->SetSquadTacticalPlan(DeathSquadID, EBattleSquadTactic::Support, EBattleOrder::Hold, FVector::ZeroVector, DeathGoals, 3, TEXT("DEATH FIXTURE")) && DeathTactics->Observe(*DeathStore->FindSquad(DeathSquadID)).RecentDamage == 0, TEXT("Death fixture begins with active tactical authority and no damage history"));
+    DeathStore->ApplyDamage(DeathFirstID, 1, 10000);
+    CheckSmoke(DeathStore->FindSquad(DeathSquadID)->TacticalPlan.Action == EBattleSquadTactic::Support, TEXT("Surviving member retains tactical authority"));
+    DeathStore->ApplyDamage(DeathLastID, 1, 10000);
+    CheckSmoke(DeathStore->FindSquad(DeathSquadID)->TacticalPlan.Action == EBattleSquadTactic::Mission && DeathTactics->Observe(*DeathStore->FindSquad(DeathSquadID)).Living == 0, TEXT("Last member death cancels tactical authority immediately"));
+    CheckSmoke(DeathTactics->Observe(*DeathStore->FindSquad(DeathSquadID)).RecentDamage == 200.f, TEXT("Recent own damage is recorded without enemy state access"));
+   }
+   UE_LOG(LogFutureBattle, Display, TEXT("BATTLE_SMOKE_RESULT failures=%d"), SmokeFailures);
+   FPlatformMisc::RequestExitWithStatus(false,SmokeFailures?1:0);
+  }), 1.f, false);
  }), Duration, false);
 }

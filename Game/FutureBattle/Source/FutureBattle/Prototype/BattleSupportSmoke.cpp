@@ -1,6 +1,5 @@
 #include "BattleGameMode.h"
 #include "BattleMatch.h"
-#include "BattleSave.h"
 #include "BattleUnit.h"
 #include "BattleController.h"
 #include "BattlePerception.h"
@@ -45,17 +44,11 @@ void ABattleGameMode::RunSupportSmokeTest()
 	auto* Wall = GetWorld()->SpawnActor<AStaticMeshActor>(KnownPosition + FVector(0, 100, 70), FRotator::ZeroRotator);
 	Wall->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable); Wall->GetStaticMeshComponent()->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube")));
 	Wall->SetActorScale3D(FVector(1, .3, 4)); Wall->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));
-	auto* Save = Match->CaptureSnapshot(); FString Error;
-	CheckSmoke(Save && Save->Validate(Error) && Save->Strikes.Num() == 1 && Save->AllySupportUsed == 1 && Save->AllySupportCooldown == 20, TEXT("Pending impact delay cooldown and consumed mission count are included in save validation"));
 	Match->UpdateSupport(2.f);
 	CheckSmoke(Store->Find(VictimID)->HP == 100 && Match->Strikes.Num() == 1 && Match->Strikes[0].Remaining == 1, TEXT("Delayed support causes no early damage"));
 	bCombatPaused = true; Match->UpdateSupport(10.f);
 	CheckSmoke(Match->Strikes[0].Remaining == 1 && Match->SupportCooldown[0] == 18, TEXT("Pausing freezes both support arrival and rearm timers"));
-	CheckSmoke(Match->RestoreSnapshot(Save) && Match->Strikes.Num() == 1 && Match->Strikes[0].Remaining == 3 && Match->SupportCooldown[0] == 20 && Match->SupportUsed[0] == 1, TEXT("Restoring an in-flight strike neither duplicates it nor refunds its mission"));
-	for (ABattleUnit* Unit : Units) { Unit->SavedAI->StopMovement(); Unit->SavedAI->SetActorTickEnabled(false); }
-	auto* Bad = DuplicateObject<UBattleSave>(Save, GetTransientPackage()); Bad->Strikes[0].Remaining = -1;
-	CheckSmoke(!Match->RestoreSnapshot(Bad) && Match->Strikes.Num() == 1 && Match->Strikes[0].Remaining == 3, TEXT("Corrupt support timer rejects the complete snapshot without altering the current mission"));
-	Match->UpdateSupport(3.01f);
+	bCombatPaused = false; Match->UpdateSupport(1.01f);
 	CheckSmoke(Store->Find(VictimID)->HP < 100 && Store->Find(TargetID)->HP == 100 && Match->Strikes.IsEmpty(), TEXT("Impact damages enemies near the recorded point and does not follow the moved target"));
 	CheckSmoke(Store->Find(ShieldID)->HP == 100 && Store->Find(FriendID)->HP == 100, TEXT("Physical cover blocks blast damage and friendly units remain protected"));
 	Match->UpdateSupport(20.f); Match->RequestSupport(ObserverID); Match->UpdateSupport(20.f); Match->RequestSupport(ObserverID);

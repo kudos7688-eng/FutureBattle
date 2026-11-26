@@ -260,19 +260,6 @@ float BattleTactics::ArtilleryStandoff()
  return HasOverride?FMath::Clamp(OverrideStandoff,0.f,1.f):GetDefault<UBattleTuning>()->ArtilleryStandoff;
 }
 
-namespace { int32 SaveReloadBoundarySmokeOverride=-1; }
-bool BattleTactics::SaveReloadBoundary()
-{
- static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSaveReloadBoundary="),V);return V==1;}();
- return SaveReloadBoundarySmokeOverride>=0?SaveReloadBoundarySmokeOverride==1:On;
-}
-int32 BattleTactics::OverrideSaveReloadBoundaryForSmoke(int32 Value)
-{
- const int32 Previous=SaveReloadBoundarySmokeOverride;
- if(FParse::Param(FCommandLine::Get(),TEXT("BattleMixedSaveSmoke")))SaveReloadBoundarySmokeOverride=FMath::Clamp(Value,-1,1);
- return Previous;
-}
-
 bool BattleTactics::SPGAmmoEnabled()
 {
  // Default 1 since 2026-11-24 (user decision "12発・6発で既定に"): 12 rounds, 6 per 10 s supply (BattleTuning); -BattleSPGAmmo=0 restores unlimited fire.

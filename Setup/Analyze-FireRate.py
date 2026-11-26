@@ -11,11 +11,13 @@ Per match, from metrics.json and run.log:
   - squad time by plan (tactical_squad_seconds) and by known contacts (BATTLE_ST_SAMPLE contacts=),
   - how many shots a peek out of cover ends with (cover_diagnostics.peek_end_shots_*),
   - how unevenly the aimed shots are spread over the soldiers (BATTLE_SHOT_AT unit=),
-  - with -BattleFireTimeLog: the riflemen's time by what keeps them from firing (cover_diagnostics.firetime_*)."""
+  - with -BattleFireTimeLog: the riflemen's time by what keeps them from firing (cover_diagnostics.firetime_*),
+  - with -BattleArriveWatch: how many arrivals were watched (BATTLE_ARRIVE_WATCH)."""
 import collections, json, os, re, sys
 
 SAMPLE = re.compile(r'BATTLE_ST_SAMPLE t=([\d.]+) squad=(\d+) team=(\d) managed=\d living=(\d+) .*? contacts=(\d+) ')
 SHOT = re.compile(r'BATTLE_SHOT_AT t=([\d.]+) unit=(\d+) team=\d type=(-?\d+) d_cm=(\d+)')
+WATCH = re.compile(r'BATTLE_ARRIVE_WATCH t=[\d.]+ squad=(\d+) team=\d sector=(\d) arrived=(\d) walk_in=([\d.]+)')
 BASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Benchmarks', 'SightTrial-20261111')
 INTERVAL = 1.4
 
@@ -25,6 +27,7 @@ def analyse(run):
     m = json.load(open(os.path.join(folder, 'metrics.json'), encoding='utf-8-sig'))
     shots, first_living, seen = collections.Counter(), {}, {}
     contact_squad, all_squad, contact_person, all_person = 0., 0., 0., 0.
+    watches = []
     with open(os.path.join(folder, 'run.log'), encoding='utf-8', errors='replace') as log:
         for line in log:
             if 'BATTLE_ST_SAMPLE' in line:
@@ -41,6 +44,10 @@ def analyse(run):
                     if contacts > 0:
                         contact_squad += step
                         contact_person += step * living
+            elif 'BATTLE_ARRIVE_WATCH' in line:
+                s = WATCH.search(line)
+                if s:
+                    watches.append((int(s[1]), s[2] == '1', s[3] == '1', float(s[4])))
             elif 'BATTLE_SHOT_AT' in line:
                 s = SHOT.search(line)
                 if s and s[3] == '0':
@@ -75,6 +82,15 @@ def analyse(run):
     if engage:
         print(' if every soldier of a squad in ENGAGE fired without pause (8 per squad): %.0f shots; actual share %.0f%%' % (
             engage * 8 / INTERVAL, 100 * m['shots'] / (engage * 8 / INTERVAL)))
+    if ev.get('SeekEnemyGo') or ev.get('JoinFightGo'):
+        # -BattleSeekKnown / -BattleJoinFight: squads sent to where the team saw an enemy / to a fighting squad, and how those ended.
+        print(' seeks %d (met an enemy %d, none there %d, 90 s %d); joins %d (met an enemy %d)' % (
+            ev.get('SeekEnemyGo', 0), ev.get('SeekEnemyContact', 0), ev.get('SeekEnemyEndEmpty', 0), ev.get('SeekEnemyEndTimeout', 0),
+            ev.get('JoinFightGo', 0), ev.get('JoinFightContact', 0)))
+    if watches:
+        came = [w for w in watches if w[2]]
+        print(' arrival watches: %d by %d squads (%d in a sector); walked in for %.0f s on average; %d gave up after 30 s short of the destination' % (
+            len(came), len({w[0] for w in came}), sum(w[1] for w in came), sum(w[3] for w in came) / max(1, len(came)), len(watches) - len(came)))
     peeks = [c.get('peek_end_shots_0', 0), c.get('peek_end_shots_1', 0), c.get('peek_end_shots_2plus', 0)]
     if sum(peeks):
         print(' peeks out of cover ending with 0 / 1 / 2+ shots: %d / %d / %d (%.0f%% with none)' % (*peeks, 100 * peeks[0] / sum(peeks)))
@@ -100,6 +116,20 @@ def analyse(run):
             print('   %-52s %8.0f  %5.2f%%' % (label, n / 30, 100 * n / total))
         if left:
             print('   not grouped:', left)
+    where = [(k[10:].split('_'), v) for k, v in c.items() if k.startswith('firewhere_')]
+    if where:
+        # One sample a second per rifleman outside cover actions: sight (none = no squad target and no enemy in his sight), plan,
+        # group (g<kind>p<phase>: kind 0 attack, 1 front-holding, 2 surprise; phase 0 assemble, 1 advance, 2 hold), order, walk/still,
+        # at/away from the squad's destination, place (home 80 m, point 100 m, field), nearest living enemy (truth).
+        none = [(p, v) for p, v in where if p[0] == 'none']
+        base = sum(v for _, v in none) or 1
+        print(' no target and no enemy in sight: %.1f%% of %d samples; of that time:' % (100 * base / sum(v for _, v in where), sum(v for _, v in where)))
+        for title, idx in (('plan', (1,)), ('group', (2,)), ('order', (3,)), ('walking / at destination', (4, 5)), ('place', (6,)),
+                           ('nearest enemy', (7,)), ('plan, order, walking, at destination', (1, 3, 4, 5)), ('place, nearest enemy', (6, 7))):
+            count = collections.Counter()
+            for p, v in none:
+                count[' '.join(p[i] for i in idx)] += v
+            print('   %s: %s' % (title, ', '.join('%s %.1f%%' % (k, 100 * v / base) for k, v in count.most_common(8))))
     if shots:
         soldiers = sum(v for v in first_living.values() if v == 8)
         ranked = sorted(shots.values(), reverse=True)

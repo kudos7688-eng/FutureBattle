@@ -50,11 +50,9 @@ namespace BattleArms
  uint8 EliteKit(int32 Slot);            // role of a slot (slots past the table are riflemen)
  uint8 GradeKit(uint8 Grade,int32 Slot); // the role of a slot in a squad of that grade (1 elite platoon, 2 sniper team)
  bool ValidGrade(uint8 SquadType,uint8 Grade); // 0 any; 1 rifle squads; 2 scout pairs
- bool GradeWeapon(uint8 Grade,EBattleWeapon W); // a weapon some role of that grade carries (save validation)
  EBattleWeapon KitWeapon(uint8 Kit);    // primary weapon of a role
  int32 KitGrenades(uint8 Kit);
  bool ValidKit(uint8 Kit);
- bool EliteWeapon(EBattleWeapon W);     // a weapon some elite role carries (save validation)
  const TCHAR* KitName(uint8 Kit);       // Japanese role name for the HUD ("" for none)
  const TCHAR* WeaponName(EBattleWeapon W);
  // Damage scale of a shot of W that travelled Distance cm (the shotgun's falls with distance; others are constant).

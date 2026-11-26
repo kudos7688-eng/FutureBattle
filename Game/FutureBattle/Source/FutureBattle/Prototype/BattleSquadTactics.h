@@ -6,12 +6,11 @@
 #include "BattleSquadTactics.generated.h"
 
 struct FBattleSquadState;
-class UBattleSave;
 USTRUCT()
 struct FBattleSquadObservation
 {
  GENERATED_BODY()
- // Sum of living members' maximum HP (leader multiplier included). Not saved; 0 falls back to PerUnit*Living.
+ // Sum of living members' maximum HP (leader multiplier included). 0 falls back to PerUnit*Living.
  float MaxHealth=0;
  float FullHealth(float PerUnit) const { return MaxHealth>0.f?MaxHealth:PerUnit*Living; }
  UPROPERTY() int32 Living=0;
@@ -60,13 +59,10 @@ public:
  void RecordDamage(int32 SquadID, float Damage);
  void Dump() const;
  void Reset();
- void CaptureSave(UBattleSave& Save,double Now) const;
- void RestoreSave(const UBattleSave& Save,double Now);
- int32 FeatureMask() const {return (bEnabled?1:0)|(bST2?2:0)|(bFlank?4:0)|(bRelaxedFlank?16:0)|((FlankTeams^3)<<5)|(bCoverActions?128:0)|(bCoordination?256:0);}
  double Clock() const { return ActiveSeconds; }
  const TMap<FName,int64>& EventCounts() const { return Events; }
  const TMap<FName,double>& ActionDurations() const { return ActionSeconds; }
- // Evaluation only (never read by AI decisions, not saved): home supply trips by squad, timed on the tactical clock.
+ // Evaluation only (never read by AI decisions): home supply trips by squad, timed on the tactical clock.
  const TMap<int32,double>& OpenSupplyTrips() const { return SupplyTripStart; }
  const TArray<double>& CompletedSupplyTripSeconds() const { return SupplyTripSeconds; }
 private:
@@ -96,9 +92,26 @@ private:
  TArray<double> SupplyTripSeconds;
  void SupplyTripBegin(int32 SquadID){ SupplyTripStart.Add(SquadID, ActiveSeconds); }
  // Trial -BattleJoinFight (BattleTactics.h): the squad each joining squad walks to, when it set out, since when that squad has not
- // been fighting (-1: it fights) and when the join ended (-1: under way). Not saved.
+ // been fighting (-1: it fights) and when the join ended (-1: under way).
  struct FJoinFight{int32 Host=INDEX_NONE;double Start=0.,QuietSince=-1.,EndAt=-1.;};
  TMap<int32,FJoinFight> JoinFights;
+ // Trial -BattleSupplyCarRecover (BattleTactics.h): when a squad gave up waiting for replacements at a supply vehicle (it does not
+ // try a vehicle for its losses again for 180 s). Not saved.
+ TMap<int32,double> FieldRecoverGaveUp;
+ // ... and since when a squad is on a trip to a vehicle for its losses (a trip for ammunition only is not in here).
+ TMap<int32,double> FieldRecoverSince;
+ // Trial -BattleSeekKnown (BattleTactics.h): per team, the 50 m squares in which one of its soldiers saw enemy infantry (the place
+ // and the time of the last sighting; refreshed once a second), and per seeking squad the square it walks to, the place, when it
+ // set out, when it arrived (-1: on its way) and when the seek ended (-1: under way). Not saved.
+ struct FKnownSpot{FVector At=FVector::ZeroVector;double Seen=0.;};
+ TMap<FIntPoint,FKnownSpot> KnownSpots[2];
+ double KnownSpotsAt[2]={-100.,-100.};
+ struct FSeekEnemy{FIntPoint Cell=FIntPoint::ZeroValue;FVector At=FVector::ZeroVector;double Start=0.,ArrivedAt=-1.,EndAt=-1.;};
+ TMap<int32,FSeekEnemy> SeekEnemies;
+ // Per squad, the squares its seeks ended in and when (30 s before it goes to one again, and its place there counts that long).
+ TMap<int32,TMap<FIntPoint,double>> SeekEnded;
+ void RefreshKnownSpots(int32 Team);
+ void EndSeek(int32 SquadID);
  void SupplyTripEnd(int32 SquadID, bool bResumed);
  TMap<int32, TArray<TPair<double, float>>> DamageHistory;
  double TotalStepMs = 0, MaxStepMs = 0;

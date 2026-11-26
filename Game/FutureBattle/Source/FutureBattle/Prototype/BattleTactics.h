@@ -31,7 +31,7 @@ namespace BattleTactics
  // off, 2..10): an AI soldier's carbine fires bursts of n rounds at the player's interval (UBattleTuning::ShotInterval for the
  // player), then holds for -BattleBurstPause=s (default 1.0, 0.2..5; from the
  // burst's last round to the next burst's first). Each round is a real shot (damage, spread, one round of
- // ammunition). The count within a burst is not saved (a new burst after a load).
+ // ammunition).
  // -BattleCoverPeekShots=n (default 0 = UBattleTuning::AICoverShotsPerPeek, 1..30): shots after which an AI peek out of cover ends.
  int32 BurstFire();
  float BurstPause();
@@ -41,11 +41,34 @@ namespace BattleTactics
  // mission with no enemy of its own walks to a squad of its team that holds a firing position against an enemy it sees (plan
  // Engage), within -BattleJoinFightRange=cm (default 15000, 2000..60000) leader to leader, at most -BattleJoinFightMax=n (default 2,
  // 1..8) squads per fighting squad. It goes back to its mission when that squad has stopped fighting for 10 s or after 60 s; with an
- // enemy of its own in sight it fights as usual. Own team's squads and plans only. Who joined whom is not saved (a joining squad
- // goes back to its mission after a load). BattleSquadRetreat.cpp (Evaluate).
+ // enemy of its own in sight it fights as usual. Own team's squads and plans only. BattleSquadRetreat.cpp (Evaluate).
  bool JoinFight();
  float JoinFightRange();
  int32 JoinFightMax();
+ // Contact trial, user 2026-11-25 ("share the enemy's place across the team", STATUS "弾薬と補給" 14:10/16:00: an enemy is within
+ // 200 m for 74% of the time without one in sight; a sighting reaches only soldiers within ShareRange, 16 m, and the team's view
+ // serves the front line and the groups, never a squad's own way). -BattleSeekKnown=1|2 (default 0): the team remembers for
+ // -BattleSeekKnownSeconds=s (default 30, 5..180) each 50 m square in which one of its soldiers saw enemy infantry himself (no
+ // vehicles, no scout long sight, no reports; the place last seen there, no true positions). An AI rifle squad on its mission with
+ // no enemy of its own attack-moves to the nearest such place within -BattleSeekKnownRange=cm (default 20000, 2000..60000), at most
+ // -BattleSeekKnownMax=n (default 2, 1..8) squads per square. With an enemy in its own sight it fights as usual; 10 s at the place
+ // with none, or 90 s, and it goes back to its mission. 1: squads outside the groups only. 2: also squads of front-holding groups
+ // (attack and surprise groups never). Not saved. BattleSquadRetreat.cpp (Evaluate, RefreshKnownSpots).
+ // Contact trial, user 2026-11-25 ("once spotted, know its true place for some seconds"; an exception to the rule that decisions
+ // read observed information only, limited to this). -BattleSpotTrack=s (default 0 = off, 0..30): for s seconds after a soldier
+ // loses sight of an enemy he saw himself, his contact also holds where that enemy is now (FBattleContact::TrackedPosition,
+ // refreshed at his perception scans, so it may be one scan old; no longer than his memory of the contact, 5 s by default,
+ // see -BattleMemorySeconds). Read through FBattleContact::MoveAt() only where a soldier or squad decides where to look, walk, take cover or
+ // fall back: the watch and walking look (BattleSoldierWatch.cpp), the choice of cover (BattleThreatCover.cpp, Follow), the
+ // retreat goal and the safety of a flank route (BattleSquadRetreat.cpp, BattleSquadFlank.cpp), the facing on a flank move, and
+ // the team's places for -BattleSeekKnown. LastKnownPosition is untouched: everything that fires or throws at a remembered place
+ // (grenades, covering fire, suppressing fire, blind fire, guns) and the player's map read that, so nothing is shot at a tracked
+ // place. Not reported to other soldiers, not saved.
+ float SpotTrack();
+ int32 SeekKnown();
+ float SeekKnownSeconds();
+ float SeekKnownRange();
+ int32 SeekKnownMax();
  // Contact trial, user 2026-11-25. -BattleMemorySeconds=s (default 0 = UBattleTuning::MemorySeconds, 5 s; 1..120): how long a soldier
  // keeps an enemy he no longer sees (before the recruit/veteran factor). The 5 s caps inside the cover actions stay.
  // -BattleSuppressFire=s (default 0 = off, 0..60): a soldier who stands still and has lost sight of the squad's target keeps firing
@@ -53,12 +76,42 @@ namespace BattleTactics
  // the way clear of walls. The shots suppress like covering fire. BattleLeaderRuntime.cpp (Follow).
  float MemorySeconds();
  float SuppressFire();
+ // Contact trial, user 2026-11-25 (STATUS "弾薬と補給" 14:10: 56% of the time without an enemy in sight is walking on an attack-move
+ // mission short of its destination; missions change about 1.5 times a minute per squad, so a squad that arrives walks on at once).
+ // -BattleArriveWatch=s (default 0 = off, 0..60): an AI rifle squad on an attack-move mission keeps that mission from 65 m before
+ // its destination (a road waypoint is replaced by the next at 60 m, BattleRoutes.cpp) until s seconds after its leader came within
+ // 15 m of it (a sector mission: from entering the sector, for s seconds), so it walks in, stands and watches there (the watch of
+ // standing soldiers, -BattleSoldierWatch) before it is given the next mission. Walking in takes at most 30 s. Once per mission;
+ // only while the squad follows its mission (not while it fights, retreats or resupplies). Orders that pass at once: any order
+ // that is not an attack-move, the home defence, a group gathering, artillery raids and their screens, anti-tank hunts, mortar
+ // posts, surprise bridge legs; no vehicles or other squad types. A front post that moves back is taken up to s seconds late.
+ // Not saved (after a load a squad at its destination watches once more). BattleMatch.cpp (UpdateTeamOrders, ArriveWatchHolds).
+ float ArriveWatch();
  // Stage 2: -BattleSupplyAmmoShare=x (default 0 = off, 0..0.9): an infantry squad whose living members together hold x or less of
  // their full reserve (loaded rounds are not counted, so a refilled squad is never low) goes for ammunition (a supply vehicle in
  // reach, else home), instead of only when half or all of them are empty; it resumes with 0.9 of the reserve or more. Own squad
  // state only (BattleSquadRetreat.cpp). -BattleAreaSupplyEarly=1 (default 0): the AI buys its supply vehicles (-BattleAreaSupplyKeep)
  // right after its first purchases and before the other special types, instead of last (BattleArea.cpp).
  float SupplyAmmoShare();
+ // Supply trial, user 2026-11-26 ("the supply unit restores everyone"; STATUS "弾薬と補給" 11-26: rifle squads go home for their
+ // losses, at 3-5 of 8 living with 95% of their rounds left, so ammunition never becomes a reason). -BattleSupplyCarRecover=1
+ // (default 0): an infantry squad whose leader is within UBattleTuning::SupplyTeamRadius of a supply vehicle of its team with
+ // stock gets there what it gets at home: its living members are healed in full at once and its dead members are replaced (10 s
+ // each, one credit each as at home; each replacement also takes one soldier's load of rounds, magazine + reserve, from the
+ // vehicle's stock). A squad down to the living count that sends it home drives to a supply vehicle within
+ // UBattleTuning::FieldSupplyRange instead ("FIELD SUPPLY") and stays until it is manned again (as at home: SupplyResumeLiving, or
+ // no credits); 120 s after setting out without that, or when the vehicle is gone, it gives up, goes on with the members it has
+ // (home when its losses ask for it) and does not try a vehicle for its losses again for 180 s. Healing: members within the radius
+ // who were not hit in the last 5 s; it costs nothing. A replacement waits while the stock holds less than his rounds. Not for
+ // vehicles, exoskeletons, scout pairs and the base garrison. BattleArea.cpp (UpdateArea), BattleSquadRetreat.cpp (Evaluate).
+ bool SupplyCarRecover();
+ // Trial -BattleBaseRifleDamage=x (default 0 = unchanged, 0.01..1): small-arms shots do x of their damage to an enemy home base
+ // (anti-tank rounds, tank guns and shells keep their own base damage).
+ float BaseRifleDamage();
+ bool BaseGarrison();
+ constexpr int32 BaseGarrisonSquads=2;
+ float BaseGarrisonRadius();
+ float BaseGarrisonSeconds();
  // Trial -BattleVehicleOrderHere=1 (default 0): a vehicle order to where the vehicle already stands is accepted as arrived (no route needed).
  bool VehicleOrderHere();
  bool ArtilleryPosts(); // Trial -BattleArtilleryPosts=1 (default 0): public mortar posts and raids.
@@ -96,10 +149,6 @@ namespace BattleTactics
  int32 ACStandOff(); // Trial -BattleACStandOff=<cm> (default 0 = anti-tank reach + VehicleStandOffMargin): how far an armoured car keeps from known anti-tank soldiers.
  int32 ACTankStandOff(); // Trial -BattleACTankStandOff=<cm> (default 0 = off): an armoured car also keeps this far from known enemy tanks / guns (BattleATHunt.cpp).
  bool ACShield(); // Trial -BattleACShield=1 (default 0): an armoured car goes ahead of attacking infantry and holds against anti-tank soldiers.
- bool SaveReloadBoundary(); // Trial -BattleSaveReloadBoundary=1 (default 0): finish due reloads on the save copy.
- int32 OverrideSaveReloadBoundaryForSmoke(int32 Value); // Smoke only; -1 restores command-line policy.
- bool SaveRoutes(); // Trial -BattleSaveRoutes=1 (default 0): persist player route orders and lane choices.
- int32 OverrideSaveRoutesForSmoke(int32 Value); // -1 restores command-line policy; returns previous override. Smoke only.
  bool BlastOcclusionEnabled();
  bool ArtilleryClustersEnabled();
  bool WeaponOrderGateEnabled(); // trial, default 0: apply mission permissions to launchers and artillery
@@ -136,23 +185,21 @@ namespace BattleTactics
  bool LeaderGuardEnabled();
  // Squad leaders start with N times Health: UBattleTuning::LeaderHealthMultiplier (default 3), overridden by -BattleLeaderHealth=N (1..10).
  float LeaderHealthMultiplier();
- // Bits added to the mixed-save rule check so saves only load under the same leader multiplier.
- int32 LeaderHealthSaveBits();
  // Area home supply cycle: UBattleTuning::Supply* overridden by -BattleSupplyReturnLiving= / -BattleSupplyResumeLiving= /
- // -BattleSupplyAwayRatio= / -BattleSupplyHeal= / -BattleSupplyResumeHealth= (trials only; not part of the save check).
+ // -BattleSupplyAwayRatio= / -BattleSupplyHeal= / -BattleSupplyResumeHealth= (trials only).
  struct FSupplyTuning { int32 ReturnLiving=8, ResumeLiving=10; float AwayRatio=1.f, HealPerSecond=0.f, ResumeHealthRatio=0.f; bool bPointAmmo=false; float PointRadius=2500.f; };
  const FSupplyTuning& Supply();
  // Area new-squad hiring: UBattleTuning::bAreaHire/AreaSquadCost/AreaHireReserve; -BattleAreaHire=0/1 overrides.
- // MaxActive = UBattleTuning::AreaMaxActiveSquads (default 30 since 2026-11-20, was 25), -BattleAreaMaxSquads=N (1..100) overrides; the save check uses it.
+ // MaxActive = UBattleTuning::AreaMaxActiveSquads (default 30 since 2026-11-20, was 25), -BattleAreaMaxSquads=N (1..100) overrides.
  // AI pacing: Interval between a team's AI purchases and Stop = no AI purchase in the last N seconds
- // (-BattleAreaHireReserve= / -BattleAreaHireInterval= / -BattleAreaHireStop= override; not part of the save check).
+ // (-BattleAreaHireReserve= / -BattleAreaHireInterval= / -BattleAreaHireStop= override).
  // P1 trial -BattleAreaHirePurpose=1 (default OFF; -BattleAreaHirePurposeFront=N, default 10): the AI buys only for an observed need
  // (own home hit in the last 30 s or enemies seen within 150 m of it, a point with fewer than N own soldiers within 100 m, or the
  // enemy home seen at or below 500 HP) and gives the new squad that mission; otherwise it keeps its resources.
  struct FAreaHireTuning { bool bEnabled=true; int32 Cost=15, Reserve=10, MaxActive=25; float Interval=0.f, Stop=0.f; bool bPurpose=false; int32 PurposeFront=10; };
  const FAreaHireTuning& AreaHire();
  // Area income: UBattleTuning::bAreaIncome/AreaIncomeSeconds/AreaBaseIncome/AreaPointIncome; -BattleAreaIncome=0/1 overrides.
- // Trials (not part of the save check): -BattleAreaIncomeBase= / -BattleAreaIncomePerPoint= override the amounts; -BattleAreaIncomeRamp=r
+ // Trials: -BattleAreaIncomeBase= / -BattleAreaIncomePerPoint= override the amounts; -BattleAreaIncomeRamp=r
   // multiplies each payment by 1+r*elapsed minutes (rounded); -BattleAreaStartCredits= replaces the 100 starting resources.
  // Map E: UBattleTuning::AreaBaseIncomeUrban / AreaPointIncomeUrban (-1 = same as A-D), -BattleAreaIncomeUrbanBase= / -BattleAreaIncomeUrbanPerPoint=.
  struct FAreaIncomeTuning { bool bEnabled=true; float Seconds=20.f; int32 Base=1, PerPoint=1; int32 UrbanBase=-1, UrbanPerPoint=-1; float Ramp=0.f; int32 StartCredits=100;
@@ -201,6 +248,8 @@ namespace BattleTactics
  bool SymmetricStart(const class UWorld* World);
  // The number that picks a squad's allocation slot: the squad ID, or with the symmetric start its number within its own team.
  int32 AllocationIndex(const class UWorld* World,int32 SquadID,int32 Team);
+ int32 PhaseIndex(const class UWorld* World,int32 SquadID,int32 Team);
+ bool MoveTraceSquad(int32 SquadID);
  // Trial -BattleDefendEngage=0/1 (UBattleTuning::bDefendEngage, default 0; the trial team with -BattleAreaTrialTeam): defending squads target enemies within weapon range, not only within DefenseRadius of the defended place.
  bool DefendEngage(int32 Team);
 	// SpreadScale: extra multiplier from runtime effects (suppression trial); 1 = none.
