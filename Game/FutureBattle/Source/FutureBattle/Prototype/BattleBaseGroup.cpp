@@ -130,11 +130,22 @@ bool UBattleMatch::BaseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector
  const auto* S=Store?Store->FindSquad(SquadID):nullptr;
  if(!G||G->Kind!=3||!S||!R||!Store->Find(S->LeaderUnitID))return false;
  Order=EBattleOrder::AttackMove;
+ // A squad falling back, regrouping or walking home for replacements keeps its mission: a new goal every update (the leg below moves
+ // with the leader) cut those short, so depleted squads never reached the home (map I seeds 7/19: "MEMBERS" fall-backs 6/2 -> 29/56,
+ // three of five squads down to one to three soldiers for the rest of the match).
+ if(S->bHasMission&&S->TacticalPlan.Action!=EBattleSquadTactic::Mission){Center=S->MissionDestination;return true;}
  if(G->Phase==0){Center=G->Rally;return true;}
  constexpr int32 Cols=BattleSectors::Columns;
  const bool bLow=AreaHome(Team).X<0;auto ColOf=[&](const FIntPoint& C){return bLow?C.X:Cols-1-C.X;};
  const int32 EnemyHomeCol=FMath::Clamp(ColOf(BattleSectors::Cell(AreaHome(1-Team))),0,Cols-1);
- const int32 Col=ColOf(BattleSectors::Cell(R->Position(S->LeaderUnitID)));
+ const FVector Leader=R->Position(S->LeaderUnitID);const int32 Col=ColOf(BattleSectors::Cell(Leader));
+ // The current leg stands until the leader is within a sector of it, when it is still on the group's row and ahead of the leader.
+ if(S->bHasMission&&FVector::Dist2D(Leader,S->MissionDestination)>BattleSectors::Size)
+ {
+  const FIntPoint M=BattleSectors::Cell(S->MissionDestination);
+  if(BattleSectors::Valid(M)&&ColOf(M)>Col&&FMath::Abs(M.Y-FrontCell(Team,0,G->SurpriseRow).Y)<=BattleSectors::Rows/2-1&&ColOf(M)<EnemyHomeCol-EnemyHomeReach+LegColumns)
+  {Center=S->MissionDestination;return true;}
+ }
  FIntPoint Cell;
  if(Col>=EnemyHomeCol-EnemyHomeReach||BaseGroupRowCell(Team,FMath::Min(Col+LegColumns,EnemyHomeCol-EnemyHomeReach),G->SurpriseRow,Cell)==INDEX_NONE)
  {Center=AreaHome(1-Team)*(25./27.);return true;}
