@@ -37,6 +37,12 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-27 2時10分 Claude（壁の遮蔽判定）：マップK で値2の移動が 15 → 2 に減ったのは移動の約束の欠陥ではなく、試合の分かれ（コードは直していない）
+
+- 調べ方（凍結 coverlean-5c57baf、30FPS、両軍とも値2、1試合ずつ）：約束を切った `-BattleKnownMoveCommit=0` の K s7 は前の版 bcf31ea の K s7 と移動の記録がすべて同じ（開始15・到着8・着いて撃つ1）＝切替0の戻し方は正しい。約束ありの K s7 は、期限で断った候補13件で早い時期に試合が分かれ、進軍中の門が 141万 → 201万回に増えて移動の機会自体が減った。
+- 同じ seed で比べた対（K s43）：約束なし 開始8・到着4・着いて撃つ0・情報切れの取り消し3 → 約束あり 11・7・2・0。約束は移動を減らさず、着いて撃つ数を増やした。
+- 次の一手：着いて撃つ数はまだ1試合に数回。進軍中の防衛命令の兵（`gate_march_defend`、K で百万回級）を値2の対象にするかはユーザーの判断。
+
 ## 2026-11-27 02時30分（弾薬と補給）補給車で回復＋本拠地より優先、今の既定で2 seed：本拠地戻りは 48〜71 → 20〜22回、補充は約3.5倍。得点差は4試合とも縮み、2試合で勝ちが東へ
 
 - 計画: 掲示板の申請（段3、既存の2 seed）。凍結ビルド `carhuntlog1`（main d7e3b9f9）、マップK、`-BattleShotLog -BattleFireTimeLog`、各1試合。回復＝補給車を買う3引数（`-BattleAreaSupplyKeep=2 -BattleAreaSupplyEarly=1 -BattleGroupSupplySlot=1`）＋`-BattleSupplyCarRecover=1`、優先＝それに `-BattleSupplyCarFirst=1`。
