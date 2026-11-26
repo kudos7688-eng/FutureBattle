@@ -90,7 +90,7 @@ void UBattleMatch::UpdateFrontArmies(int32 Team,const FBattleGroup& G,const TArr
  for(int32 SID:G.Squads)if(!FrontArmyOf.Contains(SID))
  {
   int32 Best=0;double BestScore=-1e9;const double Row=SquadRow(SID);
-  for(int32 A=0;A<NA;++A){const double Score=(Slots[A]-Have[A])*100.-FMath::Abs(Row-Middle(A));if(Score>BestScore){BestScore=Score;Best=A;}}
+  for(int32 A=0;A<NA;++A){const double ArmyScore=(Slots[A]-Have[A])*100.-FMath::Abs(Row-Middle(A));if(ArmyScore>BestScore){BestScore=ArmyScore;Best=A;}}
   // A squad bought for a section (stage 7 reservation destination) joins the army of that section's rows (Codex review 2026-11-27).
   if(const int32* Wish=FrontSectionWish.Find(SID);Wish&&Plan.SectionFirst.IsValidIndex(*Wish))if(const int32 W=FrontArmyOfRow(Team,Plan.SectionFirst[*Wish]);W!=INDEX_NONE)Best=W;
   FrontArmyOf.Add(SID,int8(Best));++Have[Best];
