@@ -9,7 +9,7 @@
 
 bool BattleKnownFire::Enabled()
 {
- static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownTargetFire="),V);return V==1 || V==2;}();
+ static const bool On=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownTargetFire="),V);return V==1 || V==2;}(); // Default 1 (user decision 2026-11-27).
  return On;
 }
 
