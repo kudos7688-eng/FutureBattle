@@ -53,6 +53,7 @@ struct FBattleSectorInfo
 
 namespace BattleSectorView
 {
+ FLinearColor SectionColor(int32 Section);
 	// Enemy contacts the player's side holds, best per enemy (seen now over remembered, then newest). Scouts' long-range sightings
 	// are left out (they reach the side through reports), as on the minimap.
 	void KnownEnemies(const UWorld* World, TMap<int32, const FBattleContact*>& Out, TSet<int32>& Visible);
