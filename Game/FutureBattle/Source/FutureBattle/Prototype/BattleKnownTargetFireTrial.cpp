@@ -232,6 +232,12 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
  TrialShooter.SpreadSkillScale=TrialSavedSkill;
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_DIAG known_fire_damage=%.6f"),SightExperiment.KnownFireDamage);
 
+ // The ordinary/stage-1 path must not borrow a movement-only defense permit.
+ TrialReset();TrialShooter.Order=EBattleOrder::Defend;TrialSquad.Order=EBattleOrder::Defend;
+ TrialSquad.Destination=TrialStart;TrialSquad.DefenseRadius=600;TrialObserve(251,TrialFirst,0);
+ const int32 TrialOutsideShots=TrialShooter.ShotSequence;const auto TrialOutside=TrialPick();
+ TrialCheck(TEXT("defend_outside_no_ordinary_fire"),!TrialOutside.Ready() &&
+  !FireKnownTarget(2,TrialStart+FVector(0,0,60),TrialOutside,false) && TrialShooter.ShotSequence==TrialOutsideShots);
  if(BattleKnownFire::MoveEnabled())
  {
   TrialFailures+=RunKnownTargetMoveTrial();
