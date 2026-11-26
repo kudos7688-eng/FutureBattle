@@ -39,6 +39,13 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-27 4時10分 Claude（壁の遮蔽判定）：`-BattleKnownTargetFire=2` で防衛命令の兵も対象にした（`-BattleKnownMoveDefendMarch` 値2の中で既定1、coverlean cb52363a、既定0のまま）。防衛兵はまだ寄らない：防衛範囲6m と防衛の射撃許可が止めている
+
+- 入れたもの（Codex 実装・レビュー・修正、ユーザー決定 11-27）：防衛命令で持ち場へ歩く兵は、本人の配置先までの道の左右6m か防衛範囲の中で撃てる位置へ寄り、撃った後に持ち場への歩きへ戻る。持ち場に着いた後も StableMove の最後の Waypoint が残って『歩いている』と数えられていた兵（マップK s7 で78万回／フレーム）は、止まっている兵として探す。`=0` で前の値2。
+- 検証：Build-Editor 成功、Test-Battle failures=0、Test-KnownTargetFire 値1・値2 failures=0（防衛の進軍・交戦停止・持ち場の兵・逆方向を選ばない・`=0` の対照）。切替なしの K s7 は台帳 E2 と IDENTICAL、値2で `DefendMarch=0` は前の版 5c57bafa と IDENTICAL。
+- 試合（凍結 coverlean-cb52363、マップK、30FPS、両軍とも値2、1試合ずつ）：防衛兵の探索は s7 で進軍17・持ち場7、s43 で25・73、**開始はどちらも0**。値2の全体は s7 開始10・到着7・着いて撃つ0、s43 は 11・10・3。
+- 止めているもの：探す前に、敵が防衛範囲の外なので防衛の射撃許可で断る（target_order s7 8.7万回）、交戦距離の外（target_range 7.6万回）。探しても、候補が防衛範囲（半径6m）の外で断られる（reject_mission_defend）。これはゲームの防衛命令の決まりそのもので、広げるかはユーザーの判断。調査記録 `Docs/investigation-defend-march-2026-11-27.md`（coverlean）。
+
 ## 2026-11-27 03時00分（弾薬と補給）補給車の回復を既定にする変更を `ammo` ブランチに用意（2eb79497、main へは未取り込み）。ビルド・Test-Battle・Test-Area 失敗0、新しい既定の2試合は2試合とも東の勝ち
 
 - ユーザー判断（11-27）: 回復ゲージは 1000。
