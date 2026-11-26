@@ -222,7 +222,8 @@ public:
  bool bMixedFastMatch=false;
  bool bArea=false;
  FName SnapshotMode() const {return bArea?TEXT("Area"):bMixedFastMatch?TEXT("MixedFast"):TEXT("Wide");}
- bool ReplaceFollower(int32 DeadID);
+ // Beside: where the replacement appears (a supply vehicle's place, -BattleSupplyCarRecover); none: around his leader.
+ bool ReplaceFollower(int32 DeadID,const FVector* Beside=nullptr);
  // Scout pairs: the surviving follower becomes the squad leader (its Mass body is replaced by an Actor in place).
  bool PromoteScout(int32 SquadID,int32 NewLeaderID);
  // -BattleHireSightRefresh=1 restores the full sight update after a hire or scout handover (default 0 = skipped, user decision 2026-11-18).

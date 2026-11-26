@@ -30,7 +30,7 @@ int32 UBattleMatch::AreaScore(int32 Team)const
 void UBattleMatch::InitializeArea()
 {
  BattleComposition::LogStart(); // stage 1: returns before constructing definitions when OFF
- Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();FireReveals[0].Reset();FireReveals[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();ArriveWatches.Reset();SupplyPosts.Reset();FrontSectionWish.Reset();FrontOrderScriptDone=false;FrontReservePosts.Reset();FrontReserveRow.Reset();FreeLastPos.Reset();FreeLastStep.Reset();FreeReversals[0]=FreeReversals[1]=0;FreeMoved[0]=FreeMoved[1]=0.;SectorCrowd[0]=SectorCrowd[1]=0;FrontLanes[0]=FrontLanes[1]=0;RoadSteps[0]=RoadSteps[1]=0;LatFront[0].Reset();LatFront[1].Reset();LatOther[0].Reset();LatOther[1].Reset();FreeLogSlot.Reset();BaseLegs.Reset();bSetupDone=bSetupBurst=false;FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
+ Credits[0]=Credits[1]=BattleTactics::AreaIncome().StartCredits;Area=FBattleAreaState();ScoutReports.Reset();IntelPurpose.Reset();PlayerRoutes.Reset();IntelViews[0]=IntelViews[1]=FAreaIntelView();KnownVehicles[0].Reset();KnownVehicles[1].Reset();FireReveals[0].Reset();FireReveals[1].Reset();CarChoices.Reset();Groups.Reset();SquadGroup.Reset();NextGroupID=1;FrontLine[0].Reset();FrontLine[1].Reset();FrontPosts.Reset();ArriveWatches.Reset();SupplyPosts.Reset();SupplyHealLeft.Reset();FrontSectionWish.Reset();FrontOrderScriptDone=false;FrontReservePosts.Reset();FrontReserveRow.Reset();FreeLastPos.Reset();FreeLastStep.Reset();FreeReversals[0]=FreeReversals[1]=0;FreeMoved[0]=FreeMoved[1]=0.;SectorCrowd[0]=SectorCrowd[1]=0;FrontLanes[0]=FrontLanes[1]=0;RoadSteps[0]=RoadSteps[1]=0;LatFront[0].Reset();LatFront[1].Reset();LatOther[0].Reset();LatOther[1].Reset();FreeLogSlot.Reset();BaseLegs.Reset();bSetupDone=bSetupBurst=false;FrontLineAt[0]=FrontLineAt[1]=FrontLineLogAt[0]=FrontLineLogAt[1]=-1.f;SurpriseNextAt[0]=SurpriseNextAt[1]=0.f;Score[0]=Score[1]=0;
  // Observation records are per observing team and objective (2 x 3 on maps A-D, 2 x 5 on map E).
  Area.KnownOwners.Init(-2,2*Objectives.Num());Area.SeenAt.Init(-1.f,2*Objectives.Num());
  // A team knows the objectives it holds from the start (the depots of map F).
@@ -565,7 +565,10 @@ void UBattleMatch::UpdateArea(float Dt)
   // Beside a supply vehicle: the new soldier's rounds come from its stock; without that many left he waits.
   const int32* Car=AtCar.Find(ReplacedSquad);const auto* Tune=GetDefault<UBattleTuning>();
   if(Car&&SupplyStockOf(*Car)<Tune->Magazine+Tune->ReserveAmmo)continue;
-  if(Credits[Team]>0&&R->ReplaceFollower(ID))
+  // Beside a supply vehicle the new soldier appears beside the vehicle.
+  FVector CarAt=FVector::ZeroVector;
+  if(Car)if(const auto* CarSquad=Store->FindSquad(*Car))CarAt=R->Position(CarSquad->LeaderUnitID);
+  if(Credits[Team]>0&&R->ReplaceFollower(ID,Car&&!CarAt.IsZero()?&CarAt:nullptr))
   {
    --Credits[Team];Area.Replacements.Remove(ID);
    if(Car)
@@ -612,9 +615,16 @@ void UBattleMatch::UpdateArea(float Dt)
   {
    // Members within the vehicle's radius who were not hit in the last 5 s (no healing while under fire).
    const FVector CarAt=R->Position(Store->FindSquad(AtCar[SID])->LeaderUnitID);const double Reach=FMath::Clamp(GetDefault<UBattleTuning>()->SupplyTeamRadius,100.f,20000.f);
+   // -BattleSupplyCarHealStock: no more than the vehicle's healing gauge holds; what is healed leaves it.
+   const int32 HealCar=AtCar[SID];const bool bGauge=BattleTactics::SupplyCarHealStock()>0.f;float Left=bGauge?SupplyHealOf(HealCar):1.e6f;
    float Healed=0.f;
-   for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive()&&FVector::Dist2D(R->Position(ID),CarAt)<=Reach&&!R->HitWithin(ID,GetWorld()->GetTimeSeconds(),5.))Healed+=Store->Heal(ID,1.e6f);
-   if(Healed>0.f)UE_LOG(LogFutureBattle,Display,TEXT("AREA_CAR_HEAL time=%.0f squad=%d team=%d hp=%.0f"),Elapsed,SID,S->Team,Healed);
+   for(int32 ID:S->Members)if(Left>0.f&&Store->Find(ID)->IsAlive()&&FVector::Dist2D(R->Position(ID),CarAt)<=Reach&&!R->HitWithin(ID,GetWorld()->GetTimeSeconds(),5.))
+   {const float One=Store->Heal(ID,Left);Healed+=One;if(bGauge){Left-=One;if(Left<1.f)Left=0.f;}}
+   if(Healed>0.f)
+   {
+    if(bGauge)SupplyHealLeft.Add(HealCar,Left);
+    UE_LOG(LogFutureBattle,Display,TEXT("AREA_CAR_HEAL time=%.0f squad=%d team=%d hp=%.0f car=%d heal_left=%.0f"),Elapsed,SID,S->Team,Healed,HealCar,bGauge?Left:-1.f);
+   }
   }
   if(!bHome&&!bCarRecover)continue; // a point gives ammunition only: no healing, no replacements
   // Trial -BattleSupplyHeal>0: living members (leader included) recover HP at home, up to their own maximum.

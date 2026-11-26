@@ -221,6 +221,9 @@ public:
  int32 SupplyStockOf(int32 SquadID) const;
  void SpendSupply(int32 SquadID,int32 Rounds);
  void RestockSupplyCar(int32 SquadID);
+ // -BattleSupplyCarHealStock (BattleTactics.h): supply vehicle -> hit points of healing it has left (no entry = full; transient).
+ TMap<int32,float> SupplyHealLeft;
+ float SupplyHealOf(int32 SquadID) const;
  // The order of an AI-run supply vehicle: home to load while low; with its group (role 5) behind the group's post; otherwise behind the
  // own point nearest the enemy home. False: not a supply vehicle.
  bool SupplyCarOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;

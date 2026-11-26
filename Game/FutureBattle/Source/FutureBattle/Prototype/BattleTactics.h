@@ -107,6 +107,12 @@ namespace BattleTactics
  // who were not hit in the last 5 s; it costs nothing. A replacement waits while the stock holds less than his rounds. Not for
  // vehicles, exoskeletons, scout pairs and the base garrison. BattleArea.cpp (UpdateArea), BattleSquadRetreat.cpp (Evaluate).
  bool SupplyCarRecover();
+ // User 2026-11-27 (with -BattleSupplyCarRecover): the healing beside a supply vehicle draws on a gauge of that vehicle,
+ // -BattleSupplyCarHealStock=<hit points> (default 3000, 0 = no limit as before, up to 100000): each hit point healed leaves it;
+ // empty, the vehicle heals no more, drives home as when its rounds run low and is full again there (with its rounds). And a
+ // replacement made beside a supply vehicle appears right beside the vehicle (3.5 m to 8 m from it) instead of around his leader.
+ // BattleArea.cpp (UpdateArea), BattleSupplyCar.cpp, BattleMixedRecruitment.cpp (ReplaceFollower).
+ float SupplyCarHealStock();
  // Supply trials, user 2026-11-26 (with -BattleSupplyCarRecover the supply vehicle is where squads recover), each default 0:
  // -BattleSupplyCarFirst=1: a squad that needs supply or replacements goes to the nearest supply vehicle of its team that has
  //   stock to give (not one about to drive home to load) whenever that vehicle is no farther from it than its home, instead of only
@@ -128,7 +134,11 @@ namespace BattleTactics
  //   enemy tank first, then a supply vehicle, then the other vehicles, and always tries its line to the best supply vehicle. What
  //   the squad or tank sees and the observed type only. BattleArmourAI.cpp (PickArmourTargets), BattleTankGun.cpp (TankGunTarget).
  bool SupplyCarFirst();
- bool SupplyCarPost();
+ // -BattleSupplyCarPost=2 (user 2026-11-27 "the vehicle's place is bad"; counted on map K seed 7: in 31 of 53 trips to a vehicle the
+ //   vehicle moved more than 30 m while the squad walked to it, median 84 m): only the halt of =1 - the vehicle stands still (a
+ //   Hold order) while a squad is on its way to it or stands beside it short of members (and the team has credits for
+ //   replacements); its posts are chosen as without the switch.
+ int32 SupplyCarPost();
  bool SupplyCarTarget();
  // -BattleSupplyCarHunt=1 (default 0; user 2026-11-26 "attack a supply vehicle as soon as it is found"; -BattleSupplyCarTarget alone
  //   changed nothing in a match, the vehicles stand behind their line and are rarely in the view of a squad that picks targets):
