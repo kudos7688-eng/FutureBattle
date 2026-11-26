@@ -37,6 +37,12 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-26 18時03分 Claude（個人AI）：試験切替 `-BattleArrivalReady` を削除（main 7310e52、既定の試合は不変）
+
+- **依頼**：ユーザー「削除する」（しゃがんで待つ案は不採用）。
+- **中身**：切替の本体（BattleStance）、移動処理の呼び出し（BattleLeaderRuntime）、Play-Area.ps1・Test-WideSight.ps1 の引数、Docs/experiments.md の行を削除。デスクトップのショートカットも削除。既定0だったので既定の試合は変わらない。通り道で止まる理由の数（`route_still_why_*`・`route_arrived_*`）は残す。
+- **確認**：18時の回で取り込み。Build-Editor 成功、Test-Battle 失敗0。
+
 ## 2026-11-26 16時30分 Claude（壁の遮蔽判定）：段階2 `-BattleKnownTargetFire=2`（撃てる位置へ移る、既定0、coverlean 7d2020b）。固定場面は合格、既定と値1の試合は不変。ただしマップK ではほとんど動かない（1試合3回）、マップI で60回。撃てる位置の候補の半分が地形で線が通らない
 
 12時55分の項目の続き。ユーザー指示「段階2に進む」「10m・2人は少なすぎる、広げてよい」「進軍中も許す」。実装・レビュー・直しは Codex。
