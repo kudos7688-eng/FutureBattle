@@ -3,6 +3,7 @@
 #include "BattlePerception.h"
 #include "BattleCover.h"
 #include "BattleRanges.h"
+#include "BattleFieldLayout.h"
 #include "BattleSectors.h"
 #include "BattleMatch.h"
 #include "BattleStance.h"
@@ -184,30 +185,76 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
  if(!KnownMoveReserve(ID,Now)){KnownMoveAfter.Add(ID,Now+.1);return false;}
  SightExperiment.Cover(TEXT("known_move_searches"));
  auto FinishBudget=[&](){KnownMoveRelease(ID);};
- struct FPlace {FVector At;int32 Slot;};TArray<FPlace> Places;
- for(int32 Slot:Cover->NearbySlots(Start,float(BattleKnownFire::MoveRange()),24))Places.Add({Cover->GetSlots()[Slot]+FVector(0,0,90),Slot});
- // Rank a bounded nearby pool by observed target distance before retaining four slots.
+ // Source: edge / inferred opening / ordinary slot / ring. Geometry queries do not trace.
+ struct FPlace {FVector At;int32 Slot;uint8 Source;};TArray<FPlace> Places;
  const FVector ObservedGoal=Team.Targets.FindChecked(Candidates[0]).At(Now);
- Places.Sort([&](const FPlace& Left,const FPlace& Right){const double L=FVector::DistSquared2D(Left.At,ObservedGoal),R=FVector::DistSquared2D(Right.At,ObservedGoal);return L==R?Left.Slot<Right.Slot:L<R;});
- if(Places.Num()>4)Places.SetNum(4,EAllowShrinking::No);
- // Keep lateral fallbacks for tight walls. Alternate with forward diagonals after a full cycle.
- const int32 Turn=KnownMoveCursor.FindRef(ID);
- const FVector Toward=(ObservedGoal-Start).GetSafeNormal2D();
- const FVector Side=FVector::CrossProduct(Toward,FVector::UpVector);
- const double Radius=FMath::Min(BattleKnownFire::MoveRange(),500.);
- const int32 CycleSize=(Places.Num()+2)*Candidates.Num();
- const FVector Advance=((Turn/CycleSize)%2)?FVector::ZeroVector:Toward*.6;
- Places.Add({Start+(Advance+Side).GetSafeNormal2D()*Radius,INDEX_NONE});Places.Add({Start+(Advance-Side).GetSafeNormal2D()*Radius,INDEX_NONE});
- Places.StableSort([&](const FPlace& Left,const FPlace& Right){return FVector::DistSquared2D(Left.At,ObservedGoal)<FVector::DistSquared2D(Right.At,ObservedGoal);});
- // Admit one whole position/target transaction; continue advances to the next transaction.
- do
+ const auto& Heights=BattleFieldLayout::Of(GetWorld()).Heights;
+ const TArray<FBox> Boxes=Cover->KnownMoveGeometry(Start,BattleKnownFire::MoveRange()+200.);
+ auto AddPlace=[&](FVector Point,int32 PlaceSlot,uint8 SourceKind)
  {
-  if(bKnownMoveDeferred)break;
-  const int32 PlaceAt=(Turn/Candidates.Num())%Places.Num();const FPlace& Place=Places[PlaceAt];
-  KnownMoveCursor.Add(ID,(Turn+1)%(CycleSize*2));
-  KnownMoveAfter.Add(ID,Now+((Turn+1)%(Places.Num()*Candidates.Num())==0?1.:.1));
+  if(FVector::DistSquared2D(Start,Point)>FMath::Square(BattleKnownFire::MoveRange()))return;
+  for(const FPlace& Existing:Places)if(FVector::DistSquared(Existing.At,Point)<FMath::Square(60.))return;
+  Places.Add({Point,PlaceSlot,SourceKind});
+ };
+ // Corners sit 50 cm inside an end, 95 cm off its face: the existing 1-1.2 m lean can clear it.
+ for(int32 EdgeBoxIndex=0;EdgeBoxIndex<FMath::Min(24,Boxes.Num());++EdgeBoxIndex)
+ {
+  const FBox& Box=Boxes[EdgeBoxIndex];
+  if(Box.Max.Z<Start.Z-30. || Box.Min.Z>Start.Z+60.)continue;
+  for(int32 FaceAxis=0;FaceAxis<2;++FaceAxis)for(double FaceSign:{-1.,1.})for(double EndSign:{-1.,1.})
+  {
+   const int32 AlongAxis=1-FaceAxis;const FVector BoxCentre=Box.GetCenter(),BoxExtent=Box.GetExtent();
+   if(BoxExtent[AlongAxis]<100.)continue;
+   FVector EdgeAt=BoxCentre;EdgeAt.Z=Start.Z;
+   EdgeAt[FaceAxis]+=FaceSign*(BoxExtent[FaceAxis]+95.);EdgeAt[AlongAxis]+=EndSign*(BoxExtent[AlongAxis]-50.);
+   // Shift the anchor along the face so an oblique observed ray grazes the end within lean reach.
+   const double FacePlane=BoxCentre[FaceAxis]+FaceSign*BoxExtent[FaceAxis],EndPlane=BoxCentre[AlongAxis]+EndSign*BoxExtent[AlongAxis];
+   const double Across=ObservedGoal[FaceAxis]-FacePlane;
+   if(FMath::Abs(Across)>100.)EdgeAt[AlongAxis]+=(ObservedGoal[AlongAxis]-EndPlane)*(EdgeAt[FaceAxis]-FacePlane)/Across;
+   // Keep the near face. Opposite faces would require walking through/around the whole obstacle.
+   if((Start[FaceAxis]-BoxCentre[FaceAxis])*FaceSign<0.)continue;
+   bool Opening=false;
+   if(BoxExtent[FaceAxis]<=100.)for(const FBox& Adjacent:Boxes)
+   {
+    const double Gap=EndSign>0.?Adjacent.Min[AlongAxis]-Box.Max[AlongAxis]:Box.Min[AlongAxis]-Adjacent.Max[AlongAxis];
+    if(Gap>=90. && Gap<=600. && FMath::Abs(Adjacent.GetCenter()[FaceAxis]-BoxCentre[FaceAxis])<10. && Adjacent.GetExtent()[FaceAxis]<=100. && Adjacent.Min.Z<=Start.Z+60. && Adjacent.Max.Z>=Start.Z+60.){Opening=true;break;}
+   }
+   AddPlace(EdgeAt,INDEX_NONE,Opening?1:0);
+  }
+ }
+ for(int32 Slot:Cover->NearbySlots(Start,float(BattleKnownFire::MoveRange()),24))AddPlace(Cover->GetSlots()[Slot]+FVector(0,0,90),Slot,2);
+ const FVector Toward=(ObservedGoal-Start).GetSafeNormal2D(),Side=FVector::CrossProduct(Toward,FVector::UpVector);
+ for(double RingRadius:{500.,1000.,1500.,BattleKnownFire::MoveRange()})
+ {
+  if(RingRadius>BattleKnownFire::MoveRange() || RingRadius<=0.)continue;
+  for(double ForwardPart:{.6,0.,-.6})for(double SideSign:{-1.,1.})
+  {
+   FVector RingAt=Start+(Toward*ForwardPart+Side*SideSign).GetSafeNormal2D()*(RingRadius*.999999);
+   if(!Heights.Field.IsEmpty())RingAt.Z=Heights.Base(RingAt.X,RingAt.Y)+90.;
+   AddPlace(RingAt,INDEX_NONE,3);
+  }
+ }
+ Places.StableSort([&](const FPlace& Left,const FPlace& Right)
+ {
+  const int32 LeftRank=Left.Source<2?0:int32(Left.Source),RightRank=Right.Source<2?0:int32(Right.Source);
+  if(LeftRank!=RightRank)return LeftRank<RightRank;
+  const double LeftThreat=FVector::DistSquared2D(Left.At,ObservedGoal),RightThreat=FVector::DistSquared2D(Right.At,ObservedGoal);
+  if(LeftThreat!=RightThreat)return LeftThreat<RightThreat;
+  return FVector::DistSquared2D(Left.At,Start)<FVector::DistSquared2D(Right.At,Start);
+ });
+ if(Places.IsEmpty()){FinishBudget();return false;}
+ const int32 CycleSize=Places.Num()*Candidates.Num();
+ int32 Turn=KnownMoveCursor.FindRef(ID)%CycleSize;
+ // Up to eight transactions, with a fresh atomic reservation for each. FIFO still wins over batching.
+ for(int32 Attempt=0;Attempt<FMath::Min(8,CycleSize);++Attempt)
+ {
+  if(Attempt>0){FinishBudget();if(!KnownMoveReserve(ID,Now))break;}
+  const int32 PlaceAt=Turn/Candidates.Num(),TargetID=Candidates[Turn%Candidates.Num()];const FPlace& Place=Places[PlaceAt];
+  Turn=(Turn+1)%CycleSize;KnownMoveCursor.Add(ID,Turn);
+  KnownMoveAfter.Add(ID,Now+(Turn==0?1.:.1));
   FVector Anchor=Place.At;const bool Free=Place.Slot==INDEX_NONE;
   SightExperiment.Cover(Free?TEXT("known_move_candidate_free"):TEXT("known_move_candidate_slot"));
+  if(Place.Source!=2)SightExperiment.Cover(Place.Source==0?TEXT("known_move_candidate_edge"):Place.Source==1?TEXT("known_move_candidate_door"):TEXT("known_move_candidate_ring"));
   if(const TCHAR* MissionRejection=KnownMovePlaceRejection(ID,Start,Anchor)){SightExperiment.Cover(TEXT("known_move_reject_anchor_mission"));SightExperiment.Cover(MissionRejection);continue;}
   if(FVector::Dist2D(Start,Anchor)<150.){SightExperiment.Cover(TEXT("known_move_reject_too_close"));continue;}
   if(!Free && !Cover->IsAvailable(Place.Slot,ID,Now)){SightExperiment.Cover(TEXT("known_move_reject_slot_busy"));continue;}
@@ -219,12 +266,26 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
   if(!KnownMoveSpend(ID,Now,2))break;
   FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Anchor-FVector(0,0,90),Projected,FVector(50,50,150))){SightExperiment.Cover(TEXT("known_move_reject_anchor_nav"));continue;}
   Anchor=Projected.Location+FVector(0,0,90);if(!KnownMovePlaceAllowed(ID,Start,Anchor)){SightExperiment.Cover(TEXT("known_move_reject_projected_mission"));continue;}
-  const int32 TargetID=Candidates[Turn%Candidates.Num()];
   do
   {
    if(bKnownMoveDeferred)break;
    const auto& Target=Team.Targets.FindChecked(TargetID);const FVector Threat=Target.At(Now);FVector Peek=Anchor;uint8 Kind=0;
    if(FVector::DistSquared2D(Anchor,Threat)>FMath::Square(Reach)){SightExperiment.Cover(TEXT("known_move_reject_anchor_range"));continue;}
+   // Conservative sampled envelope: keep every possible lean/projection, reject only solid geometry.
+   // CoverFirePoint accepts at most 120 cm in XY after projection, and projects +/-150 cm in Z.
+   const bool UsesCover=Place.Source<3;
+   bool TerrainBlocked=false,BoxBlocked=false;
+   const FVector FilterFrom=Anchor+FVector(0,0,60),FilterTo=Threat+FVector(0,0,60);
+   for(int32 Sample=1;Sample<=8 && !TerrainBlocked && !BoxBlocked;++Sample)
+   {
+    const double Fraction=double(Sample)/9.,Margin=UsesCover?120.*(1.-Fraction):0.,Vertical=UsesCover?150.*(1.-Fraction):0.;
+    const FVector Mid=FMath::Lerp(FilterFrom,FilterTo,Fraction),Span(Margin+2.,Margin+2.,Vertical+2.);
+    // Only the exact height field (no box approximation of hills or upper floors).
+    if(!Heights.Field.IsEmpty() && !UsesCover && Heights.Field.Height(Mid.X,Mid.Y)>Mid.Z+2.)TerrainBlocked=true;
+    for(const FBox& Solid:Boxes)
+     if(Solid.IsInside(Mid+Span) && Solid.IsInside(Mid-Span)){BoxBlocked=true;break;}
+   }
+   if(TerrainBlocked || BoxBlocked){SightExperiment.Cover(TerrainBlocked?TEXT("known_move_prefilter_terrain"):TEXT("known_move_prefilter_box"));continue;}
    // Allow at most min(5 m, 10% of current separation) closer to every observed enemy.
    auto Safe=[&](FVector Point)
    {for(int32 ThreatID:Observed){const FVector Seen=Team.Targets.FindChecked(ThreatID).At(Now);const double Separation=FVector::Dist2D(Start,Seen);if(FVector::Dist2D(Point,Seen)<Separation-FMath::Min(500.,Separation*.1))return false;}return true;};
@@ -241,13 +302,13 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
     if(bKnownMoveDeferred || (ThereVisible && !HereVisible)){MoreExposed=true;break;}
    }
    if(MoreExposed){SightExperiment.Cover(bKnownMoveDeferred?TEXT("known_move_reject_exposure_deferred"):TEXT("known_move_reject_more_exposed"));continue;}
-   const bool CanFire=Free?KnownMoveLine(ID,Anchor+FVector(0,0,60),Threat+FVector(0,0,60),Now):CoverFirePoint(ID,Anchor,Threat,Peek,Kind,3,false,Now);
+   const bool CanFire=Place.Source==3?KnownMoveLine(ID,Anchor+FVector(0,0,60),Threat+FVector(0,0,60),Now):CoverFirePoint(ID,Anchor,Threat,Peek,Kind,3,false,Now);
    if(bKnownMoveDeferred){SightExperiment.Cover(TEXT("known_move_reject_fire_deferred"));continue;}
-   if(!CanFire){SightExperiment.Cover(Free?TEXT("known_move_reject_free_fire_line"):TEXT("known_move_reject_cover_fire_point"));continue;}
+   if(!CanFire){SightExperiment.Cover(Place.Source==3?TEXT("known_move_reject_free_fire_line"):TEXT("known_move_reject_cover_fire_point"));continue;}
    if(!KnownMovePlaceAllowed(ID,Start,Peek)){SightExperiment.Cover(TEXT("known_move_reject_peek_mission"));continue;}
    if(!Safe(Peek)){SightExperiment.Cover(TEXT("known_move_reject_peek_danger"));continue;}
    if(FVector::DistSquared2D(Peek,Threat)>FMath::Square(Reach)){SightExperiment.Cover(TEXT("known_move_reject_peek_range"));continue;}
-   SightExperiment.Cover(Free?TEXT("known_move_fire_free"):Kind==1?TEXT("known_move_fire_over"):TEXT("known_move_fire_lean"));
+   SightExperiment.Cover(Place.Source==3?TEXT("known_move_fire_free"):Kind==1?TEXT("known_move_fire_over"):TEXT("known_move_fire_lean"));
    if(!KnownMoveSpend(ID,Now,1))break;
    if(GetWorld()->SweepTestByObjectType(Anchor,Anchor,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88))){SightExperiment.Cover(TEXT("known_move_reject_anchor_capsule"));continue;}
    if(!KnownMoveSpend(ID,Now,2))break;
@@ -272,16 +333,18 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
    CancelCoverAction(ID);
    if(!Free && !Cover->Reserve(Place.Slot,ID,Now)){SightExperiment.Cover(TEXT("known_move_reject_reservation"));if(OldSlot>=0)Cover->Reserve(OldSlot,ID,Now);continue;}
    FKnownMove Episode;Episode.Start=Start;Episode.Goal=Anchor;Episode.Last=Start;Episode.Peek=Peek;Episode.Observation=Target;Episode.Mission=Squad->MissionRevision;
-   Episode.bMarch=March;Episode.Revision=Unit->OrderRevision;Episode.Started=Now;Episode.Slot=Place.Slot;Episode.bStandUp=StandUp;KnownMoves.Add(ID,Episode);
+   Episode.bMarch=March;Episode.Revision=Unit->OrderRevision;Episode.Started=Now;Episode.Slot=Place.Slot;Episode.bStandUp=StandUp || Place.Source<2;KnownMoves.Add(ID,Episode);
    FCoverApproach Approach;Approach.Goal=Anchor;Approach.Target=TargetID;Approach.Slot=Place.Slot;Approach.Revision=Unit->OrderRevision;
    Approach.Until=Now+FMath::Max(8.,Length/100.+3.);Approach.bFree=Free;CoverApproaches.Add(ID,Approach);
    auto& Path=SoldierPaths.FindOrAdd(ID);Path=FSoldierPath();Path.Points=Route->PathPoints;
    FirePositions.Remove(ID);KnownFireSearches.Remove(ID);
+   SightExperiment.Cover(Place.Source==0?TEXT("known_move_pick_edge"):Place.Source==1?TEXT("known_move_pick_door"):Place.Source==2?TEXT("known_move_pick_slot"):TEXT("known_move_pick_ring"));
    Unit->DecisionReason=TEXT("KNOWN TARGET / MOVING TO FIRE");SightExperiment.Cover(TEXT("known_move_started"));
    if(Target.Tracked(Now))SightExperiment.Cover(TEXT("known_move_tracked_plans"));
    FinishBudget();return true;
   }while(false);
- }while(false);
+  if(Turn==0)break;
+ }
  FinishBudget();return false;
 }
 

@@ -204,4 +204,5 @@ BattleCompositionSmoke | 編成AIの選択・貯蓄のスモーク検査（UBatt
 BattleSectorSight | 区画内・区画間の戦い（`-BattleSectorSight`、11-23 から既定1＝通常小隊だけ。`=2` は兵種ごとの決まり `SectorSightRole`〔試験〕、`=0` で元の動き。`Docs/design-sector-combat.md`）：区画のあるマップで、通常小隊は別の区画（20m より遠い）の敵を探す光線を隊長だけが出し、隊員は隊長が今見ている敵を発射直前の視線判定で撃つ（UBattleLeaderRuntime の一部。走査の側は `UBattlePerception::Update` の `SkipCross`）
 
 BattleKnownTargetMove | 既知敵の位置取り（値2）：観測から移動先を選び、予算・予約・命令制限を確認して短距離移動
-BattleKnownTargetMoveTrial | 値2の固定場面。値1の27項目に追加し、March=0は計47項目、March=1は計51項目（進軍・射撃・復帰を含む）
+BattleKnownTargetMoveTrial | 値2の固定場面。値1の27項目に追加し、March=0は計50項目、March=1は計54項目（塀の端・本人確認・進軍・射撃・復帰を含む、追加3項目は未実行）
+BattleKnownMoveGeometry | 値2専用の静的な箱形遮蔽の格子索引。端・開口部の推定と光線前の予選に使う

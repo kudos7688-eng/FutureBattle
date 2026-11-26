@@ -246,15 +246,15 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleJoinFightMax` | Value | 2 | BattleTactics.cpp:99 |  |
 | `-BattleJoinFightRange` | Value | 15000.f | BattleTactics.cpp:94 |  |
 | `-BattleKillLog` | Value | 1 | BattleHUD.cpp:1362 |  |
-| `-BattleKnownMoveMarch` | Value | 1 | BattleKnownTargetMove.cpp:18 |  |
-| `-BattleKnownMoveMax` | Value | 0 | BattleKnownTargetMove.cpp:21 |  |
-| `-BattleKnownMoveNavBudget` | Value | 32 | BattleKnownTargetMove.cpp:26 |  |
-| `-BattleKnownMoveRange` | Value | 2500. | BattleKnownTargetMove.cpp:19 |  |
-| `-BattleKnownMoveRayBudget` | Value | 32 | BattleKnownTargetMove.cpp:24 |  |
-| `-BattleKnownMoveSquadRadius` | Value | 5000. | BattleKnownTargetMove.cpp:20 |  |
-| `-BattleKnownMoveSweepBudget` | Value | 24 | BattleKnownTargetMove.cpp:25 |  |
-| `-BattleKnownTargetFire` | Value | 0 | BattleKnownTargetMove.cpp:17, BattleKnownTargets.cpp:12 |  |
-| `-BattleKnownTargetFireTrial` | Param | off | BattleKnownTargetMove.cpp:238, BattleLeaderRuntime.cpp:252 |  |
+| `-BattleKnownMoveMarch` | Value | 1 | BattleKnownTargetMove.cpp:19 |  |
+| `-BattleKnownMoveMax` | Value | 0 | BattleKnownTargetMove.cpp:22 |  |
+| `-BattleKnownMoveNavBudget` | Value | 32 | BattleKnownTargetMove.cpp:27 |  |
+| `-BattleKnownMoveRange` | Value | 2500. | BattleKnownTargetMove.cpp:20 |  |
+| `-BattleKnownMoveRayBudget` | Value | 32 | BattleKnownTargetMove.cpp:25 |  |
+| `-BattleKnownMoveSquadRadius` | Value | 5000. | BattleKnownTargetMove.cpp:21 |  |
+| `-BattleKnownMoveSweepBudget` | Value | 24 | BattleKnownTargetMove.cpp:26 |  |
+| `-BattleKnownTargetFire` | Value | 0 | BattleKnownTargetMove.cpp:18, BattleKnownTargets.cpp:12 |  |
+| `-BattleKnownTargetFireTrial` | Param | off | BattleKnownTargetMove.cpp:299, BattleLeaderRuntime.cpp:252 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
 | `-BattleLauncherDamage` | Value | 60.f | BattleArms.cpp:158 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleLeaderCommand` | Value | 0 | BattleGameMode.cpp:54 |  |

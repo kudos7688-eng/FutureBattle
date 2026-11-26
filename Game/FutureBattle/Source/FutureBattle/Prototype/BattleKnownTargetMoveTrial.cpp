@@ -9,6 +9,9 @@
 #include "Components/CapsuleComponent.h"
 #include "FutureBattle.h"
 #include "Engine/World.h"
+#include "Engine/StaticMeshActor.h"
+#include "Engine/StaticMesh.h"
+#include "Components/StaticMeshComponent.h"
 #include "Templates/UnrealTemplate.h"
 
 int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
@@ -104,6 +107,7 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   return false;
  };
  TestWorld->GetSubsystem<UBattleCover>()->BuildSlots();
+ TestWorld->GetSubsystem<UBattleCover>()->KnownMoveGeometry(Start,BattleKnownFire::MoveRange());
  // Replay the original geometry first for diagnosis, then require the repaired
  // fixture to hide the chest AND permit fire. Existing outcome checks stay intact.
  auto ProbeFixture=[&](bool RequireGeometry)
@@ -298,6 +302,64 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  Reset();KnownMoveAfter.Add(2,TestNow+1.);const int32 IntervalBefore=Count(TEXT("known_move_gate_search_interval"));
  Check(TEXT("move_interval_diagnostic"),!StartKnownMove(2,TestNow+.5) && Count(TEXT("known_move_gate_search_interval"))==IntervalBefore+1);
  Check(TEXT("move_no_partial_geometry"),Count(TEXT("known_move_reservation_violation"))==0 && KnownMoveReservedID==INDEX_NONE);
+ // Additional scene only; all preceding checks and the stage 1 fixture are unchanged.
+ Reset();
+ for(auto* EdgeOldWall:Walls){EdgeOldWall->SetActorEnableCollision(false);EdgeOldWall->Destroy();}Walls.Reset();
+ Wall(Start+FVector(250,0,60),FVector(30,900,250));
+ auto* EdgeCover=TestWorld->GetSubsystem<UBattleCover>();
+ auto* EdgeCube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));
+ int32 EdgeCrates=0;
+ // Nearby real slots from small crates behind the shooter; they cannot lean past the long wall.
+ for(double CrateBack:{-300.,-600.})for(double CrateSide:{-450.,-150.,150.,450.})
+ {
+  auto* Crate=TestWorld->SpawnActor<AStaticMeshActor>();
+  if(!Crate || !EdgeCube)continue;
+  Crate->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);Crate->GetStaticMeshComponent()->SetCanEverAffectNavigation(false);
+  Crate->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));
+  Crate->GetStaticMeshComponent()->SetStaticMesh(EdgeCube);Crate->SetActorScale3D(FVector(1.,1.,1.));
+  Crate->SetActorLocation(Start+FVector(CrateBack,CrateSide,-40.));
+  Crate->GetStaticMeshComponent()->SetMobility(EComponentMobility::Static);Walls.Add(Crate);++EdgeCrates;
+ }
+ EdgeCover->BuildSlots(true);EdgeCover->KnownMoveGeometry(Start,BattleKnownFire::MoveRange(),true);
+ TArray<int32> EdgeOldSlots=EdgeCover->NearbySlots(Start,float(BattleKnownFire::MoveRange()),24);
+ EdgeOldSlots.Sort([&](int32 LeftSlot,int32 RightSlot){const double LeftDistance=FVector::DistSquared2D(EdgeCover->GetSlots()[LeftSlot],Enemy),RightDistance=FVector::DistSquared2D(EdgeCover->GetSlots()[RightSlot],Enemy);return LeftDistance==RightDistance?LeftSlot<RightSlot:LeftDistance<RightDistance;});
+ if(EdgeOldSlots.Num()>4)EdgeOldSlots.SetNum(4,EAllowShrinking::No);
+ bool OldPlacesBlocked=EdgeCube && EdgeCrates==8 && EdgeOldSlots.Num()==4;
+ for(int32 OldSlot:EdgeOldSlots)
+ {
+  TestNow+=.2;const bool EdgeReserved=KnownMoveReserve(2,TestNow);FVector OldPeek=FVector::ZeroVector;uint8 OldKind=0;
+  OldPlacesBlocked &= EdgeReserved && !CoverFirePoint(2,EdgeCover->GetSlots()[OldSlot]+FVector(0,0,90),Enemy,OldPeek,OldKind,3,false,TestNow) && !bKnownMoveDeferred;
+  KnownMoveRelease(2);
+ }
+ for(double OldForward:{0.,.6})for(double OldSide:{-1.,1.})
+ {
+  TestNow+=.2;const bool OldReserved=KnownMoveReserve(2,TestNow);
+  const FVector OldFree=Start+FVector(OldForward,OldSide,0).GetSafeNormal2D()*500.;
+  OldPlacesBlocked &= OldReserved && !KnownMoveLine(2,OldFree+FVector(0,0,60),Enemy+FVector(0,0,60),TestNow);KnownMoveRelease(2);
+ }
+ Check(TEXT("move_edge_old_places_blocked"),OldPlacesBlocked);
+ const int32 EdgePicksBefore=Count(TEXT("known_move_pick_edge")),EdgeShotsBefore=Shooter.ShotSequence;
+ int32 EdgeArrivalSensors=0;bool EdgeBudgetsOK=true,EdgeNoEarlyShot=true;
+ const int32 EdgeFiredBefore=Count(TEXT("known_move_arrived_fired"));
+ const bool EdgeStarted=TryStart();bool EdgeArrived=false,EdgeHiddenChecked=false,EdgeHiddenSilent=false;
+ for(int32 EdgeFrame=0;EdgeFrame<900 && EdgeStarted;++EdgeFrame)
+ {
+  TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
+  if(const auto* EdgeEpisode=KnownMoves.Find(2);EdgeEpisode && EdgeEpisode->Arrived>=0)EdgeArrived=true;
+  if(!EdgeArrived)EdgeNoEarlyShot &= Shooter.ShotSequence==EdgeShotsBefore;
+  EdgeBudgetsOK &= KnownFireBudgets[Shooter.Team].Used<=BattleKnownFire::MoveRayBudget() && MoveTeamBudget.Sweeps<=BattleKnownFire::MoveSweepBudget() && MoveTeamBudget.Nav<=BattleKnownFire::MoveNavBudget();
+  if(EdgeArrived && !EdgeHiddenChecked)
+  {
+   EdgeArrivalSensors=Count(TEXT("known_fire_sensor_checks"));EdgeHiddenChecked=true;const int32 EdgeHiddenShots=Shooter.ShotSequence;Put(251,Start+FVector(50000,0,0));
+   for(int32 EdgeHiddenFrame=0;EdgeHiddenFrame<15;++EdgeHiddenFrame){TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);}
+   EdgeHiddenSilent=Shooter.ShotSequence==EdgeHiddenShots;Put(251,Enemy);Observe();
+  }
+  if(Count(TEXT("known_move_arrived_fired"))>EdgeFiredBefore)break;
+ }
+ Check(TEXT("move_edge_arrive_personal_fire"),EdgeStarted && EdgeArrived && Count(TEXT("known_move_pick_edge"))==EdgePicksBefore+1 &&
+  EdgeNoEarlyShot && EdgeHiddenChecked && EdgeHiddenSilent && Count(TEXT("known_fire_sensor_checks"))>EdgeArrivalSensors && Shooter.ShotSequence>EdgeShotsBefore && Count(TEXT("known_move_arrived_fired"))==EdgeFiredBefore+1);
+ Check(TEXT("move_edge_budget"),EdgeBudgetsOK && Count(TEXT("known_move_reservation_violation"))==0 && KnownMoveReservedID==INDEX_NONE &&
+  KnownFireBudgets[Shooter.Team].Used<=BattleKnownFire::MoveRayBudget() && MoveTeamBudget.Sweeps<=BattleKnownFire::MoveSweepBudget() && MoveTeamBudget.Nav<=BattleKnownFire::MoveNavBudget());
  for(auto* TestWall:Walls){TestWall->SetActorEnableCollision(false);TestWall->Destroy();}
  return Failures;
 }
