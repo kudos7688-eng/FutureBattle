@@ -64,6 +64,8 @@ namespace BattleTactics
  // the team's places for -BattleSeekKnown. LastKnownPosition is untouched: everything that fires or throws at a remembered place
  // (grenades, covering fire, suppressing fire, blind fire, guns) and the player's map read that, so nothing is shot at a tracked
  // place. Not reported to other soldiers, not saved.
+ // Exception: -BattleKnownTargetFire=1 copies valid tracking samples into its team index for candidate ranking and aim only;
+ // it still requires the shooter's sensor and aim line. No other consumer or tracking update changes.
  float SpotTrack();
  int32 SeekKnown();
  float SeekKnownSeconds();

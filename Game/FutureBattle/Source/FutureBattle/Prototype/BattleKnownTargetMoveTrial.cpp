@@ -1,0 +1,303 @@
+// Stage 2 extension. The original 27 stage 1 checks remain in BattleKnownTargetFireTrial.cpp.
+#include "BattleLeaderRuntime.h"
+#include "BattlePerception.h"
+#include "BattleCover.h"
+#include "BattleStance.h"
+#include "BattleSectors.h"
+#include "NavigationSystem.h"
+#include "Components/BoxComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "FutureBattle.h"
+#include "Engine/World.h"
+#include "Templates/UnrealTemplate.h"
+
+int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
+{
+ auto* TestWorld=GetWorld();auto* TestStore=TestWorld->GetSubsystem<UBattleState>();auto* TestSense=TestWorld->GetSubsystem<UBattlePerception>();
+ auto& Shooter=TestStore->Units.FindChecked(2);auto& Squad=TestStore->Squads.FindChecked(Shooter.SquadID);
+ // Follow/UpdateAim use the supplied time, but Fire/ConsumeShot read the world clock.
+ // Advance both together: otherwise a turn during marching sets NextShotTime in
+ // the simulated future and Fire can never finish that cooldown. Restore on exit.
+ TGuardValue<double> MoveTrialClock(TestWorld->TimeSeconds,TestWorld->GetTimeSeconds()+10.);
+ double& TestNow=TestWorld->TimeSeconds;
+ const FVector Start=Position(2),Enemy=Start+FVector(1500,0,0);int32 Failures=0;
+ auto Check=[&](const TCHAR* Name,bool OK){Failures+=!OK;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_CHECK name=%s ok=%d"),Name,OK);};
+ auto Count=[&](const TCHAR* Key){return SightExperiment.CoverDiag.FindRef(FName(Key));};
+ auto Put=[&](int32 TestID,FVector At)
+ {
+  auto& TestBody=Bodies.FindChecked(TestID);
+  if(TestBody.Actor.IsValid())TestBody.Actor->SetActorLocation(At,false,nullptr,ETeleportType::TeleportPhysics);
+  else{TestBody.Capsule->SetWorldLocation(At);auto& TestFragment=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(TestBody.Entity);TestFragment.Position=At;TestFragment.Forward=FVector::ForwardVector;}
+  TestBody.Velocity=FVector::ZeroVector;
+ };
+ TArray<AActor*> Walls;
+ auto Wall=[&](FVector At,FVector Extent)
+ {
+  auto* WallActor=TestWorld->SpawnActor<AActor>();if(!WallActor)return;
+  auto* Box=NewObject<UBoxComponent>(WallActor);WallActor->SetRootComponent(Box);WallActor->AddInstanceComponent(Box);
+  Box->SetBoxExtent(Extent);Box->SetCollisionObjectType(ECC_WorldStatic);Box->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+  Box->SetCollisionResponseToAllChannels(ECR_Block);Box->SetCanEverAffectNavigation(false);Box->SetWorldLocation(At);Box->SetMobility(EComponentMobility::Static);Box->RegisterComponent();Walls.Add(WallActor);
+ };
+ auto Observe=[&]()
+ {
+  TestSense->Reset();auto& Contact=TestSense->Observers.FindOrAdd(11).Contacts.FindOrAdd(251);
+  Contact.TargetID=251;Contact.SourceUnitID=11;Contact.LastKnownPosition=Enemy;Contact.LastSeenTime=TestNow;
+  // This fixture is a normal observation by another squad, not an unreported long-range scout contact.
+  // FBattleContact defaults to restricted provenance; BuildTeamKnownTargets must keep rejecting that default.
+  Contact.bLongRangeObservation=false;Contact.ObservedSquadType=0;
+  Contact.bVisible=true;Contact.bShared=false;Contact.KnownExpiresAt=TestNow+20.;Contact.KnownSourceSquad=TestStore->Find(11)->SquadID;TestSense->BuildTeamKnownTargets(TestNow);
+ };
+ auto Reset=[&](bool OriginalLowWalls=false)
+ {
+  if(KnownMoves.Contains(2))EndKnownMove(2,TestNow,TEXT("known_move_test_reset"));
+  CancelCoverAction(2);TestWorld->GetSubsystem<UBattleCover>()->Release(2);CoverApproaches.Remove(2);SoldierPaths.Remove(2);FirePositions.Remove(2);
+  KnownFireSearches.Reset();KnownMoveAfter.Reset();KnownMoveEndCooldown.Reset();KnownMoveCursor.Reset();KnownMoveReservedID=INDEX_NONE;
+  for(auto& FireBudget:KnownFireBudgets)FireBudget=BattleKnownFire::FBudget();
+  for(auto& MoveBudget:KnownMoveBudgets)MoveBudget=FKnownMoveBudget();
+  for(auto* OldWall:Walls){OldWall->SetActorEnableCollision(false);OldWall->Destroy();}Walls.Reset();
+  TestNow+=10.;Put(2,Start);Put(251,Enemy);Put(252,Start+FVector(5000,2000,0));
+  Shooter.Order=EBattleOrder::Defend;Shooter.bSoldierOrder=false;Shooter.Ammo=30;Shooter.Reserve=90;Shooter.NextShotTime=0;Shooter.ReloadEndTime=0;
+  Shooter.Perception.SightRange=10000;Shooter.Perception.FieldOfView=120;Shooter.Destination=Start;Shooter.CoverPhase=0;
+  Squad.Order=EBattleOrder::Defend;Squad.Destination=Start;Squad.DefenseRadius=5000;Squad.bSectorMission=false;Squad.TacticalPlan.Action=EBattleSquadTactic::Mission;
+  auto& TestPlan=Plans.FindOrAdd(Shooter.SquadID);TestPlan=FBattleLeaderPlan();TestPlan.Center=Start;
+  SetStance(2,BattleStance::Stand,TestNow,true);Observe();
+  Wall(Start+FVector(250,0,60),FVector(30,120,150));
+  // Match the planner's projected body centre, not the physical floor at Start.
+  // The old top (Start.Z+40) leaves only 8.45 cm for navmesh elevation before
+  // the chest ray at the wall's near face (80/1500 of the ray) clears it.
+  auto* TrialNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(TestWorld);
+  for(double TrialSide:{-500.,500.})
+  {
+   FNavLocation TrialProjected;
+   if(!TrialNav || !TrialNav->ProjectPointToNavigation(Start+FVector(0,TrialSide,-90),TrialProjected,FVector(50,50,150)))
+   {Check(TEXT("move_fixture_nav"),false);continue;}
+   const FVector TrialAnchor=TrialProjected.Location+FVector(0,0,90);
+   // A 15 cm margin on either side of the chest/muzzle heights. Keep the wall
+   // off the lateral walking path (its nearest face is 80 cm away).
+   if(OriginalLowWalls)Wall(Start+FVector(100,TrialSide,-25),FVector(20,160,65));
+   else Wall(TrialAnchor+FVector(100,0,-22.5),FVector(20,160,67.5));
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_FIXTURE side=%.0f start=%s anchor=%s old_top=%.3f old_chest_at_face=%.3f new_top=%.3f"),
+    TrialSide,*Start.ToCompactString(),*TrialAnchor.ToCompactString(),Start.Z+40.,FMath::Lerp(TrialAnchor.Z+30.,Enemy.Z+60.,80./(Enemy.X-TrialAnchor.X)),TrialAnchor.Z+45.);
+  }
+ };
+ auto TryStart=[&]()
+ {
+  const int32 StartRays=Count(TEXT("known_move_rays")),StartSweeps=Count(TEXT("known_move_sweeps")),StartNav=Count(TEXT("known_move_nav"));
+  for(int32 Attempt=0;Attempt<24;++Attempt)
+  {
+   const TMap<FName,int32> BeforeRejects=SightExperiment.CoverDiag;
+   TestNow+=1.01;Observe();const bool AttemptStarted=StartKnownMove(2,TestNow);
+   for(const auto& Reject:SightExperiment.CoverDiag)
+    if(Reject.Key.ToString().StartsWith(TEXT("known_move_reject_")) && Reject.Value>BeforeRejects.FindRef(Reject.Key))
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_REJECT now=%.3f attempt=%d started=%d %s=%d"),TestNow,Attempt,AttemptStarted,*Reject.Key.ToString(),Reject.Value-BeforeRejects.FindRef(Reject.Key));
+   if(AttemptStarted)return true;
+  }
+  int32 TestLiving=0,TestMoving=0;
+  for(int32 TestMember:Squad.Members)if(const auto* TestUnit=TestStore->Find(TestMember);TestUnit && TestUnit->IsAlive())
+  {++TestLiving;if(TestMember!=2 && (TestUnit->CoverPhase==1 || CoverApproaches.Contains(TestMember)))++TestMoving;}
+  const int32 TestLimit=BattleKnownFire::MoveMax()>0?FMath::Min(TestLiving/2,BattleKnownFire::MoveMax()):TestLiving/2;
+  const auto* TestKnown=TestSense->TeamKnownTargets[Shooter.Team].Targets.Find(251);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_DIAG move_start_failed now=%.3f allowed=%d known=%d fresh=%d target_allowed=%d living=%d moving=%d limit=%d episode=%d approach=%d cooldown=%.3f cover_built=%d rays=%d sweeps=%d nav=%d"),
+   TestNow,KnownMoveAllowed(2),TestKnown!=nullptr,TestKnown && TestKnown->Fresh(TestNow),TestKnown && WeaponOrderAllows(2,251,TestKnown->At(TestNow)),
+   TestLiving,TestMoving,TestLimit,KnownMoves.Contains(2),CoverApproaches.Contains(2),KnownMoveAfter.FindRef(2)-TestNow,TestWorld->GetSubsystem<UBattleCover>()->IsBuilt(),
+   Count(TEXT("known_move_rays"))-StartRays,Count(TEXT("known_move_sweeps"))-StartSweeps,Count(TEXT("known_move_nav"))-StartNav);
+  return false;
+ };
+ TestWorld->GetSubsystem<UBattleCover>()->BuildSlots();
+ // Replay the original geometry first for diagnosis, then require the repaired
+ // fixture to hide the chest AND permit fire. Existing outcome checks stay intact.
+ auto ProbeFixture=[&](bool RequireGeometry)
+ {
+  for(double FixtureSide:{-500.,500.})
+  {
+   auto* FixtureNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(TestWorld);FNavLocation FixtureProjected;
+   const bool FixtureOnNav=FixtureNav && FixtureNav->ProjectPointToNavigation(Start+FVector(0,FixtureSide,-90),FixtureProjected,FVector(50,50,150));
+   bool FixtureHere=false,FixtureThere=false,FixtureFire=false;
+   if(FixtureOnNav)
+   {
+    TestNow+=.2;bKnownMoveDeferred=false;
+    const bool ProbeReserved=KnownMoveReserve(2,TestNow);
+    if(!ProbeReserved){Check(TEXT("move_fixture_budget"),false);continue;}
+    const FVector FixtureAnchor=FixtureProjected.Location+FVector(0,0,90);
+    FixtureHere=KnownMoveLine(2,Start+FVector(0,0,30),Enemy+FVector(0,0,60),TestNow);
+    FixtureThere=KnownMoveLine(2,FixtureAnchor+FVector(0,0,30),Enemy+FVector(0,0,60),TestNow);
+    FixtureFire=KnownMoveLine(2,FixtureAnchor+FVector(0,0,60),Enemy+FVector(0,0,60),TestNow);
+    KnownMoveRelease(2);
+   }
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_FIXTURE_PROBE repaired=%d side=%.0f nav=%d here=%d there=%d fire=%d deferred=%d"),RequireGeometry,FixtureSide,FixtureOnNav,FixtureHere,FixtureThere,FixtureFire,bKnownMoveDeferred);
+   if(RequireGeometry)Check(FixtureSide<0?TEXT("move_fixture_left_hidden_fire"):TEXT("move_fixture_right_hidden_fire"),FixtureOnNav && !FixtureHere && !FixtureThere && FixtureFire && !bKnownMoveDeferred);
+  }
+ };
+ Reset(true);ProbeFixture(false);
+ // Run the original candidate selection too: its per-attempt rejection counts
+ // distinguish exposure from budget exhaustion or a different map/navmesh.
+ const bool OriginalStarted=TryStart();
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_ORIGINAL started=%d"),OriginalStarted);
+ Reset();ProbeFixture(true);
+ TestNow+=.2;Observe();
+ const auto Blocked=SelectKnownFire(2,Start+FVector(0,0,60),TestNow);
+ const bool Started=!Blocked.Ready() && TryStart();const int32 BeforeShot=Shooter.ShotSequence;
+ bool Within=true,Arrived=false,RecheckedHidden=false,HiddenDidNotFire=false;
+ const int32 SensorsBefore=Count(TEXT("known_fire_sensor_checks"));
+ if(Started)
+ {
+  for(int32 Frame=0;Frame<600;++Frame)
+  {
+   TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
+   Within &= FVector::Dist2D(Position(2),Start)<=BattleKnownFire::MoveRange()+1.;
+   if(const auto* Walk=KnownMoves.Find(2);Walk && Walk->Arrived>=0)Arrived=true;
+   if(Arrived && !RecheckedHidden)
+   {
+    // Keep the shared observation unchanged while the real target is no longer visible.
+    RecheckedHidden=true;const int32 HiddenShots=Shooter.ShotSequence;
+    Put(251,Start+FVector(50000,0,0));
+    for(int32 HiddenFrame=0;HiddenFrame<30;++HiddenFrame){TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);}
+    HiddenDidNotFire=Shooter.ShotSequence==HiddenShots;
+    Put(251,Enemy);Observe();
+   }
+   if(Count(TEXT("known_move_arrived_fired"))>0)break;
+  }
+ }
+ Check(TEXT("move_arrive_personal_fire"),Started && Arrived && Shooter.ShotSequence>BeforeShot && Count(TEXT("known_move_arrived_fired"))==1 && Within && RecheckedHidden && HiddenDidNotFire && Count(TEXT("known_fire_sensor_checks"))>SensorsBefore);
+ const int32 Once=Count(TEXT("known_move_arrived_fired"));KnownMoveShot(2,251,TestNow);
+ Check(TEXT("move_first_shot_once"),Once==1 && Count(TEXT("known_move_arrived_fired"))==Once);
+ Reset();const bool StartForOrder=TryStart();const int32 OrderBefore=Count(TEXT("known_move_cancel_order"));++Shooter.OrderRevision;
+ Follow(2,1.f/30.f,TestNow+.01);
+ Check(TEXT("move_order_change"),StartForOrder && !KnownMoves.Contains(2) && Count(TEXT("known_move_cancel_order"))==OrderBefore+1 && KnownMoveAfter.FindRef(2)>=TestNow+5.);
+ Reset();const int32 HeldBefore=Count(TEXT("known_move_started"));Squad.Order=EBattleOrder::Hold;
+ const bool Held=!StartKnownMove(2,TestNow);Squad.Order=EBattleOrder::Defend;Shooter.bSoldierOrder=true;
+ const bool Personal=!StartKnownMove(2,TestNow);Shooter.bSoldierOrder=false;Squad.TacticalPlan.Action=EBattleSquadTactic::Retreat;
+ const bool Retreat=!StartKnownMove(2,TestNow);Squad.TacticalPlan.Action=EBattleSquadTactic::Recover;
+ const bool Supply=!StartKnownMove(2,TestNow);Squad.TacticalPlan.Action=EBattleSquadTactic::Regroup;
+ Check(TEXT("move_priority_gates"),Held && Personal && Retreat && Supply && !StartKnownMove(2,TestNow) && Count(TEXT("known_move_started"))==HeldBefore);
+ Reset();auto& March=Plans.FindChecked(Shooter.SquadID);March.Path={Start,Start+FVector(2000,0,0)};Bodies.FindChecked(2).Waypoint=1;
+ Squad.Order=EBattleOrder::AttackMove;Shooter.Order=EBattleOrder::AttackMove;Shooter.Destination=March.Path[1];
+ if(!BattleKnownFire::MoveMarch())
+ {
+  Check(TEXT("move_march_gate"),!StartKnownMove(2,TestNow));
+  const int32 GateStartsBefore=Count(TEXT("known_move_started")),GateCountBefore=Count(TEXT("known_move_gate_march"));
+  TestNow+=1.01;Observe();Follow(2,0.f,TestNow);
+  Check(TEXT("move_march_follow_gate"),!KnownMoves.Contains(2) && Count(TEXT("known_move_started"))==GateStartsBefore && Count(TEXT("known_move_gate_march"))>GateCountBefore);
+ }
+ if(BattleKnownFire::MoveMarch())
+ {
+  // Exercise the Follow entry gate as well as the planner. Zero dt keeps the initial geometry fixed.
+  const FVector MarchDestination=Start+FVector(0,3000,0);
+  March.Path={Start,MarchDestination};March.Corridors.Add(2,March.Path);March.ArrivalGoals.Add(2,MarchDestination);Shooter.Destination=MarchDestination;Squad.Destination=MarchDestination;
+  const auto SavedOrderRevision=Shooter.OrderRevision;const auto SavedMissionRevision=Squad.MissionRevision;
+  const int32 MarchShots=Shooter.ShotSequence,MarchFiredBefore=Count(TEXT("known_move_arrived_fired"));
+  const TMap<FName,int32> MarchBeforeDiag=SightExperiment.CoverDiag;
+  bool MarchStarted=false,MarchArrived=false,MarchWithin=true;
+  for(int32 MarchAttempt=0;MarchAttempt<24 && !MarchStarted;++MarchAttempt)
+  {
+   const TMap<FName,int32> MarchBeforeAttempt=SightExperiment.CoverDiag;
+   TestNow+=1.01;Observe();Follow(2,0.f,TestNow);MarchStarted=KnownMoves.Contains(2);
+   for(const auto& MarchReject:SightExperiment.CoverDiag)
+    if(MarchReject.Key.ToString().StartsWith(TEXT("known_move_reject_")) && MarchReject.Value>MarchBeforeAttempt.FindRef(MarchReject.Key))
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_REJECT scene=march now=%.3f attempt=%d started=%d %s=%d"),TestNow,MarchAttempt,MarchStarted,*MarchReject.Key.ToString(),MarchReject.Value-MarchBeforeAttempt.FindRef(MarchReject.Key));
+  }
+  for(int32 MarchFrame=0;MarchFrame<600 && KnownMoves.Contains(2);++MarchFrame)
+  {
+   TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
+   if(const auto* MarchEpisode=KnownMoves.Find(2);MarchEpisode && MarchEpisode->Arrived>=0)MarchArrived=true;
+   MarchWithin &= FVector::Dist2D(Position(2),Plans.FindChecked(Shooter.SquadID).Center)<=BattleKnownFire::MoveSquadRadius()+1.;
+  }
+  for(const auto& MarchDiag:SightExperiment.CoverDiag)
+   if(MarchDiag.Value>MarchBeforeDiag.FindRef(MarchDiag.Key))
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_MARCH_DIAG %s=%d"),*MarchDiag.Key.ToString(),MarchDiag.Value-MarchBeforeDiag.FindRef(MarchDiag.Key));
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_MARCH_RESULT started=%d arrived=%d within=%d shots=%d first_shots=%d phase=%d now=%.3f world_now=%.3f next_shot=%.3f"),
+   MarchStarted,MarchArrived,MarchWithin,Shooter.ShotSequence-MarchShots,Count(TEXT("known_move_arrived_fired"))-MarchFiredBefore,int32(Shooter.CoverPhase),TestNow,TestWorld->GetTimeSeconds(),Shooter.NextShotTime);
+  Check(TEXT("move_march_arrive_fire"),MarchStarted && MarchArrived && MarchWithin && Shooter.ShotSequence>MarchShots && Count(TEXT("known_move_arrived_fired"))==MarchFiredBefore+1);
+  const FVector MarchResumeAt=Position(2);TestSense->Reset();Put(251,Start+FVector(50000,0,0));
+  for(int32 ResumeFrame=0;ResumeFrame<30;++ResumeFrame){TestNow+=1./30.;Follow(2,1.f/30.f,TestNow);}
+  Check(TEXT("move_march_resume"),!KnownMoves.Contains(2) && !CoverApproaches.Contains(2) && !FirePositions.Contains(2) && !Shooter.CoverPhase &&
+   FVector::Dist2D(Position(2),MarchDestination)<FVector::Dist2D(MarchResumeAt,MarchDestination)-40. &&
+   Shooter.Order==EBattleOrder::AttackMove && Squad.Order==EBattleOrder::AttackMove && Shooter.OrderRevision==SavedOrderRevision && Squad.MissionRevision==SavedMissionRevision && Squad.Destination==MarchDestination);
+  Reset();auto& StaleMarchPlan=Plans.FindChecked(Shooter.SquadID);StaleMarchPlan.Path={Start,MarchDestination};StaleMarchPlan.Corridors.Add(2,StaleMarchPlan.Path);StaleMarchPlan.ArrivalGoals.Add(2,MarchDestination);Bodies.FindChecked(2).Waypoint=1;
+  Squad.Order=EBattleOrder::AttackMove;Shooter.Order=EBattleOrder::AttackMove;Shooter.Destination=MarchDestination;Squad.Destination=MarchDestination;
+  const bool StaleMarchStarted=TryStart();TestSense->Reset();Put(251,Start+FVector(50000,0,0));
+  const int32 StaleMarchShots=Shooter.ShotSequence;const FVector StaleMarchAt=Position(2);
+  for(int32 StaleMarchFrame=0;StaleMarchFrame<30;++StaleMarchFrame){TestNow+=1./30.;Follow(2,1.f/30.f,TestNow);}
+  Check(TEXT("move_march_stale_resume"),StaleMarchStarted && !KnownMoves.Contains(2) && Shooter.ShotSequence==StaleMarchShots &&
+   FVector::Dist2D(Position(2),MarchDestination)<FVector::Dist2D(StaleMarchAt,MarchDestination)-40.);
+  Reset();Squad.Order=EBattleOrder::AttackMove;Shooter.Order=EBattleOrder::AttackMove;Shooter.Destination=MarchDestination;
+  // A fresh report in the spatial bucket but outside weapon engagement range cannot start a march detour.
+  auto& DistantReport=TestSense->TeamKnownTargets[Shooter.Team].Targets.FindChecked(251);DistantReport.LastKnownPosition=Start+FVector(100000,0,0);
+  Check(TEXT("move_march_near_gate"),!StartKnownMove(2,TestNow) && !KnownMoves.Contains(2));
+  Reset();Squad.Order=EBattleOrder::AttackMove;Shooter.Order=EBattleOrder::AttackMove;Shooter.Destination=MarchDestination;Squad.bSectorMission=true;
+  const FVector MarchCellStart(-10,100,Start.Z),MarchCellGoal(10,100,Start.Z);
+  Squad.Destination=MarchCellGoal;Plans.FindChecked(Shooter.SquadID).Center=MarchCellStart;
+  Check(TEXT("move_march_sector"),KnownMovePlaceAllowed(2,MarchCellStart,MarchCellStart) && KnownMovePlaceAllowed(2,MarchCellStart,MarchCellGoal) &&
+   KnownMovePlaceAllowed(2,MarchCellStart,FVector(-10,-10,Start.Z)));
+  Plans.FindChecked(Shooter.SquadID).Center=MarchCellStart+FVector(BattleKnownFire::MoveSquadRadius()+10.,0,0);
+  Check(TEXT("move_march_squad_radius"),!KnownMovePlaceAllowed(2,MarchCellStart,MarchCellStart));
+ }
+ Reset();const bool OutsideRange=!KnownMovePlaceAllowed(2,Start,Start+FVector(BattleKnownFire::MoveRange()+1.,0,0));
+ Plans.FindChecked(Shooter.SquadID).Center=Start+FVector(BattleKnownFire::MoveSquadRadius()+10.,0,0);
+ const bool OutsideSquad=!KnownMovePlaceAllowed(2,Start,Start);Plans.FindChecked(Shooter.SquadID).Center=Start;Squad.DefenseRadius=100;
+ const bool OutsideDefend=!KnownMovePlaceAllowed(2,Start,Start+FVector(200,0,0));Squad.DefenseRadius=5000;Squad.bSectorMission=true;
+ const FVector SectorStart(10,100,Start.Z),OutsideSector(-10,100,Start.Z);
+ Squad.Destination=SectorStart;Plans.FindChecked(Shooter.SquadID).Center=SectorStart;
+ const bool SectorRejected=!KnownMovePlaceAllowed(2,SectorStart,OutsideSector);Squad.bSectorMission=false;
+ Check(TEXT("move_distance_mission_limits"),OutsideRange && OutsideSquad && OutsideDefend && SectorRejected && KnownMovePlaceAllowed(2,SectorStart,OutsideSector));
+ Reset();TArray<int32> Busy;
+ for(int32 Member:Squad.Members)if(Member!=2 && TestStore->Find(Member)->IsAlive()){FCoverApproach Reserved;Reserved.Goal=Start+FVector(0,500,0);CoverApproaches.Add(Member,Reserved);Busy.Add(Member);}
+ Check(TEXT("move_shared_limit"),!StartKnownMove(2,TestNow));for(int32 Member:Busy)CoverApproaches.Remove(Member);
+ Reset();const bool First=TryStart();const int32 Starts=Count(TEXT("known_move_started"));
+ const bool NoDouble=First && !StartKnownMove(2,TestNow+2.) && Count(TEXT("known_move_started"))==Starts;
+ // An upper-priority approach replacing this episode must keep its own reservation/path.
+ if(First){auto& Replacement=CoverApproaches.FindChecked(2);Replacement.Target=252;Replacement.bCharge=true;}
+ StepKnownMove(2,1.f/30.f,TestNow+.01);
+ Check(TEXT("move_no_double_start"),NoDouble && !KnownMoves.Contains(2) && CoverApproaches.Contains(2) &&
+  CoverApproaches.FindChecked(2).Target==252 && SoldierPaths.Contains(2));
+ Reset();const bool StaleStart=TryStart();const int32 StaleBefore=Count(TEXT("known_move_cancel_stale"));
+ FVector StaleGoal=Start;bool StaleWasFree=false;
+ if(StaleStart)
+ {
+  StaleWasFree=KnownMoves.FindChecked(2).Slot==INDEX_NONE;
+  StaleGoal=StaleWasFree?Start:KnownMoves.FindChecked(2).Goal;
+  for(int32 WalkFrame=0;WalkFrame<10;++WalkFrame){TestNow+=1./30.;Observe();StepKnownMove(2,1.f/30.f,TestNow);}
+ }
+ const bool LeftStart=FVector::Dist2D(Position(2),Start)>40.;TestSense->Reset();
+ for(int32 Frame=0;Frame<600 && KnownMoves.Contains(2);++Frame){TestNow+=1./30.;StepKnownMove(2,1.f/30.f,TestNow);}
+ Check(TEXT("move_stale_return"),StaleStart && LeftStart && !KnownMoves.Contains(2) && Count(TEXT("known_move_cancel_stale"))==StaleBefore+1 &&
+  FVector::Dist2D(Position(2),StaleGoal)<40. && !CoverApproaches.Contains(2) && !SoldierPaths.Contains(2));
+ Reset();const bool RayReserved=KnownMoveReserve(2,TestNow);
+ bool Tokens=RayReserved;for(int32 Token=0;Token<12;++Token)Tokens &= KnownMoveSpend(2,TestNow,0);
+ KnownMoveRelease(2);auto& MoveTeamBudget=KnownMoveBudgets[Shooter.Team];
+ Check(TEXT("move_ray_budget"),Tokens && MoveTeamBudget.Rays==12 && MoveTeamBudget.Sweeps==0 && MoveTeamBudget.Nav==0);
+ // Movement rays are charged to the shared 32-ray allowance; only 20 remain.
+ bool MoreTokens=true;for(int32 Token=0;Token<20;++Token)MoreTokens &= KnownFireRay(2,TestNow);
+ Check(TEXT("move_shared_ray_budget"),MoreTokens && KnownFireBudgets[Shooter.Team].Used==32 && !KnownFireRay(2,TestNow));
+ Reset();bool Sweeps=KnownMoveReserve(2,TestNow),Navs=Sweeps;
+ for(int32 Token=0;Token<24;++Token)Sweeps &= KnownMoveSpend(2,TestNow,1);
+ for(int32 Token=0;Token<8;++Token)Navs &= KnownMoveSpend(2,TestNow,2);
+ KnownMoveRelease(2);
+ Check(TEXT("move_geometry_budget"),Sweeps && Navs && MoveTeamBudget.Sweeps==24 && MoveTeamBudget.Nav==8 && MoveTeamBudget.Rays==0);
+ // Failure in each dimension is atomic: no other dimension is charged and no cursor is advanced.
+ bool Atomic=true;
+ for(int32 Dimension=0;Dimension<3;++Dimension)
+ {
+  Reset();MoveTeamBudget.Window=FMath::FloorToInt64(TestNow/.1);
+  MoveTeamBudget.Rays=Dimension==0?BattleKnownFire::MoveRayBudget():0;
+  KnownFireBudgets[Shooter.Team].Window=MoveTeamBudget.Window;KnownFireBudgets[Shooter.Team].Used=MoveTeamBudget.Rays;
+  MoveTeamBudget.Sweeps=Dimension==1?BattleKnownFire::MoveSweepBudget():0;
+  MoveTeamBudget.Nav=Dimension==2?BattleKnownFire::MoveNavBudget():0;
+  const int32 BeforeRays=MoveTeamBudget.Rays,BeforeSweeps=MoveTeamBudget.Sweeps,BeforeNav=MoveTeamBudget.Nav,BeforeShared=KnownFireBudgets[Shooter.Team].Used;
+  Atomic &= !StartKnownMove(2,TestNow) && KnownMoveReservedID==INDEX_NONE && KnownMoveCursor.FindRef(2)==0 &&
+   MoveTeamBudget.Rays==BeforeRays && MoveTeamBudget.Sweeps==BeforeSweeps && MoveTeamBudget.Nav==BeforeNav && KnownFireBudgets[Shooter.Team].Used==BeforeShared;
+ }
+ Check(TEXT("move_budget_atomic"),Atomic);
+ const bool NewCaller=!KnownMoveReserve(11,TestNow+1.01);const bool OldCaller=KnownMoveReserve(2,TestNow+1.01);
+ KnownMoveRelease(2);
+ const bool NextCaller=KnownMoveReserve(11,TestNow+1.01);KnownMoveRelease(11);
+ Check(TEXT("move_budget_fifo"),NewCaller && OldCaller && NextCaller);
+ Reset();const bool IntervalStart=TryStart();if(IntervalStart)EndKnownMove(2,TestNow,TEXT("known_move_test_reset"));
+ const int32 EndCooldownBefore=Count(TEXT("known_move_gate_end_cooldown"));
+ Check(TEXT("move_cooldown"),IntervalStart && !StartKnownMove(2,TestNow+4.99) && Count(TEXT("known_move_gate_end_cooldown"))==EndCooldownBefore+1);
+ Reset();KnownMoveAfter.Add(2,TestNow+1.);const int32 IntervalBefore=Count(TEXT("known_move_gate_search_interval"));
+ Check(TEXT("move_interval_diagnostic"),!StartKnownMove(2,TestNow+.5) && Count(TEXT("known_move_gate_search_interval"))==IntervalBefore+1);
+ Check(TEXT("move_no_partial_geometry"),Count(TEXT("known_move_reservation_violation"))==0 && KnownMoveReservedID==INDEX_NONE);
+ for(auto* TestWall:Walls){TestWall->SetActorEnableCollision(false);TestWall->Destroy();}
+ return Failures;
+}
