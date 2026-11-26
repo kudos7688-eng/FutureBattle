@@ -18,6 +18,8 @@ class UBattleCover : public UWorldSubsystem
 	GENERATED_BODY()
 public:
 	void BuildSlots(bool bForce = false);
+	// Lazy, geometry-only index used exclusively by known-target movement (mode 2).
+	TArray<FBox> KnownMoveGeometry(FVector Origin,double Radius,bool Rebuild=false);
 	// Evaluation only (-BattleSymmetryAudit): compares the cover slots, the navigation mesh and lines of sight with their 180-degree
 	// counterparts and logs BATTLE_SYMMETRY lines (never read by the AI).
 	void AuditSymmetry() const;
@@ -33,6 +35,9 @@ public:
 	void ResetReservations() { Reservations.Reset(); UnitToSlot.Reset(); }
 	int32 Owner(int32 Slot, double Now) const;
 private:
+	bool bKnownGeometryBuilt=false;
+	TArray<FBox> KnownGeometryBoxes;
+	TMap<FIntPoint,TArray<int32>> KnownGeometryCells;
 	bool bBuilt = false;
 	UPROPERTY() TArray<FVector> Slots;
 	UPROPERTY() TMap<int32, FBattleCoverReservation> Reservations;
