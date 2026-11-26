@@ -123,6 +123,13 @@ void UBattleMatch::UpdateBaseGroup(int32 Team)
  }
 }
 
+bool UBattleMatch::BaseGroupFinal(int32 SquadID) const
+{
+ // Phase 1 without a leg: BaseGroupOrder sent the squad for the enemy home itself.
+ const int32 ID=GroupOf(SquadID);const auto* G=ID!=INDEX_NONE?Groups.Find(ID):nullptr;
+ return G&&G->Kind==3&&G->Phase==1&&!BaseLegs.Contains(SquadID);
+}
+
 bool UBattleMatch::BaseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const
 {
  using namespace BattleBaseGroupValues;

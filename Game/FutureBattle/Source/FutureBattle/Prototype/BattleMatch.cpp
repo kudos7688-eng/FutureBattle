@@ -510,6 +510,9 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   // Diagnosis -BattleOrderTrace=1 (2026-11-25, log only): the goal before the road routing, for BATTLE_ORDER_TRACE below.
   const FVector TraceGoal=Center;
   bool bRoadWaypoint=false,bSectorStage=false;
+  // Trial -BattleBaseGroup: on its last approach (within a few columns of the enemy home) a squad of the home-assault group goes straight
+  // for the home - no stages beside the way, which swung between two sectors short of it (map I seed 7, 2026-11-26).
+  const bool bBaseFinal=BaseGroupFinal(Pair.Key);
   // A surprise bridge leg is already a precise waypoint; road/sector routing must not replace it with another crossing.
   bool bSurpriseBridge=false;
   if(bStrategy&&!Purpose&&SurpriseOn(Team))if(const auto* G=Groups.Find(GroupOf(Pair.Key));G&&G->Kind==2&&G->Phase<2&&G->SurpriseBridgeStage!=0&&GroupAIRun(*G))bSurpriseBridge=true;
@@ -524,11 +527,11 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
     static const bool bSectorAIOn=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
     FVector PinStage;
     if(UBattleLeaderRuntime::PinnedFlankEnabled()&&SectorRouteOn()&&bSectorAIOn&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&
-       !Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&PinnedFlankStage(Pair.Key,P,PinStage))
+       !Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&!bBaseFinal&&PinnedFlankStage(Pair.Key,P,PinStage))
     {Center=PinStage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
     // -BattleCloseIn: a sector squad trading fire at long range moves one sector closer first.
     else if(UBattleLeaderRuntime::CloseInEnabled()&&SectorRouteOn()&&bSectorAIOn&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&
-       !Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&CloseInStage(Pair.Key,P,PinStage))
+       !Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&!bBaseFinal&&CloseInStage(Pair.Key,P,PinStage))
     {Center=PinStage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
     // -BattleSectorFlank: the last leg (no junction left) may also stop in a sector beside the enemy's front first.
     else if(!Step.Equals(Center,1) || (SectorFlankOn()&&SectorRouteOn()))
@@ -537,7 +540,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
      // (a sector mission) instead of walking to the junction itself.
      FVector Stage;
      static const bool bSectorAI=[](){int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorAI="),V);return V!=0;}();
-     if(SectorRouteOn()&&bSectorAI&&!bChosen&&!Purpose&&BattleFieldLayout::Of(GetWorld()).bSectors&&!Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&SectorStage(Pair.Value,P,Step,Center,RouteEnemies,Stage))
+     if(SectorRouteOn()&&bSectorAI&&!bChosen&&!Purpose&&!bBaseFinal&&BattleFieldLayout::Of(GetWorld()).bSectors&&!Runtime->IsVehicle(Pair.Value.LeaderUnitID)&&SectorStage(Pair.Value,P,Step,Center,RouteEnemies,Stage))
      {Center=Stage;Order=EBattleOrder::AttackMove;bSectorStage=true;}
      else if(!Step.Equals(Center,1)){bRoadWaypoint=true;Center=Step;if(!Runtime->IsVehicle(Pair.Value.LeaderUnitID))++RoadSteps[Team]; /* log only (road=) */if(Order==EBattleOrder::Defend)Order=EBattleOrder::AttackMove;}
     }
