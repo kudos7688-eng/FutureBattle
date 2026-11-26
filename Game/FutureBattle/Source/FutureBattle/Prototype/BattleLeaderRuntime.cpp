@@ -816,7 +816,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  // threat - its target, else the known enemy nearest to the sector within 200 m - is 45 degrees or more off the direction they were
  // placed against. Checked every 2 s while the sector is hot for its team (-BattleHotSectors, IsHotSector), else every 10 s; at
  // most once in 10 s. It takes the place of the -BattleArrivalThreat re-facing below for these squads.
- const bool bSpreadHold=DefendSpreadEnabled() && Sector && (S->Order==EBattleOrder::Defend || S->Order==EBattleOrder::Hold) && BattleSectors::Cell(P.Center)==SectorCell;
+ const bool bSpreadHold=DefendSpreadFor(S->Team) && Sector && (S->Order==EBattleOrder::Defend || S->Order==EBattleOrder::Hold) && BattleSectors::Cell(P.Center)==SectorCell;
  if(bSpreadHold && Now>=P.SpreadCheckAt)
  {
   const bool bHot=IsHotSector(S->Team,S->Destination);
@@ -879,7 +879,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive())Store->Units.FindChecked(ID).Order=EBattleOrder::Defend;
    // -BattleDefendSpread (BattleDefendSpread.cpp): once, the squad that now holds the sector places its fire teams.
    // (Codex 11-25: the arrival revision is kept, so members already in place go on from their own part of the path.)
-   if(DefendSpreadEnabled()){P.ArrivalGoals.Reset();P.ArrivalTails.Reset();P.bReplan=true;ReleaseSpreadCover(*S);SightExperiment.Cover(TEXT("defend_spread_on_hold"));}
+   if(DefendSpreadFor(S->Team)){P.ArrivalGoals.Reset();P.ArrivalTails.Reset();P.bReplan=true;ReleaseSpreadCover(*S);SightExperiment.Cover(TEXT("defend_spread_on_hold"));}
   }
  }
  const bool NewOrder=P.OrderRevision!=S->OrderRevision;

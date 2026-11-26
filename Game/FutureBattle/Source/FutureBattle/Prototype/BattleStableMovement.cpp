@@ -146,7 +146,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   }
   // Trial -BattleDefendSpread=1, stage 1b: a re-placement faces the threat that asked for it.
   const bool bDefendPlan=Sector && (S->Order==EBattleOrder::Defend || S->Order==EBattleOrder::Hold);
-  if(bDefendPlan && DefendSpreadEnabled() && !P.SpreadWant.IsNearlyZero()){Forward=P.SpreadWant;P.ArrivalFacing=Forward;}
+  if(bDefendPlan && DefendSpreadFor(S->Team) && !P.SpreadWant.IsNearlyZero()){Forward=P.SpreadWant;P.ArrivalFacing=Forward;}
   // Trial -BattleCoverStrict=1: arrival places must hide from the known enemy nearest to the sector (at most 2 of 5 samples).
   bool bStrictThreat=false;FVector StrictEye=FVector::ZeroVector;
   if(Sector && CoverStrictEnabled())
@@ -271,7 +271,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   const double TakenRadius=Sector && CoverDenseEnabled()?130.:190.;
   // Trial -BattleDefendSpread=1 (BattleDefendSpread.cpp): a squad holding a sector walks each member's own candidate order.
   TMap<int32,TArray<FVector>> SpreadOrder;
-  if(CoverArrival && bDefendPlan && DefendSpreadEnabled())
+  if(CoverArrival && bDefendPlan && DefendSpreadFor(S->Team))
   {
    PlanDefendSpread(*S,Forward,Right,CoverCandidates,SpreadOrder);
    P.SpreadFacing=Forward;P.SpreadWant=FVector::ZeroVector;P.SpreadPlacedAt=GetWorld()->GetTimeSeconds(); // stage 1b

@@ -29,6 +29,13 @@ bool UBattleLeaderRuntime::DefendSpreadEnabled()
  return b;
 }
 
+bool UBattleLeaderRuntime::DefendSpreadFor(int32 Team)
+{
+ // -BattleDefendSpreadTeam=0/1 (one-sided trial, default -1 both): only that team's squads place fire teams.
+ static const int32 T=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleDefendSpreadTeam="),V);return V;}();
+ return DefendSpreadEnabled() && (T<0 || T==Team);
+}
+
 void UBattleLeaderRuntime::ReleaseSpreadCover(const FBattleSquadState& S)
 {
  // Codex 11-25: a soldier in a cover action is stepped by StepCoverAction before his move and could stay in his old cover while
