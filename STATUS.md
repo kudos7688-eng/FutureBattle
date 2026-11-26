@@ -34,10 +34,29 @@
 | 一戦中のセーブ・ロード（`nosave` ブランチ、`FutureBattle-nosave`） | **11-25 18時30分 main へ（9997b7a）：削除した**（ユーザー決定「一戦中にセーブロードはいらない」、掲示板 C28）。F8/F9・ツールバーの保存/読込・パッドの群メニューの項目・`BattleSave` と各機能の保存/復元・評価の往復保存・保存の自己試験 206 件を削除。通常の試合は不変（前後の凍結ビルドでマップI seed 7・マップK seed 43 が IDENTICAL） | 往復保存が無くなったので、18時の回より前の評価の結果とは比べない（MEASURE.md）。新しい機能に保存・復元の対応は要らない（AGENTS.md） |
 | スポットの緩和（`spotrelax` ブランチ、`FutureBattle-spotrelax`） | **11-27 6時45分：既定の変更（ユーザー決定、6時の回、main 0d707778）**。「向かう（広く）」＝`-BattleSeekKnown` 既定2・`-BattleSeekKnownRange` 既定60000・`-BattleSeekKnownMax` 既定8（`=0` で元の動作、`nd1` と一致）。軍が見た敵歩兵のマスへ手すきの小銃小隊が向かう。マップK で与えた損害 +8〜49%（切替なしと比べた6本すべてで増）、ENGAGE 2〜3倍、得点の両軍合計は下がる。スポットの緩和の切替 A-1〜A-4・診断 A-5 は既定0で main に入った。司令部の知らせは、後方を配る形でだけ撃破 +11%（8種）なので候補から外して休止。設計 `Docs/design-spot-relax.md` | **ユーザーの判断待ち**：敵の本当の位置を使う条件（案3つ）、B・C・D の案。**未確認**：マップ I・J・H、持ち場を空ける影響、性能、実画面。台帳 E2 は古い |
 | ミッション（`missions` ブランチ、`FutureBattle-missions`） | **11-27 2時40分**：`-BattleMissions=1`（既定0、missions f16a619b、main 未取り込み）。両軍に3枠（拠点の確保→資源30、敵の撃滅→敵の作戦の写し60秒、区画の偵察→敵の基地の位置）、AI の派遣、画面。固定場面 89項目合格、切替0は IDENTICAL。マップK 2シードで両軍とも敵の基地を見つける（192〜345秒）。設計 `Docs/design-missions.md`（missions） | 砲撃（印のあと本拠地を撃てる）を既定で切るか。東だけ損をする向き（原因未調査）。精鋭の本拠地攻撃は0回。実画面は未確認 |
+| 区画の攻防と遮蔽（`sectorfight` ブランチ、`FutureBattle-sectorfight`、掲示板 C54） | **11-27 8時35分**：設計 `Docs/design-sector-attack-defend.md`（sectorfight 9c5f4fa5）。攻撃の切替 `-BattleSectorSeize=1`（既定0、sectorfight 77dd078e）：手すきの小銃小隊が軍の目撃のある区画へ向かい、撃ち合いの後も向かい直し、15秒目撃が無ければ取って30秒残り、隣の敵の区画へ進む。**未ビルド・未試験**（作業の列の9番目）。遮蔽 `-BattleCoverNearEnemy`（相手に近く相手から隠れる遮蔽）は Codex が実装中、維持 `-BattleSectorDefend` は設計だけ | ビルド・Test-Battle・切替0の一致・1試合の発動。既定にするかはユーザー判断 |
 
 **いま誰が何を調べているか・各系統がわかったこと**は調査の掲示板で引く：`python -I Setup/Board.py status`／`find <語>`（`Docs/design-investigation-board.md`）。
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
+
+## 2026-11-27 08時35分 Claude（区画の攻防と遮蔽）：設計と、攻撃の切替 `-BattleSectorSeize=1`（既定0、`sectorfight` 77dd078e、main 未取り込み）。**未ビルド・未試験**
+
+- **依頼**（ユーザー、11-27）：「攻撃する際、もう少し相手がいる区画に対して積極的に区画選択を行い、区画を制圧する動きを強めた方がいい。維持する際もその場で打ち合うのではなく、区画から区画防衛を行った方がいい。遮蔽を取る際は、中心から外側、あるいは相手に対して射程を取るように」→「3点とも設計から」→「設計書ができたら攻撃から実装。相手からできるだけ近い遮蔽および相手に対して遮蔽を取れるように」。遮蔽は最後の指示（相手に近く、相手から隠れる）を正とした。
+- **現状（コードの読み取り、Codex の調査を自分で照合）**：
+  - 敵へ向かうのは `-BattleSeekKnown`（既定2）だけ。行き先は目撃の点で区画任務ではなく、敵を見るとその場で `Engage`／`Hold`（`BattleSquadRetreat.cpp:464・585`）、見失って4秒で元の任務へ帰る（同 :482）。区画を取って残る動きは無い。
+  - 戦略の目標は拠点（`AreaStrategyTarget`）。前線は敵の多い行へは進まない（`BattleFrontLine.cpp:177・207・326・380〜`）。区画経由の移動は敵だけの区画を立ち寄り先から外す（`BattleSectorRoute.cpp:205`）。
+  - 守りの小隊も、敵を見ると `Engage`／`Hold` に移り、区画任務の扱い（区画の遮蔽を攻撃の対象の向きに選び直す）が外れる。「その場で撃ち合う」の正体とみる。
+  - 到着の遮蔽は「攻撃の対象の方向±30度の2.5m先に壁」を、区画の中心に近い順に取る（`BattleStableMovement.cpp:216・230`）。敵からの距離は入っていない。
+- **設計**：`Docs/design-sector-attack-defend.md`（sectorfight 9c5f4fa5）。切替3つ、すべて既定0：`-BattleSectorSeize`（攻撃）、`-BattleCoverNearEnemy`（遮蔽）、`-BattleSectorDefend`（維持）。順番は 攻撃 → 遮蔽 → 維持。
+- **変更（sectorfight 77dd078e、Codex が実装、Claude が差分を確認して2点直した）**：
+  - `-BattleSectorSeize=1`（`-BattleSectorSeizeMax` 既定3・`-BattleSectorSeizeHold` 既定30秒・`-BattleSectorSeizeTeam` 既定-1）。新規 `BattleSectorSeize.cpp`。「向かう」と同じ条件の小銃小隊（前線軍を含む）が、軍の目撃マスのある区画を選ぶ（近さ、味方が向かっている区画 +3、自軍の兵が隣にいる区画 +2、1区画3小隊まで）。
+  - 動き：区画の中心へ攻撃移動（到着は区画任務と同じ遮蔽の選び方）→ 敵を見たら止まって撃つ → 見失って4秒で**同じ区画へ向かい直す** → 区画に入って15秒目撃が無ければ取った → 30秒残り、隣の区画に目撃があれば次へ、無ければ任務へ帰る。打ち切りは180秒・目撃が60秒無い。
+  - 記録：`SeizeGo`／`SeizeContact`／`SeizeAgain`／`SeizeEnter`／`SeizeTaken`／`SeizeNext`／`SeizeEnd*`、行 `BATTLE_SECTOR_SEIZE`・`BATTLE_SECTOR_SEIZE_END`。
+  - 直した2点：取った後の `Hold` の行き先を区画の中心ではなく今の位置に（既存の `KNOWN ENEMY / HOLD` と同じ形）、180秒の打ち切りは取る前だけ。
+- **検証**：**していない**（ビルド・`Test-Battle`・試合とも未実施）。差分の読み取りでは、新しい分岐・状態・記録はすべて `SectorSeize()>0` の内側。
+- **制限**：区画の読み方は `BattleSectors::Cell`（東西の境の読み替え `SectorCellFor` は使っていない）。取りに行く間、小隊の目標は目的の区画の中の敵に限られる（途中で敵を見ると `SEIZE SECTOR / FIRE` に移って通常の目標選びに戻る）。前線の線・群の目標は変えていない（設計 3.4、次の段）。固定場面の試験は無い。
+- **次の一手**：作業の列（9番目、13時前の見込み）でビルド → `Test-Battle` → 凍結ビルド → マップK s7 の切替0（基準と一致）と切替1（発動の数）。遮蔽の切替は Codex が実装中。系統「前線ペース」（`-BattleFrontPace`）と層は違うが、同じ「攻めの活発さ」なので結果を見比べる。
 
 ## 2026-11-27 08時00分 Claude（群制御）：前線軍の分割 `-BattleFrontArmies=N`（既定0、groupui f10bf9e、main へは未統合）。本拠地が落ちやすくなった
 - 依頼：ユーザー「前線軍を複数に分け、どの軍にどの部隊が配置され、どの前線を担っているかを分かりやすく」→「中身も分ける案」。
