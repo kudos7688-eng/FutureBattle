@@ -446,6 +446,16 @@ public:
 	void AssignGroupRoles(FBattleGroup& Group) const;
 	FVector GroupSupportPost(int32 Team, int32 Point) const;
 	TMap<int32, FBattleGroup> Groups;
+ // Front armies (trial -BattleFrontArmies=N, BattleFrontArmies.cpp): the front-holding group's squads split into armies by bands of rows.
+ static int32 FrontArmiesWanted();
+ int32 FrontArmyCount(int32 Team) const;
+ int32 FrontArmyOfRow(int32 Team,int32 Row) const;
+ int32 FrontArmyOfSquad(int32 SquadID) const;
+ bool SetFrontArmy(int32 SquadID,int32 Army); // the player drops a squad on an army's header
+ void UpdateFrontArmies(int32 Team,const FBattleGroup& G,const TArray<int32>& SlotRow,int32 NB);
+ bool FrontArmyMismatch(int32 Team,int32 SquadID,int32 Row) const;
+ TMap<int32,int8> FrontArmyOf; TSet<int32> FrontArmyPinned; TArray<int32> FrontArmyFirst[2],FrontArmyNeed[2];
+ float FrontArmyMoveAt[2]={-100.f,-100.f},FrontArmyLogAt[2]={0.f,0.f};
  // The point an AI attack group follows: the second focus for the second attack army, else the team focus (StrategyFocusPoint).
  int32 GroupFocusPoint(const FBattleGroup& G) const;
  // Stage 7 link to the army control (user 11-23): with -BattleFrontPlanPlayer=1 a player's attack group the player delegated (J) follows

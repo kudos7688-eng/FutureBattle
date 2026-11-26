@@ -818,6 +818,21 @@ void ABattleHUD::DrawSquadList()
    DrawText(TEXT("部隊をここへドラッグすると群を作ります（群の見出しへドラッグでその群へ）"),FLinearColor(.8f,.75f,.55f),Layout.Origin.X+9,Y+23,GEngine->GetSmallFont(),.7f);
    continue;
   }
+  if(Entry.bArmyHeader)
+  {
+   // Trial -BattleFrontArmies: a front army's header - its number and colour (as on the map's front line), its rows, squads against need.
+   const int32 A=Entry.FrontArmy;const auto& First=Match->FrontArmyFirst[0];
+   const int32 Row0=First.IsValidIndex(A)?First[A]+1:0,Row1=First.IsValidIndex(A+1)?First[A+1]:BattleSectors::Rows;
+   int32 Have=0,Living=0;const auto* ArmyStore=GetWorld()->GetSubsystem<UBattleState>();for(const auto& S:All)if(S.bActive&&Match->FrontArmyOfSquad(S.SquadID)==A){++Have;if(const auto* Sq=ArmyStore?ArmyStore->FindSquad(S.SquadID):nullptr)for(int32 UID:Sq->Members)if(const auto* U=ArmyStore->Find(UID);U&&U->IsAlive())++Living;}
+   const int32 Need=Match->FrontArmyNeed[0].IsValidIndex(A)?Match->FrontArmyNeed[0][A]:0;
+   const FLinearColor Ink=BattleSectorView::SectionColor(A);
+   DrawRect(FLinearColor(.07f,.09f,.08f),Layout.Origin.X+10,Y,Layout.Width-19,Layout.RowHeight-2);
+   DrawRect(Ink,Layout.Origin.X+12,Y+5,8,Layout.RowHeight-12);
+   DrawText(FString::Printf(TEXT("前線軍%d　行%d〜%d"),A+1,Row0,Row1),Ink,Layout.Origin.X+26,Y+4,GEngine->GetSmallFont(),1);
+   DrawText(FString::Printf(TEXT("%d部隊 ／ 必要 %d ／ 兵 %d"),Have,Need,Living),Have<Need?FLinearColor(1.f,.5f,.35f):Ink,Layout.Origin.X+26,Y+23,GEngine->GetSmallFont(),.8f);
+   DrawText(TEXT("部隊をここへドラッグでこの軍へ"),FLinearColor(.6f,.65f,.6f),Layout.Origin.X+Layout.Width-190,Y+4,GEngine->GetSmallFont(),.7f);
+   continue;
+  }
   if(Entry.bGroupHeader)
   {
    // Group header: number, who runs it, strength; phase and objective; roles of its squads.
@@ -1578,9 +1593,14 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
    const int32 ColourRow=Sign>0?R:BattleSectors::Rows-1-R;
    const auto& ColourPlan=FM->FrontPlanState[0];
    if(FM->FrontSectionOrdersOn(0)&&ColourPlan.SectionOfRow.IsValidIndex(ColourRow))FrontInk=BattleSectorView::SectionColor(ColourPlan.SectionOfRow[ColourRow]);
+   // Trial -BattleFrontArmies: each front army's stretch of the line in its colour (as in the army list), a tick where armies meet.
+   const bool bArmyInk=!FM->FrontSectionOrdersOn(0)&&FM->FrontArmyCount(0)>=2;
+   if(bArmyInk)FrontInk=BattleSectorView::SectionColor(FM->FrontArmyOfRow(0,ColourRow));
    const double X=EdgeX(R),Y0=-HY+R*Size;
    const int32 PreviousRow=Sign>0?R-1:BattleSectors::Rows-R;
    if(FM->FrontSectionOrdersOn(0)&&ColourPlan.SectionOfRow.IsValidIndex(ColourRow)&&ColourPlan.SectionOfRow.IsValidIndex(PreviousRow)&&ColourPlan.SectionOfRow[ColourRow]!=ColourPlan.SectionOfRow[PreviousRow])
+    Thick(Ground(X-Size*.18,Y0),Ground(X+Size*.18,Y0));
+   if(bArmyInk&&PreviousRow>=0&&PreviousRow<BattleSectors::Rows&&FM->FrontArmyOfRow(0,ColourRow)!=FM->FrontArmyOfRow(0,PreviousRow))
     Thick(Ground(X-Size*.18,Y0),Ground(X+Size*.18,Y0));
    for(double Y=Y0;Y<Y0+Size-1;Y+=StepLen)Thick(Ground(X,Y),Ground(X,FMath::Min(Y+StepLen,Y0+Size)));
    if(R+1<BattleSectors::Rows&&EdgeX(R+1)!=X){const double X1=EdgeX(R+1),Y=Y0+Size;for(double T=0;T<1;T+=.25)Thick(Ground(FMath::Lerp(X,X1,T),Y),Ground(FMath::Lerp(X,X1,T+.25),Y));}
