@@ -382,6 +382,9 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now)
 void UBattleLeaderRuntime::EndKnownMove(int32 ID,double Now,const TCHAR* Reason)
 {
  const auto* Episode=KnownMoves.Find(ID);if(!Episode)return;
+ // Arrival owns the fire request until it fires, returns, or is cancelled (including death).
+ if(Episode->CommitUntil>0. && Episode->Arrived>=0)
+  for(auto& EndingBudget:KnownFireBudgets){EndingBudget.Waiting.Remove(ID);EndingBudget.RequestedAt.Remove(ID);}
  SightExperiment.Cover(Reason);
  if(SightExperiment.Enabled && Episode->Arrived<0){SightExperiment.KnownMoveDistance+=Episode->Distance;SightExperiment.KnownMoveSeconds+=Now-Episode->Started;}
  if(SightExperiment.Enabled)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_END unit=%d target=%d reason=%s distance_cm=%.3f time=%.3f"),ID,Episode->Observation.TargetID,Reason,Episode->Distance,Now-Episode->Started);
@@ -518,6 +521,7 @@ bool UBattleLeaderRuntime::StepKnownMoveArrival(int32 ID,float Dt,double Now)
 {
  auto& Episode=KnownMoves.FindChecked(ID);auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto& Unit=Store->Units.FindChecked(ID);
  auto& Body=Bodies.FindChecked(ID);auto* Cover=GetWorld()->GetSubsystem<UBattleCover>();
+ auto ReleaseFireQueue=[&](){auto& ArrivalBudget=KnownFireBudgets[Unit.Team];ArrivalBudget.Waiting.Remove(ID);ArrivalBudget.RequestedAt.Remove(ID);};
  if(Episode.bFired){EndKnownMove(ID,Now,TEXT("known_move_finished"));return true;}
  if(Episode.Slot!=INDEX_NONE && !Cover->Reserve(Episode.Slot,ID,Now)){EndKnownMove(ID,Now,TEXT("known_move_cancel_reservation"));return false;}
  // Only the previously certified peek and reverse route are used; no new navigation or geometry search.
@@ -528,7 +532,16 @@ bool UBattleLeaderRuntime::StepKnownMoveArrival(int32 ID,float Dt,double Now)
   const auto* WalkSquad=Store->FindSquad(Unit.SquadID);
   const float WalkRate=GetDefault<UBattleTuning>()->MoveSpeed*BattleSquadType::SpeedAt(WalkSquad->SquadType,GetWorld(),WalkBefore);
   if(Body.Actor.IsValid())
-  {Body.Actor->GetCharacterMovement()->MaxWalkSpeed=FMath::Min(WalkRate,float(FVector::Dist2D(WalkBefore,WalkGoal))/FMath::Max(Dt,.001f));Body.Actor->AddMovementInput(WalkDirection);Body.Velocity=Body.Actor->GetVelocity();}
+  {
+   if(FVector::Dist2D(WalkBefore,WalkGoal)<40.)
+   {
+    // Match precise cover peeking: clamp the swept final step, never persist a reduced speed.
+    Body.Actor->GetCharacterMovement()->StopMovementImmediately();FHitResult WalkHit;
+    Body.Actor->AddActorWorldOffset(WalkDirection*FMath::Min(WalkRate*Dt,float(FVector::Dist2D(WalkBefore,WalkGoal))),true,&WalkHit);
+    Body.Velocity=(Position(ID)-WalkBefore)/FMath::Max(Dt,.001f);
+   }
+   else{Body.Actor->AddMovementInput(WalkDirection);Body.Velocity=Body.Actor->GetVelocity();}
+  }
   else
   {
    FVector WalkDelta=WalkDirection*FMath::Min(WalkRate*Dt,float(FVector::Dist2D(WalkBefore,WalkGoal)));if(!TerrainStep(WalkBefore,WalkDelta))WalkDelta=FVector::ZeroVector;
@@ -554,7 +567,7 @@ bool UBattleLeaderRuntime::StepKnownMoveArrival(int32 ID,float Dt,double Now)
   SetStance(ID,BattleStance::Stand,Now,true);
   if(!WalkTo(Episode.Peek))
   {
-   if(Now-Episode.Arrived>5.){Episode.bReturning=true;Episode.ReturnUntil=Now+12.;SightExperiment.Cover(TEXT("known_move_arrived_unseen"));}
+   if(Now-Episode.Arrived>5.){ReleaseFireQueue();Episode.bReturning=true;Episode.ReturnUntil=Now+12.;SightExperiment.Cover(TEXT("known_move_arrived_unseen"));}
    return true;
   }
   Episode.bAtPeek=true;Episode.CheckUntil=Now+BattleKnownFire::MoveWait();
@@ -562,7 +575,7 @@ bool UBattleLeaderRuntime::StepKnownMoveArrival(int32 ID,float Dt,double Now)
   Body.Velocity=FVector::ZeroVector;Unit.CoverPhase=Episode.Source<3 || Episode.bStandUp?4:0;
  }
  if(Now>Episode.CheckUntil)
- {Episode.bReturning=true;Episode.ReturnUntil=Now+12.;if(!Episode.bArrivalSeen)SightExperiment.Cover(TEXT("known_move_arrived_unseen"));return true;}
+ {ReleaseFireQueue();Episode.bReturning=true;Episode.ReturnUntil=Now+12.;if(!Episode.bArrivalSeen)SightExperiment.Cover(TEXT("known_move_arrived_unseen"));return true;}
  const FVector ObservedPoint=Episode.Observation.At(Now),WatchDirection=(ObservedPoint-Position(ID)).GetSafeNormal2D();
  if(Body.Actor.IsValid())Body.Actor->SetActorRotation(WatchDirection.Rotation());
  else Manager->GetFragmentDataChecked<FBattleFollowerFragment>(Body.Entity).Forward=WatchDirection;
@@ -574,7 +587,6 @@ bool UBattleLeaderRuntime::StepKnownMoveArrival(int32 ID,float Dt,double Now)
  // Enemy truth is accessed only by the personal sensor; observation coordinates never authorize a shot.
  const auto Sensor=Sight(ID);FVector SensorEnd=FVector::ZeroVector;
  SightExperiment.Cover(TEXT("known_fire_sensor_checks"));
- auto ReleaseFireQueue=[&](){auto& ArrivalBudget=KnownFireBudgets[Unit.Team];ArrivalBudget.Waiting.Remove(ID);ArrivalBudget.RequestedAt.Remove(ID);};
  if(!PrepareSightTrace(Sensor,Episode.Observation.TargetID,SensorEnd)){ReleaseFireQueue();return true;}
  if(!KnownFireRay(ID,Now)){Episode.NextCheck=Now+.1;return true;}
  SightExperiment.Cover(TEXT("known_fire_sensor_rays"));

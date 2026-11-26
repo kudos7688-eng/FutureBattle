@@ -7,12 +7,15 @@
 #include "NavigationSystem.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "FutureBattle.h"
 #include "Engine/World.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
 #include "Components/StaticMeshComponent.h"
 #include "Templates/UnrealTemplate.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
 {
@@ -313,6 +316,10 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  Check(TEXT("move_no_partial_geometry"),Count(TEXT("known_move_reservation_violation"))==0 && KnownMoveReservedID==INDEX_NONE);
  if(BattleKnownFire::MoveCommit()>0.)
  {
+  // Expectations come from the requested settings, not the implementation's deadline/getters.
+  double ExpectedCommitSeconds=12.,ExpectedWaitSeconds=1.5;
+  FParse::Value(FCommandLine::Get(),TEXT("BattleKnownMoveCommit="),ExpectedCommitSeconds);
+  FParse::Value(FCommandLine::Get(),TEXT("BattleKnownMoveWait="),ExpectedWaitSeconds);
   // Expire the same fresh sample after departure; do not refresh it in the frame loop.
   for(bool CommitMarch:{false,true})for(bool HideAtArrival:{false,true})
   {
@@ -327,6 +334,7 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
    const int32 CommitWalksBefore=Count(TEXT("known_move_commit_walks")),CommitArrivalsBefore=Count(TEXT("known_move_commit_arrived"));
    const int32 CommitFiredBefore=Count(TEXT("known_move_commit_fired")),CommitUnseenBefore=Count(TEXT("known_move_arrived_unseen"));
    FVector CommitShelter=Start;bool CommitArrived=false,CommitNoEarlyShot=true,CommitExpired=false;
+   double CommitPeekAt=-1.,CommitReturnAt=-1.;bool CommitWaitExact=true;
    if(CommitStarted)CommitShelter=(KnownMoves.FindChecked(2).Source<3 || KnownMoves.FindChecked(2).bStandUp)?KnownMoves.FindChecked(2).Goal:Start;
    for(int32 CommitFrame=0;CommitFrame<900 && KnownMoves.Contains(2);++CommitFrame)
    {
@@ -334,6 +342,9 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
     if(const auto* CommitEpisode=KnownMoves.Find(2))
     {
      CommitExpired |= !CommitEpisode->Observation.Fresh(TestNow);
+     if(CommitEpisode->bAtPeek && CommitPeekAt<0.)CommitPeekAt=TestNow;
+     if(CommitEpisode->bReturning && CommitReturnAt<0.)CommitReturnAt=TestNow;
+     if(HideAtArrival && CommitPeekAt>=0. && TestNow<=CommitPeekAt+ExpectedWaitSeconds)CommitWaitExact &= !CommitEpisode->bReturning;
      if(CommitEpisode->Arrived>=0)
      {
       if(!CommitArrived && HideAtArrival)Put(251,Start+FVector(50000,0,0));
@@ -348,13 +359,117 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
     HideAtArrival?TEXT("move_commit_unseen_return"):TEXT("move_commit_arrive_fire");
    Check(CommitCase,CommitCommon && (HideAtArrival?
     Shooter.ShotSequence==CommitShots && Count(TEXT("known_move_arrived_unseen"))==CommitUnseenBefore+1 &&
-    Count(TEXT("known_move_commit_fired"))==CommitFiredBefore && FVector::Dist2D(Position(2),CommitShelter)<40. && !Shooter.CoverPhase:
+    Count(TEXT("known_move_commit_fired"))==CommitFiredBefore && FVector::Dist2D(Position(2),CommitShelter)<40. && !Shooter.CoverPhase &&
+    CommitWaitExact && CommitPeekAt>=0. && CommitReturnAt>CommitPeekAt+ExpectedWaitSeconds && CommitReturnAt<=CommitPeekAt+ExpectedWaitSeconds+1./30.+.0001:
     Shooter.ShotSequence>CommitShots && Count(TEXT("known_move_commit_fired"))==CommitFiredBefore+1));
   }
   Reset();const bool TimeoutStarted=TryStart(true);const int32 TimeoutBefore=Count(TEXT("known_move_commit_timeout")),TimeoutShots=Shooter.ShotSequence;
-  if(TimeoutStarted){TestNow=KnownMoves.FindChecked(2).CommitUntil+.01;StepKnownMove(2,0.f,TestNow);}
-  Check(TEXT("move_commit_timeout"),TimeoutStarted && !KnownMoves.Contains(2) && !CoverApproaches.Contains(2) && !SoldierPaths.Contains(2) &&
+  bool TimeoutContinued=false,TimeoutValue=false;
+  if(TimeoutStarted)
+  {
+   const double ExpectedDeadline=KnownMoves.FindChecked(2).Observation.ObservedAt+ExpectedCommitSeconds;
+   TimeoutValue=FMath::Abs(KnownMoves.FindChecked(2).CommitUntil-ExpectedDeadline)<.0001;
+   TestNow=ExpectedDeadline-.01;StepKnownMove(2,0.f,TestNow);
+   TimeoutContinued=KnownMoves.Contains(2) && CoverApproaches.Contains(2) && SoldierPaths.Contains(2) && Count(TEXT("known_move_commit_timeout"))==TimeoutBefore;
+   TestNow=ExpectedDeadline+.01;StepKnownMove(2,0.f,TestNow);
+  }
+  Check(TEXT("move_commit_timeout"),TimeoutStarted && TimeoutValue && TimeoutContinued && !KnownMoves.Contains(2) && !CoverApproaches.Contains(2) && !SoldierPaths.Contains(2) &&
    Shooter.ShotSequence==TimeoutShots && Count(TEXT("known_move_commit_timeout"))==TimeoutBefore+1);
+  auto ArrivalScene=[&]()
+  {
+   Reset();
+   for(auto* ArrivalWall:Walls){ArrivalWall->SetActorEnableCollision(false);ArrivalWall->Destroy();}Walls.Reset();
+   FKnownMove ArrivalEpisode;ArrivalEpisode.Start=Start;ArrivalEpisode.Goal=Start;ArrivalEpisode.Peek=Start;ArrivalEpisode.Last=Start;
+   ArrivalEpisode.Observation=TestSense->TeamKnownTargets[Shooter.Team].Targets.FindChecked(251);
+   ArrivalEpisode.Revision=Shooter.OrderRevision;ArrivalEpisode.Mission=Squad.MissionRevision;
+   ArrivalEpisode.Started=TestNow;ArrivalEpisode.Arrived=TestNow;ArrivalEpisode.CommitUntil=TestNow+BattleKnownFire::MoveCommit();
+   KnownMoves.Add(2,ArrivalEpisode);Shooter.bWeaponAimInitialized=false;
+   if(auto* ArrivalActor=Actor(2))ArrivalActor->SetActorRotation(FRotator::ZeroRotator);
+   else Manager->GetFragmentDataChecked<FBattleFollowerFragment>(Bodies.FindChecked(2).Entity).Forward=FVector::ForwardVector;
+  };
+  ArrivalScene();Wall(Start+FVector(750,0,60),FVector(30,150,150));
+  FVector WallEnd=FVector::ZeroVector;const auto WallSensor=Sight(2);
+  const bool WallInView=PrepareSightTrace(WallSensor,251,WallEnd);
+  const bool WallOccludes=WallInView && !SightHitVisible(TraceSight(WallSensor,WallEnd,251,SightFromCanSee),251);
+  const int32 WallShots=Shooter.ShotSequence,WallRays=Count(TEXT("known_fire_sensor_rays"));
+  StepKnownMove(2,0.f,TestNow);
+  Check(TEXT("move_commit_sensor_wall"),WallInView && WallOccludes && Shooter.ShotSequence==WallShots &&
+   Count(TEXT("known_fire_sensor_rays"))==WallRays+1 && !KnownMoves.FindChecked(2).bArrivalSeen);
+
+  // A side-exposed eye sees around this wall; the actual body/muzzle remains behind it.
+  ArrivalScene();auto& MuzzleEpisode=KnownMoves.FindChecked(2);MuzzleEpisode.bAtPeek=true;MuzzleEpisode.CheckUntil=TestNow+BattleKnownFire::MoveWait();
+  Shooter.CoverPhase=2;Shooter.CoverAnchor=Start;Shooter.CoverPeek=Start+FVector(0,200,0);
+  BlindFireUntil.Add(2,TestNow+10.);BlindFireSide.Add(2,Start+FVector(0,200,60));
+  Wall(Start+FVector(250,0,60),FVector(20,70,150));
+  const auto MuzzleSensor=Sight(2);FVector MuzzleEnd=FVector::ZeroVector;
+  const bool MuzzleInView=PrepareSightTrace(MuzzleSensor,251,MuzzleEnd);
+  auto BlockedMuzzleSensor=MuzzleSensor;BlockedMuzzleSensor.Eye=Position(2)+FVector(0,0,BattleStance::EyeOffset(StanceOf(2)));
+  const bool SeparateMuzzle=MuzzleInView && SightHitVisible(TraceSight(MuzzleSensor,MuzzleEnd,251,SightFromCanSee),251) &&
+   !SightHitVisible(TraceSight(BlockedMuzzleSensor,MuzzleEnd,251,SightFromCanSee),251);
+  const int32 MuzzleShots=Shooter.ShotSequence,MuzzleRays=Count(TEXT("known_fire_aim_rays"));
+  StepKnownMove(2,0.f,TestNow);
+  Check(TEXT("move_commit_muzzle_wall"),SeparateMuzzle && Shooter.ShotSequence==MuzzleShots &&
+   KnownMoves.FindChecked(2).bArrivalSeen && Count(TEXT("known_fire_aim_rays"))==MuzzleRays+1);
+  BlindFireUntil.Remove(2);BlindFireSide.Remove(2);
+
+  ArrivalScene();Put(251,Enemy+FVector(0,400,0));
+  FVector MovedEnd=FVector::ZeroVector;const bool MovedInView=PrepareSightTrace(Sight(2),251,MovedEnd);
+  const FVector MovedMuzzle=Position(2)+FVector(0,0,BattleStance::EyeOffset(StanceOf(2)));
+  const FVector ExpectedMovedAim=(MovedEnd-MovedMuzzle).GetSafeNormal();const int32 MovedShots=Shooter.ShotSequence;
+  StepKnownMove(2,0.f,TestNow);
+  Check(TEXT("move_commit_current_aim"),MovedInView && !MovedEnd.Equals(Enemy+FVector(0,0,TargetAimOffset(251)),1.) &&
+   KnownMoves.FindChecked(2).Observation.LastKnownPosition==Enemy && KnownMoves.FindChecked(2).bArrivalSeen &&
+   Shooter.ShotSequence==MovedShots+1 && Shooter.WeaponAimDirection.Equals(ExpectedMovedAim,.0001));
+
+  // Use real deferral at the head of the FIFO; the next request is less than .5 seconds old.
+  for(bool QueueCancel:{false,true})
+  {
+   ArrivalScene();const double QueuePeekAt=TestNow;Shooter.NextShotTime=TestNow+10.;StepKnownMove(2,0.f,TestNow);Shooter.NextShotTime=0.;
+   TestNow=QueuePeekAt+ExpectedWaitSeconds-.01;
+   auto& QueuedBudget=KnownFireBudgets[Shooter.Team];QueuedBudget.Window=FMath::FloorToInt64(TestNow/.1);QueuedBudget.Used=BattleKnownFire::MoveRayBudget();
+   StepKnownMove(2,0.f,TestNow);
+   const bool WasQueued=QueuedBudget.Waiting.Num()==1 && QueuedBudget.Waiting[0]==2 && QueuedBudget.RequestedAt.Contains(2);
+   const bool NextDeferred=!KnownFireRay(11,TestNow);
+   const bool WaitContinued=KnownMoves.Contains(2) && !KnownMoves.FindChecked(2).bReturning;
+   TestNow=QueuePeekAt+ExpectedWaitSeconds+.01;
+   if(QueueCancel)++Shooter.OrderRevision;
+   StepKnownMove(2,0.f,TestNow);
+   const bool ReleasedQueue=!QueuedBudget.Waiting.Contains(2) && !QueuedBudget.RequestedAt.Contains(2);
+   const bool EndedAsExpected=QueueCancel?!KnownMoves.Contains(2):KnownMoves.Contains(2) && KnownMoves.FindChecked(2).bReturning;
+   TestNow+=.11;const bool NextGranted=KnownFireRay(11,TestNow);
+   Check(QueueCancel?TEXT("move_commit_cancel_fifo"):TEXT("move_commit_wait_fifo"),WasQueued && NextDeferred && WaitContinued && ReleasedQueue && EndedAsExpected && NextGranted);
+  }
+
+  // Exercise an Actor, not the Mass follower used by the walking fixtures. No world tick is needed for the swept final step.
+  ArrivalScene();FActorSpawnParameters SpeedSpawn;SpeedSpawn.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+  auto* SpeedActor=TestWorld->SpawnActor<ABattleUnit>(Start,FRotator::ZeroRotator,SpeedSpawn);
+  bool ActorSpeedOK=false;
+  if(SpeedActor)
+  {
+   SpeedActor->InitializeUnit(2);auto& SpeedBody=Bodies.FindChecked(2);
+   const auto SavedSpeedActor=SpeedBody.Actor;const auto SavedSpeedCollision=SpeedBody.Capsule->GetCollisionEnabled();
+   SpeedBody.Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);SpeedBody.Actor=SpeedActor;
+   auto* SpeedMovement=SpeedActor->GetCharacterMovement();const float ExpectedSpeed=GetDefault<UBattleTuning>()->MoveSpeed;
+   SpeedMovement->MaxWalkSpeed=ExpectedSpeed;Shooter.NextShotTime=TestNow+10.;
+   KnownMoves.FindChecked(2).Peek=Start+FVector(0,2,0);
+   StepKnownMove(2,1.f/30.f,TestNow);
+   ActorSpeedOK=SpeedMovement->MaxWalkSpeed==ExpectedSpeed && FVector::Dist2D(Position(2),Start+FVector(0,2,0))<1.;
+   TestNow+=1./30.;StepKnownMove(2,1.f/30.f,TestNow);
+   ActorSpeedOK &= KnownMoves.FindChecked(2).bAtPeek && SpeedMovement->MaxWalkSpeed==ExpectedSpeed;
+   TestNow+=BattleKnownFire::MoveWait()+.01;StepKnownMove(2,1.f/30.f,TestNow);
+   ActorSpeedOK &= KnownMoves.FindChecked(2).bReturning;
+   for(int32 SpeedFrame=0;SpeedFrame<4 && KnownMoves.Contains(2);++SpeedFrame){TestNow+=1./30.;StepKnownMove(2,1.f/30.f,TestNow);}
+   ActorSpeedOK &= !KnownMoves.Contains(2) && SpeedMovement->MaxWalkSpeed==ExpectedSpeed && FVector::Dist2D(Position(2),Start)<1.;
+   // A cancellation during the final 2 cm must also leave normal movement speed intact.
+   FKnownMove CancelSpeedEpisode;CancelSpeedEpisode.Start=Start;CancelSpeedEpisode.Goal=Start;CancelSpeedEpisode.Peek=Start+FVector(0,2,0);
+   CancelSpeedEpisode.Observation=TestSense->TeamKnownTargets[Shooter.Team].Targets.FindChecked(251);
+   CancelSpeedEpisode.Revision=Shooter.OrderRevision;CancelSpeedEpisode.Mission=Squad.MissionRevision;
+   CancelSpeedEpisode.Arrived=TestNow;CancelSpeedEpisode.CommitUntil=TestNow+BattleKnownFire::MoveCommit();KnownMoves.Add(2,CancelSpeedEpisode);
+   StepKnownMove(2,1.f/30.f,TestNow);++Shooter.OrderRevision;StepKnownMove(2,0.f,TestNow);
+   ActorSpeedOK &= !KnownMoves.Contains(2) && SpeedMovement->MaxWalkSpeed==ExpectedSpeed;
+   SpeedBody.Actor=SavedSpeedActor;SpeedBody.Capsule->SetCollisionEnabled(SavedSpeedCollision);SpeedActor->Destroy();
+  }
+  Check(TEXT("move_commit_actor_speed"),ActorSpeedOK);
   Reset();const bool RefreshStarted=TryStart();bool RefreshKeptPlan=false,TrackKeptPlan=false;
   const int32 RefreshBefore=Count(TEXT("known_move_refreshed"));
   if(RefreshStarted)
