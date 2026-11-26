@@ -8,12 +8,19 @@
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "FutureBattle.h"
+#include "Engine/World.h"
+#include "Templates/UnrealTemplate.h"
 
 int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
 {
  auto* TestWorld=GetWorld();auto* TestStore=TestWorld->GetSubsystem<UBattleState>();auto* TestSense=TestWorld->GetSubsystem<UBattlePerception>();
  auto& Shooter=TestStore->Units.FindChecked(2);auto& Squad=TestStore->Squads.FindChecked(Shooter.SquadID);
- const FVector Start=Position(2),Enemy=Start+FVector(1500,0,0);double TestNow=TestWorld->GetTimeSeconds()+10.;int32 Failures=0;
+ // Follow/UpdateAim use the supplied time, but Fire/ConsumeShot read the world clock.
+ // Advance both together: otherwise a turn during marching sets NextShotTime in
+ // the simulated future and Fire can never finish that cooldown. Restore on exit.
+ TGuardValue<double> MoveTrialClock(TestWorld->TimeSeconds,TestWorld->GetTimeSeconds()+10.);
+ double& TestNow=TestWorld->TimeSeconds;
+ const FVector Start=Position(2),Enemy=Start+FVector(1500,0,0);int32 Failures=0;
  auto Check=[&](const TCHAR* Name,bool OK){Failures+=!OK;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_CHECK name=%s ok=%d"),Name,OK);};
  auto Count=[&](const TCHAR* Key){return SightExperiment.CoverDiag.FindRef(FName(Key));};
  auto Put=[&](int32 TestID,FVector At)
@@ -176,15 +183,27 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
   March.Path={Start,MarchDestination};March.Corridors.Add(2,March.Path);March.ArrivalGoals.Add(2,MarchDestination);Shooter.Destination=MarchDestination;Squad.Destination=MarchDestination;
   const auto SavedOrderRevision=Shooter.OrderRevision;const auto SavedMissionRevision=Squad.MissionRevision;
   const int32 MarchShots=Shooter.ShotSequence,MarchFiredBefore=Count(TEXT("known_move_arrived_fired"));
+  const TMap<FName,int32> MarchBeforeDiag=SightExperiment.CoverDiag;
   bool MarchStarted=false,MarchArrived=false,MarchWithin=true;
   for(int32 MarchAttempt=0;MarchAttempt<8 && !MarchStarted;++MarchAttempt)
-  {TestNow+=1.01;Observe();Follow(2,0.f,TestNow);MarchStarted=KnownMoves.Contains(2);}
+  {
+   const TMap<FName,int32> MarchBeforeAttempt=SightExperiment.CoverDiag;
+   TestNow+=1.01;Observe();Follow(2,0.f,TestNow);MarchStarted=KnownMoves.Contains(2);
+   for(const auto& MarchReject:SightExperiment.CoverDiag)
+    if(MarchReject.Key.ToString().StartsWith(TEXT("known_move_reject_")) && MarchReject.Value>MarchBeforeAttempt.FindRef(MarchReject.Key))
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_REJECT scene=march now=%.3f attempt=%d started=%d %s=%d"),TestNow,MarchAttempt,MarchStarted,*MarchReject.Key.ToString(),MarchReject.Value-MarchBeforeAttempt.FindRef(MarchReject.Key));
+  }
   for(int32 MarchFrame=0;MarchFrame<600 && KnownMoves.Contains(2);++MarchFrame)
   {
    TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
    if(const auto* MarchEpisode=KnownMoves.Find(2);MarchEpisode && MarchEpisode->Arrived>=0)MarchArrived=true;
    MarchWithin &= FVector::Dist2D(Position(2),Plans.FindChecked(Shooter.SquadID).Center)<=BattleKnownFire::MoveSquadRadius()+1.;
   }
+  for(const auto& MarchDiag:SightExperiment.CoverDiag)
+   if(MarchDiag.Value>MarchBeforeDiag.FindRef(MarchDiag.Key))
+    UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_MARCH_DIAG %s=%d"),*MarchDiag.Key.ToString(),MarchDiag.Value-MarchBeforeDiag.FindRef(MarchDiag.Key));
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_MARCH_RESULT started=%d arrived=%d within=%d shots=%d first_shots=%d phase=%d now=%.3f world_now=%.3f next_shot=%.3f"),
+   MarchStarted,MarchArrived,MarchWithin,Shooter.ShotSequence-MarchShots,Count(TEXT("known_move_arrived_fired"))-MarchFiredBefore,int32(Shooter.CoverPhase),TestNow,TestWorld->GetTimeSeconds(),Shooter.NextShotTime);
   Check(TEXT("move_march_arrive_fire"),MarchStarted && MarchArrived && MarchWithin && Shooter.ShotSequence>MarchShots && Count(TEXT("known_move_arrived_fired"))==MarchFiredBefore+1);
   const FVector MarchResumeAt=Position(2);TestSense->Reset();Put(251,Start+FVector(50000,0,0));
   for(int32 ResumeFrame=0;ResumeFrame<30;++ResumeFrame){TestNow+=1./30.;Follow(2,1.f/30.f,TestNow);}
