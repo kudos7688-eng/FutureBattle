@@ -37,6 +37,14 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-26 18時26分 Claude（試合数の統制）：共用の基準 E2 を台帳に登録した（main 37a3f33、凍結ビルド `baseline-37a3f33`、7本）。E1 は今夜の既定の変更で古くなった
+
+- **対象**：11-26 18時の回の既定の変更がすべて入った main 37a3f33（小道 `-BattleSectorLanes` 既定1、マップI 版3、マップJ・K の入れる建物、`-BattleSquadKnowledge` 既定1、`-BattleCoverPeekLookout` 既定1）。DLL は18時13分のビルド。
+- **条件**：E1 と同じ（`Test-WideSight.ps1 -Area -ObserveTactics -Experiment -CoverActions 1 -FlankCoordination 1 -Fps 30 -BehaviorConcurrency 7`、描画なし）。試合の枠で7本同時（18時17分〜18時25分）。7本とも `failures=0`・900秒。
+- **結果（得点 味方:敵、かっこ内は E1）**：I s7 339:583（441:685）／I s43 355:413（685:624）／J s7 505:455（421:465）／J s43 537:252（345:332）／K s7 769:428（463:264）／K s43 684:408（443:284）／H s7 282:258（251:448）。結果は `Setup/Benchmarks/SightTrial-20261111/base-37a3f33-<マップ>-s<シード>`。マップH は地形が変わっていないが、既定の切替の変更で結果は変わった（E1 と `DIFFERENT`、55項目）。
+- **使い方**は E1 と同じ（`Baseline.py show`／`path`／`Analyze-MatchDelta.py --baseline`）。E1 までの凍結ビルドで取った試験の結果は E2 とは比べられない。
+- **制限**：シードは 7・43 だけ。損害・戦死はここに書いていない（比較のときに `Analyze-MatchDelta.py` が出す）。
+
 ## 2026-11-26 18時20分 Claude（壁の遮蔽判定）：**既定の変更** — coverlean を main へ（18時の回、merge 37a3f33）。`-BattleCoverPeekLookout` 既定1（ユーザー決定）で区画マップの既定の試合が変わる（基準は取り直し）
 
 - 入ったもの：`-BattleCoverPeekLookout` 既定1（`=0` で戻る）。既定0のまま：`-BattleCoverFirePoint`、peekwhy の記録、`-BattleKnownTargetFire=1/2` と `-BattleKnownMove*`。Play-Area に `-CoverPeekLookout -1|0|1`（main 側で消えた `-ArrivalReady` は外したまま）。
