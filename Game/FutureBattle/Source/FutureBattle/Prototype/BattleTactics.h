@@ -93,6 +93,18 @@ namespace BattleTactics
  // state only (BattleSquadRetreat.cpp). -BattleAreaSupplyEarly=1 (default 0): the AI buys its supply vehicles (-BattleAreaSupplyKeep)
  // right after its first purchases and before the other special types, instead of last (BattleArea.cpp).
  float SupplyAmmoShare();
+ // Supply trial, user 2026-11-26 ("the supply unit restores everyone"; STATUS "弾薬と補給" 11-26: rifle squads go home for their
+ // losses, at 3-5 of 8 living with 95% of their rounds left, so ammunition never becomes a reason). -BattleSupplyCarRecover=1
+ // (default 0): an infantry squad whose leader is within UBattleTuning::SupplyTeamRadius of a supply vehicle of its team with
+ // stock gets there what it gets at home: its living members are healed in full at once and its dead members are replaced (10 s
+ // each, one credit each as at home; each replacement also takes one soldier's load of rounds, magazine + reserve, from the
+ // vehicle's stock). A squad down to the living count that sends it home drives to a supply vehicle within
+ // UBattleTuning::FieldSupplyRange instead ("FIELD SUPPLY") and stays until it is manned again (as at home: SupplyResumeLiving, or
+ // no credits); 120 s after setting out without that, or when the vehicle is gone, it gives up, goes on with the members it has
+ // (home when its losses ask for it) and does not try a vehicle for its losses again for 180 s. Healing: members within the radius
+ // who were not hit in the last 5 s; it costs nothing. A replacement waits while the stock holds less than his rounds. Not for
+ // vehicles, exoskeletons, scout pairs and the base garrison. BattleArea.cpp (UpdateArea), BattleSquadRetreat.cpp (Evaluate).
+ bool SupplyCarRecover();
  // Trial -BattleBaseRifleDamage=x (default 0 = unchanged, 0.01..1): small-arms shots do x of their damage to an enemy home base
  // (anti-tank rounds, tank guns and shells keep their own base damage).
  float BaseRifleDamage();

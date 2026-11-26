@@ -541,18 +541,39 @@ void UBattleMatch::UpdateArea(float Dt)
   int32 Living=0,Near=0;for(int32 ID:S.Members)if(Store->Find(ID)->IsAlive()){++Living;Near+=FVector::Dist2D(R->Position(ID),AreaHome(S.Team))<=2500;}
   if(FVector::Dist2D(R->Position(S.LeaderUnitID),AreaHome(S.Team))<=2500&&Near>=FMath::CeilToInt(Living*.7))AtHome.Add(S.SquadID);
  }
+ // Trial -BattleSupplyCarRecover (BattleTactics.h): infantry squads beside a supply vehicle of their team with stock (squad -> vehicle).
+ TMap<int32,int32> AtCar;
+ if(BattleTactics::SupplyCarRecover())for(const auto& Pair:Store->GetSquads())
+ {
+  const auto& S=Pair.Value;
+  if(S.CommandStatus!=EBattleCommandStatus::Active||S.SquadType==BattleSquadType::Supply||S.SquadType==BattleSquadType::Exo||!BattleSquadType::Replenished(S.SquadType)||
+     R->IsVehicle(S.LeaderUnitID)||AtHome.Contains(S.SquadID)||(BattleTactics::BaseGarrison()&&IsBaseGarrison(S.SquadID)))continue;
+  const auto* Leader=Store->Find(S.LeaderUnitID);if(!Leader||!Leader->IsAlive())continue;
+  if(const int32 Car=SupplyCarNear(S.Team,R->Position(S.LeaderUnitID));Car!=INDEX_NONE)AtCar.Add(S.SquadID,Car);
+ }
  for(auto It=Area.Replacements.CreateIterator();It;++It)
  {
   const auto* U=Store->Find(It.Key());
-  if(!U||U->IsAlive()||U->bRetired||(BattleTactics::BaseGarrison()&&IsBaseGarrison(U->SquadID))||!AtHome.Contains(U->SquadID)){It.RemoveCurrent();continue;}
+  if(!U||U->IsAlive()||U->bRetired||(BattleTactics::BaseGarrison()&&IsBaseGarrison(U->SquadID))||!(AtHome.Contains(U->SquadID)||AtCar.Contains(U->SquadID))){It.RemoveCurrent();continue;}
   It.Value()=FMath::Min(10.f,It.Value()+Step);
  }
  // Stable IDs make simultaneous completion/resource accounting deterministic.
  TArray<int32> Pending;Area.Replacements.GetKeys(Pending);Pending.Sort();
  for(int32 ID:Pending)if(Area.Replacements.FindChecked(ID)>=10)
  {
-  const int32 Team=Store->Find(ID)->Team;
-  if(Credits[Team]>0&&R->ReplaceFollower(ID)){--Credits[Team];Area.Replacements.Remove(ID);}
+  const int32 Team=Store->Find(ID)->Team;const int32 ReplacedSquad=Store->Find(ID)->SquadID;
+  // Beside a supply vehicle: the new soldier's rounds come from its stock; without that many left he waits.
+  const int32* Car=AtCar.Find(ReplacedSquad);const auto* Tune=GetDefault<UBattleTuning>();
+  if(Car&&SupplyStockOf(*Car)<Tune->Magazine+Tune->ReserveAmmo)continue;
+  if(Credits[Team]>0&&R->ReplaceFollower(ID))
+  {
+   --Credits[Team];Area.Replacements.Remove(ID);
+   if(Car)
+   {
+    SpendSupply(*Car,Tune->Magazine+Tune->ReserveAmmo);
+    UE_LOG(LogFutureBattle,Display,TEXT("AREA_CAR_REPLACE time=%.0f squad=%d team=%d car=%d stock=%d"),Elapsed,ReplacedSquad,Team,*Car,SupplyStockOf(*Car));
+   }
+  }
  }
  int32 Reserved[2]={0,0};for(const auto& Q:Area.Replacements)++Reserved[Store->Find(Q.Key)->Team];
  TArray<int32> Squads;Store->GetSquads().GetKeys(Squads);Squads.Sort();
@@ -584,11 +605,21 @@ void UBattleMatch::UpdateArea(float Dt)
    if(bPoint&&Rounds>0)UE_LOG(LogFutureBattle,Display,TEXT("AREA_POINT_SUPPLY time=%.0f squad=%d team=%d rounds=%d"),Elapsed,SID,S->Team,Rounds);
    if(bTeamSupply&&Rounds>0){SpendSupply(Car,Rounds);UE_LOG(LogFutureBattle,Display,TEXT("AREA_TEAM_SUPPLY time=%.0f squad=%d team=%d rounds=%d car=%d stock=%d"),Elapsed,SID,S->Team,Rounds,Car,SupplyStockOf(Car));}
   }
-  if(!bHome)continue; // a point gives ammunition only: no healing, no replacements
+  // Trial -BattleSupplyCarRecover: beside a supply vehicle the living members are healed in full, and replacements come as at home.
+  const bool bCarRecover=!bHome&&AtCar.Contains(SID);
+  if(bCarRecover)
+  {
+   // Members within the vehicle's radius who were not hit in the last 5 s (no healing while under fire).
+   const FVector CarAt=R->Position(Store->FindSquad(AtCar[SID])->LeaderUnitID);const double Reach=FMath::Clamp(GetDefault<UBattleTuning>()->SupplyTeamRadius,100.f,20000.f);
+   float Healed=0.f;
+   for(int32 ID:S->Members)if(Store->Find(ID)->IsAlive()&&FVector::Dist2D(R->Position(ID),CarAt)<=Reach&&!R->HitWithin(ID,GetWorld()->GetTimeSeconds(),5.))Healed+=Store->Heal(ID,1.e6f);
+   if(Healed>0.f)UE_LOG(LogFutureBattle,Display,TEXT("AREA_CAR_HEAL time=%.0f squad=%d team=%d hp=%.0f"),Elapsed,SID,S->Team,Healed);
+  }
+  if(!bHome&&!bCarRecover)continue; // a point gives ammunition only: no healing, no replacements
   // Trial -BattleSupplyHeal>0: living members (leader included) recover HP at home, up to their own maximum.
   // Trial -BattleMachineRepairRate: vehicles and exos are repaired at that rate instead.
   const bool bMachineHere=S->SquadType==BattleSquadType::Exo||R->IsVehicle(S->LeaderUnitID);
-  if(const float Heal=bMachineHere&&BattleTactics::MachineRepairRate()>0.f?BattleTactics::MachineRepairRate():BattleTactics::Supply().HealPerSecond;Heal>0.f&&!bDepotMachine)
+  if(const float Heal=bMachineHere&&BattleTactics::MachineRepairRate()>0.f?BattleTactics::MachineRepairRate():BattleTactics::Supply().HealPerSecond;Heal>0.f&&!bDepotMachine&&bHome)
    for(int32 ID:S->Members)Store->Heal(ID,Heal*Step);
   // Scout pairs are never replenished.
   if(BattleSquadType::Replenished(S->SquadType)&&(!BattleTactics::BaseGarrison()||!IsBaseGarrison(SID)))

@@ -95,6 +95,11 @@ private:
  // been fighting (-1: it fights) and when the join ended (-1: under way).
  struct FJoinFight{int32 Host=INDEX_NONE;double Start=0.,QuietSince=-1.,EndAt=-1.;};
  TMap<int32,FJoinFight> JoinFights;
+ // Trial -BattleSupplyCarRecover (BattleTactics.h): when a squad gave up waiting for replacements at a supply vehicle (it does not
+ // try a vehicle for its losses again for 180 s). Not saved.
+ TMap<int32,double> FieldRecoverGaveUp;
+ // ... and since when a squad is on a trip to a vehicle for its losses (a trip for ammunition only is not in here).
+ TMap<int32,double> FieldRecoverSince;
  // Trial -BattleSeekKnown (BattleTactics.h): per team, the 50 m squares in which one of its soldiers saw enemy infantry (the place
  // and the time of the last sighting; refreshed once a second), and per seeking squad the square it walks to, the place, when it
  // set out, when it arrived (-1: on its way) and when the seek ended (-1: under way). Not saved.
