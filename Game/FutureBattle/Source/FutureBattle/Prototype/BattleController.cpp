@@ -457,7 +457,7 @@ void ABattleController::ResetMatchControl()
   auto* TargetRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
   for(const auto& TargetPair:TargetOrders)TargetRuntime->SetOrderTarget(TargetPair.Key,INDEX_NONE);
  }
- TargetOrders.Reset();EnemyTrack.Reset();EnemyTrackDestroyed.Reset();TargetRefusedBySquad.Reset();
+ FlashOrders.Reset();TargetOrders.Reset();EnemyTrack.Reset();EnemyTrackDestroyed.Reset();TargetRefusedBySquad.Reset();
  NextTargetOrderUpdate=0.;EnemyTrackedEntries=EnemyRememberedEntries=TargetReissueRefused=0;EnemyLongestRemembered=0.;
  bTargetPress=false;TargetTest=FTargetTest{};
 	EnterTactical(); Selected.Reset(); LastControlled = nullptr; bTriggerHeld = false; PendingOrder = EBattleOrder::Move;

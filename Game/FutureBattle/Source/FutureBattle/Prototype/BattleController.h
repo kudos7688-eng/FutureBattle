@@ -196,6 +196,11 @@ public:
  double EnemyLongestRemembered=0.;
  struct FTargetOrder { int32 EnemySquad=INDEX_NONE; FVector Goal=FVector::ZeroVector; int32 Revision=0; double IssuedAt=0.,LastReissueAt=0.; };
  TMap<int32,FTargetOrder> TargetOrders;
+ // A player-ordered estimated flash position, eligible for one observed-target conversion.
+ struct FFlashOrder { FVector Where=FVector::ZeroVector; float ErrorRadius=0.f; int32 Revision=0; double IssuedAt=0.; };
+ TMap<int32,FFlashOrder> FlashOrders;
+ bool FireRevealAt(FVector2D Screen,int32& OutKey,FVector& OutWhere) const;
+ int32 IssueFlashOrder(int32 RevealKey);
  double NextTargetOrderUpdate=0.;
  int32 TargetReissueRefused=0;
  TMap<int32,int32> TargetRefusedBySquad;
@@ -209,7 +214,7 @@ public:
  void StepTargetOrderTest();
  struct FTargetTest
  {
-  int32 Stage=0,Failures=0,Squad=INDEX_NONE,Enemy=INDEX_NONE,Followed=0,Moved=0,RefusedAtMove=0,LastRefusedSeen=0;
+  int32 Stage=0,Failures=0,Squad=INDEX_NONE,Enemy=INDEX_NONE,Followed=0,Moved=0,RefusedAtMove=0,LastRefusedSeen=0,FlashOrder=0;
   double Since=0.,Started=-1.,NextPoll=0.,MoveAt=-1.,OrderShotAt=-1.,RememberedShotAt=-1.;
   FVector MoveGoal=FVector::ZeroVector;
   bool bOrderShot=false,bRememberedShot=false,bHoldIssued=false;
@@ -345,6 +350,9 @@ public:
 	int32 AimLevel = 1;
 	UFUNCTION(Exec) void BattleVerify();
 private:
+ TArray<int32> SelectedTargetSquads() const;
+ int32 IssueTargetOrderForSquads(int32 EnemySquadID,const TArray<int32>& SquadIDs,bool bNotify);
+ int32 IssueFlashOrderForSquads(int32 RevealKey,const TArray<int32>& SquadIDs);
  bool bGamepadMenuOpen=false, bGroundFloorPending=false;
  int32 GamepadMenuRow=0;
  TSet<FKey> GamepadMenuKeys;

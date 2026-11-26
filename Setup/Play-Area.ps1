@@ -1,8 +1,9 @@
 [CmdletBinding()]
-param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K','L')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(-1,0,1)][int]$StanceSteady=-1,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[switch]$SectionOrders,[switch]$NoSectionOrders,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms,[switch]$SquadKnowledge,[ValidateSet(-1,0,1)][int]$CoverPeekLookout=-1,[double]$EnemyMapTrack=-1,[double]$EnemyMapKeep=-1)
+param([ValidateSet('A','B','C','D','E','F','G','H','I','J','K','L')][string]$Map='A',[switch]$SectorAI,[switch]$SectorTrials,[switch]$TestAfterPlay,[switch]$Setup,[ValidateSet(0,30,50)][int]$CloseRange=0,[ValidateSet(0,1,2)][int]$OwnTarget=0,[ValidateSet(0,1,2)][int]$OwnTargetCover=0,[ValidateSet(-1,0,1)][int]$StanceSteady=-1,[ValidateSet(0,1,2)][int]$WalkLook=0,[switch]$FrontPlanPlayer,[switch]$SectionOrders,[switch]$NoSectionOrders,[ValidateSet(0,1)][int]$VehicleRoadGoal=0,[switch]$Arms,[switch]$SquadKnowledge,[ValidateSet(-1,0,1)][int]$CoverPeekLookout=-1,[double]$EnemyMapTrack=-1,[double]$EnemyMapKeep=-1,[switch]$ArtilleryFlash)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Game/FutureBattle/FutureBattle.uproject'))
 $extra = @()
+if ($ArtilleryFlash) { $extra += @("-BattleArtilleryFlash=1","-BattleTankGunFlash=1") }
 if ($EnemyMapTrack -ge 0) { $extra += ("-BattleEnemyMapTrack="+$EnemyMapTrack.ToString([Globalization.CultureInfo]::InvariantCulture)) }
 if ($EnemyMapKeep -ge 0) { $extra += ("-BattleEnemyMapKeep="+$EnemyMapKeep.ToString([Globalization.CultureInfo]::InvariantCulture)) }
 # Trial (2026-11-26, default 0): a cover peek may fire on the lookout's current sighting (sector sight), like ordinary fire.

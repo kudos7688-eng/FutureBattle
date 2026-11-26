@@ -724,9 +724,9 @@ void ABattleHUD::DrawMinimap()
  {
   for(int32 MarkerTeam=0;MarkerTeam<2;++MarkerTeam)for(const FVector& MarkerPost:Match->ArtilleryPostPositions[MarkerTeam])Dot(MarkerPost,4,Muted);
   DrawText(TEXT("砲撃陣地：灰点"),Muted,Map.Origin.X+150,Map.Origin.Y-20,GEngine->GetSmallFont(),.7f);
-  // Public posts and fresh team reports; never look up the shooter's current state.
-  for(const auto& MarkerFlash:Match->FireReveals[0])if(MarkerFlash.Value.At<=Match->Elapsed&&Match->Elapsed-MarkerFlash.Value.At<MarkerFlash.Value.Memory)Dot(MarkerFlash.Value.Position,4,Stale);
  }
+ // Fresh team reports do not depend on the public artillery-post overlay.
+ for(const auto& MarkerFlash:Match->FireReveals[0])if(MarkerFlash.Value.At<=Match->Elapsed&&Match->Elapsed-MarkerFlash.Value.At<MarkerFlash.Value.Memory)Dot(MarkerFlash.Value.Position,4,Stale);
  // Homes are public; objective ownership is what the player's side last observed.
  if(Match->bArea) for(int32 Team=0;Team<2;++Team)
  {const FVector2D P=Map.ToScreen(Match->AreaHome(Team));Frame(P-FVector2D(7,7),P+FVector2D(7,7),Team?Enemy:Mint);}
@@ -1217,6 +1217,16 @@ void ABattleHUD::DrawSquadIcons()
   for(const auto& R:RememberedEnemySquads(GetWorld(),Seen))
    Add(R.Value.Where,R.Value.Type,FLinearColor(1.f,.55f,.35f,.7f),true,false,FString::Printf(TEXT("%.0f秒前"),FMath::Max(0.,Now-R.Value.SeenAt)),2);
  }
+ // Flash reports carry estimated positions and observed types only, independent of camera distance.
+ const auto* FlashMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+ for(const auto& FlashPair:FlashMatch->FireReveals[0])
+ {
+  const auto& FlashReport=FlashPair.Value;
+  if(FlashReport.At>FlashMatch->Elapsed||FlashMatch->Elapsed-FlashReport.At>=FlashReport.Memory)continue;
+  const uint8 FlashType=FlashReport.ObservedSquadType==255&&FlashReport.bArtillery?BattleSquadType::SPGun:FlashReport.ObservedSquadType;
+  Add(FlashReport.Position,FlashType,FLinearColor(1.f,.75f,.3f,.8f),true,false,
+   FString::Printf(TEXT("発砲 %.0f秒前"),FlashMatch->Elapsed-FlashReport.At),3);
+ }
  // Icons of the same kind that would overlap are merged into the first (selected first): it shows "+N" for the others.
  Items.StableSort([](const FItem& X,const FItem& Y){return X.bSelected&&!Y.bSelected;});
  TArray<int32> Shown;
@@ -1248,7 +1258,19 @@ void ABattleHUD::DrawSquadIcons()
  if(!PC->GetSelection().IsEmpty()&&PC->GetSoldierSelection()==INDEX_NONE)
  {
   FVector2D PointerAt;FBattleEnemyTrackEntry HoverEntry;
-  if(PC->GetPointerPosition(PointerAt)&&PC->EnemyEntry(PC->EnemySquadAt(PointerAt),HoverEntry))TargetBracket(HoverEntry.Where,TEXT("右クリック：この部隊を攻撃"));
+  if(PC->GetPointerPosition(PointerAt))
+  {
+   const int32 HoverEnemy=PC->EnemySquadAt(PointerAt);
+   if(HoverEnemy!=INDEX_NONE)
+   {
+    if(PC->EnemyEntry(HoverEnemy,HoverEntry))TargetBracket(HoverEntry.Where,TEXT("右クリック：この部隊を攻撃"));
+   }
+   else
+   {
+    int32 HoverFlashKey=INDEX_NONE;FVector HoverFlashWhere;
+    if(PC->FireRevealAt(PointerAt,HoverFlashKey,HoverFlashWhere))TargetBracket(HoverFlashWhere,TEXT("右クリック：発砲位置を攻撃"));
+   }
+  }
  }
  TSet<int32> MarkedTargets;
  for(const auto& SelectedUnit:PC->GetSelection())if(SelectedUnit&&SelectedUnit->GetState())

@@ -8,6 +8,7 @@
 #include "Misc/Parse.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Misc/App.h"
+#include "Misc/ScopeExit.h"
 #include "UnrealClient.h"
 
 namespace
@@ -73,35 +74,110 @@ int32 ABattleController::EnemySquadAt(FVector2D Screen) const
  {for(const auto& Seen:SeenEnemySquads(GetWorld()))Consider(Seen.Key,Seen.Value.Sum/Seen.Value.Count,Seen.Value.Soldiers);}
  return Closest;
 }
+bool ABattleController::FireRevealAt(FVector2D Screen,int32& OutKey,FVector& OutWhere) const
+{
+ OutKey=INDEX_NONE;OutWhere=FVector::ZeroVector;bool bFound=false;
+ double ClosestDistance=TNumericLimits<double>::Max();
+ const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ for(const auto& ReportPair:Match->FireReveals[0])
+ {
+  const auto& Report=ReportPair.Value;
+  if(Report.At>Match->Elapsed||Match->Elapsed-Report.At>=Report.Memory)continue;
+  FVector2D ReportScreen;if(!ProjectWorldLocationToScreen(Report.Position+FVector(0,0,250),ReportScreen))continue;
+  ReportScreen.Y-=14.;
+  if(FMath::Abs(ReportScreen.X-Screen.X)>20.||FMath::Abs(ReportScreen.Y-Screen.Y)>16.)continue;
+  const double ReportDistance=FVector2D::DistSquared(ReportScreen,Screen);
+  if(!bFound||ReportDistance<ClosestDistance||(ReportDistance==ClosestDistance&&ReportPair.Key<OutKey))
+  {bFound=true;ClosestDistance=ReportDistance;OutKey=ReportPair.Key;OutWhere=Report.Position;}
+ }
+ return bFound;
+}
+int32 ABattleController::IssueFlashOrder(int32 RevealKey)
+{
+ return IssueFlashOrderForSquads(RevealKey,SelectedTargetSquads());
+}
+int32 ABattleController::IssueFlashOrderForSquads(int32 RevealKey,const TArray<int32>& SquadIDs)
+{
+ auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(!Runtime->IsEnabled())return 0;
+ auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();const auto* Report=Match->FireReveals[0].Find(RevealKey);
+ if(!Report||Report->At>Match->Elapsed||Match->Elapsed-Report->At>=Report->Memory)return 0;
+ const FVector EstimatedWhere=Report->Position;const float EstimatedRadius=FMath::Max(0.f,Report->ErrorRadius);
+ const double Now=GetWorld()->GetTimeSeconds();const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
+ int32 Accepted=0,Rejected=0;TSet<int32> Done;
+ for(int32 OwnID:SquadIDs)
+ {
+  if(Done.Contains(OwnID))continue;Done.Add(OwnID);
+  const auto* OwnSquad=Store->FindSquad(OwnID);
+  if(!OwnSquad||OwnSquad->Team!=0||OwnSquad->CommandStatus!=EBattleCommandStatus::Active||!TargetSquadAlive(Store,*OwnSquad))continue;
+  bool bAccepted=false;
+  // Centre first, then eight fixed directions, starting at +X. No random sampling.
+  for(int32 Attempt=0;Attempt<9;++Attempt)
+  {
+   const double Angle=(Attempt-1)*PI/4.;
+   const FVector CandidateWhere=Attempt==0?EstimatedWhere:EstimatedWhere+FVector(FMath::Cos(Angle)*600.,FMath::Sin(Angle)*600.,0.);
+   if(Runtime->IssueOrder(OwnID,EBattleOrder::AttackMove,CandidateWhere,false,false)){bAccepted=true;break;}
+  }
+  if(bAccepted)
+  {
+   Match->ClearPlayerRouteMission(OwnID);
+   TargetOrders.Remove(OwnID);Runtime->SetOrderTarget(OwnID,INDEX_NONE);
+   FlashOrders.Add(OwnID,{EstimatedWhere,EstimatedRadius,Store->FindSquad(OwnID)->MissionRevision,Now});++Accepted;
+  }
+  else ++Rejected;
+ }
+ ShowNotice(FString::Printf(TEXT("発砲位置へ攻撃：%d部隊（不可 %d）。位置は推定です"),Accepted,Rejected));
+ UE_LOG(LogTemp,Display,TEXT("BATTLE_INPUT FlashOrder key=%d accepted=%d rejected=%d"),RevealKey,Accepted,Rejected);
+ return Accepted;
+}
+
 bool ABattleController::TryTargetOrderClick()
 {
  const bool bPressed=bTargetPress;bTargetPress=false;
  if(!bPressed||!bTactical||Selected.IsEmpty()||SoldierSelection!=INDEX_NONE||bFrontDraw||PendingOrder==EBattleOrder::Defend)return false;
  FVector2D PointerAt;
  if(!GetPointerPosition(PointerAt)||FVector2D::Distance(PointerAt,bPathDraw?PathScreenStart:TargetPressScreen)>12.)return false;
- const int32 EnemyID=EnemySquadAt(PointerAt);if(EnemyID==INDEX_NONE)return false;
- IssueTargetOrder(EnemyID);bPathDraw=false;DrawnPath.Reset();DrawnLength=0.;PendingOrder=EBattleOrder::Move;return true;
+ const int32 EnemyID=EnemySquadAt(PointerAt);
+ if(EnemyID!=INDEX_NONE)IssueTargetOrder(EnemyID);
+ else
+ {
+  int32 FlashKey=INDEX_NONE;FVector FlashWhere;
+  if(!FireRevealAt(PointerAt,FlashKey,FlashWhere))return false;
+  IssueFlashOrder(FlashKey);
+ }
+ bPathDraw=false;DrawnPath.Reset();DrawnLength=0.;PendingOrder=EBattleOrder::Move;return true;
+}
+TArray<int32> ABattleController::SelectedTargetSquads() const
+{
+ TArray<int32> SquadIDs;
+ for(ABattleUnit* Unit:Selected)
+  if(Unit&&Unit->IsAlive()&&Unit->GetState()&&Unit->GetState()->Team==0&&LeaderSelectable(Unit))SquadIDs.AddUnique(Unit->GetState()->SquadID);
+ return SquadIDs;
 }
 int32 ABattleController::IssueTargetOrder(int32 EnemySquadID)
+{
+ return IssueTargetOrderForSquads(EnemySquadID,SelectedTargetSquads(),true);
+}
+int32 ABattleController::IssueTargetOrderForSquads(int32 EnemySquadID,const TArray<int32>& SquadIDs,bool bNotify)
 {
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(!Runtime->IsEnabled())return 0;
  FBattleEnemyTrackEntry Entry;if(!EnemyEntry(EnemySquadID,Entry))return 0;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  const double Now=GetWorld()->GetTimeSeconds();int32 Accepted=0,Rejected=0;TSet<int32> Done;
- for(ABattleUnit* Unit:Selected)
+ for(int32 OwnID:SquadIDs)
  {
-  if(!Unit||!Unit->IsAlive()||!Unit->GetState()||Unit->GetState()->Team!=0||!LeaderSelectable(Unit))continue;
-  const int32 OwnID=Unit->GetState()->SquadID;if(Done.Contains(OwnID))continue;Done.Add(OwnID);
+  if(Done.Contains(OwnID))continue;Done.Add(OwnID);
+  const auto* OwnSquad=Store->FindSquad(OwnID);
+  if(!OwnSquad||OwnSquad->Team!=0||OwnSquad->CommandStatus!=EBattleCommandStatus::Active||!TargetSquadAlive(Store,*OwnSquad))continue;
   FVector AcceptedAt;
   if(TargetDestination(Runtime,OwnID,Entry,false,AcceptedAt))
   {
    Match->ClearPlayerRouteMission(OwnID);Runtime->SetOrderTarget(OwnID,EnemySquadID);
    const auto* Squad=Store->FindSquad(OwnID);
-   TargetOrders.Add(OwnID,{EnemySquadID,AcceptedAt,Squad->MissionRevision,Now,Now});++Accepted;
+   TargetOrders.Add(OwnID,{EnemySquadID,AcceptedAt,Squad->MissionRevision,Now,Now});FlashOrders.Remove(OwnID);++Accepted;
   }
   else ++Rejected;
  }
- ShowNotice(FString::Printf(TEXT("攻撃目標：敵の%s部隊（%d部隊が向かう／不可 %d）"),Entry.Type<BattleSquadType::Count?FBattleBuyPanelLayout::TypeName(Entry.Type):TEXT("不明の"),Accepted,Rejected));
+ if(bNotify)ShowNotice(FString::Printf(TEXT("攻撃目標：敵の%s部隊（%d部隊が向かう／不可 %d）"),Entry.Type<BattleSquadType::Count?FBattleBuyPanelLayout::TypeName(Entry.Type):TEXT("不明の"),Accepted,Rejected));
  UE_LOG(LogTemp,Display,TEXT("BATTLE_INPUT TargetOrder enemy=%d state=%d accepted=%d rejected=%d"),EnemySquadID,Entry.State,Accepted,Rejected);
  return Accepted;
 }
@@ -112,7 +188,7 @@ int32 ABattleController::TargetOrderOf(int32 SquadID) const
 void ABattleController::UpdateTargetOrders()
 {
  // This gate also avoids touching any runtime table in AI-only matches.
- if(TargetOrders.IsEmpty())return;
+ if(TargetOrders.IsEmpty()&&FlashOrders.IsEmpty())return;
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(!Runtime->IsEnabled())return;
  const double Now=GetWorld()->GetTimeSeconds();if(Now<NextTargetOrderUpdate)return;NextTargetOrderUpdate=Now+.5;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();bool bDestroyedNotice=false,bLostNotice=false,bArrivedNotice=false;
@@ -142,9 +218,29 @@ void ABattleController::UpdateTargetOrders()
   if(Entry.State==2&&FVector::Dist2D(Runtime->Position(Squad->LeaderUnitID),Order.Goal)<=2000.&&Now-Entry.LastSeenAt>BattleEnemyTrack::TrackSeconds()+5.)
   {bArrivedNotice=true;Remove();}
  }
+ // Snapshot own IDs because a successful conversion removes its FlashOrders row.
+ TArray<int32> FlashSquads;FlashOrders.GetKeys(FlashSquads);bool bConvertedFlash=false;
+ for(int32 FlashSquadID:FlashSquads)
+ {
+  const auto* FlashMission=FlashOrders.Find(FlashSquadID);if(!FlashMission)continue;
+  const auto* FlashSquad=Store->FindSquad(FlashSquadID);
+  if(!FlashSquad||FlashSquad->CommandStatus!=EBattleCommandStatus::Active||!TargetSquadAlive(Store,*FlashSquad)||
+     FlashSquad->MissionRevision!=FlashMission->Revision||Now-FlashMission->IssuedAt>=120.)
+  {FlashOrders.Remove(FlashSquadID);continue;}
+  // Match only observed/tracked map positions, never the shooter ID or hidden true state.
+  int32 DiscoveredID=INDEX_NONE;double NearestDistance=FMath::Square(double(FlashMission->ErrorRadius));
+  for(const auto& KnownEnemy:EnemyTrack)if(KnownEnemy.Value.State<=1)
+  {
+   const double EnemyDistance=FVector::DistSquared2D(KnownEnemy.Value.Where,FlashMission->Where);
+   if(EnemyDistance<NearestDistance||(EnemyDistance==NearestDistance&&(DiscoveredID==INDEX_NONE||KnownEnemy.Key<DiscoveredID)))
+   {DiscoveredID=KnownEnemy.Key;NearestDistance=EnemyDistance;}
+  }
+  if(DiscoveredID!=INDEX_NONE&&IssueTargetOrderForSquads(DiscoveredID,TArray<int32>{FlashSquadID},false)>0)bConvertedFlash=true;
+ }
  if(bDestroyedNotice)ShowNotice(TEXT("攻撃目標の敵部隊を撃破しました"));
  if(bLostNotice)ShowNotice(TEXT("攻撃目標を見失いました"));
  if(bArrivedNotice)ShowNotice(TEXT("攻撃目標を見失いました（最後の位置に着きました）"));
+ if(bConvertedFlash)ShowNotice(TEXT("発砲した敵部隊を発見、攻撃目標にしました"));
 }
 
 // Controller-driven self-test: requires a local player controller, including in -nullrhi games.
@@ -153,7 +249,7 @@ void ABattleController::StepTargetOrderTest()
  static const bool bTest=FParse::Param(FCommandLine::Get(),TEXT("BattleTargetOrderTest"));
  if(!bTest||TargetTest.Stage>=5)return;
  auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();if(!Runtime->IsEnabled())return;
- const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
  const double Now=GetWorld()->GetTimeSeconds();auto& Test=TargetTest;
  auto Fail=[&](const TCHAR* Why){++Test.Failures;UE_LOG(LogTemp,Display,TEXT("BATTLE_TARGET_ORDER_TEST fail stage=%d why=%s"),Test.Stage,Why);};
  static const FString Shots=[]{FString Prefix;FParse::Value(FCommandLine::Get(),TEXT("BattleTargetOrderShots="),Prefix);return Prefix;}();
@@ -269,6 +365,23 @@ void ABattleController::StepTargetOrderTest()
  }
  if(Test.Stage==3)
  {
+  // Synthetic report exists only during this synchronous fixture and is removed on every exit.
+  if(const auto* FlashTestSquad=Store->FindSquad(Test.Squad);FlashTestSquad&&TargetSquadAlive(Store,*FlashTestSquad))
+  {
+   constexpr int32 FlashTestKey=-9001;
+   UBattleMatch::FFireReveal FlashReport;
+   FlashReport.Position=Runtime->Position(FlashTestSquad->LeaderUnitID)+FVector(3000,0,0);
+   FlashReport.At=Match->Elapsed;FlashReport.Memory=30.;FlashReport.bArtillery=true;
+   Match->FireReveals[0].Add(FlashTestKey,FlashReport);
+   ON_SCOPE_EXIT{Match->FireReveals[0].Remove(FlashTestKey);FlashOrders.Remove(Test.Squad);};
+   const int32 FlashAccepted=IssueFlashOrderForSquads(FlashTestKey,TArray<int32>{Test.Squad});
+   const auto* FlashResultSquad=Store->FindSquad(Test.Squad);
+   if(FlashAccepted==1&&FlashResultSquad&&FlashResultSquad->MissionOrder==EBattleOrder::AttackMove&&!FlashResultSquad->bSectorMission&&
+      FVector::Dist2D(FlashResultSquad->MissionDestination,FlashReport.Position)<=700.&&
+      TargetOrderOf(Test.Squad)==INDEX_NONE&&Runtime->OrderTarget(Test.Squad)==INDEX_NONE)Test.FlashOrder=1;
+   else Fail(TEXT("flash_order"));
+  }
+  else Fail(TEXT("flash_order_no_squad"));
   struct FStateCase { double Age; float Track,Keep; int32 Expected; };
   const FStateCase Cases[]={{.1,10,60,1},{10,10,60,1},{10.1,10,60,2},{60,10,60,2},{60.1,10,60,-1},
    {.1,0,60,2},{0,0,60,2},{10,10,5,1},{10.1,10,5,-1},{.1,10,0,-1}};
@@ -285,8 +398,8 @@ void ABattleController::StepTargetOrderTest()
    if(!Test.bOrderShot)UE_LOG(LogTemp,Display,TEXT("BATTLE_TARGET_ORDER_SHOT skipped=order why=not_reached"));
    if(!Test.bRememberedShot)UE_LOG(LogTemp,Display,TEXT("BATTLE_TARGET_ORDER_SHOT skipped=remembered why=no_remembered_target"));
   }
-  UE_LOG(LogTemp,Display,TEXT("BATTLE_TARGET_ORDER_RESULT failures=%d tracked_entries=%d remembered_entries=%d longest_remembered_s=%.1f followed=%d moved=%d reissue_refused=%d order_target_pick=%d"),
-   Test.Failures,EnemyTrackedEntries,EnemyRememberedEntries,EnemyLongestRemembered,Test.Followed,Test.Moved,TargetReissueRefused,Runtime->OrderTargetPicks);
+  UE_LOG(LogTemp,Display,TEXT("BATTLE_TARGET_ORDER_RESULT failures=%d tracked_entries=%d remembered_entries=%d longest_remembered_s=%.1f followed=%d moved=%d reissue_refused=%d order_target_pick=%d flash_order=%d"),
+   Test.Failures,EnemyTrackedEntries,EnemyRememberedEntries,EnemyLongestRemembered,Test.Followed,Test.Moved,TargetReissueRefused,Runtime->OrderTargetPicks,Test.FlashOrder);
   Test.Stage=5;
  }
 }
