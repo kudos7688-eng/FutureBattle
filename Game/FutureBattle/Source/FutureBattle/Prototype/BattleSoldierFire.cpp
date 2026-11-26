@@ -15,7 +15,9 @@
 
 int32 UBattleLeaderRuntime::OwnTargetMode(int32 Team)
 {
- static const int32 Value=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleOwnTarget="),V);return FMath::Clamp(V,0,2);}();
+ // Default 2 since 2026-11-27 (user decision, with -BattleOwnTargetCover=1; 0 until then by the user's decision of 2026-11-22 after a
+ // play test: more soldiers fired standing in the open). =0 turns it off.
+ static const int32 Value=[]{int32 V=2;FParse::Value(FCommandLine::Get(),TEXT("BattleOwnTarget="),V);return FMath::Clamp(V,0,2);}();
  static const int32 Only=[]{int32 V=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleOwnTargetTeam="),V);return V==0||V==1?V:-1;}();
  return Only<0 || Only==Team ? Value : 0;
 }
@@ -29,7 +31,8 @@ int32 UBattleLeaderRuntime::OwnTargetMode(int32 Team)
 // bHoldToo - soldiers of a holding squad too, who are most of those standing) and asks again there.
 int32 UBattleLeaderRuntime::OwnTargetCover(int32 Team)
 {
- static const int32 Value=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleOwnTargetCover="),V);return FMath::Clamp(V,0,2);}();
+ // Default 1 since 2026-11-27 (user decision). =0 turns it off.
+ static const int32 Value=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleOwnTargetCover="),V);return FMath::Clamp(V,0,2);}();
  return OwnTargetMode(Team) ? Value : 0;
 }
 

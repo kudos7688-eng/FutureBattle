@@ -224,7 +224,8 @@ public:
  bool bMixedFastMatch=false;
  bool bArea=false;
  FName SnapshotMode() const {return bArea?TEXT("Area"):bMixedFastMatch?TEXT("MixedFast"):TEXT("Wide");}
- bool ReplaceFollower(int32 DeadID);
+ // Beside: where the replacement appears (a supply vehicle's place, -BattleSupplyCarRecover); none: around his leader.
+ bool ReplaceFollower(int32 DeadID,const FVector* Beside=nullptr);
  // Scout pairs: the surviving follower becomes the squad leader (its Mass body is replaced by an Actor in place).
  bool PromoteScout(int32 SquadID,int32 NewLeaderID);
  // -BattleHireSightRefresh=1 restores the full sight update after a hire or scout handover (default 0 = skipped, user decision 2026-11-18).
@@ -927,26 +928,41 @@ public:
  bool KnownCoverContact(int32 ID,double Now,FBattleContact& Out);
  TMap<int32,BattleKnownFire::FSearch> KnownFireSearches;
  BattleKnownFire::FBudget KnownFireBudgets[2];
+ double KnownMoveDefendReach(int32 ID) const;
+ FVector KnownMoveReachCenter(int32 ID) const;
+ bool KnownMoveTargetAllows(int32 ID,int32 TargetID,const FVector& Observed) const;
+ double KnownMoveTrialDefendReach=-1.; // Scoped fixture override; never changed in a match.
  bool KnownMoveAllowed(int32 ID,bool CountGate=false);
  bool KnownMoveMarching(int32 ID) const;
- const TCHAR* KnownMovePlaceRejection(int32 ID,FVector Start,FVector Place) const;
- bool KnownMovePlaceAllowed(int32 ID,FVector Start,FVector Place) const;
+ bool KnownMoveDefendAtPost(int32 ID) const;
+ bool KnownMoveDefendMarching(int32 ID,bool FollowingMarch,bool CountGate=false);
+ void TrackKnownDefendResume(int32 ID,double Now);
+ const TCHAR* KnownMovePlaceRejection(int32 ID,FVector Start,FVector Place,bool DefendMarchAtStart=false) const;
+ bool KnownMoveSegmentAllowed(int32 ID,FVector Start,FVector From,FVector To,bool DefendMarchAtStart=false) const;
+ bool KnownMovePlaceAllowed(int32 ID,FVector Start,FVector Place,bool DefendMarchAtStart=false) const;
  bool KnownMoveReserve(int32 ID,double Now);
  void KnownMoveRelease(int32 ID);
  bool KnownMoveSpend(int32 ID,double Now,uint8 Kind);
  bool KnownMoveLine(int32 ID,FVector From,FVector To,double Now);
- bool StartKnownMove(int32 ID,double Now);
+ bool StartKnownMove(int32 ID,double Now,bool FollowingMarch=false);
  bool StepKnownMove(int32 ID,float Dt,double Now);
+ bool StepKnownMoveArrival(int32 ID,float Dt,double Now);
  void EndKnownMove(int32 ID,double Now,const TCHAR* Reason);
  void KnownMoveShot(int32 ID,int32 Target,double Now);
  struct FKnownMove
  {
   BattleKnownFire::FTarget Observation;
+  uint8 Source=3;FBox SourceBox=FBox(ForceInit);int32 FaceAxis=INDEX_NONE;double FaceSign=0.,EndSign=0.;
   FVector Start=FVector::ZeroVector,Goal=FVector::ZeroVector,Peek=FVector::ZeroVector,Last=FVector::ZeroVector;
+  FVector DefendPost=FVector::ZeroVector; // Fixed personal post for the lifetime of a defend detour.
   int32 Mission=0,Revision=0,Slot=INDEX_NONE;
   double Started=0,Arrived=-1,Distance=0;float Stuck=0;
-  bool bReturning=false,bFired=false,bStandUp=false,bMarch=false;
+  double CommitUntil=0,CheckUntil=0,NextCheck=0,ReturnUntil=0;
+  bool bCommittedWalk=false,bAtPeek=false,bArrivalSeen=false;TArray<FVector> ReturnPoints;int32 ReturnNext=0;
+  bool bReturning=false,bFired=false,bStandUp=false,bMarch=false,bDefendMarch=false,bDefendPost=false,bDefendReach=false;
  };
+ struct FKnownDefendResume {FVector Goal=FVector::ZeroVector,ArrivalGoal=FVector::ZeroVector;int32 Mission=0,Revision=0;double Best=0,ProgressAt=0;bool bReportedStuck=false,bDefendPost=false;};
+ TMap<int32,FKnownDefendResume> KnownDefendResumes;
  TMap<int32,FKnownMove> KnownMoves;
  TMap<int32,double> KnownMoveAfter;
  TMap<int32,double> KnownMoveEndCooldown;
@@ -956,6 +972,7 @@ public:
  int32 KnownMoveReservedID=INDEX_NONE,KnownMoveRemainingRays=0,KnownMoveRemainingSweeps=0,KnownMoveRemainingNav=0;
  int64 KnownMoveReservedWindow=-1;
  bool bKnownMoveDeferred=false;
+ bool bKnownMoveTrialSkipEdges=false; // Scoped only by the fixed-scene negative control.
  void RunCoverPeekTrial();
  int32 PeekTrialStage=0,PeekTrialCase=0,PeekTrialFailures=0;
  int32 PeekTrialShots=0;

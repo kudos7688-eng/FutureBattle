@@ -115,16 +115,68 @@ void UBattleSquadTactics::RefreshKnownSpots(int32 Team)
  KnownSpotsAt[Team]=Now;auto& Spots=KnownSpots[Team];
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Perception=GetWorld()->GetSubsystem<UBattlePerception>();
  const auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ const int32 Share=BattleTactics::SpotShare();
+ const bool Relax=Share || BattleTactics::SpotShots() || BattleTactics::SpotLost() || BattleTactics::SpotHQ()>0.f || (BattleTactics::SpotTruth()&1);
  for(const auto& U:Store->GetUnits())if(U.Value.Team==Team && U.Value.IsAlive())
   if(const auto* Contacts=Perception->GetContacts(U.Key))
    for(const auto& C:*Contacts)
    {
     // -BattleSpotTrack: an enemy he follows after losing sight of it counts as seen, where it is now.
-    if(!(C.Value.bVisible || C.Value.bTracked) || C.Value.bShared || Runtime->IsVehicle(C.Key) || Match->IsScoutLongContact(U.Key,C.Value))continue;
-    const FVector& At=C.Value.MoveAt();
-    FKnownSpot Spot;Spot.At=At;Spot.Seen=Now;
-    Spots.Add(FIntPoint(FMath::FloorToInt32(At.X/5000.),FMath::FloorToInt32(At.Y/5000.)),Spot);
+    if(!Share)
+    {
+     if(!(C.Value.bVisible || C.Value.bTracked) || C.Value.bShared || Runtime->IsVehicle(C.Key) || Match->IsScoutLongContact(U.Key,C.Value))continue;
+     AddKnownSpot(Team,C.Value.MoveAt(),Now,Relax && !C.Value.bVisible?1:0,!Relax);
+    }
+    else
+    {
+     const auto& Contact=C.Value;const bool Vehicle=Runtime->IsVehicle(C.Key),Long=Match->IsScoutLongContact(U.Key,Contact);
+     if((!(Contact.bVisible || Contact.bTracked) || Contact.bShared) && !(Share&1))continue;
+     if((Vehicle && !(Share&4)) || (Long && !(Share&2)))continue;
+     // Perception records world seconds; the seeking table uses the active tactical clock.
+     const double Age=GetWorld()->GetTimeSeconds()-Contact.LastSeenTime;
+     if(!FMath::IsFinite(Age) || Age<0. || Age>U.Value.Perception.MemorySeconds || Contact.Confidence<=.35f)continue;
+     const uint8 Kind=Contact.bVisible && !Contact.bShared && !Vehicle && !Long?0:1;
+     AddKnownSpot(Team,Contact.MoveAt(),Now-Age,Kind);
+    }
    }
+ if(Share&1)for(const auto& S:Store->GetSquads())if(S.Value.Team==Team)
+ {
+  bool Living=false;for(int32 ID:S.Value.Members)if(const auto* U=Store->Find(ID);U && U->IsAlive()){Living=true;break;}
+  if(!Living)continue;
+  if(const auto* Contacts=Perception->GetSquadContacts(S.Key))for(const auto& Pair:*Contacts)
+  {
+   const auto& C=Pair.Value.Contact;
+   const bool Vehicle=Runtime->IsVehicle(C.TargetID),Long=Match->IsScoutLongContact(C.SourceUnitID,C);
+   if((Vehicle && !(Share&4)) || (Long && !(Share&2)))continue;
+   const double Age=GetWorld()->GetTimeSeconds()-C.LastSeenTime;
+   if(!FMath::IsFinite(Age) || Age<0. || C.Confidence<=.35f || Age>BattleTactics::SeekKnownSeconds())continue;
+   AddKnownSpot(Team,C.MoveAt(),Now-Age,C.bVisible && !C.bShared && !Vehicle && !Long?0:1);
+  }
+ }
+ if(Share&2)
+ {
+  Match->AddScoutSpotSightings(Team,(Share&4)!=0,[&](const FVector& At,double ReportedAt)
+  {AddKnownSpot(Team,At,Now-(Match->Elapsed-ReportedAt),1);});
+ }
+ if(BattleTactics::SpotLost())AdvanceLostSpots(Team,Now);
+ if(BattleTactics::SpotHQ()>0.f)AdvanceHQSpots(Team,Now,BattleTactics::SpotHQ(),BattleTactics::SpotHQDelay(),BattleTactics::SpotHQMin(),BattleTactics::SpotHQDepth());
+ // Diagnostic -BattleSpotTruth bit 1 (Docs/design-spot-relax.md): the true places of the enemy's living infantry, as if seen now.
+ if(BattleTactics::SpotTruth()&1)
+ {
+  if(FMath::FloorToInt32(Now/60.)!=FMath::FloorToInt32((Now-1.)/60.))
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SPOT_TRUTH kind=seek team=%d t=%.0f written=%lld spots=%d"),Team,Match->Elapsed,SpotTruthSpots[Team],Spots.Num());
+  for(const auto& U:Store->GetUnits())if(U.Value.Team==1-Team && U.Value.IsAlive() && !Runtime->IsVehicle(U.Key))
+  {
+   const FVector At=Runtime->Position(U.Key);
+   if(!SpotDepthAllows(At,Match->AreaHome(Team),Match->AreaHome(1-Team),BattleTactics::SpotTruthDepth()))continue;
+   if(AddKnownSpot(Team,At,Now,5))++SpotTruthSpots[Team];
+  }
+ }
+ if(Relax && FMath::FloorToDouble(Now/60.)>SpotRelaxLogAt[Team])
+ {
+  SpotRelaxLogAt[Team]=FMath::FloorToDouble(Now/60.);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SPOT_RELAX team=%d t=%.0f share=%lld shots=%lld lost=%lld hq=%lld spots=%d"),Team,Now,SpotWrites[Team][1],SpotWrites[Team][2],SpotWrites[Team][3],SpotWrites[Team][4],Spots.Num());
+ }
  for(auto It=Spots.CreateIterator();It;++It)if(Now<It->Value.Seen || Now-It->Value.Seen>BattleTactics::SeekKnownSeconds())It.RemoveCurrent();
 }
 
@@ -524,7 +576,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
     if(Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::AttackMove,SeekAt,TEXT("SEEK ENEMY / MOVE TO WHERE THE TEAM SAW IT")))
     {
      FSeekEnemy Seek;Seek.Cell=BestCell;Seek.At=SeekAt;Seek.Start=SeekNow;SeekEnemies.Add(SID,Seek);Event(TEXT("SeekEnemyGo"));
-     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SEEK_ENEMY t=%.0f squad=%d team=%d group=%d dist=%.0f age=%.0f"),Match->Elapsed,SID,S->Team,SeekGroup?int32(SeekGroup->Kind):-1,FMath::Sqrt(BestD),Age);
+     UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SEEK_ENEMY t=%.0f squad=%d team=%d group=%d dist=%.0f age=%.0f kind=%d"),Match->Elapsed,SID,S->Team,SeekGroup?int32(SeekGroup->Kind):-1,FMath::Sqrt(BestD),Age,int32(Best->Kind));
      return;
     }
    }

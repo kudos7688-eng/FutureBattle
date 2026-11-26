@@ -230,6 +230,7 @@ void ABattleGameMode::RunSmokeTest()
 {
 	bCombatPaused = true;
 	SmokeFailures = 0;
+ UBattleSquadTactics::TestSpotRelax(GetWorld(),[this](bool OK,const TCHAR* Text){CheckSmoke(OK,Text);});
 	ABattleController* PC = Cast<ABattleController>(GetWorld()->GetFirstPlayerController());
 	CheckSmoke(Units.Num() == 20, TEXT("20 units spawned"));
 	if (Units.Num() != 20 || !PC) { CheckSmoke(false, TEXT("Controller and units available")); FinishSmokeTest(); return; }

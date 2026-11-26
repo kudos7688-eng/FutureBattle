@@ -428,7 +428,7 @@ public:
 	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyCost = 10;
 	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyLimit = 2;
 	UPROPERTY(Config, EditAnywhere) float SupplyTeamRadius = 3000.f;
-	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyKeep = 0;
+	UPROPERTY(Config, EditAnywhere) int32 AreaSupplyKeep = 2; // 2 since 2026-11-27 (user decision; 0 before)
 	// Rounds the vehicle carries (an empty 8-soldier rifle squad takes 720 of reserve ammunition); below SupplyCarRestockRatio of it the
 	// vehicle drives home and waits there until full again.
 	UPROPERTY(Config, EditAnywhere) int32 SupplyCarStock = 2400;

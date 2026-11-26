@@ -33,6 +33,8 @@ namespace BattleTactics
  // burst's last round to the next burst's first). Each round is a real shot (damage, spread, one round of
  // ammunition).
  // -BattleCoverPeekShots=n (default 0 = UBattleTuning::AICoverShotsPerPeek, 1..30): shots after which an AI peek out of cover ends.
+ // Defaults since 2026-11-27 (user decision; STATUS 2026-11-27 05:50, measured over the supply vehicle default): -BattleBurstFire=3,
+ // -BattleBurstPause=1.4, -BattleCoverPeekShots=3. The old pace: -BattleBurstFire=0 -BattleCoverPeekShots=2.
  int32 BurstFire();
  float BurstPause();
  int32 CoverPeekShots();
@@ -47,11 +49,11 @@ namespace BattleTactics
  int32 JoinFightMax();
  // Contact trial, user 2026-11-25 ("share the enemy's place across the team", STATUS "弾薬と補給" 14:10/16:00: an enemy is within
  // 200 m for 74% of the time without one in sight; a sighting reaches only soldiers within ShareRange, 16 m, and the team's view
- // serves the front line and the groups, never a squad's own way). -BattleSeekKnown=1|2 (default 0): the team remembers for
+ // serves the front line and the groups, never a squad's own way). -BattleSeekKnown=0|1|2 (default 2 since 2026-11-27, user decision; 0 = off): the team remembers for
  // -BattleSeekKnownSeconds=s (default 30, 5..180) each 50 m square in which one of its soldiers saw enemy infantry himself (no
  // vehicles, no scout long sight, no reports; the place last seen there, no true positions). An AI rifle squad on its mission with
- // no enemy of its own attack-moves to the nearest such place within -BattleSeekKnownRange=cm (default 20000, 2000..60000), at most
- // -BattleSeekKnownMax=n (default 2, 1..8) squads per square. With an enemy in its own sight it fights as usual; 10 s at the place
+ // no enemy of its own attack-moves to the nearest such place within -BattleSeekKnownRange=cm (default 60000, 2000..60000), at most
+ // -BattleSeekKnownMax=n (default 8, 1..8) squads per square. With an enemy in its own sight it fights as usual; 10 s at the place
  // with none, or 90 s, and it goes back to its mission. 1: squads outside the groups only. 2: also squads of front-holding groups
  // (attack and surprise groups never). Not saved. BattleSquadRetreat.cpp (Evaluate, RefreshKnownSpots).
  // Contact trial, user 2026-11-25 ("once spotted, know its true place for some seconds"; an exception to the rule that decisions
@@ -71,6 +73,24 @@ namespace BattleTactics
  float SeekKnownSeconds();
  float SeekKnownRange();
  int32 SeekKnownMax();
+ // Spot relaxation (Docs/design-spot-relax.md, user 2026-11-27). -BattleSpotTruth=bits (default 0; DIAGNOSTIC ONLY, never a default):
+ // the true places of the living enemies enter what a team was told. Bit 1: its infantry, into the team's places for
+ // -BattleSeekKnown (needs that switch). Bit 2: every enemy, into the team's view (AreaIntelView: the front line, the groups,
+ // the guns' known places). Nothing fires at a soldier because of it; no soldier's own contact changes.
+ int32 SpotTruth();
+ // Trials: write only the seeking table, never perception, AreaIntelView or shooting. Require -BattleSeekKnown>0.
+ // -BattleSpotShare=bits (0, 0..7): 1 memory/shared/squad contacts, 2 scout long sight/reports, 4 vehicles.
+ int32 SpotShare();
+ // -BattleSpotShots=1 (0): infantry small arms heard by enemy infantry. Hear cm (15000, 1000..60000),
+ // Error cm (2500, 0..10000), Every s (2, 0.2..30). Independent deterministic error; no combat RNG.
+ bool SpotShots(); float SpotShotsHear(); float SpotShotsError(); float SpotShotsEvery();
+ // -BattleSpotLost=1 (0): new enemy point owner, including neutral captures. Seconds (60, 5..300); recapture cancels.
+ bool SpotLost(); float SpotLostSeconds();
+ // -BattleSpotHQ=s (0 off, otherwise 10..600): snapshot infantry counts per sector; Delay s (30, 0..300), Min (2, 1..20).
+ // Depth (0 unlimited, 1..20): omit columns beyond enemy home column minus Depth, in the recipient's orientation.
+ float SpotHQ(); float SpotHQDelay(); int32 SpotHQMin(); int32 SpotHQDepth();
+ // -BattleSpotTruthDepth=n (0 unlimited, 1..20): the same column filter for SpotTruth bit 1 only.
+ int32 SpotTruthDepth();
  // Contact trial, user 2026-11-25. -BattleMemorySeconds=s (default 0 = UBattleTuning::MemorySeconds, 5 s; 1..120): how long a soldier
  // keeps an enemy he no longer sees (before the recruit/veteran factor). The 5 s caps inside the cover actions stay.
  // -BattleSuppressFire=s (default 0 = off, 0..60): a soldier who stands still and has lost sight of the squad's target keeps firing
@@ -97,7 +117,8 @@ namespace BattleTactics
  float SupplyAmmoShare();
  // Supply trial, user 2026-11-26 ("the supply unit restores everyone"; STATUS "弾薬と補給" 11-26: rifle squads go home for their
  // losses, at 3-5 of 8 living with 95% of their rounds left, so ammunition never becomes a reason). -BattleSupplyCarRecover=1
- // (default 0): an infantry squad whose leader is within UBattleTuning::SupplyTeamRadius of a supply vehicle of its team with
+ // (default 1 since 2026-11-27, user decision; with -BattleSupplyCarFirst, the AI's two supply vehicles and their group slot:
+ // STATUS 2026-11-27): an infantry squad whose leader is within UBattleTuning::SupplyTeamRadius of a supply vehicle of its team with
  // stock gets there what it gets at home: its living members are healed in full at once and its dead members are replaced (10 s
  // each, one credit each as at home; each replacement also takes one soldier's load of rounds, magazine + reserve, from the
  // vehicle's stock). A squad down to the living count that sends it home drives to a supply vehicle within
@@ -107,8 +128,14 @@ namespace BattleTactics
  // who were not hit in the last 5 s; it costs nothing. A replacement waits while the stock holds less than his rounds. Not for
  // vehicles, exoskeletons, scout pairs and the base garrison. BattleArea.cpp (UpdateArea), BattleSquadRetreat.cpp (Evaluate).
  bool SupplyCarRecover();
+ // User 2026-11-27 (with -BattleSupplyCarRecover): the healing beside a supply vehicle draws on a gauge of that vehicle,
+ // -BattleSupplyCarHealStock=<hit points> (default 1000 since 2026-11-27, 0 = no limit, up to 100000): each hit point healed leaves it;
+ // empty, the vehicle heals no more, drives home as when its rounds run low and is full again there (with its rounds). And a
+ // replacement made beside a supply vehicle appears right beside the vehicle (3.5 m to 8 m from it) instead of around his leader.
+ // BattleArea.cpp (UpdateArea), BattleSupplyCar.cpp, BattleMixedRecruitment.cpp (ReplaceFollower).
+ float SupplyCarHealStock();
  // Supply trials, user 2026-11-26 (with -BattleSupplyCarRecover the supply vehicle is where squads recover), each default 0:
- // -BattleSupplyCarFirst=1: a squad that needs supply or replacements goes to the nearest supply vehicle of its team that has
+ // -BattleSupplyCarFirst=1 (default 1 since 2026-11-27): a squad that needs supply or replacements goes to the nearest supply vehicle of its team that has
  //   stock to give (not one about to drive home to load) whenever that vehicle is no farther from it than its home, instead of only
  //   within UBattleTuning::FieldSupplyRange (200 m); once on its way the distance no longer ends the trip. A trip for losses may
  //   take 300 s to reach the vehicle, and the 120 s of waiting for replacements count from its arrival beside it.
@@ -128,7 +155,11 @@ namespace BattleTactics
  //   enemy tank first, then a supply vehicle, then the other vehicles, and always tries its line to the best supply vehicle. What
  //   the squad or tank sees and the observed type only. BattleArmourAI.cpp (PickArmourTargets), BattleTankGun.cpp (TankGunTarget).
  bool SupplyCarFirst();
- bool SupplyCarPost();
+ // -BattleSupplyCarPost=2 (user 2026-11-27 "the vehicle's place is bad"; counted on map K seed 7: in 31 of 53 trips to a vehicle the
+ //   vehicle moved more than 30 m while the squad walked to it, median 84 m): only the halt of =1 - the vehicle stands still (a
+ //   Hold order) while a squad is on its way to it or stands beside it short of members (and the team has credits for
+ //   replacements); its posts are chosen as without the switch.
+ int32 SupplyCarPost();
  bool SupplyCarTarget();
  // -BattleSupplyCarHunt=1 (default 0; user 2026-11-26 "attack a supply vehicle as soon as it is found"; -BattleSupplyCarTarget alone
  //   changed nothing in a match, the vehicles stand behind their line and are rarely in the view of a squad that picks targets):
