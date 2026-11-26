@@ -1837,6 +1837,17 @@ void ABattleController::UpdatePlanPanelShot()
  if(ShotStage==0)
  {
   if(ShotMatch->Phase!=EBattleMatchPhase::Combat||ShotMatch->FrontPlanState[0].Sections<2)return;
+  // In a played match the player's team has no front army until the player puts squads in it: put ten free squads there first and
+  // give the line time to form.
+  static bool bShotArmy=false;
+  if(!bShotArmy)
+  {
+   bShotArmy=true;const uint8 FilterBefore=SquadFilter;SquadFilter=2;int32 ShotAssigned=0;
+   for(const auto& ShotRow:SquadListRows())if(ShotAssigned<10&&ShotRow.Squad.bActive&&ShotMatch->AssignArmy(ShotRow.Squad.SquadID,1))++ShotAssigned;
+   SquadFilter=FilterBefore;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_PLAN_PANEL_SHOT stage=army assigned=%d"),ShotAssigned);
+   ShotNext=ShotTime+15.;return;
+  }
   TArray<int32> ShotOffsets;ShotOffsets.Init(0,ShotMatch->FrontPlanState[0].Sections);ShotOffsets[0]=3;ShotOffsets.Last()=-3;
   if(ShotMatch->DrawFrontSectionOffsets(ShotOffsets)<=0)return;
   EnterTactical();bShowSectorGrid=true;bPlanPanel=false;bBuyPanel=false;

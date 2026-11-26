@@ -15,7 +15,7 @@ $log=Join-Path $out 'run.log'
 $shot=Join-Path $out 'shot'
 $a=@(('"'+$project+'"'),'/Game/Prototype/Lvl_BattleWide_J','-game','-unattended','-nosound','-nosplash','-RenderOffscreen','-ForceRes',"-ResX=$ResX","-ResY=$ResY",
  '-BattleWideMixed','-BattleArea','-BattleCoverActions=1','-BattleFlankCoordination=1','-BattleAreaPointSupply=1','-BattleFollowerAnimSkip=1',
- '-BattleFrontPlan=1','-BattleFrontPlanTeam=0','-BattleFrontPlanPlayer=1','-BattleFrontPlanFocus2=1','-BattleHireReserve=1','-BattleFrontSectionOrders=1',
+ '-BattleFrontPlan=1','-BattleFrontPlanTeam=0','-BattleFrontPlanPlayer=1','-BattleFrontPlanFocus2=1','-BattleHireReserve=1','-BattleFrontSectionOrders=1','-BattleStartRunning',
  ('-BattlePlanPanelShot="'+$shot+'"'),('-abslog="'+$log+'"'))
 if($Extra){$a+=@($Extra -split ' '|Where-Object{$_})}
 $p=Start-Process 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe' -ArgumentList $a -WindowStyle Hidden -PassThru
