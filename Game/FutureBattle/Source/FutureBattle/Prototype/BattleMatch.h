@@ -502,7 +502,7 @@ public:
 	mutable TMap<int32, FCarChoice> CarChoices; // squad -> current objective (At uses match Elapsed)
 	// Scout reports (ROADMAP 2026-11-14, stage 3): what a scout pair sees beyond normal sight reaches its team only through a timed
 	// two-step report (direction after ScoutAlertSeconds, positions and size after ScoutReportSeconds). Transient.
-	struct FScoutReport { bool bHomeObserved=false; double Started=-1, LastLong=-1, AlertAt=-1, ReportedAt=-1, NextHint=0, RetreatUntil=-1, PauseStart=-1, LastDanger=-1; FVector ReportFrom=FVector::ZeroVector; float LastHP=-1; int32 Stage=0, Living=0, Sequence=0, AlertSequence=0, Burns=0; FVector Direction=FVector::ZeroVector, Approx=FVector::ZeroVector, RetreatPoint=FVector::ZeroVector; TArray<FVector> Positions; };
+	struct FScoutReport { bool bHomeObserved=false; double Started=-1, LastLong=-1, AlertAt=-1, ReportedAt=-1, NextHint=0, RetreatUntil=-1, PauseStart=-1, LastDanger=-1; FVector ReportFrom=FVector::ZeroVector; float LastHP=-1; int32 Stage=0, Living=0, Sequence=0, AlertSequence=0, Burns=0; FVector Direction=FVector::ZeroVector, Approx=FVector::ZeroVector, RetreatPoint=FVector::ZeroVector; TArray<FVector> Positions; TArray<bool> SpotVehicles; }; // SpotVehicles: trial-only report snapshot metadata for seeking
 	// Scout retreat (2026-11-17): an AI-led pair that is hit falls back ScoutRetreatDistance from the nearest seen enemy, watches from
 	// there until ScoutHoldSeconds pass without a hit, then returns to its post shifted sideways (Burns). The report pauses while it moves.
 	bool IsAIScoutLed(int32 SquadID) const;
@@ -542,6 +542,7 @@ public:
 	bool IsScoutLongContact(int32 ObserverID, const struct FBattleContact& Contact) const;
 	// Positions from the team's scout reports of the last ScoutReportMemory seconds (keys below zero, never unit IDs).
 	void AddScoutReportSightings(int32 Team, TMap<int32, FVector>& Seen) const;
+ void AddScoutSpotSightings(int32 Team,bool bVehicles,TFunctionRef<void(const FVector&,double)> Write) const;
 	void AreaFronts(int32 Team, FAreaFront (&Out)[FAreaIntent::MaxObjectives]) const;
  // Strategy layer, stage S1 (BattleStrategy.cpp, Docs/design-strategy-layer.md): the team's situation map. Theatres are the objectives'
  // Voronoi cells (by Y on three-objective maps, as AreaFronts), plus the enemy home zone (index N) and the own home zone (N+1), each

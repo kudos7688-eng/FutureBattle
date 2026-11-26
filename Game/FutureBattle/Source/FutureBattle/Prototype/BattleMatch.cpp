@@ -266,6 +266,11 @@ void UBattleMatch::AdvanceObjectiveControl(float DeltaSeconds, TFunctionRef<int3
 			}
 		}
 		else { Point.CaptureProgress = 0; Point.CapturingTeam = INDEX_NONE; }
+  if(BattleTactics::SpotLost() && BattleTactics::SeekKnown()>0 && Point.Owner!=OwnerBefore)
+  {
+   auto* Tactics=GetWorld()->GetSubsystem<UBattleSquadTactics>();
+   Tactics->NotePointLost(int32(&Point-Objectives.GetData()),Point.Owner,Point.Position,Tactics->Clock(),BattleTactics::SpotLostSeconds());
+  }
 		// No payout on the capture frame or while an opponent is capturing the point.
 		if (!bArea && Point.Owner != INDEX_NONE && Point.Owner == OwnerBefore && (Team == INDEX_NONE || Team == Point.Owner))
 		{

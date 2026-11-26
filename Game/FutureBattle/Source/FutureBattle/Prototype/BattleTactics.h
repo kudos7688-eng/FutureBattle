@@ -76,6 +76,19 @@ namespace BattleTactics
  // -BattleSeekKnown (needs that switch). Bit 2: every enemy, into the team's view (AreaIntelView: the front line, the groups,
  // the guns' known places). Nothing fires at a soldier because of it; no soldier's own contact changes.
  int32 SpotTruth();
+ // Trials: write only the seeking table, never perception, AreaIntelView or shooting. Require -BattleSeekKnown>0.
+ // -BattleSpotShare=bits (0, 0..7): 1 memory/shared/squad contacts, 2 scout long sight/reports, 4 vehicles.
+ int32 SpotShare();
+ // -BattleSpotShots=1 (0): infantry small arms heard by enemy infantry. Hear cm (15000, 1000..60000),
+ // Error cm (2500, 0..10000), Every s (2, 0.2..30). Independent deterministic error; no combat RNG.
+ bool SpotShots(); float SpotShotsHear(); float SpotShotsError(); float SpotShotsEvery();
+ // -BattleSpotLost=1 (0): new enemy point owner, including neutral captures. Seconds (60, 5..300); recapture cancels.
+ bool SpotLost(); float SpotLostSeconds();
+ // -BattleSpotHQ=s (0 off, otherwise 10..600): snapshot infantry counts per sector; Delay s (30, 0..300), Min (2, 1..20).
+ // Depth (0 unlimited, 1..20): omit columns beyond enemy home column minus Depth, in the recipient's orientation.
+ float SpotHQ(); float SpotHQDelay(); int32 SpotHQMin(); int32 SpotHQDepth();
+ // -BattleSpotTruthDepth=n (0 unlimited, 1..20): the same column filter for SpotTruth bit 1 only.
+ int32 SpotTruthDepth();
  // Contact trial, user 2026-11-25. -BattleMemorySeconds=s (default 0 = UBattleTuning::MemorySeconds, 5 s; 1..120): how long a soldier
  // keeps an enemy he no longer sees (before the recruit/veteran factor). The 5 s caps inside the cover actions stay.
  // -BattleSuppressFire=s (default 0 = off, 0..60): a soldier who stands still and has lost sight of the squad's target keeps firing
