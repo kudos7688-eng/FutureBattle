@@ -69,9 +69,11 @@ void UBattleMatch::UpdateBaseGroup(int32 Team)
  {
   const auto& S=P.Value;
   if(S.Team!=Team||S.CommandStatus!=EBattleCommandStatus::Active||(Team==0&&!S.bPlayerDelegated))continue;
-  if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Tank)continue;
-  if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key)||ArmyPinned.Contains(P.Key))continue;
   if(const int32 Old=GroupOf(P.Key);Old!=INDEX_NONE&&Old!=ID)continue;
+  // A squad the player put into this group by hand (AssignArmy pins it) stays whatever its slot (Codex review 2026-11-26).
+  if(ArmyPinned.Contains(P.Key)){if(ID!=INDEX_NONE&&GroupOf(P.Key)==ID)Base.Add(P.Key);continue;}
+  if(Area.HirePurpose.Contains(P.Key)||IntelPurpose.Contains(P.Key))continue;
+  if(S.SquadType!=BattleSquadType::Rifle&&S.SquadType!=BattleSquadType::Tank)continue;
   if(BattleTactics::BaseGarrison()&&IsBaseGarrison(P.Key))continue;
   bool bBase=false;AreaStrategyTarget(P.Key,Team,bBase);
   if(bBase)Base.Add(P.Key);
