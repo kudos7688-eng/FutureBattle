@@ -1,5 +1,19 @@
 # 防衛進軍の門と個人配置先（a679d57f からの修正）
 
+## 657ae7b9 の結果を受けた到着済み兵の修正
+
+ユーザー提供の凍結 coverlean-657ae7b・K・30FPS・両軍値2/DefendMarch=1：seed 7 の gate_pass=1,031,487、gate_at_post=782,854、defend_march_searches=60、started=0。seed 43 も at_post=667,618、searches=9、started=0。これにより、旧記録の gate_march_defend の大半は持ち場に着いている兵と確定した。下記の「特定不能」はこの結果を得る前の記録。
+
+- 値2かつ DefendMarch=1 だけ、個人 ArrivalGoals（無ければUnit.Destination）から1m以内で、従来 at_post に該当する兵を Follow の進軍分岐から通常の StartKnownMove へ渡す。Waypoint・到着予約・命令は変えない。bMarch/bDefendMarch はfalse。防衛円と区画任務の制約、人数・露出・予算・移動期限・本人確認を通常の停止中と共有する。個人配置先が防衛円外でも防衛円を広げないため、この変更後も候補が成立しない場合がある。
+- 通常の値2の Commit>0 は EndKnownMove で自分の遮蔽状態・FirePositionsを解除し、Follow/StableMove が元の個人配置へ戻す構造。今回の兵には bDefendPost を持たせ、Commit=0 でも初弾／到着後5秒／情報失効で終了・解除する。残った遮蔽が帰還を妨げないようにする。帰還待ちの間は次の既知敵への位置取りを始めない。通常の戦闘停止・混雑・再配置は引き続き適用され、一定秒数内の必着を保証する変更ではない。
+- 記録 `known_move_defend_post_searches` は予算予約成功後、`_started` は移動開始、`_arrived` は射撃位置到着、`_fired` は到着後の初弾（別目標を含む、既存 march_fired と同じ）。`_resumed` は通常の持ち場移動へ戻した回数、`_resume_arrived` はその時点の個人配置先から1m以内、`_resume_interrupted` は死亡・命令／任務変更など、`_resume_stuck` は10秒間40cm以上の接近が無かった場合に1回。`_gate_returning` は帰還中の再探索拒否。`_resumed` だけで帰還成功と数えない。
+- Follow から通常探索に振り分けた到着済み兵は、従来の進軍門を呼ばないため gate_at_post に計上されない。旧版との at_post の大小を探索成功の比較に使わない。
+- 固定場面に `move_defend_post_limits`、`move_defend_post_arrive_fire`、`move_defend_post_resume`、無効時の `move_defend_post_disabled` を追加。最終Waypointを残し、命令目的地と個人配置先を200cmずらした兵で探索・実発砲・個人配置への帰還・状態解放を検査する。既存項目は変更しない。Commit=0/12とDefendMarch=0/1で実行する想定。
+
+進軍中の target_range は軍共有表を「交戦距離＋MoveRange」の格子範囲で列挙した後、進軍だけ出発点から交戦距離内に絞るため発生する。target_order は WeaponOrderAllows の制限（非区画Defendの防衛円、区画Missionの別区画拒否と既存の撃ち返し例外など）。seed 7の80,607/70,111は探索数ではなく敵候補ごとの拒否件数。どの命令条件が最多かはこの合算記録からは判別できない。安く直せる契約違反は見つからず、ルールは変えない。
+
+ビルド・UE・試合は依頼により未実施。CRLFと差分、既存固定項目の維持、追加識別子・初期化を静的確認し、コード案内と切替表を再生成する。DefendMarch=0の同一性はコード上の非発動を確認する範囲で、修正後のIDENTICALは未確認。STATUS.md / Docs/journal/ は変更しない。掲示板はUE同梱Pythonで既存申請を参照した（新しい試合の実行・申請なし）。
+
 ビルド・UE・試合は実行していない。以下はコードと既存 metrics.json の調査。STATUS.md / Docs/journal は依頼により変更しない。
 
 ## 既存結果から確定できること

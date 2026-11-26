@@ -1332,7 +1332,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  {
   if(CanEngage || bOwnEngage || BaseEngage || bCoverFire || bSuppress || bArtilleryAim || KnownFire.TargetID!=INDEX_NONE)SightExperiment.Cover(TEXT("known_move_gate_fire_candidate"));
   else if(KnownFire.Reject==BattleKnownFire::EReject::Deferred)SightExperiment.Cover(TEXT("known_move_gate_budget"));
-  else if((bOnRoute && !StopForCombat) || bArrivalWalk)
+  else if(((bOnRoute && !StopForCombat) || bArrivalWalk) && !KnownMoveDefendAtPost(ID))
   {
    if((!BattleKnownFire::MoveMarch() || S->Order!=EBattleOrder::AttackMove) && !KnownMoveDefendMarching(ID,true,S->Order==EBattleOrder::Defend))
    {

@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（183 モジュール、50500 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（183 モジュール、50581 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -133,9 +133,9 @@
 | `BattleHUD` | .h/.cpp | 75 + 1762 | ABattleHUD | 画面表示（HUD、ミニマップ、部隊一覧、通知、命令の印） |
 | `BattleKnownMoveGeometry` | .cpp | 51 |  | 値2専用の静的な箱形遮蔽の格子索引。端・開口部の推定と光線前の予選に使う |
 | `BattleKnownTargetFire` | .cpp | 191 |  | 軍共有候補の上位3件・本人確認・狙いの射線・光線予算・通常／覗き射撃（UBattleLeaderRuntimeの一部、段階1） |
-| `BattleKnownTargetMove` | .cpp | 703 |  | 既知敵の位置取り（値2）：観測で候補を選び、期限付き完歩・同目標の情報更新・到着後の本人確認・未発見時の帰還 |
+| `BattleKnownTargetMove` | .cpp | 726 |  | 既知敵の位置取り（値2）：観測で候補を選び、期限付き完歩・同目標の情報更新・到着後の本人確認・未発見時の帰還 |
 | `BattleKnownTargets` | .h/.cpp | 60 + 63 | BattleKnownFire, FTarget, FTeam, FResult, FSearch, FBudget | 軍共有の観測表と50m格子。知覚結果の適用後だけ集約し、元の観測時刻・期限・追跡試料を保持（既定0） |
-| `BattleLeaderRuntime` | .h/.cpp | 1066 + 2141 | FBattleBodyInit, FBattleBrokenCover, FBattleFollowerFragment, FBattleSquadSummary, FBattleSquadListRow, FBattleSquadListLayout, FBattleMinimapLayout, FBattleLeaderBody ほか7 | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新 |
+| `BattleLeaderRuntime` | .h/.cpp | 1067 + 2141 | FBattleBodyInit, FBattleBrokenCover, FBattleFollowerFragment, FBattleSquadSummary, FBattleSquadListRow, FBattleSquadListLayout, FBattleMinimapLayout, FBattleLeaderBody ほか7 | 混成の中心：起動、視線、隊長の判断、兵の移動と射撃、表示の更新 |
 | `BattleMapI` | .h | 112 | BattleMapI | マップI（区画を前提にした設計）の表：50mの区画 20×14 の種類 `Kind`、道路 `Roads`、川・橋・浅瀬の位置、家 `Houses`・丘 `Hills`、高さの表 `MakeHeights`、拠点 `Objectives`。配置は `BattleMapLayoutI.inl`（生成と共有） |
 | `BattleMapJ` | .h | 143 | BattleMapJ, FMirror | マップJ（11-22、`Docs/design-map-j-terrain.md`）の区画の表：山 `M`（通れない・見通しを遮る）・湖 `L`（通れない）と、ビル・集合住宅・教会・工場・廃墟・駐車場・公園・商店の区画。区画ごとの配置の候補と8通りの向き（`Variant`／`Mirror`）、入れる家の位置（`HouseOf`）、拠点・丘・道。配置は `BattleMapLayoutJ.inl`、生成は `BattleMapCommandlet`（`-WideField=J`、`Setup/Initialize-MapJ.ps1`） |
 | `BattleMapK` | .h | 119 | BattleMapK | マップK（11-22、`Docs/design-map-k.md`）の区画の表：密な小さい市街地（街は列4〜15・行3〜10、外側は山）、道 `Roads`、拠点6つ、入れる家 `HouseOf`。配置はマップJ の `BattleMapLayoutJ.inl` を名前空間だけ差し替えて使い、K だけの高い塀・追加の遮蔽は `bDenseCover`、道のトラックは `BattleMapCommandlet`（`-WideField=K`、`Setup/Initialize-MapK.ps1`、区画図 `Setup/Export-MapK.py`） |
@@ -236,7 +236,7 @@
 | `BattleGridTrial` | .cpp | 86 |  | Test-only synchronous mixed Actor/Mass fixture. Never used for performance. |
 | `BattleHiddenBoneTrial` | .h/.cpp | 27 + 74 | ABattleHiddenBoneTrial |  |
 | `BattleKnownTargetFireTrial` | .cpp | 246 |  | 軍共有射撃の固定場面。実発砲・候補の切替・鮮度・追跡・予算・命令を検査、BATTLE_KNOWN_FIRE_RESULT |
-| `BattleKnownTargetMoveTrial` | .cpp | 770 |  | 値2の固定場面。値1の27項目に追加。Commit=0の旧鮮度切れ、Commit>0の完歩・本人確認・未発見帰還・期限・更新（進軍／停止）を分岐検査。追加項目は未実行 |
+| `BattleKnownTargetMoveTrial` | .cpp | 827 |  | 値2の固定場面。値1の27項目に追加。Commit=0の旧鮮度切れ、Commit>0の完歩・本人確認・未発見帰還・期限・更新（進軍／停止）を分岐検査。追加項目は未実行 |
 | `BattleLargeFieldTest` | .cpp | 83 |  |  |
 | `BattleLeaderSmoke` | .cpp | 143 |  |  |
 | `BattleMapCommandlet` | .h/.cpp | 14 + 934 | UBattleMapCommandlet | Reproducible editor-only arena authoring; never overwrites a map unless -Force is passed. |

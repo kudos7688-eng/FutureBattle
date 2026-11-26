@@ -37,6 +37,20 @@ bool UBattleLeaderRuntime::KnownMoveMarching(int32 ID) const
   Squad->TacticalPlan.Action!=EBattleSquadTactic::Engage && FVector::DistSquared2D(Position(ID),Unit->Destination)>FMath::Square(100.);
 }
 
+// The same personal-post threshold as the marching gate, without changing route state.
+bool UBattleLeaderRuntime::KnownMoveDefendAtPost(int32 ID) const
+{
+ if(!BattleKnownFire::MoveEnabled() || !BattleKnownFire::MoveDefendMarch())return false;
+ const auto* PostStore=GetWorld()->GetSubsystem<UBattleState>();const auto* PostUnit=PostStore->Find(ID);
+ const auto* PostSquad=PostUnit?PostStore->FindSquad(PostUnit->SquadID):nullptr;
+ const auto* PostPlan=PostUnit?Plans.Find(PostUnit->SquadID):nullptr;const auto* PostBody=Bodies.Find(ID);
+ if(!PostSquad || !PostPlan || !PostBody || PostSquad->Order!=EBattleOrder::Defend || PostPlan->bCoverStop ||
+  PostSquad->TacticalPlan.Action==EBattleSquadTactic::Engage)return false;
+ const auto* PostRoute=PostPlan->Corridors.Find(ID);const auto* PostGoal=PostPlan->ArrivalGoals.Find(ID);
+ return (PostPlan->Path.IsValidIndex(PostBody->Waypoint) || (PostRoute && PostRoute->IsValidIndex(PostBody->Waypoint))) &&
+  FVector::DistSquared2D(Position(ID),PostGoal?*PostGoal:PostUnit->Destination)<=FMath::Square(100.);
+}
+
 bool UBattleLeaderRuntime::KnownMoveDefendMarching(int32 ID,bool FollowingMarch,bool CountGate)
 {
  auto DefendGate=[&](const TCHAR* DefendReason)
@@ -69,17 +83,17 @@ void UBattleLeaderRuntime::TrackKnownDefendResume(int32 ID,double Now)
  const auto* ResumeSquad=ResumeUnit?ResumeStore->FindSquad(ResumeUnit->SquadID):nullptr;
  if(!ResumeUnit || !ResumeUnit->IsAlive() || !ResumeSquad || ResumeUnit->OrderRevision!=Resume->Revision ||
   ResumeSquad->MissionRevision!=Resume->Mission || ResumeSquad->Order!=EBattleOrder::Defend || ResumeUnit->Destination!=Resume->Goal)
- {SightExperiment.Cover(TEXT("known_move_defend_march_resume_interrupted"));KnownDefendResumes.Remove(ID);return;}
+ {SightExperiment.Cover(Resume->bDefendPost?TEXT("known_move_defend_post_resume_interrupted"):TEXT("known_move_defend_march_resume_interrupted"));KnownDefendResumes.Remove(ID);return;}
  if(KnownMoves.Contains(ID))return;
  const auto* ResumePlan=Plans.Find(ResumeUnit->SquadID);
  const FVector* AssignedPost=ResumePlan?ResumePlan->ArrivalGoals.Find(ID):nullptr;
  const FVector CurrentPost=AssignedPost?*AssignedPost:Resume->Goal;
  if(CurrentPost!=Resume->ArrivalGoal){Resume->ArrivalGoal=CurrentPost;Resume->Best=FVector::Dist2D(Position(ID),CurrentPost);Resume->ProgressAt=Now;}
  const double Remaining=FVector::Dist2D(Position(ID),CurrentPost);
- if(Remaining<=100.){SightExperiment.Cover(TEXT("known_move_defend_march_resume_arrived"));KnownDefendResumes.Remove(ID);return;}
+ if(Remaining<=100.){SightExperiment.Cover(Resume->bDefendPost?TEXT("known_move_defend_post_resume_arrived"):TEXT("known_move_defend_march_resume_arrived"));KnownDefendResumes.Remove(ID);return;}
  if(Remaining<Resume->Best-40.){Resume->Best=Remaining;Resume->ProgressAt=Now;}
  if(!Resume->bReportedStuck && Now-Resume->ProgressAt>10.)
- {Resume->bReportedStuck=true;SightExperiment.Cover(TEXT("known_move_defend_march_resume_stuck"));}
+ {Resume->bReportedStuck=true;SightExperiment.Cover(Resume->bDefendPost?TEXT("known_move_defend_post_resume_stuck"):TEXT("known_move_defend_march_resume_stuck"));}
 }
 
 bool UBattleLeaderRuntime::KnownMoveAllowed(int32 ID,bool CountGate)
@@ -211,6 +225,10 @@ bool UBattleLeaderRuntime::KnownMoveLine(int32 ID,FVector From,FVector To,double
 bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now,bool FollowingMarch)
 {
  const bool DefendMarch=KnownMoveDefendMarching(ID,FollowingMarch);
+ const bool DefendAtPost=KnownMoveDefendAtPost(ID);
+ // Finish returning to the personal post before beginning another detour.
+ if(const auto* PostResume=KnownDefendResumes.Find(ID);PostResume && PostResume->bDefendPost)
+ {SightExperiment.Cover(TEXT("known_move_defend_post_gate_returning"));return false;}
  // Preserve existing totals; the parallel namespace counts only marching defenders.
  auto RecordMove=[&](const TCHAR* MoveMetric)
  {
@@ -264,6 +282,7 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now,bool FollowingMarc
  if(!Nav || !Cover->IsBuilt()){RecordMove(TEXT("known_move_reject_setup"));RecordMove(TEXT("known_move_gate_setup"));return false;} // slot prebuild is not hidden work in a per-soldier budget
  if(!KnownMoveReserve(ID,Now)){if(DefendMarch)SightExperiment.Cover(TEXT("known_move_defend_march_budget_deferred"));KnownMoveAfter.Add(ID,Now+.1);return false;}
  RecordMove(TEXT("known_move_searches"));
+ if(DefendAtPost)SightExperiment.Cover(TEXT("known_move_defend_post_searches"));
  auto FinishBudget=[&](){KnownMoveRelease(ID);};
  // Source: edge / inferred opening / ordinary slot / ring. Geometry queries do not trace.
  struct FPlace {FVector At;int32 Slot;uint8 Source;FBox SourceBox;int32 FaceAxis;double FaceSign,EndSign;};TArray<FPlace> Places;
@@ -435,11 +454,12 @@ bool UBattleLeaderRuntime::StartKnownMove(int32 ID,double Now,bool FollowingMarc
    FKnownMove Episode;Episode.Start=Start;Episode.Goal=Anchor;Episode.Last=Start;Episode.Peek=Peek;Episode.Observation=Target;Episode.Mission=Squad->MissionRevision;
    Episode.Source=Place.Source;Episode.SourceBox=Place.SourceBox;Episode.FaceAxis=Place.FaceAxis;Episode.FaceSign=Place.FaceSign;Episode.EndSign=Place.EndSign;
    if(DefendMarch){const FVector* EpisodePost=Plan->ArrivalGoals.Find(ID);Episode.DefendPost=EpisodePost?*EpisodePost:Unit->Destination;}
-   Episode.bDefendMarch=DefendMarch;Episode.bMarch=March;Episode.Revision=Unit->OrderRevision;Episode.Started=Now;Episode.Slot=Place.Slot;Episode.bStandUp=StandUp || Place.Source<2;
+   Episode.bDefendPost=DefendAtPost;Episode.bDefendMarch=DefendMarch;Episode.bMarch=March;Episode.Revision=Unit->OrderRevision;Episode.Started=Now;Episode.Slot=Place.Slot;Episode.bStandUp=StandUp || Place.Source<2;
    Episode.CommitUntil=CommitDeadline;
    if(CommitSeconds>0.)for(int32 ReturnIndex=Route->PathPoints.Num()-1;ReturnIndex>=0;--ReturnIndex)Episode.ReturnPoints.Add(Route->PathPoints[ReturnIndex]+FVector(0,0,90));
    KnownMoves.Add(ID,Episode);
    if(DefendMarch){if(KnownDefendResumes.Remove(ID))RecordMove(TEXT("known_move_defend_march_resume_interrupted"));SightExperiment.Cover(TEXT("known_move_defend_march_started"));}
+   if(DefendAtPost)SightExperiment.Cover(TEXT("known_move_defend_post_started"));
    FCoverApproach Approach;Approach.Goal=Anchor;Approach.Target=TargetID;Approach.Slot=Place.Slot;Approach.Revision=Unit->OrderRevision;
    Approach.Until=CommitSeconds>0.?CommitDeadline:Now+FMath::Max(8.,Length/100.+3.);Approach.bFree=Free;CoverApproaches.Add(ID,Approach);
    auto& Path=SoldierPaths.FindOrAdd(ID);Path=FSoldierPath();Path.Points=Route->PathPoints;
@@ -469,24 +489,25 @@ void UBattleLeaderRuntime::EndKnownMove(int32 ID,double Now,const TCHAR* Reason)
   EndingApproach->Revision==Episode->Revision && EndingApproach->Slot==Episode->Slot &&
   EndingApproach->Goal==Episode->Goal && !EndingApproach->bCharge && !EndingApproach->bAssault;
  if(Episode->Arrived<0 && (OwnApproach || (!EndingApproach && (!EndingUnit || !EndingUnit->CoverPhase))))GetWorld()->GetSubsystem<UBattleCover>()->Release(ID);
- else if(Episode->Arrived>=0 && (Episode->CommitUntil>0. || Episode->bMarch || FCString::Strncmp(Reason,TEXT("known_move_cancel_"),18)==0))
+ else if(Episode->Arrived>=0 && (Episode->CommitUntil>0. || Episode->bMarch || Episode->bDefendPost || FCString::Strncmp(Reason,TEXT("known_move_cancel_"),18)==0))
  {
   const auto* EndedUnit=GetWorld()->GetSubsystem<UBattleState>()->Find(ID);
-  if(EndedUnit && EndedUnit->CoverOrderRevision==Episode->Revision && ((Episode->bMarch && EndedUnit->CoverAnchor==Episode->Goal) || (EndedUnit->CoverTargetID==Episode->Observation.TargetID && EndedUnit->CoverPeek==Episode->Peek)))CancelCoverAction(ID);
+  if(EndedUnit && EndedUnit->CoverOrderRevision==Episode->Revision && (((Episode->bMarch || Episode->bDefendPost) && EndedUnit->CoverAnchor==Episode->Goal) || (EndedUnit->CoverTargetID==Episode->Observation.TargetID && EndedUnit->CoverPeek==Episode->Peek)))CancelCoverAction(ID);
   if(const auto* EndedPosition=FirePositions.Find(ID);EndedPosition && *EndedPosition==Episode->Goal)FirePositions.Remove(ID);
  }
  if(OwnApproach){CoverApproaches.Remove(ID);SoldierPaths.Remove(ID);}
- if(Episode->bMarch && (!EndingApproach || OwnApproach))SoldierPaths.Remove(ID); // discard the detour; normal movement rebuilds the mission route
+ if((Episode->bMarch || Episode->bDefendPost) && (!EndingApproach || OwnApproach))SoldierPaths.Remove(ID); // discard the detour; normal movement rebuilds the mission route
  if(!EndingApproach || OwnApproach)
   if(auto* EndBody=Bodies.Find(ID);EndBody && EndBody->Actor.IsValid())EndBody->Actor->GetCharacterMovement()->StopMovementImmediately();
- if(Episode->bDefendMarch && EndingUnit && EndingUnit->IsAlive() && EndingUnit->OrderRevision==Episode->Revision)
+ if((Episode->bDefendMarch || Episode->bDefendPost) && EndingUnit && EndingUnit->IsAlive() && EndingUnit->OrderRevision==Episode->Revision)
  {
   const auto* ResumeSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(EndingUnit->SquadID);
   if(ResumeSquad && ResumeSquad->Order==EBattleOrder::Defend && ResumeSquad->MissionRevision==Episode->Mission)
   {
    FKnownDefendResume Resume;Resume.Goal=EndingUnit->Destination;Resume.ArrivalGoal=Resume.Goal;Resume.Mission=Episode->Mission;Resume.Revision=Episode->Revision;
+   Resume.bDefendPost=Episode->bDefendPost;
    Resume.Best=FVector::Dist2D(Position(ID),Resume.Goal);Resume.ProgressAt=Now;KnownDefendResumes.Add(ID,Resume);
-   SightExperiment.Cover(TEXT("known_move_defend_march_resumed"));
+   SightExperiment.Cover(Episode->bDefendPost?TEXT("known_move_defend_post_resumed"):TEXT("known_move_defend_march_resumed"));
   }
  }
  KnownMoves.Remove(ID);KnownMoveAfter.Add(ID,Now+5.);KnownMoveEndCooldown.Add(ID,Now+5.);
@@ -509,7 +530,7 @@ bool UBattleLeaderRuntime::StepKnownMove(int32 ID,float Dt,double Now)
  {Episode->Observation=*Current;SightExperiment.Cover(TEXT("known_move_refreshed"));}
  if(Commit && !WeaponOrderAllows(ID,Episode->Observation.TargetID,Episode->Observation.At(Now)))
  {EndKnownMove(ID,Now,TEXT("known_move_cancel_order"));return false;}
- if(Episode->bMarch && ((!Fresh && !Commit) || Episode->bFired))
+ if((Episode->bMarch || Episode->bDefendPost) && ((!Fresh && !Commit) || Episode->bFired))
  {EndKnownMove(ID,Now,!Fresh && !Commit?TEXT("known_move_cancel_stale"):TEXT("known_move_finished"));return false;}
  if(Episode->bMarch && (!KnownMovePlaceAllowed(ID,Episode->Start,Position(ID)) || !KnownMovePlaceAllowed(ID,Episode->Start,Episode->Peek)))
  {EndKnownMove(ID,Now,TEXT("known_move_cancel_mission"));return false;}
@@ -518,7 +539,7 @@ bool UBattleLeaderRuntime::StepKnownMove(int32 ID,float Dt,double Now)
  if(Episode->Arrived>=0)
  {
   if(Commit)return StepKnownMoveArrival(ID,Dt,Now);
-  if(Episode->bMarch)
+  if(Episode->bMarch || Episode->bDefendPost)
   {
    if(Now-Episode->Arrived>5.){EndKnownMove(ID,Now,TEXT("known_move_finished"));return false;}
    // Stay at the certified point until the first shot. Do not execute the squad route in this frame.
@@ -568,6 +589,7 @@ bool UBattleLeaderRuntime::StepKnownMove(int32 ID,float Dt,double Now)
   const FCoverApproach Done=*Approach;CoverApproaches.Remove(ID);SoldierPaths.Remove(ID);Episode->Arrived=Now;KnownMoveAfter.Add(ID,Now+5.);
   KnownFireSearches.Remove(ID);SightExperiment.Cover(TEXT("known_move_arrived"));
   if(Episode->bDefendMarch)SightExperiment.Cover(TEXT("known_move_defend_march_arrived"));
+  if(Episode->bDefendPost)SightExperiment.Cover(TEXT("known_move_defend_post_arrived"));
   if(Episode->bCommittedWalk)SightExperiment.Cover(TEXT("known_move_commit_arrived"));
   if(SightExperiment.Enabled){SightExperiment.KnownMoveDistance+=Episode->Distance;SightExperiment.KnownMoveSeconds+=Now-Episode->Started;}
   if(SightExperiment.Enabled)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_MOVE_ARRIVED unit=%d target=%d known_move_distance_cm=%.3f known_move_time=%.3f"),ID,Done.Target,Episode->Distance,Now-Episode->Started);
@@ -695,7 +717,8 @@ void UBattleLeaderRuntime::KnownMoveShot(int32 ID,int32 Target,double Now)
 {
  auto* Episode=KnownMoves.Find(ID);if(!Episode || Episode->Arrived<0 || Episode->bFired)return;
  if(Episode->bDefendMarch)SightExperiment.Cover(TEXT("known_move_defend_march_fired"));
- if(Target!=Episode->Observation.TargetID){SightExperiment.Cover(TEXT("known_move_arrived_other_shot"));if(Episode->bMarch)Episode->bFired=true;return;}
+ if(Episode->bDefendPost)SightExperiment.Cover(TEXT("known_move_defend_post_fired"));
+ if(Target!=Episode->Observation.TargetID){SightExperiment.Cover(TEXT("known_move_arrived_other_shot"));if(Episode->bMarch || Episode->bDefendPost)Episode->bFired=true;return;}
  Episode->bFired=true;SightExperiment.Cover(TEXT("known_move_arrived_fired"));
  if(Episode->bCommittedWalk)SightExperiment.Cover(TEXT("known_move_commit_fired"));
  if(SightExperiment.Enabled)SightExperiment.KnownMoveFirstShotSeconds+=Now-Episode->Arrived;

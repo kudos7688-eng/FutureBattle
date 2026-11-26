@@ -927,6 +927,7 @@ public:
  BattleKnownFire::FBudget KnownFireBudgets[2];
  bool KnownMoveAllowed(int32 ID,bool CountGate=false);
  bool KnownMoveMarching(int32 ID) const;
+ bool KnownMoveDefendAtPost(int32 ID) const;
  bool KnownMoveDefendMarching(int32 ID,bool FollowingMarch,bool CountGate=false);
  void TrackKnownDefendResume(int32 ID,double Now);
  const TCHAR* KnownMovePlaceRejection(int32 ID,FVector Start,FVector Place,bool DefendMarchAtStart=false) const;
@@ -950,9 +951,9 @@ public:
   double Started=0,Arrived=-1,Distance=0;float Stuck=0;
   double CommitUntil=0,CheckUntil=0,NextCheck=0,ReturnUntil=0;
   bool bCommittedWalk=false,bAtPeek=false,bArrivalSeen=false;TArray<FVector> ReturnPoints;int32 ReturnNext=0;
-  bool bReturning=false,bFired=false,bStandUp=false,bMarch=false,bDefendMarch=false;
+  bool bReturning=false,bFired=false,bStandUp=false,bMarch=false,bDefendMarch=false,bDefendPost=false;
  };
- struct FKnownDefendResume {FVector Goal=FVector::ZeroVector,ArrivalGoal=FVector::ZeroVector;int32 Mission=0,Revision=0;double Best=0,ProgressAt=0;bool bReportedStuck=false;};
+ struct FKnownDefendResume {FVector Goal=FVector::ZeroVector,ArrivalGoal=FVector::ZeroVector;int32 Mission=0,Revision=0;double Best=0,ProgressAt=0;bool bReportedStuck=false,bDefendPost=false;};
  TMap<int32,FKnownDefendResume> KnownDefendResumes;
  TMap<int32,FKnownMove> KnownMoves;
  TMap<int32,double> KnownMoveAfter;

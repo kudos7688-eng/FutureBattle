@@ -765,6 +765,63 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  Check(TEXT("move_defend_march_arrived_gate"),!KnownMoveDefendMarching(2,true,true) &&
   Count(TEXT("known_move_defend_gate_at_post"))==DeploymentAtPost+(BattleKnownFire::MoveDefendMarch()?1:0) &&
   DeploymentPlan.Corridors.FindChecked(2).IsValidIndex(Bodies.FindChecked(2).Waypoint));
+ // Arrival does not borrow the marching strip outside the defense disk or sector.
+ Check(TEXT("move_defend_post_limits"),KnownMoveDefendAtPost(2)==BattleKnownFire::MoveDefendMarch() &&
+  !KnownMovePlaceAllowed(2,DeploymentPost,DeploymentPost) &&
+  !KnownMovePlaceAllowed(2,DeploymentPost,FVector(-100,DeploymentPost.Y,DeploymentPost.Z)));
+ // A retained final waypoint at a personal post must use stationary constraints.
+ Reset();KnownDefendResumes.Reset();
+ TestWorld->GetSubsystem<UBattleCover>()->BuildSlots(true);
+ TestWorld->GetSubsystem<UBattleCover>()->KnownMoveGeometry(Start,BattleKnownFire::MoveRange(),true);
+ const FVector PostOrderGoal=Start+FVector(200,0,0);
+ Shooter.Destination=PostOrderGoal;Squad.Destination=PostOrderGoal;
+ auto& PostTrialPlan=Plans.FindChecked(Shooter.SquadID);
+ PostTrialPlan.Path={Start-FVector(0,500,0),Start};PostTrialPlan.Corridors.Add(2,PostTrialPlan.Path);
+ PostTrialPlan.ArrivalGoals.Add(2,Start);Bodies.FindChecked(2).Waypoint=1;Bodies.FindChecked(2).bArrived=true;
+ const int32 PostTrialRevision=Shooter.OrderRevision,PostTrialMission=Squad.MissionRevision;
+ const int32 PostTrialSearches=Count(TEXT("known_move_defend_post_searches")),PostTrialAllSearches=Count(TEXT("known_move_searches"));
+ const int32 PostTrialStarts=Count(TEXT("known_move_defend_post_started")),PostTrialArrivals=Count(TEXT("known_move_defend_post_arrived"));
+ const int32 PostTrialFires=Count(TEXT("known_move_defend_post_fired")),PostTrialResumes=Count(TEXT("known_move_defend_post_resumed"));
+ const int32 PostTrialReturned=Count(TEXT("known_move_defend_post_resume_arrived")),PostTrialMarchStarts=Count(TEXT("known_move_defend_march_started"));
+ const int32 PostTrialShots=Shooter.ShotSequence,PostTrialSensors=Count(TEXT("known_fire_sensor_checks")),PostTrialRays=Count(TEXT("known_move_rays"));
+ bool PostTrialStarted=false,PostTrialStationary=true,PostTrialNoEarlyShot=true,PostTrialLeft=false;
+ for(int32 PostTrialAttempt=0;PostTrialAttempt<24 && !PostTrialStarted;++PostTrialAttempt)
+ {TestNow+=1.01;Observe();Follow(2,0.f,TestNow);PostTrialStarted=KnownMoves.Contains(2);}
+ if(!BattleKnownFire::MoveDefendMarch())
+ {
+  Check(TEXT("move_defend_post_disabled"),!PostTrialStarted && Count(TEXT("known_move_searches"))==PostTrialAllSearches &&
+   Count(TEXT("known_move_defend_post_searches"))==PostTrialSearches && Count(TEXT("known_move_defend_post_started"))==PostTrialStarts &&
+   Count(TEXT("known_move_rays"))==PostTrialRays && Shooter.ShotSequence==PostTrialShots && FVector::Dist2D(Position(2),Start)<1. &&
+   PostTrialPlan.Corridors.FindChecked(2).IsValidIndex(Bodies.FindChecked(2).Waypoint));
+ }
+ else
+ {
+  for(int32 PostTrialFrame=0;PostTrialFrame<900 && KnownMoves.Contains(2);++PostTrialFrame)
+  {
+   if(const auto* PostTrialEpisode=KnownMoves.Find(2))
+   {
+    PostTrialStationary &= PostTrialEpisode->bDefendPost && !PostTrialEpisode->bMarch && !PostTrialEpisode->bDefendMarch &&
+     KnownMovePlaceAllowed(2,PostTrialEpisode->Start,PostTrialEpisode->Goal) && KnownMovePlaceAllowed(2,PostTrialEpisode->Start,PostTrialEpisode->Peek);
+    if(PostTrialEpisode->Arrived<0)PostTrialNoEarlyShot &= Shooter.ShotSequence==PostTrialShots;
+   }
+   TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
+   PostTrialLeft |= FVector::Dist2D(Position(2),Start)>100.;
+  }
+  Check(TEXT("move_defend_post_arrive_fire"),PostTrialStarted && PostTrialStationary && PostTrialNoEarlyShot && PostTrialLeft &&
+   Count(TEXT("known_move_defend_post_searches"))>PostTrialSearches && Count(TEXT("known_move_defend_post_started"))==PostTrialStarts+1 &&
+   Count(TEXT("known_move_defend_post_arrived"))==PostTrialArrivals+1 && Count(TEXT("known_move_defend_post_fired"))==PostTrialFires+1 &&
+   Shooter.ShotSequence>PostTrialShots && Count(TEXT("known_fire_sensor_checks"))>PostTrialSensors &&
+   Count(TEXT("known_move_defend_march_started"))==PostTrialMarchStarts);
+  TestSense->Reset();Put(251,Start+FVector(50000,0,0));
+  for(int32 PostTrialReturnFrame=0;PostTrialReturnFrame<900;++PostTrialReturnFrame)
+  {TestNow+=1./30.;Follow(2,1.f/30.f,TestNow);if(Count(TEXT("known_move_defend_post_resume_arrived"))>PostTrialReturned)break;}
+  Check(TEXT("move_defend_post_resume"),Count(TEXT("known_move_defend_post_resumed"))==PostTrialResumes+1 &&
+   Count(TEXT("known_move_defend_post_resume_arrived"))==PostTrialReturned+1 && FVector::Dist2D(Position(2),Start)<=100. &&
+   FVector::Dist2D(Position(2),PostOrderGoal)>100. && !KnownMoves.Contains(2) && !KnownDefendResumes.Contains(2) &&
+   !CoverApproaches.Contains(2) && !SoldierPaths.Contains(2) && !FirePositions.Contains(2) && !Shooter.CoverPhase &&
+   Shooter.OrderRevision==PostTrialRevision && Squad.MissionRevision==PostTrialMission &&
+   Shooter.Destination==PostOrderGoal && Squad.Destination==PostOrderGoal && PostTrialPlan.ArrivalGoals.FindChecked(2)==Start);
+ }
  for(auto* TestWall:Walls){TestWall->SetActorEnableCollision(false);TestWall->Destroy();}
  return Failures;
 }

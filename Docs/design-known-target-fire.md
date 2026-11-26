@@ -1,5 +1,13 @@
 # 軍で共有する既知の敵への射撃と位置取り（`-BattleKnownTargetFire`、設計）
 
+## 2026-11-27 追記：個人の持ち場に到着した防衛兵
+
+値2かつ `-BattleKnownMoveDefendMarch=1` で、最終Waypointが残っていても個人ArrivalGoals（無ければUnit.Destination）から1m以内の兵は、従来のat_post条件に従い停止中として通常の位置取り探索へ渡す。進軍の帯は使わず、防衛円・区画任務の範囲、移動の約束と到着後の本人確認を保つ。切替0・値1・値2のDefendMarch=0は従来経路のまま。
+
+射撃位置で初弾を撃つ／確認期限が切れると、自分の遮蔽と射撃位置を解放し、既存のFollow/StableMoveで個人の配置先へ戻る。Commit=0でもこの兵は初弾または到着後5秒で終了する。帰還待ちの間は既知敵への新しい位置取りを抑止する。戦闘停止や混雑による遅れは通常どおりで、帰還開始と帰還完了を別々に数える。
+
+`known_move_defend_post_{searches,started,arrived,fired}` と `known_move_defend_post_{resumed,resume_arrived,resume_interrupted,resume_stuck,gate_returning}` を追加する。個人配置先から1m以内を帰還完了とする。詳細と未実施の検証は [防衛進軍の調査](investigation-defend-march-2026-11-27.md) の冒頭を参照。固定場面には到着済み・Waypoint残存から探索→本人確認して発砲→個人配置へ帰還、およびDefendMarch=0で寄らない対照を追加した。ビルドと実行試験は未実施。
+
 最新の防衛進軍の修正・原因の切り分け・記録・未実行の追加試験は [2026-11-27 調査記録](investigation-defend-march-2026-11-27.md) を参照。以下の旧仕様の小隊目的地への帯は、個人配置先への帯に更新した。
 
 ## 2026-11-27 防衛命令の進軍中も対象にする（5c57bafaから、未ビルド・未実行）
