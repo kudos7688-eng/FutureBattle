@@ -81,7 +81,7 @@ struct FBattleQuitLayout
 struct FBattlePlanPanelLayout
 {
  // Kind: 0 text, 1 section role, 2 reservation one up, 3 reservation cancel, 4 delegation level, 5 reserve down, 6 reserve up,
- // 7 type allowed, 8 close, 9 reservation destination, 10 attack group follows the focus. Tone: buttons 0 plain, 1 allowed, 2 denied, 3 chosen; text 0 plain, 4 title, 5 muted.
+ // 7 type allowed, 8 close, 9 reservation destination, 10 attack group follows the focus, 11 direct section role (section*8+role), 12 section colour. Tone: buttons 0 plain, 1 allowed, 2 denied, 3 chosen; text 0 plain, 4 title, 5 muted.
  struct FItem { FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector; uint8 Kind=0, Tone=0; int32 Index=0; FString Text; };
  TArray<FItem> Items; FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector;
  static FBattlePlanPanelLayout Make(FVector2D View,const UWorld* World);
@@ -228,6 +228,13 @@ public:
 	// Plan panel (front plan stage 7): U opens and closes it in the tactical view.
 	bool IsPlanPanelOpen() const { return bPlanPanel; }
 	void TogglePlanPanel();
+ TArray<FBattlePlanPanelLayout::FItem> SectionLabels() const;
+ int32 SectionMenuIndex=INDEX_NONE;
+ FVector2D SectionMenuOrigin=FVector2D::ZeroVector;
+ bool SectionMenuInput(const FInputKeyEventArgs& Params);
+ bool bSectionMenuPress=false;
+ void OpenSectionMenu(int32 Section,FVector2D At);
+ void UpdatePlanPanelShot();
 	// Purchase panel (BattleBuyPanel.cpp): B opens and closes it in the area battle (elsewhere B is still the support request).
 	// Quit menu (BattleQuitMenu.cpp, 2026-11-25 user request): the top bar's quit button or Esc opens a confirmation; its quit button ends the game.
 	bool IsQuitMenuOpen() const { return bQuitMenu; }

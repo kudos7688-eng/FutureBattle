@@ -37,6 +37,7 @@
 #include "DrawDebugHelpers.h"
 #include "FutureBattle.h"
 #include "Misc/CommandLine.h"
+#include "Misc/App.h"
 
 FBattleCommandBarLayout FBattleCommandBarLayout::Make(FVector2D View,const UWorld* World,bool bPad)
 {
@@ -314,7 +315,7 @@ FBattlePlanPanelLayout FBattlePlanPanelLayout::Make(FVector2D View,const UWorld*
   // Sections of the own front line: where (the line's sector names in the first and last row), the observed points inside and
   // ahead, the role now (the player's or the AI's) and the player's choice as a button.
   const auto& P=M->FrontPlanState[0];
-  Text(TEXT("前線の区間：右のボタンで役割を切り替え（指定の無い区間は AI が決める）"),X0,0);Y+=Row;
+  Text(M->FrontSectionOrdersOn(0)?TEXT("地図の札で役割を選択／前線を引くと通った区間が前進・後退"):TEXT("前線の区間：右のボタンで役割を切り替え（指定の無い区間は AI が決める）"),X0,0);Y+=Row;
   if(P.Sections<=0){Text(TEXT("まだありません（戦闘が始まると決まる）"),X0+8,5);Y+=Row;}
   for(int32 K=0;K<P.Sections;++K)
   {
@@ -328,10 +329,23 @@ FBattlePlanPanelLayout FBattlePlanPanelLayout::Make(FVector2D View,const UWorld*
     if(P.OwnMask.IsValidIndex(K)&&((P.OwnMask[K]>>I)&1u))Own.AppendChar(TCHAR('A'+I));
     if(P.AheadMask.IsValidIndex(K)&&((P.AheadMask[K]>>I)&1u))Ahead.AppendChar(TCHAR('A'+I));
    }
+   if(M->FrontSectionOrdersOn(0))Btn(12,K,TEXT(""),X0,8,0);
    Text(FString::Printf(TEXT("区間%d %s ／ 自軍の拠点 %s ／ 前の拠点 %s ／ 今：%s"),K+1,*Where,Own.IsEmpty()?TEXT("なし"):*Own,Ahead.IsEmpty()?TEXT("なし"):*Ahead,
     PlanRoleJa(P.Role.IsValidIndex(K)?P.Role[K]:TEXT('K'))),X0+8,0);
    const uint8 Pick=M->PlayerSectionRole(K);
-   Btn(1,K,FString::Printf(TEXT("指定：%s"),UBattleMatch::SectionRoleJa(Pick)),Right-150,150,Pick?3:0);
+   if(M->FrontSectionOrdersOn(0))
+   {
+    Y+=Row;
+    static const TCHAR* ShortRoles[]={TEXT("任せる"),TEXT("重点"),TEXT("保つ"),TEXT("保持"),TEXT("下がってよい"),TEXT("前進"),TEXT("後退")};
+    const float RoleWidth=(Right-X0)/8.f;float RoleX=X0;
+    for(int32 RoleButton=0;RoleButton<7;++RoleButton)
+    {
+     const float ThisWidth=RoleWidth*(RoleButton==4?2.f:1.f);
+     Btn(11,K*8+RoleButton,ShortRoles[RoleButton],RoleX,ThisWidth-3,!M->CanSetPlayerSectionRole(K,uint8(RoleButton))?2:Pick==RoleButton?3:0);
+     RoleX+=ThisWidth;
+    }
+   }
+   else Btn(1,K,FString::Printf(TEXT("指定：%s"),UBattleMatch::SectionRoleJa(Pick)),Right-150,150,Pick?3:0);
    Y+=Row;
   }
   Y+=4;
@@ -388,6 +402,7 @@ void ABattleController::TogglePlanPanel()
  if(!bTactical||!Match->IsEnabled()||!Match->bArea)return;
  if(!bPlanPanel&&!Match->PlayerRolesOn(0)&&!UBattleMatch::HireReserveOn())
  {ShowNotice(TEXT("作戦方針は、前線の区間の指定（試験切替）か購入予約（試験切替）が有効なときに使えます"));return;}
+ if(Match->FrontSectionOrdersOn(0))SectionMenuIndex=INDEX_NONE;
  bPlanPanel=!bPlanPanel;
  if(bPlanPanel)bBuyPanel=false; // one panel at a time
 }
@@ -408,6 +423,7 @@ bool ABattleController::PlanPanelInput(const FInputKeyEventArgs& Params)
  const int32 D=Match->Area.PlayerHireDelegate,Reserve=Match->Area.PlayerHireReserve,Deny=Match->Area.PlayerHireDeny;
  switch(It.Kind)
  {
+ case 11: if(Match->FrontSectionOrdersOn(0)&&Match->SetPlayerSectionRole(It.Index/8,uint8(It.Index%8)))ShowNotice(Match->LastMessage);break;
  case 1: Match->CyclePlayerSectionRole(It.Index);ShowNotice(Match->LastMessage);break;
  case 2: Match->MoveHire(0,It.Index,-1);break;
  case 3: Match->CancelHire(0,It.Index);break;
@@ -631,6 +647,7 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 {
  if(Params.Key.IsGamepadKey()) bGamepadActive=true;
  else if(Params.Key.IsMouseButton()||!Params.Key.IsAnalog()) bGamepadActive=false;
+ if(SectionMenuInput(Params))return true;
  if(HandleQuitMenu(Params))return true; // quit confirmation (BattleQuitMenu.cpp) before every other handler
  if(HandleGamepadMenu(Params))return true;
  if(HandleBuyPanelPad(Params))return true;
@@ -669,6 +686,7 @@ bool ABattleController::InputKey(const FInputKeyEventArgs& Params)
 
 void ABattleController::CancelPlayerInput(bool bGamepadOnly)
 {
+ if(!bGamepadOnly){bSectionMenuPress=false;SectionMenuIndex=INDEX_NONE;}
  TMap<FKey,FInputKeyEventArgs> Released;
  for(auto& Pair:HeldPlayerKeys)
  {
@@ -1735,4 +1753,141 @@ void ABattleController::HireSPGun()
 	auto* Match = GetWorld()->GetSubsystem<UBattleMatch>();
 	if (!bTactical || !Match->IsEnabled() || !Match->bArea) return;
 	BuyArea(BattleSquadType::SPGun);
+}
+
+TArray<FBattlePlanPanelLayout::FItem> ABattleController::SectionLabels() const
+{
+ TArray<FBattlePlanPanelLayout::FItem> Labels;
+ const auto* LabelMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+ if(!bTactical||!bShowSectorGrid||!LabelMatch->FrontSectionOrdersOn(0)||LabelMatch->FrontLine[0].Num()!=BattleSectors::Rows)return Labels;
+ const auto& LabelPlan=LabelMatch->FrontPlanState[0];
+ int32 LabelViewW=0,LabelViewH=0;GetViewportSize(LabelViewW,LabelViewH);
+ for(int32 LabelSection=0;LabelSection<LabelPlan.Sections;++LabelSection)
+ {
+  int32 FirstRow=INDEX_NONE,LastRow=INDEX_NONE;
+  for(int32 LabelRow=0;LabelRow<LabelPlan.SectionOfRow.Num();++LabelRow)if(LabelPlan.SectionOfRow[LabelRow]==LabelSection){if(FirstRow<0)FirstRow=LabelRow;LastRow=LabelRow;}
+  if(FirstRow<0)continue;
+  const int32 LabelMid=(FirstRow+LastRow)/2;
+  FVector LabelWorld=BattleSectors::Center(LabelMatch->FrontCell(0,LabelMatch->FrontLine[0][LabelMid],LabelMid));
+  LabelWorld.X+=(LabelMatch->AreaHome(0).X<0?1.:-1.)*BattleSectors::Size*.5;
+  LabelWorld.Z=BattleSectorView::GroundZ(GetWorld(),LabelWorld.X,LabelWorld.Y)+25;
+  FVector2D LabelScreen;if(!ProjectWorldLocationToScreen(LabelWorld,LabelScreen)||LabelScreen.X<0||LabelScreen.X>LabelViewW||LabelScreen.Y<160||LabelScreen.Y>LabelViewH-160)continue;
+  FBattlePlanPanelLayout::FItem LabelItem;LabelItem.Index=LabelSection;LabelItem.Size=FVector2D(216,26);
+  LabelItem.Origin=FVector2D(FMath::Clamp(LabelScreen.X+6.,8.,FMath::Max(8.,LabelViewW-224.)),LabelScreen.Y-18.);
+  LabelItem.Text=FString::Printf(TEXT("区間%d %s"),LabelSection+1,UBattleMatch::SectionRoleJa(LabelMatch->PlayerSectionRole(LabelSection)));
+  Labels.Add(MoveTemp(LabelItem));
+ }
+ return Labels;
+}
+
+void ABattleController::OpenSectionMenu(int32 Section,FVector2D At)
+{
+ if(!bTactical||!GetWorld()->GetSubsystem<UBattleMatch>()->FrontSectionOrdersOn(0))return;
+ int32 MenuViewW=0,MenuViewH=0;GetViewportSize(MenuViewW,MenuViewH);
+ SectionMenuIndex=Section;
+ SectionMenuOrigin=FVector2D(FMath::Clamp(At.X,8.,FMath::Max(8.,MenuViewW-232.)),FMath::Clamp(At.Y,160.,FMath::Max(160.,MenuViewH-360.)));
+}
+
+bool ABattleController::SectionMenuInput(const FInputKeyEventArgs& Params)
+{
+ auto* MenuMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+ if(!bTactical||!MenuMatch->FrontSectionOrdersOn(0)){SectionMenuIndex=INDEX_NONE;return false;}
+ if(Params.Key==EKeys::LeftMouseButton&&Params.Event==IE_Released&&bSectionMenuPress){bSectionMenuPress=false;bTriggerHeld=false;return true;}
+ if(bQuitMenu||bBuyPanel||bPlanPanel||bGamepadMenuOpen){SectionMenuIndex=INDEX_NONE;return false;}
+ if(SectionMenuIndex>=0&&Params.Key==EKeys::Escape){if(Params.Event==IE_Pressed)SectionMenuIndex=INDEX_NONE;return true;}
+ if(SectionMenuIndex>=0&&Params.Key==EKeys::RightMouseButton&&Params.Event==IE_Pressed)SectionMenuIndex=INDEX_NONE;
+ if(Params.Key!=EKeys::LeftMouseButton||Params.Event!=IE_Pressed)return false;
+ FVector2D MenuPointer;if(!GetPointerPosition(MenuPointer))return false;
+ if(SectionMenuIndex>=0)
+ {
+  const FVector2D Relative=MenuPointer-SectionMenuOrigin;
+  if(Relative.X>=0&&Relative.X<224&&Relative.Y>=0&&Relative.Y<196)
+  {
+   const uint8 MenuRole=uint8(Relative.Y/28.);
+   if(MenuMatch->SetPlayerSectionRole(SectionMenuIndex,MenuRole)){ShowNotice(MenuMatch->LastMessage);SectionMenuIndex=INDEX_NONE;}
+   bSectionMenuPress=true;bTriggerHeld=false;return true;
+  }
+  SectionMenuIndex=INDEX_NONE;
+ }
+ if(bPlanPanel||bBuyPanel||bQuitMenu||bGamepadMenuOpen)return false;
+ {
+  // The HUD panels drawn over the field (squad list, delegation, command bar, notices, minimap) keep their clicks (review 2026-11-26).
+  int32 PanelViewW=0,PanelViewH=0;GetViewportSize(PanelViewW,PanelViewH);const FVector2D PanelView(PanelViewW,PanelViewH);
+  const auto PanelBar=FBattleCommandBarLayout::Make(PanelView,GetWorld(),bGamepadActive);
+  const auto PanelNotices=VisibleNotices();
+  const auto PanelNoticeLayout=FBattleNoticeLayout::Make(PanelView,GetWorld(),PanelNotices.Num(),NoticeLogTop());
+  if(SquadPanelAtPointer()||DelegationPanelAt(MenuPointer)||PanelBar.ButtonAt(MenuPointer)!=INDEX_NONE||PanelBar.RouteAt(MenuPointer)
+   ||PanelNoticeLayout.RowAt(MenuPointer)!=INDEX_NONE||FBattleMinimapLayout::Make(PanelView,GetWorld()).Contains(MenuPointer))return false;
+ }
+ for(const auto& LabelHit:SectionLabels())
+  if(MenuPointer.X>=LabelHit.Origin.X&&MenuPointer.X<LabelHit.Origin.X+LabelHit.Size.X&&MenuPointer.Y>=LabelHit.Origin.Y&&MenuPointer.Y<LabelHit.Origin.Y+LabelHit.Size.Y)
+  {OpenSectionMenu(LabelHit.Index,LabelHit.Origin+FVector2D(0,28));bSectionMenuPress=true;bTriggerHeld=false;return true;}
+ return false;
+}
+
+// Rendered UI capture only; all order changes use the same entry points as the player.
+void ABattleController::UpdatePlanPanelShot()
+{
+ static const FString ShotPrefix=[]{FString ShotValue;FParse::Value(FCommandLine::Get(),TEXT("BattlePlanPanelShot="),ShotValue);return ShotValue;}();
+ auto* ShotMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+ if(ShotPrefix.IsEmpty()||!FApp::CanEverRender()||FParse::Param(FCommandLine::Get(),TEXT("nullrhi"))||!ShotMatch->FrontSectionOrdersOn(0))return;
+ static int32 ShotStage=0;static double ShotNext=0.;
+ const double ShotTime=GetWorld()->GetTimeSeconds();
+ if(ShotTime<ShotNext)return;
+ if(ShotStage==0)
+ {
+  if(ShotMatch->Phase!=EBattleMatchPhase::Combat||ShotMatch->FrontPlanState[0].Sections<2)return;
+  // In a played match the player's team has no front army until the player puts squads in it: put ten free squads there first and
+  // give the line time to form.
+  static bool bShotArmy=false;
+  if(!bShotArmy)
+  {
+   bShotArmy=true;const uint8 FilterBefore=SquadFilter;SquadFilter=2;int32 ShotAssigned=0;
+   for(const auto& ShotRow:SquadListRows())if(ShotAssigned<10&&ShotRow.Squad.bActive&&ShotMatch->AssignArmy(ShotRow.Squad.SquadID,1))++ShotAssigned;
+   SquadFilter=FilterBefore;
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_PLAN_PANEL_SHOT stage=army assigned=%d"),ShotAssigned);
+   ShotNext=ShotTime+15.;return;
+  }
+  TArray<int32> ShotOffsets;ShotOffsets.Init(0,ShotMatch->FrontPlanState[0].Sections);ShotOffsets[0]=3;ShotOffsets.Last()=-3;
+  if(ShotMatch->DrawFrontSectionOffsets(ShotOffsets)<=0)return;
+  EnterTactical();bShowSectorGrid=true;bPlanPanel=false;bBuyPanel=false;
+  if(TacticalPawn){TacticalPawn->SetActorLocation(FVector::ZeroVector);TacticalPawn->Zoom(100000);}
+  if(auto* ShotMode=GetWorld()->GetAuthGameMode<ABattleGameMode>())ShotMode->bCombatPaused=true;
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_PLAN_PANEL_SHOT stage=draw first=%d last=%d sections=%d"),int32(ShotMatch->PlayerSectionRole(0)),int32(ShotMatch->PlayerSectionRole(ShotOffsets.Num()-1)),ShotOffsets.Num());
+  ShotStage=1;ShotNext=ShotTime+1.;
+ }
+ else if(ShotStage==1)
+ {
+  FScreenshotRequest::RequestScreenshot(ShotPrefix+TEXT("-map.png"),true,false);
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_PLAN_PANEL_SHOT stage=map labels=%d"),SectionLabels().Num());
+  ShotStage=2;ShotNext=ShotTime+1.;
+ }
+ else if(ShotStage==2)
+ {
+  for(const auto& ShotLabel:SectionLabels())if(ShotLabel.Index==0)
+  {
+   SetMouseLocation(FMath::RoundToInt(ShotLabel.Origin.X+10),FMath::RoundToInt(ShotLabel.Origin.Y+10));
+   FViewport* ShotViewport=GetLocalPlayer()&&GetLocalPlayer()->ViewportClient?GetLocalPlayer()->ViewportClient->Viewport:nullptr;
+   InputKey(FInputKeyEventArgs(ShotViewport,FInputDeviceId::CreateFromInternalId(0),EKeys::LeftMouseButton,IE_Pressed,FPlatformTime::Cycles64()));
+   InputKey(FInputKeyEventArgs(ShotViewport,FInputDeviceId::CreateFromInternalId(0),EKeys::LeftMouseButton,IE_Released,FPlatformTime::Cycles64()));
+   break;
+  }
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_PLAN_PANEL_SHOT stage=menu section=%d"),SectionMenuIndex+1);
+  ShotStage=3;ShotNext=ShotTime+.6;
+ }
+ else if(ShotStage==3){FScreenshotRequest::RequestScreenshot(ShotPrefix+TEXT("-menu.png"),true,false);ShotStage=4;ShotNext=ShotTime+1.;}
+ else if(ShotStage==4)
+ {
+  SectionMenuIndex=INDEX_NONE;TogglePlanPanel();
+  int32 ShotW=0,ShotH=0;GetViewportSize(ShotW,ShotH);
+  const auto ShotLayout=FBattlePlanPanelLayout::Make(FVector2D(ShotW,ShotH),GetWorld());
+  bool bShotFits=ShotLayout.Size.X<=620&&ShotLayout.Origin.Y+ShotLayout.Size.Y<=ShotH;
+  int32 ShotButtons=0;
+  for(const auto& ShotItem:ShotLayout.Items)if(ShotItem.Kind==11)
+  {++ShotButtons;bShotFits&=ShotItem.Origin.X>=ShotLayout.Origin.X&&ShotItem.Origin.X+ShotItem.Size.X<=ShotLayout.Origin.X+ShotLayout.Size.X;}
+  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_PLAN_PANEL_SHOT stage=panel open=%d buttons=%d fits=%d"),bPlanPanel?1:0,ShotButtons,bShotFits?1:0);
+  ShotStage=5;ShotNext=ShotTime+.6;
+ }
+ else if(ShotStage==5){FScreenshotRequest::RequestScreenshot(ShotPrefix+TEXT("-panel.png"),true,false);ShotStage=6;ShotNext=ShotTime+1.;}
+ else if(ShotStage==6){ShotStage=7;FPlatformMisc::RequestExit(false,TEXT("BattlePlanPanelShot"));}
 }
