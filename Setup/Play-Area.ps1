@@ -55,6 +55,8 @@ if ($Map -eq 'H' -or $Map -eq 'I' -or $Map -eq 'J' -or $Map -eq 'K' -or $Map -eq
     $extra += '-BattleArmourWait=1'
     # A group gives its squads one sector each around its rally and its point, from the side first (trial, user 2026-11-23).
     $extra += '-BattleGroupSectors=1'
+    # The home-assault squads go as one group on one flank (trial, user 2026-11-27 play test; BattleBaseGroup.cpp).
+    $extra += '-BattleBaseGroup=1'
     # AI orders as sector missions (move by sectors, fire on the move into the sector), as Test-WideSight.ps1 measures them by default
     # (-SectorAI 1). Before 2026-11-24 the play passed it only with -SectorAI, so the play's AI differed from the measured one (user decision).
     $extra += '-BattleSectorAI=1'
