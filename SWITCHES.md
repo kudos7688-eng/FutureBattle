@@ -145,7 +145,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleCoverHuddle` | Value | -1 | BattleStableMovement.cpp:292 | -1 = by map: on for map I, off elsewhere (BattleFieldLayout::SectorComboSwitch, 2026-11-22 user decision) |
 | `-BattleCoverIndoor` | Value | 0 | BattleLeaderRuntime.cpp:1982 |  |
 | `-BattleCoverOutward` | Value | 0 | BattleLeaderRuntime.cpp:1987 |  |
-| `-BattleCoverPeekLookout` | Value | 0 | BattleCoverAction.cpp:25 | trial, AI only, default 0 |
+| `-BattleCoverPeekLookout` | Value | 1 | BattleCoverAction.cpp:25 | AI only, default 1 (user 11-26); =0 restores own-sighting-only peeks |
 | `-BattleCoverPeekShots` | Value | 0 | BattleTactics.cpp:64 |  |
 | `-BattleCoverPeekSight` | Value | True | BattleTactics.cpp:220 |  |
 | `-BattleCoverPeekTrial` | Param | off | BattleCoverPeekTrial.cpp:16, BattleLeaderRuntime.cpp:224, BattleSightExperiment.cpp:26 |  |

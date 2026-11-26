@@ -22,7 +22,7 @@
 namespace {
 bool CoverPeekLookout()
 {
- static const bool Enabled=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverPeekLookout="),V);return V!=0;}(); // trial, AI only, default 0
+ static const bool Enabled=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverPeekLookout="),V);return V!=0;}(); // AI only, default 1 (user 11-26); =0 restores own-sighting-only peeks
  return Enabled;
 }
 bool PeekRangeCheck()
