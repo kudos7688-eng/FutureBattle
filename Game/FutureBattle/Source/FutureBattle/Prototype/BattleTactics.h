@@ -49,11 +49,11 @@ namespace BattleTactics
  int32 JoinFightMax();
  // Contact trial, user 2026-11-25 ("share the enemy's place across the team", STATUS "弾薬と補給" 14:10/16:00: an enemy is within
  // 200 m for 74% of the time without one in sight; a sighting reaches only soldiers within ShareRange, 16 m, and the team's view
- // serves the front line and the groups, never a squad's own way). -BattleSeekKnown=1|2 (default 0): the team remembers for
+ // serves the front line and the groups, never a squad's own way). -BattleSeekKnown=0|1|2 (default 2 since 2026-11-27, user decision; 0 = off): the team remembers for
  // -BattleSeekKnownSeconds=s (default 30, 5..180) each 50 m square in which one of its soldiers saw enemy infantry himself (no
  // vehicles, no scout long sight, no reports; the place last seen there, no true positions). An AI rifle squad on its mission with
- // no enemy of its own attack-moves to the nearest such place within -BattleSeekKnownRange=cm (default 20000, 2000..60000), at most
- // -BattleSeekKnownMax=n (default 2, 1..8) squads per square. With an enemy in its own sight it fights as usual; 10 s at the place
+ // no enemy of its own attack-moves to the nearest such place within -BattleSeekKnownRange=cm (default 60000, 2000..60000), at most
+ // -BattleSeekKnownMax=n (default 8, 1..8) squads per square. With an enemy in its own sight it fights as usual; 10 s at the place
  // with none, or 90 s, and it goes back to its mission. 1: squads outside the groups only. 2: also squads of front-holding groups
  // (attack and surprise groups never). Not saved. BattleSquadRetreat.cpp (Evaluate, RefreshKnownSpots).
  // Contact trial, user 2026-11-25 ("once spotted, know its true place for some seconds"; an exception to the rule that decisions
@@ -73,6 +73,24 @@ namespace BattleTactics
  float SeekKnownSeconds();
  float SeekKnownRange();
  int32 SeekKnownMax();
+ // Spot relaxation (Docs/design-spot-relax.md, user 2026-11-27). -BattleSpotTruth=bits (default 0; DIAGNOSTIC ONLY, never a default):
+ // the true places of the living enemies enter what a team was told. Bit 1: its infantry, into the team's places for
+ // -BattleSeekKnown (needs that switch). Bit 2: every enemy, into the team's view (AreaIntelView: the front line, the groups,
+ // the guns' known places). Nothing fires at a soldier because of it; no soldier's own contact changes.
+ int32 SpotTruth();
+ // Trials: write only the seeking table, never perception, AreaIntelView or shooting. Require -BattleSeekKnown>0.
+ // -BattleSpotShare=bits (0, 0..7): 1 memory/shared/squad contacts, 2 scout long sight/reports, 4 vehicles.
+ int32 SpotShare();
+ // -BattleSpotShots=1 (0): infantry small arms heard by enemy infantry. Hear cm (15000, 1000..60000),
+ // Error cm (2500, 0..10000), Every s (2, 0.2..30). Independent deterministic error; no combat RNG.
+ bool SpotShots(); float SpotShotsHear(); float SpotShotsError(); float SpotShotsEvery();
+ // -BattleSpotLost=1 (0): new enemy point owner, including neutral captures. Seconds (60, 5..300); recapture cancels.
+ bool SpotLost(); float SpotLostSeconds();
+ // -BattleSpotHQ=s (0 off, otherwise 10..600): snapshot infantry counts per sector; Delay s (30, 0..300), Min (2, 1..20).
+ // Depth (0 unlimited, 1..20): omit columns beyond enemy home column minus Depth, in the recipient's orientation.
+ float SpotHQ(); float SpotHQDelay(); int32 SpotHQMin(); int32 SpotHQDepth();
+ // -BattleSpotTruthDepth=n (0 unlimited, 1..20): the same column filter for SpotTruth bit 1 only.
+ int32 SpotTruthDepth();
  // Contact trial, user 2026-11-25. -BattleMemorySeconds=s (default 0 = UBattleTuning::MemorySeconds, 5 s; 1..120): how long a soldier
  // keeps an enemy he no longer sees (before the recruit/veteran factor). The 5 s caps inside the cover actions stay.
  // -BattleSuppressFire=s (default 0 = off, 0..60): a soldier who stands still and has lost sight of the squad's target keeps firing

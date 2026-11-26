@@ -46,6 +46,19 @@ void UBattleMatch::AddScoutReportSightings(int32 Team,TMap<int32,FVector>& Seen)
  }
 }
 
+void UBattleMatch::AddScoutSpotSightings(int32 Team,bool bVehicles,TFunctionRef<void(const FVector&,double)> Write) const
+{
+ // The same delivered positions as AddScoutReportSightings, with original report time and captured vehicle flags.
+ const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const float Memory=GetDefault<UBattleTuning>()->ScoutReportMemory;
+ for(const auto& P:ScoutReports)
+ {
+  const auto* S=Store->FindSquad(P.Key);const auto& Report=P.Value;
+  if(!S || S->Team!=Team || Report.ReportedAt<0. || Elapsed-Report.ReportedAt>Memory)continue;
+  for(int32 I=0;I<Report.Positions.Num();++I)
+   if(bVehicles || (Report.SpotVehicles.IsValidIndex(I) && !Report.SpotVehicles[I]))Write(Report.Positions[I],Report.ReportedAt);
+ }
+}
+
 void UBattleMatch::UpdateScoutReports()
 {
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
@@ -150,6 +163,10 @@ void UBattleMatch::UpdateScoutReports()
   if(Rep.Stage==1&&Now-Rep.Started>=T->ScoutReportSeconds&&!Long.IsEmpty())
   {
    Rep.Positions.Reset();for(const auto& L:Long)Rep.Positions.Add(L.Value);
+   if((BattleTactics::SpotShare()&2) && BattleTactics::SeekKnown()>0)
+   {
+    Rep.SpotVehicles.Reset();for(const auto& L:Long)Rep.SpotVehicles.Add(R->IsVehicle(L.Key));
+   }
    if(BattleTactics::ObservedTactics())
    {
     Rep.bHomeObserved=false;

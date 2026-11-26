@@ -1493,6 +1493,11 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   Burst=&State.Key;Interval=*Burst>1?T->ShotInterval(W,true):BattleTactics::BurstPause();
  }
  if(bSide?!BattleArms::ConsumeSidearmShot(Store->Units.FindChecked(ID),Now,Interval):!Store->ConsumeShot(ID,Now,Interval,!bPlayerShot&&W==EBattleWeapon::Carbine?BattleTactics::CarbineShotRounds():1)) return false;
+ if(BattleTactics::SpotShots() && BattleTactics::SeekKnown()>0 && W!=EBattleWeapon::AntiTank && !IsVehicle(ID))
+ {
+  auto* Tactics=GetWorld()->GetSubsystem<UBattleSquadTactics>();
+  Tactics->NoteShotSpot(ID,U->Team,Start,Tactics->Clock(),BattleTactics::SpotShotsHear(),BattleTactics::SpotShotsError(),BattleTactics::SpotShotsEvery());
+ }
  if(Burst){--*Burst;BurstLeft.FindChecked(ID).Value=Now;}
  if(bSide)SightExperiment.Cover(bPlayerShot?TEXT("arms_sidearm_shots_player"):TEXT("arms_sidearm_shots"));
  if(SightExperiment.Started)
