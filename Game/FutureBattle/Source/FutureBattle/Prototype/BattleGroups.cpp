@@ -643,6 +643,7 @@ bool UBattleMatch::GroupOrder(int32 SquadID,int32 Team,FVector& Center,EBattleOr
  // The front army holds posts squad by squad: one squad the player commands by hand does not stop the others (2026-11-21).
  if(G&&S&&G->Kind==1)return G->Team==Team&&(Team!=0||S->bPlayerDelegated)&&FrontGroupOrder(SquadID,Team,Center,Order); // BattleFrontLine.cpp
  if(G&&S&&G->Kind==2)return G->Team==Team&&GroupAIRun(*G)&&SurpriseGroupOrder(ID,SquadID,Team,Center,Order);
+ if(G&&S&&G->Kind==3)return G->Team==Team&&GroupAIRun(*G)&&BaseGroupOrder(ID,SquadID,Team,Center,Order); // BattleBaseGroup.cpp
  if(!G||!S||G->Team!=Team||!Objectives.IsValidIndex(G->Objective)||!GroupAIRun(*G))return false;
  if(BattleTactics::GroupStrengthEnabled()&&!GroupSquadPresent(*S))return false;
  const uint8 Role=GroupRole(*G,SquadID);if(Role==255||Role==5)return false; // 5 supply: SupplyCarOrder (BattleSupplyCar.cpp)

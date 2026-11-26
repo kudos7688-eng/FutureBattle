@@ -828,6 +828,7 @@ void ABattleHUD::DrawSquadList()
    static const TCHAR* const SurpriseNames[]={TEXT("集結"),TEXT("潜行"),TEXT("突入")};
    if(G->Kind==1) Goal=TEXT("前線維持");
    if(G->Kind==2) Goal=FString::Printf(TEXT("奇襲 ／ %s ／ 敵本拠地"),G->Phase<3?SurpriseNames[G->Phase]:TEXT("？"));
+   if(G->Kind==3) Goal=FString::Printf(TEXT("本拠地攻撃 ／ %s ／ %s側"),G->Phase==0?TEXT("集結"):TEXT("前進"),G->Rally.Y>0?TEXT("北"):TEXT("南"));
    DrawText(G->Kind!=0?Goal:FString::Printf(TEXT("%s ／ %s"),G->Phase<3?PhaseNames[G->Phase]:TEXT("？"),*Goal),Gold,Layout.Origin.X+9,Y+23,GEngine->GetSmallFont(),.8f);
    static const TCHAR* const RoleNames[]={TEXT("突撃"),TEXT("支援"),TEXT("装甲"),TEXT("火力"),TEXT("護衛"),TEXT("補給")};
    int32 Roles[7]={0,0,0,0,0,0,0}; for(int32 SID:G->Squads){const uint8 R=Match->GroupRole(*G,SID);++Roles[R<6?R:6];}

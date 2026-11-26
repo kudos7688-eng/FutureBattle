@@ -385,6 +385,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
  // Squad groups (BattleGroups.cpp): members, AI formation (trial) and phases, before the orders that read them.
  if((CompositionTeams&(1<<Team))!=0)UpdateCompositionPurposes(Team);
  UpdateGroups(Team);
+ if(bStrategy)UpdateBaseGroup(Team); // trial -BattleBaseGroup (BattleBaseGroup.cpp)
  if(bArea&&BattleTactics::ArtilleryPosts())UpdateArtilleryRaids(Team);
  if(bArea&&(BattleTactics::ATHunt()||BattleTactics::ATFire()))UpdateATHunts(Team);
  // Routes (map F): what the team sees now, gathered once for all its squads.

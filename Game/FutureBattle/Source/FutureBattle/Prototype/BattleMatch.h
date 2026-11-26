@@ -235,6 +235,11 @@ public:
  bool SurpriseOn(int32 Team) const;
  void UpdateSurpriseGroup(int32 Team,int32 FrontID);
  bool SurpriseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
+ // Home-assault group (trial -BattleBaseGroup=1, BattleBaseGroup.cpp): the home-assault squads as one group (Kind 3) on one flank.
+ bool BaseGroupOn() const;
+ int32 BaseGroupRowCell(int32 Team,int32 Column,int32 Row,FIntPoint& Out) const;
+ void UpdateBaseGroup(int32 Team);
+ bool BaseGroupOrder(int32 GroupID,int32 SquadID,int32 Team,FVector& Center,EBattleOrder& Order) const;
  // True while the squad's surprise group is moving along its row (phase 1): its tactics do not stop to hold at a seen enemy.
  bool SurpriseMoving(int32 SquadID) const;
  bool RaidSneaking(int32 SquadID) const; // Trial -BattleArtilleryRaidSneak: an artillery raid squad still farther than the sneak radius from its target.
@@ -395,7 +400,7 @@ public:
 		bool bOpened = false; /* the opening rush was decided (once per group) */
 		bool bArrived = false; /* this advance has reached its point: the stall clock (PhaseAt) runs from then */
 		float ArrivedAt = 0.f; int32 Extensions = 0; /* stage 3d: when it arrived, and how often the stall clock was extended while pushing */
-		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp) */
+		uint8 Kind = 0; /* 0 attack (raid) group, 1 front-holding group, 2 surprise group (BattleFrontLine.cpp), 3 home-assault group (BattleBaseGroup.cpp) */
 		bool bFocus2 = false; /* front plan stage 5: the second attack army, aimed at FFrontPlanTeam::Focus2 (Kind 0) */
 		bool bFollowFocus = true; /* front plan stage 7: a player's attack group follows the focus while delegated (the player's per-group switch) */
 		int32 SurpriseRow = 0; /* surprise group: the edge sector row it moves along */
