@@ -4,7 +4,7 @@
 既定値は C++ と DefaultGame.ini の静的読取りによる。解決できない値は「未解決」と記す。
 UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読取り先の初期値で、マップ・陣営・実行時の変更や後処理まで保証しない。Param / Strifind の off は引数なしを示す。読取り箇所で値が異なる場合は場所を併記する。
 
-計 541 種類。
+計 543 種類。
 
 | 引数 | 読み方 | 既定（推定） | 場所 | 行のコメント |
 |---|---|---|---|---|
@@ -246,15 +246,17 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleJoinFightMax` | Value | 2 | BattleTactics.cpp:99 |  |
 | `-BattleJoinFightRange` | Value | 15000.f | BattleTactics.cpp:94 |  |
 | `-BattleKillLog` | Value | 1 | BattleHUD.cpp:1362 |  |
-| `-BattleKnownMoveMarch` | Value | 1 | BattleKnownTargetMove.cpp:19 |  |
-| `-BattleKnownMoveMax` | Value | 0 | BattleKnownTargetMove.cpp:22 |  |
-| `-BattleKnownMoveNavBudget` | Value | 32 | BattleKnownTargetMove.cpp:27 |  |
-| `-BattleKnownMoveRange` | Value | 2500. | BattleKnownTargetMove.cpp:20 |  |
-| `-BattleKnownMoveRayBudget` | Value | 32 | BattleKnownTargetMove.cpp:25 |  |
-| `-BattleKnownMoveSquadRadius` | Value | 5000. | BattleKnownTargetMove.cpp:21 |  |
-| `-BattleKnownMoveSweepBudget` | Value | 24 | BattleKnownTargetMove.cpp:26 |  |
+| `-BattleKnownMoveCommit` | Value | 12. | BattleKnownTargetMove.cpp:19 |  |
+| `-BattleKnownMoveMarch` | Value | 1 | BattleKnownTargetMove.cpp:21 |  |
+| `-BattleKnownMoveMax` | Value | 0 | BattleKnownTargetMove.cpp:24 |  |
+| `-BattleKnownMoveNavBudget` | Value | 32 | BattleKnownTargetMove.cpp:29 |  |
+| `-BattleKnownMoveRange` | Value | 2500. | BattleKnownTargetMove.cpp:22 |  |
+| `-BattleKnownMoveRayBudget` | Value | 32 | BattleKnownTargetMove.cpp:27 |  |
+| `-BattleKnownMoveSquadRadius` | Value | 5000. | BattleKnownTargetMove.cpp:23 |  |
+| `-BattleKnownMoveSweepBudget` | Value | 24 | BattleKnownTargetMove.cpp:28 |  |
+| `-BattleKnownMoveWait` | Value | 1.5 | BattleKnownTargetMove.cpp:20 |  |
 | `-BattleKnownTargetFire` | Value | 0 | BattleKnownTargetMove.cpp:18, BattleKnownTargets.cpp:12 |  |
-| `-BattleKnownTargetFireTrial` | Param | off | BattleKnownTargetMove.cpp:299, BattleLeaderRuntime.cpp:252 |  |
+| `-BattleKnownTargetFireTrial` | Param | off | BattleKnownTargetMove.cpp:325, BattleLeaderRuntime.cpp:252 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
 | `-BattleLauncherDamage` | Value | 60.f | BattleArms.cpp:158 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
 | `-BattleLeaderCommand` | Value | 0 | BattleGameMode.cpp:54 |  |

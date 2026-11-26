@@ -935,6 +935,7 @@ public:
  bool KnownMoveLine(int32 ID,FVector From,FVector To,double Now);
  bool StartKnownMove(int32 ID,double Now);
  bool StepKnownMove(int32 ID,float Dt,double Now);
+ bool StepKnownMoveArrival(int32 ID,float Dt,double Now);
  void EndKnownMove(int32 ID,double Now,const TCHAR* Reason);
  void KnownMoveShot(int32 ID,int32 Target,double Now);
  struct FKnownMove
@@ -944,6 +945,8 @@ public:
   FVector Start=FVector::ZeroVector,Goal=FVector::ZeroVector,Peek=FVector::ZeroVector,Last=FVector::ZeroVector;
   int32 Mission=0,Revision=0,Slot=INDEX_NONE;
   double Started=0,Arrived=-1,Distance=0;float Stuck=0;
+  double CommitUntil=0,CheckUntil=0,NextCheck=0,ReturnUntil=0;
+  bool bCommittedWalk=false,bAtPeek=false,bArrivalSeen=false;TArray<FVector> ReturnPoints;int32 ReturnNext=0;
   bool bReturning=false,bFired=false,bStandUp=false,bMarch=false;
  };
  TMap<int32,FKnownMove> KnownMoves;
