@@ -26,7 +26,7 @@
 
 | 試験 | 契 | 局 | 試 | 操 | 判断すること | 合格の行 | マップ・長さ |
 |---|---|---|---|---|---|---|---|
-| Test-KnownTargetFire | ○ | ○ | | | 別小隊の観測から通常／覗き実発砲、第一候補が壁で第二候補へ、鮮度・元期限、追跡あり／なし、本人確認と狙いの壁、予算32本と待ち順、命令・武器制約、追加移動なし。観測は固定fixture、未実行 | `BATTLE_KNOWN_FIRE_RESULT failures=0` と22項目 | Field500、上限180秒。`-SpotTrack 0` と `-SpotTrack 3` を別出力名で実行、KnownTargetFire=1を起動引数で指定 |
+| Test-KnownTargetFire | ○ | ○ | | | 別小隊の観測から通常／覗き実発砲、第一候補が壁で第二候補へ、鮮度・元期限、追跡あり／なし、本人確認と狙いの壁、予算32本と待ち順、命令・武器制約、追加移動なし。観測は固定fixture、未実行 | `BATTLE_KNOWN_FIRE_RESULT failures=0` と22項目 | C (Lvl_BattleWide_C, -BattleWideMixed, -BattleSightExperiment)、上限180秒。`-SpotTrack 0` と `-SpotTrack 3` を別出力名で実行、KnownTargetFire=1を起動引数で指定 |
 | Test-Battle | ○ | ○ | | △ | 基本回帰：命令の実行、知覚、戦術効果、協同、訓練、購入・拠点、支援攻撃（Smoke を順に。保存の Smoke は 11-25 に削除） | `BATTLE_SMOKE_RESULT failures=0` | 試作の小マップ、上限180秒 |
 | Test-Area | ○ | ○ | | △ | エリア戦：補充・資源、購入と予約、B03（残す資源）、車両・砲兵・補給車の規則、収入と勝敗、購入の入力。編成AI のスモークも中で走る | `BATTLE_AREA_RESULT failures=0` | マップA 固定、上限180秒 |
 | Test-MixedFast | ○ | ○ | | | 混成の購入・予算：課金は一度、人数、不正な購入の拒否、有料の補給、読込後の新ID | `BATTLE_MIXED_FAST_RESULT failures=0` | 500体の野原、約10秒 |

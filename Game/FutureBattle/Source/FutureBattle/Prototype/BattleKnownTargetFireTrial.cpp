@@ -1,5 +1,6 @@
 #include "BattleLeaderRuntime.h"
 #include "BattleGameMode.h"
+#include "BattleFieldLayout.h"
 #include "BattlePerception.h"
 #include "BattleStance.h"
 #include "Components/BoxComponent.h"
@@ -13,8 +14,10 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
  const double TrialNow=TrialWorld->GetTimeSeconds();int32 TrialFailures=0;
  auto TrialCheck=[&](const TCHAR* TrialName,bool TrialOK)
  {TrialFailures+=!TrialOK;UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_KNOWN_FIRE_CHECK name=%s ok=%d"),TrialName,TrialOK);};
- if(!TrialWorld->GetMapName().EndsWith(TEXT("Lvl_BattleField500")) || !BattleKnownFire::Enabled() || !SightExperiment.Enabled || !Bodies.Contains(2) || !Bodies.Contains(11) || !Bodies.Contains(251) || !Bodies.Contains(252))
+ if(FCString::Strcmp(BattleFieldLayout::Of(TrialWorld).Name,TEXT("Lvl_BattleWide_C"))!=0 || !BattleKnownFire::Enabled() || !SightExperiment.Enabled || !Bodies.Contains(2) || !Bodies.Contains(11) || !Bodies.Contains(251) || !Bodies.Contains(252))
  {UE_LOG(LogFutureBattle,Error,TEXT("BATTLE_KNOWN_FIRE_RESULT failures=1 fixture"));FPlatformMisc::RequestExitWithStatus(false,1);return;}
+ // Map C, same open ground and low-wall anchor as RunCoverPeekTrial; all scene walls are relative to it.
+ // Without BattleArea, 25 squads of 10 per team give allied IDs 2/11 and enemy IDs 251/252.
  FVector TrialGround(-9595,-4000,0);FHitResult TrialFloor;
  const bool TrialHasFloor=TrialWorld->LineTraceSingleByObjectType(TrialFloor,TrialGround+FVector(0,0,500),TrialGround-FVector(0,0,500),FCollisionObjectQueryParams(ECC_WorldStatic));
  if(TrialHasFloor)TrialGround.Z=TrialFloor.ImpactPoint.Z;
@@ -27,7 +30,7 @@ void UBattleLeaderRuntime::RunKnownTargetFireTrial()
  };
  for(auto& TrialPair:TrialStore->Units)
  {
-  TrialPair.Value.Ammo=0;TrialPair.Value.Reserve=0;
+  TrialPair.Value.Ammo=0;TrialPair.Value.Reserve=0;TrialPair.Value.Perception.ShareRange=0;
   // Keep unrelated bodies from blocking the fixture's rays or moving its shooter through separation.
   if(Bodies.Contains(TrialPair.Key))TrialPlace(TrialPair.Key,FVector(8000+(TrialPair.Key%20)*120,-7000+(TrialPair.Key/20)*120,100));
  }
