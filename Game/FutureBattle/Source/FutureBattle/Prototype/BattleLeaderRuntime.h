@@ -936,7 +936,7 @@ public:
  struct FKnownMove
  {
   BattleKnownFire::FTarget Observation;
-  FVector Start=FVector::ZeroVector,Peek=FVector::ZeroVector,Last=FVector::ZeroVector;
+  FVector Start=FVector::ZeroVector,Goal=FVector::ZeroVector,Peek=FVector::ZeroVector,Last=FVector::ZeroVector;
   int32 Mission=0,Revision=0,Slot=INDEX_NONE;
   double Started=0,Arrived=-1,Distance=0;float Stuck=0;
   bool bReturning=false,bFired=false,bStandUp=false;

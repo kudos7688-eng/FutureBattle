@@ -246,10 +246,10 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleJoinFightMax` | Value | 2 | BattleTactics.cpp:84 |  |
 | `-BattleJoinFightRange` | Value | 15000.f | BattleTactics.cpp:79 |  |
 | `-BattleKillLog` | Value | 1 | BattleHUD.cpp:1352 |  |
-| `-BattleKnownMoveMax` | Value | 0 | BattleKnownTargetMove.cpp:18 |  |
-| `-BattleKnownMoveRange` | Value | 2500. | BattleKnownTargetMove.cpp:16 |  |
-| `-BattleKnownMoveSquadRadius` | Value | 5000. | BattleKnownTargetMove.cpp:17 |  |
-| `-BattleKnownTargetFire` | Value | 0 | BattleKnownTargetMove.cpp:15, BattleKnownTargets.cpp:12 |  |
+| `-BattleKnownMoveMax` | Value | 0 | BattleKnownTargetMove.cpp:20 |  |
+| `-BattleKnownMoveRange` | Value | 2500. | BattleKnownTargetMove.cpp:18 |  |
+| `-BattleKnownMoveSquadRadius` | Value | 5000. | BattleKnownTargetMove.cpp:19 |  |
+| `-BattleKnownTargetFire` | Value | 0 | BattleKnownTargetMove.cpp:17, BattleKnownTargets.cpp:12 |  |
 | `-BattleKnownTargetFireTrial` | Param | off | BattleLeaderRuntime.cpp:252 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
 | `-BattleLauncherDamage` | Value | 60.f | BattleArms.cpp:158 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |

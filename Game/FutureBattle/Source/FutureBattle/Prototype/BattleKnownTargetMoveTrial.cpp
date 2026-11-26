@@ -39,7 +39,7 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  auto Reset=[&]()
  {
   if(KnownMoves.Contains(2))EndKnownMove(2,TestNow,TEXT("known_move_test_reset"));
-  CancelCoverAction(2);CoverApproaches.Remove(2);SoldierPaths.Remove(2);FirePositions.Remove(2);
+  CancelCoverAction(2);TestWorld->GetSubsystem<UBattleCover>()->Release(2);CoverApproaches.Remove(2);SoldierPaths.Remove(2);FirePositions.Remove(2);
   KnownFireSearches.Reset();KnownMoveAfter.Reset();KnownMoveCursor.Reset();
   for(auto& FireBudget:KnownFireBudgets)FireBudget=BattleKnownFire::FBudget();
   for(auto& MoveBudget:KnownMoveBudgets)MoveBudget=FKnownMoveBudget();
@@ -62,7 +62,8 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  TestWorld->GetSubsystem<UBattleCover>()->BuildSlots();Reset();
  const auto Blocked=SelectKnownFire(2,Start+FVector(0,0,60),TestNow);
  const bool Started=!Blocked.Ready() && TryStart();const int32 BeforeShot=Shooter.ShotSequence;
- bool Within=true,Arrived=false;
+ bool Within=true,Arrived=false,RecheckedHidden=false,HiddenDidNotFire=false;
+ const int32 SensorsBefore=Count(TEXT("known_fire_sensor_checks"));
  if(Started)
  {
   for(int32 Frame=0;Frame<600;++Frame)
@@ -70,10 +71,19 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
    TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);
    Within &= FVector::Dist2D(Position(2),Start)<=BattleKnownFire::MoveRange()+1.;
    if(const auto* Walk=KnownMoves.Find(2);Walk && Walk->Arrived>=0)Arrived=true;
+   if(Arrived && !RecheckedHidden)
+   {
+    // Keep the shared observation unchanged while the real target is no longer visible.
+    RecheckedHidden=true;const int32 HiddenShots=Shooter.ShotSequence;
+    Put(251,Start+FVector(50000,0,0));
+    for(int32 HiddenFrame=0;HiddenFrame<30;++HiddenFrame){TestNow+=1./30.;Observe();Follow(2,1.f/30.f,TestNow);}
+    HiddenDidNotFire=Shooter.ShotSequence==HiddenShots;
+    Put(251,Enemy);Observe();
+   }
    if(Count(TEXT("known_move_arrived_fired"))>0)break;
   }
  }
- Check(TEXT("move_arrive_personal_fire"),Started && Arrived && Shooter.ShotSequence>BeforeShot && Count(TEXT("known_move_arrived_fired"))==1 && Within);
+ Check(TEXT("move_arrive_personal_fire"),Started && Arrived && Shooter.ShotSequence>BeforeShot && Count(TEXT("known_move_arrived_fired"))==1 && Within && RecheckedHidden && HiddenDidNotFire && Count(TEXT("known_fire_sensor_checks"))>SensorsBefore);
  const int32 Once=Count(TEXT("known_move_arrived_fired"));KnownMoveShot(2,251,TestNow);
  Check(TEXT("move_first_shot_once"),Once==1 && Count(TEXT("known_move_arrived_fired"))==Once);
  Reset();const bool StartForOrder=TryStart();const int32 OrderBefore=Count(TEXT("known_move_cancel_order"));++Shooter.OrderRevision;
@@ -92,16 +102,32 @@ int32 UBattleLeaderRuntime::RunKnownTargetMoveTrial()
  Plans.FindChecked(Shooter.SquadID).Center=Start+FVector(BattleKnownFire::MoveSquadRadius()+10.,0,0);
  const bool OutsideSquad=!KnownMovePlaceAllowed(2,Start,Start);Plans.FindChecked(Shooter.SquadID).Center=Start;Squad.DefenseRadius=100;
  const bool OutsideDefend=!KnownMovePlaceAllowed(2,Start,Start+FVector(200,0,0));Squad.DefenseRadius=5000;Squad.bSectorMission=true;
- const FVector OutsideSector=Start+FVector(BattleSectors::Cell(Start).X>=0?-100000.:100000.,0,0);
- Check(TEXT("move_distance_mission_limits"),OutsideRange && OutsideSquad && OutsideDefend && !KnownMovePlaceAllowed(2,Start,OutsideSector));
+ const FVector SectorStart(10,100,Start.Z),OutsideSector(-10,100,Start.Z);
+ Squad.Destination=SectorStart;Plans.FindChecked(Shooter.SquadID).Center=SectorStart;
+ const bool SectorRejected=!KnownMovePlaceAllowed(2,SectorStart,OutsideSector);Squad.bSectorMission=false;
+ Check(TEXT("move_distance_mission_limits"),OutsideRange && OutsideSquad && OutsideDefend && SectorRejected && KnownMovePlaceAllowed(2,SectorStart,OutsideSector));
  Reset();TArray<int32> Busy;
  for(int32 Member:Squad.Members)if(Member!=2 && TestStore->Find(Member)->IsAlive()){FCoverApproach Reserved;Reserved.Goal=Start+FVector(0,500,0);CoverApproaches.Add(Member,Reserved);Busy.Add(Member);}
  Check(TEXT("move_shared_limit"),!StartKnownMove(2,TestNow));for(int32 Member:Busy)CoverApproaches.Remove(Member);
  Reset();const bool First=TryStart();const int32 Starts=Count(TEXT("known_move_started"));
- Check(TEXT("move_no_double_start"),First && !StartKnownMove(2,TestNow+2.) && Count(TEXT("known_move_started"))==Starts);
- Reset();const bool StaleStart=TryStart();const int32 StaleBefore=Count(TEXT("known_move_cancel_stale"));TestSense->Reset();
+ const bool NoDouble=First && !StartKnownMove(2,TestNow+2.) && Count(TEXT("known_move_started"))==Starts;
+ // An upper-priority approach replacing this episode must keep its own reservation/path.
+ if(First){auto& Replacement=CoverApproaches.FindChecked(2);Replacement.Target=252;Replacement.bCharge=true;}
+ StepKnownMove(2,1.f/30.f,TestNow+.01);
+ Check(TEXT("move_no_double_start"),NoDouble && !KnownMoves.Contains(2) && CoverApproaches.Contains(2) &&
+  CoverApproaches.FindChecked(2).Target==252 && SoldierPaths.Contains(2));
+ Reset();const bool StaleStart=TryStart();const int32 StaleBefore=Count(TEXT("known_move_cancel_stale"));
+ FVector StaleGoal=Start;bool StaleWasFree=false;
+ if(StaleStart)
+ {
+  StaleWasFree=KnownMoves.FindChecked(2).Slot==INDEX_NONE;
+  StaleGoal=StaleWasFree?Start:KnownMoves.FindChecked(2).Goal;
+  for(int32 WalkFrame=0;WalkFrame<10;++WalkFrame){TestNow+=1./30.;Observe();StepKnownMove(2,1.f/30.f,TestNow);}
+ }
+ const bool LeftStart=FVector::Dist2D(Position(2),Start)>40.;TestSense->Reset();
  for(int32 Frame=0;Frame<600 && KnownMoves.Contains(2);++Frame){TestNow+=1./30.;StepKnownMove(2,1.f/30.f,TestNow);}
- Check(TEXT("move_stale_return"),StaleStart && !KnownMoves.Contains(2) && Count(TEXT("known_move_cancel_stale"))==StaleBefore+1);
+ Check(TEXT("move_stale_return"),StaleStart && LeftStart && !KnownMoves.Contains(2) && Count(TEXT("known_move_cancel_stale"))==StaleBefore+1 &&
+  FVector::Dist2D(Position(2),StaleGoal)<40. && !CoverApproaches.Contains(2) && !SoldierPaths.Contains(2));
  Reset();bool Tokens=true;for(int32 Token=0;Token<16;++Token)Tokens &= KnownMoveSpend(2,TestNow,0);
  const bool Deferred=!KnownMoveSpend(2,TestNow,0);auto& TeamBudget=KnownFireBudgets[Shooter.Team];
  Check(TEXT("move_ray_budget"),Tokens && Deferred && TeamBudget.Used==16 && KnownMoveBudgets[Shooter.Team].Rays==16);
