@@ -46,7 +46,8 @@ int32 BattleTactics::SupplyCarHunt()
 }
 bool BattleTactics::SupplyCarFirst()
 {
- static const bool bOn=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarFirst="),Value);return Value!=0;}();
+ // Default 1 since 2026-11-27 (user decision; =0: only a vehicle within FieldSupplyRange).
+ static const bool bOn=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarFirst="),Value);return Value!=0;}();
  return bOn;
 }
 int32 BattleTactics::SupplyCarPost()
@@ -61,12 +62,14 @@ bool BattleTactics::SupplyCarTarget()
 }
 float BattleTactics::SupplyCarHealStock()
 {
- static const float Stock=[](){float Value=3000.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarHealStock="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,100000.f):3000.f;}();
+ // 1000 since 2026-11-27 (user decision: 3000 never ran out in a match).
+ static const float Stock=[](){float Value=1000.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarHealStock="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,100000.f):1000.f;}();
  return Stock;
 }
 bool BattleTactics::SupplyCarRecover()
 {
- static const bool bOn=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarRecover="),Value);return Value!=0;}();
+ // Default 1 since 2026-11-27 (user decision; =0 restores the home-only recovery).
+ static const bool bOn=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarRecover="),Value);return Value!=0;}();
  return bOn;
 }
 float BattleTactics::SpotTrack()
@@ -176,17 +179,20 @@ int32 BattleTactics::JoinFightMax()
 }
 int32 BattleTactics::BurstFire()
 {
- static const int32 Rounds=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleBurstFire="),Value);return Value<2?0:FMath::Min(Value,10);}();
+ // Default 3 since 2026-11-27 (user decision; =0 or =1 restores one shot each AIShotInterval).
+ static const int32 Rounds=[](){int32 Value=3;FParse::Value(FCommandLine::Get(),TEXT("BattleBurstFire="),Value);return Value<2?0:FMath::Min(Value,10);}();
  return Rounds;
 }
 float BattleTactics::BurstPause()
 {
- static const float Seconds=[](){float Value=1.f;FParse::Value(FCommandLine::Get(),TEXT("BattleBurstPause="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,.2f,5.f):1.f;}();
+ // Default 1.4 since 2026-11-27 (user decision; 1.0 before).
+ static const float Seconds=[](){float Value=1.4f;FParse::Value(FCommandLine::Get(),TEXT("BattleBurstPause="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,.2f,5.f):1.4f;}();
  return Seconds;
 }
 int32 BattleTactics::CoverPeekShots()
 {
- static const int32 Shots=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverPeekShots="),Value);return FMath::Clamp(Value,0,30);}();
+ // Default 3 since 2026-11-27 (user decision; =2 is the count before, =0 UBattleTuning::AICoverShotsPerPeek).
+ static const int32 Shots=[](){int32 Value=3;FParse::Value(FCommandLine::Get(),TEXT("BattleCoverPeekShots="),Value);return FMath::Clamp(Value,0,30);}();
  return Shots;
 }
 int32 BattleTactics::CarbineShotRounds()

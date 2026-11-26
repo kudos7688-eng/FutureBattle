@@ -764,7 +764,13 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
   if(Diag.Enabled && U->CoverPhase==3)if(auto* WhyEpisode=Diag.PeekWhy.Find(ID))++WhyEpisode->WalkFrames;
   const FVector Goal=U->CoverPhase==1?U->CoverAnchor:U->CoverPeek;
   const FVector Before=Position(ID),D=(Goal-Before).GetSafeNormal2D();
-  if(FVector::Dist2D(Before,Goal)<40)
+  // Stage 2 edge/opening rays certify the selected peek, not the old 40 cm arrival disk.
+  // Keep legacy cover (including values 0/1) unchanged; never move the sensor ahead of the body.
+  const auto* PreciseEpisode=BattleKnownFire::MoveEnabled() && !Player && U->CoverPhase==3?KnownMoves.Find(ID):nullptr;
+  const bool bPreciseKnownPeek=PreciseEpisode && PreciseEpisode->Arrived>=0 && PreciseEpisode->Source<2 &&
+   PreciseEpisode->Revision==U->CoverOrderRevision && PreciseEpisode->Observation.TargetID==U->CoverTargetID &&
+   PreciseEpisode->Goal==U->CoverAnchor && PreciseEpisode->Peek==U->CoverPeek;
+  if(FVector::Dist2D(Before,Goal)<(bPreciseKnownPeek?1.:40.))
   {U->CoverPhase=U->CoverPhase==1?2:4;U->CoverSeconds=U->CoverPhase==2?CoverHideSeconds(ID):AIPeekFire?FMath::Clamp(GetDefault<UBattleTuning>()->AICoverPeekSeconds,.1f,3.f):1.2f;if(U->CoverPhase==4 && !Player)
    {
     CoverPeekShots.Add(ID,0);
@@ -781,7 +787,18 @@ bool UBattleLeaderRuntime::StepCoverAction(int32 ID,float Dt,double Now)
   else if(U->CoverSeconds<=0){Diag.Cover(U->CoverPhase==1?TEXT("cancel_move_timeout_to_hidden"):TEXT("cancel_move_timeout_to_peek"));CancelCoverAction(ID,TEXT("timeout"));return false;}
   else
   {
-   if(B.Actor.IsValid()){B.Actor->AddMovementInput(D);B.Velocity=B.Actor->GetVelocity();}
+   if(B.Actor.IsValid())
+   {
+    if(bPreciseKnownPeek && FVector::Dist2D(Before,Goal)<40.)
+    {
+     // Bound the final step just like follower capsules; character acceleration must not overshoot a 1 cm goal.
+     B.Actor->GetCharacterMovement()->StopMovementImmediately();
+     FHitResult PrecisePeekHit;
+     B.Actor->AddActorWorldOffset(D*FMath::Min(250.f*Dt,float(FVector::Dist2D(Before,Goal))),true,&PrecisePeekHit);
+     B.Velocity=(Position(ID)-Before)/FMath::Max(.001f,Dt);
+    }
+    else{B.Actor->AddMovementInput(D);B.Velocity=B.Actor->GetVelocity();}
+   }
    else {FHitResult Hit;B.Capsule->MoveComponent(D*FMath::Min(250.f*Dt,float(FVector::Dist2D(Before,Goal))),B.Capsule->GetComponentQuat(),true,&Hit);auto& F=Manager->GetFragmentDataChecked<FBattleFollowerFragment>(B.Entity);F.Position=B.Capsule->GetComponentLocation();B.Velocity=(F.Position-Before)/FMath::Max(.001f,Dt);}
   }
  }
