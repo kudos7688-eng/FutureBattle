@@ -16,8 +16,8 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 
-// Default 1 (user decision 2026-11-27): known-target fire from place; =2 adds the moves, =0 restores the old play.
-bool BattleKnownFire::MoveEnabled(){static const bool On=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownTargetFire="),V);return V==2;}();return On;}
+// Default 2 (user decision 2026-11-27): known-target fire plus moves to a firing position; =1 fires from place only, =0 restores the old play.
+bool BattleKnownFire::MoveEnabled(){static const bool On=[]{int32 V=2;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownTargetFire="),V);return V==2;}();return On;}
 double BattleKnownFire::MoveCommit(){static const double Seconds=[]{double V=12.;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownMoveCommit="),V);return FMath::IsFinite(V)?FMath::Clamp(V,0.,60.):12.;}();return Seconds;}
 double BattleKnownFire::MoveWait(){static const double Seconds=[]{double V=1.5;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownMoveWait="),V);return FMath::IsFinite(V)?FMath::Clamp(V,.1,5.):1.5;}();return Seconds;}
 bool BattleKnownFire::MoveMarch(){static const bool On=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleKnownMoveMarch="),V);return V!=0;}();return On;}

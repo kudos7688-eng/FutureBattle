@@ -258,7 +258,7 @@ UBattleTuning の Config 値は DefaultGame.ini を優先する。既定は読�
 | `-BattleKnownMoveSquadRadius` | Value | 5000. | BattleKnownTargetMove.cpp:65 |  |
 | `-BattleKnownMoveSweepBudget` | Value | 24 | BattleKnownTargetMove.cpp:70 |  |
 | `-BattleKnownMoveWait` | Value | 1.5 | BattleKnownTargetMove.cpp:22, BattleKnownTargetMoveTrial.cpp:325 |  |
-| `-BattleKnownTargetFire` | Value | 1 | BattleKnownTargetMove.cpp:20, BattleKnownTargets.cpp:12 | Default 1 (user decision 2026-11-27). |
+| `-BattleKnownTargetFire` | Value | 2 | BattleKnownTargetMove.cpp:20, BattleKnownTargets.cpp:12 | Default 2 (user decision 2026-11-27). |
 | `-BattleKnownTargetFireTrial` | Param | off | BattleKnownTargetMove.cpp:504, BattleLeaderRuntime.cpp:252 |  |
 | `-BattleLargeFieldTest` | Param | off | BattleGameMode.cpp:143 |  |
 | `-BattleLauncherDamage` | Value | 60.f | BattleArms.cpp:158 | FloatSwitch → BattleArms.cpp:35（ヘルパー経由） |
