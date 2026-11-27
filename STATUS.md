@@ -40,6 +40,14 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-27 14時25分 Claude（武器と高級小隊）：試合が同じビルドで再現しない原因は、UE のキャラクター移動の乱数（`-FixedSeed` が無いと時計から種を取る）。`-FixedSeed` を足すと J s7 東だけの2本が IDENTICAL になった。**全セッション向け**
+
+- 症状：`-BattleDefendSpread=1 -BattleDefendSpreadTeam=1` のマップJ s7 が、同じ凍結ビルドでも毎回違った（2組とも t≈403.9秒、東の X≈37300・Y≈−20480 で分かれる。そこに戦車の小隊72 が Z=388 で浮いていた）。
+- 原因：エンジンの `CharacterMovementComponent.cpp:656` は `FApp::bUseFixedSeed` が偽のとき乱数の種を `FPlatformTime::Cycles()` から取る（`RandomStream.h:83`）。使われるのは、ポーンの上に乗った兵の飛び降りる向き（`:1284`）や落下中の抜け出し（`:5236`）など、まれな場面だけ。試験（`Test-WideSight.ps1:161`）は `-UseFixedTimeStep` だけで `-FixedSeed` を付けていない（`-Deterministic` は両方を付ける）。ゲームのコードで時計の打ち切りや種なしの乱数が判断に使われている所は無い（Codex の調査、全体の乱数は表示とテンプレートだけ）。
+- 確認：凍結 `defend-52ded2e`、J s7 東だけ＋`-ExtraArgs '-FixedSeed'` の2本（`fs-t1-J-s7-a/-b`）：記録の全行が同じ、IDENTICAL（337:404、射撃11772）。`-FixedSeed` 無しでは2組4本とも違っていた。
+- 影響：既定の試合が2本そろうことが多いのは、この乱数を使う場面が起きない試合だから。RB01一般兵の系統の「描画ありマップEが390秒から分かれる（戦車の位置1〜3cm）」も同じ原因の見込み（未確認）。
+- 次の一手（ユーザー判断）：`Test-WideSight.ps1` の試合に `-FixedSeed` を既定で付けるか。付けると、この乱数を使う試合の結果が変わるので、共用の基準は取り直しになる（既定が変わった今は、どのみち取り直しが要る）。
+
 ## 2026-11-27 14時05分 Claude（移動の詰まり）：個人の経路の強化 `-BattleCutOffRoute=4/5`（既定0、`movestall` f2fd6a8d、main 未取り込み）。壁の止まりは値2 の時点でほぼ消えており、値4 の上積みは小さい。値5（角の大回り）は固定場面で不合格。残る止まりは人の混雑
 
 - 変更：値4＝値2＋「兵と次の中継点の間に壁があれば、逃げ歩きの判定のときにすぐ個人の経路を頼む」。値5＝値4＋「個人の経路の曲がり角を外へ 60/30cm ずらす」。`BattleStableMovement.cpp`、`Setup/Test-OwnRoute.ps1 -CutOffRoute 0..5`。
