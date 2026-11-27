@@ -40,6 +40,13 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-27 13時50分 Claude（敵部隊への攻撃命令）：AI の追跡 `-BattleSpotTrack` を6 seed に増やした（ユーザー指示「試合を増やして判断」）。5秒も15秒＋記憶15秒も、与えた損害・撃破・戦死を一定の向きに動かさない。既定は0のまま
+
+- **条件**：マップK seed 7・43・239・277・307・331、両軍に切替、凍結 targetorder-1（既定は main-714523e と IDENTICAL）、基準は既存の `cmb1-K-default-s*`（取り直していない）。追加は8本（`to1-K-track5-s*`・`to1-K-track15-s*`）。
+- **追跡5秒**（6 seed の平均、基準→試験、上がった seed の数）：与ダメージ 自軍 25902→26993（+4%、3/6）・敵軍 26645→28245（+6%、4/6）。撃破 161→163（3/6）・157→167（4/6）。戦死 136→141（3/6）・143→144（3/6）。得点 353→356・384→366。
+- **追跡15秒＋記憶15秒**：与ダメージ 25902→25836（−0%、3/6）・26645→25453（−4%、2/6）。撃破 161→158（3/6）・157→149（1/6）。戦死 136→132（2/6）・143→137（3/6）。得点 353→392（4/6）・384→331（0/6）。敵軍の得点だけ6 seed とも下がったが、損害・撃破・戦死はそろっていないので原因は未調査。
+- **判断**：seed ごとの振れ（与ダメージで −23%〜+39%）が平均の差より大きく、どちらも効果があるとは言えない。計画どおり8本で打ち切り。既定は変えていない（ユーザーへ「今のまま」を勧める）。追跡が働いた回数の記録が無いことは変わらず。
+
 ## 2026-11-27 10時30分 Claude（敵部隊への攻撃命令）：敵部隊を選んで攻撃する命令、敵の地図表示の延長、閃光を目標にする命令。**既定の変更（18時の回で main へ）** — 砲の閃光 `-BattleArtilleryFlash`・`-BattleTankGunFlash` 既定1（ユーザー決定）
 
 - **変更範囲**（ブランチ `targetorder`：669ea9b8、18bd273f、ae85a7aa。実装は Codex、確認は Claude）：`BattleEnemyTrack.h/.cpp`（プレイヤー用の敵部隊の表、`-BattleEnemyMapTrack` 既定15秒・`-BattleEnemyMapKeep` 既定60秒）、`BattleTargetOrder.cpp`（敵部隊への攻撃命令、閃光への攻撃命令、自己試験 `-BattleTargetOrderTest`）、`BattleController`・`BattleLeaderRuntime`（命令の目標の兵を優先して撃つ。表が空なら何もしない）・`BattleHUD`（追跡・記憶のアイコン、攻撃目標の枠、閃光のアイコン）、`BattleArtillery.cpp`（閃光2切替の既定1）、`Test-WideSight.ps1 -TargetOrderTest`、`Play-Area.ps1 -EnemyMapTrack/-EnemyMapKeep`。操作は PROTOTYPE.md の「敵部隊への攻撃命令と敵の地図表示」。
