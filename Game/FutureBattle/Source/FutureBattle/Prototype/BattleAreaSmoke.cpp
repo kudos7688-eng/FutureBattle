@@ -490,9 +490,9 @@ void UBattleLeaderRuntime::RunAreaSmoke()
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleObservedTactics=")))Check(!BattleTactics::ObservedTactics(),TEXT("observed tactics defaults OFF"));
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleObservedArmour=")))Check(!BattleTactics::ObservedArmour(),TEXT("observed armour defaults OFF"));
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleVehicleHitCover=")))Check(!BattleTactics::VehicleHitCover(),TEXT("vehicle hit cover defaults OFF"));
-    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleTankGunFlash=")))Check(!BattleTactics::TankGunFlash(),TEXT("tank gun flash defaults OFF"));
+    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleTankGunFlash=")))Check(BattleTactics::TankGunFlash(),TEXT("tank gun flash defaults ON"));
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleArtilleryPosts=")))Check(!BattleTactics::ArtilleryPosts(),TEXT("artillery posts default OFF"));
-    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleArtilleryFlash=")))Check(!BattleTactics::ArtilleryFlash(),TEXT("artillery flash defaults OFF"));
+    if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleArtilleryFlash=")))Check(BattleTactics::ArtilleryFlash(),TEXT("artillery flash defaults ON"));
     if(!FCString::Strifind(FCommandLine::Get(),TEXT("BattleSPGRange=")))Check(ArtilleryMaxRange(true)==GetDefault<UBattleTuning>()->SPGRange,TEXT("SPG range defaults to config"));
     // Armour AI, stage 3 (BattleArmourAI.cpp): the tank's objective is kept on the next pick and its overwatch post lies short of the
     // point on the own side; a stopped hull turns no faster than its turn rate; no reaction without a threat or a hit; an enemy vehicle

@@ -48,13 +48,13 @@ bool BattleTactics::VehicleHitCover()
 
 bool BattleTactics::TankGunFlash()
 {
- static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleTankGunFlash="),V);return V==1;}();
+ static const bool On=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleTankGunFlash="),V);return V==1;}();
  return On;
 }
 
 bool BattleTactics::ArtilleryFlash()
 {
- static const bool On=[]{int32 V=0;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryFlash="),V);return V==1;}();
+ static const bool On=[]{int32 V=1;FParse::Value(FCommandLine::Get(),TEXT("BattleArtilleryFlash="),V);return V==1;}();
  return On;
 }
 
