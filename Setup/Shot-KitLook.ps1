@@ -12,7 +12,7 @@ $dir=Join-Path $PSScriptRoot 'KitShots'; New-Item -ItemType Directory -Force $di
 if (!$Name) { $Name = "$Map-kit$KitLook" }
 $prefix=(Join-Path $dir $Name).Replace([char]92,[char]47)
 $a=@(('"'+$project+'"'),"/Game/Prototype/Lvl_BattleWide_$Map",'-game','-unattended','-nosound','-nosplash','-RenderOffscreen','-ResX=1600','-ResY=900',
-    '-BattleWideMixed','-BattleArea','-BattleStartRunning',"-BattleKitLook=$KitLook",('-BattleKitShot="'+$prefix+'"'),('-BattleKitShotCams="'+$Cams+'"'),('-abslog="'+$prefix+'.log"'))+$Extra
+    '-BattleWideMixed','-BattleArea','-BattleStartRunning','-dpcvars=r.MotionBlurQuality=0',"-BattleKitLook=$KitLook",('-BattleKitShot="'+$prefix+'"'),('-BattleKitShotCams="'+$Cams+'"'),('-abslog="'+$prefix+'.log"'))+$Extra
 $p=Start-Process -FilePath $editor -ArgumentList $a -WindowStyle Hidden -PassThru
 if (!$p.WaitForExit(240000)) { Stop-Process -Id $p.Id; throw "Shot timed out. See $prefix.log" }
 Select-String -LiteralPath "$prefix.log" -Pattern 'BATTLE_KIT' | ForEach-Object { $_.Line }
