@@ -72,6 +72,33 @@
 - 前線の線を敵の区画の手前で止める決まり（2.1）を、取りに向かっている区画の列までは出す（スポットの緩和の B-3 と同じ所。系統「戦略層」「群制御」と調整が要る）。
 - 群（突入群・本拠地攻撃隊）の目標に敵の区画を足す。
 
+### 3.5 敵の拠点への集中
+
+2026-11-27 ユーザー決定（C56）：兵力を集中させ、ある程度無理をしてでも敵の拠点の区画を取りに行く行動を足す。既存の目撃区画への移動だけでは、試験で撃ち合いが増えても拠点数が動かなかったため。
+
+- `-BattleSectorSeizePoint=1`（既定0、0〜1）。BattleSectorSeize=1 とその既存条件（SeekKnown、区画マップ、エリア戦、対象軍）が必要。
+- 公開の UBattleMatch::Objectives の Position・Owner から敵所有の拠点を候補にする。中立と敵本拠地区画は除外。軍ごとに1秒の表で、自軍の生存兵のいる区画中心から最も近い拠点を1つ選び、同距離は自軍向きの X・Y の小さい順。小隊が向かった後は所有権獲得か全員終了まで固定する（支援・側面移動による一時中断も継続中に含める）。
+- 目撃なしでも選べる。既存の距離・集中・足場の点数に +6。距離上限は SeekKnownRange。上限 `-BattleSectorSeizePointMax=8`（2〜12）、集合数 `-BattleSectorSeizePointMin=4`（1〜8）、最初の集合到着からの待ち上限 `-BattleSectorSeizePointWait=45`（0〜120秒）。Min が Max を超えても変更せず、待ち時間で出発する。
+- 従来対象に加え、区画任務・Mission・Defend・任務区画へ到着・接触なしの小銃小隊は、購入目的つきでも借りられる。本拠地攻撃枠・非前線群・IntelPurpose・奇襲・襲撃の除外と、上位の退却・補給・健康条件は維持。
+- 自軍の各拠点（本拠地含む）と隣8区画にいる、生存者のある小銃小隊のうち Mission/Defend の小隊を小隊ID順に2個予約し、選定から外す（2個未満なら全員）。移動中や一時任務中の小隊を「残る2個」に数えない保守的な実装。1秒の表で、重なる拠点では1小隊が複数拠点の守備に数えられる。
+- 集合先は拠点の隣8区画から、通れる・目撃なし・自軍本拠地に拠点区画より近い区画。到着用遮蔽スロット数の多い順、同点は自軍向きの X・Y 順。`SEIZE SECTOR / ASSEMBLE` で攻撃移動し、隊長の集合区画入区数が Min 以上、または最初の入区から Wait 秒で `SEIZE SECTOR / ASSAULT POINT` へ全員を進める。候補なしなら直接突入。FIRE・支援・側面移動中はその処理を優先し、復帰先を突入先へ変える。集合中の本人視認は FIRE、見失って4秒・被害なしで集合先へ戻る。
+- 拠点目標は目撃消失60秒・180秒打切りを使わず、出発から360秒で SeizeEndPointTimeout（接触中・取った後も共通）。隊長入区後に目撃なし15秒で HOLD TAKEN。公開の持ち主が自軍になるまで最大120秒待ち、その後に従来の「残る／隣へ／任務復帰」を開始する。360秒の全体期限が先ならそちらを優先。支援・側面移動からの復帰でも同じ期限・集合先を使用。
+- SeizingSector は既存の「SEIZE SECTOR で始まり / FIRE を含まない」判定で ASSEMBLE／ASSAULT POINT の AttackMove も区画扱いになる。StepSectorDefend が true の間は新規選定まで進まない（接触後30秒と後退中も含む）。
+- Event：SeizePointPick（軍の集中先選択）、SeizePointAssemble（小隊が集合開始）、SeizePointGo（軍の突入解禁）、SeizePointEnter（小隊長入区）、SeizePointTaken（軍の集中先の所有権獲得）、SeizeEndPointTimeout。行 `BATTLE_SECTOR_SEIZE_POINT t=%.0f team=%d point=%d cell=%d,%d what=pick|go|taken|drop squads=%d`。drop は全小隊終了による集中解除。Taken は区画の静穏判定 SeizeTaken とは別。
+
+### 3.6 奪われた区画への反撃
+
+2026-11-27 ユーザー決定（C56）：敵陣に入り込んだ自軍2小隊が約5分防衛し、相手の手すきの front_reserve 2〜6小隊が向かわなかった試遊を受け、侵入された区画へ反撃を集中する。
+
+- `-BattleSectorSeizeCounter=1`（既定0、0〜1）。依存条件は3.5と同じ。上限 `-BattleSectorSeizeCounterMax=5`（1〜8）。
+- 軍の有効な KnownSpots がある区画のうち、自軍拠点（本拠地含む）の区画・隣8区画、または自軍本拠地の方が敵本拠地より近い区画を「入り込まれた区画」とする。真の敵位置は読まない。
+- 点数 +5、上限は min(CounterMax, max(2, 目撃マス数×2))。Point と重なれば点数は加算、上限は大きい方。ログの kind は point を優先するが、Counter の Go／Taken も数える。制限時間は Point の360秒を優先。
+- 対象と守備予約は3.5と同じ。ただし反撃先が予約対象の自軍拠点の区画そのものなら、その拠点の2個予約を免除する。複数拠点の予約が重なる場合は他拠点の予約は残す。group 無し・購入目的なしの手すき予備は既存でも対象なので専用の拡張は不要。
+- 出発時の目標種別を保持し、180秒の打切りを300秒に延ばす。目撃消失60秒と取った後の保持・復帰は既存どおり（従来の消失打切りは未入区時、支援からの復帰は入区後にも検査）。
+- Event：SeizeCounterGo／SeizeCounterTaken。どちらかの新切替が1のときだけ `BATTLE_SECTOR_SEIZE` に `kind=sight|point|counter` を足す。両方0は既存の行をそのまま使う。
+
+実装は Prototype/BattleSectorSeizePoint.cpp に分離。入口・中断復帰・1秒更新・Reset の追加は新切替の内側。今回の依頼により固定場面の自己試験は追加せず、ビルド・UE・試合は未実施。切替0不変はコード差分による確認であり、IDENTICAL の実測ではない。
+
 ## 4. 維持：区画の単位で守る -BattleSectorDefend=1/2
 
 2026-11-27 実装（未ビルド・未実行）。親切替は既定0・0〜2。-BattleSectorDefendTeam=-1（両軍、0/1で片軍）、-BattleSectorDefendBack=30（5〜120秒）。区画マップのエリア戦、AI管理下の区画任務で、到着後に計画 Mission・命令 Defend になった小隊を対象とする。兵種の追加制限はない。直接操作・明示命令の小隊には介入しない。

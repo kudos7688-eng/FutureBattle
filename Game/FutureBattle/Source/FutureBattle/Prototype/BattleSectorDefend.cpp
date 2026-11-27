@@ -217,6 +217,8 @@ bool UBattleSquadTactics::ResumeSeizeSector(int32 SID,const FBattleSquadObservat
  const bool Healthy=O.RecentDamage==0 && O.Armed>0 && O.Armed>=FMath::CeilToInt(O.Living*.6f) &&
   O.Living>S->Members.Num()*Tune->SquadRetreatLivingRatio &&
   O.Health/FMath::Max(1.f,O.FullHealth(Tune->Health))>=Tune->SquadRetreatHealthRatio;
+ if(BattleTactics::SectorSeizePoint()>0 || BattleTactics::SectorSeizeCounter()>0)
+  return ResumeSeizeExtended(SID,O,Visible,Healthy);
  if(!Healthy || (Open->TakenAt<0. && Now-Open->Start>=180.) || Now-Open->LastKnown>=60. ||
     (Open->TakenAt>=0. && Now-Open->TakenAt>=BattleTactics::SectorSeizeHold()+90.))
  {EndSeize(SID);SeizeSuspended.Remove(SID);return false;}
@@ -230,6 +232,8 @@ bool UBattleSquadTactics::ResumeSeizeSector(int32 SID,const FBattleSquadObservat
 
 void UBattleSquadTactics::CheckSectorTrials()
 {
+ if(BattleTactics::SectorSeize()>0 && (BattleTactics::SectorSeizePoint()>0 || BattleTactics::SectorSeizeCounter()>0))
+  for(int32 SeizeTeam=0;SeizeTeam<2;++SeizeTeam)if(SectorSeizeEnabled(SeizeTeam))UpdateSeizeExtensions(SeizeTeam);
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  if(BattleTactics::SectorDefend()>0)
  {

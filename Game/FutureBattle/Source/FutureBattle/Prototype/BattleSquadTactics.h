@@ -129,6 +129,34 @@ private:
   double Start=0.,EnterAt=-1.,QuietSince=-1.,TakenAt=-1.,EndAt=-1.,LastKnown=0.,LastSeen=-1.;
  };
  TMap<int32,FSeizeSector> SeizeSectors;
+ // Written only inside the Point/Counter trials; no extra per-seize state on the legacy path.
+ struct FSeizePointPlan
+ {
+  int32 Point=INDEX_NONE;
+  FIntPoint Cell=FIntPoint::ZeroValue,Assembly=FIntPoint(-1,-1);
+  double Start=0.,FirstAt=-1.,GoAt=-1.;
+  bool Taken=false,Committed=false;
+ };
+ struct FSeizeExtra{int32 Point=INDEX_NONE;bool Counter=false;double CapturedAt=-1.;};
+ FSeizePointPlan SeizePoints[2];
+ TMap<int32,FSeizeExtra> SeizeExtras;
+ TMap<int32,TSet<FIntPoint>> SeizeGuards[2];
+ TSet<FIntPoint> SeizeTrialOwn[2],SeizeTrialKnown[2];
+ TMap<FIntPoint,int32> SeizeTrialSlots;
+ double SeizeTrialAt[2]={-100.,-100.},SeizeTrialSlotsAt=-100.;
+ void ResetSeizeExtensions();
+ void UpdateSeizeExtensions(int32 Team);
+ bool SeizeCounterCell(int32 Team,FIntPoint Cell,int32* Count=nullptr) const;
+ bool SeizeGuardAllows(int32 SID,int32 Team,FIntPoint Cell) const;
+ bool PickSeizeExtended(int32 SID,const FBattleSquadState& S,const FVector& Here,const FIntPoint* Around,FIntPoint& Out);
+ bool BeginSeizeExtended(int32 SID,const FBattleSquadObservation& O,bool Visible,int32 Threats);
+ bool StartSeizeExtended(int32 SID,FIntPoint Cell,const TCHAR* SightReason);
+ bool StepSeizeExtended(int32 SID,const FBattleSquadObservation& O,bool Visible);
+ bool ResumeSeizeExtended(int32 SID,const FBattleSquadObservation& O,bool Visible,bool Healthy);
+ const TCHAR* SeizeExtendedEnd(int32 SID,double Now) const;
+ FVector SeizeExtendedGoal(int32 SID,const TCHAR*& Reason) const;
+ bool SeizePointWaiting(int32 SID) const;
+ void LogSeizePoint(int32 Team,const TCHAR* What) const;
  TSet<int32> SeizeSuspended;
  bool ResumeSeizeSector(int32 SID,const FBattleSquadObservation& O,bool Visible);
  void SeizePlanChanged(int32 SID);

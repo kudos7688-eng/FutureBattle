@@ -60,6 +60,8 @@ bool UBattleSquadTactics::PickSeizeSector(int32 SID,const FBattleSquadState& S,c
  double Now,const FIntPoint* Around,FIntPoint& Out)
 {
  if(BattleTactics::SectorSeize()<=0 || !SectorSeizeEnabled(S.Team))return false;
+ if(BattleTactics::SectorSeizePoint()>0 || BattleTactics::SectorSeizeCounter()>0)
+  return PickSeizeExtended(SID,S,Here,Around,Out);
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  const auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  // Only our soldiers' true positions; enemy candidates come exclusively from KnownSpots.
@@ -130,6 +132,8 @@ bool UBattleSquadTactics::BeginSeizeSector(int32 SID,const FBattleSquadObservati
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  const auto* S=Store->FindSquad(SID);
  if(!S || !SectorSeizeEnabled(S->Team))return false;
+ if(BattleTactics::SectorSeizePoint()>0 || BattleTactics::SectorSeizeCounter()>0)
+  return BeginSeizeExtended(SID,O,Visible,Threats);
  EndSeize(SID);
  const double Now=Clock();
  if(const auto* Last=SeizeSectors.Find(SID);Last && Last->EndAt>=0. && Now-Last->EndAt<5.)return false;
@@ -163,6 +167,8 @@ bool UBattleSquadTactics::StepSeizeSector(int32 SID,const FBattleSquadObservatio
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  auto* S=Store->Squads.Find(SID);
  if(!S || !SectorSeizeEnabled(S->Team))return false;
+ if(BattleTactics::SectorSeizePoint()>0 || BattleTactics::SectorSeizeCounter()>0)
+  return StepSeizeExtended(SID,O,Visible);
  auto& Plan=S->TacticalPlan;
  if(Plan.Action!=EBattleSquadTactic::Engage || !Plan.Reason.StartsWith(TEXT("SEIZE SECTOR")))return false;
  const double Now=Clock();

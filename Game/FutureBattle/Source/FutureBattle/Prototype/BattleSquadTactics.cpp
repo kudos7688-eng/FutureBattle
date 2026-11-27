@@ -37,6 +37,7 @@ void UBattleSquadTactics::Reset()
  if(BattleTactics::SectorSeize()>0)
  {
   SeizeSectors.Reset();SeizeEnded.Reset();SeizeSuspended.Reset();
+  if(BattleTactics::SectorSeizePoint()>0 || BattleTactics::SectorSeizeCounter()>0)ResetSeizeExtensions();
   for(int32 SeizeTeam=0;SeizeTeam<2;++SeizeTeam)
   {SeizeOwnCells[SeizeTeam].Reset();SeizeKnownCells[SeizeTeam].Reset();SeizeCellsAt[SeizeTeam]=-100.;}
  }
