@@ -40,6 +40,12 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-27 9時20分 Claude（グラフィック）：**ユーザー決定** — 素材キットの見た目を試遊（`Play-Area.ps1`）で既定にする
+
+- 決定: `Play-Area.ps1 -KitLook` 既定1（`-BattleKitLook=1` を渡す。`-KitLook 0` で元の見た目）。ゲーム本体の既定（`-BattleKitLook`）は0のままで、評価・計測のスクリプトは変えない（描画ありの性能の基準を動かさないため）。
+- 今は visuals の作業ツリーから遊べる: デスクトップ「FutureBattle 新グラフィック マップK」「…マップL」（`FutureBattle-visuals\Setup\Play-Area.ps1 -Map K|L`）。
+- main への取り込みは、テクスチャを 1K にして入れ直し・素材をコミットした後、18時の回で行う（C++ と素材が入るので main のビルドが要る）。
+
 ## 2026-11-27 9時10分 Claude（グラフィック）：使い回せる素材キット（武器・小物・表面・エフェクト画像）と、表示だけで当てる切替 `-BattleKitLook=1`（既定0）。visuals ブランチ、main へは未取り込み
 
 - 経緯: ユーザー依頼「Blender と Tripo でマップ・武器のグラフィックも。アセットが使えれば使う」「他のマップでも使えるよう素材として作る、使い回しを考慮」「Tripo のクレジットは3割ほど使ってよい」「エフェクトも続けて」。
