@@ -77,6 +77,22 @@ float BattleTactics::SpotTrack()
  static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSpotTrack="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,30.f):0.f;}();
  return Seconds;
 }
+int32 BattleTactics::SectorDefend()
+{
+ static const int32 Mode=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorDefend="),Value);return FMath::Clamp(Value,0,2);}();
+ return Mode;
+}
+int32 BattleTactics::SectorDefendTeam()
+{
+ static const int32 Team=[](){int32 Value=-1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorDefendTeam="),Value);return FMath::Clamp(Value,-1,1);}();
+ return Team;
+}
+float BattleTactics::SectorDefendBack()
+{
+ static const float Seconds=[](){float Value=30.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorDefendBack="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,5.f,120.f):30.f;}();
+ return Seconds;
+}
+
 int32 BattleTactics::SectorSeize()
 {
  static const int32 Mode=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSeize="),Value);return FMath::Clamp(Value,0,1);}();

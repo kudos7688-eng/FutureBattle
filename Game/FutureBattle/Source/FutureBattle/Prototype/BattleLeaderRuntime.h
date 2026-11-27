@@ -820,6 +820,8 @@ public:
  // -BattleSectorSymmetric: the sector of a point as the team reads it - for the east team the sector of the point turned 180
  // degrees, turned back (a point on a sector border then falls on the same side for both teams). Else BattleSectors::Cell.
  FIntPoint SectorCellFor(int32 Team,const FVector& At) const;
+ bool SectorDefendUnitPlace(int32 ID,const FVector& Place) const;
+ void EnforceSectorDefend(int32 ID,double Now);
  // -BattleAttackFocus: each team's current sightings (RouteKnownEnemies), refreshed at most once a second.
  TArray<FVector> FocusEnemies[2];double FocusEnemiesAt[2]={-1.,-1.};
  bool PickAttackFocus(const struct FBattleSquadState& S,double Now,FVector& Out,const TCHAR*& Source);

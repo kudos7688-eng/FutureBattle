@@ -46,6 +46,7 @@ bool UBattleSquadTactics::ReassessSoloFlank(int32 SID,const FBattleSquadObservat
 
 bool UBattleSquadTactics::TryFlank(int32 SID,int32 Supporter)
 {
+ if(BattleTactics::SectorDefend()>0 && DefendingSector(SID))return false;
  if(BattleTactics::BaseGarrison()&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID))return false;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  auto* S=Store->Squads.Find(SID); auto* R=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();

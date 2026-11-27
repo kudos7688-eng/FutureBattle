@@ -102,7 +102,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID); auto& P=Plans.FindChecked(SID);
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
  const bool Sector=(S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission) ||
-  (BattleTactics::SectorSeize()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizingSector(SID));
+  (BattleTactics::SectorSeize()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizingSector(SID)) ||
+  (BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(SID));
  const auto Cell=BattleSectors::Cell(S->Destination);
  const bool NewOrder=P.ArrivalRevision!=S->OrderRevision;
  if(NewOrder || P.ArrivalGoals.IsEmpty())
@@ -298,6 +299,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    {
     const FVector At=Cover->GetSlots()[Slot];
     if(Sector && BattleSectors::Cell(At)!=Cell)continue;
+    if(BattleTactics::SectorDefend()>0 && !GetWorld()->GetSubsystem<UBattleSquadTactics>()->SectorDefendPlace(SID,At))continue;
     // Evaluation (arrival_slot_*): slots in the sector, those without an obstacle 2.5 m ahead, those seen by the nearest threat (-BattleCoverStrict).
     SightExperiment.Cover(TEXT("arrival_slot_in_cell"));
     if(!WallAhead(At)) SightExperiment.Cover(TEXT("arrival_slot_no_wall_ahead"));
@@ -418,6 +420,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
       bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,Want)<FMath::Square(90.)) {Taken=true;break;}
       if(Taken) continue;
       FNavLocation Projected; if(!Nav->ProjectPointToNavigation(Want,Projected,FVector(30,30,200)) || FVector::Dist2D(Projected.Location,Want)>40) continue;
+      if(BattleTactics::SectorDefend()>0 && !GetWorld()->GetSubsystem<UBattleSquadTactics>()->SectorDefendPlace(SID,Projected.Location))continue;
       if(!GetWorld()->LineTraceTestByObjectType(Projected.Location+FVector(0,0,100),Projected.Location-Normal*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic)) || (bNearEnemyArrival?!NearEnemyHides(Projected.Location):!HidesFromThreat(Projected.Location))) continue;
       if(BattleTactics::CoverFirePointEnabled())
       {
@@ -444,6 +447,7 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
       if(Occupied) continue;
       ++Queries; FNavLocation Projected;
       if(!Nav || !Nav->ProjectPointToNavigation(Candidate,Projected,FVector(30,30,200))) continue;
+      if(BattleTactics::SectorDefend()>0 && !GetWorld()->GetSubsystem<UBattleSquadTactics>()->SectorDefendPlace(SID,Projected.Location))continue;
       TArray<FVector> OpenTail;
       if(!ClearMovementSegment(S->Destination,Projected.Location))
       {

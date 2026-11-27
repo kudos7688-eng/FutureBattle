@@ -19,6 +19,8 @@ bool UBattleSquadTactics::Apply(int32 SID, EBattleSquadTactic Action, EBattleOrd
  if(LeavingFlank && FParse::Param(FCommandLine::Get(),TEXT("BattleFlankTrial")))
   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_FLANK_LEAVE t=%.3f squad=%d reason=%s"),GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed,SID,*Reason);
  Store->Squads.FindChecked(SID).TacticalPlan.bAutonomous=true;
+ if(BattleTactics::SectorSeize()>0)SeizePlanChanged(SID);
+ if(BattleTactics::SectorDefend()>0 && Action!=EBattleSquadTactic::Engage)EndSectorDefend(SID);
  Event(FName(BattleSquadTacticName(Action)));
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_ST2_TRANSITION squad=%d action=%s reason=%s goal=%s"),SID,BattleSquadTacticName(Action),*Reason,*Goal.ToCompactString());
  return true;
@@ -431,7 +433,10 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   if(Reaction==2){Event(TEXT("ArmourFallBack"));Retreat();S->TacticalPlan.RetrySeconds=FMath::Max(S->TacticalPlan.RetrySeconds,T->SquadRetreatRetrySeconds);return;}
   CauseOverride.Reset();
  }
+ if(BattleTactics::SectorDefend()>=2 && Emergency && CauseOverride.IsEmpty() && Cause.StartsWith(TEXT("DAMAGE ")) && FallBackSector(SID,O))return;
  if(Emergency) { if(P.Action==EBattleSquadTactic::Flank)Event(TEXT("WideFlankEmergency"));Retreat(); return; }
+ if(BattleTactics::SectorSeize()>0 && ResumeSeizeSector(SID,O,Visible))return;
+ if(BattleTactics::SectorDefend()>0 && StepSectorDefend(SID,O,Visible))return;
  if(P.Action==EBattleSquadTactic::Flank) { EvaluateFlank(SID,O); return; }
  if(P.Action==EBattleSquadTactic::Support) return; // Emergency retreat above overrides team assignment.
  if(P.Action==EBattleSquadTactic::Engage)

@@ -162,6 +162,7 @@ const TCHAR* UBattleLeaderRuntime::KnownMovePlaceRejection(int32 ID,FVector Star
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Unit=Store->Find(ID);
  const auto* Squad=Unit?Store->FindSquad(Unit->SquadID):nullptr;const auto* Plan=Unit?Plans.Find(Unit->SquadID):nullptr;
  if(!Squad || !Plan || Place.ContainsNaN())return TEXT("known_move_reject_mission_invalid");
+ if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,Place))return TEXT("known_move_reject_mission_sector");
  if(FVector::DistSquared2D(Start,Place)>FMath::Square(BattleKnownFire::MoveRange()))return TEXT("known_move_reject_mission_range");
  if(FVector::DistSquared2D(Plan->Center,Place)>FMath::Square(BattleKnownFire::MoveSquadRadius()))return TEXT("known_move_reject_mission_squad_radius");
  const double DefendReach=KnownMoveDefendReach(ID);

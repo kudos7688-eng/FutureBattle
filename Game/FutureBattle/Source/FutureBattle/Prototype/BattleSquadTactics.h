@@ -60,6 +60,11 @@ public:
  void Dump() const;
  void Reset();
  bool SeizingSector(int32 SID) const;
+ bool DefendingSector(int32 SID) const;
+ bool SectorDefendPlace(int32 SID,const FVector& Place) const;
+ bool SectorDefendMoving(int32 SID) const;
+ void SectorDefendReplan(int32 SID);
+
  double Clock() const { return ActiveSeconds; }
  // Spot relaxation entry points. Callers gate trials; helpers take explicit values for isolated smoke tests.
  bool AddKnownSpot(int32 Team,const FVector& At,double Seen,uint8 Kind,bool bLegacy=false);
@@ -124,6 +129,26 @@ private:
   double Start=0.,EnterAt=-1.,QuietSince=-1.,TakenAt=-1.,EndAt=-1.,LastKnown=0.,LastSeen=-1.;
  };
  TMap<int32,FSeizeSector> SeizeSectors;
+ TSet<int32> SeizeSuspended;
+ bool ResumeSeizeSector(int32 SID,const FBattleSquadObservation& O,bool Visible);
+ void SeizePlanChanged(int32 SID);
+ struct FSectorDefend
+ {
+  FIntPoint Cell=FIntPoint::ZeroValue,From=FIntPoint::ZeroValue;
+  double Start=0.,LastSeen=0.,LastReplan=-100.,BackAt=-1.;
+  double LastDamage=0.,ArrivedAt=-1.;
+  int32 OrderRevision=0;
+ };
+ TMap<int32,FSectorDefend> SectorDefends;
+ TMap<FIntPoint,int32> DefendSlotCounts;
+ double DefendSlotsAt=-100.;
+ bool SectorDefendEnabled(int32 Team) const;
+ bool StepSectorDefend(int32 SID,const FBattleSquadObservation& O,bool Visible);
+ bool FallBackSector(int32 SID,const FBattleSquadObservation& O);
+ void EndSectorDefend(int32 SID);
+ void LogSectorDefend(int32 SID,const FSectorDefend& Defence,const TCHAR* What) const;
+ void CheckSectorTrials();
+
  TMap<int32,TMap<FIntPoint,double>> SeizeEnded;
  TSet<FIntPoint> SeizeOwnCells[2],SeizeKnownCells[2];
  double SeizeCellsAt[2]={-100.,-100.};

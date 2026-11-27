@@ -65,20 +65,47 @@
 
 `SeizeGo`（向かった）、`SeizeAgain`（撃ち合いの後に向かい直した）、`SeizeEnter`（区画に入った）、`SeizeTaken`（取った）、`SeizeNext`（次の区画へ）、`SeizeEndTimeout`／`SeizeEndGone`／`SeizeEndOther`。行 `BATTLE_SECTOR_SEIZE`。意図した行動は `SeizeAgain`・`SeizeEnter`・`SeizeTaken` で数える。
 
+支援／側面移動で中断した未終了の制圧は、その計画が Engage／Mission に戻った後、人数・HP・武装数・被害なしの条件と期限を再確認して同じ区画へ戻す（自分で見ている場合は FIRE）。成功は SeizeResume、不成立は SeizeEndOther。SUPPORT／FLANK 中は閉じず、退却・補給・再編では閉じる。
+
 ### 3.4 次の段（今回は入れない）
 
 - 前線の線を敵の区画の手前で止める決まり（2.1）を、取りに向かっている区画の列までは出す（スポットの緩和の B-3 と同じ所。系統「戦略層」「群制御」と調整が要る）。
 - 群（突入群・本拠地攻撃隊）の目標に敵の区画を足す。
 
-## 4. 維持：区画の単位で守る `-BattleSectorDefend=1`
+## 4. 維持：区画の単位で守る -BattleSectorDefend=1/2
 
-1. **区画の中で受ける**：区画任務で着いた小隊（守り）が敵を自分で見ても、その場の `Engage`／`Hold` に移らず、区画任務のまま撃つ。攻撃の対象の点が変われば、区画の中の遮蔽を敵の向きに選び直す（今の選び直し、10秒に1回）。兵は区画の外へ出ない（既知の敵へ寄る `-BattleKnownTargetFire=2` の Reach も区画の中に限る）。
-2. **区画から区画へ下がる**：5秒の被害が大きいとき（今の退却の条件）、退却の点ではなく、**味方側の隣の区画のうち遮蔽の多い区画**へ下がって守りを続ける。そこでも押されれば次の区画へ。補給・再編の条件は今のまま。
-3. **取り返す**：下がった区画で30秒被害が無く、元の区画に目撃があれば、3章の「取りに行く」の目標になる。
+2026-11-27 実装（未ビルド・未実行）。親切替は既定0・0〜2。-BattleSectorDefendTeam=-1（両軍、0/1で片軍）、-BattleSectorDefendBack=30（5〜120秒）。区画マップのエリア戦、AI管理下の区画任務で、到着後に計画 Mission・命令 Defend になった小隊を対象とする。兵種の追加制限はない。直接操作・明示命令の小隊には介入しない。
 
-記録：`DefendStay`（接触しても区画任務のまま）、`DefendReplan`（敵の向きに選び直した）、`DefendFallBack`（隣の区画へ下がった）。
+### 4.1 値1：区画の中で受ける
 
-守りの配置（arms、小隊の中の散らし方）とは層が違うので重ねられる。先に 1 だけを入れて確かめる。
+- Evaluate の補給・退却・再編・盾切れ・対戦車退避・Emergency より後、通常の Engage 処理と新規 JOIN／SEEK／SEIZE より前で区画任務を継続する。守りが静かになってもこの任務を勝手に探索へ貸し出さない。
+- 避ける「見たので止まる」分岐は末尾の KNOWN ENEMY / HOLD FIRING POSITION。JOIN FIGHT／SEEK ENEMY 内の同文の分岐は、既に Engage の別任務なので対象に含めない。SEIZE の FIRE も別の試験の規則を維持する。
+- 対象は CanSupport／AcceptSupport／TryFlank で支援・側面移動に選ばない。区画AIの CoverCheck・PinnedFlank・CloseIn も対象から外す。
+- 攻撃の対象の点は既存の PickAttackFocus。Mission を保つので、Think の3秒ごとの確認、45度の向きの変化／対象出現、10秒間隔の遮蔽再計画が接触中も働く。この既存の再計画で DefendReplan を記録する（行ログは出さない）。
+- OrderAllowsTarget は区画任務なら元から防衛半径を課さない。一方 Think と WeaponOrderAllows は区画外を別に拒否していたので、対象小隊について外の観測敵も許可する。射程・個人の視認・射撃判定は従来のまま。
+- SectorDefendPlace は状態の Cell（状態作成前は任務の目的区画）を SectorCellFor で照合する。接触時の遮蔽の Anchor／Peek、CoverFirePoint／RevalidatePeek、ContactFirePoint、StartCoverApproach、StartHuddle、StartFirePosition、KnownTarget Reach の投影後の地点・覗き地点・経路の検査へ接続した。既存の外向き接触の例外でも区画外へ出ない。
+- 到着時の遮蔽スロット選びは既に区画内限定。追加でスロットと Nav 投影後の集合／開けた到着地点を検査する。個人の SoldierMove は既存の区画内 Anchor 制限と、今回制限した ContactFirePoint を通るので専用の分岐を増やさない。
+- Follow の入口で、既に進行中の区画外への遮蔽行動・KnownMove を解除する。個人への明示命令は優先する。
+
+### 4.2 値2：区画から区画へ下がる
+
+- 既存の Emergency が成立し、退却理由が DAMAGE 5s ... になった場合だけ置換する。式は Threats>0 かつ O.RecentDamage >= T->Health * S->Members.Num() * T->SquadRetreatDamageRatio。弾切れ・人数・HPの理由が先なら置換しない。対戦車退避なども従来どおり先に処理する。
+- 周り8区画から、Valid・Impassableでない・自軍本拠地へ近づく・軍の KnownSpots がない区画を選ぶ。点数は遮蔽スロット数＋自軍兵がいる場合2。点数同点なら本拠地への距離、さらに同点なら自軍の向きで読んだ X、Y の小さい順。
+- スロット数は到着処理と同じ UBattleCover::GetSlots を1秒ごとに区画別集計する。選択のために BuildSlots や新しい光線／Nav 検索は行わない。自軍兵と目撃は後退の選択時だけ集計する。
+- Apply(Engage, Move, 隣の区画中心, "SECTOR DEFEND / FALL BACK")。Mission は Apply で受理されないため Engage を使用し、DefendingSector により到着計画・攻撃の対象の向き・Follow の区画扱いを拡張する。MissionDestination 等は変更しない。
+- 移動中は通常の退却と同じ Move 命令で交戦停止せず、接触遮蔽／Reach の寄り道も禁止する。生存者全員が入区してから Defend（計画は Engage、理由 HOLD BACK）にする。過半数の時点で残りの兵が止まらないための判断。入区不能の兵に対する新しいタイムアウトは設けていない。
+- 次の後退は10秒以上あける。10秒未満の同じ DAMAGE 理由はその場の計画を維持する（通常の退却へは落とさない）。健康・補給・対戦車の理由はこの待ち時間でも優先。候補なし／Apply拒否は DefendFallBackNone を記録して通常の退却へ。
+- 入区後、最後の被害から Back 秒、被害なしで ResumeMission。被害時刻は既存の DamageHistory の1秒バケット末尾を使うため最大約1秒保守的。復帰先は最新の元任務。SeizeEnded には登録しない。取り返す専用の計画は作らない。
+
+### 4.3 状態と記録
+
+TMap<int32,FSectorDefend> SectorDefends：Cell、Start、LastSeen、LastReplan、BackAt=-1、From。From は直前の後退元。加えて LastDamage・ArrivedAt・OrderRevision を保持し、被害のない時間・入区・明示された別命令を区別する。Reset は Seize と同じ Reset 関数で親切替の内側。
+
+最初の接触で DefendStay。後退していない状態は最後の自分の視認から30秒で DefendEnd として閉じる。後退中は Back の復帰条件を優先する。退却・補給・再編、権限喪失・命令変更でも閉じる。後退時 DefendFallBack、復帰時 DefendReturn。復帰は return だけを記録し、end を重ねない。
+
+行は BATTLE_SECTOR_DEFEND t=... squad=... team=... cell=x,y what=stay|back|return|end from=x,y secs=...。再計画は Event のみ。
+
+実装の主処理は Prototype/BattleSectorDefend.cpp。既存ファイルは呼び出し・条件の拡張。守りの配置（arms）とは別の層。ビルド・UE・試合・固定場面試験は今回の依頼により実施していない。
 
 ## 5. 遮蔽：相手に近く、相手に対して遮蔽になる地点 `-BattleCoverNearEnemy=1`
 

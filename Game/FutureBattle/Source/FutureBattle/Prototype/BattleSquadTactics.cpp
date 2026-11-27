@@ -33,9 +33,10 @@ void UBattleSquadTactics::Reset()
  ActiveSeconds = 0; NextDump = 5; NextSample.Reset(); Samples.Reset(); Events.Reset(); ActionSeconds.Reset();
  SupplyTripStart.Reset(); SupplyTripSeconds.Reset(); JoinFights.Reset(); FieldRecoverGaveUp.Reset(); FieldRecoverSince.Reset(); FieldRecoverArrived.Reset();
  SeekEnemies.Reset(); SeekEnded.Reset(); KnownSpots[0].Reset(); KnownSpots[1].Reset(); KnownSpotsAt[0]=KnownSpotsAt[1]=-100.;
+ if(BattleTactics::SectorDefend()>0){SectorDefends.Reset();DefendSlotCounts.Reset();DefendSlotsAt=-100.;}
  if(BattleTactics::SectorSeize()>0)
  {
-  SeizeSectors.Reset();SeizeEnded.Reset();
+  SeizeSectors.Reset();SeizeEnded.Reset();SeizeSuspended.Reset();
   for(int32 SeizeTeam=0;SeizeTeam<2;++SeizeTeam)
   {SeizeOwnCells[SeizeTeam].Reset();SeizeKnownCells[SeizeTeam].Reset();SeizeCellsAt[SeizeTeam]=-100.;}
  }
@@ -152,6 +153,7 @@ void UBattleSquadTactics::Step(float DeltaSeconds)
    ActiveSeconds, Pair.Key, Squad.Team, bManaged, Sample.Living, Sample.Ready, Sample.Direct, Sample.Health, Sample.RecentDamage, Sample.Ammo, Sample.Reserve, Sample.Contacts.Num(), Sample.Cover, Sample.Support, Sample.Flank, Sample.Failed, *Sample.Reason);
   Samples.Add(Pair.Key, MoveTemp(Sample));
  }
+ if(BattleTactics::SectorSeize()>0 || BattleTactics::SectorDefend()>0)CheckSectorTrials();
  if (Wide && IsST2Enabled()) GetWorld()->GetSubsystem<UBattleTeamAI>()->Step();
  const double Cost = (FPlatformTime::Seconds() - Start) * 1000.;
  ++StepCount; TotalStepMs += Cost; MaxStepMs = FMath::Max(MaxStepMs, Cost);

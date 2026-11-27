@@ -121,6 +121,7 @@ bool UBattleLeaderRuntime::CoverLineClear(int32 ID,FVector From,FVector Threat) 
 // Kind is derived from the saved positions; no new transient or persistent tactical state is needed.
 bool UBattleLeaderRuntime::CoverFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& OutPeek,uint8& OutKind,uint8 AllowedKinds,bool bPeekLine,double KnownMoveNow)
 {
+ if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,Anchor))return false;
  auto FireLine=[&](FVector FireFrom,FVector FireTo){return KnownMoveNow>=0.?KnownMoveLine(ID,FireFrom,FireTo,KnownMoveNow):BattleTactics::HasTerrainLine(GetWorld(),FireFrom,FireTo);};
  OutKind=0;
  const FVector FireEye=Threat+FVector(0,0,60);
@@ -141,6 +142,7 @@ bool UBattleLeaderRuntime::CoverFirePoint(int32 ID,FVector Anchor,FVector Threat
   if(KnownMoveNow>=0. && !KnownMoveSpend(ID,KnownMoveNow,2))return false;
   FNavLocation FireProjected;if(!FireNav->ProjectPointToNavigation(Anchor+FireSide*FireOffset-FVector(0,0,90),FireProjected,FVector(50,50,150))){if(KnownMoveNow>=0.)SightExperiment.Cover(TEXT("known_move_reject_lean_nav"));continue;}
   const FVector FirePeek=FireProjected.Location+FVector(0,0,90);
+  if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,FirePeek))continue;
   const double FireDistance=FVector::Dist2D(Anchor,FirePeek);if(FireDistance<100.||FireDistance>120.){if(KnownMoveNow>=0.)SightExperiment.Cover(TEXT("known_move_reject_lean_distance"));continue;}
   if(KnownMoveNow>=0. && !KnownMoveSpend(ID,KnownMoveNow,1))return false;
   if(GetWorld()->SweepTestByObjectType(Anchor,FirePeek,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88))){if(KnownMoveNow>=0.)SightExperiment.Cover(TEXT("known_move_reject_lean_capsule"));continue;}
@@ -173,6 +175,7 @@ bool UBattleLeaderRuntime::CoverStepFirePoint(FVector Anchor,FVector Threat,FVec
 bool UBattleLeaderRuntime::RevalidatePeek(int32 ID,FVector Threat)
 {
  auto* U=GetWorld()->GetSubsystem<UBattleState>()->Units.Find(ID);if(!U)return false;
+ if(BattleTactics::SectorDefend()>0 && (!SectorDefendUnitPlace(ID,U->CoverAnchor) || !SectorDefendUnitPlace(ID,U->CoverPeek)))return false;
  // -BattleCoverFirePoint: the current peek still sees the threat, or one over the cover / a short step past its edge does
  // (level 2 may retain a previous step after both short firing-point checks fail).
  if(BattleTactics::CoverFirePointEnabled())
@@ -195,6 +198,7 @@ bool UBattleLeaderRuntime::RevalidatePeek(int32 ID,FVector Threat)
  {
   FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Anchor+Lateral*Offset-FVector(0,0,90),Projected,FVector(50,50,150)))continue;
   const FVector Peek=Projected.Location+FVector(0,0,90);
+  if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,Peek))continue;
   if(BattleTactics::CoverFirePointEnabled()){const double StepDistance=FVector::Dist2D(Anchor,Peek);if(StepDistance<=120.||StepDistance>450.)continue;}
   else if(PeekRangeCheck()){const double D=FVector::Dist2D(Anchor,Peek);if(D<100.||D>450.)continue;}
   if(GetWorld()->SweepTestByObjectType(Anchor,Peek,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))continue;
@@ -235,6 +239,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
  for(int32 Slot:Candidates)
  {
   const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
+  if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,Anchor))continue;
   Stage=FMath::Max(Stage,1);if(!Cover->IsAvailable(Slot,ID,Now))continue;
   if(bThreats && BrokenCoverSlot(ID,Slot,Now))continue;
   if(Accept && !Accept(Slot,Anchor))continue; // the caller's own rules (stage A relocation: the squad's area)
@@ -254,6 +259,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
     if(BattleTactics::CoverFirePointLevel()>=2)StepCandidates.Add({Slot,Anchor,Hidden});
     continue;
    }
+   if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,FirePeek))continue;
    Diag.Cover(FireKind==1?TEXT("cover_fire_point_over"):TEXT("cover_fire_point_lean"));
    Stage=FMath::Max(Stage,5);if(!Cover->Reserve(Slot,ID,Now))continue;
    Diag.Cover(TEXT("request_success"));if(FireKind==1)Diag.Cover(TEXT("request_success_stand_up"));
@@ -265,6 +271,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
   {
    FVector Point;
    if(!ContactFirePoint(ID,Anchor,Threat,Point))continue;
+   if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,Point))continue;
    Stage=FMath::Max(Stage,5);
    if(!Cover->Reserve(Slot,ID,Now))continue;
    Diag.Cover(TEXT("request_success"));
@@ -288,6 +295,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
   {
    FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Anchor+Lateral*Offset-FVector(0,0,90),Projected,FVector(50,50,150))){Diag.Cover(TEXT("peek_off_navmesh"));continue;}
    const FVector Peek=Projected.Location+FVector(0,0,90);
+  if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,Peek))continue;
    if(PeekRangeCheck()){const double D=FVector::Dist2D(Anchor,Peek);if(D<100.||D>450.)continue;}
    if(!Clear(Anchor,Peek)){Diag.Cover(TEXT("peek_path_blocked"));continue;}
    if(BattleTactics::ExposureAt(GetWorld(),Peek,Forward(ID),Eye).Fraction()<Hidden+.39f){Diag.Cover(TEXT("peek_not_exposed_enough"));continue;}
@@ -306,6 +314,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
  {
   FVector StepPoint;
   if(!CoverStepFirePoint(StepCandidate.Anchor,Threat,Lateral,Forward(ID),StepCandidate.Hidden,StepPoint))continue;
+  if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,StepPoint))continue;
   Stage=FMath::Max(Stage,5);if(!Cover->Reserve(StepCandidate.Slot,ID,Now))continue;
   Diag.Cover(TEXT("cover_fire_point_step"));Diag.Cover(TEXT("request_success"));
   U->CoverAnchor=StepCandidate.Anchor;U->CoverPeek=StepPoint;U->CoverSlot=StepCandidate.Slot;U->CoverPhase=1;U->CoverSeconds=3;
@@ -318,6 +327,7 @@ bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Targ
 
 bool UBattleLeaderRuntime::ContactFirePoint(int32 ID,FVector Anchor,FVector Threat,FVector& Peek)
 {
+ if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,Anchor))return false;
  const FVector Eye=Threat+FVector(0,0,60);
  const float Hidden=ThreatSeen(ID,Anchor,Threat); // ExposureAt toward Eye unless -BattleThreatCoverCrouch=1
  if(Hidden>CoverExposureLimit())return false;
@@ -333,6 +343,7 @@ bool UBattleLeaderRuntime::ContactFirePoint(int32 ID,FVector Anchor,FVector Thre
  {
   FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Anchor+Lateral*Offset-FVector(0,0,90),Projected,FVector(50,50,150)))continue;
   const FVector Point=Projected.Location+FVector(0,0,90);
+  if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,Point))continue;
   if(GetWorld()->SweepTestByObjectType(Anchor,Point,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))continue;
   if(!BattleTactics::HasTerrainLine(GetWorld(),Point+FVector(0,0,60),Eye))continue;
   if(const double Step=FVector::Dist2D(Anchor,Point);Step<100.||Step>450.)continue; // the range a saved cover action may hold
@@ -391,6 +402,7 @@ bool UBattleLeaderRuntime::StartHuddle(int32 ID,FVector Threat,int32 Target,doub
    if(Taken)continue;
    FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Want-FVector(0,0,90),Projected,FVector(40,40,150)) || FVector::Dist2D(Projected.Location,Want)>40)continue;
    const FVector Point=Projected.Location+FVector(0,0,90);
+  if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,Point))continue;
    if(BattleTactics::ExposureAt(GetWorld(),Point,FVector::ForwardVector,Eye).VisibleSamples>2)continue;
    if(++Tried>8){SightExperiment.Cover(TEXT("huddle_none"));return false;}
    if(GetWorld()->SweepTestByObjectType(Pos,Point,FQuat::Identity,FCollisionObjectQueryParams(ECC_WorldStatic),FCollisionShape::MakeCapsule(36,88)))continue;
@@ -426,6 +438,7 @@ bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Targ
  for(int32 Slot:Cover->NearbySlots(Pos,bWide?2000.f:FMath::Max(0.f,T->AICoverApproachRadius),Limit+32))
  {
   const FVector Anchor=Cover->GetSlots()[Slot]+FVector(0,0,90);
+  if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,Anchor))continue;
   if(FVector::Dist2D(Pos,Anchor)<=Near)continue; // Already covered by the local cover search.
   if(++Evaluated>Limit)break;
   if(!Cover->IsAvailable(Slot,ID,Now))continue;
@@ -442,6 +455,7 @@ bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Targ
    if(!CoverFirePoint(ID,Anchor,Threat,FirePoint,ApproachKind)){Diag.Cover(TEXT("approach_no_fire_point"));continue;}
   }
   else if(bWide?!ContactFirePoint(ID,Anchor,Threat,FirePoint):ThreatSeen(ID,Anchor,Threat)>CoverExposureLimit())continue;
+  if(BattleTactics::SectorDefend()>0 && bWide && !SectorDefendUnitPlace(ID,FirePoint))continue;
   // -BattleThreatCover: walk only to a place that also hides the soldier from his other threats, and not back to one he left.
   if(bThreats && (BrokenCoverSlot(ID,Slot,Now) || ExposedToThreats(ID,Anchor,Threats))){Diag.Cover(TEXT("threat_approach_exposed_other"));continue;}
   FCoverApproach A;A.Goal=Anchor;A.Slot=Slot;A.Target=Target;A.Revision=U->OrderRevision;A.Until=Now+(bWide?8.f:FMath::Max(0.f,T->AICoverApproachSeconds));
@@ -478,6 +492,7 @@ bool UBattleLeaderRuntime::StartFirePosition(int32 ID,FVector Threat,int32 Targe
    if(Squad->bSectorMission && Squad->TacticalPlan.Action==EBattleSquadTactic::Mission ? (!OutsideContact && BattleSectors::Cell(Try)!=BattleSectors::Cell(Squad->Destination)) : Squad->Order==EBattleOrder::Defend && FVector::Dist2D(Try,Squad->Destination)>Squad->DefenseRadius)continue;
    FNavLocation Projected;if(!Nav->ProjectPointToNavigation(Try-FVector(0,0,90),Projected,FVector(50,50,150)))continue;
    const FVector Point=Projected.Location+FVector(0,0,90);
+  if(BattleTactics::SectorDefend()>0 && !SectorDefendUnitPlace(ID,Point))continue;
    if(!BattleTactics::HasTerrainLine(GetWorld(),Point+FVector(0,0,60),Eye))continue; // he must be able to fire from it
    const bool bStandUp=bStances && !BattleTactics::HasTerrainLine(GetWorld(),Point+FVector(0,0,BattleStance::TopOffset(BattleStance::Crouch)),Eye);
    const float Seen=BattleTactics::ExposureAt(GetWorld(),Point,Forward(ID),Eye).Fraction();

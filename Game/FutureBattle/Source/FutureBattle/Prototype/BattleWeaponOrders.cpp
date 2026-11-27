@@ -1,5 +1,6 @@
 // Shared mission permission: observed target positions only, never enemy true positions.
 #include "BattleLeaderRuntime.h"
+#include "BattleSquadTactics.h"
 #include "BattleTactics.h"
 #include "BattleSectors.h"
 #include "Misc/CommandLine.h"
@@ -23,7 +24,8 @@ bool BattleTactics::OrderAllowsTarget(const FBattleSquadState& S,int32 TargetID,
  if(S.TacticalPlan.Action==EBattleSquadTactic::Support&&(TargetID<=0||TargetID!=S.TacticalPlan.SupportTarget))return false;
  // -BattleSectorSeize: a squad taking a sector (plan Engage, reason SEIZE SECTOR) fights as a sector squad, not inside a defence radius.
  const bool Sector=(S.bSectorMission&&S.TacticalPlan.Action==EBattleSquadTactic::Mission)||
-  (SectorSeize()>0&&S.TacticalPlan.Action==EBattleSquadTactic::Engage&&S.TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")));
+  (SectorSeize()>0&&S.TacticalPlan.Action==EBattleSquadTactic::Engage&&S.TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR"))) ||
+  (SectorDefend()>0&&S.TacticalPlan.bAutonomous&&S.TacticalPlan.Action==EBattleSquadTactic::Engage&&S.TacticalPlan.Reason.StartsWith(TEXT("SECTOR DEFEND")));
  if(!Sector&&S.Order==EBattleOrder::Defend&&!DefendEngage(S.Team)&&FVector::Dist2D(KnownPosition,S.Destination)>S.DefenseRadius)return false;
  return true;
 }
@@ -32,6 +34,7 @@ bool UBattleLeaderRuntime::WeaponOrderAllows(int32 ID,int32 TargetID,const FVect
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
  if(!U||!U->IsAlive()||!S||S->CommandStatus!=EBattleCommandStatus::Active||!BattleTactics::OrderAllowsTarget(*S,TargetID,KnownPosition))return false;
+ if(BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(S->SquadID))return true;
  if(!S->bSectorMission||S->TacticalPlan.Action!=EBattleSquadTactic::Mission||BattleSectors::Cell(KnownPosition)==BattleSectors::Cell(S->Destination))return true;
  // Same outside-sector return-fire exception as the normal squad pick.
  return (SectorContactEnabled()||SectorMoveFireEnabled()||SectorFireBack.Contains(S->SquadID))&&
