@@ -215,6 +215,100 @@ for mi_name, (name, tint, tile) in PART_INSTANCES.items():
     try: surface_instance('MI_Kit_' + mi_name, name, tint=tint, tile=tile)
     except Exception as e: report['errors'].append('part material %s: %r' % (mi_name, e))
 
+# ---------------------------------------------------------------- painted ground (map L: BattleMapCommandlet.cpp BuildTerrainL)
+# The ground mesh of a height-field map carries the old flat colours as vertex colours (grass .16 .24 .11, field .30 .27 .12,
+# wood .09 .17 .07, town .21 .21 .20, road .07 .08 .09, 'S' sectors .14 .19 .24, markers and water strongly coloured).
+# M_Kit_GroundPaint reads them by their colour ratios (the height shading and the contour lines only change the brightness)
+# and lays the kit surfaces: Grass, ForestFloor, FarmSoil, Pavement, Asphalt, Gravel. Markers and water keep their colour.
+# Top-down projection (the ground is nearly flat), colour and normal only (12 textures; roughness is a constant per layer).
+GROUND_LAYERS = ('Grass', 'ForestFloor', 'FarmSoil', 'Pavement', 'Asphalt', 'Gravel')
+GROUND_WEIGHTS = NOISE + '''
+float3 v = max(Paint.rgb, 0.0);
+float gg = max(v.g, 0.004), rg = v.r / gg, bg = v.b / gg, lum = max(v.r, max(v.g, v.b));
+float jit = (K.fbm(WorldPos / 420.0) - 0.5) * 0.16 + (K.fbm(WorldPos / 90.0 + 3.1) - 0.5) * 0.06;   // ragged borders
+float special = max(max(step(1.6, bg), step(rg, 0.25)), step(2.0, rg));       // water, objective and home markers
+float paved = smoothstep(0.62, 0.80, bg + jit);
+float road = paved * (1.0 - smoothstep(0.10, 0.13, lum));
+float stone = paved * smoothstep(1.10, 1.20, bg) * (1.0 - road / max(paved, 0.001));
+float town = saturate(paved - road - stone);
+float soil = (1.0 - paved) * smoothstep(0.82, 0.98, rg + jit);
+float wood = (1.0 - paved) * (1.0 - smoothstep(0.56, 0.63, rg + jit * 0.6));
+float grass = saturate(1.0 - paved - soil - wood);
+float yard = town * smoothstep(0.52, 0.62, K.fbm(WorldPos / 1400.0 + 7.3) + jit);   // lawns and worn ground between the paving of a town
+float worn = (town - yard) * smoothstep(0.58, 0.70, K.fbm(WorldPos / 700.0 + 19.1));
+town -= yard + worn; grass += yard; soil += worn;
+float W[6]; W[0] = grass; W[1] = wood; W[2] = soil; W[3] = town; W[4] = road; W[5] = stone;
+float expected = grass * 0.24 + wood * 0.17 + soil * 0.30 + town * 0.21 + road * 0.085 + stone * 0.24;
+float shade = lerp(1.0, clamp(lum / max(expected, 0.02), 0.72, 1.12), 0.7);   // keeps the contour lines and the height shading, softly
+float2 xy = WorldPos.xy;
+'''
+GROUND_COLOR = GROUND_WEIGHTS + '''
+float2x2 R = float2x2(0.8253, -0.5646, 0.5646, 0.8253);
+float3 c = float3(0, 0, 0);
+#define KIT_LAYER(T, S, tile, w) { float2 uv = xy / tile; float3 a = Texture2DSample(T, S, uv).rgb; \\
+  float3 big = Texture2DSample(T, S, mul(R, uv) * 0.143 + 0.37).rgb; float3 avg = Texture2DSampleLevel(T, S, float2(0.5, 0.5), 12.0).rgb; \\
+  c += a * lerp(float3(1, 1, 1), clamp(big / max(avg, 0.02), 0.45, 1.7), 0.6) * w; }
+%(layers)s
+#undef KIT_LAYER
+c *= lerp(1.0, 0.72, town);   // the pale paving read as a white floor over a whole town
+float far = K.fbm(WorldPos / 3000.0), mid = K.fbm(WorldPos / 650.0 + 31.7);
+c *= 1.0 + 0.2 * (far - 0.5) * 2.4;
+float d = smoothstep(0.52, 0.70, mid * 0.75 + far * 0.25);
+float g = dot(c, float3(0.3, 0.59, 0.11));
+c = lerp(c, lerp(c, float3(g, g, g), 0.45) * float3(0.66, 0.62, 0.56), d * 0.3);
+return lerp(c * shade, v, special);
+'''
+GROUND_NORMAL = GROUND_WEIGHTS + '''
+float2 t = float2(0, 0);
+#define KIT_LAYER(T, S, tile, w) { t += (Texture2DSample(T, S, xy / tile).rg * 2.0 - 1.0) * w; }
+%(layers)s
+#undef KIT_LAYER
+float3 n = normalize(WorldNormal);
+return normalize(float3(n.xy + t * (1.0 - special), n.z));
+'''
+GROUND_ROUGH = GROUND_WEIGHTS + '''
+return lerp(grass * 0.92 + wood * 0.95 + soil * 0.93 + town * 0.85 + road * 0.78 + stone * 0.9, 0.35, step(1.6, bg));
+'''
+try:
+    if all(n in textures for n in GROUND_LAYERS):
+        dest = '/Game/Kit/Surfaces'
+        mat = u.load_asset(dest + '/M_Kit_GroundPaint')
+        if mat is None: mat = tools.create_asset('M_Kit_GroundPaint', dest, u.Material, u.MaterialFactoryNew())
+        else: ml.delete_all_material_expressions(mat)
+        mat.set_editor_property('tangent_space_normal', False)
+        paint = ml.create_material_expression(mat, u.MaterialExpressionVertexColor, -1500, -600)
+        calls = '\n'.join('KIT_LAYER(T%d, T%dSampler, %.1f, W[%d])' % (i, i, tiles[n], i) for i, n in enumerate(GROUND_LAYERS))
+
+        def ground_node(code, key, y, out=None):
+            ins = {'Paint': paint}
+            if key:
+                for i, n in enumerate(GROUND_LAYERS):
+                    t = ml.create_material_expression(mat, u.MaterialExpressionTextureObject, -1500, y + i * 90)
+                    t.set_editor_property('texture', textures[n][key])
+                    t.set_editor_property('sampler_type', u.MaterialSamplerType.SAMPLERTYPE_COLOR if key == 'BaseColor' else u.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+                    ins['T%d' % i] = t
+            c = ml.create_material_expression(mat, u.MaterialExpressionCustom, -900, y)
+            c.set_editor_property('code', code % {'layers': calls} if key else code)
+            c.set_editor_property('output_type', out or u.CustomMaterialOutputType.CMOT_FLOAT3)
+            ins['WorldPos'] = ml.create_material_expression(mat, u.MaterialExpressionWorldPosition, -1200, y + 600)
+            if key == 'Normal': ins['WorldNormal'] = ml.create_material_expression(mat, u.MaterialExpressionVertexNormalWS, -1200, y + 660)
+            cis = []
+            for nm in ins:
+                ci = u.CustomInput(); ci.set_editor_property('input_name', nm); cis.append(ci)
+            c.set_editor_property('inputs', cis)
+            for nm, e in ins.items(): assert ml.connect_material_expressions(e, '', c, nm), nm
+            return c
+        ml.connect_material_property(ground_node(GROUND_COLOR, 'BaseColor', -600), '', u.MaterialProperty.MP_BASE_COLOR)
+        ml.connect_material_property(ground_node(GROUND_NORMAL, 'Normal', 300), '', u.MaterialProperty.MP_NORMAL)
+        ml.connect_material_property(ground_node(GROUND_ROUGH, None, 1200, u.CustomMaterialOutputType.CMOT_FLOAT1), '', u.MaterialProperty.MP_ROUGHNESS)
+        ml.recompile_material(mat); eal.save_loaded_asset(mat)
+        mi = u.load_asset(dest + '/MI_Kit_GroundPaint')   # the surface table of BattleKitLook.cpp names instances
+        if mi is None: mi = tools.create_asset('MI_Kit_GroundPaint', dest, u.MaterialInstanceConstant, u.MaterialInstanceConstantFactoryNew())
+        ml.set_material_instance_parent(mi, mat); ml.update_material_instance(mi); eal.save_loaded_asset(mi)
+        report['surfaces']['GroundPaint'] = {'instance': mi.get_path_name(), 'layers': list(GROUND_LAYERS)}
+except Exception as e:
+    report['errors'].append('ground paint: %r' % (e,))
+
 # ---------------------------------------------------------------- weapons and props (baked by Art/Kit/Scripts/make_weapon.py)
 samplers = {'BaseColor': u.MaterialSamplerType.SAMPLERTYPE_COLOR, 'ORM': u.MaterialSamplerType.SAMPLERTYPE_MASKS, 'Normal': u.MaterialSamplerType.SAMPLERTYPE_NORMAL}
 
@@ -342,6 +436,7 @@ try:
         tools.import_asset_tasks([t])
         tex = u.load_asset(fx_dest + '/' + png.stem); assert tex, png.stem
         tex.set_editor_property('srgb', True)
+        tex.set_editor_property('never_stream', True)   # billboards give the streamer no size: streamed sheets stayed at low mips and every puff was a soft blob
         eal.save_loaded_asset(tex); fx_tex[png.stem[len('T_Kit_FX_'):]] = tex
     if fx_tex:
         mat = u.load_asset(fx_dest + '/M_Kit_FX_Flipbook')

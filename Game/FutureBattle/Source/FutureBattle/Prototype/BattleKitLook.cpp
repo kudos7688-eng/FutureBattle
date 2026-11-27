@@ -74,7 +74,9 @@ namespace
   {TEXT("M_MapRust"),TEXT("MetalRust")},{TEXT("M_MapTower"),TEXT("PlasterPainted")},
   {TEXT("M_MapTrunk"),TEXT("Bark")},{TEXT("M_FordGravel"),TEXT("Gravel")},
   {TEXT("M_SectorField"),TEXT("FarmSoil")},{TEXT("M_SectorRoad"),TEXT("Asphalt")},
-  {TEXT("M_SectorWood"),TEXT("ForestFloor")}
+  {TEXT("M_SectorWood"),TEXT("ForestFloor")},
+  // Map L: the painted ground mesh. GroundPaint reads the vertex colours (grass, field, wood, town, road) and lays kit surfaces by them.
+  {TEXT("M_GroundVertex"),TEXT("GroundPaint")}
  };
  // EBattleWeapon order. Corrections are in the hand/camera parent space: cm and pitch/yaw/roll degrees.
  struct FWeaponSpec {const TCHAR* Name;FVector Offset;FRotator Rotation;};
