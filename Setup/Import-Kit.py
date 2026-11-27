@@ -237,6 +237,8 @@ float grass = saturate(1.0 - paved - soil - wood);
 float yard = town * smoothstep(0.52, 0.62, K.fbm(WorldPos / 1400.0 + 7.3) + jit);   // lawns and worn ground between the paving of a town
 float worn = (town - yard) * smoothstep(0.58, 0.70, K.fbm(WorldPos / 700.0 + 19.1));
 town -= yard + worn; grass += yard; soil += worn;
+float glade = wood * smoothstep(0.50, 0.62, K.fbm(WorldPos / 600.0 + 41.3)) * 0.8;   // green patches on the forest floor
+wood -= glade; grass += glade;
 float W[6]; W[0] = grass; W[1] = wood; W[2] = soil; W[3] = town; W[4] = road; W[5] = stone;
 float expected = grass * 0.24 + wood * 0.17 + soil * 0.30 + town * 0.21 + road * 0.085 + stone * 0.24;
 float shade = lerp(1.0, clamp(lum / max(expected, 0.02), 0.72, 1.12), 0.7);   // keeps the contour lines and the height shading, softly
@@ -245,7 +247,7 @@ float2 xy = WorldPos.xy;
 GROUND_COLOR = GROUND_WEIGHTS + '''
 float2x2 R = float2x2(0.8253, -0.5646, 0.5646, 0.8253);
 float3 c = float3(0, 0, 0);
-float3 G[6]; G[0] = float3(0.36, 0.68, 0.30); G[1] = float3(0.8, 1.0, 0.75); G[2] = G[3] = G[4] = G[5] = float3(1, 1, 1);   // the grass scan is straw yellow: push it to green
+float3 G[6]; G[0] = float3(0.36, 0.68, 0.30); G[1] = float3(0.50, 0.60, 0.36); G[2] = G[3] = G[4] = float3(1, 1, 1); G[5] = float3(0.50, 0.50, 0.50);   // the grass scan is straw yellow: push it to green
 #define KIT_LAYER(T, S, tile, i) { float2 uv = xy / tile; float3 a = Texture2DSample(T, S, uv).rgb; \\
   float3 big = Texture2DSample(T, S, mul(R, uv) * 0.143 + 0.37).rgb; float3 avg = Texture2DSampleLevel(T, S, float2(0.5, 0.5), 12.0).rgb; \\
   c += a * lerp(float3(1, 1, 1), clamp(big / max(avg, 0.02), 0.45, 1.7), 0.6) * W[i] * G[i]; }
