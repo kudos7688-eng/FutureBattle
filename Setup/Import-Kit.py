@@ -245,9 +245,10 @@ float2 xy = WorldPos.xy;
 GROUND_COLOR = GROUND_WEIGHTS + '''
 float2x2 R = float2x2(0.8253, -0.5646, 0.5646, 0.8253);
 float3 c = float3(0, 0, 0);
-#define KIT_LAYER(T, S, tile, w) { float2 uv = xy / tile; float3 a = Texture2DSample(T, S, uv).rgb; \\
+float3 G[6]; G[0] = float3(0.36, 0.68, 0.30); G[1] = float3(0.8, 1.0, 0.75); G[2] = G[3] = G[4] = G[5] = float3(1, 1, 1);   // the grass scan is straw yellow: push it to green
+#define KIT_LAYER(T, S, tile, i) { float2 uv = xy / tile; float3 a = Texture2DSample(T, S, uv).rgb; \\
   float3 big = Texture2DSample(T, S, mul(R, uv) * 0.143 + 0.37).rgb; float3 avg = Texture2DSampleLevel(T, S, float2(0.5, 0.5), 12.0).rgb; \\
-  c += a * lerp(float3(1, 1, 1), clamp(big / max(avg, 0.02), 0.45, 1.7), 0.6) * w; }
+  c += a * lerp(float3(1, 1, 1), clamp(big / max(avg, 0.02), 0.45, 1.7), 0.6) * W[i] * G[i]; }
 %(layers)s
 #undef KIT_LAYER
 c *= lerp(1.0, 0.72, town);   // the pale paving read as a white floor over a whole town
@@ -260,7 +261,7 @@ return lerp(c * shade, v, special);
 '''
 GROUND_NORMAL = GROUND_WEIGHTS + '''
 float2 t = float2(0, 0);
-#define KIT_LAYER(T, S, tile, w) { t += (Texture2DSample(T, S, xy / tile).rg * 2.0 - 1.0) * w; }
+#define KIT_LAYER(T, S, tile, i) { t += (Texture2DSample(T, S, xy / tile).rg * 2.0 - 1.0) * W[i]; }
 %(layers)s
 #undef KIT_LAYER
 float3 n = normalize(WorldNormal);
@@ -277,7 +278,7 @@ try:
         else: ml.delete_all_material_expressions(mat)
         mat.set_editor_property('tangent_space_normal', False)
         paint = ml.create_material_expression(mat, u.MaterialExpressionVertexColor, -1500, -600)
-        calls = '\n'.join('KIT_LAYER(T%d, T%dSampler, %.1f, W[%d])' % (i, i, tiles[n], i) for i, n in enumerate(GROUND_LAYERS))
+        calls = '\n'.join('KIT_LAYER(T%d, T%dSampler, %.1f, %d)' % (i, i, tiles[n], i) for i, n in enumerate(GROUND_LAYERS))
 
         def ground_node(code, key, y, out=None):
             ins = {'Paint': paint}
