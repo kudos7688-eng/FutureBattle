@@ -40,7 +40,7 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
-## 2026-11-27 14時15分 Claude（移動の詰まり）：個人の経路の強化 `-BattleCutOffRoute=4/5`（既定0、`movestall` f2fd6a8d、main 未取り込み）。壁の止まりは値2 の時点でほぼ消えており、値4 の上積みは小さい。値5（角の大回り）は固定場面で不合格。残る止まりは人の混雑
+## 2026-11-27 14時05分 Claude（移動の詰まり）：個人の経路の強化 `-BattleCutOffRoute=4/5`（既定0、`movestall` f2fd6a8d、main 未取り込み）。壁の止まりは値2 の時点でほぼ消えており、値4 の上積みは小さい。値5（角の大回り）は固定場面で不合格。残る止まりは人の混雑
 
 - 変更：値4＝値2＋「兵と次の中継点の間に壁があれば、逃げ歩きの判定のときにすぐ個人の経路を頼む」。値5＝値4＋「個人の経路の曲がり角を外へ 60/30cm ずらす」。`BattleStableMovement.cpp`、`Setup/Test-OwnRoute.ps1 -CutOffRoute 0..5`。
 - 検証：ビルド成功、`Test-Battle` 合格。固定場面 `Test-OwnRoute`：値4 合格（`move_own_route_wall_seen=32`）、**値5 不合格**（補給の場面で3人中2人、`corner_widened=2226`）。試合はマップK・30FPS・凍結 `movestall-wall4-1127`・`-BattleHireDelay=0`、切替なし seed7 は台帳 E2 と IDENTICAL。
