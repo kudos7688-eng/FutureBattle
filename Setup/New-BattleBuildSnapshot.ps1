@@ -26,7 +26,28 @@ if(!$NoProjectCopy){
  New-Item -ItemType Directory -Path (Join-Path $copy 'Binaries/Win64'),(Join-Path $copy 'Saved') -Force|Out-Null
  foreach($f in 'UnrealEditor-FutureBattle.dll','UnrealEditor.modules'){Copy-Item (Join-Path $project "Binaries/Win64/$f") (Join-Path $copy 'Binaries/Win64')}
  Copy-Item (Join-Path $project 'FutureBattle.uproject') $copy
- foreach($d in 'Config','Content','DerivedDataCache'){if(Test-Path (Join-Path $project $d)){Copy-Item (Join-Path $project $d) $copy -Recurse}}
+ foreach($d in 'Config','DerivedDataCache'){if(Test-Path (Join-Path $project $d)){Copy-Item (Join-Path $project $d) $copy -Recurse}}
+ # Content (about 660 MB, nearly the same in every snapshot) is not copied again when the newest earlier snapshot holds the
+ # same file: a file of 64 KB or more with the same relative path, size and SHA-256 becomes a hard link to that frozen
+ # copy (never to the live tree). Deleting one snapshot's Project leaves the others intact. Since 2026-11-27 (disk full).
+ $content=Join-Path $project 'Content'
+ if(Test-Path $content){
+  $prev=@(Get-ChildItem (Join-Path $PSScriptRoot 'Benchmarks/BuildSnapshots') -Directory|Where-Object{$_.FullName -ne $out -and (Test-Path (Join-Path $_.FullName 'Project/Content')) -and (Test-Path (Join-Path $_.FullName 'manifest.json'))}|Sort-Object LastWriteTimeUtc -Descending|Select-Object -First 1)
+  $prevContent=if($prev.Count){Join-Path $prev[0].FullName 'Project/Content'}else{$null}
+  $linked=0;$copied=0
+  foreach($f in Get-ChildItem $content -Recurse -File){
+   $rel=$f.FullName.Substring($content.Length).TrimStart('\','/')
+   $dest=Join-Path (Join-Path $copy 'Content') $rel
+   New-Item -ItemType Directory -Path (Split-Path $dest) -Force|Out-Null
+   $old=if($prevContent){Join-Path $prevContent $rel}else{$null}
+   $done=$false
+   if($old -and $f.Length -ge 65536 -and (Test-Path -LiteralPath $old) -and (Get-Item -LiteralPath $old).Length -eq $f.Length -and (Get-FileHash -LiteralPath $old).Hash -eq (Get-FileHash -LiteralPath $f.FullName).Hash){
+    try{New-Item -ItemType HardLink -Path $dest -Target $old -ErrorAction Stop|Out-Null;$done=$true;$linked++}catch{$done=$false}
+   }
+   if(!$done){Copy-Item -LiteralPath $f.FullName -Destination $dest;$copied++}
+  }
+  Write-Verbose "Content: $linked linked to $($prev.Name), $copied copied"
+ }
  if(Test-Path (Join-Path $project 'Saved/Config')){Copy-Item (Join-Path $project 'Saved/Config') (Join-Path $copy 'Saved') -Recurse}
  if((Get-FileHash (Join-Path $copy 'Binaries/Win64/UnrealEditor-FutureBattle.dll')).Hash -ne $dllHash){throw 'DLL changed during snapshot'}
 }
