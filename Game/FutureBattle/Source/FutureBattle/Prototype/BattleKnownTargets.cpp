@@ -15,7 +15,7 @@ bool BattleKnownFire::Enabled()
 
 void UBattlePerception::BuildTeamKnownTargets(double Now)
 {
- if(!BattleKnownFire::Enabled())return;
+ if(!BattleKnownFire::Enabled() && !(BattleTactics::PointTruth() && PointTruthAt>=0.))return;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  BattleKnownFire::FTeam Next[2];
  auto Add=[&](int32 Team,const FBattleContact& Contact,double MemoryUntil)

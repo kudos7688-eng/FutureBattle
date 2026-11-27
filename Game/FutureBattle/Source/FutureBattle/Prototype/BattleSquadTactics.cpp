@@ -88,6 +88,12 @@ FBattleSquadObservation UBattleSquadTactics::Observe(const FBattleSquadState& Sq
        (C.bVisible == Existing->bVisible && C.SourceUnitID < Existing->SourceUnitID)))) Out.Contacts.Add(C.TargetID, C);
   }
  }
+ if(BattleTactics::PointTruth())
+ {
+  int32 PointContactCount=0;
+  for(const auto& PointContact:Out.Contacts)if(PointContact.Value.bPointTruth && PointContact.Value.bVisible && !PointContact.Value.bShared)++PointContactCount;
+  if(PointContactCount)GetWorld()->GetSubsystem<UBattleSquadTactics>()->Event(TEXT("PointTruthContacts"),PointContactCount);
+ }
  Out.Reason = Out.Living == 0 ? TEXT("NO LIVING MEMBERS") : Out.Failed ? TEXT("LOCAL MOVE FAILED") :
   Out.Contacts.IsEmpty() ? TEXT("NO KNOWN CONTACT / FOLLOW MISSION") : TEXT("KNOWN CONTACT / LOCAL AI");
  return Out;

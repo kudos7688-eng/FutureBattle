@@ -25,6 +25,7 @@ struct FBattleContact
  // KnownTargetFire alone may use the copied tracking sample to aim; other consumers retain their contract.
  double KnownExpiresAt=0,KnownTrackSampleAt=0;
  int32 KnownSourceSquad=INDEX_NONE;
+ bool bPointTruth = false; // bounded point sample; never a license for SpotTrack outside the point
  bool bTracked = false;
  FVector TrackedPosition = FVector::ZeroVector;
  const FVector& MoveAt() const { return bTracked ? TrackedPosition : LastKnownPosition; }
@@ -150,5 +151,23 @@ private:
 	UPROPERTY() TMap<int32, FBattleSquadIntel> SquadIntel;
 	UPROPERTY() TArray<FBattleSquadReport> SquadReports;
 	TSet<FIntVector> SquadReportKeys; // (source squad, receiver squad, target) waiting in SquadReports
+ struct FPointTruthUnit
+ {
+  int32 ID=INDEX_NONE,Squad=INDEX_NONE,Team=INDEX_NONE;
+  FVector At=FVector::ZeroVector;uint8 Type=255;float Memory=0.f;
+ };
+ struct FPointTruthCell
+ {
+  int32 Point=INDEX_NONE;
+  TArray<int32> Infantry[2],Units[2];
+  double Since=-1.;
+ };
+ TMap<FIntPoint,FPointTruthCell> PointTruthCells;
+ TMap<int32,FPointTruthUnit> PointTruthUnits;
+ TArray<FIntPoint> PointTruthWrites; // (observer ID,target ID), only injected contacts to demote next update
+ double PointTruthAt=-1.;
+ void ClearPointTruthVisibility();
+ void UpdatePointTruth(double Now);
+ void ResetPointTruth();
 	TMap<int32, double> NextScanTimes, LastScanTimes;
 };

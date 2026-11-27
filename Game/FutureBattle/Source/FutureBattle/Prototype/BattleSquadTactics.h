@@ -69,6 +69,7 @@ public:
  void SectorDefendReplan(int32 SID);
 
  double Clock() const { return ActiveSeconds; }
+ void InjectPointTruthSpots(int32 Team,const TArray<FVector>& Positions);
  // Spot relaxation entry points. Callers gate trials; helpers take explicit values for isolated smoke tests.
  bool AddKnownSpot(int32 Team,const FVector& At,double Seen,uint8 Kind,bool bLegacy=false);
  bool NoteShotSpot(int32 ShooterID,int32 Team,const FVector& At,double Now,float Hear,float Error,float Every);

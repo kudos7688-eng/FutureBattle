@@ -95,6 +95,9 @@ namespace BattleTactics
  // -BattleSeekKnown (needs that switch). Bit 2: every enemy, into the team's view (AreaIntelView: the front line, the groups,
  // the guns' known places). Nothing fires at a soldier because of it; no soldier's own contact changes.
  int32 SpotTruth();
+ // Point-local truth exception (user decision 2026-11-27), independent of SpotTruth.
+ int32 PointTruth();
+ int32 PointTruthTeam();
  // Trials: write only the seeking table, never perception, AreaIntelView or shooting. Require -BattleSeekKnown>0.
  // -BattleSpotShare=bits (0, 0..7): 1 memory/shared/squad contacts, 2 scout long sight/reports, 4 vehicles.
  int32 SpotShare();

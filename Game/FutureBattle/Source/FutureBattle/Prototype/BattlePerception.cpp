@@ -110,6 +110,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 	const bool bGroupRecordsType = BattleTactics::GroupStrengthEnabled()||bArmourWaitRecordsType;
  const auto* CompositionMatch=GetWorld()->GetSubsystem<UBattleMatch>();
  const int32 ObserverCompositionTeams=CompositionMatch?CompositionMatch->CompositionTeams:0;
+ if(BattleTactics::PointTruth())ClearPointTruthVisibility();
 	// Cache immutable values for this synchronous update, not between sensor ticks.
 	struct FLiveUnit { ABattleUnit* Unit; const FBattleUnitState* State; FVector Position; int32 Ordinal; };
 	TMap<int32, FLiveUnit> Alive;
@@ -199,6 +200,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			}
 		auto& Contact = Observer.Contacts.FindOrAdd(TargetID);
 		Contact.TargetID = TargetID;
+  if(BattleTactics::PointTruth())Contact.bPointTruth=false;
   if(BattleTactics::ObservedTactics() || BattleKnownFire::Enabled())
   {
    Contact.bLongRangeObservation=Mixed&&Leader->HasLongSight(Pair.Key)&&
@@ -229,7 +231,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			// Trial -BattleSpotTrack (BattleTactics.h, default 0): an enemy he saw himself and still remembers is followed for some
 			// seconds (TrackedPosition only, read by MoveAt; the memory above and LastKnownPosition are as before).
 			Contact.bTracked = false;
-			if (const float Track = BattleTactics::SpotTrack(); Track > 0.f && !Contact.bShared && Age <= Track)
+			if (const float Track = BattleTactics::SpotTrack(); Track > 0.f && !Contact.bShared && Age <= Track && !(BattleTactics::PointTruth() && Contact.bPointTruth))
 				if (const auto* Live = Alive.Find(Contact.TargetID)) { Contact.TrackedPosition = Live->Position; Contact.bTracked = true; if(BattleKnownFire::Enabled())Contact.KnownTrackSampleAt=Now; if (Mixed) Leader->SightExperiment.Cover(TEXT("spot_track_updates")); }
 			Contact.Confidence = FMath::Clamp(1.f - static_cast<float>(Age / Profile.MemorySeconds), 0.f, 1.f);
 		}
@@ -414,6 +416,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 			++ParallelUpdates; ParallelTraces += Traces.Num();
 		}
 	}
+ if(BattleTactics::PointTruth())UpdatePointTruth(Now);
 	// Deliver snapshots, never a reference that tracks the target's live position.
 	{
 		FBattleScopedMetric DeliveryTiming(Metrics, EBattleMetricPhase::ReportDelivery);
@@ -611,7 +614,7 @@ void UBattlePerception::Update(const TArray<TObjectPtr<ABattleUnit>>& Units, dou
 		}
 		SquadReportsPeak = FMath::Max(SquadReportsPeak, static_cast<int64>(SquadReports.Num()));
 	}
- if(BattleKnownFire::Enabled())BuildTeamKnownTargets(Now);
+ if(BattleKnownFire::Enabled() || (BattleTactics::PointTruth() && PointTruthAt>=0.))BuildTeamKnownTargets(Now);
 	if (Metrics->bRecording) Metrics->PendingReportsPeak = FMath::Max(Metrics->PendingReportsPeak, static_cast<int64>(PendingReports.Num() + SquadReports.Num()));
 }
 
@@ -635,7 +638,8 @@ void UBattlePerception::AddHint(int32 ObserverID, int32 TargetID, const FVector&
 
 void UBattlePerception::Reset()
 {
- if(BattleKnownFire::Enabled())for(auto& KnownTeam:TeamKnownTargets)KnownTeam=BattleKnownFire::FTeam();
+ if(BattleTactics::PointTruth())ResetPointTruth();
+ if(BattleKnownFire::Enabled() || BattleTactics::PointTruth())for(auto& KnownTeam:TeamKnownTargets)KnownTeam=BattleKnownFire::FTeam();
  Observers.Reset();PendingReports.Reset();PendingCounts.Reset();NextScanTimes.Reset();LastScanTimes.Reset();CrossSectorLook.Reset();SquadIntel.Reset();SquadReports.Reset();SquadReportKeys.Reset();
  if(auto* WhyWorld=GetWorld())if(auto* WhyRuntime=WhyWorld->GetSubsystem<UBattleLeaderRuntime>())WhyRuntime->SightExperiment.PeekScans.Reset();
 }
