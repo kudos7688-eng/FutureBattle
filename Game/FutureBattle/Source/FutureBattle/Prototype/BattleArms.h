@@ -34,6 +34,10 @@ namespace BattleArms
  bool CoverFireEnabled();  // -BattleArmsCoverFire=1: covering fire for assault bounds from squads within 60 m (BattleArmsSector.cpp)
  bool SmokeEnabled();     // -BattleArmsSmoke: the self-test (UBattleLeaderRuntime::RunArmsSmoke)
  bool AnyTrial();         // any of the switches above
+ int32 HoldFireMode();    // -BattleArmsHoldFire (trial, default 0; UBattleLeaderRuntime::StepArms): 1 a soldier who could bound stays and
+                          // fires instead while he was hit within 5 s or sees the target himself within his weapon's engage range;
+                          // 2 he bounds only toward an enemy he sees himself (not a reported one, not a remembered place)
+ bool HoldFireEnabled();  // HoldFireMode()==1
  bool ForTeam(int32 Team); // -BattleArmsTeam=0/1 (one-sided trial, default -1 both; 2 neither, its baseline): only that team issues pistols and grenades, hires
                           // elite platoons and sniper teams, strikes, and has ordinary riflemen bound and charge, watch for rushes
                           // and give covering fire; the other team plays as with all of them =0. Not part of AnyTrial.

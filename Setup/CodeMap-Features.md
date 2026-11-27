@@ -96,6 +96,8 @@ BattleExo | 外骨格兵：盾の回復、副武器（肩の対戦車火器）�
 BattleArms | 歩兵の装備：副武装（拳銃）・手りゅう弾・擲弾銃の弾・近接攻撃・衛生兵の手当て・精鋭小隊の役割と自分の目標、追加の武器種の値（UBattleLeaderRuntime の一部と BattleArms 名前空間）
 BattleArmsSector | 区画の任務と歩兵の装備（試験、既定0）：躍進は攻める任務だけ `-BattleArmsSectorTask`、守る側が走り込みを見つけて迎え撃つ・手りゅう弾・下がる・逆襲 `-BattleArmsRushWatch`、躍進への周りの小隊の援護射撃（制圧が効く） `-BattleArmsCoverFire`
 BattleController | プレイヤーの入力、RTS/TPS 切替、選択、命令、通知、ゲームパッド
+BattleDefendSpread | 守りの配置の段階1 `-BattleDefendSpread`（試験、既定0、arms）：区画を守る小隊を2〜3組に分けて散らす候補の順（PlanDefendSpread）、置き直しのとき遮蔽の動作を止める（UBattleLeaderRuntime の一部）
+BattleHotSectors | 詳しく計算する区画の選び方と記録 `-BattleHotSectors`（試験、既定0、arms）：プレイヤーの周り・攻撃指示・接触の点数（UBattleLeaderRuntime の一部）
 BattleCover | 遮蔽の場所の一覧と予約
 BattleCoverAction | 遮蔽への接近とのぞき撃ちの動作（UBattleLeaderRuntime の一部）。撃てる遮蔽の判定 `UBattleLeaderRuntime::CoverFirePoint`（over/lean）と値2の step `CoverStepFirePoint`（試験 `-BattleCoverFirePoint`、既定0）
 BattleCoverFire | 区画の到着地点が撃てる遮蔽か（over/lean）の判定 `BattleCoverFire::ArrivalFirePoint` の公開（中身は BattleStableMovement.cpp、試験 `-BattleCoverFirePoint`）
@@ -198,6 +200,7 @@ BattleMapJ | マップJ（11-22、`Docs/design-map-j-terrain.md`）の区画の�
 BattleMapK | マップK（11-22、`Docs/design-map-k.md`）の区画の表：密な小さい市街地（街は列4〜15・行3〜10、外側は山）、道 `Roads`、拠点6つ、入れる家 `HouseOf`。配置はマップJ の `BattleMapLayoutJ.inl` を名前空間だけ差し替えて使い、K だけの高い塀・追加の遮蔽は `bDenseCover`、道のトラックは `BattleMapCommandlet`（`-WideField=K`、`Setup/Initialize-MapK.ps1`、区画図 `Setup/Export-MapK.py`）
 BattleSectorView | 作戦画面の表示だけ（規則・AIは読まない）：自軍の視界の格子 `FBattleFogGrid`（12.5m、自軍の兵から静的な物体への光線）と区画ごとの状態 `BattleSectorView::Gather`（自軍の人数・観測した敵・視界の割合・拠点・命令中の部隊・遮蔽位置の数）
 BattleSectorRoute | 区画経由の移動 `-BattleSectorRoute`・側面 `-BattleSectorFlank`・前線 `-BattleSectorFront`（区画のあるマップ、AIの歩兵）：道路網の次の交差点の代わりに、その周りで遮蔽の多い区画を制圧・維持しながら進む。側面は観測した敵の正面を避けた区画、前線は自軍の区画のうち敵に接する区画（UBattleMatch の一部）
+BattleFrontArmies | 前線軍の分割（試験切替 `-BattleFrontArmies=N`、既定0、区画マップ）：前線軍の部隊を行の帯ごとの軍（作戦方針の区間があればその区間、なければ N 等分）に分け、自分の軍の行の持ち場だけに付ける。軍ごとの必要数・新しい部隊の振り分け・20秒に1部隊の融通 `UpdateFrontArmies`、軍の一覧の見出しと地図の線の色
 BattleBaseGroup | 本拠地攻撃隊（試験切替 `-BattleBaseGroup`、既定0、区画マップ）：本拠地攻撃の枠の部隊を1つの群（Kind 3）にし、知っている敵の少ない端の列を1回だけ選んで、集合地点でそろってからその列を2区画ずつ進む `UpdateBaseGroup`・`BaseGroupOrder`
 BattleSectors | マップHの50m区画の格子（20×14）：区画の番号と中心、区画の種類の表、川・橋・浅瀬の位置
 BattleFrontLine | Surprise bridge waypoints: UpdateSurpriseBridge, BattleSurpriseRoute::Bridge / Intersects; fixed H/I map geometry, entrance / exit / edge goal, retained on same-time restore

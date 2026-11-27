@@ -144,6 +144,9 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    P.FocusPlanDir=Dir;
    if(!Dir.IsNearlyZero()){Forward=Dir;P.ArrivalFacing=Dir;bFocusArrival=true;SightExperiment.Cover(TEXT("arrival_focus_facing"));}
   }
+  // Trial -BattleDefendSpread=1, stage 1b: a re-placement faces the threat that asked for it.
+  const bool bDefendPlan=Sector && (S->Order==EBattleOrder::Defend || S->Order==EBattleOrder::Hold);
+  if(bDefendPlan && DefendSpreadFor(S->Team) && !P.SpreadWant.IsNearlyZero()){Forward=P.SpreadWant;P.ArrivalFacing=Forward;}
   // Trial -BattleCoverStrict=1: arrival places must hide from the known enemy nearest to the sector (at most 2 of 5 samples).
   bool bStrictThreat=false;FVector StrictEye=FVector::ZeroVector;
   if(Sector && CoverStrictEnabled())
@@ -266,6 +269,13 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   }
   CoverCandidates.Append(HideOnlyCandidates);
   const double TakenRadius=Sector && CoverDenseEnabled()?130.:190.;
+  // Trial -BattleDefendSpread=1 (BattleDefendSpread.cpp): a squad holding a sector walks each member's own candidate order.
+  TMap<int32,TArray<FVector>> SpreadOrder;
+  if(CoverArrival && bDefendPlan && DefendSpreadFor(S->Team))
+  {
+   PlanDefendSpread(*S,Forward,Right,CoverCandidates,SpreadOrder);
+   P.SpreadFacing=Forward;P.SpreadWant=FVector::ZeroVector;P.SpreadPlacedAt=GetWorld()->GetTimeSeconds(); // stage 1b
+  }
   int32 Queries=0, OpenMembers=0, TailQueries=0;
   if(CoverArrival) SightExperiment.Cover(CoverCandidates.Num()==0?TEXT("arrival_plan_candidates_0"):CoverCandidates.Num()<5?TEXT("arrival_plan_candidates_lt5"):CoverCandidates.Num()<20?TEXT("arrival_plan_candidates_lt20"):TEXT("arrival_plan_candidates_ge20"));
   for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive())
@@ -273,10 +283,12 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    bool Found=false;
    // Evaluation (arrival_open_*): why this member found no cover slot.
    bool bCoverTried=false,bCapHit=false;int32 ArrTaken=0,ArrNoPath=0,ArrLong=0;
+   const TArray<FVector>* OwnOrder=SpreadOrder.Find(ID); // -BattleDefendSpread: this member's own candidate order
+   const TArray<FVector>& MemberCandidates=OwnOrder?*OwnOrder:CoverCandidates;
    if(CoverArrival && (Sector || ID==S->LeaderUnitID || OpenMembers++>=3))
-    for(const FVector& At:CoverCandidates)
+    for(const FVector& At:MemberCandidates)
     {
-     const int32 CoverCandidateIndex=int32(&At-CoverCandidates.GetData());
+     const int32 CoverCandidateIndex=OwnOrder?CoverCandidates.IndexOfByKey(At):int32(&At-CoverCandidates.GetData());
      const bool bFireCoverSlot=CoverCandidateIndex<FireCoverSlots;
      const bool bIndoorSlot=bFireCoverSlot?CoverCandidateIndex<IndoorSlots:CoverCandidateIndex-FireCoverSlots<HideOnlyIndoorSlots;
      bCoverTried=true;
@@ -372,6 +384,17 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
     P.ArrivalGoals.Add(ID,P.Path.Num()?FVector(P.Path.Last()):S->Destination); CoverAssigned.Add(ID);
     SightExperiment.Cover(TEXT("arrival_fallback"));
    }
+  }
+  // Record (all sector defence plans, so a run with -BattleDefendSpread can be compared with one without): how wide the squad
+  // stands across the threat direction (cm), and how far apart its soldiers are on average.
+  if(bDefendPlan && SightExperiment.Enabled && P.ArrivalGoals.Num()>=2)
+  {
+   double Lo=DBL_MAX,Hi=-DBL_MAX,Pair=0;int32 Pairs=0;TArray<FVector> G;P.ArrivalGoals.GenerateValueArray(G);
+   for(const FVector& V:G){const double L=FVector::DotProduct(V-S->Destination,Right);Lo=FMath::Min(Lo,L);Hi=FMath::Max(Hi,L);}
+   for(int32 I=0;I<G.Num();++I)for(int32 J=I+1;J<G.Num();++J){Pair+=FVector::Dist2D(G[I],G[J]);++Pairs;}
+   SightExperiment.Cover(TEXT("defend_plan_n"));
+   SightExperiment.CoverDiag.FindOrAdd(FName(TEXT("defend_plan_width_cm")))+=int32(Hi-Lo);
+   SightExperiment.CoverDiag.FindOrAdd(FName(TEXT("defend_plan_pair_cm")))+=int32(Pair/FMath::Max(1,Pairs));
   }
   // Preserve front-to-back ordering: a front row must not stop on the rear row's route.
   TArray<int32> Members;TArray<FVector> Goals;

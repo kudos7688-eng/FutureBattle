@@ -876,6 +876,13 @@ bool ABattleController::HandlePlayerInput(const FInputKeyEventArgs& Params)
      int32 Army=-1,Target=INDEX_NONE;FString Where;
      if(Tab>=0 && Tab<=2){static const TCHAR* const ArmyNames[]={TEXT("前線軍"),TEXT("攻撃軍"),TEXT("未所属")};Army=Tab==0?1:Tab==1?2:0;Where=ArmyNames[Tab];}
      else if(Under==FBattleSquadListRow::NewGroupKey){Army=2;Target=UBattleMatch::NewAttackGroup;Where=TEXT("新しい攻撃群");}
+     else if(Under<=FBattleSquadListRow::ArmyHeaderBase && Under>FBattleSquadListRow::ArmyHeaderBase-8 && PressedSquadID>=0)
+     {
+      // Trial -BattleFrontArmies: a squad dropped on a front army's header joins that army (and the front army group).
+      const int32 FrontArmyIndex=FBattleSquadListRow::ArmyHeaderBase-Under;int32 Moved=0;
+      for(int32 SID:DraggedSquads()) Moved+=Match->SetFrontArmy(SID,FrontArmyIndex)?1:0;
+      if(Moved) ShowNotice(FString::Printf(TEXT("%d部隊を前線軍%dへ移しました"),Moved,FrontArmyIndex+1));
+     }
      else if(Under!=INDEX_NONE && Under<0 && Under!=PressedSquadID)
       if(const auto* G=Match->Groups.Find(-Under-1)){Army=G->Kind==1?1:2;Target=G->Kind==1?INDEX_NONE:G->ID;Where=G->Kind==1?TEXT("前線軍"):FString::Printf(TEXT("群%d"),G->ID);}
      if(Army>=0 && PressedSquadID>=0)
@@ -1268,11 +1275,20 @@ void ABattleController::SelectSquadListRow(FVector2D P)
    {
     FVector Where=FVector::ZeroVector; int32 N=0;
     if(Entry.bGroupHeader){ for(const auto& S:L->Summaries()) if(S.bActive && GetWorld()->GetSubsystem<UBattleMatch>()->GroupOf(S.SquadID)==Entry.GroupID){Where+=L->Position(S.LeaderUnitID);++N;} if(N) Where/=N; }
+    else if(Entry.bArmyHeader){ for(const auto& S:L->Summaries()) if(S.bActive && GetWorld()->GetSubsystem<UBattleMatch>()->FrontArmyOfSquad(S.SquadID)==Entry.FrontArmy){Where+=L->Position(S.LeaderUnitID);++N;} if(N) Where/=N; }
     else { Where=L->Position(Row.LeaderUnitID); N=1; }
     if(N) TacticalPawn->SetActorLocation(FVector(Where.X,Where.Y,TacticalPawn->GetActorLocation().Z));
    }
    LastRowClickID=Entry.Key(); LastRowClickTime=Now; }
  if(Entry.bNewGroup) { ShowNotice(TEXT("部隊をこの行へドラッグすると、新しい攻撃群を作ります")); return; }
+ if(Entry.bArmyHeader)
+ {
+  auto* Mode=GetWorld()->GetAuthGameMode<ABattleGameMode>(); const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+  SoldierSelection=INDEX_NONE; Selected.Reset();
+  if(Mode&&Match) for(ABattleUnit* Unit:Mode->Units) if(Unit && Unit->IsAlive() && Unit->GetState()->Team==0 && LeaderSelectable(Unit) && Match->FrontArmyOfSquad(Unit->GetState()->SquadID)==Entry.FrontArmy) Selected.AddUnique(Unit);
+  ShowNotice(FString::Printf(TEXT("前線軍%d を選択：%d 部隊"),Entry.FrontArmy+1,Selected.Num()));
+  return;
+ }
  if(Entry.bGroupHeader) { SelectGroup(Entry.GroupID); return; }
  // Shift + click adds the squad to the selection (2026-11-21).
  if(L->CanSelectLeader(Row.LeaderUnitID) && (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift))) { if(ABattleUnit* A=L->Actor(Row.LeaderUnitID)) { SoldierSelection=INDEX_NONE; Selected.AddUnique(A); } }
@@ -1509,7 +1525,21 @@ TArray<FBattleSquadListRow> ABattleController::SquadListRows() const
    if((Match->Groups[GID].Kind==1)!=(SquadFilter==0)) continue;
    FBattleSquadListRow H; H.GroupID=GID; H.bGroupHeader=true; Out.Add(H);
    TArray<FBattleSquadSummary> Rows; for(const auto& Row:L->Summaries()) if(Row.bActive && Match->GroupOf(Row.SquadID)==GID) Rows.Add(Row);
-   SortSquadRows(Rows); Append(Rows,GID);
+   SortSquadRows(Rows);
+   // Trial -BattleFrontArmies: the front army's squads under one header per army (its rows, need and squads), then any not yet in one.
+   if(Match->Groups[GID].Kind==1 && Match->FrontArmyCount(0)>=2)
+   {
+    for(int32 A=0;A<Match->FrontArmyCount(0);++A)
+    {
+     FBattleSquadListRow AH; AH.GroupID=GID; AH.bArmyHeader=true; AH.FrontArmy=A; Out.Add(AH);
+     TArray<FBattleSquadSummary> Mine; for(const auto& Row:Rows) if(Match->FrontArmyOfSquad(Row.SquadID)==A) Mine.Add(Row);
+     Append(Mine,GID);
+    }
+    TArray<FBattleSquadSummary> Loose; for(const auto& Row:Rows) if(Match->FrontArmyOfSquad(Row.SquadID)==INDEX_NONE) Loose.Add(Row);
+    Append(Loose,GID);
+    continue;
+   }
+   Append(Rows,GID);
   }
   if(SquadFilter==1){ FBattleSquadListRow N; N.bNewGroup=true; Out.Add(N); } // the "+ new attack group" drop row
   return Out;
@@ -1675,7 +1705,9 @@ void ABattleController::UpdateGamepad(float DeltaTime)
   {
    const float Speed=1200.f*GetWorld()->DeltaRealTimeSeconds;
    VirtualCursor.X=FMath::Clamp(VirtualCursor.X+RX*FMath::Abs(RX)*Speed,0.f,float(W-1));
-   VirtualCursor.Y=FMath::Clamp(VirtualCursor.Y-RY*FMath::Abs(RY)*Speed,0.f,float(H-1));
+   // Sign flipped 2026-11-27 (user report: up and down were reversed in the tactical view). Same stick reading as the look
+   // below: pushing the right stick up gives a negative RY, and screen Y grows downward.
+   VirtualCursor.Y=FMath::Clamp(VirtualCursor.Y+RY*FMath::Abs(RY)*Speed,0.f,float(H-1));
    const int32 MousePixelX=FMath::RoundToInt(VirtualCursor.X),MousePixelY=FMath::RoundToInt(VirtualCursor.Y);
    SetMouseLocation(MousePixelX,MousePixelY);
    LastCursorPosition=FVector2f(float(MousePixelX),float(MousePixelY));
