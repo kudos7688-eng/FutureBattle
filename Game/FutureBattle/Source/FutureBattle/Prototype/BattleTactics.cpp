@@ -72,6 +72,11 @@ bool BattleTactics::SupplyCarRecover()
  static const bool bOn=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSupplyCarRecover="),Value);return Value!=0;}();
  return bOn;
 }
+float BattleTactics::HuntTrack()
+{
+ static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleHuntTrack="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,30.f):0.f;}();
+ return Seconds;
+}
 float BattleTactics::SpotTrack()
 {
  static const float Seconds=[](){float Value=0.f;FParse::Value(FCommandLine::Get(),TEXT("BattleSpotTrack="),Value);return FMath::IsFinite(Value)?FMath::Clamp(Value,0.f,30.f):0.f;}();

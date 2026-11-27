@@ -69,6 +69,10 @@ namespace BattleTactics
  // Exception: -BattleKnownTargetFire=1 copies valid tracking samples into its team index for candidate ranking and aim only;
  // it still requires the shooter's sensor and aim line. No other consumer or tracking update changes.
  float SpotTrack();
+ // Trial -BattleHuntTrack=s (default 0 = off, 0..30). User decision 2026-11-27: a limited exception to observation-only AI.
+ // Read only the current position of the one living target assigned to a hunt, within s seconds of the team's last sighting.
+ // Tracking never refreshes the sighting time or reveals death to the hunt's end conditions. Artillery raids have no observed target ID.
+ float HuntTrack();
  int32 SeekKnown();
  float SeekKnownSeconds();
  float SeekKnownRange();

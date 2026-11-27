@@ -69,14 +69,23 @@ void UBattleMatch::UpdateATHunts(int32 Team)
   FATHunt& Hunt=ATHunts[HunterID];if(Hunt.Team!=Team)continue;
   const auto* Hunter=Store->FindSquad(HunterID);const auto* Target=Store->Find(Hunt.Target);
   for(int32 I=0;I<V.EnemyKeys.Num()&&I<V.Enemies.Num();++I)if(V.EnemyKeys[I]==Hunt.Target){Hunt.Position=V.Enemies[I];Hunt.SeenAt=Elapsed;break;}
+  // Keep the real sighting clock separate: tracking cannot renew its own permission.
+  const float TrackSeconds=BattleTactics::ATHunt()?BattleTactics::HuntTrack():0.f;
+  const bool bTrackWindow=TrackSeconds>0.f&&Hunt.SeenAt>=0.&&Elapsed>=Hunt.SeenAt&&Elapsed-Hunt.SeenAt<=TrackSeconds;
+  if(bTrackWindow&&Elapsed>Hunt.SeenAt&&Target&&Target->IsAlive())
+  {
+   Hunt.Position=R->Position(Hunt.Target);Hunt.TrackedAt=Elapsed;
+   if(++Hunt.Tracked==1)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HUNT_TRACK kind=at team=%d squad=%d target=%d"),Team,HunterID,Hunt.Target);
+  }
+  const double LastLocatedAt=TrackSeconds>0.f?FMath::Max(Hunt.SeenAt,Hunt.TrackedAt):Hunt.SeenAt;
   // -BattleATHunt=2: an unseen soldier is searched for at his last seen position (ends when the squad leader is within 15 m of it).
   const bool bSearch=BattleTactics::ATHunt()==2;
-  const bool bArrived=bSearch&&Hunter&&Elapsed-Hunt.SeenAt>2.&&FVector::DistSquared2D(R->Position(Hunter->LeaderUnitID),Hunt.Position)<FMath::Square(1500.);
+  const bool bArrived=bSearch&&Hunter&&!bTrackWindow&&Elapsed-LastLocatedAt>2.&&FVector::DistSquared2D(R->Position(Hunter->LeaderUnitID),Hunt.Position)<FMath::Square(1500.);
   const TCHAR* End=!Target||!Target->IsAlive()?TEXT("killed"):!Hunter||Hunter->CommandStatus!=EBattleCommandStatus::Active?TEXT("inactive"):
-   bArrived?TEXT("searched"):!bSearch&&Elapsed-Hunt.SeenAt>20.?TEXT("unseen"):Elapsed-Hunt.StartAt>60.?TEXT("timeout"):nullptr;
+   bArrived?TEXT("searched"):!bSearch&&!bTrackWindow&&Elapsed-LastLocatedAt>20.?TEXT("unseen"):Elapsed-Hunt.StartAt>60.?TEXT("timeout"):nullptr;
   if(End)
   {
-   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AT_HUNT_END team=%d squad=%d target=%d reason=%s after=%.0f"),Team,HunterID,Hunt.Target,End,Elapsed-Hunt.StartAt);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_AT_HUNT_END team=%d squad=%d target=%d reason=%s after=%.0f tracked=%d"),Team,HunterID,Hunt.Target,End,Elapsed-Hunt.StartAt,Hunt.Tracked);
    ATHunts.Remove(HunterID);
   }
  }
@@ -130,7 +139,7 @@ void UBattleMatch::UpdateATHunts(int32 Team)
 
 void UBattleMatch::UpdateSupplyHunts(int32 Team)
 {
- // Trial -BattleSupplyCarHunt (BattleTactics.h). What the team sees and the observed type only; nothing of the vehicle's true state.
+ // Trial -BattleSupplyCarHunt (BattleTactics.h): observations only, except the opt-in HuntTrack position update below.
  if(!bArea||!BattleTactics::SupplyCarHunt()||Team<0||Team>1)return;
  if(Elapsed<SupplyHuntClock[Team]){SupplyHunts.Reset();SupplyHuntRest[0].Reset();SupplyHuntRest[1].Reset();SupplySeenLogged[0].Reset();SupplySeenLogged[1].Reset();}
  SupplyHuntClock[Team]=Elapsed;
@@ -154,8 +163,22 @@ void UBattleMatch::UpdateSupplyHunts(int32 Team)
   FSupplyHunt& Hunt=SupplyHunts[HunterID];if(Hunt.Team!=Team)continue;
   const auto* Hunter=Store->FindSquad(HunterID);
   if(const FVector* At=Seen.Find(Hunt.Target)){Hunt.Position=*At;Hunt.SeenAt=Elapsed;}
+  // Read truth only for this hunt's one target and only inside the sighting window.
+  const float TrackSeconds=BattleTactics::HuntTrack();
+  const bool bTrackWindow=TrackSeconds>0.f&&Hunt.SeenAt>=0.&&Elapsed>=Hunt.SeenAt&&Elapsed-Hunt.SeenAt<=TrackSeconds;
+  if(bTrackWindow&&Elapsed>Hunt.SeenAt)
+  {
+   const auto* TrackedTarget=Store->Find(Hunt.Target);
+   if(TrackedTarget&&TrackedTarget->IsAlive())
+   {
+    Hunt.Position=R->Position(Hunt.Target);Hunt.TrackedAt=Elapsed;
+    if(++Hunt.Tracked==1)UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_HUNT_TRACK kind=supply team=%d squad=%d target=%d"),Team,HunterID,Hunt.Target);
+   }
+  }
+  // Do not infer death from missing samples; the search waits for the tracking window to end.
+  const double LastLocatedAt=TrackSeconds>0.f?FMath::Max(Hunt.SeenAt,Hunt.TrackedAt):Hunt.SeenAt;
   const double Distance=Hunter?FVector::Dist2D(R->Position(Hunter->LeaderUnitID),Hunt.Position):0.;
-  const bool bArrived=Hunter&&Elapsed-Hunt.SeenAt>2.&&Distance<1500.;
+  const bool bArrived=Hunter&&!bTrackWindow&&Elapsed-LastLocatedAt>2.&&Distance<1500.;
   // Log only (-BattleSupplyHuntLog, default off; STATUS 2026-11-26 21:10: the hunts do not get there): every 5 s where the squad
   // is, the order and mission it holds, its plan and what its leader does. Changes nothing in the match.
   static const bool bHuntLog=FParse::Param(FCommandLine::Get(),TEXT("BattleSupplyHuntLog"));
@@ -177,7 +200,7 @@ void UBattleMatch::UpdateSupplyHunts(int32 Team)
   if(End)
   {
    if(!bArrived)SupplyHuntRest[Team].Add(Hunt.Target,Elapsed+60.);
-   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SUPPLY_HUNT_END team=%d squad=%d target=%d reason=%s after=%.0f unseen=%.0f"),Team,HunterID,Hunt.Target,End,Elapsed-Hunt.StartAt,Elapsed-Hunt.SeenAt);
+   UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SUPPLY_HUNT_END team=%d squad=%d target=%d reason=%s after=%.0f unseen=%.0f tracked=%d"),Team,HunterID,Hunt.Target,End,Elapsed-Hunt.StartAt,Elapsed-Hunt.SeenAt,Hunt.Tracked);
    SupplyHunts.Remove(HunterID);
   }
  }

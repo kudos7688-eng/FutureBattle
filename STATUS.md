@@ -40,6 +40,16 @@
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
 
+## 2026-11-27 15時05分 Claude（敵部隊への攻撃命令）：狩りの目標だけ追う試験切替 `-BattleHuntTrack=<秒>`（既定0）。追跡は働くが、狩りは今も目標に届かない（詰まって終わる）ので、試合の数値は動かない
+
+- **経緯**：ユーザー選択「追跡の使い道を絞る」。全員への `-BattleSpotTrack` は6 seed で効果なし（下の項目）。
+- **変更範囲**（実装 Codex、確認と一部修正 Claude）：`BattleTactics.h/.cpp`（`HuntTrack()`、0..30）、`BattleMatch.h`（`FATHunt`・`FSupplyHunt` に `TrackedAt`・`Tracked`）、`BattleATHunt.cpp`（`UpdateATHunts`・`UpdateSupplyHunts`：目標を軍が最後に見てから s 秒以内で、今見えていない間だけ、狩りの行き先をその目標1体の今の位置で更新。`SeenAt` は本当に見た時刻のまま。追跡中は searched / unseen で終わらない）、`Test-WideSight.ps1 -HuntTrack`、`Docs/experiments.md`。ログ `BATTLE_HUNT_TRACK kind=supply|at`（狩り1件の最初の1回）と、終了ログ末尾の `tracked=<回数>`。
+- **入れなかったもの**：砲兵襲撃（`-BattleArtilleryRaidChase`）。`FArtilleryRaidChase` は座標だけで「実際に見た砲」の ID を持たず、閃光だけの砲の真の位置を読むことになるため。敵の対戦車兵を狩る仕組みは既存の `-BattleATHunt`（装甲車・戦車が見た対戦車兵へ小銃・重装小隊を送る）だったので、新しい切替は足していない。
+- **検証**：ビルド成功、`Test-Battle` failures=0、凍結 targetorder-3。切替なしは前のビルドと IDENTICAL（`to3-K-default-s7` 対 `to2-K-flash-s7`）。
+- **試合**（マップK、両軍 `-BattleSupplyCarHunt=1 -BattleATHunt=2`、追跡なし→追跡15秒）：追跡した狩りは seed 7 で9件（補給車7・対戦車兵2）、seed 43 で13件（補給車13）。**追跡した補給車狩り20件の終わり方は stalled 11・inactive 4・supply 3 で、searched（着いた）は0**。対戦車兵狩りは seed 7 timeout 2、seed 43 は追跡なし timeout 4 → 追跡あり killed 2（この2件は tracked=0）。数値：seed 7 与ダメージ 24791/26941→23570/23923、撃破 155/153→152/147、戦死 130/143→135/137、得点 279/371→423/370。seed 43 与ダメージ 22206/21173→25710/22274、撃破 135/146→165/137、戦死 124/121→124/147、得点 459/386→454/395（自軍/敵軍）。1試合の散らばりの内。
+- **わかったこと**：狩りが届かない原因は「場所を知らない」ことではなく、向かう途中で詰まること（11-26 21時10分 弾薬と補給 の記録と同じ）。追跡を足しても届く数は増えない。
+- **次の一手**：`-BattleHuntTrack` は既定0のまま置く。先に狩りの小隊が目標へ着かない理由（stalled）を直すのが筋（ユーザーの判断待ち）。砲兵襲撃に効かせるには、襲撃が「見た砲の ID」を持つ変更が要る。
+
 ## 2026-11-27 13時50分 Claude（敵部隊への攻撃命令）：AI の追跡 `-BattleSpotTrack` を6 seed に増やした（ユーザー指示「試合を増やして判断」）。5秒も15秒＋記憶15秒も、与えた損害・撃破・戦死を一定の向きに動かさない。既定は0のまま
 
 - **条件**：マップK seed 7・43・239・277・307・331、両軍に切替、凍結 targetorder-1（既定は main-714523e と IDENTICAL）、基準は既存の `cmb1-K-default-s*`（取り直していない）。追加は8本（`to1-K-track5-s*`・`to1-K-track15-s*`）。
