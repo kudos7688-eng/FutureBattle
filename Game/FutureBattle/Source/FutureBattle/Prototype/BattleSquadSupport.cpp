@@ -9,6 +9,7 @@ bool UBattleSquadTactics::CanSupport(int32 SID,int32 Target) const
 {
  if(BattleTactics::SectorDefendMarch()>0 && MarchingSector(SID))return false;
  if(BattleTactics::SectorDefend()>0 && DefendingSector(SID))return false;
+ if(BattleTactics::SectorSeizePoint()>0 && SeizePointMember(SID))return false;
  if(BattleTactics::BaseGarrison()&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID))return false;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID);
  if(!S || S->CommandStatus!=EBattleCommandStatus::Active || (S->Team==0 && !S->bPlayerDelegated)) return false;
@@ -91,6 +92,7 @@ bool UBattleSquadTactics::AcceptSupport(int32 SID,int32 OtherID,int32 Target)
     !CanSupport(SID,Target)) return false;
  if(BattleTactics::SectorDefendMarch()>0 && MarchingSector(SID))return false;
  if(BattleTactics::SectorDefend()>0 && DefendingSector(SID))return false;
+ if(BattleTactics::SectorSeizePoint()>0 && SeizePointMember(SID))return false;
  // Local emergency assessment has final say, even when the team report was stale.
  Evaluate(SID,Observe(*S),0);
  if(S->TacticalPlan.Action!=EBattleSquadTactic::Mission && S->TacticalPlan.Action!=EBattleSquadTactic::Engage) return false;

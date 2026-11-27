@@ -559,6 +559,17 @@ const TCHAR* UBattleSquadTactics::SeizeExtendedEnd(int32 SID,double Now) const
  return nullptr;
 }
 
+bool UBattleSquadTactics::SeizePointMember(int32 SID) const
+{
+ if(BattleTactics::SectorSeizePoint()<=0)return false;
+ const auto* MemberOpen=SeizeSectors.Find(SID);
+ const auto* MemberExtra=SeizeExtras.Find(SID);
+ const auto* MemberSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
+ return MemberOpen && MemberOpen->EndAt<0. && MemberExtra && MemberExtra->Point!=INDEX_NONE &&
+  MemberSquad && MemberSquad->TacticalPlan.Action==EBattleSquadTactic::Engage &&
+  MemberSquad->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR"));
+}
+
 bool UBattleSquadTactics::SeizeClearing(int32 SID) const
 {
  if(BattleTactics::SectorSeizePoint()<=0)return false;

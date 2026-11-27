@@ -61,6 +61,7 @@ public:
  void Reset();
  bool SeizingSector(int32 SID) const;
  bool SeizeClearing(int32 SID) const;
+ bool SeizePointMember(int32 SID) const; // in a point concentration (assemble, assault, clear, support): not lent to SUPPORT/FLANK
  bool SeizeSupportFocus(int32 SID,FVector& Out) const;
  bool SeizeSupportTarget(int32 SID,const FVector& At) const;
  bool MarchingSector(int32 SID) const;
