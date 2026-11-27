@@ -109,7 +109,8 @@ namespace
    Arrangement==EArrangement::Barrels?2+int32((Hash>>10)%2):1;
   if(Segments>256)return false;
   const FVector Part(Target.X/Segments,Target.Y,Target.Z),Scale=Part/Native;
-  if(!InRange(Scale,FVector(bTree?.4:.6),FVector(bTree?2.5:1.6)))return false;
+  // Walls may be up to twice as thick and as tall as the prop: map L's forest hedges are 150 cm thick (1.7x the hedge mesh) and stayed green cubes.
+  if(!InRange(Scale,FVector(bTree?.4:.6),bTree?FVector(2.5):Arrangement==EArrangement::Wall?FVector(1.6,2.,2.):FVector(1.6)))return false;
   const FQuat Turn=Box.Rotation*FRotator(0,Quarter*90.,0).Quaternion();
   for(int32 I=0;I<Segments;++I)
   {

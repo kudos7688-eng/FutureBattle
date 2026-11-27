@@ -247,7 +247,7 @@ float2 xy = WorldPos.xy;
 GROUND_COLOR = GROUND_WEIGHTS + '''
 float2x2 R = float2x2(0.8253, -0.5646, 0.5646, 0.8253);
 float3 c = float3(0, 0, 0);
-float3 G[6]; G[0] = float3(0.36, 0.68, 0.30); G[1] = float3(0.50, 0.60, 0.36); G[2] = G[3] = G[4] = float3(1, 1, 1); G[5] = float3(0.50, 0.50, 0.50);   // the grass scan is straw yellow: push it to green
+float3 G[6]; G[0] = float3(0.36, 0.68, 0.30); G[1] = float3(0.50, 0.60, 0.36); G[2] = G[3] = G[4] = float3(1, 1, 1); G[5] = float3(0.27, 0.28, 0.29);   // the gravel scan is nearly white: a home base read as snow   // the grass scan is straw yellow: push it to green
 #define KIT_LAYER(T, S, tile, i) { float2 uv = xy / tile; float3 a = Texture2DSample(T, S, uv).rgb; \\
   float3 big = Texture2DSample(T, S, mul(R, uv) * 0.143 + 0.37).rgb; float3 avg = Texture2DSampleLevel(T, S, float2(0.5, 0.5), 12.0).rgb; \\
   c += a * lerp(float3(1, 1, 1), clamp(big / max(avg, 0.02), 0.45, 1.7), 0.6) * W[i] * G[i]; }
