@@ -211,6 +211,16 @@
 - 入ったもの：撃てる位置の候補（壁・塀の端と切れ目 → 遮蔽スロット → 環、光線の前の予選）、移動の約束 `-BattleKnownMoveCommit=12`／`-BattleKnownMoveWait=1.5`、防衛兵 `-BattleKnownMoveDefendMarch`・`-BattleKnownMoveDefendReach=1500`（値2の中の既定）。調査記録 `Docs/investigation-defend-march-2026-11-27.md`。
 - 検証（main 09079c22）：Build-Editor 成功、Test-Battle failures=0、Test-KnownTargetFire 値1・値2 failures=0、Test-CoverActions・Test-CoverPeek failures=0。試合は回していない（切替なしの一致は coverlean の凍結ビルドで台帳 E2 と IDENTICAL を確認済み）。
 
+## 2026-11-27 11時30分 Claude（ミッション）：攻撃中の精鋭の近い集合と再開（第6段、`missions` の先頭、ミッションの切替の内側）。途中で止まる現象は消えたが、2個では敵の守りを抜けず、まだ敵の本拠地には着かない
+
+- **ユーザー決定（11-27）**：立て直しを直す。
+- **原因（Codex の調査）**：第5段で止まったのは通常の集合ではなく補給のための本拠地戻り（`HOME SUPPLY`、本拠地到着と補充まで解けない）。壁際では経路を作り直すたびに進捗の時計が戻り、同じ場所から抜けなかった。
+- **変更**：`-BattleMissionAssaultRally`（ミッションが1のとき有効、0で前の動き）、`-BattleMissionAssaultRallyBack=6000`、`-BattleMissionAssaultRallyWait=45`。来た経路を約60m 戻って集まり、7割そろうか45秒で、戦力が残っていれば再開、足りなければ補給戻り。同じ損害での戻りの繰り返しを防ぐ。記録 `mission_assault_rally`／`_rally_resume`／`_rally_timeout`。
+- **検証**：ビルド成功、`Test-Battle` failures=0、`Test-Missions`（m8、8通り）すべて failures=0。凍結ビルド `missions-stage6`。
+- **1試合（マップK seed 43、`ms8-K-rally-s43`）**：西の2個は267秒に出発、集合4回・再開2回（523秒と579秒、いずれも数秒で再開）・期限2回。敵の本拠地の330〜380m 手前の交戦で各8人が4人、さらに3人と2人に減り、630〜660秒に補給戻り。東は発見が736秒で2個そろわず出発なし。`*_near_opponent_home_seconds` は両軍0。得点 西470／東507（第5段は587／327、1試合どうしで比較にはならない）。
+- **制限**：seed 43 の1試合だけ。seed 7、2シードの比較、切替0の一致の再確認は未実施。
+- **次の一手**：移動と集合の不具合は残っていない。残る原因は、精鋭2個だけでは敵の守りを抜けないこと。群の攻勢に合わせて出す形にするかをユーザーに確認する。
+
 ## 2026-11-27 8時45分 Claude（ミッション）：精鋭を2個そろえてマップの端から出す第5段（`missions` 7883eae1、ミッションの切替の内側）。出発はするが、まだ敵の本拠地には着かない
 
 - **ユーザー決定（11-27）**：立て直しの直し（第4段 6c4e98af）を入れたうえで、出し方は A（端を回る経路）＋B（2個そろうまで待つ、上限150秒）。
