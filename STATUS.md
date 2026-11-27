@@ -34,11 +34,23 @@
 | 一戦中のセーブ・ロード（`nosave` ブランチ、`FutureBattle-nosave`） | **11-25 18時30分 main へ（9997b7a）：削除した**（ユーザー決定「一戦中にセーブロードはいらない」、掲示板 C28）。F8/F9・ツールバーの保存/読込・パッドの群メニューの項目・`BattleSave` と各機能の保存/復元・評価の往復保存・保存の自己試験 206 件を削除。通常の試合は不変（前後の凍結ビルドでマップI seed 7・マップK seed 43 が IDENTICAL） | 往復保存が無くなったので、18時の回より前の評価の結果とは比べない（MEASURE.md）。新しい機能に保存・復元の対応は要らない（AGENTS.md） |
 | スポットの緩和（`spotrelax` ブランチ、`FutureBattle-spotrelax`） | **11-27 6時45分：既定の変更（ユーザー決定、6時の回、main 0d707778）**。「向かう（広く）」＝`-BattleSeekKnown` 既定2・`-BattleSeekKnownRange` 既定60000・`-BattleSeekKnownMax` 既定8（`=0` で元の動作、`nd1` と一致）。軍が見た敵歩兵のマスへ手すきの小銃小隊が向かう。マップK で与えた損害 +8〜49%（切替なしと比べた6本すべてで増）、ENGAGE 2〜3倍、得点の両軍合計は下がる。スポットの緩和の切替 A-1〜A-4・診断 A-5 は既定0で main に入った。司令部の知らせは、後方を配る形でだけ撃破 +11%（8種）なので候補から外して休止。設計 `Docs/design-spot-relax.md` | **ユーザーの判断待ち**：敵の本当の位置を使う条件（案3つ）、B・C・D の案。**未確認**：マップ I・J・H、持ち場を空ける影響、性能、実画面。台帳 E2 は古い |
 | ミッション（`missions` ブランチ、`FutureBattle-missions`） | **11-27 2時40分**：`-BattleMissions=1`（既定0、missions f16a619b、main 未取り込み）。両軍に3枠（拠点の確保→資源30、敵の撃滅→敵の作戦の写し60秒、区画の偵察→敵の基地の位置）、AI の派遣、画面。固定場面 89項目合格、切替0は IDENTICAL。マップK 2シードで両軍とも敵の基地を見つける（192〜345秒）。設計 `Docs/design-missions.md`（missions） | 砲撃（印のあと本拠地を撃てる）を既定で切るか。東だけ損をする向き（原因未調査）。精鋭の本拠地攻撃は0回。実画面は未確認 |
-| グラフィック（`visuals` ブランチ、`FutureBattle-visuals`） | **11-27 9時10分**：どのマップでも使い回せる**素材キット**（`/Game/Kit`）と、それを表示だけで当てる切替 `-BattleKitLook=1`（既定0、`Play-Area.ps1 -KitLook` は既定1）。武器10種＋手りゅう弾・小物17種（Tripo）、地面と壁の表面26種（Poly Haven、CC0）、エフェクトのコマ送り画像4種（Blender で自作）。立方体のマップの表面を差し替え、空と雲を足し、木・生け垣・低い壁・箱・車を小物に見た目だけ替える。衝突・判定は不変、Test-Battle failures=0。main へは未取り込み。出典は `Docs/ASSET_SOURCES_KIT.md` | 既定にするか（ユーザー）。エフェクト（煙・土ぼこり・爆炎）は実装済みだが画面で未確認。`Content/Kit` が 376MB あり、テクスチャを 1K に焼き直してから取り込む。家の窓・扉、マップL の地面、描画の負荷は未着手・未計測 |
+| グラフィック（`visuals` ブランチ、`FutureBattle-visuals`） | **11-27 9時10分**：どのマップでも使い回せる**素材キット**（`/Game/Kit`）と、それを表示だけで当てる切替 `-BattleKitLook=1`（既定0、`Play-Area.ps1 -KitLook` は既定1）。武器10種＋手りゅう弾・小物17種（Tripo）、地面と壁の表面26種（Poly Haven、CC0）、エフェクトのコマ送り画像4種（Blender で自作）。立方体のマップの表面を差し替え、空と雲を足し、木・生け垣・低い壁・箱・車を小物に見た目だけ替える。衝突・判定は不変、Test-Battle failures=0。main へは未取り込み。出典は `Docs/ASSET_SOURCES_KIT.md` | **11-27 14時10分**：家の窓・扉・屋根の部品15種（`/Game/Kit/Parts`、切替 `-BattleKitHouses` 既定1）、建物ごとの壁の色、地面・壁の繰り返しを崩す素材（明暗のむら・汚れ・2種類目の地面）、陰影付きのエフェクト画像、テクスチャ1K化（`Content/Kit` 200MB）。試遊は既定で新しい見た目（ユーザー決定）。残り: main への取り込み（18時の回）、マップL の地面（`M_GroundVertex` は白いまま）、エフェクトはまだ丸い煙、描画の負荷は未計測 |
 
 **いま誰が何を調べているか・各系統がわかったこと**は調査の掲示板で引く：`python -I Setup/Board.py status`／`find <語>`（`Docs/design-investigation-board.md`）。
 
 古い項目：11-22〜11-24 は `Docs/journal/STATUS-2026-11-22_11-24.md`、11-18〜11-21 は `Docs/journal/STATUS-2026-11-18_11-21.md`、11-17 は `Docs/journal/STATUS-2026-11-17.md`、11-04〜11-16 は `Docs/journal/STATUS-2026-11-04_11-16.md`、性能の経緯（11-04〜11-11）は `Docs/journal/PERFORMANCE-2026-11-04_11-11.md`。
+
+## 2026-11-27 14時10分 Claude（グラフィック）：家の窓・扉・屋根の部品、建物ごとの壁の色、繰り返しの目立たない地面・壁、エフェクト画像の描き直し（表示だけ、visuals ブランチ）
+
+- 経緯: ユーザー依頼「家の窓・扉・屋根の部品も作って」「地面・壁のグラフィックが全部同じ繰り返しでリアリティが低い」。
+- 部品（`Art/Kit/Scripts/make_parts.py`、Blender で箱から自作、生成なし・Tripo 消費なし）: WindowA / WindowB（鎧戸）/ WindowTall / DoorA / DoorB（両開き）/ WindowOpen・DoorOpen（開口用の枠、拡縮して使う）/ RoofGable / RoofHip / RoofRafters（梁だけ）/ Trim / RoofVent / Chimney / Awning / Balcony。材質スロットは役割名（Frame・Glass・Roof…）で、`Setup/Import-Kit.py` が世界座標合わせのキット素材を割り当てる（不均等に拡縮しても伸びない）。`/Game/Kit/Parts/SM_Kit_<名前>`。
+- 付け方（`BattleKitHouses.cpp`、Codex 実装、`-BattleKitHouses` 既定1、`-BattleKitLook=1` のときだけ）: 入れる2階建て（HouseWall / HouseSill）は窓台の上に枠、扉の抜けに枠、屋根は**梁だけ**（2階に屋根の当たり判定が無く上から見え撃てるので、覆う屋根で隠さない）。箱形の建物（House・Shop・Shed・Apartment・Warehouse・Nave など、ラベルの許可リスト）は窓を階と列で並べ、扉、店の日よけ、集合住宅のバルコニー、低い建物は切妻/寄棟の屋根（瓦かスレート）と煙突、高い建物は屋上の縁と換気機。経路の範囲が屋上に届く建物には屋根を置かない。壁は1軒ごとに6色から位置のハッシュで選ぶ（MID は 材質×色 で使い回し）。元の立方体は隠さず、部品は当たり判定・経路への影響なしの ISM。
+- 地面・壁（`M_Kit_Surface` を作り直し）: 同じ写真を7倍に拡大・回転したものの濃淡を掛ける（Mix）、30m 規模の明暗（Macro）、数m幅の汚れ（Dirt）。地面は2層の `M_Kit_SurfaceBlend`: 草に土、まばらな草に草、畑・土道・岩地にまばらな草、森の地面に草（まだらに混ぜる）。明るさの違う組（土に砂利、舗装にコンクリート）は雪のように見えたのでやめた。
+- エフェクト画像: EEVEE では陰影の無い灰色の塊だったので Cycles で描き直した（`make_flipbook.py`、既定 Cycles）。画面では前より立体感があるが、まだ丸い煙の玉に見える。
+- テクスチャ: 武器・小物を 1K に焼き直し、`Content/Kit` 376MB → 200MB。
+- 検証（ロック内、13時56分〜14時06分）: Build-Editor Succeeded、`Import-Kit` `surfaces=26 weapons=10 props=17 parts=15 errors=0`、Test-Battle `BATTLE_SMOKE_RESULT failures=0`、エフェクト確認（マップE、`-BattleKitLook=1`）`FX_CHECK_RESULT failures=0`。マップK `BATTLE_KITLOOK_HOUSES houses=30 buildings=16 windows=530 doors=76 roofs=68 tinted=1024 instances=680 missing_meshes=0`、マップL `houses=82 buildings=14 windows=1066 doors=178 roofs=110 instances=1354`、マップE `buildings=92 windows=1168 doors=92 roofs=249`。画面（`Setup/KitShots/K-houses3-*.png`）で2階建ての枠と梁の屋根、店・小屋の屋根と煙突を目で確認。
+- 未確認・制限: 切替なしの試合が同じ結果になることは試合では未確認（部品は当たり判定なし・乱数は位置のハッシュだけ、Test-Battle は通過）。描画の負荷は未計測（マップL で部品 1354、小物 2618 インスタンス）。マップL の地面（`M_GroundVertex`）は白いまま。梁を真上のごく近くから見ると木目が伸びる。扉・窓の枠は影の中で灰色に見える。遠景の VAT の武器は元のまま。
+- 次の一手: 18時の回で main へ取り込み（main でビルドと取り込みが要る）。その後、マップL の地面、煙の形（輪郭の崩し）、描画の負荷の比較。
 
 ## 2026-11-27 9時20分 Claude（グラフィック）：**ユーザー決定** — 素材キットの見た目を試遊（`Play-Area.ps1`）で既定にする
 

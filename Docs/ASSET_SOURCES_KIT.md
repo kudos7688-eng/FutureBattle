@@ -91,3 +91,7 @@ bash Art/Kit/Scripts/make_all_props.sh      # 小物：軸にそろえる・底�
 Setup\Import-Kit.ps1                        # UE へ取り込み（計測ロックが要る）
 ```
 
+
+## 家の部品（2026-11-27 追加）
+
+`Art/Kit/Parts`（`/Game/Kit/Parts/SM_Kit_*`、15種）は `Art/Kit/Scripts/make_parts.py` が Blender の箱から作る自作の模型（生成・外部素材なし）。表面は上の Poly Haven（CC0）のキット素材を材質スロットに割り当てている。ガラス `M_Kit_Glass` は色だけの自作材質。エフェクト画像4種は `make_flipbook.py`（Cycles）で描き直した自作。

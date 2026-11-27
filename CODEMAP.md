@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（188 モジュール、52639 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（189 モジュール、52965 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -22,8 +22,9 @@
 | 機能 | 入口（ここから読む） | 関連 |
 |---|---|---|
 | 素材キットのコマ送りエフェクト | `BattleKitFX::Puff` (BattleKitFX.cpp:140) 、 `BattleKitFX::Explosion` (BattleKitFX.cpp:202) 、 `BattleKitFX::Wreck` (BattleKitFX.cpp:230) | `-BattleKitFX=0` で停止（BattleKitLook=1 内で既定1）。表示専用ビルボード96枚、World時間で更新。BattleFXCheckで4種類を確認 |
+| 素材キットの家・建物 | `BattleKitLook::DressHouses` (BattleKitHouses.cpp:284) | `-BattleKitHouses=0` で停止（BattleKitLook=1 内で既定1）。材質差し替え後に開口枠・窓扉・屋根を衝突なしISMで追加。棟別Tintを共有 |
 | 素材キットの小物 | `BattleKitLook::Dress` (BattleKitProps.cpp:127) | `-BattleKitProps=0` で停止（BattleKitLook=1 内で既定1）。表面差し替え前に保存済み立方体を分類。元の衝突を残し、種類別ISMを表示 |
-| 素材キットの見た目 | `BattleKitLook::Apply` (BattleKitLook.cpp:240) 、 `BattleKitLook::Weapon` (BattleKitLook.cpp:197) 、 `BattleKitLook::Grip` (BattleKitLook.cpp:211) | `-BattleKitLook=1`（既定0）。表面・空・武器は個別に切れる。握り校正 `-BattleKitGrip=x,y,z,pitch,yaw,roll`。撮影は Setup/Preview-KitWeapons.ps1 |
+| 素材キットの見た目 | `BattleKitLook::Apply` (BattleKitLook.cpp:242) 、 `BattleKitLook::Weapon` (BattleKitLook.cpp:199) 、 `BattleKitLook::Grip` (BattleKitLook.cpp:213) | `-BattleKitLook=1`（既定0）。表面・空・武器は個別に切れる。握り校正 `-BattleKitGrip=x,y,z,pitch,yaw,roll`。撮影は Setup/Preview-KitWeapons.ps1 |
 | 軍共有の既知敵への射撃（段階1） | `UBattlePerception::BuildTeamKnownTargets` (BattleKnownTargets.cpp:16) 、 `UBattleLeaderRuntime::SelectKnownFire` (BattleKnownTargetFire.cpp:102) 、 `UBattleLeaderRuntime::RunKnownTargetFireTrial` (BattleKnownTargetFireTrial.cpp:10) | `-BattleKnownTargetFire=1`（既定0）。通常射撃と既存の覗き、SpotTrackの限定例外、光線予算。移動追加なし |
 | 軍が知った敵へ向かう・スポットの緩和（試験） | `UBattleSquadTactics::RefreshKnownSpots` (BattleSquadRetreat.cpp:109) 、 `UBattleSquadTactics::AddKnownSpot` (BattleSpotRelax.cpp:12) 、 `UBattleSquadTactics::NoteShotSpot` (BattleSpotRelax.cpp:66) 、 `UBattleSquadTactics::NotePointLost` (BattleSpotRelax.cpp:77) 、 `UBattleSquadTactics::AdvanceHQSpots` (BattleSpotRelax.cpp:138) | `-BattleSeekKnown`（向かう読み手、既定0）の目撃マスに、`-BattleSpotShare`・`-BattleSpotShots`・`-BattleSpotLost`・`-BattleSpotHQ`・診断 `-BattleSpotTruth`（すべて既定0）が知らせを入れる。向かう判断は `UBattleSquadTactics::Evaluate`（BattleSquadRetreat.cpp）。設計 `Docs/design-spot-relax.md` |
 | 覗き0発の診断・固定場面 | `UBattleLeaderRuntime::RecordPeekFrame` (BattlePeekDiagnostics.cpp:10) 、 `UBattleLeaderRuntime::RunCoverPeekTrial` (BattleCoverPeekTrial.cpp:14) | 記録だけの `peekwhy_*`。`Test-CoverPeek.ps1` は目撃済み／見失いを検査、未発見は記録のみ |
@@ -137,7 +138,8 @@
 | `BattleGroups` | .cpp | 749 |  | 部隊群：編成と解散、役割、集結・前進・保持の段階、AIの群の運用、群に従う命令（UBattleMatch の一部） |
 | `BattleHUD` | .h/.cpp | 75 + 1771 | ABattleHUD | 画面表示（HUD、ミニマップ、部隊一覧、通知、命令の印） |
 | `BattleKitFX` | .h/.cpp | 18 + 248 | BattleKitFX | 表示だけのコマ送りエフェクト：上限付きプール、遅延煙、銃煙、残骸の発煙 |
-| `BattleKitLook` | .h/.cpp | 18 + 290 | BattleKitLook | 素材キットの見た目（表示だけ、既定0）：保存済みマップの表面・空・近景武器・握り校正 |
+| `BattleKitHouses` | .h/.cpp | 8 + 315 | BattleKitLook | 素材キットの家の部品：家・建物のまとめ、窓・扉・屋根の配置、建物ごとの壁の色、表示専用ISM |
+| `BattleKitLook` | .h/.cpp | 18 + 293 | BattleKitLook | 素材キットの見た目（表示だけ、既定0）：保存済みマップの表面・空・近景武器・握り校正 |
 | `BattleKitProps` | .h/.cpp | 9 + 221 | BattleKitLook | 素材キットの小物：分類表、座標ハッシュ、箱に収める配置、表示専用ISM |
 | `BattleKnownMoveGeometry` | .cpp | 51 |  | 値2専用の静的な箱形遮蔽の格子索引。端・開口部の推定と光線前の予選に使う |
 | `BattleKnownTargetFire` | .cpp | 191 |  | 軍共有候補の上位3件・本人確認・狙いの射線・光線予算・通常／覗き射撃（UBattleLeaderRuntimeの一部、段階1） |

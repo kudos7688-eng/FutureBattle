@@ -35,14 +35,42 @@ def import_texture(path, dest, name, kind, flip_green):
 
 
 # ---------------------------------------------------------------- surfaces
+# Small value noise in world space (cm) for the large-scale variation; a struct, because a Custom node body cannot declare functions.
+NOISE = '''
+struct KitNoise {
+ float h(float3 p) { p = frac(p * 0.3183099 + 0.1); p *= 17.0; return frac(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+ float n(float3 x) { float3 i = floor(x), f = frac(x); f = f * f * (3.0 - 2.0 * f);
+  return lerp(lerp(lerp(h(i), h(i + float3(1, 0, 0)), f.x), lerp(h(i + float3(0, 1, 0)), h(i + float3(1, 1, 0)), f.x), f.y),
+              lerp(lerp(h(i + float3(0, 0, 1)), h(i + float3(1, 0, 1)), f.x), lerp(h(i + float3(0, 1, 1)), h(i + float3(1, 1, 1)), f.x), f.y), f.z); }
+ float fbm(float3 x) { return n(x) * 0.5 + n(x * 2.03 + 7.1) * 0.3 + n(x * 4.01 + 13.7) * 0.2; }
+};
+KitNoise K;
+'''
 TRIPLANAR = '''
 float3 p = WorldPos / max(Tile, 1.0);
 float3 n = normalize(WorldNormal);
 float3 w = pow(abs(n), 4.0); w /= (w.x + w.y + w.z);
 float2 uvx = p.yz * float2(1, -1), uvy = p.xz * float2(1, -1), uvz = p.xy;
 '''
-CODE_COLOR = TRIPLANAR + '''
+CODE_PLAIN = TRIPLANAR + '''
 return Texture2DSample(Tex, TexSampler, uvx).rgb * w.x + Texture2DSample(Tex, TexSampler, uvy).rgb * w.y + Texture2DSample(Tex, TexSampler, uvz).rgb * w.z;
+'''
+# Colour without the visible repeat (2026-11-27): the same photo is sampled a second time 7 times larger and turned, and its
+# tone relative to the average of the photo (the smallest mip) multiplies the sharp sample (Mix); on top a 30 m brightness
+# variation (Macro) and darker, greyer patches a few metres wide (Dirt). The detail stays as sharp as before.
+CODE_COLOR = NOISE + TRIPLANAR + '''
+float3 c = Texture2DSample(Tex, TexSampler, uvx).rgb * w.x + Texture2DSample(Tex, TexSampler, uvy).rgb * w.y + Texture2DSample(Tex, TexSampler, uvz).rgb * w.z;
+float2x2 R = float2x2(0.8253, -0.5646, 0.5646, 0.8253);
+float2 bx = mul(R, uvx) * 0.143 + 0.37, by = mul(R, uvy) * 0.143 + 0.61, bz = mul(R, uvz) * 0.143 + 0.19;
+float3 big = Texture2DSample(Tex, TexSampler, bx).rgb * w.x + Texture2DSample(Tex, TexSampler, by).rgb * w.y + Texture2DSample(Tex, TexSampler, bz).rgb * w.z;
+float3 avg = Texture2DSampleLevel(Tex, TexSampler, float2(0.5, 0.5), 12.0).rgb;
+c *= lerp(float3(1, 1, 1), clamp(big / max(avg, 0.02), 0.45, 1.7), Mix);
+float far = K.fbm(WorldPos / 3000.0), mid = K.fbm(WorldPos / 650.0 + 31.7);
+c *= 1.0 + Macro * (far - 0.5) * 2.4;
+float d = smoothstep(0.52, 0.70, mid * 0.75 + far * 0.25);
+float g = dot(c, float3(0.3, 0.59, 0.11));
+c = lerp(c, lerp(c, float3(g, g, g), 0.45) * float3(0.66, 0.62, 0.56), d * Dirt);
+return c;
 '''
 # World-space normal from three tangent-space samples (whiteout blend): each plane's XY bends its own two world axes.
 CODE_NORMAL = TRIPLANAR + '''
@@ -55,77 +83,137 @@ float3 ny = float3(ty.x, ty.z * s.y, -ty.y);
 float3 nz = float3(tz.x, tz.y, tz.z * s.z);
 return normalize(nx * w.x + ny * w.y + nz * w.z + n * 0.001);
 '''
+# Second layer of the two-layer ground (M_Kit_SurfaceBlend): patches Cover (0..1 of the area) about BlendScale cm wide.
+CODE_MASK = NOISE + '''
+float f = K.fbm(WorldPos / max(BlendScale, 1.0) + 5.3) * 0.7 + K.fbm(WorldPos / max(BlendScale * 0.23, 1.0)) * 0.3;
+float t = 0.5 + (0.5 - Cover) * 0.55;
+return smoothstep(t - 0.07, t + 0.07, f);
+'''
 
 
-def custom(mat, code, tex_param, tile, x, y):
+def scalar(mat, name, value, x, y):
+    e = ml.create_material_expression(mat, u.MaterialExpressionScalarParameter, x, y)
+    e.set_editor_property('parameter_name', name); e.set_editor_property('default_value', value)
+    return e
+
+
+def custom(mat, code, inputs, x, y, out=None):
     c = ml.create_material_expression(mat, u.MaterialExpressionCustom, x, y)
     c.set_editor_property('code', code)
-    c.set_editor_property('output_type', u.CustomMaterialOutputType.CMOT_FLOAT3)
+    c.set_editor_property('output_type', out or u.CustomMaterialOutputType.CMOT_FLOAT3)
+    inputs = dict(inputs)
+    inputs['WorldPos'] = ml.create_material_expression(mat, u.MaterialExpressionWorldPosition, x - 300, y + 60)
+    if 'Tex' in inputs: inputs['WorldNormal'] = ml.create_material_expression(mat, u.MaterialExpressionVertexNormalWS, x - 300, y + 120)
     ins = []
-    for nm in ('Tex', 'WorldPos', 'WorldNormal', 'Tile'):
+    for nm in inputs:
         i = u.CustomInput(); i.set_editor_property('input_name', nm); ins.append(i)
     c.set_editor_property('inputs', ins)
-    wp = ml.create_material_expression(mat, u.MaterialExpressionWorldPosition, x - 300, y + 60)
-    vn = ml.create_material_expression(mat, u.MaterialExpressionVertexNormalWS, x - 300, y + 120)
-    assert ml.connect_material_expressions(tex_param, '', c, 'Tex')
-    assert ml.connect_material_expressions(wp, '', c, 'WorldPos')
-    assert ml.connect_material_expressions(vn, '', c, 'WorldNormal')
-    assert ml.connect_material_expressions(tile, '', c, 'Tile')
+    for nm, e in inputs.items(): assert ml.connect_material_expressions(e, '', c, nm), nm
     return c
 
 
-def build_surface_master(default_tex):
-    dest, name = '/Game/Kit/Surfaces', 'M_Kit_Surface'
+def build_surface_master(name, default_tex, blend):
+    dest = '/Game/Kit/Surfaces'
     mat = u.load_asset(dest + '/' + name)
     if mat is None: mat = tools.create_asset(name, dest, u.Material, u.MaterialFactoryNew())
     else: ml.delete_all_material_expressions(mat)
     mat.set_editor_property('tangent_space_normal', False)
-    tile = ml.create_material_expression(mat, u.MaterialExpressionScalarParameter, -1100, 500)
-    tile.set_editor_property('parameter_name', 'Tile'); tile.set_editor_property('default_value', 200.0)
-    tint = ml.create_material_expression(mat, u.MaterialExpressionVectorParameter, -500, -200)
+    tint = ml.create_material_expression(mat, u.MaterialExpressionVectorParameter, -200, -500)
     tint.set_editor_property('parameter_name', 'Tint'); tint.set_editor_property('default_value', u.LinearColor(1, 1, 1, 1))
-    params = {}
-    for i, (key, st) in enumerate((('BaseColor', u.MaterialSamplerType.SAMPLERTYPE_COLOR),
-                                   ('ORM', u.MaterialSamplerType.SAMPLERTYPE_MASKS),
-                                   ('Normal', u.MaterialSamplerType.SAMPLERTYPE_NORMAL))):
-        p = ml.create_material_expression(mat, u.MaterialExpressionTextureObjectParameter, -1100, i * 300 - 300)
-        p.set_editor_property('parameter_name', key); p.set_editor_property('texture', default_tex[key])
-        p.set_editor_property('sampler_type', st); params[key] = p
-    col = custom(mat, CODE_COLOR, params['BaseColor'], tile, -700, -300)
-    orm = custom(mat, CODE_COLOR, params['ORM'], tile, -700, 0)
-    nrm = custom(mat, CODE_NORMAL, params['Normal'], tile, -700, 300)
-    mul = ml.create_material_expression(mat, u.MaterialExpressionMultiply, -300, -300)
-    assert ml.connect_material_expressions(col, '', mul, 'A') and ml.connect_material_expressions(tint, '', mul, 'B')
+    vary = {'Mix': scalar(mat, 'Mix', 0.6, -1500, -700), 'Macro': scalar(mat, 'Macro', 0.2, -1500, -620), 'Dirt': scalar(mat, 'Dirt', 0.35, -1500, -540)}
+    types = (('BaseColor', u.MaterialSamplerType.SAMPLERTYPE_COLOR), ('ORM', u.MaterialSamplerType.SAMPLERTYPE_MASKS), ('Normal', u.MaterialSamplerType.SAMPLERTYPE_NORMAL))
+
+    def layer(suffix, y0):
+        tile = scalar(mat, 'Tile' + suffix, 200.0, -1500, y0 + 500)
+        out = {}
+        for i, (key, st) in enumerate(types):
+            p = ml.create_material_expression(mat, u.MaterialExpressionTextureObjectParameter, -1500, y0 + i * 300 - 300)
+            p.set_editor_property('parameter_name', key + suffix); p.set_editor_property('texture', default_tex[key])
+            p.set_editor_property('sampler_type', st)
+            ins = {'Tex': p, 'Tile': tile}
+            if key == 'BaseColor': ins.update(vary)
+            out[key] = custom(mat, CODE_COLOR if key == 'BaseColor' else CODE_NORMAL if key == 'Normal' else CODE_PLAIN, ins, -1000, y0 + i * 300 - 300)
+        return out
+    a = layer('', 0)
+    if blend:
+        b = layer('2', 1200)
+        mask = custom(mat, CODE_MASK, {'BlendScale': scalar(mat, 'BlendScale', 900.0, -1000, 900), 'Cover': scalar(mat, 'Cover', 0.3, -1000, 980)},
+                      -700, 900, u.CustomMaterialOutputType.CMOT_FLOAT1)
+        for key in a:
+            l = ml.create_material_expression(mat, u.MaterialExpressionLinearInterpolate, -500, {'BaseColor': -300, 'ORM': 0, 'Normal': 300}[key])
+            assert ml.connect_material_expressions(a[key], '', l, 'A') and ml.connect_material_expressions(b[key], '', l, 'B') and ml.connect_material_expressions(mask, '', l, 'Alpha')
+            a[key] = l
+    mul = ml.create_material_expression(mat, u.MaterialExpressionMultiply, -200, -300)
+    assert ml.connect_material_expressions(a['BaseColor'], '', mul, 'A') and ml.connect_material_expressions(tint, '', mul, 'B')
     ml.connect_material_property(mul, '', u.MaterialProperty.MP_BASE_COLOR)
-    mask = {}
     for ch, prop in (('R', u.MaterialProperty.MP_AMBIENT_OCCLUSION), ('G', u.MaterialProperty.MP_ROUGHNESS), ('B', u.MaterialProperty.MP_METALLIC)):
-        m = ml.create_material_expression(mat, u.MaterialExpressionComponentMask, -300, {'R': -60, 'G': 40, 'B': 140}[ch])
+        m = ml.create_material_expression(mat, u.MaterialExpressionComponentMask, -200, {'R': -60, 'G': 40, 'B': 140}[ch])
         for k in 'rgba': m.set_editor_property(k, k.upper() == ch)
-        assert ml.connect_material_expressions(orm, '', m, '')
+        assert ml.connect_material_expressions(a['ORM'], '', m, '')
         ml.connect_material_property(m, '', prop)
-    ml.connect_material_property(nrm, '', u.MaterialProperty.MP_NORMAL)
+    if blend:
+        nn = ml.create_material_expression(mat, u.MaterialExpressionNormalize, -200, 300)
+        assert ml.connect_material_expressions(a['Normal'], '', nn, '')
+        ml.connect_material_property(nn, '', u.MaterialProperty.MP_NORMAL)
+    else: ml.connect_material_property(a['Normal'], '', u.MaterialProperty.MP_NORMAL)
+    ml.set_material_usage(mat, u.MaterialUsage.MATUSAGE_INSTANCED_STATIC_MESHES)  # the house parts are drawn as instances (BattleKitHouses.cpp)
     ml.recompile_material(mat); eal.save_loaded_asset(mat)
     return mat
 
 
+# Regular patterns (bricks, tiles, planks): a turned, enlarged copy of the pattern would show through, so only a little of it.
+PATTERNED = {'BrickRed': 0.2, 'StoneBlock': 0.25, 'Cobble': 0.3, 'Pavement': 0.3, 'RoofClay': 0.2, 'RoofSlate': 0.2, 'MetalPlate': 0.2, 'WoodRough': 0.3}
+# Ground with a second layer in patches: name -> (second surface, share of the area, patch size in cm).
+# Pairs of similar brightness only: pale gravel on brown earth and pale concrete on asphalt read as snow (seen 2026-11-27).
+BLENDS = {'Grass': ('DirtPath', 0.22, 1100.0), 'GrassSparse': ('Grass', 0.40, 900.0), 'FarmSoil': ('GrassSparse', 0.25, 1400.0),
+          'ForestFloor': ('Grass', 0.30, 800.0), 'DirtPath': ('GrassSparse', 0.28, 700.0), 'RockGround': ('GrassSparse', 0.25, 700.0)}
+# Extra instances for the house parts (Art/Kit/Parts material slots): name -> (surface, tint, tile cm).
+PART_INSTANCES = {'PartFrame': ('PlasterWhite', (0.95, 0.95, 0.92), 150.0), 'PartDoor': ('WoodRough', (0.50, 0.72, 0.58), 120.0),
+                  'PartShutter': ('WoodRough', (0.48, 0.62, 0.85), 120.0), 'PartCloth': ('PlasterWhite', (0.70, 0.20, 0.15), 150.0),
+                  'PartDark': ('MetalPlate', (0.25, 0.25, 0.27), 150.0)}
+
 surfaces = json.loads((KIT / 'Surfaces' / 'surfaces.json').read_text(encoding='utf-8'))
-master = None
+textures, tiles, masters = {}, {}, {}
 for name, info in sorted(surfaces.items()):
     try:
-        tex = {k: import_texture(KIT / 'Surfaces' / name / info['files'][k]['file'], '/Game/Kit/Surfaces/Textures',
-                                 'T_Kit_%s_%s' % (name, k), k, False) for k in ('BaseColor', 'ORM', 'Normal')}
-        if master is None: master = build_surface_master(tex)
-        mi_name = 'MI_Kit_' + name
-        mi = u.load_asset('/Game/Kit/Surfaces/' + mi_name)
-        if mi is None: mi = tools.create_asset(mi_name, '/Game/Kit/Surfaces', u.MaterialInstanceConstant, u.MaterialInstanceConstantFactoryNew())
-        ml.set_material_instance_parent(mi, master)
-        for k in tex: ml.set_material_instance_texture_parameter_value(mi, k, tex[k])
-        tile_cm = max(50.0, float(info['size_m'][0]) / 10.0)  # Poly Haven gives the photographed size in millimetres
-        ml.set_material_instance_scalar_parameter_value(mi, 'Tile', tile_cm)
-        ml.update_material_instance(mi); eal.save_loaded_asset(mi)
-        report['surfaces'][name] = {'instance': mi.get_path_name(), 'tile_cm': tile_cm}
+        textures[name] = {k: import_texture(KIT / 'Surfaces' / name / info['files'][k]['file'], '/Game/Kit/Surfaces/Textures',
+                                            'T_Kit_%s_%s' % (name, k), k, False) for k in ('BaseColor', 'ORM', 'Normal')}
+        tiles[name] = max(50.0, float(info['size_m'][0]) / 10.0)  # Poly Haven gives the photographed size in millimetres
     except Exception as e:  # keep going: one bad surface must not stop the kit
         report['errors'].append('surface %s: %r' % (name, e))
+
+
+def surface_instance(mi_name, name, tint=None, tile=None, blend=None):
+    kind = 'M_Kit_SurfaceBlend' if blend else 'M_Kit_Surface'
+    if kind not in masters: masters[kind] = build_surface_master(kind, textures[name], bool(blend))
+    mi = u.load_asset('/Game/Kit/Surfaces/' + mi_name)
+    if mi is None: mi = tools.create_asset(mi_name, '/Game/Kit/Surfaces', u.MaterialInstanceConstant, u.MaterialInstanceConstantFactoryNew())
+    ml.clear_all_material_instance_parameters(mi)
+    ml.set_material_instance_parent(mi, masters[kind])
+    for k, t in textures[name].items(): ml.set_material_instance_texture_parameter_value(mi, k, t)
+    ml.set_material_instance_scalar_parameter_value(mi, 'Tile', tile or tiles[name])
+    ml.set_material_instance_scalar_parameter_value(mi, 'Mix', PATTERNED.get(name, 0.6))
+    if tint: ml.set_material_instance_vector_parameter_value(mi, 'Tint', u.LinearColor(tint[0], tint[1], tint[2], 1))
+    if blend:
+        for k, t in textures[blend[0]].items(): ml.set_material_instance_texture_parameter_value(mi, k + '2', t)
+        ml.set_material_instance_scalar_parameter_value(mi, 'Tile2', tiles[blend[0]])
+        ml.set_material_instance_scalar_parameter_value(mi, 'Cover', blend[1])
+        ml.set_material_instance_scalar_parameter_value(mi, 'BlendScale', blend[2])
+    ml.update_material_instance(mi); eal.save_loaded_asset(mi)
+    return mi
+
+
+for name in sorted(textures):
+    try:
+        blend = BLENDS.get(name)
+        if blend and blend[0] not in textures: blend = None
+        mi = surface_instance('MI_Kit_' + name, name, blend=blend)
+        report['surfaces'][name] = {'instance': mi.get_path_name(), 'tile_cm': tiles[name], 'second_layer': blend[0] if blend else None}
+    except Exception as e:
+        report['errors'].append('surface %s: %r' % (name, e))
+for mi_name, (name, tint, tile) in PART_INSTANCES.items():
+    try: surface_instance('MI_Kit_' + mi_name, name, tint=tint, tile=tile)
+    except Exception as e: report['errors'].append('part material %s: %r' % (mi_name, e))
 
 # ---------------------------------------------------------------- weapons and props (baked by Art/Kit/Scripts/make_weapon.py)
 samplers = {'BaseColor': u.MaterialSamplerType.SAMPLERTYPE_COLOR, 'ORM': u.MaterialSamplerType.SAMPLERTYPE_MASKS, 'Normal': u.MaterialSamplerType.SAMPLERTYPE_NORMAL}
@@ -181,6 +269,59 @@ for group, key in (('Weapons', 'weapons'), ('Props', 'props')):
             if r: report[key][d.name] = r
         except Exception as e:
             report['errors'].append('%s %s: %r' % (group, d.name, e))
+
+# ---------------------------------------------------------------- house parts (Art/Kit/Scripts/make_parts.py)
+# Box-modelled windows, doors and roofs. No textures of their own: each material slot (named by role) gets a world-aligned kit
+# surface, so BattleKitHouses.cpp can scale a part unevenly. Glass is a plain dark, shiny, opaque material.
+SLOT_MATERIALS = {'Frame': 'MI_Kit_PartFrame', 'Shutter': 'MI_Kit_PartShutter', 'Door': 'MI_Kit_PartDoor', 'Trim': 'MI_Kit_Concrete',
+                  'Roof': 'MI_Kit_RoofClay', 'Wall': 'MI_Kit_PlasterWhite', 'Wood': 'MI_Kit_WoodRough', 'Metal': 'MI_Kit_MetalPlate',
+                  'Dark': 'MI_Kit_PartDark', 'Cloth': 'MI_Kit_PartCloth', 'Brick': 'MI_Kit_BrickRed'}
+report['parts'] = {}
+try:
+    parts_dir = KIT / 'Parts'; parts_dest = '/Game/Kit/Parts'
+    glass = u.load_asset(parts_dest + '/M_Kit_Glass')
+    if glass is None: glass = tools.create_asset('M_Kit_Glass', parts_dest, u.Material, u.MaterialFactoryNew())
+    else: ml.delete_all_material_expressions(glass)
+    for prop, value, y in ((u.MaterialProperty.MP_BASE_COLOR, (0.03, 0.045, 0.06), 0), (u.MaterialProperty.MP_ROUGHNESS, 0.08, 150),
+                           (u.MaterialProperty.MP_METALLIC, 0.6, 300), (u.MaterialProperty.MP_SPECULAR, 0.9, 450)):
+        if isinstance(value, tuple):
+            e = ml.create_material_expression(glass, u.MaterialExpressionConstant3Vector, -400, y); e.set_editor_property('constant', u.LinearColor(*value, 1))
+        else:
+            e = ml.create_material_expression(glass, u.MaterialExpressionConstant, -400, y); e.set_editor_property('r', value)
+        ml.connect_material_property(e, '', prop)
+    ml.set_material_usage(glass, u.MaterialUsage.MATUSAGE_INSTANCED_STATIC_MESHES)
+    ml.recompile_material(glass); eal.save_loaded_asset(glass)
+    for d in sorted(p for p in parts_dir.iterdir() if p.is_dir()) if parts_dir.exists() else []:
+        try:
+            asset = 'SM_Kit_' + d.name; fbx = d / 'Exports' / (asset + '.fbx')
+            if not fbx.exists(): continue
+            t = u.AssetImportTask(); t.filename = str(fbx); t.destination_path = parts_dest; t.destination_name = asset
+            t.automated = True; t.replace_existing = True; t.save = True; t.factory = u.FbxFactory()
+            o = u.FbxImportUI()
+            o.import_as_skeletal = False; o.automated_import_should_detect_type = False
+            o.mesh_type_to_import = u.FBXImportType.FBXIT_STATIC_MESH
+            o.import_mesh = True; o.import_animations = False; o.import_materials = False; o.import_textures = False
+            sd = o.static_mesh_import_data
+            sd.set_editor_property('combine_meshes', True); sd.set_editor_property('auto_generate_collision', False)
+            sd.set_editor_property('normal_import_method', u.FBXNormalImportMethod.FBXNIM_COMPUTE_NORMALS)
+            t.options = o
+            tools.import_asset_tasks([t])
+            mesh = u.load_asset(parts_dest + '/' + asset); assert isinstance(mesh, u.StaticMesh), asset
+            slots = []
+            for i, sm in enumerate(mesh.static_materials):
+                slot = str(sm.material_slot_name); slots.append(slot)
+                mat = glass if slot == 'Glass' else u.load_asset('/Game/Kit/Surfaces/' + SLOT_MATERIALS[slot])
+                assert mat, slot
+                mesh.set_material(i, mat)
+            eal.save_loaded_asset(mesh)
+            b = mesh.get_bounding_box()
+            report['parts'][d.name] = {'asset': mesh.get_path_name(), 'triangles': mesh.get_num_triangles(0), 'slots': slots,
+                                       'box_min_cm': [round(b.min.x, 1), round(b.min.y, 1), round(b.min.z, 1)],
+                                       'box_max_cm': [round(b.max.x, 1), round(b.max.y, 1), round(b.max.z, 1)]}
+        except Exception as e:
+            report['errors'].append('part %s: %r' % (d.name, e))
+except Exception as e:
+    report['errors'].append('parts: %r' % (e,))
 
 # ---------------------------------------------------------------- effect flipbooks (Art/Kit/Scripts/make_flipbook.py)
 # M_Kit_FX_Flipbook: unlit translucent sprite. Parameters: Frame (0..63 of the 8x8 sheet, blended with the next frame),
@@ -249,6 +390,6 @@ except Exception as e:
     report['errors'].append('effects: %r' % (e,))
 
 (KIT / 'unreal-import.json').write_text(json.dumps(report, indent=1), encoding='utf-8')
-u.log('KIT_IMPORT_DONE surfaces=%d weapons=%d props=%d errors=%d' % (len(report['surfaces']), len(report['weapons']), len(report['props']), len(report['errors'])))
+u.log('KIT_IMPORT_DONE surfaces=%d weapons=%d props=%d parts=%d errors=%d' % (len(report['surfaces']), len(report['weapons']), len(report['props']), len(report['parts']), len(report['errors'])))
 for e in report['errors']: u.log_warning('KIT_IMPORT_ERROR ' + e)
 u.SystemLibrary.execute_console_command(world, 'QUIT_EDITOR')

@@ -1,6 +1,7 @@
 // Material kit trial (default off). No gameplay queries, random numbers or battle-state writes.
 #include "BattleKitLook.h"
 #include "BattleKitProps.h"
+#include "BattleKitHouses.h"
 #include "BattleBodyAnim.h"
 #include "BattleState.h"
 #include "FutureBattle.h"
@@ -36,7 +37,7 @@ namespace
 {
  struct FOptions
  {
-  int32 Look=0, Surfaces=1, Sky=1, Weapons=1, Props=1;
+  int32 Look=0, Surfaces=1, Sky=1, Weapons=1, Props=1, Houses=1;
   FVector Offset=FVector::ZeroVector;
   FRotator Rotation=FRotator::ZeroRotator;
   FOptions()
@@ -46,6 +47,7 @@ namespace
    FParse::Value(FCommandLine::Get(),TEXT("BattleKitSky="),Sky);
    FParse::Value(FCommandLine::Get(),TEXT("BattleKitWeapons="),Weapons);
    FParse::Value(FCommandLine::Get(),TEXT("BattleKitProps="),Props);
+   FParse::Value(FCommandLine::Get(),TEXT("BattleKitHouses="),Houses);
    FString Text;
    if(FParse::Value(FCommandLine::Get(),TEXT("BattleKitGrip="),Text,false))
    {
@@ -283,6 +285,7 @@ void BattleKitLook::Apply(UWorld* World)
    }
   }
  }
+ if(Options().Houses!=0)DressHouses(World);
  const bool bSky=Options().Sky!=0&&AddSky(World,Missing);
  int32 Loaded=0;
  if(Options().Weapons!=0){LoadWeapons();Loaded=Assets().Loaded;Missing+=Assets().Missing;}
