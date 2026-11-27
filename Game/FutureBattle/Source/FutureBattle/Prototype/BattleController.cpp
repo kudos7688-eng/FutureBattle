@@ -1703,7 +1703,9 @@ void ABattleController::UpdateGamepad(float DeltaTime)
   {
    const float Speed=1200.f*GetWorld()->DeltaRealTimeSeconds;
    VirtualCursor.X=FMath::Clamp(VirtualCursor.X+RX*FMath::Abs(RX)*Speed,0.f,float(W-1));
-   VirtualCursor.Y=FMath::Clamp(VirtualCursor.Y-RY*FMath::Abs(RY)*Speed,0.f,float(H-1));
+   // Sign flipped 2026-11-27 (user report: up and down were reversed in the tactical view). Same stick reading as the look
+   // below: pushing the right stick up gives a negative RY, and screen Y grows downward.
+   VirtualCursor.Y=FMath::Clamp(VirtualCursor.Y+RY*FMath::Abs(RY)*Speed,0.f,float(H-1));
    const int32 MousePixelX=FMath::RoundToInt(VirtualCursor.X),MousePixelY=FMath::RoundToInt(VirtualCursor.Y);
    SetMouseLocation(MousePixelX,MousePixelY);
    LastCursorPosition=FVector2f(float(MousePixelX),float(MousePixelY));

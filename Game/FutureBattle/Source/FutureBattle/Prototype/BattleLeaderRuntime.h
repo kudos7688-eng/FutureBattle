@@ -89,6 +89,8 @@ struct FBattleMinimapLayout
 {
  FVector2D Origin=FVector2D::ZeroVector, Size=FVector2D::ZeroVector, HalfExtent=FVector2D(30000,20000);
  static FBattleMinimapLayout Make(FVector2D View,const UWorld* World);
+ // Direct control (soldier view): the same map, display only, at the bottom right above the help lines.
+ static FBattleMinimapLayout MakeDirect(FVector2D View,const UWorld* World);
  bool Contains(FVector2D P) const { return Size.X>0 && P.X>=Origin.X && P.X<Origin.X+Size.X && P.Y>=Origin.Y && P.Y<Origin.Y+Size.Y; }
  FVector2D ToScreen(FVector World) const { return FVector2D(Origin.X+(World.Y+HalfExtent.Y)/(2*HalfExtent.Y)*Size.X,Origin.Y+(HalfExtent.X-World.X)/(2*HalfExtent.X)*Size.Y); }
  FVector ToWorld(FVector2D P) const { return FVector(HalfExtent.X-(P.Y-Origin.Y)/Size.Y*2*HalfExtent.X,(P.X-Origin.X)/Size.X*2*HalfExtent.Y-HalfExtent.Y,0); }

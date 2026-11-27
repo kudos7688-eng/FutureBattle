@@ -56,6 +56,19 @@ FBattleMinimapLayout FBattleMinimapLayout::Make(FVector2D View,const UWorld* Wor
  const float Height=FMath::Min(300.f,MapBottom-290.f); if(Height<140.f) return M;
  M.Size=FVector2D(Height*M.HalfExtent.Y/M.HalfExtent.X,Height); M.Origin=FVector2D(20,MapBottom-Height); return M;
 }
+FBattleMinimapLayout FBattleMinimapLayout::MakeDirect(FVector2D View,const UWorld* World)
+{
+ // Bottom right, above the soldier view's status and help lines (they start at View.Y-128) and below the kill log (top right).
+ // Nothing is clicked in this view, so no input code uses this layout.
+ FBattleMinimapLayout M; if(!BattleFieldLayout::IsSightField(World)) return M;
+ M.HalfExtent=BattleFieldLayout::FieldHalfExtent(World);
+ const float MapBottom=float(View.Y)-150.f;
+ float Height=FMath::Min(240.f,MapBottom-330.f); if(Height<120.f) return M;
+ float Width=Height*M.HalfExtent.Y/M.HalfExtent.X;
+ // A wide field must not take more than a quarter of the screen width.
+ if(const float MaxWidth=float(View.X)*.25f;Width>MaxWidth){Height*=MaxWidth/Width;Width=MaxWidth;}
+ M.Size=FVector2D(Width,Height); M.Origin=FVector2D(View.X-Width-24.f,MapBottom-Height); return M;
+}
 FBattleSquadListLayout FBattleSquadListLayout::Make(FVector2D View,const UWorld* World)
 {
  FBattleSquadListLayout L; L.Width=FMath::Min(360.f,float(View.X)-32.f);
