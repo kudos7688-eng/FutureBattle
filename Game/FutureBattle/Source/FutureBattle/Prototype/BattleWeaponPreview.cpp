@@ -1,4 +1,7 @@
 #include "BattleGameMode.h"
+#include "BattleKitLook.h"
+#include "Camera/CameraComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "BattleUnit.h"
 #include "BattleController.h"
 #include "BattleTactics.h"
@@ -7,6 +10,7 @@
 #include "GameFramework/HUD.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
+#include "EngineUtils.h"
 
 void ABattleGameMode::RunWeaponPreview()
 {
@@ -18,6 +22,50 @@ void ABattleGameMode::RunWeaponPreview()
 	FString Prefix;
 	FParse::Value(FCommandLine::Get(),TEXT("BattleWeaponPreview="),Prefix);
 	auto Capture = [&](const TCHAR* Name){ if (!Prefix.IsEmpty()) FScreenshotRequest::RequestScreenshot(Prefix+Name,true,false); };
+	if (BattleKitLook::Active(GetWorld()))
+	{
+		// Separate display fixture: never change Weapon/Ammo or run the legacy cadence checks on a swapped mesh.
+		// Four frames per weapon: mount FPS, capture, mount hand_r, capture. No shots or random draws.
+		const int32 KitStage = WeaponPreviewStage++;
+		if (KitStage >= 40) { Carbine->RemountWeapon(); CompleteSmokeTest(); return; }
+		const EBattleWeapon KitKind = static_cast<EBattleWeapon>(KitStage / 4);
+		const int32 KitView = KitStage % 4;
+		if (KitView == 0)
+		{
+			CheckSmoke(PC->ControlUnit(Carbine), TEXT("Kit preview possession"));
+			PC->SetViewTarget(Carbine);
+			Carbine->MountWeapon(Carbine->Rifle, Carbine->FirstPersonCamera, KitKind, true);
+			UStaticMesh* ExpectedKit = BattleKitLook::Weapon(GetWorld(), KitKind);
+			CheckSmoke(ExpectedKit && Carbine->Rifle->GetStaticMesh() == ExpectedKit && Carbine->Rifle->GetRelativeScale3D().Equals(FVector(1.)),
+				*FString::Printf(TEXT("Kit weapon %d loaded and mounted at full size"), int32(KitKind)));
+		}
+		else if (KitView == 2)
+		{
+			PC->EnterTactical();
+			Carbine->MountWeapon(Carbine->Rifle, Carbine->GetMesh(), KitKind, false);
+			CheckSmoke(Carbine->Rifle->GetStaticMesh() == BattleKitLook::Weapon(GetWorld(), KitKind) &&
+				Carbine->Rifle->GetAttachSocketName() == FName(TEXT("hand_r")) &&
+				Carbine->Rifle->GetRelativeTransform().Equals(BattleKitLook::Grip(KitKind, false)),
+				*FString::Printf(TEXT("Kit weapon %d hand grip transform"), int32(KitKind)));
+			const FVector KitTarget = Carbine->GetActorLocation() + FVector(0,0,35);
+			const FVector KitEye = KitTarget + FVector(185,220,45);
+			// Reuse one camera for the whole sequence; the view target keeps it alive between frames.
+			ACameraActor* KitCamera = nullptr;
+			for (TActorIterator<ACameraActor> It(GetWorld()); It; ++It)
+				if (It->ActorHasTag(TEXT("BattleKitPreviewCamera"))) { KitCamera = *It; break; }
+			if (!KitCamera)
+			{
+				KitCamera = GetWorld()->SpawnActor<ACameraActor>(KitEye,(KitTarget-KitEye).Rotation());
+				if (KitCamera) KitCamera->Tags.Add(TEXT("BattleKitPreviewCamera"));
+			}
+			if (KitCamera) PC->SetViewTarget(KitCamera);
+			CheckSmoke(KitCamera != nullptr, TEXT("Kit preview third person camera"));
+		}
+		else Capture(*FString::Printf(TEXT("-kit-%02d-%s.png"),int32(KitKind),KitView == 1 ? TEXT("fps") : TEXT("hand")));
+		FTimerHandle KitNext;
+		GetWorldTimerManager().SetTimer(KitNext,this,&ABattleGameMode::RunWeaponPreview,.75f,false);
+		return;
+	}
 	const double Now = GetWorld()->GetTimeSeconds();
 	float Wait = .45f;
 	switch (WeaponPreviewStage++)

@@ -1,5 +1,6 @@
 // Sound and effects check (2026-11-22). Test only: does nothing without -BattleFXCheck. See BattleFXCheck.h.
 #include "BattleFXCheck.h"
+#include "BattleKitFX.h"
 #include "BattleAudio.h"
 #include "BattleController.h"
 #include "BattleEffects.h"
@@ -25,7 +26,7 @@ namespace
 {
  enum class EEvent : uint8 { SeeBlast1, ShotBlast1, SeeBlast25, ShotBlast25, ShotBlast25Late, SeeBlastMortar, ShotBlastMortar,
   Record, Rifle, Heavy, Impacts, Blast1, Blast25, Rocket, Mortar, Cannon, Incoming, BlastMortar, CaptureUs, CaptureThem, Win, Lose,
-  StopRecording, Finish };
+  KitKinds, KitShot, StopRecording, Finish };
  struct FEvent { float T; EEvent E; };
 
  // Names in FX_CHECK_EVENT lines (Setup/Analyze-SoundFX.py measures each sound from the audio clock written with it).
@@ -58,6 +59,7 @@ namespace
   {.5f,EEvent::SeeBlast1},{.62f,EEvent::ShotBlast1},
   {2.f,EEvent::SeeBlast25},{2.12f,EEvent::ShotBlast25},{2.9f,EEvent::ShotBlast25Late},
   {4.f,EEvent::SeeBlastMortar},{4.12f,EEvent::ShotBlastMortar},
+  {5.f,EEvent::KitKinds},{5.3f,EEvent::KitShot},
   {6.5f,EEvent::Record},
   {7.f,EEvent::Rifle},{7.1f,EEvent::Rifle},{7.2f,EEvent::Rifle},{7.3f,EEvent::Rifle},{7.4f,EEvent::Rifle},{7.5f,EEvent::Rifle},
   {8.3f,EEvent::Heavy},{8.4f,EEvent::Heavy},{8.5f,EEvent::Heavy},{8.6f,EEvent::Heavy},
@@ -126,6 +128,24 @@ namespace
   case EEvent::ShotBlast25Late:Screenshot(C,TEXT("blast-spg-late"));break;
   case EEvent::SeeBlastMortar:Check(C,BattleEffects::Explosion(World,Place(World,C,14.f,0.f),2.f),TEXT("explosion size 2 (mortar shell) started"));break;
   case EEvent::ShotBlastMortar:Screenshot(C,TEXT("blast-mortar"));break;
+  case EEvent::KitKinds:
+   if(BattleKitFX::Active(World))
+   {
+    const auto* PC=World->GetFirstPlayerController();
+    if(!PC||!PC->PlayerCameraManager){Check(C,false,TEXT("kit camera present"));break;}
+    const FVector KitEye=PC->PlayerCameraManager->GetCameraLocation();
+    const FRotator KitView=PC->PlayerCameraManager->GetCameraRotation();
+    const FVector KitForward=KitView.Vector(),KitRight=FRotationMatrix(KitView).GetUnitAxis(EAxis::Y);
+    for(int32 KindIndex=0;KindIndex<int32(BattleKitFX::EKind::Count);++KindIndex)
+    {
+     const auto Kind=static_cast<BattleKitFX::EKind>(KindIndex);
+     const uint64 Before=BattleKitFX::Started(World,Kind);
+     const bool Spawned=BattleKitFX::Puff(World,Kind,KitEye+KitForward*700.+KitRight*((KindIndex-1.5)*180.),160.f,1.2f);
+     Check(C,Spawned&&BattleKitFX::Started(World,Kind)==Before+1,FString::Printf(TEXT("kit flipbook kind=%d admitted once"),KindIndex));
+    }
+   }
+   break;
+  case EEvent::KitShot:if(BattleKitFX::Active(World))Screenshot(C,TEXT("kit-flipbooks"));break;
   case EEvent::Record:
   {
    Check(C,BattleAudio::Enabled(World),TEXT("audio device present (run without -nosound)"));

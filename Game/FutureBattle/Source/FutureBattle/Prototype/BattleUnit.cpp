@@ -1,4 +1,5 @@
 #include "BattleUnit.h"
+#include "BattleKitLook.h"
 #include "UObject/StrongObjectPtr.h"
 #include "BattleLeaderRuntime.h"
 #include "BattleMuzzleFlash.h"
@@ -384,6 +385,14 @@ void ABattleUnit::MountWeapon(UStaticMeshComponent* Model, USceneComponent* Pare
 		else Model->SetRelativeLocationAndRotation(LookGrip.GetLocation(), LookGrip.GetRotation());
 		return;
 	}
+	// Use the component's world: followers also call this function through the unit CDO.
+	if (UStaticMesh* KitMesh = BattleKitLook::Weapon(Model->GetWorld(), Weapon))
+	{
+		Model->SetStaticMesh(KitMesh);
+		Model->AttachToComponent(Parent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, bFirstPerson ? NAME_None : FName(TEXT("hand_r")));
+		Model->SetRelativeTransform(BattleKitLook::Grip(Weapon, bFirstPerson));
+		return;
+	}
 	// No anti-tank or mortar model yet: the support gun model, larger.
 	const bool Support = Weapon == EBattleWeapon::SupportGun || Weapon == EBattleWeapon::AntiTank || Weapon == EBattleWeapon::Mortar || Weapon == EBattleWeapon::Shotgun;
 	// Weapons added 2026-11-22 (BattleArms.cpp) use existing models: the exoskeleton's rifle for the marksman rifle and its launcher,
@@ -443,6 +452,13 @@ FVector ABattleUnit::TracerStart(const UStaticMeshComponent* Model, const FVecto
 	// Only a muzzle ahead of the eye and near it: a body whose pose has not been evaluated (never rendered yet)
 	// or is not a firing pose holds the model elsewhere, and a tracer must not start at the feet.
 	const FVector Off = Muzzle - Eye;
+	if (BattleKitLook::IsWeapon(Model->GetWorld(), Mesh))
+	{
+		// Kit pistols can end closer than 30cm, long launchers farther than 140cm. Keep the pose guard,
+		// but size it to the actual visual mesh. Only the tracer/flash origin uses this result.
+		const double Reach = 140. + Mesh->GetBoundingBox().GetSize().Size() * Model->GetComponentScale().GetAbsMax();
+		return FVector::DotProduct(Off, Forward) > 0. && Off.SizeSquared() <= FMath::Square(Reach) ? Muzzle : Guess;
+	}
 	return FVector::DotProduct(Off, Forward.GetSafeNormal2D()) >= 30. && Off.SizeSquared() <= FMath::Square(140.) ? Muzzle : Guess;
 }
 
@@ -725,8 +741,11 @@ void ABattleUnit::UpdateWeaponPose(const FBattleUnitState& S)
 	{
 		const double Kick = FMath::Clamp(1.-(Now-LastVisualShot)/.12,0.,1.);
 		const double Dip = Reloading ? FMath::Sin(PI*FMath::Clamp((S.ReloadEndTime-Now)/Duration,0.,1.)) : 0.;
-		Rifle->SetRelativeLocation(FVector(47-4*Kick,15,-16-6*Dip));
-		Rifle->SetRelativeRotation(FRotator(0,90,4*Kick-25*Dip));
+		if (!BattleKitLook::AnimateFirstPerson(Rifle, Kick, Dip))
+		{
+			Rifle->SetRelativeLocation(FVector(47-4*Kick,15,-16-6*Dip));
+			Rifle->SetRelativeRotation(FRotator(0,90,4*Kick-25*Dip));
+		}
 	}
 }
 

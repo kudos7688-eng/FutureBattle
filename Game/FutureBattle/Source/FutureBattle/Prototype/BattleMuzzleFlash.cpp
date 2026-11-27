@@ -1,6 +1,7 @@
 // Muzzle flash (2026-11-18): a small pool of glowing ellipsoids (engine sphere + the engine's unlit additive
 // material), shown at the muzzle for a few frames. No collision, no navigation, no overlap events: display only.
 #include "BattleMuzzleFlash.h"
+#include "BattleKitFX.h"
 #include "FutureBattle.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -62,6 +63,7 @@ namespace
 
 void BattleMuzzleFlash::Show(UWorld* World,const FVector& Muzzle,const FVector& Direction,float Size,float Seconds)
 {
+ BattleKitFX::Muzzle(World,Muzzle,Size);
  static const bool bOff=FParse::Param(FCommandLine::Get(),TEXT("BattleNoMuzzleFlash"));
  if(bOff||!World||!FApp::CanEverRender()||Direction.IsNearlyZero()||Muzzle.ContainsNaN())return;
  FFlashPool* P=Pools.Find(World);

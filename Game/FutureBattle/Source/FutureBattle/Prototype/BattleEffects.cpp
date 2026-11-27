@@ -3,6 +3,7 @@
 // Explosion: Lyra Starter Game NS_Grenade_Explosion (Niagara), copied with its materials and textures by
 // Setup/Import-AudioFXAssets.py; sources and terms in Docs/ASSET_SOURCES_AUDIO_FX.md.
 #include "BattleEffects.h"
+#include "BattleKitFX.h"
 #include "FutureBattle.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Engine/World.h"
@@ -92,12 +93,14 @@ void BattleEffects::Preload(UWorld* World)
 bool BattleEffects::Explosion(UWorld* World,const FVector& At,float Size)
 {
  FFxState* S=Ready(World);
- if(!S||!S->Blast||At.ContainsNaN())return false;
- if(!InView(*S,At,150000.,5000.)||S->Blasts>=4)return false;
+ if(!S||!S->Blast||At.ContainsNaN()){BattleKitFX::Explosion(World,At,Size);return false;}
+ if(!InView(*S,At,150000.,5000.)||S->Blasts>=4){BattleKitFX::Explosion(World,At,Size);return false;}
  ++S->Blasts;
  // Sit on the ground when the burst is just above it (shells aim at soldiers' centres); a hit high on a wall stays there.
  FVector Where=At;
  FHitResult Ground;
  if(World->LineTraceSingleByObjectType(Ground,At+FVector(0,0,50),At-FVector(0,0,300),FCollisionObjectQueryParams(ECC_WorldStatic)))Where=Ground.ImpactPoint;
+ // Reuse the existing visual ground sample; the kit adds no traces of its own.
+ BattleKitFX::Explosion(World,Where,Size);
  return UNiagaraFunctionLibrary::SpawnSystemAtLocation(World,S->Blast,Where,FRotator::ZeroRotator,FVector(FMath::Clamp(Size,.5f,3.f)),true,true,ENCPoolMethod::AutoRelease,true)!=nullptr;
 }

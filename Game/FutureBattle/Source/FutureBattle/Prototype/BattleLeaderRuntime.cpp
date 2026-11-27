@@ -1,4 +1,5 @@
 #include "BattleLeaderRuntime.h"
+#include "BattleKitFX.h"
 #include "BattleArms.h"
 #include "BattleMuzzleFlash.h"
 #include "BattleAudio.h"
@@ -551,6 +552,11 @@ void UBattleLeaderRuntime::OnDeath(int32 ID)
  if(auto* B=Bodies.Find(ID))
  {
   B->Velocity=FVector::ZeroVector;
+  // The vehicle display persists as a wreck after VehicleIDs.Remove. Only copy its visible turret position;
+  // the smoke emitter owns its own clock and never reads/writes combat state on subsequent frames.
+  if(BattleKitFX::Active(GetWorld()))
+   if(const auto* WreckTurret=Turrets.Find(ID);WreckTurret&&WreckTurret->IsValid()&&(*WreckTurret)->IsVisible()&&
+    B->Actor.IsValid()&&!B->Actor->IsHidden())BattleKitFX::Wreck(GetWorld(),(*WreckTurret)->GetComponentLocation());
   if(B->Actor.IsValid()) B->Actor->ApplyDeath();
   else
   {
@@ -1742,7 +1748,11 @@ bool UBattleLeaderRuntime::Fire(int32 ID,FVector Start,FVector Direction,bool bP
   const FVector HitAt=Hit.bBlockingHit?FVector(Hit.ImpactPoint):End;
   if(bAT)BattleAudio::Cue(GetWorld(),BattleAudio::ECue::RocketLaunch,&Start);
   else BattleAudio::Shot(GetWorld(),Start,Shooter->Weapon==EBattleWeapon::SupportGun?BattleAudio::EShot::Heavy:BattleAudio::EShot::Rifle,bPlayerShot);
-  if(!bAT&&Hit.bBlockingHit)BattleAudio::Impact(GetWorld(),HitAt,Victim>0);
+  if(!bAT&&Hit.bBlockingHit)
+  {
+   BattleAudio::Impact(GetWorld(),HitAt,Victim>0);
+   BattleKitFX::Impact(GetWorld(),Hit,Victim>0);
+  }
   BattleAudio::ShotPassing(GetWorld(),Start,HitAt,Shooter->Team,Victim);
   if(HotSectorsEnabled()&&FVector::Dist2D(Start,HitAt)<=5000.)NoteHotEvent(Start,.2f); // hot sectors: a shot over at most 50 m
  }

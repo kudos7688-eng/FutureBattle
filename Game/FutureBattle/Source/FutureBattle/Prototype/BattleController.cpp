@@ -2,6 +2,7 @@
 #include "BattleArms.h"
 #include "BattleAudio.h"
 #include "BattleEffects.h"
+#include "BattleKitLook.h"
 #include "BattleFXCheck.h"
 #include "BattleUIText.h"
 #include "BattleTactics.h"
@@ -109,6 +110,7 @@ void ABattleController::BeginPlay()
 	// Sounds and effects are loaded before the first shot (nothing is loaded with -nosound / -nullrhi).
 	BattleAudio::Preload(GetWorld());
 	BattleEffects::Preload(GetWorld());
+	BattleKitLook::Apply(GetWorld());
 }
 
 void ABattleController::SetupInputComponent()
