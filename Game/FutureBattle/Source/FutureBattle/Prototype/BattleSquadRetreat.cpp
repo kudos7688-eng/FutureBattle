@@ -197,7 +197,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
     S->CommandStatus!=EBattleCommandStatus::Active || (S->Team==0 && !S->bPlayerDelegated) || O.Living==0) return;
  auto& P=S->TacticalPlan;
  // Trial -BattleSeekKnown: the team's sightings are kept whether or not any squad may seek now.
- if(BattleTactics::SeekKnown()>0)RefreshKnownSpots(S->Team);
+ if(BattleTactics::SeekKnown()>0 || BattleTactics::SectorDefendMarch()>0)RefreshKnownSpots(S->Team);
  // A direct-controlled leader suspends tactical transitions; followers retain the existing plan.
  if(O.Direct>0 || (P.Action!=EBattleSquadTactic::Mission && !P.bAutonomous)) return;
  const auto* T=GetDefault<UBattleTuning>(); const FVector Here=Runtime->Position(S->LeaderUnitID);
@@ -435,6 +435,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  }
  if(BattleTactics::SectorDefend()>=2 && Emergency && CauseOverride.IsEmpty() && Cause.StartsWith(TEXT("DAMAGE ")) && FallBackSector(SID,O))return;
  if(Emergency) { if(P.Action==EBattleSquadTactic::Flank)Event(TEXT("WideFlankEmergency"));Retreat(); return; }
+ if(BattleTactics::SectorDefendMarch()>0 && StepSectorMarch(SID,O,Visible))return;
  if(BattleTactics::SectorSeize()>0 && ResumeSeizeSector(SID,O,Visible))return;
  if(BattleTactics::SectorDefend()>0 && StepSectorDefend(SID,O,Visible))return;
  if(P.Action==EBattleSquadTactic::Flank) { EvaluateFlank(SID,O); return; }

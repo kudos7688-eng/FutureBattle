@@ -16,7 +16,12 @@ int32 BattleTactics::SectorSeizePoint()
 }
 int32 BattleTactics::SectorSeizePointMax()
 {
- static const int32 Limit=[](){int32 Value=8;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSeizePointMax="),Value);return FMath::Clamp(Value,2,12);}();
+ static const int32 Limit=[](){int32 Value=6;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSeizePointMax="),Value);return FMath::Clamp(Value,2,12);}();
+ return Limit;
+}
+int32 BattleTactics::SectorSeizePointSupport()
+{
+ static const int32 Limit=[](){int32 Value=2;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSeizePointSupport="),Value);return FMath::Clamp(Value,0,4);}();
  return Limit;
 }
 int32 BattleTactics::SectorSeizePointMin()
@@ -51,7 +56,7 @@ void UBattleSquadTactics::ResetSeizeExtensions()
  }
 }
 
-void UBattleSquadTactics::LogSeizePoint(int32 Team,const TCHAR* What) const
+void UBattleSquadTactics::LogSeizePoint(int32 Team,const TCHAR* What,const FIntPoint* LogCell) const
 {
  if(!BattleTactics::SectorSeizePoint() || !SectorSeizeEnabled(Team))return;
  const auto& Focus=SeizePoints[Team];
@@ -59,12 +64,13 @@ void UBattleSquadTactics::LogSeizePoint(int32 Team,const TCHAR* What) const
  for(const auto& Pair:SeizeExtras)
  {
   const auto* Squad=Store->FindSquad(Pair.Key);const auto* Open=SeizeSectors.Find(Pair.Key);
-  if(Pair.Value.Point==Focus.Point && Squad && Squad->Team==Team && Open && Open->EndAt<0. &&
+  if(Pair.Value.Point==Focus.Point && (!BattleTactics::SectorSeizePointSupport() || Pair.Value.FocusStart==Focus.Start) &&
+     Squad && Squad->Team==Team && Open && Open->EndAt<0. &&
      Squad->CommandStatus==EBattleCommandStatus::Active &&
      (Squad->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")) || SeizeSuspended.Contains(Pair.Key)))++AssignedCount;
  }
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SECTOR_SEIZE_POINT t=%.0f team=%d point=%d cell=%d,%d what=%s squads=%d"),
-  GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed,Team,Focus.Point,Focus.Cell.X,Focus.Cell.Y,What,
+  GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed,Team,Focus.Point,LogCell?LogCell->X:Focus.Cell.X,LogCell?LogCell->Y:Focus.Cell.Y,What,
   AssignedCount);
 }
 
@@ -126,7 +132,13 @@ void UBattleSquadTactics::UpdateSeizeExtensions(int32 Team)
  for(const auto& Pair:SeizeExtras)
  {
   const auto* Squad=Store->FindSquad(Pair.Key);const auto* Open=SeizeSectors.Find(Pair.Key);
-  if(Focus.Point!=INDEX_NONE && Pair.Value.Point==Focus.Point && Squad && Squad->Team==Team &&
+  if(BattleTactics::SectorSeizePointSupport()>0 && Squad)
+  {
+   bool Living=false;for(int32 ID:Squad->Members)if(const auto* Unit=Store->Find(ID);Unit && Unit->IsAlive()){Living=true;break;}
+   if(!Living)continue;
+  }
+  if(Focus.Point!=INDEX_NONE && Pair.Value.Point==Focus.Point &&
+     (!BattleTactics::SectorSeizePointSupport() || Pair.Value.FocusStart==Focus.Start) && Squad && Squad->Team==Team &&
      Squad->CommandStatus==EBattleCommandStatus::Active && Open && Open->EndAt<0. &&
      (Squad->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")) || SeizeSuspended.Contains(Pair.Key)))Assigned.Add(Pair.Key);
  }
@@ -138,7 +150,13 @@ void UBattleSquadTactics::UpdateSeizeExtensions(int32 Team)
    Focus.Taken=true;Event(TEXT("SeizePointTaken"));LogSeizePoint(Team,TEXT("taken"));
    for(int32 AssignedID:Assigned)SeizeExtras.FindChecked(AssignedID).CapturedAt=Now;
   }
-  if(Assigned.Num()>0 && !Focus.Taken)
+  int32 Assaults=Assigned.Num();
+  if(BattleTactics::SectorSeizePointSupport()>0)
+  {
+   Assaults=0;
+   for(int32 AssignedID:Assigned)if(!SeizeExtras.FindChecked(AssignedID).Support)++Assaults;
+  }
+  if(Assaults>0 && !Focus.Taken)
   {
    if(Focus.GoAt<0.)
    {
@@ -146,6 +164,7 @@ void UBattleSquadTactics::UpdateSeizeExtensions(int32 Team)
     for(int32 AssignedID:Assigned)
     {
      const auto* Squad=Store->FindSquad(AssignedID);
+     if(BattleTactics::SectorSeizePointSupport()>0 && SeizeExtras.FindChecked(AssignedID).Support)continue;
      if(BattleSectors::Cell(Runtime->Position(Squad->LeaderUnitID))==Focus.Assembly)++Assembled;
     }
     if(Assembled>0 && Focus.FirstAt<0.)Focus.FirstAt=Now;
@@ -165,6 +184,8 @@ void UBattleSquadTactics::UpdateSeizeExtensions(int32 Team)
    return; // Keep this point even if another point has become nearer.
   }
   if(!Focus.Taken && Focus.Committed)LogSeizePoint(Team,TEXT("drop"));
+  if(BattleTactics::SectorSeizePointSupport()>0)
+   for(int32 AssignedID:Assigned)if(auto& Detail=SeizeExtras.FindChecked(AssignedID);Detail.Support && Detail.ReleasedAt<0.)Detail.ReleasedAt=Now;
  }
  // Select once per second from public enemy ownership, excluding the enemy home sector.
  const FVector Home=Match->AreaHome(Team);const int32 Turn=Home.X>0?-1:1;
@@ -261,7 +282,9 @@ bool UBattleSquadTactics::PickSeizeExtended(int32 SID,const FBattleSquadState& S
    for(const auto& Pair:SeizeSectors)
    {
     const auto* Other=Store->FindSquad(Pair.Key);
-    if(Pair.Key!=SID && Pair.Value.EndAt<0. && Pair.Value.Cell==Cell && Other && Other->Team==S.Team &&
+    const auto* Detail=BattleTactics::SectorSeizePointSupport()>0?SeizeExtras.Find(Pair.Key):nullptr;
+    const bool SamePoint=Point && Detail && Detail->Point==Focus.Point && Detail->FocusStart==Focus.Start;
+    if(Pair.Key!=SID && Pair.Value.EndAt<0. && (Pair.Value.Cell==Cell || SamePoint) && Other && Other->Team==S.Team &&
        Other->CommandStatus==EBattleCommandStatus::Active &&
        (Other->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")) || SeizeSuspended.Contains(Pair.Key)))++Allies;
    }
@@ -301,6 +324,7 @@ bool UBattleSquadTactics::SeizePointWaiting(int32 SID) const
 {
  const auto* Extra=SeizeExtras.Find(SID);const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
  if(!BattleTactics::SectorSeizePoint() || !Extra || Extra->Point==INDEX_NONE || !S)return false;
+ if(BattleTactics::SectorSeizePointSupport()>0 && Extra->Support)return false;
  const auto& Focus=SeizePoints[S->Team];
  return Focus.Point==Extra->Point && Focus.GoAt<0. && BattleSectors::Valid(Focus.Assembly);
 }
@@ -310,6 +334,8 @@ FVector UBattleSquadTactics::SeizeExtendedGoal(int32 SID,const TCHAR*& Reason) c
  const auto& Open=SeizeSectors.FindChecked(SID);const auto* Extra=SeizeExtras.Find(SID);
  if(BattleTactics::SectorSeizePoint() && Extra && Extra->Point!=INDEX_NONE)
  {
+  if(BattleTactics::SectorSeizePointSupport()>0 && Extra->Support)
+  {Reason=TEXT("SEIZE SECTOR / SUPPORT SECTOR");return BattleSectors::Center(Open.Cell);}
   if(SeizePointWaiting(SID))
   {
    const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);Reason=TEXT("SEIZE SECTOR / ASSEMBLE");
@@ -329,8 +355,18 @@ bool UBattleSquadTactics::StartSeizeExtended(int32 SID,FIntPoint Cell,const TCHA
  if(BattleTactics::SectorSeizePoint() && Focus.Point!=INDEX_NONE && Focus.Cell==Cell)
  {
   Extra.Point=Focus.Point;
+  if(BattleTactics::SectorSeizePointSupport()>0)
+  {Extra.FocusStart=Focus.Start;Extra.PointCell=Focus.Cell;}
   if(Focus.GoAt<0. && BattleSectors::Valid(Focus.Assembly)){Goal=BattleSectors::Center(Focus.Assembly);Reason=TEXT("SEIZE SECTOR / ASSEMBLE");}
   else Reason=TEXT("SEIZE SECTOR / ASSAULT POINT");
+ }
+ if(Extra.Point!=INDEX_NONE && BattleTactics::SectorSeizePointSupport()>0 &&
+    Focus.AssaultJoined>=BattleTactics::SectorSeizePointMin() && Focus.SupportJoined<BattleTactics::SectorSeizePointSupport())
+ {
+  FIntPoint SupportCell=Focus.SupportCell;
+  if(!BattleSectors::Valid(SupportCell) && !PickSeizeSupport(S->Team,SupportCell))return false;
+  Extra.Support=true;Cell=SupportCell;Extra.Counter=SeizeCounterCell(S->Team,Cell);
+  Goal=BattleSectors::Center(Cell);Reason=TEXT("SEIZE SECTOR / SUPPORT SECTOR");
  }
  if(!Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::AttackMove,Goal,Reason))return false;
  EndSeek(SID);
@@ -338,14 +374,20 @@ bool UBattleSquadTactics::StartSeizeExtended(int32 SID,FIntPoint Cell,const TCHA
  if(Extra.Point!=INDEX_NONE)
  {
   Focus.Committed=true;
-  if(SeizePointWaiting(SID))Event(TEXT("SeizePointAssemble"));
+  if(BattleTactics::SectorSeizePointSupport()>0)
+  {
+   if(Extra.Support){++Focus.SupportJoined;Focus.SupportCell=Cell;Event(TEXT("SeizePointSupportGo"));LogSeizePoint(S->Team,TEXT("support"),&Cell);}
+   else ++Focus.AssaultJoined;
+  }
+  if(Extra.Support){} // Support leaves immediately and never opens the assault gate.
+  else if(SeizePointWaiting(SID))Event(TEXT("SeizePointAssemble"));
   else if(Focus.GoAt<0.){Focus.GoAt=Now;Event(TEXT("SeizePointGo"));LogSeizePoint(S->Team,TEXT("go"));}
  }
  if(Extra.Counter)Event(TEXT("SeizeCounterGo"));
  Event(TEXT("SeizeGo"));int32 Known=0;SeizeSectorKnown(S->Team,Cell,Now,&Known);
  UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SECTOR_SEIZE t=%.0f squad=%d team=%d cell=%d,%d dist=%.0f known=%d allies=%d kind=%s"),
   Match->Elapsed,SID,S->Team,Cell.X,Cell.Y,FVector::Dist2D(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->Position(S->LeaderUnitID),BattleSectors::Center(Cell)),
-  Known,SeizeSectorAllies(SID,S->Team,Cell),Extra.Point!=INDEX_NONE?TEXT("point"):Extra.Counter?TEXT("counter"):TEXT("sight"));
+  Known,SeizeSectorAllies(SID,S->Team,Cell),Extra.Support?TEXT("support"):Extra.Point!=INDEX_NONE?TEXT("point"):Extra.Counter?TEXT("counter"):TEXT("sight"));
  return true;
 }
 
@@ -354,7 +396,15 @@ const TCHAR* UBattleSquadTactics::SeizeExtendedEnd(int32 SID,double Now) const
  const auto* Open=SeizeSectors.Find(SID);if(!Open || Open->EndAt>=0.)return TEXT("SeizeEndLost");
  const auto* Extra=SeizeExtras.Find(SID);
  if(BattleTactics::SectorSeizePoint() && Extra && Extra->Point!=INDEX_NONE)
+ {
+  if(BattleTactics::SectorSeizePointSupport()>0 && Extra->Support && Open->TakenAt>=0. &&
+     (Extra->ReleasedAt>=0. || Extra->CapturedAt>=0.))
+  {
+   const double Released=Extra->ReleasedAt>=0.?Extra->ReleasedAt:Extra->CapturedAt;
+   if(Now-FMath::Max(Released,Open->TakenAt)>=BattleTactics::SectorSeizeHold()+90.)return TEXT("SeizeEndHeldLong");
+  }
   return Now-Open->Start>=360.?TEXT("SeizeEndPointTimeout"):nullptr;
+ }
  const double Timeout=BattleTactics::SectorSeizeCounter() && Extra && Extra->Counter?300.:180.;
  if(Open->TakenAt<0. && Now-Open->Start>=Timeout)return TEXT("SeizeEndTimeout");
  if(Open->TakenAt>=0. && Now-Open->TakenAt>=BattleTactics::SectorSeizeHold()+90.)return TEXT("SeizeEndHeldLong");
@@ -417,7 +467,15 @@ bool UBattleSquadTactics::StepSeizeExtended(int32 SID,const FBattleSquadObservat
  Plan.Remaining=60.f;
  auto* Extra=SeizeExtras.Find(SID);
  const bool Point=BattleTactics::SectorSeizePoint()>0 && Extra && Extra->Point!=INDEX_NONE;
- if(Point && Seize->EnterAt<0. && BattleSectors::Cell(Here)==Seize->Cell)
+ const bool Support=Point && BattleTactics::SectorSeizePointSupport()>0 && Extra->Support;
+ if(Support && (Extra->ReleasedAt>=0. || Extra->CapturedAt>=0.) && Seize->TakenAt<0.)
+ {
+  EndSeize(SID,TEXT("SeizeEndOther"));
+  if(!ResumeMission(SID,TEXT("POINT SUPPORT OVER / RESUME MISSION"),nullptr))
+   Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("POINT SUPPORT OVER / HOLD"));
+  return true;
+ }
+ if(Point && !Support && Seize->EnterAt<0. && BattleSectors::Cell(Here)==Seize->Cell)
  {Seize->EnterAt=Now;Event(TEXT("SeizeEnter"));Event(TEXT("SeizePointEnter"));}
  if(Point && Extra->CapturedAt<0. && GetWorld()->GetSubsystem<UBattleMatch>()->Objectives.IsValidIndex(Extra->Point) &&
     GetWorld()->GetSubsystem<UBattleMatch>()->Objectives[Extra->Point].Owner==S->Team)Extra->CapturedAt=Now;
@@ -455,6 +513,7 @@ bool UBattleSquadTactics::StepSeizeExtended(int32 SID,const FBattleSquadObservat
    // Hold keeps the soldiers where they are; Defend can rebuild routes using DefenseRadius.
    Seize->TakenAt=Now;Event(TEXT("SeizeTaken"));LogSeizeSector(SID,*Seize,TEXT("SeizeTaken"));
    if(BattleTactics::SectorSeizeCounter()>0 && Extra && Extra->Counter)Event(TEXT("SeizeCounterTaken"));
+   if(Support)Event(TEXT("SeizePointSupportTaken"));
   }
  }
  else Seize->QuietSince=-1.;
@@ -465,7 +524,12 @@ bool UBattleSquadTactics::StepSeizeExtended(int32 SID,const FBattleSquadObservat
    Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Hold,Here,TEXT("SEIZE SECTOR / HOLD TAKEN"));
   // Hold for public ownership (at most 120 s); then start the ordinary stay/next phase.
   double HoldFrom=Seize->TakenAt;
-  if(Point)
+  if(Support)
+  {
+   if(Extra->ReleasedAt<0. && Extra->CapturedAt<0.)return true;
+   HoldFrom=FMath::Max(Seize->TakenAt,Extra->ReleasedAt>=0.?Extra->ReleasedAt:Extra->CapturedAt);
+  }
+  else if(Point)
   {
    if(Extra->CapturedAt<0. && Now-Seize->TakenAt<120.)return true;
    HoldFrom=Extra->CapturedAt>=0.?FMath::Max(Seize->TakenAt,Extra->CapturedAt):Seize->TakenAt+120.;
@@ -489,4 +553,43 @@ bool UBattleSquadTactics::StepSeizeExtended(int32 SID,const FBattleSquadObservat
   }
  }
  return true;
+}
+
+bool UBattleSquadTactics::PickSeizeSupport(int32 Team,FIntPoint& Out) const
+{
+ const auto& Focus=SeizePoints[Team];const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
+ const int32 Turn=Match->AreaHome(Team).X>0?-1:1;
+ bool Found=false;int32 BestKnown=-1,BestNear=MAX_int32,BestSlots=-1;FIntPoint BestRead=FIntPoint::ZeroValue;
+ const FIntPoint Anchor=BattleSectors::Valid(Focus.Assembly)?Focus.Assembly:BattleSectors::Cell(Match->AreaHome(Team));
+ for(int32 DX=-1;DX<=1;++DX)for(int32 DY=-1;DY<=1;++DY)
+ {
+  if(!DX && !DY)continue;
+  const FIntPoint Candidate=Focus.Cell+FIntPoint(DX,DY);
+  if(Candidate==Focus.Assembly || !BattleSectors::Valid(Candidate) || BattleSectors::Impassable(BattleFieldLayout::SectorKind(GetWorld(),Candidate)))continue;
+  int32 Known=0;SeizeSectorKnown(Team,Candidate,Clock(),&Known);
+  const int32 Near=FMath::Max(FMath::Abs(Candidate.X-Anchor.X),FMath::Abs(Candidate.Y-Anchor.Y));
+  const int32 Slots=SeizeTrialSlots.FindRef(Candidate);const FIntPoint ReadCell(Candidate.X*Turn,Candidate.Y*Turn);
+  const bool Smaller=ReadCell.X<BestRead.X || (ReadCell.X==BestRead.X && ReadCell.Y<BestRead.Y);
+  bool Better=!Found || Known>BestKnown;
+  if(Found && Known==BestKnown)
+   Better=Known>0?Smaller:Near<BestNear || (Near==BestNear && (Slots>BestSlots || (Slots==BestSlots && Smaller)));
+  if(!Better)continue;
+  Found=true;BestKnown=Known;BestNear=Near;BestSlots=Slots;BestRead=ReadCell;Out=Candidate;
+ }
+ return Found;
+}
+
+bool UBattleSquadTactics::SeizeSupportFocus(int32 SID,FVector& Out) const
+{
+ if(!BattleTactics::SectorSeizePoint() || !BattleTactics::SectorSeizePointSupport())return false;
+ const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
+ const auto* Extra=SeizeExtras.Find(SID);const auto* Open=SeizeSectors.Find(SID);
+ if(!S || !SectorSeizeEnabled(S->Team) || !Extra || !Extra->Support || !Open || Open->EndAt>=0. ||
+    S->TacticalPlan.Action!=EBattleSquadTactic::Engage || !S->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")))return false;
+ Out=BattleSectors::Center(Extra->PointCell);return true;
+}
+
+bool UBattleSquadTactics::SeizeSupportTarget(int32 SID,const FVector& At) const
+{
+ FVector Focus;return SeizeSupportFocus(SID,Focus) && BattleSectors::Cell(At)==BattleSectors::Cell(Focus);
 }

@@ -673,6 +673,8 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  auto* Sense=GetWorld()->GetSubsystem<UBattlePerception>();
  if(Phase3 && Phase3->bEnabled && P.NextThink>0) Phase3->DecisionLateMS=FMath::Max(Phase3->DecisionLateMS,(Now-P.NextThink)*1000);
  P.NextThink=Now+FMath::Max(.2f,GetDefault<UBattleTuning>()->SquadDecisionSeconds);
+ const bool bDefendMarch=BattleTactics::SectorDefendMarch()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->MarchingSector(SID);
+ if(bDefendMarch){P.bPinned=false;P.bCloseIn=false;P.bCoverStop=false;}
  const int32 PreviousTarget=P.TargetID;
  // Trial -BattleDefendEngage=1: a defending squad targets any enemy within weapon range (BattleGroups.cpp).
  const bool Sector=(S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission) ||
@@ -683,7 +685,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  // Trial -BattleSectorContact=1: shot at on the way or while holding, the squad also answers enemies outside its sector.
  const bool bShotAt=Sector && (SectorContactEnabled() || SectorMoveFireEnabled() || SectorFireBack.Contains(SID)) && SquadShotAt(*S,Now);
  const FIntPoint SectorCell=Sector?BattleSectors::Cell(S->Destination):FIntPoint(-1,-1);
- auto OutsideOK=[&](int32 ID,const FVector& At){if(BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(SID))return FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));return bShotAt && FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));};
+ auto OutsideOK=[&](int32 ID,const FVector& At){if(bDefendMarch || (BattleTactics::SectorSeizePoint()>0 && BattleTactics::SectorSeizePointSupport()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeSupportTarget(SID,At)))return FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));if(BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(SID))return FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));return bShotAt && FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));};
  FVector SelectedTargetAt=FVector::ZeroVector;
  P.TargetID=INDEX_NONE; double Best=DBL_MAX;
  P.Center=FVector::ZeroVector; int32 Count=0; for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) { P.Center+=Position(ID); ++Count; } if(Count) P.Center/=Count;
@@ -701,13 +703,13 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  struct FKnownRef{int32 Key;const FBattleContact& Value;};
  // -BattleSquadKnowledge=1: the squad's own table holds the newest information; otherwise the first member's contact, as before.
  auto SquadKnown=[&](int32 TargetID)->const FBattleContact*{if(const auto* K=Sense->FindSquadContact(SID,TargetID))return &K->Contact;return Known.First(TargetID);};
- if(S->Order!=EBattleOrder::Move) for(const auto& KT:Known.ByTarget) for(const auto& G:KT.Value)
+ if(S->Order!=EBattleOrder::Move || bDefendMarch) for(const auto& KT:Known.ByTarget) for(const auto& G:KT.Value)
   if(G.Contact->bVisible && !G.Contact->bShared && Store->Find(G.MemberID)->IsAlive())
   {
    const int32 ID=G.MemberID;const FKnownRef C{KT.Key,*G.Contact};
    if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C.Value.LastKnownPosition)>FMath::Square(TargetRange(ID))) continue;
    if(Sector && BattleSectors::Cell(C.Value.LastKnownPosition)!=SectorCell && !OutsideOK(ID,C.Value.LastKnownPosition)) continue;
-   if(!BattleTactics::OrderAllowsTarget(*S,C.Key,C.Value.LastKnownPosition))continue;
+   if(!bDefendMarch && !BattleTactics::OrderAllowsTarget(*S,C.Key,C.Value.LastKnownPosition))continue;
    if(bArmourSectorGate)AllowedArmourTargets.Add(C.Key);
    double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
    const bool bInCone=!bFocusTarget || FVector::DotProduct((C.Value.LastKnownPosition-P.Center).GetSafeNormal2D(),FocusDir)>=.707f;
@@ -750,7 +752,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  else if(const auto* C=P.TargetID!=INDEX_NONE?SquadKnown(P.TargetID):nullptr){TargetAt=C->LastKnownPosition;bTargetKnown=true;}
  // Trial -BattleSquadCoverCheck=1: a squad that fires on the move decides as a whole whether to stop in cover here - only when
  // it can hide and is at least even with the enemies it sees; otherwise it keeps firing on the move.
- if(!(BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(SID)) && SquadCoverCheckEnabled() && Sector && (SectorMoveFireEnabled() || SectorFireBack.Contains(SID)) && bTargetKnown &&
+ if(!(BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(SID)) && !bDefendMarch && SquadCoverCheckEnabled() && Sector && (SectorMoveFireEnabled() || SectorFireBack.Contains(SID)) && bTargetKnown &&
     BattleSectors::Cell(P.Center)!=SectorCell)
  {
   if(Now>=P.CoverCheckAt)
@@ -776,7 +778,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  }
  else {P.BoundGroup=-1;P.BoundSwitchAt=0;}
  // Trial -BattlePinnedFlank=1: shot at on the way for 20 s without getting 10 m closer to the sector.
- if(!(BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(SID)) && PinnedFlankEnabled() && Sector && bShotAt && BattleSectors::Cell(P.Center)!=SectorCell)
+ if(!(BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(SID)) && !bDefendMarch && PinnedFlankEnabled() && Sector && bShotAt && BattleSectors::Cell(P.Center)!=SectorCell)
  {
   const double D=FVector::Dist2D(P.Center,S->Destination);
   if(P.PinnedSince==0 || D<P.PinnedBestDist-1000.){P.PinnedSince=Now;P.PinnedBestDist=D;}
@@ -784,7 +786,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  }
  else if(!bShotAt){P.PinnedSince=0;P.bPinned=false;}
  // Trial -BattleCloseIn=1: in its sector, a squad trading fire at long range while at least even moves a sector closer.
- if(!(BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(SID)) && CloseInEnabled() && Sector && bTargetKnown && !P.bCloseIn && BattleSectors::Cell(P.Center)==SectorCell && Now>=P.FarCheckAt)
+ if(!(BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(SID)) && !bDefendMarch && CloseInEnabled() && Sector && bTargetKnown && !P.bCloseIn && BattleSectors::Cell(P.Center)==SectorCell && Now>=P.FarCheckAt)
  {
   P.FarCheckAt=Now+2.;
   bool bFar=FVector::DistSquared2D(P.Center,TargetAt)>FMath::Square(9000.);
@@ -820,6 +822,10 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
    {P.ArrivalGoals.Reset();P.bReplan=true;P.FocusReplanAt=Now+10.;SightExperiment.Cover(TEXT("attack_focus_replan"));
     if(BattleTactics::SectorDefend()>0)GetWorld()->GetSubsystem<UBattleSquadTactics>()->SectorDefendReplan(SID); }
   }
+ }
+ if(BattleTactics::SectorSeizePoint()>0 && BattleTactics::SectorSeizePointSupport()>0)
+ {
+  FVector SupportFocus;if(GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeSupportFocus(SID,SupportFocus)){P.bFocus=true;P.Focus=SupportFocus;}
  }
  // Trial -BattleArrivalThreat=1: in the sector, a target far off the direction the arrival places face picks them again
  // (not with -BattleAttackFocus, which re-plans by its focus).
@@ -940,6 +946,8 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* U=Store->Find(ID); if(!U || !U->IsAlive()){if(BattleKnownFire::MoveEnabled() && KnownMoves.Contains(ID))EndKnownMove(ID,Now,TEXT("known_move_cancel_died"));return;}
  auto& B=Bodies.FindChecked(ID);
  if(BattleTactics::SectorDefend()>0)EnforceSectorDefend(ID,Now);
+ const bool bDefendMarchUnit=BattleTactics::SectorDefendMarch()>0 && SectorMarchUnit(ID);
+ if(bDefendMarchUnit)EnforceSectorMarch(ID,Now);
  if(BattleKnownFire::MoveEnabled() && KnownMoves.Contains(ID) && StepKnownMove(ID,Dt,Now)){SightExperiment.Cover(TEXT("known_move_gate_active"));return;}
  const bool bKnownMoveEntryAllowed=!BattleKnownFire::MoveEnabled() || KnownMoveAllowed(ID,true);
  // The player's order to this soldier ends (squad order, squad stopped, taken over...) before his cover action runs.
@@ -1070,7 +1078,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   S->bSectorMission && BattleSectors::Cell(Pos)!=BattleSectors::Cell(S->Destination);
  if(bBoundMove && (U->CoverPhase || CoverApproaches.Contains(ID))){CancelCoverAction(ID);CoverApproaches.Remove(ID);}
  if(bBoundMove)FirePositions.Remove(ID);
- const bool bMoveFire=!bOwnOrder && (bBoundMove || ((SectorMoveFireEnabled() || (!SectorFireBack.IsEmpty() && SectorFireBack.Contains(U->SquadID))) && !bVehicleBody &&
+ const bool bMoveFire=!bOwnOrder && (bDefendMarchUnit || bBoundMove || ((SectorMoveFireEnabled() || (!SectorFireBack.IsEmpty() && SectorFireBack.Contains(U->SquadID))) && !bVehicleBody &&
   S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission && !P->bCoverStop &&
   BattleSectors::Cell(Pos)!=BattleSectors::Cell(S->Destination) && !U->CoverPhase && !CoverApproaches.Contains(ID)));
  // -BattleArrivalWalk (and evaluation): his own arrival place in the sector, still more than 1.5 m away, on a route that goes past
@@ -1186,7 +1194,7 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   const bool bOwnMarch=bMoveFire || bOwnWalking || bArrivalWalk || (!bOwnOrder && S->Order!=EBattleOrder::Hold && !StopForCombat && bOnRoute);
   const int32 OwnCover=bSeenCover || bHitCover || bOwnOrder || U->Order==EBattleOrder::Move ? 0 : OwnTargetCover(U->Team);
   SightExperiment.Cover(bOwnMarch?TEXT("own_target_open_walking_frames"):TEXT("own_target_open_standing_frames"));
-  if(BattleTactics::CoverActionsEnabled() && OwnCover && ProbeSlot && Now>=RetryAt &&
+  if(!bDefendMarchUnit && BattleTactics::CoverActionsEnabled() && OwnCover && ProbeSlot && Now>=RetryAt &&
    (!bOwnMarch || (OwnCover>=2 && FVector::DistSquared2D(Pos,OwnContact->LastKnownPosition)<=FMath::Square(5000.))))
   {
    if(LeaderFirst){}else if(HitFirst)++PriorityProbesThisFrame;else if(ProbeBudget)++CoverProbesThisFrame;else NextCoverProbe=Now+FMath::Max(0.f,CoverTuning->AICoverProbeInterval);
@@ -2060,6 +2068,9 @@ bool UBattleLeaderRuntime::FocusTargetEnabled()
 }
 bool UBattleLeaderRuntime::PickAttackFocus(const FBattleSquadState& S,double Now,FVector& Out,const TCHAR*& Source)
 {
+ if(BattleTactics::SectorSeizePoint()>0 && BattleTactics::SectorSeizePointSupport()>0 &&
+    GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeSupportFocus(S.SquadID,Out))
+ {Source=TEXT("attack_focus_seize_support");return true;}
  Source=TEXT("attack_focus_none");
  const int32 Team=S.Team;if(Team!=0 && Team!=1)return false;
  if(Now-FocusEnemiesAt[Team]>=1.){FocusEnemies[Team]=GetWorld()->GetSubsystem<UBattleMatch>()->RouteKnownEnemies(Team);FocusEnemiesAt[Team]=Now;}

@@ -210,6 +210,7 @@ bool UBattleLeaderRuntime::RevalidatePeek(int32 ID,FVector Threat)
 
 bool UBattleLeaderRuntime::RequestCoverAction(int32 ID,FVector Threat,int32 Target,float SearchRadius,bool bAllHidden,const TFunction<bool(int32,const FVector&)>& Accept)
 {
+ if(BattleTactics::SectorDefendMarch()>0 && SectorMarchUnit(ID))return false;
  if(!bEnabled || !BattleTactics::CoverActionsEnabled() || !Bodies.Contains(ID) || Threat.ContainsNaN())return false;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();auto* U=Store->Units.Find(ID);
  if(!U || !U->IsAlive() || U->CoverPhase)return false;
@@ -383,6 +384,7 @@ bool UBattleLeaderRuntime::SquadCanHide(int32 SID,FVector Threat,double Now) con
 
 bool UBattleLeaderRuntime::StartHuddle(int32 ID,FVector Threat,int32 Target,double Now)
 {
+ if(BattleTactics::SectorDefendMarch()>0 && SectorMarchUnit(ID))return false;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
  if(!U || !U->IsAlive() || U->CoverPhase || Threat.ContainsNaN() || !Bodies.Contains(ID) || CoverApproaches.Contains(ID))return false;
  auto* Nav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());if(!Nav)return false;
@@ -415,6 +417,7 @@ bool UBattleLeaderRuntime::StartHuddle(int32 ID,FVector Threat,int32 Target,doub
 
 bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Target,double Now,float LocalRadius,bool bHoldToo)
 {
+ if(BattleTactics::SectorDefendMarch()>0 && SectorMarchUnit(ID))return false;
  auto& Diag=SightExperiment;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);
  if(!U || !U->IsAlive() || U->CoverPhase || Threat.ContainsNaN() || !Bodies.Contains(ID))return false;
@@ -466,6 +469,7 @@ bool UBattleLeaderRuntime::StartCoverApproach(int32 ID,FVector Threat,int32 Targ
 
 bool UBattleLeaderRuntime::StartFirePosition(int32 ID,FVector Threat,int32 Target,double Now)
 {
+ if(BattleTactics::SectorDefendMarch()>0 && SectorMarchUnit(ID))return false;
  bFirePositionHereGood=false;
  auto& Diag=SightExperiment;
  auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);

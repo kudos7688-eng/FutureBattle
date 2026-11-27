@@ -70,11 +70,14 @@ namespace BattleTactics
  // it still requires the shooter's sensor and aim line. No other consumer or tracking update changes.
  float SpotTrack();
  // Sector attack trial (design-sector-attack-defend.md, chapter 3), default off.
+ int32 SectorDefendMarch(); // 0..1, independent of SectorDefend.
+ int32 SectorDefendMarchTeam(); // -1 both, 0/1.
  int32 SectorDefend(); // 0 off, 1 hold the sector, 2 fall back between sectors.
  int32 SectorDefendTeam(); // -1 both, 0/1 one team.
  float SectorDefendBack(); // 30, 5..120 seconds without damage after arrival.
  int32 SectorSeizePoint(); // 0..1, requires SectorSeize.
- int32 SectorSeizePointMax(); // 8, 2..12.
+ int32 SectorSeizePointMax(); // 6, 2..12.
+ int32 SectorSeizePointSupport(); // 2, 0..4; requires SectorSeizePoint.
  int32 SectorSeizePointMin(); // 4, 1..8.
  float SectorSeizePointWait(); // 45, 0..120 seconds after first arrival.
  int32 SectorSeizeCounter(); // 0..1, requires SectorSeize.

@@ -33,6 +33,8 @@ bool BattleTactics::OrderAllowsTarget(const FBattleSquadState& S,int32 TargetID,
 bool UBattleLeaderRuntime::WeaponOrderAllows(int32 ID,int32 TargetID,const FVector& KnownPosition) const
 {
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* U=Store->Find(ID);const auto* S=U?Store->FindSquad(U->SquadID):nullptr;
+ if(BattleTactics::SectorDefendMarch()>0 && SectorMarchUnit(ID))
+  return TargetID>0 && FVector::DistSquared(Position(ID),KnownPosition)<=FMath::Square(TargetRange(ID));
  if(!U||!U->IsAlive()||!S||S->CommandStatus!=EBattleCommandStatus::Active||!BattleTactics::OrderAllowsTarget(*S,TargetID,KnownPosition))return false;
  if(BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(S->SquadID))return true;
  if(!S->bSectorMission||S->TacticalPlan.Action!=EBattleSquadTactic::Mission||BattleSectors::Cell(KnownPosition)==BattleSectors::Cell(S->Destination))return true;

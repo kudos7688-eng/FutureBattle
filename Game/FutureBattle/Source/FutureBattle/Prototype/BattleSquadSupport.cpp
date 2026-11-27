@@ -7,6 +7,7 @@
 
 bool UBattleSquadTactics::CanSupport(int32 SID,int32 Target) const
 {
+ if(BattleTactics::SectorDefendMarch()>0 && MarchingSector(SID))return false;
  if(BattleTactics::SectorDefend()>0 && DefendingSector(SID))return false;
  if(BattleTactics::BaseGarrison()&&GetWorld()->GetSubsystem<UBattleMatch>()->IsBaseGarrison(SID))return false;
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>(); const auto* S=Store->FindSquad(SID);
@@ -88,10 +89,12 @@ bool UBattleSquadTactics::AcceptSupport(int32 SID,int32 OtherID,int32 Target)
     Store->Find(Other->LeaderUnitID)->Action==EBattleAction::DirectControl ||
     FVector::Dist2D(R->Position(S->LeaderUnitID),R->Position(Other->LeaderUnitID))>(bCoordination&&Other->TacticalPlan.Action==EBattleSquadTactic::Flank?5000:2000) ||
     !CanSupport(SID,Target)) return false;
+ if(BattleTactics::SectorDefendMarch()>0 && MarchingSector(SID))return false;
  if(BattleTactics::SectorDefend()>0 && DefendingSector(SID))return false;
  // Local emergency assessment has final say, even when the team report was stale.
  Evaluate(SID,Observe(*S),0);
  if(S->TacticalPlan.Action!=EBattleSquadTactic::Mission && S->TacticalPlan.Action!=EBattleSquadTactic::Engage) return false;
+ if(BattleTactics::SectorDefendMarch()>0 && MarchingSector(SID))return false;
  if(BattleTactics::SectorDefend()>0 && DefendingSector(SID))return false;
  if(!Apply(SID,EBattleSquadTactic::Support,EBattleOrder::Hold,R->Position(S->LeaderUnitID),
     FString::Printf(TEXT("COVER S%d / TARGET %d / WAITING FOR FIRE"),OtherID,Target))) return false;

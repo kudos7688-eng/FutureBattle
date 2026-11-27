@@ -141,7 +141,13 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   // Trial -BattleAttackFocus=1: a sector squad with a focus chooses its arrival places against it (instead of the way in or the
   // -BattleArrivalThreat direction); the direction is kept for the squad's re-planning check.
   bool bFocusArrival=false;
-  if(Sector && AttackFocusEnabled())
+  bool bSeizeSupportFacing=false;
+  if(BattleTactics::SectorSeizePoint()>0 && BattleTactics::SectorSeizePointSupport()>0)
+  {
+   FVector SupportFocus;bSeizeSupportFacing=GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeSupportFocus(SID,SupportFocus);
+   if(bSeizeSupportFacing){P.bFocus=true;P.Focus=SupportFocus;}
+  }
+  if(Sector && (AttackFocusEnabled() || bSeizeSupportFacing))
   {
    const FVector Dir=P.bFocus?(P.Focus-S->Destination).GetSafeNormal2D():FVector::ZeroVector;
    P.FocusPlanDir=Dir;

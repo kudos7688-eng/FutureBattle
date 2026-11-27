@@ -60,6 +60,9 @@ public:
  void Dump() const;
  void Reset();
  bool SeizingSector(int32 SID) const;
+ bool SeizeSupportFocus(int32 SID,FVector& Out) const;
+ bool SeizeSupportTarget(int32 SID,const FVector& At) const;
+ bool MarchingSector(int32 SID) const;
  bool DefendingSector(int32 SID) const;
  bool SectorDefendPlace(int32 SID,const FVector& Place) const;
  bool SectorDefendMoving(int32 SID) const;
@@ -136,8 +139,11 @@ private:
   FIntPoint Cell=FIntPoint::ZeroValue,Assembly=FIntPoint(-1,-1);
   double Start=0.,FirstAt=-1.,GoAt=-1.;
   bool Taken=false,Committed=false;
+  int32 AssaultJoined=0,SupportJoined=0;
+  FIntPoint SupportCell=FIntPoint(-1,-1);
  };
- struct FSeizeExtra{int32 Point=INDEX_NONE;bool Counter=false;double CapturedAt=-1.;};
+ struct FSeizeExtra{int32 Point=INDEX_NONE;bool Counter=false;double CapturedAt=-1.;
+  bool Support=false;double FocusStart=-1.,ReleasedAt=-1.;FIntPoint PointCell=FIntPoint::ZeroValue;};
  FSeizePointPlan SeizePoints[2];
  TMap<int32,FSeizeExtra> SeizeExtras;
  TMap<int32,TSet<FIntPoint>> SeizeGuards[2];
@@ -156,7 +162,8 @@ private:
  const TCHAR* SeizeExtendedEnd(int32 SID,double Now) const;
  FVector SeizeExtendedGoal(int32 SID,const TCHAR*& Reason) const;
  bool SeizePointWaiting(int32 SID) const;
- void LogSeizePoint(int32 Team,const TCHAR* What) const;
+ void LogSeizePoint(int32 Team,const TCHAR* What,const FIntPoint* LogCell=nullptr) const;
+ bool PickSeizeSupport(int32 Team,FIntPoint& Out) const;
  TSet<int32> SeizeSuspended;
  bool ResumeSeizeSector(int32 SID,const FBattleSquadObservation& O,bool Visible);
  void SeizePlanChanged(int32 SID);
@@ -167,6 +174,21 @@ private:
   double LastDamage=0.,ArrivedAt=-1.;
   int32 OrderRevision=0;
  };
+ struct FSectorMarch
+ {
+  FIntPoint Cell=FIntPoint::ZeroValue;int32 Revision=0;
+  double Since=0.,Distance=0.,BlockedUntil=-1.;
+  bool Kept=false,EnemyNoted=false;
+ };
+ TMap<int32,FSectorMarch> SectorMarches;
+ TMap<int32,double> SectorMarchKeepAt;
+ TMap<int32,bool> SectorMarchBaseSlots;
+ TSet<FIntPoint> SectorMarchKnown[2];
+ double SectorMarchKnownAt[2]={-100.,-100.};
+ bool SectorMarchCandidate(int32 SID,FIntPoint& Cell,bool& Arrived) const;
+ bool SectorMarchEnemy(int32 Team,FIntPoint Cell) const;
+ bool StepSectorMarch(int32 SID,const FBattleSquadObservation& O,bool Visible);
+ void LogSectorMarch(int32 SID,FIntPoint Cell,const TCHAR* What,double Distance) const;
  TMap<int32,FSectorDefend> SectorDefends;
  TMap<FIntPoint,int32> DefendSlotCounts;
  double DefendSlotsAt=-100.;

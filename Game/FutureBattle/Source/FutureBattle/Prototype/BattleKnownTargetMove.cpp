@@ -139,6 +139,7 @@ void UBattleLeaderRuntime::TrackKnownDefendResume(int32 ID,double Now)
 
 bool UBattleLeaderRuntime::KnownMoveAllowed(int32 ID,bool CountGate)
 {
+ if(BattleTactics::SectorDefendMarch()>0 && SectorMarchUnit(ID))return false;
  if(!BattleKnownFire::MoveEnabled())return false;
  auto RejectGate=[&](const TCHAR* Reason){if(CountGate)SightExperiment.Cover(Reason);return false;};
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();const auto* Unit=Store->Find(ID);
