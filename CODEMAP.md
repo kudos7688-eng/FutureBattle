@@ -4,7 +4,7 @@
 実装を探すときは、まずこの表で入口を決め、関数の行は [CODEMAP_SYMBOLS.md](CODEMAP_SYMBOLS.md) を Grep で引く（全文は読まない）。
 行番号は生成時点のもの。ずれていたら作り直す。起動引数は [SWITCHES.md](SWITCHES.md)。
 
-対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（190 モジュール、53915 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
+対象は `Game/FutureBattle/Source/FutureBattle/Prototype/`（190 モジュール、53930 行）。同じ階層の `Variant_*` と `FutureBattle*.cpp/.h` は UE テンプレート由来で、ゲームのルールは置いていない。
 
 ## 毎フレームの流れ（どこから呼ばれるか）
 
@@ -58,7 +58,7 @@
 | 個人AIをプレイヤーの周りだけで動かす | `UBattleLeaderRuntime::SoldierAIFocus` (BattleSoldierMove.cpp:111) | 試験切替 `-BattleSoldierAIFocus=<m>`（既定0＝全員）、`-BattleSoldierAIFocusAt=X,Y`。段階A（`UBattleLeaderRuntime::CheckCoverThreats` (BattleThreatCover.cpp:134) ほか）とB1（`UBattleLeaderRuntime::StepSoldierMove` (BattleSoldierMove.cpp:48)）の入口で見る |
 | プレイヤーが兵1人に出す移動の命令（Ctrl＋クリックで選ぶ・右クリックで移動先・Hで戻す） | `UBattleLeaderRuntime::IssueSoldierOrder` (BattleSoldierOrder.cpp:20) 、 `UBattleLeaderRuntime::StepSoldierOrder` (BattleSoldierOrder.cpp:86) 、 `ABattleController::SelectSoldierAt` (BattleSoldierOrder.cpp:142) 、直接操作では `ABattleController::CommandSoldierFromView` (BattleSoldierOrder.cpp:173) （G） | 兵の状態 `bSoldierOrder`。`UBattleLeaderRuntime::Follow` (BattleLeaderRuntime.cpp:939) の `bOwnOrder`。自動試験 `-BattleSoldierOrderTest`（`UBattleLeaderRuntime::StepSoldierOrderTest` (BattleSoldierOrder.cpp:245)） |
 | 射撃の散らばり | `BattleTactics::SpreadDegrees` (BattleTactics.cpp:444) 、 `BattleTactics::ShotDirection` (BattleTactics.cpp:452) | 照準の遅れは `UBattleState::UpdateAim` (BattleState.cpp:330) 。プレイヤーの直接操作だけの倍率は `ABattleUnit::PlayerSpreadScale` (BattleUnit.cpp:164) |
-| 部隊の戦術（撤退・集合・援護・迂回） | `UBattleSquadTactics::Step` (BattleSquadTactics.cpp:128) 、 `UBattleSquadTactics::Evaluate` (BattleSquadRetreat.cpp:190) 、 `UBattleSquadTactics::Apply` (BattleSquadRetreat.cpp:11) | 撤退 `UBattleSquadTactics::RetreatGoal` (BattleSquadRetreat.cpp:57) 、援護 `UBattleSquadTactics::AcceptSupport` (BattleSquadSupport.cpp:77) 、迂回 `UBattleSquadTactics::TryFlank` (BattleSquadFlank.cpp:47) |
+| 部隊の戦術（撤退・集合・援護・迂回） | `UBattleSquadTactics::Step` (BattleSquadTactics.cpp:128) 、 `UBattleSquadTactics::Evaluate` (BattleSquadRetreat.cpp:190) 、 `UBattleSquadTactics::Apply` (BattleSquadRetreat.cpp:11) | 撤退 `UBattleSquadTactics::RetreatGoal` (BattleSquadRetreat.cpp:57) 、援護 `UBattleSquadTactics::AcceptSupport` (BattleSquadSupport.cpp:78) 、迂回 `UBattleSquadTactics::TryFlank` (BattleSquadFlank.cpp:47) |
 | 陣営全体の判断（援護・迂回の割り振り） | `UBattleTeamAI::Step` (BattleTeamAI.cpp:16) | |
 | 試合の進行・勝敗・制限時間 | `UBattleMatch::InitializeMatch` (BattleMatch.cpp:15) 、 `UBattleMatch::Update` (BattleMatch.cpp:153) 、 `UBattleMatch::Finish` (BattleMatch.cpp:670) | 拠点の占領は `UBattleMatch::UpdateObjectives` (BattleMatch.cpp:227) |
 | 雇用（旧・固定の価格） | `UBattleMatch::HireSquad` (BattleMatch.cpp:57) 、 `UBattleMatch::CurrentSquadPrice` (BattleMatch.cpp:52) | 実体を出すのは `UBattleLeaderRuntime::SpawnPurchasedSquad` (BattleMixedRecruitment.cpp:49) |
@@ -171,7 +171,7 @@
 | `BattleSectorLanes` | .cpp | 139 |  | Trial -BattleSectorLanes=1 (2026-11-25, default 0): spread entering squads over authored lanes and keep their choice. |
 | `BattleSectorRoute` | .cpp | 239 |  | 区画経由の移動 `-BattleSectorRoute`・側面 `-BattleSectorFlank`・前線 `-BattleSectorFront`（区画のあるマップ、AIの歩兵）：道路網の次の交差点の代わりに、その周りで遮蔽の多い区画を制圧・維持しながら進む。側面は観測した敵の正面を避けた区画、前線は自軍の区画のうち敵に接する区画（UBattleMatch の一部） |
 | `BattleSectorSeize` | .cpp | 259 |  |  |
-| `BattleSectorSeizePoint` | .cpp | 935 |  |  |
+| `BattleSectorSeizePoint` | .cpp | 946 |  |  |
 | `BattleSectorSight` | .cpp | 70 |  | 区画内・区画間の戦い（`-BattleSectorSight`、11-23 から既定1＝通常小隊だけ。`=2` は兵種ごとの決まり `SectorSightRole`〔試験〕、`=0` で元の動き。`Docs/design-sector-combat.md`）：区画のあるマップで、通常小隊は別の区画（20m より遠い）の敵を探す光線を隊長だけが出し、隊員は隊長が今見ている敵を発射直前の視線判定で撃つ（UBattleLeaderRuntime の一部。走査の側は `UBattlePerception::Update` の `SkipCross`） |
 | `BattleSectorView` | .h/.cpp | 72 + 197 | FBattleFogGrid, FBattleSectorInfo, BattleSectorView | 作戦画面の表示だけ（規則・AIは読まない）：自軍の視界の格子 `FBattleFogGrid`（12.5m、自軍の兵から静的な物体への光線）と区画ごとの状態 `BattleSectorView::Gather`（自軍の人数・観測した敵・視界の割合・拠点・命令中の部隊・遮蔽位置の数） |
 | `BattleSectors` | .h | 70 | BattleSectors | マップHの50m区画の格子（20×14）：区画の番号と中心、区画の種類の表、川・橋・浅瀬の位置 |
@@ -182,10 +182,10 @@
 | `BattleSoldierWatch` | .cpp | 117 |  | 個人AI `-BattleSoldierWatch`：止まっていて撃つ相手のいない兵が、知っている最も近い敵へ、無ければ小隊で分けた前方へ向く（視野120度。UBattleLeaderRuntime の一部） |
 | `BattleSpotRelax` | .cpp | 224 |  |  |
 | `BattleSquadAI` | .h/.cpp | 35 + 198 | FBattleSquadPlan, UBattleSquadAI | 旧全Actor経路の部隊 AI |
-| `BattleSquadFlank` | .cpp | 206 |  | 迂回の判断（UBattleSquadTactics の一部） |
+| `BattleSquadFlank` | .cpp | 207 |  | 迂回の判断（UBattleSquadTactics の一部） |
 | `BattleSquadRetreat` | .cpp | 595 |  | 撤退の判断と適用（UBattleSquadTactics の一部。Evaluate と Apply はここ） |
-| `BattleSquadSupport` | .cpp | 130 |  | 援護の受け渡し（UBattleSquadTactics の一部） |
-| `BattleSquadTactics` | .h/.cpp | 251 + 183 | FBattleSquadObservation, UBattleSquadTactics, FSeizeSector, FSeizePointPlan, FSectorDefend, FSectorMarch | 部隊の戦術の土台：観測、毎フレームの更新、記録 |
+| `BattleSquadSupport` | .cpp | 132 |  | 援護の受け渡し（UBattleSquadTactics の一部） |
+| `BattleSquadTactics` | .h/.cpp | 252 + 183 | FBattleSquadObservation, UBattleSquadTactics, FSeizeSector, FSeizePointPlan, FSectorDefend, FSectorMarch | 部隊の戦術の土台：観測、毎フレームの更新、記録 |
 | `BattleStableMovement` | .cpp | 951 |  | 混成の移動計画と実行（UBattleLeaderRuntime の一部） |
 | `BattleStance` | .h/.cpp | 45 + 319 | BattleStance | 姿勢（立ち・しゃがみ）の数値と切替 |
 | `BattleStanceAnimImport` | .cpp | 43 |  | 姿勢アニメーションの取り込み（エディタ用。宣言は BattleVATBake.h） |
