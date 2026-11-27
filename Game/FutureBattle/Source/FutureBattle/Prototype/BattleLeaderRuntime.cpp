@@ -1078,7 +1078,9 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   S->bSectorMission && BattleSectors::Cell(Pos)!=BattleSectors::Cell(S->Destination);
  if(bBoundMove && (U->CoverPhase || CoverApproaches.Contains(ID))){CancelCoverAction(ID);CoverApproaches.Remove(ID);}
  if(bBoundMove)FirePositions.Remove(ID);
- const bool bMoveFire=!bOwnOrder && (bDefendMarchUnit || bBoundMove || ((SectorMoveFireEnabled() || (!SectorFireBack.IsEmpty() && SectorFireBack.Contains(U->SquadID))) && !bVehicleBody &&
+ const bool bSeizeClearingUnit=BattleTactics::SectorSeizePoint()>0 && !bVehicleBody &&
+  GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeClearing(S->SquadID);
+ const bool bMoveFire=!bOwnOrder && (bDefendMarchUnit || bSeizeClearingUnit || bBoundMove || ((SectorMoveFireEnabled() || (!SectorFireBack.IsEmpty() && SectorFireBack.Contains(U->SquadID))) && !bVehicleBody &&
   S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission && !P->bCoverStop &&
   BattleSectors::Cell(Pos)!=BattleSectors::Cell(S->Destination) && !U->CoverPhase && !CoverApproaches.Contains(ID)));
  // -BattleArrivalWalk (and evaluation): his own arrival place in the sector, still more than 1.5 m away, on a route that goes past

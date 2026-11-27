@@ -60,6 +60,7 @@ public:
  void Dump() const;
  void Reset();
  bool SeizingSector(int32 SID) const;
+ bool SeizeClearing(int32 SID) const;
  bool SeizeSupportFocus(int32 SID,FVector& Out) const;
  bool SeizeSupportTarget(int32 SID,const FVector& At) const;
  bool MarchingSector(int32 SID) const;
@@ -145,9 +146,9 @@ private:
  };
  struct FSeizeExtra{int32 Point=INDEX_NONE;bool Counter=false;double CapturedAt=-1.;
   bool Support=false;double FocusStart=-1.,ReleasedAt=-1.;FIntPoint PointCell=FIntPoint::ZeroValue;
-  bool FreeCounter=false,GuardCounter=false,ClearHasSpot=false,Closing=false;
+  bool FreeCounter=false,GuardCounter=false,ClearHasSpot=false,Closing=false,FireWasActive=false;
   int32 AssaultOrdinal=0,SweepIndex=0;
-  double ClearAt=-1.,ClearPickAt=-100.,SweepAt=-1.,FireAt=-1.,FireCheckedAt=-1.;
+  double ClearAt=-1.,ClearPickAt=-100.,SweepAt=-1.,FireSeconds=-1.,FireCheckedAt=-1.;
   FIntPoint ClearSpot=FIntPoint::ZeroValue,FireSpot=FIntPoint::ZeroValue;
   FVector ClearGoal=FVector::ZeroVector;};
  FSeizePointPlan SeizePoints[2];

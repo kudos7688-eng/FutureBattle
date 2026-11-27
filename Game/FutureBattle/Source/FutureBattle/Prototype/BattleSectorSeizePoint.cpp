@@ -8,6 +8,7 @@
 #include "FutureBattle.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Misc/ScopeExit.h"
 #include "NavigationSystem.h"
 
 int32 BattleTactics::SectorSeizePoint()
@@ -460,6 +461,17 @@ const TCHAR* UBattleSquadTactics::SeizeExtendedEnd(int32 SID,double Now) const
  return nullptr;
 }
 
+bool UBattleSquadTactics::SeizeClearing(int32 SID) const
+{
+ if(BattleTactics::SectorSeizePoint()<=0)return false;
+ const auto* ClearingOpen=SeizeSectors.Find(SID);
+ const auto* ClearingExtra=SeizeExtras.Find(SID);
+ const auto* ClearingSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
+ return ClearingOpen && ClearingOpen->EndAt<0. && ClearingExtra && !ClearingExtra->Support &&
+  ClearingSquad && ClearingSquad->TacticalPlan.Action==EBattleSquadTactic::Engage &&
+  ClearingSquad->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR / CLEAR POINT"));
+}
+
 bool UBattleSquadTactics::ResumeSeizeExtended(int32 SID,const FBattleSquadObservation& O,bool Visible,bool Healthy)
 {
  if(!Visible)for(const auto& Contact:O.Contacts)if(Contact.Value.bVisible && !Contact.Value.bShared){Visible=true;break;}
@@ -474,6 +486,12 @@ bool UBattleSquadTactics::ResumeSeizeExtended(int32 SID,const FBattleSquadObserv
  if(Visible){Goal=GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->Position(S->LeaderUnitID);Reason=TEXT("SEIZE SECTOR / FIRE");}
  if(!Apply(SID,EBattleSquadTactic::Engage,Visible?EBattleOrder::Hold:EBattleOrder::AttackMove,Goal,Reason))
  {EndSeize(SID);SeizeSuspended.Remove(SID);return false;}
+ // A resumed FIRE plan must not inherit time spent supporting or flanking.
+ if(Point)
+ {
+  auto& ResumedClear=SeizeExtras.FindChecked(SID);
+  ResumedClear.FireSeconds=-1.;ResumedClear.FireCheckedAt=-1.;ResumedClear.FireWasActive=false;ResumedClear.Closing=false;
+ }
  if(Visible)Open->LastSeen=Now;
  Open->QuietSince=-1.;SeizeSuspended.Remove(SID);Event(TEXT("SeizeResume"));return true;
 }
@@ -736,12 +754,18 @@ bool UBattleSquadTactics::StepSeizeClear(int32 SID,const FBattleSquadObservation
    HasTarget=true;BestReserved=Reserved;NearestTarget=SpotDistance;ClearTarget=ClearKnown.Value.At;TargetSpot=ClearKnown.Key;
   }
  }
- if(ClearExtra.FireAt>=0. && ClearExtra.FireCheckedAt>=0. && !ClearExtra.Closing && ClearSquad->TacticalPlan.Reason!=TEXT("SEIZE SECTOR / FIRE"))
-  ClearExtra.FireAt+=ClearNow-ClearExtra.FireCheckedAt;
+ // Charge only the interval whose preceding evaluation left the squad firing.
+ if(ClearExtra.FireSeconds>=0. && ClearExtra.FireCheckedAt>=0. && ClearExtra.FireWasActive &&
+    ClearSquad->TacticalPlan.Reason==TEXT("SEIZE SECTOR / FIRE") && !ClearExtra.Closing)
+  ClearExtra.FireSeconds+=FMath::Max(0.,ClearNow-ClearExtra.FireCheckedAt);
  ClearExtra.FireCheckedAt=ClearNow;
- if(!HasTarget || (ClearExtra.FireAt>=0. && ClearExtra.FireSpot!=TargetSpot)){ClearExtra.FireAt=-1.;ClearExtra.Closing=false;}
- if(HasVisibleTarget && ClearExtra.FireAt<0.){ClearExtra.FireAt=ClearNow;ClearExtra.FireSpot=TargetSpot;}
- if(HasTarget && ClearExtra.FireAt>=0. && ClearNow-ClearExtra.FireAt>=20.)ClearExtra.Closing=true;
+ ON_SCOPE_EXIT
+ {
+  ClearExtra.FireWasActive=ClearSquad->TacticalPlan.Reason==TEXT("SEIZE SECTOR / FIRE");
+ };
+ if(!HasTarget || (ClearExtra.FireSeconds>=0. && ClearExtra.FireSpot!=TargetSpot)){ClearExtra.FireSeconds=-1.;ClearExtra.Closing=false;}
+ if(HasVisibleTarget && ClearExtra.FireSeconds<0.){ClearExtra.FireSeconds=0.;ClearExtra.FireSpot=TargetSpot;}
+ if(HasTarget && ClearExtra.FireSeconds>=20.)ClearExtra.Closing=true;
  if(Visible && O.Armed>0)
  {
   ClearOpen.LastSeen=ClearNow;
