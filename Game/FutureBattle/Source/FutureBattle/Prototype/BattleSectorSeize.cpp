@@ -21,6 +21,9 @@ bool UBattleSquadTactics::SeizingSector(int32 SID) const
  const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
  if(!S || !SectorSeizeEnabled(S->Team))return false;
  const auto* Seize=SeizeSectors.Find(SID);
+ if(BattleTactics::SectorSeizePoint()>0 && Seize && Seize->EndAt<0. && S->TacticalPlan.Action==EBattleSquadTactic::Engage &&
+    S->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")))
+  if(const auto* ClearDetail=SeizeExtras.Find(SID);ClearDetail && !ClearDetail->Support && ClearDetail->ClearAt>=0. && ClearDetail->CapturedAt<0.)return true;
  return Seize && Seize->EndAt<0. && S->TacticalPlan.Action==EBattleSquadTactic::Engage &&
   (S->Order==EBattleOrder::AttackMove || S->Order==EBattleOrder::Defend) &&
   S->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")) &&

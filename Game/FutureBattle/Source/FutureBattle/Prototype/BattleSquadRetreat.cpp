@@ -435,6 +435,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
  }
  if(BattleTactics::SectorDefend()>=2 && Emergency && CauseOverride.IsEmpty() && Cause.StartsWith(TEXT("DAMAGE ")) && FallBackSector(SID,O))return;
  if(Emergency) { if(P.Action==EBattleSquadTactic::Flank)Event(TEXT("WideFlankEmergency"));Retreat(); return; }
+ if(BattleTactics::SectorSeizeCounter()>0 && BeginFreeCounter(SID,O,Visible))return;
  if(BattleTactics::SectorDefendMarch()>0 && StepSectorMarch(SID,O,Visible))return;
  if(BattleTactics::SectorSeize()>0 && ResumeSeizeSector(SID,O,Visible))return;
  if(BattleTactics::SectorDefend()>0 && StepSectorDefend(SID,O,Visible))return;

@@ -67,9 +67,8 @@ bool UBattleSquadTactics::StepSectorMarch(int32 SID,const FBattleSquadObservatio
  const auto* MarchSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
  if(!MarchSquad || MarchSquad->Team<0 || MarchSquad->Team>1)return false;
  // Strategic allocation and sight aggregation run on squad evaluation, never per soldier's fire/cover check.
- bool Base=false;
- if(BattleTactics::AreaStrategy().bEnabled)GetWorld()->GetSubsystem<UBattleMatch>()->AreaStrategyTarget(SID,MarchSquad->Team,Base);
- SectorMarchBaseSlots.Add(SID,Base);
+ const bool* ConfirmedBase=GetWorld()->GetSubsystem<UBattleMatch>()->SectorTrialBaseSlots.Find(SID);
+ SectorMarchBaseSlots.Add(SID,!ConfirmedBase || *ConfirmedBase);
  const int32 Team=MarchSquad->Team;
  if(Clock()<SectorMarchKnownAt[Team] || Clock()-SectorMarchKnownAt[Team]>=1.)
  {

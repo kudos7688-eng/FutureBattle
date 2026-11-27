@@ -15,6 +15,7 @@
 void UBattleMatch::InitializeMatch()
 {
 	if (IsEnabled()) return;
+ if(BattleTactics::SectorDefendMarch() || BattleTactics::SectorSeizePoint() || BattleTactics::SectorSeizeCounter())SectorTrialBaseSlots.Reset();
 	MatchID = FGuid::NewGuid(); Phase = EBattleMatchPhase::Deployment;
 	Credits[0] = Credits[1] = 3000; Winner = INDEX_NONE;
 	if (BattleFieldLayout::IsSightField(GetWorld()))
@@ -459,6 +460,7 @@ void UBattleMatch::UpdateTeamOrders(int32 Team, bool bDelegatedOnly)
   // A routed manual order of the player is under way (BattlePlayerRoutes.cpp): the team AI leaves the squad alone.
   if(!PlayerRoutes.IsEmpty())if(const FPlayerRoute* Routed=PlayerRoutes.Find(Pair.Key);Routed&&Routed->bMission)continue;
   const bool BaseAssault=bStrategy?bStrategyBase:(bArea&&Group%5==0);
+  if(BattleTactics::SectorDefendMarch() || BattleTactics::SectorSeizePoint() || BattleTactics::SectorSeizeCounter())SectorTrialBaseSlots.Add(Pair.Key,BaseAssault);
   FVector Center=BaseAssault?AreaHome(1-Team)*(25./27.):bHomeDefence?AreaHome(Team)*(25./27.):Objectives[Target].Position;
   EBattleOrder Order=bHomeDefence||(!BaseAssault&&ObservedOwner(Team,Target)==Team)?EBattleOrder::Defend:EBattleOrder::AttackMove;
   // After a warning (an enemy near or a hit) the pair moves to its fall-back point, then watches from there until ScoutHoldSeconds pass without one (BattleScoutReport.cpp).

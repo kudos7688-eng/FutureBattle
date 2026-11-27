@@ -137,13 +137,18 @@ private:
  {
   int32 Point=INDEX_NONE;
   FIntPoint Cell=FIntPoint::ZeroValue,Assembly=FIntPoint(-1,-1);
-  double Start=0.,FirstAt=-1.,GoAt=-1.;
-  bool Taken=false,Committed=false;
+  double Start=0.,FirstAt=-1.,GoAt=-1.,ClearAt=-1.;
+  bool Taken=false,Committed=false,Broken=false;
   int32 AssaultJoined=0,SupportJoined=0;
   FIntPoint SupportCell=FIntPoint(-1,-1);
  };
  struct FSeizeExtra{int32 Point=INDEX_NONE;bool Counter=false;double CapturedAt=-1.;
-  bool Support=false;double FocusStart=-1.,ReleasedAt=-1.;FIntPoint PointCell=FIntPoint::ZeroValue;};
+  bool Support=false;double FocusStart=-1.,ReleasedAt=-1.;FIntPoint PointCell=FIntPoint::ZeroValue;
+  bool FreeCounter=false,GuardCounter=false,ClearHasSpot=false,Closing=false;
+  int32 AssaultOrdinal=0,SweepIndex=0;
+  double ClearAt=-1.,ClearPickAt=-100.,SweepAt=-1.,FireAt=-1.,FireCheckedAt=-1.;
+  FIntPoint ClearSpot=FIntPoint::ZeroValue,FireSpot=FIntPoint::ZeroValue;
+  FVector ClearGoal=FVector::ZeroVector;};
  FSeizePointPlan SeizePoints[2];
  TMap<int32,FSeizeExtra> SeizeExtras;
  TMap<int32,TSet<FIntPoint>> SeizeGuards[2];
@@ -152,9 +157,12 @@ private:
  double SeizeTrialAt[2]={-100.,-100.},SeizeTrialSlotsAt=-100.;
  void ResetSeizeExtensions();
  void UpdateSeizeExtensions(int32 Team);
+ bool SeizeFreeSquad(int32 SID) const;
+ bool BeginFreeCounter(int32 SID,const FBattleSquadObservation& O,bool Visible);
+ bool StepSeizeClear(int32 SID,const FBattleSquadObservation& O,bool Visible);
  bool SeizeCounterCell(int32 Team,FIntPoint Cell,int32* Count=nullptr) const;
  bool SeizeGuardAllows(int32 SID,int32 Team,FIntPoint Cell) const;
- bool PickSeizeExtended(int32 SID,const FBattleSquadState& S,const FVector& Here,const FIntPoint* Around,FIntPoint& Out);
+ bool PickSeizeExtended(int32 SID,const FBattleSquadState& S,const FVector& Here,const FIntPoint* Around,FIntPoint& Out,bool CounterOnly=false);
  bool BeginSeizeExtended(int32 SID,const FBattleSquadObservation& O,bool Visible,int32 Threats);
  bool StartSeizeExtended(int32 SID,FIntPoint Cell,const TCHAR* SightReason);
  bool StepSeizeExtended(int32 SID,const FBattleSquadObservation& O,bool Visible);

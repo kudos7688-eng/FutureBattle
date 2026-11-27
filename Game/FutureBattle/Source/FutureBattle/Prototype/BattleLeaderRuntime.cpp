@@ -1383,6 +1383,14 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
  {Direction=(From-Pos).GetSafeNormal2D();SightExperiment.Cover(HitFaceEnabled()?TEXT("hit_face_turned"):TEXT("own_target_hit_turn_frames"));}
  // Trial -BattleAttackFocus=1: a still soldier of a sector squad with nothing to fire at watches the squad's focus, the members
  // fanned 0/-20/+20/-40/+40 degrees (with the 120-degree view, the squad watches about 200 degrees around the focus).
+ else if(FVector PointSupportFacing;BattleTactics::SectorSeizePoint()>0 && !bArtilleryAim && !bVehicleBody &&
+  B.Velocity.SizeSquared2D()<900. && GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeSupportFocus(S->SquadID,PointSupportFacing) &&
+  FVector::DistSquared2D(PointSupportFacing,Pos)>1.e4)
+ {
+  static const float SupportFan[]={0.f,-20.f,20.f,-40.f,40.f};
+  Direction=(PointSupportFacing-Pos).GetSafeNormal2D().RotateAngleAxis(SupportFan[FMath::Max(0,S->Members.IndexOfByKey(ID))%5],FVector::UpVector);
+  SightExperiment.Cover(TEXT("focus_facing_frames"));
+ }
  else if(AttackFocusEnabled() && P->bFocus && !bArtilleryAim && !bVehicleBody &&
   ((S->bSectorMission && S->TacticalPlan.Action==EBattleSquadTactic::Mission) ||
    (BattleTactics::SectorSeize()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizingSector(S->SquadID)) ||
