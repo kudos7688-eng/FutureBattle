@@ -65,6 +65,7 @@ public:
  bool SeizeSupportFocus(int32 SID,FVector& Out) const;
  bool SeizeEscortVehicleTarget(int32 SID,int32 TargetID,uint8 SeenType) const;
  bool SeizeEscortPlace(int32 SID,const FVector& At) const;
+ bool SeizeEscortVehicle(int32 SID) const;
  bool SeizeSupportTarget(int32 SID,const FVector& At) const;
  bool MarchingSector(int32 SID) const;
  bool DefendingSector(int32 SID) const;

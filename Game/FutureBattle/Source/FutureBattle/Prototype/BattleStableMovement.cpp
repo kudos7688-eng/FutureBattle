@@ -106,7 +106,16 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
   (BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(SID));
  const auto Cell=BattleSectors::Cell(S->Destination);
  const bool NewOrder=P.ArrivalRevision!=S->OrderRevision;
- if(NewOrder || P.ArrivalGoals.IsEmpty())
+ const bool bSeizeEscortVehicleArrival=GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeEscortVehicle(SID);
+ if(bSeizeEscortVehicleArrival)
+ {
+  // StepSeizeEscort supplies the assembly centre or the vehicle-Nav-validated EscortGoal.
+  // Do not replace it with infantry cover, a grid slot, or a tail queried without vehicle context.
+  P.ArrivalGoals.Reset();P.ArrivalTails.Reset();P.ArrivalRevision=S->OrderRevision;
+  for(int32 EscortArrivalID:S->Members)if(const auto* EscortArrivalUnit=Store->Find(EscortArrivalID);EscortArrivalUnit && EscortArrivalUnit->IsAlive())
+   P.ArrivalGoals.Add(EscortArrivalID,S->Destination);
+ }
+ else if(NewOrder || P.ArrivalGoals.IsEmpty())
  {
   P.ArrivalGoals.Reset(); P.ArrivalTails.Reset(); P.ArrivalRevision=S->OrderRevision;
   TArray<FVector> Reserved;

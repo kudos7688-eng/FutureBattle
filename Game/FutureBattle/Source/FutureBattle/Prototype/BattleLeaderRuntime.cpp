@@ -1097,7 +1097,12 @@ void UBattleLeaderRuntime::Follow(int32 ID,float Dt,double Now)
   !U->CoverPhase && !CoverApproaches.Contains(ID);
  const bool bArrivalWalk=!bOwnOrder && ArrivalWalkEnabled() && bWalkIn && S->Order!=EBattleOrder::Hold && OwnRoute && OwnRoute->IsValidIndex(B.Waypoint);
  const bool bOnRoute=P->Path.IsValidIndex(B.Waypoint) || (ArrivalWalkEnabled() && bTailLeft);
- const bool StopForCombat=!bMoveFire && !bOwnWalking && !bArrivalWalk && (P->TargetID!=INDEX_NONE || (bArmourAI && P->ArmourTargetID!=INDEX_NONE)) && (S->Order!=EBattleOrder::Move || bOwnOrder) &&
+ // Only an active escort on its assembly/entry march ignores combat stops. Safety plans no longer qualify.
+ const bool bSeizeEscortVehicleMarch=!bOwnOrder && bVehicleBody && S->Order==EBattleOrder::AttackMove &&
+  (S->TacticalPlan.Reason==TEXT("SEIZE SECTOR / ASSEMBLE") || S->TacticalPlan.Reason==TEXT("SEIZE SECTOR / ESCORT MOVE")) &&
+  FVector::DistSquared2D(Pos,S->Destination)>FMath::Square(250.) &&
+  GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeEscortVehicle(S->SquadID);
+ const bool StopForCombat=!bSeizeEscortVehicleMarch && !bMoveFire && !bOwnWalking && !bArrivalWalk && (P->TargetID!=INDEX_NONE || (bArmourAI && P->ArmourTargetID!=INDEX_NONE)) && (S->Order!=EBattleOrder::Move || bOwnOrder) &&
   !(bOutsideContact && !U->CoverPhase && !CoverApproaches.Contains(ID) && !(P->bCoverStop && FirePositions.Contains(ID)));
  const bool CombatContact=StopForCombat || bOutsideContact;
  // Evaluation (arrival_walk_*, frames): stopped for combat short of his place / standing at the shared end with his tail left /

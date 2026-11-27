@@ -1188,7 +1188,10 @@ bool UBattleSquadTactics::StepSeizeEscort(int32 SID)
   EscortDetail.EscortAtPost?TEXT("SEIZE SECTOR / TANK OVERWATCH"):TEXT("SEIZE SECTOR / ESCORT MOVE");
  // AT retains its sector arrival-cover route. Vehicles hold once at the post, without a defence-radius route.
  const EBattleOrder EscortOrder=(EscortWaiting?EscortArrived:EscortVehicle && EscortDetail.EscortAtPost)?EBattleOrder::Hold:EBattleOrder::AttackMove;
- if(EscortSquad->Order!=EscortOrder || EscortSquad->TacticalPlan.Reason!=EscortReason || !EscortSquad->Destination.Equals(EscortGoal,1.))
+ const bool EscortOrderMatches=EscortSquad->Order==EscortOrder ||
+  (BattleTactics::SectorSeizePoint()==1 && !EscortWaiting && !EscortVehicle &&
+   EscortOrder==EBattleOrder::AttackMove && EscortSquad->Order==EBattleOrder::Defend);
+ if(!EscortOrderMatches || EscortSquad->TacticalPlan.Reason!=EscortReason || !EscortSquad->Destination.Equals(EscortGoal,1.))
   Apply(SID,EBattleSquadTactic::Engage,EscortOrder,EscortGoal,EscortReason);
  GetWorld()->GetSubsystem<UBattleState>()->Squads.FindChecked(SID).TacticalPlan.Remaining=60.f;
  return true;
@@ -1255,6 +1258,16 @@ bool UBattleSquadTactics::SeizeEscortVehicleTarget(int32 SID,int32 TargetID,uint
  const auto* EscortSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
  return EscortSquad && EscortSquad->SquadType==BattleSquadType::AntiTank &&
   (BattleSquadType::IsVehicle(SeenType) || SeizeKnownVehicle(EscortSquad->Team,TargetID,FVector::ZeroVector,false));
+}
+
+bool UBattleSquadTactics::SeizeEscortVehicle(int32 SID) const
+{
+ if(BattleTactics::SectorSeizePoint()!=1 || BattleTactics::SectorSeizePointTank()<=0 ||
+    !SeizeEscort(SID) || !SeizePointMember(SID))return false;
+ const auto* EscortVehicleSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
+ return EscortVehicleSquad && EscortVehicleSquad->CommandStatus==EBattleCommandStatus::Active &&
+  (EscortVehicleSquad->Team!=0 || EscortVehicleSquad->bPlayerDelegated) &&
+  (EscortVehicleSquad->SquadType==BattleSquadType::Tank || EscortVehicleSquad->SquadType==BattleSquadType::ArmoredCar);
 }
 
 bool UBattleSquadTactics::SeizeEscortPlace(int32 SID,const FVector& At) const

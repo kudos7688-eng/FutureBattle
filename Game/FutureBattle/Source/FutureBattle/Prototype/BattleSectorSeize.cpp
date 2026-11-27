@@ -20,6 +20,8 @@ bool UBattleSquadTactics::SeizingSector(int32 SID) const
  if(BattleTactics::SectorSeize()<=0)return false;
  const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
  if(!S || !SectorSeizeEnabled(S->Team))return false;
+ // Escort vehicles use their validated destination, never infantry sector-arrival cover.
+ if(SeizeEscortVehicle(SID))return false;
  const auto* Seize=SeizeSectors.Find(SID);
  if(BattleTactics::SectorSeizePoint()>0 && Seize && Seize->EndAt<0. && S->TacticalPlan.Action==EBattleSquadTactic::Engage &&
     S->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")))
