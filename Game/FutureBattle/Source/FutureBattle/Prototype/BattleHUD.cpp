@@ -43,7 +43,7 @@ void ABattleHUD::DrawHUD()
  const float PanelTop=PC->IsTactical()?BottomBar.PanelTop:H-128.f;
 	const FLinearColor Ink(.025f, .04f, .065f, .92f), Mint(.28f, .95f, .8f), Muted(.62f, .7f, .77f), White(.94f, .97f, 1.f);
 	auto Label = [&](const FString& Text, float X, float Y, FLinearColor Color, float Scale = 1.f)
-	{ if(Y>=PanelTop){ // bottom panel of both views: long lines shrink to the screen widthfloat LabelWidth=0,LabelHeight=0;Canvas->StrLen(GEngine->GetSmallFont(),Text,LabelWidth,LabelHeight);Scale=FMath::Min(Scale,FMath::Max(1.f,W-X-34.f)/FMath::Max(1.f,LabelWidth));}
+	{ /* bottom panel of both views: long lines shrink to the screen width */ if(Y>=PanelTop){float LabelWidth=0,LabelHeight=0;Canvas->StrLen(GEngine->GetSmallFont(),Text,LabelWidth,LabelHeight);Scale=FMath::Min(Scale,FMath::Max(1.f,W-X-34.f)/FMath::Max(1.f,LabelWidth));}
    DrawText(Text, Color, X, Y, GEngine->GetSmallFont(), Scale); };
 	// Scope (direct control, right button + wheel): black outside the lens and a reticle, under the rest of the HUD.
 	const ABattleUnit* ScopeUnit = PC->IsTactical() ? nullptr : Cast<ABattleUnit>(PC->GetPawn());
@@ -1353,6 +1353,8 @@ void ABattleHUD::DrawOffscreenMarkers(ABattleController* PC)
  const FVector CamLoc=PC->PlayerCameraManager->GetCameraLocation();const FRotator CamRot=PC->PlayerCameraManager->GetCameraRotation();
  const ABattleUnit* Unit=PC->IsTactical()?nullptr:Cast<ABattleUnit>(PC->GetPawn());
  const FLinearColor Mint(.28f,.95f,.8f),Enemy(1,.35f,.25f),Muted(.62f,.7f,.77f),White(.94f,.97f,1.f),Ink(.025f,.04f,.065f,.8f);
+ // Soldier view: the minimap at the bottom right is drawn later; arrows that would land on it slide to its left or above it.
+ const auto MarkerMap=Unit&&GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->IsEnabled()?FBattleMinimapLayout::MakeDirect(FVector2D(W,H),GetWorld()):FBattleMinimapLayout();
  auto Marker=[&](const FVector& World,const FString& Text,FLinearColor Color)
  {
   const FVector Local=CamRot.UnrotateVector(World-CamLoc); // X forward, Y right, Z up
@@ -1368,7 +1370,8 @@ void ABattleHUD::DrawOffscreenMarkers(ABattleController* PC)
   // Where the ray from the centre leaves the free rectangle.
   const float Tx=Dir.X>0?(Right-Center.X)/Dir.X:Dir.X<0?(Left-Center.X)/Dir.X:BIG_NUMBER;
   const float Ty=Dir.Y>0?(Bottom-Center.Y)/Dir.Y:Dir.Y<0?(Top-Center.Y)/Dir.Y:BIG_NUMBER;
-  const FVector2D Edge=Center+Dir*FMath::Min(Tx,Ty);
+  FVector2D Edge=Center+Dir*FMath::Min(Tx,Ty);
+  if(MarkerMap.Size.X>0&&Edge.X>MarkerMap.Origin.X-34.f&&Edge.Y>MarkerMap.Origin.Y-48.f){if(Tx<Ty)Edge.Y=MarkerMap.Origin.Y-48.f;else Edge.X=MarkerMap.Origin.X-34.f;}
   const FVector2D Side(-Dir.Y,Dir.X),Tip=Edge+Dir*10.f,Back=Edge-Dir*8.f;
   DrawLine(Tip.X,Tip.Y,Back.X+Side.X*9.f,Back.Y+Side.Y*9.f,Color,3.f);
   DrawLine(Tip.X,Tip.Y,Back.X-Side.X*9.f,Back.Y-Side.Y*9.f,Color,3.f);
@@ -1507,12 +1510,14 @@ void ABattleHUD::DrawFieldOverlay(ABattleController* PC)
 {
  TRACE_CPUPROFILER_EVENT_SCOPE(BattleHUD_DrawFieldOverlay);
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
- if(!PC||!Canvas||!PC->IsTactical()||!L->IsEnabled()||!BattleFieldLayout::IsSightField(GetWorld())) return;
+ if(!PC||!Canvas||!L->IsEnabled()||!BattleFieldLayout::IsSightField(GetWorld())) return;
  const double Now=GetWorld()->GetRealTimeSeconds();
- // The fog is kept up to date whenever the tactical view is open, so the minimap shows it even with the field overlay hidden.
+ // The fog and the sector states are kept up to date in both views, so the minimap shows them even with the field overlay hidden
+ // and in the soldier view (its minimap, 2026-11-27).
  Fog.Update(GetWorld(),Now,400);
  const bool bSectors=BattleFieldLayout::Of(GetWorld()).bSectors;
  BattleSectorView::Gather(GetWorld(),Fog,Now,FrameContacts,Sectors);
+ if(!PC->IsTactical()) return; // soldier view: nothing is drawn on the field
  // Display check -BattleSectorViewShot=<prefix> (rendered game only): screenshots of the tactical view at 40 s and 90 s of game time
  // with the pointer held at the screen centre, a BATTLE_SECTOR_VIEW line with the fog and sector counts, then quit.
  if(const FString& Shot=SectorViewShotPrefix();!Shot.IsEmpty())
