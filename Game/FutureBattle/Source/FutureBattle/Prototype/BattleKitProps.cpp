@@ -131,7 +131,7 @@ BattleKitLook::FPropsResult BattleKitLook::Dress(UWorld* World)
  for(TActorIterator<AStaticMeshActor> It(World);It;++It)
  {
   if(!It->HasAnyFlags(RF_WasLoaded)||It->HasAnyFlags(RF_Transient)||It->ActorHasTag(TEXT("BattleTerrain")))continue;
-  auto* Source=It->GetStaticMeshComponent();const auto* Mesh=Source?Source->GetStaticMesh():nullptr;
+  auto* Source=It->GetStaticMeshComponent();const UStaticMesh* Mesh=Source?Source->GetStaticMesh().Get():nullptr;
   if(!Mesh||Mesh->GetPathName()!=TEXT("/Engine/BasicShapes/Cube.Cube")||!Source->IsVisible()||
    !Source->HasAnyFlags(RF_WasLoaded)||Source->HasAnyFlags(RF_Transient))continue;
   const auto* Material=Source->GetMaterial(0);if(!Material)continue;
@@ -203,7 +203,7 @@ BattleKitLook::FPropsResult BattleKitLook::Dress(UWorld* World)
   // receive collision/navigation settings; none of the original actors/components is reconfigured.
   Instances->SetCanEverAffectNavigation(false);
   Instances->SetCollisionEnabled(ECollisionEnabled::NoCollision);Instances->SetGenerateOverlapEvents(false);
-  Instances->SetMobility(EComponentMobility::Static);Instances->SetStaticMesh(Batch.Mesh.Get());
+  Instances->SetMobility(EComponentMobility::Movable);Instances->SetStaticMesh(Batch.Mesh.Get());
   Host->AddInstanceComponent(Instances);
   // Identity component transform; placements are world coordinates. Explicitly disable navigation updates.
   Instances->AddInstances(Batch.Transforms,false,false,false);

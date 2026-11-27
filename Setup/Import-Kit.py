@@ -162,6 +162,8 @@ def import_model(group, name):
         else:
             ml.connect_material_property(node, 'G', u.MaterialProperty.MP_ROUGHNESS)
             ml.connect_material_property(node, 'B', u.MaterialProperty.MP_METALLIC)
+    # The prop dressing draws these as instances (BattleKitProps.cpp); without the flag a game build falls back to the grey default material.
+    ml.set_material_usage(mat, u.MaterialUsage.MATUSAGE_INSTANCED_STATIC_MESHES)
     ml.recompile_material(mat)
     mesh.set_material(0, mat)
     eal.save_loaded_asset(mat); eal.save_loaded_asset(mesh)

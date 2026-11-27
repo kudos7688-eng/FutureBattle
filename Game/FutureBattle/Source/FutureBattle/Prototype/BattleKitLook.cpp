@@ -16,12 +16,17 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/World.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/HUD.h"
+#include "TimerManager.h"
+#include "UnrealClient.h"
 #include "EngineUtils.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
-#include "Misc/LexFromString.h"
 #include "RHI.h"
 #include "UObject/StrongObjectPtr.h"
 
@@ -46,7 +51,7 @@ namespace
    {
     TArray<FString> Parts;Text.ParseIntoArray(Parts,TEXT(","),false);
     double Values[6]={};bool bValid=Parts.Num()==6;
-    for(int32 I=0;bValid&&I<6;++I)bValid=LexTryParseString(Values[I],*Parts[I])&&FMath::IsFinite(Values[I]);
+    for(int32 I=0;bValid&&I<6;++I){bValid=Parts[I].IsNumeric();Values[I]=FCString::Atod(*Parts[I]);}
     if(bValid){Offset=FVector(Values[0],Values[1],Values[2]);Rotation=FRotator(Values[3],Values[4],Values[5]);}
     else UE_LOG(LogFutureBattle,Warning,TEXT("BATTLE_KITLOOK invalid BattleKitGrip; expected x,y,z,pitch,yaw,roll (finite numbers)"));
    }
@@ -56,15 +61,15 @@ namespace
 
  struct FSurface {const TCHAR* Original;const TCHAR* Kit;};
  const FSurface Surfaces[]={
-  {TEXT("M_ArenaFloor"),TEXT("Asphalt")},{TEXT("M_ArenaCover"),TEXT("Concrete")},
+  {TEXT("M_ArenaFloor"),TEXT("Asphalt")},{TEXT("M_ArenaCover"),TEXT("PlasterWhite")},
   {TEXT("M_MapBrick"),TEXT("BrickRed")},{TEXT("M_MapBridge"),TEXT("StoneBlock")},
   {TEXT("M_MapChurch"),TEXT("StoneBlock")},{TEXT("M_MapField"),TEXT("FarmSoil")},
   {TEXT("M_MapFlats"),TEXT("PlasterGrey")},{TEXT("M_MapGrass"),TEXT("Grass")},
   {TEXT("M_MapHill"),TEXT("GrassSparse")},{TEXT("M_MapHouse"),TEXT("PlasterPainted")},
-  {TEXT("M_MapLane"),TEXT("DirtPath")},{TEXT("M_MapPave"),TEXT("Cobble")},
+  {TEXT("M_MapLane"),TEXT("DirtPath")},{TEXT("M_MapPave"),TEXT("Pavement")},
   {TEXT("M_MapRoad"),TEXT("Asphalt")},{TEXT("M_MapRock"),TEXT("RockFace")},
-  {TEXT("M_MapRockTop"),TEXT("RockGround")},{TEXT("M_MapRuin"),TEXT("ConcreteCracked")},
-  {TEXT("M_MapRust"),TEXT("MetalRust")},{TEXT("M_MapTower"),TEXT("Concrete")},
+  {TEXT("M_MapRockTop"),TEXT("RockGround")},{TEXT("M_MapRuin"),TEXT("ConcreteDirty")},
+  {TEXT("M_MapRust"),TEXT("MetalRust")},{TEXT("M_MapTower"),TEXT("PlasterPainted")},
   {TEXT("M_MapTrunk"),TEXT("Bark")},{TEXT("M_FordGravel"),TEXT("Gravel")},
   {TEXT("M_SectorField"),TEXT("FarmSoil")},{TEXT("M_SectorRoad"),TEXT("Asphalt")},
   {TEXT("M_SectorWood"),TEXT("ForestFloor")}
@@ -138,6 +143,51 @@ namespace
 }
 }
 
+// Look check (display only): -BattleKitShot=<file prefix> saves <prefix>-N.png for each camera given with
+// -BattleKitShotCams="x,y,z,pitch,yaw;x,y,z,pitch,yaw;..." (cm, degrees), from 8 seconds after the start, 2 seconds apart,
+// then quits. Without cameras: one picture of the player's own view. The view target is the only thing it changes.
+namespace BattleKitLook
+{
+namespace
+{
+ void StartShots(UWorld* World)
+ {
+  FString Prefix;if(!FParse::Value(FCommandLine::Get(),TEXT("BattleKitShot="),Prefix)||Prefix.IsEmpty())return;
+  FString CamText;FParse::Value(FCommandLine::Get(),TEXT("BattleKitShotCams="),CamText,false);
+  TArray<FString> CamList;CamText.ParseIntoArray(CamList,TEXT(";"),true);
+  TArray<FTransform> Cams;
+  for(const FString& One:CamList)
+  {
+   TArray<FString> V;One.ParseIntoArray(V,TEXT(","),false);if(V.Num()!=5)continue;
+   Cams.Add(FTransform(FRotator(FCString::Atod(*V[3]),FCString::Atod(*V[4]),0.),FVector(FCString::Atod(*V[0]),FCString::Atod(*V[1]),FCString::Atod(*V[2]))));
+  }
+  const int32 Count=FMath::Max(1,Cams.Num());
+  TWeakObjectPtr<UWorld> WeakWorld(World);
+  for(int32 Index=0;Index<=Count;++Index)
+  {
+   FTimerHandle Handle;
+   World->GetTimerManager().SetTimer(Handle,FTimerDelegate::CreateLambda([WeakWorld,Cams,Prefix,Index,Count]()
+   {
+    UWorld* W=WeakWorld.Get();if(!W)return;
+    if(APlayerController* Viewer=W->GetFirstPlayerController())if(AHUD* Hud=Viewer->GetHUD())Hud->bShowHUD=false;
+    if(Index>0)FScreenshotRequest::RequestScreenshot(FString::Printf(TEXT("%s-%d.png"),*Prefix,Index-1),false,false);
+    if(Index==Count){FTimerHandle Quit;W->GetTimerManager().SetTimer(Quit,FTimerDelegate::CreateLambda([](){FPlatformMisc::RequestExit(false);}),1.f,false);return;}
+    if(Cams.IsValidIndex(Index))
+     if(APlayerController* PC=W->GetFirstPlayerController())
+     {
+      FActorSpawnParameters Spawn;Spawn.ObjectFlags|=RF_Transient;
+      if(ACameraActor* Cam=W->SpawnActor<ACameraActor>(Cams[Index].GetLocation(),Cams[Index].Rotator(),Spawn))
+      {
+       if(UCameraComponent* Lens=Cam->GetCameraComponent()){Lens->bConstrainAspectRatio=false;Lens->SetFieldOfView(70.f);}
+       PC->SetViewTarget(Cam);
+      }
+     }
+   }),8.f+2.f*Index,false);
+  }
+ }
+}
+}
+
 bool BattleKitLook::Active(UWorld* World)
 {
  // Test renderability before even parsing the kit options (including on a CDO / dedicated server).
@@ -189,10 +239,17 @@ bool BattleKitLook::AnimateFirstPerson(UStaticMeshComponent* Model,double Kick,d
 
 void BattleKitLook::Apply(UWorld* World)
 {
- if(!Active(World))return;
+ // The look check also works with the switch off (the same pictures before and after).
+ if(!Active(World))
+ {
+  static bool bShotsOff=false;
+  if(!bShotsOff&&World&&World->IsGameWorld()&&FApp::CanEverRender()&&!GUsingNullRHI){bShotsOff=true;StartShots(World);}
+  return;
+ }
  static TSet<TWeakObjectPtr<UWorld>> Applied;
  for(auto It=Applied.CreateIterator();It;++It)if(!It->IsValid())It.RemoveCurrent();
  if(Applied.Contains(World))return;Applied.Add(World);
+ StartShots(World);
  // Dressing classifies the ORIGINAL material names; surface replacement must follow it.
  const FPropsResult Dressing=Options().Props!=0?Dress(World):FPropsResult{};
  int32 Changed=0,Missing=Dressing.Missing;
