@@ -99,11 +99,19 @@ bool UBattleSquadTactics::StepSectorDefend(int32 SID,const FBattleSquadObservati
    int32 Inside=0;
    for(int32 ID:S->Members)if(const auto* Unit=Store->Find(ID);Unit && Unit->IsAlive() &&
       Runtime->SectorCellFor(S->Team,Runtime->Position(ID))==Defence->Cell)++Inside;
-   if(Inside==O.Living && O.Living>0 && Defence->ArrivedAt<0.)
+   // Stragglers must not hold the squad in the move for ever: after 45 s half of the living inside is enough.
+   if(O.Living>0 && Defence->ArrivedAt<0. && (Inside==O.Living || (Now-Defence->BackAt>=45. && Inside*2>=O.Living)))
    {
+    FVector HoldAt=BattleSectors::Center(Defence->Cell);BattleFieldLayout::Of(GetWorld()).Heights.Lift(HoldAt);
     // Move suppresses combat stops during the entire deployment, just as ordinary retreat does.
-    if(Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Defend,BattleSectors::Center(Defence->Cell),TEXT("SECTOR DEFEND / HOLD BACK")))
+    if(Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Defend,HoldAt,TEXT("SECTOR DEFEND / HOLD BACK")))
     {Defence->ArrivedAt=Now;Defence->OrderRevision=S->OrderRevision;}
+   }
+   if(Defence->ArrivedAt<0. && Now-Defence->BackAt>=90.)
+   {
+    const FSectorDefend Stuck=*Defence;
+    if(ResumeMission(SID,TEXT("SECTOR DEFEND / FALL BACK FAILED / RESUME MISSION"),nullptr))
+    {Event(TEXT("DefendFallBackStuck"));LogSectorDefend(SID,Stuck,TEXT("stuck"));SectorDefends.Remove(SID);return true;}
    }
    if(Defence->ArrivedAt>=0. && O.RecentDamage==0 &&
       Now-FMath::Max(Defence->ArrivedAt,Defence->LastDamage)>=BattleTactics::SectorDefendBack())
@@ -168,7 +176,8 @@ bool UBattleSquadTactics::FallBackSector(int32 SID,const FBattleSquadObservation
  FSectorDefend Next;
  if(Previous)Next=*Previous;
  else {Next.Cell=Current;Next.From=Current;Next.Start=Now;Next.LastSeen=Now;}
- if(!Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Move,BattleSectors::Center(BestCell),TEXT("SECTOR DEFEND / FALL BACK")))
+ FVector BackGoal=BattleSectors::Center(BestCell);BattleFieldLayout::Of(GetWorld()).Heights.Lift(BackGoal);
+ if(!Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::Move,BackGoal,TEXT("SECTOR DEFEND / FALL BACK")))
  {Event(TEXT("DefendFallBackNone"));return false;}
  if(BattleTactics::SectorSeize()>0)EndSeize(SID);
  Next.From=Current;Next.Cell=BestCell;Next.BackAt=Now;Next.ArrivedAt=-1.;if(O.RecentDamage>0)Next.LastDamage=Now;Next.OrderRevision=S->OrderRevision;

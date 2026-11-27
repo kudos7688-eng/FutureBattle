@@ -78,7 +78,7 @@
 
 ### 4.1 値1：区画の中で受ける
 
-- Evaluate の補給・退却・再編・盾切れ・対戦車退避・Emergency より後、通常の Engage 処理と新規 JOIN／SEEK／SEIZE より前で区画任務を継続する。守りが静かになってもこの任務を勝手に探索へ貸し出さない。
+- Evaluate の補給・退却・再編・盾切れ・対戦車退避・Emergency より後、通常の Engage 処理と新規 JOIN／SEEK／SEIZE より前で区画任務を継続する。接触が無いとき（まだ見ていない、または最後に自分で見てから30秒）は状態を閉じて通常の評価へ戻す（JOIN／SEEK／SEIZE に選ばれてよい。固定すると敵を探しに出る小隊が居なくなるため）。値2の後退は、45秒たって生存者の半数が入区していれば到着とみなし、90秒たっても着かなければ任務へ帰る（DefendFallBackStuck）。後退先の中心は地形の高さへ補正する。
 - 避ける「見たので止まる」分岐は末尾の KNOWN ENEMY / HOLD FIRING POSITION。JOIN FIGHT／SEEK ENEMY 内の同文の分岐は、既に Engage の別任務なので対象に含めない。SEIZE の FIRE も別の試験の規則を維持する。
 - 対象は CanSupport／AcceptSupport／TryFlank で支援・側面移動に選ばない。区画AIの CoverCheck・PinnedFlank・CloseIn も対象から外す。
 - 攻撃の対象の点は既存の PickAttackFocus。Mission を保つので、Think の3秒ごとの確認、45度の向きの変化／対象出現、10秒間隔の遮蔽再計画が接触中も働く。この既存の再計画で DefendReplan を記録する（行ログは出さない）。
