@@ -152,6 +152,10 @@ private:
   FIntPoint ClearSpot=FIntPoint::ZeroValue,FireSpot=FIntPoint::ZeroValue;
   FVector ClearGoal=FVector::ZeroVector;};
  FSeizePointPlan SeizePoints[2];
+ TMap<int32,double> SeizePointNoAt;
+ double SeizePointNoneAt[2]={-100.,-100.};
+ void SeizePointNo(int32 SID,int32 Team,const TCHAR* Why);
+ void AdoptSeizePoint(int32 Team);
  TMap<int32,FSeizeExtra> SeizeExtras;
  TMap<int32,TSet<FIntPoint>> SeizeGuards[2];
  TSet<FIntPoint> SeizeTrialOwn[2],SeizeTrialKnown[2];
@@ -166,7 +170,7 @@ private:
  bool SeizeGuardAllows(int32 SID,int32 Team,FIntPoint Cell) const;
  bool PickSeizeExtended(int32 SID,const FBattleSquadState& S,const FVector& Here,const FIntPoint* Around,FIntPoint& Out,bool CounterOnly=false);
  bool BeginSeizeExtended(int32 SID,const FBattleSquadObservation& O,bool Visible,int32 Threats);
- bool StartSeizeExtended(int32 SID,FIntPoint Cell,const TCHAR* SightReason);
+ bool StartSeizeExtended(int32 SID,FIntPoint Cell,const TCHAR* SightReason,bool Adopt=false);
  bool StepSeizeExtended(int32 SID,const FBattleSquadObservation& O,bool Visible);
  bool ResumeSeizeExtended(int32 SID,const FBattleSquadObservation& O,bool Visible,bool Healthy);
  const TCHAR* SeizeExtendedEnd(int32 SID,double Now) const;
