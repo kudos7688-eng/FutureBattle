@@ -43,7 +43,7 @@ void ABattleHUD::DrawHUD()
  const float PanelTop=PC->IsTactical()?BottomBar.PanelTop:H-128.f;
 	const FLinearColor Ink(.025f, .04f, .065f, .92f), Mint(.28f, .95f, .8f), Muted(.62f, .7f, .77f), White(.94f, .97f, 1.f);
 	auto Label = [&](const FString& Text, float X, float Y, FLinearColor Color, float Scale = 1.f)
-	{ if(PC->IsTactical()&&Y>=PanelTop){float LabelWidth=0,LabelHeight=0;Canvas->StrLen(GEngine->GetSmallFont(),Text,LabelWidth,LabelHeight);Scale=FMath::Min(Scale,FMath::Max(1.f,W-X-34.f)/FMath::Max(1.f,LabelWidth));}
+	{ if(Y>=PanelTop){ // bottom panel of both views: long lines shrink to the screen widthfloat LabelWidth=0,LabelHeight=0;Canvas->StrLen(GEngine->GetSmallFont(),Text,LabelWidth,LabelHeight);Scale=FMath::Min(Scale,FMath::Max(1.f,W-X-34.f)/FMath::Max(1.f,LabelWidth));}
    DrawText(Text, Color, X, Y, GEngine->GetSmallFont(), Scale); };
 	// Scope (direct control, right button + wheel): black outside the lens and a reticle, under the rest of the HUD.
 	const ABattleUnit* ScopeUnit = PC->IsTactical() ? nullptr : Cast<ABattleUnit>(PC->GetPawn());
@@ -461,16 +461,25 @@ void ABattleHUD::DrawHUD()
 				Label(FString::Printf(TEXT("通り道：%s%s"), !bAny ? TEXT("―") : RouteLane < 0 ? TEXT("混在") : BattleRouteLaneName(RouteLane), PC->bGamepadActive ? TEXT("") : TEXT(" [Z]")), Bar.RouteOrigin.X + 8, Bar.RouteOrigin.Y + 5, bLit ? FLinearColor::Yellow : bAny ? Mint : Muted, .85f);
 			}
 		}
-		if (PC->bGamepadActive) Label(TEXT("右スティック：カーソル   A：選択・決定   左スティック：視点移動   LT/RT：拡大縮小   LB：全選択   ビュー：直接操作   メニュー：AI一時停止   十字←：購入   十字→：速度"), 34, H - 53, Muted, .9f);
+		// Help line (rewritten 2026-11-27 to the present bindings). The orders are on the command bar above and the toolbar at the
+		// top with their keys in brackets, so this line lists what has no button. Keep it in step with SetupInputComponent and GamepadToKey.
+		if (PC->bGamepadActive) Label(FString::Printf(TEXT("右スティック：カーソル   A：選択・ボタンを押す   左スティック：カメラ   LT／RT：縮小／拡大   LB：全選択   十字→：速度   ビュー：直接操作   メニュー：AI停止・再開   左スティック押し込み：作戦メニュー（群の編成・選択）%s   ｜ 命令は下のボタンの [ ]      選択中 %02d"), Match->IsEnabled() && !Match->bArea ? TEXT("   右スティック押し込み：試合開始") : TEXT(""), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
 		else
-		Label(FString::Printf(TEXT("左ドラッグ：選択   Q：全選択   E/Tab：直接操作   WASD：視点移動   ホイール：拡大縮小   P：AI一時停止   F5：やり直し   F6：記憶表示   %s   %s   L：射程の円（%s）      選択中 %02d"), Match->IsEnabled() ? (Match->bArea ? TEXT("B：部隊の購入") : TEXT("1〜3：購入")) : TEXT("F7：練度の切替"), BattleFieldLayout::Of(GetWorld()).bSectors ? TEXT("M：区画の格子   N：霧") : TEXT("N：霧"), ABattleController::RangeRingModeName(PC->RangeRingMode), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
+		Label(FString::Printf(TEXT("左ドラッグ：選択   Ctrl＋クリック：兵1人を選択   右クリック：移動（押したままドラッグ：道筋）   WASD：カメラ（Shift：速く）   ホイール：拡大縮小   ミニマップをクリック：カメラ移動   F5：やり直し   %s｜ ほかの操作は上と下のボタンの [ ] のキー      選択中 %02d"), !Match->IsEnabled() ? TEXT("F7：練度の切替   ") : Match->bArea ? TEXT("") : TEXT("1〜3：購入   Enter：試合開始   "), PC->GetSelection().Num()), 34, H - 53, Muted, .9f);
 	}
 	else
 	{
-		if (PC->bGamepadActive) Label(TEXT("左スティック：移動   右スティック：照準（補助あり）   RT：射撃   LT：構える（十字↑↓：倍率）   X：装填   A：ジャンプ   B：姿勢   Y：遮蔽   ビュー：作戦画面"), 34, H - 80, Mint);
+		// Soldier view: two lines, the same actions in the same order for keyboard and pad.
+		if (PC->bGamepadActive)
+		{
+			Label(TEXT("左スティック：移動（押し込み：ダッシュ）   右スティック：照準（補助あり）   RT：射撃   LT：構える（十字↑↓：倍率）   X：装填   A：ジャンプ・乗り越え   B：姿勢   Y：遮蔽"), 34, H - 80, Mint);
+			Label(TEXT("RB：手りゅう弾   LB：拳銃／武器の切替   右スティック押し込み：近接攻撃   十字←：兵1人に命令   ビュー：作戦画面   メニュー：AI停止・再開"), 34, H - 53, Muted, .9f);
+		}
 		else
-		Label(TEXT("WASD：移動   マウス：照準   左クリック：射撃   右クリック：構える（＋ホイール：スコープ）   R：装填   Space：ジャンプ   Tab：作戦画面"), 34, H - 80, Mint);
-		Label(TEXT("P：AI一時停止   F5：戦闘をやり直す   ｜   操作を切り替えても、兵・HP・弾薬・命令は引き継がれる"), 34, H - 53, Muted, .9f);
+		{
+			Label(TEXT("WASD：移動（Shift：ダッシュ）   マウス：照準   左クリック：射撃   右クリック：構える（＋ホイール：倍率）   R：装填   Space：ジャンプ・乗り越え   X：姿勢   C：遮蔽"), 34, H - 80, Mint);
+			Label(TEXT("Q：手りゅう弾   F：拳銃／武器の切替   V：近接攻撃   G：兵1人に命令（H：戻す）   Tab：作戦画面   P：AI停止・再開   F5：やり直し   Esc：終了"), 34, H - 53, Muted, .9f);
+		}
 		const FLinearColor CrossColor = PC->HitMarkerUntil > GetWorld()->GetTimeSeconds() ? FLinearColor::Yellow : White;
 		// Aiming tightens the player's shots: say so next to the crosshair while it applies.
 		if (ScopeUnit && ScopeUnit->AimSpreadScale() < 1.f) Label(FString::Printf(TEXT("構え：散らばり ×%.1f"), ScopeUnit->AimSpreadScale()), W / 2 + 26, H / 2 + 18, Mint, .9f);
@@ -683,8 +692,12 @@ void ABattleHUD::DrawMinimap()
 {
  TRACE_CPUPROFILER_EVENT_SCOPE(BattleHUD_DrawMinimap);
  auto* L=GetWorld()->GetSubsystem<UBattleLeaderRuntime>(); if(!L->IsEnabled()) return;
- auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas || !PC->IsTactical()) return;
- const auto Map=FBattleMinimapLayout::Make(FVector2D(Canvas->SizeX,Canvas->SizeY),GetWorld()); if(Map.Size.X<=0) return;
+ auto* PC=Cast<ABattleController>(PlayerOwner); if(!PC || !Canvas) return;
+ // Soldier view (2026-11-27, user request): the same map at the bottom right, display only, with the soldier's place and facing.
+ const bool bDirect=!PC->IsTactical();
+ if(bDirect && (!Cast<ABattleUnit>(PC->GetPawn()) || PC->IsQuitMenuOpen())) return;
+ const FVector2D MapView(Canvas->SizeX,Canvas->SizeY);
+ const auto Map=bDirect?FBattleMinimapLayout::MakeDirect(MapView,GetWorld()):FBattleMinimapLayout::Make(MapView,GetWorld()); if(Map.Size.X<=0) return;
  const FLinearColor Ink(.025f,.04f,.065f,.94f), Ground(.07f,.1f,.13f,.96f), Mint(.28f,.95f,.8f), Enemy(1,.35f,.25f), Stale(.95f,.65f,.3f,.75f), White(.94f,.97f,1.f), Muted(.45f,.52f,.58f);
  auto Dot=[&](FVector World,float Size,FLinearColor Color){const FVector2D P=Map.ToScreen(World);if(Map.Contains(P))DrawRect(Color,P.X-Size*.5f,P.Y-Size*.5f,Size,Size);};
  auto Frame=[&](FVector2D A,FVector2D B,FLinearColor Color)
@@ -775,6 +788,21 @@ void ABattleHUD::DrawMinimap()
  {
   auto* Leader=L->Actor(S.LeaderUnitID); const bool Selected=Leader && PC->IsSelected(Leader);
   Dot(L->Position(S.LeaderUnitID),Selected?7:5,Selected?White:Mint);
+ }
+ if(bDirect)
+ {
+  // The controlled soldier: an arrowhead pointing the way the view faces (world +X is up and +Y is right on the map).
+  const FVector2D P=Map.ToScreen(PC->GetPawn()->GetActorLocation());
+  if(Map.Contains(P))
+  {
+   const float Yaw=FMath::DegreesToRadians(PC->GetControlRotation().Yaw);
+   const FVector2D Ahead(FMath::Sin(Yaw),-FMath::Cos(Yaw)),Side(-Ahead.Y,Ahead.X);
+   const FVector2D Tip=P+Ahead*12.f,Left=P-Ahead*7.f-Side*7.f,Right=P-Ahead*7.f+Side*7.f,Notch=P-Ahead*2.f;
+   const FLinearColor Self(1.f,.9f,.3f);
+   DrawLine(Tip.X,Tip.Y,Left.X,Left.Y,Self,2);DrawLine(Left.X,Left.Y,Notch.X,Notch.Y,Self,2);
+   DrawLine(Notch.X,Notch.Y,Right.X,Right.Y,Self,2);DrawLine(Right.X,Right.Y,Tip.X,Tip.Y,Self,2);
+  }
+  return;
  }
  // Where the tactical camera is looking.
  if(const APawn* Camera=PC->GetPawn()){const FVector2D P=Map.ToScreen(Camera->GetActorLocation());if(Map.Contains(P))Frame(P-FVector2D(9,6),P+FVector2D(9,6),White);}
