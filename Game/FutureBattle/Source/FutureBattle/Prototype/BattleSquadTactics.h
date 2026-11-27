@@ -63,6 +63,8 @@ public:
  bool SeizeClearing(int32 SID) const;
  bool SeizePointMember(int32 SID) const; // in a point concentration (assemble, assault, clear, support): not lent to SUPPORT/FLANK
  bool SeizeSupportFocus(int32 SID,FVector& Out) const;
+ bool SeizeEscortVehicleTarget(int32 SID,int32 TargetID,uint8 SeenType) const;
+ bool SeizeEscortPlace(int32 SID,const FVector& At) const;
  bool SeizeSupportTarget(int32 SID,const FVector& At) const;
  bool MarchingSector(int32 SID) const;
  bool DefendingSector(int32 SID) const;
@@ -146,6 +148,8 @@ private:
   FIntPoint SupportCell=FIntPoint(-1,-1);
  };
  struct FSeizeExtra{int32 Point=INDEX_NONE;bool Counter=false;double CapturedAt=-1.;
+  bool EscortAtPost=false;bool Escort=false;FVector EscortGoal=FVector::ZeroVector;FIntPoint EscortAssembly=FIntPoint(-1,-1);
+  FBattleMission EscortMission;
   bool Support=false;double FocusStart=-1.,ReleasedAt=-1.;FIntPoint PointCell=FIntPoint::ZeroValue;
   bool FreeCounter=false,GuardCounter=false,ClearHasSpot=false,Closing=false,FireWasActive=false;
   int32 AssaultOrdinal=0,SweepIndex=0;
@@ -157,6 +161,15 @@ private:
  double SeizePointNoneAt[2]={-100.,-100.};
  void SeizePointNo(int32 SID,int32 Team,const TCHAR* Why);
  void AdoptSeizePoint(int32 Team);
+ bool SeizeEscort(int32 SID) const;
+ int32 SeizeEscortCount(int32 Team,uint8 Type) const;
+ bool SeizeEscortGoal(int32 SID,FIntPoint Cell,FIntPoint Assembly,FVector& Goal) const;
+ void UpdateSeizeTanks(int32 Team);
+ bool StepSeizeEscort(int32 SID);
+ bool SeizeArmourCover(int32 SID) const;
+ bool SeizeArmourStay(int32 SID);
+ bool SeizeKnownVehicle(int32 Team,int32 Key,const FVector& At,bool Spot) const;
+ TMap<int32,double> SeizeArmourStayAt;
  TMap<int32,FSeizeExtra> SeizeExtras;
  TMap<int32,TSet<FIntPoint>> SeizeGuards[2];
  TSet<FIntPoint> SeizeTrialOwn[2],SeizeTrialKnown[2];

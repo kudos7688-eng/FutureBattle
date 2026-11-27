@@ -76,6 +76,8 @@ namespace BattleTactics
  int32 SectorDefendTeam(); // -1 both, 0/1 one team.
  float SectorDefendBack(); // 30, 5..120 seconds without damage after arrival.
  int32 SectorSeizePoint(); // 0..1, requires SectorSeize.
+ int32 SectorSeizePointAT(); // 1, 0..2; only inside SectorSeizePoint.
+ int32 SectorSeizePointTank(); // 1, 0..2; only inside SectorSeizePoint.
  int32 SectorSeizePointMax(); // 6, 2..12.
  int32 SectorSeizePointSupport(); // 2, 0..4; requires SectorSeizePoint.
  int32 SectorSeizePointMin(); // 4, 1..8.

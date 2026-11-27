@@ -16,6 +16,16 @@ int32 BattleTactics::SectorSeizePoint()
  static const int32 Mode=[](){int32 Value=0;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSeizePoint="),Value);return FMath::Clamp(Value,0,1);}();
  return Mode;
 }
+int32 BattleTactics::SectorSeizePointAT()
+{
+ static const int32 Limit=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSeizePointAT="),Value);return FMath::Clamp(Value,0,2);}();
+ return Limit;
+}
+int32 BattleTactics::SectorSeizePointTank()
+{
+ static const int32 Limit=[](){int32 Value=1;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSeizePointTank="),Value);return FMath::Clamp(Value,0,2);}();
+ return Limit;
+}
 int32 BattleTactics::SectorSeizePointMax()
 {
  static const int32 Limit=[](){int32 Value=6;FParse::Value(FCommandLine::Get(),TEXT("BattleSectorSeizePointMax="),Value);return FMath::Clamp(Value,2,12);}();
@@ -50,7 +60,8 @@ int32 BattleTactics::SectorSeizeCounterMax()
 void UBattleSquadTactics::ResetSeizeExtensions()
 {
  if(BattleTactics::SectorSeize()<=0 || (!BattleTactics::SectorSeizePoint() && !BattleTactics::SectorSeizeCounter()))return;
- SeizeExtras.Reset();SeizeTrialSlots.Reset();SeizeTrialSlotsAt=-100.;
+ SeizeExtras.Reset();SeizeTrialSlots.Reset();
+ if(BattleTactics::SectorSeizePoint() && (BattleTactics::SectorSeizePointAT()>0 || BattleTactics::SectorSeizePointTank()>0))SeizeArmourStayAt.Reset();SeizeTrialSlotsAt=-100.;
  if(BattleTactics::SectorSeizePoint()){SeizePointNoAt.Reset();SeizePointNoneAt[0]=SeizePointNoneAt[1]=-100.;}
  for(int32 Team=0;Team<2;++Team)
  {
@@ -72,9 +83,9 @@ void UBattleSquadTactics::LogSeizePoint(int32 Team,const TCHAR* What,const FIntP
      Squad->CommandStatus==EBattleCommandStatus::Active &&
      (Squad->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")) || SeizeSuspended.Contains(Pair.Key)))++AssignedCount;
  }
- UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SECTOR_SEIZE_POINT t=%.0f team=%d point=%d cell=%d,%d what=%s squads=%d%s"),
+ UE_LOG(LogFutureBattle,Display,TEXT("BATTLE_SECTOR_SEIZE_POINT t=%.0f team=%d point=%d cell=%d,%d what=%s squads=%d at=%d tank=%d%s"),
   GetWorld()->GetSubsystem<UBattleMatch>()->Elapsed,Team,Focus.Point,LogCell?LogCell->X:Focus.Cell.X,LogCell?LogCell->Y:Focus.Cell.Y,What,
-  AssignedCount,FCString::Strcmp(What,TEXT("taken"))==0?*FString::Printf(TEXT(" clear_secs=%.0f"),Focus.ClearAt>=0.?Clock()-Focus.ClearAt:0.):TEXT(""));
+  AssignedCount,SeizeEscortCount(Team,BattleSquadType::AntiTank),SeizeEscortCount(Team,BattleSquadType::Tank),FCString::Strcmp(What,TEXT("taken"))==0?*FString::Printf(TEXT(" clear_secs=%.0f"),Focus.ClearAt>=0.?Clock()-Focus.ClearAt:0.):TEXT(""));
 }
 
 void UBattleSquadTactics::UpdateSeizeExtensions(int32 Team)
@@ -83,6 +94,7 @@ void UBattleSquadTactics::UpdateSeizeExtensions(int32 Team)
  const double Now=Clock();
  if(Now>=SeizeTrialAt[Team] && Now-SeizeTrialAt[Team]<1.)return;
  SeizeTrialAt[Team]=Now;
+ ON_SCOPE_EXIT { if(BattleTactics::SectorSeizePoint() && BattleTactics::SectorSeizePointTank()>0)UpdateSeizeTanks(Team); };
  const auto* Store=GetWorld()->GetSubsystem<UBattleState>();
  const auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
  const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
@@ -98,7 +110,8 @@ void UBattleSquadTactics::UpdateSeizeExtensions(int32 Team)
    if(BattleSectors::Valid(OwnCell))SeizeTrialOwn[Team].Add(OwnCell);
   }
   // Keep soldiers actually holding here, not squads already on a temporary trip away.
-  if(Living && Pair.Value.SquadType==BattleSquadType::Rifle && Pair.Value.CommandStatus==EBattleCommandStatus::Active &&
+  if(Living && (Pair.Value.SquadType==BattleSquadType::Rifle ||
+     (BattleTactics::SectorSeizePoint() && BattleTactics::SectorSeizePointAT()>0 && Pair.Value.SquadType==BattleSquadType::AntiTank)) && Pair.Value.CommandStatus==EBattleCommandStatus::Active &&
      Pair.Value.TacticalPlan.Action==EBattleSquadTactic::Mission && Pair.Value.Order==EBattleOrder::Defend)RifleIDs.Add(Pair.Key);
  }
  RifleIDs.Sort();
@@ -158,10 +171,12 @@ void UBattleSquadTactics::UpdateSeizeExtensions(int32 Team)
    return; // Re-select on the next one-second update, even while captured squads remain.
   }
   int32 Assaults=Assigned.Num();
+  if(BattleTactics::SectorSeizePointAT()>0 || BattleTactics::SectorSeizePointTank()>0)
+   for(int32 EscortID:Assigned)if(SeizeEscort(EscortID))--Assaults;
   if(BattleTactics::SectorSeizePointSupport()>0)
   {
    Assaults=0;
-   for(int32 AssignedID:Assigned)if(!SeizeExtras.FindChecked(AssignedID).Support)++Assaults;
+   for(int32 AssignedID:Assigned)if(!SeizeExtras.FindChecked(AssignedID).Support && !SeizeEscort(AssignedID))++Assaults;
   }
   if(!Focus.Taken && !Focus.Broken && Focus.ClearAt>=0. && Assaults<=1 && SeizeSectorKnown(Team,Focus.Cell,Now))
   {
@@ -169,6 +184,7 @@ void UBattleSquadTactics::UpdateSeizeExtensions(int32 Team)
    for(int32 AssignedID:Assigned)
    {
     const auto* BrokenSquad=Store->FindSquad(AssignedID);
+    if(SeizeEscort(AssignedID)){StepSeizeEscort(AssignedID);continue;}
     EndSeize(AssignedID,TEXT("SeizeEndPointBroken"));SeizeSuspended.Remove(AssignedID);
     if(BrokenSquad->TacticalPlan.Action==EBattleSquadTactic::Retreat ||
        BrokenSquad->TacticalPlan.Action==EBattleSquadTactic::Regroup || BrokenSquad->TacticalPlan.Action==EBattleSquadTactic::Recover)continue;
@@ -185,7 +201,7 @@ void UBattleSquadTactics::UpdateSeizeExtensions(int32 Team)
     for(int32 AssignedID:Assigned)
     {
      const auto* Squad=Store->FindSquad(AssignedID);
-     if(BattleTactics::SectorSeizePointSupport()>0 && SeizeExtras.FindChecked(AssignedID).Support)continue;
+     if(SeizeEscort(AssignedID) || (BattleTactics::SectorSeizePointSupport()>0 && SeizeExtras.FindChecked(AssignedID).Support))continue;
      if(BattleSectors::Cell(Runtime->Position(Squad->LeaderUnitID))==Focus.Assembly)++Assembled;
     }
     if(Assembled>0 && Focus.FirstAt<0.)Focus.FirstAt=Now;
@@ -197,7 +213,7 @@ void UBattleSquadTactics::UpdateSeizeExtensions(int32 Team)
      {
       const auto* Squad=Store->FindSquad(AssignedID);
       // Fire and suspended plans retain priority; their normal resume uses the new assault goal.
-      if(Squad->TacticalPlan.Reason==TEXT("SEIZE SECTOR / ASSEMBLE"))
+      if(!SeizeEscort(AssignedID) && Squad->TacticalPlan.Reason==TEXT("SEIZE SECTOR / ASSEMBLE"))
        Apply(AssignedID,EBattleSquadTactic::Engage,EBattleOrder::AttackMove,BattleSectors::Center(Focus.Cell),TEXT("SEIZE SECTOR / ASSAULT POINT"));
      }
     }
@@ -293,7 +309,7 @@ void UBattleSquadTactics::AdoptSeizePoint(int32 Team)
   if(!AdoptLiving)continue;
   const auto* AdoptExtra=SeizeExtras.Find(Reservation.Key);
   if(AdoptExtra && AdoptExtra->Point==AdoptFocus.Point && AdoptExtra->FocusStart==AdoptFocus.Start &&
-     (AdoptSquad->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")) || SeizeSuspended.Contains(Reservation.Key)))++AdoptCount;
+     (AdoptSquad->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")) || SeizeSuspended.Contains(Reservation.Key)) && !SeizeEscort(Reservation.Key))++AdoptCount;
   if((!AdoptExtra || (AdoptExtra->Point==INDEX_NONE && !AdoptExtra->Counter)) && Reservation.Value.Cell==AdoptFocus.Cell &&
      Reservation.Value.TakenAt<0. && AdoptSquad->SquadType==BattleSquadType::Rifle &&
      AdoptSquad->TacticalPlan.Action==EBattleSquadTactic::Engage && AdoptSquad->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")) &&
@@ -348,6 +364,15 @@ bool UBattleSquadTactics::PickSeizeExtended(int32 SID,const FBattleSquadState& S
  UpdateSeizeExtensions(S.Team);
  const double Now=Clock();const auto* Ended=SeizeEnded.Find(SID);
  const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();const auto& Focus=SeizePoints[S.Team];
+ if(BattleTactics::SectorSeizePoint() && BattleTactics::SectorSeizePointAT()>0 && S.SquadType==BattleSquadType::AntiTank && !CounterOnly)
+ {
+  if(Around || Focus.Point==INDEX_NONE || Focus.Taken || Focus.Broken || !BattleSectors::Valid(Focus.Assembly) ||
+     SeizeGuards[S.Team].Contains(SID) || SeizeEscortCount(S.Team,BattleSquadType::AntiTank)>=BattleTactics::SectorSeizePointAT() ||
+     FVector::Dist2D(Here,BattleSectors::Center(Focus.Cell))>BattleTactics::SeekKnownRange())return false;
+  const double* ATEnded=Ended?Ended->Find(Focus.Cell):nullptr;
+  if(ATEnded && Now>=*ATEnded && Now-*ATEnded<30.)return false;
+  Out=Focus.Cell;return true;
+ }
  const int32 Turn=Match->AreaHome(S.Team).X>0?-1:1;
  TSet<FIntPoint> Candidates=SeizeTrialKnown[S.Team];
  if(BattleTactics::SectorSeizePoint() && Focus.Point!=INDEX_NONE)Candidates.Add(Focus.Cell);
@@ -382,7 +407,7 @@ bool UBattleSquadTactics::PickSeizeExtended(int32 SID,const FBattleSquadState& S
     const auto* Other=Store->FindSquad(Pair.Key);
     const auto* Detail=BattleTactics::SectorSeizePointSupport()>0?SeizeExtras.Find(Pair.Key):nullptr;
     const bool SamePoint=Point && Detail && Detail->Point==Focus.Point && Detail->FocusStart==Focus.Start;
-    if(Pair.Key!=SID && Pair.Value.EndAt<0. && (Pair.Value.Cell==Cell || SamePoint) && Other && Other->Team==S.Team &&
+    if(Pair.Key!=SID && !SeizeEscort(Pair.Key) && Pair.Value.EndAt<0. && (Pair.Value.Cell==Cell || SamePoint) && Other && Other->Team==S.Team &&
        Other->CommandStatus==EBattleCommandStatus::Active &&
        (Other->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR")) || SeizeSuspended.Contains(Pair.Key)))++Allies;
    }
@@ -426,7 +451,11 @@ bool UBattleSquadTactics::BeginSeizeExtended(int32 SID,const FBattleSquadObserva
  EndSeize(SID);const double Now=Clock();
  if(const auto* Last=SeizeSectors.Find(SID);Last && Last->EndAt>=0. && Now-Last->EndAt<5.)return false;
  const auto* Tune=GetDefault<UBattleTuning>();auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();
- if(Visible || Threats!=0 || O.RecentDamage!=0 || S->SquadType!=BattleSquadType::Rifle ||
+ const bool BorrowAT=BattleTactics::SectorSeizePoint() && BattleTactics::SectorSeizePointAT()>0 && S->SquadType==BattleSquadType::AntiTank;
+ if(BorrowAT && (Match->GroupOf(SID)!=INDEX_NONE || Match->ATHunts.Contains(SID) || Match->SupplyHunts.Contains(SID) ||
+    Match->FrontPosts.Contains(SID) || Match->PlayerRoutes.Contains(SID) || !O.Contacts.IsEmpty() || S->TacticalPlan.Action!=EBattleSquadTactic::Mission ||
+    S->TacticalPlan.Reason.Contains(TEXT("EXPLICIT ORDER"))))return false;
+ if(Visible || Threats!=0 || O.RecentDamage!=0 || (S->SquadType!=BattleSquadType::Rifle && !BorrowAT) ||
     O.Armed<FMath::CeilToInt(O.Living*.6f) || O.Living<=S->Members.Num()*Tune->SquadRetreatLivingRatio ||
     O.Health/FMath::Max(1.f,O.FullHealth(Tune->Health))<Tune->SquadRetreatHealthRatio || Match->SurpriseMoving(SID) || Match->RaidSneaking(SID))
  {
@@ -438,7 +467,7 @@ bool UBattleSquadTactics::BeginSeizeExtended(int32 SID,const FBattleSquadObserva
  }
  const auto* Group=Match->Groups.Find(Match->GroupOf(SID));
  const auto* Runtime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();const FVector Here=Runtime->Position(S->LeaderUnitID);
- const bool Guard=S->bSectorMission && S->Order==EBattleOrder::Defend && S->TacticalPlan.Action==EBattleSquadTactic::Mission &&
+ const bool Guard=(S->bSectorMission || BorrowAT) && S->Order==EBattleOrder::Defend && S->TacticalPlan.Action==EBattleSquadTactic::Mission &&
   Runtime->SectorCellFor(S->Team,Here)==Runtime->SectorCellFor(S->Team,S->Destination) && O.Contacts.IsEmpty();
  if((Group && Group->Kind!=1) || (Match->Area.HirePurpose.Contains(SID) && !Guard) || Match->IntelPurpose.Contains(SID))return false;
  const bool* Base=Match->SectorTrialBaseSlots.Find(SID);if(!Base || *Base)return false;
@@ -468,6 +497,7 @@ FVector UBattleSquadTactics::SeizeExtendedGoal(int32 SID,const TCHAR*& Reason) c
    const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);Reason=TEXT("SEIZE SECTOR / ASSEMBLE");
    return BattleSectors::Center(SeizePoints[S->Team].Assembly);
   }
+  if(Extra->Escort){Reason=TEXT("SEIZE SECTOR / ESCORT MOVE");return Extra->EscortGoal;}
   if(Extra->ClearAt>=0.){Reason=TEXT("SEIZE SECTOR / CLEAR POINT");return Extra->ClearGoal.IsNearlyZero()?BattleSectors::Center(Open.Cell):Extra->ClearGoal;}
   Reason=TEXT("SEIZE SECTOR / ASSAULT POINT");
  }
@@ -478,6 +508,16 @@ bool UBattleSquadTactics::StartSeizeExtended(int32 SID,FIntPoint Cell,const TCHA
 {
  const auto* S=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
  const auto* Match=GetWorld()->GetSubsystem<UBattleMatch>();const double Now=Clock();auto& Focus=SeizePoints[S->Team];
+ if(BattleTactics::SectorSeizePoint() && BattleTactics::SectorSeizePointAT()>0 && S->SquadType==BattleSquadType::AntiTank &&
+    Focus.Point!=INDEX_NONE && Cell==Focus.Cell && !Focus.Taken && !Focus.Broken)
+ {
+  const auto* ATBase=Match->SectorTrialBaseSlots.Find(SID);
+  if(S->TacticalPlan.Action!=EBattleSquadTactic::Mission || Match->GroupOf(SID)!=INDEX_NONE ||
+     Match->ATHunts.Contains(SID) || Match->SupplyHunts.Contains(SID) || Match->PlayerRoutes.Contains(SID) ||
+     !ATBase || *ATBase || SeizeGuards[S->Team].Contains(SID) ||
+     FVector::Dist2D(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->Position(S->LeaderUnitID),BattleSectors::Center(Cell))>BattleTactics::SeekKnownRange() ||
+     SeizeEscortCount(S->Team,BattleSquadType::AntiTank)>=BattleTactics::SectorSeizePointAT())return false;
+ }
  FSeizeExtra Extra;Extra.Counter=SeizeCounterCell(S->Team,Cell);
  const bool FreeRole=SeizeFreeSquad(SID);
  const bool GuardRole=!FreeRole && S->Order==EBattleOrder::Defend && S->TacticalPlan.Action==EBattleSquadTactic::Mission;
@@ -489,7 +529,16 @@ bool UBattleSquadTactics::StartSeizeExtended(int32 SID,FIntPoint Cell,const TCHA
   if(Focus.GoAt<0. && BattleSectors::Valid(Focus.Assembly)){Goal=BattleSectors::Center(Focus.Assembly);Reason=TEXT("SEIZE SECTOR / ASSEMBLE");}
   else Reason=TEXT("SEIZE SECTOR / ASSAULT POINT");
  }
- if(Extra.Point!=INDEX_NONE && !Extra.FreeCounter && BattleTactics::SectorSeizePointSupport()>0 &&
+ if(Extra.Point!=INDEX_NONE &&
+    ((S->SquadType==BattleSquadType::AntiTank && BattleTactics::SectorSeizePointAT()>0) ||
+     ((S->SquadType==BattleSquadType::Tank || S->SquadType==BattleSquadType::ArmoredCar) && BattleTactics::SectorSeizePointTank()>0)))
+ {
+  Extra.Escort=true;Extra.EscortAssembly=Focus.Assembly;Extra.Counter=false;Extra.FreeCounter=false;Extra.GuardCounter=false;
+  if(!SeizeEscortGoal(SID,Focus.Cell,Focus.Assembly,Extra.EscortGoal) ||
+     !GetWorld()->GetSubsystem<UBattleState>()->MissionOf(SID,Extra.EscortMission))return false;
+  if(Focus.GoAt>=0.){Goal=Extra.EscortGoal;Reason=TEXT("SEIZE SECTOR / ESCORT MOVE");}
+ }
+ if(Extra.Point!=INDEX_NONE && !Extra.Escort && !Extra.FreeCounter && BattleTactics::SectorSeizePointSupport()>0 &&
     Focus.AssaultJoined>=BattleTactics::SectorSeizePointMin() && Focus.SupportJoined<BattleTactics::SectorSeizePointSupport())
  {
   FIntPoint SupportCell=Focus.SupportCell;
@@ -498,7 +547,7 @@ bool UBattleSquadTactics::StartSeizeExtended(int32 SID,FIntPoint Cell,const TCHA
   Extra.FreeCounter=false;Extra.GuardCounter=Extra.Counter && S->Order==EBattleOrder::Defend && S->TacticalPlan.Action==EBattleSquadTactic::Mission;
   Goal=BattleSectors::Center(Cell);Reason=TEXT("SEIZE SECTOR / SUPPORT SECTOR");
  }
- if(Adopt && Extra.Point!=INDEX_NONE && !Extra.Support &&
+ if(Adopt && Extra.Point!=INDEX_NONE && !Extra.Support && !Extra.Escort &&
     BattleSectors::Cell(GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->Position(S->LeaderUnitID))==Focus.Cell)
  {Extra.ClearAt=Now;Goal=BattleSectors::Center(Focus.Cell);Reason=TEXT("SEIZE SECTOR / CLEAR POINT");}
  if(!Apply(SID,EBattleSquadTactic::Engage,EBattleOrder::AttackMove,Goal,Reason))return false;
@@ -515,8 +564,9 @@ bool UBattleSquadTactics::StartSeizeExtended(int32 SID,FIntPoint Cell,const TCHA
    Event(TEXT("SeizeEnter"));Event(TEXT("SeizePointEnter"));Event(TEXT("SeizePointClear"));
   }
   if(Extra.Support){++Focus.SupportJoined;Focus.SupportCell=Cell;Event(TEXT("SeizePointSupportGo"));LogSeizePoint(S->Team,TEXT("support"),&Cell);}
-  if(!Extra.Support)++Focus.AssaultJoined;
-  if(Extra.Support){} // Support leaves immediately and never opens the assault gate.
+  if(!Extra.Support && !Extra.Escort)++Focus.AssaultJoined;
+  if(Extra.Escort)Event(S->SquadType==BattleSquadType::AntiTank?TEXT("SeizePointATGo"):TEXT("SeizePointTankGo"));
+  if(Extra.Support || Extra.Escort){} // Escorts and supports never open the rifle assault gate.
   else if(SeizePointWaiting(SID))Event(TEXT("SeizePointAssemble"));
   else if(Focus.GoAt<0.){Focus.GoAt=Now;Event(TEXT("SeizePointGo"));LogSeizePoint(S->Team,TEXT("go"));}
  }
@@ -620,6 +670,7 @@ bool UBattleSquadTactics::StepSeizeExtended(int32 SID,const FBattleSquadObservat
  const FVector Here=GetWorld()->GetSubsystem<UBattleLeaderRuntime>()->Position(S->LeaderUnitID);
  auto* Seize=SeizeSectors.Find(SID);
  auto* Extra=SeizeExtras.Find(SID);
+ if(SeizeEscort(SID))return StepSeizeEscort(SID);
  const bool Point=BattleTactics::SectorSeizePoint()>0 && Extra && Extra->Point!=INDEX_NONE;
  const bool Support=Point && BattleTactics::SectorSeizePointSupport()>0 && Extra->Support;
  if(Point && !Support && Seize && Seize->EndAt<0. && Seize->EnterAt<0. && BattleSectors::Cell(Here)==Seize->Cell)
@@ -801,6 +852,15 @@ bool UBattleSquadTactics::SeizeFreeSquad(int32 SID) const
 bool UBattleSquadTactics::BeginFreeCounter(int32 SID,const FBattleSquadObservation& O,bool Visible)
 {
  if(!SeizeFreeSquad(SID) || Visible || O.RecentDamage!=0 || O.Direct>0)return false;
+ if(BattleTactics::SectorSeizePoint() && BattleTactics::SectorSeizePointAT()>0)
+ {
+  const auto* FreeATSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
+  if(FreeATSquad && FreeATSquad->SquadType==BattleSquadType::AntiTank)
+  {
+   const auto* FreeATMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+   if(!O.Contacts.IsEmpty() || FreeATMatch->ATHunts.Contains(SID) || FreeATMatch->SupplyHunts.Contains(SID))return false;
+  }
+ }
  const auto* CounterSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
  const auto CounterAction=CounterSquad->TacticalPlan.Action;
  if((CounterAction!=EBattleSquadTactic::Mission && CounterAction!=EBattleSquadTactic::Engage) ||
@@ -830,12 +890,15 @@ bool UBattleSquadTactics::StepSeizeClear(int32 SID,const FBattleSquadObservation
  const auto* ClearState=GetWorld()->GetSubsystem<UBattleState>();const auto* ClearSquad=ClearState->FindSquad(SID);
  const auto* ClearRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();const double ClearNow=Clock();
  const FVector ClearHere=ClearRuntime->Position(ClearSquad->LeaderUnitID);
+ const bool ClearArmourCovered=SeizeArmourCover(SID);
  // Use delivered positions only, with stable ties (contact ID / spot coordinates).
  FVector ClearTarget=FVector::ZeroVector;FIntPoint TargetSpot=FIntPoint::ZeroValue;
  bool HasTarget=false,HasVisibleTarget=false;double NearestTarget=DBL_MAX;int32 NearestContact=MAX_int32;
  for(const auto& ClearContact:O.Contacts)
  {
   const auto& SeenContact=ClearContact.Value;
+  if(ClearArmourCovered && (BattleSquadType::IsVehicle(SeenContact.ObservedSquadType) ||
+     SeizeKnownVehicle(ClearSquad->Team,ClearContact.Key,SeenContact.LastKnownPosition,false)))continue;
   if(!SeenContact.bVisible || SeenContact.bShared || BattleSectors::Cell(SeenContact.LastKnownPosition)!=ClearOpen.Cell)continue;
   const double ContactDistance=FVector::DistSquared2D(ClearHere,SeenContact.LastKnownPosition);
   if(ContactDistance>NearestTarget || (ContactDistance==NearestTarget && ClearContact.Key>=NearestContact))continue;
@@ -848,6 +911,16 @@ bool UBattleSquadTactics::StepSeizeClear(int32 SID,const FBattleSquadObservation
   for(const auto& ClearKnown:KnownSpots[ClearSquad->Team])
   {
    if(ClearNow<ClearKnown.Value.Seen || ClearNow-ClearKnown.Value.Seen>BattleTactics::SeekKnownSeconds() || BattleSectors::Cell(ClearKnown.Value.At)!=ClearOpen.Cell)continue;
+   if(ClearArmourCovered)
+   {
+    bool ClearVehicleSpot=SeizeKnownVehicle(ClearSquad->Team,INDEX_NONE,ClearKnown.Value.At,true);
+    for(const auto& ClearVehicleContact:O.Contacts)
+     if(BattleSquadType::IsVehicle(ClearVehicleContact.Value.ObservedSquadType) &&
+        FMath::FloorToInt32(ClearVehicleContact.Value.LastKnownPosition.X/5000.)==ClearKnown.Key.X &&
+        FMath::FloorToInt32(ClearVehicleContact.Value.LastKnownPosition.Y/5000.)==ClearKnown.Key.Y)
+     {ClearVehicleSpot=true;break;}
+    if(ClearVehicleSpot)continue;
+   }
    bool Reserved=false;
    for(const auto& OtherClear:SeizeExtras)
    {
@@ -943,4 +1016,259 @@ bool UBattleSquadTactics::StepSeizeClear(int32 SID,const FBattleSquadObservation
   Event(ClearEvent);
  }
  return true;
+}
+
+
+bool UBattleSquadTactics::SeizeEscort(int32 SID) const
+{
+ if(!BattleTactics::SectorSeizePoint())return false;
+ const auto* EscortDetail=SeizeExtras.Find(SID);
+ if(!EscortDetail || !EscortDetail->Escort)return false;
+ const auto* EscortSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
+ return EscortSquad && (EscortSquad->SquadType==BattleSquadType::AntiTank?
+  BattleTactics::SectorSeizePointAT()>0:BattleTactics::SectorSeizePointTank()>0);
+}
+
+int32 UBattleSquadTactics::SeizeEscortCount(int32 Team,uint8 Type) const
+{
+ if(!BattleTactics::SectorSeizePoint())return 0;
+ const auto* EscortStore=GetWorld()->GetSubsystem<UBattleState>();const auto& EscortFocus=SeizePoints[Team];
+ int32 EscortCount=0;
+ for(const auto& EscortPair:SeizeExtras)
+ {
+  const auto* EscortSquad=EscortStore->FindSquad(EscortPair.Key);
+  if(!EscortSquad || EscortSquad->Team!=Team || EscortSquad->SquadType!=Type ||
+     EscortSquad->CommandStatus!=EBattleCommandStatus::Active || !SeizeEscort(EscortPair.Key) || !SeizePointMember(EscortPair.Key) ||
+     EscortPair.Value.Point!=EscortFocus.Point || EscortPair.Value.FocusStart!=EscortFocus.Start)continue;
+  for(int32 EscortUnitID:EscortSquad->Members)if(const auto* EscortUnit=EscortStore->Find(EscortUnitID);EscortUnit && EscortUnit->IsAlive())
+  {++EscortCount;break;}
+ }
+ return EscortCount;
+}
+
+bool UBattleSquadTactics::SeizeEscortGoal(int32 SID,FIntPoint Cell,FIntPoint Assembly,FVector& Goal) const
+{
+ if(!BattleSectors::Valid(Assembly))return false;
+ const auto* EscortStore=GetWorld()->GetSubsystem<UBattleState>();const auto* EscortSquad=EscortStore->FindSquad(SID);
+ const auto* EscortRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ auto* EscortNav=FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+ if(!EscortSquad || !EscortNav || Cell==Assembly)return false;
+ const ANavigationData* EscortNavData=EscortRuntime->NavFor(EscortSquad->LeaderUnitID);
+ if(BattleSquadType::IsVehicle(EscortSquad->SquadType) && !EscortNavData)return false;
+ const FVector EscortCenter=BattleSectors::Center(Cell);
+ const FVector EscortBack=(BattleSectors::Center(Assembly)-EscortCenter).GetSafeNormal2D();
+ const FVector EscortEntry=EscortCenter+FVector(FMath::Sign(EscortBack.X)*1250.,FMath::Sign(EscortBack.Y)*1250.,0.);
+ const FVector EscortSide(-EscortBack.Y,EscortBack.X,0);
+ // A bounded search on the unit's Nav data: vehicle clearance excludes buildings/narrow infantry cover.
+ // Stay within 1000..1500 cm of the entry boundary; never fall back to the point centre.
+ for(int32 EscortAttempt=0;EscortAttempt<9;++EscortAttempt)
+ {
+  const int32 EscortOffset=EscortAttempt==0?0:((EscortAttempt+1)/2)*(EscortAttempt%2?1:-1);
+  FVector EscortWant=EscortEntry+EscortSide*(EscortOffset*400.);
+  BattleFieldLayout::Of(GetWorld()).Heights.Lift(EscortWant);
+  FNavLocation EscortProjected;
+  if(!EscortNav->ProjectPointToNavigation(EscortWant,EscortProjected,FVector(100,100,250),EscortNavData) ||
+     BattleSectors::Cell(EscortProjected.Location)!=Cell)continue;
+  const FVector EscortLocal=EscortProjected.Location-EscortCenter;
+  const double EscortDepthX=2500.-EscortLocal.X*FMath::Sign(EscortBack.X);
+  const double EscortDepthY=2500.-EscortLocal.Y*FMath::Sign(EscortBack.Y);
+  if((!FMath::IsNearlyZero(EscortBack.X) && (EscortDepthX<1000. || EscortDepthX>1500.)) ||
+     (!FMath::IsNearlyZero(EscortBack.Y) && (EscortDepthY<1000. || EscortDepthY>1500.)))continue;
+  Goal=EscortProjected.Location;return true;
+ }
+ return false;
+}
+
+void UBattleSquadTactics::UpdateSeizeTanks(int32 Team)
+{
+ if(!BattleTactics::SectorSeizePoint() || BattleTactics::SectorSeizePointTank()<=0 || !SectorSeizeEnabled(Team))return;
+ const auto* EscortStore=GetWorld()->GetSubsystem<UBattleState>();const auto* EscortMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+ const auto* EscortRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();const auto& EscortFocus=SeizePoints[Team];
+ // End old escorts even when no rifle remains to evaluate the old concentration.
+ TArray<int32> EscortExisting;
+ for(const auto& EscortPair:SeizeExtras)
+  if(const auto* EscortSquad=EscortStore->FindSquad(EscortPair.Key);EscortSquad && EscortSquad->Team==Team &&
+     SeizeEscort(EscortPair.Key) && SeizePointMember(EscortPair.Key))EscortExisting.Add(EscortPair.Key);
+ EscortExisting.Sort();
+ for(int32 EscortID:EscortExisting)StepSeizeEscort(EscortID);
+ if(EscortFocus.Point==INDEX_NONE || EscortFocus.Taken || EscortFocus.Broken || !BattleSectors::Valid(EscortFocus.Assembly))return;
+ bool EscortHasRifle=false;
+ for(const auto& EscortPair:SeizeExtras)
+ {
+  const auto* EscortSquad=EscortStore->FindSquad(EscortPair.Key);
+  if(!EscortSquad || EscortSquad->Team!=Team || EscortSquad->SquadType!=BattleSquadType::Rifle ||
+     EscortSquad->CommandStatus!=EBattleCommandStatus::Active || (Team==0 && !EscortSquad->bPlayerDelegated) ||
+     EscortPair.Value.Point!=EscortFocus.Point || EscortPair.Value.FocusStart!=EscortFocus.Start || !SeizePointMember(EscortPair.Key))continue;
+  for(int32 EscortUnitID:EscortSquad->Members)if(const auto* EscortUnit=EscortStore->Find(EscortUnitID);EscortUnit && EscortUnit->IsAlive())
+  {EscortHasRifle=true;break;}
+ }
+ if(!EscortHasRifle)return;
+ const FVector EscortAssembly=BattleSectors::Center(EscortFocus.Assembly);const auto* EscortTune=GetDefault<UBattleTuning>();
+ TArray<int32> EscortTanks,EscortCars;bool EscortAnyTank=false;
+ for(const auto& EscortPair:EscortStore->GetSquads())
+ {
+  const auto& EscortSquad=EscortPair.Value;
+  if(EscortSquad.Team!=Team || (EscortSquad.SquadType!=BattleSquadType::Tank && EscortSquad.SquadType!=BattleSquadType::ArmoredCar))continue;
+  const auto* EscortUnit=EscortStore->Find(EscortSquad.LeaderUnitID);
+  if(!EscortUnit || !EscortUnit->IsAlive())continue;
+  if(EscortSquad.SquadType==BattleSquadType::Tank)EscortAnyTank=true;
+  const auto* EscortSample=Find(EscortPair.Key);const bool* EscortBase=EscortMatch->SectorTrialBaseSlots.Find(EscortPair.Key);
+  if(EscortUnit->Action==EBattleAction::DirectControl || EscortSquad.CommandStatus!=EBattleCommandStatus::Active || (Team==0 && !EscortSquad.bPlayerDelegated) ||
+     EscortSquad.TacticalPlan.Action!=EBattleSquadTactic::Mission || EscortSquad.TacticalPlan.Reason.Contains(TEXT("EXPLICIT ORDER")) ||
+     !EscortSquad.bHasMission || EscortMatch->GroupOf(EscortPair.Key)!=INDEX_NONE || !EscortBase || *EscortBase ||
+     EscortMatch->Area.HirePurpose.Contains(EscortPair.Key) || EscortMatch->IntelPurpose.Contains(EscortPair.Key) ||
+     EscortMatch->FrontPosts.Contains(EscortPair.Key) || EscortMatch->PlayerRoutes.Contains(EscortPair.Key) ||
+     EscortMatch->ATHunts.Contains(EscortPair.Key) || EscortMatch->SupplyHunts.Contains(EscortPair.Key) ||
+     EscortMatch->SurpriseMoving(EscortPair.Key) || EscortMatch->RaidSneaking(EscortPair.Key) ||
+     !EscortSample || Clock()-EscortSample->SampleTime>2.5 || EscortSample->Direct>0 || EscortSample->Living==0 ||
+     EscortSample->Armed==0 || EscortSample->RecentDamage>0 || EscortSquad.TacticalPlan.RetrySeconds>0 ||
+     EscortSample->Health/FMath::Max(1.f,EscortSample->FullHealth(EscortTune->Health))<
+       FMath::Max(EscortTune->VehicleRepairRatio,EscortTune->SquadRetreatHealthRatio))continue;
+  if(const auto* EscortOld=SeizeSectors.Find(EscortPair.Key);EscortOld && (EscortOld->EndAt<0. || Clock()-EscortOld->EndAt<30.))continue;
+  (EscortSquad.SquadType==BattleSquadType::Tank?EscortTanks:EscortCars).Add(EscortPair.Key);
+ }
+ auto EscortNearer=[&](int32 LeftID,int32 RightID)
+ {
+  const double LeftDistance=FVector::DistSquared2D(EscortRuntime->Position(EscortStore->FindSquad(LeftID)->LeaderUnitID),EscortAssembly);
+  const double RightDistance=FVector::DistSquared2D(EscortRuntime->Position(EscortStore->FindSquad(RightID)->LeaderUnitID),EscortAssembly);
+  return LeftDistance<RightDistance || (LeftDistance==RightDistance && LeftID<RightID);
+ };
+ EscortTanks.Sort(EscortNearer);EscortCars.Sort(EscortNearer);
+ const int32 EscortAssigned=SeizeEscortCount(Team,BattleSquadType::Tank)+SeizeEscortCount(Team,BattleSquadType::ArmoredCar);
+ int32 EscortSlots=BattleTactics::SectorSeizePointTank()-EscortAssigned;
+ const auto& EscortCandidates=EscortAnyTank?EscortTanks:EscortCars;
+ if(!EscortAnyTank)EscortSlots=FMath::Min(EscortSlots,1-EscortAssigned);
+ for(int32 EscortID:EscortCandidates)
+ {
+  if(EscortSlots<=0)break;
+  if(StartSeizeExtended(EscortID,EscortFocus.Cell,TEXT("SEIZE SECTOR / ASSEMBLE")))--EscortSlots;
+ }
+}
+
+bool UBattleSquadTactics::StepSeizeEscort(int32 SID)
+{
+ if(!SeizeEscort(SID) || !SeizePointMember(SID))return false;
+ const auto* EscortStore=GetWorld()->GetSubsystem<UBattleState>();const auto* EscortSquad=EscortStore->FindSquad(SID);
+ auto* EscortRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();const auto* EscortMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+ auto& EscortDetail=SeizeExtras.FindChecked(SID);const auto& EscortFocus=SeizePoints[EscortSquad->Team];
+ // Never overwrite direct control, a new explicit command, or safety transitions.
+ if(EscortSquad->CommandStatus!=EBattleCommandStatus::Active || (EscortSquad->Team==0 && !EscortSquad->bPlayerDelegated))return true;
+ for(int32 EscortUnitID:EscortSquad->Members)if(const auto* EscortUnit=EscortStore->Find(EscortUnitID);EscortUnit && EscortUnit->IsAlive() &&
+    EscortUnit->Action==EBattleAction::DirectControl)return true;
+ bool EscortRifles=false;
+ for(const auto& EscortPair:SeizeExtras)
+ {
+  const auto* RifleSquad=EscortStore->FindSquad(EscortPair.Key);
+  if(!RifleSquad || RifleSquad->Team!=EscortSquad->Team || RifleSquad->SquadType!=BattleSquadType::Rifle ||
+     RifleSquad->CommandStatus!=EBattleCommandStatus::Active || (RifleSquad->Team==0 && !RifleSquad->bPlayerDelegated) ||
+     EscortPair.Value.Point!=EscortDetail.Point || EscortPair.Value.FocusStart!=EscortDetail.FocusStart || !SeizePointMember(EscortPair.Key))continue;
+  for(int32 RifleUnitID:RifleSquad->Members)if(const auto* RifleUnit=EscortStore->Find(RifleUnitID);RifleUnit && RifleUnit->IsAlive())
+  {EscortRifles=true;break;}
+ }
+ const bool EscortVehicle=BattleSquadType::IsVehicle(EscortSquad->SquadType);
+ const bool EscortOver=EscortFocus.Point!=EscortDetail.Point || EscortFocus.Start!=EscortDetail.FocusStart ||
+  EscortFocus.Taken || EscortFocus.Broken || EscortDetail.CapturedAt>=0. ||
+  EscortMatch->ObservedOwner(EscortSquad->Team,EscortDetail.Point)==EscortSquad->Team ||
+  (EscortVehicle && !EscortRifles) || SeizeExtendedEnd(SID,Clock())!=nullptr;
+ if(EscortOver)
+ {
+  // Tactical plans keep mission fields separately. Restore the saved vehicle mission before releasing the plan.
+  if(EscortVehicle && !EscortRuntime->IssueOrder(SID,EscortDetail.EscortMission.Order,EscortDetail.EscortMission.Goal,true,EscortDetail.EscortMission.bSector))
+   return true; // Retry without sending the vehicle deeper into the point.
+  if(!ResumeMission(SID,TEXT("POINT ESCORT OVER / RESUME MISSION"),nullptr))return true;
+  EndSeize(SID,TEXT("SeizeEndOther"));return true;
+ }
+ const bool EscortWaiting=EscortFocus.GoAt<0.;
+ const FVector EscortGoal=EscortWaiting?BattleSectors::Center(EscortDetail.EscortAssembly):EscortDetail.EscortGoal;
+ const FVector EscortHere=EscortRuntime->Position(EscortSquad->LeaderUnitID);
+ const bool EscortArrived=FVector::DistSquared2D(EscortHere,EscortGoal)<=FMath::Square(250.);
+ if(!EscortWaiting && EscortArrived)EscortDetail.EscortAtPost=true;
+ const TCHAR* EscortReason=EscortWaiting?TEXT("SEIZE SECTOR / ASSEMBLE"):
+  !EscortVehicle?TEXT("SEIZE SECTOR / AT OVERWATCH"):
+  EscortDetail.EscortAtPost?TEXT("SEIZE SECTOR / TANK OVERWATCH"):TEXT("SEIZE SECTOR / ESCORT MOVE");
+ // AT retains its sector arrival-cover route. Vehicles hold once at the post, without a defence-radius route.
+ const EBattleOrder EscortOrder=(EscortWaiting?EscortArrived:EscortVehicle && EscortDetail.EscortAtPost)?EBattleOrder::Hold:EBattleOrder::AttackMove;
+ if(EscortSquad->Order!=EscortOrder || EscortSquad->TacticalPlan.Reason!=EscortReason || !EscortSquad->Destination.Equals(EscortGoal,1.))
+  Apply(SID,EBattleSquadTactic::Engage,EscortOrder,EscortGoal,EscortReason);
+ GetWorld()->GetSubsystem<UBattleState>()->Squads.FindChecked(SID).TacticalPlan.Remaining=60.f;
+ return true;
+}
+
+bool UBattleSquadTactics::SeizeArmourCover(int32 SID) const
+{
+ if(!BattleTactics::SectorSeizePoint() || (BattleTactics::SectorSeizePointAT()==0 && BattleTactics::SectorSeizePointTank()==0) ||
+    !SeizePointMember(SID))return false;
+ const auto* EscortStore=GetWorld()->GetSubsystem<UBattleState>();const auto* EscortRuntime=GetWorld()->GetSubsystem<UBattleLeaderRuntime>();
+ const auto* CoveredSquad=EscortStore->FindSquad(SID);const auto& CoveredDetail=SeizeExtras.FindChecked(SID);
+ const auto& CoveredFocus=SeizePoints[CoveredSquad->Team];
+ if(CoveredFocus.Point!=CoveredDetail.Point || CoveredFocus.Start!=CoveredDetail.FocusStart || CoveredFocus.Taken || CoveredFocus.Broken)return false;
+ for(const auto& EscortPair:SeizeExtras)
+ {
+  const auto* EscortSquad=EscortStore->FindSquad(EscortPair.Key);
+  if(!EscortSquad || EscortSquad->Team!=CoveredSquad->Team ||
+     (EscortSquad->SquadType!=BattleSquadType::AntiTank && EscortSquad->SquadType!=BattleSquadType::Tank) ||
+     !SeizeEscort(EscortPair.Key) || !SeizePointMember(EscortPair.Key) ||
+     EscortSquad->CommandStatus!=EBattleCommandStatus::Active || (EscortSquad->Team==0 && !EscortSquad->bPlayerDelegated) ||
+     EscortPair.Value.Point!=CoveredDetail.Point || EscortPair.Value.FocusStart!=CoveredDetail.FocusStart)continue;
+  for(int32 EscortUnitID:EscortSquad->Members)
+  {
+   const auto* EscortUnit=EscortStore->Find(EscortUnitID);if(!EscortUnit || !EscortUnit->IsAlive())continue;
+   const FVector EscortAt=EscortRuntime->Position(EscortUnitID);const FIntPoint EscortCell=BattleSectors::Cell(EscortAt);
+   if(EscortCell==CoveredFocus.Cell || EscortCell==CoveredFocus.Assembly)return true;
+   const FVector EscortA=BattleSectors::Center(CoveredFocus.Assembly),EscortB=BattleSectors::Center(CoveredFocus.Cell);
+   const FVector EscortAB=EscortB-EscortA;
+   const double EscortAlong=FVector::DotProduct(EscortAt-EscortA,EscortAB)/EscortAB.SizeSquared2D();
+   if(EscortAlong>=0. && EscortAlong<=1. &&
+      FVector::DistSquared2D(EscortAt,EscortA+EscortAB*EscortAlong)<=FMath::Square(1250.))return true;
+  }
+ }
+ return false;
+}
+
+bool UBattleSquadTactics::SeizeArmourStay(int32 SID)
+{
+ if(!SeizeArmourCover(SID))return false;
+ const double StayNow=Clock();const double* StayLast=SeizeArmourStayAt.Find(SID);
+ if(!StayLast || StayNow<*StayLast || StayNow-*StayLast>=30.)
+ {SeizeArmourStayAt.Add(SID,StayNow);Event(TEXT("SeizePointArmourStay"));}
+ return true;
+}
+
+bool UBattleSquadTactics::SeizeKnownVehicle(int32 Team,int32 Key,const FVector& At,bool Spot) const
+{
+ // Read the already delivered vehicle table. KnownEnemyVehicles/AreaIntelView would refresh it as a side effect.
+ const auto* EscortMatch=GetWorld()->GetSubsystem<UBattleMatch>();
+ const float EscortMemory=FMath::Max(1.f,GetDefault<UBattleTuning>()->VehicleMemory);
+ for(const auto& EscortKnown:EscortMatch->KnownVehicles[Team])
+ {
+  if(EscortKnown.Value.At>EscortMatch->Elapsed || EscortMatch->Elapsed-EscortKnown.Value.At>EscortMemory)continue;
+  if(!Spot && EscortKnown.Key==Key)return true;
+  if(Spot && FMath::FloorToInt32(At.X/5000.)==FMath::FloorToInt32(EscortKnown.Value.Position.X/5000.) &&
+     FMath::FloorToInt32(At.Y/5000.)==FMath::FloorToInt32(EscortKnown.Value.Position.Y/5000.))return true;
+ }
+ return false;
+}
+
+bool UBattleSquadTactics::SeizeEscortVehicleTarget(int32 SID,int32 TargetID,uint8 SeenType) const
+{
+ if(!BattleTactics::SectorSeizePoint() || BattleTactics::SectorSeizePointAT()<=0 || !SeizeEscort(SID) || !SeizePointMember(SID))return false;
+ const auto* EscortSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
+ return EscortSquad && EscortSquad->SquadType==BattleSquadType::AntiTank &&
+  (BattleSquadType::IsVehicle(SeenType) || SeizeKnownVehicle(EscortSquad->Team,TargetID,FVector::ZeroVector,false));
+}
+
+bool UBattleSquadTactics::SeizeEscortPlace(int32 SID,const FVector& At) const
+{
+ if(!BattleTactics::SectorSeizePoint() || BattleTactics::SectorSeizePointAT()<=0 || !SeizeEscort(SID) || !SeizePointMember(SID))return true;
+ const auto* EscortSquad=GetWorld()->GetSubsystem<UBattleState>()->FindSquad(SID);
+ const auto& EscortDetail=SeizeExtras.FindChecked(SID);
+ if(!EscortSquad || EscortSquad->SquadType!=BattleSquadType::AntiTank ||
+    BattleSectors::Cell(EscortSquad->Destination)!=EscortDetail.PointCell)return true;
+ if(BattleSectors::Cell(At)!=EscortDetail.PointCell)return false;
+ const FVector EscortLocal=At-BattleSectors::Center(EscortDetail.PointCell);
+ const FIntPoint EscortSide=EscortDetail.EscortAssembly-EscortDetail.PointCell;
+ const double EscortDepthX=2500.-EscortLocal.X*FMath::Sign(EscortSide.X);
+ const double EscortDepthY=2500.-EscortLocal.Y*FMath::Sign(EscortSide.Y);
+ return (EscortSide.X==0 || (EscortDepthX>=1000. && EscortDepthX<=1500.)) &&
+  (EscortSide.Y==0 || (EscortDepthY>=1000. && EscortDepthY<=1500.));
 }

@@ -172,6 +172,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    // Converging squads fill their own approach half-plane rather than crossing
    // the rally point to claim a slot behind the opposing incoming stream.
    if(Sector && BattleSectors::Cell(S->Destination+Offset)!=Cell)continue;
+   if(BattleTactics::SectorSeizePoint()>0 && BattleTactics::SectorSeizePointAT()>0 &&
+      !GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeEscortPlace(SID,S->Destination+Offset))continue;
    if(!Sector && FVector::DotProduct(Offset,Forward)>20) continue;
    if(Rally && Offset.Size2D()>450) continue;
    if(!Sector && S->Order==EBattleOrder::Defend && Offset.Size2D()>S->DefenseRadius-80) continue;
@@ -305,6 +307,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
    {
     const FVector At=Cover->GetSlots()[Slot];
     if(Sector && BattleSectors::Cell(At)!=Cell)continue;
+    if(BattleTactics::SectorSeizePoint()>0 && BattleTactics::SectorSeizePointAT()>0 &&
+       !GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeEscortPlace(SID,At))continue;
     if(BattleTactics::SectorDefend()>0 && !GetWorld()->GetSubsystem<UBattleSquadTactics>()->SectorDefendPlace(SID,At))continue;
     // Evaluation (arrival_slot_*): slots in the sector, those without an obstacle 2.5 m ahead, those seen by the nearest threat (-BattleCoverStrict).
     SightExperiment.Cover(TEXT("arrival_slot_in_cell"));
@@ -426,6 +430,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
       bool Taken=false; for(const auto& R:Reserved) if(FVector::DistSquared2D(R,Want)<FMath::Square(90.)) {Taken=true;break;}
       if(Taken) continue;
       FNavLocation Projected; if(!Nav->ProjectPointToNavigation(Want,Projected,FVector(30,30,200)) || FVector::Dist2D(Projected.Location,Want)>40) continue;
+      if(BattleTactics::SectorSeizePoint()>0 && BattleTactics::SectorSeizePointAT()>0 &&
+         !GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeEscortPlace(SID,Projected.Location))continue;
       if(BattleTactics::SectorDefend()>0 && !GetWorld()->GetSubsystem<UBattleSquadTactics>()->SectorDefendPlace(SID,Projected.Location))continue;
       if(!GetWorld()->LineTraceTestByObjectType(Projected.Location+FVector(0,0,100),Projected.Location-Normal*250+FVector(0,0,100),FCollisionObjectQueryParams(ECC_WorldStatic)) || (bNearEnemyArrival?!NearEnemyHides(Projected.Location):!HidesFromThreat(Projected.Location))) continue;
       if(BattleTactics::CoverFirePointEnabled())
@@ -453,6 +459,8 @@ void UBattleLeaderRuntime::BuildMovementPlan(int32 SID)
       if(Occupied) continue;
       ++Queries; FNavLocation Projected;
       if(!Nav || !Nav->ProjectPointToNavigation(Candidate,Projected,FVector(30,30,200))) continue;
+      if(BattleTactics::SectorSeizePoint()>0 && BattleTactics::SectorSeizePointAT()>0 &&
+         !GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeEscortPlace(SID,Projected.Location))continue;
       if(BattleTactics::SectorDefend()>0 && !GetWorld()->GetSubsystem<UBattleSquadTactics>()->SectorDefendPlace(SID,Projected.Location))continue;
       TArray<FVector> OpenTail;
       if(!ClearMovementSegment(S->Destination,Projected.Location))

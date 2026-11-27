@@ -430,7 +430,7 @@ void UBattleSquadTactics::Evaluate(int32 SID,const FBattleSquadObservation& O,fl
   FVector Goal;
   const int32 Reaction=Match->AreaArmourReaction(S->Team,SID,O.RecentDamage/FullHP,Goal,CauseOverride);
   if(Reaction==1 && Apply(SID,EBattleSquadTactic::Retreat,EBattleOrder::Move,Goal,CauseOverride)){Event(TEXT("ArmourStandOff"));P.RetrySeconds=T->SquadRetreatRetrySeconds;return;}
-  if(Reaction==2){Event(TEXT("ArmourFallBack"));Retreat();S->TacticalPlan.RetrySeconds=FMath::Max(S->TacticalPlan.RetrySeconds,T->SquadRetreatRetrySeconds);return;}
+  if(Reaction==2 && !SeizeArmourStay(SID)){Event(TEXT("ArmourFallBack"));Retreat();S->TacticalPlan.RetrySeconds=FMath::Max(S->TacticalPlan.RetrySeconds,T->SquadRetreatRetrySeconds);return;}
   CauseOverride.Reset();
  }
  if(BattleTactics::SectorDefend()>=2 && Emergency && CauseOverride.IsEmpty() && Cause.StartsWith(TEXT("DAMAGE ")) && FallBackSector(SID,O))return;

@@ -194,6 +194,9 @@ void UBattleSquadTactics::SeizePlanChanged(int32 SID)
  if(Action==EBattleSquadTactic::Support || Action==EBattleSquadTactic::Flank){SeizeSuspended.Add(SID);return;}
  if(Action==EBattleSquadTactic::Engage && S->TacticalPlan.Reason.StartsWith(TEXT("SEIZE SECTOR"))){SeizeSuspended.Remove(SID);return;}
  if(SeizeSuspended.Contains(SID) && (Action==EBattleSquadTactic::Engage || Action==EBattleSquadTactic::Mission))return;
+ if(SeizeEscort(SID) && BattleSquadType::IsVehicle(S->SquadType) &&
+    (Action==EBattleSquadTactic::Retreat || Action==EBattleSquadTactic::Regroup || Action==EBattleSquadTactic::Recover))
+  Event(TEXT("SeizePointTankBack"));
  EndSeize(SID);
 }
 

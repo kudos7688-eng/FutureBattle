@@ -685,7 +685,8 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
  // Trial -BattleSectorContact=1: shot at on the way or while holding, the squad also answers enemies outside its sector.
  const bool bShotAt=Sector && (SectorContactEnabled() || SectorMoveFireEnabled() || SectorFireBack.Contains(SID)) && SquadShotAt(*S,Now);
  const FIntPoint SectorCell=Sector?BattleSectors::Cell(S->Destination):FIntPoint(-1,-1);
- auto OutsideOK=[&](int32 ID,const FVector& At){if(bDefendMarch || (BattleTactics::SectorSeizePoint()>0 && BattleTactics::SectorSeizePointSupport()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeSupportTarget(SID,At)))return FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));if(BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(SID))return FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));return bShotAt && FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));};
+ auto OutsideOK=[&](int32 ID,const FVector& At,int32 SeenID,uint8 SeenType){if(BattleTactics::SectorSeizePoint()>0 && BattleTactics::SectorSeizePointAT()>0 &&
+  GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeEscortVehicleTarget(SID,SeenID,SeenType))return FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));if(bDefendMarch || (BattleTactics::SectorSeizePoint()>0 && BattleTactics::SectorSeizePointSupport()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->SeizeSupportTarget(SID,At)))return FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));if(BattleTactics::SectorDefend()>0 && GetWorld()->GetSubsystem<UBattleSquadTactics>()->DefendingSector(SID))return FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));return bShotAt && FVector::DistSquared(Position(ID),At)<=FMath::Square(TargetRange(ID));};
  FVector SelectedTargetAt=FVector::ZeroVector;
  P.TargetID=INDEX_NONE; double Best=DBL_MAX;
  P.Center=FVector::ZeroVector; int32 Count=0; for(int32 ID:S->Members) if(Store->Find(ID)->IsAlive()) { P.Center+=Position(ID); ++Count; } if(Count) P.Center/=Count;
@@ -708,7 +709,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
   {
    const int32 ID=G.MemberID;const FKnownRef C{KT.Key,*G.Contact};
    if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C.Value.LastKnownPosition)>FMath::Square(TargetRange(ID))) continue;
-   if(Sector && BattleSectors::Cell(C.Value.LastKnownPosition)!=SectorCell && !OutsideOK(ID,C.Value.LastKnownPosition)) continue;
+   if(Sector && BattleSectors::Cell(C.Value.LastKnownPosition)!=SectorCell && !OutsideOK(ID,C.Value.LastKnownPosition,C.Key,C.Value.ObservedSquadType)) continue;
    if(!bDefendMarch && !BattleTactics::OrderAllowsTarget(*S,C.Key,C.Value.LastKnownPosition))continue;
    if(bArmourSectorGate)AllowedArmourTargets.Add(C.Key);
    double D=FVector::DistSquared(C.Value.LastKnownPosition,P.Center);
@@ -728,7 +729,7 @@ void UBattleLeaderRuntime::Think(int32 SID,double Now)
     const int32 ID=G.MemberID;const auto* C=G.Contact;
     if(C->bShared || Now-C->LastSeenTime>Hold+1.e-6) continue;
     if(bRangeAwareCombat && FVector::DistSquared(Position(ID),C->LastKnownPosition)>FMath::Square(TargetRange(ID))) continue;
-    if(Sector && BattleSectors::Cell(C->LastKnownPosition)!=SectorCell && !OutsideOK(ID,C->LastKnownPosition)) continue;
+    if(Sector && BattleSectors::Cell(C->LastKnownPosition)!=SectorCell && !OutsideOK(ID,C->LastKnownPosition,PreviousTarget,C->ObservedSquadType)) continue;
     if(!BattleTactics::OrderAllowsTarget(*S,PreviousTarget,C->LastKnownPosition))continue;
     if(bArmourSectorGate)AllowedArmourTargets.Add(PreviousTarget);
     P.TargetID=PreviousTarget;if(BattleTactics::ObservedTactics())SelectedTargetAt=C->LastKnownPosition;SightExperiment.Cover(TEXT("squad_target_held"));break;
